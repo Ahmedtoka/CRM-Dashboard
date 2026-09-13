@@ -1,0 +1,29 @@
+{
+  "data": {
+    "node": {
+      "id": "gid://shopify/BulkOperation/720918",
+      "status": "COMPLETED",
+      "errorCode": null,
+      "objectCount": "9",
+      "fileSize": "4096",
+      "url": "https://storage.shopifycloud.com/{stage}.jsonl",
+      "partialDataUrl": null
+    },
+    "currentBulkOperation": {
+      "id": "gid://shopify/BulkOperation/720918",
+      "status": "COMPLETED",
+      "errorCode": null,
+      "objectCount": "9",
+      "fileSize": "4096",
+      "url": "https://storage.shopifycloud.com/{stage}.jsonl",
+      "partialDataUrl": null
+    }
+  },
+  "extensions": {
+    "cost": {
+      "requestedQueryCost": 1,
+      "actualQueryCost": 1,
+      "throttleStatus": {"maximumAvailable": 2000.0, "currentlyAvailable": 1999, "restoreRate": 100.0}
+    }
+  }
+}

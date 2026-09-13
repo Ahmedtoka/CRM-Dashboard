@@ -1,0 +1,112 @@
+<?php
+
+namespace App\Http\Middleware;
+
+use App\Enums\Platform;
+use App\Models\ChannelAccount;
+use App\Models\User;
+use Illuminate\Foundation\Inspiring;
+use Illuminate\Http\Request;
+use Inertia\Middleware;
+
+class HandleInertiaRequests extends Middleware
+{
+    /**
+     * The root template that's loaded on the first page visit.
+     *
+     * @see https://inertiajs.com/server-side-setup#root-template
+     *
+     * @var string
+     */
+    protected $rootView = 'app';
+
+    /**
+     * Determines the current asset version.
+     *
+     * @see https://inertiajs.com/asset-versioning
+     */
+    public function version(Request $request): ?string
+    {
+        return parent::version($request);
+    }
+
+    /**
+     * Define the props that are shared by default.
+     *
+     * @see https://inertiajs.com/shared-data
+     *
+     * @return array<string, mixed>
+     */
+    public function share(Request $request): array
+    {
+        [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
+
+        /** @var User|null $user */
+        $user = $request->user();
+
+        return array_merge(parent::share($request), [
+            'name' => config('app.name'),
+            'quote' => ['message' => trim($message), 'author' => trim($author)],
+            'auth' => [
+                'user' => $user ? [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'email_verified_at' => $user->email_verified_at?->toIso8601String(),
+                    'role' => $user->role?->value,
+                    'color' => $user->color,
+                    'locale' => $user->locale,
+                    'platforms' => array_map(fn (Platform $p) => $p->value, $user->platforms()),
+                ] : null,
+            ],
+            'locale' => fn () => app()->getLocale(),
+            'translations' => fn () => $this->translations(app()->getLocale()),
+            'platforms' => array_map(fn (Platform $p) => [
+                'value' => $p->value,
+                'label' => $p->label(),
+                'color' => $p->color(),
+            ], Platform::cases()),
+            // Spec §9: channel credential errors alert admins.
+            'channelAlerts' => fn () => $user?->isAdmin()
+                ? ChannelAccount::where('status', 'error')->orderBy('id')->get(['id', 'platform', 'name', 'last_error'])
+                : [],
+            'broadcasting' => fn () => $this->broadcasting(),
+            'whatsappTemplates' => fn () => config('crm.whatsapp_templates', []),
+        ]);
+    }
+
+    /**
+     * UI strings from lang/{locale}.json (added by the frontend tasks); empty when absent.
+     *
+     * @return array<string, string>
+     */
+    private function translations(string $locale): array
+    {
+        $path = lang_path($locale.'.json');
+
+        if (! is_file($path)) {
+            return [];
+        }
+
+        return json_decode((string) file_get_contents($path), true) ?: [];
+    }
+
+    /**
+     * @return array{key: string, host: ?string, port: int|string|null, scheme: ?string}|null
+     */
+    private function broadcasting(): ?array
+    {
+        $reverb = config('broadcasting.connections.reverb');
+
+        if (empty($reverb['key'])) {
+            return null;
+        }
+
+        return [
+            'key' => $reverb['key'],
+            'host' => $reverb['options']['host'] ?? null,
+            'port' => $reverb['options']['port'] ?? null,
+            'scheme' => $reverb['options']['scheme'] ?? null,
+        ];
+    }
+}

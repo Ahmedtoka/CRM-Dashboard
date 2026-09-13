@@ -1,0 +1,47 @@
+{
+  "data": {
+    "orders": {
+      "edges": [
+        {
+          "cursor": "c-9003",
+          "node": {
+            "id": "gid://shopify/Order/9003",
+            "name": "#9003",
+            "email": "nour@example.com",
+            "phone": null,
+            "createdAt": "2026-09-12T12:00:00Z",
+            "updatedAt": "2026-09-12T13:00:00Z",
+            "processedAt": "2026-09-12T12:00:00Z",
+            "cancelledAt": "2026-09-12T13:00:00Z",
+            "cancelReason": "CUSTOMER",
+            "currencyCode": "EGP",
+            "displayFinancialStatus": "VOIDED",
+            "displayFulfillmentStatus": "UNFULFILLED",
+            "note": null,
+            "customAttributes": [],
+            "paymentGatewayNames": ["Cash on Delivery (COD)"],
+            "currentSubtotalPriceSet": {"shopMoney": {"amount": "300.0", "currencyCode": "EGP"}},
+            "currentTotalPriceSet": {"shopMoney": {"amount": "360.0", "currencyCode": "EGP"}},
+            "currentTotalDiscountsSet": {"shopMoney": {"amount": "0.0", "currencyCode": "EGP"}},
+            "totalShippingPriceSet": {"shopMoney": {"amount": "60.0", "currencyCode": "EGP"}},
+            "shippingAddress": {"name": "نور حسن", "firstName": "نور", "lastName": "حسن", "phone": "01005556667", "address1": "3 شارع الهرم", "address2": null, "city": "الجيزة", "province": "Giza", "provinceCode": "GZ", "zip": null, "countryCodeV2": "EG"},
+            "billingAddress": null,
+            "shippingLine": {"title": "شحن القاهرة والجيزة"},
+            "customer": {"id": "gid://shopify/Customer/3101", "firstName": "نور", "lastName": "حسن", "email": "nour@example.com", "phone": "+201005556667", "updatedAt": "2026-09-12T08:00:00Z"},
+            "lineItems": {"edges": []},
+            "fulfillments": [],
+            "refunds": []
+          }
+        }
+      ],
+      "pageInfo": {"hasNextPage": false, "endCursor": "c-9003"}
+    }
+  },
+  "extensions": {
+    "cost": {
+      "requestedQueryCost": 252,
+      "actualQueryCost": 6,
+      "throttleStatus": {"maximumAvailable": 2000.0, "currentlyAvailable": 1994, "restoreRate": 100.0}
+    }
+  }
+}

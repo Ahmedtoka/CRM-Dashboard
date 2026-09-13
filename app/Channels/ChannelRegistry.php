@@ -1,0 +1,43 @@
+<?php
+
+namespace App\Channels;
+
+use App\Channels\Adapters\FakeChannelAdapter;
+use App\Channels\Adapters\InstagramAdapter;
+use App\Channels\Adapters\MessengerAdapter;
+use App\Channels\Adapters\WhatsAppAdapter;
+use App\Channels\Contracts\ChannelAdapter;
+use App\Enums\Platform;
+use App\Models\ChannelAccount;
+
+class ChannelRegistry
+{
+    public function adapter(Platform $platform): ChannelAdapter
+    {
+        if ($platform === Platform::TikTok) {
+            return new FakeChannelAdapter($platform);
+        }
+
+        if (config('crm.drivers.channels') === 'fake') {
+            return new FakeChannelAdapter($platform);
+        }
+
+        $account = ChannelAccount::where('platform', $platform)->first();
+
+        if ($account && $account->driver === 'fake') {
+            return new FakeChannelAdapter($platform);
+        }
+
+        return match ($platform) {
+            Platform::Facebook => app(MessengerAdapter::class),
+            Platform::Instagram => app(InstagramAdapter::class),
+            Platform::WhatsApp => app(WhatsAppAdapter::class),
+            Platform::TikTok => new FakeChannelAdapter($platform),
+        };
+    }
+
+    public function account(Platform $platform): ChannelAccount
+    {
+        return ChannelAccount::where('platform', $platform)->firstOrFail();
+    }
+}

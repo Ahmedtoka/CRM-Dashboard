@@ -1,0 +1,146 @@
+<?php
+
+namespace App\Http\Controllers\Web;
+
+use App\Analytics\ActivityLogger;
+use App\Analytics\LatencyRecorder;
+use App\Analytics\MetricsService;
+use App\Analytics\PresenceTracker;
+use App\Enums\Platform;
+use App\Http\Controllers\Concerns\ReportEndpoints;
+use App\Http\Controllers\Controller;
+use App\Http\Resources\ActivityLogResource;
+use App\Http\Support\DateRange;
+use App\Models\ActivityLog;
+use App\Models\User;
+use Carbon\CarbonImmutable;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Inertia\Inertia;
+use Inertia\Response;
+use ReflectionClass;
+
+class ReportController extends Controller
+{
+    use ReportEndpoints;
+
+    public function team(Request $request, MetricsService $metrics, PresenceTracker $presence): Response
+    {
+        return Inertia::render('Reports/Team', $this->teamReport($request, $metrics, $presence));
+    }
+
+    public function user(Request $request, MetricsService $metrics, User $user): Response
+    {
+        return Inertia::render('Reports/User', $this->userReport($request, $metrics, $user));
+    }
+
+    public function me(Request $request, MetricsService $metrics): Response
+    {
+        return Inertia::render('Reports/Me', $this->userReport($request, $metrics, $request->user()));
+    }
+
+    public function bot(Request $request, MetricsService $metrics): Response
+    {
+        return Inertia::render('Reports/Bot', $this->botReport($request, $metrics));
+    }
+
+    /**
+     * Spec §11.3 / §11.5 step 7 — percentiles per kind against the exact acceptance
+     * targets, over a selectable recent window. Admin-only: shows real production
+     * numbers moderators/supervisors don't need day to day.
+     */
+    public function latency(Request $request, LatencyRecorder $recorder): Response
+    {
+        $data = $request->validate([
+            'window' => ['nullable', Rule::in(['15m', '1h', '24h', 'custom'])],
+            'from' => ['nullable', 'date_format:Y-m-d\TH:i'],
+            'to' => ['nullable', 'date_format:Y-m-d\TH:i'],
+        ]);
+
+        [$window, $from, $to] = $this->resolveLatencyWindow($data);
+
+        $targets = (array) config('crm.latency.targets', ['inbound' => 2000, 'outbound' => 1500, 'list' => 300]);
+
+        $kinds = [];
+        foreach (['inbound', 'outbound', 'list'] as $kind) {
+            $percentiles = $recorder->percentiles($kind, $from, $to);
+            $target = (int) ($targets[$kind] ?? 0);
+
+            $kinds[$kind] = [
+                ...$percentiles,
+                'target' => $target,
+                // Ruling: PASS when count > 0 and p95 <= target; no data => neither pass nor fail.
+                'pass' => $percentiles['count'] > 0 ? $percentiles['p95'] <= $target : null,
+            ];
+        }
+
+        return Inertia::render('Reports/Latency', [
+            'window' => $window,
+            'range' => ['from' => $from->toIso8601String(), 'to' => $to->toIso8601String()],
+            'targets' => $targets,
+            'kinds' => $kinds,
+        ]);
+    }
+
+    /**
+     * @param  array{window?: string, from?: string, to?: string}  $data
+     * @return array{0: string, 1: CarbonImmutable, 2: CarbonImmutable}
+     */
+    private function resolveLatencyWindow(array $data): array
+    {
+        $window = $data['window'] ?? '1h';
+
+        if ($window === 'custom' && ! empty($data['from']) && ! empty($data['to'])) {
+            $tz = (string) config('crm.timezone_display', 'Africa/Cairo');
+            $from = CarbonImmutable::createFromFormat('Y-m-d\TH:i', $data['from'], $tz)->utc();
+            $to = CarbonImmutable::createFromFormat('Y-m-d\TH:i', $data['to'], $tz)->utc();
+
+            if ($to->lt($from)) {
+                [$from, $to] = [$to, $from];
+            }
+
+            return ['custom', $from, $to];
+        }
+
+        // No usable custom bounds (or a non-custom preset): fall back to a relative window.
+        $window = $window === 'custom' ? '1h' : $window;
+        $to = CarbonImmutable::now();
+        $from = match ($window) {
+            '15m' => $to->subMinutes(15),
+            '24h' => $to->subDay(),
+            default => $to->subHour(),
+        };
+
+        return [$window, $from, $to];
+    }
+
+    public function activity(Request $request): Response
+    {
+        $actions = array_values((new ReflectionClass(ActivityLogger::class))->getConstants());
+
+        $filters = $request->validate([
+            'user_id' => ['nullable', 'integer'],
+            'action' => ['nullable', Rule::in($actions)],
+            'platform' => ['nullable', Rule::enum(Platform::class)],
+        ]);
+        $range = DateRange::fromRequest($request);
+
+        $logs = ActivityLog::query()
+            ->with('user')
+            ->whereBetween('created_at', [$range->from, $range->to])
+            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
+            ->when($filters['action'] ?? null, fn ($q, $v) => $q->where('action', $v))
+            ->when($filters['platform'] ?? null, fn ($q, $v) => $q->where('platform', $v))
+            ->orderByDesc('id')
+            ->paginate(50)
+            ->withQueryString();
+
+        return Inertia::render('Reports/Activity', [
+            'logs' => ActivityLogResource::collection($logs),
+            'range' => $range->toArray(),
+            'filters' => array_merge(['user_id' => null, 'action' => null, 'platform' => null], $filters),
+            'users' => User::orderBy('name')->get(['id', 'name', 'color']),
+            'actions' => $actions,
+        ]);
+    }
+}

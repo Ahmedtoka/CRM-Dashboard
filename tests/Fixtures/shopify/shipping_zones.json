@@ -1,0 +1,77 @@
+[
+  {
+    "zone": {
+      "id": "gid://shopify/DeliveryZone/412345670001",
+      "name": "القاهرة والجيزة",
+      "countries": [
+        {
+          "id": "gid://shopify/DeliveryCountry/512345670001",
+          "name": "Egypt",
+          "code": {"countryCode": "EG", "restOfWorld": false},
+          "provinces": [
+            {"id": "gid://shopify/DeliveryProvince/612345670001", "name": "Cairo", "code": "C"},
+            {"id": "gid://shopify/DeliveryProvince/612345670002", "name": "Giza", "code": "GZ"}
+          ]
+        }
+      ]
+    },
+    "methodDefinitions": {
+      "nodes": [
+        {
+          "id": "gid://shopify/DeliveryMethodDefinition/712345670001",
+          "name": "شحن القاهرة والجيزة",
+          "active": true,
+          "rateProvider": {"id": "gid://shopify/DeliveryRateDefinition/812345670001", "price": {"amount": "60.0", "currencyCode": "EGP"}},
+          "methodConditions": []
+        },
+        {
+          "id": "gid://shopify/DeliveryMethodDefinition/712345670002",
+          "name": "شحن مجاني",
+          "active": true,
+          "rateProvider": {"id": "gid://shopify/DeliveryRateDefinition/812345670002", "price": {"amount": "0.0", "currencyCode": "EGP"}},
+          "methodConditions": [
+            {"field": "TOTAL_PRICE", "operator": "GREATER_THAN_OR_EQUAL_TO", "conditionCriteria": {"amount": "1500.0", "currencyCode": "EGP"}}
+          ]
+        },
+        {
+          "id": "gid://shopify/DeliveryMethodDefinition/712345670003",
+          "name": "شحن سريع (موقوف)",
+          "active": false,
+          "rateProvider": {"id": "gid://shopify/DeliveryRateDefinition/812345670003", "price": {"amount": "120.0", "currencyCode": "EGP"}},
+          "methodConditions": []
+        }
+      ]
+    }
+  },
+  {
+    "zone": {
+      "id": "gid://shopify/DeliveryZone/412345670002",
+      "name": "الدلتا والإسكندرية",
+      "countries": [
+        {
+          "code": {"countryCode": "EG", "restOfWorld": false},
+          "provinces": [
+            {"name": "Alexandria", "code": "ALX"},
+            {"name": "Dakahlia", "code": "DK"},
+            {"name": "Gharbia", "code": "GH"}
+          ]
+        }
+      ]
+    },
+    "methodDefinitions": {
+      "edges": [
+        {
+          "node": {
+            "id": "gid://shopify/DeliveryMethodDefinition/712345670004",
+            "name": "شحن الدلتا",
+            "active": true,
+            "rateProvider": {"id": "gid://shopify/DeliveryRateDefinition/812345670004", "price": {"amount": "75.00", "currencyCode": "EGP"}},
+            "methodConditions": [
+              {"field": "TOTAL_PRICE", "operator": "LESS_THAN_OR_EQUAL_TO", "conditionCriteria": {"amount": "5000.0", "currencyCode": "EGP"}}
+            ]
+          }
+        }
+      ]
+    }
+  }
+]

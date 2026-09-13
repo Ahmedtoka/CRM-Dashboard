@@ -1,0 +1,69 @@
+{
+  "id": 5987654321002,
+  "admin_graphql_api_id": "gid://shopify/Order/5987654321002",
+  "name": "#1235",
+  "order_number": 1235,
+  "email": null,
+  "phone": "+201221234567",
+  "created_at": "2026-09-11T11:00:00+03:00",
+  "updated_at": "2026-09-11T11:00:04+03:00",
+  "processed_at": "2026-09-11T11:00:00+03:00",
+  "cancelled_at": null,
+  "cancel_reason": null,
+  "currency": "EGP",
+  "financial_status": "pending",
+  "fulfillment_status": null,
+  "gateway": "Cash on Delivery (COD)",
+  "note": "طلب من المحادثة",
+  "note_attributes": [
+    {"name": "crm_order_id", "value": "0"},
+    {"name": "crm_conversation_id", "value": "0"}
+  ],
+  "source_name": "shopify_draft_order",
+  "tags": "crm, chat",
+  "current_subtotal_price": "900.00",
+  "current_total_price": "960.00",
+  "current_total_discounts": "0.00",
+  "total_shipping_price_set": {
+    "shop_money": {"amount": "60.00", "currency_code": "EGP"},
+    "presentment_money": {"amount": "60.00", "currency_code": "EGP"}
+  },
+  "customer": {
+    "id": 7123456789002,
+    "email": null,
+    "created_at": "2026-09-11T10:59:00+03:00",
+    "updated_at": "2026-09-11T11:00:00+03:00",
+    "first_name": "ياسمين",
+    "last_name": "محمود",
+    "tags": "",
+    "phone": "+201221234567"
+  },
+  "shipping_address": {
+    "name": "ياسمين محمود",
+    "address1": "٣ شارع الجمهورية",
+    "address2": null,
+    "city": "المنصورة",
+    "province": "Dakahlia",
+    "province_code": "DK",
+    "zip": "35511",
+    "country_code": "EG",
+    "phone": "01221234567"
+  },
+  "line_items": [
+    {
+      "id": 15123456789010,
+      "variant_id": 45123456789002,
+      "product_id": 8123456789012,
+      "title": "فستان سهرة شيفون",
+      "variant_title": "أسود / L",
+      "sku": "DRS-CHF-BLK-L",
+      "quantity": 2,
+      "price": "450.00",
+      "total_discount": "0.00",
+      "discount_allocations": []
+    }
+  ],
+  "shipping_lines": [
+    {"id": 4123456789002, "title": "شحن الدلتا", "price": "60.00", "code": "delta"}
+  ]
+}

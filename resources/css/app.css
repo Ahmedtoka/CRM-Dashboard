@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body,
+html {
+    --font-sans: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+@layer base {
+    /* Calm slate surfaces, white panes, indigo as the single action accent. */
+    :root {
+        --background: 210 40% 96.1%;
+        --foreground: 222.2 47.4% 11.2%;
+        --card: 0 0% 100%;
+        --card-foreground: 222.2 47.4% 11.2%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222.2 47.4% 11.2%;
+        --primary: 243.4 75.4% 58.6%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 210 40% 96.1%;
+        --secondary-foreground: 222.2 47.4% 11.2%;
+        --muted: 210 40% 96.1%;
+        --muted-foreground: 215.4 16.3% 46.9%;
+        --accent: 214.3 31.8% 93.5%;
+        --accent-foreground: 222.2 47.4% 11.2%;
+        --destructive: 0 72.2% 50.6%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 214.3 31.8% 91.4%;
+        --input: 214.3 31.8% 88%;
+        --ring: 243.4 75.4% 58.6%;
+        --chart-1: 243 75% 59%;
+        --chart-2: 173 58% 39%;
+        --chart-3: 199 89% 48%;
+        --chart-4: 38 92% 50%;
+        --chart-5: 330 81% 60%;
+        --radius: 0.5rem;
+        --sidebar-background: 0 0% 100%;
+        --sidebar-foreground: 215.3 25% 26.7%;
+        --sidebar-primary: 243.4 75.4% 58.6%;
+        --sidebar-primary-foreground: 0 0% 100%;
+        --sidebar-accent: 226 100% 96.7%;
+        --sidebar-accent-foreground: 243.7 54.5% 41.4%;
+        --sidebar-border: 214.3 31.8% 91.4%;
+        --sidebar-ring: 243.4 75.4% 58.6%;
+    }
+
+    .dark {
+        --background: 222.2 47.4% 7%;
+        --foreground: 210 40% 96.1%;
+        --card: 222.2 47.4% 11.2%;
+        --card-foreground: 210 40% 96.1%;
+        --popover: 222.2 47.4% 11.2%;
+        --popover-foreground: 210 40% 96.1%;
+        --primary: 234.5 89.5% 73.9%;
+        --primary-foreground: 222.2 47.4% 11.2%;
+        --secondary: 217.2 32.6% 17.5%;
+        --secondary-foreground: 210 40% 96.1%;
+        --muted: 217.2 32.6% 17.5%;
+        --muted-foreground: 215 20.2% 65.1%;
+        --accent: 217.2 32.6% 17.5%;
+        --accent-foreground: 210 40% 96.1%;
+        --destructive: 0 62.8% 50%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 217.2 32.6% 20%;
+        --input: 217.2 32.6% 22%;
+        --ring: 234.5 89.5% 73.9%;
+        --chart-1: 234 89% 74%;
+        --chart-2: 160 60% 45%;
+        --chart-3: 199 89% 60%;
+        --chart-4: 38 92% 60%;
+        --chart-5: 330 81% 65%;
+        --sidebar-background: 222.2 47.4% 9%;
+        --sidebar-foreground: 210 40% 90%;
+        --sidebar-primary: 234.5 89.5% 73.9%;
+        --sidebar-primary-foreground: 222.2 47.4% 11.2%;
+        --sidebar-accent: 217.2 32.6% 17.5%;
+        --sidebar-accent-foreground: 210 40% 96.1%;
+        --sidebar-border: 217.2 32.6% 17.5%;
+        --sidebar-ring: 234.5 89.5% 73.9%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background text-sm text-foreground;
+    }
+
+    :focus-visible {
+        @apply outline-none ring-2 ring-ring ring-offset-1 ring-offset-background;
+    }
+}
+
+@layer utilities {
+    /* Mirror directional icons (chevrons, arrows, send) in RTL. */
+    [dir='rtl'] .rtl-flip {
+        transform: scaleX(-1);
+    }
+
+    .scrollbar-thin {
+        scrollbar-width: thin;
+        scrollbar-color: hsl(var(--border)) transparent;
+    }
+}

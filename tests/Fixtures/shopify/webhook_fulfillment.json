@@ -1,0 +1,23 @@
+{
+  "id": 5523456789001,
+  "admin_graphql_api_id": "gid://shopify/Fulfillment/5523456789001",
+  "order_id": 5987654321001,
+  "status": "success",
+  "created_at": "2026-09-11T09:30:00+03:00",
+  "updated_at": "2026-09-11T09:30:02+03:00",
+  "service": "manual",
+  "shipment_status": "confirmed",
+  "location_id": 71234567001,
+  "origin_address": null,
+  "name": "#1234.1",
+  "tracking_company": "Bosta",
+  "tracking_number": "BST8812345670",
+  "tracking_numbers": ["BST8812345670"],
+  "tracking_url": "https://bosta.co/tracking-shipments?shipment-number=BST8812345670",
+  "tracking_urls": ["https://bosta.co/tracking-shipments?shipment-number=BST8812345670"],
+  "receipt": {},
+  "line_items": [
+    {"id": 15123456789001, "variant_id": 45123456789001, "title": "فستان سهرة شيفون", "quantity": 1, "sku": "DRS-CHF-BLK-M", "price": "450.00", "fulfillment_status": "fulfilled"},
+    {"id": 15123456789002, "variant_id": null, "title": "طرحة شيفون", "quantity": 2, "sku": "HJB-CHF-BEG", "price": "100.00", "fulfillment_status": "fulfilled"}
+  ]
+}

@@ -1,0 +1,20 @@
+{
+    "object": "page",
+    "entry": [
+        {
+            "id": "178923456789012",
+            "time": 1757671920000,
+            "messaging": [
+                {
+                    "sender": { "id": "5581234567890123" },
+                    "recipient": { "id": "178923456789012" },
+                    "timestamp": 1757671920000,
+                    "message": {
+                        "mid": "m_StickerLevelAbCdEfGhIjKlMnOpQr",
+                        "sticker_id": 369239263222822
+                    }
+                }
+            ]
+        }
+    ]
+}

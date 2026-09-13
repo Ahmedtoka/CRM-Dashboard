@@ -1,0 +1,78 @@
+{
+  "data": {
+    "orders": {
+      "edges": [
+        {
+          "cursor": "c-9001",
+          "node": {
+            "id": "gid://shopify/Order/9001",
+            "name": "#9001",
+            "email": "nour@example.com",
+            "phone": null,
+            "createdAt": "2026-09-12T08:00:00Z",
+            "updatedAt": "2026-09-12T09:00:00Z",
+            "processedAt": "2026-09-12T08:00:00Z",
+            "cancelledAt": null,
+            "cancelReason": null,
+            "currencyCode": "EGP",
+            "displayFinancialStatus": "PAID",
+            "displayFulfillmentStatus": "UNFULFILLED",
+            "note": null,
+            "customAttributes": [],
+            "paymentGatewayNames": ["paymob"],
+            "currentSubtotalPriceSet": {"shopMoney": {"amount": "799.5", "currencyCode": "EGP"}},
+            "currentTotalPriceSet": {"shopMoney": {"amount": "859.5", "currencyCode": "EGP"}},
+            "currentTotalDiscountsSet": {"shopMoney": {"amount": "0.0", "currencyCode": "EGP"}},
+            "totalShippingPriceSet": {"shopMoney": {"amount": "60.0", "currencyCode": "EGP"}},
+            "shippingAddress": {"name": "نور حسن", "firstName": "نور", "lastName": "حسن", "phone": "01005556667", "address1": "3 شارع الهرم", "address2": null, "city": "الجيزة", "province": "Giza", "provinceCode": "GZ", "zip": null, "countryCodeV2": "EG"},
+            "billingAddress": null,
+            "shippingLine": {"title": "شحن القاهرة والجيزة"},
+            "customer": {"id": "gid://shopify/Customer/3101", "firstName": "نور", "lastName": "حسن", "email": "nour@example.com", "phone": "+201005556667", "updatedAt": "2026-09-12T08:00:00Z"},
+            "lineItems": {"edges": [{"node": {"id": "gid://shopify/LineItem/9101", "title": "عباية كتان", "name": "عباية كتان - S", "sku": "ABY-LIN-S", "quantity": 1, "currentQuantity": 1, "variant": {"id": "gid://shopify/ProductVariant/2102"}, "originalUnitPriceSet": {"shopMoney": {"amount": "799.5", "currencyCode": "EGP"}}, "totalDiscountSet": {"shopMoney": {"amount": "0.0", "currencyCode": "EGP"}}, "discountAllocations": [], "image": null}}]},
+            "fulfillments": [],
+            "refunds": []
+          }
+        },
+        {
+          "cursor": "c-9002",
+          "node": {
+            "id": "gid://shopify/Order/9002",
+            "name": "#9002",
+            "email": null,
+            "phone": null,
+            "createdAt": "2026-09-12T10:00:00Z",
+            "updatedAt": "2026-09-12T10:30:00Z",
+            "processedAt": "2026-09-12T10:00:00Z",
+            "cancelledAt": null,
+            "cancelReason": null,
+            "currencyCode": "EGP",
+            "displayFinancialStatus": "PENDING",
+            "displayFulfillmentStatus": "UNFULFILLED",
+            "note": null,
+            "customAttributes": [],
+            "paymentGatewayNames": ["Cash on Delivery (COD)"],
+            "currentSubtotalPriceSet": {"shopMoney": {"amount": "450.0", "currencyCode": "EGP"}},
+            "currentTotalPriceSet": {"shopMoney": {"amount": "525.0", "currencyCode": "EGP"}},
+            "currentTotalDiscountsSet": {"shopMoney": {"amount": "0.0", "currencyCode": "EGP"}},
+            "totalShippingPriceSet": {"shopMoney": {"amount": "75.0", "currencyCode": "EGP"}},
+            "shippingAddress": {"name": "هالة سمير", "firstName": "هالة", "lastName": "سمير", "phone": "01223334445", "address1": "10 شارع الجيش", "address2": null, "city": "طنطا", "province": "Gharbia", "provinceCode": "GH", "zip": null, "countryCodeV2": "EG"},
+            "billingAddress": null,
+            "shippingLine": {"title": "شحن الدلتا"},
+            "customer": {"id": "gid://shopify/Customer/3102", "firstName": "هالة", "lastName": "سمير", "email": null, "phone": "+201223334445", "updatedAt": "2026-09-12T10:00:00Z"},
+            "lineItems": {"edges": []},
+            "fulfillments": [],
+            "refunds": []
+          }
+        }
+      ],
+      "pageInfo": {"hasNextPage": true, "endCursor": "c-9002"}
+    }
+  },
+  "extensions": {
+    "cost": {
+      "requestedQueryCost": 252,
+      "actualQueryCost": 12,
+      "throttleStatus": {"maximumAvailable": 2000.0, "currentlyAvailable": 1988, "restoreRate": 100.0}
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+    "data": {
+        "orderCreate": {
+            "order": null,
+            "userErrors": [
+                {
+                    "field": ["order", "lineItems", "0"],
+                    "message": "Not enough inventory"
+                }
+            ]
+        }
+    }
+}

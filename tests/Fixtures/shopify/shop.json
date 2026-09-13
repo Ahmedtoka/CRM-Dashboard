@@ -1,0 +1,33 @@
+{
+    "data": {
+        "shop": {
+            "name": "متجر تجريبي",
+            "currencyCode": "EGP"
+        },
+        "currentAppInstallation": {
+            "accessScopes": [
+                {"handle": "read_products"},
+                {"handle": "read_inventory"},
+                {"handle": "read_customers"},
+                {"handle": "write_customers"},
+                {"handle": "read_orders"},
+                {"handle": "write_orders"},
+                {"handle": "read_draft_orders"},
+                {"handle": "write_draft_orders"},
+                {"handle": "read_fulfillments"},
+                {"handle": "read_shipping"}
+            ]
+        }
+    },
+    "extensions": {
+        "cost": {
+            "requestedQueryCost": 1,
+            "actualQueryCost": 1,
+            "throttleStatus": {
+                "maximumAvailable": 1000,
+                "currentlyAvailable": 999,
+                "restoreRate": 50
+            }
+        }
+    }
+}

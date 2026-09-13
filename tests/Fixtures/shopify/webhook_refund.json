@@ -1,0 +1,18 @@
+{
+  "id": 9923456789001,
+  "admin_graphql_api_id": "gid://shopify/Refund/9923456789001",
+  "order_id": 5987654321001,
+  "created_at": "2026-09-14T16:00:00+03:00",
+  "processed_at": "2026-09-14T16:00:00+03:00",
+  "note": "المقاس مش مناسب",
+  "restock": true,
+  "user_id": 81234567001,
+  "refund_line_items": [
+    {"id": 3312345670001, "line_item_id": 15123456789002, "quantity": 2, "restock_type": "return", "subtotal": 200.0, "total_tax": 0.0}
+  ],
+  "transactions": [
+    {"id": 6612345670001, "order_id": 5987654321001, "kind": "refund", "gateway": "manual", "status": "success", "amount": "200.00", "currency": "EGP"},
+    {"id": 6612345670002, "order_id": 5987654321001, "kind": "refund", "gateway": "manual", "status": "failure", "amount": "200.00", "currency": "EGP"}
+  ],
+  "order_adjustments": []
+}

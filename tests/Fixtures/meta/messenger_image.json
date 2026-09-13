@@ -1,0 +1,27 @@
+{
+    "object": "page",
+    "entry": [
+        {
+            "id": "178923456789012",
+            "time": 1757671260000,
+            "messaging": [
+                {
+                    "sender": { "id": "5581234567890123" },
+                    "recipient": { "id": "178923456789012" },
+                    "timestamp": 1757671260000,
+                    "message": {
+                        "mid": "m_ImageAbCdEfGhIjKlMnOpQrStUvWx",
+                        "attachments": [
+                            {
+                                "type": "image",
+                                "payload": {
+                                    "url": "https://scontent.xx.fbcdn.net/v/t1.15752-9/sample_dress.jpg"
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ]
+}
