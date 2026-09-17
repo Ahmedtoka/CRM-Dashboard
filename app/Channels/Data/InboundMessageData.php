@@ -19,5 +19,6 @@ final readonly class InboundMessageData
         public ?string $customerUsername = null,
         public ?string $customerAvatar = null,
         public ?string $customerPhone = null,
+        public ?string $payload = null,
     ) {}
 }

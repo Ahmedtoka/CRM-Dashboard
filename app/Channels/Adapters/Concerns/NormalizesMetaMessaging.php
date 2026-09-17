@@ -41,6 +41,7 @@ trait NormalizesMetaMessaging
                     body: $item['message']['text'] ?? '',
                     occurredAt: $this->fromMsTimestamp($item['timestamp'] ?? 0),
                     attachments: $this->mapAttachments($item['message']),
+                    payload: isset($item['message']['quick_reply']['payload']) ? (string) $item['message']['quick_reply']['payload'] : null,
                 );
 
                 continue;
@@ -57,6 +58,7 @@ trait NormalizesMetaMessaging
                     externalMessageId: 'postback:'.($item['sender']['id'] ?? '').':'.($item['timestamp'] ?? ''),
                     body: $item['postback']['title'] ?? '',
                     occurredAt: $this->fromMsTimestamp($item['timestamp'] ?? 0),
+                    payload: isset($item['postback']['payload']) ? (string) $item['postback']['payload'] : null,
                 );
 
                 continue;

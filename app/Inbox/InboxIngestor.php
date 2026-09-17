@@ -4,6 +4,7 @@ namespace App\Inbox;
 
 use App\Analytics\ActivityLogger;
 use App\Analytics\LatencyRecorder;
+use App\Bot\Flow\ReplyScheduler;
 use App\Channels\ChannelRegistry;
 use App\Channels\Data\DeliveryReceiptData;
 use App\Channels\Data\InboundMessageData;
@@ -17,6 +18,9 @@ use App\Enums\SenderType;
 use App\Events\ConversationUpdated;
 use App\Events\MessageCreated;
 use App\Events\MessageUpdated;
+use App\Inbox\Jobs\FetchCustomerProfile;
+use App\Media\InboundAttachmentRecorder;
+use App\Media\Jobs\DownloadInboundMedia;
 use App\Models\BotSetting;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
@@ -30,8 +34,6 @@ use Illuminate\Support\Facades\DB;
 
 class InboxIngestor
 {
-    private const BOT_JOB = 'App\\Bot\\Jobs\\RunBot';
-
     /** Outbound delivery progression; a receipt may only move a message forward. */
     private const RANK = [
         'queued' => 0,
@@ -46,6 +48,7 @@ class InboxIngestor
         private readonly ChannelRegistry $registry,
         private readonly ConversationPriorityClassifier $priorityClassifier,
         private readonly LatencyRecorder $latency,
+        private readonly InboundAttachmentRecorder $attachmentRecorder,
     ) {}
 
     /**
@@ -64,7 +67,7 @@ class InboxIngestor
             ->first() ?? $this->registry->account($d->platform);
 
         try {
-            [$message, $conversation] = DB::transaction(function () use ($d, $account) {
+            [$message, $conversation, $pendingAttachments] = DB::transaction(function () use ($d, $account) {
                 $identity = $this->resolver->resolve(
                     $d->platform,
                     $d->customerExternalId,
@@ -82,10 +85,13 @@ class InboxIngestor
                     'sender_type' => SenderType::Customer,
                     'body' => $d->body,
                     'attachments' => $d->attachments ?: null,
+                    'payload' => $d->payload,
                     'external_id' => $d->externalMessageId,
                     'status' => MessageStatus::Received,
                     'sent_at' => $d->occurredAt,
                 ]);
+
+                $pendingAttachments = $this->attachmentRecorder->record($message, $d->attachments);
 
                 $verdict = $this->priorityClassifier->classify($message, $identity);
                 $this->priorityClassifier->apply($message, $conversation, $verdict);
@@ -107,13 +113,14 @@ class InboxIngestor
 
                 $this->logger->log(ActorType::System, null, ActivityLogger::MESSAGE_RECEIVED, $message, $conversation);
 
-                return [$message, $conversation];
+                return [$message, $conversation, $pendingAttachments];
             });
         } catch (UniqueConstraintViolationException) {
             return null; // concurrent duplicate of the same external message id
         }
 
         $message->setRelation('conversation', $conversation);
+        $message->load('mediaAttachments');
 
         // Queue the bot before broadcasting so a realtime outage can't silence it.
         $this->maybeRunBot($message, $conversation);
@@ -123,6 +130,30 @@ class InboxIngestor
 
         if ($event !== null) {
             $this->latency->inbound($event, $message);
+        }
+
+        // Downloads never run inside ingest (spec §1.3: inbound p95 target unchanged), and
+        // dispatching happens last so a dispatch-time failure (e.g. a synchronous queue
+        // connection immediately executing and failing the fetch) can never abort the rest
+        // of ingestion above — it's reported and swallowed instead.
+        //
+        // The dispatch call must NOT be `return`ed out of the closure: dispatch() only
+        // returns a PendingDispatch, whose __destruct() does the real work, so returning
+        // it would let that destructor (and any exception it throws) run after rescue()'s
+        // own try/catch has already exited.
+        foreach ($pendingAttachments as $attachmentId) {
+            rescue(function () use ($attachmentId) {
+                DownloadInboundMedia::dispatch($attachmentId);
+            }, report: true);
+        }
+
+        // Messenger/Instagram webhooks carry no sender name: fetch it (same dispatch rules as above).
+        $identity = CustomerIdentity::where('platform', $d->platform)->where('external_id', $d->customerExternalId)->first();
+
+        if ($identity !== null && $account !== null && FetchCustomerProfile::needed($identity)) {
+            rescue(function () use ($identity, $account) {
+                FetchCustomerProfile::dispatch($identity->id, $account->id);
+            }, report: true);
         }
 
         return $message;
@@ -234,12 +265,8 @@ class InboxIngestor
             return;
         }
 
-        $job = self::BOT_JOB;
-
-        if (! class_exists($job)) {
-            return; // Bot engine (Task 4) not installed.
-        }
-
-        dispatch(new $job($message->id))->onQueue('bot');
+        rescue(function () use ($message, $conversation) {
+            app(ReplyScheduler::class)->schedule($message, $conversation);
+        }, report: true);
     }
 }

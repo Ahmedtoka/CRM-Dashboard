@@ -20,7 +20,11 @@ class MessageResource extends JsonResource
             'sender_type' => $this->sender_type?->value,
             'user' => $user ? ['id' => $user->id, 'name' => $user->name, 'color' => $user->color] : null,
             'body' => $this->body,
-            'attachments' => $this->attachments ?? [],
+            'buttons' => $this->buttons ?? [],
+            'payload' => $this->payload,
+            'attachments' => AttachmentResource::collection(
+                $this->resource->relationLoaded('mediaAttachments') ? $this->mediaAttachments : $this->mediaAttachments()->get()
+            )->resolve($request),
             'status' => $this->status?->value,
             'error' => $this->error,
             'is_template' => (bool) $this->is_template,

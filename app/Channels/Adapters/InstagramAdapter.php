@@ -3,6 +3,7 @@
 namespace App\Channels\Adapters;
 
 use App\Channels\Adapters\Concerns\NormalizesMetaMessaging;
+use App\Channels\Adapters\Concerns\SendsMetaAttachments;
 use App\Channels\Adapters\Concerns\VerifiesMetaWebhooks;
 use App\Channels\Contracts\ChannelAdapter;
 use App\Channels\Data\ChannelCapabilities;
@@ -15,6 +16,7 @@ use App\Models\CustomerIdentity;
 class InstagramAdapter implements ChannelAdapter
 {
     use NormalizesMetaMessaging;
+    use SendsMetaAttachments;
     use VerifiesMetaWebhooks;
 
     public function __construct(private readonly MetaGraphClient $graph) {}
@@ -87,7 +89,24 @@ class InstagramAdapter implements ChannelAdapter
             $payload['tag'] = $options['tag'];
         }
 
+        if (! empty($options['quick_replies'])) {
+            $payload['message']['quick_replies'] = array_map(fn (array $b) => [
+                'content_type' => 'text',
+                'title' => mb_substr((string) $b['title'], 0, 20),
+                'payload' => mb_substr((string) $b['payload'], 0, 1000),
+            ], array_slice($options['quick_replies'], 0, 13));
+        }
+
         return $this->graph->post($account, 'me/messages', $payload);
+    }
+
+    /** Best effort on the fast path (final fix wave I9): one 3 s try, never the send client's retries. */
+    public function typing(ChannelAccount $account, CustomerIdentity $to, bool $on): void
+    {
+        rescue(fn () => $this->graph->postFast($account, 'me/messages', [
+            'recipient' => ['id' => $to->external_id],
+            'sender_action' => $on ? 'typing_on' : 'typing_off',
+        ], 3), report: false);
     }
 
     public function replyToComment(ChannelAccount $account, string $commentExternalId, string $text): SendResult

@@ -9,6 +9,7 @@ use App\Enums\SenderType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Message extends Model
 {
@@ -23,6 +24,8 @@ class Message extends Model
         'user_id',
         'body',
         'attachments',
+        'buttons',
+        'payload',
         'external_id',
         'status',
         'error',
@@ -42,6 +45,7 @@ class Message extends Model
             'direction' => MessageDirection::class,
             'sender_type' => SenderType::class,
             'attachments' => 'array',
+            'buttons' => 'array',
             'status' => MessageStatus::class,
             'is_template' => 'boolean',
             'is_spam' => 'boolean',
@@ -67,5 +71,13 @@ class Message extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * @return HasMany<MessageAttachment, $this>
+     */
+    public function mediaAttachments(): HasMany
+    {
+        return $this->hasMany(MessageAttachment::class)->orderBy('id');
     }
 }
