@@ -125,6 +125,24 @@ class HandleInertiaRequests extends Middleware
      */
     private function broadcasting(): ?array
     {
+        // Hosted Pusher (e.g. on Cloudways, where a Reverb daemon/port is impractical).
+        if (config('broadcasting.default') === 'pusher') {
+            $pusher = config('broadcasting.connections.pusher');
+
+            if (empty($pusher['key'])) {
+                return null;
+            }
+
+            return [
+                'driver' => 'pusher',
+                'key' => $pusher['key'],
+                'cluster' => $pusher['options']['cluster'] ?? 'mt1',
+                'host' => null,
+                'port' => null,
+                'scheme' => 'https',
+            ];
+        }
+
         $reverb = config('broadcasting.connections.reverb');
 
         if (empty($reverb['key'])) {

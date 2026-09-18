@@ -3,6 +3,9 @@ import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
 
 export interface BroadcastingConfig {
+    /** 'pusher' for hosted Pusher Channels; absent/'reverb' for a self-hosted Reverb server. */
+    driver?: 'reverb' | 'pusher';
+    cluster?: string;
     key: string;
     host: string | null;
     port: number | string | null;
@@ -62,14 +65,23 @@ export function getEcho(shared?: BroadcastingConfig | null): Echo<'reverb'> | nu
 
     try {
         window.Pusher = Pusher;
+        // Hosted Pusher speaks the same protocol; only the connection options differ.
+        const connection =
+            config.driver === 'pusher'
+                ? { cluster: config.cluster ?? 'mt1', forceTLS: true }
+                : {
+                      wsHost: config.host ?? window.location.hostname,
+                      wsPort: port,
+                      wssPort: port,
+                      forceTLS: scheme === 'https',
+                      enabledTransports: ['ws', 'wss'] as ('ws' | 'wss')[],
+                  };
+
         instance = new Echo({
-            broadcaster: 'reverb',
+            // Both run on Echo's Pusher connector; typed as 'reverb' to keep one Echo<'reverb'> instance type.
+            broadcaster: (config.driver === 'pusher' ? 'pusher' : 'reverb') as 'reverb',
             key: config.key,
-            wsHost: config.host ?? window.location.hostname,
-            wsPort: port,
-            wssPort: port,
-            forceTLS: scheme === 'https',
-            enabledTransports: ['ws', 'wss'],
+            ...connection,
             // Auth through axios so the rotating XSRF cookie is always used.
             authorizer: (channel: { name: string }) => ({
                 authorize: (socketId: string, callback: (error: Error | null, data: ChannelAuthData | null) => void) => {
