@@ -126,7 +126,7 @@ class ShopifyIntegrationController extends Controller
     public function sync(Request $request): HttpResponse
     {
         $data = $request->validate([
-            'resource' => ['required', Rule::in(['products', 'customers', 'orders'])],
+            'resource' => ['required', Rule::in(['shipping', 'products', 'customers', 'orders'])],
             'from' => ['nullable', 'date_format:Y-m-d'],
             'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
         ]);
@@ -298,13 +298,13 @@ class ShopifyIntegrationController extends Controller
     }
 
     /**
-     * @return array{products: ?string, customers: ?string, orders: ?string}
+     * @return array{shipping: ?string, products: ?string, customers: ?string, orders: ?string}
      */
     private function lastSync(): array
     {
         $result = [];
 
-        foreach (['products', 'customers', 'orders'] as $resource) {
+        foreach (['shipping', 'products', 'customers', 'orders'] as $resource) {
             $run = ShopifySyncRun::query()
                 ->where('resource', $resource)
                 ->where('status', 'completed')

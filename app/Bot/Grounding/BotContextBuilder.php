@@ -5,7 +5,6 @@ namespace App\Bot\Grounding;
 use App\Bot\CatalogSearch;
 use App\Bot\Knowledge\KnowledgeBase;
 use App\Bot\Knowledge\SizeChart;
-use App\Commerce\ShippingQuote;
 use App\Enums\BotIntent;
 use App\Models\BotSetting;
 
@@ -18,7 +17,7 @@ final class BotContextBuilder
 {
     public function __construct(
         private readonly GovernorateMatcher $governorates,
-        private readonly ShippingQuote $quotes,
+        private readonly ShippingFeeAnswer $fees,
         private readonly KnowledgeBase $knowledge,
         private readonly CatalogSearch $catalog,
     ) {}
@@ -28,9 +27,19 @@ final class BotContextBuilder
         $lines = [];
         $code = $this->governorates->match($text);
 
+        // Shipping fees come only from the synced Shopify rates (ShippingFeeAnswer).
         if ($code !== null && in_array($intent, [BotIntent::Shipping, BotIntent::Price, BotIntent::Other], true)) {
-            $option = $this->quotes->quote($code, '0')[0];
-            $lines[] = 'الشحن لـ'.$this->governorates->name($code).': '.rtrim(rtrim($option->price, '0'), '.').' جنيه ('.$option->title.')';
+            if (($fact = $this->fees->governorateFact($code)) !== null) {
+                $lines[] = $fact;
+            }
+        } elseif ($intent === BotIntent::Shipping) {
+            $fee = $this->fees->for($text);
+
+            if ($fee['fact'] !== null) {
+                $lines[] = $fee['fact'];
+            } elseif ($fee['asks_governorate']) {
+                $lines[] = 'مصاريف الشحن بتختلف حسب المحافظة: '.ShippingFeeAnswer::ASK_GOVERNORATE;
+            }
         }
 
         $knowledgeKeys = match ($intent) {

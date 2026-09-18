@@ -24,6 +24,7 @@ use App\Http\Controllers\Web\Settings\BotLearningController;
 use App\Http\Controllers\Web\Settings\BranchController;
 use App\Http\Controllers\Web\Settings\ChannelController;
 use App\Http\Controllers\Web\Settings\CityController;
+use App\Http\Controllers\Web\Settings\FacebookLoginController;
 use App\Http\Controllers\Web\Settings\QuickReplyCategoryController;
 use App\Http\Controllers\Web\Settings\QuickReplyController;
 use App\Http\Controllers\Web\Settings\ShopifyIntegrationController;
@@ -214,6 +215,10 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
         Route::delete('channels/{channel}', [ChannelController::class, 'destroy'])->name('channels.destroy');
         Route::post('channels/{channel}/test', [ChannelController::class, 'test'])->name('channels.test');
         Route::post('channels/{channel}/subscribe', [ChannelController::class, 'subscribe'])->name('channels.subscribe');
+        Route::get('channels/facebook/connect', [FacebookLoginController::class, 'connect'])->name('channels.facebook.connect');
+        Route::get('channels/facebook/callback', [FacebookLoginController::class, 'callback'])->name('channels.facebook.callback');
+        Route::get('channels/facebook/pages', [FacebookLoginController::class, 'pages'])->name('channels.facebook.pages');
+        Route::post('channels/facebook/pages/{pageId}', [FacebookLoginController::class, 'select'])->where('pageId', '[0-9]+')->name('channels.facebook.select');
 
         Route::get('cities', [CityController::class, 'index'])->name('cities.index');
         Route::post('cities', [CityController::class, 'store'])->name('cities.store');

@@ -12,4 +12,5 @@ return [
     App\Shopify\ShopifyServiceProvider::class,
     App\Analytics\AnalyticsServiceProvider::class,
     App\Simulator\SimulatorServiceProvider::class,
+    App\Legal\LegalServiceProvider::class,
 ];

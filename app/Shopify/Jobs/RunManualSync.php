@@ -2,6 +2,7 @@
 
 namespace App\Shopify\Jobs;
 
+use App\Shopify\Sync\BulkImporter;
 use App\Shopify\Sync\IncrementalSync;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
@@ -52,6 +53,13 @@ class RunManualSync implements ShouldBeUnique, ShouldQueue
 
     public function handle(IncrementalSync $sync): void
     {
+        // Shipping zones have no "updated since" window: the whole list is re-imported.
+        if ($this->resource === 'shipping') {
+            app(BulkImporter::class)->syncShipping('manual');
+
+            return;
+        }
+
         $since = $this->from !== null
             ? Carbon::parse($this->from)->startOfDay()
             : now()->subDay();

@@ -11,6 +11,7 @@ use App\Bot\Flows\FlowEngine;
 use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\FlowScripts;
 use App\Bot\Flows\FlowState;
+use App\Bot\Grounding\ShippingFeeAnswer;
 use App\Bot\HandoverSignals;
 use App\Bot\Knowledge\KnowledgeBase;
 use App\Enums\AttachmentType;
@@ -51,6 +52,12 @@ class TurnRunner
 
     /** A flow prompt that follows a delayed reply part is queued this long after that part. */
     public const FOLLOW_UP_GAP_MS = 1000;
+
+    /** The "الشحن بكام" intent: answered with the live Shopify rate as a fact (ShippingFeeAnswer). */
+    public const SHIPPING_COST_INTENT = 'shipping_cost';
+
+    /** A price word bound to a shipping word, on ArabicNormalizer-normalized text. */
+    private const SHIPPING_PRICE_PATTERN = '/(?:شحن|توصيل)\S*(?:\s+\S+){0,3}?\s+ب\s?كام|ب\s?كام\s+(?:ال)?(?:شحن|توصيل)|سعر\s+(?:ال)?(?:شحن|توصيل)/u';
 
     public const CLARIFY_TEXT = 'ممكن توضحيلي حضرتك محتاجة إيه بالظبط عشان أقدر أساعدك؟ 🌸';
 
@@ -228,6 +235,53 @@ class TurnRunner
                 $state['awaiting_intent'] = null;
             }
         }
+
+        // Shipping fee: never a number from a script, always the synced Shopify rate. Without a
+        // governorate (and no flat rate) she is asked for it, and her next message naming one
+        // gets that governorate's rate.
+        $shippingAsk = false;
+        $answerKeys = array_map(fn (BotIntent $i) => (string) $i->key, $answerIntents);
+
+        // "الشحن للجيزة بكام" reads as a price question to the keyword matcher: it asks the shipping fee.
+        if (! in_array(self::SHIPPING_COST_INTENT, $answerKeys, true) && in_array('price', $answerKeys, true)
+            && self::asksShippingFee($texts) && ($shippingIntent = $catalog->find(self::SHIPPING_COST_INTENT)) !== null && $shippingIntent->route === 'answer') {
+            $answerIntents[] = $shippingIntent;
+        }
+
+        if (in_array(self::SHIPPING_COST_INTENT, array_map(fn (BotIntent $i) => (string) $i->key, $answerIntents), true)) {
+            // "الشحن بكام" also hits the price intent's "بكام": unless a product price is asked too
+            // ("الفستان بكام والشحن بكام"), the question is only about shipping.
+            if (! self::asksProductPriceToo($texts)) {
+                $answerIntents = array_values(array_filter($answerIntents, fn (BotIntent $i) => $i->key !== 'price'));
+            }
+            $fee = app(ShippingFeeAnswer::class)->for(implode("
+", $texts));
+
+            if ($fee['fact'] !== null) {
+                $facts[] = $fee['fact'];
+            }
+
+            if ($fee['asks_governorate']) {
+                $facts[] = ShippingFeeAnswer::ASK_GOVERNORATE;
+                $this->nextSteps[] = 'Ask her which governorate the order ships to; never guess a shipping fee.';
+                $shippingAsk = true;
+            }
+        } elseif (! empty($previousState['shipping_ask']) && $resume === null && $collectIntent === null && $lookupIntents === []
+            && ($code = app(ShippingFeeAnswer::class)->matchGovernorate(implode("
+", $texts))) !== null) {
+            if (($fact = app(ShippingFeeAnswer::class)->governorateFact($code)) !== null) {
+                $facts[] = $fact;
+            } else {
+                // No Shopify rate for it: the approved "shown at checkout" script, never a guess.
+                $scripts = array_merge($scripts, $this->bodies(['shipping_fee']));
+            }
+
+            $clarify = false;
+            $handover = ($handover['category'] ?? null) === 'unclear' ? null : $handover;
+            $understood = true;
+        }
+
+        $state['shipping_ask'] = $shippingAsk;
 
         // Spec §4: understanding failed and the keyword fallback cannot tell either → a person, no clarifying question.
         $aiError = $aiFailed && ($u->unclear || ! $understood);
@@ -877,6 +931,28 @@ class TurnRunner
     }
 
     /** @return list<string> active `script.*` bodies for the intent, in its script_keys order */
+    /**
+     * "بكام" next to a shipping word ("الشحن للجيزة بكام", "بكام الشحن"): the question is the
+     * shipping fee. Only "بكام", never a bare "كام" ("التوصيل بياخد كام يوم" asks the time).
+     *
+     * @param  list<string>  $texts
+     */
+    public static function asksShippingFee(array $texts): bool
+    {
+        $text = app(ArabicNormalizer::class)->normalize(implode(' ', $texts));
+
+        return preg_match(self::SHIPPING_PRICE_PATTERN, $text) === 1
+            || preg_match('/\b(?:shipping|delivery)\b.*\b(?:cost|fee|price|how much)\b/i', $text) === 1;
+    }
+
+    /** More "بكام"/"سعر" in the burst than the ones tied to a shipping word: a product price is asked too. */
+    public static function asksProductPriceToo(array $texts): bool
+    {
+        $text = app(ArabicNormalizer::class)->normalize(implode(' ', $texts));
+
+        return preg_match_all('/ب\s?كام|سعر/u', $text) > preg_match_all(self::SHIPPING_PRICE_PATTERN, $text);
+    }
+
     private function scripts(BotIntent $i): array
     {
         return $this->bodies($i->script_keys ?? []);

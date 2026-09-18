@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web\Settings;
 
 use App\Channels\Adapters\MetaGraphClient;
 use App\Channels\Jobs\ProcessWebhookEvent;
+use App\Channels\MetaPageSubscriber;
 use App\Commerce\Jobs\ProcessShopifyWebhook;
 use App\Enums\Platform;
 use App\Http\Controllers\Concerns\RespondsWithData;
@@ -20,7 +21,10 @@ class ChannelController extends Controller
 {
     use RespondsWithData;
 
-    public function __construct(private readonly MetaGraphClient $graph) {}
+    public function __construct(
+        private readonly MetaGraphClient $graph,
+        private readonly MetaPageSubscriber $subscriber,
+    ) {}
 
     public function index(): Response
     {
@@ -30,6 +34,7 @@ class ChannelController extends Controller
                 ->orderByDesc('id')
                 ->limit(50)
                 ->get(['id', 'provider', 'event_type', 'status', 'attempts', 'error', 'payload', 'created_at']),
+            'facebookLogin' => FacebookLoginController::settings(),
         ]);
     }
 
@@ -130,9 +135,7 @@ class ChannelController extends Controller
             return response()->json(['ok' => false, 'error' => 'missing_external_id']);
         }
 
-        $result = $this->graph->post($channel, "{$pageId}/subscribed_apps", [
-            'subscribed_fields' => 'messages,messaging_postbacks,message_deliveries,message_reads,feed',
-        ]);
+        $result = $this->subscriber->subscribe($channel, $pageId);
 
         if (! $result->success) {
             return response()->json(['ok' => false, 'error' => $result->error]);

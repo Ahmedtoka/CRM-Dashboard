@@ -50,5 +50,14 @@ function toggleLocale(): void {
                 <slot />
             </div>
         </div>
+
+        <!-- Public legal pages (plain links: they are Blade pages, not Inertia visits). -->
+        <nav class="flex items-center gap-2 text-xs text-muted-foreground">
+            <a :href="`/privacy?lang=${locale}`" class="hover:text-foreground hover:underline">{{ t('auth.legal.privacy') }}</a>
+            <span aria-hidden="true">·</span>
+            <a :href="`/terms?lang=${locale}`" class="hover:text-foreground hover:underline">{{ t('auth.legal.terms') }}</a>
+            <span aria-hidden="true">·</span>
+            <a :href="`/data-deletion?lang=${locale}`" class="hover:text-foreground hover:underline">{{ t('auth.legal.data_deletion') }}</a>
+        </nav>
     </div>
 </template>

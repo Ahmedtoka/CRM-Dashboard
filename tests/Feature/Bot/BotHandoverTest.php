@@ -39,6 +39,10 @@ it('hands over size recommendation and complaints', function () {
 });
 
 it('answers shipping fee from the shipping quote and knowledge, never inventing numbers', function () {
+    // The fee comes only from the synced Shopify rates (ShippingFeeAnswer).
+    $zone = \App\Models\ShippingZone::factory()->create();
+    \App\Models\ShippingZoneRegion::factory()->create(['shipping_zone_id' => $zone->id, 'province_code' => 'ALX', 'province_name' => 'Alexandria']);
+    \App\Models\ShippingRate::factory()->create(['shipping_zone_id' => $zone->id, 'price' => 60]);
     $run = ($this->say)('الشحن لإسكندرية بكام؟');
 
     expect($run->decision)->toBe('reply')->and($run->intent)->toBe('shipping')

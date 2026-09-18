@@ -28,6 +28,15 @@ return [
         'token' => env('CRM_HEALTH_TOKEN'),
     ],
 
+    // Public legal pages (/privacy, /terms, /data-deletion) required by Meta App Review.
+    // contact_email is shown as the privacy / deletion contact; when empty the pages point
+    // people to the Facebook Page instead. retention_months is quoted in the privacy policy.
+    'legal' => [
+        'company_name' => env('LEGAL_COMPANY_NAME', 'Le Voile'),
+        'contact_email' => env('LEGAL_CONTACT_EMAIL'),
+        'retention_months' => (int) env('LEGAL_RETENTION_MONTHS', 24),
+    ],
+
     // Behind a TLS-terminating proxy (Cloudflare tunnel locally, Nginx on staging)
     // trust its X-Forwarded-* headers so generated URLs keep https. Comma-separated
     // IPs, or '*'; empty trusts nothing. Applied in AppServiceProvider::boot().
@@ -37,6 +46,13 @@ return [
         'app_secret' => env('META_APP_SECRET'),
         'verify_token' => env('META_VERIFY_TOKEN', 'crm-verify'),
         'graph_version' => env('META_GRAPH_VERSION', 'v23.0'),
+
+        // "Connect with Facebook" (Facebook Login) on Settings → Channels. The app id is
+        // public; the token exchange also needs app_secret above. login_config_id is the
+        // optional Facebook Login for Business configuration id — when set it replaces
+        // the explicit scope list in the login dialog.
+        'app_id' => env('META_APP_ID'),
+        'login_config_id' => env('META_LOGIN_CONFIG_ID'),
     ],
 
     // Perf instrumentation (spec §11.3). Off by default so ordinary requests never

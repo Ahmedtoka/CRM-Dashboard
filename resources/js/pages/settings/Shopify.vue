@@ -133,7 +133,7 @@ async function resumeImport(): Promise<void> {
 }
 
 // --- manual sync ---
-const syncing = reactive<Record<ShopifySyncResource, boolean>>({ products: false, customers: false, orders: false });
+const syncing = reactive<Record<ShopifySyncResource, boolean>>({ shipping: false, products: false, customers: false, orders: false });
 const ordersFrom = ref('');
 const ordersTo = ref('');
 
@@ -200,7 +200,7 @@ poll(refreshStatus);
 onBeforeUnmount(() => echo?.leave('integrations'));
 
 const breadcrumbs = computed(() => [{ title: t('settings.shopify.title'), href: '/settings/shopify' }]);
-const syncResources: ShopifySyncResource[] = ['products', 'customers'];
+const syncResources: ShopifySyncResource[] = ['shipping', 'products', 'customers'];
 </script>
 
 <template>
@@ -223,7 +223,7 @@ const syncResources: ShopifySyncResource[] = ['products', 'customers'];
                 <section class="grid gap-3 rounded-lg bg-card p-4 text-xs shadow-card">
                     <h2 class="text-sm font-semibold">{{ t('settings.shopify.sync.title') }}</h2>
 
-                    <ul class="grid gap-2 sm:grid-cols-3">
+                    <ul class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                         <li v-for="resource in syncResources" :key="resource" class="grid gap-1.5 rounded-md border border-border p-2.5">
                             <span class="font-medium">{{ t(`settings.shopify.import.stage.${resource}`) }}</span>
                             <span class="text-muted-foreground">{{ t('settings.shopify.sync.last_sync') }}: {{ formatDateTime(lastSync[resource], locale) || t('settings.shopify.sync.never') }}</span>

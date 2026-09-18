@@ -296,6 +296,53 @@ final class BulkImporter
     {
         $this->updateStage('shipping', ['status' => 'running', 'total' => null, 'processed' => 0, 'failed' => 0, 'run_id' => $run->id]);
 
+        $count = $this->replaceShippingZones();
+
+        $this->recorder->close($run, SyncRunSummary::empty()->withProcessed($count), 'completed');
+        $this->updateStage('shipping', ['status' => 'completed', 'total' => $count, 'processed' => $count]);
+    }
+
+    /**
+     * Re-imports only the shipping zones/regions/rates (the daily
+     * `shopify:sync-shipping` run and the settings page's "sync now"), so the
+     * bot's shipping quotes always follow Shopify. Recorded as its own
+     * `shopify_sync_runs` row; the initial import's `import_state` is left alone.
+     * Shares the shipping stage's lock, so it never overlaps an import.
+     *
+     * @return int the number of zones imported
+     *
+     * @throws RuntimeException when the stage lock is held or Shopify returns nothing usable
+     */
+    public function syncShipping(string $type = 'nightly'): int
+    {
+        $lock = Cache::lock('shopify-import-shipping', self::LOCK_SECONDS);
+
+        if (! $lock->get()) {
+            throw new RuntimeException('The Shopify shipping zones are already being imported.');
+        }
+
+        $run = $this->recorder->open($type, 'shipping');
+
+        try {
+            $this->integrations->requireConnected();
+            $count = $this->replaceShippingZones();
+            $this->recorder->close($run, SyncRunSummary::empty()->withProcessed($count), 'completed');
+
+            return $count;
+        } catch (Throwable $e) {
+            $run->refresh();
+            $this->recorder->recordError($run, 'shipping', $this->describe($e));
+            $this->recorder->close($run, SyncRunSummary::fromRun($run), 'failed');
+
+            throw $e;
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /** Pages every delivery profile's zones and replaces the local copy; returns the zone count. */
+    private function replaceShippingZones(): int
+    {
         $zones = [];
         $cursor = null;
         $first = true;
@@ -328,10 +375,7 @@ final class BulkImporter
             }
         }
 
-        $count = $this->zones->replaceAll($zones);
-
-        $this->recorder->close($run, SyncRunSummary::empty()->withProcessed($count), 'completed');
-        $this->updateStage('shipping', ['status' => 'completed', 'total' => $count, 'processed' => $count]);
+        return $this->zones->replaceAll($zones);
     }
 
     /** @return list<array<string, mixed>> every zone of one profile location group, following zone pages */

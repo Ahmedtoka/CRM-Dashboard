@@ -8,12 +8,12 @@ import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatDateTime } from '@/lib/format';
 import type { SharedData } from '@/types';
-import type { ChannelAccount, ChannelTestResult, FailedWebhookEvent } from '@/types/admin';
+import type { ChannelAccount, ChannelTestResult, FacebookLoginSettings, FailedWebhookEvent } from '@/types/admin';
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { LoaderCircle, RotateCw } from 'lucide-vue-next';
+import { CircleAlert, CircleCheck, Info, LoaderCircle, RotateCw, TriangleAlert, X } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 
-const props = defineProps<{ accounts: ChannelAccount[]; failedEvents: FailedWebhookEvent[] }>();
+const props = defineProps<{ accounts: ChannelAccount[]; failedEvents: FailedWebhookEvent[]; facebookLogin: FacebookLoginSettings }>();
 
 const { t, locale } = useI18n();
 const page = usePage<SharedData>();
@@ -26,13 +26,42 @@ const testingAccount = ref<number | null>(null);
 const subscribingAccount = ref<number | null>(null);
 const testResults = reactive<Record<number, ChannelTestResult | null>>({});
 
-// One card per platform: the first connected account, else the first one on file.
+// One card per platform: a live connected account first (e.g. the page picked through
+// "Connect with Facebook", even when a simulator account exists), else the first
+// account that is not disconnected, else the first one on file.
 const cards = computed(() =>
     (page.props.platforms ?? []).map((p) => {
         const list = props.accounts.filter((a) => a.platform === p.value);
-        return { platform: p.value, account: list.find((a) => a.status !== 'disconnected') ?? list[0] ?? null };
+        const active = list.filter((a) => a.status !== 'disconnected');
+        return { platform: p.value, account: active.find((a) => a.driver === 'live') ?? active[0] ?? list[0] ?? null };
     }),
 );
+
+// Outcome of the "Connect with Facebook" flow (flashed once by the server).
+const flashTones = {
+    connected: 'success',
+    cancelled: 'info',
+    subscribe_failed: 'warning',
+    missing_tasks: 'warning',
+    expired: 'warning',
+} as const;
+const dismissedFlash = ref(false);
+const facebookFlash = computed(() => {
+    const flash = props.facebookLogin.flash;
+    if (!flash || dismissedFlash.value) return null;
+    return {
+        tone: flashTones[flash.code as keyof typeof flashTones] ?? 'error',
+        message: t(`settings.channels.facebook.flash.${flash.code}`, { name: flash.name ?? '' }),
+        detail: flash.detail ?? null,
+    };
+});
+const flashClasses = {
+    success: 'border-success/30 bg-success/10',
+    info: 'border-border bg-muted',
+    warning: 'border-warning/40 bg-warning/15',
+    error: 'border-destructive/30 bg-destructive/10',
+} as const;
+const flashIcons = { success: CircleCheck, info: Info, warning: TriangleAlert, error: CircleAlert } as const;
 
 // The Instagram card's "linked Facebook page" picker only ever offers Facebook accounts.
 const facebookAccounts = computed(() => props.accounts.filter((a) => a.platform === 'facebook').map((a) => ({ id: a.id, name: a.name })));
@@ -137,6 +166,17 @@ const breadcrumbs = computed(() => [{ title: t('settings.channels.title'), href:
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.channels.title')" :description="t('settings.channels.description')" />
 
+            <div v-if="facebookFlash" role="status" class="flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm" :class="flashClasses[facebookFlash.tone]">
+                <component :is="flashIcons[facebookFlash.tone]" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                <div class="min-w-0 flex-1">
+                    <p class="font-medium">{{ facebookFlash.message }}</p>
+                    <p v-if="facebookFlash.detail" class="mt-0.5 break-words text-xs text-muted-foreground" dir="ltr">{{ facebookFlash.detail }}</p>
+                </div>
+                <button type="button" class="rounded p-0.5 text-muted-foreground hover:bg-background/60 hover:text-foreground" :aria-label="t('common.close')" @click="dismissedFlash = true">
+                    <X class="size-4" aria-hidden="true" />
+                </button>
+            </div>
+
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <ChannelCard
                     v-for="card in cards"
@@ -148,6 +188,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.channels.title'), href:
                     :subscribing="subscribingAccount === card.account?.id"
                     :test-result="card.account ? (testResults[card.account.id] ?? null) : null"
                     :facebook-accounts="facebookAccounts"
+                    :facebook-login="facebookLogin"
                     @driver="changeDriver"
                     @save-live="saveLive"
                     @test="testAccount"

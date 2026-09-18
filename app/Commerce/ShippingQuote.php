@@ -27,6 +27,52 @@ final class ShippingQuote
         return $options !== [] ? $options : [$this->defaultOption()];
     }
 
+    /**
+     * The first Shopify zone rate for a governorate at subtotal 0 (what the bot
+     * quotes), or null when Shopify has no rate for it. Unlike quote(), never
+     * falls back to the integration's default fee.
+     */
+    public function shopifyRate(string $provinceCode): ?ShippingOption
+    {
+        return $this->zoneRates($provinceCode, 0.0)[0] ?? null;
+    }
+
+    /**
+     * The one domestic rate when every Egyptian governorate Shopify ships to has
+     * the same first rate (a flat fee), else null (the fee depends on the
+     * governorate, or nothing is synced). Two queries, whatever the zone count.
+     */
+    public function domesticFlatRate(): ?ShippingOption
+    {
+        $zonesByProvince = ShippingZoneRegion::query()
+            ->where('country_code', 'EG')
+            ->whereNotNull('province_code')
+            ->get(['shipping_zone_id', 'province_code'])
+            ->groupBy('province_code')
+            ->map(fn ($regions) => $regions->pluck('shipping_zone_id')->all());
+
+        if ($zonesByProvince->isEmpty()) {
+            return null;
+        }
+
+        $rates = ShippingRate::query()
+            ->whereIn('shipping_zone_id', $zonesByProvince->flatten()->unique()->all())
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (ShippingRate $r) => $r->min_order_subtotal === null || (float) $r->min_order_subtotal <= 0.0)
+            ->filter(fn (ShippingRate $r) => $r->max_order_subtotal === null || (float) $r->max_order_subtotal >= 0.0);
+
+        $firsts = $zonesByProvince->map(fn (array $zoneIds) => $rates->first(fn (ShippingRate $r) => in_array($r->shipping_zone_id, $zoneIds, false)));
+
+        if ($firsts->contains(null) || $firsts->map(fn (ShippingRate $r) => self::money($r->price))->unique()->count() !== 1) {
+            return null;
+        }
+
+        $rate = $firsts->first();
+
+        return new ShippingOption($rate->id, $rate->title, self::money($rate->price));
+    }
+
     public function defaultOption(): ShippingOption
     {
         $settings = ($this->integrations->current() ?? new ShopifyIntegration)->settingsWithDefaults();

@@ -17,6 +17,12 @@ use App\Bot\ArabicNormalizer;
  */
 final class LeVoileScripts
 {
+    /** Owner-confirmed payment methods (2026-09-18): COD, Visa, Mastercard, Apple Pay, any e-wallet. */
+    public const PAYMENT_TEXT = 'الدفع كاش عند الاستلام، أو فيزا / ماستركارد، أو Apple Pay، أو أي محفظة إلكترونية (من الموقع) 🌸';
+
+    /** The placeholder payment_info was seeded with; replaced only while still untouched. */
+    public const PAYMENT_PLACEHOLDER = '❓ محتاج طرق الدفع المتاحة';
+
     /** Overnight refinement change 3/4: the owner's default store link. */
     public const STORE_URL = 'https://levoilestores.com/';
 
@@ -134,6 +140,8 @@ https://levoilestores.com/', 'active' => true],
             'delivery_time' => ['title' => 'مدة التوصيل', 'body' => 'الاوردر بيوصل القاهرة / الجيزة / الاسكندريه خلال 3-5 ايام عمل .
 باقي المحافظات خلال 5-7 ايام عمل ✨
 غير محسوب الاجازات الرسميه والاسبوعيه', 'active' => true],
+            // Never a number here: TurnRunner adds the live Shopify rate as a fact (ShippingFeeAnswer).
+            'shipping_fee' => ['title' => 'مصاريف الشحن', 'body' => 'مصاريف الشحن بتتحسب حسب المحافظة وبتظهر لحضرتك قبل تأكيد الأوردر على الويب سايت 🌸', 'active' => true],
             'track_shipped' => ['title' => 'متابعة أوردر مشحون', 'body' => 'تم التواصل مع شركه الشحن لمتابعه الاوردر و هيتم التواصل مع حضرتك من خلالهم في اقرب وقت للتسليم', 'active' => true],
             'cancel_order' => ['title' => 'إلغاء أوردر', 'body' => 'ممكن رقم الاوردر او رقم الموبايل او الميل اللي تم بيه الاوردر عشان اقدر اساعد حضرتك 🌸
 حابه اوضح لحضرتك ان فيما بعد الغاء الاوردر بيكون في خلال ساعتين فقط من الطلب لان بيكون في تحمل لمصاريف الشحن', 'active' => true],
@@ -223,7 +231,8 @@ Thanks for choosing Le Voile 🌸', 'active' => true],
             'offer_human' => ['title' => 'عرض التحويل لموظف', 'body' => 'لو حابة أحولك لموظف في أي وقت قوليلي 🌸', 'active' => true],
             // Placeholders the owner has not supplied yet (inactive until filled in).
             'branches_hours' => ['title' => 'الفروع ومواعيد العمل', 'body' => '❓ محتاج عناوين الفروع ومواعيد العمل', 'active' => false],
-            'payment_info' => ['title' => 'طرق الدفع', 'body' => '❓ محتاج طرق الدفع المتاحة', 'active' => false],
+            // Owner-confirmed 2026-09-18 (was a ❓ placeholder).
+            'payment_info' => ['title' => 'طرق الدفع', 'body' => self::PAYMENT_TEXT, 'active' => true],
         ];
     }
 
@@ -253,6 +262,8 @@ Thanks for choosing Le Voile 🌸', 'active' => true],
             $row('material', 'general', 'الخامة', 'Material', 'answer', 'low', null, ['material_link'], [], ['الخامه', 'خامه', 'قماش', 'material', '5ama', 'khama']),
             $row('colors', 'general', 'الألوان', 'Colors', 'answer', 'low', null, ['colors'], [], ['الوان', 'لون', 'colors', 'color', 'alwan', 'lon']),
             $row('delivery_time', 'general', 'مدة التوصيل', 'Delivery time', 'answer', 'low', null, ['delivery_time'], [], ['التوصيل', 'مدة التوصيل', 'كام يوم', 'بيوصل امتي', 'delivery', 'tawseel', 'twseel']),
+            // "الشحن بكام": answered with the live Shopify rate (TurnRunner::SHIPPING_COST_INTENT), never a scripted fee.
+            $row('shipping_cost', 'general', 'مصاريف الشحن', 'Shipping cost', 'answer', 'low', null, ['shipping_fee'], [], ['الشحن بكام', 'الشحن كام', 'الشحن ب كام', 'سعر الشحن', 'مصاريف الشحن', 'مصاريف شحن', 'تكلفة الشحن', 'التوصيل بكام', 'shipping cost', 'shipping fee', 'sha7n bkam']),
             $row('international_shipping', 'general', 'الشحن خارج مصر', 'International shipping', 'answer', 'low', null, ['international_shipping'], [], ['خارج مصر', 'برا مصر', 'بره مصر', 'international', 'outside egypt']),
             $row('return_policy', 'general', 'سياسة الاستبدال والاسترجاع', 'Return & exchange policy', 'answer', 'low', null, ['return_policy'], [], ['السياسه', 'سياسة الاستبدال', 'سياسة الاسترجاع', 'policy', 'return policy']),
             // Overnight refinement change 2: merged in booking hints (احجز, عايزة اطلب, عاوزه اطلب, اطلب) alongside the existing ones.

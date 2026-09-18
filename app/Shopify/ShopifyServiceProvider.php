@@ -7,6 +7,7 @@ use App\Shopify\Client\HttpShopifyTransport;
 use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Client\ShopifyTransport;
 use App\Shopify\Commands\ReconcileCommand;
+use App\Shopify\Commands\SyncShippingCommand;
 use App\Shopify\Commands\WebhooksCheckCommand;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
@@ -32,6 +33,7 @@ class ShopifyServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 ReconcileCommand::class,
+                SyncShippingCommand::class,
                 WebhooksCheckCommand::class,
             ]);
         }
@@ -39,6 +41,13 @@ class ShopifyServiceProvider extends ServiceProvider
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
             $schedule->command(ReconcileCommand::class)
                 ->dailyAt('03:00')
+                ->timezone('Africa/Cairo')
+                ->withoutOverlapping()
+                ->onOneServer();
+
+            // Shipping fees can change in Shopify at any time and no webhook reports it.
+            $schedule->command(SyncShippingCommand::class)
+                ->dailyAt('03:30')
                 ->timezone('Africa/Cairo')
                 ->withoutOverlapping()
                 ->onOneServer();

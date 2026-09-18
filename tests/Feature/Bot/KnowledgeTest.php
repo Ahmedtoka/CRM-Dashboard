@@ -7,13 +7,13 @@ use App\Models\{BotKnowledgeEntry, BotSetting, User};
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
-it('seeds template knowledge entries marked as templates', function () {
+it('seeds the real Le Voile knowledge entries, no longer marked as samples', function () {
     // The Le Voile owner scripts (`script.*`, seeded separately, not templates) are excluded here.
     $defaults = BotKnowledgeEntry::where('key', 'not like', 'script.%');
 
     expect((clone $defaults)->orderBy('sort')->pluck('key')->all())
         ->toBe(['store_intro', 'working_hours_text', 'payment_methods', 'shipping_times', 'exchange_policy', 'return_policy', 'fabric_care'])
-        ->and((clone $defaults)->where('is_template', false)->count())->toBe(0)
+        ->and((clone $defaults)->where('is_template', true)->count())->toBe(0)
         ->and(BotKnowledgeEntry::where('key', 'exchange_policy')->value('body'))->toContain('14 يوم');
 });
 
@@ -86,6 +86,7 @@ it('rejects a new entry key longer than 60 characters', function () {
 it('keeps is_template true when only is_active is toggled on a fresh template entry', function () {
     $sup = User::factory()->create(['role' => UserRole::Supervisor]);
     $entry = BotKnowledgeEntry::where('key', 'store_intro')->first();
+    $entry->update(['is_template' => true]);
     expect($entry->is_template)->toBeTrue();
 
     $this->actingAs($sup)->putJson("/settings/bot-knowledge/entries/{$entry->id}", ['is_active' => false])->assertOk()

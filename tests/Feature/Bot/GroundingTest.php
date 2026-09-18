@@ -75,19 +75,29 @@ it('detects handover signals', function (string $text, ?string $reason) {
     ['الفستان ده بكام', null], ['جدول المقاسات لو سمحتي', null],
 ]);
 
+/** A synced Shopify zone for one governorate with one rate. */
+function groundingShopifyRate(string $code, float $price): void
+{
+    $zone = \App\Models\ShippingZone::factory()->create();
+    \App\Models\ShippingZoneRegion::factory()->create(['shipping_zone_id' => $zone->id, 'province_code' => $code]);
+    \App\Models\ShippingRate::factory()->create(['shipping_zone_id' => $zone->id, 'price' => $price]);
+}
+
 it('builds shipping and knowledge grounding by intent', function () {
+    groundingShopifyRate('GZ', 60);
     $ctx = app(BotContextBuilder::class)->build('الشحن للجيزة بكام وبياخد قد ايه', BotIntent::Shipping);
 
     expect($ctx->governorate)->toBe('GZ')
-        ->and($ctx->lines[0])->toStartWith('الشحن لـالجيزة: 60 جنيه')
+        ->and($ctx->lines[0])->toBe('مصاريف الشحن لـالجيزة: 60 جنيه')
         ->and(collect($ctx->lines)->contains(fn ($l) => str_starts_with($l, '[مدة التوصيل]')))->toBeTrue();
 });
 
 it('rejects a reply whose price or fee is not in the grounding', function () {
+    groundingShopifyRate('GZ', 60);
     $ctx = app(BotContextBuilder::class)->build('الشحن للجيزة بكام', BotIntent::Shipping);
     $guard = app(PriceGuard::class);
 
-    expect($guard->isSafe('الشحن للجيزة 60 جنيه والتوصيل من 2 لـ 4 أيام', $ctx->lines))->toBeTrue()
+    expect($guard->isSafe('الشحن للجيزة 60 جنيه والتوصيل من 3 لـ 5 أيام', $ctx->lines))->toBeTrue()
         ->and($guard->isSafe('الشحن للجيزة 45 جنيه بس', $ctx->lines))->toBeFalse()
         ->and($guard->isSafe('الاستبدال خلال 30 يوم', $ctx->lines))->toBeFalse();
 });

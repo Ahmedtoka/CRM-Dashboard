@@ -304,6 +304,31 @@ export interface ChannelTestResult {
     note?: string;
 }
 
+/** Outcome of the "Connect with Facebook" flow, flashed back to Settings → Channels. */
+export interface FacebookConnectFlash {
+    code: string;
+    name?: string;
+    detail?: string;
+}
+
+export interface FacebookLoginSettings {
+    enabled: boolean;
+    secret_missing: boolean;
+    redirect_uri: string;
+    flash: FacebookConnectFlash | null;
+}
+
+/** A Page from `GET /me/accounts` as shown on the picker — never carries a token. */
+export interface FacebookPageOption {
+    id: string;
+    name: string;
+    category: string | null;
+    picture: string | null;
+    tasks: string[] | null;
+    missing_tasks: string[];
+    connected: boolean;
+}
+
 export interface FailedWebhookEvent {
     id: number;
     provider: string;
@@ -457,7 +482,7 @@ export interface SimPost {
 // Shopify connection screen (Task 8, spec §7).
 export type ShopifyStatus = 'connected' | 'error' | 'disconnected';
 export type ShopifyStage = 'shipping' | 'products' | 'customers' | 'orders';
-export type ShopifySyncResource = 'products' | 'customers' | 'orders';
+export type ShopifySyncResource = 'shipping' | 'products' | 'customers' | 'orders';
 
 export interface ShopifyStageState {
     status: 'pending' | 'running' | 'completed' | 'failed';
@@ -515,6 +540,7 @@ export interface ShopifySyncRunRow {
 }
 
 export interface ShopifyLastSync {
+    shipping: string | null;
     products: string | null;
     customers: string | null;
     orders: string | null;

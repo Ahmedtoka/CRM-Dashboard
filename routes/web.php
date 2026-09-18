@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\Web\LegalController;
 use App\Http\Controllers\Web\LocaleController;
 use App\Http\Controllers\Web\MediaController;
 use App\Http\Middleware\SetLocale;
@@ -21,6 +22,11 @@ Route::get('/up/crm', HealthController::class)->name('health.crm');
 // send (Task 2). `MediaController::publicShow()` additionally refuses any attachment
 // that isn't yet linked to a message.
 Route::get('/media/public/{attachment}', [MediaController::class, 'publicShow'])->middleware('signed')->name('media.public');
+
+// Public legal pages (Meta App Review): open to guests and signed-in users alike.
+Route::get('/privacy', [LegalController::class, 'privacy'])->name('legal.privacy');
+Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
+Route::get('/data-deletion', [LegalController::class, 'dataDeletion'])->name('legal.data-deletion');
 
 Route::get('dashboard', fn () => redirect()->route('inbox'))->middleware('auth')->name('dashboard');
 

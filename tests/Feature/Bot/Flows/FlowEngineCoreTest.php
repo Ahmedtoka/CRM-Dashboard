@@ -88,8 +88,9 @@ it('opens a sub menu, hides inactive scripts and sends a script with the main me
     $c = flowSay('اهلا');
     $engine = app(FlowEngine::class);
 
+    // Ruling R4: an inactive script's option is hidden (5 → 4).
+    BotKnowledgeEntry::where('key', 'script.payment_info')->update(['is_active' => false]);
     expect($engine->runPayload($c, 'menu:products'))->toBeTrue();
-    // Ruling R4: payment_info is inactive in the seed, so its option is hidden (5 → 4).
     expect(lastBot()->buttons)->toHaveCount(4)
         ->and(collect(lastBot()->buttons)->pluck('payload')->all())->not->toContain('script:payment_info');
 
