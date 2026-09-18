@@ -53,21 +53,28 @@ final class ShopifyClient
         return $clone;
     }
 
-    /** @return array<mixed> */
+    /**
+     * A document starting with `mutation` is treated as a mutation (no resend
+     * after transport/5xx failures), even when sent through query().
+     *
+     * @return array<mixed>
+     */
     public function query(string $query, array $variables = []): array
     {
-        return $this->execute($query, $variables);
+        return $this->execute($query, $variables, preg_match('/^\s*mutation\b/i', $query) === 1);
     }
 
     /**
      * Mutation helper: throws ShopifyException('user_errors') when
-     * $data[$root]['userErrors'] is non-empty.
+     * $data[$root]['userErrors'] is non-empty. A mutation is only resent after
+     * 429/THROTTLED (Shopify did not run it); after a transport error or 5xx it
+     * may have run, so it is never resent automatically.
      *
      * @return array<mixed>
      */
     public function mutate(string $mutation, array $variables, string $root): array
     {
-        $data = $this->execute($mutation, $variables);
+        $data = $this->execute($mutation, $variables, true);
         $userErrors = $data[$root]['userErrors'] ?? [];
 
         if (! empty($userErrors)) {
@@ -84,7 +91,7 @@ final class ShopifyClient
     }
 
     /** @return array<mixed> */
-    private function execute(string $query, array $variables): array
+    private function execute(string $query, array $variables, bool $isMutation = false): array
     {
         [$domain, $token] = $this->resolveCredentials();
 
@@ -94,7 +101,9 @@ final class ShopifyClient
             'X-Shopify-Access-Token' => $token,
             'Content-Type' => 'application/json',
         ];
-        $body = ['query' => $query, 'variables' => $variables];
+        // Shopify rejects `"variables": []` (a JSON array) with "Invalid variables
+        // parameter" — an empty set must go out as a JSON object.
+        $body = ['query' => $query, 'variables' => $variables === [] ? new \stdClass : $variables];
 
         $this->paceIfNeeded();
 
@@ -104,7 +113,7 @@ final class ShopifyClient
             try {
                 $response = $this->transport->post($url, $headers, $body);
             } catch (Throwable $e) {
-                if ($attempt >= count(self::BACKOFF_SECONDS)) {
+                if ($isMutation || $attempt >= count(self::BACKOFF_SECONDS)) {
                     throw new ShopifyException('transport', $e->getMessage(), [], $e);
                 }
                 $this->sleep(self::BACKOFF_SECONDS[$attempt]);
@@ -124,9 +133,18 @@ final class ShopifyClient
                 throw new ShopifyException('auth', 'Shopify authentication failed');
             }
 
-            if ($status === 429 || $status >= 500 || $this->hasErrorCode($json, 'THROTTLED')) {
+            $throttled = $status === 429 || $this->hasErrorCode($json, 'THROTTLED');
+
+            // A 5xx mutation may already have been executed: surface it instead of resending.
+            if ($status >= 500 && $isMutation) {
+                throw new ShopifyException('transport', 'Shopify mutation failed with HTTP '.$status);
+            }
+
+            if ($throttled || $status >= 500) {
                 if ($attempt >= count(self::BACKOFF_SECONDS)) {
-                    throw new ShopifyException('throttled', 'Shopify request throttled after retries');
+                    throw $throttled
+                        ? new ShopifyException('throttled', 'Shopify request throttled after retries')
+                        : new ShopifyException('transport', 'Shopify request failed with HTTP '.$status.' after retries');
                 }
                 $this->sleep(self::BACKOFF_SECONDS[$attempt]);
                 $attempt++;
@@ -135,7 +153,9 @@ final class ShopifyClient
             }
 
             if (! empty($json['errors'])) {
-                throw new ShopifyException('transport', 'Shopify GraphQL error: '.json_encode($json['errors']));
+                $messages = collect($json['errors'])->pluck('message')->filter()->implode('; ');
+
+                throw new ShopifyException('graphql', $messages !== '' ? $messages : json_encode($json['errors']));
             }
 
             $this->recordThrottleStatus($json);

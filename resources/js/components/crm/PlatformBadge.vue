@@ -12,7 +12,7 @@ const info = usePlatform(() => props.platform);
 
 <template>
     <span
-        class="inline-flex shrink-0 items-center gap-1 rounded-full border bg-card font-medium text-muted-foreground"
+        class="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-card font-medium text-muted-foreground"
         :class="size === 'xs' ? 'h-4 px-1 text-2xs' : 'h-5 px-1.5 text-xs'"
         :title="info.label"
     >

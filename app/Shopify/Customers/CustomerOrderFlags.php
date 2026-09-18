@@ -7,6 +7,7 @@ use App\Enums\ShipmentStatus;
 use App\Events\CustomerUpdated;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Shipping\StuckOrderScope;
 use App\Shopify\Connection\IntegrationRepository;
 use App\Support\SafeBroadcast;
 use Illuminate\Database\Eloquent\Builder;
@@ -35,7 +36,6 @@ final class CustomerOrderFlags
             ->orWhereHas('fulfillments', fn (Builder $f) => $f->where('shipment_status', 'delivered'));
 
         $days = (int) ($this->integrations->current()?->settingsWithDefaults()['stuck_order_days'] ?? 5);
-        $cutoff = now()->subDays(max(1, $days));
 
         $flags = [
             'is_repeat' => max($shopifyCount, $localCount) >= 2,
@@ -48,14 +48,7 @@ final class CustomerOrderFlags
                     ->whereHas('refunds')
                     ->orWhereHas('shipment', fn (Builder $s) => $s->where('status', ShipmentStatus::Returned->value)))
                 ->exists(),
-            'has_stuck_order' => $orders()
-                ->whereNotIn('status', $notCancelled)
-                ->whereHas('shipment', fn (Builder $s) => $s
-                    ->whereNotIn('status', [ShipmentStatus::Delivered->value, ShipmentStatus::Returned->value, ShipmentStatus::Cancelled->value])
-                    ->whereDoesntHave('events', fn (Builder $e) => $e->where('occurred_at', '>=', $cutoff))
-                    ->where(fn (Builder $w) => $w->whereNull('last_event_at')->orWhere('last_event_at', '<', $cutoff))
-                    ->where(fn (Builder $w) => $w->whereHas('events')->orWhere('created_at', '<', $cutoff)))
-                ->exists(),
+            'has_stuck_order' => StuckOrderScope::apply($orders(), $days)->exists(),
         ];
 
         $stored = Customer::query()->whereKey($id)->first(self::FLAGS);

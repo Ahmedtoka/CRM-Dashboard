@@ -103,7 +103,7 @@ it('computes response time, roles, comments, orders and online minutes for a use
 
     $m = app(MetricsService::class)->userMetrics($mod, t('2026-09-10 00:00:00'), t('2026-09-10 23:59:59'));
 
-    expect(array_keys($m))->toBe(['messages_sent', 'conversations_handled', 'first_responses', 'continued', 'follow_ups', 'resolved', 'avg_first_response_sec', 'avg_response_sec', 'comments_handled', 'private_replies', 'orders_count', 'orders_total', 'cod_count', 'payment_link_count', 'payment_link_paid', 'online_minutes', 'by_platform'])
+    expect(array_keys($m))->toBe(['messages_sent', 'conversations_handled', 'first_responses', 'continued', 'follow_ups', 'resolved', 'avg_first_response_sec', 'avg_response_sec', 'comments_handled', 'private_replies', 'orders_count', 'orders_total', 'cod_count', 'payment_link_count', 'payment_link_paid', 'online_minutes', 'by_platform', 'orders_created_count', 'orders_created_total', 'orders_delivered', 'revenue_realized', 'orders_returned', 'delivery_rate', 'return_rate', 'by_source'])
         ->and($m['messages_sent'])->toBe(3)
         ->and($m['conversations_handled'])->toBe(1)
         ->and($m['first_responses'])->toBe(0)
@@ -171,7 +171,7 @@ it('computes team metrics', function () {
 
     $cairoHour = t('2026-09-10 10:00:00')->setTimezone('Africa/Cairo')->hour;
 
-    expect(array_keys($m))->toBe(['inbound_messages', 'outbound_messages', 'bot_messages', 'conversations_new', 'conversations_resolved', 'waiting_now', 'needs_human_now', 'avg_first_response_sec', 'comments_total', 'comments_by_status', 'orders_count', 'orders_total', 'by_platform', 'by_hour'])
+    expect(array_keys($m))->toBe(['inbound_messages', 'outbound_messages', 'bot_messages', 'conversations_new', 'conversations_resolved', 'waiting_now', 'needs_human_now', 'avg_first_response_sec', 'comments_total', 'comments_by_status', 'orders_count', 'orders_total', 'by_platform', 'by_hour', 'orders_created_count', 'orders_created_total', 'orders_delivered', 'revenue_realized', 'orders_returned', 'delivery_rate', 'return_rate', 'by_source'])
         ->and($m['inbound_messages'])->toBe(2)
         ->and($m['outbound_messages'])->toBe(1)
         ->and($m['bot_messages'])->toBe(1)
@@ -241,7 +241,7 @@ it('computes bot metrics', function () {
 
     $m = app(MetricsService::class)->botMetrics(t('2026-09-10 00:00:00'), t('2026-09-10 23:59:59'));
 
-    expect(array_keys($m))->toBe(['messages_sent', 'conversations_touched', 'auto_resolved', 'handovers', 'handover_rate', 'handover_reasons', 'rule_hits', 'ai_runs', 'ai_cost_usd', 'comments_replied', 'comments_hidden', 'private_replies'])
+    expect(array_keys($m))->toBe(['messages_sent', 'conversations_touched', 'auto_resolved', 'handovers', 'handover_rate', 'handover_reasons', 'rule_hits', 'ai_runs', 'ai_cost_usd', 'comments_replied', 'comments_hidden', 'private_replies', 'flows'])
         ->and($m['messages_sent'])->toBe(3)
         ->and($m['conversations_touched'])->toBe(4)
         ->and($m['auto_resolved'])->toBe(1)

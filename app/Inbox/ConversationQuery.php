@@ -23,7 +23,17 @@ class ConversationQuery
 {
     public const PER_PAGE = 30;
 
-    public const FILTERS = ['waiting', 'needs_human', 'bot', 'mine', 'comment', 'ad', 'spam', 'low_priority'];
+    public const FILTERS = [
+        'waiting', 'needs_human', 'bot', 'mine', 'comment', 'ad', 'spam', 'low_priority',
+        // Customer order-flag filters (spec §11.2, plan Task 9), joined off `customers`.
+        'customer_new', 'customer_repeat', 'open_order', 'has_return', 'stuck_order',
+        // Bot handover priority queues (spec §2.1/§2.3 Task 4). queue_senior is restricted to
+        // supervisor+ in build(); a moderator asking for it gets no rows, not an error.
+        'queue_all', 'queue_high', 'queue_senior',
+    ];
+
+    /** Priority rank used by the queue ordering (spec §2.3: high → medium → low, then oldest first). */
+    private const PRIORITY_ORDER_SQL = "CASE conversations.priority_level WHEN 'high' THEN 0 WHEN 'medium' THEN 1 WHEN 'low' THEN 2 ELSE 3 END";
 
     /**
      * Conversations the user may see: all for supervisor+, own platforms for moderators.
@@ -39,7 +49,7 @@ class ConversationQuery
     }
 
     /**
-     * @param  array{platform?: ?string, status?: ?string, filter?: ?string, q?: ?string}  $f
+     * @param  array{platform?: ?string, status?: ?string, filter?: ?string, q?: ?string, tag?: ?int}  $f
      */
     public function paginate(User $u, array $f): CursorPaginator
     {
@@ -59,6 +69,10 @@ class ConversationQuery
 
         if ($status = ConversationStatus::tryFrom((string) ($f['status'] ?? ''))) {
             $q->where('conversations.status', $status->value);
+        }
+
+        if (! empty($f['tag'])) {
+            $q->whereHas('tags', fn (Builder $t) => $t->where('tags.id', (int) $f['tag']));
         }
 
         if (($term = trim((string) ($f['q'] ?? ''))) !== '') {
@@ -81,20 +95,40 @@ class ConversationQuery
             'ad' => $q->where('conversations.source', ConversationSource::Ad->value),
             'spam' => $q->where('conversations.priority', ConversationPriority::Spam->value),
             'low_priority' => $q->where('conversations.priority', ConversationPriority::Low->value),
+            'customer_new' => $q->whereHas('customer', fn (Builder $c) => $c
+                ->where('is_repeat', false)
+                ->where(fn (Builder $w) => $w->where('orders_count', '>', 0)->orWhere('shopify_orders_count', '>', 0))),
+            'customer_repeat' => $q->whereHas('customer', fn (Builder $c) => $c->where('is_repeat', true)),
+            'open_order' => $q->whereHas('customer', fn (Builder $c) => $c->where('has_open_order', true)),
+            'has_return' => $q->whereHas('customer', fn (Builder $c) => $c->where('has_return', true)),
+            'stuck_order' => $q->whereHas('customer', fn (Builder $c) => $c->where('has_stuck_order', true)),
+            'queue_all' => $q->where('conversations.needs_human', true),
+            'queue_high' => $q->where('conversations.needs_human', true)->where('conversations.priority_level', 'high'),
+            // Role-restricted (spec §2.1 HandoverRouter, ruling 1): a moderator asking for the
+            // senior queue gets no rows rather than an error or the full queue.
+            'queue_senior' => $u->isSupervisorOrAbove()
+                ? $q->where('conversations.needs_human', true)->where('conversations.queue', 'senior')
+                : $q->whereRaw('1 = 0'),
             default => null,
         };
 
         // The default inbox (and every filter but "spam") hides spam conversations;
-        // "waiting"/"needs_human" additionally exclude low-value ones (spec §11.1).
+        // "waiting"/"needs_human" and the queue filters additionally exclude low-value ones (spec §11.1).
         if ($filter !== 'spam') {
             $q->where('conversations.priority', '!=', ConversationPriority::Spam->value);
         }
-        if (in_array($filter, ['waiting', 'needs_human'], true)) {
+        if (in_array($filter, ['waiting', 'needs_human', 'queue_all', 'queue_high', 'queue_senior'], true)) {
             $q->where('conversations.priority', '!=', ConversationPriority::Low->value);
         }
 
         if ($filter === 'waiting') {
             $q->orderBy('conversations.last_customer_message_at')->orderBy('conversations.id');
+        } elseif (in_array($filter, ['needs_human', 'queue_all', 'queue_high', 'queue_senior'], true)) {
+            // Priority (high → medium → low), then oldest customer message first (spec §2.3,
+            // owner: "بالتوقيت حسب ميعاد الرساله"), sqlite/mysql-portable form of FIELD(...).
+            $q->orderByRaw(self::PRIORITY_ORDER_SQL)
+                ->orderBy('conversations.last_customer_message_at')
+                ->orderBy('conversations.id');
         } else {
             $q->orderByDesc('conversations.last_message_at')->orderByDesc('conversations.id');
         }
@@ -120,8 +154,14 @@ class ConversationQuery
                     ->whereColumn('messages.conversation_id', 'conversations.id')
                     ->where('sender_type', '!=', SenderType::System->value)
                     ->orderByDesc('id')->limit(1),
+                // Handling indicator fallback (spec §5.4, Task 15): last human reply,
+                // so ConversationResource::handling() never issues a per-row query.
+                'last_human_reply_at' => Message::query()->select('created_at')
+                    ->whereColumn('messages.conversation_id', 'conversations.id')
+                    ->where('sender_type', SenderType::User->value)
+                    ->orderByDesc('id')->limit(1),
             ])
-            ->with(['customer', 'lockedBy', 'firstResponder', 'tags']);
+            ->with(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags']);
     }
 
     /**

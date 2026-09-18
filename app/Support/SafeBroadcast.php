@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Bot\Flows\Sandbox\SandboxMode;
+
 /**
  * Real-time pushes are best-effort. All CRM events broadcast synchronously
  * (ShouldBroadcastNow), so an unreachable Reverb/Pusher server would otherwise
@@ -15,6 +17,11 @@ final class SafeBroadcast
 {
     public static function send(object $event): void
     {
+        // A flow-designer sandbox run (FlowSandbox) never pushes real-time events.
+        if (SandboxMode::active()) {
+            return;
+        }
+
         rescue(fn () => event($event), null, report: true);
     }
 }

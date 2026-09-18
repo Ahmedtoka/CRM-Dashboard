@@ -11,7 +11,7 @@ import { orderStatusTone, paymentState, shipmentTone } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type { OrderRow, Paginated } from '@/types/admin';
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { Search } from 'lucide-vue-next';
+import { AlertTriangle, Search } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
 interface Filters {
@@ -23,7 +23,17 @@ interface Filters {
     /** Cairo calendar dates (Y-m-d); the server converts them to UTC bounds. */
     from: string | null;
     to: string | null;
+    source: string | null;
+    financial_status: string | null;
+    fulfillment_status: string | null;
+    shipment_step: string | null;
+    mismatch: string | boolean | null;
+    stuck: string | boolean | null;
 }
+
+const FINANCIAL_STATUSES = ['paid', 'pending', 'partially_paid', 'refunded', 'partially_refunded', 'voided'];
+const FULFILLMENT_STATUSES = ['fulfilled', 'partial', 'unfulfilled', 'restocked'];
+const SHIPMENT_STEPS = ['created', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered', 'failed_attempt', 'returned', 'cancelled'];
 
 const props = withDefaults(defineProps<{ orders: Paginated<OrderRow>; filters: Filters; team?: { id: number; name: string }[] }>(), {
     team: () => [],
@@ -37,6 +47,10 @@ function apply(patch: Partial<Filters>): void {
     const next = { ...props.filters, ...patch };
     const query = Object.fromEntries(Object.entries(next).filter(([, v]) => v !== null && v !== ''));
     router.get('/orders', query, { preserveState: true, preserveScroll: true, replace: true, onStart: () => (loading.value = true), onFinish: () => (loading.value = false) });
+}
+
+function toggle(key: 'mismatch' | 'stuck'): void {
+    apply({ [key]: props.filters[key] ? null : '1' });
 }
 
 const search = ref(props.filters.q ?? '');
@@ -70,17 +84,17 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2 text-
     <Head :title="t('orders.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-4 p-4">
+        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('orders.title')" />
 
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2 rounded-lg bg-card p-3 shadow-card">
                 <div class="relative min-w-[14rem] flex-1 sm:max-w-xs">
                     <Search class="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                    <input v-model="search" type="search" :placeholder="t('orders.search')" :aria-label="t('orders.search')" class="h-8 w-full rounded-md border border-input bg-background pe-2 ps-8 text-sm" />
+                    <input v-model="search" type="search" :placeholder="t('orders.search')" :aria-label="t('orders.search')" class="h-8 w-full rounded-full border border-input bg-elevated pe-2 ps-8 text-sm" />
                 </div>
                 <select :value="filters.status ?? ''" :class="selectClass" :aria-label="t('orders.status_all')" @change="apply({ status: selectValue($event) })">
                     <option value="">{{ t('orders.status_all') }}</option>
-                    <option v-for="s in ['awaiting_payment', 'confirmed', 'cancelled', 'failed']" :key="s" :value="s">{{ t(`orders.statuses.${s}`) }}</option>
+                    <option v-for="s in ['submitting', 'awaiting_payment', 'confirmed', 'cancelled', 'failed']" :key="s" :value="s">{{ t(`orders.statuses.${s}`) }}</option>
                 </select>
                 <select :value="filters.type ?? ''" :class="selectClass" :aria-label="t('orders.type_all')" @change="apply({ type: selectValue($event) })">
                     <option value="">{{ t('orders.type_all') }}</option>
@@ -103,13 +117,52 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2 text-
                     {{ t('orders.date_to') }}
                     <input type="date" :value="filters.to ?? ''" :min="filters.from ?? undefined" :class="selectClass" @change="apply({ to: inputValue($event) })" />
                 </label>
+                <select :value="filters.source ?? ''" :class="selectClass" :aria-label="t('orders.source_all')" @change="apply({ source: selectValue($event) })">
+                    <option value="">{{ t('orders.source_all') }}</option>
+                    <option value="chat">{{ t('orders.source.chat') }}</option>
+                    <option value="store">{{ t('orders.source.store') }}</option>
+                </select>
+                <select :value="filters.financial_status ?? ''" :class="selectClass" :aria-label="t('orders.financial_all')" @change="apply({ financial_status: selectValue($event) })">
+                    <option value="">{{ t('orders.financial_all') }}</option>
+                    <option v-for="s in FINANCIAL_STATUSES" :key="s" :value="s">{{ t(`orders.payment_status.${s}`) }}</option>
+                </select>
+                <select :value="filters.fulfillment_status ?? ''" :class="selectClass" :aria-label="t('orders.fulfillment_all')" @change="apply({ fulfillment_status: selectValue($event) })">
+                    <option value="">{{ t('orders.fulfillment_all') }}</option>
+                    <option v-for="s in FULFILLMENT_STATUSES" :key="s" :value="s">{{ t(`orders.fulfillment_status.${s}`) }}</option>
+                </select>
+                <select :value="filters.shipment_step ?? ''" :class="selectClass" :aria-label="t('orders.shipment_step_all')" @change="apply({ shipment_step: selectValue($event) })">
+                    <option value="">{{ t('orders.shipment_step_all') }}</option>
+                    <option v-for="s in SHIPMENT_STEPS" :key="s" :value="s">{{ t(`shipment.status.${s}`) }}</option>
+                </select>
+                <button
+                    type="button"
+                    class="h-8 rounded-md border px-2 text-xs font-medium"
+                    :class="filters.mismatch ? 'border-warning bg-warning/15 text-foreground' : 'border-input bg-background text-muted-foreground'"
+                    :aria-pressed="!!filters.mismatch"
+                    @click="toggle('mismatch')"
+                >
+                    {{ t('orders.mismatch_only') }}
+                </button>
+                <button
+                    type="button"
+                    class="h-8 rounded-md border px-2 text-xs font-medium"
+                    :class="filters.stuck ? 'border-warning bg-warning/15 text-foreground' : 'border-input bg-background text-muted-foreground'"
+                    :aria-pressed="!!filters.stuck"
+                    @click="toggle('stuck')"
+                >
+                    {{ t('orders.stuck_only') }}
+                </button>
             </div>
 
             <div>
                 <DataTable :columns="columns" :rows="orders.data" clickable :loading="loading" :empty="t('orders.empty')" :caption="t('orders.title')" @row-click="router.visit(`/orders/${$event.id}`)">
                     <template #cell-order_number="{ row }">
                         <span class="font-medium" dir="ltr">{{ row.order_number || `#${row.id}` }}</span>
+                        <span>{{ row.source === 'store' ? '🛍️' : '🗨️' }}</span>
                         <StatusChip class="ms-1.5" :label="t(`orders.statuses.${row.status}`)" :tone="orderStatusTone[row.status]" />
+                        <span v-if="row.mismatch" class="ms-1 inline-flex size-4 items-center justify-center rounded-full bg-warning/15" :title="t('order.mismatch.title')">
+                            <AlertTriangle class="size-3" :aria-label="t('order.mismatch.title')" />
+                        </span>
                     </template>
                     <template #cell-customer="{ row }">
                         <span class="block max-w-[12rem] truncate">{{ row.customer?.name ?? '—' }}</span>
@@ -118,7 +171,7 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2 text-
                     <template #cell-platform="{ row }"><PlatformBadge :platform="row.platform" /></template>
                     <template #cell-created_by="{ row }">{{ row.created_by?.name ?? t('orders.bot') }}</template>
                     <template #cell-type="{ row }"><span class="whitespace-nowrap">{{ t(`order.${row.type}`) }}</span></template>
-                    <template #cell-total="{ row }"><span class="whitespace-nowrap font-medium tabular-nums">{{ formatMoney(row.total, locale) }}</span></template>
+                    <template #cell-total="{ row }"><span class="whitespace-nowrap font-bold tabular-nums">{{ formatMoney(row.total, locale) }}</span></template>
                     <template #cell-payment="{ row }">
                         <StatusChip :label="t(`orders.payment.${paymentState(row).key}`)" :tone="paymentState(row).tone" />
                     </template>

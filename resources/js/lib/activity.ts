@@ -32,6 +32,7 @@ export function activitySentence(log: ActivityLogItem, locale: Locale, platforms
         status: status ? translate(locale, `shipment.status.${status}`) : '',
         rule: text(meta.rule_name ?? meta.rule_id),
         other: text(meta.other_name ?? meta.other_id),
+        version: text(meta.version),
     });
 }
 

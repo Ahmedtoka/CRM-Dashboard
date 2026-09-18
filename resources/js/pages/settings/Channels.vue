@@ -134,7 +134,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.channels.title'), href:
     <Head :title="t('settings.channels.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-4 p-4">
+        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.channels.title')" :description="t('settings.channels.description')" />
 
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -162,10 +162,10 @@ const breadcrumbs = computed(() => [{ title: t('settings.channels.title'), href:
                         <span class="font-medium" dir="ltr">#{{ row.id }} · {{ row.provider }} · {{ row.event_type ?? '—' }}</span>
                     </template>
                     <template #cell-attempts="{ row }"><span class="tabular-nums">{{ row.attempts }}</span></template>
-                    <template #cell-error="{ row }"><span class="line-clamp-2 max-w-md break-words text-red-700" dir="ltr">{{ row.error ?? '—' }}</span></template>
+                    <template #cell-error="{ row }"><span class="line-clamp-2 max-w-md break-words text-destructive" dir="ltr">{{ row.error ?? '—' }}</span></template>
                     <template #cell-created_at="{ row }"><span class="whitespace-nowrap tabular-nums text-muted-foreground">{{ formatDateTime(row.created_at, locale) }}</span></template>
                     <template #cell-actions="{ row }">
-                        <button type="button" class="inline-flex h-7 items-center gap-1 rounded-md border px-2 hover:bg-muted disabled:opacity-50" :disabled="busyEvent !== null" @click="reprocess(row)">
+                        <button type="button" class="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 hover:bg-muted disabled:opacity-50" :disabled="busyEvent !== null" @click="reprocess(row)">
                             <LoaderCircle v-if="busyEvent === row.id" class="size-3 animate-spin" aria-hidden="true" />
                             <RotateCw v-else class="size-3" aria-hidden="true" />{{ t('settings.channels.reprocess') }}
                         </button>

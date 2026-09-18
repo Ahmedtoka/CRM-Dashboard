@@ -36,6 +36,20 @@ final class ModeratorScope
             ->orWhere('orders.created_by_id', $u->id));
     }
 
+    /**
+     * Support cases on the moderator's platforms (spec §4). Cases carry their own
+     * `platform` column (copied from the conversation at record time), so unlike
+     * orders there is no "created it themselves" exception to fall back on.
+     */
+    public static function cases(Builder|Relation $q, User $u): Builder|Relation
+    {
+        if ($u->isSupervisorOrAbove()) {
+            return $q;
+        }
+
+        return $q->whereIn('support_cases.platform', self::platformValues($u));
+    }
+
     public static function identities(Builder|Relation $q, User $u): Builder|Relation
     {
         if ($u->isSupervisorOrAbove()) {
@@ -66,6 +80,7 @@ final class ModeratorScope
     {
         return [
             'identities' => fn ($q) => self::identities($q, $u),
+            'addresses',
             'orders' => fn ($q) => self::orders($q, $u)
                 ->with(['items', 'shipment.events', 'createdBy'])
                 ->orderByDesc('id')

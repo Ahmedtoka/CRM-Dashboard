@@ -279,12 +279,51 @@ export interface Participant {
     messages_count: number;
 }
 
+/** spec §4: a case a guided bot flow recorded (return/exchange, complaint, cancel/edit, delivery follow-up). */
+export type CaseType = 'return_exchange' | 'complaint' | 'cancel_edit' | 'delivery_followup';
+export type CaseStatus = 'new' | 'in_progress' | 'closed';
+export type CasePriority = 'medium' | 'high';
+
+export interface CasePhoto {
+    id: number;
+    url: string;
+}
+
+/** One block of the organised case summary (same as the conversation note). */
+export interface CaseSummarySection {
+    key: 'customer' | 'order' | 'request' | 'attachments' | 'alerts' | 'team_action';
+    icon: string;
+    title: string;
+    lines: string[];
+}
+
+export interface SupportCase {
+    id: number;
+    type: CaseType;
+    type_label: string;
+    status: CaseStatus;
+    priority: CasePriority;
+    order_id: number | null;
+    order_number: string | null;
+    summary_header: string;
+    summary_sections: CaseSummarySection[];
+    data: Record<string, unknown>;
+    photos: CasePhoto[];
+    policy_notes: string[];
+    assigned_to: { id: number; name: string } | null;
+    conversation_id: number;
+    customer: { id: number; name: string | null; phone: string | null } | null;
+    created_at: string | null;
+    closed_at: string | null;
+}
+
 export interface ConversationDetail {
     conversation: Conversation;
     messages: Message[];
     notes: Note[];
     customer: Customer | null;
     participants: Participant[];
+    cases: SupportCase[];
     window: { mode: WindowMode; expires_at: string | null };
     lock: { holder: UserRef | null; until: string | null };
 }

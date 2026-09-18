@@ -2,6 +2,8 @@
 
 namespace App\Inbox;
 
+use App\Inbox\Commands\PruneUserNotifications;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
 
 class InboxServiceProvider extends ServiceProvider
@@ -17,6 +19,12 @@ class InboxServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        //
+        if ($this->app->runningInConsole()) {
+            $this->commands([PruneUserNotifications::class]);
+        }
+
+        $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
+            $schedule->command(PruneUserNotifications::class)->daily()->withoutOverlapping()->onOneServer();
+        });
     }
 }

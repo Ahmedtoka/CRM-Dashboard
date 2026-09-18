@@ -66,11 +66,12 @@ const breadcrumbs = computed(() => [{ title: t('reports.team_title'), href: '/re
     <Head :title="t('reports.team_title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-4 p-4">
-            <PageHeader :title="t('reports.team_title')" />
-            <ReportFilters :range="range" :platform="platform" @change="visit" />
+        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
+            <PageHeader :title="t('reports.team_title')">
+                <ReportFilters :range="range" :platform="platform" @change="visit" />
+            </PageHeader>
 
-            <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <StatCard v-for="card in cards" :key="card.label" :label="card.label" :value="card.value" :tone="'tone' in card ? card.tone : 'default'" />
             </div>
 

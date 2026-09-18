@@ -8,6 +8,7 @@ use App\Http\Resources\ConversationResource;
 use App\Inbox\ConversationQuery;
 use App\Inbox\QuickReplyCatalog;
 use App\Models\City;
+use App\Models\QuickReplyCategory;
 use App\Models\Tag;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -24,8 +25,9 @@ class InboxController extends Controller
 
         return Inertia::render('Inbox', [
             'conversations' => ConversationResource::collection($query->paginate($user, $filters)),
-            'filters' => array_merge(['platform' => null, 'status' => null, 'filter' => null, 'q' => null], $filters),
+            'filters' => array_merge(['platform' => null, 'status' => null, 'filter' => null, 'q' => null, 'tag' => null], $filters),
             'quickReplies' => $quickReplies->toArray($user),
+            'quickReplyCategories' => QuickReplyCategory::orderBy('sort')->get(['id', 'name', 'sort']),
             'tags' => Tag::orderBy('name')->get(['id', 'name', 'color']),
             'cities' => City::orderBy('name_ar')->get(['id', 'name_ar', 'name_en', 'shipping_fee']),
         ]);

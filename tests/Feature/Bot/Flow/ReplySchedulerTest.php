@@ -4,6 +4,7 @@ use App\Bot\BotEngine;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\Jobs\RunBotTurn;
 use App\Bot\Flow\ReplyScheduler;
+use App\Bot\Flows\FlowState;
 use App\Channels\Data\InboundMessageData;
 use App\Enums\Platform;
 use App\Inbox\InboxIngestor;
@@ -24,6 +25,15 @@ beforeEach(function () {
 function fbIn(string $id, string $text): InboundMessageData
 {
     return new InboundMessageData(Platform::Facebook, 'PAGE1', 'PSID-1', 'Mona', $id, $text, CarbonImmutable::now());
+}
+
+/** An inbound image, mirroring a channel adapter's normalize() shape recorded by InboundAttachmentRecorder. */
+function fbInImage(string $id): InboundMessageData
+{
+    return new InboundMessageData(
+        Platform::Facebook, 'PAGE1', 'PSID-1', 'Mona', $id, '', CarbonImmutable::now(),
+        attachments: [['type' => 'image', 'url' => 'https://cdn.test/photo.jpg']],
+    );
 }
 
 it('delays the turn by the burst wait and pushes it forward on each new message', function () {
@@ -145,4 +155,41 @@ it('answers a button tap without the burst wait', function () {
     ));
 
     expect(Conversation::first()->bot_due_at->lessThanOrEqualTo(now()))->toBeTrue();
+});
+
+it('answers a photo right away when the active flow is waiting for one', function () {
+    Queue::fake();
+    $this->freezeSecond();
+
+    app(InboxIngestor::class)->ingestMessage(fbIn('m1', 'اهلا'));
+    $c = Conversation::first();
+    FlowState::put($c, ['key' => 'return_exchange', 'step' => 'product_photo', 'data' => [], 'retries' => 0, 'started_at' => now()->toIso8601String()]);
+
+    app(InboxIngestor::class)->ingestMessage(fbInImage('m2'));
+
+    // 2s, not the 25s max wait: the photo step answers right away, with just enough
+    // of a window for a second photo sent together to land in the same burst.
+    expect(Conversation::first()->bot_due_at->equalTo(now()->addSeconds(2)))->toBeTrue();
+});
+
+it('still waits the max burst wait for an image when no flow is active', function () {
+    Queue::fake();
+    $this->freezeSecond();
+
+    app(InboxIngestor::class)->ingestMessage(fbInImage('m1'));
+
+    expect(Conversation::first()->bot_due_at->equalTo(now()->addSeconds(25)))->toBeTrue();
+});
+
+it('still waits the max burst wait for an image when the active flow is not on a photo step', function () {
+    Queue::fake();
+    $this->freezeSecond();
+
+    app(InboxIngestor::class)->ingestMessage(fbIn('m1', 'اهلا'));
+    $c = Conversation::first();
+    FlowState::put($c, ['key' => 'return_exchange', 'step' => 'reason', 'data' => [], 'retries' => 0, 'started_at' => now()->toIso8601String()]);
+
+    app(InboxIngestor::class)->ingestMessage(fbInImage('m2'));
+
+    expect(Conversation::first()->bot_due_at->equalTo(now()->addSeconds(25)))->toBeTrue();
 });

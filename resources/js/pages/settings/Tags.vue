@@ -2,16 +2,17 @@
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import StarterEmptyState from '@/components/crm/StarterEmptyState.vue';
 import { useCrud } from '@/composables/useCrud';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount } from '@/lib/format';
 import type { TagRow } from '@/types/admin';
 import { Head } from '@inertiajs/vue3';
-import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { Pencil, Plus, Tag as TagIcon, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 
-defineProps<{ tags: TagRow[] }>();
+defineProps<{ tags: TagRow[]; starterExamples: string[] }>();
 
 const { t, locale } = useI18n();
 const crud = useCrud('/settings/tags', 'tags');
@@ -45,14 +46,26 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
     <Head :title="t('settings.tags.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="max-w-3xl space-y-4 p-4">
+        <div class="mx-auto w-full max-w-3xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.tags.title')">
                 <button type="button" class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" @click="edit(null)">
                     <Plus class="size-3.5" aria-hidden="true" />{{ t('settings.tags.add') }}
                 </button>
             </PageHeader>
 
-            <DataTable :columns="columns" :rows="tags" :empty="t('settings.tags.empty')" :caption="t('settings.tags.title')">
+            <StarterEmptyState
+                v-if="!tags.length"
+                :icon="TagIcon"
+                :title="t('settings.starter.tags_title')"
+                :body="t('settings.starter.tags_body')"
+                :preview="starterExamples"
+                endpoint="/settings/tags/examples"
+                reload-prop="tags"
+            >
+                <button type="button" class="text-xs font-medium text-primary hover:underline" @click="edit(null)">{{ t('settings.starter.or_create') }}</button>
+            </StarterEmptyState>
+
+            <DataTable v-else :columns="columns" :rows="tags" :empty="t('settings.tags.empty')" :caption="t('settings.tags.title')">
                 <template #cell-name="{ row }">
                     <span class="inline-flex items-center gap-1.5">
                         <span class="size-2.5 rounded-full" :style="{ backgroundColor: row.color ?? '#94a3b8' }" aria-hidden="true" />
@@ -63,7 +76,7 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                 <template #cell-actions="{ row }">
                     <span class="inline-flex gap-0.5">
                         <button type="button" :class="iconBtn" :title="t('ui.edit')" :aria-label="`${t('ui.edit')} ${row.name}`" @click="edit(row)"><Pencil class="size-3.5" /></button>
-                        <button type="button" :class="[iconBtn, 'hover:text-red-700']" :title="t('ui.delete')" :aria-label="`${t('ui.delete')} ${row.name}`" @click="crud.remove(row.id, t('ui.confirm_delete', { name: row.name }))">
+                        <button type="button" :class="[iconBtn, 'hover:text-destructive']" :title="t('ui.delete')" :aria-label="`${t('ui.delete')} ${row.name}`" @click="crud.remove(row.id, t('ui.confirm_delete', { name: row.name }))">
                             <Trash2 class="size-3.5" />
                         </button>
                     </span>
@@ -74,11 +87,11 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
         <FormDialog v-model:open="open" :title="editingId ? t('settings.tags.edit') : t('settings.tags.add')" :busy="crud.busy.value" :error="crud.error.value" @submit="submit">
             <div class="grid grid-cols-[1fr_5rem] gap-2">
                 <label class="grid gap-1">
-                    <span class="text-xs font-medium">{{ t('settings.tags.name') }}</span>
+                    <span class="text-sm font-semibold">{{ t('settings.tags.name') }}</span>
                     <input v-model="form.name" dir="auto" required maxlength="100" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
                 </label>
                 <label class="grid gap-1">
-                    <span class="text-xs font-medium">{{ t('settings.tags.color') }}</span>
+                    <span class="text-sm font-semibold">{{ t('settings.tags.color') }}</span>
                     <input v-model="form.color" type="color" class="h-9 w-full rounded-md border border-input bg-background p-1" />
                 </label>
             </div>

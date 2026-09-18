@@ -1,9 +1,17 @@
 <?php
 
 use App\Commerce\FakeCommerceProvider;
-use App\Enums\{Platform, UserRole};
-use App\Models\{ChannelAccount, City, Conversation, Customer, Product, ProductVariant, User};
+use App\Enums\Platform;
+use App\Enums\UserRole;
+use App\Models\ChannelAccount;
+use App\Models\City;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Models\User;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Str;
 
 beforeEach(function () {
     Event::fake();
@@ -23,6 +31,7 @@ function failedOrderId(User $creator): int
     FakeCommerceProvider::$forceError = 'Shopify timeout';
 
     $id = test()->actingAs($creator)->postJson('/inbox/conversations/'.test()->conv->id.'/orders', [
+        'idempotency_key' => (string) Str::uuid(),
         'type' => 'cod',
         'items' => [['variant_id' => test()->variant->id, 'qty' => 1]],
         'shipping' => ['name' => 'Nour', 'phone' => '01001234567', 'city_id' => test()->city->id, 'address' => 'شارع النصر'],

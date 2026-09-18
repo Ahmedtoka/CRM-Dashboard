@@ -77,18 +77,21 @@ async function copy(value: string | null): Promise<void> {
 </script>
 
 <template>
-    <section class="flex flex-col gap-3 rounded-lg border bg-card p-3 text-xs">
+    <section class="flex min-w-0 flex-col gap-3 rounded-lg bg-card p-3 text-xs shadow-card">
         <header class="flex items-center gap-2">
             <PlatformBadge :platform="platform" show-label />
             <span v-if="account" class="truncate text-muted-foreground">{{ account.name }}</span>
-            <StatusChip v-if="account" class="ms-auto" :label="t(`settings.channels.status.${account.status}`)" :tone="statusTone[account.status]" />
+            <!-- A fake-driver account is never really "connected": say it is a test account instead. -->
+            <StatusChip v-if="account && account.driver === 'fake'" class="ms-auto" :label="t('settings.channels.fake_badge')" tone="warning" />
+            <StatusChip v-else-if="account" class="ms-auto" :label="t(`settings.channels.status.${account.status}`)" :tone="statusTone[account.status]" />
         </header>
+        <p v-if="account?.driver === 'fake'" class="rounded-md bg-warning/15 px-2.5 py-1.5 text-2xs text-foreground">{{ t('settings.channels.fake_hint') }}</p>
 
         <p v-if="!account" class="py-4 text-center text-muted-foreground">{{ t('settings.channels.no_account') }}</p>
 
         <template v-else>
             <label class="grid gap-1">
-                <span class="font-medium">{{ t('settings.channels.driver') }}</span>
+                <span class="text-sm font-semibold">{{ t('settings.channels.driver') }}</span>
                 <select
                     :value="account.driver"
                     class="h-8 rounded-md border border-input bg-background px-2"
@@ -103,8 +106,8 @@ async function copy(value: string | null): Promise<void> {
             <div v-for="field in [
                 { label: t('settings.channels.webhook_url'), value: account.webhook_url },
                 { label: t('settings.channels.verify_token'), value: account.verify_token },
-            ]" :key="field.label" class="grid gap-1">
-                <span class="font-medium">{{ field.label }}</span>
+            ]" :key="field.label" class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1">
+                <span class="text-sm font-semibold">{{ field.label }}</span>
                 <div class="flex items-center gap-1">
                     <code class="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-2xs" dir="ltr">{{ field.value || '—' }}</code>
                     <button v-if="field.value" type="button" class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" :aria-label="`${t('ui.copy')} ${field.label}`" @click="copy(field.value)">
@@ -120,21 +123,21 @@ async function copy(value: string | null): Promise<void> {
                 </div>
                 <div v-if="account.last_error">
                     <dt class="text-muted-foreground">{{ t('settings.channels.last_error') }}</dt>
-                    <dd class="mt-0.5 break-words rounded bg-red-50 px-2 py-1 text-red-700" dir="ltr">{{ account.last_error }}</dd>
+                    <dd class="mt-0.5 break-words rounded bg-destructive/10 px-2 py-1 text-foreground" dir="ltr">{{ account.last_error }}</dd>
                 </div>
             </dl>
 
-            <form v-if="isMeta && account.driver === 'live'" class="grid gap-2 border-t pt-2" @submit.prevent="saveLive">
+            <form v-if="isMeta && account.driver === 'live'" class="grid gap-2 border-t border-border pt-2" @submit.prevent="saveLive">
                 <p class="font-medium">{{ t('settings.channels.live_setup') }}</p>
 
                 <label class="grid gap-1">
-                    <span>{{ isInstagram ? t('settings.channels.instagram_business_id') : t('settings.channels.page_id') }}</span>
+                    <span class="text-sm font-semibold">{{ isInstagram ? t('settings.channels.instagram_business_id') : t('settings.channels.page_id') }}</span>
                     <input v-model="externalId" type="text" dir="ltr" class="h-8 rounded-md border border-input bg-background px-2" />
                 </label>
 
                 <template v-if="isInstagram">
                     <label class="grid gap-1">
-                        <span>{{ t('settings.channels.linked_facebook_page') }}</span>
+                        <span class="text-sm font-semibold">{{ t('settings.channels.linked_facebook_page') }}</span>
                         <select v-model.number="linkedFacebookAccountId" class="h-8 rounded-md border border-input bg-background px-2">
                             <option :value="null" disabled>{{ t('settings.channels.select_page') }}</option>
                             <option v-for="fb in facebookAccounts" :key="fb.id" :value="fb.id">{{ fb.name }}</option>
@@ -144,7 +147,7 @@ async function copy(value: string | null): Promise<void> {
                 </template>
 
                 <label v-else class="grid gap-1">
-                    <span>{{ t('settings.channels.access_token') }}</span>
+                    <span class="text-sm font-semibold">{{ t('settings.channels.access_token') }}</span>
                     <input
                         v-model="accessToken"
                         type="password"
@@ -155,18 +158,18 @@ async function copy(value: string | null): Promise<void> {
                     />
                 </label>
 
-                <button type="submit" class="h-8 rounded-md border px-2 font-medium hover:bg-muted disabled:opacity-50" :disabled="busy">
+                <button type="submit" class="h-8 rounded-md border border-border px-2 font-medium hover:bg-muted disabled:opacity-50" :disabled="busy">
                     {{ t('common.save') }}
                 </button>
 
                 <div class="flex gap-2">
-                    <button type="button" class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border px-2 hover:bg-muted disabled:opacity-50" :disabled="testing" @click="emit('test', account)">
+                    <button type="button" class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border px-2 hover:bg-muted disabled:opacity-50" :disabled="testing" @click="emit('test', account)">
                         <LoaderCircle v-if="testing" class="size-3 animate-spin" aria-hidden="true" />
                         {{ t('settings.channels.test') }}
                     </button>
                     <button
                         type="button"
-                        class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border px-2 hover:bg-muted disabled:opacity-50"
+                        class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border px-2 hover:bg-muted disabled:opacity-50"
                         :disabled="subscribing"
                         @click="emit('subscribe', account)"
                     >
@@ -175,14 +178,14 @@ async function copy(value: string | null): Promise<void> {
                     </button>
                 </div>
 
-                <p v-if="testResult?.ok" class="rounded bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                <p v-if="testResult?.ok" class="rounded bg-success/10 px-2 py-1 text-foreground">
                     {{ t('settings.channels.test_ok', { name: testResult.page_name ?? testResult.ig_username ?? '—' }) }}
                 </p>
-                <p v-else-if="testResult && !testResult.ok" class="rounded bg-red-50 px-2 py-1 text-red-700">
+                <p v-else-if="testResult && !testResult.ok" class="rounded bg-destructive/10 px-2 py-1 text-foreground">
                     {{ testResult.error }}
                 </p>
 
-                <p v-if="testResult?.note" class="rounded bg-amber-50 px-2 py-1 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                <p v-if="testResult?.note" class="rounded bg-warning/15 px-2 py-1 text-foreground">
                     {{ testResult.note }}
                 </p>
             </form>

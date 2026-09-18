@@ -9,76 +9,112 @@ html {
 }
 
 @layer base {
-    /* Calm slate surfaces, white panes, indigo as the single action accent. */
+    /* Business-Suite-inspired surfaces: light grey app background, white cards, blue action accent. */
     :root {
-        --background: 210 40% 96.1%;
-        --foreground: 222.2 47.4% 11.2%;
-        --card: 0 0% 100%;
-        --card-foreground: 222.2 47.4% 11.2%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 222.2 47.4% 11.2%;
-        --primary: 243.4 75.4% 58.6%;
+        --background: 216 20% 95.1%; /* #F0F2F5 */
+        --foreground: 0 0% 2%; /* #050505 */
+        --card: 0 0% 100%; /* #FFFFFF */
+        --card-foreground: 0 0% 2%; /* #050505 */
+        --popover: 0 0% 100%; /* #FFFFFF */
+        --popover-foreground: 0 0% 2%; /* #050505 */
+        --elevated: 216 20% 95.1%; /* #F0F2F5 */
+        --primary: 214 89.3% 52.2%; /* #1877F2 */
+        --primary-hover: 214 82.5% 49.2%; /* #166FE5 */
         --primary-foreground: 0 0% 100%;
-        --secondary: 210 40% 96.1%;
-        --secondary-foreground: 222.2 47.4% 11.2%;
-        --muted: 210 40% 96.1%;
-        --muted-foreground: 215.4 16.3% 46.9%;
-        --accent: 214.3 31.8% 93.5%;
-        --accent-foreground: 222.2 47.4% 11.2%;
-        --destructive: 0 72.2% 50.6%;
+        --secondary: 216 20% 95.1%; /* #F0F2F5 */
+        --secondary-foreground: 0 0% 2%; /* #050505 */
+        --muted: 216 20% 95.1%; /* #F0F2F5 */
+        --muted-foreground: 220 2.9% 40.8%; /* #65676B */
+        --accent: 210 100% 95.3%; /* #E7F3FF */
+        --accent-foreground: 0 0% 2%; /* #050505 */
+        --surface-accent: 210 100% 95.3%; /* #E7F3FF */
+        --success: 134 53.6% 41.4%; /* #31A24C */
+        --success-foreground: 0 0% 100%;
+        --warning: 42 92.8% 56.3%; /* #F7B928 */
+        --warning-foreground: 0 0% 2%;
+        --destructive: 350 78.6% 50.6%; /* #E41E3F */
         --destructive-foreground: 0 0% 100%;
-        --border: 214.3 31.8% 91.4%;
-        --input: 214.3 31.8% 88%;
-        --ring: 243.4 75.4% 58.6%;
-        --chart-1: 243 75% 59%;
+        --border: 220 6.5% 82%; /* #CED0D4 */
+        --input: 220 6.5% 82%; /* #CED0D4 */
+        --ring: 214 89.3% 52.2%; /* #1877F2 */
+        --chart-1: 214 89.3% 52.2%; /* #1877F2 */
         --chart-2: 173 58% 39%;
         --chart-3: 199 89% 48%;
         --chart-4: 38 92% 50%;
         --chart-5: 330 81% 60%;
         --radius: 0.5rem;
-        --sidebar-background: 0 0% 100%;
-        --sidebar-foreground: 215.3 25% 26.7%;
-        --sidebar-primary: 243.4 75.4% 58.6%;
+        --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.1);
+        --sidebar-background: 0 0% 100%; /* #FFFFFF */
+        --sidebar-foreground: 220 2.9% 40.8%; /* #65676B */
+        --sidebar-primary: 214 89.3% 52.2%; /* #1877F2 */
         --sidebar-primary-foreground: 0 0% 100%;
-        --sidebar-accent: 226 100% 96.7%;
-        --sidebar-accent-foreground: 243.7 54.5% 41.4%;
-        --sidebar-border: 214.3 31.8% 91.4%;
-        --sidebar-ring: 243.4 75.4% 58.6%;
+        --sidebar-accent: 210 100% 95.3%; /* #E7F3FF */
+        --sidebar-accent-foreground: 214 89.3% 52.2%; /* #1877F2 */
+        --sidebar-border: 220 6.5% 82%; /* #CED0D4 */
+        --sidebar-ring: 214 89.3% 52.2%; /* #1877F2 */
+
+        /* Raw chat-skin variables (spec §3.2), used by Task 8 chat skins. */
+        --wa-wallpaper: #efeae2;
+        --wa-out: #d9fdd3;
+        --wa-in: #ffffff;
+        --wa-header: #f0f2f5;
+        --wa-read-tick: #53bdeb;
+        --suite-in: #e4e6eb;
+        --note-bg: #fff4cc;
+        --note-border: #f7b928;
     }
 
     .dark {
-        --background: 222.2 47.4% 7%;
-        --foreground: 210 40% 96.1%;
-        --card: 222.2 47.4% 11.2%;
-        --card-foreground: 210 40% 96.1%;
-        --popover: 222.2 47.4% 11.2%;
-        --popover-foreground: 210 40% 96.1%;
-        --primary: 234.5 89.5% 73.9%;
-        --primary-foreground: 222.2 47.4% 11.2%;
-        --secondary: 217.2 32.6% 17.5%;
-        --secondary-foreground: 210 40% 96.1%;
-        --muted: 217.2 32.6% 17.5%;
-        --muted-foreground: 215 20.2% 65.1%;
-        --accent: 217.2 32.6% 17.5%;
-        --accent-foreground: 210 40% 96.1%;
-        --destructive: 0 62.8% 50%;
-        --destructive-foreground: 210 40% 98%;
-        --border: 217.2 32.6% 20%;
-        --input: 217.2 32.6% 22%;
-        --ring: 234.5 89.5% 73.9%;
-        --chart-1: 234 89% 74%;
+        --background: 210 4% 9.8%; /* #18191A */
+        --foreground: 223 14.9% 90.8%; /* #E4E6EB */
+        --card: 210 2.7% 14.5%; /* #242526 */
+        --card-foreground: 223 14.9% 90.8%; /* #E4E6EB */
+        --popover: 210 2.7% 14.5%; /* #242526 */
+        --popover-foreground: 223 14.9% 90.8%; /* #E4E6EB */
+        --elevated: 210 1.7% 23.1%; /* #3A3B3C */
+        --primary: 214 100% 58.8%; /* #2D88FF */
+        --primary-hover: 214 100% 58.8%; /* #2D88FF */
+        --primary-foreground: 0 0% 100%;
+        --secondary: 210 1.7% 23.1%; /* #3A3B3C */
+        --secondary-foreground: 223 14.9% 90.8%; /* #E4E6EB */
+        --muted: 210 1.7% 23.1%; /* #3A3B3C */
+        --muted-foreground: 218 5.3% 70.6%; /* #B0B3B8 */
+        --accent: 214 36.1% 23.3%; /* #263951 */
+        --accent-foreground: 223 14.9% 90.8%; /* #E4E6EB */
+        --surface-accent: 214 36.1% 23.3%; /* #263951 */
+        --success: 134 53.6% 41.4%; /* #31A24C */
+        --success-foreground: 0 0% 100%;
+        --warning: 42 92.8% 56.3%; /* #F7B928 */
+        --warning-foreground: 0 0% 2%;
+        --destructive: 350 78.6% 50.6%; /* #E41E3F */
+        --destructive-foreground: 0 0% 100%;
+        --border: 210 3.1% 25.1%; /* #3E4042 */
+        --input: 210 3.1% 25.1%; /* #3E4042 */
+        --ring: 214 100% 58.8%; /* #2D88FF */
+        --chart-1: 214 100% 58.8%; /* #2D88FF */
         --chart-2: 160 60% 45%;
         --chart-3: 199 89% 60%;
         --chart-4: 38 92% 60%;
         --chart-5: 330 81% 65%;
-        --sidebar-background: 222.2 47.4% 9%;
-        --sidebar-foreground: 210 40% 90%;
-        --sidebar-primary: 234.5 89.5% 73.9%;
-        --sidebar-primary-foreground: 222.2 47.4% 11.2%;
-        --sidebar-accent: 217.2 32.6% 17.5%;
-        --sidebar-accent-foreground: 210 40% 96.1%;
-        --sidebar-border: 217.2 32.6% 17.5%;
-        --sidebar-ring: 234.5 89.5% 73.9%;
+        --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --sidebar-background: 210 2.7% 14.5%; /* #242526 */
+        --sidebar-foreground: 218 5.3% 70.6%; /* #B0B3B8 */
+        --sidebar-primary: 214 100% 58.8%; /* #2D88FF */
+        --sidebar-primary-foreground: 0 0% 100%;
+        --sidebar-accent: 214 36.1% 23.3%; /* #263951 */
+        --sidebar-accent-foreground: 214 100% 58.8%; /* #2D88FF */
+        --sidebar-border: 210 3.1% 25.1%; /* #3E4042 */
+        --sidebar-ring: 214 100% 58.8%; /* #2D88FF */
+
+        /* Raw chat-skin variables (spec §3.2), used by Task 8 chat skins. */
+        --wa-wallpaper: #0b141a;
+        --wa-out: #005c4b;
+        --wa-in: #202c33;
+        --wa-header: #202c33;
+        --wa-read-tick: #53bdeb;
+        --suite-in: #3a3b3c;
+        --note-bg: #3d3522;
+        --note-border: #f7b928;
     }
 }
 
@@ -105,5 +141,20 @@ html {
     .scrollbar-thin {
         scrollbar-width: thin;
         scrollbar-color: hsl(var(--border)) transparent;
+    }
+
+    .shadow-card {
+        box-shadow: var(--shadow-card);
+    }
+
+    .chat-wallpaper-wa {
+        background-color: var(--wa-wallpaper);
+        background-image: radial-gradient(rgb(0 0 0 / 0.035) 1px, transparent 1px), radial-gradient(rgb(0 0 0 / 0.025) 1px, transparent 1px);
+        background-size: 22px 22px, 22px 22px;
+        background-position: 0 0, 11px 11px;
+    }
+
+    .dark .chat-wallpaper-wa {
+        background-image: radial-gradient(rgb(255 255 255 / 0.03) 1px, transparent 1px), radial-gradient(rgb(255 255 255 / 0.02) 1px, transparent 1px);
     }
 }

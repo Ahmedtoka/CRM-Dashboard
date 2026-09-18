@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -28,6 +29,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Read here, not in bootstrap/app.php: the middleware callback runs before .env is loaded.
+        if ($proxies = config('crm.trusted_proxies')) {
+            TrustProxies::at($proxies === '*' ? '*' : array_map('trim', explode(',', $proxies)));
+        }
+
         // Web session login/logout audit (API token login/logout log in Api\V1\AuthController).
         Event::listen(function (Login $event) {
             if ($event->user instanceof User) {

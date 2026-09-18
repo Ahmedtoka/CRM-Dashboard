@@ -4,12 +4,13 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { TransitionRoot } from '@headlessui/vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useI18n } from '@/composables/useI18n';
 import { type BreadcrumbItem } from '@/types';
 
 interface Props {
@@ -18,12 +19,9 @@ interface Props {
 
 defineProps<Props>();
 
-const breadcrumbItems: BreadcrumbItem[] = [
-    {
-        title: 'Password settings',
-        href: '/settings/password',
-    },
-];
+const { t } = useI18n();
+
+const breadcrumbItems = computed<BreadcrumbItem[]>(() => [{ title: t('nav.settings_layout.password'), href: '/settings/password' }]);
 
 const passwordInput = ref<HTMLInputElement>();
 const currentPasswordInput = ref<HTMLInputElement>();
@@ -59,15 +57,15 @@ const updatePassword = () => {
 
 <template>
     <AppLayout :breadcrumbs="breadcrumbItems">
-        <Head title="Profile settings" />
+        <Head :title="t('nav.settings_layout.password')" />
 
         <SettingsLayout>
             <div class="space-y-6">
-                <HeadingSmall title="Update password" description="Ensure your account is using a long, random password to stay secure" />
+                <HeadingSmall :title="t('nav.settings_layout.password_heading')" :description="t('nav.settings_layout.password_hint')" />
 
-                <form @submit.prevent="updatePassword" class="space-y-6">
+                <form @submit.prevent="updatePassword" class="space-y-6 rounded-lg bg-card p-4 shadow-card">
                     <div class="grid gap-2">
-                        <Label for="current_password">Current Password</Label>
+                        <Label for="current_password">{{ t('nav.settings_layout.current_password') }}</Label>
                         <Input
                             id="current_password"
                             ref="currentPasswordInput"
@@ -75,13 +73,13 @@ const updatePassword = () => {
                             type="password"
                             class="mt-1 block w-full"
                             autocomplete="current-password"
-                            placeholder="Current password"
+                            :placeholder="t('nav.settings_layout.current_password')"
                         />
                         <InputError :message="form.errors.current_password" />
                     </div>
 
                     <div class="grid gap-2">
-                        <Label for="password">New password</Label>
+                        <Label for="password">{{ t('nav.settings_layout.new_password') }}</Label>
                         <Input
                             id="password"
                             ref="passwordInput"
@@ -89,27 +87,25 @@ const updatePassword = () => {
                             type="password"
                             class="mt-1 block w-full"
                             autocomplete="new-password"
-                            placeholder="New password"
+                            :placeholder="t('nav.settings_layout.new_password')"
                         />
                         <InputError :message="form.errors.password" />
                     </div>
 
                     <div class="grid gap-2">
-                        <Label for="password_confirmation">Confirm password</Label>
+                        <Label for="password_confirmation">{{ t('nav.settings_layout.confirm_password') }}</Label>
                         <Input
                             id="password_confirmation"
                             v-model="form.password_confirmation"
                             type="password"
                             class="mt-1 block w-full"
                             autocomplete="new-password"
-                            placeholder="Confirm password"
+                            :placeholder="t('nav.settings_layout.confirm_password')"
                         />
                         <InputError :message="form.errors.password_confirmation" />
                     </div>
 
-                    <div class="flex items-center gap-4">
-                        <Button :disabled="form.processing">Save password</Button>
-
+                    <div class="flex items-center justify-end gap-4">
                         <TransitionRoot
                             :show="form.recentlySuccessful"
                             enter="transition ease-in-out"
@@ -117,8 +113,9 @@ const updatePassword = () => {
                             leave="transition ease-in-out"
                             leave-to="opacity-0"
                         >
-                            <p class="text-sm text-neutral-600">Saved</p>
+                            <p class="text-sm text-muted-foreground">{{ t('nav.settings_layout.saved') }}</p>
                         </TransitionRoot>
+                        <Button :disabled="form.processing">{{ t('nav.settings_layout.save_password') }}</Button>
                     </div>
                 </form>
             </div>

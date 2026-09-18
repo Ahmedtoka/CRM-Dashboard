@@ -22,15 +22,15 @@ const troubled = computed(() => ['failed_attempt', 'returned', 'cancelled'].incl
 <template>
     <div class="text-xs">
         <div class="flex items-center gap-2">
-            <Truck class="size-3.5 text-muted-foreground" aria-hidden="true" />
-            <span class="font-medium" :class="{ 'text-emerald-700': delivered, 'text-red-700': troubled }">{{ statusLabel(shipment.status) }}</span>
+            <Truck class="size-3.5" :class="delivered ? 'text-success' : troubled ? 'text-destructive' : 'text-muted-foreground'" aria-hidden="true" />
+            <span class="font-medium text-foreground">{{ statusLabel(shipment.status) }}</span>
             <span v-if="shipment.tracking_number" class="ms-auto truncate text-2xs text-muted-foreground" dir="ltr">{{ shipment.tracking_number }}</span>
         </div>
-        <ol v-if="events.length" class="ms-1.5 mt-2 space-y-2 border-s ps-3">
+        <ol v-if="events.length" class="ms-1.5 mt-2 space-y-2 border-s border-border ps-3">
             <li v-for="(event, index) in events" :key="`${event.status}-${event.occurred_at}`" class="relative">
                 <span
                     class="absolute -start-[1.05rem] top-1 size-2 rounded-full"
-                    :class="index === 0 ? 'bg-primary ring-2 ring-primary/20' : 'bg-slate-300 dark:bg-slate-600'"
+                    :class="index === 0 ? 'bg-primary ring-2 ring-primary/20' : 'bg-border'"
                     aria-hidden="true"
                 />
                 <p :class="index === 0 ? 'font-medium text-foreground' : 'text-muted-foreground'">{{ statusLabel(event.status) }}</p>

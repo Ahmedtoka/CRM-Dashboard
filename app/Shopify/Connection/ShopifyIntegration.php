@@ -6,6 +6,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class ShopifyIntegration extends Model
 {
+    /**
+     * The demo/seeder-only shop domain (`Database\Seeders\DemoSeeder::seedShopifyCatalog()`).
+     * `HttpShopifyTransport` refuses any request whose host is this domain, and the
+     * scheduled Shopify jobs (`ReconcileShopify`, `CheckShopifyWebhooks`) skip an
+     * integration with this domain outright — so a leftover demo row can never
+     * cause a real HTTP call, even if `crm.shopify.driver`/`crm.drivers.commerce`
+     * were ever misconfigured as live in the same process.
+     */
+    public const DEMO_SHOP_DOMAIN = 'demo-store.myshopify.com';
+
     protected $table = 'shopify_integrations';
 
     protected $fillable = [

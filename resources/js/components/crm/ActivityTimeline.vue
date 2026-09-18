@@ -17,7 +17,7 @@ const icon = (log: ActivityLogItem) => (log.actor_type === 'bot' ? Bot : log.use
 </script>
 
 <template>
-    <ol class="divide-y rounded-lg border bg-card">
+    <ol class="divide-y divide-border rounded-lg bg-card shadow-card">
         <li v-if="!logs.length" class="px-3 py-8 text-center text-xs text-muted-foreground">{{ empty ?? t('activity.ui.empty') }}</li>
         <li v-for="log in logs" :key="log.id" class="flex items-start gap-2.5 px-3 py-2 text-xs">
             <span

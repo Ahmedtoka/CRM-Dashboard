@@ -2,6 +2,7 @@
 
 namespace App\Shopify\Client;
 
+use App\Shopify\Connection\ShopifyIntegration;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -14,6 +15,13 @@ final class HttpShopifyTransport implements ShopifyTransport
 {
     public function post(string $url, array $headers, array $body): array
     {
+        // Independent of everything upstream (driver config, which integration
+        // row got read): this transport must never reach the demo/seeder shop
+        // domain over the network, no matter how it got asked to.
+        if (parse_url($url, PHP_URL_HOST) === ShopifyIntegration::DEMO_SHOP_DOMAIN) {
+            throw new ShopifyException('transport', 'Refusing to call the demo Shopify domain ('.ShopifyIntegration::DEMO_SHOP_DOMAIN.') over the live transport.');
+        }
+
         $response = Http::withHeaders($headers)
             ->timeout(30)
             ->post($url, $body);

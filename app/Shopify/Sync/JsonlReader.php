@@ -14,6 +14,12 @@ use RuntimeException;
  * children under the GraphQL connection key the mappers' GraphQL normalizers
  * read (`variants: {nodes: [...]}`, `lineItems: {nodes: [...]}`, ...) and yields
  * the parent as soon as the next top-level line starts.
+ *
+ * Each parent is yielded with the byte offset just past it (the start of the
+ * next top-level line, or EOF): a parent boundary that `objects($path, $offset)`
+ * can resume from. A malformed line is yielded as `['__malformed' => message]`
+ * with a null offset, immediately before the parent it was read inside; it is
+ * never a resume point.
  */
 final class JsonlReader
 {
@@ -28,10 +34,11 @@ final class JsonlReader
     ];
 
     /**
-     * @return Generator<int, array{0: array<string, mixed>, 1: array<string, list<array<string, mixed>>>}>
-     *                                                                                                        parent row (children merged under connection keys) and its children grouped by __typename
+     * @param  int  $offset  a parent boundary previously yielded by this reader (0 = start)
+     * @return Generator<int, array{0: array<string, mixed>, 1: array<string, list<array<string, mixed>>>, 2: int|null}>
+     *                                                                                                                   parent row (children merged under connection keys), its children grouped by __typename, and the resume offset after it
      */
-    public function objects(string $path): Generator
+    public function objects(string $path, int $offset = 0): Generator
     {
         $handle = @fopen($path, 'rb');
 
@@ -40,12 +47,24 @@ final class JsonlReader
         }
 
         try {
+            if ($offset > 0 && fseek($handle, $offset) !== 0) {
+                throw new RuntimeException("Cannot seek bulk JSONL file {$path} to byte {$offset}.");
+            }
+
             $parent = null;
             $children = [];
             $grandchildren = [];
             $childIds = [];
+            $malformed = [];
 
-            while (($line = fgets($handle)) !== false) {
+            while (true) {
+                $lineStart = ftell($handle);
+                $line = fgets($handle);
+
+                if ($line === false) {
+                    break;
+                }
+
                 $line = trim($line);
 
                 if ($line === '') {
@@ -55,14 +74,21 @@ final class JsonlReader
                 $row = json_decode($line, true);
 
                 if (! is_array($row)) {
+                    $malformed[] = $lineStart;
+
                     continue;
                 }
 
                 $parentId = $row['__parentId'] ?? null;
 
                 if ($parentId === null) {
+                    yield from $this->malformed($malformed);
+                    $malformed = [];
+
                     if ($parent !== null) {
-                        yield $this->assemble($parent, $children, $grandchildren);
+                        [$assembled, $grouped] = $this->assemble($parent, $children, $grandchildren);
+
+                        yield [$assembled, $grouped, $lineStart];
                     }
 
                     $parent = $row;
@@ -89,11 +115,27 @@ final class JsonlReader
                 // Anything else is an orphan (its parent was not the preceding top-level line): ignored.
             }
 
+            $end = ftell($handle);
+            yield from $this->malformed($malformed);
+
             if ($parent !== null) {
-                yield $this->assemble($parent, $children, $grandchildren);
+                [$assembled, $grouped] = $this->assemble($parent, $children, $grandchildren);
+
+                yield [$assembled, $grouped, $end];
             }
         } finally {
             fclose($handle);
+        }
+    }
+
+    /**
+     * @param  list<int>  $positions
+     * @return Generator<int, array{0: array{__malformed: string}, 1: array{}, 2: null}>
+     */
+    private function malformed(array $positions): Generator
+    {
+        foreach ($positions as $position) {
+            yield [['__malformed' => "Malformed JSONL line at byte {$position}."], [], null];
         }
     }
 

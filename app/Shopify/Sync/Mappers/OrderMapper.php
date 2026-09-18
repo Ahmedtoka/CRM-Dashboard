@@ -2,6 +2,7 @@
 
 namespace App\Shopify\Sync\Mappers;
 
+use App\Commerce\Jobs\RefreshOrderStatus;
 use App\Enums\ConversationStatus;
 use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
@@ -389,6 +390,13 @@ final class OrderMapper
             'shopify_updated_at' => Payload::time($o['updated_at'] ?? null),
         ]);
 
+        // When the customer placed it in the store (orders.created_at is the import time). Never blanked.
+        $placedAt = Payload::time($o['created_at'] ?? null) ?? Payload::time($o['processed_at'] ?? null);
+
+        if ($placedAt !== null) {
+            $order->placed_at = $placedAt;
+        }
+
         if ($order->paid_at === null && $financial === 'paid') {
             $order->paid_at = Payload::time($o['processed_at'] ?? null) ?? now();
         }
@@ -465,6 +473,8 @@ final class OrderMapper
         // Deferred past commit so listeners (and the realtime broadcast) never
         // observe a row from a transaction that ultimately rolled back.
         $orderId = $order->id;
+        // Mismatch recompute (spec §6.1); bulk mode is covered by the post-import pass.
+        DB::afterCommit(fn () => rescue(fn () => RefreshOrderStatus::dispatch($orderId), null, report: true));
         DB::afterCommit(fn () => SafeBroadcast::send(new OrderUpdated(Order::find($orderId) ?? $order)));
     }
 

@@ -29,4 +29,21 @@ final readonly class OrderPayload
         public array $shippingLine = [],
         public ?array $discount = null,
     ) {}
+
+    /**
+     * Tag put on every store order/draft so a retry can find what an earlier,
+     * failed-looking attempt already created instead of creating a duplicate.
+     * Scoped to this install (final fix wave I3): two CRM installs (e.g. staging
+     * and local) sharing one store never adopt each other's order #N.
+     */
+    public static function tagFor(int $orderId): string
+    {
+        return 'crm-'.self::installId()."-order-{$orderId}";
+    }
+
+    /** First 8 hex chars of sha1(app.key): stable per install, reveals nothing about the key. */
+    public static function installId(): string
+    {
+        return substr(sha1((string) config('app.key')), 0, 8);
+    }
 }

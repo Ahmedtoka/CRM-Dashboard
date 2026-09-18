@@ -8,6 +8,7 @@ use App\Enums\Platform;
 use App\Enums\ShipmentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
+use App\Media\SampleMedia;
 use App\Models\Order;
 use App\Models\Post;
 use App\Models\Shipment;
@@ -58,14 +59,16 @@ class SimulatorController extends Controller
             'platform' => ['required', Rule::enum(Platform::class)],
             'customer_key' => ['required', 'string', 'max:100'],
             'name' => ['required', 'string', 'max:100'],
-            'text' => ['required', 'string', 'max:2000'],
+            'text' => ['required_without:attachment', 'nullable', 'string', 'max:2000'],
+            'attachment' => ['nullable', Rule::in(SampleMedia::KINDS)],
         ]);
 
         $event = $this->simulator->queueCustomerMessage(
             Platform::from($data['platform']),
             $data['customer_key'],
             $data['name'],
-            $data['text'],
+            $data['text'] ?? '',
+            attachment: $data['attachment'] ?? null,
         );
 
         return response()->json(['data' => ['webhook_event_id' => $event->id]], 201);

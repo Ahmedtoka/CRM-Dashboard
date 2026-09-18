@@ -51,12 +51,12 @@ const breadcrumbs = computed(() => [{ title: t('customers.title'), href: '/custo
     <Head :title="t('customers.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-4 p-4">
+        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('customers.title')" />
 
             <div class="relative max-w-sm">
                 <Search class="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <input v-model="search" type="search" :placeholder="t('customers.search')" :aria-label="t('customers.search')" class="h-8 w-full rounded-md border border-input bg-background pe-2 ps-8 text-sm" />
+                <input v-model="search" type="search" :placeholder="t('customers.search')" :aria-label="t('customers.search')" class="h-8 w-full rounded-full border border-input bg-elevated pe-2 ps-8 text-sm" />
             </div>
 
             <div>

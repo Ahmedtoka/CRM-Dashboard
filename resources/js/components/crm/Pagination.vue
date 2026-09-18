@@ -8,7 +8,7 @@ defineProps<{ page: Paginated<unknown> }>();
 
 const { t } = useI18n();
 
-const linkClass = 'inline-flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-xs hover:bg-muted';
+const linkClass = 'inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2.5 text-xs hover:bg-muted';
 </script>
 
 <template>

@@ -6,6 +6,7 @@ use App\Analytics\ActivityLogger;
 use App\Analytics\LatencyRecorder;
 use App\Analytics\MetricsService;
 use App\Analytics\PresenceTracker;
+use App\Analytics\QuickReplyReport;
 use App\Enums\Platform;
 use App\Http\Controllers\Concerns\ReportEndpoints;
 use App\Http\Controllers\Controller;
@@ -19,6 +20,7 @@ use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use ReflectionClass;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
@@ -112,6 +114,40 @@ class ReportController extends Controller
         };
 
         return [$window, $from, $to];
+    }
+
+    /**
+     * Saved replies usage report (spec §2.3, §6): stats only — reply bodies never
+     * appear here — ranked by usage, broken down per agent, plus replies unused
+     * in the last 30 days. Supervisor+ only, same platform filter as other reports.
+     */
+    public function quickReplies(Request $request, QuickReplyReport $report): Response
+    {
+        $range = DateRange::fromRequest($request);
+        $platform = $this->reportPlatform($request);
+
+        return Inertia::render('Reports/QuickReplies', [
+            'range' => $range->toArray(),
+            'platform' => $platform?->value,
+            'top' => $report->top($range, $platform),
+            'perAgent' => $report->perAgent($range, $platform),
+            'unused' => $report->unused(30),
+        ]);
+    }
+
+    public function quickRepliesExport(Request $request, QuickReplyReport $report): StreamedResponse
+    {
+        $range = DateRange::fromRequest($request);
+        $platform = $this->reportPlatform($request);
+
+        return response()->streamDownload(function () use ($report, $range, $platform) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\u{FEFF}"); // Excel opens UTF-8 Arabic correctly with a BOM
+            foreach ($report->csvRows($range, $platform) as $row) {
+                fputcsv($out, $row);
+            }
+            fclose($out);
+        }, "quick-replies-{$range->fromDate}-{$range->toDate}.csv", ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     public function activity(Request $request): Response

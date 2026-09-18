@@ -97,6 +97,9 @@ class RollupDaily extends Command
             'orders_count' => $m['orders_count'],
             'orders_total' => $m['orders_total'],
             'online_minutes' => $m['online_minutes'],
+            'orders_delivered' => $m['orders_delivered'],
+            'revenue_realized' => $m['revenue_realized'],
+            'orders_returned' => $m['orders_returned'],
         ];
     }
 

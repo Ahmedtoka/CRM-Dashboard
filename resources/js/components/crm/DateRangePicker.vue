@@ -66,7 +66,7 @@ function apply(): void {
             :key="preset"
             type="button"
             :aria-pressed="active === preset && !showCustom"
-            class="h-8 rounded-md border px-2.5 text-xs transition-colors"
+            class="h-9 rounded-md border px-2.5 text-xs transition-colors"
             :class="active === preset && !showCustom ? 'border-primary bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground'"
             @click="choose(preset)"
         >
@@ -76,7 +76,7 @@ function apply(): void {
             type="button"
             :aria-pressed="showCustom || active === 'custom'"
             :aria-expanded="showCustom"
-            class="h-8 rounded-md border px-2.5 text-xs transition-colors"
+            class="h-9 rounded-md border px-2.5 text-xs transition-colors"
             :class="showCustom || active === 'custom' ? 'border-primary bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground'"
             @click="showCustom = !showCustom"
         >
@@ -84,11 +84,11 @@ function apply(): void {
         </button>
         <form v-if="showCustom" class="flex flex-wrap items-center gap-1.5" @submit.prevent="apply">
             <label class="sr-only" for="range-from">{{ t('range.from') }}</label>
-            <input id="range-from" v-model="from" type="date" dir="ltr" class="h-8 rounded-md border border-input bg-background px-2 text-xs" :max="to" />
+            <input id="range-from" v-model="from" type="date" dir="ltr" class="h-9 rounded-md border border-input bg-background px-2 text-xs" :max="to" />
             <span class="text-xs text-muted-foreground" aria-hidden="true">→</span>
             <label class="sr-only" for="range-to">{{ t('range.to') }}</label>
-            <input id="range-to" v-model="to" type="date" dir="ltr" class="h-8 rounded-md border border-input bg-background px-2 text-xs" :min="from" />
-            <button type="submit" class="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50" :disabled="invalid">
+            <input id="range-to" v-model="to" type="date" dir="ltr" class="h-9 rounded-md border border-input bg-background px-2 text-xs" :min="from" />
+            <button type="submit" class="h-9 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50" :disabled="invalid">
                 {{ t('range.apply') }}
             </button>
         </form>

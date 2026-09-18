@@ -7,6 +7,7 @@ use App\Enums\ConversationSource;
 use App\Enums\ConversationStatus;
 use App\Enums\Handler;
 use App\Enums\Platform;
+use Database\Factories\ConversationFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Conversation extends Model
 {
-    /** @use HasFactory<\Database\Factories\ConversationFactory> */
+    /** @use HasFactory<ConversationFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -32,6 +33,7 @@ class Conversation extends Model
         'last_responder_id',
         'locked_by_id',
         'locked_until',
+        'claimed_until',
         'unread_count',
         'last_message_at',
         'last_customer_message_at',
@@ -39,6 +41,11 @@ class Conversation extends Model
         'handover_at',
         'resolved_at',
         'resolved_by_id',
+        'bot_due_at',
+        'bot_state',
+        'priority_level',
+        'handover_category',
+        'queue',
     ];
 
     protected function casts(): array
@@ -51,12 +58,15 @@ class Conversation extends Model
             'needs_human' => 'boolean',
             'source' => ConversationSource::class,
             'locked_until' => 'datetime',
+            'claimed_until' => 'datetime',
             'unread_count' => 'integer',
             'last_message_at' => 'datetime',
             'last_customer_message_at' => 'datetime',
             'first_response_at' => 'datetime',
             'handover_at' => 'datetime',
             'resolved_at' => 'datetime',
+            'bot_due_at' => 'datetime',
+            'bot_state' => 'array',
         ];
     }
 
@@ -90,6 +100,14 @@ class Conversation extends Model
     public function notes(): HasMany
     {
         return $this->hasMany(ConversationNote::class);
+    }
+
+    /**
+     * @return HasMany<SupportCase, $this>
+     */
+    public function cases(): HasMany
+    {
+        return $this->hasMany(SupportCase::class);
     }
 
     /**
@@ -146,5 +164,31 @@ class Conversation extends Model
     public function resolvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'resolved_by_id');
+    }
+
+    /**
+     * The bot_state a conversation keeps once a human resolves it or hands it back
+     * to the bot (human bot flow Task 5 ruling 6a): only the burst turn marker, so
+     * stale clarified/repeat_count/last_intents/asks/collected can never trigger a
+     * "repeated" or clarify handover when the customer writes again. The
+     * once-per-conversation delayed-response flag (final fix wave I2) is kept too.
+     * Null when neither was set. Returned, not saved — callers persist it.
+     *
+     * @return array{last_turn_message_id?: int|string, delayed_response_sent?: true}|null
+     */
+    public function resetBotState(): ?array
+    {
+        $state = $this->bot_state ?? [];
+        $kept = [];
+
+        if (($state['last_turn_message_id'] ?? null) !== null) {
+            $kept['last_turn_message_id'] = $state['last_turn_message_id'];
+        }
+
+        if (! empty($state['delayed_response_sent'])) {
+            $kept['delayed_response_sent'] = true;
+        }
+
+        return $kept !== [] ? $kept : null;
     }
 }

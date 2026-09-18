@@ -2,12 +2,15 @@
 
 namespace App\Http\Resources;
 
+use App\Bot\HandoverSummary;
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
 use App\Models\Conversation;
 use App\Models\Tag;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /** @mixin Conversation */
@@ -39,6 +42,10 @@ class ConversationResource extends JsonResource
             'platform' => $c->platform?->value,
             'status' => $c->status?->value,
             'priority' => $c->priority?->value,
+            'priority_level' => $c->priority_level,
+            'queue' => $c->queue,
+            'handover_category' => $c->handover_category,
+            'handover_category_label' => self::categoryLabel($c),
             'handler' => $c->handler?->value,
             'needs_human' => (bool) $c->needs_human,
             'source' => $c->source?->value,
@@ -57,6 +64,60 @@ class ConversationResource extends JsonResource
             'locked_by' => $lockedBy ? ['id' => $lockedBy->id, 'name' => $lockedBy->name] : null,
             'first_responder' => $firstResponder ? ['id' => $firstResponder->id, 'name' => $firstResponder->name] : null,
             'tags' => $c->tags->map(fn (Tag $t) => ['id' => $t->id, 'name' => $t->name, 'color' => $t->color])->values()->all(),
+            'handling' => self::handling($c),
+            // Fix round 1, minor (i): the claim button needs to know whether the
+            // viewer may reply at all — computed here (not per row in the list
+            // query) so a moderator scoped away from this platform never sees it.
+            // `canAccessPlatform()` is O(1) per request: it short-circuits for
+            // supervisor+, and for a moderator it reads the already-memoized
+            // `userPlatforms` relation on the single, request-cached `$request->user()`
+            // model — never a per-row query even across every row of the list.
+            'can' => [
+                'reply' => (bool) $request->user()?->canAccessPlatform($c->platform),
+                'reset' => (bool) $request->user()?->isSupervisorOrAbove(),
+            ],
         ];
+    }
+
+    /** Arabic handover category label from HandoverSummary, the one labels source (human bot flow Task 5). */
+    public static function categoryLabel(Conversation $c): ?string
+    {
+        return $c->handover_category !== null && $c->handover_category !== ''
+            ? HandoverSummary::categoryLabel((string) $c->handover_category)
+            : null;
+    }
+
+    /**
+     * Who's handling this conversation right now (spec §5.4, Task 15): an active
+     * soft-lock holder first, else the last human whose reply is still recent.
+     * Shared by the list/detail resource and the ConversationUpdated broadcast so
+     * both resolve the same way without issuing a per-row query on the list.
+     *
+     * @return array{id:int,name:string,color:?string,via:string}|null
+     */
+    public static function handling(Conversation $c): ?array
+    {
+        if ($c->locked_by_id !== null && $c->locked_until?->isFuture()) {
+            $u = $c->relationLoaded('lockedBy') ? $c->lockedBy : User::find($c->locked_by_id);
+
+            return $u ? ['id' => $u->id, 'name' => $u->name, 'color' => $u->color, 'via' => 'lock'] : null;
+        }
+
+        if ($c->last_responder_id === null) {
+            return null;
+        }
+
+        $attributes = $c->getAttributes();
+        $lastReply = array_key_exists('last_human_reply_at', $attributes)
+            ? $attributes['last_human_reply_at']
+            : $c->messages()->where('sender_type', SenderType::User->value)->orderByDesc('id')->value('created_at');
+
+        if ($lastReply === null || Carbon::parse($lastReply)->lt(now()->subMinutes((int) config('crm.handling_recent_minutes', 30)))) {
+            return null;
+        }
+
+        $u = $c->relationLoaded('lastResponder') ? $c->lastResponder : User::find($c->last_responder_id);
+
+        return $u ? ['id' => $u->id, 'name' => $u->name, 'color' => $u->color, 'via' => 'recent_reply'] : null;
     }
 }

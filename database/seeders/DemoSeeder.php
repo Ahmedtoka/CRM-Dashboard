@@ -17,7 +17,6 @@ use App\Models\ChannelAccount;
 use App\Models\City;
 use App\Models\Conversation;
 use App\Models\CustomerIdentity;
-use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\QuickReply;
 use App\Models\Shipment;
@@ -25,6 +24,8 @@ use App\Models\Tag;
 use App\Models\User;
 use App\Models\UserPlatform;
 use App\Shipping\ShipmentService;
+use App\Shopify\Connection\ShopifyIntegration;
+use App\Shopify\Sync\BulkImporter;
 use App\Simulator\Simulator;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
@@ -33,6 +34,7 @@ use Database\Seeders\Demo\ArabicCorpus;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -81,8 +83,30 @@ class DemoSeeder extends Seeder
 
     private CarbonImmutable $realNow;
 
+    /**
+     * Every driver switch the demo touches, including the Shopify transport
+     * (not one of `crm.drivers.*`, but just as dangerous to leave live).
+     * `seedShopifyCatalog()` persists a `connected` `ShopifyIntegration` row —
+     * if any of these were ever live, a later scheduled reconcile/webhooks-check
+     * run (or any other Shopify call) could use that row's bogus token against
+     * a real store.
+     */
+    private const DRIVER_CONFIG_KEYS = [
+        'crm.drivers.channels',
+        'crm.drivers.commerce',
+        'crm.drivers.shipping',
+        'crm.drivers.ai',
+        'crm.shopify.driver',
+    ];
+
     public function run(): void
     {
+        // Refuse outright rather than silently proceeding: this must never be
+        // a matter of "seedShopifyCatalog() happens to force crm.shopify.driver
+        // around one call and everything else is scoped correctly" — the whole
+        // run refuses to start unless every driver was already `fake`.
+        $this->assertFakeDriversOnly();
+
         // Reseeding must be reproducible: array_rand()/shuffle()/mt_rand()
         // all draw from the same Mersenne Twister state, so seeding it once
         // up front makes every scenario choice below deterministic. (Only
@@ -95,17 +119,22 @@ class DemoSeeder extends Seeder
 
         $originalBroadcast = config('broadcasting.default');
         $originalQueue = config('queue.default');
+        $originalDrivers = collect(self::DRIVER_CONFIG_KEYS)->mapWithKeys(fn (string $key) => [$key => config($key)])->all();
 
         // Historical replay must never hit a real broadcast server, and every
         // queued job (bot runs, comment bot runs) must execute inline so the
         // data produced is fully consistent by the time the seeder returns.
+        // Every driver is pinned to `fake` for the whole run (not just around
+        // the Shopify import below) — belt and suspenders on top of the guard
+        // above, since nothing here should ever need anything else.
         config(['broadcasting.default' => 'null', 'queue.default' => 'sync']);
+        config(array_fill_keys(self::DRIVER_CONFIG_KEYS, 'fake'));
 
         try {
             $this->seedUsers();
             $this->seedChannelAccounts();
             $this->seedCities();
-            $this->seedProducts();
+            $this->seedShopifyCatalog();
             $this->seedBotSettingsAndRules();
             $this->seedQuickReplies();
             $this->seedTags();
@@ -123,6 +152,19 @@ class DemoSeeder extends Seeder
         } finally {
             $this->travelTo(null);
             config(['broadcasting.default' => $originalBroadcast, 'queue.default' => $originalQueue]);
+            config($originalDrivers);
+        }
+    }
+
+    /** @throws RuntimeException when any driver isn't already `fake` */
+    private function assertFakeDriversOnly(): void
+    {
+        foreach (self::DRIVER_CONFIG_KEYS as $key) {
+            $value = config($key);
+
+            if ($value !== 'fake') {
+                throw new RuntimeException("DemoSeeder runs only with fake drivers ({$key} is \"{$value}\", not \"fake\").");
+            }
         }
     }
 
@@ -209,38 +251,50 @@ class DemoSeeder extends Seeder
         }
     }
 
-    private function seedProducts(): void
+    /**
+     * Task 10: rather than inserting `Product`/`ProductVariant` rows by hand,
+     * the demo connects a `ShopifyIntegration` to the fake Shopify driver and
+     * runs the real `BulkImporter` against it, so the demo's products,
+     * shipping zones (27 governorates) and a first batch of customers all
+     * flow through the same mappers a real store's initial import would use.
+     * `FakeShopifyTransport` generates its bulk export from this same
+     * `ArabicCorpus` catalog, so the imported products match what the
+     * simulator/seeder expect. `queue.default` is already forced to `sync`
+     * above, so `BulkImporter::start()`'s job chain (shipping → products →
+     * customers → orders) runs to completion synchronously here.
+     *
+     * The 'orders' stage of that same import also seeds a batch of
+     * storefront-only orders (no matching CRM conversation), which
+     * `OrderMapper` records with `source = store` — the demo's ~20%
+     * store-origin share once combined with the chat orders created later
+     * by replayConversations().
+     */
+    private function seedShopifyCatalog(): void
     {
-        $sizes = ['S', 'M', 'L', 'XL'];
+        $this->travelTo($this->realNow->subDays(31));
 
-        foreach (ArabicCorpus::products() as $i => $def) {
-            $product = Product::create([
-                'shopify_id' => 'demo-p-'.$i,
-                'title' => $def['title'],
-                'handle' => Str::slug($def['title']).'-'.$i,
-                'status' => 'active',
-            ]);
+        // `run()` already asserted and pinned every driver (including
+        // `crm.shopify.driver`) to `fake` for the whole seeder, so this row is
+        // never read by anything but `FakeShopifyTransport`. Its shop_domain is
+        // also the shared `ShopifyIntegration::DEMO_SHOP_DOMAIN` constant that
+        // the live transport and the scheduled Shopify jobs refuse to call out
+        // for, as a second, independent safety net.
+        ShopifyIntegration::create([
+            'shop_domain' => ShopifyIntegration::DEMO_SHOP_DOMAIN,
+            'shop_name' => 'متجر تجريبي',
+            'currency' => 'EGP',
+            'access_token' => 'demo-fake-token',
+            'api_secret' => 'demo-fake-secret',
+            'api_version' => config('crm.shopify.api_version'),
+            'granted_scopes' => config('crm.shopify.required_scopes', []),
+            'status' => 'connected',
+            'connected_at' => now(),
+        ]);
 
-            $variantSpecs = $def['sizes']
-                ? array_map(fn ($size, $j) => [$size, $def['colors'][$j % count($def['colors'])]], $sizes, array_keys($sizes))
-                : array_map(fn ($color) => [null, $color], $def['colors']);
+        app(BulkImporter::class)->start();
 
-            foreach ($variantSpecs as $j => [$size, $color]) {
-                $title = trim(implode(' - ', array_filter([$size, $color])));
-                $price = (int) (round(mt_rand($def['price_min'], $def['price_max']) / 25) * 25);
-
-                $variant = ProductVariant::create([
-                    'product_id' => $product->id,
-                    'shopify_id' => 'demo-v-'.$i.'-'.$j,
-                    'sku' => 'SKU-'.$i.'-'.$j,
-                    'title' => $title !== '' ? $title : 'Default',
-                    'price' => $price,
-                    'inventory_quantity' => mt_rand(0, 80),
-                ]);
-
-                $this->variantIds[] = $variant->id;
-            }
-        }
+        $this->variantIds = ProductVariant::pluck('id')->all();
+        $this->travelTo(null);
     }
 
     private function seedBotSettingsAndRules(): void
@@ -639,8 +693,13 @@ class DemoSeeder extends Seeder
             'shipping' => [
                 'name' => $names[array_rand($names)],
                 'phone' => $this->randomEgyptianPhone(),
-                'city_id' => $city->id,
-                'address' => 'شارع '.mt_rand(1, 40).'، '.$city->name_ar,
+                // New shape (province_code/city/address1): Task 10's Shopify import seeds
+                // real ShippingZone rows before any order is created, so the legacy
+                // city_id fee path (only used while no zones exist) no longer applies —
+                // this keeps demo orders on the same varied per-governorate rates.
+                'province_code' => $this->provinceCode($city->name_ar),
+                'city' => $city->name_ar,
+                'address1' => 'شارع '.mt_rand(1, 40).'، '.$city->name_ar,
             ],
         ];
 
@@ -861,6 +920,15 @@ class DemoSeeder extends Seeder
         $prefixes = ['010', '011', '012', '015'];
 
         return $prefixes[array_rand($prefixes)].mt_rand(10000000, 99999999);
+    }
+
+    /** ISO 3166-2:EG code for one of `ArabicCorpus::cities()`' Arabic names (`config('crm.eg_provinces')` is the reverse map). */
+    private function provinceCode(string $nameAr): ?string
+    {
+        static $codeByName = null;
+        $codeByName ??= array_flip(config('crm.eg_provinces', []));
+
+        return $codeByName[$nameAr] ?? null;
     }
 
     private function travelTo(?CarbonInterface $at): void

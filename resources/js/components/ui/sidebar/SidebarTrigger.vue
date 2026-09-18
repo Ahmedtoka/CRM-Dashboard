@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Button from '@/components/ui/button/Button.vue';
+import { useI18n } from '@/composables/useI18n';
 import { cn } from '@/lib/utils';
 import { PanelLeft } from 'lucide-vue-next';
 import type { HTMLAttributes } from 'vue';
@@ -10,11 +11,12 @@ const props = defineProps<{
 }>();
 
 const { toggleSidebar } = useSidebar();
+const { t } = useI18n();
 </script>
 
 <template>
     <Button data-sidebar="trigger" variant="ghost" size="icon" :class="cn('h-7 w-7', props.class)" @click="toggleSidebar">
         <PanelLeft />
-        <span class="sr-only">Toggle Sidebar</span>
+        <span class="sr-only">{{ t('nav.toggle_sidebar') }}</span>
     </Button>
 </template>

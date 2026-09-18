@@ -2,6 +2,7 @@
 
 namespace App\Bot\Ai;
 
+use App\Enums\BotIntent;
 use App\Enums\CommentIntent;
 use Illuminate\Support\Facades\Http;
 
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\Http;
  * wrap JSON in prose or code fences. HTTP errors raise an exception (via
  * `->throw()`) so BotEngine can turn them into a `handover('ai_error')`.
  */
-class ClaudeAiResponder implements AiResponder
+class ClaudeAiResponder implements AiResponder, MessageClassifier
 {
     private const ENDPOINT = 'https://api.anthropic.com/v1/messages';
 
@@ -22,6 +23,8 @@ class ClaudeAiResponder implements AiResponder
         private readonly string $classifierModel,
         private readonly string $replyModel,
         private readonly int $timeout = 10,
+        private readonly ?int $classifyTimeout = null,
+        private readonly ?int $replyTimeout = null,
     ) {}
 
     public function classify(string $text): Classification
@@ -72,13 +75,66 @@ class ClaudeAiResponder implements AiResponder
     }
 
     /**
+     * Clothing-store message intent (spec §4.3). Strict parse: an unparsable
+     * response or out-of-range values fall back to `other` with confidence 0,
+     * which makes BotEngine hand over. Nothing here is logged.
+     */
+    public function classifyMessage(string $text): MessageClassification
+    {
+        $system = <<<'PROMPT'
+            You classify one Egyptian Arabic message to a women's clothing store. Respond with ONLY a JSON object:
+            {"intent":"greeting|price|availability|size_chart|size_recommendation|shipping|exchange_return|payment|order_status|purchase|complaint|other","sentiment":"positive|neutral|negative","confidence":0-1}
+            size_recommendation = asks which size fits her or gives weight/height. purchase = wants to order/reserve or sends address/phone.
+            PROMPT;
+
+        $start = microtime(true);
+
+        $response = Http::withHeaders($this->headers())
+            ->timeout($this->classifyTimeout ?? $this->timeout)
+            ->post(self::ENDPOINT, [
+                'model' => $this->classifierModel,
+                'max_tokens' => 100,
+                'system' => $system,
+                'messages' => [
+                    ['role' => 'user', 'content' => $text],
+                ],
+            ])
+            ->throw();
+
+        $latencyMs = (int) round((microtime(true) - $start) * 1000);
+        $data = $response->json() ?? [];
+        $usage = $data['usage'] ?? [];
+        $inputTokens = (int) ($usage['input_tokens'] ?? 0);
+        $outputTokens = (int) ($usage['output_tokens'] ?? 0);
+
+        $json = $this->extractJson($this->textFrom($data));
+        $confidence = $json['confidence'] ?? null;
+
+        if ($json === null || ! is_string($json['intent'] ?? null) || ! is_numeric($confidence)) {
+            return new MessageClassification(BotIntent::Other, 'neutral', 0.0, $this->classifierModel, $inputTokens, $outputTokens, $latencyMs);
+        }
+
+        $sentiment = in_array($json['sentiment'] ?? null, ['positive', 'neutral', 'negative'], true) ? $json['sentiment'] : 'neutral';
+
+        return new MessageClassification(
+            BotIntent::tryFrom($json['intent']) ?? BotIntent::Other,
+            $sentiment,
+            max(0.0, min(1.0, (float) $confidence)),
+            $this->classifierModel,
+            $inputTokens,
+            $outputTokens,
+            $latencyMs,
+        );
+    }
+
+    /**
      * @param  array<int, array{role: 'customer'|'agent', text: string}>  $history
      * @param  string[]  $catalogLines
      */
     public function reply(array $history, array $catalogLines, string $systemPrompt): AiReply
     {
         $system = $systemPrompt
-            ."\n\nCatalog (use these prices only, never invent or discount):\n"
+            ."\n\nGrounding — catalog, shipping, policies, size chart (use only these facts and numbers, never invent or discount):\n"
             .implode("\n", $catalogLines)
             ."\n\nRespond with ONLY a JSON object, no other text: {\"action\":\"reply|handover\",\"text\":\"...\"}."
             .' Reply in short Egyptian Arabic.';
@@ -91,7 +147,7 @@ class ClaudeAiResponder implements AiResponder
         $start = microtime(true);
 
         $response = Http::withHeaders($this->headers())
-            ->timeout($this->timeout)
+            ->timeout($this->replyTimeout ?? $this->timeout)
             ->post(self::ENDPOINT, [
                 'model' => $this->replyModel,
                 'max_tokens' => 400,

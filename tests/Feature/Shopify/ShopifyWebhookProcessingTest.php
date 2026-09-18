@@ -138,3 +138,45 @@ it('stores an unknown topic as ignored without processing it', function () {
     signedPost($this, 'carts-update', ['id' => 1], 'sec', 'unknown-1')->assertOk();
     expect(WebhookEvent::where('dedupe_key', 'unknown-1')->value('status'))->toBe('ignored');
 });
+
+// --- Final fix wave I5 ---
+
+it('does not mark paid from a stale orders/paid payload', function () {
+    $order = Order::factory()->create(['type' => OrderType::PaymentLink, 'status' => OrderStatus::AwaitingPayment, 'shopify_order_id' => '9500']);
+    $order->forceFill(['shopify_updated_at' => '2030-01-02 00:00:00'])->save();
+
+    signedPost($this, 'orders-paid', ['id' => 9500, 'name' => '#9500', 'financial_status' => 'paid', 'updated_at' => '2030-01-01T00:00:00Z'])->assertOk();
+
+    expect($order->fresh()->status)->toBe(OrderStatus::AwaitingPayment)
+        ->and($order->fresh()->paid_at)->toBeNull();
+});
+
+it('ignores a stale orders/paid after a cancel without a paid_ignored alert', function () {
+    $order = Order::factory()->create(['type' => OrderType::PaymentLink, 'status' => OrderStatus::Cancelled, 'shopify_order_id' => '9600']);
+    $order->forceFill(['shopify_updated_at' => '2030-01-02 00:00:00', 'cancelled_at' => '2030-01-02 00:00:00'])->save();
+
+    signedPost($this, 'orders-paid', ['id' => 9600, 'name' => '#9600', 'financial_status' => 'paid', 'updated_at' => '2030-01-01T00:00:00Z'])->assertOk();
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Cancelled)
+        ->and(ActivityLog::where('action', ActivityLogger::ORDER_PAID_IGNORED)->count())->toBe(0);
+});
+
+it('does not cancel from a stale orders/cancelled payload', function () {
+    $order = Order::factory()->create(['status' => OrderStatus::Confirmed, 'shopify_order_id' => '9700', 'financial_status' => 'paid']);
+    $order->forceFill(['shopify_updated_at' => '2030-01-02 00:00:00'])->save();
+
+    signedPost($this, 'orders-cancelled', ['id' => 9700, 'name' => '#9700', 'cancelled_at' => '2030-01-01T00:00:00Z', 'updated_at' => '2030-01-01T00:00:00Z'])->assertOk();
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Confirmed)
+        ->and(ActivityLog::where('action', ActivityLogger::ORDER_CANCELLED)->where('subject_id', $order->id)->count())->toBe(0);
+});
+
+it('still marks paid from a newer orders/paid payload', function () {
+    $order = Order::factory()->create(['type' => OrderType::PaymentLink, 'status' => OrderStatus::AwaitingPayment, 'shopify_order_id' => '9800']);
+    $order->forceFill(['shopify_updated_at' => '2030-01-01 00:00:00'])->save();
+
+    signedPost($this, 'orders-paid', ['id' => 9800, 'name' => '#9800', 'financial_status' => 'paid', 'updated_at' => '2030-01-02T00:00:00Z'])->assertOk();
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Confirmed)
+        ->and($order->fresh()->paid_at)->not->toBeNull();
+});

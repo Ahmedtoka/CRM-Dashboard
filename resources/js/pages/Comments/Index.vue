@@ -62,16 +62,21 @@ const breadcrumbs = computed(() => [{ title: t('comments.title'), href: '/commen
     <Head :title="t('comments.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-4 p-4">
+        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('comments.title')">
                 <span v-if="!live" class="inline-flex items-center gap-1 text-2xs text-muted-foreground"><WifiOff class="size-3" aria-hidden="true" />{{ t('alerts.polling') }}</span>
             </PageHeader>
 
-            <div class="grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)]">
-                <CommentFilters v-model:ad-only="adOnly" :filters="filters" class="lg:sticky lg:top-4 lg:self-start" @update:filters="applyFilters" />
+            <div class="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+                <CommentFilters
+                    v-model:ad-only="adOnly"
+                    :filters="filters"
+                    class="rounded-lg bg-card p-3 shadow-card lg:sticky lg:top-4 lg:self-start"
+                    @update:filters="applyFilters"
+                />
 
                 <div class="space-y-3">
-                    <EmptyState v-if="!groups.length" :icon="MessagesSquare" :title="t('comments.empty')" class="rounded-lg border bg-card" />
+                    <EmptyState v-if="!groups.length" :icon="MessagesSquare" :title="t('comments.empty')" class="rounded-lg bg-card shadow-card" />
                     <PostGroup v-for="group in groups" :key="group.key" :post="group.post" :comments="group.comments" @filter-post="applyFilters({ ...filters, post_id: $event })">
                         <CommentCard
                             v-for="comment in group.comments"

@@ -66,8 +66,8 @@ export function formatListStamp(iso: string | null | undefined, locale: Locale, 
     return new Intl.DateTimeFormat(intlLocale(locale), { day: 'numeric', month: 'short', timeZone: DISPLAY_TIMEZONE }).format(d);
 }
 
-/** Compact duration: "٥ د" / "3h" / "2d". */
-export function formatDuration(ms: number, locale: Locale): string {
+/** Compact relative duration: "٥ د" / "3h" / "2d". Internal to `formatSince`/`formatUntil`. */
+function relativeDuration(ms: number, locale: Locale): string {
     const minutes = Math.max(0, Math.floor(ms / 60000));
 
     if (minutes < 1) {
@@ -90,7 +90,7 @@ export function formatSince(iso: string | null | undefined, locale: Locale, now:
     if (!d) {
         return '';
     }
-    const duration = formatDuration(now - d.getTime(), locale);
+    const duration = relativeDuration(now - d.getTime(), locale);
 
     return now - d.getTime() < 60000 ? duration : translate(locale, 'time.ago', { time: duration });
 }
@@ -103,7 +103,28 @@ export function formatUntil(iso: string | null | undefined, locale: Locale, now:
         return null;
     }
 
-    return formatDuration(d.getTime() - now, locale);
+    return relativeDuration(d.getTime() - now, locale);
+}
+
+/** File size: "١٫٥ م.ب" / "1.5 MB". */
+export function formatBytes(bytes: number | null, locale: Locale): string {
+    if (bytes === null) return '';
+    const units = locale === 'ar' ? ['بايت', 'ك.ب', 'م.ب'] : ['B', 'KB', 'MB'];
+    let value = bytes;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024;
+        unit++;
+    }
+    return `${formatNumber(locale, value, { maximumFractionDigits: unit === 0 ? 0 : 1 })} ${units[unit]}`;
+}
+
+/** Media duration as "m:ss" (audio/video player clock), Arabic-Indic digits in ar. */
+export function formatDuration(ms: number | null, locale: Locale): string {
+    const total = Math.max(0, Math.round((ms ?? 0) / 1000));
+    const mm = Math.floor(total / 60);
+    const ss = String(total % 60).padStart(2, '0');
+    return locale === 'ar' ? `${formatNumber(locale, mm)}:${ss.replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)])}` : `${mm}:${ss}`;
 }
 
 /** EGP with exactly two decimals ("١٬٢٥٠٫٠٠ ج.م" / "1,250.00 EGP"). */

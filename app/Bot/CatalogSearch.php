@@ -2,6 +2,9 @@
 
 namespace App\Bot;
 
+use App\Bot\Grounding\Synonyms;
+use App\Bot\Grounding\VariantOptions;
+use App\Models\Product;
 use App\Models\ProductVariant;
 
 /**
@@ -15,7 +18,8 @@ class CatalogSearch
     public function linesFor(string $text, int $limit = 8): array
     {
         $words = collect(preg_split('/\s+/u', trim($text)) ?: [])
-            ->map(fn ($w) => trim($w, '؟?!.,،'))
+            // Multibyte-safe: trim()'s byte charlist ate the 0xD8 lead byte of "ا" etc.
+            ->map(fn ($w) => preg_replace('/^[؟?!.,،]+|[؟?!.,،]+$/u', '', $w) ?? $w)
             ->filter(fn ($w) => mb_strlen($w) >= 2)
             ->unique()
             ->values();
@@ -37,6 +41,74 @@ class CatalogSearch
             ->filter(fn (ProductVariant $v) => $v->product !== null);
 
         return $variants->map(fn (ProductVariant $v) => $this->formatLine($v))->all();
+    }
+
+    /**
+     * One grounding line per product (spec §4.3), for the message bot:
+     * "{title} | {price or min - max} جنيه | أحمر: S (3)، M (نفد) | أسود: L (2)".
+     * Bounded to $limit active products; colour/size words and stop words are
+     * dropped from the search so "الفستان الستان الاحمر متاح؟" finds "فستان ستان".
+     *
+     * @return list<string>
+     */
+    public function groupedLinesFor(string $text, int $limit = 5): array
+    {
+        $normalizer = app(ArabicNormalizer::class);
+        $stop = ['متاح', 'موجود', 'بكام', 'سعر', 'عندكم', 'لو', 'سمحتي', 'ممكن', 'ده', 'دي', 'فيه', 'مقاس', 'لون'];
+        // Multibyte-safe punctuation trim: trim()'s byte charlist would eat the
+        // lead byte (0xD8) of Arabic letters such as "ا" along with "؟"/"،".
+        $tokens = collect(preg_split('/\s+/u', $normalizer->normalize($text)) ?: [])
+            ->map(fn ($w) => preg_replace('/^[؟?!.,،]+|[؟?!.,،]+$/u', '', $w) ?? $w)
+            ->map(fn ($w) => preg_replace('/^ال/u', '', $w) ?? $w)
+            ->filter(fn ($w) => mb_strlen($w) >= 3 && ! in_array($w, $stop, true) && Synonyms::color($w) === null && Synonyms::size($w) === null)
+            ->unique()
+            ->take(8) // keeps the OR/LIKE query bounded for long messages
+            ->values();
+
+        if ($tokens->isEmpty()) {
+            return [];
+        }
+
+        $products = Product::query()
+            ->with(['variants' => fn ($v) => $v->orderBy('id')])
+            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', 'active'))
+            ->where(function ($q) use ($tokens) {
+                foreach ($tokens as $t) {
+                    $q->orWhere('title', 'like', "%{$t}%")->orWhereHas('variants', fn ($v) => $v->where('sku', 'like', "%{$t}%"));
+                }
+            })
+            ->limit($limit)
+            ->get();
+
+        return $products->map(fn (Product $p) => $this->productLine($p))->filter()->values()->all();
+    }
+
+    private function productLine(Product $p): ?string
+    {
+        if ($p->variants->isEmpty()) {
+            return null;
+        }
+
+        $prices = $p->variants->map(fn ($v) => (float) $v->price);
+        $price = $prices->min() === $prices->max()
+            ? $this->formatPrice($prices->min())
+            : $this->formatPrice($prices->min()).' - '.$this->formatPrice($prices->max());
+
+        $byColor = [];
+        foreach ($p->variants as $v) {
+            ['color' => $color, 'size' => $size] = VariantOptions::parse($v->title);
+            $isDefault = $v->title === null || in_array($v->title, ['', 'Default', 'Default Title'], true);
+            $label = $size ?? ($color === null && ! $isDefault ? $v->title : 'مقاس واحد');
+            $stock = (int) $v->inventory_quantity > 0 ? '('.(int) $v->inventory_quantity.')' : '(نفد)';
+            $byColor[$color ?? 'لون واحد'][] = "{$label} {$stock}";
+        }
+
+        $parts = [$p->title, $price.' جنيه'];
+        foreach ($byColor as $color => $sizes) {
+            $parts[] = $color.': '.implode('، ', $sizes);
+        }
+
+        return implode(' | ', $parts);
     }
 
     private function formatLine(ProductVariant $variant): string

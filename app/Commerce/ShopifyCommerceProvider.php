@@ -6,6 +6,7 @@ use App\Commerce\Contracts\CommerceProvider;
 use App\Commerce\Data\CommerceResult;
 use App\Commerce\Data\OrderPayload;
 use App\Commerce\Data\OrderStatusUpdate;
+use App\Enums\OrderType;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
@@ -14,7 +15,9 @@ use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Client\ShopifyException;
 use App\Shopify\Connection\IntegrationRepository;
 use App\Shopify\Customers\PhoneNormalizer;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Throwable;
 
 /**
  * Live Shopify driver (crm.drivers.commerce = 'live'). Every call goes through
@@ -122,11 +125,13 @@ class ShopifyCommerceProvider implements CommerceProvider
         $discount = $payload->discount;
 
         $input = array_filter([
+            // priceOverride pins each line to the CRM's unit price so the invoice total matches the order.
             'lineItems' => array_map(fn (array $li) => [
                 'variantId' => "gid://shopify/ProductVariant/{$li['variant_shopify_id']}",
                 'quantity' => $li['qty'],
+                'priceOverride' => ['amount' => $li['price'], 'currencyCode' => $currency],
             ], $payload->lineItems),
-            'customerId' => $payload->customerId ? "gid://shopify/Customer/{$payload->customerId}" : null,
+            'purchasingEntity' => $payload->customerId ? ['customerId' => "gid://shopify/Customer/{$payload->customerId}"] : null,
             'phone' => $payload->shippingAddress['phone'] ?? null,
             'shippingAddress' => $payload->shippingAddress !== [] ? $this->mailingAddress($payload->shippingAddress) : null,
             'shippingLine' => [
@@ -145,7 +150,7 @@ class ShopifyCommerceProvider implements CommerceProvider
         ], fn ($v) => $v !== null);
 
         $data = $this->client->mutate(
-            'mutation draftOrderCreate($input: DraftOrderInput!) { draftOrderCreate(input: $input) { draftOrder { id name invoiceUrl } userErrors { field message } } }',
+            'mutation draftOrderCreate($input: DraftOrderInput!) { draftOrderCreate(input: $input) { draftOrder { id name invoiceUrl totalPriceSet { shopMoney { amount } } } userErrors { field message } } }',
             ['input' => $input],
             'draftOrderCreate',
         );
@@ -156,11 +161,87 @@ class ShopifyCommerceProvider implements CommerceProvider
             throw new ShopifyException('transport', 'Shopify returned no draft order');
         }
 
+        return $this->draftResult($draft);
+    }
+
+    /**
+     * A tag alone is not proof (final fix wave I3): the found node must carry
+     * this order's `crm_order_id` custom attribute and must not predate the
+     * local order (10 min clock-skew allowance). Unverified nodes are ignored.
+     */
+    public function findSubmittedOrder(Order $order): ?CommerceResult
+    {
+        $search = "tag:'".OrderPayload::tagFor($order->id)."'";
+
+        if ($order->type === OrderType::PaymentLink) {
+            $data = $this->client->query(
+                'query draftByTag($query: String!) { draftOrders(first: 5, query: $query) { nodes { id name invoiceUrl createdAt customAttributes { key value } totalPriceSet { shopMoney { amount } } } } }',
+                ['query' => $search],
+            );
+
+            $draft = $this->firstVerifiedNode($data['draftOrders']['nodes'] ?? [], $order);
+
+            return $draft ? $this->draftResult($draft) : null;
+        }
+
+        $data = $this->client->query(
+            'query orderByTag($query: String!) { orders(first: 5, query: $query) { nodes { id name createdAt customAttributes { key value } } } }',
+            ['query' => $search],
+        );
+
+        $found = $this->firstVerifiedNode($data['orders']['nodes'] ?? [], $order);
+
+        return $found
+            ? new CommerceResult(success: true, orderId: $this->numericId($found['id'] ?? null), orderNumber: $found['name'] ?? null)
+            : null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function firstVerifiedNode(mixed $nodes, Order $order): ?array
+    {
+        $earliest = CarbonImmutable::instance($order->created_at ?? now())->subMinutes(10);
+
+        foreach (is_array($nodes) ? $nodes : [] as $node) {
+            if (! is_array($node) || blank($node['createdAt'] ?? null)) {
+                continue;
+            }
+
+            $crmOrderId = collect($node['customAttributes'] ?? [])
+                ->first(fn ($attr) => is_array($attr) && ($attr['key'] ?? null) === 'crm_order_id')['value'] ?? null;
+
+            if ((string) $crmOrderId !== (string) $order->id) {
+                continue;
+            }
+
+            try {
+                $createdAt = CarbonImmutable::parse((string) $node['createdAt']);
+            } catch (Throwable) {
+                continue;
+            }
+
+            if ($createdAt->greaterThanOrEqualTo($earliest)) {
+                return $node;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $draft
+     */
+    private function draftResult(array $draft): CommerceResult
+    {
+        $amount = $draft['totalPriceSet']['shopMoney']['amount'] ?? null;
+
         return new CommerceResult(
             success: true,
             orderNumber: $draft['name'] ?? null,
             draftOrderId: $this->numericId($draft['id'] ?? null),
             invoiceUrl: $draft['invoiceUrl'] ?? null,
+            total: $amount !== null ? number_format((float) $amount, 2, '.', '') : null,
         );
     }
 

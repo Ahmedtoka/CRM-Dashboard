@@ -55,6 +55,7 @@ it('serves the api conversation list and send endpoint with a token', function (
 });
 
 it('ingests simulator messages through the webhook pipeline', function () {
+    config(['crm.dev_tools' => true]);
     $admin = User::factory()->create(['role'=>UserRole::Admin]);
 
     $this->actingAs($admin)->postJson('/simulator/message', ['platform'=>'instagram', 'customer_key'=>'cust-1', 'name'=>'Nour', 'text'=>'عايز اكلم حد'])

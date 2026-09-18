@@ -3,6 +3,7 @@ import { useEcho } from '@/composables/useEcho';
 import { useI18n } from '@/composables/useI18n';
 import type { User } from '@/types';
 import type {
+    Attachment,
     Conversation,
     ConversationAction,
     ConversationDetail,
@@ -12,12 +13,14 @@ import type {
     Message,
     Note,
     Order,
+    QuickReply,
+    RenderedQuickReply,
     TemplatePayload,
     UserRef,
 } from '@/types/crm';
 import { computed, onScopeDispose, ref } from 'vue';
 
-type SendPayload = { body: string } | { template: TemplatePayload };
+type SendPayload = { body: string; attachment_ids?: number[]; quick_reply_id?: number } | { template: TemplatePayload };
 
 interface Options {
     me: User;
@@ -47,8 +50,11 @@ export function useConversationThread(options: Options) {
     const viewers = ref<UserRef[]>([]);
     const typingUsers = ref<Record<number, string>>({});
     const lockHolder = ref<UserRef | null>(null);
+    /** @mentions autocomplete data source (Task 15) — refreshed each time a conversation is opened. */
+    const mentionable = ref<UserRef[]>([]);
     const busyAction = ref<string | null>(null);
     const retrying = ref<Array<number | string>>([]);
+    const retryingAttachments = ref<number[]>([]);
     const error = ref<string | null>(null);
 
     const typingNames = computed(() => Object.values(typingUsers.value));
@@ -87,14 +93,24 @@ export function useConversationThread(options: Options) {
         const index = messages.value.findIndex((m) => m.id === message.id);
         if (index !== -1) {
             messages.value[index] = { ...messages.value[index], ...message, client_key: messages.value[index].client_key };
+            resolveRetriedAttachments(message);
             return;
         }
         messages.value.push(message);
+        resolveRetriedAttachments(message);
 
         // A customer message can reopen the reply window.
         if (message.direction === 'in' && detail.value && detail.value.window.mode !== 'open') {
             scheduleReload();
         }
+    }
+
+    // A retried attachment stays in `retryingAttachments` (spinner, not the Retry
+    // button) until a broadcast reports it left `pending` — stored or failed again.
+    function resolveRetriedAttachments(message: Message): void {
+        if (!retryingAttachments.value.length) return;
+        const resolvedIds = new Set(message.attachments.filter((a) => a.status !== 'pending').map((a) => a.id));
+        if (resolvedIds.size) retryingAttachments.value = retryingAttachments.value.filter((id) => !resolvedIds.has(id));
     }
 
     function clearTyping(userId: number): void {
@@ -138,7 +154,7 @@ export function useConversationThread(options: Options) {
 
     function markRead(id: number): void {
         options.onRead(id);
-        api.post(`/inbox/conversations/${id}/read`).catch(() => undefined);
+        api.post(`/inbox/conversations/${id}/read`, {}, { silent: true }).catch(() => undefined);
     }
 
     async function open(id: number | null): Promise<void> {
@@ -151,6 +167,7 @@ export function useConversationThread(options: Options) {
         viewers.value = [];
         typingUsers.value = {};
         lockHolder.value = null;
+        mentionable.value = [];
         error.value = null;
         lastTypingPost = 0;
         if (id === null) return;
@@ -163,6 +180,11 @@ export function useConversationThread(options: Options) {
             applyDetail(data);
             joinPresence(id);
             markRead(id);
+            api.get<{ data: UserRef[] }>(`/inbox/conversations/${id}/mentionable`, { silent: true })
+                .then(({ data: res }) => {
+                    if (id === current.value) mentionable.value = res.data;
+                })
+                .catch(() => undefined);
         } catch (e) {
             if (seq === loadSeq) error.value = apiErrorMessage(e, t('common.error'));
         } finally {
@@ -174,7 +196,7 @@ export function useConversationThread(options: Options) {
         const id = current.value;
         if (id === null || !detail.value) return;
         const seq = loadSeq;
-        const { data } = await api.get<ConversationDetail>(`/inbox/conversations/${id}`);
+        const { data } = await api.get<ConversationDetail>(`/inbox/conversations/${id}`, { silent: true });
         if (seq === loadSeq && id === current.value) applyDetail(data, true);
     }
 
@@ -183,11 +205,14 @@ export function useConversationThread(options: Options) {
         reloadTimer = window.setTimeout(() => void silentReload().catch(() => undefined), 500);
     }
 
-    async function deliver(local: Message, payload: SendPayload): Promise<void> {
+    /** Resolves `true` only once the POST actually succeeded — a caller that needs to know
+     *  whether the send really went through (e.g. send-and-resolve) checks this rather than
+     *  just awaiting the promise, since a failed request is caught here, not rethrown. */
+    async function deliver(local: Message, payload: SendPayload): Promise<boolean> {
         const key = local.client_key as string;
         pendingPayloads.set(key, payload);
         try {
-            const { data } = await api.post<{ data: Message }>(`/inbox/conversations/${local.conversation_id}/messages`, payload);
+            const { data } = await api.post<{ data: Message; messages?: Message[] }>(`/inbox/conversations/${local.conversation_id}/messages`, payload);
             const server = data.data;
             const localIndex = messages.value.findIndex((m) => m.client_key === key && m.id < 0);
             const serverIndex = messages.value.findIndex((m) => m.id === server.id);
@@ -197,17 +222,22 @@ export function useConversationThread(options: Options) {
             } else if (localIndex !== -1) {
                 messages.value[localIndex] = { ...messages.value[localIndex], ...server, client_key: key };
             }
+            // A multi-attachment send creates one message per attachment; the first
+            // is the optimistic bubble above, the rest arrive only in this response.
+            (data.messages ?? []).slice(1).forEach(mergeMessage);
             pendingPayloads.delete(key);
+            return true;
         } catch (e) {
             const index = messages.value.findIndex((m) => m.client_key === key && m.id < 0);
             if (index !== -1) {
                 messages.value[index] = { ...messages.value[index], status: 'failed', error: apiErrorMessage(e, t('thread.failed')) };
             }
             scheduleReload(); // window / lock may have changed
+            return false;
         }
     }
 
-    function optimistic(id: number, body: string, isTemplate: boolean): Message {
+    function optimistic(id: number, body: string, isTemplate: boolean, attachments: Attachment[] = []): Message {
         const message: Message = {
             id: -Date.now(),
             conversation_id: id,
@@ -215,7 +245,7 @@ export function useConversationThread(options: Options) {
             sender_type: 'user',
             user: me,
             body,
-            attachments: [],
+            attachments,
             status: 'queued',
             error: null,
             is_template: isTemplate,
@@ -226,14 +256,49 @@ export function useConversationThread(options: Options) {
         return message;
     }
 
-    async function send(body: string): Promise<void> {
-        if (current.value === null || !body.trim()) return;
-        await deliver(optimistic(current.value, body, false), { body });
+    async function send(body: string, attachments: Attachment[] = [], quickReplyId: number | null = null): Promise<boolean> {
+        if (current.value === null || (!body.trim() && !attachments.length)) return false;
+        const payload: { body: string; attachment_ids?: number[]; quick_reply_id?: number } = attachments.length
+            ? { body, attachment_ids: attachments.map((a) => a.id) }
+            : { body };
+        if (quickReplyId !== null) payload.quick_reply_id = quickReplyId;
+        return deliver(optimistic(current.value, body, false, attachments), payload);
+    }
+
+    async function renderQuickReply(reply: QuickReply): Promise<RenderedQuickReply> {
+        const id = current.value;
+        if (id === null) throw new Error('No open conversation');
+        const { data } = await api.post<RenderedQuickReply>(`/inbox/conversations/${id}/quick-replies/${reply.id}/render`);
+        return data;
     }
 
     async function sendTemplate(template: TemplatePayload): Promise<void> {
         if (current.value === null) return;
         await deliver(optimistic(current.value, `[template] ${template.name}`, true), { template });
+    }
+
+    function patchAttachment(updated: Attachment): void {
+        const messageIndex = messages.value.findIndex((m) => m.attachments.some((a) => a.id === updated.id));
+        if (messageIndex === -1) return;
+        const message = messages.value[messageIndex];
+        messages.value[messageIndex] = { ...message, attachments: message.attachments.map((a) => (a.id === updated.id ? updated : a)) };
+    }
+
+    async function retryAttachment(attachment: Attachment): Promise<void> {
+        if (retryingAttachments.value.includes(attachment.id)) return;
+        retryingAttachments.value = [...retryingAttachments.value, attachment.id];
+        try {
+            const { data } = await api.post<{ data: Attachment }>(`/media/${attachment.id}/retry`);
+            patchAttachment(data.data);
+            // Still pending: the download job hasn't finished yet, so keep the
+            // spinner up until `resolveRetriedAttachments` sees it settle.
+            if (data.data.status !== 'pending') {
+                retryingAttachments.value = retryingAttachments.value.filter((id) => id !== attachment.id);
+            }
+        } catch (e) {
+            retryingAttachments.value = retryingAttachments.value.filter((id) => id !== attachment.id);
+            error.value = apiErrorMessage(e, t('media.download_failed'));
+        }
     }
 
     async function retry(message: Message): Promise<void> {
@@ -270,7 +335,7 @@ export function useConversationThread(options: Options) {
 
         if (now - lastTypingPost > TYPING_POST_MS) {
             lastTypingPost = now;
-            api.post<{ locked: boolean; holder: UserRef | null }>(`/inbox/conversations/${id}/typing`)
+            api.post<{ locked: boolean; holder: UserRef | null }>(`/inbox/conversations/${id}/typing`, {}, { silent: true })
                 .then(({ data }) => {
                     if (id === current.value) lockHolder.value = data.holder;
                 })
@@ -288,6 +353,10 @@ export function useConversationThread(options: Options) {
         busyAction.value = name;
         try {
             const { data } = await api.post<{ data: Conversation }>(`/inbox/conversations/${id}/${name}`);
+            if (name === 'reset' && id === current.value) {
+                messages.value = [];
+                hasMore.value = false;
+            }
             replaceConversation(id, data.data);
             return data.data;
         } catch (e) {
@@ -330,16 +399,38 @@ export function useConversationThread(options: Options) {
         }
     }
 
-    async function addNote(body: string): Promise<boolean> {
+    async function addNote(body: string, mentions: number[] = []): Promise<boolean> {
         const id = current.value;
         if (id === null) return false;
         try {
-            const { data } = await api.post<{ data: Note }>(`/inbox/conversations/${id}/notes`, { body });
+            const { data } = await api.post<{ data: Note }>(`/inbox/conversations/${id}/notes`, { body, mentions });
             if (id === current.value && detail.value) detail.value.notes = [data.data, ...detail.value.notes];
             return true;
         } catch (e) {
             error.value = apiErrorMessage(e, t('common.error'));
             return false;
+        }
+    }
+
+    /**
+     * Explicit "استلام" claim (spec §5.4, Task 15): a forced soft lock for
+     * `crm.claim_lock_minutes`. Never blocks anyone else from sending — this is
+     * purely a "who's on it" signal, same as the rest of the handling indicator.
+     */
+    async function claim(): Promise<Conversation | null> {
+        const id = current.value;
+        if (id === null || busyAction.value) return null;
+        busyAction.value = 'claim';
+        try {
+            const { data } = await api.post<{ data: Conversation }>(`/inbox/conversations/${id}/claim`);
+            replaceConversation(id, data.data);
+            if (id === current.value) lockHolder.value = data.data.locked_by;
+            return data.data;
+        } catch (e) {
+            error.value = apiErrorMessage(e, t('common.error'));
+            return null;
+        } finally {
+            busyAction.value = null;
         }
     }
 
@@ -397,8 +488,10 @@ export function useConversationThread(options: Options) {
         viewers,
         typingNames,
         lockHolder,
+        mentionable,
         busyAction,
         retrying,
+        retryingAttachments,
         error,
         open,
         silentReload,
@@ -406,9 +499,12 @@ export function useConversationThread(options: Options) {
         markRead,
         send,
         sendTemplate,
+        renderQuickReply,
         retry,
+        retryAttachment,
         typing,
         action,
+        claim,
         setPriority,
         toggleTag,
         addNote,

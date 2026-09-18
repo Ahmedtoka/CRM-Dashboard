@@ -5,12 +5,15 @@ namespace App\Http\Middleware;
 use App\Enums\Platform;
 use App\Models\ChannelAccount;
 use App\Models\User;
+use App\Shopify\Connection\IntegrationRepository;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
+    public function __construct(private readonly IntegrationRepository $shopifyIntegrations) {}
+
     /**
      * The root template that's loaded on the first page visit.
      *
@@ -57,6 +60,7 @@ class HandleInertiaRequests extends Middleware
                     'color' => $user->color,
                     'locale' => $user->locale,
                     'platforms' => array_map(fn (Platform $p) => $p->value, $user->platforms()),
+                    'preferences' => $user->notificationPreferences(),
                 ] : null,
             ],
             'locale' => fn () => app()->getLocale(),
@@ -66,12 +70,15 @@ class HandleInertiaRequests extends Middleware
                 'label' => $p->label(),
                 'color' => $p->color(),
             ], Platform::cases()),
-            // Spec §9: channel credential errors alert admins.
+            // Spec §9: channel credential errors alert admins (Shopify error/disconnected included, spec §7).
             'channelAlerts' => fn () => $user?->isAdmin()
                 ? ChannelAccount::where('status', 'error')->orderBy('id')->get(['id', 'platform', 'name', 'last_error'])
+                    ->concat($this->shopifyAlerts())
                 : [],
             'broadcasting' => fn () => $this->broadcasting(),
             'whatsappTemplates' => fn () => config('crm.whatsapp_templates', []),
+            // Developer-only nav entries (simulator, latency report) show only when this is on.
+            'devTools' => (bool) config('crm.dev_tools'),
         ]);
     }
 
@@ -89,6 +96,28 @@ class HandleInertiaRequests extends Middleware
         }
 
         return json_decode((string) file_get_contents($path), true) ?: [];
+    }
+
+    /**
+     * A `shopify` pseudo channel-alert row (spec §7) — same shape as a
+     * `ChannelAccount` row so AppLayout's banner renders it unchanged.
+     *
+     * @return array<int, array{id: string, platform: string, name: string, last_error: ?string}>
+     */
+    private function shopifyAlerts(): array
+    {
+        $integration = $this->shopifyIntegrations->current();
+
+        if ($integration === null || ! in_array($integration->status, ['error', 'disconnected'], true)) {
+            return [];
+        }
+
+        return [[
+            'id' => 'shopify',
+            'platform' => 'shopify',
+            'name' => $integration->shop_domain ?? 'Shopify',
+            'last_error' => $integration->last_error,
+        ]];
     }
 
     /**

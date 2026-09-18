@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\V1\PresenceController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\QuickReplyController;
 use App\Http\Controllers\Api\V1\ReportController;
+use App\Http\Controllers\Api\V1\SearchController;
+use App\Http\Controllers\Api\V1\ShippingController;
 use App\Http\Controllers\Api\V1\WhatsappTemplateController;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\SetLocale;
@@ -29,7 +31,10 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::get('conversations/{conversation}', [ConversationController::class, 'show'])->name('conversations.show');
         Route::get('conversations/{conversation}/messages', [ConversationController::class, 'messages'])->name('conversations.messages.index');
         Route::post('conversations/{conversation}/messages', [ConversationController::class, 'sendMessage'])->name('conversations.messages.store');
+        Route::post('conversations/{conversation}/attachments', [ConversationController::class, 'uploadAttachment'])->name('conversations.attachments.store');
         Route::post('conversations/{conversation}/notes', [ConversationController::class, 'storeNote'])->name('conversations.notes.store');
+        Route::post('conversations/{conversation}/claim', [ConversationController::class, 'claim'])->name('conversations.claim');
+        Route::get('conversations/{conversation}/mentionable', [ConversationController::class, 'mentionable'])->name('conversations.mentionable');
         Route::post('conversations/{conversation}/resolve', [ConversationController::class, 'resolve'])->name('conversations.resolve');
         Route::post('conversations/{conversation}/reopen', [ConversationController::class, 'reopen'])->name('conversations.reopen');
         Route::post('conversations/{conversation}/return-to-bot', [ConversationController::class, 'returnToBot'])->name('conversations.return-to-bot');
@@ -49,6 +54,12 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('comments/{comment}/private-reply', [CommentController::class, 'privateReply'])->name('comments.private-reply');
 
         Route::get('products', [ProductController::class, 'search'])->name('products.index');
+
+        // Global search (Dashboard Experience Task 13, spec §5.3): additive-only, mobile command palette data source.
+        Route::get('search', SearchController::class)->middleware('throttle:60,1')->name('search');
+
+        Route::get('shipping/provinces', [ShippingController::class, 'provinces'])->name('shipping.provinces');
+        Route::get('shipping/quote', [ShippingController::class, 'quote'])->name('shipping.quote');
 
         Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
         Route::get('orders/{order}', [OrderController::class, 'show'])->name('orders.show');

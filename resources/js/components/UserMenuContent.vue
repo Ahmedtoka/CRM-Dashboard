@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import UserInfo from '@/components/UserInfo.vue';
-import { DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import {
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { useAppearance } from '@/composables/useAppearance';
 import { useI18n } from '@/composables/useI18n';
 import type { User } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { Languages, LogOut, Settings } from 'lucide-vue-next';
+import { Languages, LogOut, Monitor, Moon, Settings, Sun } from 'lucide-vue-next';
 
 interface Props {
     user: User;
@@ -13,6 +21,7 @@ interface Props {
 defineProps<Props>();
 
 const { t, locale, setLocale } = useI18n();
+const { appearance, updateAppearance } = useAppearance();
 </script>
 
 <template>
@@ -38,6 +47,13 @@ const { t, locale, setLocale } = useI18n();
             <span class="ms-auto text-xs text-muted-foreground" :lang="locale === 'ar' ? 'en' : 'ar'">{{ t('nav.switch_language') }}</span>
         </DropdownMenuItem>
     </DropdownMenuGroup>
+    <DropdownMenuSeparator />
+    <DropdownMenuLabel class="text-2xs text-muted-foreground">{{ t('nav.appearance') }}</DropdownMenuLabel>
+    <DropdownMenuRadioGroup :model-value="appearance" @update:model-value="(v) => updateAppearance(v as 'light' | 'dark' | 'system')">
+        <DropdownMenuRadioItem value="light"><Sun class="me-2 size-4" />{{ t('nav.appearance_light') }}</DropdownMenuRadioItem>
+        <DropdownMenuRadioItem value="dark"><Moon class="me-2 size-4" />{{ t('nav.appearance_dark') }}</DropdownMenuRadioItem>
+        <DropdownMenuRadioItem value="system"><Monitor class="me-2 size-4" />{{ t('nav.appearance_system') }}</DropdownMenuRadioItem>
+    </DropdownMenuRadioGroup>
     <DropdownMenuSeparator />
     <DropdownMenuItem :as-child="true">
         <Link class="block w-full" method="post" :href="route('logout')" as="button">

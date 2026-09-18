@@ -3,14 +3,18 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Commerce\OrderService;
+use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Enums\Platform;
+use App\Enums\ShipmentStatus;
 use App\Http\Resources\OrderResource;
 use App\Http\Support\DateRange;
 use App\Http\Support\ModeratorScope;
 use App\Models\Order;
 use App\Shipping\ShipmentService;
+use App\Shipping\StuckOrderScope;
+use App\Shopify\Connection\IntegrationRepository;
 use DomainException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -99,7 +103,7 @@ trait OrderEndpoints
     /**
      * `from`/`to` are Cairo calendar dates (Y-m-d), like the report filters.
      *
-     * @return array{status?: ?string, type?: ?string, platform?: ?string, q?: ?string, created_by?: ?int, from?: ?string, to?: ?string}
+     * @return array{status?: ?string, type?: ?string, platform?: ?string, q?: ?string, created_by?: ?int, from?: ?string, to?: ?string, source?: ?string, financial_status?: ?string, fulfillment_status?: ?string, shipment_step?: ?string, mismatch?: ?bool, stuck?: ?bool}
      */
     protected function orderFilters(Request $request): array
     {
@@ -111,6 +115,12 @@ trait OrderEndpoints
             'created_by' => ['nullable', 'integer'],
             'from' => ['nullable', 'date_format:Y-m-d'],
             'to' => ['nullable', 'date_format:Y-m-d'],
+            'source' => ['nullable', Rule::enum(OrderSource::class)],
+            'financial_status' => ['nullable', 'string', 'max:50'],
+            'fulfillment_status' => ['nullable', 'string', 'max:50'],
+            'shipment_step' => ['nullable', Rule::enum(ShipmentStatus::class)],
+            'mismatch' => ['nullable', 'boolean'],
+            'stuck' => ['nullable', 'boolean'],
         ]);
     }
 
@@ -130,13 +140,28 @@ trait OrderEndpoints
             ->when($f['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
             ->when($f['type'] ?? null, fn ($q, $v) => $q->where('type', $v))
             ->when($f['platform'] ?? null, fn ($q, $v) => $q->where('platform', $v))
+            ->when($f['source'] ?? null, fn ($q, $v) => $q->where('source', $v))
+            ->when($f['financial_status'] ?? null, fn ($q, $v) => $q->where('financial_status', $v))
+            ->when($f['fulfillment_status'] ?? null, fn ($q, $v) => $q->where('fulfillment_status', $v))
+            ->when($f['shipment_step'] ?? null, fn ($q, $v) => $q->whereHas('shipment', fn (Builder $s) => $s->where('status', $v)))
             ->when($f['created_by'] ?? null, fn ($q, $v) => $q->where('created_by_id', (int) $v))
             ->when($f['from'] ?? null, fn ($q, $v) => $q->where('created_at', '>=', DateRange::startOfCairoDay($v)))
             ->when($f['to'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', DateRange::endOfCairoDay($v)))
+            ->when(array_key_exists('mismatch', $f) && $f['mismatch'] !== null, fn ($q) => $q->where('mismatch', (bool) $f['mismatch']))
+            ->when(array_key_exists('stuck', $f) && $f['stuck'], fn (Builder $q) => StuckOrderScope::apply($q, $this->stuckOrderDays()))
             ->when(trim((string) ($f['q'] ?? '')), fn ($q, $term) => $q->where(fn (Builder $w) => $w
                 ->where('order_number', 'like', "%{$term}%")
                 ->orWhere('shipping_phone', 'like', "%{$term}%")
                 ->orWhereHas('customer', fn (Builder $c) => $c->where('name', 'like', "%{$term}%")->orWhere('phone', 'like', "%{$term}%"))))
             ->orderByDesc('id');
+    }
+
+    /**
+     * Days of shipment silence before an order counts as "stuck" (`?stuck=1`),
+     * mirroring `CustomerOrderFlags::has_stuck_order`.
+     */
+    private function stuckOrderDays(): int
+    {
+        return (int) (app(IntegrationRepository::class)->current()?->settingsWithDefaults()['stuck_order_days'] ?? 5);
     }
 }

@@ -5,7 +5,6 @@ namespace App\Shopify\Webhooks;
 use App\Commerce\Contracts\CommerceProvider;
 use App\Commerce\OrderService;
 use App\Enums\OrderSource;
-use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Events\UserNotified;
 use App\Models\Order;
@@ -14,10 +13,10 @@ use App\Shopify\Connection\IntegrationRepository;
 use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Sync\Mappers\CustomerMapper;
 use App\Shopify\Sync\Mappers\InventoryMapper;
+use App\Shopify\Sync\Mappers\MapResult;
 use App\Shopify\Sync\Mappers\OrderMapper;
 use App\Shopify\Sync\Mappers\ProductMapper;
 use App\Support\SafeBroadcast;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Routes a stored, verified Shopify webhook to its mapper (spec §4.2). One
@@ -68,22 +67,23 @@ final class ShopifyWebhookProcessor
      * OrderMapper::upsert's chat-order path never moves the order's status or
      * touches paid_at (see OrderMapper::updateChatOrder) — only Shopify ids,
      * name, financial/fulfillment statuses and shopify_updated_at change there.
-     * So after it runs, this re-reads the order under lockForUpdate (protecting
-     * against another worker processing a sibling webhook for the same order at
-     * the same time) and drives the real transition itself:
-     *  - a cancelled_at now present on a chat order that isn't already
-     *    Cancelled goes through OrderService::cancel (no provider sync — the
-     *    cancel came from Shopify);
-     *  - otherwise, still-awaiting-payment with a paid/partially_paid financial
-     *    status goes through OrderService::markPaid.
-     * Both give the order the side effects (shipment, customer stats, activity
-     * log, broadcast) that only OrderService performs, regardless of whether
-     * orders/create, orders/updated or orders/paid happened to be the delivery
-     * that actually carried the paid/cancelled signal.
+     * So after it runs, this drives the real transition itself:
+     *  - a cancelled_at present on the payload goes through OrderService::cancel
+     *    (no provider sync — the cancel came from Shopify);
+     *  - otherwise a paid/partially_paid financial status goes through
+     *    OrderService::markPaid.
+     * Both lock the row and re-check its status inside their own transaction
+     * (idempotent under concurrent/duplicate delivery), and give the order the
+     * side effects (shipment, customer stats, activity log, broadcast) that only
+     * OrderService performs, regardless of which of orders/create,
+     * orders/updated or orders/paid carried the signal. A payload the mapper
+     * skipped as stale never drives a transition (final fix wave I5).
      */
     private function routeOrderUpsert(array $payload): void
     {
-        $this->orders->upsert($payload);
+        if ($this->orders->upsert($payload) === MapResult::Skipped) {
+            return;
+        }
 
         $order = $this->findChatOrder($payload);
 
@@ -95,7 +95,7 @@ final class ShopifyWebhookProcessor
         // guarantee orders/cancelled fires separately in every case); treat it
         // the same as the dedicated topic whenever the payload carries it.
         if (! blank($payload['cancelled_at'] ?? null)) {
-            $this->lockAndCancelChatOrder($order);
+            $this->orderService->cancel($order, null, syncProvider: false);
 
             return;
         }
@@ -106,35 +106,20 @@ final class ShopifyWebhookProcessor
             return;
         }
 
-        DB::transaction(function () use ($order) {
-            $locked = Order::query()->lockForUpdate()->find($order->id);
-
-            if ($locked !== null && $locked->status === OrderStatus::AwaitingPayment) {
-                $this->orderService->markPaid($locked);
-            }
-        });
+        $this->orderService->markPaid($order);
     }
 
     private function routeOrderCancelled(array $payload): void
     {
-        $this->orders->markCancelled($payload);
+        if ($this->orders->markCancelled($payload) === MapResult::Skipped) {
+            return;
+        }
 
         $order = $this->findChatOrder($payload);
 
         if ($order !== null) {
-            $this->lockAndCancelChatOrder($order);
+            $this->orderService->cancel($order, null, syncProvider: false);
         }
-    }
-
-    private function lockAndCancelChatOrder(Order $order): void
-    {
-        DB::transaction(function () use ($order) {
-            $locked = Order::query()->lockForUpdate()->find($order->id);
-
-            if ($locked !== null && $locked->status !== OrderStatus::Cancelled) {
-                $this->orderService->cancel($locked, null, syncProvider: false);
-            }
-        });
     }
 
     /**

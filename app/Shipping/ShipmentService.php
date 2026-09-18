@@ -3,6 +3,7 @@
 namespace App\Shipping;
 
 use App\Analytics\ActivityLogger;
+use App\Commerce\Jobs\RefreshOrderStatus;
 use App\Enums\ActorType;
 use App\Enums\ShipmentStatus;
 use App\Events\OrderUpdated;
@@ -15,6 +16,7 @@ use App\Shopify\Customers\CustomerOrderFlags;
 use App\Support\SafeBroadcast;
 use Carbon\CarbonInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 
 class ShipmentService
 {
@@ -93,6 +95,12 @@ class ShipmentService
 
         if (config('crm.notify_customer_on_shipment') && in_array($status, [ShipmentStatus::OutForDelivery, ShipmentStatus::Delivered], true)) {
             $this->notifyCustomer($order, $status);
+        }
+
+        if ($order !== null) {
+            // Mismatch recompute (spec §6.1), after the surrounding transaction (if any) commits.
+            $orderId = $order->id;
+            DB::afterCommit(fn () => rescue(fn () => RefreshOrderStatus::dispatch($orderId), null, report: true));
         }
 
         SafeBroadcast::send(new OrderUpdated($order ?? $shipment->order()->first()));

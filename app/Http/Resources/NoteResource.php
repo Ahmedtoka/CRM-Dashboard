@@ -17,6 +17,7 @@ class NoteResource extends JsonResource
             'id' => $this->id,
             'conversation_id' => $this->conversation_id,
             'body' => $this->body,
+            'mentions' => $this->mentions ?? [],
             'user' => $user ? ['id' => $user->id, 'name' => $user->name, 'color' => $user->color] : null,
             'created_at' => $this->created_at?->toIso8601String(),
         ];

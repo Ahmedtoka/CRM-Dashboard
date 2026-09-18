@@ -1,5 +1,7 @@
 import { useApi } from '@/composables/useApi';
 import { useEcho } from '@/composables/useEcho';
+import { useI18n } from '@/composables/useI18n';
+import { compareConversations, matchesInboxFilters } from '@/lib/inboxListOrder';
 import type { User } from '@/types';
 import type { Conversation, ConversationPatch, CursorPage, InboxFilters, Message, Order } from '@/types/crm';
 import { onScopeDispose, ref, type Ref } from 'vue';
@@ -16,9 +18,7 @@ interface Options {
     handlers: InboxRealtimeHandlers;
 }
 
-const FILTER_KEYS = ['platform', 'status', 'filter', 'q'] as const;
-
-const time = (iso: string | null | undefined, empty: number) => (iso ? Date.parse(iso) : empty);
+const FILTER_KEYS = ['platform', 'status', 'filter', 'q', 'tag'] as const;
 
 /**
  * Conversation list state: filters, cursor paging, and realtime upserts from `private-inbox`
@@ -27,6 +27,7 @@ const time = (iso: string | null | undefined, empty: number) => (iso ? Date.pars
 export function useConversationList(initial: CursorPage<Conversation>, initialFilters: InboxFilters, options: Options) {
     const api = useApi();
     const { echo, live, poll } = useEcho();
+    const { t } = useI18n();
 
     const conversations = ref<Conversation[]>([...(initial.data ?? [])]);
     const nextCursor = ref<string | null>(initial.meta?.next_cursor ?? null);
@@ -35,6 +36,7 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
         status: initialFilters.status ?? null,
         filter: initialFilters.filter ?? null,
         q: initialFilters.q ?? null,
+        tag: initialFilters.tag ?? null,
     });
     const loading = ref(false);
     const loadingMore = ref(false);
@@ -44,20 +46,9 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
 
     const params = () => Object.fromEntries(Object.entries(filters.value).filter(([, v]) => v !== null && v !== ''));
 
+    // Same ordering as the server for the active filter (queues: priority, then oldest customer message).
     function sortList(): void {
-        const waiting = filters.value.filter === 'waiting';
-
-        conversations.value.sort((a, b) => {
-            if (waiting) {
-                const wa = time(a.waiting_since, Number.MAX_SAFE_INTEGER);
-                const wb = time(b.waiting_since, Number.MAX_SAFE_INTEGER);
-                if (wa !== wb) return wa - wb;
-            }
-            const la = time(a.last_message_at, 0);
-            const lb = time(b.last_message_at, 0);
-
-            return la !== lb ? lb - la : b.id - a.id;
-        });
+        conversations.value.sort(compareConversations(filters.value.filter));
     }
 
     function syncUrl(): void {
@@ -114,7 +105,8 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
     // Merges the first page without dropping rows already paged in below it.
     async function refreshFirstPage(): Promise<void> {
         const seq = requestSeq;
-        const { data } = await api.get<CursorPage<Conversation>>('/inbox/conversations', { params: params() });
+        // Background refresh (poll / debounced broadcast): never shows the loading bar.
+        const { data } = await api.get<CursorPage<Conversation>>('/inbox/conversations', { params: params(), silent: true });
         if (seq !== requestSeq) return;
         data.data.forEach(upsertFull);
         sortList();
@@ -132,18 +124,7 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
     }
 
     function matchesFilters(c: Conversation): boolean {
-        const f = filters.value;
-        if (f.filter === 'spam') return c.priority === 'spam';
-        if (c.priority === 'spam') return false; // hidden everywhere except the spam filter
-        if (f.filter === 'low_priority') return c.priority === 'low';
-        if ((f.filter === 'waiting' || f.filter === 'needs_human') && c.priority === 'low') return false;
-        if (f.platform && c.platform !== f.platform) return false;
-        if (f.status && c.status !== f.status) return false;
-        if (f.filter === 'needs_human' && !c.needs_human) return false;
-        if (f.filter === 'bot' && c.handler !== 'bot') return false;
-        if (f.filter === 'waiting' && !c.waiting_since) return false;
-
-        return true;
+        return matchesInboxFilters(c, filters.value);
     }
 
     function applyConversation(patch: ConversationPatch): void {
@@ -174,6 +155,7 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
 
         const c = { ...conversations.value[index] };
         if (message.body) c.last_message_preview = message.body.length > 80 ? `${message.body.slice(0, 77)}...` : message.body;
+        else if (message.attachments?.length) c.last_message_preview = t(`media.preview_${message.attachments[0].type}`);
         if (message.created_at) c.last_message_at = message.created_at;
         if (message.sender_type !== 'system') {
             if (message.direction === 'in') {
@@ -187,23 +169,35 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
         sortList();
     }
 
-    echo
+    // Named handlers so dispose can detach exactly these. The `inbox` channel is
+    // shared with useNotifications (sound, desktop alerts, badge refresh), so this
+    // composable must never `leave('inbox')` — that would unbind every listener on it.
+    const onConversationUpdated = (patch: ConversationPatch) => {
+        applyConversation(patch);
+        options.handlers.onConversation?.(patch);
+    };
+    const onMessageCreated = (message: Message) => {
+        applyMessage(message);
+        options.handlers.onMessage?.(message);
+    };
+    const onMessageUpdated = (message: Message) => options.handlers.onMessage?.(message);
+    const onOrderUpdated = (order: Order) => options.handlers.onOrder?.(order);
+
+    const inboxChannel = echo
         ?.private('inbox')
-        .listen('ConversationUpdated', (patch: ConversationPatch) => {
-            applyConversation(patch);
-            options.handlers.onConversation?.(patch);
-        })
-        .listen('MessageCreated', (message: Message) => {
-            applyMessage(message);
-            options.handlers.onMessage?.(message);
-        })
-        .listen('MessageUpdated', (message: Message) => options.handlers.onMessage?.(message))
-        .listen('OrderUpdated', (order: Order) => options.handlers.onOrder?.(order));
+        .listen('ConversationUpdated', onConversationUpdated)
+        .listen('MessageCreated', onMessageCreated)
+        .listen('MessageUpdated', onMessageUpdated)
+        .listen('OrderUpdated', onOrderUpdated);
 
     poll(refreshFirstPage);
 
     onScopeDispose(() => {
-        echo?.leave('inbox');
+        inboxChannel
+            ?.stopListening('ConversationUpdated', onConversationUpdated)
+            .stopListening('MessageCreated', onMessageCreated)
+            .stopListening('MessageUpdated', onMessageUpdated)
+            .stopListening('OrderUpdated', onOrderUpdated);
         window.clearTimeout(refreshTimer);
     });
 

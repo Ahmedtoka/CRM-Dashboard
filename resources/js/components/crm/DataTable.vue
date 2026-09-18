@@ -32,13 +32,13 @@ function cell(row: T, key: string): unknown {
 </script>
 
 <template>
-    <div class="scrollbar-thin relative overflow-x-auto rounded-lg border bg-card">
+    <div class="scrollbar-thin relative overflow-x-auto rounded-lg bg-card shadow-card">
         <div v-if="loading" class="absolute inset-x-0 top-0 h-0.5 animate-pulse bg-primary/60" aria-hidden="true" />
         <table class="w-full text-xs" :aria-busy="loading">
             <caption v-if="caption" class="sr-only">{{ caption }}</caption>
-            <thead class="border-b bg-muted/50 text-2xs uppercase tracking-wide text-muted-foreground">
+            <thead class="border-b border-border/60 bg-card text-2xs font-semibold text-muted-foreground">
                 <tr>
-                    <th v-for="col in columns" :key="col.key" scope="col" class="whitespace-nowrap px-3 py-2 font-medium" :class="[alignClass(col.align), col.class]">
+                    <th v-for="col in columns" :key="col.key" scope="col" class="whitespace-nowrap px-3 py-2 font-semibold" :class="[alignClass(col.align), col.class]">
                         {{ col.label }}
                     </th>
                 </tr>
@@ -50,8 +50,8 @@ function cell(row: T, key: string): unknown {
                 <tr
                     v-for="row in rows"
                     :key="row.id"
-                    class="border-b last:border-0"
-                    :class="clickable ? 'cursor-pointer hover:bg-muted/50 focus-visible:bg-muted/50' : ''"
+                    class="border-t border-border/60 first:border-t-0"
+                    :class="clickable ? 'cursor-pointer hover:bg-muted focus-visible:bg-muted' : ''"
                     :tabindex="clickable ? 0 : undefined"
                     @click="clickable && emit('rowClick', row)"
                     @keydown="onKey($event, row)"

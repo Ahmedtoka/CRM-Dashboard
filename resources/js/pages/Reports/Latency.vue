@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import PageHeader from '@/components/crm/PageHeader.vue';
+import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import { formatNumber } from '@/i18n';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -82,16 +83,16 @@ const breadcrumbs = computed(() => [{ title: t('reports.latency.title'), href: '
     <Head :title="t('reports.latency.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-4 p-4">
+        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('reports.latency.title')" :description="t('reports.latency.hint')" />
 
-            <div class="flex flex-wrap items-center gap-1.5" role="group" :aria-label="t('reports.latency.window_label')">
+            <div class="flex flex-wrap items-center gap-1.5 rounded-lg bg-card p-3 shadow-card" role="group" :aria-label="t('reports.latency.window_label')">
                 <button
                     v-for="w in WINDOWS"
                     :key="w"
                     type="button"
                     :aria-pressed="window === w"
-                    class="h-8 rounded-md border px-2.5 text-xs transition-colors"
+                    class="h-9 rounded-md border px-2.5 text-xs transition-colors"
                     :class="window === w ? 'border-primary bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground'"
                     @click="choose(w)"
                 >
@@ -105,7 +106,7 @@ const breadcrumbs = computed(() => [{ title: t('reports.latency.title'), href: '
                         v-model="customFrom"
                         type="datetime-local"
                         dir="ltr"
-                        class="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        class="h-9 rounded-md border border-input bg-background px-2 text-xs"
                         :max="customTo"
                     />
                     <span class="text-xs text-muted-foreground" aria-hidden="true">{{ t('reports.latency.to') }}</span>
@@ -115,12 +116,12 @@ const breadcrumbs = computed(() => [{ title: t('reports.latency.title'), href: '
                         v-model="customTo"
                         type="datetime-local"
                         dir="ltr"
-                        class="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        class="h-9 rounded-md border border-input bg-background px-2 text-xs"
                         :min="customFrom"
                     />
                     <button
                         type="submit"
-                        class="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50"
+                        class="h-9 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50"
                         :disabled="customInvalid"
                     >
                         {{ t('reports.latency.apply') }}
@@ -129,22 +130,15 @@ const breadcrumbs = computed(() => [{ title: t('reports.latency.title'), href: '
             </div>
 
             <div class="grid gap-4 lg:grid-cols-3">
-                <section v-for="card in cards" :key="card.kind" class="space-y-2 rounded-lg border bg-card p-3">
+                <section v-for="card in cards" :key="card.kind" class="space-y-2 rounded-lg bg-card p-3 shadow-card">
                     <div class="flex items-start justify-between gap-2">
                         <h2 class="text-xs font-medium">{{ card.label }}</h2>
-                        <span
-                            v-if="card.stats.pass === null"
-                            class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-2xs font-medium text-muted-foreground"
-                        >
-                            {{ t('reports.latency.no_data') }}
-                        </span>
-                        <span
+                        <StatusChip v-if="card.stats.pass === null" :label="t('reports.latency.no_data')" tone="neutral" />
+                        <StatusChip
                             v-else
-                            class="shrink-0 rounded-full px-2 py-0.5 text-2xs font-medium"
-                            :class="card.stats.pass ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400'"
-                        >
-                            {{ card.stats.pass ? t('reports.latency.pass') : t('reports.latency.fail') }}
-                        </span>
+                            :label="card.stats.pass ? t('reports.latency.pass') : t('reports.latency.fail')"
+                            :tone="card.stats.pass ? 'positive' : 'negative'"
+                        />
                     </div>
 
                     <dl class="grid grid-cols-2 gap-x-2 gap-y-1.5 text-xs">
@@ -162,7 +156,7 @@ const breadcrumbs = computed(() => [{ title: t('reports.latency.title'), href: '
                         </div>
                         <div>
                             <dt class="text-muted-foreground">{{ t('reports.latency.p95') }}</dt>
-                            <dd class="tabular-nums font-semibold" :class="{ 'text-red-600': card.stats.pass === false }">
+                            <dd class="tabular-nums font-semibold" :class="{ 'text-destructive': card.stats.pass === false }">
                                 {{ n(card.stats.p95) }} {{ t('reports.latency.unit_ms') }}
                             </dd>
                         </div>

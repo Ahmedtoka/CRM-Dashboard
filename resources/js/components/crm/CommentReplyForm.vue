@@ -36,7 +36,7 @@ function onKeydown(event: KeyboardEvent): void {
             rows="2"
             dir="auto"
             maxlength="2000"
-            class="w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            class="w-full resize-y rounded-2xl border border-input bg-elevated px-3 py-1.5 text-sm"
             :placeholder="placeholder"
             :aria-label="placeholder"
             @keydown="onKeydown"

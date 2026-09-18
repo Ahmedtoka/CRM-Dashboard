@@ -10,6 +10,7 @@ use App\Models\Post;
 use App\Models\User;
 
 beforeEach(function () {
+    config(['crm.dev_tools' => true]);
     $this->admin = User::factory()->create(['role' => UserRole::Admin]);
 });
 

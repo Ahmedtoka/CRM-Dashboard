@@ -4,6 +4,7 @@ return [
     App\Providers\AppServiceProvider::class,
     App\Channels\ChannelsServiceProvider::class,
     App\Inbox\InboxServiceProvider::class,
+    App\Media\MediaServiceProvider::class,
     App\Comments\CommentsServiceProvider::class,
     App\Bot\BotServiceProvider::class,
     App\Commerce\CommerceServiceProvider::class,

@@ -29,6 +29,8 @@ class ActivityLogger
 
     public const CONVERSATION_RETURN_TO_BOT = 'conversation.return_to_bot';
 
+    public const CONVERSATION_RESET = 'conversation.reset';
+
     public const NOTE_ADDED = 'note.added';
 
     public const COMMENT_REPLIED = 'comment.replied';
@@ -66,6 +68,17 @@ class ActivityLogger
     public const USER_LOGOUT = 'user.logout';
 
     public const CUSTOMER_MERGED = 'customer.merged';
+
+    /** Flow designer (2026-09-17 Task 2): every draft/publish/restore/create/update on a `BotFlow`. */
+    public const BOT_FLOW_DRAFT_SAVED = 'bot_flow.draft_saved';
+
+    public const BOT_FLOW_PUBLISHED = 'bot_flow.published';
+
+    public const BOT_FLOW_RESTORED = 'bot_flow.restored';
+
+    public const BOT_FLOW_CREATED = 'bot_flow.created';
+
+    public const BOT_FLOW_UPDATED = 'bot_flow.updated';
 
     public function log(ActorType $actor, ?User $user, string $action, ?Model $subject = null, ?Conversation $conversation = null, array $meta = []): ActivityLog
     {

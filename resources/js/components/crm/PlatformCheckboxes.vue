@@ -19,9 +19,9 @@ function toggle(value: PlatformValue, checked: boolean): void {
 
 <template>
     <fieldset :disabled="disabled">
-        <legend class="mb-1 text-xs font-medium">{{ legend }}</legend>
+        <legend class="mb-1 text-sm font-semibold">{{ legend }}</legend>
         <div class="flex flex-wrap gap-2">
-            <label v-for="p in page.props.platforms" :key="p.value" class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs">
+            <label v-for="p in page.props.platforms" :key="p.value" class="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs">
                 <input type="checkbox" class="rounded border-input" :checked="modelValue.includes(p.value)" @change="toggle(p.value, ($event.target as HTMLInputElement).checked)" />
                 <PlatformBadge :platform="p.value" show-label size="xs" class="border-0" />
             </label>

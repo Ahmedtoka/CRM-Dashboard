@@ -38,7 +38,7 @@ class Simulator
      * persisted inbound Message once ingestion (and, synchronously when the
      * queue is `sync`, the bot's reaction) has completed.
      */
-    public function customerMessage(Platform $p, string $customerKey, string $name, string $text, ?CarbonInterface $at = null): Message
+    public function customerMessage(Platform $p, string $customerKey, string $name, string $text, ?CarbonInterface $at = null, ?string $attachment = null): Message
     {
         $at ??= now();
 
@@ -53,6 +53,7 @@ class Simulator
             'name' => $name,
             'text' => $text,
             'at' => $at->toIso8601String(),
+            'attachments' => $attachment ? [['type' => ['image' => 'image', 'voice' => 'audio', 'video' => 'video', 'file' => 'file'][$attachment], 'fixture' => $attachment]] : [],
         ]]);
 
         ProcessWebhookEvent::dispatchSync($event->id);
@@ -178,7 +179,7 @@ class Simulator
      * webhook is processed by the queue worker (optionally after a delay) so
      * the HTTP request returns immediately, exactly like a real platform push.
      */
-    public function queueCustomerMessage(Platform $p, string $customerKey, string $name, string $text, int $delaySeconds = 0): WebhookEvent
+    public function queueCustomerMessage(Platform $p, string $customerKey, string $name, string $text, int $delaySeconds = 0, ?string $attachment = null): WebhookEvent
     {
         $this->ensureAccount($p);
 
@@ -189,6 +190,7 @@ class Simulator
             'name' => $name,
             'text' => $text,
             'at' => now()->addSeconds($delaySeconds)->toIso8601String(),
+            'attachments' => $attachment ? [['type' => ['image' => 'image', 'voice' => 'audio', 'video' => 'video', 'file' => 'file'][$attachment], 'fixture' => $attachment]] : [],
         ]]);
 
         $this->dispatchEvent($event, $delaySeconds);

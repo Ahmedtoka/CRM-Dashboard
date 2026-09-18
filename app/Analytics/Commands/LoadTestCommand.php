@@ -22,7 +22,10 @@ class LoadTestCommand extends Command
         {--duration=600 : How many seconds to run}
         {--secret-env=META_APP_SECRET : Env var name holding the Meta app secret used to sign requests}
         {--backlog-url= : Optional URL returning {"backlog": n} instead of reading the local queue}
-        {--force : Allow running against APP_ENV=production}';
+        {--force : Allow running against APP_ENV=production}
+        {--search-token= : Sanctum token used for /api/v1/search requests}
+        {--search-rate=0 : Search requests per second (0 = off)}
+        {--search-queries=فستان,01001234567,#1001 : Comma separated search terms, rotated}';
 
     protected $description = 'Send signed Meta-format webhook traffic at a fixed rate to load-test a staging deployment';
 
@@ -48,6 +51,25 @@ class LoadTestCommand extends Command
         $secret = $this->resolveSecret((string) $this->option('secret-env'));
         $endpoint = "{$url}/webhooks/{$platform}";
 
+        $searchRate = max(0, (int) $this->option('search-rate'));
+        $searchToken = (string) $this->option('search-token');
+        $searchQueries = array_values(array_filter(array_map('trim', explode(',', (string) $this->option('search-queries')))));
+
+        if ($searchRate > 0 && $searchToken === '') {
+            $this->error('--search-token is required when --search-rate is greater than 0.');
+
+            return self::FAILURE;
+        }
+
+        if ($searchRate > 1) {
+            $this->warn(
+                "--search-rate={$searchRate} exceeds 1 request/s for a single token — ".
+                'the /search endpoints are throttled to 60/min per user, so sustained runs above 1/s '.
+                'will start hitting 429s and understate the real p95. Use --search-rate=1, or run '.
+                'several instances with different --search-token values and sum the results.'
+            );
+        }
+
         /** @var callable(int):void $sleeper */
         $sleeper = app('crm.loadtest.sleeper');
 
@@ -59,6 +81,10 @@ class LoadTestCommand extends Command
         $minuteSent = 0;
         $minute2xx = 0;
         $minuteNon2xx = 0;
+        $searchDurations = [];
+        $searchSent = 0;
+        $searchOk = 0;
+        $searchBad = 0;
 
         for ($second = 0; $second < $duration; $second++) {
             $batchStartedAt = microtime(true);
@@ -71,6 +97,16 @@ class LoadTestCommand extends Command
             $minuteSent += $sent;
             $minute2xx += $ok;
             $minuteNon2xx += $bad;
+
+            if ($searchRate > 0) {
+                $searchBatch = $this->searchBatch($url, $searchToken, $searchQueries, $searchRate, $second);
+                // Only successful (2xx) requests count toward the p95 — a 429/500 has no
+                // meaningful "response time" to grade against the 500ms target.
+                $searchDurations = array_merge($searchDurations, $searchBatch['durations']);
+                $searchSent += $searchBatch['sent'];
+                $searchOk += $searchBatch['ok'];
+                $searchBad += $searchBatch['bad'];
+            }
 
             $isLast = $second === $duration - 1;
             $isMinuteBoundary = ($second + 1) % 60 === 0;
@@ -98,7 +134,55 @@ class LoadTestCommand extends Command
 
         $this->info("Done. total sent={$totalSent} 2xx={$total2xx} non2xx={$totalNon2xx}");
 
+        if ($searchRate > 0) {
+            sort($searchDurations);
+            $p95 = $searchDurations === [] ? 0 : $searchDurations[(int) max(0, ceil(count($searchDurations) * 0.95) - 1)];
+            $this->info(sprintf('[search] requests=%d 2xx=%d non2xx=%d p95=%dms target=500ms', $searchSent, $searchOk, $searchBad, $p95));
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * @param  list<string>  $queries
+     * @return array{durations: list<int>, sent: int, ok: int, bad: int} durations in ms, 2xx responses only
+     */
+    private function searchBatch(string $url, string $token, array $queries, int $rate, int $second): array
+    {
+        if ($queries === []) {
+            return ['durations' => [], 'sent' => 0, 'ok' => 0, 'bad' => 0];
+        }
+
+        $started = [];
+        $responses = Http::pool(function (Pool $pool) use ($url, $token, $queries, $rate, $second, &$started) {
+            $requests = [];
+
+            for ($i = 0; $i < $rate; $i++) {
+                $q = $queries[($second * $rate + $i) % count($queries)];
+                $started[$i] = microtime(true);
+                $requests[] = $pool->withToken($token)->acceptJson()->get("{$url}/api/v1/search", ['q' => $q]);
+            }
+
+            return $requests;
+        });
+
+        $now = microtime(true);
+        $durations = [];
+        $ok = 0;
+        $bad = 0;
+
+        foreach ($responses as $i => $response) {
+            $successful = ! ($response instanceof Throwable) && method_exists($response, 'successful') && $response->successful();
+
+            if ($successful) {
+                $ok++;
+                $durations[] = (int) round(($now - $started[$i]) * 1000);
+            } else {
+                $bad++;
+            }
+        }
+
+        return ['durations' => $durations, 'sent' => count($responses), 'ok' => $ok, 'bad' => $bad];
     }
 
     /**

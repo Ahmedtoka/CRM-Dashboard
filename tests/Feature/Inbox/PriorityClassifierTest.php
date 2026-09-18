@@ -57,6 +57,9 @@ it('keeps a manual spam mark on later automatic spam, but not once the sender is
 });
 
 it('treats a whatsapp-normalized sticker attachment as low value', function () {
+    // The sticker carries a bare media id with no fixture/url, so the queued
+    // DownloadInboundMedia (media task) fails against the fake channel driver;
+    // InboxIngestor::rescue()s that dispatch, so it never reaches this test.
     $m = app(InboxIngestor::class)->ingestMessage(new InboundMessageData(
         Platform::Facebook, 'PG1', 'u5', 'Nour', 'sticker1', '', CarbonImmutable::now(),
         attachments: [['type' => 'sticker', 'id' => 'MEDIA1']],
@@ -105,4 +108,15 @@ it('counts repeated identical messages across every conversation of the same cus
 
     $verdict = app(ConversationPriorityClassifier::class)->classify($m3, $identity);
     expect($verdict->priority)->toBe(ConversationPriority::Spam)->and($verdict->reason)->toBe('repeat');
+});
+
+it('allows links to the connected shopify store domain even when the allow-list omits it', function () {
+    BotSetting::current()->update(['allowed_link_domains' => ['facebook.com']]);
+    \App\Shopify\Connection\ShopifyIntegration::create(['shop_domain' => 'bezra-store.myshopify.com', 'access_token' => 't', 'api_secret' => 's', 'status' => 'connected']);
+
+    $m = ($this->send)('شوفي المنتج ده https://bezra-store.myshopify.com/products/dress', 'u-shop');
+    expect($m->fresh()->is_spam)->toBeFalse();
+
+    $other = ($this->send)('شوفي ده https://another-store.myshopify.com/products/x', 'u-other');
+    expect($other->fresh()->is_spam)->toBeTrue();
 });

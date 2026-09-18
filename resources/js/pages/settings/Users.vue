@@ -66,7 +66,7 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
     <Head :title="t('settings.users.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-4 p-4">
+        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.users.title')">
                 <button type="button" class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" @click="openForm(null)">
                     <Plus class="size-3.5" aria-hidden="true" />{{ t('settings.users.add') }}
@@ -103,7 +103,7 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                         <button
                             v-if="row.is_active"
                             type="button"
-                            :class="[iconBtn, 'hover:text-red-700']"
+                            :class="[iconBtn, 'hover:text-destructive']"
                             :title="t('settings.users.deactivate')"
                             :aria-label="`${t('settings.users.deactivate')} ${row.name}`"
                             @click="crud.remove(row.id, t('settings.users.deactivate_confirm', { name: row.name }), 'settings.users.deactivated')"
@@ -127,7 +127,7 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
             @submit="submitReset"
         >
             <label class="grid gap-1">
-                <span class="text-xs font-medium">{{ t('settings.users.new_password') }}</span>
+                <span class="text-sm font-semibold">{{ t('settings.users.new_password') }}</span>
                 <input v-model="newPassword" type="password" dir="ltr" required minlength="8" autocomplete="new-password" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
             </label>
         </FormDialog>

@@ -43,6 +43,27 @@ return new class extends Migration
             }
         });
 
+        // Blank strings and duplicates would break the unique index below
+        // (final fix wave): data-only normalisation, skipped wherever the index
+        // already exists. 2026_09_14_300000 repeats it for databases where this
+        // migration already ran without the index.
+        if (! $this->indexExists('customers', 'customers_shopify_customer_id_unique')) {
+            DB::table('customers')
+                ->whereNotNull('shopify_customer_id')
+                ->whereRaw("TRIM(shopify_customer_id) = ''")
+                ->update(['shopify_customer_id' => null]);
+
+            DB::table('customers')
+                ->whereNotNull('shopify_customer_id')
+                ->groupBy('shopify_customer_id')
+                ->havingRaw('COUNT(*) > 1')
+                ->pluck('shopify_customer_id')
+                ->each(fn ($shopifyId) => DB::table('customers')
+                    ->where('shopify_customer_id', $shopifyId)
+                    ->where('id', '!=', DB::table('customers')->where('shopify_customer_id', $shopifyId)->min('id'))
+                    ->update(['shopify_customer_id' => null]));
+        }
+
         // `email` and `shopify_customer_id` already exist on this table;
         // add the indexes the spec calls for without re-adding the columns.
         Schema::table('customers', function (Blueprint $table) {

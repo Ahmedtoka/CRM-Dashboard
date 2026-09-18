@@ -177,8 +177,15 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
                 <span v-if="kind === 'customer' && message?.payload" aria-hidden="true">🔘 </span>{{ body }}
             </p>
 
-            <div v-if="outbound && message?.buttons?.length" class="mt-2 flex flex-wrap gap-1">
-                <span v-for="b in message.buttons" :key="b.payload" class="rounded-full border border-primary/40 px-2 py-0.5 text-2xs text-primary">{{ b.title }}</span>
+            <!-- The quick replies the customer sees. Solid light chips so they stay readable
+                 on every bubble colour (Messenger blue, WhatsApp green, bot, dark mode). -->
+            <div v-if="outbound && message?.buttons?.length" class="mt-1.5 flex flex-wrap gap-1">
+                <span
+                    v-for="b in message.buttons"
+                    :key="b.payload"
+                    class="rounded-full bg-white/20 px-1.5 py-px text-2xs leading-4 opacity-80 ring-1 ring-white/30 dark:bg-black/20 dark:ring-white/15"
+                    >{{ b.title }}</span
+                >
             </div>
 
             <MessageAttachments

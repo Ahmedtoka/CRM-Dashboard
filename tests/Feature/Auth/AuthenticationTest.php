@@ -51,4 +51,19 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
         $response->assertRedirect('/');
     }
+
+    /**
+     * Final fix wave I2: an Inertia logout must force a full page load so no
+     * client-side module state (notification channels, prefs, items) survives
+     * into the next user's session in the same tab.
+     */
+    public function test_inertia_logout_forces_a_full_page_reload()
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->post('/logout', [], ['X-Inertia' => 'true']);
+
+        $this->assertGuest();
+        $response->assertStatus(409)->assertHeader('X-Inertia-Location', url('/'));
+    }
 }

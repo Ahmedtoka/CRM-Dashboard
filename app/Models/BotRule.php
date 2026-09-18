@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use Database\Factories\BotRuleFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class BotRule extends Model
 {
-    /** @use HasFactory<\Database\Factories\BotRuleFactory> */
+    /** @use HasFactory<BotRuleFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -22,6 +23,8 @@ class BotRule extends Model
         'private_reply',
         'action',
         'hits',
+        'knowledge_key',
+        'sends_size_chart',
     ];
 
     protected function casts(): array
@@ -33,6 +36,7 @@ class BotRule extends Model
             'keywords' => 'array',
             'public_replies' => 'array',
             'hits' => 'integer',
+            'sends_size_chart' => 'boolean',
         ];
     }
 }

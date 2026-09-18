@@ -63,11 +63,25 @@ return [
             'after_commit' => false,
         ],
 
+        // retry_after must stay above the longest job/worker --timeout on the
+        // connection, or a second worker re-runs a job that is still running.
+        // Every Supervisor worker on `redis` uses --timeout <= 80.
         'redis' => [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
             'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            'block_for' => null,
+            'after_commit' => false,
+        ],
+
+        // Same Redis, for hour-long jobs (ShopifyReconcile, RunManualSync on the
+        // `commerce-long` queue; Supervisor program crm-commerce-long, --timeout=3600).
+        'redis-long' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => 'long',
+            'retry_after' => (int) env('REDIS_LONG_RETRY_AFTER', 3700),
             'block_for' => null,
             'after_commit' => false,
         ],

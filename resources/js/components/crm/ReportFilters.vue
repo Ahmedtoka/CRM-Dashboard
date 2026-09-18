@@ -19,7 +19,7 @@ const page = usePage<SharedData>();
         <select
             v-if="showPlatform !== false"
             :value="platform ?? ''"
-            class="h-8 rounded-md border border-input bg-background px-2 text-xs"
+            class="h-9 rounded-md border border-input bg-background px-2 text-xs"
             :aria-label="t('ui.platforms')"
             @change="emit('change', range, (($event.target as HTMLSelectElement).value || null) as PlatformValue | null)"
         >

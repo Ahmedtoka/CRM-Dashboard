@@ -3,6 +3,7 @@
 namespace App\Shopify\Jobs;
 
 use App\Shopify\Connection\IntegrationRepository;
+use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Webhooks\WebhookRegistrar;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -30,7 +31,11 @@ class CheckShopifyWebhooks implements ShouldQueue
 
     public function handle(WebhookRegistrar $registrar, IntegrationRepository $integrations): void
     {
-        if ($integrations->current()?->status !== 'connected') {
+        $integration = $integrations->current();
+
+        // The demo/seeder domain never leaves a fake process behind on purpose: skip
+        // it outright rather than trust whatever crm.shopify.driver happens to be.
+        if ($integration?->status !== 'connected' || $integration->shop_domain === ShopifyIntegration::DEMO_SHOP_DOMAIN) {
             return;
         }
 

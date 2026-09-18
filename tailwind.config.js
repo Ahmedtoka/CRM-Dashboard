@@ -54,6 +54,17 @@ export default {
                     DEFAULT: 'hsl(var(--destructive))',
                     foreground: 'hsl(var(--destructive-foreground))',
                 },
+                success: {
+                    DEFAULT: 'hsl(var(--success))',
+                    foreground: 'hsl(var(--success-foreground))',
+                },
+                warning: {
+                    DEFAULT: 'hsl(var(--warning))',
+                    foreground: 'hsl(var(--warning-foreground))',
+                },
+                elevated: 'hsl(var(--elevated))',
+                'surface-accent': 'hsl(var(--surface-accent))',
+                'primary-hover': 'hsl(var(--primary-hover))',
                 border: 'hsl(var(--border))',
                 input: 'hsl(var(--input))',
                 ring: 'hsl(var(--ring))',

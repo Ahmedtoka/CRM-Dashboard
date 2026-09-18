@@ -7,13 +7,16 @@ use App\Enums\CommentStatus;
 use App\Enums\ConversationPriority;
 use App\Enums\ConversationStatus;
 use App\Enums\MessageDirection;
+use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Enums\ParticipantRole;
 use App\Enums\Platform;
 use App\Enums\SenderType;
+use App\Enums\ShipmentStatus;
 use App\Models\ActivityLog;
 use App\Models\AnalyticsDaily;
+use App\Models\BotFlow;
 use App\Models\BotRule;
 use App\Models\BotRun;
 use App\Models\Comment;
@@ -21,6 +24,8 @@ use App\Models\Conversation;
 use App\Models\ConversationParticipant;
 use App\Models\Message;
 use App\Models\Order;
+use App\Models\ShipmentEvent;
+use App\Models\SupportCase;
 use App\Models\User;
 use App\Models\UserSession;
 use Carbon\CarbonImmutable;
@@ -45,6 +50,9 @@ class MetricsService
     private const ROLLUP_SUM_KEYS = ['messages_sent', 'conversations_handled', 'first_responses', 'follow_ups', 'resolved', 'comments_handled', 'orders_count', 'online_minutes'];
 
     private const EXCLUDED_ORDER_STATUSES = [OrderStatus::Cancelled->value, OrderStatus::Failed->value];
+
+    /** Shopify financial statuses whose order value counts as collected (spec §6.3). */
+    private const REALIZED_FINANCIAL_STATUSES = ['paid', 'partially_refunded'];
 
     public function userMetrics(User $u, CarbonInterface $from, CarbonInterface $to, ?Platform $platform = null): array
     {
@@ -86,8 +94,8 @@ class MetricsService
         $orderGroups = Order::query()
             ->whereBetween('created_at', [$from, $to])
             ->whereNotIn('status', self::EXCLUDED_ORDER_STATUSES)
-            ->selectRaw('platform, count(*) as n, sum(total) as total')
-            ->groupBy('platform')
+            ->selectRaw('platform, source, count(*) as n, sum(total) as total')
+            ->groupBy('platform', 'source')
             ->toBase()
             ->get();
 
@@ -158,7 +166,12 @@ class MetricsService
             'orders_total' => round((float) $orders->sum('total'), 2),
             'by_platform' => $byPlatform,
             'by_hour' => $byHour,
-        ];
+        ] + $this->outcomeKeys(
+            (int) $orders->sum('n'),
+            (float) $orders->sum('total'),
+            ['chat' => (int) $orders->where('source', 'chat')->sum('n'), 'store' => (int) $orders->where('source', 'store')->sum('n')],
+            $this->orderOutcomes($from, $to, null, $p),
+        );
     }
 
     public function botMetrics(CarbonInterface $from, CarbonInterface $to, ?Platform $platform = null): array
@@ -229,7 +242,108 @@ class MetricsService
             'comments_replied' => (int) ($botComments[ActivityLogger::COMMENT_REPLIED] ?? 0),
             'comments_hidden' => (int) ($botComments[ActivityLogger::COMMENT_HIDDEN] ?? 0),
             'private_replies' => (int) ($botComments[ActivityLogger::COMMENT_PRIVATE_REPLY] ?? 0),
+            'flows' => $this->flowUsage($from, $to, $platform),
         ];
+    }
+
+    /**
+     * Per guided flow, for the period (Reports → Bot "الفلوهات" table). Nothing logs a
+     * flow's start or end explicitly, so this replays the conversation's bot_runs in order:
+     * a `flow_engine` run by ConversationRouter stores the flow still active AFTER the
+     * turn in `intent` (null once it cleared).
+     *
+     *  - started:   distinct conversations with such a run for the flow;
+     *  - finished:  the flow was active and a later non-handover router run shows it
+     *               cleared (its `end` step) — or, for a menu flow, moved on to another flow;
+     *  - handovers: the flow was active when a run handed the conversation over;
+     *  - cases:     support cases of the flow's `record_case` (or `status` → delivery_followup) types opened in the period
+     *               in a conversation that started the flow.
+     *
+     * A flow that starts and ends inside one turn leaves no trace and is not counted.
+     *
+     * @return list<array{key:string, title:string, is_active:bool, started:int, finished:int, handovers:int, cases:int, records_cases:bool}>
+     */
+    private function flowUsage(CarbonImmutable $from, CarbonImmutable $to, ?Platform $platform): array
+    {
+        $flows = BotFlow::query()->orderBy('id')->get(['id', 'key', 'title_ar', 'is_active', 'definition']);
+        $keys = $flows->pluck('key')->all();
+
+        $runs = BotRun::query()
+            ->whereBetween('bot_runs.created_at', [$from, $to])
+            ->whereNotNull('bot_runs.conversation_id')
+            ->when($platform, fn (Builder $q) => $q->whereHas('conversation', fn ($c) => $c->where('platform', $platform->value)))
+            ->orderBy('bot_runs.conversation_id')
+            ->orderBy('bot_runs.id')
+            ->toBase()
+            ->get(['conversation_id', 'engine', 'intent', 'decision']);
+
+        $menuFlows = $flows->filter(fn (BotFlow $f) => (($f->definition['steps'][$f->definition['start'] ?? ''] ?? [])['type'] ?? null) === 'menu')->pluck('key')->all();
+        $started = $finished = $handovers = array_fill_keys($keys, []);
+
+        foreach ($runs->groupBy('conversation_id') as $conversationId => $conversationRuns) {
+            $active = null;
+
+            foreach ($conversationRuns as $run) {
+                $isHandover = in_array($run->decision, ['handover', 'reply_and_handover'], true);
+                $isRouterTurn = $run->engine === 'flow_engine' && in_array($run->decision, ['flow', 'button', 'menu', 'handover'], true);
+
+                if ($isHandover && $active !== null) {
+                    $handovers[$active][$conversationId] = true;
+                    $active = null;
+
+                    continue;
+                }
+
+                if (! $isRouterTurn) {
+                    continue; // agent turns (answers mid-flow) keep the flow active
+                }
+
+                $now = in_array($run->intent, $keys, true) ? $run->intent : null;
+
+                if ($now !== null) {
+                    $started[$now][$conversationId] = true;
+                }
+
+                if ($active !== null && $now !== $active && ($now === null || in_array($active, $menuFlows, true))) {
+                    $finished[$active][$conversationId] = true;
+                }
+
+                $active = $now;
+            }
+        }
+
+        // record_case steps open a case of their `case_type`; a `status` step opens a
+        // delivery_followup case for a delayed order (App\Bot\Flows\Steps\StatusStep).
+        $caseTypes = $flows->mapWithKeys(fn (BotFlow $f) => [$f->key => collect($f->definition['steps'] ?? [])
+            ->map(fn ($step) => match ($step['type'] ?? null) {
+                'record_case' => $step['case_type'] ?? null,
+                'status' => 'delivery_followup',
+                default => null,
+            })
+            ->filter()->unique()->values()->all()]);
+
+        $cases = SupportCase::query()
+            ->whereBetween('created_at', [$from, $to])
+            ->when($platform, fn ($q) => $q->where('platform', $platform->value))
+            ->toBase()
+            ->get(['conversation_id', 'type']);
+
+        return $flows
+            ->map(fn (BotFlow $f) => [
+                'key' => $f->key,
+                'title' => (string) $f->title_ar,
+                'is_active' => (bool) $f->is_active,
+                'started' => count($started[$f->key]),
+                'finished' => count($finished[$f->key]),
+                'handovers' => count($handovers[$f->key]),
+                'cases' => $cases
+                    ->filter(fn ($c) => in_array($c->type, $caseTypes[$f->key], true) && isset($started[$f->key][$c->conversation_id]))
+                    ->count(),
+                'records_cases' => $caseTypes[$f->key] !== [],
+            ])
+            ->sortByDesc('started')
+            ->values()
+            ->all();
     }
 
     /**
@@ -296,15 +410,16 @@ class MetricsService
             ->whereIn('created_by_id', $ids)
             ->whereBetween('created_at', [$from, $to])
             ->whereNotIn('status', self::EXCLUDED_ORDER_STATUSES)
-            ->selectRaw('created_by_id as user_id, platform, type, count(*) as n, sum(total) as total, sum(case when paid_at is not null then 1 else 0 end) as paid')
-            ->groupBy('created_by_id', 'platform', 'type')
+            ->selectRaw('created_by_id as user_id, platform, type, source, count(*) as n, sum(total) as total, sum(case when paid_at is not null then 1 else 0 end) as paid')
+            ->groupBy('created_by_id', 'platform', 'type', 'source')
             ->toBase()
             ->get());
 
         $online = $this->onlineMinutesByUser($ids, $from, $to);
         $responses = $this->responseTimesByUser($ids, $from, $to);
+        $outcomes = $this->orderOutcomesByUser($from, $to, $ids);
 
-        $rows = $users->map(function (User $u) use ($messages, $handled, $roles, $actions, $firstResponses, $orders, $online, $responses) {
+        $rows = $users->map(function (User $u) use ($messages, $handled, $roles, $actions, $firstResponses, $orders, $online, $responses, $outcomes) {
             $id = $u->id;
             $m = $messages->get($id, collect());
             $r = $roles->get($id, collect());
@@ -342,6 +457,12 @@ class MetricsService
                 'payment_link_paid' => (int) $sum($o, 'type', OrderType::PaymentLink->value, 'paid'),
                 'online_minutes' => (int) ($online[$id] ?? 0),
                 'by_platform' => $byPlatform,
+                ...$this->outcomeKeys(
+                    (int) $o->sum(fn ($row) => (int) $row->n),
+                    (float) $o->sum(fn ($row) => (float) $row->total),
+                    ['chat' => (int) $sum($o, 'source', 'chat'), 'store' => (int) $sum($o, 'source', 'store')],
+                    $outcomes[$id],
+                ),
                 'user' => ['id' => $u->id, 'name' => $u->name, 'color' => $u->color],
             ];
         })->all();
@@ -470,7 +591,10 @@ class MetricsService
 
     // ---------------------------------------------------------------- user internals
 
-    private function liveUser(int $userId, CarbonImmutable $from, CarbonImmutable $to, ?Platform $platform): array
+    /**
+     * @param  bool  $withOutcomes  false for long-range edge windows, whose caller computes outcomes over the whole range
+     */
+    private function liveUser(int $userId, CarbonImmutable $from, CarbonImmutable $to, ?Platform $platform, bool $withOutcomes = true): array
     {
         $p = $platform?->value;
 
@@ -509,7 +633,7 @@ class MetricsService
             ->whereBetween('created_at', [$from, $to])
             ->whereNotIn('status', self::EXCLUDED_ORDER_STATUSES)
             ->when($p, fn ($q) => $q->where('platform', $p))
-            ->get(['id', 'type', 'total', 'paid_at', 'platform']);
+            ->get(['id', 'type', 'total', 'paid_at', 'platform', 'source']);
 
         $paymentLinks = $orders->where('type', OrderType::PaymentLink);
 
@@ -539,6 +663,15 @@ class MetricsService
             'payment_link_paid' => $paymentLinks->whereNotNull('paid_at')->count(),
             'online_minutes' => $platform === null ? $this->onlineMinutes($userId, $from, $to) : 0,
             'by_platform' => $byPlatform,
+            ...($withOutcomes ? $this->outcomeKeys(
+                $orders->count(),
+                (float) $orders->sum(fn (Order $o) => (float) $o->total),
+                [
+                    'chat' => $orders->filter(fn (Order $o) => $o->source === OrderSource::Chat)->count(),
+                    'store' => $orders->filter(fn (Order $o) => $o->source === OrderSource::Store)->count(),
+                ],
+                $this->orderOutcomes($from, $to, $userId, $p),
+            ) : []),
             '_fr_sum' => array_sum($firstResponse),
             '_fr_n' => count($firstResponse),
             '_rt_sum' => array_sum($responses),
@@ -573,10 +706,10 @@ class MetricsService
 
         $edges = [];
         if ($firstFull->utc()->greaterThan($from)) {
-            $edges[] = $this->liveUser($userId, $from, $firstFull->utc()->subSecond(), $platform);
+            $edges[] = $this->liveUser($userId, $from, $firstFull->utc()->subSecond(), $platform, withOutcomes: false);
         }
         if ($afterLast->utc()->lessThanOrEqualTo($to)) {
-            $edges[] = $this->liveUser($userId, $afterLast->utc(), $to, $platform);
+            $edges[] = $this->liveUser($userId, $afterLast->utc(), $to, $platform, withOutcomes: false);
         }
         $edgeSum = fn (string $key) => array_sum(array_column($edges, $key));
 
@@ -651,6 +784,194 @@ class MetricsService
             'payment_link_paid' => (int) ($orderTypes[OrderType::PaymentLink->value]->paid ?? 0),
             'online_minutes' => $platform === null ? $sums['online_minutes'] : 0,
             'by_platform' => $byPlatform,
+        ] + $this->outcomeKeys(
+            $sums['orders_count'],
+            (float) $totals->sum(fn ($r) => (float) $r->orders_total) + $edgeSum('orders_total'),
+            $this->createdBySource($userId, $from, $to, $p),
+            // Order outcomes are aggregate queries, cheap over any range: computed
+            // live so by_source always adds up (the rollup columns serve exports).
+            $this->orderOutcomes($from, $to, $userId, $p),
+        );
+    }
+
+    /**
+     * Order outcomes (spec §6.3), all aggregate SQL so any range length is cheap:
+     * COD orders whose shipment is delivered, dated by the latest `delivered` event;
+     * other paid orders (financial_status paid|partially_refunded, or a COD order
+     * with no CRM shipment) dated by paid_at, else created_at (processed_at is not
+     * stored; the mapper already sets paid_at from it); minus refunds on those chat
+     * orders dated by the refund. Cancelled/failed orders never count.
+     *
+     * @return array{delivered: int, returned: int, failed_final: int, revenue: float, revenue_by_source: array{chat: float, store: float}}
+     */
+    private function orderOutcomes(CarbonImmutable $from, CarbonImmutable $to, ?int $userId, ?string $platform): array
+    {
+        [$shipments, $money] = $this->orderOutcomeRows($from, $to, $userId !== null ? [$userId] : null, $platform);
+
+        return $this->summarizeOutcomes($shipments, $money);
+    }
+
+    /**
+     * The same outcomes for many users at once (leaderboard): still two queries.
+     *
+     * @param  array<int, int>  $ids
+     * @return array<int, array> user id => orderOutcomes() shape
+     */
+    private function orderOutcomesByUser(CarbonImmutable $from, CarbonImmutable $to, array $ids): array
+    {
+        [$shipments, $money] = $this->orderOutcomeRows($from, $to, $ids, null);
+        $shipments = $shipments->groupBy(fn ($r) => (int) $r->user_id);
+        $money = $money->groupBy(fn ($r) => (int) $r->user_id);
+
+        $result = [];
+        foreach ($ids as $id) {
+            $result[$id] = $this->summarizeOutcomes($shipments->get($id, collect()), $money->get($id, collect()));
+        }
+
+        return $result;
+    }
+
+    /**
+     * Two grouped queries per (created_by_id, source): shipment outcomes (delivered /
+     * returned by their latest matching event, and cancelled-after-failed-attempt
+     * "failed_final" by last_event_at) and money (paid orders plus negative refunds,
+     * as one UNION ALL).
+     *
+     * @param  array<int, int>|null  $userIds  null = every order (team, store orders included)
+     * @return array{0: Collection, 1: Collection}
+     */
+    private function orderOutcomeRows(CarbonImmutable $from, CarbonImmutable $to, ?array $userIds, ?string $platform): array
+    {
+        $scoped = fn () => Order::query()
+            ->whereNotIn('orders.status', self::EXCLUDED_ORDER_STATUSES)
+            ->when($userIds !== null, fn ($q) => $q->whereIn('orders.created_by_id', $userIds))
+            ->when($platform !== null, fn ($q) => $q->where('orders.platform', $platform));
+
+        $range = [$from->toDateTimeString(), $to->toDateTimeString()];
+        $cod = OrderType::Cod->value;
+
+        $lastEvent = ShipmentEvent::query()
+            ->whereIn('status', [ShipmentStatus::Delivered->value, ShipmentStatus::Returned->value])
+            ->selectRaw('shipment_id, status, max(occurred_at) as at')
+            ->groupBy('shipment_id', 'status')
+            ->havingRaw('max(occurred_at) between ? and ?', $range)
+            ->toBase();
+
+        $shipments = $scoped()
+            ->join('shipments', 'shipments.order_id', '=', 'orders.id')
+            ->leftJoinSub($lastEvent, 'last_event', fn ($join) => $join
+                ->on('last_event.shipment_id', '=', 'shipments.id')
+                ->on('last_event.status', '=', 'shipments.status'))
+            ->where(fn ($q) => $q
+                ->whereNotNull('last_event.shipment_id')
+                ->orWhere(fn ($w) => $w
+                    ->where('shipments.status', ShipmentStatus::Cancelled->value)
+                    ->whereBetween('shipments.last_event_at', $range)
+                    ->whereExists(fn ($e) => $e->selectRaw('1')
+                        ->from('shipment_events')
+                        ->whereColumn('shipment_events.shipment_id', 'shipments.id')
+                        ->where('shipment_events.status', ShipmentStatus::FailedAttempt->value))))
+            ->selectRaw('orders.created_by_id as user_id, orders.source as source, shipments.status as outcome, count(*) as n, sum(case when orders.type = ? then orders.total else 0 end) as cod_total', [$cod])
+            ->groupBy('orders.created_by_id', 'orders.source', 'shipments.status')
+            ->toBase()
+            ->get();
+
+        $hasShipment = fn ($q) => $q->selectRaw('1')->from('shipments')->whereColumn('shipments.order_id', 'orders.id');
+        $paidRule = fn ($q) => $q->whereIn('orders.financial_status', self::REALIZED_FINANCIAL_STATUSES)
+            ->where(fn ($w) => $w->where('orders.type', '!=', $cod)->orWhereNotExists($hasShipment));
+
+        $paid = $scoped()
+            ->where($paidRule)
+            ->whereRaw('coalesce(orders.paid_at, orders.created_at) between ? and ?', $range)
+            ->selectRaw('orders.created_by_id as user_id, orders.source as source, sum(orders.total) as amount')
+            ->groupBy('orders.created_by_id', 'orders.source')
+            ->toBase();
+
+        // Store orders store Shopify's current_total_price, which is already net of
+        // refunds: subtracting their refunds again would count them twice.
+        $refunds = $scoped()
+            ->where('orders.source', '!=', OrderSource::Store->value)
+            ->join('refunds', 'refunds.order_id', '=', 'orders.id')
+            ->whereRaw('coalesce(refunds.shopify_created_at, refunds.created_at) between ? and ?', $range)
+            ->where(fn ($q) => $q
+                ->where(fn ($w) => $w->where('orders.type', $cod)->whereExists(fn ($s) => $hasShipment($s)->where('shipments.status', ShipmentStatus::Delivered->value)))
+                ->orWhere($paidRule))
+            ->selectRaw('orders.created_by_id as user_id, orders.source as source, 0 - sum(refunds.amount) as amount')
+            ->groupBy('orders.created_by_id', 'orders.source')
+            ->toBase();
+
+        return [$shipments, $paid->unionAll($refunds)->get()];
+    }
+
+    /**
+     * @return array{delivered: int, returned: int, failed_final: int, revenue: float, revenue_by_source: array{chat: float, store: float}}
+     */
+    private function summarizeOutcomes(Collection $shipments, Collection $money): array
+    {
+        $bySource = ['chat' => 0.0, 'store' => 0.0];
+        $add = function (mixed $source, float $amount) use (&$bySource) {
+            $bySource[(string) $source] = ($bySource[(string) $source] ?? 0.0) + $amount;
+        };
+
+        foreach ($shipments->where('outcome', ShipmentStatus::Delivered->value) as $r) {
+            $add($r->source, (float) $r->cod_total);
+        }
+        foreach ($money as $r) {
+            $add($r->source, (float) $r->amount);
+        }
+
+        $count = fn (ShipmentStatus $status) => (int) $shipments->where('outcome', $status->value)->sum(fn ($r) => (int) $r->n);
+
+        return [
+            'delivered' => $count(ShipmentStatus::Delivered),
+            'returned' => $count(ShipmentStatus::Returned),
+            'failed_final' => $count(ShipmentStatus::Cancelled),
+            'revenue' => round(array_sum($bySource), 2),
+            'revenue_by_source' => ['chat' => round($bySource['chat'], 2), 'store' => round($bySource['store'], 2)],
+        ];
+    }
+
+    /**
+     * @return array{chat: int, store: int} created (non-cancelled/failed) orders per source
+     */
+    private function createdBySource(?int $userId, CarbonImmutable $from, CarbonImmutable $to, ?string $platform): array
+    {
+        $counts = Order::query()
+            ->whereBetween('created_at', [$from, $to])
+            ->whereNotIn('status', self::EXCLUDED_ORDER_STATUSES)
+            ->when($userId !== null, fn ($q) => $q->where('created_by_id', $userId))
+            ->when($platform !== null, fn ($q) => $q->where('platform', $platform))
+            ->selectRaw('source, count(*) as n')
+            ->groupBy('source')
+            ->toBase()
+            ->pluck('n', 'source');
+
+        return ['chat' => (int) ($counts['chat'] ?? 0), 'store' => (int) ($counts['store'] ?? 0)];
+    }
+
+    /**
+     * The realized-revenue keys appended to user and team metrics.
+     *
+     * @param  array{chat: int, store: int}  $createdBySource
+     */
+    private function outcomeKeys(int $createdCount, float $createdTotal, array $createdBySource, array $outcomes): array
+    {
+        $delivered = $outcomes['delivered'];
+        $returned = $outcomes['returned'];
+        $deliveryDenominator = $delivered + $returned + $outcomes['failed_final'];
+
+        return [
+            'orders_created_count' => $createdCount,
+            'orders_created_total' => round($createdTotal, 2),
+            'orders_delivered' => $delivered,
+            'revenue_realized' => $outcomes['revenue'],
+            'orders_returned' => $returned,
+            'delivery_rate' => $deliveryDenominator > 0 ? round($delivered / $deliveryDenominator, 2) : 0.0,
+            'return_rate' => ($delivered + $returned) > 0 ? round($returned / ($delivered + $returned), 2) : 0.0,
+            'by_source' => [
+                'chat' => ['created_count' => $createdBySource['chat'], 'revenue_realized' => $outcomes['revenue_by_source']['chat']],
+                'store' => ['created_count' => $createdBySource['store'], 'revenue_realized' => $outcomes['revenue_by_source']['store']],
+            ],
         ];
     }
 

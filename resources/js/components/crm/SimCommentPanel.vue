@@ -50,32 +50,32 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
 </script>
 
 <template>
-    <form class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-xs" @submit.prevent="send">
+    <form class="flex flex-col gap-3 rounded-lg bg-card p-4 text-xs shadow-card" @submit.prevent="send">
         <h2 class="flex items-center gap-1.5 text-sm font-medium"><MessagesSquare class="size-4" aria-hidden="true" />{{ t('simulator.comment.title') }}</h2>
         <label class="grid gap-1">
-            <span class="font-medium">{{ t('simulator.platform') }}</span>
+            <span class="text-sm font-semibold">{{ t('simulator.platform') }}</span>
             <select v-model="platform" :class="input">
                 <option v-for="p in page.props.platforms" :key="p.value" :value="p.value">{{ p.label }}</option>
             </select>
         </label>
         <label class="grid gap-1">
-            <span class="font-medium">{{ t('simulator.comment.post') }}</span>
+            <span class="text-sm font-semibold">{{ t('simulator.comment.post') }}</span>
             <select v-model="postId" :class="input">
                 <option value="">{{ t('simulator.comment.new_post') }}</option>
                 <option v-for="p in platformPosts" :key="p.id" :value="String(p.id)">{{ (p.caption ?? p.external_id).slice(0, 60) }}</option>
             </select>
         </label>
         <label v-if="!selectedPost" class="grid gap-1">
-            <span class="font-medium">{{ t('simulator.comment.post_key') }}</span>
+            <span class="text-sm font-semibold">{{ t('simulator.comment.post_key') }}</span>
             <input v-model="newPostKey" dir="ltr" maxlength="100" placeholder="summer-sale" :class="input" />
         </label>
         <label class="flex items-center gap-2"><input v-model="isAd" type="checkbox" class="rounded border-input" :disabled="!!selectedPost" />{{ t('simulator.comment.ad') }}</label>
         <label class="grid gap-1">
-            <span class="font-medium">{{ t('simulator.message.customer_name') }}</span>
+            <span class="text-sm font-semibold">{{ t('simulator.message.customer_name') }}</span>
             <input v-model="name" dir="auto" maxlength="100" :class="input" />
         </label>
         <label class="grid gap-1">
-            <span class="font-medium">{{ t('simulator.text') }}</span>
+            <span class="text-sm font-semibold">{{ t('simulator.text') }}</span>
             <textarea v-model="text" rows="3" dir="auto" maxlength="2000" class="rounded-md border border-input bg-background px-3 py-2 text-sm" />
         </label>
         <button type="submit" class="mt-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50" :disabled="!valid || sim.busy.value !== null">

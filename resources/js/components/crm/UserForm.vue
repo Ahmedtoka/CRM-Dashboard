@@ -56,33 +56,33 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
 <template>
     <FormDialog :open="open" :title="user ? t('settings.users.edit') : t('settings.users.add')" :busy="busy" :error="error" @update:open="emit('update:open', $event)" @submit="submit">
         <label class="grid gap-1">
-            <span class="text-xs font-medium">{{ t('settings.users.name') }}</span>
+            <span class="text-sm font-semibold">{{ t('settings.users.name') }}</span>
             <input v-model="form.name" :class="input" required maxlength="255" autocomplete="off" />
         </label>
         <label class="grid gap-1">
-            <span class="text-xs font-medium">{{ t('settings.users.email') }}</span>
+            <span class="text-sm font-semibold">{{ t('settings.users.email') }}</span>
             <input v-model="form.email" type="email" dir="ltr" :class="input" required autocomplete="off" />
         </label>
         <label v-if="!user" class="grid gap-1">
-            <span class="text-xs font-medium">{{ t('settings.users.password') }}</span>
+            <span class="text-sm font-semibold">{{ t('settings.users.password') }}</span>
             <input v-model="form.password" type="password" dir="ltr" :class="input" required minlength="8" autocomplete="new-password" />
         </label>
         <div class="grid grid-cols-3 gap-2">
             <label class="grid gap-1">
-                <span class="text-xs font-medium">{{ t('settings.users.role') }}</span>
+                <span class="text-sm font-semibold">{{ t('settings.users.role') }}</span>
                 <select v-model="form.role" :class="input">
                     <option v-for="role in roles" :key="role" :value="role">{{ t(`roles.${role}`) }}</option>
                 </select>
             </label>
             <label class="grid gap-1">
-                <span class="text-xs font-medium">{{ t('settings.users.locale') }}</span>
+                <span class="text-sm font-semibold">{{ t('settings.users.locale') }}</span>
                 <select v-model="form.locale" :class="input">
                     <option value="ar">العربية</option>
                     <option value="en">English</option>
                 </select>
             </label>
             <label class="grid gap-1">
-                <span class="text-xs font-medium">{{ t('settings.users.color') }}</span>
+                <span class="text-sm font-semibold">{{ t('settings.users.color') }}</span>
                 <input v-model="form.color" type="color" class="h-9 w-full rounded-md border border-input bg-background p-1" />
             </label>
         </div>

@@ -2,8 +2,10 @@
 
 namespace App\Events;
 
+use App\Http\Resources\ConversationResource;
 use App\Models\Conversation;
 use App\Models\User;
+use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
@@ -18,7 +20,7 @@ class ConversationUpdated implements ShouldBroadcastNow
     public function __construct(public Conversation $conversation) {}
 
     /**
-     * @return array<int, \Illuminate\Broadcasting\Channel>
+     * @return array<int, Channel>
      */
     public function broadcastOn(): array
     {
@@ -39,6 +41,11 @@ class ConversationUpdated implements ShouldBroadcastNow
             'id' => $c->id,
             'status' => $c->status?->value,
             'priority' => $c->priority?->value,
+            // Queue badges update live, not only on the next list refresh (human bot flow Task 5).
+            'priority_level' => $c->priority_level,
+            'queue' => $c->queue,
+            'handover_category' => $c->handover_category,
+            'handover_category_label' => ConversationResource::categoryLabel($c),
             'handler' => $c->handler?->value,
             'needs_human' => (bool) $c->needs_human,
             'unread_count' => (int) $c->unread_count,
@@ -51,6 +58,7 @@ class ConversationUpdated implements ShouldBroadcastNow
                 'avatar_url' => $customer->avatar_url,
             ] : null,
             'locked_by' => $lockedBy ? ['id' => $lockedBy->id, 'name' => $lockedBy->name] : null,
+            'handling' => ConversationResource::handling($c),
         ];
     }
 }

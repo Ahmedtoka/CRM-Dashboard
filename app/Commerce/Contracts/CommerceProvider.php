@@ -19,6 +19,12 @@ interface CommerceProvider
      */
     public function ensureCustomer(Customer $customer, array $shippingAddress): string;
 
+    /**
+     * The store order (COD) or draft (payment link) already created for this
+     * CRM order, found by its `crm-order-{id}` tag; null when there is none.
+     */
+    public function findSubmittedOrder(Order $order): ?CommerceResult;
+
     public function createCodOrder(OrderPayload $payload): CommerceResult;
 
     public function createPaymentLink(OrderPayload $payload): CommerceResult;

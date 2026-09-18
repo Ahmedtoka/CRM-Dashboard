@@ -28,6 +28,17 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
+        <!-- Tests assume fake drivers; a live local .env must never leak into them. -->
+        <env name="CRM_CHANNEL_DRIVER" value="fake"/>
+        <env name="CRM_COMMERCE_DRIVER" value="fake"/>
+        <env name="CRM_SHIPPING_DRIVER" value="fake"/>
+        <env name="CRM_SHOPIFY_DRIVER" value="fake"/>
+        <env name="CRM_AI_DRIVER" value="fake"/>
+        <env name="CRM_OMS_DRIVER" value="fake"/>
+        <env name="CRM_BOT_BURST_WAIT_SECONDS" value="0"/>
+        <env name="CRM_BOT_MAX_WAIT_SECONDS" value="0"/>
+        <env name="CRM_BOT_TYPING_MS_PER_CHAR" value="0"/>
+        <env name="TRUSTED_PROXIES" value=""/>
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="MAIL_MAILER" value="array"/>

@@ -16,9 +16,11 @@ class ShopifyServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(ShopifyTransport::class, function ($app) {
-            return config('crm.shopify.driver', 'fake') === 'fake'
-                ? new FakeShopifyTransport
-                : $app->make(HttpShopifyTransport::class);
+            // Strict: only the exact value 'live' reaches a real store; a typo,
+            // different casing or 'off' must never fall through to live calls.
+            return config('crm.shopify.driver', 'fake') === 'live'
+                ? $app->make(HttpShopifyTransport::class)
+                : new FakeShopifyTransport;
         });
 
         // One client per request/job so every collaborator shares throttle state.

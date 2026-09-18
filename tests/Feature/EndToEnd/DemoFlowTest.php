@@ -2,16 +2,38 @@
 
 use App\Channels\Adapters\FakeChannelAdapter;
 use App\Commerce\FakeCommerceProvider;
-use App\Enums\{CommentStatus, ConversationSource, Handler, MessageStatus, ParticipantRole, Platform, UserRole};
-use App\Models\{BotRule, BotSetting, ChannelAccount, City, Comment, Conversation, ConversationParticipant, CustomerIdentity, Product, ProductVariant, User};
+use App\Enums\CommentStatus;
+use App\Enums\ConversationSource;
+use App\Enums\Handler;
+use App\Enums\MessageStatus;
+use App\Enums\ParticipantRole;
+use App\Enums\Platform;
+use App\Enums\UserRole;
+use App\Models\BotRule;
+use App\Models\BotSetting;
+use App\Models\ChannelAccount;
+use App\Models\City;
+use App\Models\Comment;
+use App\Models\Conversation;
+use App\Models\ConversationParticipant;
+use App\Models\CustomerIdentity;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Models\ShippingZone;
+use App\Models\User;
+use App\Shopify\Connection\ShopifyIntegration;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 
 /**
  * The owner's demo, end to end over HTTP with the fake drivers (sync queue, no broadcasting):
  * simulator → bot → handover → moderator reply → COD + payment-link orders → payment →
- * ad comment → private reply → reports → moderator scoping → language switch.
+ * ad comment → private reply → reports → moderator scoping → language switch → connecting the
+ * fake Shopify store (Task 10: fake store parity) without disturbing what came before.
  */
 it('runs the whole demo flow over HTTP', function () {
+    config(['crm.dev_tools' => true]); // the demo drives the simulator (a developer tool)
     $this->travelTo(CarbonImmutable::parse('2026-09-13 11:00:00', 'Africa/Cairo'));
     FakeChannelAdapter::reset();
     FakeCommerceProvider::$payloads = [];
@@ -66,7 +88,7 @@ it('runs the whole demo flow over HTTP', function () {
     // 4) COD order: confirmed on Shopify with attribution tags + note, shipment created.
     $shipping = ['name' => 'Nour', 'phone' => '01001112233', 'city_id' => $city->id, 'address' => '12 شارع النصر'];
     $cod = $this->actingAs($whatsappMod)->postJson("/inbox/conversations/{$conversation->id}/orders", [
-        'idempotency_key' => (string) Illuminate\Support\Str::uuid(),
+        'idempotency_key' => (string) Str::uuid(),
         'type' => 'cod', 'items' => [['variant_id' => $variant->id, 'qty' => 1]], 'shipping' => $shipping, 'note' => 'التسليم بعد العصر',
     ]);
     expect($cod->status())->toBeIn([200, 201]);
@@ -80,6 +102,7 @@ it('runs the whole demo flow over HTTP', function () {
 
     // 5) Payment-link order, paid from the simulator: confirmed + shipment.
     $link = $this->actingAs($whatsappMod)->postJson("/inbox/conversations/{$conversation->id}/orders", [
+        'idempotency_key' => (string) Str::uuid(),
         'type' => 'payment_link', 'items' => [['variant_id' => $variant->id, 'qty' => 2]], 'shipping' => $shipping,
     ]);
     $link->assertJsonPath('data.status', 'awaiting_payment');
@@ -141,4 +164,22 @@ it('runs the whole demo flow over HTTP', function () {
     $this->actingAs($whatsappMod->fresh())->get('/reports/me')
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('locale', 'en'));
+
+    // 10) Connecting the fake Shopify store (Task 10) runs the real initial import —
+    // products/shipping zones/customers/orders all flow through the real mappers —
+    // without disturbing the chat orders created above.
+    config(['crm.shopify.driver' => 'fake']);
+    $this->actingAs($admin)->post('/settings/shopify/connect', [
+        'shop_domain' => 'demo-store.myshopify.com', 'access_token' => 'fake', 'api_secret' => 'fake',
+    ])->assertRedirect();
+
+    expect(ShopifyIntegration::first()->status)->toBe('connected')
+        ->and(Product::count())->toBeGreaterThan(30)
+        ->and(ShippingZone::count())->toBeGreaterThan(0)
+        ->and(Order::where('source', 'store')->count())->toBeGreaterThan(0);
+
+    $codOrder = Order::find($cod->json('data.id'));
+    expect($codOrder->source->value)->toBe('chat')
+        ->and($codOrder->status->value)->toBe('confirmed')
+        ->and((float) $codOrder->total)->toBe(1310.0);
 });

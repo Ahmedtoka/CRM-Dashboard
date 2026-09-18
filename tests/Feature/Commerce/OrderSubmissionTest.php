@@ -1,12 +1,30 @@
 <?php
 
-use App\Commerce\{OrderService, FakeCommerceProvider};
+use App\Commerce\FakeCommerceProvider;
 use App\Commerce\Jobs\SubmitOrderToProvider;
-use App\Enums\{OrderStatus, Platform, UserRole};
+use App\Commerce\OrderService;
+use App\Enums\OrderStatus;
+use App\Enums\Platform;
+use App\Enums\UserRole;
 use App\Events\UserNotified;
-use App\Models\{Conversation, ChannelAccount, Customer, Product, ProductVariant, ShippingZone, User, Order};
-use Illuminate\Support\Facades\{Event, Queue};
+use App\Models\ActivityLog;
+use App\Models\ChannelAccount;
+use App\Models\City;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Models\ShippingZone;
+use App\Models\User;
+use App\Shipping\ShipmentService;
+use App\Shopify\Client\ShopifyException;
+use App\Shopify\Connection\ShopifyIntegration;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 beforeEach(function () {
     Event::fake();
@@ -66,8 +84,8 @@ it('refuses cancelling fulfilled orders and moderators', function () {
 });
 
 it('blocks creation when order creation is disabled', function () {
-    \App\Shopify\Connection\ShopifyIntegration::create(['shop_domain' => 'd.myshopify.com', 'access_token' => 't', 'api_secret' => 's', 'status' => 'connected', 'settings' => ['order_creation_enabled' => false]]);
-    expect(fn () => app(OrderService::class)->create($this->conv, $this->sup, ($this->data)()))->toThrow(\Illuminate\Validation\ValidationException::class);
+    ShopifyIntegration::create(['shop_domain' => 'd.myshopify.com', 'access_token' => 't', 'api_secret' => 's', 'status' => 'connected', 'settings' => ['order_creation_enabled' => false]]);
+    expect(fn () => app(OrderService::class)->create($this->conv, $this->sup, ($this->data)()))->toThrow(ValidationException::class);
 });
 
 // --- Additional coverage beyond the brief ---
@@ -176,9 +194,9 @@ it('rejects a rate that does not serve the province and a discount without reaso
     $giza = $z->rates()->create(['title' => 'عادي', 'price' => 60]);
 
     expect(fn () => app(OrderService::class)->create($this->conv, $this->sup, ($this->data)(['shipping' => ['rate_id' => $giza->id]])))
-        ->toThrow(\Illuminate\Validation\ValidationException::class)
+        ->toThrow(ValidationException::class)
         ->and(fn () => app(OrderService::class)->create($this->conv, $this->sup, ($this->data)(['discount' => ['type' => 'fixed', 'value' => 50]])))
-        ->toThrow(\Illuminate\Validation\ValidationException::class);
+        ->toThrow(ValidationException::class);
 });
 
 it('cancels an unpaid payment link by deleting the draft and passes restock for cod', function () {
@@ -209,11 +227,16 @@ it('forbids moderators from cancelling', function () {
     $mod = User::factory()->create(['role' => UserRole::Moderator]);
     $order = Order::factory()->create(['status' => OrderStatus::Confirmed, 'created_by_id' => $mod->id]);
 
-    expect(fn () => app(OrderService::class)->cancel($order, $mod))->toThrow(\Illuminate\Auth\Access\AuthorizationException::class);
+    expect(fn () => app(OrderService::class)->cancel($order, $mod))->toThrow(AuthorizationException::class);
 });
 
-it('accepts the legacy city_id payload without an idempotency key', function () {
-    $city = \App\Models\City::factory()->create(['shipping_fee' => 45]);
+// `idempotency_key` is `required` at the HTTP layer (both web and API); calling
+// `OrderService::create()` directly, as here, bypasses that validation, so this is only
+// verifying the service itself still defaults a missing key and accepts the legacy
+// `city_id` shape — not that an HTTP request can omit the key (see `OrderDrawerEndpointsTest`
+// and `ApiOrderCreationTest` for that).
+it('service layer defaults a missing idempotency key and accepts the legacy city_id payload', function () {
+    $city = City::factory()->create(['shipping_fee' => 45]);
 
     $order = app(OrderService::class)->create($this->conv, $this->sup, [
         'type' => 'cod', 'items' => [['variant_id' => $this->variant->id, 'qty' => 1]],
@@ -258,4 +281,137 @@ it('guards cancel over http: moderators 403, fulfilled 422, restock flag honoure
     $this->actingAs($this->sup)->postJson("/orders/{$open->id}/cancel", ['restock' => false])->assertOk()->assertJsonPath('data.status', 'cancelled');
 
     expect(FakeCommerceProvider::$cancelCalls)->toBe([['order_id' => $open->id, 'mode' => 'order', 'restock' => false]]);
+});
+
+// --- Fix round 1 ---
+
+it('tags every store order with the crm order id', function () {
+    $order = app(OrderService::class)->create($this->conv, $this->sup, ($this->data)());
+
+    expect(FakeCommerceProvider::$payloads[0]->tags)->toContain(\App\Commerce\Data\OrderPayload::tagFor($order->id))
+        ->and(FakeCommerceProvider::$payloads[0]->tags)->toContain('social-crm');
+});
+
+it('adopts the order a timed-out attempt created on the next queue attempt instead of duplicating it', function () {
+    Queue::fake();
+    $order = app(OrderService::class)->create($this->conv, $this->sup, ($this->data)());
+    FakeCommerceProvider::failNext('transport', 'Timed out reading the response', afterCreate: true);
+    $job = new SubmitOrderToProvider($order->id);
+
+    expect(fn () => $job->handle(app(OrderService::class)))->toThrow(ShopifyException::class);
+    expect($order->fresh()->status)->toBe(OrderStatus::Submitting); // left for the queue to retry
+
+    $job->handle(app(OrderService::class));
+
+    $fresh = $order->fresh();
+    expect($fresh->status)->toBe(OrderStatus::Confirmed)
+        ->and(FakeCommerceProvider::$created)->toHaveCount(1)
+        ->and(FakeCommerceProvider::$lookups)->toBe(1)
+        ->and($fresh->shopify_order_id)->toBe(FakeCommerceProvider::$created[0]['result']->orderId)
+        ->and($fresh->submit_attempts)->toBe(2);
+});
+
+it('adopts by tag when a manual retry follows a transport failure', function () {
+    FakeCommerceProvider::failNext('transport', 'Connection reset', afterCreate: true);
+    $order = app(OrderService::class)->create($this->conv, $this->sup, ($this->data)(['type' => 'payment_link']));
+    expect($order->fresh()->status)->toBe(OrderStatus::Failed); // sync queue: no automatic retries
+
+    app(OrderService::class)->retry($order->fresh(), $this->sup);
+
+    expect($order->fresh()->status)->toBe(OrderStatus::AwaitingPayment)
+        ->and($order->fresh()->invoice_url)->toBe(FakeCommerceProvider::$created[0]['result']->invoiceUrl)
+        ->and(FakeCommerceProvider::$created)->toHaveCount(1);
+});
+
+it('finalizes from stored ids without calling the store again', function () {
+    Queue::fake();
+    $order = app(OrderService::class)->create($this->conv, $this->sup, ($this->data)());
+    $order->forceFill(['shopify_order_id' => '4242', 'order_number' => '#4242'])->save();
+
+    app(OrderService::class)->submit($order->id);
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Confirmed)
+        ->and($order->fresh()->shopify_order_id)->toBe('4242')
+        ->and(FakeCommerceProvider::$payloads)->toBe([])
+        ->and(FakeCommerceProvider::$lookups)->toBe(0);
+});
+
+it('flags a payment link whose shopify total differs and announces the shopify total', function () {
+    FakeCommerceProvider::$draftTotalOverride = '1100.00';
+
+    $order = app(OrderService::class)->create($this->conv, $this->sup, ($this->data)(['type' => 'payment_link']));
+
+    $fresh = $order->fresh();
+    expect($fresh->status)->toBe(OrderStatus::AwaitingPayment)
+        ->and($fresh->mismatch)->toBeTrue()
+        ->and($fresh->last_error)->toBe('إجمالي Shopify 1100.00 مختلف عن إجمالي الطلب 1060.00')
+        ->and($this->conv->messages()->latest('id')->first()->body)->toEndWith('— 1100.00 ج.م');
+});
+
+it('keeps a matching payment link unflagged', function () {
+    $order = app(OrderService::class)->create($this->conv, $this->sup, ($this->data)(['type' => 'payment_link']));
+
+    expect($order->fresh()->mismatch)->toBeFalse()->and($order->fresh()->last_error)->toBeNull();
+});
+
+it('fails graphql errors with the shopify message and no supervisor alert', function () {
+    FakeCommerceProvider::failNext('graphql', "Field 'foo' doesn't exist");
+
+    $order = app(OrderService::class)->create($this->conv, $this->sup, ($this->data)());
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Failed)
+        ->and($order->fresh()->last_error)->toBe("Shopify: Field 'foo' doesn't exist");
+    Event::assertNotDispatched(UserNotified::class);
+});
+
+it('caps a fixed discount at the goods subtotal', function () {
+    $order = app(OrderService::class)->create($this->conv, $this->sup, ($this->data)([
+        'discount' => ['type' => 'fixed', 'value' => 5000, 'reason' => 'تعويض'],
+    ]))->fresh();
+
+    expect((float) $order->discount)->toBe(1000.0)
+        ->and((float) $order->discount_value)->toBe(1000.0)
+        ->and((float) $order->total)->toBe(60.0) // shipping is still paid
+        ->and(FakeCommerceProvider::$payloads[0]->discount)->toMatchArray(['type' => 'fixed', 'value' => '1000.00', 'amount' => '1000.00']);
+});
+
+it('runs the remaining follow-up steps when one fails after submission', function () {
+    $this->mock(ShipmentService::class, fn ($m) => $m->shouldReceive('createFor')->andThrow(new RuntimeException('carrier down')));
+
+    $order = app(OrderService::class)->create($this->conv, $this->sup, ($this->data)());
+
+    $failure = ActivityLog::where('action', OrderService::POST_SUBMIT_FAILED)->where('subject_id', $order->id)->first();
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Confirmed)
+        ->and($failure?->meta['step'])->toBe('shipment')
+        ->and(ActivityLog::where('action', 'order.created')->where('subject_id', $order->id)->exists())->toBeTrue()
+        ->and($this->conv->messages()->latest('id')->first()->body)->toStartWith('🛒 أوردر');
+});
+
+it('retries three times with backoff and no retryUntil override', function () {
+    $job = new SubmitOrderToProvider(1);
+
+    expect($job->tries)->toBe(3)
+        ->and($job->backoff)->toBe([10, 30, 90])
+        ->and(method_exists($job, 'retryUntil'))->toBeFalse()
+        ->and($job->uniqueId())->toBe('order-1')
+        ->and($job->queue)->toBe('commerce');
+});
+
+// --- Final fix wave I6 ---
+
+it('explains in arabic, not as a raw key, that order creation is disabled', function () {
+    ShopifyIntegration::create(['shop_domain' => 'demo.myshopify.com', 'access_token' => 't', 'api_secret' => 's', 'status' => 'connected', 'settings' => ['order_creation_enabled' => false]]);
+
+    try {
+        app(OrderService::class)->create($this->conv, $this->sup, ($this->data)());
+        $this->fail('Expected a validation error');
+    } catch (ValidationException $e) {
+        $message = $e->errors()['order'][0] ?? '';
+
+        expect($message)->not->toBe('order_creation_disabled')
+            ->and(preg_match('/\p{Arabic}/u', $message))->toBe(1);
+    }
+
+    expect(Order::count())->toBe(0);
 });

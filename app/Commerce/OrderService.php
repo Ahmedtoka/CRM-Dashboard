@@ -38,6 +38,7 @@ use DomainException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -54,6 +55,12 @@ class OrderService
     public const DISCOUNT_FIXED = 'fixed';
 
     public const DISCOUNT_PERCENT = 'percent';
+
+    /** Activity recorded when a follow-up step after a successful store submission fails. */
+    public const POST_SUBMIT_FAILED = 'order.post_submit_failed';
+
+    /** Lock TTL must satisfy: job timeout 60 < lock < retry_after 90 */
+    private const SUBMIT_LOCK_SECONDS = 75;
 
     public function __construct(
         private readonly CommerceProvider $provider,
@@ -86,7 +93,7 @@ class OrderService
         }
 
         if (! $this->settings()['order_creation_enabled']) {
-            throw ValidationException::withMessages(['order' => 'order_creation_disabled']);
+            throw ValidationException::withMessages(['order' => 'إنشاء الطلبات من المحادثات متوقف حاليًا من إعدادات Shopify.']);
         }
 
         $items = $data['items'] ?? [];
@@ -113,9 +120,10 @@ class OrderService
 
         $option = $this->shippingOption($shipping, $subtotalPiastres, $city);
         $shippingFeePiastres = $this->toPiastres($option->price);
-        $discountPiastres = $discount['type'] === self::DISCOUNT_PERCENT
+        // Never more than the goods subtotal (shipping is not discountable).
+        $discountPiastres = min($subtotalPiastres, $discount['type'] === self::DISCOUNT_PERCENT
             ? (int) round($subtotalPiastres * $discount['value'] / 100)
-            : $this->toPiastres($discount['value']);
+            : $this->toPiastres($discount['value']));
         $totalPiastres = max(0, $subtotalPiastres + $shippingFeePiastres - $discountPiastres);
 
         $attributes = [
@@ -133,7 +141,9 @@ class OrderService
             'shipping_title' => $option->title,
             'discount' => $this->fromPiastres($discountPiastres),
             'discount_type' => $discountPiastres > 0 ? $discount['type'] : null,
-            'discount_value' => $discountPiastres > 0 ? $this->money($discount['value']) : null,
+            'discount_value' => $discountPiastres > 0
+                ? ($discount['type'] === self::DISCOUNT_PERCENT ? $this->money($discount['value']) : $this->fromPiastres($discountPiastres))
+                : null,
             'discount_reason' => $discountPiastres > 0 ? $discount['reason'] : null,
             'total' => $this->fromPiastres($totalPiastres),
             'currency' => config('crm.currency', 'EGP'),
@@ -184,9 +194,31 @@ class OrderService
      * transport errors are rethrown for the queue to retry; any other exception
      * fails it so an order is never stranded in `submitting`.
      *
+     * Two executions can never create two store orders: the whole submission
+     * runs under the atomic `order-submit-{id}` lock (non-blocking).
+     *
+     * @return bool false when another execution holds the lock (nothing was done)
+     *
      * @throws ShopifyException kinds 'throttled' and 'transport'
      */
-    public function submit(int $orderId): void
+    public function submit(int $orderId): bool
+    {
+        $lock = Cache::lock("order-submit-{$orderId}", self::SUBMIT_LOCK_SECONDS);
+
+        if (! $lock->get()) {
+            return false;
+        }
+
+        try {
+            $this->submitLocked($orderId);
+        } finally {
+            $lock->release();
+        }
+
+        return true;
+    }
+
+    private function submitLocked(int $orderId): void
     {
         $order = Order::with(['items', 'customer', 'conversation', 'createdBy'])->find($orderId);
 
@@ -209,16 +241,29 @@ class OrderService
             return;
         }
 
+        // Already created by an earlier attempt that died before finalizing.
+        if ($stored = $this->resultFromStoredIds($order)) {
+            $this->applySubmissionSuccess($order, $stored);
+
+            return;
+        }
+
         try {
             $order->increment('submit_attempts');
 
-            $address = $this->shippingAddressFor($order);
-            $customerId = $order->customer ? $this->linkStoreCustomer($order->customer, $address) : null;
-            $payload = $this->payloadFor($order, $variants, $address, $customerId);
+            // A previous attempt may have created it and then failed (timeout/5xx
+            // on the response): adopt that store order instead of creating a duplicate.
+            $result = $order->submit_attempts > 1 ? $this->provider->findSubmittedOrder($order) : null;
 
-            $result = $order->type === OrderType::PaymentLink
-                ? $this->provider->createPaymentLink($payload)
-                : $this->provider->createCodOrder($payload);
+            if ($result === null) {
+                $address = $this->shippingAddressFor($order);
+                $customerId = $order->customer ? $this->linkStoreCustomer($order->customer, $address) : null;
+                $payload = $this->payloadFor($order, $variants, $address, $customerId);
+
+                $result = $order->type === OrderType::PaymentLink
+                    ? $this->provider->createPaymentLink($payload)
+                    : $this->provider->createCodOrder($payload);
+            }
         } catch (ShopifyException $e) {
             if (in_array($e->kind, ['throttled', 'transport'], true)) {
                 throw $e;
@@ -596,10 +641,21 @@ class OrderService
             ? ['status' => OrderStatus::Confirmed->value, 'financial_status' => 'pending']
             : ['status' => OrderStatus::AwaitingPayment->value];
 
+        // The customer pays Shopify's draft total: flag it when it isn't ours.
+        $mismatch = ! $cod && $result->total !== null && abs((float) $result->total - (float) $order->total) > 0.01;
+        $state['last_error'] = $mismatch
+            ? 'إجمالي Shopify '.$this->money($result->total).' مختلف عن إجمالي الطلب '.$this->money($order->total)
+            : null;
+
+        if ($mismatch) {
+            $state['mismatch'] = true;
+            $state['mismatch_reason'] = OrderStatusResolver::SHOPIFY_TOTAL_DIFFERS;
+        }
+
         $claimed = Order::query()
             ->whereKey($order->id)
             ->where('status', OrderStatus::Submitting->value)
-            ->update($ids + $state + ['last_error' => null]);
+            ->update($ids + $state);
 
         if ($claimed === 0) {
             // Cancelled locally while the store was creating it: keep the ids so
@@ -616,26 +672,68 @@ class OrderService
 
         $order->refresh();
 
+        // The store order exists and the row says so: each follow-up step is
+        // isolated so one failure (carrier, chat, broadcast) can't skip the rest.
         if ($cod) {
-            $this->applyCustomerStats($order);
-
-            if ($this->autoCreateShipment() && ! $order->shipment()->exists()) {
-                $this->shipments->createFor($order);
-            }
+            $this->postSubmitStep($order, 'customer_stats', fn () => $this->applyCustomerStats($order));
+            $this->postSubmitStep($order, 'shipment', function () use ($order) {
+                if ($this->autoCreateShipment() && ! $order->shipment()->exists()) {
+                    $this->shipments->createFor($order);
+                }
+            });
         }
 
-        $this->attribution->recordOrder($order);
+        $this->postSubmitStep($order, 'attribution', fn () => $this->attribution->recordOrder($order));
 
-        if ($order->conversation) {
+        $this->postSubmitStep($order, 'chat_line', function () use ($order, $cod, $result) {
+            if ($order->conversation === null) {
+                return;
+            }
+
             $cod
                 ? $this->announce($order, $order->conversation, $order->createdBy)
                 : $this->outbound->sendSystem(
                     $order->conversation,
-                    '🔗 رابط دفع لطلب '.($result->orderNumber ?? '#'.$order->id)." — {$order->total} ج.م",
+                    '🔗 رابط دفع لطلب '.($result->orderNumber ?? '#'.$order->id).' — '.($result->total !== null ? $this->money($result->total) : $order->total).' ج.م',
                 );
+        });
+
+        $this->postSubmitStep($order, 'broadcast', fn () => SafeBroadcast::send(new OrderUpdated($order)));
+    }
+
+    private function postSubmitStep(Order $order, string $step, callable $run): void
+    {
+        try {
+            $run();
+        } catch (Throwable $e) {
+            report($e);
+
+            try {
+                $this->logger->log(ActorType::System, null, self::POST_SUBMIT_FAILED, $order, $order->conversation, [
+                    'step' => $step,
+                    'error' => Str::limit($e->getMessage(), 250),
+                ]);
+            } catch (Throwable $logFailure) {
+                report($logFailure);
+            }
+        }
+    }
+
+    /**
+     * The row already carries the store ids (a prior attempt created it but
+     * crashed before the status update).
+     */
+    private function resultFromStoredIds(Order $order): ?CommerceResult
+    {
+        if ($order->type === OrderType::PaymentLink) {
+            return $order->shopify_draft_order_id !== null
+                ? new CommerceResult(success: true, draftOrderId: $order->shopify_draft_order_id, invoiceUrl: $order->invoice_url)
+                : null;
         }
 
-        SafeBroadcast::send(new OrderUpdated($order));
+        return $order->shopify_order_id !== null
+            ? new CommerceResult(success: true, orderId: $order->shopify_order_id, orderNumber: $order->order_number ?? $order->shopify_order_name)
+            : null;
     }
 
     /**
@@ -655,7 +753,12 @@ class OrderService
                 'qty' => (int) $i->qty,
                 'price' => $this->money($i->price),
             ])->values()->all(),
-            tags: array_values(array_filter(['social-crm', $platform ? 'platform:'.$platform->value : null, $creator ? $this->moderatorTag($creator) : null])),
+            tags: array_values(array_filter([
+                'social-crm',
+                $platform ? 'platform:'.$platform->value : null,
+                $creator ? $this->moderatorTag($creator) : null,
+                OrderPayload::tagFor($order->id),
+            ])),
             note: $this->providerNote($order),
             noteAttributes: array_filter([
                 'crm_order_id' => $order->id,

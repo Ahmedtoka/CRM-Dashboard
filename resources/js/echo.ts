@@ -73,7 +73,7 @@ export function getEcho(shared?: BroadcastingConfig | null): Echo<'reverb'> | nu
             // Auth through axios so the rotating XSRF cookie is always used.
             authorizer: (channel: { name: string }) => ({
                 authorize: (socketId: string, callback: (error: Error | null, data: ChannelAuthData | null) => void) => {
-                    api.post<ChannelAuthData>('/broadcasting/auth', { socket_id: socketId, channel_name: channel.name })
+                    api.post<ChannelAuthData>('/broadcasting/auth', { socket_id: socketId, channel_name: channel.name }, { silent: true })
                         .then((response) => callback(null, response.data))
                         .catch((error: Error) => callback(error, null));
                 },

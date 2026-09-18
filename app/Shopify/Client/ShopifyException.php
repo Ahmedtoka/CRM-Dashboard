@@ -11,7 +11,8 @@ use Throwable;
  * kinds:
  * - 'auth'         401/403 or GraphQL ACCESS_DENIED — integration flagged, no retry.
  * - 'throttled'    429 / THROTTLED exhausted all retries.
- * - 'transport'    5xx / network failure / unclassified GraphQL error exhausted all retries.
+ * - 'transport'    network failure or 5xx (queries after all retries; mutations at once, never resent).
+ * - 'graphql'      non-throttle GraphQL `errors` (bad query/input) — not retried.
  * - 'user_errors'  mutation returned non-empty userErrors.
  * - 'not_connected' no connected ShopifyIntegration to use.
  */

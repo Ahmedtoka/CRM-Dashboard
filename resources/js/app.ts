@@ -13,28 +13,42 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
+import TopLoadingBar from './components/crm/TopLoadingBar.vue';
 import { initializeTheme } from './composables/useAppearance';
 import { setCurrentLocale } from './composables/useI18n';
+import { useLoadingBar } from './composables/useLoadingBar';
+import { unreadConversationsCount } from './composables/useNotifications';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Social CRM';
 
 createInertiaApp({
-    title: (title) => (title ? `${title} - ${appName}` : appName),
+    title: (title) => {
+        const base = title ? `${title} - ${appName}` : appName;
+
+        return unreadConversationsCount() > 0 ? `(${unreadConversationsCount()}) ${base}` : base;
+    },
     resolve: (name) => resolvePageComponent(`./pages/${name}.vue`, import.meta.glob<DefineComponent>('./pages/**/*.vue')),
     setup({ el, App, props, plugin }) {
         // <html lang dir> follows the shared `locale` prop on load and after every visit.
         setCurrentLocale(props.initialPage.props.locale as string | undefined);
         router.on('navigate', (event) => setCurrentLocale(event.detail.page.props.locale as string | undefined));
 
-        createApp({ render: () => h(App, props) })
+        // TopLoadingBar is mounted once beside the page root, so guest pages (login) and
+        // every authenticated layout share the same bar without mounting it per layout.
+        createApp({ render: () => [h(App, props), h(TopLoadingBar)] })
             .use(plugin)
             .use(ZiggyVue)
             .mount(el);
     },
-    progress: {
-        color: '#4f46e5',
-    },
+    // The global TopLoadingBar replaces Inertia's own progress bar, so there is only one.
+    progress: false,
 });
+
+// Page visits drive the same bar as API requests. `finish` fires for completed,
+// cancelled and interrupted visits alike, so every `start` is always balanced.
+const loadingBar = useLoadingBar();
+router.on('start', () => loadingBar.start());
+router.on('finish', () => loadingBar.done());
 
 // This will set light / dark mode on page load...
 initializeTheme();

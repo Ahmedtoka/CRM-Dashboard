@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\Platform;
 use App\Enums\UserRole;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -13,7 +14,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
@@ -30,7 +31,16 @@ class User extends Authenticatable
         'is_active',
         'color',
         'last_seen_at',
+        'preferences',
     ];
+
+    /**
+     * Notification preferences (spec §5.4, Dashboard Experience Task 14):
+     * sound, desktop notifications, whose messages to notify about, and the
+     * sound volume. Stored sparse in `preferences` and merged with these
+     * defaults by `notificationPreferences()`.
+     */
+    public const DEFAULT_PREFERENCES = ['sound' => true, 'desktop_notifications' => false, 'notify_scope' => 'all_visible', 'sound_volume' => 0.6];
 
     /**
      * The attributes that should be hidden for serialization.
@@ -55,7 +65,22 @@ class User extends Authenticatable
             'role' => UserRole::class,
             'is_active' => 'boolean',
             'last_seen_at' => 'datetime',
+            'preferences' => 'array',
         ];
+    }
+
+    /** Notification preferences merged with defaults; unknown keys in `preferences` are ignored. */
+    public function notificationPreferences(): array
+    {
+        return array_replace(self::DEFAULT_PREFERENCES, array_intersect_key($this->preferences ?? [], self::DEFAULT_PREFERENCES));
+    }
+
+    /**
+     * @return HasMany<UserNotification, $this>
+     */
+    public function userNotifications(): HasMany
+    {
+        return $this->hasMany(UserNotification::class);
     }
 
     /**

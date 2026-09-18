@@ -47,7 +47,7 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
     <Head :title="t('settings.cities.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="max-w-3xl space-y-4 p-4">
+        <div class="mx-auto w-full max-w-3xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.cities.title')">
                 <button type="button" class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" @click="edit(null)">
                     <Plus class="size-3.5" aria-hidden="true" />{{ t('settings.cities.add') }}
@@ -61,7 +61,7 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                 <template #cell-actions="{ row }">
                     <span class="inline-flex gap-0.5">
                         <button type="button" :class="iconBtn" :title="t('ui.edit')" :aria-label="`${t('ui.edit')} ${row.name_ar}`" @click="edit(row)"><Pencil class="size-3.5" /></button>
-                        <button type="button" :class="[iconBtn, 'hover:text-red-700']" :title="t('ui.delete')" :aria-label="`${t('ui.delete')} ${row.name_ar}`" @click="crud.remove(row.id, t('ui.confirm_delete', { name: row.name_ar }))">
+                        <button type="button" :class="[iconBtn, 'hover:text-destructive']" :title="t('ui.delete')" :aria-label="`${t('ui.delete')} ${row.name_ar}`" @click="crud.remove(row.id, t('ui.confirm_delete', { name: row.name_ar }))">
                             <Trash2 class="size-3.5" />
                         </button>
                     </span>
@@ -71,15 +71,15 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
 
         <FormDialog v-model:open="open" :title="editingId ? t('settings.cities.edit') : t('settings.cities.add')" :busy="crud.busy.value" :error="crud.error.value" @submit="submit">
             <label class="grid gap-1">
-                <span class="text-xs font-medium">{{ t('settings.cities.name_ar') }}</span>
+                <span class="text-sm font-semibold">{{ t('settings.cities.name_ar') }}</span>
                 <input v-model="form.name_ar" dir="rtl" required maxlength="255" :class="input" />
             </label>
             <label class="grid gap-1">
-                <span class="text-xs font-medium">{{ t('settings.cities.name_en') }}</span>
+                <span class="text-sm font-semibold">{{ t('settings.cities.name_en') }}</span>
                 <input v-model="form.name_en" dir="ltr" required maxlength="255" :class="input" />
             </label>
             <label class="grid gap-1">
-                <span class="text-xs font-medium">{{ t('settings.cities.fee') }}</span>
+                <span class="text-sm font-semibold">{{ t('settings.cities.fee') }}</span>
                 <input v-model.number="form.shipping_fee" type="number" min="0" step="0.01" required dir="ltr" :class="input" />
             </label>
         </FormDialog>

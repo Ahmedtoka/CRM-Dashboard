@@ -30,15 +30,15 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
 </script>
 
 <template>
-    <form class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-xs" @submit.prevent="send">
+    <form class="flex flex-col gap-3 rounded-lg bg-card p-4 text-xs shadow-card" @submit.prevent="send">
         <h2 class="flex items-center gap-1.5 text-sm font-medium"><Zap class="size-4" aria-hidden="true" />{{ t('simulator.burst.title') }}</h2>
         <div class="grid grid-cols-2 gap-2">
             <label class="grid gap-1">
-                <span class="font-medium">{{ t('simulator.burst.count') }}</span>
+                <span class="text-sm font-semibold">{{ t('simulator.burst.count') }}</span>
                 <input v-model.number="count" type="number" min="1" max="500" :class="input" />
             </label>
             <label class="grid gap-1">
-                <span class="font-medium">{{ t('simulator.burst.seconds') }}</span>
+                <span class="text-sm font-semibold">{{ t('simulator.burst.seconds') }}</span>
                 <input v-model.number="seconds" type="number" min="0" max="3600" :class="input" />
             </label>
         </div>

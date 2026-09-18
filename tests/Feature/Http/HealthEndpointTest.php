@@ -16,7 +16,7 @@ it('reports health only with the token', function () {
         ->assertJsonStructure([
             'db',
             'redis',
-            'queues' => ['outbound', 'webhooks', 'bot', 'commerce', 'default', 'analytics'],
+            'queues' => ['outbound', 'webhooks', 'bot', 'commerce', 'commerce-long', 'media', 'default', 'analytics'],
             'queues_error',
             'oldest_job_seconds',
             'reverb',

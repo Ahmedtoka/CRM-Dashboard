@@ -5,6 +5,9 @@ use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 
+// The latency report is a developer tool (crm.dev_tools); see DevToolsTest for the off state.
+beforeEach(fn () => config(['crm.dev_tools' => true]));
+
 it('shows percentiles with pass/fail against targets for admins only', function () {
     // Latency tracking is off by default (fix round 1 removed the global test env
     // override) — enable it explicitly for the one test here that records samples.

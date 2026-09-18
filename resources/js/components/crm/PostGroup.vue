@@ -15,8 +15,8 @@ const newCount = computed(() => props.comments.filter((c) => c.status === 'new')
 </script>
 
 <template>
-    <section class="overflow-hidden rounded-lg border bg-card">
-        <header class="flex items-start gap-3 border-b bg-muted/30 p-3">
+    <section class="overflow-hidden rounded-lg bg-card shadow-card">
+        <header class="flex items-start gap-3 border-b border-border bg-muted/30 p-3">
             <img v-if="post?.thumbnail_url" :src="post.thumbnail_url" alt="" class="size-12 shrink-0 rounded object-cover" loading="lazy" />
             <div v-else class="flex size-12 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground" aria-hidden="true">
                 <ImageOff class="size-4" />
@@ -26,7 +26,7 @@ const newCount = computed(() => props.comments.filter((c) => c.status === 'new')
                     <PlatformBadge :platform="post?.platform" show-label />
                     <StatusChip v-if="post?.is_ad" :label="t('comments.ad')" tone="info" />
                     <span class="text-2xs tabular-nums text-muted-foreground">{{ t('comments.count', { n: comments.length }) }}</span>
-                    <span v-if="newCount" class="text-2xs font-medium tabular-nums text-amber-700">· {{ t('comments.new_count', { n: newCount }) }}</span>
+                    <span v-if="newCount" class="text-2xs font-medium tabular-nums text-foreground">· {{ t('comments.new_count', { n: newCount }) }}</span>
                 </div>
                 <p class="mt-1 line-clamp-2 text-xs text-foreground" dir="auto">{{ post?.caption || t('comments.post_untitled') }}</p>
             </div>
@@ -53,7 +53,7 @@ const newCount = computed(() => props.comments.filter((c) => c.status === 'new')
                 </a>
             </div>
         </header>
-        <div class="divide-y">
+        <div class="divide-y divide-border">
             <slot />
         </div>
     </section>

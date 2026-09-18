@@ -49,13 +49,13 @@ onMounted(load);
 </script>
 
 <template>
-    <section class="rounded-lg border bg-card p-3 text-xs" :aria-busy="loading">
+    <section class="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs shadow-card" :aria-busy="loading">
         <h2 class="flex items-center gap-1.5 font-medium"><Users class="size-3.5" aria-hidden="true" />{{ t('customers.duplicates') }}</h2>
         <p class="mb-2 text-2xs text-muted-foreground">{{ t('customers.duplicates_hint') }}</p>
         <LoaderCircle v-if="loading" class="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
         <p v-else-if="!suggestions.length" class="text-muted-foreground">{{ t('customers.no_duplicates') }}</p>
         <ul v-else class="space-y-2">
-            <li v-for="other in suggestions" :key="other.id" class="flex items-center gap-2 rounded-md border px-2 py-1.5">
+            <li v-for="other in suggestions" :key="other.id" class="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5">
                 <div class="min-w-0 flex-1">
                     <Link :href="`/customers/${other.id}`" class="block truncate font-medium hover:underline">{{ other.name ?? `#${other.id}` }}</Link>
                     <span class="flex items-center gap-1 text-2xs text-muted-foreground">

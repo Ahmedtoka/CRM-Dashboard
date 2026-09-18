@@ -3,6 +3,7 @@
 use App\Enums\UserRole; use App\Models\User;
 
 it('guards settings and reports by role', function () {
+    config(['crm.dev_tools' => true]);
     $mod = User::factory()->create(['role'=>UserRole::Moderator]);
     $sup = User::factory()->create(['role'=>UserRole::Supervisor]);
     $this->actingAs($mod)->get('/reports/team')->assertForbidden();
@@ -22,6 +23,7 @@ it('renders settings pages from the lowercase settings folder', function () {
 });
 
 it('lets admins reach every settings page', function () {
+    config(['crm.dev_tools' => true]);
     $admin = User::factory()->create(['role'=>UserRole::Admin]);
     foreach (['/settings/users', '/settings/channels', '/settings/bot', '/settings/quick-replies', '/settings/tags', '/settings/cities', '/simulator', '/reports/team', '/reports/bot', '/reports/activity', '/comments', '/orders', '/customers'] as $url) {
         $this->actingAs($admin)->get($url)->assertOk();

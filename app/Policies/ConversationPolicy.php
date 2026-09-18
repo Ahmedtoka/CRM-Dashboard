@@ -16,4 +16,10 @@ class ConversationPolicy
     {
         return $user->canAccessPlatform($conversation->platform);
     }
+
+    /** Wiping a conversation's history (test resets) is destructive: supervisors and admins only. */
+    public function reset(User $user, Conversation $conversation): bool
+    {
+        return $user->isSupervisorOrAbove();
+    }
 }

@@ -13,6 +13,7 @@ use App\Models\Conversation;
 use App\Models\CustomerIdentity;
 use App\Models\Message;
 use App\Models\User;
+use App\Shopify\Connection\IntegrationRepository;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -27,6 +28,7 @@ final class ConversationPriorityClassifier
     public function __construct(
         private readonly ArabicNormalizer $normalizer,
         private readonly ActivityLogger $logger,
+        private readonly IntegrationRepository $integrations,
     ) {}
 
     public function classify(Message $inbound, CustomerIdentity $identity): PriorityVerdict
@@ -145,6 +147,9 @@ final class ConversationPriorityClassifier
             return false;
         }
 
+        // Links to the connected store are always allowed, whatever the owner's list says.
+        $allowedDomains = array_merge($allowedDomains, $this->storeDomains());
+
         foreach ($matches[1] as $url) {
             if (! $this->isAllowedHost($url, $allowedDomains)) {
                 return true;
@@ -152,6 +157,21 @@ final class ConversationPriorityClassifier
         }
 
         return false;
+    }
+
+    /**
+     * The connected Shopify integration's shop domain (only a myshopify.com
+     * domain is stored; no primary/custom domain column exists yet).
+     *
+     * @return array<int, string>
+     */
+    private function storeDomains(): array
+    {
+        $integration = $this->integrations->current();
+
+        return $integration !== null && $integration->status === 'connected' && filled($integration->shop_domain)
+            ? [(string) $integration->shop_domain]
+            : [];
     }
 
     /**

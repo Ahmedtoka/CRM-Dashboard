@@ -6,6 +6,7 @@ use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Enums\Platform;
+use Database\Factories\OrderFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Order extends Model
 {
-    /** @use HasFactory<\Database\Factories\OrderFactory> */
+    /** @use HasFactory<OrderFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -44,6 +45,7 @@ class Order extends Model
         'source',
         'shopify_order_name',
         'cancelled_at',
+        'placed_at',
         'cancel_reason',
         'shopify_updated_at',
         'idempotency_key',
@@ -53,6 +55,7 @@ class Order extends Model
         'shipping_title',
         'discount_reason',
         'mismatch',
+        'mismatch_reason',
         'shipping_province_code',
         'discount_type',
         'discount_value',
@@ -72,9 +75,11 @@ class Order extends Model
             'total' => 'decimal:2',
             'paid_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'placed_at' => 'datetime',
             'shopify_updated_at' => 'datetime',
             'submit_attempts' => 'integer',
             'mismatch' => 'boolean',
+            'mismatch_notified_reasons' => 'array',
         ];
     }
 

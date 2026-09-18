@@ -238,7 +238,9 @@ class ChannelController extends Controller
             'last_error' => $a->last_error,
             'has_token' => ! empty($a->credentials['access_token'] ?? null),
             'linked_facebook_account_id' => $a->credentials['linked_facebook_account_id'] ?? null,
-            'webhook_url' => url('/webhooks/'.$a->platform?->value),
+            // The public address the platform posts to: always APP_URL, never the host this page
+            // happened to be opened on (e.g. http://127.0.0.1:8000 locally behind a tunnel).
+            'webhook_url' => rtrim((string) config('app.url'), '/').'/webhooks/'.$a->platform?->value,
             'verify_token' => config('crm.meta.verify_token'),
         ];
     }

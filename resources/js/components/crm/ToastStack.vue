@@ -15,14 +15,13 @@ const icons = { success: CircleCheck, error: CircleAlert, info: Info };
         <div
             v-for="toast in toasts"
             :key="toast.id"
-            class="pointer-events-auto flex items-start gap-2 rounded-lg border bg-card px-3 py-2 text-xs shadow-lg"
-            :class="{ 'border-red-200': toast.tone === 'error' }"
+            class="pointer-events-auto flex items-start gap-2 rounded-lg border-0 bg-card px-3 py-2 text-xs shadow-xl"
             :role="toast.tone === 'error' ? 'alert' : 'status'"
         >
             <component
                 :is="icons[toast.tone]"
                 class="mt-0.5 size-4 shrink-0"
-                :class="{ 'text-emerald-600': toast.tone === 'success', 'text-red-600': toast.tone === 'error', 'text-muted-foreground': toast.tone === 'info' }"
+                :class="{ 'text-success': toast.tone === 'success', 'text-destructive': toast.tone === 'error', 'text-primary': toast.tone === 'info' }"
                 aria-hidden="true"
             />
             <div class="min-w-0 flex-1">

@@ -39,7 +39,7 @@ const actionOptions = computed(() =>
 );
 
 const selectValue = (event: Event) => (event.target as HTMLSelectElement).value || null;
-const selectClass = 'h-8 max-w-[16rem] rounded-md border border-input bg-background px-2 text-xs';
+const selectClass = 'h-9 max-w-[16rem] rounded-md border border-input bg-background px-2 text-xs';
 const breadcrumbs = computed(() => [{ title: t('activity.ui.title'), href: '/reports/activity' }]);
 </script>
 
@@ -47,10 +47,10 @@ const breadcrumbs = computed(() => [{ title: t('activity.ui.title'), href: '/rep
     <Head :title="t('activity.ui.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-4 p-4">
+        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('activity.ui.title')" />
 
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2 rounded-lg bg-card p-3 shadow-card">
                 <DateRangePicker :model-value="range" @update:model-value="visit($event)" />
                 <select :value="filters.user_id ?? ''" :class="selectClass" :aria-label="t('activity.ui.actor')" @change="visit({ user_id: Number(selectValue($event)) || null })">
                     <option value="">{{ t('activity.ui.all_actors') }}</option>

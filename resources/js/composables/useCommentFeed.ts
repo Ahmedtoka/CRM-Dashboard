@@ -55,7 +55,7 @@ export function useCommentFeed(page: () => CursorPage<CommentItem>, filters: Ref
     }
 
     async function refreshFirstPage(): Promise<void> {
-        const { data } = await api.get<CursorPage<CommentItem>>('/comments/feed', { params: params() });
+        const { data } = await api.get<CursorPage<CommentItem>>('/comments/feed', { params: params(), silent: true });
         const fresh = new Map(data.data.map((c) => [c.id, c]));
         const merged = items.value.map((c) => fresh.get(c.id) ?? c);
         const known = new Set(merged.map((c) => c.id));

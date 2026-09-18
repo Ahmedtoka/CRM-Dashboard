@@ -26,10 +26,10 @@ const view = computed(() => {
             return {
                 icon: Clock,
                 text: t('window.open', { time: remaining.value }),
-                tone: msLeft.value !== null && msLeft.value < TWO_HOURS ? 'amber' : 'muted',
+                tone: msLeft.value !== null && msLeft.value < TWO_HOURS ? 'amber' : 'accent',
             };
         case 'human_agent':
-            return { icon: ShieldAlert, text: t('window.human_agent', { time: remaining.value }), tone: 'amber' };
+            return { icon: ShieldAlert, text: t('window.human_agent', { time: remaining.value }), tone: 'accent' };
         case 'template_only':
             return { icon: FileText, text: t('window.template_only'), tone: 'amber' };
         default:
@@ -38,9 +38,9 @@ const view = computed(() => {
 });
 
 const tones: Record<string, string> = {
-    muted: 'bg-muted/50 text-muted-foreground',
-    amber: 'border-amber-200 bg-amber-50 text-amber-900',
-    red: 'border-red-200 bg-red-50 text-red-700',
+    accent: 'bg-surface-accent text-primary',
+    amber: 'bg-warning/15 text-foreground',
+    red: 'bg-destructive/10 text-destructive',
 };
 </script>
 

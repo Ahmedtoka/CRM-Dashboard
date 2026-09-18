@@ -3,10 +3,8 @@ import BarChart from '@/components/crm/BarChart.vue';
 import DataTable from '@/components/crm/DataTable.vue';
 import Heatmap from '@/components/crm/Heatmap.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
-import ReportFilters from '@/components/crm/ReportFilters.vue';
 import StatCard from '@/components/crm/StatCard.vue';
 import { useI18n } from '@/composables/useI18n';
-import { useReportFilters } from '@/composables/useReportFilters';
 import { formatCount, formatMinutes, formatMoney, formatSeconds } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { HeatmapGrid, ManagedUser, ReportRange, UserMetrics } from '@/types/admin';
@@ -18,7 +16,6 @@ const props = defineProps<{ range: ReportRange; platform: PlatformValue | null; 
 
 const { t, locale } = useI18n();
 const page = usePage<SharedData>();
-const { visit } = useReportFilters();
 
 const canSeeActivity = computed(() => ['admin', 'supervisor'].includes(page.props.auth.user.role ?? ''));
 const n = (v: number) => formatCount(v, locale.value);
@@ -53,9 +50,7 @@ const activityHref = computed(() => `/reports/activity?user_id=${props.user.id}&
 
 <template>
     <div class="space-y-4">
-        <ReportFilters :range="range" :platform="platform" @change="visit" />
-
-        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
             <StatCard v-for="card in cards" :key="card.label" :label="card.label" :value="card.value" />
         </div>
 
@@ -80,7 +75,7 @@ const activityHref = computed(() => `/reports/activity?user_id=${props.user.id}&
 
         <Heatmap :title="t('reports.heatmap_title')" :grid="heatmap" />
 
-        <section class="rounded-lg border bg-card p-3 text-xs">
+        <section class="rounded-lg bg-card p-3 text-xs shadow-card">
             <h2 class="mb-1 font-medium text-foreground">{{ t('reports.recent_activity') }}</h2>
             <Link v-if="canSeeActivity" :href="activityHref" class="text-primary hover:underline">{{ t('reports.activity_link') }}</Link>
             <p v-else class="text-muted-foreground">{{ t('reports.activity_unavailable') }}</p>

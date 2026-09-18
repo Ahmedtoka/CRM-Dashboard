@@ -28,7 +28,6 @@ const rtl = computed(() => dir.value === 'rtl');
 const fmt = (v: number) => (props.format ? props.format(v) : String(v));
 const max = computed(() => Math.max(1, ...props.items.map((i) => i.value)));
 const total = computed(() => props.items.reduce((sum, i) => sum + i.value, 0));
-const ACCENT = '#6366f1';
 
 // Horizontal: fixed label column + bar track + value label, mirrored in RTL.
 const H_ROW = 26;
@@ -72,8 +71,8 @@ const vBars = computed(() => {
 </script>
 
 <template>
-    <figure class="rounded-lg border bg-card p-3">
-        <figcaption :id="`${id}-title`" class="mb-2 text-xs font-medium text-foreground">{{ title }}</figcaption>
+    <figure class="rounded-lg bg-card p-3 shadow-card">
+        <figcaption :id="`${id}-title`" class="mb-2 text-sm font-bold text-foreground">{{ title }}</figcaption>
         <p v-if="total === 0" class="py-6 text-center text-xs text-muted-foreground">{{ t('reports.no_data') }}</p>
 
         <svg
@@ -87,7 +86,7 @@ const vBars = computed(() => {
                 <title>{{ bar.label }}: {{ fmt(bar.value) }}</title>
                 <text :x="bar.labelX" :y="bar.y + 17" :text-anchor="rtl ? 'end' : 'start'" class="fill-muted-foreground text-[11px]">{{ bar.label }}</text>
                 <rect :x="rtl ? H_VALUE : H_LABEL" :y="bar.y + 6" :width="trackWidth" height="14" rx="3" class="fill-muted" />
-                <rect :x="bar.barX" :y="bar.y + 6" :width="bar.w" height="14" rx="3" :fill="bar.color ?? ACCENT" />
+                <rect :x="bar.barX" :y="bar.y + 6" :width="bar.w" height="14" rx="3" :class="!bar.color ? 'fill-primary' : ''" :style="bar.color ? { fill: bar.color } : undefined" />
                 <text :x="bar.valueX" :y="bar.y + 17" :text-anchor="rtl ? 'end' : 'start'" class="fill-foreground text-[11px] font-medium tabular-nums">
                     {{ fmt(bar.value) }}
                 </text>
@@ -98,7 +97,7 @@ const vBars = computed(() => {
             <line x1="0" :x2="V_WIDTH" :y1="V_TOP + plotHeight" :y2="V_TOP + plotHeight" class="stroke-border" />
             <g v-for="bar in vBars" :key="bar.key">
                 <title>{{ bar.label }}: {{ fmt(bar.value) }}</title>
-                <rect :x="bar.x" :y="bar.y" :width="bar.w" :height="Math.max(0, bar.h)" rx="2" :fill="bar.color ?? ACCENT" />
+                <rect :x="bar.x" :y="bar.y" :width="bar.w" :height="Math.max(0, bar.h)" rx="2" :class="!bar.color ? 'fill-primary' : ''" :style="bar.color ? { fill: bar.color } : undefined" />
                 <text
                     v-if="bar.value > 0 && bar.value === max"
                     :x="bar.cx"

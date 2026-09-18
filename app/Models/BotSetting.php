@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Bot\Knowledge\SizeChart;
+use Database\Factories\BotSettingFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class BotSetting extends Model
 {
-    /** @use HasFactory<\Database\Factories\BotSettingFactory> */
+    /** @use HasFactory<BotSettingFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -15,6 +17,7 @@ class BotSetting extends Model
         'ai_enabled',
         'ai_classifier_model',
         'ai_reply_model',
+        'ai_learning_model',
         'system_prompt',
         'min_confidence',
         'max_bot_turns',
@@ -27,6 +30,13 @@ class BotSetting extends Model
         'low_value_phrases',
         'allowed_link_domains',
         'spam_repeat_threshold',
+        'size_chart',
+        'size_chart_image_path',
+        'size_chart_image_mime',
+        'burst_wait_seconds',
+        'burst_max_wait_seconds',
+        'typing_ms_per_char',
+        'order_lookup_enabled',
     ];
 
     /** Seeded from the existing "حذف السبام" comment rule keywords (spec §11.1). */
@@ -39,6 +49,17 @@ class BotSetting extends Model
     public const DEFAULT_ALLOWED_LINK_DOMAINS = ['facebook.com', 'instagram.com', 'fb.me', 'wa.me', 'myshopify.com'];
 
     public const DEFAULT_SPAM_REPEAT_THRESHOLD = 3;
+
+    /**
+     * Left unchanged in behaviour by this task — the bot engine and
+     * `system_prompt` itself are untouched; Task 11 wires this default in.
+     */
+    public const DEFAULT_SYSTEM_PROMPT = <<<'PROMPT'
+        إنتِ مساعدة خدمة عملاء لمتجر ملابس حريمي في مصر. ردي بالعامية المصرية بلطف وبصيغة المؤنث ("أهلاً بيكي"، "حضرتك")، ردود قصيرة، وإيموجي واحد بالكتير.
+        بتردي بس على: سعر المنتج، المقاسات والألوان المتاحة والمخزون، سعر ومدة الشحن حسب المحافظة، سياسة الاستبدال والاسترجاع، طرق الدفع، مواعيد العمل، الخامات والعناية، وجدول المقاسات.
+        ممنوع تقترحي مقاس، أو تاخدي بيانات أوردر، أو تعملي أوردر. ممنوع تخترعي أي سعر أو مصاريف شحن أو سياسة: استخدمي بس الأرقام والمعلومات الموجودة في البيانات المرفقة.
+        لو العميلة عايزة تطلب أو بعتت عنوان أو رقم تليفون، أو سألت عن مقاسها، أو عندها شكوى أو مشكلة في أوردر، أو المعلومة مش موجودة: رجّعي action = handover.
+        PROMPT;
 
     protected function casts(): array
     {
@@ -55,6 +76,11 @@ class BotSetting extends Model
             'low_value_phrases' => 'array',
             'allowed_link_domains' => 'array',
             'spam_repeat_threshold' => 'integer',
+            'size_chart' => 'array',
+            'burst_wait_seconds' => 'integer',
+            'burst_max_wait_seconds' => 'integer',
+            'typing_ms_per_char' => 'integer',
+            'order_lookup_enabled' => 'boolean',
         ];
     }
 
@@ -76,6 +102,11 @@ class BotSetting extends Model
             'low_value_phrases' => self::DEFAULT_LOW_VALUE_PHRASES,
             'allowed_link_domains' => self::DEFAULT_ALLOWED_LINK_DOMAINS,
             'spam_repeat_threshold' => self::DEFAULT_SPAM_REPEAT_THRESHOLD,
+            'size_chart' => SizeChart::DEFAULT,
+            'burst_wait_seconds' => config('crm.bot.burst_wait_seconds'),
+            'burst_max_wait_seconds' => config('crm.bot.burst_max_wait_seconds'),
+            'typing_ms_per_char' => config('crm.bot.typing_ms_per_char'),
+            'order_lookup_enabled' => true,
         ]);
     }
 }

@@ -6,17 +6,17 @@ use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Sync\Mappers\Payload;
 use Carbon\CarbonInterface;
 use InvalidArgumentException;
+use RuntimeException;
 use Throwable;
 
 /**
  * Paged `updated_at` window sync for products, customers or orders (spec §4.3
- * nightly reconciliation, §4.5 manual sync). The mappers' stale guard makes
+ * nightly reconciliation, §4.5 manual sync). Page sizes keep every request under
+ * Shopify's 1000-point query cost (SyncQueries). The mappers' stale guard makes
  * unchanged records no-ops, so overlapping windows are safe.
  */
 final class IncrementalSync
 {
-    public const PAGE_SIZE = 250;
-
     public function __construct(
         private readonly ShopifyClient $client,
         private readonly ResourceRowMapper $rows,
@@ -37,7 +37,6 @@ final class IncrementalSync
         try {
             do {
                 $data = $this->client->query(SyncQueries::paged($resource), [
-                    'first' => self::PAGE_SIZE,
                     'cursor' => $cursor,
                     'query' => $filter,
                 ]);
@@ -49,7 +48,7 @@ final class IncrementalSync
 
                 foreach (Payload::list($page) as $node) {
                     try {
-                        $summary = $summary->withResult($this->rows->map($resource, $node));
+                        $summary = $summary->withResult($this->rows->map($resource, $this->completeNested($resource, $node)));
                     } catch (Throwable $e) {
                         $summary = $summary->withFailure();
                         $this->recorder->recordError($run, (string) ($node['id'] ?? '?'), $e->getMessage());
@@ -69,6 +68,42 @@ final class IncrementalSync
         $this->recorder->close($run, $summary, 'completed');
 
         return $summary;
+    }
+
+    /**
+     * Fetches the remaining pages of the node's nested list (variants, addresses,
+     * line items): the mappers delete whatever is missing from it.
+     */
+    private function completeNested(string $resource, array $node): array
+    {
+        $key = SyncQueries::nestedKey($resource);
+        $connection = $node[$key] ?? null;
+
+        if (! is_array($connection)) {
+            return $node;
+        }
+
+        $items = Payload::list($connection);
+        $pageInfo = $connection['pageInfo'] ?? [];
+
+        while (($pageInfo['hasNextPage'] ?? false) && is_string($pageInfo['endCursor'] ?? null)) {
+            $data = $this->client->query(SyncQueries::nestedPage($resource), [
+                'id' => (string) ($node['id'] ?? ''),
+                'cursor' => $pageInfo['endCursor'],
+            ]);
+            $more = $data['node'][$key] ?? null;
+
+            if (! is_array($more)) {
+                throw new RuntimeException("Shopify returned no further {$key} for ".($node['id'] ?? '?').'.');
+            }
+
+            array_push($items, ...Payload::list($more));
+            $pageInfo = $more['pageInfo'] ?? [];
+        }
+
+        $node[$key] = ['nodes' => $items];
+
+        return $node;
     }
 
     private function iso(CarbonInterface $time): string

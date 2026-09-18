@@ -65,3 +65,44 @@ it('paces each second to the remaining time budget instead of a flat 1s sleep', 
         expect($micros)->toBeGreaterThanOrEqual(0)->and($micros)->toBeLessThanOrEqual(1_000_000);
     }
 });
+
+it('adds authenticated search requests when a search rate is given', function () {
+    config(['crm.meta.app_secret' => 'sec']);
+    Http::fake(['staging.test/webhooks/*' => Http::response('EVENT_RECEIVED', 200), 'staging.test/api/v1/search*' => Http::response(['customers' => []], 200)]);
+
+    $this->artisan('crm:loadtest', ['--url' => 'https://staging.test', '--rate' => 1, '--duration' => 2, '--search-rate' => 2, '--search-token' => 'tkn', '--search-queries' => 'فستان,#1001'])
+        ->expectsOutputToContain('[search]')->assertSuccessful();
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/api/v1/search?q=') && $r->hasHeader('Authorization', 'Bearer tkn'));
+    expect(collect(Http::recorded())->filter(fn ($p) => str_contains($p[0]->url(), '/api/v1/search'))->count())->toBe(4);
+});
+
+it('refuses to run a search load when --search-rate is given without a --search-token', function () {
+    config(['crm.meta.app_secret' => 'sec']);
+    Http::fake(['staging.test/*' => Http::response('EVENT_RECEIVED', 200)]);
+
+    $this->artisan('crm:loadtest', ['--url' => 'https://staging.test', '--rate' => 1, '--duration' => 1, '--search-rate' => 1])
+        ->assertFailed();
+
+    Http::assertNothingSent();
+});
+
+it('warns when the search rate exceeds 1/s per token because of the 60/min throttle', function () {
+    config(['crm.meta.app_secret' => 'sec']);
+    Http::fake(['staging.test/webhooks/*' => Http::response('EVENT_RECEIVED', 200), 'staging.test/api/v1/search*' => Http::response(['customers' => []], 200)]);
+
+    $this->artisan('crm:loadtest', ['--url' => 'https://staging.test', '--rate' => 1, '--duration' => 1, '--search-rate' => 2, '--search-token' => 'tkn'])
+        ->expectsOutputToContain('exceeds 1 request/s')->assertSuccessful();
+});
+
+it('excludes non-2xx search responses from the p95 and reports them separately', function () {
+    config(['crm.meta.app_secret' => 'sec']);
+    Http::fake([
+        'staging.test/webhooks/*' => Http::response('EVENT_RECEIVED', 200),
+        'staging.test/api/v1/search*' => Http::sequence()->push(['customers' => []], 200)->push('too many requests', 429),
+    ]);
+
+    $this->artisan('crm:loadtest', ['--url' => 'https://staging.test', '--rate' => 1, '--duration' => 1, '--search-rate' => 2, '--search-token' => 'tkn'])
+        ->expectsOutputToContain('[search] requests=2 2xx=1 non2xx=1')
+        ->assertSuccessful();
+});

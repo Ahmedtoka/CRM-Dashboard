@@ -29,6 +29,9 @@ class AnalyticsDaily extends Model
         'orders_count',
         'orders_total',
         'online_minutes',
+        'orders_delivered',
+        'revenue_realized',
+        'orders_returned',
     ];
 
     protected function casts(): array
@@ -47,6 +50,9 @@ class AnalyticsDaily extends Model
             'orders_count' => 'integer',
             'orders_total' => 'decimal:2',
             'online_minutes' => 'integer',
+            'orders_delivered' => 'integer',
+            'revenue_realized' => 'decimal:2',
+            'orders_returned' => 'integer',
         ];
     }
 

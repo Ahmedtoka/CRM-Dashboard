@@ -20,8 +20,8 @@ const dayNames = computed(() =>
 const hours = Array.from({ length: 24 }, (_, h) => h);
 const hourLabel = (h: number) => formatNumber(locale.value, h, { useGrouping: false });
 
-// Five-step indigo scale; the top two steps get white text for contrast.
-const STEPS = ['bg-muted', 'bg-indigo-100', 'bg-indigo-300', 'bg-indigo-500 text-white', 'bg-indigo-700 text-white'];
+// Five-step scale from the surface accent to full primary; the top two steps get the primary-foreground text for contrast.
+const STEPS = ['bg-muted', 'bg-surface-accent', 'bg-primary/40 text-foreground', 'bg-primary/70 text-primary-foreground', 'bg-primary text-primary-foreground'];
 function step(value: number): string {
     if (value <= 0 || max.value === 0) return STEPS[0];
     return STEPS[Math.min(4, 1 + Math.floor((value / max.value) * 3.999))];
@@ -29,8 +29,8 @@ function step(value: number): string {
 </script>
 
 <template>
-    <figure class="rounded-lg border bg-card p-3">
-        <figcaption :id="`${id}-title`" class="mb-1 text-xs font-medium text-foreground">{{ title }}</figcaption>
+    <figure class="rounded-lg bg-card p-3 shadow-card">
+        <figcaption :id="`${id}-title`" class="mb-1 text-sm font-bold text-foreground">{{ title }}</figcaption>
         <p class="mb-2 text-2xs text-muted-foreground">{{ t('reports.heatmap_hint') }}</p>
         <div class="scrollbar-thin overflow-x-auto">
             <table class="w-full min-w-[640px] border-separate border-spacing-0.5 text-2xs" :aria-labelledby="`${id}-title`">

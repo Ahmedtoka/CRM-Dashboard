@@ -10,18 +10,38 @@ import AuthBase from '@/layouts/AuthLayout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { LoaderCircle } from 'lucide-vue-next';
 
-defineProps<{
-    status?: string;
-    canResetPassword: boolean;
-}>();
+interface QuickUser {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+}
+
+const props = withDefaults(
+    defineProps<{
+        status?: string;
+        canResetPassword: boolean;
+        /** Local-only one-click sign-in; always empty on a real server. */
+        quickUsers?: QuickUser[];
+    }>(),
+    { quickUsers: () => [] },
+);
 
 const { t } = useI18n();
 
 const form = useForm({
     email: '',
     password: '',
-    remember: false,
+    // A login that lasts weeks instead of asking again every couple of hours.
+    remember: true,
 });
+
+const quickForm = useForm({ user_id: 0 });
+
+const quickLogin = (user: QuickUser) => {
+    quickForm.user_id = user.id;
+    quickForm.post(route('login.quick'));
+};
 
 const submit = () => {
     form.post(route('login'), {
@@ -36,6 +56,31 @@ const submit = () => {
 
         <div v-if="status" class="mb-4 text-center text-sm font-medium text-green-600">
             {{ status }}
+        </div>
+
+        <div v-if="props.quickUsers.length" class="mb-6 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
+            <p class="mb-2 text-xs font-medium text-muted-foreground">{{ t('auth.quick_login.title') }}</p>
+            <div class="flex flex-col gap-2">
+                <button
+                    v-for="user in props.quickUsers"
+                    :key="user.id"
+                    type="button"
+                    class="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2 text-start transition hover:border-primary hover:bg-elevated disabled:opacity-60"
+                    :disabled="quickForm.processing"
+                    @click="quickLogin(user)"
+                >
+                    <span class="min-w-0">
+                        <span class="block truncate text-sm font-semibold">{{ user.name }}</span>
+                        <span class="block truncate text-xs text-muted-foreground" dir="ltr">{{ user.email }}</span>
+                    </span>
+                    <span class="flex shrink-0 items-center gap-2">
+                        <span class="rounded-full bg-elevated px-2 py-0.5 text-2xs text-muted-foreground">{{ t(`roles.${user.role}`) }}</span>
+                        <LoaderCircle v-if="quickForm.processing && quickForm.user_id === user.id" class="h-4 w-4 animate-spin" />
+                        <span v-else class="text-xs font-medium text-primary">{{ t('auth.quick_login.enter') }}</span>
+                    </span>
+                </button>
+            </div>
+            <p class="mt-2 text-2xs text-muted-foreground">{{ t('auth.quick_login.note') }}</p>
         </div>
 
         <form @submit.prevent="submit" class="flex flex-col gap-6">

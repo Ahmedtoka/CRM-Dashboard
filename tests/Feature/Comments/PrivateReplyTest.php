@@ -90,6 +90,11 @@ it('rolls back the claim when the adapter throws instead of failing', function (
             throw new RuntimeException('not used in this test');
         }
 
+        public function sendAttachment(\App\Models\ChannelAccount $account, \App\Models\CustomerIdentity $to, \App\Models\MessageAttachment $attachment, ?string $caption = null, array $options = []): SendResult
+        {
+            throw new RuntimeException('not used in this test');
+        }
+
         public function replyToComment(\App\Models\ChannelAccount $account, string $commentExternalId, string $text): SendResult
         {
             throw new RuntimeException('not used in this test');
@@ -103,6 +108,11 @@ it('rolls back the claim when the adapter throws instead of failing', function (
         public function sendPrivateReply(\App\Models\ChannelAccount $account, string $commentExternalId, string $text): SendResult
         {
             throw new ConnectionException('Connection timed out');
+        }
+
+        public function typing(\App\Models\ChannelAccount $account, \App\Models\CustomerIdentity $to, bool $on): void
+        {
+            // not used in this test
         }
     };
 

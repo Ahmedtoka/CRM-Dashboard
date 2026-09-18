@@ -11,7 +11,8 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 trait ProductSearch
 {
     /**
-     * Variants from the local catalog cache; `q` (web) or `search` (API).
+     * Active-product variants from the local catalog cache; `q` (web) or `search` (API).
+     * Matches SKU, title, product title or barcode (order drawer, spec §5.1).
      */
     public function search(Request $request): AnonymousResourceCollection
     {
@@ -21,8 +22,10 @@ trait ProductSearch
 
         $variants = ProductVariant::query()
             ->with('product')
+            ->whereHas('product', fn (Builder $p) => $p->where('status', 'active'))
             ->when($term !== '', fn (Builder $q) => $q->where(fn (Builder $w) => $w
                 ->where('sku', 'like', "%{$term}%")
+                ->orWhere('barcode', 'like', "%{$term}%")
                 ->orWhere('title', 'like', "%{$term}%")
                 ->orWhereHas('product', fn (Builder $p) => $p->where('title', 'like', "%{$term}%"))))
             ->orderBy('product_id')

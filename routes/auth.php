@@ -15,6 +15,11 @@ Route::middleware('guest')->group(function () {
 
     Route::post('login', [AuthenticatedSessionController::class, 'store']);
 
+    // Local-only one-click sign-in (see AuthenticatedSessionController::quickLoginEnabled).
+    Route::post('login/quick', [AuthenticatedSessionController::class, 'quick'])
+        ->middleware('throttle:10,1')
+        ->name('login.quick');
+
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');
 

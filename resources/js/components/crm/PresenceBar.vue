@@ -30,7 +30,7 @@ const typingText = computed(() => (props.typing.length ? t('thread.typing', { na
             <span
                 v-if="others.length > 4"
                 aria-hidden="true"
-                class="flex size-5 items-center justify-center rounded-full border-2 border-card bg-slate-400 text-[9px] font-semibold text-white"
+                class="flex size-5 items-center justify-center rounded-full border-2 border-card bg-muted-foreground text-[9px] font-semibold text-white"
             >
                 +{{ others.length - 4 }}
             </span>

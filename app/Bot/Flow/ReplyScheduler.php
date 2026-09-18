@@ -3,8 +3,11 @@
 namespace App\Bot\Flow;
 
 use App\Bot\Flow\Jobs\RunBotTurn;
+use App\Bot\Flows\FlowState;
+use App\Bot\Flows\Steps\PhotoStep;
 use App\Channels\ChannelRegistry;
 use App\Enums\MessageDirection;
+use App\Models\BotFlow;
 use App\Models\BotSetting;
 use App\Models\Conversation;
 use App\Models\CustomerIdentity;
@@ -13,6 +16,9 @@ use Illuminate\Support\Collection;
 
 class ReplyScheduler
 {
+    /** A second photo sent right after the first still lands in the same burst. */
+    private const PHOTO_STEP_WAIT_SECONDS = 2;
+
     public function __construct(private readonly BurstPolicy $policy) {}
 
     public function schedule(Message $inbound, Conversation $c): void
@@ -25,12 +31,16 @@ class ReplyScheduler
         // to the last offered buttons) answers immediately: skipping the burst wait
         // avoids making the customer wait after they've already made a menu choice.
         $isButtonTap = filled($inbound->payload);
-        $wait = $isButtonTap ? 0 : $this->policy->waitSeconds(
+        // A guided flow waiting on a photo answers right away when the customer sends
+        // one, instead of sitting through the burst's max wait as if they were "still
+        // typing" — the short wait below still lets a second photo join the same burst.
+        $isAwaitedPhoto = ! $isButtonTap && $this->isAwaitingPhoto($c) && PhotoStep::hasImage($inbound);
+        $wait = $isButtonTap ? 0 : ($isAwaitedPhoto ? self::PHOTO_STEP_WAIT_SECONDS : $this->policy->waitSeconds(
             $burst->pluck('body')->map(fn ($b) => (string) $b)->all(),
             $inbound->mediaAttachments()->exists() && trim((string) $inbound->body) === '',
             $base,
             $max,
-        );
+        ));
 
         // Final fix wave I8: a customer who keeps typing never pushes the answer past
         // the burst's first message + the max wait.
@@ -68,6 +78,20 @@ class ReplyScheduler
             ->when($after, fn ($q) => $q->where('id', '>', $after))
             ->when($lastHuman, fn ($q) => $q->where('id', '>', $lastHuman))
             ->orderBy('id')->get();
+    }
+
+    /** Whether the conversation's active guided flow is currently sitting on a `photo` step. */
+    private function isAwaitingPhoto(Conversation $c): bool
+    {
+        $flow = FlowState::flow($c);
+
+        if ($flow === null) {
+            return false;
+        }
+
+        $step = BotFlow::active($flow['key'])?->definition['steps'][$flow['step']] ?? null;
+
+        return is_array($step) && ($step['type'] ?? null) === 'photo';
     }
 
     public function typing(Conversation $c, bool $on): void

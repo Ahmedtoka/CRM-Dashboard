@@ -21,7 +21,10 @@ use App\Shopify\Sync\Mappers\StaleGuard;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 
-function fixture(string $name): array { return json_decode(file_get_contents(base_path("tests/Fixtures/shopify/{$name}.json")), true); }
+function fixture(string $name): array
+{
+    return json_decode(file_get_contents(base_path("tests/Fixtures/shopify/{$name}.json")), true);
+}
 
 beforeEach(fn () => Event::fake());
 
@@ -50,6 +53,27 @@ it('creates a store order with its customer, items and fulfillment', function ()
         ->and($order->customer->shopify_customer_id)->toBe((string) $o['customer']['id']);
     app(OrderMapper::class)->applyFulfillment(fixture('webhook_fulfillment'));
     expect($order->fresh()->fulfillments->first()->tracking_number)->not->toBeNull();
+});
+
+it('stores the shopify creation time as placed_at and never blanks it', function () {
+    $o = array_replace(fixture('webhook_order_store'), ['created_at' => '2026-08-01T10:00:00+03:00', 'processed_at' => '2026-08-01T10:05:00+03:00']);
+    app(OrderMapper::class)->upsert($o);
+    $order = Order::where('shopify_order_id', (string) $o['id'])->firstOrFail();
+
+    expect($order->placed_at->equalTo(Carbon::parse('2026-08-01T10:00:00+03:00')))->toBeTrue();
+
+    app(OrderMapper::class)->upsert(array_replace($o, ['created_at' => null, 'processed_at' => null, 'updated_at' => '2030-01-01T00:00:00+02:00']));
+
+    expect($order->fresh()->placed_at->equalTo(Carbon::parse('2026-08-01T10:00:00+03:00')))->toBeTrue();
+});
+
+it('falls back to processed_at for placed_at', function () {
+    $o = fixture('webhook_order_store');
+    unset($o['created_at']);
+    $o['processed_at'] = '2026-08-02T09:00:00+03:00';
+    app(OrderMapper::class)->upsert($o);
+
+    expect(Order::where('shopify_order_id', (string) $o['id'])->firstOrFail()->placed_at->equalTo(Carbon::parse('2026-08-02T09:00:00+03:00')))->toBeTrue();
 });
 
 it('links a webhook to the local chat order by crm_order_id without changing attribution', function () {

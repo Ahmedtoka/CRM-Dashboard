@@ -12,6 +12,7 @@ use App\Enums\MessageStatus;
 use App\Enums\Platform;
 use App\Models\ChannelAccount;
 use App\Models\CustomerIdentity;
+use App\Models\MessageAttachment;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -117,6 +118,7 @@ final class FakeChannelAdapter implements ChannelAdapter
                     externalMessageId: (string) $event['id'],
                     body: $event['text'] ?? '',
                     occurredAt: CarbonImmutable::parse($event['at']),
+                    attachments: $event['attachments'] ?? [],
                     customerPhone: $event['phone'] ?? null,
                 ),
                 'comment' => new InboundCommentData(
@@ -158,6 +160,22 @@ final class FakeChannelAdapter implements ChannelAdapter
         ]);
     }
 
+    /**
+     * @param  array{tag?: string}  $options
+     */
+    public function sendAttachment(ChannelAccount $account, CustomerIdentity $to, MessageAttachment $attachment, ?string $caption = null, array $options = []): SendResult
+    {
+        return $this->record('sendAttachment', [
+            'account_id' => $account->id,
+            'to' => $to->external_id,
+            'attachment_id' => $attachment->id,
+            'type' => $attachment->type->value,
+            'mime' => $attachment->mime,
+            'caption' => $caption,
+            'options' => $options,
+        ]);
+    }
+
     public function replyToComment(ChannelAccount $account, string $commentExternalId, string $text): SendResult
     {
         return $this->record('replyToComment', [
@@ -181,6 +199,15 @@ final class FakeChannelAdapter implements ChannelAdapter
             'account_id' => $account->id,
             'comment_external_id' => $commentExternalId,
             'text' => $text,
+        ]);
+    }
+
+    public function typing(ChannelAccount $account, CustomerIdentity $to, bool $on): void
+    {
+        $this->record('typing', [
+            'account_id' => $account->id,
+            'to' => $to->external_id,
+            'on' => $on,
         ]);
     }
 

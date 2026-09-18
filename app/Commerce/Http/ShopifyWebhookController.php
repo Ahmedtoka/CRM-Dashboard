@@ -2,11 +2,11 @@
 
 namespace App\Commerce\Http;
 
-use App\Commerce\Contracts\CommerceProvider;
 use App\Commerce\Jobs\ProcessShopifyWebhook;
 use App\Http\Controllers\Controller;
 use App\Models\ShopifyWebhookSubscription;
 use App\Models\WebhookEvent;
+use App\Shopify\Connection\IntegrationRepository;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,6 +15,11 @@ use Symfony\Component\HttpFoundation\Response;
  * Shopify order webhooks go through the same store → dedupe → queue pipeline as
  * the channel webhooks, so a slow/failed order update never makes Shopify retry
  * (or give up on) the delivery, and every event is visible in webhook_events.
+ *
+ * Authentication does not depend on the commerce driver (final fix wave C1):
+ * every topic runs through the real mappers, so an unsigned POST must never be
+ * able to create orders, merge customers or disconnect the store just because
+ * CRM_COMMERCE_DRIVER is `fake`.
  */
 class ShopifyWebhookController extends Controller
 {
@@ -28,11 +33,11 @@ class ShopifyWebhookController extends Controller
         'draft-orders-update' => 'draft_orders/update',
     ];
 
-    public function __construct(private readonly CommerceProvider $provider) {}
+    public function __construct(private readonly IntegrationRepository $integrations) {}
 
     public function handle(Request $request, string $topic): Response
     {
-        if (! $this->provider->verifyWebhook($request)) {
+        if (! $this->authenticated($request)) {
             return response('Unauthorized', 401);
         }
 
@@ -67,5 +72,26 @@ class ShopifyWebhookController extends Controller
         }
 
         return response('ok', 200);
+    }
+
+    /**
+     * `X-Shopify-Hmac-Sha256` = base64 HMAC-SHA256 of the raw body. Key order:
+     * the integration's api_secret (whatever its status) → crm.shopify.webhook_secret.
+     * With no secret at all, unsigned deliveries are accepted only in
+     * local/testing or when crm.allow_fake_webhooks is set (demo/simulator).
+     */
+    private function authenticated(Request $request): bool
+    {
+        $integrationSecret = $this->integrations->current()?->api_secret;
+        $secret = filled($integrationSecret) ? (string) $integrationSecret : (string) config('crm.shopify.webhook_secret', '');
+
+        if ($secret === '') {
+            return app()->environment('local', 'testing') || (bool) config('crm.allow_fake_webhooks', false);
+        }
+
+        $header = (string) $request->header('X-Shopify-Hmac-Sha256', '');
+        $computed = base64_encode(hash_hmac('sha256', $request->getContent(), $secret, true));
+
+        return $header !== '' && hash_equals($computed, $header);
     }
 }

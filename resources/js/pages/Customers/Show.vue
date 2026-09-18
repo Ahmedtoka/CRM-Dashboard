@@ -4,6 +4,7 @@ import OrderCard from '@/components/crm/OrderCard.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import StatCard from '@/components/crm/StatCard.vue';
+import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatListStamp, formatMoney } from '@/lib/format';
@@ -26,6 +27,8 @@ const contact = computed(() =>
     ].filter((row) => row.value),
 );
 
+const badgeTone = { new: 'info', repeat: 'positive', has_return: 'negative' } as const;
+
 const breadcrumbs = computed(() => [
     { title: t('customers.title'), href: '/customers' },
     { title: title.value, href: `/customers/${props.customer.id}` },
@@ -36,7 +39,7 @@ const breadcrumbs = computed(() => [
     <Head :title="title" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-4 p-4">
+        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="title" />
 
             <div class="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -44,9 +47,15 @@ const breadcrumbs = computed(() => [
                     <div class="grid grid-cols-2 gap-2">
                         <StatCard :label="t('customer.orders_count')" :value="formatCount(customer.orders_count, locale)" />
                         <StatCard :label="t('customer.total_spent')" :value="formatMoney(customer.total_spent, locale)" />
+                        <StatCard :label="t('customer.shopify_orders')" :value="formatCount(customer.shopify_orders_count ?? 0, locale)" />
+                        <StatCard :label="t('customer.shopify_total_spent')" :value="formatMoney(customer.shopify_total_spent ?? 0, locale)" />
                     </div>
 
-                    <section class="rounded-lg border bg-card p-3 text-xs">
+                    <div v-if="customer.badges?.length" class="flex flex-wrap gap-1.5">
+                        <StatusChip v-for="badge in customer.badges" :key="badge" :label="t(`customer.badges.${badge}`)" :tone="badgeTone[badge]" />
+                    </div>
+
+                    <section class="rounded-lg bg-card p-3 text-xs shadow-card">
                         <dl class="space-y-1.5">
                             <div v-for="row in contact" :key="row.label" class="flex gap-2">
                                 <dt class="w-20 shrink-0 text-muted-foreground">{{ row.label }}</dt>
@@ -60,6 +69,22 @@ const breadcrumbs = computed(() => [
                                 <span class="truncate">{{ identity.display_name ?? identity.username ?? identity.external_id }}</span>
                             </li>
                         </ul>
+
+                        <h2 class="mb-1 mt-3 font-medium">{{ t('customer.tags') }}</h2>
+                        <div v-if="customer.tags?.length" class="flex flex-wrap gap-1">
+                            <span v-for="tag in customer.tags" :key="tag" class="rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground">{{ tag }}</span>
+                        </div>
+                        <p v-else class="text-muted-foreground">{{ t('customer.no_tags') }}</p>
+
+                        <h2 class="mb-1 mt-3 font-medium">{{ t('customer.addresses') }}</h2>
+                        <ul v-if="customer.addresses?.length" class="space-y-1.5">
+                            <li v-for="address in customer.addresses" :key="address.id" class="rounded-md border border-border px-2 py-1.5">
+                                <p>{{ [address.name, address.address1, address.city, address.province].filter(Boolean).join('، ') }}<template v-if="address.is_default"> · {{ t('customer.default_address') }}</template></p>
+                                <p v-if="address.phone" dir="ltr" class="text-start text-muted-foreground">{{ address.phone }}</p>
+                            </li>
+                        </ul>
+                        <p v-else class="text-muted-foreground">{{ t('customer.no_addresses') }}</p>
+
                         <h2 class="mb-1 mt-3 font-medium">{{ t('customers.notes') }}</h2>
                         <p class="whitespace-pre-line text-muted-foreground" dir="auto">{{ customer.notes || t('customer.no_notes') }}</p>
                     </section>
@@ -68,10 +93,10 @@ const breadcrumbs = computed(() => [
                 </aside>
 
                 <div class="grid content-start gap-4 xl:grid-cols-2">
-                    <section class="rounded-lg border bg-card">
-                        <h2 class="border-b px-3 py-2 text-xs font-medium">{{ t('customers.conversations') }}</h2>
+                    <section class="rounded-lg bg-card shadow-card">
+                        <h2 class="border-b border-border px-3 py-2 text-xs font-medium">{{ t('customers.conversations') }}</h2>
                         <p v-if="!conversations.length" class="px-3 py-6 text-center text-xs text-muted-foreground">{{ t('customers.no_conversations') }}</p>
-                        <ul class="divide-y">
+                        <ul class="divide-y divide-border">
                             <li v-for="c in conversations" :key="c.id">
                                 <Link :href="`/inbox?c=${c.id}`" class="flex items-start gap-2 px-3 py-2 text-xs hover:bg-muted/50">
                                     <PlatformBadge :platform="c.platform" />
@@ -87,7 +112,7 @@ const breadcrumbs = computed(() => [
 
                     <section class="space-y-2">
                         <h2 class="text-xs font-medium">{{ t('customer.orders') }}</h2>
-                        <p v-if="!(customer.orders ?? []).length" class="rounded-lg border bg-card px-3 py-6 text-center text-xs text-muted-foreground">{{ t('customer.no_orders') }}</p>
+                        <p v-if="!(customer.orders ?? []).length" class="rounded-lg bg-card px-3 py-6 text-center text-xs text-muted-foreground shadow-card">{{ t('customer.no_orders') }}</p>
                         <Link v-for="order in customer.orders ?? []" :key="order.id" :href="`/orders/${order.id}`" class="block rounded-lg hover:ring-2 hover:ring-primary/30">
                             <OrderCard :order="order" />
                         </Link>

@@ -1,9 +1,9 @@
 <?php
 
 use App\Analytics\ActivityLogger;
-use App\Bot\Ai\{AiReply, AiResponder, Classification};
+use App\Bot\Ai\{MessageClassifier, MessageClassification};
 use App\Bot\BotEngine;
-use App\Enums\{CommentIntent, Handler, SenderType, Platform};
+use App\Enums\{BotIntent, Handler, SenderType, Platform};
 use App\Models\{ActivityLog, BotRule, BotSetting, Conversation, Message, Product, ProductVariant, ChannelAccount, Customer, CustomerIdentity};
 use Illuminate\Support\Facades\Event;
 
@@ -71,16 +71,11 @@ it('writes a bot run and activity log for the outside-hours message', function (
 });
 
 it('tracks classifier token cost on a complaint handover', function () {
-    app()->instance(AiResponder::class, new class implements AiResponder
+    app()->instance(MessageClassifier::class, new class implements MessageClassifier
     {
-        public function classify(string $text): Classification
+        public function classifyMessage(string $text): MessageClassification
         {
-            return new Classification(CommentIntent::Complaint, 0.9, false, 'claude-haiku-4-5-20251001', 1000, 500, 120);
-        }
-
-        public function reply(array $history, array $catalogLines, string $systemPrompt): AiReply
-        {
-            throw new RuntimeException('a complaint should hand over before ever calling reply()');
+            return new MessageClassification(BotIntent::Complaint, 'negative', 0.9, 'claude-haiku-4-5-20251001', 1000, 500, 120);
         }
     });
 

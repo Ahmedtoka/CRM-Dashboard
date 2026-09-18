@@ -1,5 +1,5 @@
 // Shapes for the Task 10 screens (comments, orders list, customers, reports, settings, simulator).
-import type { Order, PlatformValue, Role, UserRef } from '@/types/crm';
+import type { Order, PlatformValue, QuickReplyScope, Role, UserRef } from '@/types/crm';
 
 export type CommentStatus = 'new' | 'replied' | 'hidden' | 'ignored';
 export type CommentIntent = 'buy' | 'question' | 'complaint' | 'spam' | 'other';
@@ -51,10 +51,6 @@ export interface Paginated<T> {
 }
 
 export interface OrderRow extends Order {
-    financial_status?: string | null;
-    fulfillment_status?: string | null;
-    shopify_order_id?: string | null;
-    shopify_draft_order_id?: string | null;
     shipping?: { name: string | null; phone: string | null; city: string | null; address: string | null };
     note?: string | null;
     paid_at?: string | null;
@@ -117,10 +113,49 @@ export interface BotMetrics {
     comments_replied: number;
     comments_hidden: number;
     private_replies: number;
+    flows: FlowUsageRow[];
+}
+
+/** Reports → Bot: one guided flow's usage in the selected period (MetricsService::flowUsage). */
+export interface FlowUsageRow {
+    key: string;
+    title: string;
+    is_active: boolean;
+    started: number;
+    finished: number;
+    handovers: number;
+    cases: number;
+    records_cases: boolean;
 }
 
 /** hourlyHeatmap: [weekday 0 (Sunday)–6][hour 0–23]. */
 export type HeatmapGrid = number[][];
+
+export interface QuickReplyTopRow {
+    id: number;
+    shortcut: string;
+    title: string;
+    scope: QuickReplyScope;
+    category: string | null;
+    uses: number;
+    users: number;
+    platforms: Partial<Record<PlatformValue, number>>;
+    last_used_at: string | null;
+}
+
+export interface QuickReplyAgentRow {
+    user: UserRef;
+    uses: number;
+    replies: number;
+}
+
+export interface QuickReplyUnusedRow {
+    id: number;
+    shortcut: string;
+    title: string;
+    scope: QuickReplyScope;
+    last_used_at: string | null;
+}
 
 export interface ManagedUser {
     id: number;
@@ -178,6 +213,45 @@ export interface BotSettings {
     low_value_phrases: string[] | null;
     allowed_link_domains: string[] | null;
     spam_repeat_threshold: number;
+    burst_wait_seconds: number;
+    burst_max_wait_seconds: number;
+    typing_ms_per_char: number;
+    order_lookup_enabled: boolean;
+}
+
+export type BotIntentRoute = 'answer' | 'lookup' | 'collect_then_handover' | 'handover';
+
+/** One row of `bot_intents` (settings/BotIntents). */
+export interface BotIntentRow {
+    id: number;
+    key: string;
+    group: string;
+    label_ar: string;
+    label_en: string;
+    route: BotIntentRoute;
+    flow_key: string | null;
+    priority: 'low' | 'medium' | 'high';
+    queue: 'agents' | 'senior' | null;
+    script_keys: string[] | null;
+    required_details: string[] | null;
+    keywords: string[] | null;
+    is_active: boolean;
+    sort: number;
+}
+
+/** A guided flow an intent can start (bot_flows). */
+export interface BotFlowOption {
+    key: string;
+    title_ar: string;
+    is_active: boolean;
+}
+
+/** A `script.*` knowledge entry an intent can answer with. */
+export interface BotScriptOption {
+    id: number;
+    key: string;
+    title: string;
+    is_active: boolean;
 }
 
 export type RuleScope = 'comment' | 'message' | 'both';
@@ -246,7 +320,17 @@ export interface QuickReplyRow {
     title: string;
     body: string;
     platforms: PlatformValue[] | null;
+    scope: 'shared' | 'personal';
+    category_id: number | null;
+    use_count: number;
+    last_used_at: string | null;
     creator: { id: number; name: string } | null;
+    attachments: { id: number; type: 'image' | 'file'; original_name: string | null; thumb_url: string | null }[];
+}
+
+export interface QuickReplyVariable {
+    key: string;
+    alias: string;
 }
 
 export interface TagRow {
@@ -263,6 +347,97 @@ export interface CityRow {
     shipping_fee: string | number;
 }
 
+export interface BranchRow {
+    id: number;
+    governorate: string;
+    area_key: string;
+    area_ar: string;
+    area_en: string | null;
+    name: string;
+    address: string;
+    phone: string | null;
+    map_url: string | null;
+    hours: string | null;
+    aliases: string[] | null;
+    is_active: boolean;
+    sort: number;
+}
+
+/** Daily learning (design §6): one nightly report and the suggestions waiting for approval. */
+export interface BotLearningStats {
+    conversations?: number;
+    handovers?: number;
+    cases?: number;
+    top_intents?: string[];
+    /** Learning v2: counted from the day's per-conversation notes. */
+    conversations_reviewed?: number;
+    notes?: number;
+    cost_usd?: number;
+    sources?: { channel_account_id: number; name: string; count: number }[];
+    /** A report written before learning v2, from the demo conversations. */
+    demo?: boolean;
+}
+
+export type BotLearningNoteKind = 'unanswered' | 'wrong_answer' | 'agent_knowledge' | 'new_phrasing' | 'flow_friction';
+
+/** One note of today's per-conversation reviews, flattened for the "ملاحظات النهارده" tab. */
+export interface BotLearningNoteRow {
+    id: string;
+    conversation_id: number | null;
+    channel_account: string | null;
+    kind: BotLearningNoteKind;
+    summary: string;
+    quote: string;
+    agent_answer: string | null;
+    created_at: string | null;
+}
+
+export interface BotLearningToday {
+    reviewed: number;
+    notes: number;
+    cost_usd: number;
+    cap: number;
+}
+
+export interface BotLearningReportRow {
+    id: number;
+    report_date: string;
+    summary: string | null;
+    stats: BotLearningStats | null;
+    model: string | null;
+    input_tokens: number;
+    output_tokens: number;
+    pending_count?: number;
+}
+
+export interface BotSuggestionRow {
+    id: number;
+    type: 'script_text' | 'new_faq' | 'intent_keywords' | 'flow_step';
+    target: string | null;
+    /** The target in words (script title, intent name, flow › step); null when unknown. */
+    target_label?: string | null;
+    current: { body?: string; keywords?: string[]; text?: string | null; options?: string[] } | null;
+    proposed: {
+        body?: string;
+        key?: string;
+        title?: string;
+        keywords?: string[];
+        add?: string[];
+        text?: string;
+        options?: { index: number; title: string }[];
+    };
+    reason: string | null;
+    evidence: { conversation_ids?: number[]; quote?: string } | null;
+    status: 'pending' | 'approved' | 'rejected';
+    decided_at: string | null;
+    applied_at: string | null;
+    error: string | null;
+}
+
+export interface BotLearningReport extends BotLearningReportRow {
+    suggestions: BotSuggestionRow[];
+}
+
 export interface SimShipment {
     id: number;
     order_id: number;
@@ -277,4 +452,111 @@ export interface SimPost {
     external_id: string;
     caption: string | null;
     is_ad: boolean;
+}
+
+// Shopify connection screen (Task 8, spec §7).
+export type ShopifyStatus = 'connected' | 'error' | 'disconnected';
+export type ShopifyStage = 'shipping' | 'products' | 'customers' | 'orders';
+export type ShopifySyncResource = 'products' | 'customers' | 'orders';
+
+export interface ShopifyStageState {
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    total: number | null;
+    processed: number;
+    failed: number;
+    bulk_operation_id: string | null;
+}
+
+export interface ShopifyImportState {
+    stages?: Partial<Record<ShopifyStage, ShopifyStageState>>;
+    orders_since?: string;
+}
+
+export interface ShopifyIntegrationRow {
+    shop_domain: string;
+    shop_name: string | null;
+    currency: string | null;
+    status: ShopifyStatus;
+    last_error: string | null;
+    connected_at: string | null;
+    settings: {
+        default_shipping_fee: number;
+        auto_create_shipment: boolean;
+        stuck_order_days: number;
+        mismatch_alerts: boolean;
+        order_creation_enabled: boolean;
+    };
+    import_state: ShopifyImportState | null;
+    granted_scopes: string[];
+    missing_scopes: string[];
+}
+
+export interface ShopifyWebhookRow {
+    topic: string;
+    last_received_at: string | null;
+    registered_at: string | null;
+}
+
+export interface ShopifySyncRunRow {
+    id: number;
+    type: string;
+    resource: string;
+    range_from: string | null;
+    range_to: string | null;
+    status: string;
+    processed: number;
+    created: number;
+    updated: number;
+    skipped_stale: number;
+    failed: number;
+    errors: { ref: string; message: string; at: string }[];
+    started_at: string | null;
+    finished_at: string | null;
+}
+
+export interface ShopifyLastSync {
+    products: string | null;
+    customers: string | null;
+    orders: string | null;
+}
+
+export interface ShopifyTestResult {
+    ok: boolean;
+    shop_name?: string | null;
+    currency?: string | null;
+    missing_scopes?: string[];
+    optional_scopes?: string[];
+    error?: string | null;
+}
+
+export interface ShopifyStatusResponse {
+    integration: ShopifyIntegrationRow | null;
+    runs: ShopifySyncRunRow[];
+    webhooks: ShopifyWebhookRow[];
+}
+
+// Bot knowledge base, size chart and settings screen (Task 10, spec §4.2).
+export interface BotKnowledgeEntry {
+    id: number;
+    key: string;
+    title: string;
+    body: string;
+    is_active: boolean;
+    is_template: boolean;
+    sort: number;
+}
+
+export interface SizeChartData {
+    unit: string;
+    columns: string[];
+    rows: string[][];
+    note: string | null;
+}
+
+export interface BotPreviewResult {
+    reply: string | null;
+    would_handover: boolean;
+    reason: string | null;
+    intent: string | null;
+    grounding: string[];
 }

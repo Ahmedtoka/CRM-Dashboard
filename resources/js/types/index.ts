@@ -17,6 +17,8 @@ export interface NavItem {
     icon?: LucideIcon;
     isActive?: boolean;
     children?: NavItem[];
+    /** Sub-section label: consecutive children sharing one render under a small heading. */
+    section?: string;
 }
 
 export interface SharedData {
@@ -27,6 +29,7 @@ export interface SharedData {
     locale: 'ar' | 'en';
     platforms: PlatformOption[];
     channelAlerts: ChannelAlert[];
+    devTools?: boolean;
     broadcasting: BroadcastingConfig | null;
     ziggy: {
         location: string;
@@ -47,8 +50,16 @@ export interface User {
     color?: string | null;
     locale?: 'ar' | 'en' | null;
     platforms?: PlatformValue[];
+    preferences?: NotificationPreferences;
     created_at?: string;
     updated_at?: string;
+}
+
+export interface NotificationPreferences {
+    sound: boolean;
+    desktop_notifications: boolean;
+    notify_scope: 'all_visible' | 'mine_and_handover';
+    sound_volume: number;
 }
 
 export type BreadcrumbItemType = BreadcrumbItem;

@@ -20,9 +20,9 @@ const breadcrumbs = computed(() => [{ title: t('simulator.title'), href: '/simul
     <Head :title="t('simulator.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-4 p-4">
+        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('simulator.title')" :description="t('simulator.description')" />
-            <div class="grid gap-4 lg:grid-cols-3">
+            <div class="grid gap-4 lg:grid-cols-2">
                 <SimMessagePanel />
                 <SimCommentPanel :posts="posts" />
                 <SimBurstPanel />

@@ -3,6 +3,7 @@ import type { OrderRow } from '@/types/admin';
 export type Tone = 'neutral' | 'positive' | 'warning' | 'negative' | 'info';
 
 export const orderStatusTone: Record<string, Tone> = {
+    submitting: 'info',
     awaiting_payment: 'warning',
     confirmed: 'positive',
     cancelled: 'neutral',

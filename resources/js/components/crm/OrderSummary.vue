@@ -9,8 +9,8 @@ const { t, locale } = useI18n();
 </script>
 
 <template>
-    <section class="overflow-hidden rounded-lg border bg-card">
-        <h2 class="border-b px-3 py-2 text-xs font-medium">{{ t('orders.items') }}</h2>
+    <section class="overflow-hidden rounded-lg bg-card shadow-card">
+        <h2 class="border-b border-border px-3 py-2 text-xs font-medium">{{ t('orders.items') }}</h2>
         <div class="scrollbar-thin overflow-x-auto">
             <table class="w-full text-xs">
                 <thead class="bg-muted/50 text-2xs text-muted-foreground">
@@ -22,7 +22,7 @@ const { t, locale } = useI18n();
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="item in order.items ?? []" :key="item.id" class="border-t">
+                    <tr v-for="item in order.items ?? []" :key="item.id" class="border-t border-border">
                         <td class="px-3 py-2">
                             <span class="block" dir="auto">{{ item.title }}</span>
                             <span v-if="item.sku" class="text-2xs text-muted-foreground" dir="ltr">{{ item.sku }}</span>
@@ -34,13 +34,13 @@ const { t, locale } = useI18n();
                 </tbody>
             </table>
         </div>
-        <dl class="space-y-1 border-t px-3 py-2 text-xs">
+        <dl class="space-y-1 border-t border-border px-3 py-2 text-xs">
             <div class="flex justify-between"><dt class="text-muted-foreground">{{ t('order.subtotal') }}</dt><dd class="tabular-nums">{{ formatMoney(order.subtotal, locale) }}</dd></div>
             <div class="flex justify-between"><dt class="text-muted-foreground">{{ t('order.shipping_fee') }}</dt><dd class="tabular-nums">{{ formatMoney(order.shipping_fee, locale) }}</dd></div>
             <div v-if="order.discount" class="flex justify-between">
                 <dt class="text-muted-foreground">{{ t('order.discount') }}</dt><dd class="tabular-nums">−{{ formatMoney(order.discount, locale) }}</dd>
             </div>
-            <div class="flex justify-between border-t pt-1 text-sm font-semibold"><dt>{{ t('order.total') }}</dt><dd class="tabular-nums">{{ formatMoney(order.total, locale) }}</dd></div>
+            <div class="flex justify-between border-t border-border pt-1 text-sm font-bold"><dt>{{ t('order.total') }}</dt><dd class="tabular-nums">{{ formatMoney(order.total, locale) }}</dd></div>
         </dl>
     </section>
 </template>
