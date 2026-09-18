@@ -22,10 +22,21 @@ class ChannelRegistry
             return new FakeChannelAdapter($platform);
         }
 
-        $account = ChannelAccount::where('platform', $platform)->first();
+        // A live account that is in use wins over a simulator/demo account kept on file:
+        // a demo seed creates a fake account per platform with a lower id, and a real
+        // Instagram/WhatsApp account connected later from Settings → Integrations must
+        // not have its Meta webhooks parsed (and its replies "sent") by the fake adapter.
+        $hasLive = ChannelAccount::where('platform', $platform)
+            ->where('driver', 'live')
+            ->where('status', '!=', 'disconnected')
+            ->exists();
 
-        if ($account && $account->driver === 'fake') {
-            return new FakeChannelAdapter($platform);
+        if (! $hasLive) {
+            $account = ChannelAccount::where('platform', $platform)->first();
+
+            if ($account && $account->driver === 'fake') {
+                return new FakeChannelAdapter($platform);
+            }
         }
 
         return match ($platform) {

@@ -34,7 +34,7 @@ function connect(page: FacebookPageOption): void {
 }
 
 const breadcrumbs = computed(() => [
-    { title: t('settings.channels.title'), href: '/settings/channels' },
+    { title: t('settings.integrations.title'), href: '/settings/integrations' },
     { title: t('settings.channels.facebook.pages_title'), href: '/settings/channels/facebook/pages' },
 ]);
 </script>
@@ -45,7 +45,7 @@ const breadcrumbs = computed(() => [
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.channels.facebook.pages_title')" :description="t('settings.channels.facebook.pages_description')">
-                <Link href="/settings/channels" class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium hover:bg-muted">
+                <Link href="/settings/integrations" class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium hover:bg-muted">
                     <component :is="dir === 'rtl' ? ArrowRight : ArrowLeft" class="size-3.5" aria-hidden="true" />
                     {{ t('settings.channels.facebook.back') }}
                 </Link>

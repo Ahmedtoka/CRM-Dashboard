@@ -586,3 +586,96 @@ export interface BotPreviewResult {
     intent: string | null;
     grounding: string[];
 }
+
+/** Settings → Integrations. */
+export type HealthLevel = 'ok' | 'warning' | 'problem';
+
+export interface HealthCheckItem {
+    key: 'token' | 'webhooks' | 'phone' | 'link' | 'inbound';
+    status: HealthLevel;
+    code: string;
+    detail?: string;
+    missing?: string[];
+    fix?: 'reconnect' | 'reconnect_facebook' | 'resubscribe';
+}
+
+export interface IntegrationHealth {
+    status: HealthLevel;
+    checked_at: string;
+    checks: HealthCheckItem[];
+}
+
+/** A live Meta account as the Integrations page sees it — never carries a token. */
+export interface IntegrationAccount {
+    id: number;
+    platform: 'facebook' | 'instagram' | 'whatsapp';
+    name: string;
+    external_id: string | null;
+    status: 'connected' | 'error' | 'disconnected';
+    connected_at: string | null;
+    last_inbound_at: string | null;
+    last_webhook_at: string | null;
+    last_error: string | null;
+    has_token: boolean;
+    profile: {
+        picture: string | null;
+        username: string | null;
+        category: string | null;
+        method: 'login' | 'system_user' | null;
+        page_id: string | null;
+        waba_id: string | null;
+        display_phone_number: string | null;
+        verified_name: string | null;
+        quality_rating: string | null;
+        override_callback: boolean;
+    };
+    health: IntegrationHealth | null;
+    health_status: HealthLevel | null;
+    health_checked_at: string | null;
+}
+
+export interface IntegrationAccounts {
+    facebook: IntegrationAccount | null;
+    instagram: IntegrationAccount | null;
+    whatsapp: IntegrationAccount | null;
+}
+
+export interface IntegrationsMeta {
+    app_id_set: boolean;
+    app_secret_set: boolean;
+    verify_token: string;
+    callback_urls: { facebook: string; instagram: string; whatsapp: string };
+    can_override_callback: boolean;
+    required_scopes: Record<'facebook' | 'instagram' | 'whatsapp', { required: string[]; recommended: string[] }>;
+}
+
+export interface ShopifySummary {
+    status: string;
+    shop_name: string | null;
+    shop_domain: string | null;
+    connected_at: string | null;
+    last_error: string | null;
+}
+
+/** An error answer from an Integrations endpoint (`IntegrationException::toArray()`). */
+export interface IntegrationError {
+    ok: false;
+    error: string;
+    detail: string | null;
+}
+
+export interface WhatsAppPhoneOption {
+    id: string;
+    display_phone_number: string | null;
+    verified_name: string | null;
+    quality_rating: string | null;
+    code_verification_status: string | null;
+}
+
+export interface SystemTokenPage {
+    id: string;
+    name: string;
+    category: string | null;
+    picture: string | null;
+    missing_tasks: string[];
+}

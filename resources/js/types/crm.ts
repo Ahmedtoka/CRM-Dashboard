@@ -444,7 +444,7 @@ export interface ChannelAlert {
 /** A persisted bell notification (spec §5.4, Dashboard Experience Task 14). */
 export interface AppNotification {
     id: number;
-    type: 'conversation.handover' | 'conversation.handover_urgent' | 'note.mention';
+    type: 'conversation.handover' | 'conversation.handover_urgent' | 'note.mention' | 'channel.problem';
     data: Record<string, unknown>;
     read_at: string | null;
     created_at: string | null;

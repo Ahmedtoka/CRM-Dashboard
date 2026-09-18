@@ -45,3 +45,50 @@ function something()
 {
     // ..
 }
+
+/**
+ * Fakes the Meta Graph API by "METHOD path" (path without the version prefix and
+ * query string, e.g. "GET me/accounts", "POST 123/subscribed_apps"). A value is a
+ * JSON body (200), a [body, status] pair, or a callable receiving the request.
+ * Anything not listed answers 500 so an unexpected call fails loudly.
+ *
+ * @param  array<string, mixed>  $routes
+ */
+function fakeMetaGraph(array $routes): void
+{
+    // Calling it again in the same test replaces the routes (a second Http::fake()
+    // closure would never be reached: the first one answers every request).
+    static $registered = [];
+    $factory = Illuminate\Support\Facades\Http::getFacadeRoot();
+    $id = spl_object_id($factory);
+    $GLOBALS['__metaGraphRoutes'] = $routes;
+
+    if (($registered[$id] ?? null) === $factory) {
+        return;
+    }
+
+    $registered = [$id => $factory];
+
+    Illuminate\Support\Facades\Http::fake(function (Illuminate\Http\Client\Request $request) {
+        $routes = $GLOBALS['__metaGraphRoutes'];
+        $path = (string) parse_url($request->url(), PHP_URL_PATH);
+        $path = preg_replace('~^/v\d+\.\d+/~', '', $path);
+        $key = strtoupper($request->method()).' '.$path;
+
+        if (! array_key_exists($key, $routes)) {
+            return Illuminate\Support\Facades\Http::response(['error' => ['message' => 'unexpected '.$key, 'code' => 1]], 500);
+        }
+
+        $route = $routes[$key];
+
+        if (is_callable($route)) {
+            $route = $route($request);
+        }
+
+        if (is_array($route) && array_key_exists(0, $route) && is_int($route[1] ?? null)) {
+            return Illuminate\Support\Facades\Http::response($route[0], $route[1]);
+        }
+
+        return Illuminate\Support\Facades\Http::response($route);
+    });
+}

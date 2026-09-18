@@ -9,7 +9,7 @@ import { useNotifications } from '@/composables/useNotifications';
 import { formatKeys, useShortcuts } from '@/composables/useShortcuts';
 import AppLayout from '@/layouts/app/AppSidebarLayout.vue';
 import type { BreadcrumbItemType, SharedData } from '@/types';
-import { usePage } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import { Search, TriangleAlert } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
@@ -28,6 +28,7 @@ const page = usePage<SharedData>();
 const { t } = useI18n();
 
 const alerts = computed(() => page.props.channelAlerts ?? []);
+const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
 
 // `shift+?` opens the cheat-sheet from anywhere; the escape entry is
 // documentation only — Radix dialogs/sheets/menus already close on Esc.
@@ -62,7 +63,10 @@ useShortcuts([
         <div v-if="alerts.length" role="alert" class="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-900">
             <p v-for="alert in alerts" :key="alert.id" class="flex items-center gap-2">
                 <TriangleAlert class="size-3.5 shrink-0" />
-                {{ t('alerts.channel_error', { name: alert.name, error: alert.last_error ?? '' }) }}
+                <span class="min-w-0 flex-1">{{ t('alerts.channel_error', { name: alert.name, error: alert.last_error ?? '' }) }}</span>
+                <Link v-if="isAdmin" :href="alert.platform === 'shopify' ? '/settings/shopify' : '/settings/integrations'" class="shrink-0 font-semibold underline underline-offset-2">
+                    {{ t('settings.integrations.title') }}
+                </Link>
             </p>
         </div>
         <slot />

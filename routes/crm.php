@@ -27,6 +27,7 @@ use App\Http\Controllers\Web\Settings\CityController;
 use App\Http\Controllers\Web\Settings\FacebookLoginController;
 use App\Http\Controllers\Web\Settings\QuickReplyCategoryController;
 use App\Http\Controllers\Web\Settings\QuickReplyController;
+use App\Http\Controllers\Web\Settings\IntegrationController;
 use App\Http\Controllers\Web\Settings\ShopifyIntegrationController;
 use App\Http\Controllers\Web\Settings\TagController;
 use App\Http\Controllers\Web\Settings\UserController;
@@ -207,6 +208,20 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
         Route::post('users', [UserController::class, 'store'])->name('users.store');
         Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+
+        // Integrations (owner-facing connection cards); Channels below is its "Advanced" page.
+        Route::get('integrations', [IntegrationController::class, 'index'])->name('integrations.index');
+        Route::middleware('throttle:30,1')->group(function () {
+            Route::post('integrations/facebook/system-token', [IntegrationController::class, 'systemTokenPages'])->name('integrations.facebook.system-token');
+            Route::post('integrations/facebook/system-token/connect', [IntegrationController::class, 'systemTokenConnect'])->name('integrations.facebook.system-token.connect');
+            Route::get('integrations/instagram/discover', [IntegrationController::class, 'instagramDiscover'])->name('integrations.instagram.discover');
+            Route::post('integrations/instagram/connect', [IntegrationController::class, 'instagramConnect'])->name('integrations.instagram.connect');
+            Route::post('integrations/whatsapp/phone-numbers', [IntegrationController::class, 'whatsappPhoneNumbers'])->name('integrations.whatsapp.phone-numbers');
+            Route::post('integrations/whatsapp/connect', [IntegrationController::class, 'whatsappConnect'])->name('integrations.whatsapp.connect');
+            Route::post('integrations/{channel}/test', [IntegrationController::class, 'test'])->name('integrations.test');
+            Route::post('integrations/{channel}/fix', [IntegrationController::class, 'fix'])->name('integrations.fix');
+            Route::delete('integrations/{channel}', [IntegrationController::class, 'destroy'])->name('integrations.destroy');
+        });
 
         Route::get('channels', [ChannelController::class, 'index'])->name('channels.index');
         Route::post('channels', [ChannelController::class, 'store'])->name('channels.store');

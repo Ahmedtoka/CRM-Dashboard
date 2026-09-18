@@ -45,7 +45,7 @@ class InstagramAdapter implements ChannelAdapter
             $events = array_merge($events, $this->normalizeMessaging($entry, $this->platform()));
 
             $channelExternalId = (string) ($entry['id'] ?? '');
-            $entryOccurredAt = $this->fromMsTimestamp($entry['time'] ?? 0);
+            $entryOccurredAt = $this->fromMetaTimestamp($entry['time'] ?? 0);
 
             foreach ($entry['changes'] ?? [] as $change) {
                 if (($change['field'] ?? null) !== 'comments') {
@@ -97,16 +97,29 @@ class InstagramAdapter implements ChannelAdapter
             ], array_slice($options['quick_replies'], 0, 13));
         }
 
-        return $this->graph->post($account, 'me/messages', $payload);
+        return $this->graph->post($account, $this->messagesEndpoint($account), $payload);
     }
 
     /** Best effort on the fast path (final fix wave I9): one 3 s try, never the send client's retries. */
     public function typing(ChannelAccount $account, CustomerIdentity $to, bool $on): void
     {
-        rescue(fn () => $this->graph->postFast($account, 'me/messages', [
+        rescue(fn () => $this->graph->postFast($account, $this->messagesEndpoint($account), [
             'recipient' => ['id' => $to->external_id],
             'sender_action' => $on ? 'typing_on' : 'typing_off',
         ], 3), report: false);
+    }
+
+    /**
+     * Instagram messaging via the Messenger Platform is sent through the *linked
+     * Facebook Page*: `POST /{page-id}/messages` with that Page's access token (the
+     * documented form; `me/messages` only resolves to the same Page by accident of
+     * the token type).
+     */
+    protected function messagesEndpoint(ChannelAccount $account): string
+    {
+        $pageId = $account->linkedFacebookAccount()?->external_id;
+
+        return filled($pageId) ? "{$pageId}/messages" : 'me/messages';
     }
 
     public function replyToComment(ChannelAccount $account, string $commentExternalId, string $text): SendResult
@@ -126,6 +139,6 @@ class InstagramAdapter implements ChannelAdapter
             'message' => ['text' => $text],
         ];
 
-        return $this->graph->post($account, 'me/messages', $payload);
+        return $this->graph->post($account, $this->messagesEndpoint($account), $payload);
     }
 }

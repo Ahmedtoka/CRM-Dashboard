@@ -45,7 +45,7 @@ trait SendsMetaAttachments
             $payload['tag'] = $options['tag'];
         }
 
-        $result = $this->graph->post($account, 'me/messages', $payload);
+        $result = $this->graph->post($account, $this->messagesEndpoint($account), $payload);
 
         // Meta attachments carry no caption: it follows as its own text message (spec §1.4).
         // The media itself is already sent at this point — a caption problem (a thrown
@@ -68,5 +68,14 @@ trait SendsMetaAttachments
         }
 
         return $result;
+    }
+
+    /**
+     * The Send API edge. With a Page access token `me` is the Page itself; Instagram
+     * overrides this with the linked Page's explicit id.
+     */
+    protected function messagesEndpoint(ChannelAccount $account): string
+    {
+        return 'me/messages';
     }
 }

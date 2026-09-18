@@ -66,7 +66,7 @@ const mainNavItems = computed<NavItem[]>(() => {
         }
         settings.push(
             { title: t('nav.settings_users'), href: '/settings/users', section: team },
-            { title: t('nav.settings_channels'), href: '/settings/channels', section: team },
+            { title: t('nav.settings_integrations'), href: '/settings/integrations', section: team },
         );
     }
 

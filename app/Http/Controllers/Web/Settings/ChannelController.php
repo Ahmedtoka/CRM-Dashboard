@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web\Settings;
 
 use App\Channels\Adapters\MetaGraphClient;
+use App\Channels\Integrations\WhatsAppConnector;
 use App\Channels\Jobs\ProcessWebhookEvent;
 use App\Channels\MetaPageSubscriber;
 use App\Commerce\Jobs\ProcessShopifyWebhook;
@@ -80,6 +81,17 @@ class ChannelController extends Controller
             return response()->json(['ok' => false, 'error' => 'missing_external_id']);
         }
 
+        // A WhatsApp phone number id has no `name` field: read the number's own fields.
+        if ($channel->platform === Platform::WhatsApp) {
+            $phone = $this->graph->get($channel, $channel->external_id, ['fields' => 'display_phone_number,verified_name']);
+
+            if ($phone->failed()) {
+                return response()->json(['ok' => false, 'error' => $phone->json('error.message') ?? 'graph_api_error']);
+            }
+
+            return response()->json(['ok' => true, 'page_name' => trim($phone->json('verified_name').' '.$phone->json('display_phone_number'))]);
+        }
+
         $pageResponse = $this->graph->get($channel, $channel->external_id, ['fields' => 'name']);
 
         if ($pageResponse->failed()) {
@@ -135,7 +147,10 @@ class ChannelController extends Controller
             return response()->json(['ok' => false, 'error' => 'missing_external_id']);
         }
 
-        $result = $this->subscriber->subscribe($channel, $pageId);
+        // WhatsApp subscribes the app to the WhatsApp Business Account, not to a Page.
+        $result = $channel->platform === Platform::WhatsApp
+            ? app(WhatsAppConnector::class)->subscribe($channel)
+            : $this->subscriber->subscribe($channel, $pageId);
 
         if (! $result->success) {
             return response()->json(['ok' => false, 'error' => $result->error]);

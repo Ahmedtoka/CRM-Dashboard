@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use App\Enums\Platform;
+use Database\Factories\ChannelAccountFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ChannelAccount extends Model
 {
-    /** @use HasFactory<\Database\Factories\ChannelAccountFactory> */
+    /** @use HasFactory<ChannelAccountFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -21,7 +22,15 @@ class ChannelAccount extends Model
         'status',
         'last_webhook_at',
         'last_error',
+        'profile',
+        'connected_at',
+        'health',
+        'health_status',
+        'health_checked_at',
     ];
+
+    /** Tokens and other secrets never leave the server (Inertia props, JSON). */
+    protected $hidden = ['credentials'];
 
     protected function casts(): array
     {
@@ -29,6 +38,10 @@ class ChannelAccount extends Model
             'platform' => Platform::class,
             'credentials' => 'encrypted:array',
             'last_webhook_at' => 'datetime',
+            'profile' => 'array',
+            'connected_at' => 'datetime',
+            'health' => 'array',
+            'health_checked_at' => 'datetime',
         ];
     }
 
@@ -38,6 +51,22 @@ class ChannelAccount extends Model
     public function conversations(): HasMany
     {
         return $this->hasMany(Conversation::class);
+    }
+
+    public function isLive(): bool
+    {
+        return $this->driver === 'live';
+    }
+
+    /**
+     * The WhatsApp Business Account id of a WhatsApp number (kept with the non-secret
+     * profile data; older manual setups may still have it in the credentials).
+     */
+    public function wabaId(): ?string
+    {
+        $id = $this->profile['waba_id'] ?? $this->credentials['waba_id'] ?? null;
+
+        return filled($id) ? (string) $id : null;
     }
 
     /**

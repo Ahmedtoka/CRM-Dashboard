@@ -3,16 +3,15 @@
 namespace App\Http\Controllers\Web\Settings;
 
 use App\Channels\Adapters\MetaGraphClient;
-use App\Channels\MetaPageSubscriber;
-use App\Enums\Platform;
+use App\Channels\Integrations\ConnectionHealthCheck;
+use App\Channels\Integrations\FacebookPageConnector;
+use App\Channels\Integrations\IntegrationException;
 use App\Http\Controllers\Controller;
-use App\Models\ChannelAccount;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -29,7 +28,7 @@ use Inertia\Response;
  * pages    → picker: the Pages without any token.
  * select   → save the chosen Page on the Messenger account and subscribe its webhooks.
  *
- * Outcomes reach Settings → Channels as a `facebook_connect` flash of a code (+ page
+ * Outcomes reach Settings → Integrations as a `facebook_connect` flash of a code (+ page
  * name / Graph message) that the page translates, so it reads right in ar and en.
  */
 class FacebookLoginController extends Controller
@@ -40,9 +39,6 @@ class FacebookLoginController extends Controller
 
     private const PAGES_TTL_MINUTES = 15;
 
-    /** Page tasks needed to answer messages (MESSAGING) and comments (MODERATE). */
-    private const REQUIRED_TASKS = ['MESSAGING', 'MODERATE'];
-
     private const SCOPES = [
         'pages_show_list',
         'pages_messaging',
@@ -52,10 +48,7 @@ class FacebookLoginController extends Controller
         'pages_manage_engagement',
     ];
 
-    public function __construct(
-        private readonly MetaGraphClient $graph,
-        private readonly MetaPageSubscriber $subscriber,
-    ) {}
+    public function __construct(private readonly FacebookPageConnector $connector) {}
 
     /**
      * What the Channels page needs to render the button and the redirect-URI hint.
@@ -154,13 +147,11 @@ class FacebookLoginController extends Controller
                 ? $long->json('access_token')
                 : $short->json('access_token'));
 
-            $pages = $this->fetchPages($userToken);
+            $pages = $this->connector->pagesForToken($userToken);
         } catch (ConnectionException) {
             return $this->back('graph_error');
-        }
-
-        if (is_string($pages)) {
-            return $this->back('graph_error', $pages);
+        } catch (IntegrationException $e) {
+            return $this->back('graph_error', $e->detail);
         }
 
         if ($pages === []) {
@@ -183,7 +174,7 @@ class FacebookLoginController extends Controller
             return $this->back('expired');
         }
 
-        $connectedId = $this->liveMessengerAccount()?->external_id;
+        $connectedId = $this->connector->liveAccount()?->external_id;
 
         return Inertia::render('settings/FacebookPages', [
             // Deliberately rebuilt field by field: page access tokens never leave the server.
@@ -209,82 +200,18 @@ class FacebookLoginController extends Controller
             return $this->back('missing_tasks', null, $page['name']);
         }
 
-        $account = DB::transaction(function () use ($page) {
-            $account = $this->liveMessengerAccount() ?? new ChannelAccount([
-                'platform' => Platform::Facebook,
-                'driver' => 'live',
-            ]);
-
-            $account->fill([
-                'name' => $page['name'],
-                'external_id' => $page['id'],
-                'credentials' => array_merge($account->credentials ?? [], ['access_token' => $page['access_token']]),
-                'status' => 'connected',
-                'last_error' => null,
-            ])->save();
-
-            return $account;
-        });
-
         $request->session()->forget(self::PAGES_KEY);
 
-        $result = $this->subscriber->subscribe($account, $page['id']);
+        [$account, $result] = $this->connector->connect($page, 'login');
+
+        // Land on the Integrations card in its real state (token scopes, subscription).
+        rescue(fn () => app(ConnectionHealthCheck::class)->run($account), report: true);
 
         if (! $result->success) {
             return $this->back('subscribe_failed', $result->error, $page['name']);
         }
 
         return $this->back('connected', null, $page['name']);
-    }
-
-    /**
-     * Every page of `GET /me/accounts`, following the `after` cursor (rather than the
-     * `paging.next` URL, which embeds the token). Returns the Graph error message on failure.
-     *
-     * @return list<array{id: string, name: string, category: ?string, picture: ?string, tasks: ?list<string>, access_token: string}>|string
-     */
-    private function fetchPages(string $userToken): array|string
-    {
-        $client = $this->graph->withProof($this->oauth()->withToken($userToken), $userToken);
-        $pages = [];
-        $after = null;
-
-        for ($i = 0; $i < 20; $i++) {
-            $query = ['fields' => 'id,name,category,picture{url},tasks,access_token', 'limit' => 100];
-
-            if ($after !== null) {
-                $query['after'] = $after;
-            }
-
-            $response = $client->get('me/accounts', $query);
-
-            if ($response->failed()) {
-                return (string) ($response->json('error.message') ?? 'graph_api_error');
-            }
-
-            foreach ((array) $response->json('data', []) as $row) {
-                if (empty($row['id']) || empty($row['access_token'])) {
-                    continue;
-                }
-
-                $pages[] = [
-                    'id' => (string) $row['id'],
-                    'name' => (string) ($row['name'] ?? $row['id']),
-                    'category' => $row['category'] ?? null,
-                    'picture' => $row['picture']['data']['url'] ?? null,
-                    'tasks' => isset($row['tasks']) && is_array($row['tasks']) ? array_values(array_map('strval', $row['tasks'])) : null,
-                    'access_token' => (string) $row['access_token'],
-                ];
-            }
-
-            $after = $response->json('paging.cursors.after');
-
-            if (blank($response->json('paging.next')) || blank($after)) {
-                break;
-            }
-        }
-
-        return $pages;
     }
 
     /**
@@ -316,33 +243,12 @@ class FacebookLoginController extends Controller
     }
 
     /**
-     * Tasks the person lacks on the page. A null list (Meta may omit `tasks`, e.g. for
-     * business-granted pages) is treated as unknown and allowed.
-     *
      * @param  list<string>|null  $tasks
      * @return list<string>
      */
     private function missingTasks(?array $tasks): array
     {
-        if ($tasks === null) {
-            return [];
-        }
-
-        return array_values(array_diff(self::REQUIRED_TASKS, $tasks));
-    }
-
-    /**
-     * The Messenger account to (re)connect: the live one on file, preferring one that
-     * is not disconnected. Fake (simulator) accounts are left alone.
-     */
-    private function liveMessengerAccount(): ?ChannelAccount
-    {
-        return ChannelAccount::query()
-            ->where('platform', Platform::Facebook)
-            ->where('driver', 'live')
-            ->orderByRaw("case when status = 'disconnected' then 1 else 0 end")
-            ->orderBy('id')
-            ->first();
+        return FacebookPageConnector::missingTasks($tasks);
     }
 
     private function oauth(): PendingRequest
@@ -357,7 +263,7 @@ class FacebookLoginController extends Controller
 
     private function back(string $code, ?string $detail = null, ?string $name = null): RedirectResponse
     {
-        return redirect()->route('settings.channels.index')->with('facebook_connect', array_filter([
+        return redirect()->route('settings.integrations.index')->with('facebook_connect', array_filter([
             'code' => $code,
             'name' => $name,
             'detail' => $detail !== null ? MetaGraphClient::redact($detail) : null,

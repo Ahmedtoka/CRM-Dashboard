@@ -32,6 +32,12 @@ trait NormalizesMetaMessaging
                     continue;
                 }
 
+                // Instagram: a message the customer unsent arrives again flagged
+                // `is_deleted` (same mid, no content) — never a new message.
+                if ($item['message']['is_deleted'] ?? false) {
+                    continue;
+                }
+
                 $events[] = new InboundMessageData(
                     platform: $platform,
                     channelExternalId: $channelExternalId,
@@ -55,7 +61,10 @@ trait NormalizesMetaMessaging
                     channelExternalId: $channelExternalId,
                     customerExternalId: (string) ($item['sender']['id'] ?? ''),
                     customerName: $item['sender']['name'] ?? '',
-                    externalMessageId: 'postback:'.($item['sender']['id'] ?? '').':'.($item['timestamp'] ?? ''),
+                    // Instagram postbacks carry their own `mid`; Messenger's do not.
+                    externalMessageId: isset($item['postback']['mid']) && $item['postback']['mid'] !== ''
+                        ? (string) $item['postback']['mid']
+                        : 'postback:'.($item['sender']['id'] ?? '').':'.($item['timestamp'] ?? ''),
                     body: $item['postback']['title'] ?? '',
                     occurredAt: $this->fromMsTimestamp($item['timestamp'] ?? 0),
                     payload: isset($item['postback']['payload']) ? (string) $item['postback']['payload'] : null,
@@ -80,12 +89,17 @@ trait NormalizesMetaMessaging
             }
 
             if (isset($item['read'])) {
+                // Instagram (`messaging_seen`) names the message read: {read: {mid}}.
+                // Messenger only sends a watermark timestamp, which matches no message id.
+                $mid = $item['read']['mid'] ?? null;
                 $watermark = $item['read']['watermark'] ?? 0;
                 $events[] = new DeliveryReceiptData(
                     platform: $platform,
-                    externalMessageId: (string) $watermark,
+                    externalMessageId: is_string($mid) && $mid !== '' ? $mid : (string) $watermark,
                     status: MessageStatus::Read,
-                    occurredAt: $this->fromMsTimestamp($watermark),
+                    occurredAt: is_string($mid) && $mid !== ''
+                        ? $this->fromMsTimestamp($item['timestamp'] ?? 0)
+                        : $this->fromMsTimestamp($watermark),
                 );
             }
         }
@@ -96,6 +110,20 @@ trait NormalizesMetaMessaging
     protected function fromMsTimestamp(int|string $timestampMs): CarbonImmutable
     {
         return CarbonImmutable::createFromTimestamp(intdiv((int) $timestampMs, 1000));
+    }
+
+    /**
+     * Meta is inconsistent about `entry.time`: milliseconds on messaging entries but
+     * seconds on Instagram `changes` (comments) entries. Anything below 10^11 is read
+     * as seconds (10^11 s is the year 5138; 10^11 ms is 1973).
+     */
+    protected function fromMetaTimestamp(int|string $timestamp): CarbonImmutable
+    {
+        $value = (int) $timestamp;
+
+        return $value >= 100_000_000_000
+            ? CarbonImmutable::createFromTimestamp(intdiv($value, 1000))
+            : CarbonImmutable::createFromTimestamp($value);
     }
 
     /**

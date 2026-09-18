@@ -67,15 +67,24 @@ class WhatsAppAdapter implements ChannelAdapter
                 $contactsByWaId = collect($value['contacts'] ?? [])->keyBy('wa_id');
 
                 foreach ($value['messages'] ?? [] as $message) {
-                    $events[] = $this->normalizeMessage($message, $contactsByWaId, $channelExternalId);
+                    $normalized = $this->normalizeMessage($message, $contactsByWaId, $channelExternalId);
+
+                    if ($normalized !== null) {
+                        $events[] = $normalized;
+                    }
                 }
 
                 foreach ($value['statuses'] ?? [] as $status) {
+                    $error = $status['errors'][0] ?? null;
+
                     $events[] = new DeliveryReceiptData(
                         platform: $this->platform(),
                         externalMessageId: (string) ($status['id'] ?? ''),
                         status: $this->mapStatus($status['status'] ?? ''),
                         occurredAt: CarbonImmutable::createFromTimestamp((int) ($status['timestamp'] ?? 0)),
+                        error: is_array($error)
+                            ? trim('('.($error['code'] ?? '?').') '.($error['error_data']['details'] ?? $error['message'] ?? $error['title'] ?? ''))
+                            : null,
                     );
                 }
             }
@@ -85,17 +94,27 @@ class WhatsAppAdapter implements ChannelAdapter
     }
 
     /**
+     * One Cloud API `messages[]` item. Returns null for events that are not a new
+     * customer message: a reaction to an earlier message, and `system`/`request_welcome`
+     * notices.
+     *
      * @param  array<string, mixed>  $message
      * @param  Collection<string, array<string, mixed>>  $contactsByWaId
      */
-    private function normalizeMessage(array $message, Collection $contactsByWaId, string $channelExternalId): InboundMessageData
+    private function normalizeMessage(array $message, Collection $contactsByWaId, string $channelExternalId): ?InboundMessageData
     {
         $from = (string) ($message['from'] ?? '');
-        $contact = $contactsByWaId->get($from);
+        $contact = $contactsByWaId->get($from) ?? $contactsByWaId->first();
 
         $type = $message['type'] ?? 'text';
-        $body = $message['text']['body'] ?? '';
+
+        if (in_array($type, ['reaction', 'system', 'request_welcome', 'ephemeral'], true)) {
+            return null;
+        }
+
+        $body = (string) ($message['text']['body'] ?? '');
         $attachments = [];
+        $payload = null;
 
         if ($type === 'sticker') {
             $attachments[] = ['type' => 'sticker', 'id' => (string) ($message['sticker']['id'] ?? '')];
@@ -109,6 +128,31 @@ class WhatsAppAdapter implements ChannelAdapter
                 'voice' => $type === 'audio' && isset($media['voice']) ? (bool) $media['voice'] : null,
             ], fn ($v) => $v !== null);
             $body = (string) ($media['caption'] ?? '');
+        } elseif ($type === 'interactive') {
+            // A tap on one of our reply buttons / list rows: the title is what the
+            // customer "said", the id is the bot payload we sent with it.
+            $reply = $message['interactive']['button_reply'] ?? $message['interactive']['list_reply'] ?? [];
+            $body = (string) ($reply['title'] ?? '');
+            $payload = isset($reply['id']) && $reply['id'] !== '' ? (string) $reply['id'] : null;
+        } elseif ($type === 'button') {
+            // A quick-reply button on a template message.
+            $body = (string) ($message['button']['text'] ?? '');
+            $payload = isset($message['button']['payload']) && $message['button']['payload'] !== '' ? (string) $message['button']['payload'] : null;
+        } elseif ($type === 'location') {
+            $location = $message['location'] ?? [];
+            $lat = $location['latitude'] ?? null;
+            $lng = $location['longitude'] ?? null;
+            $place = trim(($location['name'] ?? '').' '.($location['address'] ?? ''));
+            $body = trim(implode("\n", array_filter([
+                '📍 '.($place !== '' ? $place : 'Location'),
+                $lat !== null && $lng !== null ? "https://maps.google.com/?q={$lat},{$lng}" : null,
+            ])));
+        } elseif ($type === 'contacts') {
+            $body = collect($message['contacts'] ?? [])
+                ->map(fn (array $c) => trim(($c['name']['formatted_name'] ?? '').' '.collect($c['phones'] ?? [])->pluck('phone')->filter()->implode(' ')))
+                ->filter()
+                ->map(fn (string $line) => '👤 '.$line)
+                ->implode("\n");
         }
 
         return new InboundMessageData(
@@ -121,6 +165,7 @@ class WhatsAppAdapter implements ChannelAdapter
             occurredAt: CarbonImmutable::createFromTimestamp((int) ($message['timestamp'] ?? 0)),
             attachments: $attachments,
             customerPhone: $from,
+            payload: $payload,
         );
     }
 
@@ -141,23 +186,37 @@ class WhatsAppAdapter implements ChannelAdapter
 
         if (isset($options['template'])) {
             $template = $options['template'];
+            $params = $template['params'] ?? [];
             $payload = [
                 'messaging_product' => 'whatsapp',
+                'recipient_type' => 'individual',
                 'to' => $to->external_id,
                 'type' => 'template',
                 'template' => [
                     'name' => $template['name'],
                     'language' => ['code' => $template['language']],
-                    'components' => [[
-                        'type' => 'body',
-                        'parameters' => array_map(
-                            fn ($param) => ['type' => 'text', 'text' => (string) $param],
-                            $template['params'] ?? [],
-                        ),
-                    ]],
                 ],
             ];
+
+            // A template without variables takes no components at all: an empty body
+            // `parameters` list is rejected by the Cloud API (parameter count mismatch).
+            if ($params !== []) {
+                $payload['template']['components'] = [[
+                    'type' => 'body',
+                    'parameters' => array_map(fn ($param) => ['type' => 'text', 'text' => (string) $param], array_values($params)),
+                ]];
+            }
+        } elseif (! empty($options['quick_replies']) && ($interactive = $this->interactive($text, $options['quick_replies'])) !== null) {
+            $payload = [
+                'messaging_product' => 'whatsapp',
+                'recipient_type' => 'individual',
+                'to' => $to->external_id,
+                'type' => 'interactive',
+                'interactive' => $interactive,
+            ];
         } else {
+            // Buttons that do not fit WhatsApp's interactive limits fall back to a
+            // numbered list the customer answers by typing the number (ButtonMatcher).
             if (! empty($options['quick_replies'])) {
                 $lines = array_map(fn (int $i, array $b) => ($i + 1).'- '.$b['title'], array_keys($options['quick_replies']), $options['quick_replies']);
                 $text .= "\n\n".implode("\n", $lines);
@@ -165,6 +224,7 @@ class WhatsAppAdapter implements ChannelAdapter
 
             $payload = [
                 'messaging_product' => 'whatsapp',
+                'recipient_type' => 'individual',
                 'to' => $to->external_id,
                 'type' => 'text',
                 'text' => ['body' => $text],
@@ -172,6 +232,56 @@ class WhatsAppAdapter implements ChannelAdapter
         }
 
         return $this->graph->post($account, "{$phoneNumberId}/messages", $payload);
+    }
+
+    /**
+     * Bot buttons as a WhatsApp interactive message: up to 3 become reply buttons
+     * (title <= 20 chars), up to 10 a list (row title <= 24 chars). Null when they do
+     * not fit (more than 10, a longer title, a body over 1024 chars): the caller then
+     * sends numbered text. Titles are never cut: a truncated option reads worse than
+     * typing a number.
+     *
+     * @param  array<int, array{title: string, payload: string}>  $buttons
+     * @return array<string, mixed>|null
+     */
+    private function interactive(string $text, array $buttons): ?array
+    {
+        $buttons = array_values($buttons);
+        $body = trim($text) === '' ? '…' : $text;
+
+        if (mb_strlen($body) > 1024 || count($buttons) > 10) {
+            return null;
+        }
+
+        $fits = fn (int $max) => collect($buttons)->every(
+            fn (array $b) => mb_strlen((string) $b['title']) <= $max && mb_strlen((string) $b['payload']) <= 200,
+        );
+
+        if (count($buttons) <= 3 && $fits(20)) {
+            return [
+                'type' => 'button',
+                'body' => ['text' => $body],
+                'action' => ['buttons' => array_map(fn (array $b) => [
+                    'type' => 'reply',
+                    'reply' => ['id' => (string) $b['payload'], 'title' => (string) $b['title']],
+                ], $buttons)],
+            ];
+        }
+
+        if (! $fits(24)) {
+            return null;
+        }
+
+        return [
+            'type' => 'list',
+            'body' => ['text' => $body],
+            'action' => [
+                'button' => (string) config('crm.whatsapp_list_button', 'الاختيارات'),
+                'sections' => [[
+                    'rows' => array_map(fn (array $b) => ['id' => (string) $b['payload'], 'title' => (string) $b['title']], $buttons),
+                ]],
+            ],
+        ];
     }
 
     /**

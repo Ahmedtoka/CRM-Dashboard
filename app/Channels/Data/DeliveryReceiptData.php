@@ -13,5 +13,7 @@ final readonly class DeliveryReceiptData
         public string $externalMessageId,
         public MessageStatus $status,
         public CarbonImmutable $occurredAt,
+        /** Why a send failed, when the platform says (WhatsApp `statuses[].errors[]`). */
+        public ?string $error = null,
     ) {}
 }

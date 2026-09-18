@@ -42,7 +42,14 @@ function fakeFacebookGraph(): void
         }
 
         if (str_contains($url, '/subscribed_apps')) {
-            return Http::response(['success' => true]);
+            // POST subscribes; GET (the post-connect health check) lists our app.
+            return $request->method() === 'GET'
+                ? Http::response(['data' => [['id' => '1122334455', 'subscribed_fields' => ['messages', 'feed']]]])
+                : Http::response(['success' => true]);
+        }
+
+        if (str_contains($url, '/debug_token')) {
+            return Http::response(['data' => ['is_valid' => true, 'expires_at' => 0, 'scopes' => ['pages_messaging', 'pages_manage_metadata']]]);
         }
 
         return Http::response(['error' => ['message' => 'unexpected '.$url]], 500);
@@ -84,7 +91,7 @@ it('refuses to start without an app id', function () {
     config(['crm.meta.app_id' => null]);
 
     $this->actingAs($this->admin)->get('/settings/channels/facebook/connect')
-        ->assertRedirect('/settings/channels')
+        ->assertRedirect('/settings/integrations')
         ->assertSessionHas('facebook_connect.code', 'app_id_missing');
 });
 
@@ -93,7 +100,7 @@ it('rejects a missing or mismatched state', function () {
     startLogin($this);
 
     $this->get('/settings/channels/facebook/callback?code=abc&state=wrong')
-        ->assertRedirect('/settings/channels')
+        ->assertRedirect('/settings/integrations')
         ->assertSessionHas('facebook_connect.code', 'state_mismatch');
 
     // The state is single-use: even the right one is refused after a mismatch consumed it.
@@ -108,7 +115,7 @@ it('handles the person cancelling the dialog', function () {
     $state = startLogin($this);
 
     $this->get("/settings/channels/facebook/callback?error=access_denied&error_reason=user_denied&state={$state}")
-        ->assertRedirect('/settings/channels')
+        ->assertRedirect('/settings/integrations')
         ->assertSessionHas('facebook_connect.code', 'cancelled');
 
     Http::assertNothingSent();
@@ -150,7 +157,7 @@ it('saves the picked page on a new live messenger account and subscribes it', fu
     $this->get("/settings/channels/facebook/callback?code=c&state={$state}");
 
     $this->post('/settings/channels/facebook/pages/111')
-        ->assertRedirect('/settings/channels')
+        ->assertRedirect('/settings/integrations')
         ->assertSessionHas('facebook_connect', ['code' => 'connected', 'name' => 'Le Voile']);
 
     $account = ChannelAccount::where('platform', 'facebook')->where('driver', 'live')->sole();
@@ -159,7 +166,7 @@ it('saves the picked page on a new live messenger account and subscribes it', fu
         ->and($account->status)->toBe('connected')
         ->and($account->credentials['access_token'])->toBe('PAGE-TOKEN-111');
 
-    Http::assertSent(fn ($r) => str_contains($r->url(), '/111/subscribed_apps') && $r->hasHeader('Authorization', 'Bearer PAGE-TOKEN-111')
+    Http::assertSent(fn ($r) => $r->method() === 'POST' && str_contains($r->url(), '/111/subscribed_apps') && $r->hasHeader('Authorization', 'Bearer PAGE-TOKEN-111')
         && $r['subscribed_fields'] === 'messages,messaging_postbacks,message_deliveries,message_reads,feed');
 
     // The list is single-use.
@@ -222,7 +229,7 @@ it('sends the admin back when the pages list has expired', function () {
 
     $this->travel(16)->minutes();
 
-    $this->get('/settings/channels/facebook/pages')->assertRedirect('/settings/channels')->assertSessionHas('facebook_connect.code', 'expired');
+    $this->get('/settings/channels/facebook/pages')->assertRedirect('/settings/integrations')->assertSessionHas('facebook_connect.code', 'expired');
 });
 
 it('forbids non-admins', function () {

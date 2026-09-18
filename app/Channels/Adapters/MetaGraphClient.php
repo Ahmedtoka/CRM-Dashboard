@@ -37,6 +37,76 @@ class MetaGraphClient
     }
 
     /**
+     * A client for an access token that is not (yet) stored on an account — a pasted
+     * System User token, a WhatsApp token being validated — with the same base URL,
+     * timeout and `appsecret_proof` as client().
+     */
+    public function forToken(string $token): PendingRequest
+    {
+        $version = config('crm.meta.graph_version', 'v23.0');
+
+        $client = Http::baseUrl('https://graph.facebook.com/'.$version)
+            ->withToken($token)
+            ->acceptJson()
+            ->timeout(10)
+            ->retry(2, 200, throw: false);
+
+        return $this->withProof($client, $token);
+    }
+
+    /**
+     * GET with an explicit token (see forToken()), redacted like every other call.
+     *
+     * @param  array<string, mixed>  $query
+     */
+    public function getWithToken(string $token, string $endpoint, array $query = []): Response
+    {
+        return $this->guarded(fn () => $this->forToken($token)->get($endpoint, $query));
+    }
+
+    /**
+     * POST with an explicit token (see forToken()).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function postWithToken(string $token, string $endpoint, array $payload = []): SendResult
+    {
+        return $this->toResult($this->guarded(fn () => $this->forToken($token)->post($endpoint, $payload)));
+    }
+
+    /**
+     * DELETE with an explicit token (unsubscribing a page / WABA on disconnect).
+     *
+     * @param  array<string, mixed>  $query
+     */
+    public function deleteWithToken(string $token, string $endpoint, array $query = []): SendResult
+    {
+        return $this->toResult($this->guarded(fn () => $this->forToken($token)->delete($endpoint, $query)));
+    }
+
+    /**
+     * `GET /debug_token` authorised with the app access token (`{app-id}|{app-secret}`).
+     * Null when the app id/secret are not configured.
+     */
+    public function debugToken(string $inputToken): ?Response
+    {
+        $appId = (string) config('crm.meta.app_id');
+        $secret = (string) config('crm.meta.app_secret');
+
+        if ($appId === '' || $secret === '') {
+            return null;
+        }
+
+        $version = config('crm.meta.graph_version', 'v23.0');
+
+        return $this->guarded(fn () => Http::baseUrl('https://graph.facebook.com/'.$version)
+            ->acceptJson()
+            ->timeout(10)
+            ->retry(2, 200, throw: false)
+            ->get('debug_token', ['input_token' => $inputToken, 'access_token' => $appId.'|'.$secret]));
+    }
+
+    /**
      * Meta requires `appsecret_proof` (an HMAC of the access token actually used for the
      * call, keyed by the app secret) on every Graph API request once "Require App Secret"
      * is enabled for the app — added here as a query parameter for both GET and POST.

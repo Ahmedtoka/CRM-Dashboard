@@ -7,7 +7,7 @@ import { router, usePage } from '@inertiajs/vue3';
 import { effectScope, ref, watch, type EffectScope } from 'vue';
 
 /** Maps a notification/broadcast `type` to its i18n leaf under `notifications.types.*`. */
-export const TYPE_KEY = { 'conversation.handover': 'handover', 'conversation.handover_urgent': 'handover_urgent', 'note.mention': 'mention' } as const;
+export const TYPE_KEY = { 'conversation.handover': 'handover', 'conversation.handover_urgent': 'handover_urgent', 'note.mention': 'mention', 'channel.problem': 'channel_problem' } as const;
 
 /** Desktop notification bodies never carry more than this many characters of a message (privacy ruling). */
 const PREVIEW_MAX = 80;
@@ -179,7 +179,7 @@ export function useNotifications() {
         items.value = [{ id: Number(e.data.id), type: e.type, data: e.data, read_at: null, created_at: new Date().toISOString() }, ...items.value].slice(0, 30);
         unreadNotifications.value += 1;
         play(); // handover and mentions always notify (subject to the sound/desktop preferences)
-        desktop(t(`notifications.types.${TYPE_KEY[e.type]}`), preview(String(e.data.customer_name ?? e.data.excerpt ?? '')), Number(e.data.conversation_id) || null);
+        desktop(t(`notifications.types.${TYPE_KEY[e.type] ?? 'mention'}`), preview(String(e.data.customer_name ?? e.data.excerpt ?? e.data.name ?? '')), Number(e.data.conversation_id) || null);
     }
 
     /**

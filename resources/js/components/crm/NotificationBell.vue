@@ -24,6 +24,13 @@ function itemText(n: AppNotification): string {
         return `${urgent}${t('notifications.handover_item', { name })} · ${reasonLabel(n)}`;
     }
 
+    if (n.type === 'channel.problem') {
+        const excerpt = String(n.data.excerpt ?? '');
+        const title = t('notifications.channel_problem_item', { name: String(n.data.name ?? '') });
+
+        return excerpt ? `${title}: ${excerpt}` : title;
+    }
+
     const excerpt = String(n.data.excerpt ?? '');
 
     return excerpt ? `${t('notifications.mention_item', { name: String(n.data.by ?? '') })}: ${excerpt}` : t('notifications.mention_item', { name: String(n.data.by ?? '') });
@@ -31,6 +38,10 @@ function itemText(n: AppNotification): string {
 
 function open(n: AppNotification): void {
     void notifications.markRead([n.id]);
+    if (n.type === 'channel.problem') {
+        router.visit('/settings/integrations');
+        return;
+    }
     const conversationId = n.data.conversation_id;
     if (conversationId) router.visit(`/inbox?c=${conversationId}`);
 }

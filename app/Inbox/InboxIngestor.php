@@ -24,6 +24,7 @@ use App\Media\Jobs\DownloadInboundMedia;
 use App\Models\BotSetting;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
+use App\Models\Customer;
 use App\Models\CustomerIdentity;
 use App\Models\Message;
 use App\Models\WebhookEvent;
@@ -31,6 +32,7 @@ use App\Support\SafeBroadcast;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class InboxIngestor
 {
@@ -176,6 +178,10 @@ class InboxIngestor
                 return;
             }
             $message->status = MessageStatus::Failed;
+
+            if ($d->error !== null && $d->error !== '') {
+                $message->error = Str::limit($d->error, 250);
+            }
         } else {
             $new = self::RANK[$d->status->value] ?? null;
             $current = self::RANK[$message->status->value] ?? null;
@@ -207,7 +213,7 @@ class InboxIngestor
      */
     public function openConversationFor(CustomerIdentity $i, ChannelAccount $a, ConversationSource $src = ConversationSource::Direct, ?int $sourceCommentId = null): Conversation
     {
-        \App\Models\Customer::query()->whereKey($i->customer_id)->lockForUpdate()->first();
+        Customer::query()->whereKey($i->customer_id)->lockForUpdate()->first();
 
         $query = fn () => Conversation::where('customer_id', $i->customer_id)
             ->where('channel_account_id', $a->id);
