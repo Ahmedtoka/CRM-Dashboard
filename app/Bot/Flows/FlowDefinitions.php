@@ -64,10 +64,8 @@ final class FlowDefinitions
                 'summary' => ['type' => 'summary', 'text' => 'ده ملخص طلب حضرتك:', 'next' => 'record'],
                 'record' => ['type' => 'record_case', 'case_type' => 'cancel_edit', 'script' => 'flow_cancel_recorded', 'next' => 'end'],
             ]]],
-            'order_tracking' => ['title_ar' => 'متابعة أوردر', 'definition' => ['start' => 'order', 'steps' => [
-                'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟ 🌸', 'next' => 'status'],
-                'status' => ['type' => 'status', 'next' => 'end'],
-            ]]],
+            // The owner's flow of 2026-09-19 (TrackingFlowUpgrade publishes it on live databases).
+            'order_tracking' => ['title_ar' => 'متابعة أوردر', 'definition' => TrackingFlowUpgrade::definition()],
             'branches' => ['title_ar' => 'الفروع والمواعيد', 'definition' => ['start' => 'list', 'steps' => [
                 'list' => ['type' => 'branches_list', 'text' => 'حضرتك في أنهي منطقة؟ اختاري أو اكتبي اسم المنطقة 👇', 'next' => 'end'],
             ]]],

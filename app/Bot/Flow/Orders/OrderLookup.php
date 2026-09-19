@@ -35,6 +35,9 @@ class OrderLookup
     /** Set after the first OMS failure of one find(): the rest of that lookup uses local data. */
     private bool $omsDown = false;
 
+    /** The current find()'s listing limit. */
+    private int $maxListed = self::MAX_LISTED;
+
     public function __construct(
         private readonly OmsClient $oms,
         private readonly OrderStatusResolver $resolver,
@@ -42,11 +45,13 @@ class OrderLookup
 
     /**
      * @param  array<string, mixed>  $entities  order_ref, phone, email, governorate (others ignored)
+     * @param  int  $maxListed  how many open orders a "multiple" result lists (the flow offers up to 13 buttons)
      * @return array{status:'found'|'multiple'|'not_found'|'missing_details', snapshots:list<OrderSnapshot>}
      */
-    public function find(Conversation $c, array $entities): array
+    public function find(Conversation $c, array $entities, int $maxListed = self::MAX_LISTED): array
     {
         $this->omsDown = false;
+        $this->maxListed = max(1, $maxListed);
 
         $ref = $this->ref($entities['order_ref'] ?? null);
         $phone = is_string($entities['phone'] ?? null) && trim($entities['phone']) !== '' ? PhoneNormalizer::toE164($entities['phone']) : null;
@@ -148,12 +153,12 @@ class OrderLookup
     {
         // Each snapshot may call the OMS: only the most recent orders are considered.
         // Found by her own mobile or email: ownership is proven (spec 2026-09-19 §1).
-        $snapshots = $orders->take(self::MAX_SNAPSHOTS)->map(fn (Order $o) => $this->snapshot($o, $entities, true, true))->values();
+        $snapshots = $orders->take(max(self::MAX_SNAPSHOTS, $this->maxListed))->map(fn (Order $o) => $this->snapshot($o, $entities, true, true))->values();
         $notCancelled = $snapshots->reject(fn (OrderSnapshot $s) => $s->statusKey === 'cancelled')->values();
         $open = $notCancelled->reject(fn (OrderSnapshot $s) => $s->statusKey === 'delivered')->values();
 
         if ($open->count() > 1) {
-            return ['status' => 'multiple', 'snapshots' => $open->take(self::MAX_LISTED)->all()];
+            return ['status' => 'multiple', 'snapshots' => $open->take($this->maxListed)->all()];
         }
 
         return ['status' => 'found', 'snapshots' => [$open->first() ?? $notCancelled->first() ?? $snapshots->first()]];

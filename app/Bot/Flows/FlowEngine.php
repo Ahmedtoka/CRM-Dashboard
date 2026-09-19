@@ -3,6 +3,7 @@
 namespace App\Bot\Flows;
 
 use App\Bot\Flows\Steps\FlowStep;
+use App\Bot\Flows\Steps\OrderStep;
 use App\Bot\Flows\Steps\StepOutcome;
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
@@ -21,6 +22,11 @@ use Throwable;
  * an answer resolver (`resolveTyped` / `answerValue`). Types with their own
  * rules (order, photo, branch, branches_list, status, record_case) live in
  * `Steps\*` via FlowSteps and report back a StepOutcome.
+ *
+ * A choice/status option may carry an `action` instead of a `next` step
+ * (2026-09-19): `flow:<key>` starts that flow with the verified order carried
+ * over (OrderStep::carried — its `order` step is then skipped), `menu:<key>`
+ * and `handover` run as the menu buttons do.
  */
 class FlowEngine
 {
@@ -231,7 +237,11 @@ class FlowEngine
 
         switch ($step['type'] ?? null) {
             case 'script':
-                if (($body = $this->prompter->script((string) ($step['script'] ?? ''), $state['data'])) !== null) {
+                // The step's own text wins over its script (2026-09-19, like record_case).
+                $own = trim((string) ($step['text'] ?? ''));
+                $body = $own !== '' ? $this->prompter->renderText($own, $state['data']) : $this->prompter->script((string) ($step['script'] ?? ''), $state['data']);
+
+                if ($body !== null) {
                     $this->send($c, $body);
                 }
 
@@ -361,7 +371,14 @@ class FlowEngine
                 FlowState::put($c, $state);
                 FlowState::setConfirm($c, null);
 
-                return $this->nextFor($step, $state['data']);
+                return $outcome->next ?? $this->nextFor($step, $state['data']);
+            case StepOutcome::JUMP:
+                $state['retries'] = 0;
+                FlowState::put($c, $state);
+                FlowState::setConfirm($c, null);
+                $this->jump($c, (string) $outcome->action);
+
+                return null;
             case StepOutcome::RETRY:
                 FlowState::put($c, $state);
                 $this->retry($c, $state, $step);
@@ -487,8 +504,38 @@ class FlowEngine
         FlowState::setConfirm($c, null);
 
         $optionNext = $option['next'] ?? null;
+        $action = $option['action'] ?? null;
+
+        if (! (is_string($optionNext) && $optionNext !== '') && is_string($action) && $action !== '') {
+            $this->jump($c, $action);
+
+            return;
+        }
 
         $this->run($c, is_string($optionNext) && $optionNext !== '' ? $optionNext : $this->nextFor($step, $state['data']));
+    }
+
+    /**
+     * An option's `action`: `flow:<key>` starts that flow carrying the verified order (no
+     * re-asking the number), anything else runs as a button payload. A target that cannot
+     * run (a missing or inactive flow) hands her to a person instead of leaving her in silence.
+     */
+    private function jump(Conversation $c, string $action): void
+    {
+        $action = trim($action);
+
+        if (str_starts_with($action, 'flow:')) {
+            $key = substr($action, 5);
+
+            if ($key !== '' && $this->begin($c, $key, OrderStep::carried(FlowState::flow($c)['data'] ?? []))) {
+                return;
+            }
+        } elseif ($this->runPayload($c, $action)) {
+            return;
+        }
+
+        Log::warning('flow.jump_failed', ['conversation_id' => $c->id, 'action' => $action]);
+        $this->handoverToHuman($c);
     }
 
     /** First branch whose data[field] is in `in`, else `next` (default "end"). */

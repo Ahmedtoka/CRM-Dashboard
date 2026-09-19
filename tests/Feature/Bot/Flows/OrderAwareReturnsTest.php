@@ -14,7 +14,6 @@ use App\Channels\Data\InboundMessageData;
 use App\Enums\Handler;
 use App\Enums\Platform;
 use App\Enums\SenderType;
-use App\Enums\ShipmentStatus;
 use App\Enums\UserRole;
 use App\Inbox\InboxIngestor;
 use App\Models\BotSetting;
@@ -28,7 +27,6 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
-use App\Models\Shipment;
 use App\Models\SupportCase;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -277,19 +275,6 @@ it('does not ask again for an order already proven in this flow (summary edit)',
     oarTurn('1047');
 
     expect(oarFlow()['step'])->toBe('order_items');
-});
-
-it('keeps the status-only reply of the tracking flow unchanged (no ownership question)', function () {
-    $order = oarOrder();
-    Shipment::factory()->for($order)->create(['status' => ShipmentStatus::InTransit]);
-    $c = oarSay('اهلا');
-    app(FlowEngine::class)->start($c, 'order_tracking');
-
-    oarTurn('1047');
-
-    expect(collect(oarBotBodies())->contains(fn ($b) => str_starts_with($b, 'الأوردر رقم #1047')))->toBeTrue()
-        ->and(oarBotBodies())->not->toContain(OrderStep::VERIFY_TEXT)
-        ->and(oarFlow())->toBeNull();
 });
 
 // ---- 2. Listing and picking items --------------------------------------------------------------

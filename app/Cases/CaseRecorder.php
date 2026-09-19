@@ -32,7 +32,7 @@ class CaseRecorder
     private const HIGH_COMPLAINTS = ['branch', 'delivery'];
 
     /** Flow-state bookkeeping that is not case data. */
-    private const INTERNAL_KEYS = ['case_id', 'order_verify', 'verified_order_ids', 'order_lookup_contact', 'items_pending'];
+    private const INTERNAL_KEYS = ['case_id', 'order_verify', 'verified_order_ids', 'order_lookup_contact', 'items_pending', 'order_choices'];
 
     public function __construct(
         private readonly ReturnPolicyChecker $policy,

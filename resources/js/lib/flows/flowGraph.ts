@@ -381,6 +381,10 @@ export const DEFAULT_STEP_TEXT: Record<string, string> = {
     summary: 'راجعي بياناتك:',
     // Empty: a new record_case step sends its script; the owner may write her own closing text instead.
     record_case: '',
+    // Empty: a script step sends its script unless the owner writes her own text (2026-09-19).
+    script: '',
+    // app/Bot/Flows/Steps/StatusStep.php CARD_TEXT
+    status: 'أهلاً يا {customer_first_name} 🌸 أوردر #{order_number} (اتطلب يوم {order_date} — {order_items})\n📦 الحالة: {order_status}\n🚚 متوقع يوصل: {order_eta}\n🔗 تتبع الشحنة: {order_tracking}',
 };
 
 /** Field names FlowPrompter already labels, so the summary shows them; used when the flow does not use them yet. */
@@ -423,6 +427,12 @@ export function defaultStep(def: FlowDefinition, type: string, id: string, catal
         step.options = [
             { title: 'اختيار ١', action: '', synonyms: [] },
             { title: 'اختيار ٢', action: '', synonyms: [] },
+        ];
+    }
+    if (type === 'status') {
+        step.options = [
+            { title: 'تمام شكرًا', value: 'thanks', synonyms: ['تمام', 'شكرا'] },
+            { title: 'كلم موظف', value: 'agent', action: 'handover', synonyms: ['موظف'] },
         ];
     }
     if (type === 'record_case') step.case_type = 'complaint';
@@ -579,6 +589,12 @@ export function describeError(message: string, t: Translate): string {
         ],
         [/^step '([^']*)' 'text' must be a string$/, (m) => t('flows.err.text_string', { step: m[1] })],
         [/^step '([^']*)' 'verify_owner' must be true or false$/, (m) => t('flows.err.verify_owner', { step: m[1] })],
+        [/^step '([^']*)' option #(\d+) 'action' must be/, (m) => t('flows.err.option_action_invalid', { step: m[1], n: Number(m[2]) + 1 })],
+        [
+            /^step '([^']*)' option #(\d+) has both a 'next' step and an 'action'$/,
+            (m) => t('flows.err.option_next_and_action', { step: m[1], n: Number(m[2]) + 1 }),
+        ],
+        [/^step '([^']*)' option #(\d+) 'when' must be/, (m) => t('flows.err.option_when', { step: m[1], n: Number(m[2]) + 1 })],
         [/^layout /, () => t('flows.err.layout')],
         [/^الزرار «(.*)» بيوديكي لفلو مش شغال: (\S+)$/, (m) => t('flows.err.option_inactive_flow', { title: m[1], ref: m[2] })],
     ];

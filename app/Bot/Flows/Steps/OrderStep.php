@@ -28,6 +28,11 @@ use Illuminate\Support\Collection;
  * Once proven, the step also keeps `customer_first_name` (the order's customer)
  * and `order_window` (`open`/`closed`: the 14 days from delivery) for the
  * return/exchange greeting and its branches.
+ *
+ * 2026-09-19 (order tracking): several open orders on her mobile/email come
+ * with one button each ("#1047 · 8/9", up to 13); a tap picks that order. A
+ * flow opened from another flow's option (`flow:<key>`) receives the verified
+ * order (self::carried) and this step is then skipped: she is not asked again.
  */
 final class OrderStep extends BaseStep
 {
@@ -36,6 +41,9 @@ final class OrderStep extends BaseStep
 
     private const MAX_VERIFY_TRIES = 2;
 
+    /** Messenger's quick-reply limit: at most this many orders are offered as buttons. */
+    public const MAX_ORDER_BUTTONS = 13;
+
     public const VERIFY_TEXT = 'لقيت الأوردر 🌸 للتأكيد، اكتبي آخر ٤ أرقام من الموبايل اللي طلبتي بيه';
 
     public const VERIFY_RETRY_TEXT = 'الأرقام دي مش مطابقة 🙏 جربي تاني، اكتبي آخر ٤ أرقام من الموبايل اللي طلبتي بيه';
@@ -43,6 +51,61 @@ final class OrderStep extends BaseStep
     public const VERIFY_FAILED_TEXT = 'مش قادر أتأكد من الأوردر ده 🙏 هحوّلك لحد من الفريق يساعدك';
 
     private const ORDER_KEYS = ['order_number', 'order_id', 'order_placed_at', 'order_status_line', 'order_status_key', 'order_governorate', 'order_failed_attempt', 'customer_first_name', 'order_window'];
+
+    /** What another flow receives of a verified order (FlowEngine jump to `flow:<key>`). */
+    private const CARRIED_KEYS = [...self::ORDER_KEYS, 'order_verified', 'verified_order_ids'];
+
+    /**
+     * The verified order of a flow's data, to start another flow with; empty when she has
+     * not proven an order is hers (nothing is carried then, the next flow asks as usual).
+     *
+     * @return array<string, mixed>
+     */
+    public static function carried(array $data): array
+    {
+        if (! self::hasVerifiedOrder($data)) {
+            return [];
+        }
+
+        return array_filter(array_intersect_key($data, array_flip(self::CARRIED_KEYS)), fn ($v) => $v !== null);
+    }
+
+    /** A proven order is already in the flow data (carried from another flow). */
+    public static function hasVerifiedOrder(array $data): bool
+    {
+        return ($data['order_verified'] ?? null) === true && is_numeric($data['order_id'] ?? null) && filled($data['order_number'] ?? null);
+    }
+
+    public function enter(Conversation $c, array $state, array $step): StepOutcome
+    {
+        // Carried over from the flow she came from (e.g. tracking to cancel/edit): never asked twice.
+        if (self::hasVerifiedOrder($state['data'] ?? []) && ! $this->verifying($state, $step)) {
+            return StepOutcome::continue();
+        }
+
+        return parent::enter($c, $state, $step);
+    }
+
+    /** A tap on one of the listed orders (`pick:<order id>`): only an order that was offered to her. */
+    public function payload(Conversation $c, array $state, array $step, string $value): ?StepOutcome
+    {
+        if (! str_starts_with($value, 'pick:') || $this->verifying($state, $step)) {
+            return null;
+        }
+
+        $id = (int) substr($value, 5);
+        $offered = array_map('intval', (array) ($state['data']['order_choices'] ?? []));
+        $order = in_array($id, $offered, true) ? Order::with('customer')->find($id) : null;
+
+        if ($order === null) {
+            return null;
+        }
+
+        // The list came from her own mobile/email: ownership is already proven.
+        $snapshot = $this->lookup->ownedSnapshot($order);
+
+        return StepOutcome::continue($this->verifies($step) ? $this->verifiedData($state, $snapshot) : $this->orderData($snapshot));
+    }
 
     public function __construct(
         FlowPrompter $prompter,
@@ -85,7 +148,7 @@ final class OrderStep extends BaseStep
             }
         }
 
-        $result = $this->lookup->find($c, $entities);
+        $result = $this->lookup->find($c, $entities, self::MAX_ORDER_BUTTONS);
 
         if ($result['status'] === 'found') {
             $snapshot = $result['snapshots'][0];
@@ -107,11 +170,15 @@ final class OrderStep extends BaseStep
             // Same sentence as TurnRunner::applyLookup.
             $list = array_map(fn (OrderSnapshot $s) => $s->number.' ('.$s->placedAt->setTimezone(OrderStatusText::TIMEZONE)->format('j/n').')', $result['snapshots']);
             $contact = array_intersect_key($entities, array_flip(['phone', 'email']));
+            $buttons = array_map(
+                fn (OrderSnapshot $s) => self::button($s->number.' · '.$s->placedAt->setTimezone(OrderStatusText::TIMEZONE)->format('j/n'), "step:{$state['key']}:{$state['step']}:pick:{$s->orderId}"),
+                $result['snapshots'],
+            );
 
             return StepOutcome::wait(
-                [['text' => 'لقيت أكتر من أوردر: '.implode('، ', $list).' تحبي أتابع أنهي واحد؟']],
+                [['text' => 'لقيت أكتر من أوردر: '.implode('، ', $list).' تحبي أتابع أنهي واحد؟', 'buttons' => $buttons]],
                 $state['retries'] + 1,
-                $contact !== [] ? ['order_lookup_contact' => $contact] : [],
+                ['order_choices' => array_map(fn (OrderSnapshot $s) => $s->orderId, $result['snapshots'])] + ($contact !== [] ? ['order_lookup_contact' => $contact] : []),
             );
         }
 
@@ -224,7 +291,7 @@ final class OrderStep extends BaseStep
     /** Continues with what she typed; order keys from an earlier pass (summary edit) are dropped. */
     private function keepTyped(string $text): StepOutcome
     {
-        return StepOutcome::continue(['order_ref_text' => trim($text), 'order_verified' => null, 'order_lookup_contact' => null] + array_fill_keys(self::ORDER_KEYS, null));
+        return StepOutcome::continue(['order_ref_text' => trim($text), 'order_verified' => null, 'order_lookup_contact' => null, 'order_choices' => null] + array_fill_keys(self::ORDER_KEYS, null));
     }
 
     /** The first word of the order's shipping name, else of its customer's name; null when neither is known. */
@@ -253,6 +320,7 @@ final class OrderStep extends BaseStep
             'order_governorate' => $s->governorate,
             'order_failed_attempt' => $s->failedAttempt,
             'order_ref_text' => null,
+            'order_choices' => null,
         ];
     }
 }

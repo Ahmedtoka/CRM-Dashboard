@@ -39,6 +39,29 @@ final class OrderStatusText
         'returned' => 'رجع لينا (مرتجع)',
     ];
 
+    /** The "📦 الحالة:" line of the tracking flow's status card (2026-09-19); unknown keys read as confirmed. */
+    public const CARD_LINES = [
+        'confirmed' => 'اتأكد وجاري تجهيزه',
+        'prepared' => 'اتجهز وهيتسلم لشركة الشحن قريب',
+        'shipped' => 'اتشحن ومع شركة الشحن',
+        'on_the_way' => 'مع المندوب في الطريق ليكي',
+        'delivered' => 'اتسلم',
+        'cancelled' => 'اتلغى',
+        'hold' => 'متوقف مؤقتًا والفريق بيراجعه',
+        'returned' => 'رجع من شركة الشحن',
+    ];
+
+    public const CARD_FAILED_ATTEMPT = 'المندوب حاول يسلمه ومعرفش';
+
+    public static function cardLine(string $key, bool $failedAttempt = false): string
+    {
+        if ($failedAttempt && ! in_array($key, ['delivered', 'cancelled'], true)) {
+            return self::CARD_FAILED_ATTEMPT;
+        }
+
+        return self::CARD_LINES[$key] ?? self::CARD_LINES['confirmed'];
+    }
+
     public static function shortLabel(string $key): string
     {
         return self::SHORT_LABELS[$key] ?? self::SHORT_LABELS['confirmed'];

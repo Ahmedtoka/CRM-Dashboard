@@ -5,7 +5,7 @@
  * buttons) and Messenger's limits (13 quick replies, 20-character titles).
  */
 import type { FlowDefinition, FlowListRow, FlowScriptOption, FlowStep } from '@/types/flows';
-import { MAX_OPTION_TITLE, MAX_QUICK_REPLIES, fieldsOf, parseAction } from './flowGraph';
+import { DEFAULT_STEP_TEXT, MAX_OPTION_TITLE, MAX_QUICK_REPLIES, fieldsOf, parseAction } from './flowGraph';
 
 /** `{time_greeting}` in the preview (the live bot picks صباح/مساء by Cairo time). */
 export const PREVIEW_GREETING = 'مساء الخير';
@@ -14,6 +14,14 @@ export const PREVIEW_CASE_ID = '1234';
 export const PREVIEW_FIRST_NAME = 'سارة';
 export const PREVIEW_ORDER_NUMBER = '1047';
 export const PREVIEW_EXCHANGE_PRODUCT = 'عباية كتان';
+/** Sample status-card values (app/Bot/Flows/Steps/StatusStep.php, an order on its way). */
+export const PREVIEW_ORDER_CARD: Record<string, string> = {
+    order_date: 'الخميس 17/9',
+    order_items: '3 قطع',
+    order_status: 'اتشحن ومع شركة الشحن',
+    order_eta: 'الإثنين 21/9 لحد الأربعاء 23/9',
+    order_tracking: 'https://track.example/1047',
+};
 
 export const MAIN_MENU_CHIP = 'القائمة الرئيسية';
 export const SUMMARY_CHIPS = ['تمام، سجل', 'عايزة أعدل'];
@@ -78,7 +86,8 @@ export function renderPlaceholders(text: string): string {
         .replaceAll('{case_id}', PREVIEW_CASE_ID)
         .replaceAll('{customer_first_name}', PREVIEW_FIRST_NAME)
         .replaceAll('{order_number}', PREVIEW_ORDER_NUMBER)
-        .replaceAll('{exchange_product_title}', PREVIEW_EXCHANGE_PRODUCT);
+        .replaceAll('{exchange_product_title}', PREVIEW_EXCHANGE_PRODUCT)
+        .replace(/\{(order_date|order_items|order_status|order_eta|order_tracking)\}/g, (_, key: string) => PREVIEW_ORDER_CARD[key]);
 }
 
 export function truncateTitle(title: string): { title: string; truncated: boolean } {
@@ -153,8 +162,8 @@ export function previewStep(
             break;
         case 'script':
         case 'record_case': {
-            // A record_case step's own text is sent instead of its script (RecordCaseStep).
-            if (step.type === 'record_case' && step.text?.trim()) {
+            // A record_case/script step's own text is sent instead of its script (RecordCaseStep, FlowEngine).
+            if (step.text?.trim()) {
                 model.text = renderPlaceholders(step.text);
                 break;
             }
@@ -184,6 +193,14 @@ export function previewStep(
             model.expects = step.type;
             break;
         case 'status':
+            // The card with its buttons for an order on its way (options shown only once delivered are left out).
+            if (step.options?.length) {
+                model.text = renderPlaceholders(step.text?.trim() || DEFAULT_STEP_TEXT.status);
+                model.chips = applyLimit(step.options.filter((o) => o.when !== 'finished').map((o) => chip(o.title)));
+                break;
+            }
+            model.note = 'status';
+            break;
         case 'handover':
         case 'end':
         case 'branches_list':

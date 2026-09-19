@@ -312,8 +312,9 @@ class MetricsService
             }
         }
 
-        // record_case steps open a case of their `case_type`; a `status` step opens a
-        // delivery_followup case for a delayed order (App\Bot\Flows\Steps\StatusStep).
+        // record_case steps open a case of their `case_type`; a `status` step's flow counts its
+        // delivery_followup cases (the step opened them itself before 2026-09-19, now its
+        // «الأوردر اتأخر» button leads to a record_case step).
         $caseTypes = $flows->mapWithKeys(fn (BotFlow $f) => [$f->key => collect($f->definition['steps'] ?? [])
             ->map(fn ($step) => match ($step['type'] ?? null) {
                 'record_case' => $step['case_type'] ?? null,

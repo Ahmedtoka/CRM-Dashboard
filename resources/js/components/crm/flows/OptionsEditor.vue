@@ -14,6 +14,8 @@ const props = defineProps<{
     flows: FlowListRow[];
     scripts: FlowScriptOption[];
     currentFlowKey: string;
+    /** order status steps: each option may be shown only for an open or a finished order */
+    allowWhen?: boolean;
 }>();
 
 const emit = defineEmits<{ 'update:modelValue': [options: FlowOption[]] }>();
@@ -24,6 +26,10 @@ const MAX_OPTIONS = MAX_QUICK_REPLIES;
 const MAX_TITLE = MAX_OPTION_TITLE;
 const ACTION_KINDS = ['flow', 'menu', 'script', 'handover'] as const;
 type ActionKind = (typeof ACTION_KINDS)[number];
+/** What a choice/status option may do instead of going to a step (FlowEngine jump, 2026-09-19). */
+const CHOICE_ACTION_KINDS = ['flow', 'menu', 'handover'] as const;
+type ChoiceGo = 'step' | (typeof CHOICE_ACTION_KINDS)[number];
+const WHEN_VALUES = ['open', 'finished'] as const;
 
 function update(index: number, patch: Partial<FlowOption>): void {
     const next = props.modelValue.map((o, i) => (i === index ? { ...o, ...patch } : o));
@@ -80,6 +86,37 @@ function targetKnown(option: FlowOption): boolean {
 
 function setActionKind(index: number, kind: string): void {
     update(index, { action: kind === 'handover' ? 'handover' : kind ? `${kind}:` : '' });
+}
+
+/** A choice option goes to a step (`next`) unless it carries an `action`. */
+function choiceGo(option: FlowOption): ChoiceGo {
+    if (option.action === undefined) return 'step';
+    const kind = actionKind(option);
+    return kind === 'flow' || kind === 'menu' || kind === 'handover' ? kind : 'step';
+}
+
+function setChoiceGo(index: number, go: string): void {
+    const option: FlowOption = { ...props.modelValue[index] };
+    if (go === 'step') {
+        delete option.action;
+    } else {
+        option.action = go === 'handover' ? 'handover' : `${go}:`;
+        delete option.next;
+    }
+    emit(
+        'update:modelValue',
+        props.modelValue.map((o, i) => (i === index ? option : o)),
+    );
+}
+
+function setWhen(index: number, value: string): void {
+    const option: FlowOption = { ...props.modelValue[index] };
+    if (value === 'open' || value === 'finished') option.when = value;
+    else delete option.when;
+    emit(
+        'update:modelValue',
+        props.modelValue.map((o, i) => (i === index ? option : o)),
+    );
 }
 
 function setActionKey(index: number, key: string): void {
@@ -216,6 +253,33 @@ const input = 'h-8 w-full rounded-md border border-input bg-background px-2 text
                     </div>
 
                     <label v-if="kind === 'choice'" class="block">
+                        <span class="mb-0.5 block text-2xs text-muted-foreground">{{ t('flows.option_go') }}</span>
+                        <select :value="choiceGo(option)" :class="input" @change="setChoiceGo(index, ($event.target as HTMLSelectElement).value)">
+                            <option value="step">{{ t('flows.option_go_step') }}</option>
+                            <option v-for="k in CHOICE_ACTION_KINDS" :key="k" :value="k">{{ t(`flows.action_${k}`) }}</option>
+                        </select>
+                    </label>
+
+                    <label v-if="kind === 'choice' && (choiceGo(option) === 'flow' || choiceGo(option) === 'menu')" class="block">
+                        <span class="mb-0.5 block text-2xs text-muted-foreground">{{ t('flows.option_target') }}</span>
+                        <select :value="actionKey(option)" :class="input" @change="setActionKey(index, ($event.target as HTMLSelectElement).value)">
+                            <option value="">{{ t('flows.action_none') }}</option>
+                            <option v-if="actionKey(option) && !targetKnown(option)" :value="actionKey(option)">{{ actionKey(option) }}</option>
+                            <option v-for="f in flows.filter((f) => f.key !== currentFlowKey)" :key="f.key" :value="f.key">
+                                {{ f.title_ar }}{{ f.is_active ? '' : ` (${t('flows.flow_not_running')})` }}
+                            </option>
+                        </select>
+                    </label>
+
+                    <label v-if="allowWhen" class="block">
+                        <span class="mb-0.5 block text-2xs text-muted-foreground">{{ t('flows.option_when') }}</span>
+                        <select :value="option.when ?? ''" :class="input" @change="setWhen(index, ($event.target as HTMLSelectElement).value)">
+                            <option value="">{{ t('flows.option_when_always') }}</option>
+                            <option v-for="w in WHEN_VALUES" :key="w" :value="w">{{ t(`flows.option_when_${w}`) }}</option>
+                        </select>
+                    </label>
+
+                    <label v-if="kind === 'choice' && choiceGo(option) === 'step'" class="block">
                         <span class="mb-0.5 block text-2xs text-muted-foreground">{{ t('flows.option_next') }}</span>
                         <select :value="option.next ?? ''" :class="input" @change="setNext(index, ($event.target as HTMLSelectElement).value)">
                             <option value="">{{ t('flows.option_next_default') }}</option>

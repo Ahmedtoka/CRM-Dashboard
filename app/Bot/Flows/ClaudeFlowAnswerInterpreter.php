@@ -58,6 +58,8 @@ class ClaudeFlowAnswerInterpreter implements FlowAnswerInterpreter
     {
         return match ($step['type'] ?? null) {
             'choice' => array_values(array_map(fn ($o) => (string) ($o['value'] ?? ''), $step['options'] ?? [])),
+            // The order status card's buttons (2026-09-19); a card without buttons takes no answer.
+            'status' => array_values(array_map(fn ($o) => (string) ($o['value'] ?? ''), $step['options'] ?? [])),
             'menu' => array_values(array_map(fn ($o) => (string) ($o['action'] ?? ''), $step['options'] ?? [])),
             'summary' => ['confirm', 'edit'],
             default => null,

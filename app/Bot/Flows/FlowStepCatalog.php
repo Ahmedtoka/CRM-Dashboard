@@ -29,10 +29,11 @@ final class FlowStepCatalog
             'product_link' => self::entry('لينك منتج للتبديل', 'Link', 'amber', ['text', 'field'], 'none', true),
             'branch' => self::entry('اختيار فرع', 'MapPin', 'emerald', ['text', 'field'], 'none', true),
             'branches_list' => self::entry('قائمة الفروع', 'Store', 'emerald', ['text'], 'none', true),
-            'status' => self::entry('حالة الأوردر', 'Truck', 'sky', [], 'none', true),
+            // The status card with its buttons (2026-09-19); options may be left empty.
+            'status' => self::entry('حالة الأوردر', 'Truck', 'sky', ['text', 'field'], 'choice', true),
             'summary' => self::entry('ملخص الطلب', 'ClipboardCheck', 'slate', ['text'], 'summary', true),
             'record_case' => self::entry('تسجيل حالة', 'FilePlus2', 'rose', ['case_type', 'text', 'script'], 'none', true),
-            'script' => self::entry('نص من السكريبتات', 'FileText', 'orange', ['script'], 'none', true),
+            'script' => self::entry('نص من السكريبتات', 'FileText', 'orange', ['script', 'text'], 'none', true),
             'handover' => self::entry('تحويل لموظف', 'UserRound', 'pink', [], 'none', false),
             'end' => self::entry('نهاية الفلو', 'CircleStop', 'slate', [], 'none', false),
         ];

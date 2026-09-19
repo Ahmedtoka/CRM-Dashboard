@@ -130,17 +130,28 @@ final class ReturnFlowUpgrade
     /** @return 'published'|'skipped' */
     public static function run(): string
     {
+        return self::publish(self::FLOW_KEY, self::definition(), self::NOTE);
+    }
+
+    /**
+     * Publishes $new as the next version of flow $flowKey (also used by TrackingFlowUpgrade):
+     * the live published version and any draft are archived (restorable), nothing happens
+     * when the live flow already is $new.
+     *
+     * @return 'published'|'skipped'
+     */
+    public static function publish(string $flowKey, array $new, string $note): string
+    {
         if (! Schema::hasTable('bot_flows')) {
             return 'skipped';
         }
 
-        $flow = DB::table('bot_flows')->where('key', self::FLOW_KEY)->first();
+        $flow = DB::table('bot_flows')->where('key', $flowKey)->first();
 
         if ($flow === null) {
             return 'skipped';
         }
 
-        $new = self::definition();
         $current = json_decode((string) $flow->definition, true);
 
         if (self::same($current, $new)) {
@@ -151,7 +162,7 @@ final class ReturnFlowUpgrade
         $now = now();
         $versions = Schema::hasTable('bot_flow_versions');
 
-        DB::transaction(function () use ($flow, $json, $now, $versions) {
+        DB::transaction(function () use ($flow, $json, $now, $versions, $note) {
             DB::table('bot_flows')->where('id', $flow->id)->update(['definition' => $json, 'updated_at' => $now]);
 
             if (! $versions) {
@@ -167,7 +178,7 @@ final class ReturnFlowUpgrade
                 'version' => ((int) DB::table('bot_flow_versions')->where('bot_flow_id', $flow->id)->max('version')) + 1,
                 'status' => 'published',
                 'definition' => $json,
-                'note' => self::NOTE,
+                'note' => $note,
                 'created_by_id' => null,
                 'published_by_id' => null,
                 'published_at' => $now,

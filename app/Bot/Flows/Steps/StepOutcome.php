@@ -5,8 +5,10 @@ namespace App\Bot\Flows\Steps;
 /**
  * What a step handler wants the engine to do: send `messages` in order, merge
  * `data` into the flow data (a null value removes the key), then continue to
- * the next step, wait on this one, run the retry path, hand over, or end the
- * flow (the conversation stays with the bot).
+ * the next step (or `next` when given: a picked option's own step), wait on
+ * this one, run the retry path, hand over, end the flow (the conversation
+ * stays with the bot), or jump: run a picked option's `action` (`flow:<key>`
+ * carrying a verified order, `menu:<key>`, `handover`) — 2026-09-19.
  */
 final readonly class StepOutcome
 {
@@ -20,6 +22,8 @@ final readonly class StepOutcome
 
     public const END = 'end';
 
+    public const JUMP = 'jump';
+
     /**
      * @param  list<array{text:string, buttons?:list<array{title:string, payload:string}>}>  $messages
      * @param  array<string, mixed>  $data
@@ -31,11 +35,20 @@ final readonly class StepOutcome
         public array $data = [],
         public ?int $retries = null,
         public ?string $handoverCategory = null,
+        public ?string $next = null,
+        public ?string $action = null,
     ) {}
 
-    public static function continue(array $data = [], array $messages = []): self
+    /** @param  string|null  $next  a step to go to instead of the step's branches/`next` */
+    public static function continue(array $data = [], array $messages = [], ?string $next = null): self
     {
-        return new self(self::CONTINUE, $messages, $data);
+        return new self(self::CONTINUE, $messages, $data, next: $next);
+    }
+
+    /** Saves `data`, sends `messages`, then runs `action` (flow:<key> | menu:<key> | handover). */
+    public static function jump(string $action, array $data = [], array $messages = []): self
+    {
+        return new self(self::JUMP, $messages, $data, action: $action);
     }
 
     public static function wait(array $messages = [], ?int $retries = null, array $data = []): self
@@ -56,7 +69,7 @@ final readonly class StepOutcome
     /** The same outcome with more data merged in (the given keys win). */
     public function withData(array $data): self
     {
-        return new self($this->kind, $this->messages, $data + $this->data, $this->retries, $this->handoverCategory);
+        return new self($this->kind, $this->messages, $data + $this->data, $this->retries, $this->handoverCategory, $this->next, $this->action);
     }
 
     public static function end(array $messages = []): self

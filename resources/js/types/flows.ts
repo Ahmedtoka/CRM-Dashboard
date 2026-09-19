@@ -4,10 +4,12 @@ export interface FlowOption {
     title: string;
     /** choice options: the stored answer value */
     value?: string;
-    /** menu options: `flow:<key>` | `menu:<key>` | `script:<key>` | `handover` */
+    /** menu options: `flow:<key>` | `menu:<key>` | `script:<key>` | `handover`; choice/status options: `flow:<key>` (the verified order carried) | `menu:<key>` | `handover`, instead of `next` */
     action?: string;
     /** choice options may jump to a step directly */
     next?: string;
+    /** status options: shown only while the order is on its way / once delivered or cancelled */
+    when?: 'open' | 'finished';
     synonyms?: string[];
 }
 

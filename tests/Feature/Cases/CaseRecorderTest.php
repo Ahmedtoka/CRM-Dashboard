@@ -160,17 +160,29 @@ it('records the case from the complaint flow and sends the closing script with t
         ->and($c->fresh()->handler)->toBe(Handler::Bot);
 });
 
-it('records a delivery follow-up case when tracking finds a returned order', function () {
-    $c = crConversation();
-    $order = Order::factory()->create(['order_number' => '4455']);
-    Shipment::factory()->for($order)->create(['status' => ShipmentStatus::Returned]);
+/** Tracks the order on $phone and taps «الأوردر اتأخر» on its status card; returns the bot's last reply. */
+function crTrackLate(string $phone): ?string
+{
+    $c = Conversation::firstOrFail();
     app(FlowEngine::class)->start($c, 'order_tracking');
 
-    app(InboxIngestor::class)->ingestMessage(new InboundMessageData(
-        Platform::Facebook, 'PAGE1', 'PSID-CR', 'Mona', 'cr-track', '4455', CarbonImmutable::now(),
-    ));
-    $c = $c->fresh();
-    app(FlowEngine::class)->handle($c, app(ReplyScheduler::class)->burst($c));
+    foreach ([[$phone, null], ['الأوردر اتأخر', 'step:order_tracking:status:late']] as [$text, $payload]) {
+        app(InboxIngestor::class)->ingestMessage(new InboundMessageData(
+            Platform::Facebook, 'PAGE1', 'PSID-CR', 'Mona', 'cr-t-'.uniqid(), $text, CarbonImmutable::now(), payload: $payload,
+        ));
+        $c = $c->fresh();
+        app(FlowEngine::class)->handle($c, app(ReplyScheduler::class)->burst($c));
+    }
+
+    return Message::where('sender_type', SenderType::Bot->value)->latest('id')->value('body');
+}
+
+it('records a delivery follow-up case when she says a returned order is late', function () {
+    $c = crConversation();
+    $order = Order::factory()->create(['order_number' => '4455', 'shipping_phone' => '+201001234567']);
+    Shipment::factory()->for($order)->create(['status' => ShipmentStatus::Returned]);
+
+    crTrackLate('01001234567');
 
     $case = SupportCase::sole();
     expect($case->type)->toBe('delivery_followup')
@@ -240,26 +252,18 @@ it('rejects an unknown case type', function () {
 
 it('keeps one open delivery follow-up case per order when she tracks it again', function () {
     $supervisor = User::factory()->create(['role' => UserRole::Supervisor]);
-    $held = Order::factory()->create(['order_number' => '6601']);
+    $held = Order::factory()->create(['order_number' => '6601', 'shipping_phone' => '+201001111111']);
     Shipment::factory()->for($held)->create(['status' => ShipmentStatus::Returned]);
-    $other = Order::factory()->create(['order_number' => '6602']);
+    $other = Order::factory()->create(['order_number' => '6602', 'shipping_phone' => '+201002222222']);
     Shipment::factory()->for($other)->create(['status' => ShipmentStatus::Returned]);
 
-    $track = function (string $number) {
-        $c = Conversation::firstOrFail();
-        app(FlowEngine::class)->start($c, 'order_tracking');
-        app(InboxIngestor::class)->ingestMessage(new InboundMessageData(
-            Platform::Facebook, 'PAGE1', 'PSID-CR', 'Mona', 'cr-t-'.uniqid(), $number, CarbonImmutable::now(),
-        ));
-        $c = $c->fresh();
-        app(FlowEngine::class)->handle($c, app(ReplyScheduler::class)->burst($c));
-
-        return Message::where('sender_type', SenderType::Bot->value)->latest('id')->value('body');
-    };
+    $phones = ['6601' => '01001111111', '6602' => '01002222222'];
+    $track = fn (string $number) => crTrackLate($phones[$number]);
 
     $c = crConversation();
-    expect($track('6601'))->toBe('هيتواصل معاكي حد من الفريق يتابع الأوردر 🌸')
-        ->and($track('6601'))->toBe('هيتواصل معاكي حد من الفريق يتابع الأوردر 🌸');
+    $recorded = 'سجلت طلب متابعة للأوردر #6601 🌸 الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت';
+    expect($track('6601'))->toBe($recorded)
+        ->and($track('6601'))->toBe($recorded);
 
     expect(SupportCase::count())->toBe(1)
         ->and(ConversationNote::where('conversation_id', $c->id)->count())->toBe(1)

@@ -31,7 +31,18 @@ const { t, locale } = useI18n();
 const CASE_TYPES = ['return', 'exchange', 'return_exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
 
 /** Flow placeholders FlowPrompter::renderText fills in a step's text (2026-09-19). */
-const PLACEHOLDERS = ['customer_first_name', 'order_number', 'exchange_product_title', 'case_id', 'time_greeting'];
+const PLACEHOLDERS = [
+    'customer_first_name',
+    'order_number',
+    'exchange_product_title',
+    'case_id',
+    'time_greeting',
+    'order_date',
+    'order_items',
+    'order_status',
+    'order_eta',
+    'order_tracking',
+];
 
 const step = computed<FlowStep>(() => props.def.steps[props.stepId]);
 const info = computed(() => props.catalog[step.value?.type] ?? null);
@@ -194,6 +205,7 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
                 @input="setText('text', ($event.target as HTMLTextAreaElement).value)"
             />
             <p v-if="step.type === 'record_case'" class="mt-1 text-2xs text-muted-foreground">{{ t('flows.record_case_text_hint') }}</p>
+            <p v-if="step.type === 'script'" class="mt-1 text-2xs text-muted-foreground">{{ t('flows.script_text_hint') }}</p>
             <details class="mt-1.5 rounded-md bg-muted/60 px-2.5 py-1.5 text-2xs text-muted-foreground">
                 <summary class="cursor-pointer select-none font-medium">{{ t('flows.placeholders_title') }}</summary>
                 <ul class="mt-1 space-y-0.5">
@@ -278,6 +290,7 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
                 :flows="flows"
                 :scripts="scripts"
                 :current-flow-key="flowKey"
+                :allow-when="step.type === 'status'"
                 @update:model-value="setOptions"
             />
         </section>

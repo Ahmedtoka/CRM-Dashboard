@@ -9,7 +9,6 @@ use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\FlowResult;
 use App\Bot\Flows\FlowState;
 use App\Channels\Data\InboundMessageData;
-use App\Enums\Handler;
 use App\Enums\Platform;
 use App\Enums\SenderType;
 use App\Enums\ShipmentStatus;
@@ -22,7 +21,6 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\Order;
 use App\Models\Shipment;
-use App\Models\SupportCase;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -137,8 +135,10 @@ it('lists several open orders found by phone and waits', function () {
         ->and(stepsLastBot()->body)->toStartWith('لقيت أكتر من أوردر: #')
         ->and(stepsLastBot()->body)->toEndWith('تحبي أتابع أنهي واحد؟');
 
+    // Typing one of them (her mobile already proved they are hers) opens its status card.
     stepsTurn('#2222');
-    expect(stepsFlow())->toBeNull()
+    expect(stepsFlow()['step'])->toBe('status')
+        ->and(stepsFlow()['data']['order_number'])->toBe('#2222')
         ->and(stepsLastBot()->body)->toContain('#2222');
 });
 
@@ -253,46 +253,6 @@ it('opens the area buttons on entering the branch step and branch buttons on an 
         ->and(stepsFlow()['step'])->toBe('branch');
 });
 
-it('sends the status line for a delivered order and ends', function () {
-    $o = Order::factory()->create(['order_number' => '7788']);
-    Shipment::factory()->for($o)->create(['status' => ShipmentStatus::Delivered]);
-    $c = stepsSay('اهلا');
-    app(FlowEngine::class)->start($c, 'order_tracking');
-
-    stepsTurn('7788');
-    expect(stepsLastBot()->body)->toBe('الأوردر رقم #7788 اتسلم، لو في أي مشكلة بلغيني 🌸')
-        ->and(stepsFlow())->toBeNull()
-        ->and(Conversation::first()->handler)->toBe(Handler::Bot);
-});
-
-it('says the team will follow up a returned order', function () {
-    $o = Order::factory()->create(['order_number' => '7799']);
-    Shipment::factory()->for($o)->create(['status' => ShipmentStatus::Returned]);
-    $c = stepsSay('اهلا');
-    app(FlowEngine::class)->start($c, 'order_tracking');
-
-    stepsTurn('7799');
-    $bodies = Message::where('sender_type', SenderType::Bot->value)->orderByDesc('id')->limit(2)->pluck('body')->all();
-    expect($bodies[0])->toBe('هيتواصل معاكي حد من الفريق يتابع الأوردر 🌸')
-        ->and($bodies[1])->toBe('هراجع الأوردر رقم #7799 مع الفريق وهرد على حضرتك')
-        ->and(stepsFlow())->toBeNull();
-});
-
-it('says the team will follow up an order with a failed delivery attempt', function () {
-    $o = Order::factory()->create(['order_number' => '7800']);
-    Shipment::factory()->for($o)->create(['status' => ShipmentStatus::FailedAttempt]);
-    $c = stepsSay('اهلا');
-    app(FlowEngine::class)->start($c, 'order_tracking');
-
-    stepsTurn('7800');
-    $bodies = Message::where('sender_type', SenderType::Bot->value)->orderByDesc('id')->limit(2)->pluck('body')->all();
-    expect(SupportCase::sole()->type)->toBe('delivery_followup')
-        ->and($bodies[0])->toBe('هيتواصل معاكي حد من الفريق يتابع الأوردر 🌸')
-        ->and($bodies[1])->toBe('الأوردر رقم #7800 مع المندوب في الطريق ليكي 🚚')
-        ->and(stepsFlow())->toBeNull()
-        ->and(Conversation::first()->handler)->toBe(Handler::Bot);
-});
-
 it('stores the failed attempt flag with the order', function () {
     $o = Order::factory()->create(['order_number' => '7801']);
     Shipment::factory()->for($o)->create(['status' => ShipmentStatus::FailedAttempt]);
@@ -301,17 +261,4 @@ it('stores the failed attempt flag with the order', function () {
 
     stepsTurn('7801');
     expect(stepsFlow()['data']['order_failed_attempt'])->toBeTrue();
-});
-
-it('hands over order tracking when no order was found', function () {
-    $c = stepsSay('اهلا');
-    app(FlowEngine::class)->start($c, 'order_tracking');
-
-    stepsTurn('999999');
-    stepsTurn('888888');
-    $c = Conversation::first();
-    expect(Message::where('sender_type', SenderType::Bot->value)->where('body', 'تمام، هيتواصل معاكي حد من الفريق يتابع الأوردر 🌸')->exists())->toBeTrue()
-        ->and($c->handler)->toBe(Handler::Human)
-        ->and($c->handover_category)->toBe('order_details_missing')
-        ->and(stepsFlow())->toBeNull();
 });

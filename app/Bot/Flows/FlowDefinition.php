@@ -32,6 +32,12 @@ final class FlowDefinition
 
     private const CASE_TYPES = ['return_exchange', 'return', 'exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
 
+    /** A choice/status option's `action` (2026-09-19): another flow, a menu, or a person. */
+    private const OPTION_ACTION_PATTERN = '/^(flow:[a-z0-9_]+|menu:[a-z0-9_]+|handover)$/';
+
+    /** A status option's `when`: shown only while the order is on its way, or once it is delivered/cancelled. */
+    public const OPTION_WHEN = ['open', 'finished'];
+
     /** @return list<string> error messages; empty means the definition is valid */
     public static function validate(array $def): array
     {
@@ -351,12 +357,14 @@ final class FlowDefinition
             $errors[] = "step '{$stepKey}' next must be a non-empty string";
         }
 
-        if ($type === 'script' && ! self::nonEmptyString($step['script'] ?? null)) {
+        // A script step may send its own text instead of a knowledge script (2026-09-19).
+        if ($type === 'script' && ! self::nonEmptyString($step['script'] ?? null) && trim((string) (is_string($step['text'] ?? null) ? $step['text'] : '')) === '') {
             $errors[] = "step '{$stepKey}' of type 'script' requires a 'script' key";
         }
 
-        if (in_array($type, ['menu', 'choice'], true)) {
-            $errors = [...$errors, ...self::validateOptions($stepKey, $type, $step['options'] ?? null, $stepKeys)];
+        // A status step's options are optional (without them it sends the card and goes on).
+        if (in_array($type, ['menu', 'choice'], true) || ($type === 'status' && array_key_exists('options', $step))) {
+            $errors = [...$errors, ...self::validateOptions($stepKey, $type === 'status' ? 'choice' : $type, $step['options'] ?? null, $stepKeys, $type)];
         }
 
         return $errors;
@@ -395,7 +403,7 @@ final class FlowDefinition
     }
 
     /** @param  list<string>  $stepKeys @return list<string> */
-    private static function validateOptions(string $stepKey, string $type, mixed $options, array $stepKeys): array
+    private static function validateOptions(string $stepKey, string $type, mixed $options, array $stepKeys, ?string $stepType = null): array
     {
         $errors = [];
 
@@ -444,6 +452,18 @@ final class FlowDefinition
 
             if (array_key_exists('next', $option)) {
                 $errors = [...$errors, ...self::validateTarget($stepKey, "option #{$i} next", $option['next'], $stepKeys)];
+            }
+
+            if ($type === 'choice' && array_key_exists('action', $option)) {
+                if (! is_string($option['action']) || preg_match(self::OPTION_ACTION_PATTERN, $option['action']) !== 1) {
+                    $errors[] = "step '{$stepKey}' option #{$i} 'action' must be flow:<key>, menu:<key> or handover";
+                } elseif (array_key_exists('next', $option)) {
+                    $errors[] = "step '{$stepKey}' option #{$i} has both a 'next' step and an 'action'";
+                }
+            }
+
+            if (array_key_exists('when', $option) && ($stepType !== 'status' || ! in_array($option['when'], self::OPTION_WHEN, true))) {
+                $errors[] = "step '{$stepKey}' option #{$i} 'when' must be open or finished (status steps only)";
             }
         }
 

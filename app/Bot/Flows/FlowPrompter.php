@@ -42,6 +42,12 @@ final class FlowPrompter
         'edit_details' => 'التعديل المطلوب',
     ];
 
+    /** Status-card values a step text may use (StatusStep sets them when it is entered). */
+    public const ORDER_PLACEHOLDERS = ['order_date', 'order_items', 'order_status', 'order_eta', 'order_tracking'];
+
+    /** A line holding one of these is left out when its value is empty (no window, no tracking). */
+    private const LINE_PLACEHOLDERS = ['order_eta', 'order_tracking'];
+
     /** @var array<string, ?array> definitions already resolved this instance, keyed by flow key */
     private array $resolvedDefinitions = [];
 
@@ -138,7 +144,9 @@ final class FlowPrompter
      * `{customer_first_name}` (the order's customer, set once she proved the order is hers —
      * "يا {customer_first_name}" is dropped when it is unknown), `{order_number}` (without "#";
      * the case number when there is no order), `{exchange_product_title}`, `{case_id}` and
-     * `{time_greeting}`.
+     * `{time_greeting}`; the status card's `{order_date}`, `{order_items}`, `{order_status}`,
+     * `{order_eta}` and `{order_tracking}` — a line whose `{order_eta}`/`{order_tracking}` is
+     * empty is dropped, and " — {order_items}" too when the count is unknown.
      */
     public function renderText(string $text, array $data): string
     {
@@ -157,7 +165,24 @@ final class FlowPrompter
             ? trim((string) $data['exchange_product']['title'])
             : '';
 
-        return $this->placeholders->render(strtr($text, [
+        $card = [];
+
+        foreach (self::ORDER_PLACEHOLDERS as $key) {
+            $value = is_scalar($data[$key] ?? null) ? trim((string) $data[$key]) : '';
+            $card['{'.$key.'}'] = $value;
+
+            if ($value !== '') {
+                continue;
+            }
+
+            if (in_array($key, self::LINE_PLACEHOLDERS, true)) {
+                $text = rtrim(preg_replace('/^[^\n]*\{'.$key.'\}[^\n]*(\n|$)/mu', '', $text) ?? $text);
+            } elseif ($key === 'order_items') {
+                $text = preg_replace('/\s*[—-]\s*\{order_items\}/u', '', $text) ?? $text;
+            }
+        }
+
+        return $this->placeholders->render(strtr($text, $card + [
             '{customer_first_name}' => $first,
             '{order_number}' => $number !== '' ? $number : (string) ($data['case_id'] ?? ''),
             '{exchange_product_title}' => $product !== '' ? $product : self::UNKNOWN_PRODUCT,
