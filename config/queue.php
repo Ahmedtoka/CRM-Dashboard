@@ -76,8 +76,8 @@ return [
         ],
 
         // Same Redis, for hour-long jobs (ShopifyReconcile, RunManualSync on the
-        // `commerce-long` queue; Supervisor program crm-commerce-long, --timeout=3600).
-        'redis-long' => [
+        // `commercelong` queue; Supervisor program crm-commercelong, --timeout=3600).
+        'redislong' => [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => 'long',

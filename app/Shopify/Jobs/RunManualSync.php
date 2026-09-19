@@ -37,12 +37,12 @@ class RunManualSync implements ShouldBeUnique, ShouldQueue
         public readonly ?string $to = null,
     ) {
         // Longer than the `redis` connection's retry_after (90 s): on Redis it
-        // runs on `redis-long` (retry_after 3700 s); any other default
+        // runs on `redislong` (retry_after 3700 s); any other default
         // connection (database/sync locally) is kept as is.
-        $this->onQueue('commerce-long');
+        $this->onQueue('commercelong');
 
         if (config('queue.default') === 'redis') {
-            $this->onConnection('redis-long');
+            $this->onConnection('redislong');
         }
     }
 

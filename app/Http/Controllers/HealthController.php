@@ -27,7 +27,7 @@ use Throwable;
  */
 class HealthController extends Controller
 {
-    private const QUEUES = ['outbound', 'webhooks', 'bot', 'commerce', 'commerce-long', 'media', 'default', 'analytics'];
+    private const QUEUES = ['outbound', 'webhooks', 'bot', 'commerce', 'commercelong', 'media', 'default', 'analytics'];
 
     /** Fully-qualified class name as a string so a missing class never breaks autoloading/parsing. */
     private const SHOPIFY_INTEGRATION_CLASS = 'App\\Shopify\\Connection\\ShopifyIntegration';

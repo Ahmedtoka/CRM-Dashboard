@@ -24,12 +24,12 @@ use Illuminate\Support\Str;
  * would let a second worker run it concurrently), and two executions of one
  * order submission can never create two store orders.
  */
-it('keeps redis retry_after at 90 and adds a redis-long connection for long jobs', function () {
+it('keeps redis retry_after at 90 and adds a redislong connection for long jobs', function () {
     expect(config('queue.connections.redis.retry_after'))->toBe(90)
-        ->and(config('queue.connections.redis-long.driver'))->toBe('redis')
-        ->and(config('queue.connections.redis-long.connection'))->toBe(config('queue.connections.redis.connection'))
-        ->and(config('queue.connections.redis-long.queue'))->toBe('long')
-        ->and(config('queue.connections.redis-long.retry_after'))->toBe(3700);
+        ->and(config('queue.connections.redislong.driver'))->toBe('redis')
+        ->and(config('queue.connections.redislong.connection'))->toBe(config('queue.connections.redis.connection'))
+        ->and(config('queue.connections.redislong.queue'))->toBe('long')
+        ->and(config('queue.connections.redislong.retry_after'))->toBe(3700);
 });
 
 it('gives the submission job a timeout below the redis retry_after', function () {
@@ -37,13 +37,13 @@ it('gives the submission job a timeout below the redis retry_after', function ()
         ->and((new SubmitOrderToProvider(1))->queue)->toBe('commerce');
 });
 
-it('puts reconcile and manual sync on the commerce-long queue of the redis-long connection when redis is the default', function () {
+it('puts reconcile and manual sync on the commercelong queue of the redislong connection when redis is the default', function () {
     config(['queue.default' => 'redis']);
 
     foreach ([new ReconcileShopify, new RunManualSync('products')] as $job) {
-        expect($job->queue)->toBe('commerce-long')
-            ->and($job->connection)->toBe('redis-long')
-            ->and($job->timeout)->toBeLessThan(config('queue.connections.redis-long.retry_after'));
+        expect($job->queue)->toBe('commercelong')
+            ->and($job->connection)->toBe('redislong')
+            ->and($job->timeout)->toBeLessThan(config('queue.connections.redislong.retry_after'));
     }
 });
 
@@ -51,7 +51,7 @@ it('keeps the default connection for reconcile and manual sync when the default 
     config(['queue.default' => $default]);
 
     foreach ([new ReconcileShopify, new RunManualSync('products')] as $job) {
-        expect($job->queue)->toBe('commerce-long')
+        expect($job->queue)->toBe('commercelong')
             ->and($job->connection)->toBeNull();
     }
 })->with(['sync', 'database']);
