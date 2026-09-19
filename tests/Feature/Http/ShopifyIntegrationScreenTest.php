@@ -122,7 +122,22 @@ it('connects when only an optional scope is missing', function () {
 
     $this->actingAs($this->admin)->postJson('/settings/shopify/test', ['shop_domain' => 'demo.myshopify.com', 'access_token' => 't'])
         ->assertJsonPath('missing_scopes', ['write_draft_orders'])
-        ->assertJsonPath('optional_scopes', ['write_draft_orders']);
+        ->assertJsonPath('optional_scopes', ['write_customers', 'write_orders', 'write_draft_orders']);
+
+    $this->actingAs($this->admin)->post('/settings/shopify/connect', ['shop_domain' => 'demo.myshopify.com', 'access_token' => 't'])->assertRedirect();
+    expect(ShopifyIntegration::first()->status)->toBe('connected');
+});
+
+it('connects a read-only store (all write scopes missing) for safe testing', function () {
+    Queue::fake();
+    $scopes = collect(config('crm.shopify.required_scopes'))->reject(fn ($h) => str_starts_with($h, 'write_'))->map(fn ($h) => ['handle' => $h])->values()->all();
+    Http::fake(['demo.myshopify.com/*' => function ($req) use ($scopes) {
+        if (str_contains($req['query'] ?? '', 'webhookSubscriptionCreate')) {
+            return Http::response(['data' => ['webhookSubscriptionCreate' => ['webhookSubscription' => ['id' => 'gid://shopify/WebhookSubscription/5'], 'userErrors' => []]]]);
+        }
+
+        return Http::response(['data' => ['shop' => ['name' => 'D', 'currencyCode' => 'EGP'], 'currentAppInstallation' => ['accessScopes' => $scopes]]]);
+    }]);
 
     $this->actingAs($this->admin)->post('/settings/shopify/connect', ['shop_domain' => 'demo.myshopify.com', 'access_token' => 't'])->assertRedirect();
     expect(ShopifyIntegration::first()->status)->toBe('connected');

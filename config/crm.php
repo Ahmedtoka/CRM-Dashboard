@@ -109,8 +109,12 @@ return [
         ],
 
         // Required scopes that don't block connecting when missing (shown as a
-        // warning): write_draft_orders only powers payment-link orders.
+        // warning). The write scopes only power creating orders, customers and
+        // payment-link orders from the CRM, so a store can be connected read-only
+        // (e.g. to test a real store without the CRM ever changing it).
         'optional_scopes' => [
+            'write_customers',
+            'write_orders',
             'write_draft_orders',
         ],
 

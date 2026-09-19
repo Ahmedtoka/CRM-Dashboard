@@ -1531,7 +1531,7 @@ const en: Messages = {
                 connect_hint: 'Run a successful connection test first',
                 test_ok: 'Connected: {name} ({currency})',
                 missing_scopes: 'Missing scopes on the app:',
-                optional_missing_scopes: 'You can connect now, but this scope is missing — payment links will not work until you add it:',
+                optional_missing_scopes: 'You can connect now (read-only), but these scopes are missing — creating orders or customers and payment links from the CRM will not work until you add them:',
                 reconnect: 'Reconnect with new credentials',
             },
             card: {
