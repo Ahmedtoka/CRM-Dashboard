@@ -297,6 +297,15 @@ export interface CaseSummarySection {
     lines: string[];
 }
 
+export interface CaseItem {
+    line_item_id: number | null;
+    title: string;
+    variant: string | null;
+    qty: number;
+    price: number | null;
+    exchange_only: boolean;
+}
+
 export interface SupportCase {
     id: number;
     type: CaseType;
@@ -308,6 +317,8 @@ export interface SupportCase {
     summary_header: string;
     summary_sections: CaseSummarySection[];
     data: Record<string, unknown>;
+    /** items picked in the return flow (spec 2026-09-19 §2) */
+    items: CaseItem[];
     photos: CasePhoto[];
     policy_notes: string[];
     assigned_to: { id: number; name: string } | null;

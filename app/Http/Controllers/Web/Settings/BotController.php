@@ -65,6 +65,9 @@ class BotController extends Controller
             'burst_max_wait_seconds' => ['sometimes', 'integer', 'min:0', 'max:120'],
             'typing_ms_per_char' => ['sometimes', 'integer', 'min:0', 'max:120'],
             'order_lookup_enabled' => ['sometimes', 'boolean'],
+            // Order-aware returns (spec 2026-09-19 §2): items matching these words are never returned or exchanged.
+            'non_returnable_keywords' => ['sometimes', 'array', 'max:100'],
+            'non_returnable_keywords.*' => ['string', 'max:100'],
         ]);
 
         $settings = BotSetting::current();

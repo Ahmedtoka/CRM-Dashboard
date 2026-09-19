@@ -34,7 +34,9 @@ final class FlowDefinitions
             ]]],
             'return_exchange' => ['title_ar' => 'المرتجع والاستبدال', 'definition' => ['start' => 'policy', 'steps' => [
                 'policy' => ['type' => 'script', 'script' => 'flow_return_policy_short', 'next' => 'order'],
-                'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟ 🌸', 'next' => 'reason'],
+                // Spec 2026-09-19: proof of ownership, then the items she picked (ReturnFlowUpgrade moves live flows here).
+                'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟ 🌸', 'verify_owner' => true, 'next' => 'order_items'],
+                'order_items' => ['type' => 'order_items', 'text' => 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها 👇', 'next' => 'reason'],
                 'reason' => ['type' => 'choice', 'field' => 'reason', 'text' => 'إيه سبب المرتجع؟', 'options' => [
                     ['value' => 'defective', 'title' => 'بايظ / فيه عيب', 'synonyms' => ['بايظ', 'عيب', 'مقطوع', 'ديفوه', 'تالف', 'شايط']],
                     ['value' => 'wrong_item', 'title' => 'غلط في الأوردر', 'synonyms' => ['غلط', 'مش اللي طلبته', 'لون تاني']],

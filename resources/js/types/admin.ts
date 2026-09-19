@@ -212,6 +212,7 @@ export interface BotSettings {
     spam_phrases: string[] | null;
     low_value_phrases: string[] | null;
     allowed_link_domains: string[] | null;
+    non_returnable_keywords: string[] | null;
     spam_repeat_threshold: number;
     burst_wait_seconds: number;
     burst_max_wait_seconds: number;

@@ -14,10 +14,16 @@ final class FlowPrompter
 {
     public const MAIN_MENU_BUTTON = ['title' => 'القائمة الرئيسية', 'payload' => 'menu:main_menu'];
 
+    /** The choice value that means "refund the money": hidden when every picked item is exchange only. */
+    public const REFUND_VALUE = 'refund';
+
+    public const EXCHANGE_ONLY_NOTE = 'القطع اللي اخترتيها متاحة للاستبدال بس 🌸';
+
     /** Human labels for collected data keys, in the order the owner reads them. */
     public const LABELS = [
         'order_number' => 'رقم الأوردر',
         'order_ref_text' => 'بيانات الأوردر',
+        'selected_items' => 'القطع',
         'reason' => 'السبب',
         'request' => 'الطلب',
         'product_photo' => 'صورة المنتج (✅)',
@@ -54,7 +60,10 @@ final class FlowPrompter
                 fn (array $o) => ['title' => (string) $o['title'], 'payload' => (string) $o['action']],
                 $this->visibleMenuOptions($step),
             )],
-            'choice' => ['text' => $text, 'buttons' => $this->choiceButtons($flowKey, $stepKey, $step)],
+            'choice' => [
+                'text' => $this->refundHidden($step, $data) ? self::EXCHANGE_ONLY_NOTE."\n".$text : $text,
+                'buttons' => $this->choiceButtons($flowKey, $stepKey, ['options' => $this->choiceOptions($step, $data)] + $step),
+            ],
             'summary' => [
                 'text' => trim($text."\n".implode("\n", $this->summaryLines($data))),
                 'buttons' => [
@@ -131,6 +140,14 @@ final class FlowPrompter
                 continue;
             }
 
+            if ($key === 'selected_items') {
+                if (($items = self::itemsText($value)) !== '') {
+                    $lines[] = '• '.$label.': '.$items;
+                }
+
+                continue;
+            }
+
             if (str_contains($label, '✅')) {
                 $lines[] = '• '.$label;
 
@@ -145,6 +162,51 @@ final class FlowPrompter
         }
 
         return $lines;
+    }
+
+    /**
+     * A choice step's options for this conversation: the refund option is dropped when every
+     * item she picked is exchange only (discounted — spec 2026-09-19 §2).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function choiceOptions(array $step, array $data): array
+    {
+        $options = array_values($step['options'] ?? []);
+
+        if (! $this->refundHidden($step, $data)) {
+            return $options;
+        }
+
+        return array_values(array_filter($options, fn ($o) => (string) ($o['value'] ?? '') !== self::REFUND_VALUE));
+    }
+
+    private function refundHidden(array $step, array $data): bool
+    {
+        $items = array_filter((array) ($data['selected_items'] ?? []), 'is_array');
+        $options = $step['options'] ?? [];
+
+        return $items !== []
+            && collect($items)->every(fn ($i) => ($i['exchange_only'] ?? false) === true)
+            && collect($options)->contains(fn ($o) => (string) ($o['value'] ?? '') === self::REFUND_VALUE)
+            && collect($options)->contains(fn ($o) => (string) ($o['value'] ?? '') !== self::REFUND_VALUE);
+    }
+
+    /** "فستان ليلى (أسود / M) × 1 — استبدال بس، طرحة × 2" */
+    public static function itemsText(mixed $items): string
+    {
+        $parts = [];
+
+        foreach ((array) $items as $i) {
+            if (! is_array($i) || ! is_scalar($i['title'] ?? null) || trim((string) $i['title']) === '') {
+                continue;
+            }
+
+            $variant = is_scalar($i['variant'] ?? null) && trim((string) $i['variant']) !== '' ? ' ('.trim((string) $i['variant']).')' : '';
+            $parts[] = trim((string) $i['title']).$variant.' × '.max(1, (int) ($i['qty'] ?? 1)).(($i['exchange_only'] ?? false) === true ? ' — استبدال بس' : '');
+        }
+
+        return implode('، ', $parts);
     }
 
     /** @return list<array{title:string, payload:string}> */

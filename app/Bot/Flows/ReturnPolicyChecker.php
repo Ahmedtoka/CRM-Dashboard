@@ -42,13 +42,20 @@ final class ReturnPolicyChecker
             return $notes;
         }
 
-        foreach ($order->items as $item) {
+        // Items she picked in the flow (order_items step) narrow the checks to those lines.
+        $picked = array_values(array_filter(array_map(
+            fn ($i) => is_array($i) && is_numeric($i['line_item_id'] ?? null) ? (int) $i['line_item_id'] : null,
+            (array) ($data['selected_items'] ?? []),
+        )));
+        $items = $picked === [] ? $order->items : $order->items->filter(fn (OrderItem $i) => in_array((int) $i->id, $picked, true))->values();
+
+        foreach ($items as $item) {
             if ($this->isExcluded((string) $item->title)) {
                 $notes[] = 'فيه منتج غالبًا غير قابل للاستبدال أو الاسترجاع: '.$item->title;
             }
         }
 
-        if (($data['request'] ?? null) === 'refund' && $order->items->contains(fn (OrderItem $i) => $this->isDiscounted($i))) {
+        if (($data['request'] ?? null) === 'refund' && $items->contains(fn (OrderItem $i) => $this->isDiscounted($i))) {
             $notes[] = 'القطعة عليها خصم: متاح استبدال فقط';
         }
 

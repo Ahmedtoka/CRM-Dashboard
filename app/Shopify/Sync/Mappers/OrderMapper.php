@@ -166,6 +166,9 @@ final class OrderMapper
             'tracking_number' => Payload::string($f['tracking_number'] ?? null) ?? Payload::string($f['tracking_numbers'][0] ?? null),
             'tracking_url' => Payload::string($f['tracking_url'] ?? null) ?? Payload::string($f['tracking_urls'][0] ?? null),
             'shipment_status' => Payload::lower($f['shipment_status'] ?? null),
+            // GraphQL deliveredAt; a REST delivery only says shipment_status "delivered" (its updated_at is then the delivery time).
+            'delivered_at' => Payload::time($f['delivered_at'] ?? null)
+                ?? (Payload::lower($f['shipment_status'] ?? null) === 'delivered' ? ($existing?->delivered_at ?? Payload::time($f['updated_at'] ?? null)) : null),
             'shopify_created_at' => Payload::time($f['created_at'] ?? null),
             'shopify_updated_at' => Payload::time($f['updated_at'] ?? null),
         ]);
@@ -381,6 +384,7 @@ final class OrderMapper
             'currency' => Payload::string($o['currency'] ?? null) ?? 'EGP',
             'shipping_name' => Payload::string($shipping['name'] ?? null),
             'shipping_phone' => Payload::string($shipping['phone'] ?? null) ?? Payload::string($o['phone'] ?? null),
+            'billing_phone' => Payload::string($o['billing_address']['phone'] ?? null),
             'shipping_city' => Payload::string($shipping['city'] ?? null) ?? Payload::string($shipping['province'] ?? null),
             'shipping_address' => $this->addressLine($shipping),
             'shipping_title' => Payload::string($o['shipping_lines'][0]['title'] ?? null),
@@ -420,6 +424,7 @@ final class OrderMapper
                 'shopify_line_item_id' => Payload::id($line['id'] ?? null),
                 'variant_id' => $variantIds->get(Payload::id($line['variant_id'] ?? null)),
                 'title' => Payload::string($line['title'] ?? null) ?? Payload::string($line['name'] ?? null) ?? '',
+                'variant_title' => Payload::string($line['variant_title'] ?? null),
                 'sku' => Payload::string($line['sku'] ?? null),
                 'qty' => (int) ($line['quantity'] ?? 1),
                 'price' => Payload::money($line['price'] ?? null),
@@ -617,6 +622,7 @@ final class OrderMapper
                 'id' => $l['id'] ?? null,
                 'variant_id' => $l['variant']['id'] ?? null,
                 'title' => $l['title'] ?? $l['name'] ?? null,
+                'variant_title' => $l['variantTitle'] ?? null,
                 'sku' => $l['sku'] ?? null,
                 'quantity' => $l['currentQuantity'] ?? $l['quantity'] ?? 1,
                 'price' => $l['originalUnitPriceSet'] ?? $l['originalUnitPrice'] ?? null,
@@ -644,6 +650,7 @@ final class OrderMapper
             'tracking_number' => $tracking['number'] ?? null,
             'tracking_url' => $tracking['url'] ?? null,
             'shipment_status' => $node['displayStatus'] ?? null,
+            'delivered_at' => $node['deliveredAt'] ?? null,
             'created_at' => $node['createdAt'] ?? null,
             'updated_at' => $node['updatedAt'] ?? null,
         ];

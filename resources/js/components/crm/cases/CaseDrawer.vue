@@ -4,7 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { casePriorityTone, caseStatusTone } from '@/lib/caseStatus';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, formatMoney } from '@/lib/format';
 import type { SupportCase } from '@/types/crm';
 import { Link } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
@@ -99,6 +99,37 @@ const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-
                 </p>
 
                 <CaseSummarySections :sections="item.summary_sections" />
+
+                <div v-if="item.items?.length" class="space-y-1.5">
+                    <h3 class="text-xs font-semibold text-muted-foreground">{{ t('cases.items.title') }}</h3>
+                    <div class="overflow-x-auto rounded-md border border-border">
+                        <table class="w-full text-xs" dir="rtl">
+                            <thead class="bg-muted/60 text-muted-foreground">
+                                <tr>
+                                    <th scope="col" class="px-2 py-1.5 text-start font-medium">{{ t('cases.items.item') }}</th>
+                                    <th scope="col" class="px-2 py-1.5 text-start font-medium">{{ t('cases.items.variant') }}</th>
+                                    <th scope="col" class="px-2 py-1.5 text-center font-medium">{{ t('cases.items.qty') }}</th>
+                                    <th scope="col" class="px-2 py-1.5 text-end font-medium">{{ t('cases.items.price') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(row, index) in item.items" :key="index" class="border-t border-border">
+                                    <td class="px-2 py-1.5">
+                                        <span class="font-medium">{{ row.title }}</span>
+                                        <span
+                                            v-if="row.exchange_only"
+                                            class="ms-1.5 inline-flex rounded-full bg-warning/15 px-1.5 py-px text-2xs font-medium text-foreground ring-1 ring-warning/40"
+                                            >{{ t('cases.items.exchange_only') }}</span
+                                        >
+                                    </td>
+                                    <td class="px-2 py-1.5 text-muted-foreground">{{ row.variant ?? '—' }}</td>
+                                    <td class="px-2 py-1.5 text-center tabular-nums">{{ row.qty }}</td>
+                                    <td class="px-2 py-1.5 text-end tabular-nums">{{ row.price !== null ? formatMoney(row.price, locale) : '—' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
                 <div class="space-y-1.5">
                     <h3 class="text-xs font-semibold text-muted-foreground">{{ t('cases.photos') }}</h3>

@@ -374,6 +374,7 @@ export const DEFAULT_STEP_TEXT: Record<string, string> = {
     phone: 'ممكن رقم موبايلك؟',
     photo: 'ممكن تبعتيلنا صورة؟',
     order: 'ممكن رقم الأوردر؟',
+    order_items: 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها 👇',
     branch: 'أنهي فرع؟',
     branches_list: 'دي فروعنا:',
     summary: 'راجعي بياناتك:',
@@ -572,6 +573,8 @@ export function describeError(message: string, t: Translate): string {
             /^step '([^']*)' option #(\d+) references unknown (flow|script) '([^']*)'$/,
             (m) => t(`flows.err.option_unknown_${m[3]}`, { step: m[1], n: Number(m[2]) + 1, ref: m[4] }),
         ],
+        [/^step '([^']*)' 'text' must be a string$/, (m) => t('flows.err.text_string', { step: m[1] })],
+        [/^step '([^']*)' 'verify_owner' must be true or false$/, (m) => t('flows.err.verify_owner', { step: m[1] })],
         [/^layout /, () => t('flows.err.layout')],
         [/^الزرار «(.*)» بيوديكي لفلو مش شغال: (\S+)$/, (m) => t('flows.err.option_inactive_flow', { title: m[1], ref: m[2] })],
     ];

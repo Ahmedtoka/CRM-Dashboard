@@ -41,6 +41,7 @@ final class CaseSummary
         return array_values(array_filter([
             self::customer($case, $data),
             self::order($case, $data),
+            self::section('items', '🛍️', 'القطع المطلوبة', self::selectedItemLines($data)),
             self::section('request', '📝', 'الطلب', self::requestLines($case, $data)),
             self::section('attachments', '📎', 'المرفقات', self::attachmentLines($case, $data)),
             self::section('alerts', '⚠️', 'تنبيهات', array_values(array_filter(array_map('strval', (array) $case->policy_notes), 'filled')) ?: ['مفيش']),
@@ -110,6 +111,46 @@ final class CaseSummary
         }
 
         return ['key' => 'order', 'icon' => '📦', 'title' => $number !== null ? 'الأوردر #'.ltrim($number, '#') : 'الأوردر', 'lines' => $lines];
+    }
+
+    /**
+     * The items she picked in the flow (spec 2026-09-19 §2), one line each:
+     * "فستان ليلى — أسود / M × 1 — 850 ج.م (استبدال بس)".
+     *
+     * @return list<array{line_item_id:?int, title:string, variant:?string, qty:int, price:?float, exchange_only:bool}>
+     */
+    public static function selectedItems(array $data): array
+    {
+        $rows = [];
+
+        foreach ((array) ($data['selected_items'] ?? []) as $i) {
+            $title = is_array($i) ? self::str($i['title'] ?? null) : null;
+
+            if ($title === null) {
+                continue;
+            }
+
+            $rows[] = [
+                'line_item_id' => is_numeric($i['line_item_id'] ?? null) ? (int) $i['line_item_id'] : null,
+                'title' => $title,
+                'variant' => self::str($i['variant'] ?? null),
+                'qty' => max(1, (int) ($i['qty'] ?? 1)),
+                'price' => is_numeric($i['price'] ?? null) ? (float) $i['price'] : null,
+                'exchange_only' => ($i['exchange_only'] ?? false) === true,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /** @return list<string> */
+    private static function selectedItemLines(array $data): array
+    {
+        return array_map(fn (array $r) => $r['title']
+            .($r['variant'] !== null ? ' — '.$r['variant'] : '')
+            .' × '.$r['qty']
+            .($r['price'] !== null ? ' — '.self::money($r['price']).' ج.م' : '')
+            .($r['exchange_only'] ? ' (استبدال بس)' : ''), self::selectedItems($data));
     }
 
     /** @return list<string> */

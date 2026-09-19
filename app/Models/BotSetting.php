@@ -37,6 +37,7 @@ class BotSetting extends Model
         'burst_max_wait_seconds',
         'typing_ms_per_char',
         'order_lookup_enabled',
+        'non_returnable_keywords',
     ];
 
     /** Seeded from the existing "حذف السبام" comment rule keywords (spec §11.1). */
@@ -49,6 +50,11 @@ class BotSetting extends Model
     public const DEFAULT_ALLOWED_LINK_DOMAINS = ['facebook.com', 'instagram.com', 'fb.me', 'wa.me', 'myshopify.com'];
 
     public const DEFAULT_SPAM_REPEAT_THRESHOLD = 3;
+
+    /** Words in an item's product type, tags or title that mean it is never returned or exchanged (spec 2026-09-19 §2). */
+    public const DEFAULT_NON_RETURNABLE_KEYWORDS = [
+        'بونيه', 'تربون', 'بادي', 'إكسسوار', 'اكسسوار', 'مكملات', 'portable', 'بوركيني', 'كاش مايوه', 'accessories', 'burkini',
+    ];
 
     /**
      * Left unchanged in behaviour by this task — the bot engine and
@@ -81,7 +87,20 @@ class BotSetting extends Model
             'burst_max_wait_seconds' => 'integer',
             'typing_ms_per_char' => 'integer',
             'order_lookup_enabled' => 'boolean',
+            'non_returnable_keywords' => 'array',
         ];
+    }
+
+    /** @return list<string> the owner's list; the default list until one is saved (an emptied list stays empty) */
+    public function nonReturnableKeywords(): array
+    {
+        $words = $this->non_returnable_keywords;
+
+        if (! is_array($words)) {
+            return self::DEFAULT_NON_RETURNABLE_KEYWORDS;
+        }
+
+        return array_values(array_filter(array_map(fn ($w) => is_string($w) ? trim($w) : '', $words), fn (string $w) => $w !== ''));
     }
 
     public static function current(): self
@@ -107,6 +126,7 @@ class BotSetting extends Model
             'burst_max_wait_seconds' => config('crm.bot.burst_max_wait_seconds'),
             'typing_ms_per_char' => config('crm.bot.typing_ms_per_char'),
             'order_lookup_enabled' => true,
+            'non_returnable_keywords' => self::DEFAULT_NON_RETURNABLE_KEYWORDS,
         ]);
     }
 }

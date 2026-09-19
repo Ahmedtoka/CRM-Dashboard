@@ -26,6 +26,7 @@ final class HandoverSummary
         'order_not_found' => 'الأوردر مش موجود', 'delayed_order' => 'الأوردر متأخر', 'order_hold' => 'الأوردر متوقف للمراجعة',
         'order_returned' => 'الأوردر مرتجع', 'failed_delivery_attempt' => 'محاولة توصيل فشلت',
         'order_details_missing' => 'بيانات الأوردر ناقصة', 'new_order' => 'طلب أوردر جديد',
+        'order_verification_failed' => 'مقدرناش نتأكد إن الأوردر بتاعها',
     ];
 
     private const PRIORITY_LABELS = ['low' => 'منخفضة', 'medium' => 'متوسطة', 'high' => 'عالية'];

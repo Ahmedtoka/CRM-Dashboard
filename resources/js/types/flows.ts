@@ -26,6 +26,8 @@ export interface FlowStep {
     branches?: FlowBranch[];
     script?: string;
     case_type?: string;
+    /** order steps: ask for the last 4 digits of the mobile before revealing the order (spec 2026-09-19 §1) */
+    verify_owner?: boolean;
 }
 
 export interface FlowDefinition {

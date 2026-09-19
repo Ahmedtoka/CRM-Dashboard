@@ -22,7 +22,7 @@ final class FlowDefinition
 {
     private const STEP_ID_PATTERN = '/^[a-z0-9_]{1,40}$/';
     public const TYPES = [
-        'menu', 'choice', 'text', 'name', 'phone', 'photo', 'order', 'branch',
+        'menu', 'choice', 'text', 'name', 'phone', 'photo', 'order', 'order_items', 'branch',
         'branches_list', 'status', 'summary', 'record_case', 'script', 'handover', 'end',
     ];
 
@@ -235,6 +235,15 @@ final class FlowDefinition
             }
         }
 
+        // order_items only lists the order when an `order` step proved she owns it; otherwise she types the item name.
+        $verifiedOrder = collect($steps)->contains(fn ($s) => is_array($s) && ($s['type'] ?? null) === 'order' && ($s['verify_owner'] ?? false) === true);
+
+        foreach ($steps as $stepKey => $step) {
+            if (is_array($step) && ($step['type'] ?? null) === 'order_items' && ! $verifiedOrder) {
+                $warnings[] = "الخطوة {$stepKey} محتاجة قبلها خطوة رقم الأوردر مع «اتأكد إن الأوردر بتاعها»، وإلا البوت هيطلب اسم القطعة بس";
+            }
+        }
+
         return $warnings;
     }
 
@@ -325,6 +334,19 @@ final class FlowDefinition
             if (! is_string($caseType) || ! in_array($caseType, self::CASE_TYPES, true)) {
                 $errors[] = "step '{$stepKey}' requires a 'case_type' in ".implode(',', self::CASE_TYPES);
             }
+        }
+
+        // Text overrides are optional, but when present they are the message sent (spec 2026-09-19 §2).
+        if (array_key_exists('text', $step) && ! is_string($step['text'])) {
+            $errors[] = "step '{$stepKey}' 'text' must be a string";
+        }
+
+        if (array_key_exists('verify_owner', $step) && ! is_bool($step['verify_owner'])) {
+            $errors[] = "step '{$stepKey}' 'verify_owner' must be true or false";
+        }
+
+        if ($type === 'order_items' && ! array_key_exists('next', $step)) {
+            $errors[] = "step '{$stepKey}' next must be a non-empty string";
         }
 
         if ($type === 'script' && ! self::nonEmptyString($step['script'] ?? null)) {

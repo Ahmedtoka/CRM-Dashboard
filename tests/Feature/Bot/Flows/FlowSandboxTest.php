@@ -21,6 +21,7 @@ use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Message;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Shipment;
 use App\Models\SupportCase;
 use App\Models\User;
@@ -60,13 +61,23 @@ it('starts the flow under test and shows the policy and the order prompt', funct
 });
 
 it('walks the whole return flow with state threaded through and saves nothing', function () {
-    $order = Order::factory()->create(['order_number' => '1047']);
+    $order = Order::factory()->create(['order_number' => '1047', 'shipping_name' => 'سارة أحمد', 'shipping_phone' => '+201001234567']);
+    $item = OrderItem::factory()->for($order)->create(['title' => 'فستان ليلى', 'qty' => 1, 'price' => 850, 'discount' => 0]);
     Shipment::factory()->for($order)->create(['status' => ShipmentStatus::Delivered]);
     $customers = Customer::count();
 
     $r = sbRun('return_exchange', 'published', null, []);
 
+    // The order number alone: only "found it" and the ownership question.
     $r = sbRun('return_exchange', 'published', $r['state'], ['text' => '1047']);
+    expect($r['current']['step_id'])->toBe('order')
+        ->and(sbTexts($r))->toContain('آخر ٤ أرقام')->not->toContain('سارة')->not->toContain('فستان');
+
+    $r = sbRun('return_exchange', 'published', $r['state'], ['text' => '4567']);
+    expect($r['current']['step_id'])->toBe('order_items')
+        ->and(sbTexts($r))->toContain('لقيت أوردر #1047 باسم سارة أحمد')->toContain('1. فستان ليلى × 1 — 850 ج.م');
+
+    $r = sbRun('return_exchange', 'published', $r['state'], ['payload' => "step:return_exchange:order_items:item:{$item->id}"]);
     expect($r['current']['step_id'])->toBe('reason')
         ->and($r['messages'])->not->toBeEmpty()
         ->and(end($r['messages'])['buttons'])->toHaveCount(6);
@@ -92,6 +103,7 @@ it('walks the whole return flow with state threaded through and saves nothing', 
     expect($case)->not->toBeNull()
         ->and($case['label'])->toBe('هيتسجل حالة: '.SupportCase::TYPE_LABELS['return_exchange'])
         ->and($case['data']['reason'])->toBe('defective')
+        ->and($case['data']['selected_items'][0]['title'])->toBe('فستان ليلى')
         ->and(sbTexts($r))->toContain('#0')
         ->and($r['current'])->toBeNull();
 

@@ -56,7 +56,7 @@ final class SyncQueries
             billingAddress { name firstName lastName phone address1 address2 city province provinceCode zip countryCodeV2 }
             shippingLine { title }
             customer { id firstName lastName email phone updatedAt }
-            fulfillments{first:5} { id status displayStatus createdAt updatedAt trackingInfo { company number url } }
+            fulfillments{first:5} { id status displayStatus createdAt updatedAt deliveredAt trackingInfo { company number url } }
             refunds{first:5} { id note createdAt totalRefundedSet { shopMoney { amount currencyCode } } }
         GRAPHQL,
     ];
@@ -81,7 +81,7 @@ final class SyncQueries
         'orders' => [
             'key' => 'lineItems', 'select' => 'lineItems', 'type' => 'Order', 'page' => 10, 'followUp' => 50,
             'node' => <<<'GRAPHQL'
-                id title name sku quantity currentQuantity
+                id title name variantTitle sku quantity currentQuantity
                 variant { id }
                 originalUnitPriceSet { shopMoney { amount currencyCode } }
                 totalDiscountSet { shopMoney { amount currencyCode } }

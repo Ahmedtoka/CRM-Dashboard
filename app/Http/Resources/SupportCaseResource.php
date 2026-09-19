@@ -31,6 +31,7 @@ class SupportCaseResource extends JsonResource
             'summary_header' => CaseSummary::header($this->resource),
             'summary_sections' => CaseSummary::sections($this->resource),
             'data' => $this->data ?? [],
+            'items' => CaseSummary::selectedItems(is_array($this->data) ? $this->data : []),
             'photos' => $photos->map(fn (MessageAttachment $a) => ['id' => $a->id, 'url' => MediaUrls::show($a)])->values()->all(),
             'policy_notes' => $this->policy_notes ?? [],
             'assigned_to' => $assignee ? ['id' => $assignee->id, 'name' => $assignee->name] : null,

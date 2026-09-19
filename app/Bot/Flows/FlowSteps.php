@@ -5,6 +5,7 @@ namespace App\Bot\Flows;
 use App\Bot\Flows\Steps\BranchesListStep;
 use App\Bot\Flows\Steps\BranchStep;
 use App\Bot\Flows\Steps\FlowStep;
+use App\Bot\Flows\Steps\OrderItemsStep;
 use App\Bot\Flows\Steps\OrderStep;
 use App\Bot\Flows\Steps\PhotoStep;
 use App\Bot\Flows\Steps\RecordCaseStep;
@@ -17,6 +18,7 @@ final class FlowSteps
     /** @var array<string, class-string<FlowStep>> */
     private const HANDLERS = [
         'order' => OrderStep::class,
+        'order_items' => OrderItemsStep::class,
         'photo' => PhotoStep::class,
         'branch' => BranchStep::class,
         'branches_list' => BranchesListStep::class,

@@ -86,29 +86,30 @@ it('extracts order refs, phones and emails', function () {
         ->and(EntityExtractor::email('مفيش'))->toBeNull();
 });
 
-it('finds the order by number and moves to the reason', function () {
+// cancel_edit's order step has no ownership check (the return flow's is covered in OrderAwareReturnsTest).
+it('finds the order by number and moves to the next step', function () {
     $o = Order::factory()->create(['order_number' => '5566']);
     Shipment::factory()->for($o)->create(['status' => ShipmentStatus::InTransit]);
 
     $c = stepsSay('اهلا');
-    app(FlowEngine::class)->start($c, 'return_exchange');
+    app(FlowEngine::class)->start($c, 'cancel_edit');
     expect(stepsFlow()['step'])->toBe('order');
 
     $r = stepsTurn('رقم الأوردر 5566');
     $flow = stepsFlow();
     expect($r->handled)->toBeTrue()
-        ->and($flow['step'])->toBe('reason')
+        ->and($flow['step'])->toBe('request')
         ->and($flow['data']['order_number'])->toBe('#5566')
         ->and($flow['data']['order_id'])->toBe($o->id)
         ->and($flow['data']['order_placed_at'])->toBeString()
         ->and($flow['data']['order_status_line'])->toContain('#5566')
         ->and($flow['data']['order_status_key'])->toBe('shipped')
-        ->and(stepsLastBot()->body)->toBe('إيه سبب المرتجع؟');
+        ->and(stepsLastBot()->body)->toBe('حضرتك عايزة تلغي الأوردر ولا تعدل فيه؟');
 });
 
 it('asks again when the order is not found, then keeps what she typed', function () {
     $c = stepsSay('اهلا');
-    app(FlowEngine::class)->start($c, 'return_exchange');
+    app(FlowEngine::class)->start($c, 'cancel_edit');
 
     stepsTurn('123456');
     expect(stepsFlow()['step'])->toBe('order')
@@ -116,7 +117,7 @@ it('asks again when the order is not found, then keeps what she typed', function
 
     stepsTurn('مش فاكرة الرقم');
     $flow = stepsFlow();
-    expect($flow['step'])->toBe('reason')
+    expect($flow['step'])->toBe('request')
         ->and($flow['data']['order_ref_text'])->toBe('مش فاكرة الرقم')
         ->and($flow['data'])->not->toHaveKey('order_number')
         ->and($flow['retries'])->toBe(0)
@@ -295,7 +296,7 @@ it('stores the failed attempt flag with the order', function () {
     $o = Order::factory()->create(['order_number' => '7801']);
     Shipment::factory()->for($o)->create(['status' => ShipmentStatus::FailedAttempt]);
     $c = stepsSay('اهلا');
-    app(FlowEngine::class)->start($c, 'return_exchange');
+    app(FlowEngine::class)->start($c, 'cancel_edit');
 
     stepsTurn('7801');
     expect(stepsFlow()['data']['order_failed_attempt'])->toBeTrue();

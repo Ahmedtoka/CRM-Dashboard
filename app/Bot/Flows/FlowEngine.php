@@ -272,7 +272,7 @@ class FlowEngine
             return new FlowResult($this->runPayload($c, (string) $o['action']));
         }
 
-        if (! $isQuestion && $type === 'choice' && ($o = $this->resolver->matchOption($step['options'] ?? [], $text)) !== null) {
+        if (! $isQuestion && $type === 'choice' && ($o = $this->resolver->matchOption($this->prompter->choiceOptions($step, $state['data']), $text)) !== null) {
             $this->answer($c, $state, $step, (string) $o['value'], (string) $o['title'], $o);
 
             return new FlowResult(true);
@@ -290,7 +290,9 @@ class FlowEngine
             return new FlowResult(true);
         }
 
-        $answer = $text === '' ? FlowAnswer::unknown() : $this->interpret($c, $step, $text, $burst);
+        // The interpreter only sees the options she was offered (no refund for exchange-only items).
+        $asked = $type === 'choice' ? ['options' => $this->prompter->choiceOptions($step, $state['data'])] + $step : $step;
+        $answer = $text === '' ? FlowAnswer::unknown() : $this->interpret($c, $asked, $text, $burst);
 
         return match ($answer->kind) {
             'question' => new FlowResult(true, question: $text),
@@ -371,6 +373,10 @@ class FlowEngine
                 $this->handover($c, $category, $state['data'], $category);
 
                 return null;
+            case StepOutcome::END:
+                FlowState::clear($c);
+
+                return null;
             default: // wait
                 $state['retries'] = $outcome->retries ?? $state['retries'];
                 FlowState::put($c, $state);
@@ -405,7 +411,7 @@ class FlowEngine
 
         switch ($step['type'] ?? null) {
             case 'choice':
-                $option = collect($step['options'] ?? [])->first(fn ($o) => (string) ($o['value'] ?? '') === $value);
+                $option = collect($this->prompter->choiceOptions($step, $state['data']))->first(fn ($o) => (string) ($o['value'] ?? '') === $value);
 
                 if ($option === null) {
                     return false;

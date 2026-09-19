@@ -19,6 +19,7 @@ class Fulfillment extends Model
         'tracking_number',
         'tracking_url',
         'shipment_status',
+        'delivered_at',
         'shopify_created_at',
         'shopify_updated_at',
     ];
@@ -27,6 +28,7 @@ class Fulfillment extends Model
     {
         return [
             'shopify_created_at' => 'datetime',
+            'delivered_at' => 'datetime',
             'shopify_updated_at' => 'datetime',
         ];
     }

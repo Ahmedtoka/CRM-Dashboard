@@ -33,6 +33,7 @@ function fromProps(s: BotSettings) {
         spam_phrases: [...(s.spam_phrases ?? [])],
         low_value_phrases: [...(s.low_value_phrases ?? [])],
         allowed_link_domains: [...(s.allowed_link_domains ?? [])],
+        non_returnable_keywords: [...(s.non_returnable_keywords ?? [])],
         spam_repeat_threshold: s.spam_repeat_threshold,
         system_prompt: s.system_prompt ?? '',
         burst_wait_seconds: s.burst_wait_seconds,
@@ -74,6 +75,7 @@ async function submit(): Promise<void> {
         spam_phrases: form.spam_phrases,
         low_value_phrases: form.low_value_phrases,
         allowed_link_domains: form.allowed_link_domains,
+        non_returnable_keywords: form.non_returnable_keywords,
         spam_repeat_threshold: form.spam_repeat_threshold,
         burst_wait_seconds: form.burst_wait_seconds,
         burst_max_wait_seconds: form.burst_max_wait_seconds,
@@ -288,6 +290,15 @@ const hint = 'text-2xs text-muted-foreground';
                     :placeholder="t('settings.bot.keyword_placeholder')"
                 />
                 <span :class="hint">{{ t('settings.bot.cards.low_value_hint') }}</span>
+            </div>
+            <div class="grid gap-1">
+                <span class="text-sm font-semibold">{{ t('settings.bot.non_returnable_keywords') }}</span>
+                <ChipsInput
+                    v-model="form.non_returnable_keywords"
+                    :label="t('settings.bot.non_returnable_keywords')"
+                    :placeholder="t('settings.bot.keyword_placeholder')"
+                />
+                <span :class="hint">{{ t('settings.bot.cards.non_returnable_hint') }}</span>
             </div>
             <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_14rem]">
                 <div class="grid content-start gap-1">

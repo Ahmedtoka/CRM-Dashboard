@@ -38,6 +38,7 @@ class Order extends Model
         'currency',
         'shipping_name',
         'shipping_phone',
+        'billing_phone',
         'shipping_city',
         'shipping_address',
         'note',

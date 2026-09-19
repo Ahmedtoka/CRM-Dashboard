@@ -64,7 +64,9 @@ class OrderLookup
 
             if ($order !== null) {
                 // An order number alone is not proof of ownership: the tracking link only goes to its owner.
-                return ['status' => 'found', 'snapshots' => [$this->snapshot($order, $entities, $this->belongsToAsker($order, $c, $phone, $email))]];
+                $asker = $this->belongsToAsker($order, $c, $phone, $email);
+
+                return ['status' => 'found', 'snapshots' => [$this->snapshot($order, $entities, $asker, $asker || $this->linkedToConversation($order, $c))]];
             }
         }
 
@@ -145,7 +147,8 @@ class OrderLookup
     private function pick(Collection $orders, array $entities): array
     {
         // Each snapshot may call the OMS: only the most recent orders are considered.
-        $snapshots = $orders->take(self::MAX_SNAPSHOTS)->map(fn (Order $o) => $this->snapshot($o, $entities))->values();
+        // Found by her own mobile or email: ownership is proven (spec 2026-09-19 §1).
+        $snapshots = $orders->take(self::MAX_SNAPSHOTS)->map(fn (Order $o) => $this->snapshot($o, $entities, true, true))->values();
         $notCancelled = $snapshots->reject(fn (OrderSnapshot $s) => $s->statusKey === 'cancelled')->values();
         $open = $notCancelled->reject(fn (OrderSnapshot $s) => $s->statusKey === 'delivered')->values();
 
@@ -173,8 +176,70 @@ class OrderLookup
         return $email !== null && $email === mb_strtolower(trim((string) $o->customer?->email));
     }
 
-    /** @param  bool  $withTrackingUrl  false hides the carrier link (the asker is not the order's owner) */
-    private function snapshot(Order $o, array $entities, bool $withTrackingUrl = true): OrderSnapshot
+    /**
+     * Spec 2026-09-19 §1: the conversation's customer is already the order's customer — the same
+     * row, the same Shopify customer id, or the same mobile on her identity as on the order.
+     */
+    public function linkedToConversation(Order $o, Conversation $c): bool
+    {
+        $mine = $c->customer_id !== null ? $c->customer : null;
+
+        if ($mine === null) {
+            return false;
+        }
+
+        if ((int) $o->customer_id === (int) $mine->id) {
+            return true;
+        }
+
+        $theirs = $o->customer;
+
+        if (filled($mine->shopify_customer_id) && $theirs !== null && (string) $mine->shopify_customer_id === (string) $theirs->shopify_customer_id) {
+            return true;
+        }
+
+        $myPhones = array_filter([$mine->normalized_phone, PhoneNormalizer::toE164($mine->phone)]);
+
+        return $myPhones !== [] && array_intersect($myPhones, $this->orderPhonesE164($o)) !== [];
+    }
+
+    /**
+     * Digits of every phone the order carries: shipping, billing and its customer's.
+     *
+     * @return list<string>
+     */
+    public function orderPhoneDigits(Order $o): array
+    {
+        $phones = [$o->shipping_phone, $o->billing_phone, $o->customer?->phone, $o->customer?->normalized_phone];
+        $digits = array_map(fn ($p) => preg_replace('/\D+/', '', (new ArabicNormalizer)->digitsToLatin((string) $p)) ?? '', $phones);
+
+        return array_values(array_unique(array_filter($digits, fn (string $d) => strlen($d) >= 4)));
+    }
+
+    /** The order as the bot may talk about it once the asker has proven she owns it. */
+    public function ownedSnapshot(Order $o): OrderSnapshot
+    {
+        $this->omsDown = false;
+
+        return $this->snapshot($o, [], true, true);
+    }
+
+    /** @return list<string> */
+    private function orderPhonesE164(Order $o): array
+    {
+        return array_values(array_filter([
+            PhoneNormalizer::toE164($o->shipping_phone),
+            PhoneNormalizer::toE164($o->billing_phone),
+            $o->customer?->normalized_phone,
+            PhoneNormalizer::toE164($o->customer?->phone),
+        ]));
+    }
+
+    /**
+     * @param  bool  $withTrackingUrl  false hides the carrier link (the asker is not the order's owner)
+     * @param  bool  $ownerVerified  the asker proved she owns it (OrderSnapshot::$ownerVerified)
+     */
+    private function snapshot(Order $o, array $entities, bool $withTrackingUrl = true, bool $ownerVerified = false): OrderSnapshot
     {
         $number = $o->shopify_order_name ?: (string) ($o->order_number ?: $o->id);
         $number = '#'.ltrim($number, '#');
@@ -216,6 +281,7 @@ class OrderLookup
             $withTrackingUrl ? $url : null,
             $this->governorate($o, $entities),
             $failedAttempt,
+            $ownerVerified,
         );
     }
 

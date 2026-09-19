@@ -68,6 +68,13 @@ function setType(type: string): void {
     });
 }
 
+function setVerifyOwner(on: boolean): void {
+    patch((s) => {
+        if (on) s.verify_owner = true;
+        else delete s.verify_owner;
+    });
+}
+
 function setOptions(options: FlowOption[]): void {
     patch((s) => {
         s.options = options;
@@ -186,6 +193,22 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
         </div>
         <p v-if="step.type === 'summary'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{{ t('flows.summary_hint') }}</p>
         <p v-if="step.type === 'status'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{{ t('flows.status_hint') }}</p>
+        <p v-if="step.type === 'order_items'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+            {{ t('flows.order_items_hint') }}
+        </p>
+
+        <label v-if="hasField('verify_owner')" class="flex items-start gap-2.5 rounded-md bg-muted/60 px-3 py-2.5">
+            <input
+                type="checkbox"
+                class="mt-0.5 size-4 shrink-0 accent-primary"
+                :checked="step.verify_owner === true"
+                @change="setVerifyOwner(($event.target as HTMLInputElement).checked)"
+            />
+            <span class="grid gap-0.5">
+                <span class="text-xs font-semibold">{{ t('flows.verify_owner') }}</span>
+                <span class="text-2xs text-muted-foreground">{{ t('flows.verify_owner_hint') }}</span>
+            </span>
+        </label>
 
         <div v-if="hasField('field')">
             <label :class="label" for="flow-step-field">{{ t('flows.field') }}</label>

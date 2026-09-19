@@ -19,6 +19,7 @@ use App\Models\ConversationNote;
 use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Shipment;
 use App\Models\SupportCase;
 use Carbon\CarbonImmutable;
@@ -61,7 +62,8 @@ function rfLastBot(): Message
 }
 
 it('records a return/exchange case at the end of the whole return flow', function () {
-    $order = Order::factory()->create(['order_number' => '5566']);
+    $order = Order::factory()->create(['order_number' => '5566', 'shipping_phone' => '+201001234567']);
+    OrderItem::factory()->for($order)->create(['title' => 'فستان ليلى', 'qty' => 1, 'price' => 850, 'discount' => 0]);
     Shipment::factory()->for($order)->create(['status' => ShipmentStatus::Delivered]);
 
     // flow:return_exchange → policy script + order prompt
@@ -74,6 +76,13 @@ it('records a return/exchange case at the end of the whole return flow', functio
         ->and(rfLastBot()->body)->toContain('رقم الأوردر');
 
     rfSay('5566');
+    expect(FlowState::flow($c->fresh())['step'])->toBe('order')
+        ->and(rfLastBot()->body)->toContain('آخر ٤ أرقام');
+
+    rfSay('٤٥٦٧');
+    expect(FlowState::flow($c->fresh())['step'])->toBe('order_items');
+
+    rfSay('1');
     expect(FlowState::flow($c->fresh())['step'])->toBe('reason')
         ->and(rfLastBot()->buttons)->not->toBeEmpty();
 
@@ -106,6 +115,8 @@ it('records a return/exchange case at the end of the whole return flow', functio
         ->and($case->order_number)->toBe('#5566')
         ->and($case->data['reason'])->toBe('defective')
         ->and($case->data['request'])->toBe('exchange')
+        ->and($case->data['selected_items'])->toHaveCount(1)
+        ->and($case->data['order_verified'])->toBeTrue()
         ->and($case->photo_attachment_ids)->toHaveCount(2)
         ->and(ConversationNote::where('conversation_id', $c->id)->where('body', 'like', '%📋 حالة #%')->exists())->toBeTrue()
         ->and(rfLastBot()->body)->toContain("تم تسجيل طلب حضرتك برقم #{$case->id}")

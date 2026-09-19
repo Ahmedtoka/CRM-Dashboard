@@ -5,7 +5,8 @@ namespace App\Bot\Flows\Steps;
 /**
  * What a step handler wants the engine to do: send `messages` in order, merge
  * `data` into the flow data (a null value removes the key), then continue to
- * the next step, wait on this one, run the retry path, or hand over.
+ * the next step, wait on this one, run the retry path, hand over, or end the
+ * flow (the conversation stays with the bot).
  */
 final readonly class StepOutcome
 {
@@ -16,6 +17,8 @@ final readonly class StepOutcome
     public const RETRY = 'retry';
 
     public const HANDOVER = 'handover';
+
+    public const END = 'end';
 
     /**
      * @param  list<array{text:string, buttons?:list<array{title:string, payload:string}>}>  $messages
@@ -48,5 +51,10 @@ final readonly class StepOutcome
     public static function handover(string $category, array $messages = []): self
     {
         return new self(self::HANDOVER, $messages, handoverCategory: $category);
+    }
+
+    public static function end(array $messages = []): self
+    {
+        return new self(self::END, $messages);
     }
 }

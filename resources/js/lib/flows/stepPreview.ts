@@ -14,10 +14,21 @@ export const PREVIEW_CASE_ID = '1234';
 export const MAIN_MENU_CHIP = 'القائمة الرئيسية';
 export const SUMMARY_CHIPS = ['تمام، سجل', 'عايزة أعدل'];
 
+/** What the `order_items` step sends for a sample order (mirrors app/Bot/Flows/Steps/OrderItemsStep.php). */
+export const ORDER_ITEMS_DEFAULT_TEXT = 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها 👇';
+export const ORDER_ITEMS_SAMPLE_HEADER = 'لقيت أوردر #1047 باسم سارة أحمد — اتسلم يوم 12 سبتمبر';
+export const ORDER_ITEMS_SAMPLE: { title: string; line: string }[] = [
+    { title: 'فستان ليلى', line: 'فستان ليلى — أسود / M × 1 — 850 ج.م' },
+    { title: 'طرحة شيفون', line: 'طرحة شيفون × 2 — 150 ج.م' },
+    { title: 'عباية كتان', line: 'عباية كتان × 1 — 1,200 ج.م' },
+];
+export const ORDER_ITEMS_MULTI_CHIP = 'كذا قطعة';
+
 /** FlowPrompter::LABELS with a sample answer each, in the order the owner reads them. */
 const SUMMARY_SAMPLES: [field: string, label: string, sample: string | null][] = [
     ['order_number', 'رقم الأوردر', '10234'],
     ['order_ref_text', 'بيانات الأوردر', 'فستان أسود مقاس M'],
+    ['selected_items', 'القطع', 'فستان ليلى (أسود / M) × 1، طرحة شيفون × 1'],
     ['reason', 'السبب', 'المقاس صغير'],
     ['request', 'الطلب', 'استبدال'],
     ['product_photo', 'صورة المنتج (✅)', null],
@@ -50,7 +61,7 @@ export interface StepPreviewModel {
     /** the step sends a script that is missing or inactive, so nothing is sent */
     scriptMissing: boolean;
     /** what the customer is expected to send next (photo / order / phone) */
-    expects: 'photo' | 'order' | 'phone' | null;
+    expects: 'photo' | 'order' | 'order_verify' | 'order_items' | 'phone' | null;
     /** a note about what the engine does instead of a message (status, handover, end, branches list) */
     note: 'status' | 'handover' | 'end' | 'branches_list' | null;
 }
@@ -84,6 +95,8 @@ export function hiddenReason(action: string | undefined, scripts: FlowScriptOpti
 /** "• label: sample" lines for the fields this flow collects (FlowPrompter::summaryLines on sample data). */
 export function sampleSummaryLines(def: FlowDefinition): string[] {
     const used = new Set(fieldsOf(def));
+    // order_items has no `field`: it always saves `selected_items`.
+    if (Object.values(def.steps).some((s) => s.type === 'order_items')) used.add('selected_items');
     let rows = SUMMARY_SAMPLES.filter(([field]) => used.has(field));
     if (!rows.length) rows = SUMMARY_SAMPLES.filter(([field]) => field === 'name' || field === 'phone');
     return rows.map(([, label, sample]) => (sample === null ? `• ${label}` : `• ${label}: ${sample}`));
@@ -134,8 +147,20 @@ export function previewStep(
             model.scriptMissing = body === null && (step.type === 'script' || !!step.script);
             break;
         }
-        case 'photo':
+        case 'order_items':
+            model.text = [
+                ORDER_ITEMS_SAMPLE_HEADER,
+                ...ORDER_ITEMS_SAMPLE.map((item, i) => `${i + 1}. ${item.line}`),
+                '',
+                renderPlaceholders(step.text?.trim() || ORDER_ITEMS_DEFAULT_TEXT),
+            ].join('\n');
+            model.chips = applyLimit([...ORDER_ITEMS_SAMPLE.map((item) => chip(item.title)), chip(ORDER_ITEMS_MULTI_CHIP)]);
+            model.expects = 'order_items';
+            break;
         case 'order':
+            model.expects = step.verify_owner ? 'order_verify' : 'order';
+            break;
+        case 'photo':
         case 'phone':
             model.expects = step.type;
             break;
