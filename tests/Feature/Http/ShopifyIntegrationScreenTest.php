@@ -230,3 +230,25 @@ it('updates commerce settings within their bounds', function () {
         'order_creation_enabled' => true,
     ])->assertStatus(422);
 });
+
+it('starts a fresh import when a different store is connected', function () {
+    ShopifyIntegration::create([
+        'shop_domain' => 'old.myshopify.com',
+        'status' => 'disconnected',
+        'import_state' => ['stages' => ['shipping' => ['status' => 'completed', 'total' => 2, 'processed' => 2, 'failed' => 0, 'bulk_operation_id' => null]]],
+    ]);
+    Queue::fake();
+    $scopes = collect(config('crm.shopify.required_scopes'))->map(fn ($h) => ['handle' => $h])->all();
+    Http::fake(['new.myshopify.com/*' => function ($req) use ($scopes) {
+        if (str_contains($req['query'] ?? '', 'webhookSubscriptionCreate')) {
+            return Http::response(['data' => ['webhookSubscriptionCreate' => ['webhookSubscription' => ['id' => 'gid://shopify/WebhookSubscription/7'], 'userErrors' => []]]]);
+        }
+
+        return Http::response(['data' => ['shop' => ['name' => 'New', 'currencyCode' => 'EGP'], 'currentAppInstallation' => ['accessScopes' => $scopes]]]);
+    }]);
+
+    $this->actingAs($this->admin)->post('/settings/shopify/connect', ['shop_domain' => 'new.myshopify.com', 'access_token' => 't'])->assertRedirect();
+
+    expect(ShopifyIntegration::count())->toBe(1)->and(ShopifyIntegration::first()->shop_domain)->toBe('new.myshopify.com');
+    Queue::assertPushed(RunBulkImportStage::class, fn ($j) => $j->stage === 'shipping');
+});

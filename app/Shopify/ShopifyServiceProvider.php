@@ -8,6 +8,7 @@ use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Client\ShopifyTransport;
 use App\Shopify\Commands\ReconcileCommand;
 use App\Shopify\Commands\SyncShippingCommand;
+use App\Shopify\Commands\PurgeStoreDataCommand;
 use App\Shopify\Commands\WebhooksCheckCommand;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
@@ -34,6 +35,7 @@ class ShopifyServiceProvider extends ServiceProvider
             $this->commands([
                 ReconcileCommand::class,
                 SyncShippingCommand::class,
+                PurgeStoreDataCommand::class,
                 WebhooksCheckCommand::class,
             ]);
         }

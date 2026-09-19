@@ -36,7 +36,13 @@ final class ConnectShopify
         }
 
         $integration = $this->integrations->current();
-        $resuming = $integration !== null && $this->hasCompletedStage($integration);
+        // A different store is a fresh import: the previous store's finished stages
+        // must not make the new store's import "resume" and skip them.
+        $sameStore = $integration !== null && strcasecmp((string) $integration->shop_domain, $domain) === 0;
+        if ($integration !== null && ! $sameStore) {
+            $integration->forceFill(['import_state' => null])->save();
+        }
+        $resuming = $sameStore && $this->hasCompletedStage($integration);
         $integration ??= new ShopifyIntegration();
 
         $integration->forceFill([
