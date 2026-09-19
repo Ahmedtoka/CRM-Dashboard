@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MessageCards from '@/components/crm/MessageCards.vue';
 import MessageAttachments from '@/components/crm/media/MessageAttachments.vue';
 import { skinClasses, type ChatSkin } from '@/composables/inbox/useChatSkin';
 import { useI18n } from '@/composables/useI18n';
@@ -43,7 +44,9 @@ const kind = computed<Kind>(() => {
     return m.sender_type === 'bot' ? 'bot' : 'user';
 });
 
-const body = computed(() => props.note?.body ?? props.message?.body ?? '');
+// A carousel's body is only its plain-text fallback: the cards show instead (2026-09-19).
+const carousel = computed(() => props.message?.cards?.type === 'generic');
+const body = computed(() => props.note?.body ?? (carousel.value ? '' : (props.message?.body ?? '')));
 
 // @mentions in a note bubble are highlighted as plain text spans (never v-html) —
 // only tokens that match one of THIS note's actual mentioned users, resolved
@@ -187,6 +190,9 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
                     >{{ b.title }}</span
                 >
             </div>
+
+            <!-- Rich cards (branch cards, the store link): quiet, like the quick replies. -->
+            <MessageCards v-if="outbound && message?.cards" :cards="message.cards" class="mt-1.5" />
 
             <MessageAttachments
                 v-if="message?.attachments?.length"

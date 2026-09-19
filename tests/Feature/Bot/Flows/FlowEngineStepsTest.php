@@ -27,6 +27,8 @@ use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
     useOrderAwareReturnFlow();
+    // The 2026-09-17 cancel_edit (order step without the ownership check) hosts the order-step tests.
+    useLegacyOwnerFlows('cancel_edit');
     Event::fake();
     Http::preventStrayRequests();
     config(['crm.drivers.ai' => 'fake']);
@@ -188,10 +190,12 @@ it('lists the branches of an area typed in the branches flow', function () {
         ->and($prompt->buttons[12]['payload'])->toBe('menu:main_menu');
 
     stepsTurn('مدينة نصر');
-    $m = stepsLastBot();
-    expect(substr_count($m->body, '📍'))->toBe(5)
-        ->and($m->buttons)->toBe([['title' => 'القائمة الرئيسية', 'payload' => 'menu:main_menu']])
-        ->and(stepsFlow())->toBeNull();
+    $cards = Message::whereNotNull('cards')->latest('id')->firstOrFail();
+    expect(substr_count($cards->body, '📍'))->toBe(5)
+        ->and($cards->cards['cards'])->toHaveCount(5)
+        ->and(stepsLastBot()->body)->toBe('تحبي حاجة تانية؟')
+        ->and(array_column(stepsLastBot()->buttons, 'title'))->toBe(['فرع في منطقة تانية', 'القائمة الرئيسية'])
+        ->and(stepsFlow()['step'])->toBe('more');
 });
 
 it('lists the branches of a tapped area', function () {
@@ -199,8 +203,8 @@ it('lists the branches of a tapped area', function () {
     app(FlowEngine::class)->start($c, 'branches');
 
     stepsTurn('الإسكندرية', 'step:branches:list:area:alexandria');
-    expect(substr_count(stepsLastBot()->body, '📍'))->toBe(4)
-        ->and(stepsFlow())->toBeNull();
+    expect(Message::whereNotNull('cards')->latest('id')->firstOrFail()->cards['cards'])->toHaveCount(4)
+        ->and(stepsFlow()['step'])->toBe('more');
 });
 
 it('re-asks the area when the branches text is not a known area', function () {
@@ -245,7 +249,7 @@ it('opens the area buttons on entering the branch step and branch buttons on an 
     $c = stepsSay('اهلا');
     app(FlowEngine::class)->start($c, 'complaint');
     stepsTurn('فرع', 'step:complaint:type:branch');
-    expect(stepsLastBot()->body)->toBe('الفرع في أنهي منطقة؟')
+    expect(stepsLastBot()->body)->toBe('اكتبي اسم الفرع، أو اختاري المنطقة من هنا 👇')
         ->and(stepsLastBot()->buttons)->toHaveCount(13);
 
     stepsTurn('الإسكندرية', 'step:complaint:branch:area:alexandria');

@@ -383,6 +383,8 @@ export const DEFAULT_STEP_TEXT: Record<string, string> = {
     record_case: '',
     // Empty: a script step sends its script unless the owner writes her own text (2026-09-19).
     script: '',
+    // app/Bot/Flows/Steps/ContactStep.php ASK_BOTH_TEXT (the one-message question)
+    contact: 'عشان الفريق يقدر يتواصل مع حضرتك 🌸 ابعتيلي اسمك ورقم موبايلك في رسالة واحدة (مثلاً: سارة 01012345678)',
     // app/Bot/Flows/Steps/StatusStep.php CARD_TEXT
     status: 'أهلاً يا {customer_first_name} 🌸 أوردر #{order_number} (اتطلب يوم {order_date} — {order_items})\n📦 الحالة: {order_status}\n🚚 متوقع يوصل: {order_eta}\n🔗 تتبع الشحنة: {order_tracking}',
 };
@@ -589,6 +591,7 @@ export function describeError(message: string, t: Translate): string {
         ],
         [/^step '([^']*)' 'text' must be a string$/, (m) => t('flows.err.text_string', { step: m[1] })],
         [/^step '([^']*)' 'verify_owner' must be true or false$/, (m) => t('flows.err.verify_owner', { step: m[1] })],
+        [/^step '([^']*)' '(return_rules|allow_text|photos)' must be true or false$/, (m) => t('flows.err.flag', { step: m[1], flag: t(`flows.${m[2]}`) })],
         [/^step '([^']*)' option #(\d+) 'action' must be/, (m) => t('flows.err.option_action_invalid', { step: m[1], n: Number(m[2]) + 1 })],
         [
             /^step '([^']*)' option #(\d+) has both a 'next' step and an 'action'$/,

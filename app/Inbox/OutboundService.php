@@ -203,10 +203,11 @@ class OutboundService
      * @param  int  $delayMs  queue the platform send this much later (a later part of a paced reply)
      * @param  bool  $skipIfHumanTookOver  at send time, drop it when the conversation is no longer the bot's
      * @param  list<array{title: string, payload: string}>  $buttons  quick-reply buttons offered with this message
+     * @param  array|null  $cards  rich cards (App\Channels\Cards\OutboundCards); `$body` is their plain-text fallback
      *
      * @throws WindowClosedException
      */
-    public function sendBot(Conversation $c, string $body, int $delayMs = 0, bool $skipIfHumanTookOver = false, array $buttons = []): Message
+    public function sendBot(Conversation $c, string $body, int $delayMs = 0, bool $skipIfHumanTookOver = false, array $buttons = [], ?array $cards = null): Message
     {
         $state = $this->windows->evaluate($c, SenderType::Bot);
 
@@ -214,13 +215,14 @@ class OutboundService
             throw new WindowClosedException($state->mode);
         }
 
-        $message = DB::transaction(function () use ($c, $body, $buttons) {
+        $message = DB::transaction(function () use ($c, $body, $buttons, $cards) {
             $message = $c->messages()->create([
                 'platform' => $c->platform,
                 'direction' => MessageDirection::Out,
                 'sender_type' => SenderType::Bot,
                 'body' => $body,
                 'buttons' => $buttons !== [] ? array_values($buttons) : null,
+                'cards' => $cards !== null && $cards !== [] ? $cards : null,
                 'status' => MessageStatus::Queued,
                 'queued_at_ms' => $this->nowMs(),
             ]);

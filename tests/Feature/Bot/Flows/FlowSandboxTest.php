@@ -105,7 +105,8 @@ it('walks the whole return flow with state threaded through and saves nothing', 
         ->and($case['label'])->toBe('هيتسجل حالة: '.SupportCase::TYPE_LABELS['return_exchange'])
         ->and($case['data']['reason'])->toBe('defective')
         ->and($case['data']['selected_items'][0]['title'])->toBe('فستان ليلى')
-        ->and(sbTexts($r))->toContain('#0')
+        // The unsaved case is numbered like the next real one: never «#0» (2026-09-19).
+        ->and(sbTexts($r))->toContain('#1')->not->toContain('#0')
         ->and($r['current'])->toBeNull();
 
     expect(SupportCase::count())->toBe(0)
@@ -140,7 +141,12 @@ it('records handover, flow start and exit events from the main menu', function (
     $menu = sbRun('main_menu', 'published', null, []);
     expect(end($menu['messages'])['buttons'])->not->toBeEmpty();
 
-    $handover = sbRun('main_menu', 'published', $menu['state'], ['payload' => 'handover']);
+    // «كلم موظف» first asks what she needs (flow 7), then hands over with her answer.
+    $ask = sbRun('main_menu', 'published', $menu['state'], ['payload' => 'handover']);
+    expect($ask['events'])->toBe([])
+        ->and($ask['messages'][0]['buttons'])->toBe([['title' => 'حوّليني على طول', 'payload' => 'handover:now']]);
+
+    $handover = sbRun('main_menu', 'published', $ask['state'], ['text' => 'عايزة أغير عنوان الأوردر']);
     expect(collect($handover['events'])->pluck('type')->all())->toBe(['handover'])
         ->and($handover['events'][0]['label'])->toBe('هيتحول لموظف')
         ->and($handover['current'])->toBeNull();

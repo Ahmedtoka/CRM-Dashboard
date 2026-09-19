@@ -3,6 +3,7 @@ import {
     Camera,
     CircleStop,
     ClipboardCheck,
+    Contact,
     FilePlus2,
     FileText,
     IdCard,
@@ -14,6 +15,7 @@ import {
     Package,
     PackageOpen,
     Phone,
+    Replace,
     Store,
     Truck,
     UserRound,
@@ -40,6 +42,8 @@ const ICONS: Record<string, Component> = {
     FileText,
     UserRound,
     CircleStop,
+    Contact,
+    Replace,
 };
 
 export const stepIcon = (name: string | undefined): Component => (name && ICONS[name]) || Workflow;

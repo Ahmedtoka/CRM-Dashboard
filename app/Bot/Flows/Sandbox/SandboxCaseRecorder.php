@@ -8,8 +8,9 @@ use App\Models\SupportCase;
 
 /**
  * CaseRecorder stand-in for a sandbox run: records a `case` event and returns
- * an unsaved SupportCase with the fake id 0 (closing scripts render `#0`).
- * No row, notification or broadcast. The parent constructor is not called.
+ * an unsaved SupportCase numbered like the next real case would be (2026-09-19:
+ * closing texts never show "#0"). No row, notification or broadcast. The parent
+ * constructor is not called.
  */
 class SandboxCaseRecorder extends CaseRecorder
 {
@@ -20,7 +21,7 @@ class SandboxCaseRecorder extends CaseRecorder
         $this->log->event('case', 'هيتسجل حالة: '.(SupportCase::TYPE_LABELS[$type] ?? $type), $data);
 
         $case = new SupportCase(['type' => $type, 'data' => $data]);
-        $case->setAttribute('id', 0);
+        $case->setAttribute('id', ((int) SupportCase::query()->max('id')) + 1);
 
         return $case;
     }

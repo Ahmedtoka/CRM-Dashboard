@@ -4,8 +4,10 @@ namespace App\Bot\Flows;
 
 use App\Bot\ArabicNormalizer;
 use App\Bot\Flow\Concerns\CallsClaudeJson;
-use App\Models\Branch;
+use App\Channels\Cards\OutboundCards;
 use App\Models\BotSetting;
+use App\Models\Branch;
+use Illuminate\Support\Collection;
 use Throwable;
 
 /**
@@ -75,6 +77,29 @@ final class BranchFinder
         return null;
     }
 
+    /**
+     * Whether the whole reply is an area's own name ("المعادي", "Nasr City"): then the area wins over a
+     * branch of the same name. An alias ("الحجاز") does not count, so a branch named like it wins.
+     */
+    public function isAreaName(string $text): bool
+    {
+        $needle = mb_strtolower($this->normalize($text));
+
+        if ($needle === '') {
+            return false;
+        }
+
+        foreach (Branch::query()->where('is_active', true)->get(['area_ar', 'area_en']) as $branch) {
+            foreach ([$branch->area_ar, $branch->area_en] as $term) {
+                if (mb_strtolower($this->normalize((string) $term)) === $needle) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /** `match()` first, then one Claude call among the known area keys. Fake driver, missing key, `none`, or any error: null. */
     public function guess(string $text): ?string
     {
@@ -142,6 +167,169 @@ final class BranchFinder
 
         return "فروعنا في {$branches->first()->area_ar} 🌸\n\n".implode("\n\n", $blocks);
     }
+
+    /**
+     * Active branches whose name she typed (the owner's flows 4 and 5, 2026-09-19): the name as
+     * written (Arabic or English, normalized), or its consonant skeleton so "المرغني" finds
+     * "El Marghany" and "عباس العقاد" finds "Abbas El Akkad". Several branches with the same
+     * name all come back (she then picks one); none → an empty collection.
+     *
+     * @return Collection<int, Branch>
+     */
+    public function matchBranches(string $text): Collection
+    {
+        $needle = mb_strtolower($this->normalize($text));
+
+        if (mb_strlen($needle) < 3) {
+            return collect();
+        }
+
+        $windows = $this->skeletonWindows($needle);
+        $branches = Branch::query()->where('is_active', true)->orderBy('sort')->orderBy('id')->get();
+
+        return $branches->filter(function (Branch $b) use ($needle, $windows) {
+            $name = mb_strtolower($this->normalize(self::stripGeneric((string) $b->name)));
+
+            if (mb_strlen($name) >= 3 && preg_match('/(?<![\p{L}\p{N}])'.preg_quote($name, '/').'(?![\p{L}\p{N}])/u', $needle) === 1) {
+                return true;
+            }
+
+            $skeleton = self::skeleton($name);
+
+            return strlen($skeleton) >= 3 && in_array($skeleton, $windows, true);
+        })->values();
+    }
+
+    /** The branches of an area, in the owner's order. @return Collection<int, Branch> */
+    public function branchesOf(string $areaKey): Collection
+    {
+        return Branch::query()->where('area_key', $areaKey)->where('is_active', true)->orderBy('sort')->orderBy('id')->get();
+    }
+
+    /**
+     * One card per branch (the owner's flow 5): title = name, subtitle = address + «📞 phone»
+     * (+ «🕘 hours» only once the owner filled them in), buttons «📍 الخريطة» and «📞 اتصل بالفرع».
+     * Each card keeps its full text too (WhatsApp, the text fallback).
+     *
+     * @param  iterable<Branch>  $branches
+     * @return array{type:'generic', cards:list<array<string, mixed>>}
+     */
+    public function cards(iterable $branches): array
+    {
+        $cards = [];
+
+        foreach ($branches as $b) {
+            $phone = trim((string) $b->phone);
+            $hours = trim((string) $b->hours);
+            $tail = array_values(array_filter([$hours !== '' ? "🕘 {$hours}" : null, $phone !== '' ? "📞 {$phone}" : null]));
+            $tailText = implode("\n", $tail);
+            // The address gives way first: the phone must survive Messenger's 80-character subtitle.
+            $room = OutboundCards::SUBTITLE_MAX - mb_strlen($tailText) - ($tailText !== '' ? 1 : 0);
+            $address = trim((string) $b->address);
+            $address = $room <= 1 ? '' : (mb_strlen($address) > $room ? mb_substr($address, 0, $room - 1).'…' : $address);
+
+            $buttons = [];
+
+            if (filled($b->map_url)) {
+                $buttons[] = OutboundCards::webUrl('📍 الخريطة', (string) $b->map_url);
+            }
+
+            if ($phone !== '' && ($call = OutboundCards::call('📞 اتصل بالفرع', $phone)) !== null) {
+                $buttons[] = $call;
+            }
+
+            $cards[] = [
+                'title' => (string) $b->name,
+                'subtitle' => implode("\n", array_filter([$address, $tailText], fn ($p) => $p !== '')),
+                'text' => $this->branchText($b),
+                'buttons' => $buttons,
+            ];
+        }
+
+        return OutboundCards::generic($cards);
+    }
+
+    /** "📍 name / address / 🕘 hours / 📞 phone / 🗺️ map" (the hours line only when set). */
+    public function branchText(Branch $branch): string
+    {
+        $lines = ["📍 {$branch->name}", (string) $branch->address];
+
+        if (filled($branch->hours)) {
+            $lines[] = "🕘 {$branch->hours}";
+        }
+
+        if (filled($branch->phone)) {
+            $lines[] = "📞 {$branch->phone}";
+        }
+
+        if (filled($branch->map_url)) {
+            $lines[] = "🗺️ {$branch->map_url}";
+        }
+
+        return implode("\n", array_filter($lines, fn ($l) => trim($l) !== ''));
+    }
+
+    /** Words that are not part of a branch's own name. */
+    private const GENERIC_WORDS = ['فرع', 'شارع', 'ش', 'مول', 'branch', 'street', 'st', 'mall', 'road', 'rd'];
+
+    private static function stripGeneric(string $name): string
+    {
+        $words = preg_split('/[\s.,\-]+/u', mb_strtolower(trim($name))) ?: [];
+
+        return implode(' ', array_filter($words, fn ($w) => $w !== '' && ! in_array($w, self::GENERIC_WORDS, true)));
+    }
+
+    /** Skeletons of every 1–3 word run of the text (generic words and articles dropped). @return list<string> */
+    private function skeletonWindows(string $text): array
+    {
+        $words = array_values(array_filter(preg_split('/[\s.,\-]+/u', mb_strtolower($text)) ?: [], fn ($w) => $w !== '' && ! in_array($w, self::GENERIC_WORDS, true)));
+        $windows = [];
+
+        foreach (array_keys($words) as $i) {
+            for ($n = 1; $n <= 3 && $i + $n <= count($words); $n++) {
+                $skeleton = self::skeleton(implode(' ', array_slice($words, $i, $n)));
+
+                if (strlen($skeleton) >= 3) {
+                    $windows[] = $skeleton;
+                }
+            }
+        }
+
+        return array_values(array_unique($windows));
+    }
+
+    /**
+     * A rough Latin consonant skeleton shared by the Arabic and English spelling of a name:
+     * articles (ال / el / al) and vowels dropped, letters mapped (ق→k, ج→g, ث→s…), doubles merged.
+     */
+    public static function skeleton(string $text): string
+    {
+        $words = preg_split('/\s+/u', mb_strtolower(trim($text))) ?: [];
+        $out = '';
+
+        foreach ($words as $word) {
+            if (in_array($word, ['el', 'al', 'ال'], true)) {
+                continue;
+            }
+
+            $word = preg_replace('/^(?:ال|لل|el-|al-)(?=\p{L}{2})/u', '', $word) ?? $word;
+            $out .= strtr($word, self::SKELETON_MAP);
+        }
+
+        $out = preg_replace('/[^a-z]/', '', $out) ?? '';
+        // A soft c (city) sounds like s; z and s are one letter here (ستارز / Stars).
+        $out = preg_replace('/c(?=[eiy])/', 's', $out) ?? $out;
+        $out = preg_replace('/[aeiouyw]/', '', str_replace(['q', 'j', 'c', 'z'], ['k', 'g', 'k', 's'], $out)) ?? '';
+
+        return preg_replace('/(.)\1+/', '$1', $out) ?? '';
+    }
+
+    private const SKELETON_MAP = [
+        'ا' => '', 'أ' => '', 'إ' => '', 'آ' => '', 'ى' => '', 'ي' => '', 'و' => '', 'ؤ' => '', 'ئ' => '', 'ء' => '', 'ع' => '', 'ة' => '', 'ه' => 'h',
+        'ب' => 'b', 'ت' => 't', 'ث' => 's', 'ج' => 'g', 'ح' => 'h', 'خ' => 'kh', 'د' => 'd', 'ذ' => 'z', 'ر' => 'r', 'ز' => 'z',
+        'س' => 's', 'ش' => 'sh', 'ص' => 's', 'ض' => 'd', 'ط' => 't', 'ظ' => 'z', 'غ' => 'gh', 'ف' => 'f', 'ق' => 'k', 'ك' => 'k',
+        'ل' => 'l', 'م' => 'm', 'ن' => 'n', 'پ' => 'b', 'ڤ' => 'v', 'x' => 'ks', 'p' => 'b',
+    ];
 
     private function normalize(string $text): string
     {

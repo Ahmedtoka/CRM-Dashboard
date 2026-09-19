@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MessageCards from '@/components/crm/MessageCards.vue';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/composables/useI18n';
 import { MAX_QUICK_REPLIES } from '@/lib/flows/flowGraph';
@@ -63,6 +64,17 @@ function chipTooltip(chip: { full: string; truncated: boolean; hidden: string | 
                     </template>
                 </div>
             </MessengerBubble>
+
+            <!-- The contact step's other message: asked instead when her name and mobile are not known. -->
+            <MessengerBubble v-if="model.alternative" :text="model.alternative" />
+
+            <!-- Sample branch cards, as Messenger shows them; other channels get their own form. -->
+            <template v-if="model.cards">
+                <MessengerBubble>
+                    <MessageCards :cards="model.cards" variant="messenger" class="max-w-full" />
+                </MessengerBubble>
+                <p class="text-center text-2xs text-muted-foreground">{{ t('flows.preview.cards_hint') }}</p>
+            </template>
 
             <p v-if="model.scriptMissing" class="flex items-start gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-2xs text-amber-800 dark:text-amber-200">
                 <TriangleAlert class="mt-px size-3.5 shrink-0" aria-hidden="true" />{{ t('flows.preview.script_missing') }}

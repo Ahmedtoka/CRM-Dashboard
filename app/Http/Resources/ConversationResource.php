@@ -46,6 +46,7 @@ class ConversationResource extends JsonResource
             'queue' => $c->queue,
             'handover_category' => $c->handover_category,
             'handover_category_label' => self::categoryLabel($c),
+            'handover_topic' => $c->handover_topic,
             'handler' => $c->handler?->value,
             'needs_human' => (bool) $c->needs_human,
             'source' => $c->source?->value,

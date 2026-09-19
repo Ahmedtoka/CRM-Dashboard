@@ -7,6 +7,7 @@ use App\Bot\Ai\AiResponder;
 use App\Bot\Ai\MessageClassifier;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Flows\ConversationRouter;
+use App\Bot\Flows\HumanHandover;
 use App\Bot\Grounding\BotContext;
 use App\Bot\Grounding\BotContextBuilder;
 use App\Bot\Knowledge\KnowledgeBase;
@@ -26,6 +27,7 @@ use App\Inbox\WindowClosedException;
 use App\Inbox\WindowPolicy;
 use App\Media\MediaPolicy;
 use App\Media\MediaRejected;
+use App\Models\BotFlow;
 use App\Models\BotRule;
 use App\Models\BotRun;
 use App\Models\BotSetting;
@@ -34,7 +36,6 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\User;
 use App\Support\SafeBroadcast;
-use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
@@ -88,15 +89,24 @@ class BotEngine
             return $this->maybeSendOutsideHoursMessage($c, $last, $peeked, $settings);
         }
 
+        // She asked for a person (the owner's flow 7, 2026-09-19): the topic question first
+        // («محتاجة إيه؟»), or straight to the team from inside a flow; the reply names the hours.
         if ($this->signals->matchesKeyword($text, $settings->handover_keywords)) {
-            $this->handover($c, 'keyword', $text, null, $this->context->build($text, BotIntent::Other));
+            if (BotFlow::active(ConversationRouter::MAIN_MENU) === null) {
+                // The menu bot is off: the person straight away, as before the owner's flows.
+                $this->handover($c, 'keyword', $text, null, $this->context->build($text, BotIntent::Other));
 
-            return $this->recordRun($c, $last, engine: 'keyword', decision: 'handover');
+                return $this->recordRun($c, $last, engine: 'keyword', decision: 'handover');
+            }
+
+            app(HumanHandover::class)->requested($c, $burst, $text);
+
+            return $this->recordRun($c, $last, engine: 'keyword', decision: $c->handler === Handler::Bot ? 'reply' : 'handover');
         }
 
         if ($this->agentTurnCount($c) >= (int) $settings->max_bot_turns
             || $this->flowTurnCount($c) >= self::FLOW_TURNS_FACTOR * (int) $settings->max_bot_turns) {
-            $this->handover($c, 'max_turns', $text, null, $this->context->build($text, BotIntent::Other));
+            $this->handoverWithHoursReply($c, 'max_turns', $text);
 
             return $this->recordRun($c, $last, engine: 'limit', decision: 'handover');
         }
@@ -113,7 +123,7 @@ class BotEngine
         }
 
         if (! $settings->ai_enabled) {
-            $this->handover($c, 'no_rule', $text, null, $this->context->build($text, BotIntent::Other));
+            $this->handoverWithHoursReply($c, 'no_rule', $text);
 
             return $this->recordRun($c, $last, engine: 'none', decision: 'handover');
         }
@@ -230,6 +240,7 @@ class BotEngine
         $c->priority_level = null;
         $c->queue = null;
         $c->handover_category = null;
+        $c->handover_topic = null;
         // Task 5 ruling 6a: the bot starts fresh, keeping only the burst turn marker.
         $c->bot_state = $c->resetBotState();
         $c->save();
@@ -472,32 +483,19 @@ class BotEngine
         );
     }
 
+    /** A handover the bot decides on a turn: the working-hours reply (flow 7, 2026-09-19), then the team. */
+    private function handoverWithHoursReply(Conversation $c, string $reason, string $text): void
+    {
+        if (BotFlow::active(ConversationRouter::MAIN_MENU) !== null && ($reply = app(HumanHandover::class)->hoursReply()) !== null) {
+            $this->trySendBot($c, $reply);
+        }
+
+        $this->handover($c, $reason, $text, null, $this->context->build($text, BotIntent::Other));
+    }
+
     private function withinWorkingHours(BotSetting $settings): bool
     {
-        $hours = $settings->working_hours;
-
-        if (empty($hours)) {
-            return true;
-        }
-
-        $now = CarbonImmutable::now('Africa/Cairo');
-        $days = $hours['days'] ?? range(0, 6);
-
-        if (! in_array($now->dayOfWeek, $days, true)) {
-            return false;
-        }
-
-        $current = $now->format('H:i');
-        $from = $hours['from'] ?? '00:00';
-        $to = $hours['to'] ?? '23:59';
-
-        // A range like {"from":"22:00","to":"02:00"} crosses midnight: "now"
-        // is inside it when it's at/after `from` OR at/before `to`, not both.
-        if ($from > $to) {
-            return $current >= $from || $current <= $to;
-        }
-
-        return $current >= $from && $current <= $to;
+        return WorkingHours::isOpen($settings);
     }
 
     private function maybeSendOutsideHoursMessage(Conversation $c, Message $m, ?BotRule $rule, BotSetting $settings): ?BotRun

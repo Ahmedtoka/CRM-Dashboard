@@ -2,7 +2,7 @@
 import { useI18n } from '@/composables/useI18n';
 import { STEP_ID_PROBLEM_KEYS, fieldsOf, renameStep, setStepText, stepIdProblem, updateStep } from '@/lib/flows/flowGraph';
 import { stepColor, stepIcon, stepTypeLabel } from '@/lib/flows/stepVisuals';
-import type { FlowBranch, FlowDefinition, FlowListRow, FlowOption, FlowScriptOption, FlowStep, StepTypeCatalog } from '@/types/flows';
+import type { FlowBranch, FlowDefinition, FlowListRow, FlowOption, FlowScriptOption, FlowStep, StepFlag, StepTypeCatalog } from '@/types/flows';
 import { CircleAlert, Flag, Trash2, TriangleAlert } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import BranchesEditor from './BranchesEditor.vue';
@@ -86,6 +86,24 @@ function setVerifyOwner(on: boolean): void {
     patch((s) => {
         if (on) s.verify_owner = true;
         else delete s.verify_owner;
+    });
+}
+
+/**
+ * The on/off switches beside verify_owner (2026-09-19): return_rules is on unless turned off
+ * (only `false` is stored), allow_text and photos are off unless turned on (only `true` is stored).
+ */
+const FLAG_DEFAULTS: Record<Exclude<StepFlag, 'verify_owner'>, boolean> = { return_rules: true, allow_text: false, photos: false };
+const flags = computed(() => (Object.keys(FLAG_DEFAULTS) as (keyof typeof FLAG_DEFAULTS)[]).filter((f) => hasField(f)));
+
+function flagOn(flag: keyof typeof FLAG_DEFAULTS): boolean {
+    return step.value?.[flag] ?? FLAG_DEFAULTS[flag];
+}
+
+function setFlag(flag: keyof typeof FLAG_DEFAULTS, on: boolean): void {
+    patch((s) => {
+        if (on === FLAG_DEFAULTS[flag]) delete s[flag];
+        else s[flag] = on;
     });
 }
 
@@ -224,6 +242,25 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
         <p v-if="step.type === 'product_link'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
             {{ t('flows.product_link_hint') }}
         </p>
+        <p v-if="step.type === 'contact'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+            {{ t('flows.contact_hint') }}
+        </p>
+        <p v-if="step.type === 'item_changes'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+            {{ t('flows.item_changes_hint') }}
+        </p>
+
+        <label v-for="flag in flags" :key="flag" class="flex items-start gap-2.5 rounded-md bg-muted/60 px-3 py-2.5">
+            <input
+                type="checkbox"
+                class="mt-0.5 size-4 shrink-0 accent-primary"
+                :checked="flagOn(flag)"
+                @change="setFlag(flag, ($event.target as HTMLInputElement).checked)"
+            />
+            <span class="grid gap-0.5">
+                <span class="text-xs font-semibold">{{ t(`flows.${flag}`) }}</span>
+                <span class="text-2xs text-muted-foreground">{{ t(`flows.${flag}_hint`) }}</span>
+            </span>
+        </label>
 
         <label v-if="hasField('verify_owner')" class="flex items-start gap-2.5 rounded-md bg-muted/60 px-3 py-2.5">
             <input

@@ -48,6 +48,8 @@ class MessageCreated implements ShouldBroadcastNow
             'sender_type' => $m->sender_type?->value,
             'user' => $user ? ['id' => $user->id, 'name' => $user->name, 'color' => $user->color] : null,
             'body' => $m->body,
+            'buttons' => $m->buttons ?? [],
+            'cards' => $m->cards,
             'attachments' => AttachmentResource::collection($m->loadMissing('mediaAttachments')->mediaAttachments)->resolve(),
             'status' => $m->status?->value,
             'error' => $m->error,

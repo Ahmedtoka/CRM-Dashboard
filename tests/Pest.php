@@ -1,5 +1,13 @@
 <?php
 
+use App\Bot\Flows\OwnerFlowsUpgrade;
+use App\Bot\Flows\ReturnFlowUpgrade;
+use App\Models\BotFlow;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
+use Tests\TestCase;
+
 /*
 |--------------------------------------------------------------------------
 | Test Case
@@ -11,8 +19,8 @@
 |
 */
 
-pest()->extend(Tests\TestCase::class)
-    ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
+pest()->extend(TestCase::class)
+    ->use(RefreshDatabase::class)
     ->in('Feature');
 
 /*
@@ -59,7 +67,7 @@ function fakeMetaGraph(array $routes): void
     // Calling it again in the same test replaces the routes (a second Http::fake()
     // closure would never be reached: the first one answers every request).
     static $registered = [];
-    $factory = Illuminate\Support\Facades\Http::getFacadeRoot();
+    $factory = Http::getFacadeRoot();
     $id = spl_object_id($factory);
     $GLOBALS['__metaGraphRoutes'] = $routes;
 
@@ -69,14 +77,14 @@ function fakeMetaGraph(array $routes): void
 
     $registered = [$id => $factory];
 
-    Illuminate\Support\Facades\Http::fake(function (Illuminate\Http\Client\Request $request) {
+    Http::fake(function (Request $request) {
         $routes = $GLOBALS['__metaGraphRoutes'];
         $path = (string) parse_url($request->url(), PHP_URL_PATH);
         $path = preg_replace('~^/v\d+\.\d+/~', '', $path);
         $key = strtoupper($request->method()).' '.$path;
 
         if (! array_key_exists($key, $routes)) {
-            return Illuminate\Support\Facades\Http::response(['error' => ['message' => 'unexpected '.$key, 'code' => 1]], 500);
+            return Http::response(['error' => ['message' => 'unexpected '.$key, 'code' => 1]], 500);
         }
 
         $route = $routes[$key];
@@ -86,10 +94,10 @@ function fakeMetaGraph(array $routes): void
         }
 
         if (is_array($route) && array_key_exists(0, $route) && is_int($route[1] ?? null)) {
-            return Illuminate\Support\Facades\Http::response($route[0], $route[1]);
+            return Http::response($route[0], $route[1]);
         }
 
-        return Illuminate\Support\Facades\Http::response($route);
+        return Http::response($route);
     });
 }
 
@@ -100,6 +108,19 @@ function fakeMetaGraph(array $routes): void
  */
 function useOrderAwareReturnFlow(): void
 {
-    App\Models\BotFlow::query()->where('key', 'return_exchange')
-        ->update(['definition' => json_encode(App\Bot\Flows\ReturnFlowUpgrade::orderAwareDefinition(), JSON_UNESCAPED_UNICODE)]);
+    BotFlow::query()->where('key', 'return_exchange')
+        ->update(['definition' => json_encode(ReturnFlowUpgrade::orderAwareDefinition(), JSON_UNESCAPED_UNICODE)]);
+}
+
+/**
+ * Puts the 2026-09-17 definitions of cancel_edit / complaint / branches back live, for tests of
+ * the step types they exercise. The seeded flows are the owner's 2026-09-19 flows
+ * (App\Bot\Flows\OwnerFlowsUpgrade).
+ */
+function useLegacyOwnerFlows(string ...$keys): void
+{
+    foreach ($keys ?: ['cancel_edit', 'complaint', 'branches'] as $key) {
+        BotFlow::query()->where('key', $key)
+            ->update(['definition' => json_encode(OwnerFlowsUpgrade::legacyDefinitions()[$key], JSON_UNESCAPED_UNICODE)]);
+    }
 }

@@ -34,41 +34,12 @@ final class FlowDefinitions
             ]]],
             // The owner's flow of 2026-09-19 (ReturnFlowUpgrade publishes it on live databases).
             'return_exchange' => ['title_ar' => 'المرتجع والاستبدال', 'definition' => ReturnFlowUpgrade::definition()],
-            'complaint' => ['title_ar' => 'شكوى', 'definition' => ['start' => 'type', 'steps' => [
-                'type' => ['type' => 'choice', 'field' => 'complaint_type', 'text' => 'آسفين جدًا لده 🙏 الشكوى بخصوص إيه؟', 'options' => [
-                    ['value' => 'branch', 'title' => 'فرع', 'synonyms' => ['فرع', 'الفرع', 'البياعة', 'الموظفة']],
-                    ['value' => 'delivery', 'title' => 'شحن وتوصيل', 'synonyms' => ['شحن', 'توصيل', 'المندوب', 'اتأخر']],
-                    ['value' => 'product', 'title' => 'منتج', 'synonyms' => ['منتج', 'جودة', 'خامة']],
-                    ['value' => 'service', 'title' => 'خدمة العملاء', 'synonyms' => ['خدمة العملاء', 'محدش بيرد', 'الرد']],
-                    ['value' => 'other', 'title' => 'حاجة تانية', 'synonyms' => ['تاني', 'حاجة تانية']],
-                ], 'branches' => [
-                    ['field' => 'complaint_type', 'in' => ['branch'], 'next' => 'branch'],
-                    ['field' => 'complaint_type', 'in' => ['delivery', 'product'], 'next' => 'order'],
-                ], 'next' => 'name'],
-                'branch' => ['type' => 'branch', 'field' => 'branch', 'text' => 'الفرع في أنهي منطقة؟', 'next' => 'visit_date'],
-                'visit_date' => ['type' => 'text', 'field' => 'visit_date', 'text' => 'كانت الزيارة إمتى تقريبًا؟', 'next' => 'name'],
-                'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟', 'next' => 'name'],
-                'name' => ['type' => 'name', 'field' => 'name', 'text' => 'ممكن اسم حضرتك؟', 'next' => 'phone'],
-                'phone' => ['type' => 'phone', 'field' => 'phone', 'text' => 'ورقم موبايل نتواصل مع حضرتك عليه؟ 📞', 'next' => 'description'],
-                'description' => ['type' => 'text', 'field' => 'description', 'text' => 'احكيلي حصل إيه بالتفصيل عشان نقدر نساعد حضرتك 🙏', 'next' => 'summary'],
-                'summary' => ['type' => 'summary', 'text' => 'ده ملخص الشكوى:', 'next' => 'record'],
-                'record' => ['type' => 'record_case', 'case_type' => 'complaint', 'script' => 'flow_complaint_recorded', 'next' => 'end'],
-            ]]],
-            'cancel_edit' => ['title_ar' => 'إلغاء أو تعديل أوردر', 'definition' => ['start' => 'order', 'steps' => [
-                'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟ 🌸', 'next' => 'request'],
-                'request' => ['type' => 'choice', 'field' => 'request', 'text' => 'حضرتك عايزة تلغي الأوردر ولا تعدل فيه؟', 'options' => [
-                    ['value' => 'cancel', 'title' => 'إلغاء الأوردر', 'synonyms' => ['الغاء', 'الغي', 'cancel']],
-                    ['value' => 'edit', 'title' => 'تعديل الأوردر', 'synonyms' => ['تعديل', 'اعدل', 'اغير', 'edit']],
-                ], 'branches' => [['field' => 'request', 'in' => ['edit'], 'next' => 'edit_details']], 'next' => 'summary'],
-                'edit_details' => ['type' => 'text', 'field' => 'edit_details', 'text' => 'عايزة تعدلي إيه بالظبط؟ (المقاس، اللون، العنوان…)', 'next' => 'summary'],
-                'summary' => ['type' => 'summary', 'text' => 'ده ملخص طلب حضرتك:', 'next' => 'record'],
-                'record' => ['type' => 'record_case', 'case_type' => 'cancel_edit', 'script' => 'flow_cancel_recorded', 'next' => 'end'],
-            ]]],
+            // The owner's flows of 2026-09-19 (OwnerFlowsUpgrade publishes them on live databases).
+            'complaint' => ['title_ar' => 'شكوى', 'definition' => OwnerFlowsUpgrade::complaintDefinition()],
+            'cancel_edit' => ['title_ar' => 'إلغاء أو تعديل أوردر', 'definition' => OwnerFlowsUpgrade::cancelEditDefinition()],
             // The owner's flow of 2026-09-19 (TrackingFlowUpgrade publishes it on live databases).
             'order_tracking' => ['title_ar' => 'متابعة أوردر', 'definition' => TrackingFlowUpgrade::definition()],
-            'branches' => ['title_ar' => 'الفروع والمواعيد', 'definition' => ['start' => 'list', 'steps' => [
-                'list' => ['type' => 'branches_list', 'text' => 'حضرتك في أنهي منطقة؟ اختاري أو اكتبي اسم المنطقة 👇', 'next' => 'end'],
-            ]]],
+            'branches' => ['title_ar' => 'الفروع والمواعيد', 'definition' => OwnerFlowsUpgrade::branchesDefinition()],
         ];
     }
 }

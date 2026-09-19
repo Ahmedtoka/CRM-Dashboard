@@ -6,6 +6,7 @@ use App\Enums\MessageDirection;
 use App\Enums\MessageStatus;
 use App\Enums\Platform;
 use App\Enums\SenderType;
+use Database\Factories\MessageFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Message extends Model
 {
-    /** @use HasFactory<\Database\Factories\MessageFactory> */
+    /** @use HasFactory<MessageFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -25,6 +26,7 @@ class Message extends Model
         'body',
         'attachments',
         'buttons',
+        'cards',
         'payload',
         'external_id',
         'status',
@@ -46,6 +48,7 @@ class Message extends Model
             'sender_type' => SenderType::class,
             'attachments' => 'array',
             'buttons' => 'array',
+            'cards' => 'array',
             'status' => MessageStatus::class,
             'is_template' => 'boolean',
             'is_spam' => 'boolean',

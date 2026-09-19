@@ -46,6 +46,8 @@ export interface Conversation {
     handover_category: string | null;
     /** Arabic label from HandoverSummary (the single labels source). */
     handover_category_label: string | null;
+    /** what she said she needs when she asked for a person («موضوع التحويل», flow 7) */
+    handover_topic?: string | null;
     handler: 'bot' | 'human';
     needs_human: boolean;
     source: 'direct' | 'comment' | 'ad' | null;
@@ -94,6 +96,23 @@ export interface PendingUpload {
     error: string | null;
 }
 
+/** A card button: a link, or a call (Messenger only). Mirrors app/Channels/Cards/OutboundCards.php. */
+export interface OutboundCardButton {
+    type: 'web_url' | 'phone';
+    title: string;
+    url?: string;
+    phone?: string;
+}
+
+export interface OutboundCard {
+    title: string;
+    subtitle?: string | null;
+    text?: string | null;
+    buttons: OutboundCardButton[];
+}
+
+export type OutboundCards = { type: 'generic'; cards: OutboundCard[] } | { type: 'button'; buttons: OutboundCardButton[] };
+
 export interface Message {
     id: number;
     conversation_id: number;
@@ -102,6 +121,8 @@ export interface Message {
     user: UserRef | null;
     body: string | null;
     buttons?: { title: string; payload: string }[];
+    /** rich cards the bot sent with this message (the branch cards, the store-link button) */
+    cards?: OutboundCards | null;
     payload?: string | null;
     attachments: Attachment[];
     status: MessageStatus | null;

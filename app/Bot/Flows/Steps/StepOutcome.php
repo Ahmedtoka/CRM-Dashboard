@@ -25,7 +25,7 @@ final readonly class StepOutcome
     public const JUMP = 'jump';
 
     /**
-     * @param  list<array{text:string, buttons?:list<array{title:string, payload:string}>}>  $messages
+     * @param  list<array{text:string, buttons?:list<array{title:string, payload:string}>, cards?:array}>  $messages  (`cards`: rich cards, the text is their fallback)
      * @param  array<string, mixed>  $data
      * @param  int|null  $retries  WAIT only: the new retry count (null keeps it)
      */

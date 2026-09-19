@@ -45,6 +45,7 @@ class Conversation extends Model
         'bot_state',
         'priority_level',
         'handover_category',
+        'handover_topic',
         'queue',
     ];
 

@@ -76,12 +76,16 @@ defineExpose({ openTags: () => (tagsOpen.value = true) });
                 <StatusChip v-if="conversation.priority_level === 'high'" :label="t('inbox.priority_level.high')" tone="negative" />
                 <StatusChip v-else-if="conversation.priority_level === 'medium'" :label="t('inbox.priority_level.medium')" tone="warning" />
                 <span
-                    v-if="conversation.handover_category_label"
+                    v-if="conversation.handover_topic || conversation.handover_category_label"
                     class="hidden h-5 min-w-0 max-w-[12rem] shrink items-center rounded-full border border-border px-2 text-2xs text-muted-foreground md:inline-flex"
-                    :title="t('inbox.category', { label: conversation.handover_category_label })"
+                    :title="
+                        conversation.handover_topic
+                            ? t('inbox.topic', { topic: conversation.handover_topic })
+                            : t('inbox.category', { label: conversation.handover_category_label ?? '' })
+                    "
                     dir="auto"
                 >
-                    <span class="truncate">{{ conversation.handover_category_label }}</span>
+                    <span class="truncate">{{ conversation.handover_topic || conversation.handover_category_label }}</span>
                 </span>
                 <StatusChip v-if="conversation.needs_human" :label="t('thread.needs_human')" tone="negative" />
                 <StatusChip v-else :label="conversation.handler === 'bot' ? `🤖 ${t('thread.handler_bot')}` : t('thread.handler_human')" :tone="conversation.handler === 'bot' ? 'info' : 'neutral'" />

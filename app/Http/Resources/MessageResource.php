@@ -21,6 +21,7 @@ class MessageResource extends JsonResource
             'user' => $user ? ['id' => $user->id, 'name' => $user->name, 'color' => $user->color] : null,
             'body' => $this->body,
             'buttons' => $this->buttons ?? [],
+            'cards' => $this->cards,
             'payload' => $this->payload,
             'attachments' => AttachmentResource::collection(
                 $this->resource->relationLoaded('mediaAttachments') ? $this->mediaAttachments : $this->mediaAttachments()->get()

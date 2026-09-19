@@ -140,6 +140,7 @@ it('notes the cancel/edit window left or over when the order was found', functio
 });
 
 it('records the case from the complaint flow and sends the closing script with the case number', function () {
+    useLegacyOwnerFlows('complaint', 'cancel_edit'); // the 2026-09-17 flows with their summary step
     $c = crConversation();
     FlowState::put($c, ['key' => 'complaint', 'step' => 'summary', 'retries' => 0, 'started_at' => now()->toIso8601String(), 'data' => [
         'complaint_type' => 'service', 'complaint_type_title' => 'خدمة العملاء', 'name' => 'منى', 'phone' => '01012345678', 'description' => 'محدش بيرد',
@@ -228,6 +229,7 @@ it('lets only users with access to the conversation platform view or update a ca
 });
 
 it('hands the customer to a person when the case cannot be recorded', function () {
+    useLegacyOwnerFlows('complaint', 'cancel_edit'); // the 2026-09-17 flows with their summary step
     $c = crConversation();
     $this->mock(CaseRecorder::class)->shouldReceive('record')->andThrow(new RuntimeException('db down'));
     FlowState::put($c, ['key' => 'cancel_edit', 'step' => 'summary', 'retries' => 0, 'started_at' => now()->toIso8601String(), 'data' => [

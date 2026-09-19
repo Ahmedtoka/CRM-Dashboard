@@ -4,7 +4,9 @@ namespace App\Bot\Flows;
 
 use App\Bot\Flows\Steps\BranchesListStep;
 use App\Bot\Flows\Steps\BranchStep;
+use App\Bot\Flows\Steps\ContactStep;
 use App\Bot\Flows\Steps\FlowStep;
+use App\Bot\Flows\Steps\ItemChangesStep;
 use App\Bot\Flows\Steps\OrderItemsStep;
 use App\Bot\Flows\Steps\OrderStep;
 use App\Bot\Flows\Steps\PhotoStep;
@@ -26,6 +28,9 @@ final class FlowSteps
         'branches_list' => BranchesListStep::class,
         'status' => StatusStep::class,
         'record_case' => RecordCaseStep::class,
+        // The owner's flows of 2026-09-19.
+        'contact' => ContactStep::class,
+        'item_changes' => ItemChangesStep::class,
     ];
 
     public function __construct(private readonly Container $app) {}

@@ -41,6 +41,7 @@ class ConversationActions
             'priority_level' => null,
             'queue' => null,
             'handover_category' => null,
+            'handover_topic' => null,
             // Task 5 ruling 6a: forget the flow's memory (clarified/repeat_count/asks…)
             // so a returning customer is not handed over as "repeated" or "unclear".
             'bot_state' => $c->resetBotState(),
@@ -115,6 +116,7 @@ class ConversationActions
                 'bot_state' => null,
                 'priority_level' => null,
                 'handover_category' => null,
+                'handover_topic' => null,
                 'queue' => null,
             ])->save();
         });

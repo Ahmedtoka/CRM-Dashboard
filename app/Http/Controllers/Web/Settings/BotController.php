@@ -68,6 +68,8 @@ class BotController extends Controller
             // Order-aware returns (spec 2026-09-19 §2): items matching these words are never returned or exchanged.
             'non_returnable_keywords' => ['sometimes', 'array', 'max:100'],
             'non_returnable_keywords.*' => ['string', 'max:100'],
+            // The «🛍️ تسوقي من الموقع» button of the products menu (2026-09-19); empty = the default store.
+            'store_url' => ['sometimes', 'nullable', 'url:http,https', 'max:255'],
         ]);
 
         $settings = BotSetting::current();

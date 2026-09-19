@@ -68,8 +68,10 @@ it('runs the whole demo flow over HTTP', function () {
         ->and($botReply->status)->toBe(MessageStatus::Sent)
         ->and($conversation->channelAccount->external_id)->toBe('demo-whatsapp');
 
-    // 2) The customer asks for a human: handover.
+    // 2) The customer asks for a human: «محتاجة إيه؟» first (flow 7), then the handover with her topic.
     $this->actingAs($admin)->postJson('/simulator/message', ['platform' => 'whatsapp', 'customer_key' => '201001112233', 'name' => 'Nour', 'text' => 'عايز اكلم حد'])->assertCreated();
+    expect($conversation->fresh()->handler)->toBe(Handler::Bot);
+    $this->actingAs($admin)->postJson('/simulator/message', ['platform' => 'whatsapp', 'customer_key' => '201001112233', 'name' => 'Nour', 'text' => 'عايزة أسأل عن أوردر'])->assertCreated();
 
     $conversation->refresh();
     expect($conversation->handler)->toBe(Handler::Human)->and($conversation->needs_human)->toBeTrue()
@@ -136,8 +138,8 @@ it('runs the whole demo flow over HTTP', function () {
     );
 
     $team = $report('team');
-    // Two WhatsApp customer messages; the ad comment is a comment, not an inbound message.
-    expect($team['metrics']['inbound_messages'])->toBe(2)
+    // Three WhatsApp customer messages (the price, the human request, its topic); the ad comment is a comment.
+    expect($team['metrics']['inbound_messages'])->toBe(3)
         ->and($team['metrics']['comments_total'])->toBe(1)
         ->and($team['metrics']['orders_count'])->toBe(2)
         ->and(collect($team['leaderboard'])->firstWhere('user.id', $whatsappMod->id)['messages_sent'])->toBe(1);

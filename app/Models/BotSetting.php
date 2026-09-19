@@ -38,6 +38,7 @@ class BotSetting extends Model
         'typing_ms_per_char',
         'order_lookup_enabled',
         'non_returnable_keywords',
+        'store_url',
     ];
 
     /** Seeded from the existing "حذف السبام" comment rule keywords (spec §11.1). */
@@ -89,6 +90,17 @@ class BotSetting extends Model
             'order_lookup_enabled' => 'boolean',
             'non_returnable_keywords' => 'array',
         ];
+    }
+
+    /** The store link of the «🛍️ تسوقي من الموقع» button (the owner's flow 6, 2026-09-19). */
+    public const DEFAULT_STORE_URL = 'https://levoilestores.com/';
+
+    /** The saved store link, else the default. */
+    public function storeUrl(): string
+    {
+        $url = trim((string) $this->store_url);
+
+        return $url !== '' ? $url : self::DEFAULT_STORE_URL;
     }
 
     /** @return list<string> the owner's list; the default list until one is saved (an emptied list stays empty) */

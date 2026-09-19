@@ -25,6 +25,16 @@ final class FlowDefinition
     public const TYPES = [
         'menu', 'choice', 'text', 'name', 'phone', 'photo', 'order', 'order_items', 'product_link', 'branch',
         'branches_list', 'status', 'summary', 'record_case', 'script', 'handover', 'end',
+        // 2026-09-19: the name + mobile to call her on, and swap/remove per picked piece (cancel/edit).
+        'contact', 'item_changes',
+    ];
+
+    /** Optional true/false switches a step may carry, and the step types that read them. */
+    private const FLAGS = [
+        'verify_owner' => ['order'],
+        'return_rules' => ['order_items'],
+        'allow_text' => ['choice'],
+        'photos' => ['text'],
     ];
 
     /** Step types that must carry a non-empty `field`. */
@@ -242,6 +252,15 @@ final class FlowDefinition
             }
         }
 
+        // item_changes walks the pieces an order_items step picked.
+        $picksItems = collect($steps)->contains(fn ($s) => is_array($s) && ($s['type'] ?? null) === 'order_items');
+
+        foreach ($steps as $stepKey => $step) {
+            if (is_array($step) && ($step['type'] ?? null) === 'item_changes' && ! $picksItems) {
+                $warnings[] = "الخطوة {$stepKey} محتاجة قبلها خطوة اختيار قطع من الأوردر";
+            }
+        }
+
         // order_items only lists the order when an `order` step proved she owns it; otherwise she types the item name.
         $verifiedOrder = collect($steps)->contains(fn ($s) => is_array($s) && ($s['type'] ?? null) === 'order' && ($s['verify_owner'] ?? false) === true);
 
@@ -348,12 +367,14 @@ final class FlowDefinition
             $errors[] = "step '{$stepKey}' 'text' must be a string";
         }
 
-        if (array_key_exists('verify_owner', $step) && ! is_bool($step['verify_owner'])) {
-            $errors[] = "step '{$stepKey}' 'verify_owner' must be true or false";
+        foreach (array_keys(self::FLAGS) as $flag) {
+            if (array_key_exists($flag, $step) && ! is_bool($step[$flag])) {
+                $errors[] = "step '{$stepKey}' '{$flag}' must be true or false";
+            }
         }
 
-        // order_items and product_link (2026-09-19) always go on to a step: they never end the flow on their own.
-        if (in_array($type, ['order_items', 'product_link'], true) && ! array_key_exists('next', $step)) {
+        // order_items, product_link and item_changes (2026-09-19) always go on to a step: they never end the flow on their own.
+        if (in_array($type, ['order_items', 'product_link', 'item_changes'], true) && ! array_key_exists('next', $step)) {
             $errors[] = "step '{$stepKey}' next must be a non-empty string";
         }
 

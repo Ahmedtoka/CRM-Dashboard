@@ -5,14 +5,17 @@ namespace App\Bot\Flows\Sandbox;
 /** What one sandbox run would have sent (messages) and done (events). */
 final class SandboxLog
 {
-    /** @var list<array{text:string, buttons:list<array{title:string, payload:string}>}> */
+    /** @var list<array{text:string, buttons:list<array{title:string, payload:string}>, cards:array|null}> */
     public array $messages = [];
 
     /** @var list<array{type:string, label:string, data:array}> */
     public array $events = [];
 
-    /** @param  list<array{title:string, payload:string}>  $buttons */
-    public function message(string $text, array $buttons = []): void
+    /**
+     * @param  list<array{title:string, payload:string}>  $buttons
+     * @param  array|null  $cards  rich cards (App\Channels\Cards\OutboundCards), rendered by the sandbox chat
+     */
+    public function message(string $text, array $buttons = [], ?array $cards = null): void
     {
         $this->messages[] = [
             'text' => $text,
@@ -20,6 +23,7 @@ final class SandboxLog
                 fn (array $b) => ['title' => (string) ($b['title'] ?? ''), 'payload' => (string) ($b['payload'] ?? '')],
                 $buttons,
             )),
+            'cards' => $cards,
         ];
     }
 

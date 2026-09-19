@@ -32,6 +32,8 @@ beforeEach(function () {
     ChannelAccount::factory()->create(['platform' => Platform::Facebook, 'external_id' => 'PAGE1']);
     BotSetting::current()->update(['enabled' => false, 'working_hours' => null]);
     app()->bind(FlowAnswerInterpreter::class, FakeFlowAnswerInterpreter::class);
+    // The engine's generic steps (name, phone, summary) are exercised through the 2026-09-17 flows.
+    useLegacyOwnerFlows('cancel_edit', 'complaint');
 });
 
 /** Ingests a customer message (bot disabled) and returns the conversation. */

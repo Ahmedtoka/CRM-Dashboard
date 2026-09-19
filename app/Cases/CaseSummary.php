@@ -176,11 +176,16 @@ final class CaseSummary
             'complaint' => [
                 self::labelled('النوع', self::optionTitle($flow, 'complaint_type', $data)),
                 self::labelled('الفرع', self::str($data['branch_name'] ?? null)),
-                self::labelled('تاريخ الزيارة', self::str($data['visit_date'] ?? null)),
+                self::labelled('تاريخ الزيارة', self::optionTitle($flow, 'visit_date', $data)),
                 self::labelled('التفاصيل', self::str($data['description'] ?? null)),
             ],
             'cancel_edit' => [
                 self::labelled('المطلوب', self::optionTitle($flow, 'request', $data)),
+                self::labelled('سبب الإلغاء', self::str($data['cancel_reason'] ?? null)),
+                self::labelled('نوع التعديل', self::optionTitle($flow, 'edit_kind', $data)),
+                ...FlowPrompter::changeLines($data['item_changes'] ?? []),
+                self::labelled('العنوان الجديد', self::str($data['new_address'] ?? null)),
+                self::labelled('الموبايل الجديد', self::str($data['new_phone'] ?? null)),
                 self::labelled('التعديل', self::str($data['edit_details'] ?? null)),
             ],
             'delivery_followup' => [self::labelled('حالة الشحن', self::statusLabel($case->order_id !== null ? $case->order : null, $data))],
@@ -248,6 +253,31 @@ final class CaseSummary
             : "طلب استبدال: {$items} ← المنتج البديل مش متحدد";
     }
 
+    /**
+     * The internal note of an edit request (the owner's cancel/edit flow, 2026-09-19): every change
+     * the team makes on the order. Null for a cancel request, or when nothing was changed.
+     */
+    public static function editNote(array $data): ?string
+    {
+        if (($data['request'] ?? null) !== 'edit') {
+            return null;
+        }
+
+        $lines = array_values(array_filter([
+            ...FlowPrompter::changeLines($data['item_changes'] ?? []),
+            ($address = self::str($data['new_address'] ?? null)) !== null ? '📍 العنوان الجديد: '.$address : null,
+            ($phone = self::str($data['new_phone'] ?? null)) !== null ? '📞 الموبايل الجديد: '.$phone : null,
+        ]));
+
+        if ($lines === []) {
+            return null;
+        }
+
+        $number = self::str($data['order_number'] ?? null);
+
+        return '✏️ تعديلات مطلوبة على '.($number !== null ? 'أوردر #'.ltrim($number, '#') : 'الأوردر').":\n".implode("\n", $lines);
+    }
+
     /** @return list<string> */
     private static function exchangeLines(array $data): array
     {
@@ -282,6 +312,14 @@ final class CaseSummary
             return ! empty($data['exchange_product_photo']) ? ['صورة المنتج البديل ✅'] : [];
         }
 
+        if ($case->type === 'complaint') {
+            return ! empty($data['description_photo']) ? ['صور من العميلة ✅'] : [];
+        }
+
+        if ($case->type === 'cancel_edit') {
+            return collect((array) ($data['item_changes'] ?? []))->contains(fn ($c) => is_array($c) && ! empty($c['photo'])) ? ['صورة للمنتج البديل ✅'] : [];
+        }
+
         if ($case->type !== 'return_exchange') {
             return [];
         }
@@ -314,7 +352,11 @@ final class CaseSummary
                 default => 'التواصل مع العميلة ومراجعة طلب المرتجع',
             },
             'complaint' => 'التواصل مع العميل ومتابعة الشكوى وحلها',
-            'cancel_edit' => match ($request) {
+            'cancel_edit' => isset($data['order_editable']) ? match ($request) {
+                'cancel' => 'إلغاء الأوردر قبل ما يتشحن وتأكيد الإلغاء مع العميلة',
+                'edit' => 'تنفيذ التعديلات على الأوردر قبل ما يتشحن وتأكيدها مع العميلة',
+                default => 'مراجعة الأوردر وتنفيذ طلب العميلة قبل ما يتشحن',
+            } : match ($request) {
                 'cancel' => 'مراجعة الأوردر وإلغاؤه لو لسه في المهلة',
                 'edit' => 'مراجعة الأوردر وتنفيذ التعديل المطلوب لو لسه في المهلة',
                 default => 'مراجعة الأوردر وتنفيذ طلب العميلة لو لسه في المهلة',

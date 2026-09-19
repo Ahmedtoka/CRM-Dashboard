@@ -4,6 +4,7 @@ namespace App\Bot\Flows\Steps;
 
 use App\Bot\Flows\BranchFinder;
 use App\Bot\Flows\FlowPrompter;
+use App\Models\Branch;
 use App\Models\Conversation;
 use Illuminate\Support\Collection;
 
@@ -11,6 +12,8 @@ use Illuminate\Support\Collection;
  * Shared by `branch` and `branches_list`: the prompt carries one button per
  * active area (`step:{flow}:{step}:area:<key>`, at most 12 + main menu); an
  * area tap, or a typed place BranchFinder::guess resolves, picks the area.
+ * A typed branch name (2026-09-19: "المرغني", "Abbas El Akkad") goes to that
+ * branch directly (forBranches) unless the whole reply is an area's own name.
  */
 abstract class AreaStep extends BaseStep
 {
@@ -23,6 +26,16 @@ abstract class AreaStep extends BaseStep
 
     /** What happens once the area is known; null when the area has nothing to show. */
     abstract protected function forArea(array $state, array $step, string $areaKey): ?StepOutcome;
+
+    /**
+     * What happens when she typed a branch's name; null lets the area rules try.
+     *
+     * @param  Collection<int, Branch>  $branches  every active branch that name matched
+     */
+    protected function forBranches(array $state, array $step, Collection $branches): ?StepOutcome
+    {
+        return null;
+    }
 
     public function prompt(array $state, array $step): array
     {
@@ -37,7 +50,16 @@ abstract class AreaStep extends BaseStep
 
     public function answer(Conversation $c, array $state, array $step, string $text, Collection $burst): ?StepOutcome
     {
-        $area = trim($text) !== '' ? $this->finder->guess($text) : null;
+        if (trim($text) === '') {
+            return null;
+        }
+
+        if (! $this->finder->isAreaName($text) && ($branches = $this->finder->matchBranches($text))->isNotEmpty()
+            && ($outcome = $this->forBranches($state, $step, $branches)) !== null) {
+            return $outcome;
+        }
+
+        $area = $this->finder->guess($text);
 
         return $area !== null ? $this->forArea($state, $step, $area) : null;
     }

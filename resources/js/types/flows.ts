@@ -1,4 +1,5 @@
 /** Flow designer types (design doc 2026-09-17-flow-designer). Mirrors app/Bot/Flows/FlowDefinition.php. */
+import type { OutboundCards } from './crm';
 
 export interface FlowOption {
     title: string;
@@ -30,7 +31,16 @@ export interface FlowStep {
     case_type?: string;
     /** order steps: ask for the last 4 digits of the mobile before revealing the order (spec 2026-09-19 §1) */
     verify_owner?: boolean;
+    /** order_items steps: false = a plain picker without the return rules (cancel/edit, 2026-09-19) */
+    return_rules?: boolean;
+    /** choice steps: a typed answer that is not a button is saved as typed */
+    allow_text?: boolean;
+    /** text steps: photos sent with the answer are kept (`<field>_photo`) */
+    photos?: boolean;
 }
+
+/** The on/off switches a step may carry, and the step types that read them (FlowDefinition::FLAGS). */
+export type StepFlag = 'verify_owner' | 'return_rules' | 'allow_text' | 'photos';
 
 export interface FlowDefinition {
     start: string;
@@ -123,7 +133,7 @@ export interface SandboxEvent {
 }
 
 export interface SandboxResponse {
-    messages: { text: string; buttons: SandboxButton[] }[];
+    messages: { text: string; buttons: SandboxButton[]; cards?: OutboundCards | null }[];
     events: SandboxEvent[];
     state: Record<string, unknown> | null;
     current: { flow_key: string; step_id: string } | null;

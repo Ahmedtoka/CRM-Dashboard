@@ -40,6 +40,12 @@ final class FlowPrompter
         'phone' => 'الموبايل',
         'description' => 'التفاصيل',
         'edit_details' => 'التعديل المطلوب',
+        // The owner's cancel/edit flow (2026-09-19).
+        'cancel_reason' => 'سبب الإلغاء',
+        'edit_kind' => 'التعديل',
+        'item_changes' => 'تعديل القطع',
+        'new_address' => 'العنوان الجديد',
+        'new_phone' => 'الموبايل الجديد',
     ];
 
     /** Status-card values a step text may use (StatusStep sets them when it is entered). */
@@ -136,7 +142,9 @@ final class FlowPrompter
             return null;
         }
 
-        return str_replace('{case_id}', (string) ($data['case_id'] ?? ''), $this->placeholders->render($body));
+        $caseId = is_numeric($data['case_id'] ?? null) && (int) $data['case_id'] > 0 ? (string) (int) $data['case_id'] : '';
+
+        return str_replace('{case_id}', $caseId, $this->placeholders->render($body));
     }
 
     /**
@@ -182,12 +190,65 @@ final class FlowPrompter
             }
         }
 
+        // A case number is only shown when there is one: never "#0" (the sandbox's unsaved case, 2026-09-19).
+        $caseId = is_numeric($data['case_id'] ?? null) && (int) $data['case_id'] > 0 ? (string) (int) $data['case_id'] : '';
+
         return $this->placeholders->render(strtr($text, $card + [
             '{customer_first_name}' => $first,
-            '{order_number}' => $number !== '' ? $number : (string) ($data['case_id'] ?? ''),
+            '{order_number}' => $number !== '' ? $number : $caseId,
             '{exchange_product_title}' => $product !== '' ? $product : self::UNKNOWN_PRODUCT,
-            '{case_id}' => (string) ($data['case_id'] ?? ''),
+            '{case_id}' => $caseId,
         ]));
+    }
+
+    /**
+     * One line per piece of a cancel/edit request (the `item_changes` step): "🔁 فستان ليلى (أسود / M) × 1
+     * ← عباية كتان — 1,200 ج.م — https://…", "🔁 … ← مقاس/لون جديد: «L»", "❌ شيل: طرحة شيفون × 2".
+     *
+     * @return list<string>
+     */
+    public static function changeLines(mixed $changes): array
+    {
+        $lines = [];
+
+        foreach ((array) $changes as $change) {
+            if (! is_array($change) || ! is_scalar($change['title'] ?? null) || trim((string) $change['title']) === '') {
+                continue;
+            }
+
+            $item = self::itemsText([$change]);
+
+            if (($change['action'] ?? null) === 'remove') {
+                $lines[] = '❌ شيل: '.$item;
+
+                continue;
+            }
+
+            $product = is_array($change['product'] ?? null) ? $change['product'] : null;
+            $typed = is_scalar($change['new_option'] ?? null) ? trim((string) $change['new_option']) : '';
+
+            if ($product !== null && is_scalar($product['title'] ?? null)) {
+                $parts = [trim((string) $product['title']).(filled($product['variant_title'] ?? null) ? ' ('.$product['variant_title'].')' : '')];
+
+                if (is_numeric($product['price'] ?? null)) {
+                    $parts[] = number_format((float) $product['price'], fmod((float) $product['price'], 1.0) === 0.0 ? 0 : 2).' ج.م';
+                }
+
+                if (filled($product['url'] ?? null)) {
+                    $parts[] = (string) $product['url'];
+                }
+
+                $to = implode(' — ', $parts);
+            } elseif ($typed !== '') {
+                $to = 'مقاس/لون جديد: «'.$typed.'»';
+            } else {
+                $to = ! empty($change['photo']) ? 'صورة للمنتج البديل' : 'البديل مش متحدد';
+            }
+
+            $lines[] = '🔁 تبديل: '.$item.' ← '.$to;
+        }
+
+        return $lines;
     }
 
     /** @return list<string> bullet lines for the labelled data, option values shown by their titles */
@@ -213,6 +274,14 @@ final class FlowPrompter
             if ($key === 'selected_items') {
                 if (($items = self::itemsText($value)) !== '') {
                     $lines[] = '• '.$label.': '.$items;
+                }
+
+                continue;
+            }
+
+            if ($key === 'item_changes') {
+                foreach (self::changeLines($value) as $line) {
+                    $lines[] = '• '.$line;
                 }
 
                 continue;

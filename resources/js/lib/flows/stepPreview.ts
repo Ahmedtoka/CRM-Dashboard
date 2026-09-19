@@ -4,6 +4,7 @@
  * inactive script or flow target, the main-menu chip under choices, the summary's confirm/edit
  * buttons) and Messenger's limits (13 quick replies, 20-character titles).
  */
+import type { OutboundCards } from '@/types/crm';
 import type { FlowDefinition, FlowListRow, FlowScriptOption, FlowStep } from '@/types/flows';
 import { DEFAULT_STEP_TEXT, MAX_OPTION_TITLE, MAX_QUICK_REPLIES, fieldsOf, parseAction } from './flowGraph';
 
@@ -35,6 +36,39 @@ export const ORDER_ITEMS_SAMPLE: { title: string; line: string }[] = [
     { title: 'عباية كتان', line: 'عباية كتان × 1 — 1,200 ج.م' },
 ];
 export const ORDER_ITEMS_MULTI_CHIP = 'كذا قطعة';
+
+/** The `contact` step with a known name and mobile (app/Bot/Flows/Steps/ContactStep.php CONFIRM_TEXT). */
+export const CONTACT_CONFIRM_SAMPLE = 'هنتواصل مع حضرتك باسم «سارة» على رقم 0106•••6611 — تمام كده؟';
+export const CONTACT_CHIPS = ['أيوه تمام', 'رقم تاني'];
+export const CONTACT_DEFAULT_TEXT = 'عشان الفريق يقدر يتواصل مع حضرتك 🌸 ابعتيلي اسمك ورقم موبايلك في رسالة واحدة (مثلاً: سارة 01012345678)';
+
+/** The `item_changes` step for a sample piece (app/Bot/Flows/Steps/ItemChangesStep.php). */
+export const ITEM_CHANGES_SAMPLE = '«فستان ليلى (أسود / M)»\nتحبي تبدليها ولا تشيليها من الأوردر؟';
+export const ITEM_CHANGES_CHIPS = ['أبدلها', 'أشيلها'];
+
+/** Sample branch cards (BranchFinder::cards): what the branches step sends after the area. */
+export const SAMPLE_BRANCH_CARDS: OutboundCards = {
+    type: 'generic',
+    cards: [
+        {
+            title: 'El Marghany',
+            subtitle: '126 El-Marghany St., Next to Shawermer\n📞 01094538159',
+            buttons: [
+                { type: 'web_url', title: '📍 الخريطة', url: 'https://goo.gl/maps/EbSV5rzAqCvvyAD37' },
+                { type: 'phone', title: '📞 اتصل بالفرع', phone: '+201094538159' },
+            ],
+        },
+        {
+            title: 'El Hegaz',
+            subtitle: '7 Ali Abd El-Razek St.\n📞 01063498056',
+            buttons: [
+                { type: 'web_url', title: '📍 الخريطة', url: 'https://goo.gl/maps/RFo6gESFKDgjSN8x5' },
+                { type: 'phone', title: '📞 اتصل بالفرع', phone: '+201063498056' },
+            ],
+        },
+    ],
+};
+export const SAMPLE_AREA_CHIPS = ['مصر الجديدة', 'مدينة نصر', 'المعادي'];
 
 /** FlowPrompter::LABELS with a sample answer each, in the order the owner reads them. */
 const SUMMARY_SAMPLES: [field: string, label: string, sample: string | null][] = [
@@ -75,7 +109,11 @@ export interface StepPreviewModel {
     /** the step sends a script that is missing or inactive, so nothing is sent */
     scriptMissing: boolean;
     /** what the customer is expected to send next (photo / order / phone) */
-    expects: 'photo' | 'order' | 'order_verify' | 'order_items' | 'product_link' | 'phone' | null;
+    expects: 'photo' | 'order' | 'order_verify' | 'order_items' | 'product_link' | 'phone' | 'contact' | 'item_changes' | null;
+    /** a second bot message the step may send instead (the contact step's one-message question) */
+    alternative?: string;
+    /** sample rich cards the step sends (the branch cards) */
+    cards?: OutboundCards;
     /** a note about what the engine does instead of a message (status, handover, end, branches list) */
     note: 'status' | 'handover' | 'end' | 'branches_list' | null;
 }
@@ -201,9 +239,25 @@ export function previewStep(
             }
             model.note = 'status';
             break;
+        case 'contact':
+            // Known name + mobile: confirm them; otherwise the step's own one-message question.
+            model.text = CONTACT_CONFIRM_SAMPLE;
+            model.chips = CONTACT_CHIPS.map((title) => chip(title));
+            model.alternative = renderPlaceholders(step.text?.trim() || CONTACT_DEFAULT_TEXT);
+            model.expects = 'contact';
+            break;
+        case 'item_changes':
+            model.text = ITEM_CHANGES_SAMPLE;
+            model.chips = ITEM_CHANGES_CHIPS.map((title) => chip(title));
+            model.expects = 'item_changes';
+            break;
+        case 'branches_list':
+            model.chips = applyLimit([...SAMPLE_AREA_CHIPS.map((title) => chip(title)), chip(MAIN_MENU_CHIP)]);
+            model.cards = SAMPLE_BRANCH_CARDS;
+            model.note = 'branches_list';
+            break;
         case 'handover':
         case 'end':
-        case 'branches_list':
             model.note = step.type;
             break;
     }

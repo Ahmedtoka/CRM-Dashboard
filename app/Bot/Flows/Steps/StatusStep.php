@@ -37,7 +37,10 @@ final class StatusStep extends BaseStep
 {
     public const CARD_TEXT = "أهلاً يا {customer_first_name} 🌸 أوردر #{order_number} (اتطلب يوم {order_date} — {order_items})\n📦 الحالة: {order_status}\n🚚 متوقع يوصل: {order_eta}\n🔗 تتبع الشحنة: {order_tracking}";
 
-    public const NO_ORDER_TEXT = 'تمام، هيتواصل معاكي حد من الفريق يتابع الأوردر 🌸';
+    /** Once the expected window has passed the card says it was expected (2026-09-19). */
+    public const ETA_LABEL = '🚚 متوقع يوصل';
+
+    public const ETA_PASSED_LABEL = '🚚 كان متوقع يوصل';
 
     /** Orders that are no longer on their way. */
     public const FINISHED = ['delivered', 'cancelled'];
@@ -58,7 +61,8 @@ final class StatusStep extends BaseStep
         $data = $state['data'];
 
         if (blank($data['order_number'] ?? null) || blank($data['order_status_key'] ?? null)) {
-            return StepOutcome::handover('order_details_missing', [['text' => self::NO_ORDER_TEXT]]);
+            // The handover's working-hours reply tells her the team has it (flow 7, 2026-09-19).
+            return StepOutcome::handover('order_details_missing');
         }
 
         $card = $this->card($data);
@@ -81,7 +85,13 @@ final class StatusStep extends BaseStep
             $this->options($state, $step),
         );
 
-        return ['text' => $this->prompter->renderText($text, $data), 'buttons' => $buttons];
+        $rendered = $this->prompter->renderText($text, $data);
+
+        if (($data['order_eta_passed'] ?? null) === true) {
+            $rendered = str_replace(self::ETA_LABEL, self::ETA_PASSED_LABEL, $rendered);
+        }
+
+        return ['text' => $rendered, 'buttons' => $buttons];
     }
 
     public function answer(Conversation $c, array $state, array $step, string $text, Collection $burst): ?StepOutcome
@@ -134,7 +144,7 @@ final class StatusStep extends BaseStep
         return StepOutcome::continue($data, [], $next);
     }
 
-    /** @return array<string, string|null> the card values (null removes a stale one) */
+    /** @return array<string, string|bool|null> the card values (null removes a stale one) */
     private function card(array $data): array
     {
         $key = (string) $data['order_status_key'];
@@ -148,10 +158,12 @@ final class StatusStep extends BaseStep
             ? $this->estimate->window($placed, $this->estimate->isMainCity($order, is_string($data['order_governorate'] ?? null) ? $data['order_governorate'] : null))
             : null;
 
+        $passed = $window !== null && $this->estimate->overdue($window, CarbonImmutable::now());
+
         $late = match (true) {
             $finished => null,
             $failed || in_array($key, self::NEEDS_TEAM, true) => 'overdue',
-            $window !== null && $this->estimate->overdue($window, CarbonImmutable::now()) => 'overdue',
+            $passed => 'overdue',
             default => 'on_time',
         };
 
@@ -160,6 +172,7 @@ final class StatusStep extends BaseStep
             'order_items' => $order !== null ? self::itemsCount((int) $order->items->sum('qty')) : null,
             'order_status' => OrderStatusText::cardLine($key, $failed),
             'order_eta' => $window !== null ? DeliveryEstimate::text($window) : null,
+            'order_eta_passed' => $passed ? true : null,
             'order_tracking' => $owner && ! $finished && $order !== null ? $this->tracking($order) : null,
             'order_stage' => $finished ? 'finished' : 'open',
             'order_late' => $late,

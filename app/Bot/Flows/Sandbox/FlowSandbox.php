@@ -8,6 +8,7 @@ use App\Bot\Flows\FlowEngine;
 use App\Bot\Flows\FlowHandover;
 use App\Bot\Flows\FlowResult;
 use App\Bot\Flows\FlowState;
+use App\Bot\Flows\HumanHandover;
 use App\Bot\Flows\PublishedFlowDefinitions;
 use App\Cases\CaseRecorder;
 use App\Enums\ConversationSource;
@@ -76,7 +77,8 @@ final class FlowSandbox
             $engine = $this->app->make(FlowEngine::class);
             $result = null;
 
-            if ($previousKey === null) {
+            // A pending «محتاجة إيه؟» (flow 7) is answered like a flow step.
+            if ($previousKey === null && ! HumanHandover::pending($c)) {
                 $engine->start($c, $flow->key);
             } else {
                 $result = $engine->handle($c, collect([$this->inbound($c, $input)]));
@@ -131,11 +133,15 @@ final class FlowSandbox
         }
     }
 
-    /** Only `flow` and `flow_confirm` travel in and out; null when neither is set. */
+    /** Only `flow`, `flow_confirm` and a pending handover topic travel in and out; null when none is set. */
     private function stateSubset(?array $state): ?array
     {
         $subset = array_filter(
-            ['flow' => $state['flow'] ?? null, 'flow_confirm' => $state['flow_confirm'] ?? null],
+            [
+                'flow' => $state['flow'] ?? null,
+                'flow_confirm' => $state['flow_confirm'] ?? null,
+                HumanHandover::STATE_KEY => $state[HumanHandover::STATE_KEY] ?? null,
+            ],
             fn ($v) => $v !== null && $v !== '' && $v !== [],
         );
 

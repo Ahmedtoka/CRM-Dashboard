@@ -35,6 +35,7 @@ class ConversationRouter
         private readonly FlowPrompter $prompter,
         private readonly OutboundService $outbound,
         private readonly BurstPolicy $burstPolicy,
+        private readonly HumanHandover $human,
     ) {}
 
     public function route(Conversation $c, Collection $burst): ?BotRun
@@ -83,6 +84,13 @@ class ConversationRouter
             if ($payload !== null && $this->runPayload($c, $payload)) {
                 return $this->record($c, $texts, $started, 'button');
             }
+        }
+
+        // 2b. She asks for a person in words (the human_request intent's words, flow 7): «محتاجة إيه؟» first.
+        if ($texts !== [] && ! $this->flows->isActive($c) && BotFlow::active(self::MAIN_MENU) !== null && $this->human->isHumanRequest(implode("\n", $texts))) {
+            $this->human->requested($c, $burst, implode("\n", $texts));
+
+            return $this->record($c, $texts, $started, 'button');
         }
 
         // 3. Greetings or a menu word open the main menu (the greeting script first on the first reply).

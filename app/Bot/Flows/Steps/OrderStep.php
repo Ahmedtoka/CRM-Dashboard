@@ -48,9 +48,20 @@ final class OrderStep extends BaseStep
 
     public const VERIFY_RETRY_TEXT = 'الأرقام دي مش مطابقة 🙏 جربي تاني، اكتبي آخر ٤ أرقام من الموبايل اللي طلبتي بيه';
 
-    public const VERIFY_FAILED_TEXT = 'مش قادر أتأكد من الأوردر ده 🙏 هحوّلك لحد من الفريق يساعدك';
+    // The handover reply that follows says she is with the team (flow 7, 2026-09-19).
+    public const VERIFY_FAILED_TEXT = 'مش قادر أتأكد من الأوردر ده 🙏';
 
-    private const ORDER_KEYS = ['order_number', 'order_id', 'order_placed_at', 'order_status_line', 'order_status_key', 'order_governorate', 'order_failed_attempt', 'customer_first_name', 'order_window'];
+    /** `order_editable`: still at the company (cancel/edit possible), already shipped, or cancelled. */
+    public const EDITABLE = 'yes';
+
+    public const NOT_EDITABLE = 'no';
+
+    public const CANCELLED = 'cancelled';
+
+    /** Status keys of an order that has not left the company yet (OrderLookup / the OMS). */
+    private const UNSHIPPED_KEYS = ['confirmed', 'prepared'];
+
+    private const ORDER_KEYS = ['order_number', 'order_id', 'order_placed_at', 'order_status_line', 'order_status_key', 'order_governorate', 'order_failed_attempt', 'customer_first_name', 'order_window', 'order_editable'];
 
     /** What another flow receives of a verified order (FlowEngine jump to `flow:<key>`). */
     private const CARRIED_KEYS = [...self::ORDER_KEYS, 'order_verified', 'verified_order_ids'];
@@ -319,8 +330,25 @@ final class OrderStep extends BaseStep
             'order_status_key' => $s->statusKey,
             'order_governorate' => $s->governorate,
             'order_failed_attempt' => $s->failedAttempt,
+            'order_editable' => self::editable($s->statusKey, Order::find($s->orderId)),
             'order_ref_text' => null,
             'order_choices' => null,
         ];
+    }
+
+    /**
+     * Whether the order can still be cancelled or changed (the owner's cancel/edit flow,
+     * 2026-09-19): only while it has not been shipped, i.e. still at the company. Any
+     * fulfillment (a partial one too) counts as shipped; a cancelled order is `cancelled`.
+     */
+    public static function editable(string $statusKey, ?Order $order): string
+    {
+        if ($statusKey === 'cancelled' || $order?->cancelled_at !== null) {
+            return self::CANCELLED;
+        }
+
+        $fulfilled = $order !== null && (in_array($order->fulfillment_status, ['fulfilled', 'partial'], true) || $order->fulfillments()->exists());
+
+        return in_array($statusKey, self::UNSHIPPED_KEYS, true) && ! $fulfilled ? self::EDITABLE : self::NOT_EDITABLE;
     }
 }

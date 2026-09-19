@@ -156,7 +156,12 @@ class SendOutboundMessage implements ShouldQueue
                             $conversation->channelAccount,
                             $identity,
                             (string) $message->body,
-                            ! empty($message->buttons) ? array_merge($this->options, ['quick_replies' => $message->buttons]) : $this->options,
+                            array_merge(
+                                $this->options,
+                                ! empty($message->buttons) ? ['quick_replies' => $message->buttons] : [],
+                                // Rich cards (2026-09-19): each adapter sends them its own way, or the body as text.
+                                ! empty($message->cards) ? ['cards' => $message->cards] : [],
+                            ),
                         );
                 } catch (Throwable $e) {
                     $result = SendResult::fail(self::errorCode($e), retryable: true);

@@ -39,7 +39,7 @@ it('refuses to publish an invalid draft and keeps the live definition', function
     app(FlowDrafts::class)->saveDraft($flow, $def, $this->u);
 
     expect(fn () => app(FlowDrafts::class)->publish($flow, $this->u, null))->toThrow(FlowValidationException::class);
-    expect($flow->fresh()->definition['steps']['list']['next'])->toBe('end');
+    expect($flow->fresh()->definition['steps']['list']['next'])->toBe('more');
 });
 
 it('rejects a menu action pointing at a missing flow or script on publish', function () {

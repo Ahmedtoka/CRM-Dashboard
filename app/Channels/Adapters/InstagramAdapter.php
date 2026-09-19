@@ -4,7 +4,9 @@ namespace App\Channels\Adapters;
 
 use App\Channels\Adapters\Concerns\NormalizesMetaMessaging;
 use App\Channels\Adapters\Concerns\SendsMetaAttachments;
+use App\Channels\Adapters\Concerns\SendsMetaCards;
 use App\Channels\Adapters\Concerns\VerifiesMetaWebhooks;
+use App\Channels\Cards\OutboundCards;
 use App\Channels\Contracts\ChannelAdapter;
 use App\Channels\Data\ChannelCapabilities;
 use App\Channels\Data\InboundCommentData;
@@ -17,6 +19,7 @@ class InstagramAdapter implements ChannelAdapter
 {
     use NormalizesMetaMessaging;
     use SendsMetaAttachments;
+    use SendsMetaCards;
     use VerifiesMetaWebhooks;
 
     public function __construct(private readonly MetaGraphClient $graph) {}
@@ -79,6 +82,16 @@ class InstagramAdapter implements ChannelAdapter
 
     public function sendText(ChannelAccount $account, CustomerIdentity $to, string $text, array $options = []): SendResult
     {
+        // Rich cards (2026-09-19): a template, falling back to this plain text when refused.
+        if (($cards = OutboundCards::valid($options['cards'] ?? null)) !== null) {
+            return $this->sendCards($account, $to, $text, $cards, $options);
+        }
+
+        return $this->sendPlainText($account, $to, $text, $options);
+    }
+
+    protected function sendPlainText(ChannelAccount $account, CustomerIdentity $to, string $text, array $options): SendResult
+    {
         $payload = [
             'recipient' => ['id' => $to->external_id],
             'message' => ['text' => $text],
@@ -90,14 +103,21 @@ class InstagramAdapter implements ChannelAdapter
         }
 
         if (! empty($options['quick_replies'])) {
-            $payload['message']['quick_replies'] = array_map(fn (array $b) => [
-                'content_type' => 'text',
-                'title' => mb_substr((string) $b['title'], 0, 20),
-                'payload' => mb_substr((string) $b['payload'], 0, 1000),
-            ], array_slice($options['quick_replies'], 0, 13));
+            $payload['message']['quick_replies'] = $this->metaQuickReplies($options['quick_replies']);
         }
 
+        return $this->postMessage($account, $payload);
+    }
+
+    protected function postMessage(ChannelAccount $account, array $payload): SendResult
+    {
         return $this->graph->post($account, $this->messagesEndpoint($account), $payload);
+    }
+
+    /** Instagram has no call button: the branch phone stays in the card subtitle. */
+    protected function supportsCallButtons(): bool
+    {
+        return false;
     }
 
     /** Best effort on the fast path (final fix wave I9): one 3 s try, never the send client's retries. */

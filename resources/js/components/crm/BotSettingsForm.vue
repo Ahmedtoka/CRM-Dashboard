@@ -40,6 +40,7 @@ function fromProps(s: BotSettings) {
         burst_max_wait_seconds: s.burst_max_wait_seconds,
         typing_ms_per_char: s.typing_ms_per_char,
         order_lookup_enabled: s.order_lookup_enabled,
+        store_url: s.store_url ?? '',
     };
 }
 
@@ -81,6 +82,7 @@ async function submit(): Promise<void> {
         burst_max_wait_seconds: form.burst_max_wait_seconds,
         typing_ms_per_char: form.typing_ms_per_char,
         order_lookup_enabled: form.order_lookup_enabled,
+        store_url: form.store_url.trim() || null,
     };
     // AI fields are admin-only; sending them as a supervisor is a 403.
     if (props.canEditAi) {
@@ -135,6 +137,13 @@ const hint = 'text-2xs text-muted-foreground';
                 <span class="text-sm font-semibold">{{ t('settings.bot.max_turns') }}</span>
                 <input v-model.number="form.max_bot_turns" type="number" min="1" max="50" dir="ltr" :class="[input, 'tabular-nums']" />
                 <span :class="hint">{{ t('settings.bot.cards.max_turns_hint') }}</span>
+            </label>
+
+            <!-- The products menu's «🛍️ تسوقي من الموقع» button (2026-09-19). -->
+            <label class="grid max-w-md content-start gap-1">
+                <span class="text-sm font-semibold">{{ t('settings.bot.store_url') }}</span>
+                <input v-model="form.store_url" type="url" dir="ltr" maxlength="255" placeholder="https://levoilestores.com/" :class="input" />
+                <span :class="hint">{{ t('settings.bot.cards.store_url_hint') }}</span>
             </label>
         </section>
 

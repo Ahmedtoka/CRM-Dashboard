@@ -32,7 +32,7 @@ class CaseRecorder
     private const HIGH_COMPLAINTS = ['branch', 'delivery'];
 
     /** Flow-state bookkeeping that is not case data. */
-    private const INTERNAL_KEYS = ['case_id', 'order_verify', 'verified_order_ids', 'order_lookup_contact', 'items_pending', 'order_choices'];
+    private const INTERNAL_KEYS = ['case_id', 'order_verify', 'verified_order_ids', 'order_lookup_contact', 'items_pending', 'order_choices', 'contact_pending', 'changes_pending'];
 
     public function __construct(
         private readonly ReturnPolicyChecker $policy,
@@ -88,6 +88,16 @@ class CaseRecorder
                 ]);
             }
 
+            // An edit request lists the changes the team makes on the order (the owner's cancel/edit flow).
+            if ($type === 'cancel_edit' && ($note = CaseSummary::editNote($data)) !== null) {
+                ConversationNote::create([
+                    'conversation_id' => $c->id,
+                    'user_id' => null,
+                    'body' => $note,
+                    'mentions' => [],
+                ]);
+            }
+
             return $case;
         });
 
@@ -134,7 +144,16 @@ class CaseRecorder
     {
         $ids = [];
 
-        foreach ($data as $key => $value) {
+        // A swapped piece's photo (item_changes) counts with the case photos too.
+        $fields = $data;
+
+        foreach ((array) ($data['item_changes'] ?? []) as $i => $change) {
+            if (is_array($change) && is_array($change['photo'] ?? null)) {
+                $fields["item_change_{$i}_photo"] = $change['photo'];
+            }
+        }
+
+        foreach ($fields as $key => $value) {
             if (! is_string($key) || ! str_ends_with($key, '_photo') || ! is_array($value)) {
                 continue;
             }
@@ -159,9 +178,18 @@ class CaseRecorder
         };
     }
 
-    /** @return list<string> only when the order step found the order */
+    /**
+     * The owner's flow (2026-09-19) only takes a request while the order is still at the company;
+     * older cases (no `order_editable`) keep the 2-hour window note.
+     *
+     * @return list<string> only when the order step found the order
+     */
     private function cancelWindowNotes(array $data, ?Order $order): array
     {
+        if (($data['order_editable'] ?? null) === 'yes') {
+            return ['الأوردر لسه متشحنش وقت الطلب — اتأكدوا قبل ما يخرج من الشركة'];
+        }
+
         $placed = $order?->placed_at ?? $order?->created_at;
 
         if (blank($data['order_number'] ?? null) || ($placed === null && blank($data['order_placed_at'] ?? null))) {

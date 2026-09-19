@@ -9,7 +9,7 @@ use App\Models\Conversation;
 use App\Models\Message;
 
 /**
- * OutboundService stand-in for a sandbox run: records bot texts and buttons
+ * OutboundService stand-in for a sandbox run: records bot texts, buttons and cards
  * and returns unsaved messages. It never checks windows, queues jobs, calls
  * channel adapters or broadcasts. The parent constructor is deliberately not
  * called — only sendBot (and sendSystem, for safety) are reachable from the
@@ -19,11 +19,14 @@ class SandboxOutbound extends OutboundService
 {
     public function __construct(private readonly SandboxLog $log) {}
 
-    public function sendBot(Conversation $c, string $body, int $delayMs = 0, bool $skipIfHumanTookOver = false, array $buttons = []): Message
+    public function sendBot(Conversation $c, string $body, int $delayMs = 0, bool $skipIfHumanTookOver = false, array $buttons = [], ?array $cards = null): Message
     {
-        $this->log->message($body, $buttons);
+        $this->log->message($body, $buttons, $cards);
 
-        return $this->unsaved($c, SenderType::Bot, $body, $buttons);
+        $message = $this->unsaved($c, SenderType::Bot, $body, $buttons);
+        $message->cards = $cards;
+
+        return $message;
     }
 
     public function sendSystem(Conversation $c, string $body): Message

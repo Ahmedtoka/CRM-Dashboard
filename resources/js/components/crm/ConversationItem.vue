@@ -29,7 +29,7 @@ const waitTone = computed<'negative' | 'warning' | 'neutral'>(() => {
 
 const hasMeta = computed(() => {
     const c = props.conversation;
-    return !!(c.waiting_since || c.needs_human || c.handler === 'bot' || c.handling || c.tags?.length || c.priority !== 'normal' || c.handover_category_label);
+    return !!(c.waiting_since || c.needs_human || c.handler === 'bot' || c.handling || c.tags?.length || c.priority !== 'normal' || c.handover_category_label || c.handover_topic);
 });
 
 // Handover priority badge (Task 5 ruling 5): high = urgent, medium = warning, low = no badge.
@@ -93,13 +93,18 @@ const tagStyle = (color: string | null) => ({
                 <StatusChip v-if="priorityBadge" :label="priorityBadge.label" :tone="priorityBadge.tone" />
                 <StatusChip v-if="conversation.needs_human" :label="t('thread.needs_human')" tone="negative" />
                 <StatusChip v-else-if="conversation.handler === 'bot'" :label="t('thread.handler_bot')" tone="info" />
+                <!-- What she said she needs («موضوع التحويل», flow 7) wins over the category. -->
                 <span
-                    v-if="conversation.handover_category_label"
+                    v-if="conversation.handover_topic || conversation.handover_category_label"
                     class="inline-flex h-5 min-w-0 max-w-[9rem] items-center rounded-full border border-border px-2 text-2xs text-muted-foreground"
-                    :title="t('inbox.category', { label: conversation.handover_category_label })"
+                    :title="
+                        conversation.handover_topic
+                            ? t('inbox.topic', { topic: conversation.handover_topic })
+                            : t('inbox.category', { label: conversation.handover_category_label ?? '' })
+                    "
                     dir="auto"
                 >
-                    <span class="truncate">{{ conversation.handover_category_label }}</span>
+                    <span class="truncate">{{ conversation.handover_topic || conversation.handover_category_label }}</span>
                 </span>
                 <HandlerAvatar :handling="conversation.handling" size="xs" />
                 <span

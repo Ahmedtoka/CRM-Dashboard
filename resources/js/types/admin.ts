@@ -218,6 +218,8 @@ export interface BotSettings {
     burst_max_wait_seconds: number;
     typing_ms_per_char: number;
     order_lookup_enabled: boolean;
+    /** the «🛍️ تسوقي من الموقع» button's link (empty = the default store) */
+    store_url?: string | null;
 }
 
 export type BotIntentRoute = 'answer' | 'lookup' | 'collect_then_handover' | 'handover';

@@ -130,7 +130,7 @@ it('validates the order_items step type for the designer', function () {
         ->and(FlowDefinition::warnings($noProof)[0])->toStartWith('الخطوة items محتاجة');
 
     expect(FlowStepCatalog::all()['order_items'])->toBe([
-        'label_ar' => 'اختيار قطع من الأوردر', 'icon' => 'PackageOpen', 'color' => 'amber', 'fields' => ['text'], 'options' => 'none', 'has_next' => true,
+        'label_ar' => 'اختيار قطع من الأوردر', 'icon' => 'PackageOpen', 'color' => 'amber', 'fields' => ['text', 'return_rules'], 'options' => 'none', 'has_next' => true,
     ])->and(FlowStepCatalog::all()['order']['fields'])->toContain('verify_owner')
         ->and(array_keys(FlowStepCatalog::all()))->toBe(FlowDefinition::TYPES);
 });

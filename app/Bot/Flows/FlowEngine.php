@@ -5,10 +5,13 @@ namespace App\Bot\Flows;
 use App\Bot\Flows\Steps\FlowStep;
 use App\Bot\Flows\Steps\OrderStep;
 use App\Bot\Flows\Steps\StepOutcome;
+use App\Channels\Cards\OutboundCards;
+use App\Enums\AttachmentType;
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
 use App\Inbox\OutboundService;
 use App\Inbox\WindowClosedException;
+use App\Models\BotSetting;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Support\Collection;
@@ -32,6 +35,13 @@ class FlowEngine
 {
     /** Steps run back-to-back (scripts) before the engine gives up on a cycle. */
     private const MAX_CHAINED_STEPS = 25;
+
+    /** The products menu (the owner's flow 6): its scripts come with the store-link button. */
+    public const PRODUCTS_FLOW = 'products';
+
+    public const STORE_LINK_SCRIPTS = ['availability', 'size', 'delivery_time', 'payment_info'];
+
+    public const STORE_BUTTON = '🛍️ تسوقي من الموقع';
 
     /** Types whose prompt waits for an answer handled by this engine. */
     private const ANSWERABLE = ['menu', 'choice', 'text', 'name', 'phone', 'summary'];
@@ -60,11 +70,13 @@ class FlowEngine
         private readonly FlowSteps $steps,
         private readonly FlowDefinitionSource $source,
         private readonly FlowHandover $handovers,
+        private readonly HumanHandover $human,
     ) {}
 
+    /** A flow is waiting for her, or the «كلم موظف» topic question is (HumanHandover). */
     public function isActive(Conversation $c): bool
     {
-        return FlowState::flow($c) !== null;
+        return FlowState::flow($c) !== null || HumanHandover::pending($c);
     }
 
     /** @param  int  $delayMs  queue the flow's messages after this delay (a reply part still on its way) */
@@ -75,6 +87,14 @@ class FlowEngine
 
     public function handle(Conversation $c, Collection $burst): FlowResult
     {
+        if ($burst->isNotEmpty() && HumanHandover::pending($c)) {
+            // Her answer to «محتاجة إيه؟» (or the skip button): the topic, then the team.
+            $payload = $burst->reverse()->map(fn (Message $m) => $this->buttons->match($c, $m))->first(fn ($p) => $p !== null);
+            $this->human->answer($c, $burst, $payload);
+
+            return new FlowResult(true, exited: true);
+        }
+
         $state = FlowState::flow($c);
 
         if ($state === null || $burst->isEmpty()) {
@@ -126,7 +146,7 @@ class FlowEngine
         return $this->resolveText($c, $state, $step, $text, $burst);
     }
 
-    /** Payloads: menu:<key>, flow:<key>, script:<key>, handover, yes, no, step:<flow>:<step>:<value>. */
+    /** Payloads: menu:<key>, flow:<key>, script:<key>, handover, handover:now, yes, no, step:<flow>:<step>:<value>. */
     public function runPayload(Conversation $c, string $payload): bool
     {
         $payload = trim($payload);
@@ -134,7 +154,14 @@ class FlowEngine
 
         switch ($kind) {
             case 'handover':
-                $this->handoverToHuman($c);
+                // «حوّليني على طول» (the topic question's skip button) hands over as it is.
+                if ($rest === 'now') {
+                    $this->human->handover($c, null, $this->customerText($c));
+
+                    return true;
+                }
+
+                $this->requestHuman($c);
 
                 return true;
             case 'yes':
@@ -150,7 +177,7 @@ class FlowEngine
                     return false;
                 }
 
-                $this->send($c, $body, [FlowPrompter::MAIN_MENU_BUTTON]);
+                $this->send($c, $body, [FlowPrompter::MAIN_MENU_BUTTON], $this->storeLinkCards($c, $rest));
 
                 return true;
             case 'step':
@@ -294,6 +321,25 @@ class FlowEngine
             return new FlowResult(true);
         }
 
+        // A choice that also takes her own words (2026-09-19, «كانت الزيارة إمتى؟» → "الخميس اللي فات").
+        if (! $isQuestion && $type === 'choice' && ($step['allow_text'] ?? false) === true && self::meaningful($text)) {
+            $this->answer($c, $state, $step, mb_substr(trim($text), 0, 500), mb_substr(trim($text), 0, 500));
+
+            return new FlowResult(true);
+        }
+
+        // A text step with `photos: true` (the complaint's description) keeps the burst's photos too.
+        if ($type === 'text' && ($step['photos'] ?? false) === true && filled($step['field'] ?? null)) {
+            $photos = $this->photoIds($burst);
+
+            if ($photos !== [] || self::meaningful($text)) {
+                $state['data'][$step['field'].'_photo'] = $photos !== [] ? $photos : null;
+                $this->answer($c, $state, $step, trim($text));
+
+                return new FlowResult(true);
+            }
+        }
+
         if (($value = $this->resolveTyped($type, $text)) !== null) {
             $this->answer($c, $state, $step, $value);
 
@@ -354,7 +400,7 @@ class FlowEngine
     private function apply(Conversation $c, array $state, array $step, StepOutcome $outcome): ?string
     {
         foreach ($outcome->messages as $message) {
-            $this->send($c, (string) $message['text'], $message['buttons'] ?? []);
+            $this->send($c, (string) $message['text'], $message['buttons'] ?? [], $message['cards'] ?? null);
         }
 
         foreach ($outcome->data as $key => $value) {
@@ -408,9 +454,34 @@ class FlowEngine
         return match ($type) {
             'phone' => $this->resolver->phone($text),
             'name' => $this->resolver->name($text),
-            'text' => $text !== '' ? $text : null,
+            // Only an emoji or a dot is not an answer (the cancel reason is required, 2026-09-19).
+            'text' => self::meaningful($text) ? $text : null,
             default => null,
         };
+    }
+
+    /** At least one letter or digit: "🙏" or "." alone does not answer a question. */
+    public static function meaningful(string $text): bool
+    {
+        return preg_match('/[\p{L}\p{N}]/u', $text) === 1;
+    }
+
+    /** @return list<int|string> the burst's image attachment ids (`legacy` for an old-style image only) */
+    private function photoIds(Collection $burst): array
+    {
+        $ids = [];
+        $legacy = false;
+
+        foreach ($burst as $m) {
+            /** @var Message $m */
+            if ($m->exists) {
+                array_push($ids, ...$m->mediaAttachments()->where('type', AttachmentType::Image->value)->pluck('id')->map(fn ($id) => (int) $id)->all());
+            }
+
+            $legacy = $legacy || collect((array) $m->attachments)->contains(fn ($a) => is_array($a) && ($a['type'] ?? null) === 'image');
+        }
+
+        return $ids !== [] ? $ids : ($legacy ? ['legacy'] : []);
     }
 
     /** Applies a resolved value (button payload value or interpreter answer) to the waiting step. */
@@ -457,7 +528,7 @@ class FlowEngine
             case 'text':
             case 'name':
             case 'phone':
-                if (trim($value) === '') {
+                if (! self::meaningful($value)) {
                     return false;
                 }
 
@@ -613,20 +684,50 @@ class FlowEngine
         $this->handover($c, 'human_request', FlowState::flow($c)['data'] ?? []);
     }
 
+    /**
+     * She asked for a person (the «كلم موظف» button, 2026-09-19): from the main menu, or with no
+     * flow going, the bot first asks what she needs (HumanHandover::askTopic). Inside another flow
+     * what she was doing is the context already, so she goes straight to the team.
+     */
+    private function requestHuman(Conversation $c): void
+    {
+        $state = FlowState::flow($c);
+
+        if ($state === null || $state['key'] === ConversationRouter::MAIN_MENU) {
+            $this->human->askTopic($c, $this->customerText($c), $this->sendDelayMs);
+
+            return;
+        }
+
+        $this->handoverToHuman($c);
+    }
+
+    /** Every flow handover: the working-hours reply, then the team (HumanHandover). */
     private function handover(Conversation $c, string $reason, array $data, string $category = 'human_request'): void
     {
-        $customerText = $this->turnTexts !== []
-            ? implode("\n", $this->turnTexts)
-            : (string) $c->messages()->where('direction', MessageDirection::In->value)->latest('id')->value('body');
-
-        $this->handovers->handover($c, $reason, $customerText, [
-            'priority' => 'medium',
-            'queue' => 'agents',
-            'category' => $category,
-            'summary_extra' => $this->prompter->summaryLines($data),
-        ]);
+        $this->human->handover($c, null, $this->customerText($c), $reason, $category, $this->prompter->summaryLines($data));
 
         FlowState::clear($c);
+    }
+
+    private function customerText(Conversation $c): string
+    {
+        return $this->turnTexts !== []
+            ? implode("\n", $this->turnTexts)
+            : (string) $c->messages()->where('direction', MessageDirection::In->value)->latest('id')->value('body');
+    }
+
+    /**
+     * The store-link button under a script sent from the products menu (the owner's flow 6,
+     * 2026-09-19): «🛍️ تسوقي من الموقع» → bot_settings.store_url.
+     */
+    private function storeLinkCards(Conversation $c, string $scriptKey): ?array
+    {
+        if ((FlowState::flow($c)['key'] ?? null) !== self::PRODUCTS_FLOW || ! in_array($scriptKey, self::STORE_LINK_SCRIPTS, true)) {
+            return null;
+        }
+
+        return OutboundCards::button([OutboundCards::webUrl(self::STORE_BUTTON, BotSetting::current()->storeUrl())]);
     }
 
     private function sendPrompt(Conversation $c, array $state, array $step): void
@@ -636,8 +737,11 @@ class FlowEngine
         $this->send($c, $prompt['text'], $prompt['buttons']);
     }
 
-    /** @param  list<array{title:string, payload:string}>  $buttons */
-    private function send(Conversation $c, string $text, array $buttons = []): void
+    /**
+     * @param  list<array{title:string, payload:string}>  $buttons
+     * @param  array|null  $cards  rich cards (App\Channels\Cards\OutboundCards); $text is their plain-text fallback
+     */
+    private function send(Conversation $c, string $text, array $buttons = [], ?array $cards = null): void
     {
         if (trim($text) === '') {
             return;
@@ -645,7 +749,7 @@ class FlowEngine
 
         try {
             $delay = $this->sendDelayMs > 0 ? $this->sendDelayMs + ($this->delayedSends++) * self::DELAYED_SEND_STEP_MS : 0;
-            $this->outbound->sendBot($c, $text, $delay, true, $buttons);
+            $this->outbound->sendBot($c, $text, $delay, true, $buttons, $cards);
         } catch (WindowClosedException) {
             Log::info('flow.window_closed', ['conversation_id' => $c->id]);
         }

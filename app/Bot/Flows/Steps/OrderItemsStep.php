@@ -31,6 +31,10 @@ use Illuminate\Support\Collection;
  * exchange steps); `exchange` takes discounted items without a note. The
  * order header is not repeated then (the greeting already named the order).
  *
+ * With `return_rules: false` (the owner's cancel/edit flow, 2026-09-19) it is a plain picker:
+ * no return rules at all (no keyword refusals, no 14 days, no discount notes) and no order
+ * header — she is only saying which pieces she wants to change.
+ *
  * Step state lives in `data.items_pending` = {mode: pick|more|qty|fallback, queue?: ids, qty_for?: id, discounted?: ids}.
  */
 final class OrderItemsStep extends BaseStep
@@ -38,6 +42,11 @@ final class OrderItemsStep extends BaseStep
     public const DEFAULT_TEXT = 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها 👇';
 
     public const FALLBACK_TEXT = 'اكتبي اسم القطعة اللي عايزة ترجعيها أو تبدليها 🌸';
+
+    /** `return_rules: false` (cancel/edit): what is asked instead. */
+    public const PLAIN_TEXT = 'اختاري القطعة اللي عايزة تعدلي فيها 👇';
+
+    public const PLAIN_FALLBACK_TEXT = 'اكتبي اسم القطعة اللي عايزة تعدلي فيها 🌸';
 
     public const MULTI_TEXT = 'اكتبي أرقام القطع اللي عايزاها، مثلًا: 1 و 3';
 
@@ -80,6 +89,9 @@ final class OrderItemsStep extends BaseStep
 
     private const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
+    /** `return_rules: false` on the step being handled (set by every entry point). */
+    private bool $plain = false;
+
     public function __construct(
         FlowPrompter $prompter,
         private readonly ReturnItems $items,
@@ -91,22 +103,35 @@ final class OrderItemsStep extends BaseStep
 
     public function enter(Conversation $c, array $state, array $step): StepOutcome
     {
+        $this->plain = self::isPlain($step);
         $order = $this->order($state['data']);
 
         if ($order === null || $order->items->isEmpty()) {
-            return StepOutcome::wait([['text' => self::FALLBACK_TEXT]], 0, ['items_pending' => ['mode' => 'fallback'], 'selected_items' => null]);
+            return StepOutcome::wait([['text' => $this->fallbackText()]], 0, ['items_pending' => ['mode' => 'fallback'], 'selected_items' => null]);
         }
 
-        return StepOutcome::wait([$this->listMessage($state, $step, $order, [], $this->kind($state) === null)], 0, ['items_pending' => ['mode' => 'pick'], 'selected_items' => null]);
+        return StepOutcome::wait([$this->listMessage($state, $step, $order, [], $this->kind($state) === null && ! $this->plain)], 0, ['items_pending' => ['mode' => 'pick'], 'selected_items' => null]);
+    }
+
+    /** `return_rules: false`: a plain picker without the return rules (cancel/edit). */
+    public static function isPlain(array $step): bool
+    {
+        return ($step['return_rules'] ?? true) === false;
+    }
+
+    private function fallbackText(): string
+    {
+        return $this->plain ? self::PLAIN_FALLBACK_TEXT : self::FALLBACK_TEXT;
     }
 
     public function prompt(array $state, array $step): array
     {
+        $this->plain = self::isPlain($step);
         $pending = $this->pending($state['data']);
         $order = $this->order($state['data']);
 
         if ($pending['mode'] === 'fallback' || $order === null || $order->items->isEmpty()) {
-            return ['text' => self::FALLBACK_TEXT, 'buttons' => []];
+            return ['text' => $this->fallbackText(), 'buttons' => []];
         }
 
         return match ($pending['mode']) {
@@ -120,6 +145,7 @@ final class OrderItemsStep extends BaseStep
 
     public function answer(Conversation $c, array $state, array $step, string $text, Collection $burst): ?StepOutcome
     {
+        $this->plain = self::isPlain($step);
         $text = trim($text);
         $pending = $this->pending($state['data']);
         $order = $this->order($state['data']);
@@ -177,6 +203,7 @@ final class OrderItemsStep extends BaseStep
 
     public function payload(Conversation $c, array $state, array $step, string $value): ?StepOutcome
     {
+        $this->plain = self::isPlain($step);
         $order = $this->order($state['data']);
         $pending = $this->pending($state['data']);
 
@@ -282,14 +309,14 @@ final class OrderItemsStep extends BaseStep
                 continue;
             }
 
-            if (($keyword = $this->items->nonReturnableKeyword($item)) !== null) {
+            if (! $this->plain && ($keyword = $this->items->nonReturnableKeyword($item)) !== null) {
                 $messages[] = ['text' => $this->refusalText($title, $keyword)];
                 $refused = true;
 
                 continue;
             }
 
-            if ($this->items->windowClosed($order)) {
+            if (! $this->plain && $this->items->windowClosed($order)) {
                 $lateText = "«{$title}» عدّى على استلامها أكتر من ".ReturnItems::RETURN_DAYS.' يوم، والمرتجع والاستبدال عندنا خلال '.ReturnItems::RETURN_DAYS.' يوم من الاستلام بس 🙏';
                 $late = true;
 
@@ -356,7 +383,7 @@ final class OrderItemsStep extends BaseStep
         $returning = $this->kind($state) === 'return';
         // Items she could still pick: not picked yet, not refused by the keyword list, and (for a return) not discounted.
         $left = $order->items->reject(fn (OrderItem $i) => collect($selected)->contains(fn ($s) => (int) ($s['line_item_id'] ?? 0) === (int) $i->id)
-            || $this->items->nonReturnableKeyword($i) !== null
+            || (! $this->plain && $this->items->nonReturnableKeyword($i) !== null)
             || ($returning && $this->items->isDiscounted($i)));
 
         // The window is the order's, so every other item is past it too: a person, or stop here.
@@ -458,7 +485,7 @@ final class OrderItemsStep extends BaseStep
 
         $name = mb_substr(trim($text), 0, 200);
 
-        if (($keyword = $this->items->keywordIn($name)) !== null) {
+        if (! $this->plain && ($keyword = $this->items->keywordIn($name)) !== null) {
             return StepOutcome::wait([['text' => $this->refusalText($name, $keyword)."\n".'لو فيه قطعة تانية اكتبي اسمها، أو اكتبي «خلاص»']], 0, ['items_pending' => ['mode' => 'fallback']]);
         }
 
@@ -477,7 +504,7 @@ final class OrderItemsStep extends BaseStep
             'variant' => $this->items->variantOf($item),
             'qty' => $qty,
             'price' => $item->price !== null ? (float) $item->price : null,
-            'exchange_only' => $this->items->isDiscounted($item),
+            'exchange_only' => ! $this->plain && $this->items->isDiscounted($item),
         ];
     }
 
@@ -492,7 +519,7 @@ final class OrderItemsStep extends BaseStep
             $lines[] = ($i + 1).'. '.$mark.$this->lineText($item);
         }
 
-        $question = trim($this->prompter->renderText((string) ($step['text'] ?? ''), $state['data'] ?? [])) ?: self::DEFAULT_TEXT;
+        $question = trim($this->prompter->renderText((string) ($step['text'] ?? ''), $state['data'] ?? [])) ?: ($this->plain ? self::PLAIN_TEXT : self::DEFAULT_TEXT);
         $text = implode("\n", array_filter([$withHeader ? $this->header($state, $order) : null, implode("\n", $lines), '', $question], fn ($p) => $p !== null));
 
         return ['text' => $text, 'buttons' => $this->itemButtons($state, $order)];

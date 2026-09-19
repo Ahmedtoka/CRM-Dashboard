@@ -46,6 +46,7 @@ class ConversationUpdated implements ShouldBroadcastNow
             'queue' => $c->queue,
             'handover_category' => $c->handover_category,
             'handover_category_label' => ConversationResource::categoryLabel($c),
+            'handover_topic' => $c->handover_topic,
             'handler' => $c->handler?->value,
             'needs_human' => (bool) $c->needs_human,
             'unread_count' => (int) $c->unread_count,

@@ -3,6 +3,7 @@
 namespace App\Channels\Adapters;
 
 use App\Channels\Adapters\Concerns\VerifiesMetaWebhooks;
+use App\Channels\Cards\OutboundCards;
 use App\Channels\Contracts\ChannelAdapter;
 use App\Channels\Data\ChannelCapabilities;
 use App\Channels\Data\DeliveryReceiptData;
@@ -183,6 +184,29 @@ class WhatsAppAdapter implements ChannelAdapter
     public function sendText(ChannelAccount $account, CustomerIdentity $to, string $text, array $options = []): SendResult
     {
         $phoneNumberId = $account->external_id;
+
+        // Rich cards (2026-09-19): WhatsApp has no carousel here, so each card goes as its own
+        // text (the phone and the map link are tappable there); a link button becomes a plain
+        // link line under the text.
+        if (! isset($options['template']) && ($cards = OutboundCards::valid($options['cards'] ?? null)) !== null) {
+            unset($options['cards']);
+
+            if ($cards['type'] === 'button') {
+                return $this->sendText($account, $to, OutboundCards::withLinkLines($text, $cards), $options);
+            }
+
+            $result = SendResult::fail('no_cards');
+
+            foreach ($cards['cards'] as $card) {
+                $result = $this->sendText($account, $to, OutboundCards::cardText($card), []);
+
+                if (! $result->success) {
+                    return $result;
+                }
+            }
+
+            return $result;
+        }
 
         if (isset($options['template'])) {
             $template = $options['template'];

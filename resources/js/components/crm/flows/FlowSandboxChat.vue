@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
+import MessageCards from '@/components/crm/MessageCards.vue';
+import type { OutboundCards } from '@/types/crm';
 import type { SandboxButton, SandboxEvent, SandboxResponse, SandboxSource } from '@/types/flows';
 import { AxiosError } from 'axios';
 import {
@@ -33,7 +35,7 @@ const { t } = useI18n();
 const api = useApi();
 
 type ChatItem =
-    | { id: number; kind: 'bot'; text: string; buttons: SandboxButton[] }
+    | { id: number; kind: 'bot'; text: string; buttons: SandboxButton[]; cards: OutboundCards | null }
     | { id: number; kind: 'customer'; text: string }
     | { id: number; kind: 'event'; event: SandboxEvent }
     | { id: number; kind: 'error'; text: string }
@@ -73,7 +75,7 @@ async function run(input: { text?: string; payload?: string; photo?: boolean }, 
         // Moving between flows reads best above the new prompt; cases and handovers after what the bot said.
         const leading = data.events.filter((event) => LEADING_EVENTS.includes(event.type));
         for (const event of leading) push({ kind: 'event', event });
-        for (const message of data.messages) push({ kind: 'bot', text: message.text, buttons: message.buttons ?? [] });
+        for (const message of data.messages) push({ kind: 'bot', text: message.text, buttons: message.buttons ?? [], cards: message.cards ?? null });
         for (const event of data.events) if (!leading.includes(event)) push({ kind: 'event', event });
         state.value = data.state;
         if (!data.current && !data.state) push({ kind: 'ended' });
@@ -226,7 +228,13 @@ defineExpose({ reset });
 
             <template v-for="(item, index) in items" :key="item.id">
                 <!-- Bot: start side (right in RTL); customer: end side -->
-                <MessengerBubble v-if="item.kind === 'bot'" :text="item.text" :show-avatar="showAvatar(index)">
+                <MessengerBubble
+                    v-if="item.kind === 'bot'"
+                    :text="item.cards?.type === 'generic' ? '' : item.text"
+                    :show-avatar="showAvatar(index)"
+                >
+                    <!-- Branch cards / the store link, as Messenger shows them (a carousel's text is only its fallback). -->
+                    <MessageCards v-if="item.cards" :cards="item.cards" variant="messenger" class="max-w-full" />
                     <div v-if="chipsFor === item.id" class="flex flex-wrap gap-1.5">
                         <button
                             v-for="(button, b) in item.buttons"
