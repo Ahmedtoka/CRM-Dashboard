@@ -92,3 +92,14 @@ function fakeMetaGraph(array $routes): void
         return Illuminate\Support\Facades\Http::response($route);
     });
 }
+
+/**
+ * Puts the first order-aware return/exchange flow (commit 009704c: order → order_items → reason →
+ * request → photos → summary) back live, for tests of the step types it exercises. The seeded flow
+ * is the owner's 2026-09-19 flow (App\Bot\Flows\ReturnFlowUpgrade::definition()).
+ */
+function useOrderAwareReturnFlow(): void
+{
+    App\Models\BotFlow::query()->where('key', 'return_exchange')
+        ->update(['definition' => json_encode(App\Bot\Flows\ReturnFlowUpgrade::orderAwareDefinition(), JSON_UNESCAPED_UNICODE)]);
+}

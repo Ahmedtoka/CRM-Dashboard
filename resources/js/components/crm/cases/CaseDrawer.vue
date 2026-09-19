@@ -92,7 +92,12 @@ const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-
                 <div class="flex flex-wrap items-center gap-2">
                     <StatusChip :label="t(`cases.priority.${item.priority}`)" :tone="casePriorityTone[item.priority]" />
                     <StatusChip :label="t(`cases.tabs.${item.status}`)" :tone="caseStatusTone[item.status]" />
+                    <StatusChip v-if="item.request_kind" :label="t(`cases.types.${item.request_kind}`)" tone="info" />
                 </div>
+
+                <p v-if="item.request_kind && item.reason" class="text-xs">
+                    <span class="font-semibold text-muted-foreground">{{ t('cases.reason') }}:</span> {{ item.reason }}
+                </p>
 
                 <p class="text-xs text-muted-foreground">
                     {{ t('cases.created_at') }}: <span class="tabular-nums">{{ formatDateTime(item.created_at, locale) }}</span>
@@ -128,6 +133,40 @@ const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <div v-if="item.exchange_product" class="space-y-1.5">
+                    <h3 class="text-xs font-semibold text-muted-foreground">{{ t('cases.exchange_product.title') }}</h3>
+                    <div class="flex items-center gap-3 rounded-md border border-border p-2" dir="rtl">
+                        <img
+                            v-if="item.exchange_product.image"
+                            :src="item.exchange_product.image"
+                            class="size-14 shrink-0 rounded-md border border-border object-cover"
+                            alt=""
+                        />
+                        <span
+                            v-else
+                            class="flex size-14 shrink-0 items-center justify-center rounded-md bg-muted text-center text-2xs text-muted-foreground"
+                            >{{ t('cases.exchange_product.no_image') }}</span
+                        >
+                        <div class="min-w-0 flex-1 space-y-0.5">
+                            <p class="truncate text-sm font-medium">{{ item.exchange_product.title }}</p>
+                            <p v-if="item.exchange_product.variant_title" class="truncate text-xs text-muted-foreground">
+                                {{ item.exchange_product.variant_title }}
+                            </p>
+                            <p v-if="item.exchange_product.price !== null" class="text-xs tabular-nums">
+                                {{ formatMoney(item.exchange_product.price, locale) }}
+                            </p>
+                            <a
+                                v-if="item.exchange_product.url"
+                                :href="item.exchange_product.url"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="inline-flex text-xs font-medium text-primary hover:underline"
+                                >{{ t('cases.exchange_product.open') }}</a
+                            >
+                        </div>
                     </div>
                 </div>
 

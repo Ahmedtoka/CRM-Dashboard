@@ -2,12 +2,13 @@
 
 use App\Bot\Flows\FlowDefinition;
 use App\Bot\Flows\FlowDefinitions;
+use App\Bot\Flows\FlowDrafts;
 use App\Bot\Flows\FlowStepCatalog;
 use App\Bot\Flows\ReturnFlowUpgrade;
 use App\Bot\Flows\Returns\ItemSelection;
 use App\Models\BotFlow;
-use App\Models\BotFlowVersion;
 use App\Models\Order;
+use App\Models\User;
 use App\Shopify\Sync\Mappers\OrderMapper;
 use Illuminate\Support\Facades\Event;
 
@@ -24,87 +25,86 @@ function rfuLegacyInstall(): BotFlow
 
 function rfuMigrate(): void
 {
-    (require database_path('migrations/2026_09_19_200020_add_order_items_to_return_flow.php'))->up();
+    (require database_path('migrations/2026_09_19_300010_publish_owner_return_exchange_flow.php'))->up();
 }
 
-it('seeds the return flow as order (verify_owner) → order_items → reason, valid and equal to the upgraded seed', function () {
+it('seeds the owner flow for return_exchange, valid and without warnings', function () {
     $def = BotFlow::where('key', 'return_exchange')->firstOrFail()->definition;
 
-    expect($def['steps']['order']['verify_owner'])->toBeTrue()
-        ->and($def['steps']['order']['next'])->toBe('order_items')
-        ->and($def['steps']['order_items'])->toBe(['type' => 'order_items', 'text' => ReturnFlowUpgrade::ITEMS_TEXT, 'next' => 'reason'])
+    expect(ReturnFlowUpgrade::same($def, ReturnFlowUpgrade::definition()))->toBeTrue()
+        ->and(FlowDefinitions::all()['return_exchange']['definition'])->toBe(ReturnFlowUpgrade::definition())
+        ->and($def['steps']['order']['verify_owner'])->toBeTrue()
+        ->and($def['steps']['kind']['text'])->toBe(ReturnFlowUpgrade::GREETING_TEXT)
+        ->and($def['steps']['exchange_product']['type'])->toBe('product_link')
+        ->and($def['steps']['record_return']['case_type'])->toBe('return')
+        ->and($def['steps']['record_exchange']['case_type'])->toBe('exchange')
         ->and(FlowDefinition::validate($def))->toBe([])
+        ->and(FlowDefinition::validateReferences($def))->toBe([])
         ->and(FlowDefinition::warnings($def))->toBe([])
-        ->and(ReturnFlowUpgrade::same(ReturnFlowUpgrade::transform(ReturnFlowUpgrade::legacyDefinition()), FlowDefinitions::all()['return_exchange']['definition']))->toBeTrue();
+        ->and(FlowDefinition::validate(ReturnFlowUpgrade::orderAwareDefinition()))->toBe([]);
 });
 
-it('updates an untouched seeded flow and publishes it as a new version', function () {
+it('publishes the owner flow over the old seed as a new version, the old one archived', function () {
     $flow = rfuLegacyInstall();
 
     rfuMigrate();
 
     $flow->refresh();
-    expect($flow->definition)->toBe(FlowDefinitions::all()['return_exchange']['definition'])
-        ->and($flow->versions()->where('status', 'published')->sole()->version)->toBe(2)
-        ->and($flow->versions()->where('status', 'published')->sole()->note)->toBe(ReturnFlowUpgrade::NOTE)
+    $published = $flow->versions()->where('status', 'published')->sole();
+    expect($flow->definition)->toBe(ReturnFlowUpgrade::definition())
+        ->and($published->version)->toBe(2)
+        ->and($published->note)->toBe(ReturnFlowUpgrade::NOTE)
+        ->and($published->definition)->toBe(ReturnFlowUpgrade::definition())
         ->and($flow->versions()->where('status', 'archived')->sole()->definition)->toBe(ReturnFlowUpgrade::legacyDefinition())
         ->and($flow->draft()->exists())->toBeFalse();
 
-    // Running it again changes nothing.
+    // Idempotent: running it again changes nothing.
     rfuMigrate();
-    expect($flow->versions()->count())->toBe(2);
+    expect($flow->versions()->count())->toBe(2)->and($flow->fresh()->definition)->toBe(ReturnFlowUpgrade::definition());
 });
 
-it('never overwrites an owner-edited flow: the change goes to a draft', function () {
+it('replaces the first order-aware version and an owner edit alike, and archives her draft', function () {
     $flow = rfuLegacyInstall();
-    $edited = ReturnFlowUpgrade::legacyDefinition();
+    $edited = ReturnFlowUpgrade::orderAwareDefinition();
     $edited['steps']['reason']['text'] = 'إيه اللي حصل؟';
-    $edited['layout'] = ['order' => ['x' => 100, 'y' => 50]];
     $flow->update(['definition' => $edited]);
+    $flow->versions()->where('status', 'published')->update(['definition' => json_encode($edited, JSON_UNESCAPED_UNICODE)]);
+    $mine = ReturnFlowUpgrade::orderAwareDefinition();
+    $mine['steps']['summary']['text'] = 'مسودتي';
+    $draft = $flow->versions()->create(['version' => 2, 'status' => 'draft', 'definition' => $mine]);
 
     rfuMigrate();
 
     $flow->refresh();
-    $draft = $flow->draft()->sole();
-    expect($flow->definition)->toBe($edited)
-        ->and($draft->version)->toBe(2)
-        ->and($draft->definition['steps']['reason']['text'])->toBe('إيه اللي حصل؟')
-        ->and($draft->definition['steps']['order']['verify_owner'])->toBeTrue()
-        ->and($draft->definition['steps']['order']['next'])->toBe('order_items')
-        ->and($draft->definition['steps']['order_items']['next'])->toBe('reason')
-        ->and(array_keys($draft->definition['steps'])[2])->toBe('order_items')
-        ->and($draft->definition['layout']['order_items'])->toEqual(['x' => 400, 'y' => 50])
-        ->and(FlowDefinition::validate($draft->definition))->toBe([]);
+    expect($flow->definition)->toBe(ReturnFlowUpgrade::definition())
+        ->and($flow->draft()->exists())->toBeFalse()
+        ->and($draft->fresh()->status)->toBe('archived')
+        ->and($draft->fresh()->definition['steps']['summary']['text'])->toBe('مسودتي')
+        ->and($flow->versions()->where('status', 'archived')->count())->toBe(2)
+        ->and($flow->versions()->where('status', 'published')->sole()->version)->toBe(3)
+        ->and(app(FlowDrafts::class)->draftFor($flow))->toBe(ReturnFlowUpgrade::definition());
 
-    // Idempotent: the draft already has the step.
+    // The old versions can still be restored from the designer's history.
+    $old = $flow->versions()->where('version', 1)->sole();
+    $restored = app(FlowDrafts::class)->restore($old, User::factory()->create());
+    expect($restored->definition['steps']['reason']['text'])->toBe('إيه اللي حصل؟')
+        ->and($flow->fresh()->definition['steps']['reason']['text'])->toBe('إيه اللي حصل؟');
+
+    // Idempotent only while the owner flow is live: a restore is the owner's choice, but re-running
+    // on a flow that is already the owner flow does nothing.
+    $flow->fresh()->update(['definition' => ReturnFlowUpgrade::definition()]);
+    $count = $flow->versions()->count();
     rfuMigrate();
-    expect(BotFlowVersion::where('bot_flow_id', $flow->id)->where('status', 'draft')->count())->toBe(1);
+    expect($flow->versions()->count())->toBe($count);
 });
 
-it('adds the change to an existing owner draft instead of replacing it', function () {
+it('keeps the superseded first upgrade migration a no-op', function () {
     $flow = rfuLegacyInstall();
-    $edited = ReturnFlowUpgrade::legacyDefinition();
-    $edited['steps']['summary']['text'] = 'راجعي طلبك:';
-    $flow->update(['definition' => $edited]);
-    $mine = ReturnFlowUpgrade::legacyDefinition();
-    $mine['steps']['summary']['text'] = 'مسودتي';
-    $flow->versions()->create(['version' => 2, 'status' => 'draft', 'definition' => $mine]);
 
-    rfuMigrate();
+    (require database_path('migrations/2026_09_19_200020_add_order_items_to_return_flow.php'))->up();
 
-    $draft = $flow->draft()->sole();
-    expect($draft->definition['steps']['summary']['text'])->toBe('مسودتي')
-        ->and($draft->definition['steps'])->toHaveKey('order_items');
-});
-
-it('leaves a flow that already has order_items, or has no order step, alone', function () {
-    $flow = BotFlow::where('key', 'return_exchange')->firstOrFail();
-    $before = $flow->versions()->count();
-
-    rfuMigrate();
-    expect($flow->versions()->count())->toBe($before)->and($flow->fresh()->definition)->toBe($flow->definition);
-
-    expect(ReturnFlowUpgrade::transform(['start' => 'a', 'steps' => ['a' => ['type' => 'text', 'field' => 'x', 'next' => 'end']]]))->toBeNull();
+    expect($flow->fresh()->definition)->toBe(ReturnFlowUpgrade::legacyDefinition())
+        ->and($flow->versions()->count())->toBe(1);
 });
 
 // ---- designer validation of the new type -------------------------------------------------------

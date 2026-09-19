@@ -1,23 +1,21 @@
 <?php
 
-use App\Bot\Flows\ReturnFlowUpgrade;
 use Illuminate\Database\Migrations\Migration;
 
 /**
- * Data-only (spec 2026-09-19 §3): the return/exchange flow asks for proof of
- * ownership and lets her pick the order's items. The live flow is updated only
- * while it is still the seeded definition; an owner-edited flow gets the change
- * as a draft to publish. Idempotent: a flow that already has the step is left alone.
+ * Superseded the same day by 2026_09_19_300010_publish_owner_return_exchange_flow
+ * (the owner's own return/exchange flow, which already has the ownership proof and
+ * the `order_items` steps). Kept as a no-op so databases that ran it stay consistent.
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        ReturnFlowUpgrade::run();
+        // Nothing: see 2026_09_19_300010_publish_owner_return_exchange_flow.
     }
 
     public function down(): void
     {
-        // Data change: the previous version stays in the flow's history and can be restored from the designer.
+        // Nothing.
     }
 };

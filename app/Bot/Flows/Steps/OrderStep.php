@@ -8,6 +8,7 @@ use App\Bot\Flow\Orders\OrderSnapshot;
 use App\Bot\Flow\Orders\OrderStatusText;
 use App\Bot\Flows\EntityExtractor;
 use App\Bot\Flows\FlowPrompter;
+use App\Bot\Flows\Returns\ReturnItems;
 use App\Models\Conversation;
 use App\Models\Order;
 use Illuminate\Support\Collection;
@@ -24,6 +25,9 @@ use Illuminate\Support\Collection;
  * order, nothing else about it. A mobile/email lookup, or a conversation
  * already linked to the order's customer, is proof by itself. The proof is
  * kept as `order_verified` (+ `verified_order_ids`) so it is not asked again.
+ * Once proven, the step also keeps `customer_first_name` (the order's customer)
+ * and `order_window` (`open`/`closed`: the 14 days from delivery) for the
+ * return/exchange greeting and its branches.
  */
 final class OrderStep extends BaseStep
 {
@@ -38,12 +42,13 @@ final class OrderStep extends BaseStep
 
     public const VERIFY_FAILED_TEXT = 'مش قادر أتأكد من الأوردر ده 🙏 هحوّلك لحد من الفريق يساعدك';
 
-    private const ORDER_KEYS = ['order_number', 'order_id', 'order_placed_at', 'order_status_line', 'order_status_key', 'order_governorate', 'order_failed_attempt'];
+    private const ORDER_KEYS = ['order_number', 'order_id', 'order_placed_at', 'order_status_line', 'order_status_key', 'order_governorate', 'order_failed_attempt', 'customer_first_name', 'order_window'];
 
     public function __construct(
         FlowPrompter $prompter,
         private readonly OrderLookup $lookup,
         private readonly OrderStatusText $statusText,
+        private readonly ReturnItems $returns,
     ) {
         parent::__construct($prompter);
     }
@@ -195,7 +200,12 @@ final class OrderStep extends BaseStep
     {
         $ids = array_map('intval', (array) ($state['data']['verified_order_ids'] ?? []));
 
+        $order = Order::with('customer')->find($s->orderId);
+
         return $this->orderData($s) + [
+            // Only once she proved the order is hers (2026-09-19): the greeting's name and the 14-day branch.
+            'customer_first_name' => $order !== null ? self::firstName($order) : null,
+            'order_window' => $order !== null && $this->returns->windowClosed($order) ? 'closed' : 'open',
             'order_verified' => true,
             'verified_order_ids' => array_values(array_unique([...$ids, $s->orderId])),
             'order_lookup_contact' => null,
@@ -215,6 +225,20 @@ final class OrderStep extends BaseStep
     private function keepTyped(string $text): StepOutcome
     {
         return StepOutcome::continue(['order_ref_text' => trim($text), 'order_verified' => null, 'order_lookup_contact' => null] + array_fill_keys(self::ORDER_KEYS, null));
+    }
+
+    /** The first word of the order's shipping name, else of its customer's name; null when neither is known. */
+    public static function firstName(Order $order): ?string
+    {
+        foreach ([$order->shipping_name, $order->customer?->name] as $name) {
+            $first = preg_split('/\s+/u', trim((string) $name))[0] ?? '';
+
+            if ($first !== '') {
+                return $first;
+            }
+        }
+
+        return null;
     }
 
     /** @return array<string, mixed> */

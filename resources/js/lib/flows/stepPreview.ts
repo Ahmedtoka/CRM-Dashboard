@@ -10,6 +10,10 @@ import { MAX_OPTION_TITLE, MAX_QUICK_REPLIES, fieldsOf, parseAction } from './fl
 /** `{time_greeting}` in the preview (the live bot picks صباح/مساء by Cairo time). */
 export const PREVIEW_GREETING = 'مساء الخير';
 export const PREVIEW_CASE_ID = '1234';
+/** Sample values for the flow placeholders (FlowPrompter::renderText, 2026-09-19). */
+export const PREVIEW_FIRST_NAME = 'سارة';
+export const PREVIEW_ORDER_NUMBER = '1047';
+export const PREVIEW_EXCHANGE_PRODUCT = 'عباية كتان';
 
 export const MAIN_MENU_CHIP = 'القائمة الرئيسية';
 export const SUMMARY_CHIPS = ['تمام، سجل', 'عايزة أعدل'];
@@ -31,6 +35,8 @@ const SUMMARY_SAMPLES: [field: string, label: string, sample: string | null][] =
     ['selected_items', 'القطع', 'فستان ليلى (أسود / M) × 1، طرحة شيفون × 1'],
     ['reason', 'السبب', 'المقاس صغير'],
     ['request', 'الطلب', 'استبدال'],
+    ['request_kind', 'نوع الطلب', 'استبدال'],
+    ['exchange_product', 'المنتج البديل', 'عباية كتان'],
     ['product_photo', 'صورة المنتج (✅)', null],
     ['defect_photo', 'صورة العيب (✅)', null],
     ['complaint_type', 'نوع الشكوى', 'تأخير في التوصيل'],
@@ -61,13 +67,18 @@ export interface StepPreviewModel {
     /** the step sends a script that is missing or inactive, so nothing is sent */
     scriptMissing: boolean;
     /** what the customer is expected to send next (photo / order / phone) */
-    expects: 'photo' | 'order' | 'order_verify' | 'order_items' | 'phone' | null;
+    expects: 'photo' | 'order' | 'order_verify' | 'order_items' | 'product_link' | 'phone' | null;
     /** a note about what the engine does instead of a message (status, handover, end, branches list) */
     note: 'status' | 'handover' | 'end' | 'branches_list' | null;
 }
 
 export function renderPlaceholders(text: string): string {
-    return text.replaceAll('{time_greeting}', PREVIEW_GREETING).replaceAll('{case_id}', PREVIEW_CASE_ID);
+    return text
+        .replaceAll('{time_greeting}', PREVIEW_GREETING)
+        .replaceAll('{case_id}', PREVIEW_CASE_ID)
+        .replaceAll('{customer_first_name}', PREVIEW_FIRST_NAME)
+        .replaceAll('{order_number}', PREVIEW_ORDER_NUMBER)
+        .replaceAll('{exchange_product_title}', PREVIEW_EXCHANGE_PRODUCT);
 }
 
 export function truncateTitle(title: string): { title: string; truncated: boolean } {
@@ -142,6 +153,11 @@ export function previewStep(
             break;
         case 'script':
         case 'record_case': {
+            // A record_case step's own text is sent instead of its script (RecordCaseStep).
+            if (step.type === 'record_case' && step.text?.trim()) {
+                model.text = renderPlaceholders(step.text);
+                break;
+            }
             const body = activeScriptBody(scripts, step.script);
             model.text = body === null ? '' : renderPlaceholders(body);
             model.scriptMissing = body === null && (step.type === 'script' || !!step.script);
@@ -159,6 +175,9 @@ export function previewStep(
             break;
         case 'order':
             model.expects = step.verify_owner ? 'order_verify' : 'order';
+            break;
+        case 'product_link':
+            model.expects = 'product_link';
             break;
         case 'photo':
         case 'phone':

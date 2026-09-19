@@ -375,9 +375,12 @@ export const DEFAULT_STEP_TEXT: Record<string, string> = {
     photo: 'ممكن تبعتيلنا صورة؟',
     order: 'ممكن رقم الأوردر؟',
     order_items: 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها 👇',
+    product_link: 'ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع 🔗',
     branch: 'أنهي فرع؟',
     branches_list: 'دي فروعنا:',
     summary: 'راجعي بياناتك:',
+    // Empty: a new record_case step sends its script; the owner may write her own closing text instead.
+    record_case: '',
 };
 
 /** Field names FlowPrompter already labels, so the summary shows them; used when the flow does not use them yet. */
@@ -387,6 +390,7 @@ export const DEFAULT_STEP_FIELD: Record<string, string> = {
     order: 'order_number',
     branch: 'branch_name',
     photo: 'product_photo',
+    product_link: 'exchange_product',
 };
 
 /** First unused `<type>_<n>` id. */

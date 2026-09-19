@@ -19,6 +19,7 @@ export const PALETTE_CARDS: PaletteCard[] = [
     { type: 'phone', key: 'phone' },
     { type: 'order', key: 'order' },
     { type: 'order_items', key: 'order_items' },
+    { type: 'product_link', key: 'product_link' },
     { type: 'photo', key: 'photo' },
     { type: 'branch', key: 'branch' },
     { type: 'branches_list', key: 'branches_list' },

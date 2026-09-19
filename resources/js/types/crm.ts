@@ -280,7 +280,7 @@ export interface Participant {
 }
 
 /** spec §4: a case a guided bot flow recorded (return/exchange, complaint, cancel/edit, delivery follow-up). */
-export type CaseType = 'return_exchange' | 'complaint' | 'cancel_edit' | 'delivery_followup';
+export type CaseType = 'return' | 'exchange' | 'return_exchange' | 'complaint' | 'cancel_edit' | 'delivery_followup';
 export type CaseStatus = 'new' | 'in_progress' | 'closed';
 export type CasePriority = 'medium' | 'high';
 
@@ -306,6 +306,15 @@ export interface CaseItem {
     exchange_only: boolean;
 }
 
+export interface CaseExchangeProduct {
+    title: string;
+    handle: string | null;
+    url: string | null;
+    price: number | null;
+    image: string | null;
+    variant_title: string | null;
+}
+
 export interface SupportCase {
     id: number;
     type: CaseType;
@@ -319,6 +328,11 @@ export interface SupportCase {
     data: Record<string, unknown>;
     /** items picked in the return flow (spec 2026-09-19 §2) */
     items: CaseItem[];
+    /** the owner's return flow (2026-09-19): `return` or `exchange`, null for other cases */
+    request_kind?: 'return' | 'exchange' | null;
+    reason?: string | null;
+    /** the product she linked for an exchange */
+    exchange_product?: CaseExchangeProduct | null;
     photos: CasePhoto[];
     policy_notes: string[];
     assigned_to: { id: number; name: string } | null;

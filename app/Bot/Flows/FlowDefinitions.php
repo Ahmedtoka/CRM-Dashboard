@@ -32,28 +32,8 @@ final class FlowDefinitions
                     ['title' => 'القائمة الرئيسية', 'action' => 'menu:main_menu'],
                 ]],
             ]]],
-            'return_exchange' => ['title_ar' => 'المرتجع والاستبدال', 'definition' => ['start' => 'policy', 'steps' => [
-                'policy' => ['type' => 'script', 'script' => 'flow_return_policy_short', 'next' => 'order'],
-                // Spec 2026-09-19: proof of ownership, then the items she picked (ReturnFlowUpgrade moves live flows here).
-                'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟ 🌸', 'verify_owner' => true, 'next' => 'order_items'],
-                'order_items' => ['type' => 'order_items', 'text' => 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها 👇', 'next' => 'reason'],
-                'reason' => ['type' => 'choice', 'field' => 'reason', 'text' => 'إيه سبب المرتجع؟', 'options' => [
-                    ['value' => 'defective', 'title' => 'بايظ / فيه عيب', 'synonyms' => ['بايظ', 'عيب', 'مقطوع', 'ديفوه', 'تالف', 'شايط']],
-                    ['value' => 'wrong_item', 'title' => 'غلط في الأوردر', 'synonyms' => ['غلط', 'مش اللي طلبته', 'لون تاني']],
-                    ['value' => 'missing_item', 'title' => 'قطعة ناقصة', 'synonyms' => ['ناقص', 'ناقصة', 'ناقصه']],
-                    ['value' => 'size', 'title' => 'المقاس مش مظبوط', 'synonyms' => ['مقاس', 'كبير', 'صغير', 'واسع', 'ضيق']],
-                    ['value' => 'not_liked', 'title' => 'مش عاجبني', 'synonyms' => ['مش عاجبني', 'معجبنيش', 'مش حلو']],
-                ], 'next' => 'request'],
-                'request' => ['type' => 'choice', 'field' => 'request', 'text' => 'حضرتك عايزة استرجاع المبلغ ولا استبدال؟', 'options' => [
-                    ['value' => 'refund', 'title' => 'استرجاع المبلغ', 'synonyms' => ['استرجاع', 'فلوس', 'مبلغ', 'refund']],
-                    ['value' => 'exchange', 'title' => 'استبدال', 'synonyms' => ['استبدال', 'ابدل', 'تبديل', 'exchange']],
-                ], 'next' => 'product_photo'],
-                'product_photo' => ['type' => 'photo', 'field' => 'product_photo', 'text' => 'ممكن صورة واضحة للمنتج؟ 📸', 'next' => 'after_photo'],
-                'after_photo' => ['type' => 'script', 'script' => 'flow_photo_received', 'branches' => [['field' => 'reason', 'in' => ['defective'], 'next' => 'defect_photo']], 'next' => 'summary'],
-                'defect_photo' => ['type' => 'photo', 'field' => 'defect_photo', 'text' => 'وممكن صورة توضح العيب اللي في المنتج؟ 📸', 'next' => 'summary'],
-                'summary' => ['type' => 'summary', 'text' => 'ده ملخص طلب حضرتك:', 'next' => 'record'],
-                'record' => ['type' => 'record_case', 'case_type' => 'return_exchange', 'script' => 'flow_return_recorded', 'next' => 'end'],
-            ]]],
+            // The owner's flow of 2026-09-19 (ReturnFlowUpgrade publishes it on live databases).
+            'return_exchange' => ['title_ar' => 'المرتجع والاستبدال', 'definition' => ReturnFlowUpgrade::definition()],
             'complaint' => ['title_ar' => 'شكوى', 'definition' => ['start' => 'type', 'steps' => [
                 'type' => ['type' => 'choice', 'field' => 'complaint_type', 'text' => 'آسفين جدًا لده 🙏 الشكوى بخصوص إيه؟', 'options' => [
                     ['value' => 'branch', 'title' => 'فرع', 'synonyms' => ['فرع', 'الفرع', 'البياعة', 'الموظفة']],

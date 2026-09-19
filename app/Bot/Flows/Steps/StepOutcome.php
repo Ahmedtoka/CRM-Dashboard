@@ -53,6 +53,12 @@ final readonly class StepOutcome
         return new self(self::HANDOVER, $messages, handoverCategory: $category);
     }
 
+    /** The same outcome with more data merged in (the given keys win). */
+    public function withData(array $data): self
+    {
+        return new self($this->kind, $this->messages, $data + $this->data, $this->retries, $this->handoverCategory);
+    }
+
     public static function end(array $messages = []): self
     {
         return new self(self::END, $messages);

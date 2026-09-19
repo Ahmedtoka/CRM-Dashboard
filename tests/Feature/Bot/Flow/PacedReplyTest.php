@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
 
 beforeEach(function () {
+    useOrderAwareReturnFlow();
     Event::fake();
     Queue::fake();
     Sleep::fake();

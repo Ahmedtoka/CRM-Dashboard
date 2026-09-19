@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * A customer request a guided flow collected for staff to act on (design §4):
- * a return/exchange, complaint, cancel/edit or delivery follow-up. `data`
+ * a return/exchange (or, since 2026-09-19, a `return` or an `exchange`), complaint, cancel/edit or delivery follow-up. `data`
  * holds every flow field; the conversation itself stays with the bot.
  * (`Case` is a PHP keyword, hence the name.)
  */
@@ -18,7 +18,7 @@ class SupportCase extends Model
     /** @use HasFactory<SupportCaseFactory> */
     use HasFactory;
 
-    public const TYPES = ['return_exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
+    public const TYPES = ['return_exchange', 'return', 'exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
 
     public const STATUSES = ['new', 'in_progress', 'closed'];
 
@@ -26,6 +26,8 @@ class SupportCase extends Model
 
     public const TYPE_LABELS = [
         'return_exchange' => 'مرتجع/استبدال',
+        'return' => 'مرتجع',
+        'exchange' => 'استبدال',
         'complaint' => 'شكوى',
         'cancel_edit' => 'إلغاء/تعديل أوردر',
         'delivery_followup' => 'متابعة شحن',

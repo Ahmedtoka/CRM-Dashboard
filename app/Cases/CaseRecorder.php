@@ -78,6 +78,16 @@ class CaseRecorder
                 'mentions' => [],
             ]);
 
+            // An exchange also gets a one-line note the team can act on (2026-09-19).
+            if ($type === 'exchange') {
+                ConversationNote::create([
+                    'conversation_id' => $c->id,
+                    'user_id' => null,
+                    'body' => CaseSummary::exchangeNote($data),
+                    'mentions' => [],
+                ]);
+            }
+
             return $case;
         });
 
@@ -143,7 +153,7 @@ class CaseRecorder
     private function policyNotes(string $type, array $data, ?Order $order): array
     {
         return match ($type) {
-            'return_exchange' => $this->policy->notes($data),
+            'return_exchange', 'return', 'exchange' => $this->policy->notes($data),
             'cancel_edit' => $this->cancelWindowNotes($data, $order),
             default => [],
         };

@@ -61,6 +61,7 @@ it('starts the flow under test and shows the policy and the order prompt', funct
 });
 
 it('walks the whole return flow with state threaded through and saves nothing', function () {
+    useOrderAwareReturnFlow();
     $order = Order::factory()->create(['order_number' => '1047', 'shipping_name' => 'سارة أحمد', 'shipping_phone' => '+201001234567']);
     $item = OrderItem::factory()->for($order)->create(['title' => 'فستان ليلى', 'qty' => 1, 'price' => 850, 'discount' => 0]);
     Shipment::factory()->for($order)->create(['status' => ShipmentStatus::Delivered]);

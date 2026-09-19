@@ -11,7 +11,8 @@ use Throwable;
 
 /**
  * Records the flow's data as a SupportCase of the step's `case_type`, keeps
- * `data.case_id`, sends the step's closing `script` with `{case_id}` rendered
+ * `data.case_id`, sends the step's own `text` (flow placeholders rendered) or else its
+ * closing `script` with `{case_id}` rendered
  * and continues (the conversation stays with the bot). If recording fails the
  * customer is handed to a person instead of being told a number that does
  * not exist.
@@ -35,8 +36,15 @@ final class RecordCaseStep extends BaseStep
 
         $data = ['case_id' => $case->id] + $state['data'];
         $key = (string) ($step['script'] ?? '');
-        $text = $key === '' ? '' : ($this->prompter->script($key, $data)
-            ?? str_replace('{case_id}', (string) $case->id, (string) (FlowScripts::all()[$key]['body'] ?? '')));
+        $own = trim((string) ($step['text'] ?? ''));
+
+        // The step's own closing text wins over its script (2026-09-19: "رقم طلبك هو نفس رقم الأوردر #{order_number}").
+        if ($own !== '') {
+            $text = $this->prompter->renderText($own, $data);
+        } else {
+            $text = $key === '' ? '' : ($this->prompter->script($key, $data)
+                ?? str_replace('{case_id}', (string) $case->id, (string) (FlowScripts::all()[$key]['body'] ?? '')));
+        }
 
         return StepOutcome::continue(['case_id' => $case->id], $text !== '' ? [['text' => $text]] : []);
     }

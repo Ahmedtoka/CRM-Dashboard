@@ -8,6 +8,7 @@ use App\Bot\Flows\Steps\FlowStep;
 use App\Bot\Flows\Steps\OrderItemsStep;
 use App\Bot\Flows\Steps\OrderStep;
 use App\Bot\Flows\Steps\PhotoStep;
+use App\Bot\Flows\Steps\ProductLinkStep;
 use App\Bot\Flows\Steps\RecordCaseStep;
 use App\Bot\Flows\Steps\StatusStep;
 use Illuminate\Contracts\Container\Container;
@@ -20,6 +21,7 @@ final class FlowSteps
         'order' => OrderStep::class,
         'order_items' => OrderItemsStep::class,
         'photo' => PhotoStep::class,
+        'product_link' => ProductLinkStep::class,
         'branch' => BranchStep::class,
         'branches_list' => BranchesListStep::class,
         'status' => StatusStep::class,

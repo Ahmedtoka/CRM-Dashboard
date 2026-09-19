@@ -24,7 +24,14 @@ use Illuminate\Support\Collection;
  * types the item's name instead. Nothing about the order is shown unless the
  * `order` step proved she owns it (`order_verified`).
  *
- * Step state lives in `data.items_pending` = {mode: pick|more|qty|fallback, queue?: ids, qty_for?: id}.
+ * With `data.request_kind` (the owner's 2026-09-19 flow asks "ترجعي ولا تبدلي؟" first):
+ * `return` refuses a discounted item (it can only be exchanged) and offers to
+ * turn the request into an exchange for it ("أبدلها بدل كده" → request_kind
+ * `exchange`, the item is added, and the step's branches take the flow to the
+ * exchange steps); `exchange` takes discounted items without a note. The
+ * order header is not repeated then (the greeting already named the order).
+ *
+ * Step state lives in `data.items_pending` = {mode: pick|more|qty|fallback, queue?: ids, qty_for?: id, discounted?: ids}.
  */
 final class OrderItemsStep extends BaseStep
 {
@@ -54,6 +61,17 @@ final class OrderItemsStep extends BaseStep
 
     public const HUMAN_BUTTON = 'كلم موظف';
 
+    public const SWITCH_BUTTON = 'أبدلها بدل كده';
+
+    public const SWITCH_QUESTION = 'تحبي تبدليها بدل ما ترجعيها؟';
+
+    public const SWITCHED_TEXT = 'تمام 🌸 هنكمل الطلب استبدال';
+
+    public const EXCHANGE_TITLE = 'استبدال';
+
+    /** Typed "switch to exchange" after a discounted item was refused for a return. */
+    private const SWITCH_PATTERN = '/بدل|استبدال|تبديل|exchange/u';
+
     /** Messenger: 13 quick replies. One slot stays for "كذا قطعة". */
     private const MAX_ITEM_BUTTONS = 12;
 
@@ -79,7 +97,7 @@ final class OrderItemsStep extends BaseStep
             return StepOutcome::wait([['text' => self::FALLBACK_TEXT]], 0, ['items_pending' => ['mode' => 'fallback'], 'selected_items' => null]);
         }
 
-        return StepOutcome::wait([$this->listMessage($state, $step, $order, [], true)], 0, ['items_pending' => ['mode' => 'pick'], 'selected_items' => null]);
+        return StepOutcome::wait([$this->listMessage($state, $step, $order, [], $this->kind($state) === null)], 0, ['items_pending' => ['mode' => 'pick'], 'selected_items' => null]);
     }
 
     public function prompt(array $state, array $step): array
@@ -92,7 +110,9 @@ final class OrderItemsStep extends BaseStep
         }
 
         return match ($pending['mode']) {
-            'more' => $this->moreMessage($state),
+            'more' => ($pending['discounted'] ?? []) !== []
+                ? ['text' => self::SWITCH_QUESTION, 'buttons' => [$this->stepButton($state, self::SWITCH_BUTTON, 'switch'), $this->stepButton($state, self::DONE_BUTTON, 'done')]]
+                : $this->moreMessage($state),
             'qty' => $this->qtyMessage($state, $order->items->firstWhere('id', (int) ($pending['qty_for'] ?? 0))),
             default => $this->listMessage($state, $step, $order, $this->selected($state['data']), false),
         };
@@ -122,6 +142,11 @@ final class OrderItemsStep extends BaseStep
         $selected = $this->selected($state['data']);
 
         if ($pending['mode'] === 'more') {
+            // "تحبي تبدليها بدل ما ترجعيها؟" → "أيوه" / "ابدلها".
+            if (($pending['discounted'] ?? []) !== [] && (preg_match(self::SWITCH_PATTERN, $this->resolver->clean($text)) === 1 || $this->resolver->yesNo($text) === 'yes')) {
+                return $this->switchToExchange($state, $order);
+            }
+
             // "تمام" after "another one?" means that's all.
             if ($this->isDone($text) || $this->resolver->clean($text) === 'تمام') {
                 return $this->finish($state, $selected);
@@ -165,6 +190,10 @@ final class OrderItemsStep extends BaseStep
 
         if ($value === 'more') {
             return $this->showList($state, $step, $order);
+        }
+
+        if ($value === 'switch') {
+            return $this->switchToExchange($state, $order);
         }
 
         if ($value === 'multi') {
@@ -235,6 +264,7 @@ final class OrderItemsStep extends BaseStep
         $refused = false;
         $late = false;
         $lateText = null;
+        $discounted = [];
 
         while ($queue !== []) {
             $id = (int) array_shift($queue);
@@ -266,6 +296,14 @@ final class OrderItemsStep extends BaseStep
                 continue;
             }
 
+            // A return: a discounted piece can only be exchanged (she is offered to switch).
+            if ($this->kind($state) === 'return' && $this->items->isDiscounted($item)) {
+                $messages[] = ['text' => $this->discountReturnText($title)];
+                $discounted[] = $id;
+
+                continue;
+            }
+
             if ((int) $item->qty > 1) {
                 if ($added !== []) {
                     $messages[] = ['text' => $this->addedText($added)];
@@ -282,12 +320,12 @@ final class OrderItemsStep extends BaseStep
             $selected[] = $row;
             $added[] = $row;
 
-            if ($row['exchange_only']) {
+            if ($row['exchange_only'] && $this->kind($state) === null) {
                 $messages[] = ['text' => $this->discountText($title)];
             }
         }
 
-        return $this->afterPicking($state, $order, $selected, $added, $messages, $refused, $late ? $lateText : null);
+        return $this->afterPicking($state, $order, $selected, $added, $messages, $refused, $late ? $lateText : null, $discounted);
     }
 
     private function withQuantity(array $state, Order $order, OrderItem $item, int $qty): StepOutcome
@@ -295,7 +333,7 @@ final class OrderItemsStep extends BaseStep
         $selected = $this->selected($state['data']);
         $row = $this->row($item, $qty);
         $selected[] = $row;
-        $messages = $row['exchange_only'] ? [['text' => $this->discountText($this->shortTitle($item))]] : [];
+        $messages = $row['exchange_only'] && $this->kind($state) === null ? [['text' => $this->discountText($this->shortTitle($item))]] : [];
         $queue = array_map('intval', (array) ($this->pending($state['data'])['queue'] ?? []));
         $state['data']['selected_items'] = $selected;
 
@@ -312,12 +350,14 @@ final class OrderItemsStep extends BaseStep
      * @param  list<array<string, mixed>>  $selected
      * @param  list<array<string, mixed>>  $added  added by this reply
      */
-    private function afterPicking(array $state, Order $order, array $selected, array $added, array $messages, bool $refused, ?string $lateText): StepOutcome
+    private function afterPicking(array $state, Order $order, array $selected, array $added, array $messages, bool $refused, ?string $lateText, array $discounted = []): StepOutcome
     {
         $data = ['selected_items' => $selected];
-        // Items she could still pick: not picked yet and not refused by the keyword list.
+        $returning = $this->kind($state) === 'return';
+        // Items she could still pick: not picked yet, not refused by the keyword list, and (for a return) not discounted.
         $left = $order->items->reject(fn (OrderItem $i) => collect($selected)->contains(fn ($s) => (int) ($s['line_item_id'] ?? 0) === (int) $i->id)
-            || $this->items->nonReturnableKeyword($i) !== null);
+            || $this->items->nonReturnableKeyword($i) !== null
+            || ($returning && $this->items->isDiscounted($i)));
 
         // The window is the order's, so every other item is past it too: a person, or stop here.
         if ($lateText !== null) {
@@ -330,6 +370,21 @@ final class OrderItemsStep extends BaseStep
             $messages[] = ['text' => $lateText."\nتحبي أحوّلك لحد من الفريق؟", 'buttons' => $buttons];
 
             return StepOutcome::wait($messages, 0, $data + ['items_pending' => ['mode' => 'more']]);
+        }
+
+        // A discounted piece in a return: switch to an exchange, pick another, or stop here.
+        if ($discounted !== []) {
+            $previous = array_map('intval', (array) ($this->pending($state['data'])['discounted'] ?? []));
+            $buttons = [$this->stepButton($state, self::SWITCH_BUTTON, 'switch')];
+
+            if ($left->isNotEmpty()) {
+                $buttons[] = $this->stepButton($state, self::OTHER_BUTTON, 'more');
+            }
+
+            $buttons[] = $this->stepButton($state, self::DONE_BUTTON, 'done');
+            $messages[] = ['text' => ($added !== [] ? $this->addedText($added)."\n" : '').self::SWITCH_QUESTION, 'buttons' => $buttons];
+
+            return StepOutcome::wait($messages, 0, $data + ['items_pending' => ['mode' => 'more', 'discounted' => array_values(array_unique([...$previous, ...$discounted]))]]);
         }
 
         if ($added !== [] && $left->isEmpty()) {
@@ -354,6 +409,34 @@ final class OrderItemsStep extends BaseStep
         $messages[] = ['text' => $question, 'buttons' => $buttons];
 
         return StepOutcome::wait($messages, 0, $data + ['items_pending' => ['mode' => 'more']]);
+    }
+
+    /**
+     * "أبدلها بدل كده": the request becomes an exchange and the discounted pieces she was refused
+     * are picked again as exchange items (a quantity question still applies). The step's branches
+     * then take the flow to the exchange steps.
+     */
+    private function switchToExchange(array $state, ?Order $order): ?StepOutcome
+    {
+        $ids = array_map('intval', (array) ($this->pending($state['data'])['discounted'] ?? []));
+
+        if ($order === null || $ids === []) {
+            return null;
+        }
+
+        $switch = ['request_kind' => 'exchange', 'request_kind_title' => self::EXCHANGE_TITLE];
+        $state['data'] = $switch + $state['data'];
+        $state['data']['items_pending'] = ['mode' => 'pick'];
+
+        return $this->pick($state, $order, $ids, [['text' => self::SWITCHED_TEXT]])->withData($switch);
+    }
+
+    /** `return` / `exchange` when the flow already asked which one she wants, else null. */
+    private function kind(array $state): ?string
+    {
+        $kind = $state['data']['request_kind'] ?? null;
+
+        return in_array($kind, ['return', 'exchange'], true) ? $kind : null;
     }
 
     /** @param  list<array<string, mixed>>  $selected */
@@ -409,7 +492,7 @@ final class OrderItemsStep extends BaseStep
             $lines[] = ($i + 1).'. '.$mark.$this->lineText($item);
         }
 
-        $question = trim((string) ($step['text'] ?? '')) ?: self::DEFAULT_TEXT;
+        $question = trim($this->prompter->renderText((string) ($step['text'] ?? ''), $state['data'] ?? [])) ?: self::DEFAULT_TEXT;
         $text = implode("\n", array_filter([$withHeader ? $this->header($state, $order) : null, implode("\n", $lines), '', $question], fn ($p) => $p !== null));
 
         return ['text' => $text, 'buttons' => $this->itemButtons($state, $order)];
@@ -510,6 +593,11 @@ final class OrderItemsStep extends BaseStep
         return $this->items->isAccessoryKeyword($keyword)
             ? "«{$title}» من الإكسسوارات ومش بتترجع ولا بتتبدل 🙏"
             : "«{$title}» من الأصناف اللي مش بتترجع ولا بتتبدل 🙏";
+    }
+
+    private function discountReturnText(string $title): string
+    {
+        return "«{$title}» عليها خصم، فمينفعش ترجع بس ممكن تتبدل 🌸";
     }
 
     private function discountText(string $title): string

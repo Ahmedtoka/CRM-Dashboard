@@ -55,7 +55,9 @@ final class ReturnPolicyChecker
             }
         }
 
-        if (($data['request'] ?? null) === 'refund' && $items->contains(fn (OrderItem $i) => $this->isDiscounted($i))) {
+        $refund = ($data['request'] ?? null) === 'refund' || ($data['request_kind'] ?? null) === 'return';
+
+        if ($refund && $items->contains(fn (OrderItem $i) => $this->isDiscounted($i))) {
             $notes[] = 'القطعة عليها خصم: متاح استبدال فقط';
         }
 

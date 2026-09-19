@@ -47,7 +47,8 @@ beforeEach(function () {
     flowRun($a, '10:02:00', 'return_exchange', 'flow');
     flowRun($a, '10:03:00', null, 'reply', engine: 'flow'); // the agent answered a question; the flow stays active
     flowRun($a, '10:04:00', null, 'flow');
-    SupportCase::factory()->returnExchange()->create(['conversation_id' => $a->id, 'created_at' => CarbonImmutable::parse('2026-09-10 10:04:00', 'UTC')]);
+    // The owner's return flow (2026-09-19) records `return` / `exchange` cases.
+    SupportCase::factory()->returnExchange()->create(['type' => 'return', 'conversation_id' => $a->id, 'created_at' => CarbonImmutable::parse('2026-09-10 10:04:00', 'UTC')]);
 
     // B: main menu → complaint → handed over from inside the complaint flow.
     $b = flowConversation();

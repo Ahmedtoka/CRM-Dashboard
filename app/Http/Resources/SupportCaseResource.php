@@ -32,6 +32,10 @@ class SupportCaseResource extends JsonResource
             'summary_sections' => CaseSummary::sections($this->resource),
             'data' => $this->data ?? [],
             'items' => CaseSummary::selectedItems(is_array($this->data) ? $this->data : []),
+            // 2026-09-19: the return/exchange flow's answer and the replacement she linked.
+            'request_kind' => in_array($this->type, ['return', 'exchange'], true) ? $this->type : null,
+            'reason' => is_array($this->data) && is_scalar($this->data['reason_title'] ?? $this->data['reason'] ?? null) ? (string) ($this->data['reason_title'] ?? $this->data['reason']) : null,
+            'exchange_product' => CaseSummary::exchangeProduct(is_array($this->data) ? $this->data : []),
             'photos' => $photos->map(fn (MessageAttachment $a) => ['id' => $a->id, 'url' => MediaUrls::show($a)])->values()->all(),
             'policy_notes' => $this->policy_notes ?? [],
             'assigned_to' => $assignee ? ['id' => $assignee->id, 'name' => $assignee->name] : null,

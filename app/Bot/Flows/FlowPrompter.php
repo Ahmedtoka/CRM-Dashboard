@@ -19,6 +19,9 @@ final class FlowPrompter
 
     public const EXCHANGE_ONLY_NOTE = 'القطع اللي اخترتيها متاحة للاستبدال بس 🌸';
 
+    /** `{exchange_product_title}` when she sent a photo or a link that did not match a product. */
+    public const UNKNOWN_PRODUCT = 'المنتج اللي بعتيه';
+
     /** Human labels for collected data keys, in the order the owner reads them. */
     public const LABELS = [
         'order_number' => 'رقم الأوردر',
@@ -26,6 +29,8 @@ final class FlowPrompter
         'selected_items' => 'القطع',
         'reason' => 'السبب',
         'request' => 'الطلب',
+        'request_kind' => 'نوع الطلب',
+        'exchange_product' => 'المنتج البديل',
         'product_photo' => 'صورة المنتج (✅)',
         'defect_photo' => 'صورة العيب (✅)',
         'complaint_type' => 'نوع الشكوى',
@@ -53,7 +58,7 @@ final class FlowPrompter
      */
     public function prompt(string $flowKey, string $stepKey, array $step, array $data): array
     {
-        $text = (string) ($step['text'] ?? '');
+        $text = $this->renderText((string) ($step['text'] ?? ''), $data);
 
         return match ($step['type'] ?? null) {
             'menu' => ['text' => $text, 'buttons' => array_map(
@@ -128,6 +133,38 @@ final class FlowPrompter
         return str_replace('{case_id}', (string) ($data['case_id'] ?? ''), $this->placeholders->render($body));
     }
 
+    /**
+     * A step text with the flow placeholders filled from the collected data (2026-09-19):
+     * `{customer_first_name}` (the order's customer, set once she proved the order is hers —
+     * "يا {customer_first_name}" is dropped when it is unknown), `{order_number}` (without "#";
+     * the case number when there is no order), `{exchange_product_title}`, `{case_id}` and
+     * `{time_greeting}`.
+     */
+    public function renderText(string $text, array $data): string
+    {
+        if (! str_contains($text, '{')) {
+            return $text;
+        }
+
+        $first = is_scalar($data['customer_first_name'] ?? null) ? trim((string) $data['customer_first_name']) : '';
+
+        if ($first === '') {
+            $text = preg_replace('/\s*يا\s*\{customer_first_name\}/u', '', $text) ?? $text;
+        }
+
+        $number = is_scalar($data['order_number'] ?? null) ? ltrim(trim((string) $data['order_number']), '#') : '';
+        $product = is_array($data['exchange_product'] ?? null) && is_scalar($data['exchange_product']['title'] ?? null)
+            ? trim((string) $data['exchange_product']['title'])
+            : '';
+
+        return $this->placeholders->render(strtr($text, [
+            '{customer_first_name}' => $first,
+            '{order_number}' => $number !== '' ? $number : (string) ($data['case_id'] ?? ''),
+            '{exchange_product_title}' => $product !== '' ? $product : self::UNKNOWN_PRODUCT,
+            '{case_id}' => (string) ($data['case_id'] ?? ''),
+        ]));
+    }
+
     /** @return list<string> bullet lines for the labelled data, option values shown by their titles */
     public function summaryLines(array $data): array
     {
@@ -137,6 +174,14 @@ final class FlowPrompter
             $label = self::LABELS[$key] ?? null;
 
             if ($label === null || $value === null || $value === '' || $value === [] || $value === false) {
+                continue;
+            }
+
+            if ($key === 'exchange_product') {
+                if (is_array($value) && is_scalar($value['title'] ?? null)) {
+                    $lines[] = '• '.$label.': '.$value['title'];
+                }
+
                 continue;
             }
 

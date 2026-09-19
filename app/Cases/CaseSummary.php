@@ -4,6 +4,8 @@ namespace App\Cases;
 
 use App\Bot\Flow\Orders\OrderStatusText;
 use App\Bot\Flows\FlowDefinitions;
+use App\Bot\Flows\FlowPrompter;
+use App\Bot\Flows\ReturnFlowUpgrade;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\SupportCase;
@@ -158,6 +160,15 @@ final class CaseSummary
     {
         $flow = $case->type;
         $lines = match ($case->type) {
+            'return' => [
+                'الطلب: مرتجع',
+                self::labelled('السبب', self::optionTitle($flow, 'reason', $data)),
+            ],
+            'exchange' => [
+                'الطلب: استبدال',
+                self::labelled('السبب', self::optionTitle($flow, 'reason', $data)),
+                ...self::exchangeLines($data),
+            ],
             'return_exchange' => [
                 self::labelled('السبب', self::optionTitle($flow, 'reason', $data)),
                 self::labelled('المطلوب', self::optionTitle($flow, 'request', $data)),
@@ -179,9 +190,98 @@ final class CaseSummary
         return array_values(array_filter($lines));
     }
 
+    /**
+     * The product she wants in exchange (the `product_link` step, 2026-09-19), or null.
+     *
+     * @return array{title:string, handle:?string, url:?string, price:?float, image:?string, variant_title:?string}|null
+     */
+    public static function exchangeProduct(array $data): ?array
+    {
+        $p = $data['exchange_product'] ?? null;
+        $title = is_array($p) ? self::str($p['title'] ?? null) : null;
+
+        if ($title === null) {
+            return null;
+        }
+
+        $url = self::str($p['url'] ?? null);
+
+        return [
+            'title' => $title,
+            'handle' => self::str($p['handle'] ?? null),
+            'url' => $url !== null ? (preg_match('~^https?://~i', $url) ? $url : 'https://'.$url) : null,
+            'price' => is_numeric($p['price'] ?? null) ? (float) $p['price'] : null,
+            'image' => self::str($p['image'] ?? null),
+            'variant_title' => self::str($p['variant_title'] ?? null),
+        ];
+    }
+
+    /** "طلب استبدال: فستان ليلى (أسود / M) × 1 ← عباية كتان — 1,200 ج.م — https://…" (the conversation note). */
+    public static function exchangeNote(array $data): string
+    {
+        $items = FlowPrompter::itemsText($data['selected_items'] ?? []);
+        $items = $items !== '' ? $items : 'القطعة';
+        $product = self::exchangeProduct($data);
+
+        if ($product !== null) {
+            $parts = [$product['title'].($product['variant_title'] !== null ? " ({$product['variant_title']})" : '')];
+
+            if ($product['price'] !== null) {
+                $parts[] = self::money($product['price']).' ج.م';
+            }
+
+            if ($product['url'] !== null) {
+                $parts[] = $product['url'];
+            }
+
+            return "طلب استبدال: {$items} ← ".implode(' — ', $parts);
+        }
+
+        $typed = self::str($data['exchange_product_text'] ?? null);
+
+        if ($typed !== null) {
+            return "طلب استبدال: {$items} ← المنتج مش متحدد، العميلة كتبت: «{$typed}»";
+        }
+
+        return ! empty($data['exchange_product_photo'])
+            ? "طلب استبدال: {$items} ← العميلة بعتت صورة للمنتج البديل (في الصور)"
+            : "طلب استبدال: {$items} ← المنتج البديل مش متحدد";
+    }
+
+    /** @return list<string> */
+    private static function exchangeLines(array $data): array
+    {
+        $product = self::exchangeProduct($data);
+
+        if ($product !== null) {
+            return array_values(array_filter([
+                'البديل: '.$product['title']
+                    .($product['variant_title'] !== null ? ' — '.$product['variant_title'] : '')
+                    .($product['price'] !== null ? ' — '.self::money($product['price']).' ج.م' : ''),
+                $product['url'] !== null ? 'اللينك: '.$product['url'] : null,
+            ]));
+        }
+
+        $typed = self::str($data['exchange_product_text'] ?? null);
+
+        return [match (true) {
+            $typed !== null => "البديل: مش متحدد — العميلة كتبت «{$typed}»",
+            ! empty($data['exchange_product_photo']) => 'البديل: العميلة بعتت صورة للمنتج',
+            default => 'البديل: مش متحدد',
+        }];
+    }
+
     /** @return list<string> */
     private static function attachmentLines(SupportCase $case, array $data): array
     {
+        if ($case->type === 'return') {
+            return ['صورة القطعة '.(! empty($data['product_photo']) ? '✅' : '— (مبعتتش صورة)')];
+        }
+
+        if ($case->type === 'exchange') {
+            return ! empty($data['exchange_product_photo']) ? ['صورة المنتج البديل ✅'] : [];
+        }
+
         if ($case->type !== 'return_exchange') {
             return [];
         }
@@ -206,6 +306,8 @@ final class CaseSummary
         $request = $data['request'] ?? null;
 
         return match ($case->type) {
+            'return' => 'مراجعة القطعة وترتيب المندوب لاستلام المرتجع وإبلاغ العميلة بموعده',
+            'exchange' => 'التأكد من توفر المنتج البديل ومقاسه، والتواصل مع العميلة لتأكيد الاستبدال والإرسال',
             'return_exchange' => match ($request) {
                 'refund' => 'التواصل مع العميلة وترتيب استلام القطعة ورد المبلغ',
                 'exchange' => 'التواصل مع العميلة وترتيب استبدال القطعة',
@@ -286,7 +388,15 @@ final class CaseSummary
             return $title;
         }
 
-        foreach (FlowDefinitions::all()[$flow]['definition']['steps'] ?? [] as $step) {
+        $flow = in_array($flow, ['return', 'exchange'], true) ? 'return_exchange' : $flow;
+        $steps = FlowDefinitions::all()[$flow]['definition']['steps'] ?? [];
+
+        // Cases recorded by the return flow before 2026-09-19 carry its old fields (e.g. `request`).
+        if ($flow === 'return_exchange') {
+            $steps = [...array_values($steps), ...array_values(ReturnFlowUpgrade::legacyDefinition()['steps'])];
+        }
+
+        foreach ($steps as $step) {
             if (($step['field'] ?? null) !== $field) {
                 continue;
             }

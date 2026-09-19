@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
+    useOrderAwareReturnFlow();
     Event::fake();
     Http::preventStrayRequests();
     config(['crm.drivers.ai' => 'fake']);

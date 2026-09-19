@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
+    useOrderAwareReturnFlow();
     Event::fake();
     ChannelAccount::factory()->create(['platform' => Platform::Facebook, 'external_id' => 'PAGE1']);
     BotSetting::current()->update(['enabled' => true, 'burst_wait_seconds' => 8, 'burst_max_wait_seconds' => 25]);

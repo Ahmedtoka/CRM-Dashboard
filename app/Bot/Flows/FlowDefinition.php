@@ -21,15 +21,16 @@ use App\Models\BotKnowledgeEntry;
 final class FlowDefinition
 {
     private const STEP_ID_PATTERN = '/^[a-z0-9_]{1,40}$/';
+
     public const TYPES = [
-        'menu', 'choice', 'text', 'name', 'phone', 'photo', 'order', 'order_items', 'branch',
+        'menu', 'choice', 'text', 'name', 'phone', 'photo', 'order', 'order_items', 'product_link', 'branch',
         'branches_list', 'status', 'summary', 'record_case', 'script', 'handover', 'end',
     ];
 
     /** Step types that must carry a non-empty `field`. */
-    private const FIELD_REQUIRED_TYPES = ['choice', 'text', 'name', 'phone', 'photo', 'order', 'branch'];
+    private const FIELD_REQUIRED_TYPES = ['choice', 'text', 'name', 'phone', 'photo', 'order', 'product_link', 'branch'];
 
-    private const CASE_TYPES = ['return_exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
+    private const CASE_TYPES = ['return_exchange', 'return', 'exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
 
     /** @return list<string> error messages; empty means the definition is valid */
     public static function validate(array $def): array
@@ -345,7 +346,8 @@ final class FlowDefinition
             $errors[] = "step '{$stepKey}' 'verify_owner' must be true or false";
         }
 
-        if ($type === 'order_items' && ! array_key_exists('next', $step)) {
+        // order_items and product_link (2026-09-19) always go on to a step: they never end the flow on their own.
+        if (in_array($type, ['order_items', 'product_link'], true) && ! array_key_exists('next', $step)) {
             $errors[] = "step '{$stepKey}' next must be a non-empty string";
         }
 

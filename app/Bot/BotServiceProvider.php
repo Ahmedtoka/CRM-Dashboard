@@ -17,6 +17,8 @@ use App\Bot\Flows\FakeFlowAnswerInterpreter;
 use App\Bot\Flows\FlowAnswerInterpreter;
 use App\Bot\Flows\FlowDefinitionSource;
 use App\Bot\Flows\PublishedFlowDefinitions;
+use App\Bot\Flows\Returns\RemoteProductLookup;
+use App\Bot\Flows\Returns\ShopifyRemoteProductLookup;
 use App\Bot\Learning\ClaudeConversationReviewer;
 use App\Bot\Learning\ClaudeLearningAnalyst;
 use App\Bot\Learning\ConversationReviewer;
@@ -65,6 +67,9 @@ class BotServiceProvider extends ServiceProvider
                 )
                 : $app->make(FakeTurnUnderstanding::class);
         });
+
+        // Exchange links (2026-09-19): a product not synced yet is fetched from the store by handle.
+        $this->app->bind(RemoteProductLookup::class, ShopifyRemoteProductLookup::class);
 
         // Guided-flow answer interpreter (design §3): same rule as the turn understanding.
         $this->app->bind(FlowAnswerInterpreter::class, function ($app) use ($model) {

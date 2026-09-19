@@ -22,7 +22,7 @@ abstract class BaseStep implements FlowStep
 
     public function prompt(array $state, array $step): array
     {
-        return ['text' => (string) ($step['text'] ?? ''), 'buttons' => []];
+        return ['text' => $this->prompter->renderText((string) ($step['text'] ?? ''), $state['data'] ?? []), 'buttons' => []];
     }
 
     public function answer(Conversation $c, array $state, array $step, string $text, Collection $burst): ?StepOutcome

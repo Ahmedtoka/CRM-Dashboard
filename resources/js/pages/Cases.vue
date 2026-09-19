@@ -23,7 +23,7 @@ interface Filters {
     to: string | null;
 }
 
-const TYPES: CaseType[] = ['return_exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
+const TYPES: CaseType[] = ['return', 'exchange', 'return_exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
 const TABS: Array<CaseStatus | 'all'> = ['all', 'new', 'in_progress', 'closed'];
 
 const props = withDefaults(

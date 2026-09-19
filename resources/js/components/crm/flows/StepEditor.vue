@@ -28,7 +28,10 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n();
 
-const CASE_TYPES = ['return_exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
+const CASE_TYPES = ['return', 'exchange', 'return_exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
+
+/** Flow placeholders FlowPrompter::renderText fills in a step's text (2026-09-19). */
+const PLACEHOLDERS = ['customer_first_name', 'order_number', 'exchange_product_title', 'case_id', 'time_greeting'];
 
 const step = computed<FlowStep>(() => props.def.steps[props.stepId]);
 const info = computed(() => props.catalog[step.value?.type] ?? null);
@@ -190,11 +193,24 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
                 class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm leading-6"
                 @input="setText('text', ($event.target as HTMLTextAreaElement).value)"
             />
+            <p v-if="step.type === 'record_case'" class="mt-1 text-2xs text-muted-foreground">{{ t('flows.record_case_text_hint') }}</p>
+            <details class="mt-1.5 rounded-md bg-muted/60 px-2.5 py-1.5 text-2xs text-muted-foreground">
+                <summary class="cursor-pointer select-none font-medium">{{ t('flows.placeholders_title') }}</summary>
+                <ul class="mt-1 space-y-0.5">
+                    <li v-for="p in PLACEHOLDERS" :key="p" class="flex flex-wrap gap-x-1.5">
+                        <code class="rounded bg-background px-1 font-mono text-foreground" dir="ltr">{{ '{' + p + '}' }}</code>
+                        <span>{{ t(`flows.placeholders.${p}`) }}</span>
+                    </li>
+                </ul>
+            </details>
         </div>
         <p v-if="step.type === 'summary'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{{ t('flows.summary_hint') }}</p>
         <p v-if="step.type === 'status'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{{ t('flows.status_hint') }}</p>
         <p v-if="step.type === 'order_items'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
             {{ t('flows.order_items_hint') }}
+        </p>
+        <p v-if="step.type === 'product_link'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+            {{ t('flows.product_link_hint') }}
         </p>
 
         <label v-if="hasField('verify_owner')" class="flex items-start gap-2.5 rounded-md bg-muted/60 px-3 py-2.5">
