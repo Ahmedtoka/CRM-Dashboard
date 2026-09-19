@@ -12,6 +12,7 @@ use App\Models\Conversation;
 use App\Models\ConversationNote;
 use App\Models\ConversationParticipant;
 use App\Models\MessageAttachment;
+use App\Models\SupportCase;
 use App\Models\User;
 use App\Support\SafeBroadcast;
 use Illuminate\Support\Facades\DB;
@@ -72,7 +73,8 @@ class ConversationActions
 
     /**
      * Wipes a conversation back to "first contact" for bot testing: messages (and their
-     * attachment files), notes, participants, tags and bot runs are deleted, and every
+     * attachment files), notes, participants, tags, bot runs and support cases ("الطلبات")
+     * are deleted, and every
      * handover / bot-flow / response-time field is cleared. The row and its customer link
      * stay, so the customer's next message lands here and the bot greets them as new.
      * Activity logs are kept for the audit trail.
@@ -89,6 +91,7 @@ class ConversationActions
             $c->notes()->delete();
             ConversationParticipant::where('conversation_id', $c->id)->delete();
             BotRun::where('conversation_id', $c->id)->delete();
+            SupportCase::where('conversation_id', $c->id)->delete();
             $c->tags()->detach();
 
             $c->forceFill([

@@ -2,7 +2,7 @@
 
 use App\Analytics\ActivityLogger;
 use App\Enums\{ConversationStatus, Platform, UserRole};
-use App\Models\{ActivityLog, BotRun, ChannelAccount, Conversation, ConversationNote, Message, User};
+use App\Models\{ActivityLog, BotRun, ChannelAccount, Conversation, ConversationNote, Message, SupportCase, User};
 use Illuminate\Support\Facades\Event;
 
 it('resets a conversation to first contact for a supervisor', function () {
@@ -15,6 +15,8 @@ it('resets a conversation to first contact for a supervisor', function () {
     Message::factory()->count(3)->create(['conversation_id'=>$c->id]);
     ConversationNote::factory()->create(['conversation_id'=>$c->id]);
     BotRun::factory()->create(['conversation_id'=>$c->id]);
+    SupportCase::factory()->create(['conversation_id'=>$c->id]);
+    $other = SupportCase::factory()->create();
     $sup = User::factory()->create(['role'=>UserRole::Supervisor]);
 
     $this->actingAs($sup)->postJson("/inbox/conversations/{$c->id}/reset")
@@ -24,6 +26,8 @@ it('resets a conversation to first contact for a supervisor', function () {
     expect(Message::where('conversation_id', $c->id)->count())->toBe(0)
         ->and(ConversationNote::where('conversation_id', $c->id)->count())->toBe(0)
         ->and(BotRun::where('conversation_id', $c->id)->count())->toBe(0)
+        ->and(SupportCase::where('conversation_id', $c->id)->count())->toBe(0)
+        ->and(SupportCase::whereKey($other->id)->exists())->toBeTrue()
         ->and($fresh->status)->toBe(ConversationStatus::Open)
         ->and($fresh->handler->value)->toBe('bot')
         ->and($fresh->needs_human)->toBeFalse()
