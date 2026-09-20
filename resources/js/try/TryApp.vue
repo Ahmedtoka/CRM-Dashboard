@@ -295,15 +295,15 @@ onBeforeUnmount(() => window.clearInterval(timer));
                     </div>
                 </div>
 
-                <div v-if="quickReplies.length && canWrite" class="try-quick">
-                    <button v-for="(button, i) in quickReplies" :key="i" type="button" :disabled="busy" dir="auto" @click="send(button.title, button.payload)">
-                        {{ button.title }}
-                    </button>
-                </div>
-
                 <p v-if="capReached" class="try-notice">You've used all {{ session?.cap }} messages for this test. Tap “Start over” to run it again.</p>
                 <p v-else-if="finished" class="try-notice">This run has finished. Tap “Start over” to begin a new one.</p>
                 <p v-if="error" class="try-notice" role="alert">{{ error }}</p>
+            </div>
+
+            <div v-if="quickReplies.length && canWrite" class="try-quick">
+                <button v-for="(button, i) in quickReplies" :key="i" type="button" :disabled="busy" dir="auto" @click="send(button.title, button.payload)">
+                    {{ button.title }}
+                </button>
             </div>
 
             <div class="try-composer">
