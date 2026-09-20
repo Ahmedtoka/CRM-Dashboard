@@ -2,6 +2,7 @@
 
 namespace App\Bot\Flows\Sandbox;
 
+use App\Bot\Language\OutboundTranslation;
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
 use App\Inbox\OutboundService;
@@ -21,6 +22,10 @@ class SandboxOutbound extends OutboundService
 
     public function sendBot(Conversation $c, string $body, int $delayMs = 0, bool $skipIfHumanTookOver = false, array $buttons = [], ?array $cards = null): Message
     {
+        // The same language gate as the real send (design 2026-09-21 §1-2), so a
+        // simulated English run says exactly what a real English customer would read.
+        [$body, $buttons, $cards] = app(OutboundTranslation::class)->apply($c, $body, $buttons, $cards);
+
         $this->log->message($body, $buttons, $cards);
 
         $message = $this->unsaved($c, SenderType::Bot, $body, $buttons);

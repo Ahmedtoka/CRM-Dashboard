@@ -63,7 +63,9 @@ class ConversationRouter
                 $run = $runner->run($c, $burst, flowContext: true);
 
                 if ($c->refresh()->handler === Handler::Bot && $this->flows->isActive($c)) {
-                    $this->flows->repromptCurrent($c, $runner->followUpDelayMs());
+                    // §6.1: the answer, then «نرجع لطلب المرتجع 🌸» with the step's question
+                    // and buttons again — or a person once she has been round twice.
+                    $this->flows->returnToFlow($c, $runner->followUpDelayMs());
                 } elseif ($c->handler !== Handler::Bot) {
                     FlowState::clear($c);
                 }

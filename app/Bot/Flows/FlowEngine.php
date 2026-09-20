@@ -2,17 +2,23 @@
 
 namespace App\Bot\Flows;
 
+use App\Bot\Flow\BurstPolicy;
+use App\Bot\Flows\Sandbox\SandboxMode;
 use App\Bot\Flows\Steps\FlowStep;
 use App\Bot\Flows\Steps\OrderStep;
 use App\Bot\Flows\Steps\StepOutcome;
+use App\Bot\Language\BotTranslator;
+use App\Bot\Language\ConversationLanguage;
 use App\Channels\Cards\OutboundCards;
 use App\Enums\AttachmentType;
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
 use App\Inbox\OutboundService;
 use App\Inbox\WindowClosedException;
+use App\Models\BotLearningNote;
 use App\Models\BotSetting;
 use App\Models\Conversation;
+use App\Models\ConversationNote;
 use App\Models\Message;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -39,6 +45,9 @@ class FlowEngine
     /** The products menu (the owner's flow 6): its scripts come with the store-link button. */
     public const PRODUCTS_FLOW = 'products';
 
+    /** Kept here so callers outside the Flows namespace do not reach for ConversationRouter. */
+    public const MAIN_MENU_FLOW = ConversationRouter::MAIN_MENU;
+
     public const STORE_LINK_SCRIPTS = ['availability', 'size', 'delivery_time', 'payment_info'];
 
     public const STORE_BUTTON = '🛍️ تسوقي من الموقع';
@@ -61,6 +70,9 @@ class FlowEngine
     /** Spacing between consecutive delayed messages of one call. */
     private const DELAYED_SEND_STEP_MS = 300;
 
+    /** A line to put above the next prompt this call sends (start()'s $lead), used once. */
+    private ?string $pendingLead = null;
+
     public function __construct(
         private readonly OutboundService $outbound,
         private readonly ButtonMatcher $buttons,
@@ -71,6 +83,10 @@ class FlowEngine
         private readonly FlowDefinitionSource $source,
         private readonly FlowHandover $handovers,
         private readonly HumanHandover $human,
+        private readonly GreetingMirror $mirrors,
+        private readonly BurstPolicy $social,
+        private readonly ConversationLanguage $language,
+        private readonly BotTranslator $translator,
     ) {}
 
     /** A flow is waiting for her, or the «كلم موظف» topic question is (HumanHandover). */
@@ -79,10 +95,20 @@ class FlowEngine
         return FlowState::flow($c) !== null || HumanHandover::pending($c);
     }
 
-    /** @param  int  $delayMs  queue the flow's messages after this delay (a reply part still on its way) */
-    public function start(Conversation $c, string $flowKey, array $prefill = [], int $delayMs = 0): void
+    /**
+     * @param  int  $delayMs  queue the flow's messages after this delay (a reply part still on its way)
+     * @param  string|null  $lead  a line put above the flow's first question, on the same message
+     *                             (design 2026-09-21 §6.6: «أقدر أساعدك في 👇» + the menu)
+     */
+    public function start(Conversation $c, string $flowKey, array $prefill = [], int $delayMs = 0, ?string $lead = null): void
     {
-        $this->withDelay($delayMs, fn () => $this->begin($c, $flowKey, $prefill));
+        $this->pendingLead = $lead !== null && trim($lead) !== '' ? trim($lead) : null;
+
+        try {
+            $this->withDelay($delayMs, fn () => $this->begin($c, $flowKey, $prefill));
+        } finally {
+            $this->pendingLead = null;
+        }
     }
 
     public function handle(Conversation $c, Collection $burst): FlowResult
@@ -104,6 +130,11 @@ class FlowEngine
         $this->turnTexts = $burst->map(fn (Message $m) => trim((string) $m->body))->filter()->values()->all();
         $text = implode("\n", $this->turnTexts);
         $step = $this->step($state['key'], $state['step']);
+
+        // §6.5: she went quiet and came back much later — never carry on as if nothing happened.
+        if ($step !== null && $this->offerResume($c, $state, $burst)) {
+            return new FlowResult(true);
+        }
 
         if ($step === null) {
             FlowState::clear($c);
@@ -146,7 +177,11 @@ class FlowEngine
         return $this->resolveText($c, $state, $step, $text, $burst);
     }
 
-    /** Payloads: menu:<key>, flow:<key>, script:<key>, handover, handover:now, yes, no, step:<flow>:<step>:<value>. */
+    /**
+     * Payloads: menu:<key>, flow:<key>, script:<key>, handover, handover:now,
+     * handover:not_understood, resume:continue, resume:restart, yes, no,
+     * step:<flow>:<step>:<value>.
+     */
     public function runPayload(Conversation $c, string $payload): bool
     {
         $payload = trim($payload);
@@ -161,9 +196,18 @@ class FlowEngine
                     return true;
                 }
 
+                // §3: two misses on the same step — the reason the team sees says so.
+                if ($rest === 'not_understood') {
+                    $this->handover($c, 'not_understood', FlowState::flow($c)['data'] ?? []);
+
+                    return true;
+                }
+
                 $this->requestHuman($c);
 
                 return true;
+            case 'resume':
+                return $this->answerResume($c, $rest);
             case 'yes':
             case 'no':
                 return $this->answerConfirm($c, $kind);
@@ -188,14 +232,47 @@ class FlowEngine
     }
 
     /** Re-sends the waiting step's prompt with its buttons (after an agent answered a question). */
-    public function repromptCurrent(Conversation $c, int $delayMs = 0): void
+    public function repromptCurrent(Conversation $c, int $delayMs = 0, ?string $lead = null): void
     {
         $state = FlowState::flow($c);
         $step = $state !== null ? $this->step($state['key'], $state['step']) : null;
 
         if ($step !== null && ! in_array($step['type'] ?? null, ['script', 'handover', 'end'], true)) {
-            $this->withDelay($delayMs, fn () => $this->sendPrompt($c, $state, $step));
+            $this->withDelay($delayMs, fn () => $this->sendPrompt($c, $state, $step, $lead));
         }
+    }
+
+    /**
+     * Design 2026-09-21 §6.1: a question was answered in the middle of a flow. She is always
+     * brought back — «نرجع لطلب المرتجع 🌸» on the same message as the step's question and its
+     * buttons, so nothing is ever repeated word for word. After `crm.bot.flow_max_detours`
+     * questions in one flow a person is offered instead.
+     *
+     * @return bool whether the flow is still running afterwards
+     */
+    public function returnToFlow(Conversation $c, int $delayMs = 0): bool
+    {
+        $state = FlowState::flow($c);
+
+        if ($state === null) {
+            return false;
+        }
+
+        $state['detours']++;
+        FlowState::put($c, $state);
+
+        if ($state['detours'] > max(0, (int) config('crm.bot.flow_max_detours', 2))) {
+            $offer = $this->prompter->script('flow_too_many_detours') ?? 'عشان نخلص طلب حضرتك صح، تحبي أوصلك لموظف يساعدك؟';
+            $this->withDelay($delayMs, fn () => $this->send($c, $offer, [FlowLabels::YES_BUTTON, FlowLabels::NO_BUTTON]));
+            FlowState::setConfirm($c, 'handover_offer');
+
+            return true;
+        }
+
+        $lead = $this->prompter->script('flow_back_to') ?? 'نرجع لـ{flow_label} 🌸';
+        $this->repromptCurrent($c, $delayMs, str_replace('{flow_label}', FlowLabels::of($state['key']), $lead));
+
+        return true;
     }
 
     private function withDelay(int $delayMs, callable $send): void
@@ -220,7 +297,7 @@ class FlowEngine
         }
 
         FlowState::setConfirm($c, null);
-        FlowState::put($c, ['key' => $flowKey, 'step' => (string) $def['start'], 'data' => $prefill, 'retries' => 0, 'started_at' => now()->toIso8601String()]);
+        FlowState::put($c, ['key' => $flowKey, 'step' => (string) $def['start'], 'data' => $prefill, 'retries' => 0, 'detours' => 0, 'started_at' => now()->toIso8601String()]);
         $this->run($c, (string) $def['start']);
 
         return true;
@@ -305,11 +382,11 @@ class FlowEngine
         // A question ("الشحن بياخد قد ايه؟") skips title/synonym matching and goes to the interpreter.
         $isQuestion = $this->resolver->isQuestion($text);
 
-        if (! $isQuestion && $type === 'menu' && ($o = $this->resolver->matchOption($this->prompter->visibleMenuOptions($step), $text)) !== null) {
+        if (! $isQuestion && $type === 'menu' && ($o = $this->matchOption($c, $this->prompter->visibleMenuOptions($step), $text)) !== null) {
             return new FlowResult($this->runPayload($c, (string) $o['action']));
         }
 
-        if (! $isQuestion && $type === 'choice' && ($o = $this->resolver->matchOption($this->prompter->choiceOptions($step, $state['data']), $text)) !== null) {
+        if (! $isQuestion && $type === 'choice' && ($o = $this->matchOption($c, $this->prompter->choiceOptions($step, $state['data']), $text)) !== null) {
             $this->answer($c, $state, $step, (string) $o['value'], (string) $o['title'], $o);
 
             return new FlowResult(true);
@@ -346,6 +423,11 @@ class FlowEngine
             return new FlowResult(true);
         }
 
+        // §6: she is not answering the step — a person, another flow, or small talk.
+        if (($off = $this->offFlow($c, $state, $step, $text)) !== null) {
+            return $off;
+        }
+
         // The interpreter only sees the options she was offered (no refund for exchange-only items).
         $asked = $type === 'choice' ? ['options' => $this->prompter->choiceOptions($step, $state['data'])] + $step : $step;
         $answer = $text === '' ? FlowAnswer::unknown() : $this->interpret($c, $asked, $text, $burst);
@@ -356,7 +438,9 @@ class FlowEngine
             'answer' => in_array($type, self::ANSWERABLE, true) && $this->answerValue($c, $state, $step, (string) $answer->value)
                 ? new FlowResult(true)
                 : $this->retry($c, $state, $step),
-            default => $this->retry($c, $state, $step),
+            // A reply written as a question that the model could not map to an option is
+            // still a question (§6.1): it is answered and she is brought back, not re-asked.
+            default => $isQuestion ? new FlowResult(true, question: $text) : $this->retry($c, $state, $step),
         };
     }
 
@@ -369,9 +453,14 @@ class FlowEngine
             return new FlowResult(true);
         }
 
+        // §6: a person, another flow, or small talk — before the step's own "I did not get that".
+        if (($off = $this->offFlow($c, $state, $step, $text)) !== null) {
+            return $off;
+        }
+
         $answer = $text === '' ? FlowAnswer::unknown() : $this->interpret($c, $step, $text, $burst);
 
-        if ($answer->kind === 'question') {
+        if ($answer->kind === 'question' || ($answer->kind === 'unknown' && $this->resolver->isQuestion($text))) {
             return new FlowResult(true, question: $text);
         }
 
@@ -386,6 +475,89 @@ class FlowEngine
         $this->proceed($c, $state, $step, $outcome ?? $handler->unresolved($c, $state, $step, $text));
 
         return new FlowResult(true);
+    }
+
+    /**
+     * Design 2026-09-21 §6: what she wrote is not an answer to the waiting step.
+     *
+     *   §6.4 she asks for a person  → the team, with what the flow has collected so far;
+     *   §6.2 she asks for another flow → «تحبي نسيب … ونتابع …؟» before anything is dropped;
+     *   §6.3 thanks or a greeting   → one polite line and the same step again, no failure counted.
+     *
+     * Returns null when it really is (a bad) answer to the step, so the normal path runs.
+     */
+    private function offFlow(Conversation $c, array $state, array $step, string $text): ?FlowResult
+    {
+        if (trim($text) === '') {
+            return null;
+        }
+
+        if ($this->human->isHumanRequest($text)) {
+            $this->handover($c, 'human_request', $state['data']);
+
+            return new FlowResult(true, exited: true);
+        }
+
+        if (($target = $this->otherFlow($c, $state, $text)) !== null) {
+            $this->offerSwitch($c, $state, $target);
+
+            return new FlowResult(true);
+        }
+
+        if (($social = $this->social->socialIntent($text)) !== null) {
+            $line = $social === 'greeting'
+                ? ($this->mirrors->line($text) ?? $this->prompter->script('greeting_mirror_hi'))
+                : $this->prompter->script('flow_thanks');
+
+            if ($line !== null) {
+                $this->send($c, $line);
+            }
+
+            // Not a failure: her retry count is untouched and the step is simply asked again.
+            $this->sendPrompt($c, $state, $step);
+
+            return new FlowResult(true);
+        }
+
+        return null;
+    }
+
+    /**
+     * §6.2: the main-menu option her words point at, when it is a different flow from the
+     * one running. Only whole main-menu options count, so «استبدال» inside the return flow
+     * (its own option) never looks like a switch.
+     */
+    private function otherFlow(Conversation $c, array $state, string $text): ?string
+    {
+        if ($state['key'] === ConversationRouter::MAIN_MENU) {
+            return null;
+        }
+
+        $menu = $this->step(ConversationRouter::MAIN_MENU, (string) ($this->definition(ConversationRouter::MAIN_MENU)['start'] ?? ''));
+
+        if ($menu === null) {
+            return null;
+        }
+
+        // Exact titles and synonyms only: a fuzzy match against the whole main menu would
+        // read half of what she types as "she wants another flow".
+        $option = $this->resolver->matchOption($this->withEnglishTitles($c, $this->prompter->visibleMenuOptions($menu)), $text);
+        $action = (string) ($option['action'] ?? '');
+
+        if (! preg_match('/^(?:flow|menu):(.+)$/', $action, $m)) {
+            return null;
+        }
+
+        return $m[1] !== $state['key'] && $m[1] !== ConversationRouter::MAIN_MENU && $this->definition($m[1]) !== null ? $m[1] : null;
+    }
+
+    private function offerSwitch(Conversation $c, array $state, string $target): void
+    {
+        $body = $this->prompter->script('flow_switch_offer') ?? 'تحبي نسيب {from_label} ونتابع {to_label}؟';
+        $body = strtr($body, ['{from_label}' => FlowLabels::of($state['key']), '{to_label}' => FlowLabels::of($target)]);
+
+        $this->send($c, $body, [FlowLabels::YES_BUTTON, FlowLabels::KEEP_BUTTON]);
+        FlowState::setConfirm($c, 'switch:'.$target);
     }
 
     /** Applies a handler outcome in an answer context and runs the next step when it continues. */
@@ -623,31 +795,92 @@ class FlowEngine
         return (string) ($step['next'] ?? 'end');
     }
 
+    /**
+     * She did not answer the step (design 2026-09-21 §3). The same question is never asked
+     * again word for word:
+     *
+     *   first miss  → ONE message: «معلش مش واضحة ليا 🙏 اختاري من دول:» carrying the step's
+     *                 own buttons (a step with no buttons gets the question under the apology);
+     *   second miss → the apology plus [كلم موظف] [القائمة الرئيسية], and an `unanswered`
+     *                 learning note so the owner sees what the bot could not read.
+     */
     private function retry(Conversation $c, array $state, array $step): FlowResult
     {
         $state['retries']++;
         FlowState::put($c, $state);
 
         if ($state['retries'] < 2) {
-            if (($retry = $this->prompter->script('flow_retry')) !== null) {
-                $this->send($c, $retry);
-            }
+            $prompt = $this->promptFor($state, $step);
+            $apology = $this->prompter->script('flow_retry') ?? 'معلش مش واضحة ليا 🙏 اختاري من دول:';
+            $text = $prompt['buttons'] === [] ? $apology."\n".$prompt['text'] : $apology;
 
-            $this->sendPrompt($c, $state, $step);
+            $this->send($c, $text, $prompt['buttons']);
 
             return new FlowResult(true);
         }
 
-        $offer = $this->prompter->script('flow_offer_human') ?? 'تحب نحولك لموظف يساعد حضرتك؟';
-        $this->send($c, $offer, [['title' => 'أيوه', 'payload' => 'yes'], ['title' => 'لأ', 'payload' => 'no']]);
+        $this->noteNotUnderstood($c, $state, $step);
+
+        $offer = $this->prompter->script('flow_not_understood') ?? 'معلش، لسه مش قادرة أفهم قصدك 🙏 تحبي أوصلك لموظف يساعدك؟';
+        $this->send($c, $offer, [FlowLabels::AGENT_BUTTON, FlowLabels::MENU_BUTTON]);
         FlowState::setConfirm($c, 'handover_offer');
 
         return new FlowResult(true);
     }
 
+    /**
+     * A learning note (kind `unanswered`) for a step that failed twice, so the owner reads
+     * in Settings → تعلم البوت exactly what she wrote and which step could not read it.
+     */
+    private function noteNotUnderstood(Conversation $c, array $state, array $step): void
+    {
+        if (SandboxMode::active() || ! $c->exists) {
+            return;
+        }
+
+        rescue(fn () => BotLearningNote::create([
+            'conversation_id' => $c->id,
+            'channel_account_id' => $c->channel_account_id,
+            'source' => $c->is_test ? BotLearningNote::SOURCE_TEST : BotLearningNote::SOURCE_LIVE,
+            'last_message_id' => $c->messages()->where('direction', MessageDirection::In->value)->max('id'),
+            'notes' => [[
+                'kind' => 'unanswered',
+                'summary' => 'البوت مفهمش ردها مرتين على خطوة '.$state['key'].'.'.$state['step'].' ('.trim((string) ($step['text'] ?? '')).')',
+                'quote' => mb_substr($this->customerText($c), 0, 200),
+            ]],
+            'model' => null,
+            'input_tokens' => 0,
+            'output_tokens' => 0,
+            'cost_usd' => 0,
+        ]), null, report: false);
+    }
+
+    /** yes/no to a pending offer: the handover offer (§3) or the flow switch (§6.2). */
     private function answerConfirm(Conversation $c, string $answer): bool
     {
-        if (FlowState::confirm($c) !== 'handover_offer') {
+        $confirm = FlowState::confirm($c);
+
+        // «نكمل» / «ابدأ من جديد» typed as "أيوه" / "لأ" (§6.5).
+        if ($confirm === 'resume') {
+            return $this->answerResume($c, $answer === 'no' ? 'restart' : 'continue');
+        }
+
+        if ($confirm !== null && str_starts_with($confirm, 'switch:')) {
+            FlowState::setConfirm($c, null);
+
+            if ($answer === 'no') {
+                $this->repromptCurrent($c);
+
+                return true;
+            }
+
+            // §6.2: what she had already given is kept on the conversation before the flow is dropped.
+            $this->noteAbandoned($c);
+
+            return $this->begin($c, substr($confirm, 7));
+        }
+
+        if ($confirm !== 'handover_offer') {
             return false;
         }
 
@@ -664,6 +897,74 @@ class FlowEngine
             FlowState::put($c, $state);
             $this->repromptCurrent($c);
         }
+
+        return true;
+    }
+
+    /** §6.2: the partial data of a flow she chose to leave, noted for the team. */
+    private function noteAbandoned(Conversation $c): void
+    {
+        $state = FlowState::flow($c);
+        $lines = $state !== null ? $this->prompter->summaryLines($state['data']) : [];
+
+        if ($state === null || $lines === [] || SandboxMode::active() || ! $c->exists) {
+            return;
+        }
+
+        rescue(fn () => ConversationNote::create([
+            'conversation_id' => $c->id,
+            'user_id' => null,
+            'body' => 'سابت «'.FlowLabels::of($state['key']).'» في النص، واللي جمعناه: '."\n".implode("\n", $lines),
+            'mentions' => [],
+        ]), null, report: false);
+    }
+
+    /**
+     * §6.5: a flow she left hanging longer than `crm.bot.flow_resume_minutes` asks
+     * «لسه فاكرين طلبك 🌸 تحبي نكمل من حيث ما وقفنا؟» [نكمل] [ابدأ من جديد] before anything
+     * she now writes is read as an answer to a step she may not even remember.
+     */
+    private function offerResume(Conversation $c, array $state, Collection $burst): bool
+    {
+        $minutes = (int) config('crm.bot.flow_resume_minutes', 30);
+        $idle = FlowState::idleMinutes($c);
+
+        if ($minutes <= 0 || $idle === null || $idle < $minutes || FlowState::confirm($c) !== null) {
+            return false;
+        }
+
+        // A tap on one of the buttons she was already offered is an answer, not a comeback.
+        $payload = $burst->reverse()->map(fn (Message $m) => $this->buttons->match($c, $m))->first(fn ($p) => $p !== null);
+
+        if ($payload !== null) {
+            FlowState::put($c, $state);
+
+            return false;
+        }
+
+        $offer = $this->prompter->script('flow_resume_offer') ?? 'لسه فاكرين طلبك 🌸 تحبي نكمل من حيث ما وقفنا؟';
+        $this->send($c, $offer, [FlowLabels::RESUME_BUTTON, FlowLabels::RESTART_BUTTON]);
+        FlowState::setConfirm($c, 'resume');
+        FlowState::put($c, $state);
+
+        return true;
+    }
+
+    private function answerResume(Conversation $c, string $choice): bool
+    {
+        if (FlowState::confirm($c) !== 'resume' || ($state = FlowState::flow($c)) === null) {
+            return false;
+        }
+
+        FlowState::setConfirm($c, null);
+
+        if ($choice === 'restart') {
+            return $this->begin($c, $state['key']);
+        }
+
+        $state['retries'] = 0;
+        FlowState::put($c, $state);
+        $this->repromptCurrent($c);
 
         return true;
     }
@@ -730,11 +1031,64 @@ class FlowEngine
         return OutboundCards::button([OutboundCards::webUrl(self::STORE_BUTTON, BotSetting::current()->storeUrl())]);
     }
 
-    private function sendPrompt(Conversation $c, array $state, array $step): void
+    private function sendPrompt(Conversation $c, array $state, array $step, ?string $lead = null): void
+    {
+        $lead ??= $this->pendingLead;
+        $this->pendingLead = null;
+
+        $prompt = $this->promptFor($state, $step);
+        $text = $lead !== null && trim($lead) !== '' ? trim($lead)."\n".$prompt['text'] : $prompt['text'];
+
+        $this->send($c, $text, $prompt['buttons']);
+    }
+
+    /** @return array{text:string, buttons:list<array{title:string, payload:string}>} */
+    private function promptFor(array $state, array $step): array
     {
         $handler = $this->steps->for($step['type'] ?? null);
-        $prompt = $handler !== null ? $handler->prompt($state, $step) : $this->prompter->prompt($state['key'], $state['step'], $step, $state['data']);
-        $this->send($c, $prompt['text'], $prompt['buttons']);
+
+        return $handler !== null
+            ? $handler->prompt($state, $step)
+            : $this->prompter->prompt($state['key'], $state['step'], $step, $state['data']);
+    }
+
+    /**
+     * Design 2026-09-21 §3: exact/synonym match (Arabic or English), then a fuzzy match, on
+     * the option titles in both languages. The English titles are the ones she was actually
+     * shown — read from the translation cache, so no model call is made here.
+     *
+     * @param  list<array<string, mixed>>  $options
+     * @return array<string, mixed>|null
+     */
+    private function matchOption(Conversation $c, array $options, string $text): ?array
+    {
+        $options = $this->withEnglishTitles($c, $options);
+
+        return $this->resolver->matchOption($options, $text) ?? $this->resolver->fuzzyOption($options, $text);
+    }
+
+    /**
+     * Adds `synonyms_en` (the stored English title of each option) so a customer writing in
+     * English matches the button she can see. Arabic conversations skip this entirely.
+     *
+     * @param  list<array<string, mixed>>  $options
+     * @return list<array<string, mixed>>
+     */
+    private function withEnglishTitles(Conversation $c, array $options): array
+    {
+        if (! $this->language->isEnglish($c)) {
+            return $options;
+        }
+
+        foreach ($options as $i => $option) {
+            $english = $this->translator->cached((string) ($option['title'] ?? ''), $this->language->of($c));
+
+            if ($english !== null) {
+                $options[$i]['synonyms'] = [...array_map('strval', $option['synonyms'] ?? []), $english];
+            }
+        }
+
+        return $options;
     }
 
     /**

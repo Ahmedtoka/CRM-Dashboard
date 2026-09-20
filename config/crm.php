@@ -184,6 +184,17 @@ return [
         'burst_wait_seconds' => (int) env('CRM_BOT_BURST_WAIT_SECONDS', 8),
         'burst_max_wait_seconds' => (int) env('CRM_BOT_MAX_WAIT_SECONDS', 25),
         'typing_ms_per_char' => (int) env('CRM_BOT_TYPING_MS_PER_CHAR', 35),
+
+        // Bilingual bot (design 2026-09-21 §2): at most this many NEW automatic
+        // translations a day. Beyond it the Arabic goes out and the skip is logged;
+        // texts already translated keep working (they are cached, not counted).
+        'translation_daily_cap' => (int) env('CRM_BOT_TRANSLATION_DAILY_CAP', 200),
+
+        // §6: a flow she left hanging longer than this asks «نكمل ولا نبدأ من جديد؟».
+        'flow_resume_minutes' => (int) env('CRM_BOT_FLOW_RESUME_MINUTES', 30),
+
+        // §6.1: how many questions the bot answers mid-flow before offering a person.
+        'flow_max_detours' => (int) env('CRM_BOT_FLOW_MAX_DETOURS', 2),
     ],
 
     'anthropic' => [
@@ -202,6 +213,8 @@ return [
         'learning_timeout' => 60,
         // Learning v2 §2: one small call per finished conversation.
         'review_timeout' => 30,
+        // Bilingual bot (design 2026-09-21 §2): one batched translation call per message.
+        'translate_timeout' => 20,
         // Per-million-token USD prices, keyed by model, used to compute
         // BotRun.cost_usd from the classifier/reply token counts.
         'prices' => [

@@ -4,15 +4,19 @@ namespace App\Bot\Flows;
 
 use App\Models\Conversation;
 use App\TestLinks\TestSessionSteps;
+use Illuminate\Support\Carbon;
 
 /**
  * Reads and writes the flow part of `conversations.bot_state`:
- * `flow = {key, step, data, retries, started_at}` and `flow_confirm`.
+ * `flow = {key, step, data, retries, detours, started_at, last_at}` and `flow_confirm`.
  * Every write merges into the existing state so other keys survive.
+ *
+ * `detours` counts the questions answered in the middle of this flow and `last_at` when
+ * it last moved, both for the off-flow handling of design 2026-09-21 §6.
  */
 final class FlowState
 {
-    /** @return array{key:string, step:string, data:array, retries:int, started_at:?string}|null */
+    /** @return array{key:string, step:string, data:array, retries:int, detours:int, started_at:?string, last_at:?string}|null */
     public static function flow(Conversation $c): ?array
     {
         $flow = ($c->bot_state ?? [])['flow'] ?? null;
@@ -26,12 +30,27 @@ final class FlowState
             'step' => (string) ($flow['step'] ?? ''),
             'data' => is_array($flow['data'] ?? null) ? $flow['data'] : [],
             'retries' => (int) ($flow['retries'] ?? 0),
+            'detours' => (int) ($flow['detours'] ?? 0),
             'started_at' => $flow['started_at'] ?? null,
+            'last_at' => $flow['last_at'] ?? ($flow['started_at'] ?? null),
         ];
+    }
+
+    /** Minutes since the flow last moved (null when it never has). */
+    public static function idleMinutes(Conversation $c): ?float
+    {
+        $at = self::flow($c)['last_at'] ?? null;
+
+        if (! is_string($at) || $at === '') {
+            return null;
+        }
+
+        return rescue(fn () => Carbon::parse($at)->diffInMinutes(now(), absolute: true), null, report: false);
     }
 
     public static function put(Conversation $c, array $flow): void
     {
+        $flow['last_at'] = now()->toIso8601String();
         $c->forceFill(['bot_state' => array_merge($c->bot_state ?? [], ['flow' => $flow])])->save();
 
         // The funnel of the team test links (design 2026-09-21 §4) is built from here:

@@ -130,6 +130,6 @@ it('queues the re-asked flow step after the delayed tail of an in-flow answer', 
     $tail = $bot->first(fn ($m) => str_starts_with($m->body, 'الجزء التاني'));
     $prompt = $bot->last();
     expect($tail)->not->toBeNull()
-        ->and($prompt->body)->toBe('إيه سبب المرتجع؟')
+        ->and($prompt->body)->toBe("نرجع لـطلب المرتجع 🌸\nإيه سبب المرتجع؟")
         ->and(jobDelayMs(jobFor($prompt)))->toBeGreaterThan(jobDelayMs(jobFor($tail)));
 });

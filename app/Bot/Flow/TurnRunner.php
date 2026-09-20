@@ -330,6 +330,18 @@ class TurnRunner
 
         $state['asks'] = $asks;
 
+        // Design 2026-09-21 §6.6: nothing matched and no flow is running — the menu, never a
+        // dead end. It replaces the clarifying question: the menu asks the same thing, with
+        // something to tap.
+        $menuFallback = $clarify && ! $aiError && ! $flowContext && $flowIntent === null
+            && FlowState::flow($c) === null && BotFlow::active(FlowEngine::MAIN_MENU_FLOW) !== null;
+
+        if ($menuFallback) {
+            $clarify = false;
+            $state['clarify_count'] = 0;
+            $state['clarified'] = null;
+        }
+
         if ($clarify && ! $aiError) {
             $scripts[] = self::CLARIFY_TEXT;
             $this->nextSteps[] = 'She was not clear. Ask her politely what exactly she needs; do not guess.';
@@ -359,6 +371,8 @@ class TurnRunner
             if ($flowIntent !== null) {
                 // The flow's first step speaks next; only the first bot reply opens with the greeting.
                 $reply = $this->isFirstBotReply($c) ? ($this->bodies(['greeting'])[0] ?? null) : null;
+            } elseif ($menuFallback) {
+                // §6.6: the menu below is the answer; never a handover for "I did not understand".
             } elseif (! $flowContext || $handover !== null || $aiError) {
                 // Nothing approved to say (e.g. the script is still a ❓ placeholder, or an ai_error):
                 // a greeting alone is not an answer, so a person takes it. Inside a flow an unanswerable
@@ -399,6 +413,16 @@ class TurnRunner
             $delivery = $this->deliver($c, $reply, (int) $s->typing_ms_per_char, $turnStarted, skipLaterPartsIfHumanTakesOver: $handover === null, buttons: $buttons);
         } else {
             $reply = null;
+        }
+
+        // §6.6: «أقدر أساعدك في 👇» on the same message as the main menu and its buttons.
+        if ($menuFallback && $handover === null && $delivery['stopped'] === null) {
+            app(FlowEngine::class)->start(
+                $c,
+                FlowEngine::MAIN_MENU_FLOW,
+                delayMs: $reply !== null ? $this->queuedDelayMs + self::FOLLOW_UP_GAP_MS : 0,
+                lead: app(FlowPrompter::class)->script('flow_menu_fallback'),
+            );
         }
 
         $flowStarts = $flowIntent !== null && $handover === null && $delivery['stopped'] === null;

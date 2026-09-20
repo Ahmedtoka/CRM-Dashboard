@@ -209,7 +209,7 @@ it('records a cancel request with her own reason, asking again for an empty or e
 
     oceTurn('🙏');
     expect(oceFlow()['step'])->toBe('cancel_reason')
-        ->and(array_slice(oceBodies(), -2))->toBe(['معلش مفهمتش 🙏', 'ممكن تكتبيلي سبب الإلغاء؟ 🙏'])
+        ->and(oceBot()->body)->toBe("معلش مش واضحة ليا 🙏 اختاري من دول:\nممكن تكتبيلي سبب الإلغاء؟ 🙏")
         ->and(SupportCase::count())->toBe(0);
 
     oceTurn('لقيت الموديل أرخص في مكان تاني');

@@ -4,6 +4,7 @@ namespace App\Bot\Flow;
 
 use App\Bot\Flow\Concerns\CallsClaudeJson;
 use App\Bot\Knowledge\KnowledgeBase;
+use App\Bot\Language\ConversationLanguage;
 use App\Bot\PriceGuard;
 use App\Bot\PromiseGuard;
 use App\Models\BotSetting;
@@ -99,7 +100,7 @@ class ReplyComposer
                 (int) config('crm.anthropic.compose_timeout', 10),
                 700,
                 self::SYSTEM_PROMPT,
-                [['role' => 'user', 'content' => $this->userContent($customerTexts, $approved, $facts, $greeting !== '', $templates, $history, $nextSteps)]],
+                [['role' => 'user', 'content' => $this->userContent($customerTexts, $approved, $facts, $greeting !== '', $templates, $history, $nextSteps, app(ConversationLanguage::class)->of($c))]],
                 self::SCHEMA,
             );
             $this->usage = ['model' => $model, 'input_tokens' => $result['input_tokens'], 'output_tokens' => $result['output_tokens'], 'latency_ms' => $result['latency_ms']];
@@ -151,13 +152,18 @@ class ReplyComposer
      * @param  list<string>  $customerTexts  @param  list<string>  $approved  @param  list<string>  $facts  @param  list<string>  $templates
      * @param  list<array{role:string, text:string}>  $history  @param  list<string>  $nextSteps
      */
-    private function userContent(array $customerTexts, array $approved, array $facts, bool $greet, array $templates = [], array $history = [], array $nextSteps = []): string
+    private function userContent(array $customerTexts, array $approved, array $facts, bool $greet, array $templates = [], array $history = [], array $nextSteps = [], string $locale = 'ar'): string
     {
         // Final fix wave I6: customer text stays inside its delimiters (a typed closing tag is dropped).
         $strip = fn ($t) => trim(str_ireplace(['<customer_messages>', '</customer_messages>', '<conversation_history>', '</conversation_history>'], '', (string) $t));
         $latest = $this->clean(array_map($strip, $customerTexts));
 
-        $content = 'Greet: '.($greet ? 'yes' : 'no');
+        // Bilingual bot (design 2026-09-21 §1): she writes in English, so the reply is written
+        // in English straight away — the approved Arabic texts are still the only source of facts.
+        $content = $locale === 'en'
+            ? 'Write the reply in ENGLISH (the customer writes in English). Keep it short, warm and simple; keep prices, links and numbers exactly as in the Arabic.
+Greet: '.($greet ? 'yes' : 'no')
+            : 'Greet: '.($greet ? 'yes' : 'no');
 
         $lines = [];
 

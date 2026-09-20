@@ -94,7 +94,7 @@ it('seeds the Le Voile catalog and scripts', function () {
         ->and(BotIntent::count())->toBe(43)
         ->and(BotIntent::where('is_active', true)->count())->toBe(42)
         ->and(BotKnowledgeEntry::where('key', 'script.availability')->value('body'))->toEndWith('https://levoilestores.com/')
-        ->and(BotKnowledgeEntry::where('key', 'like', 'script.%')->count())->toBe(69)
+        ->and(BotKnowledgeEntry::where('key', 'like', 'script.%')->count())->toBe(76)
         ->and(BotKnowledgeEntry::where('key', 'script.handover_ack')->value('is_active'))->toBeTrue()
         ->and(BotKnowledgeEntry::where('key', 'script.thanks')->value('body'))->toBe('العفو يا فندم تحت أمرك في أي وقت 🌸')
         ->and(BotIntent::where('key', 'order_status')->first()->keywords)->toContain('فين الاوردر', 'الاوردر فين', 'اوردري', 'طلبي', 'تتبع', 'tracking')

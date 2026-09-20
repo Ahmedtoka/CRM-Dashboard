@@ -4,6 +4,7 @@ namespace App\Inbox;
 
 use App\Analytics\ActivityLogger;
 use App\Analytics\AttributionRecorder;
+use App\Bot\Language\OutboundTranslation;
 use App\Enums\ActorType;
 use App\Enums\AttachmentStatus;
 use App\Enums\Handler;
@@ -214,6 +215,11 @@ class OutboundService
         if (! $state->canSendText()) {
             throw new WindowClosedException($state->mode);
         }
+
+        // Bilingual bot (design 2026-09-21 §1-2): the one gate every bot text, button
+        // and card passes through, so nothing the bot says can escape the conversation's
+        // language. Agent replies (sendHuman) are never touched.
+        [$body, $buttons, $cards] = app(OutboundTranslation::class)->apply($c, $body, $buttons, $cards);
 
         $message = DB::transaction(function () use ($c, $body, $buttons, $cards) {
             $message = $c->messages()->create([

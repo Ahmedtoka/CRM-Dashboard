@@ -19,6 +19,10 @@ use App\Bot\Flows\FlowDefinitionSource;
 use App\Bot\Flows\PublishedFlowDefinitions;
 use App\Bot\Flows\Returns\RemoteProductLookup;
 use App\Bot\Flows\Returns\ShopifyRemoteProductLookup;
+use App\Bot\Language\BotTranslator;
+use App\Bot\Language\ClaudeTranslationEngine;
+use App\Bot\Language\FakeTranslationEngine;
+use App\Bot\Language\TranslationEngine;
 use App\Bot\Learning\ClaudeConversationReviewer;
 use App\Bot\Learning\ClaudeLearningAnalyst;
 use App\Bot\Learning\ConversationReviewer;
@@ -118,6 +122,22 @@ class BotServiceProvider extends ServiceProvider
                 (int) config('crm.anthropic.review_timeout', 30),
             );
         });
+
+        // Outbound translation (design 2026-09-21 §2): Claude Haiku only when the driver is
+        // claude AND a key is set; otherwise the offline stand-in, so an English conversation
+        // still never shows Arabic — it shows the seeded translations, and «en#…» for the rest.
+        $this->app->bind(TranslationEngine::class, function ($app) use ($model) {
+            return config('crm.drivers.ai', 'fake') === 'claude' && filled(config('crm.anthropic.key'))
+                ? new ClaudeTranslationEngine(
+                    config('crm.anthropic.key'),
+                    $model('ai_classifier_model', 'classifier_model'),
+                    (int) config('crm.anthropic.translate_timeout', 20),
+                )
+                : $app->make(FakeTranslationEngine::class);
+        });
+
+        // One translator per request: its memo turns a whole turn's repeated texts into one lookup.
+        $this->app->singleton(BotTranslator::class);
 
         // Where FlowEngine reads flow definitions (flow designer §3); the sandbox swaps its own in.
         $this->app->bind(FlowDefinitionSource::class, PublishedFlowDefinitions::class);

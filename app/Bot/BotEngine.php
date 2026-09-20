@@ -13,6 +13,7 @@ use App\Bot\Grounding\BotContext;
 use App\Bot\Grounding\BotContextBuilder;
 use App\Bot\Knowledge\KnowledgeBase;
 use App\Bot\Knowledge\SizeChart;
+use App\Bot\Language\ConversationLanguage;
 use App\Bot\Learning\Jobs\ReviewConversation;
 use App\Enums\ActorType;
 use App\Enums\AttachmentType;
@@ -82,6 +83,11 @@ class BotEngine
         if ($last === null || $c->handler !== Handler::Bot || ! $settings->enabled) {
             return null;
         }
+
+        // Bilingual bot (design 2026-09-21 §1): before anything is decided or sent, the
+        // conversation follows the language she is writing in. Done once per turn, here,
+        // so every path below (flows, rules, the agent, a handover) speaks it.
+        app(ConversationLanguage::class)->observe($c, $burst);
 
         $text = $burst->pluck('body')->map(fn ($b) => (string) $b)->filter(fn ($b) => trim($b) !== '')->implode("\n");
         $peeked = $this->rules->peek($text, 'message', $c->platform);

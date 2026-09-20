@@ -22,7 +22,23 @@ final class FlowScripts
             'flow_cancel_recorded' => ['title' => 'تسجيل إلغاء/تعديل', 'body' => "تم تسجيل طلب حضرتك برقم #{case_id} وهيتم التواصل مع حضرتك في أقرب وقت 🌸\nحابة أوضح إن الإلغاء أو التعديل متاح خلال ساعتين بس من وقت الطلب."],
             'flow_offer_human' => ['title' => 'عرض موظف', 'body' => 'تحب نحولك لموظف يساعد حضرتك؟'],
             'flow_case_exists' => ['title' => 'طلب متسجل', 'body' => 'طلب حضرتك متسجل برقم #{case_id} وهيتم التواصل مع حضرتك 🌸 تحب نحولك لموظف؟'],
-            'flow_retry' => ['title' => 'إعادة السؤال', 'body' => 'معلش مفهمتش 🙏'],
+            // 2026-09-21 §3: the first miss never repeats the question word for word — it
+            // apologises and shows the same options again in ONE message.
+            'flow_retry' => ['title' => 'إعادة السؤال (أول مرة)', 'body' => 'معلش مش واضحة ليا 🙏 اختاري من دول:'],
+            // §3: the second miss stops asking and offers a person or the menu.
+            'flow_not_understood' => ['title' => 'إعادة السؤال (تاني مرة)', 'body' => 'معلش، لسه مش قادرة أفهم قصدك 🙏 تحبي أوصلك لموظف يساعدك؟'],
+            // §6.1: after answering a question that came in the middle of a flow.
+            'flow_back_to' => ['title' => 'الرجوع للفلو بعد سؤال', 'body' => 'نرجع لـ{flow_label} 🌸'],
+            // §6.1: she keeps asking other things — offer a person instead of going round.
+            'flow_too_many_detours' => ['title' => 'أسئلة كتير جوه الفلو', 'body' => 'عشان نخلص طلب حضرتك صح، تحبي أوصلك لموظف يساعدك؟'],
+            // §6.2: she asked for another flow while one is running.
+            'flow_switch_offer' => ['title' => 'تغيير الفلو', 'body' => 'تحبي نسيب {from_label} ونتابع {to_label}؟'],
+            // §6.3: thanks in the middle of a flow — one line, then the same step again.
+            'flow_thanks' => ['title' => 'رد على الشكر جوه الفلو', 'body' => 'العفو يا قمر 🌸'],
+            // §6.5: she came back after a long silence.
+            'flow_resume_offer' => ['title' => 'استكمال بعد انقطاع', 'body' => 'لسه فاكرين طلبك 🌸 تحبي نكمل من حيث ما وقفنا؟'],
+            // §6.6: nothing matched and no flow is running — never a dead end.
+            'flow_menu_fallback' => ['title' => 'مفيش فلو ومفيش إجابة', 'body' => 'أقدر أساعدك في 👇'],
             'flow_not_found_order' => ['title' => 'أوردر مش موجود', 'body' => 'مش لاقية أوردر بالبيانات دي 🌸 ممكن تتأكدي من الرقم؟'],
             // The owner's flow 7 (2026-09-19): «كلم موظف» asks the topic first, then a working-hours aware reply.
             'handover_ask_topic' => ['title' => 'كلم موظف: سؤال الموضوع', 'body' => 'أكيد 🌸 ممكن تقوليلي باختصار محتاجة إيه؟ عشان أوصّلك للشخص المناسب على طول'],

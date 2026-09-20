@@ -13,18 +13,29 @@ final class FlowAnswerResolver
 {
     /** Whole-reply words that leave the flow and show the main menu. */
     // "الغاء" is deliberately not an exit word: it is the cancel option of cancel_edit and a main-menu synonym.
-    private const MENU_WORDS = ['القائمه', 'القايمه', 'القائمه الرئيسيه', 'القايمه الرئيسيه', 'الرئيسيه', 'منيو', 'المنيو', 'menu'];
+    private const MENU_WORDS = ['القائمه', 'القايمه', 'القائمه الرئيسيه', 'القايمه الرئيسيه', 'الرئيسيه', 'منيو', 'المنيو', 'menu', 'main menu', 'the menu', 'home', 'main'];
 
-    private const YES_WORDS = ['ايوه', 'ايوا', 'اه', 'نعم', 'اكيد', 'ياريت', 'يا ريت', 'تمام', 'ماشي', 'حاضر', 'yes', 'ok', 'okay'];
+    private const YES_WORDS = ['ايوه', 'ايوا', 'اه', 'نعم', 'اكيد', 'ياريت', 'يا ريت', 'تمام', 'ماشي', 'حاضر', 'yes', 'ok', 'okay', 'sure', 'yeah', 'yep', 'please', 'go ahead'];
 
-    private const NO_WORDS = ['لا', 'لاء', 'لا شكرا', 'مش عايزه', 'مش عاوزه', 'no'];
+    private const NO_WORDS = ['لا', 'لاء', 'لا شكرا', 'مش عايزه', 'مش عاوزه', 'no', 'nope', 'no thanks', 'not now'];
 
-    private const EDIT_WORDS = ['اعدل', 'تعديل', 'عدل', 'غلط', 'اغير'];
+    private const EDIT_WORDS = ['اعدل', 'تعديل', 'عدل', 'غلط', 'اغير', 'edit', 'change', 'wrong', 'fix'];
 
-    private const CONFIRM_WORDS = ['تمام', 'سجل', 'مظبوط', 'مضبوط', 'صح', 'اه', 'ايوه', 'تم', 'ok', 'yes'];
+    private const CONFIRM_WORDS = ['تمام', 'سجل', 'مظبوط', 'مضبوط', 'صح', 'اه', 'ايوه', 'تم', 'ok', 'yes', 'confirm', 'correct', 'right', 'done', 'submit'];
 
     /** Needles this short (normalized characters) match as whole words only. */
     private const SHORT_NEEDLE = 4;
+
+    /** Fuzzy matching (design 2026-09-21 §3): how close, and how far ahead of the next option. */
+    private const SIMILAR_ENOUGH = 0.8;
+
+    private const CLEAR_LEAD = 0.08;
+
+    /**
+     * Fuzzy matching ignores needles shorter than this: «الغي» and «اللي» are one edit
+     * apart, so short options must be matched exactly or not at all.
+     */
+    private const FUZZY_MIN_NEEDLE = 5;
 
     public function __construct(private readonly ArabicNormalizer $normalizer) {}
 
@@ -62,6 +73,96 @@ final class FlowAnswerResolver
         }
 
         return null;
+    }
+
+    /**
+     * Design 2026-09-21 §3 step 2: when nothing matched exactly, the closest option title
+     * or synonym — a typo, a plural, a different word order («exchang», «track order»,
+     * «المقاسات» for «المقاس»). Deliberately strict: a wrong guess is worse than a re-ask,
+     * so a candidate must be at least SIMILAR_ENOUGH similar and clearly ahead of the runner-up.
+     *
+     * @param  list<array<string, mixed>>  $options
+     * @return array<string, mixed>|null
+     */
+    public function fuzzyOption(array $options, string $text): ?array
+    {
+        $clean = $this->clean($text);
+
+        // A long sentence is a story, not a mistyped option: the model reads that one.
+        if ($clean === '' || mb_strlen($clean) < 3 || count(explode(' ', $clean)) > 8) {
+            return null;
+        }
+
+        $best = null;
+        $bestScore = 0.0;
+        $secondScore = 0.0;
+
+        foreach ($options as $o) {
+            $score = 0.0;
+
+            foreach ([(string) ($o['title'] ?? ''), ...array_map('strval', $o['synonyms'] ?? [])] as $needle) {
+                $n = $this->clean($needle);
+
+                if ($n !== '' && mb_strlen($n) >= self::FUZZY_MIN_NEEDLE) {
+                    $score = max($score, $this->similarity($clean, $n));
+                }
+            }
+
+            if ($score > $bestScore) {
+                [$secondScore, $bestScore, $best] = [$bestScore, $score, $o];
+            } elseif ($score > $secondScore) {
+                $secondScore = $score;
+            }
+        }
+
+        return $bestScore >= self::SIMILAR_ENOUGH && $bestScore - $secondScore >= self::CLEAR_LEAD ? $best : null;
+    }
+
+    /** 0..1, the better of "the whole reply looks like it" and "one of its words looks like it". */
+    private function similarity(string $text, string $needle): float
+    {
+        $best = $this->ratio($text, $needle);
+
+        foreach (explode(' ', $text) as $word) {
+            if (mb_strlen($word) >= 3) {
+                $best = max($best, $this->ratio($word, $needle));
+            }
+        }
+
+        return $best;
+    }
+
+    private function ratio(string $a, string $b): float
+    {
+        $length = max(mb_strlen($a), mb_strlen($b));
+
+        if ($length === 0) {
+            return 0.0;
+        }
+
+        // levenshtein() is byte-based; Arabic is multi-byte, so the characters are
+        // mapped onto single bytes first (at most 255 distinct characters per pair).
+        [$a, $b] = $this->toBytes($a, $b);
+
+        return max(0.0, 1.0 - levenshtein($a, $b) / $length);
+    }
+
+    /** @return array{0:string, 1:string} */
+    private function toBytes(string $a, string $b): array
+    {
+        $map = [];
+        $encode = function (string $text) use (&$map): string {
+            $out = '';
+
+            foreach (preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $char) {
+                $map[$char] ??= count($map) + 1;
+                $out .= chr(min(255, $map[$char]));
+            }
+
+            return $out;
+        };
+
+        return [$encode($a), $encode($b)];
     }
 
     /** A reply ending with "?" or "؟" is a question, never an option pick. */
