@@ -188,7 +188,7 @@ it('hands a shipped order to a person on «كلم موظف»', function () {
     oceTap('shipped', 'agent', 'كلم موظف');
 
     expect(Conversation::first()->handler)->toBe(Handler::Human)
-        ->and(oceBot()->body)->toBe('تمام ✅ حولتك لحد من الفريق، هيرد عليكي في أقرب وقت 🌸');
+        ->and(oceBot()->body)->toBe('تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸');
 });
 
 it('says an already cancelled order is cancelled', function () {

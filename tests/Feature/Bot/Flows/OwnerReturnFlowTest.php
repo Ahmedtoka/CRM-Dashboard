@@ -215,7 +215,7 @@ it('still hands over after 2 wrong digits, revealing nothing', function () {
     expect(orfFlow())->toBeNull()
         ->and(Conversation::first()->handler)->toBe(Handler::Human)
         // The refusal, then the handover's working-hours reply (flow 7; no hours set here).
-        ->and(array_slice(orfBodies(), -2))->toBe([OrderStep::VERIFY_FAILED_TEXT, 'تمام ✅ حولتك لحد من الفريق، هيرد عليكي في أقرب وقت 🌸'])
+        ->and(array_slice(orfBodies(), -2))->toBe([OrderStep::VERIFY_FAILED_TEXT, 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸'])
         ->and(implode("\n", orfBodies()))->not->toContain('سارة')->not->toContain('أهلاً');
 });
 

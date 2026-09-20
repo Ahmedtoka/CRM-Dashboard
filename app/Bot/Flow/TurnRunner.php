@@ -11,6 +11,8 @@ use App\Bot\Flows\FlowEngine;
 use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\FlowScripts;
 use App\Bot\Flows\FlowState;
+use App\Bot\Flows\GreetingMirror;
+use App\Bot\Flows\HumanHandover;
 use App\Bot\Grounding\ShippingFeeAnswer;
 use App\Bot\HandoverSignals;
 use App\Bot\Knowledge\KnowledgeBase;
@@ -254,8 +256,7 @@ class TurnRunner
             if (! self::asksProductPriceToo($texts)) {
                 $answerIntents = array_values(array_filter($answerIntents, fn (BotIntent $i) => $i->key !== 'price'));
             }
-            $fee = app(ShippingFeeAnswer::class)->for(implode("
-", $texts));
+            $fee = app(ShippingFeeAnswer::class)->for(implode("\n", $texts));
 
             if ($fee['fact'] !== null) {
                 $facts[] = $fee['fact'];
@@ -267,8 +268,7 @@ class TurnRunner
                 $shippingAsk = true;
             }
         } elseif (! empty($previousState['shipping_ask']) && $resume === null && $collectIntent === null && $lookupIntents === []
-            && ($code = app(ShippingFeeAnswer::class)->matchGovernorate(implode("
-", $texts))) !== null) {
+            && ($code = app(ShippingFeeAnswer::class)->matchGovernorate(implode("\n", $texts))) !== null) {
             if (($fact = app(ShippingFeeAnswer::class)->governorateFact($code)) !== null) {
                 $facts[] = $fact;
             } else {
@@ -345,8 +345,8 @@ class TurnRunner
 
         if ($newOrder && ($scripts !== [] || $facts !== [])) {
             // Answered questions go out together with the message that a person takes the order.
-            $scripts = array_merge($scripts, $this->bodies(['order_via_agent']) ?: $this->bodies(['handover_ack']));
-            $this->nextSteps[] = 'Tell her to wait a moment because a colleague will register the order with her.';
+            $scripts = array_merge($scripts, $this->bodies(['order_via_agent']), $this->transferLines());
+            $this->nextSteps[] = 'Tell her to wait a moment because a colleague will register the order with her, and keep the sentence that says she is being transferred to a customer-service agent exactly as approved.';
         }
 
         $reply = null;
@@ -392,6 +392,8 @@ class TurnRunner
         }
 
         if ($reply !== null && trim($reply) !== '') {
+            // 2026-09-21: she greeted, so the reply opens by greeting her back the same way.
+            $reply = $this->withGreetingMirror($reply);
             // A turn that hands over keeps its own answer: its later part must not be dropped by that handover.
             $buttons = $menuButton && $handover === null ? [self::MENU_BUTTON] : [];
             $delivery = $this->deliver($c, $reply, (int) $s->typing_ms_per_char, $turnStarted, skipLaterPartsIfHumanTakesOver: $handover === null, buttons: $buttons);
@@ -542,8 +544,12 @@ class TurnRunner
     }
 
     /**
-     * What the customer reads when a person takes over and nothing else was sent (final fix wave I2):
-     * script.handover_ack, or once per conversation script.delayed_response for a repeated question.
+     * What the customer reads when a person takes over and nothing else was sent (final fix wave I2;
+     * 2026-09-21: every handover says she is being transferred). The last line is always the
+     * working-hours aware transfer sentence (HumanHandover::hoursReply, script.handover_in_hours /
+     * handover_after_hours / handover_no_hours); a path with its own message (a handover intent's
+     * script, or the order-through-us script for contact details) sends it above that sentence, and
+     * a repeated question keeps script.delayed_response once per conversation above it too.
      * Nothing when the reply window is closed (sending is impossible).
      *
      * @return array{text:string, delayed_response:bool}|null
@@ -556,12 +562,12 @@ class TurnRunner
             return null;
         }
 
+        $transfer = $this->transferLine();
+
         if ($category === 'repeated' && empty($previousState['delayed_response_sent']) && ($text = $this->bodies(['delayed_response'])[0] ?? null) !== null) {
-            return ['text' => $text, 'delayed_response' => true];
+            return ['text' => $this->joinLines([$text, $transfer]), 'delayed_response' => true];
         }
 
-        // Reply flow v2: a handover that has its own message (a handover intent's script, or the
-        // order-through-us script for contact details) sends it instead of the generic ack.
         $intent = ($handover['reason'] ?? null) === 'intent' ? app(IntentCatalog::class)->find((string) $category) : null;
         $ownKeys = match (true) {
             $category === 'new_order' => ['order_via_agent'],
@@ -569,9 +575,30 @@ class TurnRunner
             default => [],
         };
 
-        $text = $this->bodies($ownKeys)[0] ?? $this->bodies(['handover_ack'])[0] ?? null;
+        $text = $this->joinLines([$this->bodies($ownKeys)[0] ?? null, $transfer]);
 
-        return $text !== null ? ['text' => $text, 'delayed_response' => false] : null;
+        return $text !== '' ? ['text' => $text, 'delayed_response' => false] : null;
+    }
+
+    /**
+     * The one sentence every handover ends with (2026-09-21): «هيتم تحويلك لموظف خدمة العملاء …»,
+     * worded by the working hours. Null only when the owner turned that script off.
+     */
+    private function transferLine(): ?string
+    {
+        return app(HumanHandover::class)->hoursReply();
+    }
+
+    /** The transfer sentence as a script list, ready to merge into the turn's approved texts. */
+    private function transferLines(): array
+    {
+        return ($line = $this->transferLine()) !== null ? [$line] : [];
+    }
+
+    /** @param  list<string|null>  $lines */
+    private function joinLines(array $lines): string
+    {
+        return trim(implode("\n", array_filter(array_map(fn ($l) => trim((string) $l), $lines), fn (string $l) => $l !== '')));
     }
 
     /**
@@ -712,8 +739,9 @@ class TurnRunner
         }
 
         if ($missing === []) {
-            $scripts = array_merge($scripts, $this->bodies(['handover_ack']));
-            $this->nextSteps[] = 'Tell her you received the details and a colleague will review her request now. Do not promise a time and do not ask for anything else.';
+            // 2026-09-21: the details are complete, so she is told she is being transferred.
+            $scripts = array_merge($scripts, $this->transferLines());
+            $this->nextSteps[] = 'Tell her you received the details, and keep the sentence that says she is being transferred to a customer-service agent exactly as approved. Do not add a different time promise and do not ask for anything else.';
         }
 
         if ($lookupEnabled && in_array($key, self::WINDOW_INTENTS, true)) {
@@ -993,6 +1021,25 @@ class TurnRunner
         }
 
         return $bodies;
+    }
+
+    /**
+     * The greeting mirror (2026-09-21): when her first message of the burst opens with a greeting
+     * the reply opens with the matching greeting back, on its own line, above everything else
+     * (the `{time_greeting}` line included). Once per turn, and never on a non-greeting message.
+     */
+    private function withGreetingMirror(string $reply): string
+    {
+        $first = trim((string) ($this->currentBurstTexts[0] ?? ''));
+
+        if ($first === '') {
+            return $reply;
+        }
+
+        $mirrors = app(GreetingMirror::class);
+        $line = $mirrors->line($first);
+
+        return $line === null || $mirrors->alreadyMirrored($reply, $line) ? $reply : $line."\n".ltrim($reply);
     }
 
     private function isFirstBotReply(Conversation $c): bool

@@ -20,6 +20,10 @@ use Illuminate\Support\Facades\Log;
  * (agent rebuild, Architecture): button taps and pending yes/no answers, an
  * active guided flow, and greetings or "منيو" → the main menu. Anything else
  * returns null and the agent (TurnRunner) takes the turn.
+ *
+ * A greeting is greeted back the same way first (GreetingMirror, 2026-09-21):
+ * «وعليكم السلام ورحمة الله 🌸» / «صباح النور» / «أهلاً بيكي 🌸» goes above the
+ * `{time_greeting}` line of `script.greeting` and above the menu.
  */
 class ConversationRouter
 {
@@ -36,6 +40,7 @@ class ConversationRouter
         private readonly OutboundService $outbound,
         private readonly BurstPolicy $burstPolicy,
         private readonly HumanHandover $human,
+        private readonly GreetingMirror $mirrors,
     ) {}
 
     public function route(Conversation $c, Collection $burst): ?BotRun
@@ -95,8 +100,13 @@ class ConversationRouter
 
         // 3. Greetings or a menu word open the main menu (the greeting script first on the first reply).
         if ($texts !== [] && $this->wantsMenu($texts) && BotFlow::active(self::MAIN_MENU) !== null) {
-            if ($this->isFirstBotReply($c) && ($greeting = $this->prompter->script('greeting')) !== null) {
-                $this->send($c, $greeting);
+            // 2026-09-21: her own greeting is mirrored first, above the {time_greeting} line and the menu.
+            $mirror = $this->mirrors->line($texts[0]);
+            $greeting = $this->isFirstBotReply($c) ? $this->prompter->script('greeting') : null;
+            $opening = trim(implode("\n", array_filter([$mirror, $greeting])));
+
+            if ($opening !== '') {
+                $this->send($c, $opening);
             }
 
             $this->flows->start($c, self::MAIN_MENU);

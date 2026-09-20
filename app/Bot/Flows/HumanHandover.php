@@ -34,12 +34,14 @@ use Illuminate\Support\Str;
  * TOPIC_WAIT_SECONDS hands her over anyway. Every handover then gets one reply that
  * depends on the working hours (bot_settings.working_hours, Africa/Cairo):
  *
- *   in hours      «تمام ✅ حولتك لحد من الفريق، هيرد عليكي خلال دقايق 🌸»
- *   after hours   «تمام ✅ سجلت طلبك، وفريق خدمة العملاء هيرد عليكي أول ما نفتح {next_opening} 🌸»
- *   no hours set  «تمام ✅ حولتك لحد من الفريق، هيرد عليكي في أقرب وقت 🌸»
+ *   in hours      «تمام ✅ هيتم تحويلك لموظف خدمة العملاء خلال دقايق 🌸»
+ *   after hours   «تمام ✅ سجلت طلبك، وهيتم تحويلك لموظف خدمة العملاء أول ما نفتح {next_opening} 🌸»
+ *   no hours set  «تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸»
  *
  * Handovers the bot decides itself (a failed verification, a flow's handover step, the
- * retry offer…) skip the question and only send that reply. All texts are editable
+ * retry offer…) skip the question and only send that reply, and since 2026-09-21 the
+ * agent path (App\Bot\Flow\TurnRunner) ends every one of its handovers with the same
+ * sentence too — `script.handover_ack` is no longer the transfer promise. All texts are editable
  * scripts; a script the owner turned off is not sent (an off question = no question).
  * The pending question lives in `bot_state.handover_topic` = {asked_at}.
  */

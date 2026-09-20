@@ -94,7 +94,7 @@ it('seeds the Le Voile catalog and scripts', function () {
         ->and(BotIntent::count())->toBe(43)
         ->and(BotIntent::where('is_active', true)->count())->toBe(42)
         ->and(BotKnowledgeEntry::where('key', 'script.availability')->value('body'))->toEndWith('https://levoilestores.com/')
-        ->and(BotKnowledgeEntry::where('key', 'like', 'script.%')->count())->toBe(61)
+        ->and(BotKnowledgeEntry::where('key', 'like', 'script.%')->count())->toBe(69)
         ->and(BotKnowledgeEntry::where('key', 'script.handover_ack')->value('is_active'))->toBeTrue()
         ->and(BotKnowledgeEntry::where('key', 'script.thanks')->value('body'))->toBe('العفو يا فندم تحت أمرك في أي وقت 🌸')
         ->and(BotIntent::where('key', 'order_status')->first()->keywords)->toContain('فين الاوردر', 'الاوردر فين', 'اوردري', 'طلبي', 'تتبع', 'tracking')
@@ -154,8 +154,8 @@ it('says the cancel window is over when two hours have passed', function () {
 
     expect(Conversation::first()->handler)->toBe(Handler::Human)
         ->and(Conversation::first()->notes()->latest('id')->value('body'))->toContain('انتهت مهلة الإلغاء/التعديل')
-        // Details were complete: one acknowledgement goes out before the handover.
-        ->and(botText())->toContain('تمام يا فندم، هراجع طلب حضرتك مع الفريق حالًا وهرد عليكي 🌸')
+        // Details were complete: she is told she is being transferred before the handover.
+        ->and(botText())->toContain(HANDOVER_TRANSFER)
         ->and(BotRun::latest('id')->first()->decision)->toBe('reply_and_handover')
         ->and(Conversation::first()->bot_state['collected'])->toBe([])
         ->and(Conversation::first()->bot_state['last_turn_message_id'])->not->toBeNull();
@@ -408,12 +408,12 @@ it('sends the plain scripts when the polished reply invents a number', function 
     expect(botText())->not->toContain('99')->and(botText())->toContain('3-5 ايام عمل')->and(botText())->toContain('مع حضرتك ميار من لوفوال');
 });
 
-it('hands over with only the acknowledgement, never a greeting alone, when the intent has no active script', function () {
+it('hands over with only the transfer sentence, never a greeting alone, when the intent has no active script', function () {
     say('m1', 'الفروع فين؟'); // branches_hours: script still a ❓ placeholder
 
     $c = Conversation::first();
     expect($c->handler)->toBe(Handler::Human)
-        ->and(botText())->toBe(HANDOVER_ACK)
+        ->and(botText())->toBe(HANDOVER_TRANSFER)
         ->and(BotRun::latest('id')->first()->decision)->toBe('reply_and_handover');
 });
 
@@ -429,7 +429,7 @@ it('hands over as ai_error without a clarifying question when understanding fail
     say('m1', 'ممم');
 
     expect(Conversation::first()->handler)->toBe(Handler::Human)
-        ->and(botText())->toBe(HANDOVER_ACK)
+        ->and(botText())->toBe(HANDOVER_TRANSFER)
         ->and(Conversation::first()->bot_state['clarify_count'] ?? null)->toBeNull()
         ->and(ActivityLog::where('conversation_id', Conversation::first()->id)->get()->pluck('meta')->toJson())->toContain('ai_error');
 });
@@ -501,14 +501,17 @@ it('points a seeded refund intent at the order ask without touching an owner-edi
 
 const HANDOVER_ACK = 'تمام يا فندم، هراجع طلب حضرتك مع الفريق حالًا وهرد عليكي 🌸';
 
-/** I2: every silent handover now tells the customer a person is taking over. */
+/** 2026-09-21: the sentence every handover now ends with (no working hours set in these tests). */
+const HANDOVER_TRANSFER = 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸';
+
+/** I2 + 2026-09-21: every silent handover tells her, in the working-hours wording, that she is being transferred. */
 it('acknowledges a handover that had nothing else to say', function (Closure $turn, string $category) {
     $turn();
 
     $c = Conversation::first();
     expect($c->handler)->toBe(Handler::Human)
         ->and($c->handover_category)->toBe($category)
-        ->and(Message::where('sender_type', 'bot')->latest('id')->value('body'))->toBe(HANDOVER_ACK);
+        ->and(Message::where('sender_type', 'bot')->latest('id')->value('body'))->toBe(HANDOVER_TRANSFER);
 })->with([
     'no_script' => [fn () => say('m1', 'الفروع فين؟'), 'no_script'],
     'delivery_problem' => [fn () => say('m1', 'المندوب مجاش خالص'), 'delivery_problem'],
@@ -547,6 +550,7 @@ it('sends the delayed-response script once on a repeated handover', function () 
     $c->refresh();
     expect($c->handler)->toBe(Handler::Human)->and($c->handover_category)->toBe('repeated')
         ->and(botText())->toContain('في ضغط في الرسايل')
+        ->and(botText())->toContain(HANDOVER_TRANSFER)
         ->and(botText())->not->toContain(HANDOVER_ACK)
         ->and($c->bot_state['delayed_response_sent'])->toBeTrue();
 });
@@ -561,7 +565,7 @@ it('hands a customer who sends her order details over as a new order, with the a
     $c = Conversation::first();
     expect($c->handler)->toBe(Handler::Human)
         ->and($c->handover_category)->toBe('new_order')->and($c->priority_level)->toBe('medium')->and($c->queue)->toBe('agents')
-        ->and(Message::where('sender_type', 'bot')->latest('id')->value('body'))->toBe(ORDER_VIA_AGENT)
+        ->and(Message::where('sender_type', 'bot')->latest('id')->value('body'))->toBe(ORDER_VIA_AGENT."\n".HANDOVER_TRANSFER)
         ->and(botText())->not->toContain('توضحيلي');
 
     $note = (string) $c->notes()->latest('id')->value('body');
@@ -740,7 +744,7 @@ it('resumes the awaiting cancellation when a bare order number is tagged as an o
 
     $c = Conversation::first();
     expect($c->handler)->toBe(Handler::Human)->and($c->handover_category)->toBe('cancel_order')
-        ->and(Message::where('sender_type', 'bot')->latest('id')->value('body'))->toBe(HANDOVER_ACK);
+        ->and(Message::where('sender_type', 'bot')->latest('id')->value('body'))->toBe(HANDOVER_TRANSFER);
 });
 
 it('sends the plain scripts when the compose call fails', function () {
@@ -790,7 +794,7 @@ it('hands a request to talk to a human over as human_request at medium priority,
         ->and($c->handover_category)->toBe('human_request')
         ->and($c->priority_level)->toBe('medium')
         ->and($c->queue)->toBe('agents')
-        ->and(botText())->toBe(HANDOVER_ACK);
+        ->and(botText())->toBe(HANDOVER_TRANSFER);
 });
 
 it('hands a sale/offer question over as sale_offer', function () {
@@ -1120,7 +1124,7 @@ const ORDER_VIA_AGENT = 'تمام يا فندم، استني ثواني هحول
 it('hands an order-through-us request over with its own message', function () {
     say('m1', 'ممكن تعملولي الاوردر انتوا');
 
-    expect(botText())->toBe(ORDER_VIA_AGENT)
+    expect(botText())->toBe(ORDER_VIA_AGENT."\n".HANDOVER_TRANSFER)
         ->and(Conversation::first()->handler)->toBe(Handler::Human)
         ->and(Conversation::first()->handover_category)->toBe('order_via_agent');
 });
@@ -1129,16 +1133,17 @@ it('sends the order-through-us message when the customer sends her contact detai
     say('m1', "منى احمد\nالقاهرة مدينة نصر شارع مصطفى النحاس\n01012345678");
 
     expect(botText())->toContain(ORDER_VIA_AGENT)
+        ->and(botText())->toContain(HANDOVER_TRANSFER)
         ->and(botText())->not->toContain(HANDOVER_ACK)
         ->and(Conversation::first()->handover_category)->toBe('new_order');
 });
 
-it('falls back to the generic acknowledgement when the order-through-us script is off', function () {
+it('falls back to the transfer sentence alone when the order-through-us script is off', function () {
     BotKnowledgeEntry::where('key', 'script.order_via_agent')->update(['is_active' => false]);
 
     say('m1', 'ممكن تعملولي الاوردر انتوا');
 
-    expect(botText())->toBe(HANDOVER_ACK);
+    expect(botText())->toBe(HANDOVER_TRANSFER);
 });
 
 const OFFER_HUMAN = 'لو حابة أحولك لموظف في أي وقت قوليلي 🌸';
@@ -1204,7 +1209,7 @@ it('hands a return over once the photo arrives after the order number, without a
     $c = Conversation::first();
     expect($c->handler)->toBe(Handler::Human)
         ->and($c->handover_category)->toBe('exchange_return')
-        ->and(Message::where('sender_type', 'bot')->latest('id')->value('body'))->toBe(HANDOVER_ACK)
+        ->and(Message::where('sender_type', 'bot')->latest('id')->value('body'))->toBe(HANDOVER_TRANSFER)
         ->and((string) $c->notes()->latest('id')->value('body'))->toContain('رقم الأوردر: 1047');
 });
 

@@ -4,7 +4,9 @@ namespace App\Bot\Flows;
 
 /**
  * Closing and knowledge scripts for the guided flows (Task 3, design doc
- * §flows). Seeded as `bot_knowledge_entries` rows keyed `script.<key>`.
+ * §flows), the handover transfer sentences and the greeting mirrors. Seeded as
+ * `bot_knowledge_entries` rows keyed `script.<key>`, so the owner edits every one
+ * of them from Settings → معرفة البوت.
  * Exact Arabic texts and keys per the task brief — do not reword.
  */
 final class FlowScripts
@@ -24,9 +26,19 @@ final class FlowScripts
             'flow_not_found_order' => ['title' => 'أوردر مش موجود', 'body' => 'مش لاقية أوردر بالبيانات دي 🌸 ممكن تتأكدي من الرقم؟'],
             // The owner's flow 7 (2026-09-19): «كلم موظف» asks the topic first, then a working-hours aware reply.
             'handover_ask_topic' => ['title' => 'كلم موظف: سؤال الموضوع', 'body' => 'أكيد 🌸 ممكن تقوليلي باختصار محتاجة إيه؟ عشان أوصّلك للشخص المناسب على طول'],
-            'handover_in_hours' => ['title' => 'التحويل في مواعيد العمل', 'body' => 'تمام ✅ حولتك لحد من الفريق، هيرد عليكي خلال دقايق 🌸'],
-            'handover_after_hours' => ['title' => 'التحويل برّه مواعيد العمل', 'body' => 'تمام ✅ سجلت طلبك، وفريق خدمة العملاء هيرد عليكي أول ما نفتح {next_opening} 🌸'],
-            'handover_no_hours' => ['title' => 'التحويل (من غير مواعيد عمل)', 'body' => 'تمام ✅ حولتك لحد من الفريق، هيرد عليكي في أقرب وقت 🌸'],
+            'handover_in_hours' => ['title' => 'التحويل في مواعيد العمل', 'body' => 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء خلال دقايق 🌸'],
+            'handover_after_hours' => ['title' => 'التحويل برّه مواعيد العمل', 'body' => 'تمام ✅ سجلت طلبك، وهيتم تحويلك لموظف خدمة العملاء أول ما نفتح {next_opening} 🌸'],
+            'handover_no_hours' => ['title' => 'التحويل (من غير مواعيد عمل)', 'body' => 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸'],
+            // Greeting mirrors (2026-09-21): the bot greets back the way she greeted, before
+            // the {time_greeting} line and the menu (App\Bot\Flows\GreetingMirror).
+            'greeting_mirror_salam' => ['title' => 'رد التحية: السلام عليكم', 'body' => 'وعليكم السلام ورحمة الله 🌸'],
+            'greeting_mirror_sabah' => ['title' => 'رد التحية: صباح الخير', 'body' => 'صباح النور'],
+            'greeting_mirror_sabah_full' => ['title' => 'رد التحية: صباح الفل', 'body' => 'صباح الفل والنور'],
+            'greeting_mirror_sabah_noor' => ['title' => 'رد التحية: صباح النور', 'body' => 'صباح النور'],
+            'greeting_mirror_masa' => ['title' => 'رد التحية: مساء الخير', 'body' => 'مساء النور'],
+            'greeting_mirror_masa_full' => ['title' => 'رد التحية: مساء الفل', 'body' => 'مساء الفل والنور'],
+            'greeting_mirror_masa_noor' => ['title' => 'رد التحية: مساء النور', 'body' => 'مساء النور'],
+            'greeting_mirror_hi' => ['title' => 'رد التحية: أهلاً / هاي', 'body' => 'أهلاً بيكي 🌸'],
         ];
     }
 }

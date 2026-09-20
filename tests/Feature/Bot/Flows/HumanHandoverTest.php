@@ -33,8 +33,8 @@ use Illuminate\Support\Facades\Http;
 // «كلم موظف» (the owner's flow 7, 2026-09-19): the topic question, the topic note and the
 // working-hours aware reply. "Now" is Saturday 19 September 2026, noon in Cairo.
 
-const HH_IN_HOURS = 'تمام ✅ حولتك لحد من الفريق، هيرد عليكي خلال دقايق 🌸';
-const HH_NO_HOURS = 'تمام ✅ حولتك لحد من الفريق، هيرد عليكي في أقرب وقت 🌸';
+const HH_IN_HOURS = 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء خلال دقايق 🌸';
+const HH_NO_HOURS = 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸';
 const HH_ASK = 'أكيد 🌸 ممكن تقوليلي باختصار محتاجة إيه؟ عشان أوصّلك للشخص المناسب على طول';
 
 beforeEach(function () {
@@ -151,9 +151,9 @@ it('replies by the working hours: inside, after (next opening), and none set', f
     expect(app(HumanHandover::class)->hoursReply(CarbonImmutable::parse($at, 'Africa/Cairo')))->toBe($expected);
 })->with([
     'inside hours' => [['days' => [0, 1, 2, 3, 4, 5, 6], 'from' => '10:00', 'to' => '22:00'], '2026-09-19 12:00', HH_IN_HOURS],
-    'after closing: tomorrow' => [['days' => [0, 1, 2, 3, 4, 5, 6], 'from' => '10:00', 'to' => '22:00'], '2026-09-19 23:30', 'تمام ✅ سجلت طلبك، وفريق خدمة العملاء هيرد عليكي أول ما نفتح بكرة الساعة 10 الصبح 🌸'],
-    'before opening: today' => [['days' => [0, 1, 2, 3, 4, 5, 6], 'from' => '10:30', 'to' => '22:00'], '2026-09-19 08:00', 'تمام ✅ سجلت طلبك، وفريق خدمة العملاء هيرد عليكي أول ما نفتح النهارده الساعة 10:30 الصبح 🌸'],
-    'friday off: saturday' => [['days' => [0, 1, 2, 3, 4, 6], 'from' => '10:00', 'to' => '22:00'], '2026-09-17 23:00', 'تمام ✅ سجلت طلبك، وفريق خدمة العملاء هيرد عليكي أول ما نفتح يوم السبت الساعة 10 الصبح 🌸'],
+    'after closing: tomorrow' => [['days' => [0, 1, 2, 3, 4, 5, 6], 'from' => '10:00', 'to' => '22:00'], '2026-09-19 23:30', 'تمام ✅ سجلت طلبك، وهيتم تحويلك لموظف خدمة العملاء أول ما نفتح بكرة الساعة 10 الصبح 🌸'],
+    'before opening: today' => [['days' => [0, 1, 2, 3, 4, 5, 6], 'from' => '10:30', 'to' => '22:00'], '2026-09-19 08:00', 'تمام ✅ سجلت طلبك، وهيتم تحويلك لموظف خدمة العملاء أول ما نفتح النهارده الساعة 10:30 الصبح 🌸'],
+    'friday off: saturday' => [['days' => [0, 1, 2, 3, 4, 6], 'from' => '10:00', 'to' => '22:00'], '2026-09-17 23:00', 'تمام ✅ سجلت طلبك، وهيتم تحويلك لموظف خدمة العملاء أول ما نفتح يوم السبت الساعة 10 الصبح 🌸'],
     'no hours set' => [null, '2026-09-19 03:00', HH_NO_HOURS],
 ]);
 

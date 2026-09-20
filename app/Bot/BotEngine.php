@@ -7,6 +7,7 @@ use App\Bot\Ai\AiResponder;
 use App\Bot\Ai\MessageClassifier;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Flows\ConversationRouter;
+use App\Bot\Flows\GreetingMirror;
 use App\Bot\Flows\HumanHandover;
 use App\Bot\Grounding\BotContext;
 use App\Bot\Grounding\BotContextBuilder;
@@ -93,8 +94,9 @@ class BotEngine
         // («محتاجة إيه؟»), or straight to the team from inside a flow; the reply names the hours.
         if ($this->signals->matchesKeyword($text, $settings->handover_keywords)) {
             if (BotFlow::active(ConversationRouter::MAIN_MENU) === null) {
-                // The menu bot is off: the person straight away, as before the owner's flows.
-                $this->handover($c, 'keyword', $text, null, $this->context->build($text, BotIntent::Other));
+                // The menu bot is off: no topic question, straight to the person — but she still
+                // reads the transfer sentence (2026-09-21).
+                $this->handoverWithHoursReply($c, 'keyword', $text);
 
                 return $this->recordRun($c, $last, engine: 'keyword', decision: 'handover');
             }
@@ -351,7 +353,7 @@ class BotEngine
         }
 
         if (in_array($decision, ['reply', 'reply_and_handover'], true) && $replyText) {
-            $this->trySendBot($c, $replyText);
+            $this->trySendBot($c, $this->withGreetingMirror($text, $replyText));
         }
 
         if (in_array($decision, ['handover', 'reply_and_handover'], true)) {
@@ -483,10 +485,25 @@ class BotEngine
         );
     }
 
-    /** A handover the bot decides on a turn: the working-hours reply (flow 7, 2026-09-19), then the team. */
+    /**
+     * The greeting mirror (2026-09-21): an owner rule that answers a greeting greets her
+     * back the same way first (GreetingMirror), on its own line above the rule's reply.
+     */
+    private function withGreetingMirror(string $customerText, string $reply): string
+    {
+        $line = app(GreetingMirror::class)->line($customerText);
+
+        return $line === null || app(GreetingMirror::class)->alreadyMirrored($reply, $line) ? $reply : $line."\n".ltrim($reply);
+    }
+
+    /**
+     * A handover the bot decides on a turn: the working-hours transfer sentence (flow 7,
+     * 2026-09-19), then the team. 2026-09-21: sent whether or not the menu bot is on, so
+     * every handover path tells her she is being transferred.
+     */
     private function handoverWithHoursReply(Conversation $c, string $reason, string $text): void
     {
-        if (BotFlow::active(ConversationRouter::MAIN_MENU) !== null && ($reply = app(HumanHandover::class)->hoursReply()) !== null) {
+        if (($reply = app(HumanHandover::class)->hoursReply()) !== null) {
             $this->trySendBot($c, $reply);
         }
 
