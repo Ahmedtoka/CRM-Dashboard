@@ -142,7 +142,9 @@ class SendOutboundMessage implements ShouldQueue
                 $result = SendResult::fail('media_attachment_missing');
             } else {
                 try {
-                    $adapter = $registry->adapter($conversation->platform);
+                    // Resolved from the account, not the platform: a team test link's
+                    // account (driver `test`) swallows the send instead of reaching Meta.
+                    $adapter = $registry->adapterFor($conversation->channelAccount);
 
                     $result = $attachment !== null
                         ? $adapter->sendAttachment(

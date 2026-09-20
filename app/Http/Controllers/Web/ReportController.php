@@ -13,8 +13,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ActivityLogResource;
 use App\Http\Support\DateRange;
 use App\Models\ActivityLog;
+use App\Models\BotTestLink;
+use App\Models\BotTestSession;
 use App\Models\User;
+use App\TestLinks\TestLinkReport;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -148,6 +152,60 @@ class ReportController extends Controller
             }
             fclose($out);
         }, "quick-replies-{$range->fromDate}-{$range->toDate}.csv", ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * Reports → «تجربة الفريق» (design 2026-09-21 §4): every run of the team's test
+     * links — who, how long, how far into which flow, what it produced — plus a funnel
+     * per flow and a readable transcript.
+     */
+    public function teamTest(Request $request, TestLinkReport $report): Response
+    {
+        $link = $this->testLink($request);
+        $data = $report->forLink($link);
+
+        return Inertia::render('Reports/TeamTest', [
+            'links' => $report->links(),
+            'linkId' => $link?->id,
+            'sessions' => $data['sessions'],
+            'totals' => $data['totals'],
+            'funnels' => $data['funnels'],
+        ]);
+    }
+
+    /** The readable transcript of one run, with its link back into the inbox. */
+    public function teamTestSession(Request $request, BotTestSession $session, TestLinkReport $report): JsonResponse
+    {
+        return response()->json(['data' => [
+            'id' => $session->id,
+            'label' => $session->label(),
+            'conversation_id' => $session->conversation_id,
+            'transcript' => $report->transcript($session),
+        ]]);
+    }
+
+    public function teamTestExport(Request $request, TestLinkReport $report): StreamedResponse
+    {
+        $link = $this->testLink($request);
+        $sessions = $report->sessions($link);
+        $name = 'team-test-'.($link?->id ?? 'all').'-'.now()->format('Y-m-d').'.csv';
+
+        return response()->streamDownload(function () use ($report, $sessions) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\u{FEFF}"); // Excel opens UTF-8 Arabic correctly with a BOM
+            foreach ($report->csvRows($sessions) as $row) {
+                fputcsv($out, $row);
+            }
+            fclose($out);
+        }, $name, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /** The link the page is filtered to, or null for "every link". */
+    private function testLink(Request $request): ?BotTestLink
+    {
+        $id = (int) $request->query('link');
+
+        return $id > 0 ? BotTestLink::query()->find($id) : null;
     }
 
     public function activity(Request $request): Response

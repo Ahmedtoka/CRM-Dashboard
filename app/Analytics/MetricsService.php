@@ -28,6 +28,7 @@ use App\Models\ShipmentEvent;
 use App\Models\SupportCase;
 use App\Models\User;
 use App\Models\UserSession;
+use App\TestLinks\TestScope;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
@@ -71,6 +72,7 @@ class MetricsService
         $p = $platform?->value;
 
         $messageGroups = Message::query()
+            ->where('is_test', false)
             ->whereBetween('created_at', [$from, $to])
             ->selectRaw('platform, direction, sender_type, count(*) as n')
             ->groupBy('platform', 'direction', 'sender_type')
@@ -112,6 +114,7 @@ class MetricsService
         // Spam/low-priority conversations never need a human and never count as
         // "waiting", matching ConversationQuery's inbox filters (spec §11.1).
         $open = fn () => Conversation::query()
+            ->where('is_test', false)
             ->where('status', '!=', ConversationStatus::Resolved->value)
             ->whereNotIn('priority', [ConversationPriority::Low->value, ConversationPriority::Spam->value])
             ->when($p, fn ($q) => $q->where('platform', $p));
@@ -120,6 +123,7 @@ class MetricsService
             ->whereNotNull('last_customer_message_at')
             ->whereNotExists(fn ($q) => $q->selectRaw('1')
                 ->from('messages')
+                ->where('messages.is_test', false)
                 ->whereColumn('messages.conversation_id', 'conversations.id')
                 ->where('messages.direction', MessageDirection::Out->value)
                 ->whereIn('messages.sender_type', [SenderType::User->value, SenderType::Bot->value])
@@ -144,6 +148,7 @@ class MetricsService
 
         $byHour = array_fill(0, 24, 0);
         $inbound = Message::query()
+            ->where('is_test', false)
             ->whereBetween('created_at', [$from, $to])
             ->where('direction', MessageDirection::In->value)
             ->when($p, fn ($q) => $q->where('platform', $p));
@@ -155,8 +160,8 @@ class MetricsService
             'inbound_messages' => $count(MessageDirection::In->value, null, $p),
             'outbound_messages' => $count(MessageDirection::Out->value, SenderType::User->value, $p),
             'bot_messages' => $count(MessageDirection::Out->value, SenderType::Bot->value, $p),
-            'conversations_new' => Conversation::query()->whereBetween('created_at', [$from, $to])->when($p, fn ($q) => $q->where('platform', $p))->count(),
-            'conversations_resolved' => Conversation::query()->whereBetween('resolved_at', [$from, $to])->when($p, fn ($q) => $q->where('platform', $p))->count(),
+            'conversations_new' => Conversation::query()->where('is_test', false)->whereBetween('created_at', [$from, $to])->when($p, fn ($q) => $q->where('platform', $p))->count(),
+            'conversations_resolved' => Conversation::query()->where('is_test', false)->whereBetween('resolved_at', [$from, $to])->when($p, fn ($q) => $q->where('platform', $p))->count(),
             'waiting_now' => $waitingNow,
             'needs_human_now' => $open()->where('needs_human', true)->count(),
             'avg_first_response_sec' => $this->avg($firstResponseSeconds->all()),
@@ -180,12 +185,13 @@ class MetricsService
         $p = $platform?->value;
 
         $botMessages = fn () => Message::query()
+            ->where('is_test', false)
             ->whereBetween('created_at', [$from, $to])
             ->where('direction', MessageDirection::Out->value)
             ->where('sender_type', SenderType::Bot->value)
             ->when($p, fn ($q) => $q->where('platform', $p));
 
-        $runs = fn () => BotRun::query()
+        $runs = fn () => TestScope::excludeConversations(BotRun::query())
             ->whereBetween('created_at', [$from, $to])
             ->when($p, fn (Builder $q) => $q->where(fn (Builder $w) => $w
                 ->whereHas('conversation', fn ($c) => $c->where('platform', $p))
@@ -197,6 +203,7 @@ class MetricsService
         $touched = DB::query()->fromSub($touchedIds, 'touched')->count();
 
         $autoResolved = Conversation::query()
+            ->where('is_test', false)
             ->whereBetween('resolved_at', [$from, $to])
             ->when($p, fn ($q) => $q->where('platform', $p))
             ->whereDoesntHave('participants', fn ($q) => $q->whereNotNull('user_id'))
@@ -268,7 +275,7 @@ class MetricsService
         $flows = BotFlow::query()->orderBy('id')->get(['id', 'key', 'title_ar', 'is_active', 'definition']);
         $keys = $flows->pluck('key')->all();
 
-        $runs = BotRun::query()
+        $runs = TestScope::excludeConversations(BotRun::query(), 'bot_runs.conversation_id')
             ->whereBetween('bot_runs.created_at', [$from, $to])
             ->whereNotNull('bot_runs.conversation_id')
             ->when($platform, fn (Builder $q) => $q->whereHas('conversation', fn ($c) => $c->where('platform', $platform->value)))
@@ -323,7 +330,7 @@ class MetricsService
             })
             ->filter()->unique()->values()->all()]);
 
-        $cases = SupportCase::query()
+        $cases = TestScope::excludeConversations(SupportCase::query())
             ->whereBetween('created_at', [$from, $to])
             ->when($platform, fn ($q) => $q->where('platform', $platform->value))
             ->toBase()
@@ -382,7 +389,7 @@ class MetricsService
             ->toBase()
             ->pluck('n', 'user_id');
 
-        $roles = $byUser(ConversationParticipant::query()
+        $roles = $byUser(TestScope::excludeConversations(ConversationParticipant::query())
             ->whereIn('user_id', $ids)
             ->whereBetween('first_message_at', [$from, $to])
             ->selectRaw('user_id, role, count(*) as n')
@@ -390,7 +397,7 @@ class MetricsService
             ->toBase()
             ->get());
 
-        $actions = $byUser(ActivityLog::query()
+        $actions = $byUser(TestScope::excludeConversations(ActivityLog::query())
             ->whereIn('user_id', $ids)
             ->whereBetween('created_at', [$from, $to])
             ->whereIn('action', [ActivityLogger::CONVERSATION_RESOLVED, ActivityLogger::COMMENT_REPLIED, ActivityLogger::COMMENT_HIDDEN, ActivityLogger::COMMENT_PRIVATE_REPLY])
@@ -399,7 +406,7 @@ class MetricsService
             ->toBase()
             ->get());
 
-        $firstResponses = ActivityLog::query()
+        $firstResponses = TestScope::excludeConversations(ActivityLog::query())
             ->whereIn('user_id', $ids)
             ->where('action', ActivityLogger::CONVERSATION_FIRST_RESPONSE)
             ->whereBetween('created_at', [$from, $to])
@@ -733,14 +740,14 @@ class MetricsService
         $rtSum = $edgeSum('_rt_sum') + $totals->sum(fn ($r) => $r->avg_response_sec * $r->messages_sent);
         $rtN = $edgeSum('_rt_n') + $totals->sum('messages_sent');
 
-        $continued = ConversationParticipant::query()
+        $continued = TestScope::excludeConversations(ConversationParticipant::query())
             ->where('user_id', $userId)
             ->where('role', ParticipantRole::Continued->value)
             ->whereBetween('first_message_at', [$from, $to])
             ->when($p, fn ($q) => $q->whereHas('conversation', fn ($c) => $c->where('platform', $p)))
             ->count();
 
-        $privateReplies = ActivityLog::query()
+        $privateReplies = TestScope::excludeConversations(ActivityLog::query())
             ->where('user_id', $userId)
             ->where('action', ActivityLogger::COMMENT_PRIVATE_REPLY)
             ->whereBetween('created_at', [$from, $to])
@@ -1011,6 +1018,7 @@ class MetricsService
         $times = $outbound->pluck('created_at')->filter()->map(fn ($at) => CarbonImmutable::instance($at));
 
         $rows = Message::query()
+            ->where('is_test', false)
             ->whereIn('conversation_id', $outbound->pluck('conversation_id')->unique()->values())
             ->whereBetween('created_at', [$times->min()->subDay(), $times->max()])
             ->whereIn('sender_type', [SenderType::Customer->value, SenderType::User->value, SenderType::Bot->value])
@@ -1077,6 +1085,7 @@ class MetricsService
     private function humanOutbound(CarbonImmutable $from, CarbonImmutable $to, ?int $userId, ?string $platform): Builder
     {
         return Message::query()
+            ->where('is_test', false)
             ->whereBetween('created_at', [$from, $to])
             ->where('direction', MessageDirection::Out->value)
             ->where('sender_type', SenderType::User->value)
@@ -1113,7 +1122,7 @@ class MetricsService
      */
     private function logs(array $actions, CarbonImmutable $from, CarbonImmutable $to, ?Platform $platform, ?callable $scope = null): Collection
     {
-        $logs = ActivityLog::query()
+        $logs = TestScope::excludeConversations(ActivityLog::query())
             ->whereIn('action', $actions)
             ->whereBetween('created_at', [$from, $to])
             ->when($scope !== null, fn ($q) => $scope($q))

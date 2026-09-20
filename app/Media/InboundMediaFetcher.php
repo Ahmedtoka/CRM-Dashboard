@@ -11,6 +11,7 @@ use App\Models\MessageAttachment;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Psr\Http\Message\StreamInterface;
 
 /**
@@ -40,7 +41,20 @@ final class InboundMediaFetcher
         'facebook.com',
     ];
 
+    /** `remote_url` scheme for bytes already stored on the media disk (test-link uploads). */
+    public const UPLOAD_SCHEME = 'upload:';
+
+    /** Where a test-link upload is allowed to live on the media disk. */
+    public const UPLOAD_PREFIX = 'inbound/try/';
+
     public function __construct(private readonly MetaGraphClient $graph, private readonly ChannelRegistry $registry) {}
+
+    public static function isUploadPath(string $path): bool
+    {
+        return str_starts_with($path, self::UPLOAD_PREFIX)
+            && ! str_contains($path, '..')
+            && preg_match('~^[A-Za-z0-9/_.-]+$~', $path) === 1;
+    }
 
     public function fetch(MessageAttachment $a): FetchedMedia
     {
@@ -50,6 +64,26 @@ final class InboundMediaFetcher
             $kind = substr($remote, 8);
 
             return new FetchedMedia(SampleMedia::bytes($kind), SampleMedia::mime($kind), SampleMedia::filename($kind));
+        }
+
+        // A photo the tester picked on a public test link page (design 2026-09-21 §2):
+        // already written to the media disk by the try controller, so there is nothing
+        // to download — the bytes are read back from the path it recorded. The path is
+        // validated again here so a crafted `upload:` url can never read outside it.
+        if (str_starts_with($remote, self::UPLOAD_SCHEME)) {
+            $path = substr($remote, strlen(self::UPLOAD_SCHEME));
+
+            if (! self::isUploadPath($path)) {
+                throw new MediaFetchFailed('upload_path_rejected');
+            }
+
+            $disk = Storage::disk((string) config('crm.media.disk', 'media'));
+
+            if (! $disk->exists($path)) {
+                throw new MediaFetchFailed('upload_missing');
+            }
+
+            return new FetchedMedia((string) $disk->get($path), $a->mime, $a->original_name);
         }
 
         $conversation = $a->message?->conversation ?? throw new MediaFetchFailed('no_conversation');

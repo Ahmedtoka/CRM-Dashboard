@@ -9,6 +9,7 @@ import type {
     BotLearningNoteRow,
     BotLearningReport,
     BotLearningReportRow,
+    BotLearningSource,
     BotLearningToday,
     BotSuggestionRow,
 } from '@/types/admin';
@@ -21,6 +22,7 @@ const props = defineProps<{
     report: BotLearningReport | null;
     today: BotLearningToday;
     todayNotes: BotLearningNoteRow[];
+    source: BotLearningSource | null;
     intentLabels?: Record<string, string>;
 }>();
 
@@ -36,6 +38,23 @@ function reload(): void {
     router.reload({ only: ['reports', 'report', 'today', 'todayNotes'] });
 }
 
+/**
+ * Live / test (design 2026-09-21 §5). The filter is a page visit, not a client-side
+ * hide: the server decides which notes and which suggestions belong to each source.
+ */
+const SOURCES: (BotLearningSource | null)[] = [null, 'live', 'test'];
+
+function pickSource(value: BotLearningSource | null): void {
+    const query = new URLSearchParams(window.location.search);
+    if (value) query.set('source', value);
+    else query.delete('source');
+    router.get(`/settings/bot-learning${query.toString() ? `?${query}` : ''}`, {}, { preserveScroll: true });
+}
+
+function sourceLabel(value: BotLearningSource | null): string {
+    return value === null ? t('settings.bot_learning.source.all') : t(`settings.bot_learning.source.${value}`);
+}
+
 /** Review costs are cents a day, so small amounts keep a third decimal. */
 function money(value: number | undefined): string {
     const v = value ?? 0;
@@ -47,6 +66,7 @@ const todayChips = computed(() => [
     t('settings.bot_learning.today_reviewed', { count: props.today.reviewed }),
     t('settings.bot_learning.today_notes', { count: props.today.notes }),
     t('settings.bot_learning.today_cost', { cost: money(props.today.cost_usd) }),
+    `${t('settings.bot_learning.source.live')} ${props.today.live} · ${t('settings.bot_learning.source.test')} ${props.today.test}`,
 ]);
 
 /** The kinds in a fixed order, most useful first, so the tab never reshuffles. */
@@ -177,6 +197,20 @@ const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
                 </li>
             </ul>
 
+            <div class="flex flex-wrap gap-1.5">
+                <button
+                    v-for="value in SOURCES"
+                    :key="value ?? 'all'"
+                    type="button"
+                    class="rounded-full px-3 py-1 text-xs font-medium"
+                    :aria-pressed="props.source === value"
+                    :class="props.source === value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'"
+                    @click="pickSource(value)"
+                >
+                    {{ sourceLabel(value) }}
+                </button>
+            </div>
+
             <div class="flex gap-1 border-b border-border" role="tablist">
                 <button
                     v-for="key in tabs"
@@ -211,7 +245,14 @@ const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
                     </h2>
 
                     <article v-for="note in group.notes" :key="note.id" :class="[card, 'space-y-2']">
-                        <p class="text-sm leading-6">{{ note.summary }}</p>
+                        <p class="flex items-center gap-2 text-sm leading-6">
+                            <span
+                                v-if="note.source === 'test'"
+                                class="shrink-0 rounded-full bg-violet-500/12 px-2 py-0.5 text-2xs font-semibold text-violet-600 dark:text-violet-300"
+                                >{{ t('settings.bot_learning.source_badge.test') }}</span
+                            >
+                            <span>{{ note.summary }}</span>
+                        </p>
                         <p v-if="note.quote" class="border-s-2 border-border ps-2 text-xs italic text-muted-foreground">« {{ note.quote }} »</p>
                         <p v-if="note.agent_answer" class="rounded-md bg-emerald-500/5 p-2 text-xs leading-5">
                             <span class="font-semibold">{{ t('settings.bot_learning.agent_answer') }}</span> {{ note.agent_answer }}

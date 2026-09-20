@@ -50,6 +50,8 @@ class ConversationResource extends JsonResource
             'handler' => $c->handler?->value,
             'needs_human' => (bool) $c->needs_human,
             'source' => $c->source?->value,
+            // «تجربة» badge (design 2026-09-21 §4): a run of a public team test link.
+            'is_test' => (bool) $c->is_test,
             'unread_count' => (int) $c->unread_count,
             'last_message_at' => $c->last_message_at?->toIso8601String(),
             'last_customer_message_at' => $c->last_customer_message_at?->toIso8601String(),

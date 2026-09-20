@@ -412,6 +412,8 @@ export type BotLearningNoteKind = 'unanswered' | 'wrong_answer' | 'agent_knowled
 export interface BotLearningNoteRow {
     id: string;
     conversation_id: number | null;
+    /** Where the episode came from (design 2026-09-21 §5). */
+    source: BotLearningSource;
     channel_account: string | null;
     kind: BotLearningNoteKind;
     summary: string;
@@ -420,11 +422,16 @@ export interface BotLearningNoteRow {
     created_at: string | null;
 }
 
+/** A learning note or suggestion came from a real customer or from a team test run. */
+export type BotLearningSource = 'live' | 'test';
+
 export interface BotLearningToday {
     reviewed: number;
     notes: number;
     cost_usd: number;
     cap: number;
+    live: number;
+    test: number;
 }
 
 export interface BotLearningReportRow {
@@ -441,6 +448,7 @@ export interface BotLearningReportRow {
 export interface BotSuggestionRow {
     id: number;
     type: 'script_text' | 'new_faq' | 'intent_keywords' | 'flow_step';
+    source: BotLearningSource;
     target: string | null;
     /** The target in words (script title, intent name, flow › step); null when unknown. */
     target_label?: string | null;
@@ -681,4 +689,108 @@ export interface SystemTokenPage {
     category: string | null;
     picture: string | null;
     missing_tasks: string[];
+}
+
+/** Settings → روابط التجربة (design 2026-09-21 §1): one public link the owner shares. */
+export interface TestLinkRow {
+    id: number;
+    label: string;
+    token: string;
+    url: string;
+    is_active: boolean;
+    /** Running and not expired — what /try/{token} actually checks. */
+    is_open: boolean;
+    expires_at: string | null;
+    max_sessions: number | null;
+    max_messages_per_session: number;
+    views_count: number;
+    sessions_count: number;
+    runs_count: number;
+    live_sessions: number;
+    last_opened_at: string | null;
+    created_at: string | null;
+}
+
+/** One tester's run of a test link. */
+export interface TestLinkSessionRow {
+    id: number;
+    label: string;
+    name: string;
+    run_no: number;
+    conversation_id: number | null;
+    device_family: string | null;
+    messages_count: number;
+    started_at: string | null;
+    last_seen_at: string | null;
+    ended_at: string | null;
+    ended_reason: string | null;
+    duration_seconds: number;
+}
+
+/** Reports → تجربة الفريق (design 2026-09-21 §4): one row per run. */
+export interface TeamTestSessionRow {
+    id: number;
+    link_id: number;
+    link_label: string | null;
+    name: string;
+    run_no: number;
+    label: string;
+    conversation_id: number | null;
+    device_family: string;
+    started_at: string | null;
+    ended_at: string | null;
+    ended_reason: string | null;
+    duration_seconds: number;
+    messages_in: number;
+    messages_out: number;
+    messages_total: number;
+    flows: { key: string; title: string }[];
+    last_flow: string | null;
+    last_step: string | null;
+    finished: boolean;
+    dropped_at: string | null;
+    cases: number;
+    case_types: string[];
+    handovers: number;
+}
+
+export interface TeamTestFunnel {
+    key: string;
+    title: string;
+    entered: number;
+    finished: number;
+    steps: { id: string; reached: number; dropped: number }[];
+    top_drop_offs: { id: string; dropped: number }[];
+}
+
+export interface TeamTestTotals {
+    sessions: number;
+    testers: number;
+    messages: number;
+    cases: number;
+    handovers: number;
+    finished: number;
+    avg_duration_seconds: number;
+}
+
+export interface TeamTestLinkOption {
+    id: number;
+    label: string;
+    url: string;
+    is_open: boolean;
+    views_count: number;
+    runs_count: number;
+    last_opened_at: string | null;
+}
+
+export interface TeamTestTranscriptLine {
+    id: number;
+    direction: 'in' | 'out';
+    sender: 'customer' | 'bot' | 'user' | 'system';
+    author: string | null;
+    body: string | null;
+    buttons: { title: string; payload: string }[];
+    has_cards: boolean;
+    has_image: boolean;
+    created_at: string | null;
 }

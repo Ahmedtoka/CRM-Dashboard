@@ -238,7 +238,9 @@ return [
     // here (the demo accounts use `fake`). Per-conversation reviews stop at the
     // daily cap; beyond it they are skipped with a log line.
     'learning' => [
-        'drivers' => ['live'],
+        // Team test links (design 2026-09-21 §5): the bot studies the team's own runs
+        // too, and every note/suggestion carries whether it came from `live` or `test`.
+        'drivers' => ['live', 'test'],
         'max_reviews_per_day' => 200,
         'review_delay_minutes' => 10,
         'backfill' => 30,

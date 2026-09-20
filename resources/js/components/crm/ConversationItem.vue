@@ -29,7 +29,7 @@ const waitTone = computed<'negative' | 'warning' | 'neutral'>(() => {
 
 const hasMeta = computed(() => {
     const c = props.conversation;
-    return !!(c.waiting_since || c.needs_human || c.handler === 'bot' || c.handling || c.tags?.length || c.priority !== 'normal' || c.handover_category_label || c.handover_topic);
+    return !!(c.is_test || c.waiting_since || c.needs_human || c.handler === 'bot' || c.handling || c.tags?.length || c.priority !== 'normal' || c.handover_category_label || c.handover_topic);
 });
 
 // Handover priority badge (Task 5 ruling 5): high = urgent, medium = warning, low = no badge.
@@ -87,6 +87,13 @@ const tagStyle = (color: string | null) => ({
             </span>
 
             <span v-if="hasMeta" class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <!-- A run of a public team test link, never a real customer (design 2026-09-21 §4). -->
+                <span
+                    v-if="conversation.is_test"
+                    class="inline-flex h-5 shrink-0 items-center rounded-full bg-violet-500/12 px-2 text-2xs font-semibold text-violet-600 dark:text-violet-300"
+                >
+                    {{ t('inbox.test_badge') }}
+                </span>
                 <StatusChip v-if="conversation.priority === 'spam'" :label="t('inbox.filters.spam')" tone="negative" />
                 <StatusChip v-else-if="conversation.priority === 'low'" :label="t('inbox.filters.low_priority')" tone="neutral" />
                 <StatusChip v-if="conversation.waiting_since" :label="formatSince(conversation.waiting_since, locale, now)" :tone="waitTone" />

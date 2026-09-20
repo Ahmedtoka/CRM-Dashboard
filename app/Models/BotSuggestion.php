@@ -20,6 +20,7 @@ class BotSuggestion extends Model
     protected $fillable = [
         'report_id',
         'type',
+        'source',
         'target',
         'current',
         'proposed',

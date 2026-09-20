@@ -6,6 +6,7 @@ use App\Analytics\ActivityLogger;
 use App\Analytics\PresenceTracker;
 use App\Enums\ActorType;
 use App\Models\User;
+use App\TestLinks\TestScope;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Console\Scheduling\Schedule;
@@ -21,7 +22,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // One memo of "is this a team-test conversation?" per request/job (design 2026-09-21 §3).
+        $this->app->singleton(TestScope::class);
     }
 
     /**

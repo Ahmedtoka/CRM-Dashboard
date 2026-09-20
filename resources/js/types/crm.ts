@@ -51,6 +51,8 @@ export interface Conversation {
     handler: 'bot' | 'human';
     needs_human: boolean;
     source: 'direct' | 'comment' | 'ad' | null;
+    /** A run of a public team test link (design 2026-09-21): shown with a «تجربة» badge. */
+    is_test: boolean;
     unread_count: number;
     last_message_at: string | null;
     last_customer_message_at: string | null;
@@ -449,6 +451,7 @@ export type HandoverPriority = 'low' | 'medium' | 'high';
 export type HandoverQueue = 'agents' | 'senior';
 
 export type InboxQuickFilter =
+    | 'test'
     | 'queue_all'
     | 'queue_high'
     | 'queue_senior'

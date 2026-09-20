@@ -21,13 +21,14 @@ use App\Http\Controllers\Web\Settings\BotFlowSandboxController;
 use App\Http\Controllers\Web\Settings\BotIntentController;
 use App\Http\Controllers\Web\Settings\BotKnowledgeController;
 use App\Http\Controllers\Web\Settings\BotLearningController;
+use App\Http\Controllers\Web\Settings\BotTestLinkController;
 use App\Http\Controllers\Web\Settings\BranchController;
 use App\Http\Controllers\Web\Settings\ChannelController;
 use App\Http\Controllers\Web\Settings\CityController;
 use App\Http\Controllers\Web\Settings\FacebookLoginController;
+use App\Http\Controllers\Web\Settings\IntegrationController;
 use App\Http\Controllers\Web\Settings\QuickReplyCategoryController;
 use App\Http\Controllers\Web\Settings\QuickReplyController;
-use App\Http\Controllers\Web\Settings\IntegrationController;
 use App\Http\Controllers\Web\Settings\ShopifyIntegrationController;
 use App\Http\Controllers\Web\Settings\TagController;
 use App\Http\Controllers\Web\Settings\UserController;
@@ -125,6 +126,12 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
         Route::get('/reports/activity', [ReportController::class, 'activity'])->name('reports.activity');
         Route::get('/reports/quick-replies', [ReportController::class, 'quickReplies'])->name('reports.quick-replies');
         Route::get('/reports/quick-replies/export', [ReportController::class, 'quickRepliesExport'])->name('reports.quick-replies.export');
+
+        // Reports → «تجربة الفريق» (design 2026-09-21 §4): the team's own runs of the
+        // public test links — sessions, funnels, transcripts and the CSV.
+        Route::get('/reports/team-test', [ReportController::class, 'teamTest'])->name('reports.team-test');
+        Route::get('/reports/team-test/export', [ReportController::class, 'teamTestExport'])->name('reports.team-test.export');
+        Route::get('/reports/team-test/sessions/{session}', [ReportController::class, 'teamTestSession'])->name('reports.team-test.session');
     });
     Route::middleware(['dev-tools', 'role:admin'])->group(function () {
         Route::get('/reports/latency', [ReportController::class, 'latency'])->name('reports.latency');
@@ -193,6 +200,13 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
         Route::post('bot-flows/{flow}/main-menu', [BotFlowController::class, 'addToMainMenu'])->name('bot-flows.main-menu');
         Route::post('bot-flow-versions/{version}/restore', [BotFlowController::class, 'restore'])->name('bot-flow-versions.restore');
         Route::post('bot-flows/{flow}/simulate', BotFlowSandboxController::class)->middleware('throttle:60,1')->name('bot-flows.simulate');
+
+        // Public test links for the team (design 2026-09-21 §1): create, copy, stop, delete.
+        Route::get('bot-test-links', [BotTestLinkController::class, 'index'])->name('bot-test-links.index');
+        Route::post('bot-test-links', [BotTestLinkController::class, 'store'])->name('bot-test-links.store');
+        Route::patch('bot-test-links/{testLink}', [BotTestLinkController::class, 'update'])->name('bot-test-links.update');
+        Route::delete('bot-test-links/{testLink}', [BotTestLinkController::class, 'destroy'])->name('bot-test-links.destroy');
+        Route::get('bot-test-links/{testLink}/sessions', [BotTestLinkController::class, 'sessions'])->name('bot-test-links.sessions');
 
         // Daily learning (design §6, Task 9): nightly reports and the suggestions
         // that change nothing until the owner approves them here.

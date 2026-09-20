@@ -30,6 +30,8 @@ class ConversationQuery
         // Bot handover priority queues (spec §2.1/§2.3 Task 4). queue_senior is restricted to
         // supervisor+ in build(); a moderator asking for it gets no rows, not an error.
         'queue_all', 'queue_high', 'queue_senior',
+        // Team test links (design 2026-09-21 §4): the channel filter for the runs.
+        'test',
     ];
 
     /** Priority rank used by the queue ordering (spec §2.3: high → medium → low, then oldest first). */
@@ -102,6 +104,7 @@ class ConversationQuery
             'open_order' => $q->whereHas('customer', fn (Builder $c) => $c->where('has_open_order', true)),
             'has_return' => $q->whereHas('customer', fn (Builder $c) => $c->where('has_return', true)),
             'stuck_order' => $q->whereHas('customer', fn (Builder $c) => $c->where('has_stuck_order', true)),
+            'test' => $q->where('conversations.is_test', true),
             'queue_all' => $q->where('conversations.needs_human', true),
             'queue_high' => $q->where('conversations.needs_human', true)->where('conversations.priority_level', 'high'),
             // Role-restricted (spec §2.1 HandoverRouter, ruling 1): a moderator asking for the

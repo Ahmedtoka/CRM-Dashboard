@@ -12,6 +12,7 @@ use App\Http\Controllers\Concerns\RespondsWithData;
 use App\Http\Controllers\Controller;
 use App\Models\ChannelAccount;
 use App\Models\WebhookEvent;
+use App\TestLinks\TestScope;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -30,7 +31,10 @@ class ChannelController extends Controller
     public function index(): Response
     {
         return Inertia::render('settings/Channels', [
-            'accounts' => ChannelAccount::orderBy('platform')->orderBy('id')->get()->map(fn (ChannelAccount $a) => $this->present($a)),
+            // A team test link's account (driver `test`, design 2026-09-21 §4) is not a
+            // channel: it is managed from Settings → روابط التجربة and never shown here.
+            'accounts' => ChannelAccount::where('driver', '!=', TestScope::DRIVER)
+                ->orderBy('platform')->orderBy('id')->get()->map(fn (ChannelAccount $a) => $this->present($a)),
             'failedEvents' => WebhookEvent::where('status', 'failed')
                 ->orderByDesc('id')
                 ->limit(50)
@@ -48,6 +52,8 @@ class ChannelController extends Controller
 
     public function update(Request $request, ChannelAccount $channel): HttpResponse
     {
+        $this->refuseTestAccount($channel);
+
         $data = $this->validated($request, $channel, partial: true);
 
         if (array_key_exists('credentials', $data)) {
@@ -73,6 +79,8 @@ class ChannelController extends Controller
      */
     public function test(Request $request, ChannelAccount $channel): HttpResponse
     {
+        $this->refuseTestAccount($channel);
+
         if ($channel->platform === Platform::Instagram) {
             return $this->testInstagram($channel);
         }
@@ -131,6 +139,8 @@ class ChannelController extends Controller
      */
     public function subscribe(Request $request, ChannelAccount $channel): HttpResponse
     {
+        $this->refuseTestAccount($channel);
+
         $pageId = $channel->external_id;
 
         if ($channel->platform === Platform::Instagram) {
@@ -173,6 +183,8 @@ class ChannelController extends Controller
      */
     public function destroy(Request $request, ChannelAccount $channel): HttpResponse
     {
+        $this->refuseTestAccount($channel);
+
         $channel->update(['status' => 'disconnected']);
 
         return $this->done($request, $this->present($channel));
@@ -261,5 +273,11 @@ class ChannelController extends Controller
             'webhook_url' => rtrim((string) config('app.url'), '/').'/webhooks/'.$a->platform?->value,
             'verify_token' => config('crm.meta.verify_token'),
         ];
+    }
+
+    /** A test-link account is not a channel: it is never edited, tested or subscribed here. */
+    private function refuseTestAccount(ChannelAccount $channel): void
+    {
+        abort_if($channel->driver === TestScope::DRIVER, 404);
     }
 }

@@ -118,7 +118,7 @@ class LearnCommand extends Command
             return $report;
         });
 
-        $stored = $this->saveSuggestions($report, (array) ($result['suggestions'] ?? []), $validator);
+        $stored = $this->saveSuggestions($report, (array) ($result['suggestions'] ?? []), $validator, $this->sourceByConversation($rows));
 
         $this->info("Report for {$date->toDateString()}: {$stats['conversations_reviewed']} conversations, {$stats['notes']} notes, {$stored} suggestions.");
 
@@ -354,6 +354,13 @@ class LearnCommand extends Command
             ->values()
             ->all();
 
+        // How much of the day came from real customers and how much from the team's own
+        // test links (design 2026-09-21 §5) — the nightly report says so in words.
+        $bySource = [
+            BotLearningNote::SOURCE_LIVE => $rows->where('source', BotLearningNote::SOURCE_LIVE)->pluck('conversation_id')->filter()->unique()->count(),
+            BotLearningNote::SOURCE_TEST => $rows->where('source', BotLearningNote::SOURCE_TEST)->pluck('conversation_id')->filter()->unique()->count(),
+        ];
+
         $analystCost = ConversationReview::cost(
             (string) ($result['model'] ?? ''),
             (int) ($result['input_tokens'] ?? 0),
@@ -367,14 +374,15 @@ class LearnCommand extends Command
             'handovers' => $handovers,
             'cases' => $cases,
             'sources' => $sources,
+            'by_source' => $bySource,
             'cost_usd' => round((float) $rows->sum('cost_usd') + $analystCost, 4),
         ]);
     }
 
     /** @return int how many suggestions were stored */
-    private function saveSuggestions(BotLearningReport $report, array $suggestions, SuggestionValidator $validator): int
+    private function saveSuggestions(BotLearningReport $report, array $suggestions, SuggestionValidator $validator, array $sourceByConversation): int
     {
-        return DB::transaction(function () use ($report, $suggestions, $validator) {
+        return DB::transaction(function () use ($report, $suggestions, $validator, $sourceByConversation) {
             // A re-run of the same day replaces its pending ideas; decided ones stay.
             $report->suggestions()->where('status', 'pending')->delete();
 
@@ -411,6 +419,7 @@ class LearnCommand extends Command
                 BotSuggestion::create([
                     'report_id' => $report->id,
                     'type' => $type,
+                    'source' => self::suggestionSource($suggestion['evidence'] ?? null, $sourceByConversation),
                     'target' => $target,
                     'current' => $this->currentOf($type, $target),
                     'proposed' => (array) $suggestion['proposed'],
@@ -449,5 +458,49 @@ class LearnCommand extends Command
     private function currentOf(string $type, string $target): ?array
     {
         return LearningCurrentState::snapshot($type, $target);
+    }
+
+    /**
+     * Which conversation each reviewed episode came from, live or test.
+     *
+     * @param  Collection<int, BotLearningNote>  $rows
+     * @return array<int, string>
+     */
+    private function sourceByConversation(Collection $rows): array
+    {
+        $map = [];
+
+        foreach ($rows as $row) {
+            if ($row->conversation_id !== null) {
+                $map[(int) $row->conversation_id] = (string) ($row->source ?: BotLearningNote::SOURCE_LIVE);
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * A suggestion is a `test` one only when every conversation it cites is a team
+     * test run (design 2026-09-21 §5); anything grounded in a real customer, or in
+     * nothing identifiable, counts as `live` so the owner never mistakes it for
+     * something only the team saw.
+     *
+     * @param  array<int, string>  $sourceByConversation
+     */
+    private static function suggestionSource(mixed $evidence, array $sourceByConversation): string
+    {
+        $ids = is_array($evidence) ? array_filter(array_map('intval', (array) ($evidence['conversation_ids'] ?? []))) : [];
+
+        if ($ids === []) {
+            return BotLearningNote::SOURCE_LIVE;
+        }
+
+        foreach ($ids as $id) {
+            if (($sourceByConversation[$id] ?? BotLearningNote::SOURCE_LIVE) !== BotLearningNote::SOURCE_TEST) {
+                return BotLearningNote::SOURCE_LIVE;
+            }
+        }
+
+        return BotLearningNote::SOURCE_TEST;
     }
 }

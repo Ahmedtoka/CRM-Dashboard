@@ -17,9 +17,18 @@ class BotLearningNote extends Model
 {
     public const KINDS = ['unanswered', 'wrong_answer', 'agent_knowledge', 'new_phrasing', 'flow_friction'];
 
+    /** A real customer conversation. */
+    public const SOURCE_LIVE = 'live';
+
+    /** One of the team's runs of a public test link (design 2026-09-21 §5). */
+    public const SOURCE_TEST = 'test';
+
+    public const SOURCES = [self::SOURCE_LIVE, self::SOURCE_TEST];
+
     protected $fillable = [
         'conversation_id',
         'channel_account_id',
+        'source',
         'last_message_id',
         'notes',
         'model',

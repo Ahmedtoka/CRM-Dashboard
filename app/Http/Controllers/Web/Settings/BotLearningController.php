@@ -54,13 +54,20 @@ class BotLearningController extends Controller
             ? BotLearningReport::query()->find($requested)
             : $reports->first();
 
-        [$today, $notes] = $this->today();
+        // Learning on the team's test links (design 2026-09-21 §5): the page can show
+        // only what came from real customers, or only what the team's runs produced.
+        $source = in_array($request->query('source'), BotLearningNote::SOURCES, true)
+            ? (string) $request->query('source')
+            : null;
+
+        [$today, $notes] = $this->today($source);
 
         return Inertia::render('settings/BotLearning', [
             'reports' => $reports,
-            'report' => $selected ? $this->reportPayload($selected) : null,
+            'report' => $selected ? $this->reportPayload($selected, $source) : null,
             'today' => $today,
             'todayNotes' => $notes,
+            'source' => $source,
             // Arabic names for the intent keys a report's stats list (top_intents).
             'intentLabels' => BotIntent::query()->pluck('label_ar', 'key'),
         ]);
@@ -73,16 +80,18 @@ class BotLearningController extends Controller
      *
      * @return array{0: array{reviewed:int, notes:int, cost_usd:float, cap:int}, 1: list<array<string, mixed>>}
      */
-    private function today(): array
+    private function today(?string $source = null): array
     {
         [$from, $to] = app(TranscriptBuilder::class)->window(CarbonImmutable::now(TranscriptBuilder::TZ));
 
-        $rows = BotLearningNote::query()
+        $all = BotLearningNote::query()
             ->with('channelAccount:id,name')
             ->whereIn('channel_account_id', LearningScope::channelAccountIds())
             ->where('created_at', '>=', $from)->where('created_at', '<', $to)
             ->orderByDesc('id')
             ->get();
+
+        $rows = $source === null ? $all : $all->where('source', $source)->values();
 
         $notes = [];
 
@@ -95,6 +104,7 @@ class BotLearningController extends Controller
                 $notes[] = [
                     'id' => "{$row->id}-{$i}",
                     'conversation_id' => $row->conversation_id,
+                    'source' => (string) ($row->source ?: BotLearningNote::SOURCE_LIVE),
                     'channel_account' => $row->channelAccount?->name,
                     'kind' => (string) ($note['kind'] ?? ''),
                     'summary' => (string) ($note['summary'] ?? ''),
@@ -110,6 +120,8 @@ class BotLearningController extends Controller
             'notes' => count($notes),
             'cost_usd' => round((float) $rows->sum('cost_usd'), 4),
             'cap' => (int) config('crm.learning.max_reviews_per_day', 200),
+            'live' => $all->where('source', BotLearningNote::SOURCE_LIVE)->count(),
+            'test' => $all->where('source', BotLearningNote::SOURCE_TEST)->count(),
         ], $notes];
     }
 
@@ -174,10 +186,11 @@ class BotLearningController extends Controller
         return $this->done($request, $this->suggestionPayload($suggestion->fresh()));
     }
 
-    private function reportPayload(BotLearningReport $report): array
+    private function reportPayload(BotLearningReport $report, ?string $source = null): array
     {
         return array_merge($report->toArray(), [
             'suggestions' => $report->suggestions()
+                ->when($source !== null, fn ($q) => $q->where('source', $source))
                 ->with('decidedBy:id,name')
                 ->orderByRaw("case when status = 'pending' then 0 else 1 end")
                 ->orderBy('id')

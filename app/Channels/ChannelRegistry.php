@@ -5,13 +5,33 @@ namespace App\Channels;
 use App\Channels\Adapters\FakeChannelAdapter;
 use App\Channels\Adapters\InstagramAdapter;
 use App\Channels\Adapters\MessengerAdapter;
+use App\Channels\Adapters\TestChannelAdapter;
 use App\Channels\Adapters\WhatsAppAdapter;
 use App\Channels\Contracts\ChannelAdapter;
 use App\Enums\Platform;
 use App\Models\ChannelAccount;
+use App\TestLinks\TestScope;
 
 class ChannelRegistry
 {
+    /**
+     * The adapter that owns one account's traffic. Prefer this over `adapter()`
+     * wherever the account is known: a team test link's account (`driver = test`,
+     * design 2026-09-21 §3) must never reach Meta, however its platform reads.
+     */
+    public function adapterFor(?ChannelAccount $account): ChannelAdapter
+    {
+        if ($account === null) {
+            return $this->adapter(Platform::Facebook);
+        }
+
+        if ($account->driver === TestScope::DRIVER) {
+            return new TestChannelAdapter;
+        }
+
+        return $this->adapter($account->platform);
+    }
+
     public function adapter(Platform $platform): ChannelAdapter
     {
         if ($platform === Platform::TikTok) {
@@ -32,7 +52,10 @@ class ChannelRegistry
             ->exists();
 
         if (! $hasLive) {
-            $account = ChannelAccount::where('platform', $platform)->first();
+            // Test-link accounts are not a channel at all, so they never decide this.
+            $account = ChannelAccount::where('platform', $platform)
+                ->where('driver', '!=', TestScope::DRIVER)
+                ->first();
 
             if ($account && $account->driver === 'fake') {
                 return new FakeChannelAdapter($platform);
@@ -49,6 +72,8 @@ class ChannelRegistry
 
     public function account(Platform $platform): ChannelAccount
     {
-        return ChannelAccount::where('platform', $platform)->firstOrFail();
+        return ChannelAccount::where('platform', $platform)
+            ->where('driver', '!=', TestScope::DRIVER)
+            ->firstOrFail();
     }
 }

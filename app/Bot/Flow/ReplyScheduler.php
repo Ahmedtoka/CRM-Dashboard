@@ -100,7 +100,7 @@ class ReplyScheduler
         $account = $c->channelAccount;
 
         if ($identity && $account) {
-            app(ChannelRegistry::class)->adapter($account->platform)->typing($account, $identity, $on);
+            app(ChannelRegistry::class)->adapterFor($account)->typing($account, $identity, $on);
         }
     }
 }

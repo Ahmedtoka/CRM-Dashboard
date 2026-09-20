@@ -7,7 +7,9 @@ use App\Enums\ConversationSource;
 use App\Enums\ConversationStatus;
 use App\Enums\Handler;
 use App\Enums\Platform;
+use App\TestLinks\TestScope;
 use Database\Factories\ConversationFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,6 +25,7 @@ class Conversation extends Model
         'customer_id',
         'channel_account_id',
         'platform',
+        'is_test',
         'status',
         'priority',
         'handler',
@@ -68,7 +71,32 @@ class Conversation extends Model
             'resolved_at' => 'datetime',
             'bot_due_at' => 'datetime',
             'bot_state' => 'array',
+            'is_test' => 'boolean',
         ];
+    }
+
+    /**
+     * Team-test conversations (design 2026-09-21 §3) are flagged once, when the row is
+     * written, from their channel account's `driver`. The reports and the nightly rollup
+     * read this column instead of joining to `channel_accounts` on every aggregate.
+     *
+     * Done here rather than on the `creating` model event on purpose: a test that calls
+     * `Event::fake()` silences model events, and a conversation that quietly lost its
+     * flag would land in the owner's real numbers.
+     */
+    protected function performInsert(Builder $query)
+    {
+        if (! array_key_exists('is_test', $this->attributes)) {
+            $this->attributes['is_test'] = app(TestScope::class)->accountIsTest($this->channel_account_id);
+        }
+
+        $inserted = parent::performInsert($query);
+
+        if ($inserted) {
+            app(TestScope::class)->noteConversation((int) $this->getKey(), (bool) $this->attributes['is_test']);
+        }
+
+        return $inserted;
     }
 
     /**

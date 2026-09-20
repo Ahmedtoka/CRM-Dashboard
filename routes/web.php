@@ -4,6 +4,7 @@ use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Web\LegalController;
 use App\Http\Controllers\Web\LocaleController;
 use App\Http\Controllers\Web\MediaController;
+use App\Http\Controllers\Web\TryController;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -27,6 +28,20 @@ Route::get('/media/public/{attachment}', [MediaController::class, 'publicShow'])
 Route::get('/privacy', [LegalController::class, 'privacy'])->name('legal.privacy');
 Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
 Route::get('/data-deletion', [LegalController::class, 'dataDeletion'])->name('legal.data-deletion');
+
+// Public team test links (design 2026-09-21): no login, the token is the only secret.
+// They keep the `web` group for the browser session that owns a tester's run and for
+// CSRF on the writes; both views carry `noindex, nofollow, noarchive`, and the
+// controller rate-limits per run and per address.
+Route::prefix('try/{token}')->name('try.')->where(['token' => '[a-z0-9]{8,64}'])->group(function () {
+    Route::get('/', [TryController::class, 'show'])->name('show');
+    Route::get('state', [TryController::class, 'poll'])->name('state');
+    Route::post('start', [TryController::class, 'start'])->name('start');
+    Route::post('messages', [TryController::class, 'send'])->name('send');
+    Route::post('photo', [TryController::class, 'photo'])->name('photo');
+    Route::post('reset', [TryController::class, 'reset'])->name('reset');
+    Route::get('media/{attachment}', [TryController::class, 'media'])->name('media');
+});
 
 Route::get('dashboard', fn () => redirect()->route('inbox'))->middleware('auth')->name('dashboard');
 

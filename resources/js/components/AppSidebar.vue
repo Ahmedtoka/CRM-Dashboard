@@ -41,6 +41,7 @@ const mainNavItems = computed<NavItem[]>(() => {
             { title: t('nav.reports_bot'), href: '/reports/bot' },
             { title: t('nav.reports_activity'), href: '/reports/activity' },
             { title: t('nav.reports_quick_replies'), href: '/reports/quick-replies' },
+            { title: t('nav.reports_team_test'), href: '/reports/team-test' },
         );
         settings.push(
             { title: t('nav.settings_bot'), href: '/settings/bot', section: bot },
@@ -48,6 +49,7 @@ const mainNavItems = computed<NavItem[]>(() => {
             { title: t('nav.settings_bot_flows'), href: '/settings/bot-flows', section: bot },
             { title: t('nav.settings_bot_knowledge'), href: '/settings/bot-knowledge', section: bot },
             { title: t('nav.settings_bot_learning'), href: '/settings/bot-learning', section: bot },
+            { title: t('nav.settings_test_links'), href: '/settings/bot-test-links', section: bot },
             { title: t('nav.settings_branches'), href: '/settings/branches', section: store },
         );
         if (allows('admin')) {

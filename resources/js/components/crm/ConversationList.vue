@@ -29,6 +29,8 @@ const page = usePage<SharedData>();
 const QUICK_FILTERS = [
     'waiting', 'needs_human', 'bot', 'mine', 'comment', 'ad', 'low_priority', 'spam',
     'customer_new', 'customer_repeat', 'open_order', 'has_return', 'stuck_order',
+    // The team's own runs of a public test link (design 2026-09-21 §4).
+    'test',
 ] as const;
 const STATUSES = ['open', 'pending', 'resolved'] as const;
 const SKELETON_ROWS = 6;

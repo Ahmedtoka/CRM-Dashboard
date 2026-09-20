@@ -101,6 +101,9 @@ class ConversationReview
         return BotLearningNote::create([
             'conversation_id' => $conversation->id,
             'channel_account_id' => $conversation->channel_account_id,
+            // Where this episode came from (design 2026-09-21 §5): a real customer
+            // or one of the team's own runs of a public test link.
+            'source' => $conversation->is_test ? BotLearningNote::SOURCE_TEST : BotLearningNote::SOURCE_LIVE,
             'last_message_id' => $lastMessageId,
             'notes' => self::normalize((array) ($result['notes'] ?? [])),
             'model' => $model,

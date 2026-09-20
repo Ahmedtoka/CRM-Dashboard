@@ -73,6 +73,13 @@ defineExpose({ openTags: () => (tagsOpen.value = true) });
             <div class="flex min-w-0 items-center gap-2">
                 <h2 class="truncate text-sm font-bold">{{ name }}</h2>
                 <PlatformBadge :platform="conversation.platform" show-label size="xs" />
+                <!-- A run of a public team test link: the reply is read by a teammate, not a customer. -->
+                <span
+                    v-if="conversation.is_test"
+                    class="inline-flex h-5 shrink-0 items-center rounded-full bg-violet-500/12 px-2 text-2xs font-semibold text-violet-600 dark:text-violet-300"
+                >
+                    {{ t('inbox.test_badge') }}
+                </span>
                 <StatusChip v-if="conversation.priority_level === 'high'" :label="t('inbox.priority_level.high')" tone="negative" />
                 <StatusChip v-else-if="conversation.priority_level === 'medium'" :label="t('inbox.priority_level.medium')" tone="warning" />
                 <span

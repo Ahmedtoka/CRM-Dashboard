@@ -6,6 +6,7 @@ use App\Bot\Flow\Orders\FakeOmsClient;
 use App\Channels\Adapters\FakeChannelAdapter;
 use App\Commerce\FakeCommerceProvider;
 use App\Shopify\Client\FakeShopifyTransport;
+use App\TestLinks\TestSessionSteps;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
@@ -26,5 +27,9 @@ abstract class TestCase extends BaseTestCase
 
         // OMS statuses set by one bot test must not answer another's lookup.
         FakeOmsClient::reset();
+
+        // The test-link step recorder's "already recorded" memo is static: SQLite
+        // reuses conversation ids after each rollback, so it must not leak either.
+        TestSessionSteps::reset();
     }
 }

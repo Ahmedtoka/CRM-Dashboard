@@ -6,7 +6,9 @@ use App\Enums\MessageDirection;
 use App\Enums\MessageStatus;
 use App\Enums\Platform;
 use App\Enums\SenderType;
+use App\TestLinks\TestScope;
 use Database\Factories\MessageFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,6 +22,7 @@ class Message extends Model
     protected $fillable = [
         'conversation_id',
         'platform',
+        'is_test',
         'direction',
         'sender_type',
         'user_id',
@@ -57,7 +60,23 @@ class Message extends Model
             'sent_at' => 'datetime',
             'delivered_at' => 'datetime',
             'read_at' => 'datetime',
+            'is_test' => 'boolean',
         ];
+    }
+
+    /**
+     * Inherits the conversation's team-test flag (design 2026-09-21 §3), so every
+     * message query in the reports can exclude the team's testing with one predicate.
+     * On the insert itself, not on the `creating` event, for the reason given on
+     * Conversation::performInsert().
+     */
+    protected function performInsert(Builder $query)
+    {
+        if (! array_key_exists('is_test', $this->attributes)) {
+            $this->attributes['is_test'] = app(TestScope::class)->conversationIsTest($this->conversation_id);
+        }
+
+        return parent::performInsert($query);
     }
 
     /**
