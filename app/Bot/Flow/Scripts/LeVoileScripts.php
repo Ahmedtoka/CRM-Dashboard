@@ -108,7 +108,7 @@ final class LeVoileScripts
     public static function scripts(): array
     {
         return [
-            'greeting' => ['title' => 'ترحيب', 'body' => '{time_greeting} يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من لوفوال', 'active' => true],
+            'greeting' => ['title' => 'ترحيب', 'body' => '{time_greeting} يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من Le Voile', 'active' => true],
             'price' => ['title' => 'السعر', 'body' => 'Item name
 details..💬
 * Material :

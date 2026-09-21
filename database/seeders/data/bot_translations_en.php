@@ -23,7 +23,7 @@ Do you want to swap it or remove it from the order?',
     '⟦0⟧ متوقع يوصل' => '⟦0⟧ arriving',
     '⟦0⟧ محتاج عناوين الفروع ومواعيد العمل' => '⟦0⟧ Need branch addresses and working hours',
     '⟦0⟧ موجودة في اختياراتك خلاص ⟦1⟧' => '⟦0⟧ is already in your selections ⟦1⟧',
-    '⟦0⟧ يا فندم يومك حلو ان شاء الله ⟦1⟧ مع حضرتك ميار من لوفوال
+    '⟦0⟧ يا فندم يومك حلو ان شاء الله ⟦1⟧ مع حضرتك ميار من Le Voile
 إزاي أقدر أساعد حضرتك؟' => '⟦0⟧ Hi there, hope you\'re having a good day ⟦1⟧ I\'m Mayar from Le Voile
 How can I help you?',
     '⟦4⟧. ⟦3⟧ × ⟦5⟧ — ⟦6⟧ ج.م
@@ -76,7 +76,7 @@ We stick to this timeline to make sure everything goes through safely and smooth
 If it takes longer, get back to us and we\'ll check with our accounting team to make sure you get what\'s due as soon as possible.
 Thanks for your patience ⟦3⟧',
     'أهلاً بيكي ⟦0⟧
-مساء الخير يا فندم يومك حلو ان شاء الله ⟦1⟧ مع حضرتك ميار من لوفوال
+مساء الخير يا فندم يومك حلو ان شاء الله ⟦1⟧ مع حضرتك ميار من Le Voile
 إزاي أقدر أساعد حضرتك؟' => 'Welcome ⟦0⟧
 Good evening! Hope you\'re having a lovely day ⟦1⟧ I\'m Mayar from Le Voile
 How can I help you?',

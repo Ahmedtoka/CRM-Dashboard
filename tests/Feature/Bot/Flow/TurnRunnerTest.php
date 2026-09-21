@@ -83,7 +83,7 @@ function burstTurn(array $texts): ?BotRun
 it('seeds the Le Voile catalog and scripts', function () {
     expect(BotIntent::where('key', 'cancel_order')->value('route'))->toBe('collect_then_handover')
         ->and(BotIntent::where('key', 'store_complaint')->value('queue'))->toBe('senior')
-        ->and(BotKnowledgeEntry::where('key', 'script.greeting')->value('body'))->toBe('{time_greeting} يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من لوفوال')
+        ->and(BotKnowledgeEntry::where('key', 'script.greeting')->value('body'))->toBe('{time_greeting} يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من Le Voile')
         ->and(BotKnowledgeEntry::where('key', 'script.payment_info')->value('is_active'))->toBeTrue()
         ->and(BotIntent::where('key', 'urgent')->value('is_active'))->toBeFalse()
         ->and(BotIntent::where('key', 'angry')->value('is_active'))->toBeTrue()
@@ -115,7 +115,7 @@ it('never overwrites existing rows when the seed runs again', function () {
 it('answers a single low intent with the owner script verbatim', function () {
     say('m1', 'التوصيل بياخد كام يوم؟');
     $bot = botText();
-    expect($bot)->toContain('3-5 ايام عمل')->and($bot)->toContain('مع حضرتك ميار من لوفوال');
+    expect($bot)->toContain('3-5 ايام عمل')->and($bot)->toContain('مع حضرتك ميار من Le Voile');
     expect(Conversation::first()->handler)->toBe(Handler::Bot);
 
     $run = BotRun::latest('id')->first();
@@ -126,7 +126,7 @@ it('greets only on the first bot reply', function () {
     say('m1', 'التوصيل بياخد كام يوم؟');
     say('m2', 'والشحن خارج مصر؟');
 
-    expect(substr_count(botText(), 'مع حضرتك ميار من لوفوال'))->toBe(1)
+    expect(substr_count(botText(), 'مع حضرتك ميار من Le Voile'))->toBe(1)
         ->and(botText())->toContain('7 الي 10 ايام');
 });
 
@@ -405,7 +405,7 @@ it('sends the plain scripts when the polished reply invents a number', function 
 
     say('m1', 'التوصيل بياخد كام يوم؟');
 
-    expect(botText())->not->toContain('99')->and(botText())->toContain('3-5 ايام عمل')->and(botText())->toContain('مع حضرتك ميار من لوفوال');
+    expect(botText())->not->toContain('99')->and(botText())->toContain('3-5 ايام عمل')->and(botText())->toContain('مع حضرتك ميار من Le Voile');
 });
 
 it('hands over with only the transfer sentence, never a greeting alone, when the intent has no active script', function () {
@@ -590,7 +590,7 @@ it('sends the plain scripts when the polished reply adds a promise no approved t
 
     say('m1', 'التوصيل بياخد كام يوم؟');
 
-    expect(botText())->not->toContain('مجاني')->and(botText())->toContain('مع حضرتك ميار من لوفوال')->and(botText())->toContain('3-5 ايام عمل');
+    expect(botText())->not->toContain('مجاني')->and(botText())->toContain('مع حضرتك ميار من Le Voile')->and(botText())->toContain('3-5 ايام عمل');
 });
 
 it('wraps the customer messages in delimiters and tells the compose model they are untrusted', function () {
@@ -766,10 +766,10 @@ it('greets with the agent name and the morning greeting in the first bot reply, 
     CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-15 07:00:00', 'Africa/Cairo'));
 
     say('m1', 'التوصيل بياخد كام يوم؟');
-    expect(botText())->toContain('صباح الخير يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من لوفوال');
+    expect(botText())->toContain('صباح الخير يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من Le Voile');
 
     say('m2', 'والشحن خارج مصر؟');
-    expect(substr_count(botText(), 'مع حضرتك ميار من لوفوال'))->toBe(1);
+    expect(substr_count(botText(), 'مع حضرتك ميار من Le Voile'))->toBe(1);
 });
 
 it('greets with the evening greeting outside the morning window', function () {
@@ -777,7 +777,7 @@ it('greets with the evening greeting outside the morning window', function () {
 
     say('m1', 'التوصيل بياخد كام يوم؟');
 
-    expect(botText())->toContain('مساء الخير يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من لوفوال');
+    expect(botText())->toContain('مساء الخير يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من Le Voile');
 });
 
 /*

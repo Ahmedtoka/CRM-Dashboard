@@ -28,7 +28,7 @@ const GM_SALAM = 'وعليكم السلام ورحمة الله 🌸';
 
 const GM_HI = 'أهلاً بيكي 🌸';
 
-const GM_TIME_GREETING = 'صباح الخير يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من لوفوال';
+const GM_TIME_GREETING = 'صباح الخير يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من Le Voile';
 
 beforeEach(function () {
     Event::fake();

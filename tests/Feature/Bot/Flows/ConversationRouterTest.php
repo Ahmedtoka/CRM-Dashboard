@@ -58,7 +58,7 @@ it('greets and shows the main menu with 7 buttons on a first "هاي"', function
 
     $bot = routerBotMessages();
     expect($bot)->toHaveCount(2)
-        ->and($bot[0]->body)->toContain('مع حضرتك ميار من لوفوال')
+        ->and($bot[0]->body)->toContain('مع حضرتك ميار من Le Voile')
         ->and($bot[1]->buttons)->toHaveCount(7)
         ->and($bot[1]->buttons[0])->toBe(['title' => 'المرتجع والاستبدال', 'payload' => 'flow:return_exchange'])
         ->and(FlowState::flow(Conversation::first())['key'])->toBe('main_menu');
