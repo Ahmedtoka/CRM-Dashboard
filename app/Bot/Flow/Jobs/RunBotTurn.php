@@ -4,6 +4,7 @@ namespace App\Bot\Flow\Jobs;
 
 use App\Bot\BotEngine;
 use App\Bot\Flow\ReplyScheduler;
+use App\Bot\Flows\WaitingReply;
 use App\Enums\Handler;
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
@@ -41,7 +42,19 @@ class RunBotTurn implements ShouldQueue
     {
         $c = Conversation::find($this->conversationId);
 
-        if ($c === null || $c->handler !== Handler::Bot || ($c->bot_due_at && $c->bot_due_at->isFuture())) {
+        if ($c === null) {
+            return;
+        }
+
+        // Handed to a person and still waiting: she gets one reassurance (owner, 2026-09-21)
+        // instead of silence, and the bot stays out of the conversation otherwise.
+        if ($c->handler !== Handler::Bot) {
+            app(WaitingReply::class)->maybeSend($c);
+
+            return;
+        }
+
+        if ($c->bot_due_at && $c->bot_due_at->isFuture()) {
             return; // a newer message moved the due time; its own dispatch will run
         }
 

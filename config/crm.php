@@ -203,6 +203,10 @@ return [
 
         // §6.1: how many questions the bot answers mid-flow before offering a person.
         'flow_max_detours' => (int) env('CRM_BOT_FLOW_MAX_DETOURS', 2),
+
+        // Waiting for a person (owner, 2026-09-21): she keeps writing, so the bot
+        // reassures her at most once every this many minutes until an agent answers.
+        'waiting_ack_minutes' => (int) env('CRM_BOT_WAITING_ACK_MINUTES', 15),
     ],
 
     'anthropic' => [

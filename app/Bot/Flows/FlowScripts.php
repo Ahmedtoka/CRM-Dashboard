@@ -47,6 +47,11 @@ final class FlowScripts
             'handover_in_hours' => ['title' => 'التحويل في مواعيد العمل', 'body' => 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء خلال دقايق 🌸'],
             'handover_after_hours' => ['title' => 'التحويل برّه مواعيد العمل', 'body' => 'تمام ✅ سجلت طلبك، وهيتم تحويلك لموظف خدمة العملاء أول ما نفتح {next_opening} 🌸'],
             'handover_no_hours' => ['title' => 'التحويل (من غير مواعيد عمل)', 'body' => 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸'],
+            // She keeps writing while she waits for a person (owner, 2026-09-21): one
+            // reassurance, then at most once every crm.bot.waiting_ack_minutes.
+            'waiting_ack_in_hours' => ['title' => 'في انتظار الموظف (في المواعيد)', 'body' => 'رسايلك وصلت للفريق 🌸 وهيتم الرد على حضرتك في أقرب وقت'],
+            'waiting_ack_after_hours' => ['title' => 'في انتظار الموظف (برّه المواعيد)', 'body' => 'رسايلك وصلت للفريق 🌸 وهيتم الرد على حضرتك أول ما نفتح {next_opening}'],
+            'waiting_ack_no_hours' => ['title' => 'في انتظار الموظف (من غير مواعيد)', 'body' => 'رسايلك وصلت للفريق 🌸 وهيتم الرد على حضرتك في أقرب وقت'],
             // Greeting mirrors (2026-09-21): the bot greets back the way she greeted, before
             // the {time_greeting} line and the menu (App\Bot\Flows\GreetingMirror).
             'greeting_mirror_salam' => ['title' => 'رد التحية: السلام عليكم', 'body' => 'وعليكم السلام ورحمة الله 🌸'],
