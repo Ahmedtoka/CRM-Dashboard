@@ -1,9 +1,12 @@
 <?php
 
-use App\Bot\Knowledge\{KnowledgeBase, SizeChart};
+use App\Bot\Knowledge\KnowledgeBase;
+use App\Bot\Knowledge\SizeChart;
 use App\Enums\UserRole;
 use App\Media\SampleMedia;
-use App\Models\{BotKnowledgeEntry, BotSetting, User};
+use App\Models\BotKnowledgeEntry;
+use App\Models\BotSetting;
+use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -12,7 +15,7 @@ it('seeds the real Le Voile knowledge entries, no longer marked as samples', fun
     $defaults = BotKnowledgeEntry::where('key', 'not like', 'script.%');
 
     expect((clone $defaults)->orderBy('sort')->pluck('key')->all())
-        ->toBe(['store_intro', 'working_hours_text', 'payment_methods', 'shipping_times', 'exchange_policy', 'return_policy', 'fabric_care'])
+        ->toBe(['store_intro', 'working_hours_text', 'payment_methods', 'shipping_times', 'exchange_policy', 'return_policy', 'fabric_care', 'agent_instructions'])
         ->and((clone $defaults)->where('is_template', true)->count())->toBe(0)
         ->and(BotKnowledgeEntry::where('key', 'exchange_policy')->value('body'))->toContain('14 يوم');
 });

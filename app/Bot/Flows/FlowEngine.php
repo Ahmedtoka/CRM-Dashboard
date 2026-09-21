@@ -2,6 +2,7 @@
 
 namespace App\Bot\Flows;
 
+use App\Bot\Agent\StoreAgent;
 use App\Bot\Catalog\ProductBrowser;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flows\Sandbox\SandboxMode;
@@ -480,6 +481,14 @@ class FlowEngine
                 $state['retries'] = 1;
                 FlowState::put($c, $state);
 
+                return new FlowResult(true, question: $text);
+            }
+
+            // 2026-09-22 (seen in the live test): a second thing that the interpreter is sure is not an
+            // answer — «الفلوس اتخصمت مرتين ومحدش بيرد!!» at the order step — was kept as the order
+            // number. With the store agent on it is answered (or handed over) instead; the detour cap
+            // of returnToFlow still stops her going round forever.
+            if ($answer->kind === 'question' && StoreAgent::enabled()) {
                 return new FlowResult(true, question: $text);
             }
         }
