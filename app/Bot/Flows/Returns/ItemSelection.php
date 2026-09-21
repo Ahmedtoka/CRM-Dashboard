@@ -17,6 +17,12 @@ final class ItemSelection
     /** Normalized whole-reply (or contained) words that pick every item. */
     private const ALL_WORDS = ['الكل', 'كله', 'كلها', 'كلهم', 'كل القطع', 'كل الحاجات', 'الجميع', 'all'];
 
+    /** Phrases that end the picking, in either language, wherever they sit in the sentence. */
+    private const REFUSAL_PHRASES = [
+        'thats it', 'that is it', 'thats all', 'that is all', 'nothing else', 'im done', 'i am done',
+        'no thanks', 'no thank you', 'كده تمام', 'كدا تمام', 'بس كده', 'بس كدا', 'خلاص', 'مفيش تاني', 'لا شكرا',
+    ];
+
     /** "Both" — every item only when the list has exactly two. */
     private const BOTH_WORDS = ['الاتنين', 'الاثنين', 'الاتنين دول', 'both'];
 
@@ -54,6 +60,12 @@ final class ItemSelection
             return null;
         }
 
+        // A refusal wins over any word inside it: «No, that is all» contains "all" but
+        // means "stop", and it used to select every item in the order (seen in testing).
+        if ($this->isRefusal($clean)) {
+            return null;
+        }
+
         foreach (self::ALL_WORDS as $w) {
             if ($clean === $w || preg_match('/(?<![\p{L}\p{N}])(?:و|ب)?'.preg_quote($w, '/').'(?![\p{L}\p{N}])/u', $clean) === 1) {
                 return self::ALL;
@@ -68,6 +80,24 @@ final class ItemSelection
         $inRange = array_values(array_unique(array_filter($numbers, fn (int $n) => $n >= 1 && $n <= $count)));
 
         return $inRange === [] ? null : $inRange;
+    }
+
+    /** «no…», «لأ…», «that's it», «بس كده»: a refusal, whatever else the sentence carries. */
+    public function isRefusal(string $clean): bool
+    {
+        $clean = trim($clean);
+
+        if ($clean === '') {
+            return false;
+        }
+
+        foreach (self::REFUSAL_PHRASES as $phrase) {
+            if (str_contains($clean, $phrase)) {
+                return true;
+            }
+        }
+
+        return preg_match('/^(?:no|nope|nah|لا|لاء|لأ)(?![\p{L}\p{N}])/u', $clean) === 1;
     }
 
     /** A quantity 1..$max in the reply ("2", "٢", "اتنين", "الاتنين"/"كلهم" = all of them), or null. */

@@ -273,8 +273,12 @@ final class OrderItemsStep extends BaseStep
 
     private function isDone(string $text): bool
     {
-        return in_array($this->resolver->clean($text), array_map(fn ($w) => $this->resolver->clean($w), self::DONE_WORDS), true)
-            || $this->resolver->yesNo($text) === 'no';
+        $clean = $this->resolver->clean($text);
+
+        return in_array($clean, array_map(fn ($w) => $this->resolver->clean($w), self::DONE_WORDS), true)
+            || $this->resolver->yesNo($text) === 'no'
+            // «No, that is all», «لأ كده تمام»: a whole sentence, not just the bare word.
+            || $this->selection->isRefusal($clean);
     }
 
     private function showList(array $state, array $step, Order $order): StepOutcome

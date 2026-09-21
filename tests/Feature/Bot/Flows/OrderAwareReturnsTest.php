@@ -7,6 +7,7 @@ use App\Bot\Flows\FlowEngine;
 use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\FlowResult;
 use App\Bot\Flows\FlowState;
+use App\Bot\Flows\Returns\ItemSelection;
 use App\Bot\Flows\Steps\OrderItemsStep;
 use App\Bot\Flows\Steps\OrderStep;
 use App\Cases\CaseSummary;
@@ -658,4 +659,16 @@ it('saves the non-returnable keywords from the bot settings page', function () {
 
     $this->actingAs($admin)->putJson('/settings/bot', ['non_returnable_keywords' => [str_repeat('x', 101)]])
         ->assertStatus(422)->assertJsonValidationErrorFor('non_returnable_keywords.0');
+});
+
+it('treats «No, that is all» as finished instead of selecting every item', function () {
+    // Seen while walking the English flow: the word "all" inside a refusal picked the whole order.
+    $selection = app(ItemSelection::class);
+
+    expect($selection->positions('No, that is all', 4))->toBeNull()
+        ->and($selection->positions("no that's it", 4))->toBeNull()
+        ->and($selection->positions('لأ كده تمام', 4))->toBeNull()
+        ->and($selection->positions('all', 4))->toBe(ItemSelection::ALL)
+        ->and($selection->positions('الكل', 4))->toBe(ItemSelection::ALL)
+        ->and($selection->positions('1 و 3', 4))->toBe([1, 3]);
 });
