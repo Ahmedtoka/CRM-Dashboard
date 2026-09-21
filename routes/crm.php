@@ -22,6 +22,7 @@ use App\Http\Controllers\Web\Settings\BotIntentController;
 use App\Http\Controllers\Web\Settings\BotKnowledgeController;
 use App\Http\Controllers\Web\Settings\BotLearningController;
 use App\Http\Controllers\Web\Settings\BotTestLinkController;
+use App\Http\Controllers\Web\Settings\BotTranslationController;
 use App\Http\Controllers\Web\Settings\BranchController;
 use App\Http\Controllers\Web\Settings\ChannelController;
 use App\Http\Controllers\Web\Settings\CityController;
@@ -200,6 +201,11 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
         Route::post('bot-flows/{flow}/main-menu', [BotFlowController::class, 'addToMainMenu'])->name('bot-flows.main-menu');
         Route::post('bot-flow-versions/{version}/restore', [BotFlowController::class, 'restore'])->name('bot-flow-versions.restore');
         Route::post('bot-flows/{flow}/simulate', BotFlowSandboxController::class)->middleware('throttle:60,1')->name('bot-flows.simulate');
+
+        // Bilingual bot (design 2026-09-21 §2): what the bot says in English, and who wrote it.
+        Route::get('bot-translations', [BotTranslationController::class, 'index'])->name('bot-translations.index');
+        Route::put('bot-translations/{translation}', [BotTranslationController::class, 'update'])->name('bot-translations.update');
+        Route::post('bot-translations/retranslate', [BotTranslationController::class, 'retranslate'])->middleware('throttle:30,1')->name('bot-translations.retranslate');
 
         // Public test links for the team (design 2026-09-21 §1): create, copy, stop, delete.
         Route::get('bot-test-links', [BotTestLinkController::class, 'index'])->name('bot-test-links.index');

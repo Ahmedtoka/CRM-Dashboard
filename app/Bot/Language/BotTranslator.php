@@ -67,7 +67,8 @@ class BotTranslator
         $jobs = [];
 
         foreach ($texts as $i => $text) {
-            if (trim($text) === '' || ! TranslationMask::hasArabic($text)) {
+            // A product or branch name stays exactly as it is (§4).
+            if (trim($text) === '' || ! TranslationMask::hasArabic($text) || KeptNames::has($text)) {
                 continue;
             }
 
@@ -88,7 +89,7 @@ class BotTranslator
             $translated = $this->memo[$job['hash'].'|'.$locale] ?? null;
 
             if ($translated !== null) {
-                $out[$i] = $this->mask->restore($translated, $job['values']);
+                $out[$i] = $this->mask->restore($translated, $job['values'], $locale);
             }
         }
 
@@ -116,7 +117,7 @@ class BotTranslator
             $this->memo[$key] = (string) $row->text;
         }
 
-        return $this->mask->restore($this->memo[$key], $values);
+        return $this->mask->restore($this->memo[$key], $values, $locale);
     }
 
     /** How many automatic translations were stored today, and the cap. */
@@ -235,8 +236,11 @@ class BotTranslator
 
     private function used(): int
     {
+        // The seeded set (context `seed`) is not a cost: it was translated once, reviewed,
+        // and shipped in the repository. Only translations this day actually paid for count.
         return $this->usedToday ??= BotTranslation::query()
             ->where('origin', BotTranslation::ORIGIN_AUTO)
+            ->where(fn ($q) => $q->whereNull('context')->orWhere('context', '!=', 'seed'))
             ->whereDate('created_at', now()->toDateString())
             ->count();
     }

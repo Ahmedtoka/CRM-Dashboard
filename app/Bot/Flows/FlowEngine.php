@@ -158,7 +158,9 @@ class FlowEngine
             // A stale tap (an old step's button, or yes/no with no pending offer): its body is only the
             // button title, so never read it as a typed answer — re-ask the waiting step, no retry counted.
             if (str_starts_with($payload, 'step:') || in_array($payload, ['yes', 'no'], true)) {
-                $this->repromptCurrent($c);
+                // Never word for word (design 2026-09-21 §3): the waiting step comes back
+                // under «إحنا خلصنا الخطوة دي فعلًا 🌸», so she can see why it changed.
+                $this->repromptCurrent($c, 0, $this->prompter->script('flow_stale_tap'));
 
                 return new FlowResult(true);
             }
@@ -460,8 +462,16 @@ class FlowEngine
 
         $answer = $text === '' ? FlowAnswer::unknown() : $this->interpret($c, $step, $text, $burst);
 
+        // §6.1 and §3: a step with its own validation (order, photo, phone, branch…) answers
+        // one question and comes back, but keeps its own two-attempt rule — so «مش معايا صورة»
+        // gets an answer once and then the step moves on instead of asking forever.
         if ($answer->kind === 'question' || ($answer->kind === 'unknown' && $this->resolver->isQuestion($text))) {
-            return new FlowResult(true, question: $text);
+            if ((int) $state['retries'] < 1) {
+                $state['retries'] = 1;
+                FlowState::put($c, $state);
+
+                return new FlowResult(true, question: $text);
+            }
         }
 
         if ($answer->kind === 'exit') {

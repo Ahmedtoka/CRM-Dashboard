@@ -118,10 +118,15 @@ final class FlowAnswerResolver
         return $bestScore >= self::SIMILAR_ENOUGH && $bestScore - $secondScore >= self::CLEAR_LEAD ? $best : null;
     }
 
-    /** 0..1, the better of "the whole reply looks like it" and "one of its words looks like it". */
+    /**
+     * 0..1: the best of "the whole reply looks like it", "one of its words looks like it",
+     * and "her words cover the option's words" — the last one is what reads «returns and
+     * exchange» as «Returns & Exchanges», where the words are the same but the order,
+     * the plural and the «&» are not.
+     */
     private function similarity(string $text, string $needle): float
     {
-        $best = $this->ratio($text, $needle);
+        $best = max($this->ratio($text, $needle), $this->covers($text, $needle));
 
         foreach (explode(' ', $text) as $word) {
             if (mb_strlen($word) >= 3) {
@@ -130,6 +135,30 @@ final class FlowAnswerResolver
         }
 
         return $best;
+    }
+
+    /**
+     * The share of the needle's own words (4 letters or more) that her text carries, matched
+     * on their first four letters so a plural or a suffix still counts. A needle of one short
+     * word scores 0: that is what exact matching is for.
+     */
+    private function covers(string $text, string $needle): float
+    {
+        $words = array_values(array_filter(explode(' ', $needle), fn (string $w) => mb_strlen($w) >= 4));
+
+        if (count($words) < 2) {
+            return 0.0;
+        }
+
+        $found = 0;
+
+        foreach ($words as $word) {
+            if (str_contains($text, mb_substr($word, 0, 4))) {
+                $found++;
+            }
+        }
+
+        return $found / count($words);
     }
 
     private function ratio(string $a, string $b): float

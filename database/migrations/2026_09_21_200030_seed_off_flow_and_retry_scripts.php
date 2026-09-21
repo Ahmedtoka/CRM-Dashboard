@@ -30,6 +30,7 @@ return new class extends Migration
         'flow_switch_offer',
         'flow_thanks',
         'flow_resume_offer',
+        'flow_stale_tap',
         'flow_menu_fallback',
     ];
 

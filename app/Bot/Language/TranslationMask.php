@@ -21,14 +21,22 @@ final class TranslationMask
 
     private const CLOSE = '⟧';
 
-    /** In order: links, e-mail, {placeholder}, emoji, numbers (with , . : / - inside). */
-    private const PATTERNS = [
-        '~https?://\S+|www\.[^\s،,]+~iu',
-        '~[\w.+-]+@[\w-]+\.[\w.]+~u',
-        '~\{[a-z_][a-z0-9_]*\}~i',
-        '~[\x{1F000}-\x{1FAFF}\x{2190}-\x{21FF}\x{2300}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}\x{20E3}]+~u',
-        '~(?<![\p{L}\d])[+#]?\d+(?:[.,:/-]\d+)*~u',
-    ];
+    /**
+     * One pass, alternation in priority order: links, e-mail, `{placeholder}`, `%s`,
+     * «a name the bot is quoting» (a product, a branch, a piece she picked — never
+     * translated), emoji, then numbers. It has to be a single pass: a second pass would
+     * see the digit inside a marker it just wrote and mask the marker itself.
+     */
+    private const PATTERN = '~https?://\S+|www\.[^\s،,]+'
+        .'|[\w.+-]+@[\w-]+\.[\w.]+'
+        .'|\{[a-z_][a-z0-9_]*\}'
+        .'|%[sd]'
+        .'|«[^»]*»'
+        .'|[\x{1F000}-\x{1FAFF}\x{2190}-\x{21FF}\x{2300}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}\x{20E3}]+'
+        // A leading # or + is left in place on purpose: «#{order_number}» and «#1047» must
+        // mask to the same «#⟦n⟧», or the seeded translation of the template never matches.
+        // The ⟦ guards keep the digits of a marker already written from being masked again.
+        .'|(?<![\p{L}\d\x{27E6}])[\d\x{0660}-\x{0669}]+(?:[.,:/-][\d\x{0660}-\x{0669}]+)*(?!\x{27E7})~iu';
 
     /**
      * @return array{0:string, 1:list<string>} the masked text and the values, in marker order
@@ -36,31 +44,54 @@ final class TranslationMask
     public function mask(string $text): array
     {
         $values = [];
+        $mark = function (string $value) use (&$values): string {
+            $values[] = $value;
 
-        foreach (self::PATTERNS as $pattern) {
-            $text = (string) preg_replace_callback($pattern, function (array $m) use (&$values) {
-                $values[] = $m[0];
+            return self::OPEN.(count($values) - 1).self::CLOSE;
+        };
 
-                return self::OPEN.(count($values) - 1).self::CLOSE;
-            }, $text);
+        // The names and words this turn registered come first: they may contain digits,
+        // links or emoji of their own, and they must be masked whole.
+        foreach (KeptNames::all() as $value => $_) {
+            if (str_contains($text, $value)) {
+                $text = str_replace($value, $mark($value), $text);
+            }
         }
 
-        return [$text, $values];
+        return [(string) preg_replace_callback(self::PATTERN, fn (array $m) => $mark($m[0]), $text), $values];
     }
 
     /**
      * Puts the masked values back. A marker the model dropped is simply not restored;
-     * a marker it duplicated is restored with the same value.
+     * a marker it duplicated is restored with the same value. Outside Arabic the digits
+     * come back in Latin («٤» → «4», design §1) and a word registered with a ready
+     * translation comes back translated (KeptNames::swap).
      *
      * @param  list<string>  $values
      */
-    public function restore(string $text, array $values): string
+    public function restore(string $text, array $values, string $locale = LanguageDetector::AR): string
     {
+        $swaps = KeptNames::all();
+
         return (string) preg_replace_callback(
             '~'.self::OPEN.'(\d+)'.self::CLOSE.'~u',
-            fn (array $m) => $values[(int) $m[1]] ?? '',
+            function (array $m) use ($values, $locale, $swaps) {
+                $value = $values[(int) $m[1]] ?? '';
+
+                if (isset($swaps[$value][$locale])) {
+                    return $swaps[$value][$locale];
+                }
+
+                return $locale === LanguageDetector::AR ? $value : self::latinDigits($value);
+            },
             $text,
         );
+    }
+
+    /** Arabic-Indic digits as Latin ones; everything else untouched. */
+    public static function latinDigits(string $text): string
+    {
+        return strtr($text, ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9']);
     }
 
     /** Every marker of the masked source is still in $translated (nothing was eaten). */

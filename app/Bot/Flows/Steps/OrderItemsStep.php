@@ -7,6 +7,7 @@ use App\Bot\Flows\FlowAnswerResolver;
 use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\Returns\ItemSelection;
 use App\Bot\Flows\Returns\ReturnItems;
+use App\Bot\Language\KeptNames;
 use App\Models\Conversation;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -88,6 +89,9 @@ final class OrderItemsStep extends BaseStep
     private const DONE_WORDS = ['لا', 'لاء', 'لا كده تمام', 'لا كدا تمام', 'كده تمام', 'كدا تمام', 'خلاص', 'بس كده', 'بس كدا', 'بس', 'لا شكرا', 'مفيش', 'no', 'تمام كده'];
 
     private const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+
+    /** The same months in English, for an English conversation (design 2026-09-21 §1). */
+    private const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
     /** `return_rules: false` on the step being handled (set by every entry point). */
     private bool $plain = false;
@@ -534,7 +538,8 @@ final class OrderItemsStep extends BaseStep
     private function itemButtons(array $state, Order $order): array
     {
         $buttons = $order->items->take(self::MAX_ITEM_BUTTONS)->values()
-            ->map(fn (OrderItem $item) => $this->stepButton($state, (string) $item->title, 'item:'.$item->id))->all();
+            // The piece's own name goes out as she reads it on the invoice, in either language (§4).
+            ->map(fn (OrderItem $item) => $this->stepButton($state, KeptNames::keep((string) $item->title), 'item:'.$item->id))->all();
 
         if ($order->items->count() > 2 && $order->items->count() <= self::MAX_ITEM_BUTTONS) {
             $buttons[] = $this->stepButton($state, self::MULTI_BUTTON, 'multi');
@@ -581,14 +586,16 @@ final class OrderItemsStep extends BaseStep
             $when = OrderStatusText::shortLabel($key).' (اتطلب يوم '.$this->day($placed).')';
         }
 
-        return 'لقيت أوردر '.$number.($name !== '' ? " باسم {$name}" : '').' — '.$when;
+        return 'لقيت أوردر '.$number.($name !== '' ? ' باسم '.KeptNames::keep($name) : '').' — '.$when;
     }
 
     private function day(CarbonImmutable $at): string
     {
         $local = $at->setTimezone(OrderStatusText::TIMEZONE);
 
-        return $local->day.' '.self::MONTHS[$local->month - 1];
+        // The month has a ready English name of its own, so a date never costs a model
+        // call and «اتسلم يوم 12 سبتمبر» reads «12 September» in an English chat.
+        return $local->day.' '.KeptNames::swap(self::MONTHS[$local->month - 1], self::MONTHS_EN[$local->month - 1]);
     }
 
     /** "فستان ليلى — أسود / M × 2 — 850 ج.م" */
@@ -604,7 +611,7 @@ final class OrderItemsStep extends BaseStep
     {
         $variant = $this->items->variantOf($item);
 
-        return trim($item->title).($variant !== null ? " ({$variant})" : '');
+        return KeptNames::keep(trim($item->title).($variant !== null ? " ({$variant})" : ''));
     }
 
     /** @param  list<array<string, mixed>>  $rows */

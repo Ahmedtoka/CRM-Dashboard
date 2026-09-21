@@ -2,6 +2,7 @@
 
 namespace App\Bot\Language;
 
+use App\Bot\Flows\ButtonMatcher;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Support\Collection;
@@ -20,7 +21,10 @@ use Illuminate\Support\Facades\Log;
  */
 final class ConversationLanguage
 {
-    public function __construct(private readonly LanguageDetector $detector) {}
+    public function __construct(
+        private readonly LanguageDetector $detector,
+        private readonly ButtonMatcher $buttons,
+    ) {}
 
     /** The conversation's language, Arabic until she shows us otherwise. */
     public function of(Conversation $c): string
@@ -42,8 +46,11 @@ final class ConversationLanguage
      */
     public function observe(Conversation $c, Collection|array $burst): string
     {
+        // A tapped (or typed) button is the bot's own wording coming back, not hers: tapping
+        // «ProBar Coffee» in an Arabic chat must never turn the conversation English.
         $texts = $burst instanceof Collection
-            ? $burst->map(fn ($m) => (string) ($m->body ?? ''))->all()
+            ? $burst->reject(fn (Message $m) => $this->buttons->match($c, $m) !== null)
+                ->map(fn (Message $m) => (string) ($m->body ?? ''))->values()->all()
             : array_map('strval', $burst);
 
         // The last message that says something wins: she switched on purpose.

@@ -4,6 +4,7 @@ namespace App\Bot\Flows;
 
 use App\Bot\ArabicNormalizer;
 use App\Bot\Flow\Concerns\CallsClaudeJson;
+use App\Bot\Language\KeptNames;
 use App\Channels\Cards\OutboundCards;
 use App\Models\BotSetting;
 use App\Models\Branch;
@@ -239,8 +240,10 @@ final class BranchFinder
             }
 
             $cards[] = [
-                'title' => (string) $b->name,
-                'subtitle' => implode("\n", array_filter([$address, $tailText], fn ($p) => $p !== '')),
+                // A branch name and its address stay in Arabic in an English chat (§4):
+                // that is what is written on the shop and what a driver needs to read.
+                'title' => KeptNames::keep((string) $b->name),
+                'subtitle' => KeptNames::keep(implode("\n", array_filter([$address, $tailText], fn ($p) => $p !== ''))),
                 'text' => $this->branchText($b),
                 'buttons' => $buttons,
             ];

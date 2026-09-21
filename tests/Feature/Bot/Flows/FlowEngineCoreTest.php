@@ -292,7 +292,8 @@ it('re-asks the waiting step on a stale button tap without saving or counting a 
         ->and($state['data'])->toBe($before['data'])
         ->and($state['data'])->not->toHaveKey('description')
         ->and($state['retries'])->toBe(0)
-        ->and(lastBot()->body)->toBe('احكيلي حصل إيه بالتفصيل');
+        ->and(lastBot()->body)->toBe('إحنا خلصنا الخطوة دي فعلًا 🌸
+احكيلي حصل إيه بالتفصيل');
 
     flowTurn('أيوه', 'yes');
     $state = Conversation::first()->bot_state['flow'];

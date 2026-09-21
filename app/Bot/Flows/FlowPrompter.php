@@ -4,6 +4,7 @@ namespace App\Bot\Flows;
 
 use App\Bot\Flow\ScriptPlaceholders;
 use App\Bot\Knowledge\KnowledgeBase;
+use App\Bot\Language\KeptNames;
 
 /**
  * Builds what a waiting flow step says: the step text as written (no AI
@@ -193,10 +194,13 @@ final class FlowPrompter
         // A case number is only shown when there is one: never "#0" (the sandbox's unsaved case, 2026-09-19).
         $caseId = is_numeric($data['case_id'] ?? null) && (int) $data['case_id'] > 0 ? (string) (int) $data['case_id'] : '';
 
+        // Her own name and the product she picked are names, not text to translate
+        // (design 2026-09-21 §4) — and registering them keeps «أهلاً يا سارة» and
+        // «أهلاً يا منى» a single cached source.
         return $this->placeholders->render(strtr($text, $card + [
-            '{customer_first_name}' => $first,
+            '{customer_first_name}' => KeptNames::keep($first),
             '{order_number}' => $number !== '' ? $number : $caseId,
-            '{exchange_product_title}' => $product !== '' ? $product : self::UNKNOWN_PRODUCT,
+            '{exchange_product_title}' => $product !== '' ? KeptNames::keep($product) : KeptNames::swap(self::UNKNOWN_PRODUCT, 'the item you sent'),
             '{case_id}' => $caseId,
         ]));
     }

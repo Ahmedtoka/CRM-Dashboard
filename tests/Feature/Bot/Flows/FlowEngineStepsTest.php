@@ -242,7 +242,8 @@ it('offers the branch buttons of a typed area in the complaint and saves the tap
     stepsTurn('التجمع الخامس', 'step:complaint:branch:area:fifth_settlement');
     expect(stepsFlow()['step'])->toBe('visit_date')
         ->and(stepsFlow()['data'])->not->toHaveKey('visit_date')
-        ->and(stepsLastBot()->body)->toBe('كانت الزيارة إمتى تقريبًا؟');
+        ->and(stepsLastBot()->body)->toBe('إحنا خلصنا الخطوة دي فعلًا 🌸
+كانت الزيارة إمتى تقريبًا؟');
 });
 
 it('opens the area buttons on entering the branch step and branch buttons on an area tap', function () {

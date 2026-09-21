@@ -26,6 +26,8 @@ class BotFlowSandboxController extends Controller
             'input.text' => ['nullable', 'string', 'max:1000'],
             'input.payload' => ['nullable', 'string', 'max:191'],
             'input.photo' => ['sometimes', 'boolean'],
+            // Bilingual bot (design 2026-09-21 §1): preview the flow as an English customer.
+            'input.language' => ['nullable', Rule::in(['ar', 'en'])],
         ]);
 
         try {
@@ -37,6 +39,7 @@ class BotFlowSandboxController extends Controller
                     'text' => $data['input']['text'] ?? null,
                     'payload' => $data['input']['payload'] ?? null,
                     'photo' => (bool) ($data['input']['photo'] ?? false),
+                    'language' => $data['input']['language'] ?? null,
                 ],
                 $request->user(),
             );

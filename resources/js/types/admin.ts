@@ -794,3 +794,19 @@ export interface TeamTestTranscriptLine {
     has_image: boolean;
     created_at: string | null;
 }
+
+/** Settings → الترجمات (design 2026-09-21 §2): one Arabic text of the bot and its English. */
+export interface BotTranslationRow {
+    id: number | null;
+    source: string;
+    text: string | null;
+    origin: 'auto' | 'human' | null;
+    context: string;
+    short: boolean;
+    orphan: boolean;
+}
+
+export interface BotTranslationUsage {
+    used: number;
+    cap: number;
+}

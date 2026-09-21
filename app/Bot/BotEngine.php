@@ -14,6 +14,7 @@ use App\Bot\Grounding\BotContextBuilder;
 use App\Bot\Knowledge\KnowledgeBase;
 use App\Bot\Knowledge\SizeChart;
 use App\Bot\Language\ConversationLanguage;
+use App\Bot\Language\KeptNames;
 use App\Bot\Learning\Jobs\ReviewConversation;
 use App\Enums\ActorType;
 use App\Enums\AttachmentType;
@@ -88,6 +89,7 @@ class BotEngine
         // conversation follows the language she is writing in. Done once per turn, here,
         // so every path below (flows, rules, the agent, a handover) speaks it.
         app(ConversationLanguage::class)->observe($c, $burst);
+        KeptNames::reset();
 
         $text = $burst->pluck('body')->map(fn ($b) => (string) $b)->filter(fn ($b) => trim($b) !== '')->implode("\n");
         $peeked = $this->rules->peek($text, 'message', $c->platform);

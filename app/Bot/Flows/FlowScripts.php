@@ -37,6 +37,8 @@ final class FlowScripts
             'flow_thanks' => ['title' => 'رد على الشكر جوه الفلو', 'body' => 'العفو يا قمر 🌸'],
             // §6.5: she came back after a long silence.
             'flow_resume_offer' => ['title' => 'استكمال بعد انقطاع', 'body' => 'لسه فاكرين طلبك 🌸 تحبي نكمل من حيث ما وقفنا؟'],
+            // §3: she tapped a button of a step the flow has already passed.
+            'flow_stale_tap' => ['title' => 'زرار من خطوة قديمة', 'body' => 'إحنا خلصنا الخطوة دي فعلًا 🌸'],
             // §6.6: nothing matched and no flow is running — never a dead end.
             'flow_menu_fallback' => ['title' => 'مفيش فلو ومفيش إجابة', 'body' => 'أقدر أساعدك في 👇'],
             'flow_not_found_order' => ['title' => 'أوردر مش موجود', 'body' => 'مش لاقية أوردر بالبيانات دي 🌸 ممكن تتأكدي من الرقم؟'],

@@ -291,7 +291,10 @@ class TurnRunner
         }
 
         // Final fix wave I5: a phone or an address that no ask or lookup is waiting for is an order being placed.
-        $newOrder = ! $aiError && $flowIntent === null && $collectIntent === null && $lookupIntents === []
+        // Never inside a guided flow (design 2026-09-21 §6.1): the order number and mobile in the
+        // history are the ones that flow asked for, not a new order — she is only asking a question,
+        // and she must be answered and brought back, not handed over.
+        $newOrder = ! $aiError && ! $flowContext && $flowIntent === null && $collectIntent === null && $lookupIntents === []
             && blank($previousState['awaiting_intent'] ?? null)
             && $this->hasContactDetails($entities, $texts);
 

@@ -31,6 +31,8 @@ class Conversation extends Model
         'handler',
         'needs_human',
         'source',
+        // Bilingual bot (design 2026-09-21 §1): 'ar' | 'en', decided from her own messages.
+        'language',
         'source_comment_id',
         'first_responder_id',
         'last_responder_id',

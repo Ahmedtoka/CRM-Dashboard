@@ -23,6 +23,7 @@ use App\Bot\Language\BotTranslator;
 use App\Bot\Language\ClaudeTranslationEngine;
 use App\Bot\Language\FakeTranslationEngine;
 use App\Bot\Language\TranslationEngine;
+use App\Bot\Language\TranslationsCommand;
 use App\Bot\Learning\ClaudeConversationReviewer;
 use App\Bot\Learning\ClaudeLearningAnalyst;
 use App\Bot\Learning\ConversationReviewer;
@@ -153,7 +154,7 @@ class BotServiceProvider extends ServiceProvider
         // Registered unconditionally, NOT behind runningInConsole(): the
         // "تشغيل التعلم الآن" button calls Artisan::call('bot:learn') from a web
         // request, where a console-guarded registration is a 500.
-        $this->commands([LearnCommand::class]);
+        $this->commands([LearnCommand::class, TranslationsCommand::class]);
 
         // The nightly review runs after the Cairo day it reviews has closed.
         $this->callAfterResolving(Schedule::class, fn (Schedule $schedule) => $schedule

@@ -50,7 +50,7 @@ final class FlowSandbox
     /**
      * @param  'draft'|'published'  $source
      * @param  array{flow?:array, flow_confirm?:string}|null  $state  the `bot_state` subset returned by a previous run; null starts the flow under test
-     * @param  array{text?:?string, payload?:?string, photo?:bool}  $input
+     * @param  array{text?:?string, payload?:?string, photo?:bool, language?:?string}  $input  `language` (design 2026-09-21 §1) runs the turn as an English customer
      * @return array{messages: list<array{text:string, buttons: list<array{title:string, payload:string}>}>, events: list<array{type:string, label:string, data:array}>, state: array|null, current: array{flow_key:string, step_id:string}|null}
      */
     public function run(BotFlow $flow, string $source, ?array $state, array $input, User $by): array
@@ -72,7 +72,7 @@ final class FlowSandbox
             $inTransaction = true;
 
             $state = $this->stateSubset($state);
-            $c = $this->conversation($state);
+            $c = $this->conversation($state, ($input['language'] ?? null) === 'en' ? 'en' : 'ar');
             $previousKey = FlowState::flow($c)['key'] ?? null;
             $engine = $this->app->make(FlowEngine::class);
             $result = null;
@@ -148,7 +148,7 @@ final class FlowSandbox
         return $subset !== [] ? $subset : null;
     }
 
-    private function conversation(?array $state): Conversation
+    private function conversation(?array $state, string $language = 'ar'): Conversation
     {
         $customer = Customer::create(['name' => 'تجربة الفلو']);
         $account = ChannelAccount::create([
@@ -168,6 +168,7 @@ final class FlowSandbox
             'needs_human' => false,
             'source' => ConversationSource::Direct,
             'unread_count' => 0,
+            'language' => $language,
             'bot_state' => $state,
         ]);
     }
