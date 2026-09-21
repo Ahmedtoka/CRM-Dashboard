@@ -78,7 +78,7 @@ Thanks for your patience ⟦3⟧',
     'أهلاً بيكي ⟦0⟧
 مساء الخير يا فندم يومك حلو ان شاء الله ⟦1⟧ مع حضرتك ميار من لوفوال
 إزاي أقدر أساعد حضرتك؟' => 'Welcome ⟦0⟧
-Good evening! Hope you\'re having a lovely day ⟦1⟧ I\'m Mayar from Lofoual
+Good evening! Hope you\'re having a lovely day ⟦1⟧ I\'m Mayar from Le Voile
 How can I help you?',
     'أهلاً بيكي ⟦0⟧' => 'Welcome ⟦0⟧',
     'أهلاً يا ⟦0⟧ ⟦1⟧ أوردر #⟦2⟧ — تحبي تلغيه ولا تعدلي فيه؟' => 'Hi ⟦0⟧ ⟦1⟧ order #⟦2⟧ — want to cancel it or make changes?',

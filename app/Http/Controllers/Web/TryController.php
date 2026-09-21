@@ -38,11 +38,20 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class TryController extends Controller
 {
-    /** Requests a session may make per minute (design §2). */
+    /** Writes a session may make per minute (design §2): sending, photos, resets. */
     public const PER_MINUTE = 20;
 
-    /** Requests one address may make per minute across sessions (design §6). */
+    /** Writes one address may make per minute across sessions (design §6). */
     public const PER_IP_PER_MINUTE = 60;
+
+    /**
+     * The 3 s poll alone is 20 requests a minute, so it gets its own, roomier budget:
+     * counting it against the write limit throttled a tester who was only sitting there,
+     * and three testers on one office connection tripped the address limit.
+     */
+    public const POLLS_PER_MINUTE = 40;
+
+    public const POLLS_PER_IP_PER_MINUTE = 600;
 
     /** A page view is counted at most once per this many seconds per browser session. */
     public const VIEW_COOLDOWN_SECONDS = 120;
@@ -400,13 +409,19 @@ class TryController extends Controller
     /** Per session and per address (design §2 and §6); a page view is never throttled away. */
     private function throttle(Request $request, BotTestLink $link, string $action): void
     {
-        // Keyed on the tester's run once they have one, so the limit follows the person
-        // rather than a browser session id that may be rotated underneath them.
-        $sessionKey = 'try:'.$link->id.':'.($this->storedToken($request, $link) ?? $request->session()->getId());
-        $ipKey = 'try-ip:'.TestLinkSessions::ipHash($request->ip());
+        $polling = $action === 'poll';
 
-        if (RateLimiter::tooManyAttempts($sessionKey, self::PER_MINUTE)
-            || RateLimiter::tooManyAttempts($ipKey, self::PER_IP_PER_MINUTE)) {
+        // Keyed on the tester's run once they have one, so the limit follows the person
+        // rather than a browser session id that may be rotated underneath them. Polls are
+        // counted separately from writes, on their own budget.
+        $owner = $this->storedToken($request, $link) ?? $request->session()->getId();
+        $sessionKey = ($polling ? 'try-poll:' : 'try:').$link->id.':'.$owner;
+        $ipKey = ($polling ? 'try-poll-ip:' : 'try-ip:').TestLinkSessions::ipHash($request->ip());
+        $perSession = $polling ? self::POLLS_PER_MINUTE : self::PER_MINUTE;
+        $perIp = $polling ? self::POLLS_PER_IP_PER_MINUTE : self::PER_IP_PER_MINUTE;
+
+        if (RateLimiter::tooManyAttempts($sessionKey, $perSession)
+            || RateLimiter::tooManyAttempts($ipKey, $perIp)) {
             abort(Response::HTTP_TOO_MANY_REQUESTS, 'Slow down a little 🌸');
         }
 

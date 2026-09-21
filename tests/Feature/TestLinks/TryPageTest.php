@@ -143,11 +143,24 @@ it('throttles a session that polls too fast', function () {
     $this->postJson("/try/{$link->token}/start", ['name' => 'سارة']);
 
     // The limit is per run, so the polls all share one bucket once the run exists.
-    for ($i = 0; $i < TryController::PER_MINUTE; $i++) {
+    for ($i = 0; $i < TryController::POLLS_PER_MINUTE; $i++) {
         $this->getJson("/try/{$link->token}/state")->assertOk();
     }
 
     $this->getJson("/try/{$link->token}/state")->assertStatus(429);
+});
+
+it('lets a tester keep talking while the 3 s poll runs: polls never spend the write budget', function () {
+    // The page polls 20 times a minute on its own; counting that against the write
+    // limit throttled a tester who had only been sitting there watching.
+    $link = tryLink();
+    $this->postJson("/try/{$link->token}/start", ['name' => 'سارة']);
+
+    for ($i = 0; $i < TryController::PER_MINUTE; $i++) {
+        $this->getJson("/try/{$link->token}/state")->assertOk();
+    }
+
+    $this->postJson("/try/{$link->token}/messages", ['text' => 'عايزة أرجّع'])->assertOk();
 });
 
 it('refuses to serve a link that is full', function () {

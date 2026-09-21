@@ -86,8 +86,12 @@ function links(cards: TryCards) {
     return cards.type === 'button' ? cards.buttons : [];
 }
 
-async function call(path: string, body?: BodyInit, headers: Record<string, string> = {}): Promise<boolean> {
-    busy.value = true;
+/**
+ * `background` is the 3 s poll: it must never look "busy", or a tap that lands while
+ * it is in flight is swallowed and the tester sees nothing happen (seen in testing).
+ */
+async function call(path: string, body?: BodyInit, headers: Record<string, string> = {}, background = false): Promise<boolean> {
+    if (!background) busy.value = true;
     error.value = null;
     try {
         const response = await fetch(`${base}${path}`, {
@@ -111,7 +115,7 @@ async function call(path: string, body?: BodyInit, headers: Record<string, strin
         error.value = 'No connection. Check your internet and try again.';
         return false;
     } finally {
-        busy.value = false;
+        if (!background) busy.value = false;
     }
 }
 
@@ -152,8 +156,9 @@ async function sendPhoto(event: Event): Promise<void> {
 }
 
 async function poll(): Promise<void> {
+    // Skip only while the tester's own request is in flight, so its fresher answer wins.
     if (busy.value) return;
-    await call('/state');
+    await call('/state', undefined, {}, true);
 }
 
 async function startOver(): Promise<void> {
