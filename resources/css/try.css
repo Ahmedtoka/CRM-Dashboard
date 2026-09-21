@@ -370,6 +370,8 @@ body {
 /* ---------------------------------------------------------------- cards */
 
 .try-cards {
+    /* The thread is a flex column: without this a full thread squeezes the carousel to a line. */
+    flex: none;
     display: flex;
     gap: 8px;
     overflow-x: auto;

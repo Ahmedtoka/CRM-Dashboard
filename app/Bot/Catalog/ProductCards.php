@@ -114,11 +114,19 @@ class ProductCards
     {
         $url = (string) ($p->image_url ?: $p->variants->firstWhere('image_url', '!=', null)?->image_url);
 
+        return self::jpeg($url);
+    }
+
+    /** A public https picture every channel accepts, or null. */
+    public static function jpeg(?string $url): ?string
+    {
+        $url = (string) $url;
+
         if ($url === '' || ! str_starts_with($url, 'https://')) {
             return null;
         }
 
-        return str_contains($url, 'cdn.shopify.com')
+        return str_contains($url, 'cdn.shopify.com') && ! str_contains($url, 'format=')
             ? $url.(str_contains($url, '?') ? '&' : '?').'width=800&format=jpg'
             : $url;
     }

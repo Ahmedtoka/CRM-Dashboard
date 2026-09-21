@@ -2,12 +2,14 @@
 
 namespace App\Bot\Flows\Steps;
 
+use App\Bot\Catalog\ProductCards;
 use App\Bot\Flow\Orders\OrderStatusText;
 use App\Bot\Flows\FlowAnswerResolver;
 use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\Returns\ItemSelection;
 use App\Bot\Flows\Returns\ReturnItems;
 use App\Bot\Language\KeptNames;
+use App\Channels\Cards\OutboundCards;
 use App\Models\Conversation;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -62,6 +64,15 @@ final class OrderItemsStep extends BaseStep
     public const NOTHING_TEXT = 'تمام 🌸 لو احتجتي أي حاجة تانية أنا موجودة';
 
     public const MULTI_BUTTON = 'كذا قطعة';
+
+    /** The one button on a piece's picture card (2026-09-22). */
+    public const PICK_BUTTON = 'اختاري دي';
+
+    public const PICK_BUTTON_RETURN = 'أرجّع دي';
+
+    public const PICK_BUTTON_EXCHANGE = 'أبدّل دي';
+
+    public const PICK_BUTTON_EDIT = 'أعدّل دي';
 
     /** One tap for the whole order (owner, 2026-09-21): «أرجع كله» / «أبدل كله». */
     public const ALL_BUTTON_RETURN = 'أرجع كله';
@@ -119,7 +130,7 @@ final class OrderItemsStep extends BaseStep
             return StepOutcome::wait([['text' => $this->fallbackText()]], 0, ['items_pending' => ['mode' => 'fallback'], 'selected_items' => null]);
         }
 
-        return StepOutcome::wait([$this->listMessage($state, $step, $order, [], $this->kind($state) === null && ! $this->plain)], 0, ['items_pending' => ['mode' => 'pick'], 'selected_items' => null]);
+        return StepOutcome::wait($this->listMessages($state, $step, $order, [], $this->kind($state) === null && ! $this->plain), 0, ['items_pending' => ['mode' => 'pick'], 'selected_items' => null]);
     }
 
     /** `return_rules: false`: a plain picker without the return rules (cancel/edit). */
@@ -292,7 +303,7 @@ final class OrderItemsStep extends BaseStep
 
     private function showList(array $state, array $step, Order $order): StepOutcome
     {
-        return StepOutcome::wait([$this->listMessage($state, $step, $order, $this->selected($state['data']), false)], 0, ['items_pending' => ['mode' => 'pick']]);
+        return StepOutcome::wait($this->listMessages($state, $step, $order, $this->selected($state['data']), false), 0, ['items_pending' => ['mode' => 'pick']]);
     }
 
     /**
@@ -522,6 +533,53 @@ final class OrderItemsStep extends BaseStep
             'qty' => $qty,
             'price' => $item->price !== null ? (float) $item->price : null,
             'exchange_only' => ! $this->plain && $this->items->isDiscounted($item),
+        ];
+    }
+
+    /**
+     * The order's pieces as picture cards (owner, 2026-09-22): each card is the piece's own photo,
+     * its name, «أسود / M × 1 — 850 ج.م» and one button that picks it; the question follows as its
+     * own message, so its quick replies («أرجع كله», «كذا قطعة», the names) stay under the newest
+     * message and a typed "2" still means piece 2. With no photos at all, or past 10 pieces, the numbered
+     * text list goes out as before.
+     *
+     * @param  list<array<string, mixed>>  $selected
+     * @return list<array<string, mixed>>
+     */
+    private function listMessages(array $state, array $step, Order $order, array $selected, bool $withHeader): array
+    {
+        $list = $this->listMessage($state, $step, $order, $selected, $withHeader);
+        $items = $order->items->values();
+        $chosen = array_map(fn ($s) => (int) ($s['line_item_id'] ?? 0), $selected);
+        $pictures = $items->map(fn (OrderItem $i) => ProductCards::jpeg($i->image_url ?: $i->variant?->image_url ?: $i->variant?->product?->image_url));
+
+        // A piece without a photo still gets its card; with no photos at all the text list reads better.
+        if ($items->count() > OutboundCards::MAX_CARDS || $pictures->filter()->isEmpty()) {
+            return [$list];
+        }
+
+        $pick = match (true) {
+            $this->plain => self::PICK_BUTTON_EDIT,
+            $this->kind($state) === 'exchange' => self::PICK_BUTTON_EXCHANGE,
+            $this->kind($state) === 'return' => self::PICK_BUTTON_RETURN,
+            default => self::PICK_BUTTON,
+        };
+
+        $cards = OutboundCards::generic($items->map(fn (OrderItem $item, int $i) => [
+            'title' => (in_array((int) $item->id, $chosen, true) ? '✅ ' : '').($i + 1).'. '.KeptNames::keep(trim((string) $item->title)),
+            'subtitle' => trim(($this->items->variantOf($item) ?? '').' × '.(int) $item->qty.($item->price !== null ? ' — '.$this->money((float) $item->price).' ج.م' : ''), ' —'),
+            'text' => ($i + 1).'. '.$this->lineText($item),
+            'image_url' => $pictures[$i],
+            'buttons' => [OutboundCards::postback($pick, "step:{$state['key']}:{$state['step']}:item:{$item->id}")],
+        ])->all());
+
+        $question = trim($this->prompter->renderText((string) ($step['text'] ?? ''), $state['data'] ?? [])) ?: ($this->plain ? self::PLAIN_TEXT : self::DEFAULT_TEXT);
+        $header = $withHeader ? $this->header($state, $order) : null;
+
+        return [
+            // The body is the numbered list: what a channel without cards shows instead.
+            ['text' => $list['text'], 'cards' => $cards],
+            ['text' => trim(($header !== null ? $header."\n" : '').$question), 'buttons' => $list['buttons']],
         ];
     }
 
