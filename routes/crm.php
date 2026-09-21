@@ -21,6 +21,7 @@ use App\Http\Controllers\Web\Settings\BotFlowSandboxController;
 use App\Http\Controllers\Web\Settings\BotIntentController;
 use App\Http\Controllers\Web\Settings\BotKnowledgeController;
 use App\Http\Controllers\Web\Settings\BotLearningController;
+use App\Http\Controllers\Web\Settings\BotReplyController;
 use App\Http\Controllers\Web\Settings\BotTestLinkController;
 use App\Http\Controllers\Web\Settings\BotTranslationController;
 use App\Http\Controllers\Web\Settings\BranchController;
@@ -160,6 +161,9 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
         // Intent catalog (human bot flow Task 5): routing/priority/queue/scripts per intent.
         Route::get('bot-intents', [BotIntentController::class, 'index'])->name('bot-intents.index');
         Route::patch('bot-intents/{intent}', [BotIntentController::class, 'update'])->name('bot-intents.update');
+
+        // Every reply the bot can give, on one page (owner, 2026-09-22).
+        Route::get('bot-replies', [BotReplyController::class, 'index'])->name('bot-replies.index');
 
         Route::get('bot-knowledge', [BotKnowledgeController::class, 'index'])->name('bot-knowledge.index');
         Route::post('bot-knowledge/entries', [BotKnowledgeController::class, 'storeEntry'])->name('bot-knowledge.entries.store');

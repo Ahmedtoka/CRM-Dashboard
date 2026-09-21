@@ -45,6 +45,7 @@ const mainNavItems = computed<NavItem[]>(() => {
         );
         settings.push(
             { title: t('nav.settings_bot'), href: '/settings/bot', section: bot },
+            { title: t('nav.settings_bot_replies'), href: '/settings/bot-replies', section: bot },
             { title: t('nav.settings_bot_intents'), href: '/settings/bot-intents', section: bot },
             { title: t('nav.settings_bot_flows'), href: '/settings/bot-flows', section: bot },
             { title: t('nav.settings_bot_knowledge'), href: '/settings/bot-knowledge', section: bot },
