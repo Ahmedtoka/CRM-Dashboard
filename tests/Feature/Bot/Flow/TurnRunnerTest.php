@@ -43,7 +43,8 @@ beforeEach(function () {
     ChannelAccount::factory()->create(['platform' => Platform::Facebook, 'external_id' => 'PAGE1']);
     BotSetting::current()->update(['enabled' => true, 'ai_enabled' => true, 'working_hours' => null, 'min_confidence' => 0.6]);
     app()->bind(TurnUnderstanding::class, FakeTurnUnderstanding::class);
-    config(['crm.drivers.ai' => 'fake']);
+    // These tests cover the older turn runner (the store agent's safety net), so the agent is off here.
+    config(['crm.drivers.ai' => 'fake', 'crm.bot.agent.enabled' => false]);
     // Agent rebuild (Task 7): with the guided flows on, greetings open the menu and collect/lookup
     // intents start flows. These tests cover the reply flow v2 agent path the bot falls back to when
     // the owner turns the flows off; the flow-on behaviour is at the end of this file and in

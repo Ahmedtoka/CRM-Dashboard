@@ -100,6 +100,28 @@ class SendOutboundMessage implements ShouldQueue
         }
     }
 
+    /**
+     * Order per conversation (owner, 2026-09-22): with several outbound workers the menu could
+     * reach Messenger before the greeting queued just ahead of it — and quick replies only show
+     * under the newest message, so the menu buttons were gone. A message waits until every
+     * outbound message created before it in the same conversation has left `queued`; after
+     * `crm.outbound_order_wait_seconds` it goes anyway, so one stuck message never blocks the rest.
+     */
+    private function waitForEarlierMessages(Message $message): void
+    {
+        $deadline = microtime(true) + (float) config('crm.outbound_order_wait_seconds', 8);
+
+        while (microtime(true) < $deadline && Message::query()
+            ->where('conversation_id', $message->conversation_id)
+            ->where('direction', $message->direction)
+            ->where('id', '<', $message->id)
+            ->where('status', MessageStatus::Queued->value)
+            ->where('created_at', '>=', now()->subMinutes(2))
+            ->exists()) {
+            usleep(250_000);
+        }
+    }
+
     private function sendClaimed(ChannelRegistry $registry, ActivityLogger $logger, LatencyRecorder $latency): void
     {
         $message = Message::with(['conversation.channelAccount', 'user', 'mediaAttachments'])->find($this->messageId);
@@ -109,6 +131,8 @@ class SendOutboundMessage implements ShouldQueue
         }
 
         $conversation = $message->conversation;
+
+        $this->waitForEarlierMessages($message);
 
         if ($this->skipIfHumanTookOver && $conversation->handler !== Handler::Bot) {
             // Kept as a failed bubble so the agent can still see (and retry) what the bot had queued.

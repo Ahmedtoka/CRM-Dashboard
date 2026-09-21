@@ -179,6 +179,10 @@ return [
 
     'notify_customer_on_shipment' => env('CRM_NOTIFY_CUSTOMER_ON_SHIPMENT', false),
 
+    // A queued outbound message waits this long for the ones created before it in the same
+    // conversation to go out first (several workers must never reorder greeting and menu).
+    'outbound_order_wait_seconds' => (float) env('CRM_OUTBOUND_ORDER_WAIT', 8),
+
     'bot' => [
         // Defaults for new bot_settings rows; phpunit.xml pins them to 0 so synchronous tests stay synchronous.
         'burst_wait_seconds' => (int) env('CRM_BOT_BURST_WAIT_SECONDS', 8),
@@ -210,6 +214,15 @@ return [
 
         // «لسه بدور» when the store takes longer than this to answer a product-link lookup.
         'product_lookup_notice_seconds' => (int) env('CRM_BOT_PRODUCT_LOOKUP_NOTICE_SECONDS', 6),
+
+        // The store agent (2026-09-22): free text outside the flows is answered by one Claude
+        // conversation with tools (catalog, orders, branches, shipping) over the owner's knowledge.
+        'agent' => [
+            'enabled' => (bool) env('CRM_BOT_AGENT', true),
+            'model' => env('CRM_BOT_AGENT_MODEL', 'claude-sonnet-5'),
+            'timeout' => (int) env('CRM_BOT_AGENT_TIMEOUT', 25),
+            'budget_seconds' => (int) env('CRM_BOT_AGENT_BUDGET', 40),
+        ],
     ],
 
     'anthropic' => [

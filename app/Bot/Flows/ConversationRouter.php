@@ -2,6 +2,8 @@
 
 namespace App\Bot\Flows;
 
+use App\Bot\Agent\AgentRunner;
+use App\Bot\Agent\StoreAgent;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
 use App\Enums\Handler;
@@ -58,9 +60,18 @@ class ConversationRouter
         if ($this->flows->isActive($c)) {
             $result = $this->flows->handle($c, $burst);
 
+            // A question while a menu is up (2026-09-22): the menu is left and the agent answers it as
+            // any other message — no «نرجع لـ…», no detour count, no offer of a person.
+            if ($result->question !== null && $this->flows->atMenu($c) && StoreAgent::enabled()) {
+                FlowState::clear($c);
+
+                return null;
+            }
+
             if ($result->question !== null) {
                 $runner = app(TurnRunner::class);
-                $run = $runner->run($c, $burst, flowContext: true);
+                // The store agent answers a question asked mid-flow too (2026-09-22); the turn runner is its safety net.
+                $run = app(AgentRunner::class)->run($c, $burst, insideFlow: true) ?? $runner->run($c, $burst, flowContext: true);
 
                 if ($c->refresh()->handler === Handler::Bot && $this->flows->isActive($c)) {
                     // §6.1: the answer, then «نرجع لطلب المرتجع 🌸» with the step's question

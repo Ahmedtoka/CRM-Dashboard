@@ -69,13 +69,13 @@ class ProductBrowser
      * @param  Collection<int, Product>  $products
      * @param  list<array{title:string, payload:string}>  $buttons
      */
-    public function show(Conversation $c, string $intro, Collection $products, array $buttons = [], int $delayMs = 0): void
+    public function show(Conversation $c, string $intro, Collection $products, array $buttons = [], int $delayMs = 0, bool $menuButton = true): void
     {
         if (trim($intro) !== '') {
             $this->send($c, $intro, [], null, $delayMs);
         }
 
-        $this->send($c, $this->cards->fallbackText($products), [...$buttons, FlowPrompter::MAIN_MENU_BUTTON], $this->cards->cards($products), $delayMs > 0 ? $delayMs + 600 : 0);
+        $this->send($c, $this->cards->fallbackText($products), $menuButton ? [...$buttons, FlowPrompter::MAIN_MENU_BUTTON] : $buttons, $this->cards->cards($products), $delayMs > 0 ? $delayMs + 600 : 0);
     }
 
     /** @return list<array{title:string, payload:string}> */

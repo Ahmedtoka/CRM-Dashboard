@@ -3,6 +3,7 @@
 namespace App\Bot;
 
 use App\Analytics\ActivityLogger;
+use App\Bot\Agent\AgentRunner;
 use App\Bot\Ai\AiResponder;
 use App\Bot\Ai\MessageClassifier;
 use App\Bot\Flow\TurnRunner;
@@ -138,7 +139,8 @@ class BotEngine
             return $this->recordRun($c, $last, engine: 'none', decision: 'handover');
         }
 
-        return app(TurnRunner::class)->run($c, $burst);
+        // The store agent answers free text (2026-09-22); the older turn runner is its safety net.
+        return app(AgentRunner::class)->run($c, $burst) ?? app(TurnRunner::class)->run($c, $burst);
     }
 
     public function handleInbound(Message $m): ?BotRun

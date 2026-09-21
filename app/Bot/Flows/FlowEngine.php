@@ -1155,6 +1155,17 @@ class FlowEngine
             ->all();
     }
 
+    /**
+     * She is only looking at a menu (the main menu, «الموديلات والأسعار»): nothing is being
+     * collected, so a question here is a plain question — not a detour to count and come back from.
+     */
+    public function atMenu(Conversation $c): bool
+    {
+        $state = FlowState::flow($c);
+
+        return $state !== null && ($this->step((string) $state['key'], (string) $state['step'])['type'] ?? null) === 'menu';
+    }
+
     private function step(string $flowKey, string $stepKey): ?array
     {
         $step = $this->definition($flowKey)['steps'][$stepKey] ?? null;
