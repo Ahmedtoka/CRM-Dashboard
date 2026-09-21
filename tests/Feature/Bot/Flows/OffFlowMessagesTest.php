@@ -235,7 +235,7 @@ it('brings her back to the flow with its own name and no repeated question', fun
     app(FlowEngine::class)->returnToFlow(Conversation::firstOrFail());
 
     $last = offLast();
-    expect($last->body)->toStartWith('نرجع لـالشكوى 🌸')
+    expect($last->body)->toStartWith('نرجع لـ «الشكوى» 🌸')
         ->and($before)->not->toContain($last->body)
         ->and(collect($last->buttons)->pluck('payload')->all())->toContain('step:complaint:type:branch');
 });

@@ -6,10 +6,13 @@ namespace App\Channels\Cards;
  * Rich outbound cards a bot message may carry (`messages.cards`, the owner's flows 5 and 6,
  * 2026-09-19). Two shapes:
  *
- *   {type: "generic", cards: [{title, subtitle, text, buttons}]}   — a carousel (the branch cards)
+ *   {type: "generic", cards: [{title, subtitle, text, image_url, url, buttons}]} — a carousel (the branch
+ *                                                   cards; the product cards carry `image_url` and `url`)
  *   {type: "button",  buttons: [...]}                               — the message text with link buttons
  *
- * A button is {type: "web_url", title, url} or {type: "phone", title, phone} (phone in +20… form).
+ * A button is {type: "web_url", title, url}, {type: "phone", title, phone} (phone in +20… form) or
+ * {type: "postback", title, payload} (a tap comes back as an inbound message with that payload).
+ * A card's `image_url` must be a public https image; its `url` opens when the card itself is tapped.
  * A card's `text` is its full plain-text version, sent where cards do not exist (WhatsApp, the
  * text fallback). The message body always holds the plain-text fallback of the whole message.
  * Each channel adapter decides how much of this it can show (see the Messenger, Instagram and
@@ -40,6 +43,8 @@ final class OutboundCards
             'title' => mb_substr(trim((string) ($card['title'] ?? '')), 0, self::TITLE_MAX),
             'subtitle' => filled($card['subtitle'] ?? null) ? mb_substr(trim((string) $card['subtitle']), 0, self::SUBTITLE_MAX) : null,
             'text' => filled($card['text'] ?? null) ? (string) $card['text'] : null,
+            'image_url' => self::httpsUrl($card['image_url'] ?? null),
+            'url' => self::httpsUrl($card['url'] ?? null),
             'buttons' => self::buttons((array) ($card['buttons'] ?? [])),
         ], $cards), 0, self::MAX_CARDS))];
     }
@@ -53,6 +58,11 @@ final class OutboundCards
     public static function webUrl(string $title, string $url): array
     {
         return ['type' => 'web_url', 'title' => $title, 'url' => $url];
+    }
+
+    public static function postback(string $title, string $payload): array
+    {
+        return ['type' => 'postback', 'title' => $title, 'payload' => $payload];
     }
 
     public static function call(string $title, string $phone): ?array
@@ -73,6 +83,12 @@ final class OutboundCards
             str_starts_with($digits, '0') => '+20'.substr($digits, 1),
             default => '+20'.$digits,
         };
+    }
+
+    /** Meta and WhatsApp fetch card images themselves: only a public https URL is kept. */
+    private static function httpsUrl(mixed $url): ?string
+    {
+        return is_string($url) && str_starts_with($url, 'https://') ? $url : null;
     }
 
     /** A usable cards value (a known type with something to show), else null. */
@@ -113,13 +129,17 @@ final class OutboundCards
         $lines = array_filter([(string) ($card['title'] ?? ''), (string) ($card['subtitle'] ?? '')], 'filled');
 
         foreach ((array) ($card['buttons'] ?? []) as $b) {
-            $lines[] = ($b['type'] ?? null) === 'web_url' ? ($b['url'] ?? '') : ($b['phone'] ?? '');
+            $lines[] = match ($b['type'] ?? null) {
+                'web_url' => $b['url'] ?? '',
+                'phone' => $b['phone'] ?? '',
+                default => '',
+            };
         }
 
         return implode("\n", array_filter($lines, 'filled'));
     }
 
-    /** @return list<array<string, string>> web_url/phone buttons with a title, at most 3, titles cut to 20 */
+    /** @return list<array<string, string>> web_url/phone/postback buttons with a title, at most 3, titles cut to 20 */
     private static function buttons(array $buttons): array
     {
         $out = [];
@@ -135,6 +155,8 @@ final class OutboundCards
                 $out[] = ['type' => 'web_url', 'title' => $title, 'url' => (string) $b['url']];
             } elseif (($b['type'] ?? null) === 'phone' && filled($b['phone'] ?? null)) {
                 $out[] = ['type' => 'phone', 'title' => $title, 'phone' => (string) $b['phone']];
+            } elseif (($b['type'] ?? null) === 'postback' && filled($b['payload'] ?? null)) {
+                $out[] = ['type' => 'postback', 'title' => $title, 'payload' => (string) $b['payload']];
             }
         }
 

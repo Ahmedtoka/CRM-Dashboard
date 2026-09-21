@@ -1,11 +1,21 @@
 <?php
 
-use App\Bot\{CatalogSearch, HandoverSignals, PriceGuard};
 use App\Bot\Ai\ClaudeAiResponder;
-use App\Bot\Grounding\{BotContextBuilder, GovernorateMatcher, VariantOptions};
+use App\Bot\Ai\MessageClassifier;
+use App\Bot\CatalogSearch;
+use App\Bot\Grounding\BotContextBuilder;
+use App\Bot\Grounding\GovernorateMatcher;
+use App\Bot\Grounding\VariantOptions;
+use App\Bot\HandoverSignals;
+use App\Bot\PriceGuard;
 use App\Enums\BotIntent;
-use App\Models\{Product, ProductVariant};
-use Illuminate\Support\Facades\{DB, Http};
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Models\ShippingRate;
+use App\Models\ShippingZone;
+use App\Models\ShippingZoneRegion;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 
 it('matches governorates with common spellings', function (string $text, ?string $code) {
     expect(app(GovernorateMatcher::class)->match($text))->toBe($code);
@@ -32,17 +42,19 @@ it('does not treat several prices as a phone number', function (string $text, ?s
 it('caps the catalog search at eight tokens', function () {
     Product::factory()->create(['title' => 'فستان ستان'])->variants()->create(['shopify_id' => '1', 'title' => 'Default', 'price' => 900, 'inventory_quantity' => 1]);
     $queries = [];
-    DB::listen(function ($q) use (&$queries) { $queries[] = $q; });
+    DB::listen(function ($q) use (&$queries) {
+        $queries[] = $q;
+    });
 
     app(CatalogSearch::class)->groupedLinesFor('فستان '.implode(' ', array_map(fn ($i) => 'كلمه'.$i, range(1, 30))));
 
     $products = collect($queries)->first(fn ($q) => str_contains($q->sql, 'from "products"'));
-    expect(count(array_filter($products->bindings, fn ($b) => is_string($b) && str_starts_with($b, '%'))))->toBeLessThanOrEqual(16);
+    expect(count(array_filter($products->bindings, fn ($b) => is_string($b) && str_starts_with($b, '%'))))->toBeLessThanOrEqual(32); // 8 tokens x title, type, tags, sku
 });
 
 it('uses the configured per-call claude timeouts', function () {
     config(['crm.drivers.ai' => 'claude', 'crm.anthropic.classify_timeout' => 3, 'crm.anthropic.reply_timeout' => 5]);
-    $claude = app(\App\Bot\Ai\MessageClassifier::class);
+    $claude = app(MessageClassifier::class);
     $read = fn (string $p) => (new ReflectionProperty($claude, $p))->getValue($claude);
 
     expect($claude)->toBeInstanceOf(ClaudeAiResponder::class)
@@ -78,9 +90,9 @@ it('detects handover signals', function (string $text, ?string $reason) {
 /** A synced Shopify zone for one governorate with one rate. */
 function groundingShopifyRate(string $code, float $price): void
 {
-    $zone = \App\Models\ShippingZone::factory()->create();
-    \App\Models\ShippingZoneRegion::factory()->create(['shipping_zone_id' => $zone->id, 'province_code' => $code]);
-    \App\Models\ShippingRate::factory()->create(['shipping_zone_id' => $zone->id, 'price' => $price]);
+    $zone = ShippingZone::factory()->create();
+    ShippingZoneRegion::factory()->create(['shipping_zone_id' => $zone->id, 'province_code' => $code]);
+    ShippingRate::factory()->create(['shipping_zone_id' => $zone->id, 'price' => $price]);
 }
 
 it('builds shipping and knowledge grounding by intent', function () {

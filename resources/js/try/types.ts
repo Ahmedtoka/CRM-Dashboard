@@ -6,16 +6,19 @@ export interface TryButton {
 }
 
 export interface TryCardButton {
-    type: 'web_url' | 'phone';
+    type: 'web_url' | 'phone' | 'postback';
     title: string;
     url?: string;
     phone?: string;
+    payload?: string;
 }
 
 export interface TryGenericCard {
     title: string;
     subtitle: string | null;
     text: string | null;
+    image_url?: string | null;
+    url?: string | null;
     buttons: TryCardButton[];
 }
 

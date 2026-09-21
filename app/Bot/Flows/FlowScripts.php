@@ -28,7 +28,7 @@ final class FlowScripts
             // §3: the second miss stops asking and offers a person or the menu.
             'flow_not_understood' => ['title' => 'إعادة السؤال (تاني مرة)', 'body' => 'معلش، لسه مش قادرة أفهم قصدك 🙏 تحبي أوصلك لموظف يساعدك؟'],
             // §6.1: after answering a question that came in the middle of a flow.
-            'flow_back_to' => ['title' => 'الرجوع للفلو بعد سؤال', 'body' => 'نرجع لـ{flow_label} 🌸'],
+            'flow_back_to' => ['title' => 'الرجوع للفلو بعد سؤال', 'body' => 'نرجع لـ «{flow_label}» 🌸'],
             // §6.1: she keeps asking other things — offer a person instead of going round.
             'flow_too_many_detours' => ['title' => 'أسئلة كتير جوه الفلو', 'body' => 'عشان نخلص طلب حضرتك صح، تحبي أوصلك لموظف يساعدك؟'],
             // §6.2: she asked for another flow while one is running.
@@ -54,6 +54,9 @@ final class FlowScripts
             'waiting_ack_no_hours' => ['title' => 'في انتظار الموظف (من غير مواعيد)', 'body' => 'رسايلك وصلت للفريق 🌸 وهيتم الرد على حضرتك في أقرب وقت'],
             // The store is slow to answer while we look up the exchange product (owner, 2026-09-21).
             'product_lookup_slow' => ['title' => 'لسه بدور على المنتج', 'body' => 'لسه بدور 🌸 ثواني كمان'],
+            // The catalog as picture cards (owner, 2026-09-22; App\Bot\Catalog\ProductBrowser).
+            'products_intro' => ['title' => 'الموديلات بالصور: الجملة اللي قبل الكروت', 'body' => 'دي أحدث الموديلات المتاحة عندنا 🌸 اضغطي «التفاصيل والمقاسات» على أي موديل يعجبك'],
+            'products_type_intro' => ['title' => 'الموديلات بالصور: نوع معين', 'body' => 'موديلات {type} المتاحة 👇'],
             // Greeting mirrors (2026-09-21): the bot greets back the way she greeted, before
             // the {time_greeting} line and the menu (App\Bot\Flows\GreetingMirror).
             'greeting_mirror_salam' => ['title' => 'رد التحية: السلام عليكم', 'body' => 'وعليكم السلام ورحمة الله 🌸'],

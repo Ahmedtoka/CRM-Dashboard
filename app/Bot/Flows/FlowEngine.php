@@ -2,6 +2,7 @@
 
 namespace App\Bot\Flows;
 
+use App\Bot\Catalog\ProductBrowser;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flows\Sandbox\SandboxMode;
 use App\Bot\Flows\Steps\FlowStep;
@@ -182,7 +183,7 @@ class FlowEngine
     /**
      * Payloads: menu:<key>, flow:<key>, script:<key>, handover, handover:now,
      * handover:not_understood, resume:continue, resume:restart, yes, no,
-     * step:<flow>:<step>:<value>.
+     * step:<flow>:<step>:<value>, products:featured, products:type:<type>, product:<id>.
      */
     public function runPayload(Conversation $c, string $payload): bool
     {
@@ -216,7 +217,16 @@ class FlowEngine
             case 'menu':
             case 'flow':
                 return $rest !== '' && $this->begin($c, $rest);
+            case 'products':
+                return app(ProductBrowser::class)->browse($c, $rest);
+            case 'product':
+                return app(ProductBrowser::class)->detail($c, $rest);
             case 'script':
+                // «الموديلات والأسعار» (2026-09-22): the catalog as picture cards; its script only when the catalog is empty.
+                if ($rest === 'availability' && app(ProductBrowser::class)->browse($c, 'featured')) {
+                    return true;
+                }
+
                 $body = $this->prompter->script($rest, FlowState::flow($c)['data'] ?? []);
 
                 if ($rest === '' || $body === null) {

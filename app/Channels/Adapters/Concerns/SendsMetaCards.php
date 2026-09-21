@@ -95,13 +95,22 @@ trait SendsMetaCards
                 $element['subtitle'] = mb_substr((string) $card['subtitle'], 0, OutboundCards::SUBTITLE_MAX);
             }
 
+            // Product cards (2026-09-22): the picture, and the product page when the card itself is tapped.
+            if (filled($card['image_url'] ?? null)) {
+                $element['image_url'] = (string) $card['image_url'];
+            }
+
+            if (filled($card['url'] ?? null)) {
+                $element['default_action'] = ['type' => 'web_url', 'url' => (string) $card['url']];
+            }
+
             $buttons = $this->metaButtons((array) ($card['buttons'] ?? []));
 
             if ($buttons !== []) {
                 $element['buttons'] = $buttons;
             }
 
-            if ($element['title'] !== '' && (isset($element['subtitle']) || isset($element['buttons']))) {
+            if ($element['title'] !== '' && (isset($element['subtitle']) || isset($element['buttons']) || isset($element['image_url']))) {
                 $elements[] = $element;
             }
         }
@@ -119,6 +128,8 @@ trait SendsMetaCards
 
             if (($b['type'] ?? null) === 'web_url' && filled($b['url'] ?? null)) {
                 $out[] = ['type' => 'web_url', 'url' => (string) $b['url'], 'title' => $title];
+            } elseif (($b['type'] ?? null) === 'postback' && filled($b['payload'] ?? null)) {
+                $out[] = ['type' => 'postback', 'title' => $title, 'payload' => mb_substr((string) $b['payload'], 0, 1000)];
             } elseif (($b['type'] ?? null) === 'phone' && filled($b['phone'] ?? null) && $this->supportsCallButtons()) {
                 $out[] = ['type' => 'phone_number', 'title' => $title, 'payload' => (string) $b['phone']];
             }

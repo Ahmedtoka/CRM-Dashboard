@@ -195,10 +195,29 @@ class WhatsAppAdapter implements ChannelAdapter
                 return $this->sendText($account, $to, OutboundCards::withLinkLines($text, $cards), $options);
             }
 
+            // Product cards (2026-09-22): pictures go as a native media carousel (2–10 cards, one
+            // link button each), a single one as a picture with a link button. Anything the Cloud
+            // API refuses falls back to one picture (or text) per card below.
+            if (($rich = $this->mediaCards($to, $cards)) !== null) {
+                $result = $this->graph->post($account, "{$phoneNumberId}/messages", $rich);
+
+                if ($result->success || $result->authError) {
+                    return $result;
+                }
+            }
+
             $result = SendResult::fail('no_cards');
 
             foreach ($cards['cards'] as $card) {
-                $result = $this->sendText($account, $to, OutboundCards::cardText($card), []);
+                $result = filled($card['image_url'] ?? null)
+                    ? $this->graph->post($account, "{$phoneNumberId}/messages", [
+                        'messaging_product' => 'whatsapp',
+                        'recipient_type' => 'individual',
+                        'to' => $to->external_id,
+                        'type' => 'image',
+                        'image' => ['link' => (string) $card['image_url'], 'caption' => mb_substr(OutboundCards::cardText($card), 0, 1024)],
+                    ])
+                    : $this->sendText($account, $to, OutboundCards::cardText($card), []);
 
                 if (! $result->success) {
                     return $result;
@@ -256,6 +275,55 @@ class WhatsAppAdapter implements ChannelAdapter
         }
 
         return $this->graph->post($account, "{$phoneNumberId}/messages", $payload);
+    }
+
+    /**
+     * Picture cards as one interactive message: `carousel` for 2–10 cards, `cta_url` with an image
+     * header for one. Every card needs a picture and a link button (WhatsApp wants the same button
+     * shape on all cards); null when they do not fit.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function mediaCards(CustomerIdentity $to, array $cards): ?array
+    {
+        $items = [];
+
+        foreach (array_slice((array) ($cards['cards'] ?? []), 0, OutboundCards::MAX_CARDS) as $card) {
+            $link = collect((array) ($card['buttons'] ?? []))->firstWhere('type', 'web_url');
+
+            if (! filled($card['image_url'] ?? null) || $link === null) {
+                return null;
+            }
+
+            $items[] = [
+                'header' => ['type' => 'image', 'image' => ['link' => (string) $card['image_url']]],
+                'body' => ['text' => mb_substr(trim('*'.$card['title']."*\n".($card['subtitle'] ?? '')), 0, 160)],
+                'action' => ['name' => 'cta_url', 'parameters' => [
+                    'display_text' => mb_substr((string) $link['title'], 0, OutboundCards::BUTTON_TITLE_MAX),
+                    'url' => (string) $link['url'],
+                ]],
+            ];
+        }
+
+        if ($items === []) {
+            return null;
+        }
+
+        $interactive = count($items) === 1
+            ? ['type' => 'cta_url'] + $items[0]
+            : [
+                'type' => 'carousel',
+                'body' => ['text' => mb_substr((string) ($cards['label'] ?? '🛍️'), 0, 1024)],
+                'action' => ['cards' => array_map(fn (int $i, array $item) => ['card_index' => $i, 'type' => 'cta_url'] + $item, array_keys($items), $items)],
+            ];
+
+        return [
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $to->external_id,
+            'type' => 'interactive',
+            'interactive' => $interactive,
+        ];
     }
 
     /**

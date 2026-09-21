@@ -6,6 +6,7 @@ use App\Bot\Grounding\Synonyms;
 use App\Bot\Grounding\VariantOptions;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use Illuminate\Support\Collection;
 
 /**
  * Finds catalog lines (product/variant/price/stock) by keyword search on the
@@ -53,8 +54,19 @@ class CatalogSearch
      */
     public function groupedLinesFor(string $text, int $limit = 5): array
     {
+        return $this->productsFor($text, $limit)->map(fn (Product $p) => $this->productLine($p))->filter()->values()->all();
+    }
+
+    /**
+     * The active products a message is about (the search behind groupedLinesFor and the product cards).
+     * Every meaningful word must hit the title, the type, a tag or a SKU; when that finds nothing, any word may.
+     *
+     * @return Collection<int, Product>
+     */
+    public function productsFor(string $text, int $limit = 5): Collection
+    {
         $normalizer = app(ArabicNormalizer::class);
-        $stop = ['متاح', 'موجود', 'بكام', 'سعر', 'عندكم', 'لو', 'سمحتي', 'ممكن', 'ده', 'دي', 'فيه', 'مقاس', 'لون'];
+        $stop = ['متاح', 'موجود', 'بكام', 'سعر', 'عندكم', 'لو', 'سمحتي', 'ممكن', 'ده', 'دي', 'فيه', 'مقاس', 'لون', 'عايزه', 'عايزة', 'عاوزه', 'عاوزة', 'محتاجه', 'محتاجة', 'صور', 'صوره', 'موديلات', 'موديل'];
         // Multibyte-safe punctuation trim: trim()'s byte charlist would eat the
         // lead byte (0xD8) of Arabic letters such as "ا" along with "؟"/"،".
         $tokens = collect(preg_split('/\s+/u', $normalizer->normalize($text)) ?: [])
@@ -66,24 +78,36 @@ class CatalogSearch
             ->values();
 
         if ($tokens->isEmpty()) {
-            return [];
+            return collect();
         }
 
-        $products = Product::query()
-            ->with(['variants' => fn ($v) => $v->orderBy('id')])
-            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', 'active'))
-            ->where(function ($q) use ($tokens) {
-                foreach ($tokens as $t) {
-                    $q->orWhere('title', 'like', "%{$t}%")->orWhereHas('variants', fn ($v) => $v->where('sku', 'like', "%{$t}%"));
-                }
-            })
-            ->limit($limit)
-            ->get();
+        $hit = fn ($q, string $t) => $q->where('title', 'like', "%{$t}%")
+            ->orWhere('product_type', 'like', "%{$t}%")
+            ->orWhere('tags', 'like', "%{$t}%")
+            ->orWhereHas('variants', fn ($v) => $v->where('sku', 'like', "%{$t}%"));
 
-        return $products->map(fn (Product $p) => $this->productLine($p))->filter()->values()->all();
+        $base = fn () => Product::query()
+            ->with(['variants' => fn ($v) => $v->orderBy('id')])
+            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', 'active'));
+
+        $all = $base()->where(function ($q) use ($tokens, $hit) {
+            foreach ($tokens as $t) {
+                $q->where(fn ($w) => $hit($w, $t));
+            }
+        })->limit($limit)->get();
+
+        if ($all->isNotEmpty() || $tokens->count() === 1) {
+            return $all;
+        }
+
+        return $base()->where(function ($q) use ($tokens, $hit) {
+            foreach ($tokens as $t) {
+                $q->orWhere(fn ($w) => $hit($w, $t));
+            }
+        })->limit($limit)->get();
     }
 
-    private function productLine(Product $p): ?string
+    public function productLine(Product $p): ?string
     {
         if ($p->variants->isEmpty()) {
             return null;

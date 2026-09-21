@@ -127,7 +127,7 @@ it('answers a question inside a flow and asks the waiting step again', function 
 
     $new = routerBotMessages()->slice($before)->values();
     expect($new->pluck('body')->implode("\n"))->toContain('3-5 ايام عمل')
-        ->and($new->last()->body)->toBe("نرجع لـطلب المرتجع 🌸\nإيه سبب المرتجع؟")
+        ->and($new->last()->body)->toBe("نرجع لـ «طلب المرتجع» 🌸\nإيه سبب المرتجع؟")
         ->and(collect($new->last()->buttons)->pluck('payload')->all())->toContain('step:return_exchange:reason:defective')
         ->and(Conversation::first()->bot_state['flow']['step'])->toBe('reason')
         ->and(Conversation::first()->handler)->toBe(Handler::Bot);

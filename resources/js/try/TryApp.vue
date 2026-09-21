@@ -285,7 +285,10 @@ onBeforeUnmount(() => window.clearInterval(timer));
                         <div v-if="row.message.images.length" class="try-bubble photo">
                             <img v-for="image in row.message.images" :key="image.id" :src="image.url" alt="" loading="lazy" />
                         </div>
-                        <div v-else-if="row.message.body" class="try-bubble" dir="auto">{{ row.message.body }}</div>
+                        <!-- A carousel goes out without its text on Messenger (the body is only the no-cards fallback). -->
+                        <div v-else-if="row.message.body && !(row.message.cards && generic(row.message.cards).length)" class="try-bubble" dir="auto">
+                            {{ row.message.body }}
+                        </div>
                     </div>
 
                     <div v-if="row.message.body && row.message.images.length" class="try-row" :class="[row.mine ? 'out' : 'in', 'last']">
@@ -295,20 +298,28 @@ onBeforeUnmount(() => window.clearInterval(timer));
                     <!-- Generic-template carousel and link buttons, drawn the way Messenger draws them. -->
                     <div v-if="row.message.cards && generic(row.message.cards).length" class="try-cards" role="list">
                         <article v-for="(card, i) in generic(row.message.cards)" :key="i" class="try-card" role="listitem">
+                            <a v-if="card.image_url" class="try-card-image" :href="card.url ?? undefined" target="_blank" rel="noopener noreferrer">
+                                <img :src="card.image_url" :alt="card.title" loading="lazy" />
+                            </a>
                             <div class="try-card-body">
                                 <p class="try-card-title" dir="auto">{{ card.title }}</p>
                                 <p v-if="card.subtitle" class="try-card-sub" dir="auto">{{ card.subtitle }}</p>
                             </div>
-                            <a
-                                v-for="(button, j) in card.buttons"
-                                :key="j"
-                                class="try-card-button"
-                                :href="href(button)"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                dir="auto"
-                                >{{ button.title }}</a
-                            >
+                            <template v-for="(button, j) in card.buttons" :key="j">
+                                <button
+                                    v-if="button.type === 'postback'"
+                                    type="button"
+                                    class="try-card-button"
+                                    :disabled="busy || !canWrite"
+                                    dir="auto"
+                                    @click="send(button.title, button.payload)"
+                                >
+                                    {{ button.title }}
+                                </button>
+                                <a v-else class="try-card-button" :href="href(button)" target="_blank" rel="noopener noreferrer" dir="auto">{{
+                                    button.title
+                                }}</a>
+                            </template>
                         </article>
                     </div>
 

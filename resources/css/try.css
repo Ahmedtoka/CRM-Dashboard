@@ -393,8 +393,30 @@ body {
     background: #fff;
 }
 
+.try-card-image {
+    display: block;
+    aspect-ratio: 1.91 / 1;
+    background: #f0f2f5;
+}
+
+.try-card-image img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .try-card-body {
     padding: 10px 12px;
+}
+
+button.try-card-button {
+    width: 100%;
+    border-width: 1px 0 0;
+    border-style: solid;
+    background: none;
+    font-family: inherit;
+    cursor: pointer;
 }
 
 .try-card-title {
