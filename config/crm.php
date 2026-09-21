@@ -223,6 +223,9 @@ return [
         'review_timeout' => 30,
         // Bilingual bot (design 2026-09-21 §2): one batched translation call per message.
         'translate_timeout' => 20,
+        // Mapping a typed answer to a step's options. 6 s timed out in real use («Pant size»
+        // never reached the model), and a slower right answer beats a fast «I didn't catch that».
+        'flow_timeout' => (int) env('CRM_FLOW_TIMEOUT', 12),
         // Per-million-token USD prices, keyed by model, used to compute
         // BotRun.cost_usd from the classifier/reply token counts.
         'prices' => [

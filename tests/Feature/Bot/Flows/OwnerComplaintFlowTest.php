@@ -250,3 +250,7 @@ it('validates and walks the published complaint in the designer sandbox', functi
         ->and(end($r['messages'])['text'])->toStartWith('تمام ✅ سجلت الشكوى رقم #')->not->toContain('#0')
         ->and(SupportCase::count())->toBe(0);
 });
+
+it('gives the answer interpreter enough time to answer (6 s timed out in real use)', function () {
+    expect((int) config('crm.anthropic.flow_timeout'))->toBeGreaterThanOrEqual(10);
+});
