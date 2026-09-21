@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
-    private const KEYS = ['waiting_ack_in_hours', 'waiting_ack_after_hours', 'waiting_ack_no_hours'];
+    private const KEYS = ['waiting_ack_in_hours', 'waiting_ack_after_hours', 'waiting_ack_no_hours', 'product_lookup_slow'];
 
     public function up(): void
     {

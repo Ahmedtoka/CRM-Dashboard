@@ -207,6 +207,9 @@ return [
         // Waiting for a person (owner, 2026-09-21): she keeps writing, so the bot
         // reassures her at most once every this many minutes until an agent answers.
         'waiting_ack_minutes' => (int) env('CRM_BOT_WAITING_ACK_MINUTES', 15),
+
+        // «لسه بدور» when the store takes longer than this to answer a product-link lookup.
+        'product_lookup_notice_seconds' => (int) env('CRM_BOT_PRODUCT_LOOKUP_NOTICE_SECONDS', 6),
     ],
 
     'anthropic' => [

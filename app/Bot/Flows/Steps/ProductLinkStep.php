@@ -3,13 +3,16 @@
 namespace App\Bot\Flows\Steps;
 
 use App\Bot\Flows\FlowPrompter;
+use App\Bot\Flows\Jobs\ProductLookupStillSearching;
 use App\Bot\Flows\Returns\ExchangeProducts;
 use App\Enums\AttachmentType;
 use App\Inbox\OutboundService;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -28,6 +31,9 @@ final class ProductLinkStep extends BaseStep
     /** Sent before the store is asked, so she is not left watching nothing (owner, 2026-09-21). */
     public const CHECKING_TEXT = 'ثانية واحدة 🌸 بشوف المنتج ده على الموقع';
 
+    /** Sent by ProductLookupStillSearching when the store is slow to answer. */
+    public const STILL_SEARCHING_TEXT = 'لسه بدور 🌸 ثواني كمان';
+
     public const DEFAULT_FIELD = 'exchange_product';
 
     public function __construct(FlowPrompter $prompter, private readonly ExchangeProducts $products)
@@ -41,8 +47,12 @@ final class ProductLinkStep extends BaseStep
         $photos = $this->photos($burst);
         $link = trim($text) !== '' ? $this->products->parse($text) : null;
         $product = $link !== null
-            ? $this->products->resolve($link, fn () => $this->say($c, self::CHECKING_TEXT))
+            ? $this->products->resolve($link, fn () => $this->startedLookup($c))
             : null;
+
+        if ($link !== null) {
+            Cache::forget(self::lookupKey($c->id));
+        }
 
         if ($product !== null) {
             return StepOutcome::continue([
@@ -62,6 +72,27 @@ final class ProductLinkStep extends BaseStep
 
         // A link that matched no product: never read it as a question.
         return $link !== null ? $this->unclear($state, $step, $text) : null;
+    }
+
+    /** The cache key that says a store lookup for this conversation is still running. */
+    public static function lookupKey(int $conversationId): string
+    {
+        return 'flow:product-lookup:'.$conversationId;
+    }
+
+    /**
+     * «ثانية واحدة» now, and «لسه بدور» if the store has not answered within
+     * `crm.bot.product_lookup_notice_seconds`. The marker is cleared as soon as the
+     * lookup returns, so the second line only ever reaches a genuinely slow lookup.
+     */
+    private function startedLookup(Conversation $c): void
+    {
+        $this->say($c, self::CHECKING_TEXT);
+
+        $marker = (string) Str::uuid();
+        $after = max(2, (int) config('crm.bot.product_lookup_notice_seconds', 6));
+        Cache::put(self::lookupKey($c->id), $marker, now()->addMinutes(2));
+        ProductLookupStillSearching::dispatch($c->id, $marker)->delay(now()->addSeconds($after));
     }
 
     /** A line sent straight away, outside the step's own outcome (sandbox-safe: the container decides). */

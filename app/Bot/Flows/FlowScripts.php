@@ -52,6 +52,8 @@ final class FlowScripts
             'waiting_ack_in_hours' => ['title' => 'في انتظار الموظف (في المواعيد)', 'body' => 'رسايلك وصلت للفريق 🌸 وهيتم الرد على حضرتك في أقرب وقت'],
             'waiting_ack_after_hours' => ['title' => 'في انتظار الموظف (برّه المواعيد)', 'body' => 'رسايلك وصلت للفريق 🌸 وهيتم الرد على حضرتك أول ما نفتح {next_opening}'],
             'waiting_ack_no_hours' => ['title' => 'في انتظار الموظف (من غير مواعيد)', 'body' => 'رسايلك وصلت للفريق 🌸 وهيتم الرد على حضرتك في أقرب وقت'],
+            // The store is slow to answer while we look up the exchange product (owner, 2026-09-21).
+            'product_lookup_slow' => ['title' => 'لسه بدور على المنتج', 'body' => 'لسه بدور 🌸 ثواني كمان'],
             // Greeting mirrors (2026-09-21): the bot greets back the way she greeted, before
             // the {time_greeting} line and the menu (App\Bot\Flows\GreetingMirror).
             'greeting_mirror_salam' => ['title' => 'رد التحية: السلام عليكم', 'body' => 'وعليكم السلام ورحمة الله 🌸'],

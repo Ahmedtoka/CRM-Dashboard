@@ -9,6 +9,7 @@ use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\FlowResult;
 use App\Bot\Flows\FlowState;
 use App\Bot\Flows\FlowStepCatalog;
+use App\Bot\Flows\Jobs\ProductLookupStillSearching;
 use App\Bot\Flows\ReturnFlowUpgrade;
 use App\Bot\Flows\Returns\ExchangeProducts;
 use App\Bot\Flows\Returns\RemoteProductLookup;
@@ -44,8 +45,10 @@ use App\Shopify\Client\ShopifyTransport;
 use App\Shopify\Connection\ShopifyIntegration;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 // The owner's return/exchange flow of 2026-09-19 (ReturnFlowUpgrade::definition()), end to end.
 
@@ -667,4 +670,22 @@ it('tells her it is checking the store before a product link is looked up remote
         });
 
     expect($called)->toBe(1);
+});
+
+it('sends «لسه بدور» only when the store lookup is genuinely slow', function () {
+    Queue::fake();
+    $c = Conversation::factory()->for(ChannelAccount::factory()->state(['platform' => Platform::Facebook]), 'channelAccount')->create(['platform' => Platform::Facebook]);
+    // Her own message keeps the 24-hour reply window open.
+    Message::factory()->create(['conversation_id' => $c->id, 'direction' => 'in', 'sender_type' => 'customer', 'created_at' => now()->subMinute()]);
+    $c->forceFill(['last_customer_message_at' => now()->subMinute()])->save();
+
+    // A running lookup: the notice speaks.
+    Cache::put(ProductLinkStep::lookupKey($c->id), 'marker-1', now()->addMinute());
+    (new ProductLookupStillSearching($c->id, 'marker-1'))->handle();
+    expect(Message::where('conversation_id', $c->id)->where('sender_type', 'bot')->count())->toBe(1);
+
+    // The lookup finished (key cleared), so a late notice says nothing.
+    Cache::forget(ProductLinkStep::lookupKey($c->id));
+    (new ProductLookupStillSearching($c->id, 'marker-1'))->handle();
+    expect(Message::where('conversation_id', $c->id)->where('sender_type', 'bot')->count())->toBe(1);
 });
