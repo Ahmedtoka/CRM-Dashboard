@@ -301,6 +301,7 @@ it('lists the items numbered with variant, quantity and price, one button each p
         ['title' => 'فستان ليلى', 'payload' => "step:return_exchange:order_items:item:{$items[0]->id}"],
         ['title' => 'طرحة شيفون طويلة جدا', 'payload' => "step:return_exchange:order_items:item:{$items[1]->id}"],
         ['title' => 'عباية كتان', 'payload' => "step:return_exchange:order_items:item:{$items[2]->id}"],
+        ['title' => 'أرجع كله', 'payload' => 'step:return_exchange:order_items:all'],
         ['title' => 'كذا قطعة', 'payload' => 'step:return_exchange:order_items:multi'],
     ]);
 
@@ -315,7 +316,7 @@ it('keeps Messenger limits: at most 13 buttons, items past 12 are numbered text 
 
     oarVerified($order);
 
-    expect(oarBot()->buttons)->toHaveCount(12)
+    expect(oarBot()->buttons)->toHaveCount(13) // 12 items + «أرجع كله»
         ->and(oarBot()->body)->toContain('15. قطعة رقم 15 × 1 — 100 ج.م');
 
     // "14" is not a button: the step reads it as item 14.
@@ -352,7 +353,7 @@ it('loops tap → "another one?" → tap → "that is all" and moves on with bot
         ->and(array_column(oarBot()->buttons, 'title'))->toBe(['أيوه', 'لأ كده تمام']);
 
     oarTap('more', 'أيوه');
-    expect(oarBot()->body)->toContain('1. ✅ فستان ليلى')->and(oarBot()->buttons)->toHaveCount(4);
+    expect(oarBot()->body)->toContain('1. ✅ فستان ليلى')->and(oarBot()->buttons)->toHaveCount(5); // + «أرجع كله»
 
     oarTap("item:{$b->id}", 'عباية كتان');
     oarTap('done', 'لأ كده تمام');
@@ -671,4 +672,16 @@ it('treats «No, that is all» as finished instead of selecting every item', fun
         ->and($selection->positions('all', 4))->toBe(ItemSelection::ALL)
         ->and($selection->positions('الكل', 4))->toBe(ItemSelection::ALL)
         ->and($selection->positions('1 و 3', 4))->toBe([1, 3]);
+});
+
+it('returns the whole order in one tap', function () {
+    $order = oarOrder([
+        ['title' => 'فستان ليلى', 'price' => 850],
+        ['title' => 'عباية كتان', 'price' => 900],
+    ]);
+    oarVerified($order);
+
+    oarTap('all', 'أرجع كله');
+
+    expect(oarFlow()['data']['selected_items'])->toHaveCount(2);
 });

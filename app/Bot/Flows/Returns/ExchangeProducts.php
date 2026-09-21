@@ -63,12 +63,20 @@ class ExchangeProducts
      * @param  array{url:string, handle:string, variant_id:?string}  $link
      * @return array{title:string, handle:string, url:string, price:?float, image:?string, variant_title:?string, variant_id:?string, product_id:int, source:string}|null
      */
-    public function resolve(array $link): ?array
+    /**
+     * @param  ?callable  $onRemoteLookup  called just before the store is asked, so the flow can
+     *                                     tell her «ثانية بس، بشوف المنتج» instead of going silent
+     */
+    public function resolve(array $link, ?callable $onRemoteLookup = null): ?array
     {
         $source = 'catalog';
         $product = $this->local($link['handle']);
 
         if ($product === null) {
+            if ($onRemoteLookup !== null) {
+                $onRemoteLookup();
+            }
+
             try {
                 $product = $this->remote->byHandle($link['handle']);
             } catch (Throwable $e) {

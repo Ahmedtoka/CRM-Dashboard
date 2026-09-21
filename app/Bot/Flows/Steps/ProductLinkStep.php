@@ -5,9 +5,12 @@ namespace App\Bot\Flows\Steps;
 use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\Returns\ExchangeProducts;
 use App\Enums\AttachmentType;
+use App\Inbox\OutboundService;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * `product_link` (2026-09-19): the store link of the product she wants in
@@ -22,6 +25,9 @@ final class ProductLinkStep extends BaseStep
 {
     public const RETRY_TEXT = 'اللينك ده مش واضح، ابعتيه من صفحة المنتج على الموقع 🙏';
 
+    /** Sent before the store is asked, so she is not left watching nothing (owner, 2026-09-21). */
+    public const CHECKING_TEXT = 'ثانية واحدة 🌸 بشوف المنتج ده على الموقع';
+
     public const DEFAULT_FIELD = 'exchange_product';
 
     public function __construct(FlowPrompter $prompter, private readonly ExchangeProducts $products)
@@ -34,7 +40,9 @@ final class ProductLinkStep extends BaseStep
         $field = $this->field($step);
         $photos = $this->photos($burst);
         $link = trim($text) !== '' ? $this->products->parse($text) : null;
-        $product = $link !== null ? $this->products->resolve($link) : null;
+        $product = $link !== null
+            ? $this->products->resolve($link, fn () => $this->say($c, self::CHECKING_TEXT))
+            : null;
 
         if ($product !== null) {
             return StepOutcome::continue([
@@ -54,6 +62,16 @@ final class ProductLinkStep extends BaseStep
 
         // A link that matched no product: never read it as a question.
         return $link !== null ? $this->unclear($state, $step, $text) : null;
+    }
+
+    /** A line sent straight away, outside the step's own outcome (sandbox-safe: the container decides). */
+    private function say(Conversation $c, string $text): void
+    {
+        try {
+            app(OutboundService::class)->sendBot($c, $text);
+        } catch (Throwable $e) {
+            Log::info('flow.product_link_notice_failed', ['conversation_id' => $c->id, 'error' => $e->getMessage()]);
+        }
     }
 
     public function unresolved(Conversation $c, array $state, array $step, string $text): StepOutcome

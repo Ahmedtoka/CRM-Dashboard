@@ -63,6 +63,11 @@ final class OrderItemsStep extends BaseStep
 
     public const MULTI_BUTTON = 'كذا قطعة';
 
+    /** One tap for the whole order (owner, 2026-09-21): «أرجع كله» / «أبدل كله». */
+    public const ALL_BUTTON_RETURN = 'أرجع كله';
+
+    public const ALL_BUTTON_EXCHANGE = 'أبدل كله';
+
     public const YES_BUTTON = 'أيوه';
 
     public const DONE_BUTTON = 'لأ كده تمام';
@@ -229,6 +234,10 @@ final class OrderItemsStep extends BaseStep
 
         if ($value === 'multi') {
             return StepOutcome::wait([['text' => self::MULTI_TEXT]], 0, ['items_pending' => ['mode' => 'pick']]);
+        }
+
+        if ($value === 'all') {
+            return $this->pick($state, $order, $order->items->pluck('id')->map(fn ($id) => (int) $id)->all());
         }
 
         if (str_starts_with($value, 'item:') && ctype_digit(substr($value, 5))) {
@@ -544,6 +553,13 @@ final class OrderItemsStep extends BaseStep
         $buttons = $order->items->take(self::MAX_ITEM_BUTTONS)->values()
             // The piece's own name goes out as she reads it on the invoice, in either language (§4).
             ->map(fn (OrderItem $item) => $this->stepButton($state, KeptNames::keep((string) $item->title), 'item:'.$item->id))->all();
+
+        // «أرجع كله» / «أبدل كله»: the whole order in one tap. Not on the edit picker,
+        // where "return everything" would be the wrong thing to offer.
+        if (! $this->plain && $order->items->count() > 1) {
+            $all = ($state['data']['request_kind'] ?? null) === 'exchange' ? self::ALL_BUTTON_EXCHANGE : self::ALL_BUTTON_RETURN;
+            $buttons[] = $this->stepButton($state, $all, 'all');
+        }
 
         if ($order->items->count() > 2 && $order->items->count() <= self::MAX_ITEM_BUTTONS) {
             $buttons[] = $this->stepButton($state, self::MULTI_BUTTON, 'multi');

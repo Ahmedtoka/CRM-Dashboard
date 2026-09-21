@@ -655,3 +655,16 @@ it('moves on when she says she has no photo, and never repeats the photo request
         ->and(PhotoStep::saysNoPhoto('skip'))->toBeTrue()
         ->and(PhotoStep::saysNoPhoto('هبعتها دلوقتي'))->toBeFalse();
 });
+
+it('tells her it is checking the store before a product link is looked up remotely', function () {
+    expect(ProductLinkStep::CHECKING_TEXT)->toContain('بشوف المنتج');
+
+    // The resolver calls the notice only when the product is not already in the catalog.
+    $called = 0;
+    app(ExchangeProducts::class)
+        ->resolve(['url' => 'https://levoilestores.com/products/unknown-thing', 'handle' => 'unknown-thing', 'variant_id' => null], function () use (&$called) {
+            $called++;
+        });
+
+    expect($called)->toBe(1);
+});
