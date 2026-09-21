@@ -26,6 +26,17 @@ Do you want to swap it or remove it from the order?',
     '⟦0⟧ يا فندم يومك حلو ان شاء الله ⟦1⟧ مع حضرتك ميار من لوفوال
 إزاي أقدر أساعد حضرتك؟' => '⟦0⟧ Hi there, hope you\'re having a good day ⟦1⟧ I\'m Mayar from Le Voile
 How can I help you?',
+    '⟦4⟧. ⟦3⟧ × ⟦5⟧ — ⟦6⟧ ج.م
+⟦7⟧. ⟦1⟧ × ⟦8⟧ — ⟦9⟧ ج.م
+⟦10⟧. ⟦0⟧ × ⟦11⟧ — ⟦12⟧ ج.م
+⟦13⟧. ⟦2⟧ × ⟦14⟧ — ⟦15⟧ ج.م
+
+اختاري القطعة اللي عايزة ترجعيها ⟦16⟧' => '⟦4⟧. ⟦3⟧ × ⟦5⟧ — ⟦6⟧ EGP
+⟦7⟧. ⟦1⟧ × ⟦8⟧ — ⟦9⟧ EGP
+⟦10⟧. ⟦0⟧ × ⟦11⟧ — ⟦12⟧ EGP
+⟦13⟧. ⟦2⟧ × ⟦14⟧ — ⟦15⟧ EGP
+
+Choose which item you want to return ⟦16⟧',
     'Item name
 details..⟦0⟧
 * Material :
@@ -52,6 +63,7 @@ Thanks for choosing Le Voile ⟦2⟧',
     'أقدر أساعد حضرتك إزاي؟ اختاري من القائمة ⟦0⟧' => 'How can I help you? Pick from the menu ⟦0⟧',
     'أقدر أساعدك في ⟦0⟧' => 'I can help you with ⟦0⟧',
     'أكتوبر' => 'October',
+    'أكتوبر والشيخ زايد' => 'October & Sheikh',
     'أكيد ⟦0⟧ ممكن تقوليلي باختصار محتاجة إيه؟ عشان أوصّلك للشخص المناسب على طول' => 'Sure ⟦0⟧ can you tell me quickly what you need? So I can get you to the right person right away',
     'أنهي فرع بالظبط؟ ⟦0⟧' => 'Which branch exactly? ⟦0⟧',
     'أهلاً ⟦0⟧
@@ -63,6 +75,11 @@ Thanks for reaching out about your refund. I want to reassure you that all refun
 We stick to this timeline to make sure everything goes through safely and smoothly, and we can\'t go beyond it.
 If it takes longer, get back to us and we\'ll check with our accounting team to make sure you get what\'s due as soon as possible.
 Thanks for your patience ⟦3⟧',
+    'أهلاً بيكي ⟦0⟧
+مساء الخير يا فندم يومك حلو ان شاء الله ⟦1⟧ مع حضرتك ميار من لوفوال
+إزاي أقدر أساعد حضرتك؟' => 'Welcome ⟦0⟧
+Good evening! Hope you\'re having a lovely day ⟦1⟧ I\'m Mayar from Lofoual
+How can I help you?',
     'أهلاً بيكي ⟦0⟧' => 'Welcome ⟦0⟧',
     'أهلاً يا ⟦0⟧ ⟦1⟧ أوردر #⟦2⟧ — تحبي تلغيه ولا تعدلي فيه؟' => 'Hi ⟦0⟧ ⟦1⟧ order #⟦2⟧ — want to cancel it or make changes?',
     'أهلاً يا ⟦0⟧ ⟦1⟧ أوردر #⟦2⟧ (اتطلب يوم ⟦3⟧ — ⟦4⟧)
@@ -84,7 +101,14 @@ Thanks for your patience ⟦3⟧',
     'ابعتيلي صورة للقطعة ⟦0⟧' => 'Send me a photo of the item ⟦0⟧',
     'ابعتيلي لينك المنتج اللي عايزاه بدلها، أو اكتبي المقاس/اللون الجديد ⟦0⟧' => 'Send me a link to the product you want instead, or just tell me the new size/color ⟦0⟧',
     'ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع ⟦0⟧ (من levoilestores.com)' => 'Send me the product link you want to exchange it with from the site ⟦0⟧ (from levoilestores.com)',
+    'اتأكد وجاري تجهيزه' => 'Confirmed and being prepared',
+    'اتجهز ومستني شركة الشحن' => 'Ready and waiting for shipping company',
+    'اتجهز وهيتسلم لشركة الشحن قريب' => 'Ready and will be picked up by shipping company soon',
+    'اتسلم' => 'Delivered',
+    'اتشحن' => 'Shipped',
+    'اتشحن ومع شركة الشحن' => 'Shipped and with shipping company',
     'اتكلم' => 'speak',
+    'اتلغى' => 'Cancelled',
     'اتواصل' => 'contact',
     'احكيلي حصل إيه بالتفصيل عشان نقدر نساعد حضرتك ⟦0⟧ (ولو فيه صورة ابعتيها)' => 'Tell me exactly what happened so we can help ⟦0⟧ (and send a photo if you have one)',
     'اختاري القطعة اللي عايزة تبدليها ⟦0⟧' => 'Choose the item you want to exchange ⟦0⟧',
@@ -103,6 +127,8 @@ Thanks for your patience ⟦3⟧',
     'اكلم' => 'talk',
     'اكلمكم' => 'talk to you',
     'اكلمه' => 'talk to them',
+    'الأحد' => 'Sunday',
+    'الأربعاء' => 'Wednesday',
     'الأرقام دي مش مطابقة ⟦0⟧ جربي تاني، اكتبي آخر ⟦1⟧ أرقام من الموبايل اللي طلبتي بيه' => 'Those digits don\'t match ⟦0⟧ try again — text the last ⟦1⟧ digits of the phone number you ordered with',
     'الأوردر #⟦0⟧ ملغي أصلاً ⟦1⟧' => 'Order #⟦0⟧ is already canceled ⟦1⟧',
     'الأوردر اتأخر' => 'Order is late',
@@ -110,6 +136,8 @@ Thanks for your patience ⟦3⟧',
 لو تحبي، أحوّلك لحد من الفريق يساعدك.' => 'This order was received more than ⟦0⟧ days ago ⟦1⟧ and we only do returns and exchanges within ⟦2⟧ days of delivery.
 If you\'d like, I can connect you with someone from our team to help.',
     'الأوردر لسه في معاده ⟦0⟧ متوقع يوصل من ⟦1⟧، ولو اتأخر عن كده ابعتيلي وهتابعه فورًا' => 'Your order is on schedule ⟦0⟧ expected between ⟦1⟧, if it\'s late let me know and I\'ll follow up right away',
+    'الإثنين' => 'Monday',
+    'الإسكندرية' => 'Alexandria',
     'الاسم' => 'Name',
     'الاوردر بيوصل القاهرة / الجيزة / الاسكندريه خلال ⟦0⟧ ايام عمل .
 باقي المحافظات خلال ⟦1⟧ ايام عمل ⟦2⟧
@@ -125,15 +153,23 @@ From ⟦0⟧ EGP to ⟦1⟧ EGP
 To confirm your order through the Website ⟦2⟧
 ⟦3⟧
 Thanks for choosing Le Voile ⟦4⟧',
+    'التجمع الخامس' => 'Fifth Settlement',
     'التعديل' => 'Change',
     'التعديل المطلوب' => 'What needs to be changed',
     'التفاصيل' => 'Details',
     'التليفون' => 'Phone',
+    'الثلاثاء' => 'Tuesday',
+    'الجمعة' => 'Friday',
+    'الجيزة' => 'Giza',
     'الخصومات متاحه اونلاين و في كل فروعنا يا فندم و لكن احنا اونلاين فقط ادارة منفصله عن الفروع لو حضرتك بتسألي علي قطعه محددة ممكن تتواصلي مع الفرع بنفسك تتأكدي من توافرها قبل التوجه للفرع و تم توضيح لحضرتك كل عناوين الفروع و ارقامهم' => 'Discounts are available online and in all our branches. But we\'re a separate team for online orders from the physical branches. If you\'re asking about a specific item, you can contact the branch directly to confirm they have it before going there. We\'ve already shared all branch addresses and numbers with you',
+    'الخميس' => 'Thursday',
     'الدعم' => 'support',
     'الدفع كاش عند الاستلام، أو فيزا / ماستركارد، أو Apple Pay، أو أي محفظة إلكترونية (من الموقع) ⟦0⟧' => 'Cash on delivery, or visa/mastercard, or Apple Pay, or any e-wallet (from the website) ⟦0⟧',
+    'الرحاب' => 'Rehab',
     'الرقم' => 'Number',
+    'الزقازيق' => 'Zagazig',
     'السبب' => 'Reason',
+    'السبت' => 'Saturday',
     'السعر مناسب لجودة الخامة يا فندم و التفاصيل اللى بنهتم بيها عشان نضمن ان المنتج يكون بكواليتي عالية و مميز' => 'The price matches the fabric quality and the details we care about to make sure you get a high-quality, special product',
     'الشحن خارج مصر :
 - الاوردر بيتم عن طريق الويب سايت
@@ -164,6 +200,7 @@ International Shipping (Outside Egypt): Orders can be placed through our website
     'الفروع والمواعيد' => 'Branches & hours',
     'الفريق' => 'the team',
     'القائمة الرئيسية' => 'Main Menu',
+    'القاهرة' => 'Cairo',
     'القطع' => 'Items',
     'القطع اللي اخترتيها متاحة للاستبدال بس ⟦0⟧' => 'The items you picked are available for exchange only ⟦0⟧',
     'القطع في الأوردر' => 'Items in order',
@@ -172,15 +209,20 @@ International Shipping (Outside Egypt): Orders can be placed through our website
     'المدير' => 'the manager',
     'المرتجع والاستبدال' => 'Returns & Exchanges',
     'المسؤول' => 'the responsible one',
+    'المعادي' => 'Maadi',
     'المقاس' => 'Size',
     'المقاس مش مظبوط' => 'Size doesn\'t fit',
     'المقاسات' => 'Sizes',
     'المقاسات موضحه علي الويب سايت يا فندم بالطول و العرض فالافضل تراجعي المقاسات لانها ادق من الوزن اللي بيختلف من جسم للتاني' => 'Measurements are listed on the website by length and width, so it\'s better to check those since they\'re more accurate than weight which varies from person to person',
+    'المقطم' => 'El Mokattam',
     'المنتج البديل' => 'Replacement item',
     'المنتج اللي بعتيه' => 'The product you sent',
     'المنتج مصنوع من        و طريقة الغسيل و العناية موضحه علي الويب سايت بالفعل
 طريقة الغسيل بتكون يدوي بماء بارد و بمسحوق خفيف زي الجل و بدون فرك او عصر' => 'The product is made from        and care instructions are on the website
 Wash by hand in cold water with gentle detergent like gel, no rubbing or wringing',
+    'المندوب حاول يسلمه ومعرفش' => 'Delivery agent tried to deliver but couldn\'t reach',
+    'المنصورة' => 'Mansoura',
+    'المهندسين' => 'Mohandessin',
     'الموبايل' => 'Phone number',
     'الموبايل الجديد' => 'New phone number',
     'الموديل' => 'Style',
@@ -243,6 +285,9 @@ Just to be clear, you can cancel or edit within 2 hours of placing your order.',
     'تمام ⟦0⟧ هيتم تحويلك لموظف خدمة العملاء خلال دقايق ⟦1⟧' => 'Done ⟦0⟧ you\'ll be transferred to customer service in a few minutes ⟦1⟧',
     'تمام ⟦0⟧ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت ⟦1⟧' => 'Done ⟦0⟧ you\'ll be transferred to customer service, they\'ll get back to you soon ⟦1⟧',
     'تمام ⟦0⟧ وممكن اسم حضرتك؟' => 'Got it ⟦0⟧ — what\'s your name?',
+    'تمام ⟦1⟧ ضفت: ⟦0⟧ × ⟦2⟧
+تحبي تضيفي قطعة تانية؟' => 'All set, ⟦1⟧ added: ⟦0⟧ × ⟦2⟧
+Want to add something else?',
     'تمام شكرًا' => 'Thanks, got it',
     'تمام كده' => 'That\'s it',
     'تمام وصلتني الصورة ⟦0⟧' => 'Got the photo ⟦0⟧',
@@ -273,6 +318,8 @@ Some items can\'t be exchanged or returned like cotton products, accessories, hi
 Just let us know which one you need and we\'ll send you the details ⟦0⟧
 ⟦1⟧',
     'ديسمبر' => 'December',
+    'رجع لينا (مرتجع)' => 'Returned to us',
+    'رجع من شركة الشحن' => 'Returned from shipping company',
     'رقم' => 'number',
     'رقم الأوردر' => 'Order number',
     'رقم الموبايل' => 'Phone number',
@@ -317,7 +364,7 @@ Also, if an item is on discount, it can only be exchanged',
     'عاوزه' => 'I want',
     'عايز' => 'I want',
     'عايزة أرجع أو أبدل' => 'Want to return or',
-    'عايزة ألغي/أعدل' => 'Want to cancel/chang',
+    'عايزة ألغي/أعدل' => 'Cancel or edit',
     'عايزة تعدلي إيه؟' => 'What would you like to change?',
     'عايزه' => 'I want',
     'عايزين' => 'need',
@@ -329,7 +376,7 @@ Also, if an item is on discount, it can only be exchanged',
     'غلط في الأوردر' => 'Wrong item',
     'فبراير' => 'February',
     'فرع' => 'Branch',
-    'فرع في منطقة تانية' => 'Branch in another',
+    'فرع في منطقة تانية' => 'Another area',
     'فريق' => 'team',
     'فضلك' => 'please',
     'فلو الإلغاء والتعديل الجديد: قبل الشحن بس، سبب الإلغاء، وتعديل القطع أو العنوان أو الموبايل' => 'For cancellations and changes: only before shipping, tell us why you\'re canceling, and what you want to change — the item, address, or phone number',
@@ -346,7 +393,7 @@ Also, if an item is on discount, it can only be exchanged',
     'كانت الزيارة إمتى تقريبًا؟' => 'When did you visit, roughly?',
     'كدا تمام' => 'That\'s it',
     'كده تمام' => 'That\'s it',
-    'كذا قطعة' => 'items',
+    'كذا قطعة' => 'Several items',
     'كل الموديلات متاحه في كل الفروع يافندم ⟦0⟧
 - ممكن حضرتك تتواصلي معاهم للتاكيد من وجود المنتج او تشرفينا بنفسك وتشوفي كل الموديلات المتاحه
 لكن مقدرش اضمن لحضرتك اللون او الكميه برجاء التواصل مع الفرع للتأكد ⟦1⟧
@@ -400,7 +447,11 @@ You can see available styles here ⟦0⟧
     'مايو' => 'May',
     'متابعة أوردر' => 'Track Order',
     'متابعة الأوردر' => 'Track order',
+    'متوقف مؤقتًا والفريق بيراجعه' => 'Temporarily on hold while team reviews',
+    'متوقف ومحتاج مراجعة' => 'On hold and needs review',
     'مدير' => 'manager',
+    'مدينة نصر' => 'Nasr City',
+    'مدينتي' => 'Madinet El Zahra',
     'مسؤول' => 'responsible',
     'مساء الفل والنور' => 'Good evening',
     'مساء النور' => 'Good evening',
@@ -410,7 +461,10 @@ You can see available styles here ⟦0⟧
     'مش مهم' => 'Doesn\'t matter',
     'مش مهم خالص' => 'Doesn\'t matter at all',
     'مصاريف الشحن بتتحسب حسب المحافظة وبتظهر لحضرتك قبل تأكيد الأوردر على الويب سايت ⟦0⟧' => 'Shipping costs are calculated by governorate and shown before you confirm your order on the website ⟦0⟧',
+    'مصر الجديدة' => 'Masr El Gedida',
     'مع' => 'with',
+    'مع المندوب في الطريق' => 'On the way with delivery agent',
+    'مع المندوب في الطريق ليكي' => 'On the way to you',
     'معاك' => 'With you',
     'معاكم' => 'with you',
     'معاكي' => 'With you',
@@ -454,6 +508,9 @@ Just so you know, you can only cancel within 2 hours of placing the order, and t
     'موضوع التحويل:' => 'Transfer topic:',
     'موظف' => 'staff member',
     'موظفه' => 'staff member',
+    'نرجع لـ⟦0⟧ ⟦1⟧
+آسفين جدًا لده ⟦2⟧ ⟦0⟧ بخصوص إيه؟' => 'We\'re back to ⟦0⟧ ⟦1⟧
+We\'re really sorry about that ⟦2⟧ ⟦0⟧ — what\'s it about?',
     'نرجع لـ⟦0⟧ ⟦1⟧' => 'Back to your ⟦0⟧ ⟦1⟧',
     'نظام البيع "جمله"
 البيع مش اقل من ⟦0⟧ دست مشكل

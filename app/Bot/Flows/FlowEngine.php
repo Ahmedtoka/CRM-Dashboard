@@ -549,9 +549,9 @@ class FlowEngine
             return null;
         }
 
-        // Exact titles and synonyms only: a fuzzy match against the whole main menu would
-        // read half of what she types as "she wants another flow".
-        $option = $this->resolver->matchOption($this->withEnglishTitles($c, $this->prompter->visibleMenuOptions($menu)), $text);
+        // The same reading as a menu answer: exact, then the strict fuzzy match, so «I want to
+        // track my order instead» is recognised as another flow and not read as a question.
+        $option = $this->matchOption($c, $this->prompter->visibleMenuOptions($menu), $text);
         $action = (string) ($option['action'] ?? '');
 
         if (! preg_match('/^(?:flow|menu):(.+)$/', $action, $m)) {

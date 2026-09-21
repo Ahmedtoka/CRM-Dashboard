@@ -3,6 +3,7 @@
 namespace App\Bot\Flow\Orders;
 
 use App\Bot\Grounding\GovernorateMatcher;
+use App\Bot\Language\KeptNames;
 use App\Models\Order;
 use Carbon\CarbonImmutable;
 
@@ -29,6 +30,9 @@ final class DeliveryEstimate
 
     /** Carbon dayOfWeek (0 = Sunday) → Arabic day name. */
     private const DAYS = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+    /** The same days in English, carried with the Arabic so a date costs no model call (2026-09-21 §1). */
+    private const DAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
     public function __construct(private readonly GovernorateMatcher $governorates) {}
 
@@ -76,7 +80,7 @@ final class DeliveryEstimate
     {
         $day = $day->setTimezone(OrderStatusText::TIMEZONE);
 
-        return self::DAYS[$day->dayOfWeek].' '.$day->format('j/n');
+        return KeptNames::swap(self::DAYS[$day->dayOfWeek], self::DAYS_EN[$day->dayOfWeek]).' '.$day->format('j/n');
     }
 
     /** The $n-th working day (Fridays skipped) after $day. */

@@ -27,7 +27,7 @@ final class TranslationMask
      * translated), emoji, then numbers. It has to be a single pass: a second pass would
      * see the digit inside a marker it just wrote and mask the marker itself.
      */
-    private const PATTERN = '~https?://\S+|www\.[^\s،,]+'
+    private const PATTERN = 'https?://\S+|www\.[^\s،,]+'
         .'|[\w.+-]+@[\w-]+\.[\w.]+'
         .'|\{[a-z_][a-z0-9_]*\}'
         .'|%[sd]'
@@ -35,8 +35,7 @@ final class TranslationMask
         .'|[\x{1F000}-\x{1FAFF}\x{2190}-\x{21FF}\x{2300}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}\x{20E3}]+'
         // A leading # or + is left in place on purpose: «#{order_number}» and «#1047» must
         // mask to the same «#⟦n⟧», or the seeded translation of the template never matches.
-        // The ⟦ guards keep the digits of a marker already written from being masked again.
-        .'|(?<![\p{L}\d\x{27E6}])[\d\x{0660}-\x{0669}]+(?:[.,:/-][\d\x{0660}-\x{0669}]+)*(?!\x{27E7})~iu';
+        .'|(?<![\p{L}\d])[\d\x{0660}-\x{0669}]+(?:[.,:/-][\d\x{0660}-\x{0669}]+)*';
 
     /**
      * @return array{0:string, 1:list<string>} the masked text and the values, in marker order
@@ -44,21 +43,22 @@ final class TranslationMask
     public function mask(string $text): array
     {
         $values = [];
-        $mark = function (string $value) use (&$values): string {
-            $values[] = $value;
+
+        // One pass over the whole text, the turn's registered names first (longest first, so
+        // «فرع مدينة نصر» wins over «مدينة نصر»). It has to be one pass: a second pass would
+        // see the digits of a marker it just wrote, and the numbering has to follow the text,
+        // not the order the names were registered — otherwise the same sentence with two
+        // names swapped would be a different cached source.
+        $names = array_map(fn (string $v) => preg_quote($v, '~'), array_keys(KeptNames::all()));
+        $pattern = '~'.($names !== [] ? implode('|', $names).'|' : '').self::PATTERN.'~iu';
+
+        $masked = (string) preg_replace_callback($pattern, function (array $m) use (&$values) {
+            $values[] = $m[0];
 
             return self::OPEN.(count($values) - 1).self::CLOSE;
-        };
+        }, $text);
 
-        // The names and words this turn registered come first: they may contain digits,
-        // links or emoji of their own, and they must be masked whole.
-        foreach (KeptNames::all() as $value => $_) {
-            if (str_contains($text, $value)) {
-                $text = str_replace($value, $mark($value), $text);
-            }
-        }
-
-        return [(string) preg_replace_callback(self::PATTERN, fn (array $m) => $mark($m[0]), $text), $values];
+        return [$masked, $values];
     }
 
     /**
@@ -71,15 +71,23 @@ final class TranslationMask
      */
     public function restore(string $text, array $values, string $locale = LanguageDetector::AR): string
     {
-        $swaps = KeptNames::all();
+        // A word with a ready translation may sit inside a bigger masked value — «المنتج اللي
+        // بعتيه» inside the quoted «…» the bot writes — so the swaps are applied inside it too.
+        $swaps = [];
+
+        foreach (KeptNames::all() as $value => $byLocale) {
+            if (isset($byLocale[$locale])) {
+                $swaps[$value] = $byLocale[$locale];
+            }
+        }
 
         return (string) preg_replace_callback(
             '~'.self::OPEN.'(\d+)'.self::CLOSE.'~u',
             function (array $m) use ($values, $locale, $swaps) {
                 $value = $values[(int) $m[1]] ?? '';
 
-                if (isset($swaps[$value][$locale])) {
-                    return $swaps[$value][$locale];
+                if ($swaps !== []) {
+                    $value = strtr($value, $swaps);
                 }
 
                 return $locale === LanguageDetector::AR ? $value : self::latinDigits($value);

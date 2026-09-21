@@ -3,6 +3,7 @@
 namespace App\Bot\Flows\Steps;
 
 use App\Bot\Flows\FlowPrompter;
+use App\Bot\Language\KeptNames;
 use App\Channels\Cards\OutboundCards;
 use App\Models\Branch;
 use Illuminate\Support\Collection;
@@ -30,7 +31,7 @@ final class BranchesListStep extends AreaStep
         }
 
         $shown = $branches->take(OutboundCards::MAX_CARDS);
-        $message = $this->cardsMessage($shown, 'فروعنا في '.$branches->first()->area_ar.' 🌸');
+        $message = $this->cardsMessage($shown, 'فروعنا في '.KeptNames::keep((string) $branches->first()->area_ar).' 🌸');
 
         if ($branches->count() > OutboundCards::MAX_CARDS) {
             return StepOutcome::wait([$message, ['text' => self::MORE_BRANCHES_TEXT, 'buttons' => [FlowPrompter::MAIN_MENU_BUTTON]]], 0);

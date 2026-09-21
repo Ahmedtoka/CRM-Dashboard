@@ -2,6 +2,9 @@
 
 namespace App\Bot\Flows;
 
+use App\Bot\Language\BotTranslator;
+use App\Bot\Language\KeptNames;
+use App\Bot\Language\LanguageDetector;
 use App\Models\BotFlow;
 
 /**
@@ -40,13 +43,19 @@ final class FlowLabels
         'main_menu' => 'القائمة الرئيسية',
     ];
 
+    /**
+     * The label, registered with its own stored translation (design 2026-09-21 §2): so
+     * «تحبي نسيب {label} ونتابع {label}؟» is one cached sentence whatever the two flows are,
+     * and each label is translated once, on its own.
+     */
     public static function of(?string $flowKey): string
     {
-        if ($flowKey === null || $flowKey === '') {
-            return self::LABELS['main_menu'];
-        }
+        $label = $flowKey === null || $flowKey === ''
+            ? self::LABELS['main_menu']
+            : (self::LABELS[$flowKey] ?? (string) (BotFlow::query()->where('key', $flowKey)->value('title_ar') ?: $flowKey));
 
-        return self::LABELS[$flowKey]
-            ?? (string) (BotFlow::query()->where('key', $flowKey)->value('title_ar') ?: $flowKey);
+        $english = app(BotTranslator::class)->cached($label, LanguageDetector::EN);
+
+        return $english !== null ? KeptNames::swap($label, $english) : KeptNames::keep($label);
     }
 }

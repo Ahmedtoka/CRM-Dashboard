@@ -2,6 +2,8 @@
 
 namespace App\Bot\Language;
 
+use App\Bot\Flow\Orders\DeliveryEstimate;
+use App\Bot\Flow\Orders\OrderStatusText;
 use App\Bot\Flows\FlowEngine;
 use App\Bot\Flows\FlowLabels;
 use App\Bot\Flows\FlowPrompter;
@@ -53,6 +55,10 @@ final class TranslationSources
         PhotoStep::class,
         ProductLinkStep::class,
         StatusStep::class,
+        // The status words and day names the order card is built from, so each is translated
+        // once on its own instead of once per card wording.
+        OrderStatusText::class,
+        DeliveryEstimate::class,
     ];
 
     /**

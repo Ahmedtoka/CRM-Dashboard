@@ -4,7 +4,9 @@ namespace App\Bot\Flows;
 
 use App\Bot\Flow\ScriptPlaceholders;
 use App\Bot\Knowledge\KnowledgeBase;
+use App\Bot\Language\BotTranslator;
 use App\Bot\Language\KeptNames;
+use App\Bot\Language\LanguageDetector;
 
 /**
  * Builds what a waiting flow step says: the step text as written (no AI
@@ -178,7 +180,9 @@ final class FlowPrompter
 
         foreach (self::ORDER_PLACEHOLDERS as $key) {
             $value = is_scalar($data[$key] ?? null) ? trim((string) $data[$key]) : '';
-            $card['{'.$key.'}'] = $value;
+            // The status card's own words («اتأكد وجاري تجهيزه») carry their stored English with
+            // them, so the card is one cached text whatever the order's status is (§2).
+            $card['{'.$key.'}'] = $value !== '' ? $this->withStoredEnglish($value) : $value;
 
             if ($value !== '') {
                 continue;
@@ -203,6 +207,14 @@ final class FlowPrompter
             '{exchange_product_title}' => $product !== '' ? KeptNames::keep($product) : KeptNames::swap(self::UNKNOWN_PRODUCT, 'the item you sent'),
             '{case_id}' => $caseId,
         ]));
+    }
+
+    /** A value that already has a stored English of its own travels with it (KeptNames::swap). */
+    private function withStoredEnglish(string $value): string
+    {
+        $english = app(BotTranslator::class)->cached($value, LanguageDetector::EN);
+
+        return $english !== null ? KeptNames::swap($value, $english) : $value;
     }
 
     /**
