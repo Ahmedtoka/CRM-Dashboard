@@ -190,6 +190,14 @@ return [
         // texts already translated keep working (they are cached, not counted).
         'translation_daily_cap' => (int) env('CRM_BOT_TRANSLATION_DAILY_CAP', 200),
 
+        // Names the translator must never re-invent: a model asked to translate
+        // «لوفوال» returned "Lofoual" once and "Lufoual" the next time. Arabic => English.
+        'translation_glossary' => [
+            'لوفوال' => 'Le Voile',
+            'لو فوال' => 'Le Voile',
+            'ميار' => 'Mayar',
+        ],
+
         // §6: a flow she left hanging longer than this asks «نكمل ولا نبدأ من جديد؟».
         'flow_resume_minutes' => (int) env('CRM_BOT_FLOW_RESUME_MINUTES', 30),
 

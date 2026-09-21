@@ -35,7 +35,15 @@ class BotTranslator
     public function __construct(
         private readonly TranslationEngine $engine,
         private readonly TranslationMask $mask,
-    ) {}
+    ) {
+        // Brand and agent names keep one fixed English spelling instead of being
+        // transliterated afresh on every call («Lofoual», then «Lufoual»).
+        foreach ((array) config('crm.bot.translation_glossary', []) as $arabic => $english) {
+            if (is_string($arabic) && is_string($english) && $arabic !== '' && $english !== '') {
+                KeptNames::swap($arabic, $english);
+            }
+        }
+    }
 
     /** One text. Arabic in, $locale out (the Arabic itself when $locale is ar). */
     public function text(string $text, string $locale, ?string $context = null): string
