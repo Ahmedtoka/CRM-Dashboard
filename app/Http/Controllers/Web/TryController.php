@@ -141,7 +141,7 @@ class TryController extends Controller
         $this->throttle($request, $link, 'send');
 
         $request->validate([
-            'photo' => ['required', 'file', 'image', 'max:8192'],
+            'photo' => ['required', 'file', 'image', 'max:12288'],
             'text' => ['nullable', 'string', 'max:'.self::MAX_TEXT],
         ]);
 

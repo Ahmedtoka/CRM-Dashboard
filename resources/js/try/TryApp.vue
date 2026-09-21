@@ -143,14 +143,54 @@ async function send(text: string, payload?: string): Promise<void> {
     if (await call('/messages', form(fields))) scrollDown();
 }
 
+/**
+ * A phone photo is 5–12 MB, which servers and mobile data both dislike, so it is
+ * scaled to at most 1600px and re-encoded as JPEG before it leaves the phone.
+ * Anything that cannot be decoded is sent as it is and the server decides.
+ */
+async function shrink(file: File): Promise<File> {
+    if (!file.type.startsWith('image/') || file.size < 600 * 1024) return file;
+
+    try {
+        const bitmap = await createImageBitmap(file);
+        const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(bitmap.width * scale);
+        canvas.height = Math.round(bitmap.height * scale);
+        canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close?.();
+
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+
+        return blob && blob.size < file.size ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file;
+    } catch {
+        return file;
+    }
+}
+
 async function sendPhoto(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
-    if (!file || !canWrite.value) return;
+    if (!file || !canWrite.value || busy.value) return;
+
+    busy.value = true;
+    error.value = null;
+    let ready: File;
+    try {
+        ready = await shrink(file);
+    } finally {
+        busy.value = false;
+    }
+
+    if (ready.size > 12 * 1024 * 1024) {
+        error.value = 'That photo is too large. Try a smaller one.';
+
+        return;
+    }
 
     const data = new FormData();
-    data.append('photo', file);
+    data.append('photo', ready);
     data.append('session', session.value?.token ?? '');
     if (await call('/photo', data)) scrollDown();
 }
