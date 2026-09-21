@@ -159,6 +159,13 @@ const columns = computed<Column[]>(() => [
 
 const breadcrumbs = computed(() => [{ title: t('settings.branches.title'), href: '/settings/branches' }]);
 const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';
+/** Arabic needs four shapes for a counted noun, English two; both come from the dictionary. */
+function branchCount(n: number): string {
+    const shape = n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many';
+
+    return t(`settings.branches.count_${shape}`, { count: n });
+}
+
 const textarea = 'w-full rounded-md border border-input bg-background px-3 py-2 text-sm';
 const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground';
 </script>
@@ -181,7 +188,7 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
             <div v-for="group in groups" :key="group.key" class="space-y-2">
                 <h2 class="flex items-center gap-2 text-sm font-semibold" :dir="dir">
                     {{ group.label }}
-                    <span class="text-xs font-normal text-muted-foreground">{{ t('settings.branches.count', { count: group.rows.length }) }}</span>
+                    <span class="text-xs font-normal text-muted-foreground">{{ branchCount(group.rows.length) }}</span>
                 </h2>
 
                 <DataTable :columns="columns" :rows="group.rows" :empty="t('settings.branches.empty')" :caption="group.label">

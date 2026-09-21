@@ -1539,7 +1539,10 @@ const en: Messages = {
             active: 'Active',
             inactive: 'Inactive',
             empty: 'No branches',
-            count: '{count} branches',
+            count_one: '1 branch',
+            count_two: '{count} branches',
+            count_few: '{count} branches',
+            count_many: '{count} branches',
         },
         // Settings → Translations (design 2026-09-21 §2).
         bot_translations: {

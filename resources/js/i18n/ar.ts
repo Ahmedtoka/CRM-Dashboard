@@ -1538,7 +1538,10 @@ const ar = {
             active: 'مفعّل',
             inactive: 'غير مفعّل',
             empty: 'لا توجد فروع',
-            count: '{count} فرع',
+            count_one: 'فرع واحد',
+            count_two: 'فرعان',
+            count_few: '{count} فروع',
+            count_many: '{count} فرعًا',
         },
         // Settings → الترجمات (design 2026-09-21 §2).
         bot_translations: {
