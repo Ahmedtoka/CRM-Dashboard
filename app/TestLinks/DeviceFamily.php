@@ -24,4 +24,22 @@ final class DeviceFamily
             default => 'unknown',
         };
     }
+
+    /**
+     * The stored family rendered in the viewer's language. `of()` deliberately
+     * keeps returning a stable code because its result is PERSISTED on
+     * `bot_test_sessions.device_family` by the visitor's own request — only the
+     * two prose values are translated here; the rest are brand words that read
+     * the same in both locales.
+     */
+    public static function label(?string $stored): string
+    {
+        $value = (string) ($stored ?: 'unknown');
+
+        return match ($value) {
+            'unknown' => __('labels.device.unknown'),
+            'Android tablet' => __('labels.device.android_tablet'),
+            default => $value,
+        };
+    }
 }

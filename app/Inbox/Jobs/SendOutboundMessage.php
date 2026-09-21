@@ -123,7 +123,7 @@ class SendOutboundMessage implements ShouldQueue
             ->first();
 
         if ($identity === null) {
-            $result = SendResult::fail("Customer has no {$conversation->platform->label()} identity.");
+            $result = SendResult::fail('no_identity');
         } else {
             // Latency window (spec §11.3): moderator pressed send (message created_at) to
             // the moment we are about to call the platform's API, recorded before the call

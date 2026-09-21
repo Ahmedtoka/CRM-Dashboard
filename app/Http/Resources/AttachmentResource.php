@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Http\Support\StoredMessage;
 use App\Media\MediaUrls;
 use App\Models\MessageAttachment;
 use Illuminate\Http\Request;
@@ -22,7 +23,7 @@ class AttachmentResource extends JsonResource
             'height' => $this->height,
             'duration_ms' => $this->duration_ms,
             'status' => $this->status?->value,
-            'error' => $this->error,
+            'error' => StoredMessage::error($this->error),
             'url' => $this->isStored() ? MediaUrls::show($this->resource) : null,
             'thumb_url' => MediaUrls::thumb($this->resource),
         ];

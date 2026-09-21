@@ -216,7 +216,7 @@ it('answers a malformed state with 422 and saves nothing', function () {
         'source' => 'published',
         'state' => ['flow' => ['key' => 'return_exchange', 'step' => ['bad'], 'data' => []]],
         'input' => ['text' => '1047'],
-    ])->assertStatus(422)->assertJsonPath('message', 'حصلت مشكلة في تجربة الفلو، جرّب تبدأ من جديد');
+    ])->assertStatus(422)->assertJsonPath('message', __('errors.flows.sandbox_failed'));
 
     expect(Conversation::count())->toBe(0)
         ->and(Message::count())->toBe(0)

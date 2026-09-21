@@ -37,7 +37,8 @@ class SupportCaseResource extends JsonResource
             'reason' => is_array($this->data) && is_scalar($this->data['reason_title'] ?? $this->data['reason'] ?? null) ? (string) ($this->data['reason_title'] ?? $this->data['reason']) : null,
             'exchange_product' => CaseSummary::exchangeProduct(is_array($this->data) ? $this->data : []),
             'photos' => $photos->map(fn (MessageAttachment $a) => ['id' => $a->id, 'url' => MediaUrls::show($a)])->values()->all(),
-            'policy_notes' => $this->policy_notes ?? [],
+            // Stored as codes (CaseRecorder) or as finished Arabic; resolved to the viewer's language here.
+            'policy_notes' => CaseSummary::policyNotes($this->resource),
             'assigned_to' => $assignee ? ['id' => $assignee->id, 'name' => $assignee->name] : null,
             'conversation_id' => $this->conversation_id,
             'customer' => $customer ? ['id' => $customer->id, 'name' => $customer->name, 'phone' => $customer->phone] : null,

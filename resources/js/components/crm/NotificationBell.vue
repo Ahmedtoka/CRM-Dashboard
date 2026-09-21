@@ -2,12 +2,13 @@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useI18n } from '@/composables/useI18n';
 import { useNotifications } from '@/composables/useNotifications';
+import { formatCount } from '@/lib/format';
 import type { AppNotification } from '@/types/crm';
 import { Link, router } from '@inertiajs/vue3';
 import { Bell } from 'lucide-vue-next';
 import { computed } from 'vue';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const notifications = useNotifications();
 
 function reasonLabel(n: AppNotification): string {
@@ -25,10 +26,13 @@ function itemText(n: AppNotification): string {
     }
 
     if (n.type === 'channel.problem') {
-        const excerpt = String(n.data.excerpt ?? '');
         const title = t('notifications.channel_problem_item', { name: String(n.data.name ?? '') });
+        // The health check writes the notification from the scheduler, so its `excerpt` is
+        // frozen in the server's default language; the `codes` beside it are not.
+        const codes = Array.isArray(n.data.codes) ? (n.data.codes as string[]) : [];
+        const detail = codes.length ? codes.map((code) => t(`notifications.channel_problem_codes.${code}`)).join(' · ') : String(n.data.excerpt ?? '');
 
-        return excerpt ? `${title}: ${excerpt}` : title;
+        return detail ? `${title}: ${detail}` : title;
     }
 
     const excerpt = String(n.data.excerpt ?? '');
@@ -57,7 +61,7 @@ const desktopEnabled = computed(() => notifications.permission.value === 'grante
                 v-if="notifications.unreadNotifications.value > 0"
                 class="absolute end-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-semibold text-white"
             >
-                {{ notifications.unreadNotifications.value }}
+                {{ formatCount(notifications.unreadNotifications.value, locale) }}
             </span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" class="w-80">

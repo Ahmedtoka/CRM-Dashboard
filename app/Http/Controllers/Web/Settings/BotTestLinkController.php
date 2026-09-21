@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\RespondsWithData;
 use App\Http\Controllers\Controller;
 use App\Models\BotTestLink;
 use App\Models\BotTestSession;
+use App\TestLinks\DeviceFamily;
 use App\TestLinks\TestLinkSessions;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -84,7 +85,7 @@ class BotTestLinkController extends Controller
                 'name' => $s->tester_name,
                 'run_no' => (int) $s->run_no,
                 'conversation_id' => $s->conversation_id,
-                'device_family' => $s->device_family,
+                'device_family' => DeviceFamily::label($s->device_family),
                 'messages_count' => (int) $s->messages_count,
                 'started_at' => $s->started_at?->toIso8601String(),
                 'last_seen_at' => $s->last_seen_at?->toIso8601String(),

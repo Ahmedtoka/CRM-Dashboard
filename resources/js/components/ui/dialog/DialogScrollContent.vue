@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from '@/composables/useI18n';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-vue-next';
 import {
@@ -11,6 +12,8 @@ import {
     type DialogContentProps,
 } from 'radix-vue';
 import { computed, type HTMLAttributes } from 'vue';
+
+const { t } = useI18n();
 
 const props = defineProps<DialogContentProps & { class?: HTMLAttributes['class'] }>();
 const emits = defineEmits<DialogContentEmits>();
@@ -51,7 +54,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
 
                 <DialogClose class="absolute end-3 top-3 rounded-md p-0.5 transition-colors hover:bg-secondary">
                     <X class="h-4 w-4" />
-                    <span class="sr-only">Close</span>
+                    <span class="sr-only">{{ t('common.close') }}</span>
                 </DialogClose>
             </DialogContent>
         </DialogOverlay>

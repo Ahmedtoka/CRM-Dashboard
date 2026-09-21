@@ -5,7 +5,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title inertia>{{ config('app.name', 'Social CRM') }}</title>
+        <title inertia>{{ $locale === 'ar' ? 'سوشيال CRM' : config('app.name', 'Social CRM') }}</title>
 
         @routes
         @vite(['resources/js/app.ts'])

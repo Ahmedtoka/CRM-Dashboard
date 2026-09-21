@@ -168,7 +168,12 @@ class CaseRecorder
         return array_values(array_unique($ids));
     }
 
-    /** @return list<string> */
+    /**
+     * Stored alerts: either a finished Arabic sentence (the return-policy checker)
+     * or a `cases.policy.*` code resolved on read. @see CaseSummary::policyNotes()
+     *
+     * @return list<string|array{code:string, params:array<string, string|int>}>
+     */
     private function policyNotes(string $type, array $data, ?Order $order): array
     {
         return match ($type) {
@@ -182,12 +187,16 @@ class CaseRecorder
      * The owner's flow (2026-09-19) only takes a request while the order is still at the company;
      * older cases (no `order_editable`) keep the 2-hour window note.
      *
-     * @return list<string> only when the order step found the order
+     * The note is stored as a `cases.policy.*` code plus its parameters, not as a finished
+     * sentence: it is written once by the bot but read by staff in either language, so the
+     * wording is resolved on read (CaseSummary::policyNotes).
+     *
+     * @return list<array{code:string, params:array<string, string|int>}> only when the order step found the order
      */
     private function cancelWindowNotes(array $data, ?Order $order): array
     {
         if (($data['order_editable'] ?? null) === 'yes') {
-            return ['الأوردر لسه متشحنش وقت الطلب — اتأكدوا قبل ما يخرج من الشركة'];
+            return [['code' => 'cancel_window_open', 'params' => []]];
         }
 
         $placed = $order?->placed_at ?? $order?->created_at;
@@ -205,7 +214,9 @@ class CaseRecorder
         $snapshot = new OrderSnapshot((int) ($order?->id ?? 0), (string) $data['order_number'], $placedAt, 'shopify', (string) ($data['order_status_key'] ?? ''), null, null);
         $left = $this->orders->cancelWindowLeftMinutes($snapshot, CarbonImmutable::now());
 
-        return [$left > 0 ? "باقي على مهلة الإلغاء/التعديل: {$left} دقيقة" : 'انتهت مهلة الإلغاء/التعديل'];
+        return [$left > 0
+            ? ['code' => 'cancel_window_left', 'params' => ['minutes' => $left]]
+            : ['code' => 'cancel_window_over', 'params' => []]];
     }
 
     private function notify(Conversation $c, SupportCase $case): void

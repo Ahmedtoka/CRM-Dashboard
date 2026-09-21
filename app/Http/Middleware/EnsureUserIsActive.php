@@ -27,7 +27,7 @@ class EnsureUserIsActive
         if ($token instanceof PersonalAccessToken) {
             $token->delete();
 
-            return response()->json(['message' => 'Your account is inactive.'], 401);
+            return response()->json(['message' => __('errors.auth.account_inactive')], 401);
         }
 
         Auth::guard('web')->logout();
@@ -38,7 +38,7 @@ class EnsureUserIsActive
         }
 
         return $request->expectsJson()
-            ? response()->json(['message' => 'Your account is inactive.'], 401)
+            ? response()->json(['message' => __('errors.auth.account_inactive')], 401)
             : redirect()->route('login');
     }
 }

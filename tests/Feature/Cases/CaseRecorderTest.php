@@ -133,10 +133,18 @@ it('notes the cancel/edit window left or over when the order was found', functio
     $over = app(CaseRecorder::class)->record($c, 'cancel_edit', ['order_number' => '#1002', 'order_id' => $old->id, 'order_placed_at' => $old->placed_at->toIso8601String(), 'request' => 'edit']);
     $none = app(CaseRecorder::class)->record($c, 'cancel_edit', ['order_ref_text' => 'مش فاكرة', 'request' => 'cancel']);
 
-    expect($left->policy_notes)->toBe(['باقي على مهلة الإلغاء/التعديل: 90 دقيقة'])
-        ->and($over->policy_notes)->toBe(['انتهت مهلة الإلغاء/التعديل'])
+    // The note is stored as a code + params and worded on read, so staff see it in their own language.
+    expect($left->policy_notes)->toBe([['code' => 'cancel_window_left', 'params' => ['minutes' => 90]]])
+        ->and($over->policy_notes)->toBe([['code' => 'cancel_window_over', 'params' => []]])
         ->and($none->policy_notes)->toBe([])
-        ->and($none->order_id)->toBeNull();
+        ->and($none->order_id)->toBeNull()
+        ->and(CaseSummary::policyNotes($left))->toBe(['باقي على مهلة الإلغاء/التعديل: ٩٠ دقيقة'])
+        ->and(CaseSummary::policyNotes($over))->toBe(['انتهت مهلة الإلغاء/التعديل']);
+
+    app()->setLocale('en');
+
+    expect(CaseSummary::policyNotes($left))->toBe(['90 minutes left to cancel or change the order'])
+        ->and(CaseSummary::policyNotes($over))->toBe(['The window to cancel or change the order has closed']);
 });
 
 it('records the case from the complaint flow and sends the closing script with the case number', function () {

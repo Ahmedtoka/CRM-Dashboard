@@ -14,6 +14,7 @@ import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatCount } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { BotFlowOption, BotIntentRoute, BotIntentRow, BotScriptOption } from '@/types/admin';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -265,7 +266,7 @@ const priorityDot: Record<(typeof PRIORITIES)[number], string> = { high: 'bg-des
                         @click="groupFilter = chip.group"
                     >
                         {{ chip.group ? groupLabel(chip.group) : t('settings.bot_intents.all_groups') }}
-                        <span class="tabular-nums opacity-70">{{ chip.count }}</span>
+                        <span class="tabular-nums opacity-70">{{ formatCount(chip.count, locale) }}</span>
                     </button>
                 </div>
             </div>
@@ -292,7 +293,7 @@ const priorityDot: Record<(typeof PRIORITIES)[number], string> = { high: 'bg-des
             >
                 <h2 :id="`intent-group-${group}`" class="text-sm font-semibold text-foreground">
                     {{ groupLabel(group) }}
-                    <span class="ms-1 text-xs font-normal tabular-nums text-muted-foreground">({{ groupRows.length }})</span>
+                    <span class="ms-1 text-xs font-normal tabular-nums text-muted-foreground">({{ formatCount(groupRows.length, locale) }})</span>
                 </h2>
 
                 <ul class="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">

@@ -6,7 +6,7 @@ import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatDateTime } from '@/lib/format';
+import { formatCount, formatDateTime } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { ChannelAccount, ChannelTestResult, FacebookLoginSettings, FailedWebhookEvent } from '@/types/admin';
 import { Head, router, usePage } from '@inertiajs/vue3';
@@ -202,7 +202,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.channels.title'), href:
                     <template #cell-event="{ row }">
                         <span class="font-medium" dir="ltr">#{{ row.id }} · {{ row.provider }} · {{ row.event_type ?? '—' }}</span>
                     </template>
-                    <template #cell-attempts="{ row }"><span class="tabular-nums">{{ row.attempts }}</span></template>
+                    <template #cell-attempts="{ row }"><span class="tabular-nums">{{ formatCount(row.attempts, locale) }}</span></template>
                     <template #cell-error="{ row }"><span class="line-clamp-2 max-w-md break-words text-destructive" dir="ltr">{{ row.error ?? '—' }}</span></template>
                     <template #cell-created_at="{ row }"><span class="whitespace-nowrap tabular-nums text-muted-foreground">{{ formatDateTime(row.created_at, locale) }}</span></template>
                     <template #cell-actions="{ row }">

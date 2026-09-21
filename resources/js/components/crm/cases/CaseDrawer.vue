@@ -4,7 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { casePriorityTone, caseStatusTone } from '@/lib/caseStatus';
-import { formatDateTime, formatMoney } from '@/lib/format';
+import { formatCount, formatDateTime, formatMoney } from '@/lib/format';
 import type { SupportCase } from '@/types/crm';
 import { Link } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
@@ -77,7 +77,7 @@ const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-
         <SheetContent :side="dir === 'rtl' ? 'left' : 'right'" class="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-md">
             <SheetHeader class="border-b px-4 py-3 text-start">
                 <SheetTitle class="text-sm">{{ item ? t('cases.card_title', { id: item.id }) : t('cases.title') }}</SheetTitle>
-                <SheetDescription v-if="item" class="text-xs" dir="rtl">{{ item.summary_header }}</SheetDescription>
+                <SheetDescription v-if="item" class="text-xs" :dir="dir">{{ item.summary_header }}</SheetDescription>
             </SheetHeader>
 
             <div v-if="loading" class="space-y-3 p-4" aria-busy="true">
@@ -108,7 +108,7 @@ const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-
                 <div v-if="item.items?.length" class="space-y-1.5">
                     <h3 class="text-xs font-semibold text-muted-foreground">{{ t('cases.items.title') }}</h3>
                     <div class="overflow-x-auto rounded-md border border-border">
-                        <table class="w-full text-xs" dir="rtl">
+                        <table class="w-full text-xs" :dir="dir">
                             <thead class="bg-muted/60 text-muted-foreground">
                                 <tr>
                                     <th scope="col" class="px-2 py-1.5 text-start font-medium">{{ t('cases.items.item') }}</th>
@@ -119,7 +119,7 @@ const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-
                             </thead>
                             <tbody>
                                 <tr v-for="(row, index) in item.items" :key="index" class="border-t border-border">
-                                    <td class="px-2 py-1.5">
+                                    <td class="px-2 py-1.5" dir="auto">
                                         <span class="font-medium">{{ row.title }}</span>
                                         <span
                                             v-if="row.exchange_only"
@@ -127,8 +127,8 @@ const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-
                                             >{{ t('cases.items.exchange_only') }}</span
                                         >
                                     </td>
-                                    <td class="px-2 py-1.5 text-muted-foreground">{{ row.variant ?? '—' }}</td>
-                                    <td class="px-2 py-1.5 text-center tabular-nums">{{ row.qty }}</td>
+                                    <td class="px-2 py-1.5 text-muted-foreground" dir="auto">{{ row.variant ?? '—' }}</td>
+                                    <td class="px-2 py-1.5 text-center tabular-nums">{{ formatCount(row.qty, locale) }}</td>
                                     <td class="px-2 py-1.5 text-end tabular-nums">{{ row.price !== null ? formatMoney(row.price, locale) : '—' }}</td>
                                 </tr>
                             </tbody>
@@ -138,7 +138,7 @@ const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-
 
                 <div v-if="item.exchange_product" class="space-y-1.5">
                     <h3 class="text-xs font-semibold text-muted-foreground">{{ t('cases.exchange_product.title') }}</h3>
-                    <div class="flex items-center gap-3 rounded-md border border-border p-2" dir="rtl">
+                    <div class="flex items-center gap-3 rounded-md border border-border p-2" :dir="dir">
                         <img
                             v-if="item.exchange_product.image"
                             :src="item.exchange_product.image"
@@ -151,8 +151,8 @@ const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-
                             >{{ t('cases.exchange_product.no_image') }}</span
                         >
                         <div class="min-w-0 flex-1 space-y-0.5">
-                            <p class="truncate text-sm font-medium">{{ item.exchange_product.title }}</p>
-                            <p v-if="item.exchange_product.variant_title" class="truncate text-xs text-muted-foreground">
+                            <p class="truncate text-sm font-medium" dir="auto">{{ item.exchange_product.title }}</p>
+                            <p v-if="item.exchange_product.variant_title" class="truncate text-xs text-muted-foreground" dir="auto">
                                 {{ item.exchange_product.variant_title }}
                             </p>
                             <p v-if="item.exchange_product.price !== null" class="text-xs tabular-nums">

@@ -82,7 +82,7 @@ class BotKnowledgeController extends Controller
 
     public function destroyEntry(Request $request, BotKnowledgeEntry $entry): HttpResponse
     {
-        abort_if(in_array($entry->key, KnowledgeDefaults::CORE_KEYS, true), 422, 'المعلومة الأساسية دي مينفعش تتمسح — ممكن توقفيها بس');
+        abort_if(in_array($entry->key, KnowledgeDefaults::CORE_KEYS, true), 422, __('errors.knowledge.core_entry_undeletable'));
         $entry->delete();
 
         return $this->done($request, ['id' => $entry->id]);
@@ -111,10 +111,10 @@ class BotKnowledgeController extends Controller
         $file = $request->file('file');
         $mime = $inspector->sniff((string) $file->getRealPath(), $file->getClientMimeType(), $file->getClientOriginalExtension());
         if (! in_array($mime, self::SIZE_CHART_MIMES, true)) {
-            throw new MediaRejected(MediaPolicy::UNSUPPORTED);
+            throw new MediaRejected(__(MediaPolicy::UNSUPPORTED));
         }
         if ((int) $file->getSize() > self::SIZE_CHART_MAX_BYTES) {
-            throw new MediaRejected(strtr(MediaPolicy::TOO_BIG, [':max' => (string) intdiv(self::SIZE_CHART_MAX_BYTES, 1024 * 1024)]));
+            throw new MediaRejected(__(MediaPolicy::TOO_BIG, ['max' => (string) intdiv(self::SIZE_CHART_MAX_BYTES, 1024 * 1024)]));
         }
         $settings = BotSetting::current();
         $oldPath = $settings->size_chart_image_path;

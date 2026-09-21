@@ -123,7 +123,7 @@ class TestLinkReport
                 'run_no' => (int) $s->run_no,
                 'label' => $s->label(),
                 'conversation_id' => $s->conversation_id,
-                'device_family' => $s->device_family ?: 'unknown',
+                'device_family' => DeviceFamily::label($s->device_family),
                 'started_at' => ($s->started_at ?? $s->created_at)?->toIso8601String(),
                 'ended_at' => $s->ended_at?->toIso8601String(),
                 'ended_reason' => $s->ended_reason,
@@ -295,7 +295,11 @@ class TestLinkReport
      */
     public function csvRows(array $sessions): iterable
     {
-        yield ['link', 'tester', 'run', 'started_at', 'duration_seconds', 'messages_in', 'messages_out', 'device', 'flows', 'last_step', 'finished', 'cases', 'handovers', 'conversation_id'];
+        yield array_map(fn (string $c) => __('labels.csv.test_links.'.$c), [
+            'link', 'tester', 'run', 'started_at', 'duration_seconds', 'messages_in',
+            'messages_out', 'device', 'flows', 'last_step', 'finished', 'cases',
+            'handovers', 'conversation_id',
+        ]);
 
         foreach ($sessions as $s) {
             yield [
@@ -309,7 +313,7 @@ class TestLinkReport
                 (string) $s['device_family'],
                 implode(' | ', array_column($s['flows'], 'title')),
                 (string) ($s['last_step'] ?? ''),
-                $s['finished'] ? 'yes' : 'no',
+                $s['finished'] ? __('labels.csv.yes') : __('labels.csv.no'),
                 (string) $s['cases'],
                 (string) $s['handovers'],
                 (string) ($s['conversation_id'] ?? ''),

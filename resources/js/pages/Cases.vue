@@ -7,7 +7,7 @@ import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { casePriorityTone, caseStatusTone } from '@/lib/caseStatus';
-import { formatDateTime } from '@/lib/format';
+import { formatCount, formatDateTime } from '@/lib/format';
 import type { Paginated } from '@/types/admin';
 import type { CaseStatus, CaseType, SupportCase } from '@/types/crm';
 import { Head, router } from '@inertiajs/vue3';
@@ -110,7 +110,7 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2 text-
                         class="inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-2xs tabular-nums"
                         :class="(filters.status ?? 'all') === tab ? 'bg-primary-foreground/20' : 'bg-muted'"
                     >
-                        {{ counts[tab] ?? 0 }}
+                        {{ formatCount(counts[tab] ?? 0, locale) }}
                     </span>
                 </button>
             </div>
@@ -138,8 +138,8 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2 text-
                 <DataTable :columns="columns" :rows="cases.data" clickable :loading="loading" :empty="t('cases.empty')" :caption="t('cases.title')" @row-click="openCase">
                     <template #cell-id="{ row }"><span class="font-medium tabular-nums" dir="ltr">#{{ row.id }}</span></template>
                     <template #cell-type="{ row }">
-                        <span class="block whitespace-nowrap" dir="rtl">{{ row.type_label }}</span>
-                        <span v-if="requestLine(row)" class="block max-w-[16rem] truncate text-2xs text-muted-foreground" dir="rtl" :title="requestLine(row) ?? undefined">
+                        <span class="block whitespace-nowrap">{{ t(`cases.types.${row.type}`) }}</span>
+                        <span v-if="requestLine(row)" class="block max-w-[16rem] truncate text-2xs text-muted-foreground" dir="auto" :title="requestLine(row) ?? undefined">
                             {{ requestLine(row) }}
                         </span>
                     </template>

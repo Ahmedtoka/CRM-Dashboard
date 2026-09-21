@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Channels\Integrations\ConnectionHealthCheck;
 use App\Enums\Platform;
 use App\Models\ChannelAccount;
 use App\Models\User;
@@ -73,6 +74,14 @@ class HandleInertiaRequests extends Middleware
             // Spec §9: channel credential errors alert admins (Shopify error/disconnected included, spec §7).
             'channelAlerts' => fn () => $user?->isAdmin()
                 ? ChannelAccount::where('status', 'error')->orderBy('id')->get(['id', 'platform', 'name', 'last_error'])
+                    // `last_error` holds a stable `problem:<code>` for our own health checks;
+                    // the sentence is chosen here, in the reading admin's locale.
+                    ->map(fn (ChannelAccount $a) => [
+                        'id' => $a->id,
+                        'platform' => $a->platform?->value,
+                        'name' => $a->name,
+                        'last_error' => ConnectionHealthCheck::problemText($a->last_error),
+                    ])
                     ->concat($this->shopifyAlerts())
                 : [],
             'broadcasting' => fn () => $this->broadcasting(),

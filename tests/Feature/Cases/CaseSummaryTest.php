@@ -46,8 +46,8 @@ it('builds the return refund summary with the order, its items, photos and the t
 منى أحمد · 01012345678
 
 📦 الأوردر #1038
-بتاريخ 28/8 · اتأكد وجاري تجهيزه · 1,250 ج.م
-المنتجات: فستان ستان أسود (M) × 1
+بتاريخ ٢٨/٨ · اتأكد وجاري تجهيزه · ١٬٢٥٠ ج.م
+المنتجات: فستان ستان أسود (M) × ١
 
 📝 الطلب
 السبب: المقاس مش مظبوط
@@ -80,8 +80,8 @@ it('marks missing photos, lists more than five items and shows policy notes for 
 Mona FB · 01099999999
 
 📦 الأوردر #1038
-بتاريخ 28/8 · اتسلم · 1,250 ج.م
-المنتجات: فستان ستان أسود (M) × 1، طرحة × 2، طرحة × 2، طرحة × 2، طرحة × 2، و 2 منتجات تانية
+بتاريخ ٢٨/٨ · اتسلم · ١٬٢٥٠ ج.م
+المنتجات: فستان ستان أسود (M) × ١، طرحة × ٢، طرحة × ٢، طرحة × ٢، طرحة × ٢، و ٢ منتجات تانية
 
 📝 الطلب
 السبب: بايظ / فيه عيب
@@ -187,8 +187,8 @@ it('builds a delivery follow-up summary with the shipping status', function () {
 غير معروف
 
 📦 الأوردر #1038
-بتاريخ 28/8 · رجع لينا (مرتجع) · 1,250 ج.م
-المنتجات: فستان ستان أسود (M) × 1
+بتاريخ ٢٨/٨ · رجع لينا (مرتجع) · ١٬٢٥٠ ج.م
+المنتجات: فستان ستان أسود (M) × ١
 
 📝 الطلب
 حالة الشحن: رجع لينا (مرتجع)
@@ -210,4 +210,38 @@ it('exposes the header and sections on the resource', function () {
         ->and($json)->not->toHaveKey('summary_lines')
         ->and(array_column($json['summary_sections'], 'key'))->toBe(['customer', 'request', 'alerts', 'team_action'])
         ->and($json['summary_sections'][1])->toBe(['key' => 'request', 'icon' => '📝', 'title' => 'الطلب', 'lines' => ['النوع: خدمة العملاء', 'التفاصيل: محدش بيرد']]);
+});
+
+it('flags the empty alerts section structurally instead of leaving the front end to match the word', function () {
+    $quiet = csCase(['type' => 'complaint', 'data' => ['complaint_type' => 'service']]);
+    $noisy = csCase(['type' => 'complaint', 'data' => ['complaint_type' => 'service'], 'policy_notes' => [['code' => 'cancel_window_over', 'params' => []]]]);
+
+    expect(collect(CaseSummary::sections($quiet))->firstWhere('key', 'alerts'))
+        ->toBe(['key' => 'alerts', 'icon' => '⚠️', 'title' => 'تنبيهات', 'lines' => ['مفيش'], 'empty' => true])
+        ->and(collect(CaseSummary::sections($noisy))->firstWhere('key', 'alerts'))
+        ->toBe(['key' => 'alerts', 'icon' => '⚠️', 'title' => 'تنبيهات', 'lines' => ['انتهت مهلة الإلغاء/التعديل']]);
+});
+
+it('renders the summary in English for an English-mode viewer but keeps the customer and store data as it is', function () {
+    $case = csCase([
+        'type' => 'cancel_edit', 'priority' => 'high', 'order_number' => '#1038',
+        'data' => ['order_number' => '#1038', 'request' => 'cancel', 'cancel_reason' => 'لقيت الموديل أرخص'],
+        'policy_notes' => [['code' => 'cancel_window_left', 'params' => ['minutes' => 45]]],
+    ]);
+
+    app()->setLocale('en');
+    $json = (new SupportCaseResource($case))->resolve(Request::create('/'));
+    $section = fn (string $key) => collect($json['summary_sections'])->firstWhere('key', $key);
+
+    expect($json['type_label'])->toBe('Cancel / edit order')
+        ->and($json['summary_header'])->toBe("📋 Case #{$case->id} — Cancel / edit order — high priority")
+        ->and($json['policy_notes'])->toBe(['45 minutes left to cancel or change the order'])
+        ->and($section('order')['title'])->toBe('Order #1038')
+        // the flow's own option title and what she typed stay exactly as they were stored
+        ->and($section('request')['lines'])->toBe(['Wants: إلغاء', 'Reason for cancelling: لقيت الموديل أرخص'])
+        ->and($section('team_action')['lines'][0])->toBe('Review the order and cancel it if it is still within the window.')
+        // the bot's own record is history: it keeps the Arabic it was written in
+        ->and(CaseSummary::text($case))->toContain('📝 الطلب')
+        ->and(CaseSummary::text($case))->toContain('باقي على مهلة الإلغاء/التعديل: ٤٥ دقيقة')
+        ->and(app()->getLocale())->toBe('en');
 });

@@ -12,6 +12,7 @@ import StatCard from '@/components/crm/StatCard.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
+import { formatCount, formatShortDuration } from '@/lib/format';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { TeamTestFunnel, TeamTestLinkOption, TeamTestSessionRow, TeamTestTotals, TeamTestTranscriptLine } from '@/types/admin';
 import { Head, router } from '@inertiajs/vue3';
@@ -59,10 +60,7 @@ async function show(row: TeamTestSessionRow): Promise<void> {
 const stamp = (value: string | null): string =>
     value ? new Date(value).toLocaleString(locale.value === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 
-function duration(seconds: number): string {
-    const m = Math.floor(seconds / 60);
-    return m > 0 ? `${m}m ${seconds % 60}s` : `${seconds}s`;
-}
+const duration = (seconds: number): string => formatShortDuration(seconds, locale.value);
 
 function who(line: TeamTestTranscriptLine): string {
     if (line.sender === 'customer') return t('reports.team_test.you');
@@ -124,7 +122,7 @@ const select = 'h-8 rounded-md border border-input bg-background px-2 text-xs';
                 <template #cell-started_at="{ row }"><span class="tabular-nums">{{ stamp(row.started_at) }}</span></template>
                 <template #cell-duration_seconds="{ row }"><span class="tabular-nums">{{ duration(row.duration_seconds) }}</span></template>
                 <template #cell-messages_total="{ row }">
-                    <span class="tabular-nums">{{ row.messages_total }}</span>
+                    <span class="tabular-nums">{{ formatCount(row.messages_total, locale) }}</span>
                 </template>
                 <template #cell-flows="{ row }">
                     <span v-if="!row.flows.length" class="text-muted-foreground">—</span>

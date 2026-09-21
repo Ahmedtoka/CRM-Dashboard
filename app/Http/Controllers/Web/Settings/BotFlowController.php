@@ -128,7 +128,7 @@ class BotFlowController extends Controller
         ]);
 
         if (($data['is_active'] ?? true) === false && $flow->key === self::MAIN_MENU_KEY) {
-            return response()->json(['message' => 'القائمة الرئيسية لازم تفضل مفعّلة.'], 422);
+            return response()->json(['message' => __('errors.flows.main_menu_must_stay_active')], 422);
         }
 
         $flow->update($data);
@@ -151,7 +151,7 @@ class BotFlowController extends Controller
         // someone else created it in the meantime, so that is a conflict too.
         if ($existingDraft && (empty($data['base_updated_at'])
             || $existingDraft->updated_at->gt(Carbon::parse($data['base_updated_at'])))) {
-            return response()->json(['message' => 'حصل تعديل على المسودة من مكان تاني، لازم تحمّلي آخر نسخة الأول.'], 409);
+            return response()->json(['message' => __('errors.flows.draft_conflict')], 409);
         }
 
         try {
@@ -185,7 +185,7 @@ class BotFlowController extends Controller
         try {
             $version = $flowDrafts->publish($flow, $request->user(), $data['note'] ?? null);
         } catch (FlowValidationException $e) {
-            return response()->json(['message' => 'الفلو فيه أخطاء لازم تتصلح قبل النشر.', 'errors' => $e->errors], 422);
+            return response()->json(['message' => __('errors.flows.publish_has_errors'), 'errors' => $e->errors], 422);
         } catch (InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage(), 'errors' => []], 422);
         }
@@ -202,7 +202,7 @@ class BotFlowController extends Controller
         try {
             $restored = $flowDrafts->restore($version, $request->user());
         } catch (FlowValidationException $e) {
-            return response()->json(['message' => 'النسخة دي فيها أخطاء ومينفعش تترجع.', 'errors' => $e->errors], 422);
+            return response()->json(['message' => __('errors.flows.restore_has_errors'), 'errors' => $e->errors], 422);
         } catch (InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage(), 'errors' => []], 422);
         }

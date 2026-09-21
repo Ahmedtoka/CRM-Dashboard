@@ -93,23 +93,23 @@ class OrderService
         }
 
         if (! $this->settings()['order_creation_enabled']) {
-            throw ValidationException::withMessages(['order' => 'إنشاء الطلبات من المحادثات متوقف حاليًا من إعدادات Shopify.']);
+            throw ValidationException::withMessages(['order' => __('commerce.order.creation_disabled')]);
         }
 
         $items = $data['items'] ?? [];
 
         if (empty($items)) {
-            throw ValidationException::withMessages(['items' => 'At least one item is required.']);
+            throw ValidationException::withMessages(['items' => __('commerce.order.items_required')]);
         }
 
         $discount = $this->normalizeDiscount($data['discount'] ?? null);
 
         if ($discount['value'] > 0 && ! $user->isSupervisorOrAbove()) {
-            throw new AuthorizationException('Only a supervisor or admin can apply a discount.');
+            throw new AuthorizationException(__('commerce.discount.supervisor_only'));
         }
 
         if ($discount['value'] > 0 && $discount['reason_required'] && $discount['reason'] === null) {
-            throw ValidationException::withMessages(['discount.reason' => 'سبب الخصم مطلوب.']);
+            throw ValidationException::withMessages(['discount.reason' => __('commerce.discount.reason_required')]);
         }
 
         $type = OrderType::from($data['type'] ?? OrderType::Cod->value);
@@ -138,7 +138,10 @@ class OrderService
             'subtotal' => $this->fromPiastres($subtotalPiastres),
             'shipping_fee' => $this->fromPiastres($shippingFeePiastres),
             'shipping_rate_id' => $option->rateId,
-            'shipping_title' => $option->title,
+            // A zone rate keeps Shopify's own title; the default line stores the stable
+            // Arabic one, so an English-mode staff member's order still reads «شحن» on
+            // the customer's invoice.
+            'shipping_title' => $option->rateId === null ? ShippingQuote::DEFAULT_TITLE : $option->title,
             'discount' => $this->fromPiastres($discountPiastres),
             'discount_type' => $discountPiastres > 0 ? $discount['type'] : null,
             'discount_value' => $discountPiastres > 0
@@ -323,7 +326,7 @@ class OrderService
     public function retry(Order $order, User $user): Order
     {
         if (! $user->isSupervisorOrAbove() && (int) $order->created_by_id !== (int) $user->id) {
-            throw new AuthorizationException('Only the order creator or a supervisor can retry it.');
+            throw new AuthorizationException(__('commerce.order.retry_forbidden'));
         }
 
         $claimed = Order::query()
@@ -335,7 +338,9 @@ class OrderService
             $status = Order::whereKey($order->id)->value('status');
 
             throw ValidationException::withMessages([
-                'order' => 'Only failed orders can be retried (status: '.($status instanceof OrderStatus ? $status->value : $status).').',
+                'order' => __('commerce.order.retry_not_failed', [
+                    'status' => (string) ($status instanceof OrderStatus ? $status->value : $status),
+                ]),
             ]);
         }
 
@@ -426,7 +431,7 @@ class OrderService
     public function cancel(Order $order, ?User $user, bool $syncProvider = true, bool $restock = true): Order
     {
         if ($user !== null && ! $user->isSupervisorOrAbove()) {
-            throw new AuthorizationException('Only a supervisor or admin can cancel an order.');
+            throw new AuthorizationException(__('commerce.order.cancel_forbidden'));
         }
 
         [$order, $alreadyCancelled] = DB::transaction(function () use ($order, $syncProvider) {
@@ -462,7 +467,7 @@ class OrderService
         }
 
         if ($order->shipment && ! in_array($order->shipment->status, [ShipmentStatus::Delivered, ShipmentStatus::Returned, ShipmentStatus::Cancelled], true)) {
-            $this->shipments->applyEvent($order->shipment, ShipmentStatus::Cancelled, 'Order cancelled');
+            $this->shipments->applyEvent($order->shipment, ShipmentStatus::Cancelled, ShipmentService::EVENT_ORDER_CANCELLED);
         }
 
         $this->logger->log(
@@ -941,19 +946,19 @@ class OrderService
         }
 
         if (! is_array($discount)) {
-            throw ValidationException::withMessages(['discount' => 'قيمة الخصم غير صحيحة.']);
+            throw ValidationException::withMessages(['discount' => __('commerce.discount.invalid_value')]);
         }
 
         $type = $discount['type'] ?? self::DISCOUNT_FIXED;
 
         if (! in_array($type, [self::DISCOUNT_FIXED, self::DISCOUNT_PERCENT], true)) {
-            throw ValidationException::withMessages(['discount.type' => 'نوع الخصم لازم يكون مبلغ ثابت أو نسبة.']);
+            throw ValidationException::withMessages(['discount.type' => __('commerce.discount.invalid_type')]);
         }
 
         $value = (float) ($discount['value'] ?? 0);
 
         if ($value < 0 || ($type === self::DISCOUNT_PERCENT && $value > 100)) {
-            throw ValidationException::withMessages(['discount.value' => 'قيمة الخصم غير صحيحة.']);
+            throw ValidationException::withMessages(['discount.value' => __('commerce.discount.invalid_value')]);
         }
 
         $reason = trim((string) ($discount['reason'] ?? ''));
@@ -976,7 +981,7 @@ class OrderService
         $address = CustomerAddress::query()->where('customer_id', $conversation->customer_id)->find($shipping['address_id']);
 
         if ($address === null) {
-            throw ValidationException::withMessages(['shipping.address_id' => 'العنوان المختار مش تبع العميل ده.']);
+            throw ValidationException::withMessages(['shipping.address_id' => __('commerce.shipping.address_not_customers')]);
         }
 
         $defaults = [
@@ -1020,7 +1025,7 @@ class OrderService
             }
         }
 
-        throw ValidationException::withMessages(['shipping.rate_id' => 'طريقة الشحن المختارة مش متاحة للمحافظة دي أو لقيمة الطلب.']);
+        throw ValidationException::withMessages(['shipping.rate_id' => __('commerce.shipping.rate_unavailable')]);
     }
 
     /**
@@ -1052,7 +1057,9 @@ class OrderService
             $variant = $variants->get($item['variant_id'] ?? null);
 
             if ($variant === null) {
-                throw ValidationException::withMessages(['items' => "Variant {$item['variant_id']} was not found."]);
+                throw ValidationException::withMessages([
+                    'items' => __('commerce.order.variant_not_found', ['id' => (string) ($item['variant_id'] ?? '')]),
+                ]);
             }
 
             $qty = max(1, (int) ($item['qty'] ?? 1));

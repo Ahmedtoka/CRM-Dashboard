@@ -186,7 +186,7 @@ it('builds the team test report, its funnel and its CSV', function () {
     $rows = collect($report['sessions']);
 
     expect($rows->firstWhere('id', $first->id)['label'])->toBe('سارة')
-        ->and($rows->firstWhere('id', $second->id)['label'])->toBe('سارة — الجلسة 2')
+        ->and($rows->firstWhere('id', $second->id)['label'])->toBe('سارة — الجلسة ٢')
         ->and($rows->firstWhere('id', $first->id)['finished'])->toBeFalse()
         ->and($rows->firstWhere('id', $first->id)['dropped_at'])->toBe('description')
         ->and($rows->firstWhere('id', $first->id)['device_family'])->toBe('iPhone');
@@ -211,7 +211,9 @@ it('builds the team test report, its funnel and its CSV', function () {
 
     $body = $csv->streamedContent();
 
-    expect($body)->toContain('tester')
+    // The header row and the finished flag follow the exporting user's locale.
+    expect($body)->toContain(__('labels.csv.test_links.tester'))
+        ->and($body)->toContain(__('labels.csv.yes'))
         ->and($body)->toContain('سارة')
         ->and($body)->toContain('iPhone');
 

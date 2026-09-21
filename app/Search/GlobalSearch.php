@@ -161,7 +161,7 @@ final class GlobalSearch
         return [
             'id' => $o->id,
             'title' => $o->shopify_order_name ?: ($o->order_number ?: '#'.$o->id),
-            'subtitle' => trim(($o->customer?->name ?? '').' · '.number_format((float) $o->total, 2).' EGP', ' ·'),
+            'subtitle' => trim(($o->customer?->name ?? '').' · '.number_format((float) $o->total, 2).' '.__('labels.currency'), ' ·'),
             'status' => $o->status->value,
             'href' => "/orders/{$o->id}",
         ];
@@ -318,7 +318,7 @@ final class GlobalSearch
             })
             ->limit(self::LIMIT)->get()
             ->map(fn (Product $p) => ['id' => $p->id, 'title' => $p->title,
-                'subtitle' => trim(($p->variants->first() ? rtrim(rtrim(number_format((float) $p->variants->first()->price, 2, '.', ''), '0'), '.').' جنيه' : '').' · '.($p->variants->first()?->sku ?? ''), ' ·'),
+                'subtitle' => trim(($p->variants->first() ? rtrim(rtrim(number_format((float) $p->variants->first()->price, 2, '.', ''), '0'), '.').' '.__('labels.currency') : '').' · '.($p->variants->first()?->sku ?? ''), ' ·'),
                 'href' => null])->all();
     }
 

@@ -39,6 +39,9 @@ class QuickReplyController extends Controller
 {
     use RespondsWithData;
 
+    /** A saved reply takes at most this many attachments. */
+    private const MAX_ATTACHMENTS = 5;
+
     public function index(Request $request): Response
     {
         $user = $request->user();
@@ -122,7 +125,7 @@ class QuickReplyController extends Controller
         $mime = $inspector->sniff((string) $file->getRealPath(), $file->getClientMimeType(), $file->getClientOriginalExtension());
         $type = $policy->assertUploadable($mime, (int) $file->getSize());
         if (! in_array($type, [AttachmentType::Image, AttachmentType::File], true)) {
-            throw new MediaRejected(MediaPolicy::UNSUPPORTED);
+            throw new MediaRejected(__(MediaPolicy::UNSUPPORTED));
         }
 
         $disk = $storage->disk();
@@ -136,7 +139,7 @@ class QuickReplyController extends Controller
                 // Lock the parent row so two concurrent uploads on the same
                 // reply can never both pass the count check and land a 6th.
                 QuickReply::query()->whereKey($quickReply->id)->lockForUpdate()->firstOrFail();
-                abort_if($quickReply->attachments()->count() >= 5, 422, 'أقصى عدد ٥ مرفقات للرد');
+                abort_if($quickReply->attachments()->count() >= self::MAX_ATTACHMENTS, 422, __('errors.replies.attachments_max', ['max' => self::MAX_ATTACHMENTS]));
 
                 return $quickReply->attachments()->create([
                     'disk' => $disk,
@@ -191,7 +194,7 @@ class QuickReplyController extends Controller
                     ->when($existing, fn (Builder $q) => $q->whereKeyNot($existing->id))
                     ->exists();
                 if ($taken) {
-                    $fail('الاختصار ده مستخدم قبل كده');
+                    $fail(__('errors.replies.shortcut_taken'));
                 }
             }],
             'title' => ['required', 'string', 'max:255'],

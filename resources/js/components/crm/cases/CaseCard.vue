@@ -11,7 +11,7 @@ import CaseSummarySections from './CaseSummarySections.vue';
 const props = defineProps<{ supportCase: SupportCase }>();
 const emit = defineEmits<{ updated: [supportCase: SupportCase] }>();
 
-const { t, locale } = useI18n();
+const { t, locale, dir } = useI18n();
 const api = useApi();
 const saving = ref(false);
 const error = ref<string | null>(null);
@@ -42,9 +42,15 @@ const selectClass = 'h-7 rounded-md border border-input bg-background px-1.5 tex
     <Card class="space-y-2 p-3 text-xs">
         <div class="flex flex-wrap items-center justify-between gap-1.5">
             <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-                <span class="font-semibold" dir="rtl">{{ supportCase.summary_header }}</span>
+                <span class="font-semibold" :dir="dir">{{ supportCase.summary_header }}</span>
             </div>
-            <select :value="supportCase.status" :disabled="saving" :class="selectClass" :aria-label="t('cases.columns.status')" @change="onStatusChange">
+            <select
+                :value="supportCase.status"
+                :disabled="saving"
+                :class="selectClass"
+                :aria-label="t('cases.columns.status')"
+                @change="onStatusChange"
+            >
                 <option v-for="s in ['new', 'in_progress', 'closed']" :key="s" :value="s">{{ t(`cases.tabs.${s}`) }}</option>
             </select>
         </div>

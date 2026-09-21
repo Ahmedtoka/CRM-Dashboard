@@ -314,10 +314,12 @@ export interface CasePhoto {
 
 /** One block of the organised case summary (same as the conversation note). */
 export interface CaseSummarySection {
-    key: 'customer' | 'order' | 'request' | 'attachments' | 'alerts' | 'team_action';
+    key: 'customer' | 'order' | 'items' | 'request' | 'attachments' | 'alerts' | 'team_action';
     icon: string;
     title: string;
     lines: string[];
+    /** Set on the alerts section when there is nothing to warn about (its one line is the "none" placeholder). */
+    empty?: boolean;
 }
 
 export interface CaseItem {

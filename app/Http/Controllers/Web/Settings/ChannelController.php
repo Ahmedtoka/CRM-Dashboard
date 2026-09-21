@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web\Settings;
 
 use App\Channels\Adapters\MetaGraphClient;
+use App\Channels\Integrations\ConnectionHealthCheck;
 use App\Channels\Integrations\WhatsAppConnector;
 use App\Channels\Jobs\ProcessWebhookEvent;
 use App\Channels\MetaPageSubscriber;
@@ -112,7 +113,7 @@ class ChannelController extends Controller
     private function testInstagram(ChannelAccount $channel): HttpResponse
     {
         if (! $channel->linkedFacebookAccount()) {
-            return response()->json(['ok' => false, 'error' => 'الحساب ده لسه مش مربوط بصفحة فيسبوك.'], 422);
+            return response()->json(['ok' => false, 'error' => __('errors.channels.instagram_not_linked')], 422);
         }
 
         if (empty($channel->external_id)) {
@@ -147,7 +148,7 @@ class ChannelController extends Controller
             $linked = $channel->linkedFacebookAccount();
 
             if (! $linked) {
-                return response()->json(['ok' => false, 'error' => 'الحساب ده لسه مش مربوط بصفحة فيسبوك.'], 422);
+                return response()->json(['ok' => false, 'error' => __('errors.channels.instagram_not_linked')], 422);
             }
 
             $pageId = $linked->external_id;
@@ -169,10 +170,7 @@ class ChannelController extends Controller
         $response = ['ok' => true];
 
         if ($channel->platform === Platform::Instagram) {
-            $response['note'] = 'تم تسجيل صفحة فيسبوك المربوطة. متنساش تفعّل حقول '
-                .'messages, comments مرة واحدة من App Dashboard ← Webhooks ← Instagram '
-                .'(التفاصيل في README §6 أو docs/deploy/cloudways-staging.md)، وإلا '
-                .'رسائل وتعليقات إنستجرام مش هتوصل.';
+            $response['note'] = __('errors.channels.instagram_subscribe_note');
         }
 
         return response()->json($response);
@@ -265,7 +263,7 @@ class ChannelController extends Controller
             'driver' => $a->driver,
             'status' => $a->status,
             'last_webhook_at' => $a->last_webhook_at?->toIso8601String(),
-            'last_error' => $a->last_error,
+            'last_error' => ConnectionHealthCheck::problemText($a->last_error),
             'has_token' => ! empty($a->credentials['access_token'] ?? null),
             'linked_facebook_account_id' => $a->credentials['linked_facebook_account_id'] ?? null,
             // The public address the platform posts to: always APP_URL, never the host this page

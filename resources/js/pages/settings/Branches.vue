@@ -13,7 +13,7 @@ import { computed, reactive, ref } from 'vue';
 
 const props = defineProps<{ branches: BranchRow[] }>();
 
-const { t } = useI18n();
+const { t, locale, dir } = useI18n();
 const toast = useToast();
 const api = useApi();
 
@@ -141,7 +141,7 @@ const groups = computed(() => {
 
     for (const row of props.branches) {
         if (!map.has(row.area_key)) {
-            map.set(row.area_key, { key: row.area_key, label: row.area_ar, rows: [] });
+            map.set(row.area_key, { key: row.area_key, label: (locale.value === 'en' ? row.area_en : row.area_ar) || row.area_ar, rows: [] });
         }
         map.get(row.area_key)!.rows.push(row);
     }
@@ -179,7 +179,7 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
             </p>
 
             <div v-for="group in groups" :key="group.key" class="space-y-2">
-                <h2 class="flex items-center gap-2 text-sm font-semibold" dir="rtl">
+                <h2 class="flex items-center gap-2 text-sm font-semibold" :dir="dir">
                     {{ group.label }}
                     <span class="text-xs font-normal text-muted-foreground">{{ t('settings.branches.count', { count: group.rows.length }) }}</span>
                 </h2>
@@ -219,8 +219,8 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
         <FormDialog v-model:open="open" :title="editingId ? t('settings.branches.edit') : t('settings.branches.add')" :busy="busy" :error="error" wide @submit="submit">
             <label class="grid gap-1">
                 <span class="text-sm font-semibold">{{ t('settings.branches.area') }}</span>
-                <select v-model="form.area_key" required :class="input" dir="rtl" @change="onAreaChange">
-                    <option v-for="area in AREA_OPTIONS" :key="area.key" :value="area.key">{{ area.ar }}</option>
+                <select v-model="form.area_key" required :class="input" :dir="locale === 'en' ? 'ltr' : 'rtl'" @change="onAreaChange">
+                    <option v-for="area in AREA_OPTIONS" :key="area.key" :value="area.key">{{ locale === 'en' ? area.en : area.ar }}</option>
                 </select>
             </label>
             <label class="grid gap-1">

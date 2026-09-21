@@ -1,16 +1,22 @@
 <?php
 
-use App\Enums\{AttachmentStatus, AttachmentType};
-use App\Media\{MediaPolicy, MediaRejected, MediaStorage, SampleMedia};
+use App\Enums\AttachmentStatus;
+use App\Enums\AttachmentType;
+use App\Media\MediaPolicy;
+use App\Media\MediaRejected;
+use App\Media\MediaStorage;
+use App\Media\SampleMedia;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
 beforeEach(fn () => Storage::fake('media'));
 
-function sampleUpload(string $kind, string $name, ?string $clientMime = null): UploadedFile {
+function sampleUpload(string $kind, string $name, ?string $clientMime = null): UploadedFile
+{
     $path = tempnam(sys_get_temp_dir(), 'crm');
     file_put_contents($path, SampleMedia::bytes($kind));
+
     return new UploadedFile($path, $name, $clientMime ?? SampleMedia::mime($kind), null, true);
 }
 
@@ -38,11 +44,11 @@ it('detects pdf, ogg voice and mp4 by magic bytes', function (string $kind, stri
     ['video', 'video/mp4', AttachmentType::Video],
 ]);
 
-it('rejects executables and oversized files with arabic messages', function () {
+it('rejects executables and oversized files with a translated message', function () {
     $path = tempnam(sys_get_temp_dir(), 'crm');
     file_put_contents($path, "MZ\x90\x00".str_repeat("\x00", 60));
     expect(fn () => app(MediaStorage::class)->storeUpload(new UploadedFile($path, 'a.jpg', 'image/jpeg', null, true), User::factory()->create()))
-        ->toThrow(MediaRejected::class, MediaPolicy::UNSUPPORTED);
+        ->toThrow(MediaRejected::class, __(MediaPolicy::UNSUPPORTED));
 
     config(['crm.media.types.image.max_bytes' => 10]);
     expect(fn () => app(MediaStorage::class)->storeUpload(sampleUpload('image', 'big.png'), User::factory()->create()))

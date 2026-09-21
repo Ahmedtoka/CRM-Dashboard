@@ -134,6 +134,14 @@ export function formatMoney(amount: number | string | null | undefined, locale: 
     return `${formatNumber(locale, value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${translate(locale, 'common.currency')}`;
 }
 
+/** Elapsed run time as "8m 55s" / "٨ د ٥٥ ث" — units and digits both follow the locale. */
+export function formatShortDuration(seconds: number | null | undefined, locale: Locale): string {
+    const total = Math.max(0, Math.round(Number(seconds ?? 0)));
+    const m = Math.floor(total / 60);
+
+    return m > 0 ? translate(locale, 'time.minutes_seconds', { m, s: total % 60 }) : translate(locale, 'time.seconds', { n: total });
+}
+
 /** Locale digits for a count. */
 export function formatCount(value: number | string | null | undefined, locale: Locale): string {
     return formatNumber(locale, Number(value ?? 0));

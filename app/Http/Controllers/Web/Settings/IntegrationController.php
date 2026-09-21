@@ -302,7 +302,7 @@ class IntegrationController extends Controller
             'connected_at' => ($a->connected_at ?? $a->created_at)?->toIso8601String(),
             'last_inbound_at' => ConnectionHealthCheck::lastInboundAt($a)?->toIso8601String(),
             'last_webhook_at' => $a->last_webhook_at?->toIso8601String(),
-            'last_error' => $a->last_error,
+            'last_error' => ConnectionHealthCheck::problemText($a->last_error),
             'has_token' => filled($a->graphToken()),
             'profile' => [
                 'picture' => $profile['picture'] ?? null,

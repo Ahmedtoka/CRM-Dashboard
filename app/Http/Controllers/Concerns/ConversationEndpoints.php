@@ -436,7 +436,7 @@ trait ConversationEndpoints
                 throw $e;
             }
 
-            abort(response()->json(['message' => 'مفتاح الطلب ده مستخدم في طلب تاني — افتح نموذج الطلب من جديد.'], 409));
+            abort(response()->json(['message' => __('errors.orders.idempotency_conflict')], 409));
         }
 
         return (new OrderResource($order->loadMissing(['items', 'shipment.events', 'createdBy', 'customer'])))

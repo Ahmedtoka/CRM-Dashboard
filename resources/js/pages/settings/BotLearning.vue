@@ -2,6 +2,7 @@
 import PageHeader from '@/components/crm/PageHeader.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type {
@@ -26,7 +27,7 @@ const props = defineProps<{
     intentLabels?: Record<string, string>;
 }>();
 
-const { t } = useI18n();
+const { t, dir, locale } = useI18n();
 const toast = useToast();
 const api = useApi();
 
@@ -177,7 +178,7 @@ const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
     <Head :title="t('settings.bot_learning.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-5xl space-y-6 p-3 md:p-6" dir="rtl">
+        <div class="mx-auto w-full max-w-5xl space-y-6 p-3 md:p-6" :dir="dir">
             <PageHeader :title="t('settings.bot_learning.title')" :description="t('settings.bot_learning.description')">
                 <button
                     type="button"
@@ -227,7 +228,7 @@ const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
                     @click="tab = key"
                 >
                     {{ t(`settings.bot_learning.tab_${key}`) }}
-                    <span v-if="key === 'notes' && todayNotes.length" class="ms-1 text-primary">({{ todayNotes.length }})</span>
+                    <span v-if="key === 'notes' && todayNotes.length" class="ms-1 text-primary">({{ formatCount(todayNotes.length, locale) }})</span>
                 </button>
             </div>
 
@@ -241,7 +242,7 @@ const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
                 <div v-for="group in notesByKind" :key="group.kind" class="space-y-2">
                     <h2 class="flex items-center gap-2 text-sm font-semibold">
                         <span :class="[badge, kindTone[group.kind]]">{{ t(`settings.bot_learning.kinds.${group.kind}`) }}</span>
-                        <span class="text-xs text-muted-foreground">{{ group.notes.length }}</span>
+                        <span class="text-xs text-muted-foreground">{{ formatCount(group.notes.length, locale) }}</span>
                     </h2>
 
                     <article v-for="note in group.notes" :key="note.id" :class="[card, 'space-y-2']">
@@ -251,9 +252,9 @@ const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
                                 class="shrink-0 rounded-full bg-violet-500/12 px-2 py-0.5 text-2xs font-semibold text-violet-600 dark:text-violet-300"
                                 >{{ t('settings.bot_learning.source_badge.test') }}</span
                             >
-                            <span>{{ note.summary }}</span>
+                            <span dir="auto">{{ note.summary }}</span>
                         </p>
-                        <p v-if="note.quote" class="border-s-2 border-border ps-2 text-xs italic text-muted-foreground">« {{ note.quote }} »</p>
+                        <p v-if="note.quote" class="border-s-2 border-border ps-2 text-xs italic text-muted-foreground" dir="auto">« {{ note.quote }} »</p>
                         <p v-if="note.agent_answer" class="rounded-md bg-emerald-500/5 p-2 text-xs leading-5">
                             <span class="font-semibold">{{ t('settings.bot_learning.agent_answer') }}</span> {{ note.agent_answer }}
                         </p>
@@ -287,7 +288,7 @@ const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
                         @click="select(row.id)"
                     >
                         <span dir="ltr">{{ row.report_date }}</span>
-                        <span v-if="row.pending_count" class="ms-1 text-primary">({{ row.pending_count }})</span>
+                        <span v-if="row.pending_count" class="ms-1 text-primary">({{ formatCount(row.pending_count, locale) }})</span>
                         <span v-if="row.stats?.demo" class="block text-2xs text-muted-foreground">{{ t('settings.bot_learning.demo') }}</span>
                     </button>
                 </nav>
@@ -304,7 +305,7 @@ const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
                                 {{ t('settings.bot_learning.demo') }}
                             </span>
                         </h2>
-                        <p class="whitespace-pre-line text-sm leading-6">{{ report.summary || '—' }}</p>
+                        <p class="whitespace-pre-line text-sm leading-6" dir="auto">{{ report.summary || '—' }}</p>
                         <p v-for="source in report.stats?.sources ?? []" :key="source.channel_account_id" class="mt-2 text-xs text-muted-foreground">
                             {{ t('settings.bot_learning.sources', { count: source.count, name: source.name }) }}
                         </p>
@@ -344,11 +345,11 @@ const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
                         <div class="grid gap-3 md:grid-cols-2">
                             <div>
                                 <h3 class="mb-1 text-2xs font-semibold text-muted-foreground">{{ t('settings.bot_learning.current') }}</h3>
-                                <p class="whitespace-pre-line rounded-md bg-muted/50 p-2 text-xs leading-5">{{ currentText(s) ?? '—' }}</p>
+                                <p class="whitespace-pre-line rounded-md bg-muted/50 p-2 text-xs leading-5" dir="auto">{{ currentText(s) ?? '—' }}</p>
                             </div>
                             <div>
                                 <h3 class="mb-1 text-2xs font-semibold text-muted-foreground">{{ t('settings.bot_learning.proposed') }}</h3>
-                                <p class="whitespace-pre-line rounded-md bg-emerald-500/5 p-2 text-xs leading-5">{{ proposedText(s) }}</p>
+                                <p class="whitespace-pre-line rounded-md bg-emerald-500/5 p-2 text-xs leading-5" dir="auto">{{ proposedText(s) }}</p>
                             </div>
                         </div>
 

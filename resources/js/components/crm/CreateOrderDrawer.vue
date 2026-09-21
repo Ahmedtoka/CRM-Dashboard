@@ -7,7 +7,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
-import { formatMoney } from '@/lib/format';
+import { formatCount, formatMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Customer, Order, ProductVariant } from '@/types/crm';
 import { LoaderCircle, Minus, Plus, Trash2 } from 'lucide-vue-next';
@@ -198,7 +198,7 @@ const stepper = 'flex size-7 items-center justify-center hover:bg-muted disabled
                                 <button type="button" :class="stepper" :disabled="line.qty <= 1" :aria-label="t('order.decrease')" @click="step(line, -1)">
                                     <Minus class="size-3" />
                                 </button>
-                                <span class="w-7 text-center text-xs tabular-nums" aria-live="polite">{{ line.qty }}</span>
+                                <span class="w-7 text-center text-xs tabular-nums" aria-live="polite">{{ formatCount(line.qty, locale) }}</span>
                                 <button type="button" :class="stepper" :aria-label="t('order.increase')" @click="step(line, 1)"><Plus class="size-3" /></button>
                             </div>
                             <button

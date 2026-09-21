@@ -47,7 +47,7 @@ class BotFlowSandboxController extends Controller
             // A broken state or draft must not surface as a 500 in the designer (spec §3).
             report($e);
 
-            return response()->json(['message' => 'حصلت مشكلة في تجربة الفلو، جرّب تبدأ من جديد'], 422);
+            return response()->json(['message' => __('errors.flows.sandbox_failed')], 422);
         }
 
         return response()->json($result);

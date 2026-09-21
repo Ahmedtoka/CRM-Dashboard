@@ -106,7 +106,7 @@ class CustomerController extends Controller
         $data = $request->validate(['other_id' => ['required', 'integer', 'exists:customers,id']]);
 
         if ((int) $data['other_id'] === (int) $customer->id) {
-            throw ValidationException::withMessages(['other_id' => 'A customer cannot be merged into itself.']);
+            throw ValidationException::withMessages(['other_id' => __('errors.customers.cannot_merge_into_itself')]);
         }
 
         $merger->merge($customer, Customer::findOrFail($data['other_id']), $request->user());

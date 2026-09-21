@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Refund;
 use App\Models\ShipmentEvent;
+use App\Shipping\ShipmentService;
 use App\Shopify\Connection\IntegrationRepository;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -105,7 +106,7 @@ class OrderResource extends JsonResource
                 'last_event_at' => $shipment->last_event_at?->toIso8601String(),
                 'events' => $shipment->events->sortBy('occurred_at')->map(fn (ShipmentEvent $e) => [
                     'status' => $e->status?->value,
-                    'description' => $e->description,
+                    'description' => self::eventDescription($e->description),
                     'location' => $e->location,
                     'occurred_at' => $e->occurred_at?->toIso8601String(),
                 ])->values()->all(),
@@ -129,6 +130,21 @@ class OrderResource extends JsonResource
             ])->values()->all(),
             'timeline' => $this->timeline(),
         ];
+    }
+
+    /**
+     * ShipmentTimeline.vue renders `shipment.events[].description` raw — unlike the
+     * `timeline` below it carries no `key`/`label_params`, so the CRM's own two
+     * sentinels are mapped to the viewer's language here. Carrier text (and any
+     * older row) is passed through unchanged.
+     */
+    private static function eventDescription(?string $stored): ?string
+    {
+        return match ($stored) {
+            ShipmentService::EVENT_CREATED => __('labels.shipment_event.created'),
+            ShipmentService::EVENT_ORDER_CANCELLED => __('labels.shipment_event.order_cancelled'),
+            default => $stored,
+        };
     }
 
     /**

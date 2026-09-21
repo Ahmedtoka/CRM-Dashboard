@@ -33,7 +33,7 @@ final class AttachmentCopier
         ?User $user,
     ): MessageAttachment {
         $target = $this->storage->relativePath('outbound', (string) $mime);
-        $stream = Storage::disk($disk)->readStream($path) ?? throw new MediaRejected('الملف الأصلي مش موجود');
+        $stream = Storage::disk($disk)->readStream($path) ?? throw new MediaRejected(__('errors.media.source_missing'));
         try {
             $written = Storage::disk($this->storage->disk())->writeStream($target, $stream);
         } finally {
@@ -49,7 +49,7 @@ final class AttachmentCopier
         if ($written === false) {
             Storage::disk($this->storage->disk())->delete($target);
 
-            throw new MediaRejected('تعذر نسخ الملف المرفق');
+            throw new MediaRejected(__('errors.media.copy_failed'));
         }
 
         return MessageAttachment::create([

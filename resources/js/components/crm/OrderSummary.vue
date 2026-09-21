@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from '@/composables/useI18n';
-import { formatMoney } from '@/lib/format';
+import { formatCount, formatMoney } from '@/lib/format';
 import type { OrderRow } from '@/types/admin';
 
 defineProps<{ order: OrderRow }>();
@@ -27,7 +27,7 @@ const { t, locale } = useI18n();
                             <span class="block" dir="auto">{{ item.title }}</span>
                             <span v-if="item.sku" class="text-2xs text-muted-foreground" dir="ltr">{{ item.sku }}</span>
                         </td>
-                        <td class="px-3 py-2 text-end tabular-nums">{{ item.qty }}</td>
+                        <td class="px-3 py-2 text-end tabular-nums">{{ formatCount(item.qty, locale) }}</td>
                         <td class="whitespace-nowrap px-3 py-2 text-end tabular-nums">{{ formatMoney(item.price, locale) }}</td>
                         <td class="whitespace-nowrap px-3 py-2 text-end tabular-nums">{{ formatMoney(item.price * item.qty, locale) }}</td>
                     </tr>

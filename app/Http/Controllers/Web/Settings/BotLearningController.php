@@ -149,7 +149,7 @@ class BotLearningController extends Controller
 
         if ($outcome->status === LearningOutcome::FAILED || $exitCode !== 0) {
             return response()->json([
-                'message' => 'المراجعة فشلت: '.($outcome->message ?: $output ?: 'خطأ غير معروف'),
+                'message' => __('errors.learning.review_failed', ['reason' => $outcome->message ?: $output ?: __('errors.learning.unknown_error')]),
             ], HttpResponse::HTTP_UNPROCESSABLE_ENTITY);
         }
 
@@ -164,7 +164,7 @@ class BotLearningController extends Controller
             // The applier already recorded the reason and left the row pending;
             // an unexpected throwable is a 422 here, never a 500 on the page.
             return response()->json([
-                'message' => $e instanceof DomainException ? $e->getMessage() : 'التطبيق فشل: '.$e->getMessage(),
+                'message' => $e instanceof DomainException ? $e->getMessage() : __('errors.learning.apply_failed', ['reason' => $e->getMessage()]),
             ], HttpResponse::HTTP_UNPROCESSABLE_ENTITY);
         }
 
@@ -174,7 +174,7 @@ class BotLearningController extends Controller
     public function reject(Request $request, BotSuggestion $suggestion): HttpResponse
     {
         if ($suggestion->status !== 'pending') {
-            return response()->json(['message' => 'الاقتراح ده اتقرر فيه قبل كده.'], HttpResponse::HTTP_UNPROCESSABLE_ENTITY);
+            return response()->json(['message' => __('errors.learning.suggestion_already_decided')], HttpResponse::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $suggestion->update([

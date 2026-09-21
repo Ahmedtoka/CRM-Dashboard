@@ -9,6 +9,7 @@ import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatCount, formatShortDuration } from '@/lib/format';
 import type { TestLinkRow, TestLinkSessionRow } from '@/types/admin';
 import { Head, router } from '@inertiajs/vue3';
 import { BarChart3, Check, Copy, ExternalLink, Pencil, Play, Plus, Square, Trash2 } from 'lucide-vue-next';
@@ -125,11 +126,7 @@ async function showSessions(row: TestLinkRow): Promise<void> {
 const stamp = (value: string | null): string =>
     value ? new Date(value).toLocaleString(locale.value === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 
-function minutes(seconds: number): string {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return m > 0 ? `${m}m ${s}s` : `${s}s`;
-}
+const minutes = (seconds: number): string => formatShortDuration(seconds, locale.value);
 
 function status(row: TestLinkRow): { label: string; tone: string } {
     if (!row.is_active) return { label: t('settings.test_links.stopped'), tone: 'bg-muted text-muted-foreground' };
@@ -217,8 +214,8 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                 </div>
 
                 <p class="text-2xs text-muted-foreground">
-                    {{ t('settings.test_links.max_messages') }}: {{ row.max_messages_per_session }} ·
-                    {{ t('settings.test_links.max_sessions') }}: {{ row.max_sessions ?? t('settings.test_links.unlimited') }}
+                    {{ t('settings.test_links.max_messages') }}: {{ formatCount(row.max_messages_per_session, locale) }} ·
+                    {{ t('settings.test_links.max_sessions') }}: {{ row.max_sessions === null ? t('settings.test_links.unlimited') : formatCount(row.max_sessions, locale) }}
                     <template v-if="row.expires_at"> · {{ t('settings.test_links.expires_at') }} {{ stamp(row.expires_at) }}</template>
                 </p>
 
@@ -228,7 +225,7 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                     :aria-expanded="openSessions === row.id"
                     @click="showSessions(row)"
                 >
-                    {{ t('settings.test_links.sessions') }} ({{ row.runs_count }})
+                    {{ t('settings.test_links.sessions') }} ({{ formatCount(row.runs_count, locale) }})
                 </button>
 
                 <div v-if="openSessions === row.id" class="rounded-md border border-border/60">
@@ -239,7 +236,7 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                             <span class="font-medium" dir="auto">{{ s.label }}</span>
                             <span class="text-muted-foreground">{{ stamp(s.started_at) }}</span>
                             <span class="text-muted-foreground">{{ minutes(s.duration_seconds) }}</span>
-                            <span class="text-muted-foreground">{{ s.messages_count }} · {{ s.device_family ?? '—' }}</span>
+                            <span class="text-muted-foreground">{{ formatCount(s.messages_count, locale) }} · {{ s.device_family ?? '—' }}</span>
                             <span class="rounded-full px-2 py-0.5 text-2xs" :class="s.ended_at ? 'bg-muted text-muted-foreground' : 'bg-emerald-500/10 text-emerald-600'">
                                 {{ s.ended_at ? t('settings.test_links.session_ended') : t('settings.test_links.session_running') }}
                             </span>

@@ -15,17 +15,22 @@ import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import TopLoadingBar from './components/crm/TopLoadingBar.vue';
 import { initializeTheme } from './composables/useAppearance';
-import { setCurrentLocale } from './composables/useI18n';
+import { setCurrentLocale, useI18n } from './composables/useI18n';
 import { useLoadingBar } from './composables/useLoadingBar';
 import { unreadConversationsCount } from './composables/useNotifications';
+import { formatNumber } from './i18n';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Social CRM';
+const { t, locale } = useI18n();
 
 createInertiaApp({
     title: (title) => {
+        // The name follows the interface language too, so an Arabic tab never ends in "Social CRM".
+        const appName = t('app.name');
         const base = title ? `${title} - ${appName}` : appName;
 
-        return unreadConversationsCount() > 0 ? `(${unreadConversationsCount()}) ${base}` : base;
+        const unread = unreadConversationsCount();
+
+        return unread > 0 ? `(${formatNumber(locale.value, unread)}) ${base}` : base;
     },
     resolve: (name) => resolvePageComponent(`./pages/${name}.vue`, import.meta.glob<DefineComponent>('./pages/**/*.vue')),
     setup({ el, App, props, plugin }) {

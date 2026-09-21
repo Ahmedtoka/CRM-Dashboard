@@ -33,7 +33,7 @@ class BotController extends Controller
 
     public function update(Request $request): HttpResponse
     {
-        abort_if(! $request->user()->isAdmin() && $request->hasAny(self::AI_FIELDS), 403, 'Only admins can change AI settings.');
+        abort_if(! $request->user()->isAdmin() && $request->hasAny(self::AI_FIELDS), 403, __('errors.bot.ai_admin_only'));
 
         $data = $request->validate([
             'enabled' => ['sometimes', 'boolean'],
@@ -81,7 +81,7 @@ class BotController extends Controller
 
             if ($maxWait < $wait) {
                 throw ValidationException::withMessages([
-                    'burst_max_wait_seconds' => __('validation.gte.numeric', ['attribute' => 'burst max wait seconds', 'value' => $wait]),
+                    'burst_max_wait_seconds' => __('validation.gte.numeric', ['attribute' => __('errors.bot.burst_max_wait_attribute'), 'value' => $wait]),
                 ]);
             }
         }

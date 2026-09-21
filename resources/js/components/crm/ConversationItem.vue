@@ -4,7 +4,7 @@ import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useInitials } from '@/composables/useInitials';
-import { formatListStamp, formatSince } from '@/lib/format';
+import { formatCount, formatListStamp, formatSince } from '@/lib/format';
 import type { Conversation } from '@/types/crm';
 import { computed } from 'vue';
 
@@ -82,7 +82,7 @@ const tagStyle = (color: string | null) => ({
                     class="ms-auto flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-2xs font-semibold text-primary-foreground"
                     :aria-label="t('inbox.unread', { n: conversation.unread_count })"
                 >
-                    {{ conversation.unread_count }}
+                    {{ formatCount(conversation.unread_count, locale) }}
                 </span>
             </span>
 

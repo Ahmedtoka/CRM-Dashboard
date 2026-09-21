@@ -5,17 +5,16 @@ import type { CaseSummarySection } from '@/types/crm';
 /** The organised case summary (same sections as the conversation note): icon + bold title, lines below; alerts turn amber when there are any. */
 const props = withDefaults(defineProps<{ sections: CaseSummarySection[]; compact?: boolean }>(), { compact: false });
 
-const { t } = useI18n();
+const { t, dir } = useI18n();
 
-const EMPTY_ALERT = 'مفيش';
-
+/** The alerts box only turns amber when there is something to warn about: the PHP side flags the empty one. */
 function isAlert(section: CaseSummarySection): boolean {
-    return section.key === 'alerts' && !(section.lines.length === 1 && section.lines[0] === EMPTY_ALERT);
+    return section.key === 'alerts' && section.empty !== true;
 }
 </script>
 
 <template>
-    <div :class="props.compact ? 'space-y-2' : 'space-y-3'" dir="rtl" :aria-label="t('cases.summary')" role="group">
+    <div :class="props.compact ? 'space-y-2' : 'space-y-3'" :dir="dir" :aria-label="t('cases.summary')" role="group">
         <section
             v-for="section in sections"
             :key="section.key"
@@ -29,6 +28,7 @@ function isAlert(section: CaseSummarySection): boolean {
             <p
                 v-for="(line, index) in section.lines"
                 :key="index"
+                dir="auto"
                 class="ms-6 whitespace-pre-line leading-relaxed"
                 :class="section.key === 'alerts' && !isAlert(section) ? 'text-muted-foreground' : 'text-foreground'"
             >

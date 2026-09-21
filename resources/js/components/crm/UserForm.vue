@@ -77,8 +77,8 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
             <label class="grid gap-1">
                 <span class="text-sm font-semibold">{{ t('settings.users.locale') }}</span>
                 <select v-model="form.locale" :class="input">
-                    <option value="ar">العربية</option>
-                    <option value="en">English</option>
+                    <option value="ar">{{ t('settings.users.locale_ar') }}</option>
+                    <option value="en">{{ t('settings.users.locale_en') }}</option>
                 </select>
             </label>
             <label class="grid gap-1">

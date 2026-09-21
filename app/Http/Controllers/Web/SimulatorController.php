@@ -115,7 +115,7 @@ class SimulatorController extends Controller
     {
         if ($order->status !== OrderStatus::AwaitingPayment) {
             abort(response()->json([
-                'message' => "Only orders awaiting payment can be paid (status: {$order->status?->value}).",
+                'message' => __('errors.orders.only_awaiting_payment_can_be_paid', ['status' => (string) $order->status?->value]),
             ], 422));
         }
 
@@ -127,7 +127,7 @@ class SimulatorController extends Controller
         $next = FakeShippingProvider::nextStatus($shipment->status);
 
         if ($next === null) {
-            throw ValidationException::withMessages(['shipment' => "A {$shipment->status->value} shipment cannot be advanced."]);
+            throw ValidationException::withMessages(['shipment' => __('errors.orders.shipment_cannot_advance', ['status' => $shipment->status->value])]);
         }
 
         $shipments->applyEvent($shipment, $next, 'Simulator: '.$next->value);

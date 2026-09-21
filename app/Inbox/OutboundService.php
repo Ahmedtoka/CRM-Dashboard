@@ -87,7 +87,7 @@ class OutboundService
             ->whereNull('message_id')->where('status', AttachmentStatus::Stored->value)->get()->keyBy('id');
 
         if ($ids === [] || $found->count() !== count($ids)) {
-            throw new MediaRejected(MediaPolicy::NOT_CLAIMABLE);
+            throw new MediaRejected(__(MediaPolicy::NOT_CLAIMABLE));
         }
 
         $rows = [];
@@ -142,7 +142,7 @@ class OutboundService
                     $linked = MessageAttachment::query()->whereKey($row['attachment']->id)->whereNull('message_id')->update(['message_id' => $message->id]);
 
                     if ($linked !== 1) {
-                        throw new MediaRejected(MediaPolicy::NOT_CLAIMABLE);
+                        throw new MediaRejected(__(MediaPolicy::NOT_CLAIMABLE));
                     }
 
                     $row['attachment']->message_id = $message->id;
@@ -282,7 +282,7 @@ class OutboundService
             $linked = MessageAttachment::query()->whereKey($attachment->id)->whereNull('message_id')->update(['message_id' => $message->id]);
 
             if ($linked !== 1) {
-                throw new MediaRejected(MediaPolicy::NOT_CLAIMABLE);
+                throw new MediaRejected(__(MediaPolicy::NOT_CLAIMABLE));
             }
 
             $attachment->message_id = $message->id;
@@ -337,7 +337,7 @@ class OutboundService
         if ($m->direction !== MessageDirection::Out
             || $m->sender_type === SenderType::System
             || $m->status !== MessageStatus::Failed) {
-            throw new DomainException('Only failed outbound messages can be retried.');
+            throw new DomainException(__('errors.inbox.retry_only_failed'));
         }
 
         // Template parameters are not persisted, so a retry is always sent as text.
@@ -366,7 +366,7 @@ class OutboundService
     private function authorize(Conversation $c, User $u): void
     {
         if (! $u->canAccessPlatform($c->platform)) {
-            throw new AuthorizationException("You are not allowed to reply on {$c->platform->label()}.");
+            throw new AuthorizationException(__('errors.inbox.platform_not_allowed', ['platform' => $c->platform->label()]));
         }
     }
 

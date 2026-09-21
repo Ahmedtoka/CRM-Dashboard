@@ -51,17 +51,52 @@ final class ConnectionHealthCheck
         ],
     ];
 
-    /** Arabic one-liners stored as `last_error` (the admin alert strip shows it verbatim). */
-    private const PROBLEM_TEXT = [
-        'token_missing' => 'مفيش توكن محفوظ — اعمل إعادة ربط',
-        'token_invalid' => 'التوكن مبقاش صالح — اعمل إعادة ربط',
-        'missing_scopes' => 'التوكن ناقصه صلاحيات',
-        'not_subscribed' => 'الويب هوك مش متسجل — الرسائل مش هتوصل',
-        'missing_fields' => 'الويب هوك متسجل من غير حقل الرسائل',
-        'instagram_unlinked' => 'حساب إنستجرام اتفصل عن صفحة فيسبوك',
-        'instagram_changed' => 'صفحة فيسبوك بقت مربوطة بحساب إنستجرام تاني',
-        'facebook_disconnected' => 'صفحة فيسبوك اللي إنستجرام بيستخدمها مش متوصلة',
+    /**
+     * Prefix of the stable code stored in `ChannelAccount.last_error`, e.g.
+     * `problem:token_invalid`. The check also runs from the scheduler, in the
+     * default locale, so nothing readable is written at that point — the text
+     * comes from {@see self::problemText()} when a page renders the row.
+     */
+    public const PROBLEM_CODE_PREFIX = 'problem:';
+
+    /** Check codes that have a `labels.channel_problem.*` sentence. */
+    private const PROBLEM_CODES = [
+        'token_missing',
+        'token_invalid',
+        'missing_scopes',
+        'not_subscribed',
+        'missing_fields',
+        'instagram_unlinked',
+        'instagram_changed',
+        'facebook_disconnected',
     ];
+
+    /**
+     * Renders a stored `last_error` in the viewer's language. Anything that is not
+     * one of our own `problem:<code>` values — a raw Graph/Shopify message, or a row
+     * written before the codes existed — comes back untouched.
+     */
+    public static function problemText(?string $stored): ?string
+    {
+        if ($stored === null || $stored === '') {
+            return $stored;
+        }
+
+        $parts = array_map(
+            function (string $piece) {
+                $code = str_starts_with($piece, self::PROBLEM_CODE_PREFIX)
+                    ? substr($piece, strlen(self::PROBLEM_CODE_PREFIX))
+                    : null;
+
+                return $code !== null && in_array($code, self::PROBLEM_CODES, true)
+                    ? __('labels.channel_problem.'.$code)
+                    : $piece;
+            },
+            explode(' · ', $stored),
+        );
+
+        return implode(' · ', $parts);
+    }
 
     public function __construct(
         private readonly MetaGraphClient $graph,
@@ -382,8 +417,12 @@ final class ConnectionHealthCheck
 
         if ($problems !== []) {
             $attributes['status'] = 'error';
+            // Stable codes, not sentences: this runs from the scheduler too, so the
+            // reader's locale — not the writer's — must decide the wording.
             $attributes['last_error'] = Str::limit(implode(' · ', array_map(
-                fn (array $c) => self::PROBLEM_TEXT[$c['code']] ?? $c['code'],
+                fn (array $c) => in_array($c['code'], self::PROBLEM_CODES, true)
+                    ? self::PROBLEM_CODE_PREFIX.$c['code']
+                    : $c['code'],
                 $problems,
             )), 250);
         } elseif ($account->status === 'error') {
@@ -413,7 +452,10 @@ final class ConnectionHealthCheck
                 'platform' => $account->platform?->value,
                 'name' => $account->name,
                 'codes' => $codes,
-                'excerpt' => $account->last_error,
+                // The notification payload is persisted, so this stays what it always was:
+                // the sentence in the app's default locale. Making the bell locale-aware
+                // means rendering `codes` on the frontend instead (not this slice).
+                'excerpt' => self::problemText($account->last_error),
             ]), report: true));
     }
 }

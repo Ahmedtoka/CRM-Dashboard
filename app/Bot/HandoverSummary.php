@@ -20,30 +20,29 @@ use Illuminate\Support\Str;
 final class HandoverSummary
 {
     /** Categories from TurnRunner/IntentRouter that are not an intent key (spec §2.1/§4). */
-    private const CATEGORY_LABELS = [
-        'unclear' => 'مش واضح', 'repeated' => 'سؤال متكرر', 'angry_or_urgent' => 'غضب/إلحاح',
-        'no_script' => 'لا يوجد رد جاهز', 'ai_error' => 'خطأ في البوت', 'window_closed' => 'نافذة الرد مقفولة',
-        'order_not_found' => 'الأوردر مش موجود', 'delayed_order' => 'الأوردر متأخر', 'order_hold' => 'الأوردر متوقف للمراجعة',
-        'order_returned' => 'الأوردر مرتجع', 'failed_delivery_attempt' => 'محاولة توصيل فشلت',
-        'order_details_missing' => 'بيانات الأوردر ناقصة', 'new_order' => 'طلب أوردر جديد',
-        'order_verification_failed' => 'مقدرناش نتأكد إن الأوردر بتاعها',
+    private const CATEGORY_KEYS = [
+        'unclear', 'repeated', 'angry_or_urgent', 'no_script', 'ai_error', 'window_closed',
+        'order_not_found', 'delayed_order', 'order_hold', 'order_returned', 'failed_delivery_attempt',
+        'order_details_missing', 'new_order', 'order_verification_failed',
     ];
 
-    private const PRIORITY_LABELS = ['low' => 'منخفضة', 'medium' => 'متوسطة', 'high' => 'عالية'];
+    private const PRIORITY_KEYS = ['low', 'medium', 'high'];
+
+    /**
+     * Handover reasons. IntentRouter/TurnRunner hand over with reason "intent";
+     * the category line names which one.
+     */
+    private const REASON_KEYS = [
+        'purchase', 'contact_details', 'size_recommendation', 'complaint', 'negative_sentiment',
+        'order_status', 'ai_low_confidence', 'keyword', 'max_turns', 'ai_guard', 'ai_error',
+        'window_closed', 'no_rule', 'rule', 'no_product_match', 'intent',
+    ];
 
     public function __construct(private readonly GovernorateMatcher $governorates) {}
 
     public static function reasonLabel(string $reason): string
     {
-        return [
-            'purchase' => 'العميلة عايزة تطلب', 'contact_details' => 'العميلة بعتت عنوان أو رقم تليفون', 'size_recommendation' => 'العميلة بتسأل عن مقاسها',
-            'complaint' => 'شكوى', 'negative_sentiment' => 'العميلة متضايقة', 'order_status' => 'سؤال عن أوردر قائم', 'ai_low_confidence' => 'البوت مش متأكد من الرد',
-            'keyword' => 'طلبت تكلم موظف', 'max_turns' => 'البوت رد كتير من غير ما يخلص', 'ai_guard' => 'الرد كان فيه أرقام مش موجودة في البيانات',
-            'ai_error' => 'خطأ في البوت', 'window_closed' => 'نافذة الرد مقفولة', 'no_rule' => 'مفيش رد مناسب', 'rule' => 'قاعدة تحويل',
-            'no_product_match' => 'المنتج مش لاقيه في الكتالوج',
-            // IntentRouter/TurnRunner hand over with reason "intent"; the category line names which one.
-            'intent' => 'طلب العميل',
-        ][$reason] ?? $reason;
+        return in_array($reason, self::REASON_KEYS, true) ? __('cases.handover.reasons.'.$reason) : $reason;
     }
 
     /**
@@ -53,8 +52,8 @@ final class HandoverSummary
      */
     public static function categoryLabel(string $category): string
     {
-        if (isset(self::CATEGORY_LABELS[$category])) {
-            return self::CATEGORY_LABELS[$category];
+        if (in_array($category, self::CATEGORY_KEYS, true)) {
+            return __('cases.handover.categories.'.$category);
         }
 
         $label = self::intentLabels()[$category] ?? null;
@@ -76,7 +75,7 @@ final class HandoverSummary
 
     public static function priorityLabel(string $priority): string
     {
-        return self::PRIORITY_LABELS[$priority] ?? $priority;
+        return in_array($priority, self::PRIORITY_KEYS, true) ? __('cases.priority.'.$priority) : $priority;
     }
 
     /**
@@ -85,14 +84,24 @@ final class HandoverSummary
      */
     public function note(Conversation $c, string $reason, string $customerText, ?BotIntent $intent, ?BotContext $ctx, array $summaryExtra = []): ConversationNote
     {
-        $lines = ['🤖 تحويل من البوت', 'السبب: '.self::reasonLabel($reason)];
+        // The note is a historical record the bot writes once, so its labels stay Arabic
+        // whatever the request locale is; the resource path uses the same accessors translated.
+        $locale = app()->getLocale();
+        app()->setLocale('ar');
 
-        if ($c->handover_category !== null && $c->handover_category !== '') {
-            $lines[] = 'التصنيف: '.self::categoryLabel((string) $c->handover_category);
+        try {
+            $lines = ['🤖 تحويل من البوت', 'السبب: '.self::reasonLabel($reason)];
+
+            if ($c->handover_category !== null && $c->handover_category !== '') {
+                $lines[] = 'التصنيف: '.self::categoryLabel((string) $c->handover_category);
+            }
+            if ($c->priority_level !== null && $c->priority_level !== '') {
+                $lines[] = 'الأولوية: '.self::priorityLabel((string) $c->priority_level);
+            }
+        } finally {
+            app()->setLocale($locale);
         }
-        if ($c->priority_level !== null && $c->priority_level !== '') {
-            $lines[] = 'الأولوية: '.self::priorityLabel((string) $c->priority_level);
-        }
+
         if ($intent !== null) {
             $lines[] = 'النية: '.$intent->label();
         }

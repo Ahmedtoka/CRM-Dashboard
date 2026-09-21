@@ -45,7 +45,7 @@ const statusTone = { connected: 'positive', error: 'negative', disconnected: 'ne
         </dl>
 
         <p v-if="integration.last_error" class="rounded bg-destructive/10 px-2 py-1.5 text-destructive" dir="ltr">
-            <span class="font-medium" dir="rtl">{{ t('settings.shopify.card.last_error') }}: </span>{{ integration.last_error }}
+            <span class="font-medium">{{ t('settings.shopify.card.last_error') }}: </span>{{ integration.last_error }}
         </p>
     </section>
 </template>

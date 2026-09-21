@@ -1,5 +1,6 @@
 <script setup lang="ts" generic="T extends { id: number | string }">
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 
 export interface Column {
     key: string;
@@ -15,7 +16,7 @@ const props = withDefaults(defineProps<{ columns: Column[]; rows: T[]; clickable
 
 const emit = defineEmits<{ rowClick: [row: T] }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const alignClass = (align?: Column['align']) => (align === 'end' ? 'text-end' : align === 'center' ? 'text-center' : 'text-start');
 
@@ -28,6 +29,13 @@ function onKey(event: KeyboardEvent, row: T): void {
 
 function cell(row: T, key: string): unknown {
     return (row as Record<string, unknown>)[key];
+}
+
+/** A column with no slot of its own: a bare number still has to read in the page's own digits. */
+function defaultCell(row: T, key: string): unknown {
+    const value = cell(row, key);
+
+    return typeof value === 'number' ? formatCount(value, locale.value) : value;
 }
 </script>
 
@@ -57,7 +65,7 @@ function cell(row: T, key: string): unknown {
                     @keydown="onKey($event, row)"
                 >
                     <td v-for="col in columns" :key="col.key" class="px-3 py-2 align-middle" :class="[alignClass(col.align), col.class]">
-                        <slot :name="`cell-${col.key}`" :row="row" :value="cell(row, col.key)">{{ cell(row, col.key) ?? '—' }}</slot>
+                        <slot :name="`cell-${col.key}`" :row="row" :value="cell(row, col.key)">{{ defaultCell(row, col.key) ?? '—' }}</slot>
                     </td>
                 </tr>
             </tbody>

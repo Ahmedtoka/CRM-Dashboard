@@ -71,7 +71,7 @@ it('refuses attachments uploaded by someone else or already sent', function () {
     $foreign = MessageAttachment::factory()->stored()->create(['message_id' => null, 'uploaded_by' => User::factory()->create()->id]);
 
     $this->actingAs($this->admin)->postJson("/inbox/conversations/{$conv->id}/messages", ['attachment_ids' => [$foreign->id]])
-        ->assertStatus(422)->assertJsonPath('message', MediaPolicy::NOT_CLAIMABLE);
+        ->assertStatus(422)->assertJsonPath('message', __(MediaPolicy::NOT_CLAIMABLE));
     expect(Message::count())->toBe(0);
 });
 
@@ -80,7 +80,7 @@ it('rejects generic files on instagram before sending', function () {
     $pdf = MessageAttachment::factory()->stored()->create(['message_id' => null, 'uploaded_by' => $this->admin->id, 'type' => 'file', 'mime' => 'application/pdf', 'size_bytes' => 100]);
 
     $this->actingAs($this->admin)->postJson("/inbox/conversations/{$conv->id}/messages", ['attachment_ids' => [$pdf->id]])
-        ->assertStatus(422)->assertJsonPath('message', MediaPolicy::INSTAGRAM_FILE);
+        ->assertStatus(422)->assertJsonPath('message', __(MediaPolicy::INSTAGRAM_FILE));
 });
 
 it('rejects reusing an attachment id already linked to another message', function () {
@@ -90,7 +90,7 @@ it('rejects reusing an attachment id already linked to another message', functio
     $already = MessageAttachment::factory()->stored()->create(['uploaded_by' => $this->admin->id]);
 
     $this->actingAs($this->admin)->postJson("/inbox/conversations/{$conv->id}/messages", ['attachment_ids' => [$already->id]])
-        ->assertStatus(422)->assertJsonPath('message', MediaPolicy::NOT_CLAIMABLE);
+        ->assertStatus(422)->assertJsonPath('message', __(MediaPolicy::NOT_CLAIMABLE));
     expect(Message::where('conversation_id', $conv->id)->count())->toBe(0);
 });
 

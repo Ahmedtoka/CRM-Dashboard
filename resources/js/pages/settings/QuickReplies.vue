@@ -7,6 +7,7 @@ import CategoryManager from '@/components/crm/replies/CategoryManager.vue';
 import QuickReplyEditor from '@/components/crm/replies/QuickReplyEditor.vue';
 import { useCrud } from '@/composables/useCrud';
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { QuickReplyRow, QuickReplyVariable } from '@/types/admin';
 import type { QuickReplyCategory } from '@/types/crm';
@@ -23,7 +24,7 @@ const props = defineProps<{
     starterExamples: string[];
 }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 type TabKey = 'shared' | 'mine' | 'categories';
 const tab = ref<TabKey>(props.canManageShared ? 'shared' : 'mine');
@@ -146,7 +147,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.quick_replies.title'), 
                     <template #cell-shortcut="{ row }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">/{{ row.shortcut }}</code></template>
                     <template #cell-body="{ row }"><span class="line-clamp-2 max-w-md" dir="auto">{{ row.body }}</span></template>
                     <template #cell-category="{ row }">{{ categoryName(row.category_id) }}</template>
-                    <template #cell-use_count="{ row }">{{ row.use_count }}</template>
+                    <template #cell-use_count="{ row }">{{ formatCount(row.use_count, locale) }}</template>
                     <template #cell-platforms="{ row }">
                         <span v-if="!row.platforms?.length" class="text-muted-foreground">{{ t('ui.all_platforms') }}</span>
                         <span v-else class="flex gap-1"><PlatformBadge v-for="p in row.platforms" :key="p" :platform="p" size="xs" /></span>
@@ -192,7 +193,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.quick_replies.title'), 
                     <template #cell-shortcut="{ row }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">/{{ row.shortcut }}</code></template>
                     <template #cell-body="{ row }"><span class="line-clamp-2 max-w-md" dir="auto">{{ row.body }}</span></template>
                     <template #cell-category="{ row }">{{ categoryName(row.category_id) }}</template>
-                    <template #cell-use_count="{ row }">{{ row.use_count }}</template>
+                    <template #cell-use_count="{ row }">{{ formatCount(row.use_count, locale) }}</template>
                     <template #cell-platforms="{ row }">
                         <span v-if="!row.platforms?.length" class="text-muted-foreground">{{ t('ui.all_platforms') }}</span>
                         <span v-else class="flex gap-1"><PlatformBadge v-for="p in row.platforms" :key="p" :platform="p" size="xs" /></span>

@@ -80,7 +80,9 @@ final class QuickReplyReport
      */
     public function csvRows(DateRange $range, ?Platform $platform): \Generator
     {
-        yield ['shortcut', 'title', 'scope', 'category', 'uses', 'users', 'platforms', 'last_used_at'];
+        yield array_map(fn (string $c) => __('labels.csv.quick_replies.'.$c), [
+            'shortcut', 'title', 'scope', 'category', 'uses', 'users', 'platforms', 'last_used_at',
+        ]);
         $tz = (string) config('crm.timezone_display', 'Africa/Cairo');
         foreach ($this->top($range, $platform, 1000) as $row) {
             yield [

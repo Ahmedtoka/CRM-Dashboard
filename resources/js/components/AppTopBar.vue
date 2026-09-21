@@ -39,7 +39,7 @@ const { getInitials } = useInitials();
         <div
             class="flex shrink-0 items-center rounded-full border border-border bg-background p-0.5 text-xs font-semibold"
             role="group"
-            :aria-label="t('nav.switch_language')"
+            :aria-label="t('nav.language_switcher')"
         >
             <button
                 v-for="option in languageOptions"

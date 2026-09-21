@@ -307,7 +307,7 @@ it('records a return: item, reason, photo — no summary — and answers with th
 
     $text = CaseSummary::text($case);
     expect($text)->toContain('مرتجع')->toContain('الطلب: مرتجع')->toContain('السبب: بايظ / فيه عيب')
-        ->toContain('فستان ليلى — أسود / M × 1 — 850 ج.م')->toContain('صورة القطعة ✅')
+        ->toContain('فستان ليلى — أسود / M × ١ — ٨٥٠ ج.م')->toContain('صورة القطعة ✅')
         ->and(ConversationNote::where('conversation_id', $c->id)->where('body', $text)->exists())->toBeTrue();
 });
 
@@ -423,9 +423,9 @@ it('records an exchange with the product found by its link in the synced catalog
         ->and(orfBot()->body)->toBe('تمام ✅ تم تسجيل طلب الاستبدال بـ «عباية كتان». هنتواصل معاكي لتأكيد الاستبدال والإرسال 🌸')
         ->and(FlowState::flow($c))->toBeNull();
 
-    expect(ConversationNote::where('conversation_id', $c->id)->where('body', 'طلب استبدال: فستان ليلى (أسود / M) × 1 ← عباية كتان — 1,200 ج.م — https://levoilestores.com/products/abaya-linen')->exists())->toBeTrue()
+    expect(ConversationNote::where('conversation_id', $c->id)->where('body', 'طلب استبدال: فستان ليلى (أسود / M) × 1 ← عباية كتان — ١٬٢٠٠ ج.م — https://levoilestores.com/products/abaya-linen')->exists())->toBeTrue()
         ->and(CaseSummary::text($case))->toContain('الطلب: استبدال')->toContain('السبب: المقاس')
-        ->toContain('البديل: عباية كتان — 1,200 ج.م')->toContain('اللينك: https://levoilestores.com/products/abaya-linen');
+        ->toContain('البديل: عباية كتان — ١٬٢٠٠ ج.م')->toContain('اللينك: https://levoilestores.com/products/abaya-linen');
 
     $json = (new SupportCaseResource($case))->toArray(Request::create('/'));
     expect($json['request_kind'])->toBe('exchange')
@@ -452,7 +452,7 @@ it('reads a collection link with ?variant= and keeps that size and price', funct
         ->and($p['url'])->toBe('levoilestores.com/collections/abayas/products/Abaya-Linen?variant=4002');
 
     expect(ConversationNote::where('body', 'like', 'طلب استبدال:%')->sole()->body)
-        ->toBe('طلب استبدال: فستان ليلى (أسود / M) × 1 ← عباية كتان (بيج / L) — 1,250 ج.م — https://levoilestores.com/collections/abayas/products/Abaya-Linen?variant=4002');
+        ->toBe('طلب استبدال: فستان ليلى (أسود / M) × 1 ← عباية كتان (بيج / L) — ١٬٢٥٠ ج.م — https://levoilestores.com/collections/abayas/products/Abaya-Linen?variant=4002');
 });
 
 it('asks again once for an unknown link, then keeps what she wrote and records the exchange', function () {

@@ -1,7 +1,12 @@
 <?php
 
-use App\Enums\{Platform, UserRole};
-use App\Models\{ChannelAccount, Conversation, Customer, SupportCase, User};
+use App\Enums\Platform;
+use App\Enums\UserRole;
+use App\Models\ChannelAccount;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\SupportCase;
+use App\Models\User;
 
 function caseConversation(Platform $platform, ?Customer $customer = null): Conversation
 {

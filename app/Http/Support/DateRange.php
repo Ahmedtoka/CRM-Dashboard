@@ -33,7 +33,7 @@ final readonly class DateRange
         $toDate = $request->filled('to') ? (string) $request->input('to') : max($fromDate, $today);
 
         if ($toDate < $fromDate) {
-            throw ValidationException::withMessages(['to' => 'The end date must be on or after the start date.']);
+            throw ValidationException::withMessages(['to' => __('errors.reports.date_range_invalid')]);
         }
 
         return new self(

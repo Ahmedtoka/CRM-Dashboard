@@ -9,20 +9,25 @@ use App\Bot\Flows\ReturnFlowUpgrade;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\SupportCase;
+use App\Support\LocalizedNumbers;
 use Carbon\CarbonImmutable;
 use Throwable;
 
 /**
- * The organised Arabic summary of a case (owner-approved format), used as-is
- * by the conversation note, the stored `summary` column, the case card and the
- * cases page: a header line, then sections for the customer, the order, the
- * request, attachments, alerts and what the team should do. A section with no
- * content is left out, except the alerts one, which says "مفيش".
+ * The organised summary of a case (owner-approved format), used by the
+ * conversation note, the stored `summary` column, the case card and the cases
+ * page: a header line, then sections for the customer, the order, the request,
+ * attachments, alerts and what the team should do. A section with no content is
+ * left out, except the alerts one, which says "none" and is flagged `empty`.
+ *
+ * The staff-facing parts (`header()`, `sections()`) are built on read, so they
+ * come out in the viewer's language. The bot's own records — the stored
+ * summary, the conversation notes and the notification excerpt — are written
+ * once at record time and read later as history, so they stay Arabic whatever
+ * the request locale is (see `asRecorded()`).
  */
 final class CaseSummary
 {
-    private const PRIORITY_WORDS = ['high' => 'عالية', 'medium' => 'متوسطة'];
-
     private const MAX_ITEMS = 5;
 
     /** Shopify's placeholder title for a product that has no options. */
@@ -30,64 +35,144 @@ final class CaseSummary
 
     public static function header(SupportCase $case): string
     {
-        $priority = self::PRIORITY_WORDS[$case->priority] ?? self::PRIORITY_WORDS['medium'];
+        $priority = in_array($case->priority, ['high', 'medium'], true) ? $case->priority : 'medium';
 
-        return "📋 حالة #{$case->id} — {$case->typeLabel()} — أولوية {$priority}";
+        return __('cases.header', [
+            'id' => (string) $case->id,
+            'type' => $case->typeLabel(),
+            'priority' => __('cases.priority.'.$priority),
+        ]);
     }
 
-    /** @return list<array{key:string, icon:string, title:string, lines:list<string>}> */
+    /** @return list<array{key:string, icon:string, title:string, lines:list<string>, empty?:bool}> */
     public static function sections(SupportCase $case): array
     {
         $data = is_array($case->data) ? $case->data : [];
+        $alerts = self::policyNotes($case);
 
         return array_values(array_filter([
             self::customer($case, $data),
             self::order($case, $data),
-            self::section('items', '🛍️', 'القطع المطلوبة', self::selectedItemLines($data)),
-            self::section('request', '📝', 'الطلب', self::requestLines($case, $data)),
-            self::section('attachments', '📎', 'المرفقات', self::attachmentLines($case, $data)),
-            self::section('alerts', '⚠️', 'تنبيهات', array_values(array_filter(array_map('strval', (array) $case->policy_notes), 'filled')) ?: ['مفيش']),
-            self::section('team_action', '➡️', 'المطلوب من الفريق', [self::teamAction($case, $data)]),
+            self::section('items', '🛍️', __('cases.sections.items'), self::selectedItemLines($data)),
+            self::section('request', '📝', __('cases.sections.request'), self::requestLines($case, $data)),
+            self::section('attachments', '📎', __('cases.sections.attachments'), self::attachmentLines($case, $data)),
+            self::section('alerts', '⚠️', __('cases.sections.alerts'), $alerts !== [] ? $alerts : [__('cases.no_alerts')], $alerts === []),
+            self::section('team_action', '➡️', __('cases.sections.team_action'), [self::teamAction($case, $data)]),
         ]));
+    }
+
+    /**
+     * The stored alerts in the viewer's language. A note is either a code the
+     * recorder stored (`['code' => …, 'params' => […]]`) or, for notes written
+     * before that change and for the return-policy checker's own notes, the
+     * finished Arabic sentence.
+     *
+     * @return list<string>
+     */
+    public static function policyNotes(SupportCase $case): array
+    {
+        $notes = [];
+
+        foreach ((array) $case->policy_notes as $note) {
+            if (is_array($note) && filled($note['code'] ?? null)) {
+                $notes[] = (string) __('cases.policy.'.$note['code'], self::params($note['params'] ?? null));
+
+                continue;
+            }
+
+            if (is_scalar($note) && filled((string) $note)) {
+                $notes[] = (string) $note;
+            }
+        }
+
+        return $notes;
+    }
+
+    /**
+     * A stored note's parameters, with its numbers written in the viewer's script.
+     *
+     * @return array<string, string>
+     */
+    private static function params(mixed $params): array
+    {
+        $out = [];
+
+        foreach (is_array($params) ? $params : [] as $key => $value) {
+            $out[(string) $key] = is_int($value) || (is_string($value) && ctype_digit($value))
+                ? LocalizedNumbers::integer((int) $value)
+                : (is_scalar($value) ? (string) $value : '');
+        }
+
+        return $out;
     }
 
     /** The full note text: header and sections, blank-line separated. */
     public static function text(SupportCase $case): string
     {
-        $blocks = [self::header($case)];
+        return self::asRecorded(function () use ($case) {
+            $blocks = [self::header($case)];
 
-        foreach (self::sections($case) as $s) {
-            $blocks[] = implode("\n", array_merge([$s['icon'].' '.$s['title']], $s['lines']));
-        }
+            foreach (self::sections($case) as $s) {
+                $blocks[] = implode("\n", array_merge([$s['icon'].' '.$s['title']], $s['lines']));
+            }
 
-        return implode("\n\n", $blocks);
+            return implode("\n\n", $blocks);
+        });
     }
 
     /** One line for a notification: the header and the first request line. */
     public static function excerpt(SupportCase $case): string
     {
-        foreach (self::sections($case) as $s) {
-            if ($s['key'] === 'request' && $s['lines'] !== []) {
-                return self::header($case).' · '.$s['lines'][0];
+        return self::asRecorded(function () use ($case) {
+            foreach (self::sections($case) as $s) {
+                if ($s['key'] === 'request' && $s['lines'] !== []) {
+                    return self::header($case).' · '.$s['lines'][0];
+                }
             }
-        }
 
-        return self::header($case);
+            return self::header($case);
+        });
     }
 
-    /** @return array{key:string, icon:string, title:string, lines:list<string>}|null */
-    private static function section(string $key, string $icon, string $title, array $lines): ?array
+    /**
+     * Builds a record the bot writes once and the team reads later as history,
+     * so it keeps the Arabic it was written in no matter who is looking.
+     */
+    private static function asRecorded(callable $build): mixed
     {
-        return $lines === [] ? null : ['key' => $key, 'icon' => $icon, 'title' => $title, 'lines' => $lines];
+        $locale = app()->getLocale();
+        app()->setLocale('ar');
+
+        try {
+            return $build();
+        } finally {
+            app()->setLocale($locale);
+        }
+    }
+
+    /** @return array{key:string, icon:string, title:string, lines:list<string>, empty?:bool}|null */
+    private static function section(string $key, string $icon, string $title, array $lines, bool $empty = false): ?array
+    {
+        if ($lines === []) {
+            return null;
+        }
+
+        $section = ['key' => $key, 'icon' => $icon, 'title' => $title, 'lines' => $lines];
+
+        if ($empty) {
+            $section['empty'] = true;
+        }
+
+        return $section;
     }
 
     private static function customer(SupportCase $case, array $data): array
     {
         $customer = $case->customer_id !== null ? $case->customer : null;
-        $name = self::str($data['name'] ?? null) ?? self::str($customer?->name) ?? 'غير معروف';
+        $name = self::str($data['name'] ?? null) ?? self::str($customer?->name) ?? __('cases.customer.unknown');
         $phone = self::str($data['phone'] ?? null) ?? self::str($customer?->phone) ?? self::str($customer?->normalized_phone);
 
-        return ['key' => 'customer', 'icon' => '👤', 'title' => 'العميل', 'lines' => [$phone !== null ? "{$name} · {$phone}" : $name]];
+        return ['key' => 'customer', 'icon' => '👤', 'title' => __('cases.sections.customer'), 'lines' => [$phone !== null ? "{$name} · {$phone}" : $name]];
     }
 
     private static function order(SupportCase $case, array $data): ?array
@@ -98,13 +183,13 @@ final class CaseSummary
         if ($order === null && $number === null) {
             $typed = self::str($data['order_ref_text'] ?? null);
 
-            return $typed === null ? null : ['key' => 'order', 'icon' => '📦', 'title' => "الأوردر: {$typed} (مش لاقيينه في السيستم)", 'lines' => []];
+            return $typed === null ? null : ['key' => 'order', 'icon' => '📦', 'title' => __('cases.order.not_found', ['ref' => $typed]), 'lines' => []];
         }
 
         $details = array_values(array_filter([
-            ($date = self::placedAt($order, $data)) !== null ? 'بتاريخ '.$date->setTimezone(OrderStatusText::TIMEZONE)->format('j/n') : null,
+            ($date = self::placedAt($order, $data)) !== null ? __('cases.order.placed_on', ['date' => LocalizedNumbers::digits($date->setTimezone(OrderStatusText::TIMEZONE)->format('j/n'))]) : null,
             self::statusLabel($order, $data),
-            $order !== null && $order->total !== null ? self::money((float) $order->total).' ج.م' : null,
+            $order !== null && $order->total !== null ? self::price((float) $order->total) : null,
         ]));
         $lines = $details === [] ? [] : [implode(' · ', $details)];
 
@@ -112,7 +197,9 @@ final class CaseSummary
             $lines[] = $items;
         }
 
-        return ['key' => 'order', 'icon' => '📦', 'title' => $number !== null ? 'الأوردر #'.ltrim($number, '#') : 'الأوردر', 'lines' => $lines];
+        $title = $number !== null ? __('cases.order.numbered', ['number' => ltrim($number, '#')]) : __('cases.sections.order');
+
+        return ['key' => 'order', 'icon' => '📦', 'title' => $title, 'lines' => $lines];
     }
 
     /**
@@ -150,9 +237,9 @@ final class CaseSummary
     {
         return array_map(fn (array $r) => $r['title']
             .($r['variant'] !== null ? ' — '.$r['variant'] : '')
-            .' × '.$r['qty']
-            .($r['price'] !== null ? ' — '.self::money($r['price']).' ج.م' : '')
-            .($r['exchange_only'] ? ' (استبدال بس)' : ''), self::selectedItems($data));
+            .' × '.LocalizedNumbers::integer($r['qty'])
+            .($r['price'] !== null ? ' — '.self::price($r['price']) : '')
+            .($r['exchange_only'] ? ' '.__('cases.items.exchange_only') : ''), self::selectedItems($data));
     }
 
     /** @return list<string> */
@@ -161,34 +248,34 @@ final class CaseSummary
         $flow = $case->type;
         $lines = match ($case->type) {
             'return' => [
-                'الطلب: مرتجع',
-                self::labelled('السبب', self::optionTitle($flow, 'reason', $data)),
+                self::labelled(__('cases.fields.kind'), __('cases.types.return')),
+                self::labelled(__('cases.fields.reason'), self::optionTitle($flow, 'reason', $data)),
             ],
             'exchange' => [
-                'الطلب: استبدال',
-                self::labelled('السبب', self::optionTitle($flow, 'reason', $data)),
+                self::labelled(__('cases.fields.kind'), __('cases.types.exchange')),
+                self::labelled(__('cases.fields.reason'), self::optionTitle($flow, 'reason', $data)),
                 ...self::exchangeLines($data),
             ],
             'return_exchange' => [
-                self::labelled('السبب', self::optionTitle($flow, 'reason', $data)),
-                self::labelled('المطلوب', self::optionTitle($flow, 'request', $data)),
+                self::labelled(__('cases.fields.reason'), self::optionTitle($flow, 'reason', $data)),
+                self::labelled(__('cases.fields.request'), self::optionTitle($flow, 'request', $data)),
             ],
             'complaint' => [
-                self::labelled('النوع', self::optionTitle($flow, 'complaint_type', $data)),
-                self::labelled('الفرع', self::str($data['branch_name'] ?? null)),
-                self::labelled('تاريخ الزيارة', self::optionTitle($flow, 'visit_date', $data)),
-                self::labelled('التفاصيل', self::str($data['description'] ?? null)),
+                self::labelled(__('cases.fields.complaint_type'), self::optionTitle($flow, 'complaint_type', $data)),
+                self::labelled(__('cases.fields.branch'), self::str($data['branch_name'] ?? null)),
+                self::labelled(__('cases.fields.visit_date'), self::optionTitle($flow, 'visit_date', $data)),
+                self::labelled(__('cases.fields.description'), self::str($data['description'] ?? null)),
             ],
             'cancel_edit' => [
-                self::labelled('المطلوب', self::optionTitle($flow, 'request', $data)),
-                self::labelled('سبب الإلغاء', self::str($data['cancel_reason'] ?? null)),
-                self::labelled('نوع التعديل', self::optionTitle($flow, 'edit_kind', $data)),
+                self::labelled(__('cases.fields.request'), self::optionTitle($flow, 'request', $data)),
+                self::labelled(__('cases.fields.cancel_reason'), self::str($data['cancel_reason'] ?? null)),
+                self::labelled(__('cases.fields.edit_kind'), self::optionTitle($flow, 'edit_kind', $data)),
                 ...FlowPrompter::changeLines($data['item_changes'] ?? []),
-                self::labelled('العنوان الجديد', self::str($data['new_address'] ?? null)),
-                self::labelled('الموبايل الجديد', self::str($data['new_phone'] ?? null)),
-                self::labelled('التعديل', self::str($data['edit_details'] ?? null)),
+                self::labelled(__('cases.fields.new_address'), self::str($data['new_address'] ?? null)),
+                self::labelled(__('cases.fields.new_phone'), self::str($data['new_phone'] ?? null)),
+                self::labelled(__('cases.fields.edit_details'), self::str($data['edit_details'] ?? null)),
             ],
-            'delivery_followup' => [self::labelled('حالة الشحن', self::statusLabel($case->order_id !== null ? $case->order : null, $data))],
+            'delivery_followup' => [self::labelled(__('cases.fields.delivery_status'), self::statusLabel($case->order_id !== null ? $case->order : null, $data))],
             default => [],
         };
 
@@ -224,33 +311,35 @@ final class CaseSummary
     /** "طلب استبدال: فستان ليلى (أسود / M) × 1 ← عباية كتان — 1,200 ج.م — https://…" (the conversation note). */
     public static function exchangeNote(array $data): string
     {
-        $items = FlowPrompter::itemsText($data['selected_items'] ?? []);
-        $items = $items !== '' ? $items : 'القطعة';
-        $product = self::exchangeProduct($data);
+        return self::asRecorded(function () use ($data) {
+            $items = FlowPrompter::itemsText($data['selected_items'] ?? []);
+            $items = $items !== '' ? $items : __('cases.exchange.note_item');
+            $product = self::exchangeProduct($data);
 
-        if ($product !== null) {
-            $parts = [$product['title'].($product['variant_title'] !== null ? " ({$product['variant_title']})" : '')];
+            if ($product !== null) {
+                $parts = [$product['title'].($product['variant_title'] !== null ? " ({$product['variant_title']})" : '')];
 
-            if ($product['price'] !== null) {
-                $parts[] = self::money($product['price']).' ج.م';
+                if ($product['price'] !== null) {
+                    $parts[] = self::price($product['price']);
+                }
+
+                if ($product['url'] !== null) {
+                    $parts[] = $product['url'];
+                }
+
+                return __('cases.exchange.note', ['items' => $items, 'product' => implode(' — ', $parts)]);
             }
 
-            if ($product['url'] !== null) {
-                $parts[] = $product['url'];
+            $typed = self::str($data['exchange_product_text'] ?? null);
+
+            if ($typed !== null) {
+                return __('cases.exchange.note_typed', ['items' => $items, 'text' => $typed]);
             }
 
-            return "طلب استبدال: {$items} ← ".implode(' — ', $parts);
-        }
-
-        $typed = self::str($data['exchange_product_text'] ?? null);
-
-        if ($typed !== null) {
-            return "طلب استبدال: {$items} ← المنتج مش متحدد، العميلة كتبت: «{$typed}»";
-        }
-
-        return ! empty($data['exchange_product_photo'])
-            ? "طلب استبدال: {$items} ← العميلة بعتت صورة للمنتج البديل (في الصور)"
-            : "طلب استبدال: {$items} ← المنتج البديل مش متحدد";
+            return ! empty($data['exchange_product_photo'])
+                ? __('cases.exchange.note_photo', ['items' => $items])
+                : __('cases.exchange.note_unknown', ['items' => $items]);
+        });
     }
 
     /**
@@ -259,23 +348,28 @@ final class CaseSummary
      */
     public static function editNote(array $data): ?string
     {
-        if (($data['request'] ?? null) !== 'edit') {
-            return null;
-        }
+        return self::asRecorded(function () use ($data) {
+            if (($data['request'] ?? null) !== 'edit') {
+                return null;
+            }
 
-        $lines = array_values(array_filter([
-            ...FlowPrompter::changeLines($data['item_changes'] ?? []),
-            ($address = self::str($data['new_address'] ?? null)) !== null ? '📍 العنوان الجديد: '.$address : null,
-            ($phone = self::str($data['new_phone'] ?? null)) !== null ? '📞 الموبايل الجديد: '.$phone : null,
-        ]));
+            $lines = array_values(array_filter([
+                ...FlowPrompter::changeLines($data['item_changes'] ?? []),
+                ($address = self::str($data['new_address'] ?? null)) !== null ? __('cases.edit.new_address', ['address' => $address]) : null,
+                ($phone = self::str($data['new_phone'] ?? null)) !== null ? __('cases.edit.new_phone', ['phone' => $phone]) : null,
+            ]));
 
-        if ($lines === []) {
-            return null;
-        }
+            if ($lines === []) {
+                return null;
+            }
 
-        $number = self::str($data['order_number'] ?? null);
+            $number = self::str($data['order_number'] ?? null);
+            $order = $number !== null
+                ? __('cases.edit.note_order_numbered', ['number' => ltrim($number, '#')])
+                : __('cases.edit.note_order_any');
 
-        return '✏️ تعديلات مطلوبة على '.($number !== null ? 'أوردر #'.ltrim($number, '#') : 'الأوردر').":\n".implode("\n", $lines);
+            return __('cases.edit.note_header', ['order' => $order]).":\n".implode("\n", $lines);
+        });
     }
 
     /** @return list<string> */
@@ -285,19 +379,19 @@ final class CaseSummary
 
         if ($product !== null) {
             return array_values(array_filter([
-                'البديل: '.$product['title']
+                __('cases.exchange.replacement').': '.$product['title']
                     .($product['variant_title'] !== null ? ' — '.$product['variant_title'] : '')
-                    .($product['price'] !== null ? ' — '.self::money($product['price']).' ج.م' : ''),
-                $product['url'] !== null ? 'اللينك: '.$product['url'] : null,
+                    .($product['price'] !== null ? ' — '.self::price($product['price']) : ''),
+                $product['url'] !== null ? __('cases.exchange.link').': '.$product['url'] : null,
             ]));
         }
 
         $typed = self::str($data['exchange_product_text'] ?? null);
 
         return [match (true) {
-            $typed !== null => "البديل: مش متحدد — العميلة كتبت «{$typed}»",
-            ! empty($data['exchange_product_photo']) => 'البديل: العميلة بعتت صورة للمنتج',
-            default => 'البديل: مش متحدد',
+            $typed !== null => __('cases.exchange.typed', ['text' => $typed]),
+            ! empty($data['exchange_product_photo']) => __('cases.exchange.photo'),
+            default => __('cases.exchange.unknown'),
         }];
     }
 
@@ -305,29 +399,29 @@ final class CaseSummary
     private static function attachmentLines(SupportCase $case, array $data): array
     {
         if ($case->type === 'return') {
-            return ['صورة القطعة '.(! empty($data['product_photo']) ? '✅' : '— (مبعتتش صورة)')];
+            return [__('cases.attachments.item_photo').' '.(! empty($data['product_photo']) ? '✅' : __('cases.attachments.no_photo'))];
         }
 
         if ($case->type === 'exchange') {
-            return ! empty($data['exchange_product_photo']) ? ['صورة المنتج البديل ✅'] : [];
+            return ! empty($data['exchange_product_photo']) ? [__('cases.attachments.replacement_photo').' ✅'] : [];
         }
 
         if ($case->type === 'complaint') {
-            return ! empty($data['description_photo']) ? ['صور من العميلة ✅'] : [];
+            return ! empty($data['description_photo']) ? [__('cases.attachments.customer_photos').' ✅'] : [];
         }
 
         if ($case->type === 'cancel_edit') {
-            return collect((array) ($data['item_changes'] ?? []))->contains(fn ($c) => is_array($c) && ! empty($c['photo'])) ? ['صورة للمنتج البديل ✅'] : [];
+            return collect((array) ($data['item_changes'] ?? []))->contains(fn ($c) => is_array($c) && ! empty($c['photo'])) ? [__('cases.attachments.change_photo').' ✅'] : [];
         }
 
         if ($case->type !== 'return_exchange') {
             return [];
         }
 
-        $fields = ['product_photo' => 'صورة المنتج'];
+        $fields = ['product_photo' => __('cases.attachments.product_photo')];
 
         if (($data['reason'] ?? null) === 'defective') {
-            $fields['defect_photo'] = 'صورة العيب';
+            $fields['defect_photo'] = __('cases.attachments.defect_photo');
         }
 
         $parts = [];
@@ -341,29 +435,15 @@ final class CaseSummary
 
     private static function teamAction(SupportCase $case, array $data): string
     {
-        $request = $data['request'] ?? null;
-
-        return match ($case->type) {
-            'return' => 'مراجعة القطعة وترتيب المندوب لاستلام المرتجع وإبلاغ العميلة بموعده',
-            'exchange' => 'التأكد من توفر المنتج البديل ومقاسه، والتواصل مع العميلة لتأكيد الاستبدال والإرسال',
-            'return_exchange' => match ($request) {
-                'refund' => 'التواصل مع العميلة وترتيب استلام القطعة ورد المبلغ',
-                'exchange' => 'التواصل مع العميلة وترتيب استبدال القطعة',
-                default => 'التواصل مع العميلة ومراجعة طلب المرتجع',
-            },
-            'complaint' => 'التواصل مع العميل ومتابعة الشكوى وحلها',
-            'cancel_edit' => isset($data['order_editable']) ? match ($request) {
-                'cancel' => 'إلغاء الأوردر قبل ما يتشحن وتأكيد الإلغاء مع العميلة',
-                'edit' => 'تنفيذ التعديلات على الأوردر قبل ما يتشحن وتأكيدها مع العميلة',
-                default => 'مراجعة الأوردر وتنفيذ طلب العميلة قبل ما يتشحن',
-            } : match ($request) {
-                'cancel' => 'مراجعة الأوردر وإلغاؤه لو لسه في المهلة',
-                'edit' => 'مراجعة الأوردر وتنفيذ التعديل المطلوب لو لسه في المهلة',
-                default => 'مراجعة الأوردر وتنفيذ طلب العميلة لو لسه في المهلة',
-            },
-            'delivery_followup' => 'متابعة الشحنة مع شركة الشحن والرد على العميل',
-            default => 'مراجعة الحالة والتواصل مع العميل',
+        $request = is_scalar($data['request'] ?? null) ? (string) $data['request'] : '';
+        $key = match ($case->type) {
+            'return', 'exchange', 'complaint', 'delivery_followup' => 'cases.team_action.'.$case->type,
+            'return_exchange' => 'cases.team_action.return_exchange.'.(in_array($request, ['refund', 'exchange'], true) ? $request : 'default'),
+            'cancel_edit' => 'cases.team_action.cancel_edit.'.(isset($data['order_editable']) ? 'editable' : 'window').'.'.(in_array($request, ['cancel', 'edit'], true) ? $request : 'default'),
+            default => 'cases.team_action.default',
         };
+
+        return __($key);
     }
 
     private static function placedAt(?Order $order, array $data): ?CarbonImmutable
@@ -405,16 +485,16 @@ final class CaseSummary
             $variant = self::str($item->variant?->title);
             $suffix = $variant !== null && ! in_array(mb_strtolower($variant), self::DEFAULT_VARIANT_TITLES, true) ? " ({$variant})" : '';
 
-            return "{$item->title}{$suffix} × {$item->qty}";
+            return "{$item->title}{$suffix} × ".LocalizedNumbers::integer((int) $item->qty);
         })->all();
 
         $rest = $items->count() - self::MAX_ITEMS;
 
         if ($rest > 0) {
-            $shown[] = $rest === 1 ? 'ومنتج تاني' : "و {$rest} منتجات تانية";
+            $shown[] = $rest === 1 ? __('cases.order.more_one') : __('cases.order.more_many', ['count' => LocalizedNumbers::integer($rest)]);
         }
 
-        return 'المنتجات: '.implode('، ', $shown);
+        return __('cases.order.products', ['list' => implode(__('cases.order.separator'), $shown)]);
     }
 
     /** The option title the flow saved (`<field>_title`), else the seeded option title, else the raw value. */
@@ -458,9 +538,10 @@ final class CaseSummary
         return $value !== null ? "{$label}: {$value}" : null;
     }
 
-    private static function money(float $amount): string
+    /** An amount with the currency word, e.g. "1,250 ج.م". */
+    private static function price(float $amount): string
     {
-        return number_format($amount, fmod($amount, 1.0) === 0.0 ? 0 : 2);
+        return LocalizedNumbers::amount($amount).' '.__('cases.currency');
     }
 
     private static function str(mixed $value): ?string

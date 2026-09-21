@@ -33,7 +33,7 @@ const COUNT_KEYS = ['messages_sent', 'conversations_handled', 'first_responses',
     <DataTable :columns="columns" :rows="tableRows" clickable :caption="t('reports.leaderboard')" @row-click="emit('open', $event.user.id)">
         <template #cell-moderator="{ row }">
             <span class="inline-flex items-center gap-2 whitespace-nowrap font-medium">
-                <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-elevated text-2xs font-semibold text-muted-foreground">{{ rankOf(row.user.id) }}</span>
+                <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-elevated text-2xs font-semibold text-muted-foreground">{{ formatCount(rankOf(row.user.id), locale) }}</span>
                 <span class="size-2.5 rounded-full" :style="{ backgroundColor: row.user.color ?? '#94a3b8' }" aria-hidden="true" />
                 {{ row.user.name }}
                 <span v-if="onlineUserIds.includes(row.user.id)" class="size-1.5 rounded-full bg-success" :title="t('reports.online_now')">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import { useInitials } from '@/composables/useInitials';
 import type { UserRef } from '@/types/crm';
 import { computed } from 'vue';
@@ -32,7 +33,7 @@ const typingText = computed(() => (props.typing.length ? t('thread.typing', { na
                 aria-hidden="true"
                 class="flex size-5 items-center justify-center rounded-full border-2 border-card bg-muted-foreground text-[9px] font-semibold text-white"
             >
-                +{{ others.length - 4 }}
+                +{{ formatCount(others.length - 4, locale) }}
             </span>
         </div>
         <span v-if="typingText" class="truncate text-2xs font-medium text-primary" aria-live="polite">{{ typingText }}</span>

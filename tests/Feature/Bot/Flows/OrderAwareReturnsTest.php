@@ -640,7 +640,7 @@ it('runs the whole return flow end to end and records the items on the case', fu
 
     $items = collect(CaseSummary::sections($case))->firstWhere('key', 'items');
     expect($items['title'])->toBe('القطع المطلوبة')
-        ->and($items['lines'])->toBe(['فستان ليلى — أسود / M × 1 — 850 ج.م (استبدال بس)', 'طرحة شيفون × 1 — 150 ج.م'])
+        ->and($items['lines'])->toBe(['فستان ليلى — أسود / M × ١ — ٨٥٠ ج.م (استبدال بس)', 'طرحة شيفون × ١ — ١٥٠ ج.م'])
         ->and($case->summary)->toContain('🛍️ القطع المطلوبة');
 
     $this->actingAs($sup)->getJson("/cases/{$case->id}")

@@ -7,6 +7,7 @@ use App\Models\Conversation;
 use App\Models\User;
 use App\Models\UserNotification;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
 
@@ -90,7 +91,13 @@ it('flags an invalid token and a missing subscription as problems, alerts and no
         ->and(collect($result['checks'])->firstWhere('key', 'webhooks')['fix'])->toBe('resubscribe');
 
     $fb = $this->fb->fresh();
-    expect($fb->status)->toBe('error')->and($fb->last_error)->toContain('التوكن');
+    // Stable codes are stored (the scheduler runs in the default locale); the sentence
+    // is chosen when a page renders the row.
+    expect($fb->status)->toBe('error')
+        ->and($fb->last_error)->toBe('problem:token_invalid · problem:not_subscribed')
+        ->and(ConnectionHealthCheck::problemText($fb->last_error))
+        ->toBe(__('labels.channel_problem.token_invalid').' · '.__('labels.channel_problem.not_subscribed'))
+        ->and(ConnectionHealthCheck::problemText('Some raw Graph API message'))->toBe('Some raw Graph API message');
 
     $notes = UserNotification::where('type', 'channel.problem')->get();
     expect($notes)->toHaveCount(1)
@@ -104,7 +111,8 @@ it('flags an invalid token and a missing subscription as problems, alerts and no
 
     // Shown to admins in the alert strip.
     $this->actingAs($this->admin)->get('/settings/integrations')
-        ->assertInertia(fn ($page) => $page->where('channelAlerts.0.id', $this->fb->id));
+        ->assertInertia(fn ($page) => $page->where('channelAlerts.0.id', $this->fb->id)
+            ->where('channelAlerts.0.last_error', __('labels.channel_problem.token_invalid').' · '.__('labels.channel_problem.not_subscribed')));
 
     // Recovered: back to connected, and a later break notifies again.
     fakeMetaGraph($this->healthy);
@@ -117,7 +125,7 @@ it('flags an invalid token and a missing subscription as problems, alerts and no
 });
 
 it('treats an unreachable Graph API as a warning, not a problem', function () {
-    Http::fake(fn () => throw new Illuminate\Http\Client\ConnectionException('cURL error 28: timed out for https://graph.facebook.com/v23.0/debug_token?access_token=111222|app-sec'));
+    Http::fake(fn () => throw new ConnectionException('cURL error 28: timed out for https://graph.facebook.com/v23.0/debug_token?access_token=111222|app-sec'));
 
     $result = app(ConnectionHealthCheck::class)->run($this->fb);
 

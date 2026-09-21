@@ -23,7 +23,12 @@ class EnsureRole
         $role = $request->user()?->role;
         $rank = $role instanceof UserRole ? (self::RANK[$role->value] ?? 0) : 0;
 
-        abort_if($rank < (self::RANK[$minimum] ?? PHP_INT_MAX), 403, 'This action requires the '.$minimum.' role.');
+        $name = 'errors.roles.names.'.$minimum;
+        $label = __($name);
+
+        abort_if($rank < (self::RANK[$minimum] ?? PHP_INT_MAX), 403, __('errors.roles.requires', [
+            'role' => is_string($label) && $label !== $name ? $label : $minimum,
+        ]));
 
         return $next($request);
     }

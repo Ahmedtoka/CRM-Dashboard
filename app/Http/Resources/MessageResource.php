@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Http\Support\StoredMessage;
 use App\Models\Message;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -27,7 +28,7 @@ class MessageResource extends JsonResource
                 $this->resource->relationLoaded('mediaAttachments') ? $this->mediaAttachments : $this->mediaAttachments()->get()
             )->resolve($request),
             'status' => $this->status?->value,
-            'error' => $this->error,
+            'error' => StoredMessage::error($this->error),
             'is_template' => (bool) $this->is_template,
             'created_at' => $this->created_at?->toIso8601String(),
         ];

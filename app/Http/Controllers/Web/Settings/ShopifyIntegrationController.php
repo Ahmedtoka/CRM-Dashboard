@@ -6,8 +6,8 @@ use App\Http\Controllers\Concerns\RespondsWithData;
 use App\Http\Controllers\Controller;
 use App\Models\ShopifySyncRun;
 use App\Models\ShopifyWebhookSubscription;
-use App\Shopify\Connection\ConnectShopify;
 use App\Shopify\Connection\ConnectionTester;
+use App\Shopify\Connection\ConnectShopify;
 use App\Shopify\Connection\IntegrationRepository;
 use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Jobs\RunManualSync;
@@ -32,7 +32,7 @@ class ShopifyIntegrationController extends Controller
 {
     use RespondsWithData;
 
-    private const IMPORT_RUNNING_MESSAGE = 'فيه استيراد شغال بالفعل — استنى لما يخلص';
+    private const MAX_ORDERS_SYNC_DAYS = 366;
 
     public function __construct(
         private readonly IntegrationRepository $integrations,
@@ -168,7 +168,7 @@ class ShopifyIntegrationController extends Controller
         $integration = $this->integrations->current();
 
         if ($integration === null) {
-            return $this->failure($request, ['ok' => false, 'error' => 'No Shopify integration on file'], 404);
+            return $this->failure($request, ['ok' => false, 'error' => __('errors.shopify.no_integration')], 404);
         }
 
         $integration->forceFill(['settings' => $data])->save();
@@ -213,11 +213,11 @@ class ShopifyIntegrationController extends Controller
     private function validateOrdersRange(?string $from, ?string $to): ?string
     {
         if ($from === null || $to === null) {
-            return 'مزامنة الطلبات محتاجة تاريخ من وإلى';
+            return __('errors.shopify.orders_range_required');
         }
 
-        if (Carbon::parse($from)->diffInDays(Carbon::parse($to)) > 366) {
-            return 'أقصى مدى للمزامنة سنة واحدة (٣٦٦ يوم)';
+        if (Carbon::parse($from)->diffInDays(Carbon::parse($to)) > self::MAX_ORDERS_SYNC_DAYS) {
+            return __('errors.shopify.orders_range_max', ['days' => self::MAX_ORDERS_SYNC_DAYS]);
         }
 
         return null;
@@ -225,7 +225,7 @@ class ShopifyIntegrationController extends Controller
 
     private function importConflict(Request $request): HttpResponse
     {
-        return $this->failure($request, ['ok' => false, 'error' => self::IMPORT_RUNNING_MESSAGE], 409);
+        return $this->failure($request, ['ok' => false, 'error' => __('errors.shopify.import_running')], 409);
     }
 
     /**

@@ -1,7 +1,11 @@
 <?php
 
-use App\Enums\{Platform, UserRole};
-use App\Models\{QuickReply, QuickReplyCategory, QuickReplyUsage, User};
+use App\Enums\Platform;
+use App\Enums\UserRole;
+use App\Models\QuickReply;
+use App\Models\QuickReplyCategory;
+use App\Models\QuickReplyUsage;
+use App\Models\User;
 
 beforeEach(function () {
     $this->travelTo(now()->setTimezone('Africa/Cairo')->setTime(12, 0)->utc());
@@ -36,7 +40,8 @@ it('filters by platform and exports csv', function () {
 
     $csv = ltrim($raw, "\u{FEFF}");
     $lines = array_map('str_getcsv', array_filter(explode("\n", $csv)));
-    expect($lines[0])->toBe(['shortcut', 'title', 'scope', 'category', 'uses', 'users', 'platforms', 'last_used_at'])
+    // The header follows the exporting supervisor's own language (labels.csv.quick_replies.*).
+    expect($lines[0])->toBe(array_values(__('labels.csv.quick_replies')))
         ->and($lines[1][0])->toBe('ship')->and($lines[1][6])->toBe('facebook:1|whatsapp:1');
 });
 

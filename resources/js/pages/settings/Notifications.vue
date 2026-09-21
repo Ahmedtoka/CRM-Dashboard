@@ -14,7 +14,7 @@ const { t } = useI18n();
 const notifications = useNotifications();
 notifications.prefs.value = { ...notifications.prefs.value, ...props.preferences };
 
-const breadcrumbs = [{ title: t('notifications.title'), href: '/settings/notifications' }];
+const breadcrumbs = computed(() => [{ title: t('notifications.title'), href: '/settings/notifications' }]);
 
 function testSound(): void {
     const audio = new Audio('/sounds/notify.wav');

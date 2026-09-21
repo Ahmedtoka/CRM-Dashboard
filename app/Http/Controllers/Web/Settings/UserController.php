@@ -56,7 +56,7 @@ class UserController extends Controller
         $data = $this->validated($request, $user);
 
         if ($user->is($request->user()) && ($data['role'] !== UserRole::Admin->value || ! $request->boolean('is_active', true))) {
-            throw ValidationException::withMessages(['role' => 'You cannot remove your own admin access.']);
+            throw ValidationException::withMessages(['role' => __('errors.users.cannot_remove_own_admin')]);
         }
 
         DB::transaction(function () use ($request, $user, $data) {
@@ -90,7 +90,7 @@ class UserController extends Controller
     public function destroy(Request $request, User $user, PresenceTracker $presence): HttpResponse
     {
         if ($user->is($request->user())) {
-            throw ValidationException::withMessages(['user' => 'You cannot deactivate yourself.']);
+            throw ValidationException::withMessages(['user' => __('errors.users.cannot_deactivate_self')]);
         }
 
         $user->forceFill(['is_active' => false])->save();

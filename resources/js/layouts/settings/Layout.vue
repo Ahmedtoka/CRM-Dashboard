@@ -5,10 +5,11 @@ import { Separator } from '@/components/ui/separator';
 import { useI18n } from '@/composables/useI18n';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const { t } = useI18n();
 
-const sidebarNavItems: NavItem[] = [
+const sidebarNavItems = computed<NavItem[]>(() => [
     {
         title: t('nav.settings_layout.profile'),
         href: '/settings/profile',
@@ -25,7 +26,7 @@ const sidebarNavItems: NavItem[] = [
         title: t('nav.settings_notifications'),
         href: '/settings/notifications',
     },
-];
+]);
 
 const currentPath = window.location.pathname;
 </script>

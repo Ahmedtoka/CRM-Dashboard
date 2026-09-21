@@ -220,7 +220,8 @@ it('records a cancel request with her own reason, asking again for an empty or e
         ->and($case->data['request'])->toBe('cancel')
         ->and($case->data['cancel_reason'])->toBe('لقيت الموديل أرخص في مكان تاني')
         ->and($case->summary)->toContain('المطلوب: إلغاء')->toContain('سبب الإلغاء: لقيت الموديل أرخص في مكان تاني')
-        ->and($case->policy_notes)->toBe(['الأوردر لسه متشحنش وقت الطلب — اتأكدوا قبل ما يخرج من الشركة'])
+        ->and($case->policy_notes)->toBe([['code' => 'cancel_window_open', 'params' => []]])
+        ->and($case->summary)->toContain('الأوردر لسه متشحنش وقت الطلب — اتأكدوا قبل ما يخرج من الشركة')
         ->and(oceBot()->body)->toBe('تمام ✅ سجلت طلب إلغاء أوردر #1047، والفريق هيأكد معاكي الإلغاء في أقرب وقت 🌸')
         ->and(oceFlow())->toBeNull()
         ->and(implode("\n", oceBodies()))->not->toContain('#0');

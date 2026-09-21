@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\LocalizedNumbers;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -57,10 +58,12 @@ class BotTestSession extends Model
         return $this->ended_at !== null;
     }
 
-    /** «سارة — الجلسة 2»; the first run is just the name. */
+    /** «سارة — الجلسة 2»; the first run is just the name. Read-time, so it follows the viewer's locale. */
     public function label(): string
     {
-        return $this->run_no > 1 ? "{$this->tester_name} — الجلسة {$this->run_no}" : $this->tester_name;
+        return $this->run_no > 1
+            ? __('labels.test_session.run', ['name' => $this->tester_name, 'n' => LocalizedNumbers::integer((int) $this->run_no)])
+            : $this->tester_name;
     }
 
     public function durationSeconds(): int

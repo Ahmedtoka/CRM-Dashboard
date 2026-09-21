@@ -39,7 +39,7 @@ trait OrderEndpoints
         } catch (DomainException $e) {
             abort(response()->json([
                 'message' => $e->getMessage() === 'already_fulfilled'
-                    ? 'لا يمكن إلغاء طلب اتشحن كله أو جزء منه.'
+                    ? __('errors.orders.cancel_fulfilled')
                     : $e->getMessage(),
             ], 422));
         }

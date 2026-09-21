@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from '@/composables/useI18n';
-import { formatDateTime } from '@/lib/format';
+import { formatCount, formatDateTime } from '@/lib/format';
 import type { ShopifySyncRunRow } from '@/types/admin';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, XCircle } from 'lucide-vue-next';
 import { ref } from 'vue';
@@ -64,11 +64,11 @@ const statusIconTone: Record<string, string> = { completed: 'text-success', ok: 
                                     {{ t(`settings.shopify.log.run_status.${run.status}`, {}) || run.status }}
                                 </span>
                             </td>
-                            <td class="px-3 py-2 text-end tabular-nums">{{ run.processed }}</td>
-                            <td class="px-3 py-2 text-end tabular-nums">{{ run.created }}</td>
-                            <td class="px-3 py-2 text-end tabular-nums">{{ run.updated }}</td>
-                            <td class="px-3 py-2 text-end tabular-nums">{{ run.skipped_stale }}</td>
-                            <td class="px-3 py-2 text-end tabular-nums" :class="run.failed > 0 ? 'rounded bg-destructive/10 font-semibold text-foreground' : ''">{{ run.failed }}</td>
+                            <td class="px-3 py-2 text-end tabular-nums">{{ formatCount(run.processed, locale) }}</td>
+                            <td class="px-3 py-2 text-end tabular-nums">{{ formatCount(run.created, locale) }}</td>
+                            <td class="px-3 py-2 text-end tabular-nums">{{ formatCount(run.updated, locale) }}</td>
+                            <td class="px-3 py-2 text-end tabular-nums">{{ formatCount(run.skipped_stale, locale) }}</td>
+                            <td class="px-3 py-2 text-end tabular-nums" :class="run.failed > 0 ? 'rounded bg-destructive/10 font-semibold text-foreground' : ''">{{ formatCount(run.failed, locale) }}</td>
                             <td class="whitespace-nowrap px-3 py-2 tabular-nums text-muted-foreground">{{ formatDateTime(run.finished_at, locale) || '—' }}</td>
                             <td class="px-3 py-2 text-end">
                                 <button
@@ -78,7 +78,7 @@ const statusIconTone: Record<string, string> = { completed: 'text-success', ok: 
                                     :aria-label="t('settings.shopify.log.errors')"
                                     @click="toggle(run.id)"
                                 >
-                                    {{ run.errors.length }}
+                                    {{ formatCount(run.errors.length, locale) }}
                                     <ChevronUp v-if="expanded.has(run.id)" class="size-3.5" aria-hidden="true" />
                                     <ChevronDown v-else class="size-3.5" aria-hidden="true" />
                                 </button>

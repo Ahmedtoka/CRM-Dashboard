@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { skinClasses, type ChatSkin } from '@/composables/inbox/useChatSkin';
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import { useInitials } from '@/composables/useInitials';
 import { shortcutHint } from '@/composables/useShortcuts';
 import { cn } from '@/lib/utils';
@@ -34,7 +35,7 @@ const emit = defineEmits<{
     claim: [];
 }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const { getInitials } = useInitials();
 
 const name = computed(() => props.conversation.customer?.name || `#${props.conversation.id}`);
@@ -134,7 +135,7 @@ defineExpose({ openTags: () => (tagsOpen.value = true) });
                     :aria-label="t('thread.tags')"
                 >
                     <Tags />
-                    <span v-if="conversation.tags?.length" class="text-xs tabular-nums">{{ conversation.tags.length }}</span>
+                    <span v-if="conversation.tags?.length" class="text-xs tabular-nums">{{ formatCount(conversation.tags.length, locale) }}</span>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" class="w-52">
                     <DropdownMenuLabel class="text-xs">{{ t('thread.tags') }}</DropdownMenuLabel>

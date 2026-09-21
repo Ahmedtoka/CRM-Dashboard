@@ -15,7 +15,18 @@ use App\Shopify\Connection\ShopifyIntegration;
  */
 final class ShippingQuote
 {
+    /**
+     * The STORED title of the default shipping line: what `orders.shipping_title`
+     * keeps and what Shopify puts on the customer's invoice, so it stays Arabic
+     * whatever language the staff member is working in.
+     */
     public const DEFAULT_TITLE = 'شحن';
+
+    /** The same line as the staff member sees it in the drawer — display only, never stored. */
+    public static function defaultTitle(): string
+    {
+        return __('labels.shipping.default');
+    }
 
     public function __construct(private readonly IntegrationRepository $integrations) {}
 
@@ -77,7 +88,7 @@ final class ShippingQuote
     {
         $settings = ($this->integrations->current() ?? new ShopifyIntegration)->settingsWithDefaults();
 
-        return new ShippingOption(null, self::DEFAULT_TITLE, self::money($settings['default_shipping_fee']));
+        return new ShippingOption(null, self::defaultTitle(), self::money($settings['default_shipping_fee']));
     }
 
     /** @return list<ShippingOption> */

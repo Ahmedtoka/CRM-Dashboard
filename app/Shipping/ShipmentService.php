@@ -20,6 +20,15 @@ use Illuminate\Support\Facades\DB;
 
 class ShipmentService
 {
+    /**
+     * Stable sentinels stored in `shipment_events.description`. They are written by
+     * webhooks and queue workers running in the default locale, so they are kept as
+     * codes and translated on read — see OrderResource::eventDescription().
+     */
+    public const EVENT_CREATED = 'Shipment created';
+
+    public const EVENT_ORDER_CANCELLED = 'Order cancelled';
+
     public function __construct(
         private readonly ShippingProvider $provider,
         private readonly ActivityLogger $logger,
@@ -50,7 +59,7 @@ class ShipmentService
 
         $shipment->events()->create([
             'status' => ShipmentStatus::Created,
-            'description' => $result->success ? 'Shipment created' : $result->error,
+            'description' => $result->success ? self::EVENT_CREATED : $result->error,
             'occurred_at' => now(),
         ]);
 

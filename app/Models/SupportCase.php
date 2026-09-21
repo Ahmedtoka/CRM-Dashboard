@@ -24,6 +24,10 @@ class SupportCase extends Model
 
     public const PRIORITIES = ['medium', 'high'];
 
+    /**
+     * The raw Arabic type words. Kept for the flow sandbox log (SandboxCaseRecorder),
+     * which writes the owner's own Arabic; the staff-facing label is `typeLabel()`.
+     */
     public const TYPE_LABELS = [
         'return_exchange' => 'مرتجع/استبدال',
         'return' => 'مرتجع',
@@ -61,9 +65,12 @@ class SupportCase extends Model
         ];
     }
 
+    /** The case type in the viewer's language. */
     public function typeLabel(): string
     {
-        return self::TYPE_LABELS[$this->type] ?? (string) $this->type;
+        $key = 'cases.types.'.$this->type;
+
+        return ($label = __($key)) !== $key ? (string) $label : (string) $this->type;
     }
 
     /** @return BelongsTo<Conversation, $this> */
