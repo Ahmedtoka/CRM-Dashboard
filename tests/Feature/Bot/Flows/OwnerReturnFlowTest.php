@@ -16,6 +16,7 @@ use App\Bot\Flows\Returns\ShopifyRemoteProductLookup;
 use App\Bot\Flows\Sandbox\FlowSandbox;
 use App\Bot\Flows\Steps\OrderItemsStep;
 use App\Bot\Flows\Steps\OrderStep;
+use App\Bot\Flows\Steps\PhotoStep;
 use App\Bot\Flows\Steps\ProductLinkStep;
 use App\Cases\CaseSummary;
 use App\Channels\Data\InboundMessageData;
@@ -314,12 +315,16 @@ it('asks for the photo once more when she writes instead, then records the retur
     orfTap('return_items', 'item:'.$order->items[0]->id);
     orfTap('return_reason', 'size');
 
-    orfTurn('مش معايا صورة');
+    // Anything that is not a photo and not a refusal: ONE differently-worded nudge, never
+    // the same request twice (design 2026-09-21 §3).
+    orfTurn('الصورة عند أختي');
     expect(orfFlow()['step'])->toBe('return_photo')
-        ->and(orfBot()->body)->toBe('ابعتيلي صورة للقطعة 📸')
+        ->and(orfBot()->body)->not->toBe('ابعتيلي صورة للقطعة 📸')
+        ->and(orfBot()->body)->toContain('مش معاكي صورة')
         ->and(SupportCase::count())->toBe(0);
 
-    orfTurn('مش هقدر اصور');
+    // Telling us there is no photo moves on straight away.
+    orfTurn('مش معايا صورة');
     $case = SupportCase::sole();
     expect($case->data['product_photo_missing'])->toBeTrue()
         ->and($case->photo_attachment_ids)->toBe([])
@@ -640,4 +645,13 @@ it('walks both branches in the designer sandbox and saves nothing', function () 
         ->and($texts($r))->toBe('تمام ✅ تم تسجيل طلب الاستبدال بـ «عباية كتان». هنتواصل معاكي لتأكيد الاستبدال والإرسال 🌸');
 
     expect(SupportCase::count())->toBe(0)->and(Conversation::count())->toBe(0)->and(ConversationNote::count())->toBe(0);
+});
+
+it('moves on when she says she has no photo, and never repeats the photo request word for word', function () {
+    // Walking the English flow, «I do not have a photo» got the identical request again.
+    expect(PhotoStep::saysNoPhoto('I do not have a photo'))->toBeTrue()
+        ->and(PhotoStep::saysNoPhoto('مش معايا صورة'))->toBeTrue()
+        ->and(PhotoStep::saysNoPhoto('معنديش صور دلوقتي'))->toBeTrue()
+        ->and(PhotoStep::saysNoPhoto('skip'))->toBeTrue()
+        ->and(PhotoStep::saysNoPhoto('هبعتها دلوقتي'))->toBeFalse();
 });

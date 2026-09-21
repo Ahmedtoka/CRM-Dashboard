@@ -167,14 +167,15 @@ it('stores media attachment ids and asks for the defect photo when defective', f
         ->and(stepsLastBot()->body)->toBe('وممكن صورة توضح العيب اللي في المنتج؟ 📸');
 });
 
-it('re-asks once for a photo then continues with the missing flag', function () {
+it('nudges once for a photo then continues with the missing flag', function () {
     stepsAt('return_exchange', 'product_photo', ['reason' => 'size']);
 
-    stepsTurn('مش معايا صورة دلوقتي');
+    // Not a photo and not a refusal: one nudge, worded differently from the request itself.
+    stepsTurn('الصورة عند أختي');
     expect(stepsFlow()['step'])->toBe('product_photo')
-        ->and(stepsLastBot()->body)->toBe('ممكن صورة واضحة للمنتج؟ 📸');
+        ->and(stepsLastBot()->body)->not->toBe('ممكن صورة واضحة للمنتج؟ 📸');
 
-    stepsTurn('مش هقدر');
+    stepsTurn('مش معايا صورة دلوقتي');
     $flow = stepsFlow();
     expect($flow['step'])->toBe('summary')
         ->and($flow['data']['product_photo_missing'])->toBeTrue()
