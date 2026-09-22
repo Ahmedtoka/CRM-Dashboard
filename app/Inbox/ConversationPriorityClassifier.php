@@ -4,6 +4,8 @@ namespace App\Inbox;
 
 use App\Analytics\ActivityLogger;
 use App\Bot\ArabicNormalizer;
+use App\Bot\Flows\FlowEngine;
+use App\Bot\Flows\FlowState;
 use App\Enums\ActorType;
 use App\Enums\ConversationPriority;
 use App\Enums\MessageDirection;
@@ -48,8 +50,12 @@ final class ConversationPriorityClassifier
                 return new PriorityVerdict(ConversationPriority::Spam, 'phrase');
             }
 
+            // The repeat rule is for the same pasted text over and over, not for answers to the bot
+            // (2026-09-22: the owner's Messenger conversation was hidden as spam after «أيوه» three
+            // times in a guided flow): a button tap, a message inside a guided flow and a short
+            // answer («أيوه», «1047», «تمام») are never repeats.
             $threshold = (int) ($settings->spam_repeat_threshold ?: BotSetting::DEFAULT_SPAM_REPEAT_THRESHOLD);
-            if ($normalized !== '' && $this->isRepeated($identity, $normalized, $threshold)) {
+            if ($normalized !== '' && ! $this->isAnswerToTheBot($inbound, $normalized) && $this->isRepeated($identity, $normalized, $threshold)) {
                 return new PriorityVerdict(ConversationPriority::Spam, 'repeat');
             }
         }
@@ -232,6 +238,18 @@ final class ConversationPriorityClassifier
      * identity's customer has on this platform (not just the current one), since
      * a spammer's messages may land in more than one open conversation.
      */
+    private function isAnswerToTheBot(Message $inbound, string $normalized): bool
+    {
+        if (filled($inbound->payload) || count(preg_split('/\s+/u', $normalized, -1, PREG_SPLIT_NO_EMPTY) ?: []) <= 2 || mb_strlen($normalized) <= 12) {
+            return true;
+        }
+
+        // A real guided step (order number, piece, reason…), not a menu that is merely up.
+        $conversation = $inbound->conversation;
+
+        return $conversation !== null && FlowState::flow($conversation) !== null && ! app(FlowEngine::class)->atMenu($conversation);
+    }
+
     private function isRepeated(CustomerIdentity $identity, string $normalized, int $threshold): bool
     {
         if ($threshold <= 0) {

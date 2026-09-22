@@ -43,6 +43,18 @@ it('never marks a link to the store domain as spam (the exchange product link, 2
     expect($m->fresh()->is_spam)->toBeFalse()->and($m->conversation->fresh()->priority)->not->toBe(ConversationPriority::Spam);
 });
 
+it('never counts a short answer or a button tap as a repeat (the owner answering «أيوه» three times, 2026-09-22)', function () {
+    foreach (range(1, 4) as $_) {
+        $m = ($this->send)('أيوه');
+    }
+    expect($m->conversation->fresh()->priority)->not->toBe(ConversationPriority::Spam);
+
+    foreach (range(1, 4) as $i) {
+        $m = app(InboxIngestor::class)->ingestMessage(new InboundMessageData(Platform::Facebook, 'PG1', 'u2', 'Nour', 'tap'.$i, 'المرتجع والاستبدال من فضلك يا فندم', CarbonImmutable::now(), payload: 'flow:return_exchange'));
+    }
+    expect($m->conversation->fresh()->priority)->not->toBe(ConversationPriority::Spam);
+});
+
 it('marks repeated identical messages as spam', function () {
     foreach (range(1, 3) as $_) {
         $m = ($this->send)('ممكن تتواصلي معايا');
