@@ -350,10 +350,12 @@ it('loops tap → "another one?" → tap → "that is all" and moves on with bot
     oarTap("item:{$a->id}", 'فستان ليلى');
     expect(oarFlow()['step'])->toBe('order_items')
         ->and(oarBot()->body)->toBe("تمام ✅ ضفت: فستان ليلى × 1\n".OrderItemsStep::MORE_QUESTION)
-        ->and(array_column(oarBot()->buttons, 'title'))->toBe(['أيوه', 'لأ كده تمام']);
+        ->and(array_column(oarBot()->buttons, 'title'))->toBe(['أيوه', 'أرجع الباقي كله', 'لأ كده تمام']);
 
+    // 2026-09-22: the second list shows only the open pieces, with their original numbers.
     oarTap('more', 'أيوه');
-    expect(oarBot()->body)->toContain('1. ✅ فستان ليلى')->and(oarBot()->buttons)->toHaveCount(5); // + «أرجع كله»
+    expect(oarBot()->body)->not->toContain('فستان ليلى')->toContain('2. عباية كتان')->toContain('3. جيبة')
+        ->and(array_column(oarBot()->buttons, 'title'))->toBe(['عباية كتان', 'جيبة', 'أرجع الباقي كله']);
 
     oarTap("item:{$b->id}", 'عباية كتان');
     oarTap('done', 'لأ كده تمام');

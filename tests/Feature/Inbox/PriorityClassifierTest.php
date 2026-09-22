@@ -1,10 +1,22 @@
 <?php
 
 use App\Channels\Data\InboundMessageData;
-use App\Enums\{Platform, ConversationPriority, MessageDirection, SenderType};
+use App\Enums\ConversationPriority;
+use App\Enums\MessageDirection;
+use App\Enums\Platform;
+use App\Enums\SenderType;
+use App\Enums\UserRole;
 use App\Inbox\ConversationPriorityClassifier;
 use App\Inbox\InboxIngestor;
-use App\Models\{ChannelAccount, Conversation, BotSetting, BotRun, Customer, CustomerIdentity, Message};
+use App\Models\BotRun;
+use App\Models\BotSetting;
+use App\Models\ChannelAccount;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\CustomerIdentity;
+use App\Models\Message;
+use App\Models\User;
+use App\Shopify\Connection\ShopifyIntegration;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
 
@@ -24,8 +36,17 @@ it('marks unknown links as spam and skips the bot', function () {
         ->and(BotRun::count())->toBe(0);
 });
 
+it('never marks a link to the store domain as spam (the exchange product link, 2026-09-22)', function () {
+    BotSetting::current()->update(['store_url' => 'https://www.levoilestores.com/']);
+
+    $m = ($this->send)('عايزة أبدل بده https://levoilestores.com/products/abaya-linen?variant=1');
+    expect($m->fresh()->is_spam)->toBeFalse()->and($m->conversation->fresh()->priority)->not->toBe(ConversationPriority::Spam);
+});
+
 it('marks repeated identical messages as spam', function () {
-    foreach (range(1, 3) as $_) { $m = ($this->send)('ممكن تتواصلي معايا'); }
+    foreach (range(1, 3) as $_) {
+        $m = ($this->send)('ممكن تتواصلي معايا');
+    }
     expect($m->conversation->fresh()->priority)->toBe(ConversationPriority::Spam);
 });
 
@@ -47,8 +68,8 @@ it('keeps a manual spam mark on later automatic spam, but not once the sender is
     $conv = $m->conversation->fresh();
     expect($conv->priority)->toBe(ConversationPriority::Spam);
 
-    $admin = \App\Models\User::factory()->create(['role' => \App\Enums\UserRole::Admin]);
-    app(\App\Inbox\ConversationPriorityClassifier::class)->setManually($conv, ConversationPriority::Normal, $admin);
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    app(ConversationPriorityClassifier::class)->setManually($conv, ConversationPriority::Normal, $admin);
     expect($conv->fresh()->priority)->toBe(ConversationPriority::Normal);
 
     $m2 = ($this->send)('اربح فلوس تاني', 'u1');
@@ -112,7 +133,7 @@ it('counts repeated identical messages across every conversation of the same cus
 
 it('allows links to the connected shopify store domain even when the allow-list omits it', function () {
     BotSetting::current()->update(['allowed_link_domains' => ['facebook.com']]);
-    \App\Shopify\Connection\ShopifyIntegration::create(['shop_domain' => 'bezra-store.myshopify.com', 'access_token' => 't', 'api_secret' => 's', 'status' => 'connected']);
+    ShopifyIntegration::create(['shop_domain' => 'bezra-store.myshopify.com', 'access_token' => 't', 'api_secret' => 's', 'status' => 'connected']);
 
     $m = ($this->send)('شوفي المنتج ده https://bezra-store.myshopify.com/products/dress', 'u-shop');
     expect($m->fresh()->is_spam)->toBeFalse();

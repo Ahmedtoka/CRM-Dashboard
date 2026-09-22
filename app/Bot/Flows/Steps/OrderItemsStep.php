@@ -79,6 +79,18 @@ final class OrderItemsStep extends BaseStep
 
     public const ALL_BUTTON_EXCHANGE = 'أبدل كله';
 
+    /** After the first pick (owner, 2026-09-22): the rest of the order in one tap. */
+    public const REST_BUTTON_RETURN = 'أرجع الباقي كله';
+
+    public const REST_BUTTON_EXCHANGE = 'أبدل الباقي كله';
+
+    /** The last card of the carousel (owner, 2026-09-22): the whole order. */
+    public const ALL_CARD_RETURN = 'أرجع الأوردر كله';
+
+    public const ALL_CARD_EXCHANGE = 'أبدل الأوردر كله';
+
+    public const ALL_CARD_SUBTITLE = 'كل القطع اللي فاضلة في طلب واحد';
+
     public const YES_BUTTON = 'أيوه';
 
     public const DONE_BUTTON = 'لأ كده تمام';
@@ -208,7 +220,7 @@ final class OrderItemsStep extends BaseStep
         $picked = $this->selection->positions($text, $order->items->count());
 
         if ($picked === ItemSelection::ALL) {
-            return $this->pick($state, $order, $order->items->pluck('id')->all());
+            return $this->pick($state, $order, $this->remaining($state, $order)->pluck('id')->map(fn ($id) => (int) $id)->all());
         }
 
         if (is_array($picked)) {
@@ -247,8 +259,9 @@ final class OrderItemsStep extends BaseStep
             return StepOutcome::wait([['text' => self::MULTI_TEXT]], 0, ['items_pending' => ['mode' => 'pick']]);
         }
 
+        // «أرجع كله» / «أرجع الباقي كله» / the last card: every piece she has not picked yet.
         if ($value === 'all') {
-            return $this->pick($state, $order, $order->items->pluck('id')->map(fn ($id) => (int) $id)->all());
+            return $this->pick($state, $order, $this->remaining($state, $order)->pluck('id')->map(fn ($id) => (int) $id)->all());
         }
 
         if (str_starts_with($value, 'item:') && ctype_digit(substr($value, 5))) {
@@ -549,12 +562,13 @@ final class OrderItemsStep extends BaseStep
     private function listMessages(array $state, array $step, Order $order, array $selected, bool $withHeader): array
     {
         $list = $this->listMessage($state, $step, $order, $selected, $withHeader);
-        $items = $order->items->values();
-        $chosen = array_map(fn ($s) => (int) ($s['line_item_id'] ?? 0), $selected);
+        // The pieces still open, each with its number in the order (a typed "3" is still piece 3).
+        $numbers = $order->items->values()->pluck('id')->flip();
+        $items = $selected === [] ? $order->items->values() : $this->remaining($state, $order);
         $pictures = $items->map(fn (OrderItem $i) => ProductCards::jpeg($i->image_url ?: $i->variant?->image_url ?: $i->variant?->product?->image_url));
+        $allCard = $items->count() > 1 && ! $this->plain;
 
-        // A piece without a photo still gets its card; with no photos at all the text list reads better.
-        if ($items->count() > OutboundCards::MAX_CARDS || $pictures->filter()->isEmpty()) {
+        if ($items->count() + ($allCard ? 1 : 0) > OutboundCards::MAX_CARDS || $pictures->filter()->isEmpty()) {
             return [$list];
         }
 
@@ -565,13 +579,25 @@ final class OrderItemsStep extends BaseStep
             default => self::PICK_BUTTON,
         };
 
-        $cards = OutboundCards::generic($items->map(fn (OrderItem $item, int $i) => [
-            'title' => (in_array((int) $item->id, $chosen, true) ? '✅ ' : '').($i + 1).'. '.KeptNames::keep(trim((string) $item->title)),
+        $cards = $items->map(fn (OrderItem $item, int $i) => [
+            'title' => ($numbers[$item->id] + 1).'. '.KeptNames::keep(trim((string) $item->title)),
             'subtitle' => trim(($this->items->variantOf($item) ?? '').' × '.(int) $item->qty.($item->price !== null ? ' — '.$this->money((float) $item->price).' ج.م' : ''), ' —'),
-            'text' => ($i + 1).'. '.$this->lineText($item),
+            'text' => ($numbers[$item->id] + 1).'. '.$this->lineText($item),
             'image_url' => $pictures[$i],
             'buttons' => [OutboundCards::postback($pick, "step:{$state['key']}:{$state['step']}:item:{$item->id}")],
-        ])->all());
+        ])->all();
+
+        if ($allCard) {
+            $all = $this->kind($state) === 'exchange' ? self::ALL_CARD_EXCHANGE : self::ALL_CARD_RETURN;
+            $cards[] = [
+                'title' => '🛍️ '.$all,
+                'subtitle' => self::ALL_CARD_SUBTITLE,
+                'text' => $all,
+                'buttons' => [OutboundCards::postback($all, "step:{$state['key']}:{$state['step']}:all")],
+            ];
+        }
+
+        $cards = OutboundCards::generic($cards);
 
         $question = trim($this->prompter->renderText((string) ($step['text'] ?? ''), $state['data'] ?? [])) ?: ($this->plain ? self::PLAIN_TEXT : self::DEFAULT_TEXT);
         $header = $withHeader ? $this->header($state, $order) : null;
@@ -586,18 +612,21 @@ final class OrderItemsStep extends BaseStep
     /** @param  list<array<string, mixed>>  $selected */
     private function listMessage(array $state, array $step, Order $order, array $selected, bool $withHeader): array
     {
-        $chosen = array_map(fn ($s) => (int) ($s['line_item_id'] ?? 0), $selected);
         $lines = [];
 
         foreach ($order->items->values() as $i => $item) {
-            $mark = in_array((int) $item->id, $chosen, true) ? '✅ ' : '';
-            $lines[] = ($i + 1).'. '.$mark.$this->lineText($item);
+            // After a pick only the open pieces are listed, with their original numbers (2026-09-22).
+            if ($selected !== [] && ! $this->remaining($state, $order)->contains('id', $item->id)) {
+                continue;
+            }
+
+            $lines[] = ($i + 1).'. '.$this->lineText($item);
         }
 
         $question = trim($this->prompter->renderText((string) ($step['text'] ?? ''), $state['data'] ?? [])) ?: ($this->plain ? self::PLAIN_TEXT : self::DEFAULT_TEXT);
         $text = implode("\n", array_filter([$withHeader ? $this->header($state, $order) : null, implode("\n", $lines), '', $question], fn ($p) => $p !== null));
 
-        return ['text' => $text, 'buttons' => $this->itemButtons($state, $order)];
+        return ['text' => $text, 'buttons' => $this->itemButtons($state, $order, $selected !== [])];
     }
 
     /**
@@ -606,20 +635,22 @@ final class OrderItemsStep extends BaseStep
      *
      * @return list<array{title:string, payload:string}>
      */
-    private function itemButtons(array $state, Order $order): array
+    private function itemButtons(array $state, Order $order, bool $openOnly = false): array
     {
-        $buttons = $order->items->take(self::MAX_ITEM_BUTTONS)->values()
+        $items = $openOnly ? $this->remaining($state, $order) : $order->items->values();
+        $buttons = $items->take(self::MAX_ITEM_BUTTONS)->values()
             // The piece's own name goes out as she reads it on the invoice, in either language (§4).
             ->map(fn (OrderItem $item) => $this->stepButton($state, KeptNames::keep((string) $item->title), 'item:'.$item->id))->all();
 
-        // «أرجع كله» / «أبدل كله»: the whole order in one tap. Not on the edit picker,
-        // where "return everything" would be the wrong thing to offer.
-        if (! $this->plain && $order->items->count() > 1) {
-            $all = ($state['data']['request_kind'] ?? null) === 'exchange' ? self::ALL_BUTTON_EXCHANGE : self::ALL_BUTTON_RETURN;
+        // «أرجع كله» / «أبدل كله» (after a pick: «أرجع الباقي كله»): the open pieces in one tap.
+        // Not on the edit picker, where "return everything" would be the wrong thing to offer.
+        if (! $this->plain && $items->count() > 1) {
+            $exchange = ($state['data']['request_kind'] ?? null) === 'exchange';
+            $all = $openOnly ? ($exchange ? self::REST_BUTTON_EXCHANGE : self::REST_BUTTON_RETURN) : ($exchange ? self::ALL_BUTTON_EXCHANGE : self::ALL_BUTTON_RETURN);
             $buttons[] = $this->stepButton($state, $all, 'all');
         }
 
-        if ($order->items->count() > 2 && $order->items->count() <= self::MAX_ITEM_BUTTONS) {
+        if ($items->count() > 2 && $items->count() <= self::MAX_ITEM_BUTTONS) {
             $buttons[] = $this->stepButton($state, self::MULTI_BUTTON, 'multi');
         }
 
@@ -634,7 +665,33 @@ final class OrderItemsStep extends BaseStep
     /** @return list<array{title:string, payload:string}> */
     private function moreButtons(array $state): array
     {
-        return [$this->stepButton($state, self::YES_BUTTON, 'more'), $this->stepButton($state, self::DONE_BUTTON, 'done')];
+        $buttons = [$this->stepButton($state, self::YES_BUTTON, 'more')];
+        $order = $this->order($state['data']);
+
+        // 2026-09-22: the rest of the order in one tap, when more than one piece is still open.
+        if ($order !== null && $this->remaining($state, $order)->count() > 1) {
+            $buttons[] = $this->stepButton($state, $this->kind($state) === 'exchange' ? self::REST_BUTTON_EXCHANGE : self::REST_BUTTON_RETURN, 'all');
+        }
+
+        $buttons[] = $this->stepButton($state, self::DONE_BUTTON, 'done');
+
+        return $buttons;
+    }
+
+    /**
+     * The pieces she can still pick (2026-09-22: the list after «أيوه» no longer repeats the ones
+     * she chose): not picked yet, not refused by the keyword list, and not discounted in a return.
+     *
+     * @return Collection<int, OrderItem>
+     */
+    private function remaining(array $state, Order $order): Collection
+    {
+        $selected = $this->selected($state['data']);
+        $returning = $this->kind($state) === 'return';
+
+        return $order->items->reject(fn (OrderItem $i) => collect($selected)->contains(fn ($s) => (int) ($s['line_item_id'] ?? 0) === (int) $i->id)
+            || (! $this->plain && $this->items->nonReturnableKeyword($i) !== null)
+            || ($returning && $this->items->isDiscounted($i)))->values();
     }
 
     private function qtyMessage(array $state, ?OrderItem $item): array

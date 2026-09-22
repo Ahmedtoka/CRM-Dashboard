@@ -394,10 +394,32 @@ function orfToLink(): Order
     expect(orfBot()->body)->toBe('إيه سبب الاستبدال؟')
         ->and(orfButtons())->toBe(['المقاس', 'اللون', 'الموديل', 'فيه عيب', 'حاجة تانية', 'القائمة الرئيسية']);
     orfTap('exchange_reason', 'size', 'المقاس');
-    expect(orfFlow()['step'])->toBe('exchange_product')
-        ->and(orfBot()->body)->toBe('ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع 🔗 (من levoilestores.com)');
+    expect(orfFlow()['step'])->toBe('exchange_product');
+
+    // 2026-09-22: with a catalog she is asked «أعرضلك المنتجات هنا ولا تبعتيلي لينك أو اسم؟» first.
+    if (Product::query()->exists()) {
+        expect(orfBot()->body)->toBe(ProductLinkStep::ASK_TEXT)
+            ->and(orfButtons())->toBe([ProductLinkStep::BROWSE_BUTTON, ProductLinkStep::SEND_BUTTON]);
+        orfTap('exchange_product', 'send', ProductLinkStep::SEND_BUTTON);
+    }
+
+    expect(orfBot()->body)->toBe('ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع 🔗 (من levoilestores.com)');
 
     return $order;
+}
+
+/** A link's product is shown as a card and confirmed with «أيوه تمام» before it is saved (2026-09-22). */
+function orfConfirmProduct(string $title): void
+{
+    expect(orfFlow()['step'])->toBe('exchange_product')
+        ->and(orfBot()->body)->toBe(ProductLinkStep::CONFIRM_TEXT)
+        ->and(orfButtons())->toBe([ProductLinkStep::CONFIRM_YES, ProductLinkStep::CONFIRM_NO])
+        ->and(SupportCase::count())->toBe(0);
+
+    $card = Message::where('sender_type', 'bot')->orderByDesc('id')->skip(1)->first();
+    expect($card->cards['cards'][0]['title'])->toBe($title);
+
+    orfTap('exchange_product', 'yes', ProductLinkStep::CONFIRM_YES);
 }
 
 it('records an exchange with the product found by its link in the synced catalog', function () {
@@ -405,6 +427,7 @@ it('records an exchange with the product found by its link in the synced catalog
     $order = orfToLink();
 
     orfTurn('ده اللينك https://levoilestores.com/products/abaya-linen');
+    orfConfirmProduct('عباية كتان');
 
     $case = SupportCase::sole();
     $c = Conversation::firstOrFail();
@@ -442,6 +465,7 @@ it('reads a collection link with ?variant= and keeps that size and price', funct
     orfToLink();
 
     orfTurn('levoilestores.com/collections/abayas/products/Abaya-Linen?variant=4002.');
+    orfConfirmProduct('عباية كتان');
 
     $p = SupportCase::sole()->data['exchange_product'];
     expect($p['title'])->toBe('عباية كتان')
@@ -474,16 +498,61 @@ it('asks again once for an unknown link, then keeps what she wrote and records t
         ->and(ConversationNote::where('body', 'like', 'طلب استبدال:%')->sole()->body)->toStartWith('طلب استبدال: فستان ليلى (أسود / M) × 1 ← المنتج مش متحدد، العميلة كتبت:');
 });
 
-it('asks again for text without a link too', function () {
+it('asks again for a name the catalog does not know, then takes the link', function () {
     orfToLink();
 
     orfTurn('عايزة العباية الكتان');
-    expect(orfBot()->body)->toBe(ProductLinkStep::RETRY_TEXT);
+    expect(orfBot()->body)->toBe(ProductLinkStep::NOT_FOUND_TEXT);
 
     orfProduct();
     orfTurn('https://levoilestores.com/products/abaya-linen');
+    orfConfirmProduct('عباية كتان');
     expect(SupportCase::sole()->data['exchange_product']['title'])->toBe('عباية كتان')
         ->and(SupportCase::sole()->data)->not->toHaveKey('exchange_product_text');
+});
+
+it('finds the product by its typed name and confirms it as a card (2026-09-22)', function () {
+    orfProduct();
+    orfToLink();
+
+    orfTurn('عباية كتان');
+    orfConfirmProduct('عباية كتان');
+
+    expect(SupportCase::sole()->data['exchange_product']['handle'])->toBe('abaya-linen')
+        ->and(orfBot()->body)->toContain('تم تسجيل طلب الاستبدال بـ «عباية كتان»');
+});
+
+it('shows the catalog as picture cards and takes the tapped one without a second question (2026-09-22)', function () {
+    $product = orfProduct();
+    $order = orfOrder();
+    orfToGreeting();
+    orfTap('kind', 'exchange', 'استبدال');
+    orfTap('exchange_items', 'item:'.$order->items[0]->id);
+    orfTap('exchange_reason', 'size', 'المقاس');
+    expect(orfBot()->body)->toBe(ProductLinkStep::ASK_TEXT);
+
+    orfTap('exchange_product', 'browse', ProductLinkStep::BROWSE_BUTTON);
+    $cards = orfBot()->cards['cards'];
+    expect(orfBot()->body)->toStartWith(ProductLinkStep::BROWSE_TEXT)
+        ->and($cards[0]['title'])->toBe('عباية كتان')
+        ->and($cards[0]['image_url'])->toBe('https://cdn.example/abaya.jpg')
+        ->and($cards[0]['buttons'][0])->toBe(['type' => 'postback', 'title' => ProductLinkStep::PICK_BUTTON, 'payload' => 'step:return_exchange:exchange_product:product:'.$product->id]);
+
+    orfTap('exchange_product', 'product:'.$product->id, ProductLinkStep::PICK_BUTTON);
+
+    expect(SupportCase::sole()->data['exchange_product']['product_id'])->toBe($product->id)
+        ->and(orfBodies())->toContain(sprintf(ProductLinkStep::CONFIRMED_TEXT, 'عباية كتان'));
+});
+
+it('says no when the card is not the one she meant, and asks again', function () {
+    orfProduct();
+    orfToLink();
+
+    orfTurn('https://levoilestores.com/products/abaya-linen');
+    expect(orfBot()->body)->toBe(ProductLinkStep::CONFIRM_TEXT);
+
+    orfTap('exchange_product', 'no', ProductLinkStep::CONFIRM_NO);
+    expect(orfBot()->body)->toBe(ProductLinkStep::ASK_TEXT)->and(SupportCase::count())->toBe(0);
 });
 
 it('accepts a screenshot instead of the link', function () {
@@ -518,6 +587,7 @@ it('falls back to the store for a product that is not synced yet', function () {
     orfToLink();
 
     orfTurn('https://levoilestores.com/products/new-abaya');
+    orfConfirmProduct('عباية جديدة');
 
     $p = SupportCase::sole()->data['exchange_product'];
     expect($p['title'])->toBe('عباية جديدة')->and($p['price'])->toEqual(990)->and($p['source'])->toBe('shopify');
@@ -641,7 +711,10 @@ it('walks both branches in the designer sandbox and saves nothing', function () 
     $r = orfSandbox($r['state'], ['payload' => 'step:return_exchange:exchange_items:item:'.$order->items[0]->id]);
     $r = orfSandbox($r['state'], ['payload' => 'step:return_exchange:exchange_reason:color']);
     expect($r['current']['step_id'])->toBe('exchange_product');
+    $r = orfSandbox($r['state'], ['payload' => 'step:return_exchange:exchange_product:send']);
     $r = orfSandbox($r['state'], ['text' => 'https://levoilestores.com/products/abaya-linen?variant=4001']);
+    expect($texts($r))->toContain(ProductLinkStep::CONFIRM_TEXT);
+    $r = orfSandbox($r['state'], ['payload' => 'step:return_exchange:exchange_product:yes']);
     $case = collect($r['events'])->firstWhere('type', 'case');
     expect($case['label'])->toBe('هيتسجل حالة: استبدال')
         ->and($case['data']['exchange_product']['variant_title'])->toBe('بيج / S')

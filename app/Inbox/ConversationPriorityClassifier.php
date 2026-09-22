@@ -160,18 +160,27 @@ final class ConversationPriorityClassifier
     }
 
     /**
-     * The connected Shopify integration's shop domain (only a myshopify.com
-     * domain is stored; no primary/custom domain column exists yet).
+     * The connected Shopify integration's shop domain (myshopify.com) and the store's public
+     * domain from bot_settings.store_url.
      *
      * @return array<int, string>
      */
     private function storeDomains(): array
     {
         $integration = $this->integrations->current();
-
-        return $integration !== null && $integration->status === 'connected' && filled($integration->shop_domain)
+        $domains = $integration !== null && $integration->status === 'connected' && filled($integration->shop_domain)
             ? [(string) $integration->shop_domain]
             : [];
+
+        // The store's own domain (bot_settings.store_url, 2026-09-22): a customer pasting the
+        // product she wants in exchange from levoilestores.com is not spam.
+        $host = strtolower((string) (parse_url(BotSetting::current()->storeUrl(), PHP_URL_HOST) ?? ''));
+
+        if ($host !== '') {
+            $domains[] = preg_replace('/^www\./', '', $host);
+        }
+
+        return $domains;
     }
 
     /**
