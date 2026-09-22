@@ -39,6 +39,9 @@ final class ProductLinkStep extends BaseStep
 {
     public const ASK_TEXT = 'تحبي أعرضلك المنتجات هنا، ولا تبعتيلي لينك المنتج أو اسمه؟ 🌸';
 
+    /** Above ASK_TEXT when the pieces are known (owner, 2026-09-22): «تمام ✅ هنبدل «…». تحبي تبدلي بإيه؟». */
+    public const ASK_LEAD = "تمام ✅ هنبدل %s\nتحبي تبدلي بإيه؟";
+
     public const BROWSE_BUTTON = 'اعرضيلي المنتجات';
 
     public const SEND_BUTTON = 'هبعت لينك أو اسم';
@@ -188,7 +191,10 @@ final class ProductLinkStep extends BaseStep
 
     private function askMessage(array $state): array
     {
-        return ['text' => self::ASK_TEXT, 'buttons' => [$this->stepButton($state, self::BROWSE_BUTTON, 'browse'), $this->stepButton($state, self::SEND_BUTTON, 'send')]];
+        $items = FlowPrompter::itemsText($state['data']['selected_items'] ?? []);
+        $text = ($items !== '' ? sprintf(self::ASK_LEAD, '«'.$items.'»')."\n" : '').self::ASK_TEXT;
+
+        return ['text' => $text, 'buttons' => [$this->stepButton($state, self::BROWSE_BUTTON, 'browse'), $this->stepButton($state, self::SEND_BUTTON, 'send')]];
     }
 
     private function browse(array $state, array $step): StepOutcome

@@ -398,7 +398,7 @@ function orfToLink(): Order
 
     // 2026-09-22: with a catalog she is asked «أعرضلك المنتجات هنا ولا تبعتيلي لينك أو اسم؟» first.
     if (Product::query()->exists()) {
-        expect(orfBot()->body)->toBe(ProductLinkStep::ASK_TEXT)
+        expect(orfBot()->body)->toEndWith(ProductLinkStep::ASK_TEXT)
             ->and(orfButtons())->toBe([ProductLinkStep::BROWSE_BUTTON, ProductLinkStep::SEND_BUTTON]);
         orfTap('exchange_product', 'send', ProductLinkStep::SEND_BUTTON);
     }
@@ -529,7 +529,7 @@ it('shows the catalog as picture cards and takes the tapped one without a second
     orfTap('kind', 'exchange', 'استبدال');
     orfTap('exchange_items', 'item:'.$order->items[0]->id);
     orfTap('exchange_reason', 'size', 'المقاس');
-    expect(orfBot()->body)->toBe(ProductLinkStep::ASK_TEXT);
+    expect(orfBot()->body)->toEndWith(ProductLinkStep::ASK_TEXT);
 
     orfTap('exchange_product', 'browse', ProductLinkStep::BROWSE_BUTTON);
     $cards = orfBot()->cards['cards'];
@@ -552,7 +552,7 @@ it('says no when the card is not the one she meant, and asks again', function ()
     expect(orfBot()->body)->toBe(ProductLinkStep::CONFIRM_TEXT);
 
     orfTap('exchange_product', 'no', ProductLinkStep::CONFIRM_NO);
-    expect(orfBot()->body)->toBe(ProductLinkStep::ASK_TEXT)->and(SupportCase::count())->toBe(0);
+    expect(orfBot()->body)->toEndWith(ProductLinkStep::ASK_TEXT)->and(SupportCase::count())->toBe(0);
 });
 
 it('accepts a screenshot instead of the link', function () {

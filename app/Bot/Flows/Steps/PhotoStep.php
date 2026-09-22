@@ -19,7 +19,8 @@ final class PhotoStep extends BaseStep
 {
     /** She is telling us there is no photo, in either language. */
     private const SKIP_PHRASES = [
-        'مش معايا صوره', 'مش معايا صور', 'معنديش صوره', 'معنديش صور', 'مفيش صوره', 'مفيش صور',
+        // «مش معايا» / «معنديش» alone too: the exchange photo prompt tells her to type exactly that (2026-09-22).
+        'مش معايا', 'معنديش', 'مفيش صوره', 'مفيش صور', 'مش معايا صوره', 'مش معايا صور',
         'مش هبعت صوره', 'مش قادره ابعت صوره', 'من غير صوره', 'بعدين', 'تخطي',
         'no photo', 'no picture', 'no image', 'dont have a photo', 'do not have a photo',
         'dont have photo', 'havent got a photo', 'cant send a photo', 'cannot send a photo',

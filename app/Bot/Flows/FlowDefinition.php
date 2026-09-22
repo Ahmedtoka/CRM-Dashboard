@@ -33,6 +33,7 @@ final class FlowDefinition
     private const FLAGS = [
         'verify_owner' => ['order'],
         'return_rules' => ['order_items'],
+        'optional' => ['order_items'],
         'allow_text' => ['choice'],
         'photos' => ['text'],
     ];

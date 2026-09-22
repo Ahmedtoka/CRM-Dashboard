@@ -31,6 +31,10 @@ final class ReturnFlowUpgrade
 
     public const RETURN_DONE_TEXT = 'تمام ✅ تم تقديم طلب المرتجع بنجاح، ورقم طلبك هو نفس رقم الأوردر #{order_number}. هنتواصل معاكي أول ما المندوب يتحرك لاستلام المرتجع 🌸';
 
+    public const EXCHANGE_PHOTO_TEXT = 'صوّري القطعة وابعتيلي صورتها 📸 عشان الفريق يشوف العيب، ولو مش معاكي دلوقتي اكتبي «مش معايا»';
+
+    public const NOTE_2026_09_22 = 'فلو الاستبدال: صورة القطعة لو فيها عيب، واختيار المنتج البديل بالصور أو لينك أو اسم';
+
     public const EXCHANGE_DONE_TEXT = 'تمام ✅ تم تسجيل طلب الاستبدال بـ «{exchange_product_title}». هنتواصل معاكي لتأكيد الاستبدال والإرسال 🌸';
 
     public const LATE_TEXT = "الأوردر ده عدّى على استلامه أكتر من 14 يوم 🙏 والمرتجع والاستبدال عندنا خلال 14 يوم من الاستلام بس.\nلو تحبي، أحوّلك لحد من الفريق يساعدك.";
@@ -77,7 +81,11 @@ final class ReturnFlowUpgrade
                 ['value' => 'style', 'title' => 'الموديل', 'synonyms' => ['موديل', 'الموديل', 'الشكل', 'ستايل']],
                 ['value' => 'defective', 'title' => 'فيه عيب', 'synonyms' => ['عيب', 'بايظ', 'مقطوع', 'تالف', 'ديفوه']],
                 ['value' => 'other', 'title' => 'حاجة تانية', 'synonyms' => ['حاجة تانية', 'تاني', 'غير كده']],
+            ], 'branches' => [
+                // A defect (owner, 2026-09-22): a photo of the piece first — «مش معايا» moves on.
+                ['field' => 'reason', 'in' => ['defective'], 'next' => 'exchange_photo'],
             ], 'next' => 'exchange_product'],
+            'exchange_photo' => ['type' => 'photo', 'field' => 'product_photo', 'text' => self::EXCHANGE_PHOTO_TEXT, 'next' => 'exchange_product'],
             'exchange_product' => ['type' => 'product_link', 'field' => 'exchange_product', 'text' => 'ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع 🔗 (من levoilestores.com)', 'next' => 'record_exchange'],
             'record_exchange' => ['type' => 'record_case', 'case_type' => 'exchange', 'text' => self::EXCHANGE_DONE_TEXT, 'next' => 'end'],
         ]];

@@ -326,6 +326,10 @@ it('walks every complaint type', function (string $type, string $opener, bool $e
     if (in_array($type, ['delivery', 'product'], true)) {
         walkTurn('1047');
         walkTurn('4567');
+
+        // 2026-09-22: the verified order's pieces as cards — she picks the one the complaint is about.
+        expect(walkFlow()['step'])->toBe('complaint_items');
+        walkTap(1);
     }
 
     if (walkFlow()['step'] === 'contact') {

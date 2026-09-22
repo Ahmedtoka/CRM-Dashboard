@@ -6,6 +6,7 @@ use App\Bot\Catalog\ProductCards;
 use App\Bot\Flow\Orders\OrderStatusText;
 use App\Bot\Flows\FlowAnswerResolver;
 use App\Bot\Flows\FlowPrompter;
+use App\Bot\Flows\OwnerFlowsUpgrade;
 use App\Bot\Flows\Returns\ItemSelection;
 use App\Bot\Flows\Returns\ReturnItems;
 use App\Bot\Language\KeptNames;
@@ -124,6 +125,12 @@ final class OrderItemsStep extends BaseStep
     /** `return_rules: false` on the step being handled (set by every entry point). */
     private bool $plain = false;
 
+    /** `optional: true`: she may continue without picking (the complaint's pieces, 2026-09-22). */
+    private bool $optional = false;
+
+    /** `pick_button`: the card button's own words («الشكوى عن دي»). */
+    private ?string $pickButton = null;
+
     public function __construct(
         FlowPrompter $prompter,
         private readonly ReturnItems $items,
@@ -135,8 +142,13 @@ final class OrderItemsStep extends BaseStep
 
     public function enter(Conversation $c, array $state, array $step): StepOutcome
     {
-        $this->plain = self::isPlain($step);
+        $this->configure($step);
         $order = $this->order($state['data']);
+
+        // An optional picker with nothing to show (no synced pieces) is simply passed.
+        if ($this->optional && ($order === null || $order->items->isEmpty())) {
+            return StepOutcome::continue(['selected_items' => [], 'items_pending' => null]);
+        }
 
         if ($order === null || $order->items->isEmpty()) {
             return StepOutcome::wait([['text' => $this->fallbackText()]], 0, ['items_pending' => ['mode' => 'fallback'], 'selected_items' => null]);
@@ -151,6 +163,14 @@ final class OrderItemsStep extends BaseStep
         return ($step['return_rules'] ?? true) === false;
     }
 
+    /** Reads the step's switches once per entry point. */
+    private function configure(array $step): void
+    {
+        $this->plain = self::isPlain($step);
+        $this->optional = ($step['optional'] ?? false) === true;
+        $this->pickButton = is_string($step['pick_button'] ?? null) && trim($step['pick_button']) !== '' ? trim($step['pick_button']) : null;
+    }
+
     private function fallbackText(): string
     {
         return $this->plain ? self::PLAIN_FALLBACK_TEXT : self::FALLBACK_TEXT;
@@ -158,7 +178,7 @@ final class OrderItemsStep extends BaseStep
 
     public function prompt(array $state, array $step): array
     {
-        $this->plain = self::isPlain($step);
+        $this->configure($step);
         $pending = $this->pending($state['data']);
         $order = $this->order($state['data']);
 
@@ -177,7 +197,7 @@ final class OrderItemsStep extends BaseStep
 
     public function answer(Conversation $c, array $state, array $step, string $text, Collection $burst): ?StepOutcome
     {
-        $this->plain = self::isPlain($step);
+        $this->configure($step);
         $text = trim($text);
         $pending = $this->pending($state['data']);
         $order = $this->order($state['data']);
@@ -235,7 +255,7 @@ final class OrderItemsStep extends BaseStep
 
     public function payload(Conversation $c, array $state, array $step, string $value): ?StepOutcome
     {
-        $this->plain = self::isPlain($step);
+        $this->configure($step);
         $order = $this->order($state['data']);
         $pending = $this->pending($state['data']);
 
@@ -510,6 +530,11 @@ final class OrderItemsStep extends BaseStep
     /** @param  list<array<string, mixed>>  $selected */
     private function finish(array $state, array $selected, array $messages = []): StepOutcome
     {
+        // `optional: true` (the complaint's pieces, 2026-09-22): nothing picked is an answer too.
+        if ($selected === [] && $this->optional) {
+            return StepOutcome::continue(['selected_items' => [], 'items_pending' => null], $messages);
+        }
+
         if ($selected === []) {
             return StepOutcome::end([...$messages, ['text' => self::NOTHING_TEXT, 'buttons' => [FlowPrompter::MAIN_MENU_BUTTON]]]);
         }
@@ -573,6 +598,7 @@ final class OrderItemsStep extends BaseStep
         }
 
         $pick = match (true) {
+            $this->pickButton !== null => $this->pickButton,
             $this->plain => self::PICK_BUTTON_EDIT,
             $this->kind($state) === 'exchange' => self::PICK_BUTTON_EXCHANGE,
             $this->kind($state) === 'return' => self::PICK_BUTTON_RETURN,
@@ -652,6 +678,10 @@ final class OrderItemsStep extends BaseStep
 
         if ($items->count() > 2 && $items->count() <= self::MAX_ITEM_BUTTONS) {
             $buttons[] = $this->stepButton($state, self::MULTI_BUTTON, 'multi');
+        }
+
+        if ($this->optional && ! $openOnly) {
+            $buttons[] = $this->stepButton($state, OwnerFlowsUpgrade::COMPLAINT_SKIP_BUTTON, 'done');
         }
 
         return $buttons;

@@ -61,6 +61,14 @@ final class OwnerFlowsUpgrade
 
     public const VISIT_DATE_TEXT = 'كانت الزيارة إمتى تقريبًا؟';
 
+    public const COMPLAINT_ITEMS_TEXT = 'الشكوى بخصوص أنهي قطعة؟ 👇 ولو على الأوردر كله اضغطي الزرار الأخير';
+
+    public const COMPLAINT_PICK_BUTTON = 'الشكوى عن دي';
+
+    public const COMPLAINT_SKIP_BUTTON = 'كل الأوردر';
+
+    public const NOTE_2026_09_22 = 'فلو الشكوى: قطع الأوردر بالصور بعد التأكد من الأوردر';
+
     public const DESCRIPTION_TEXT = 'احكيلي حصل إيه بالتفصيل عشان نقدر نساعد حضرتك 🙏 (ولو فيه صورة ابعتيها)';
 
     public const COMPLAINT_DONE_TEXT = 'تمام ✅ سجلت الشكوى رقم #{case_id}، والفريق هيتواصل معاكي في أقرب وقت 🌸';
@@ -141,7 +149,11 @@ final class OwnerFlowsUpgrade
                 ['value' => 'yesterday', 'title' => 'امبارح', 'synonyms' => ['امبارح', 'امبارحه', 'امس', 'yesterday']],
                 ['value' => 'days_ago', 'title' => 'من كام يوم', 'synonyms' => ['من كام يوم', 'من يومين', 'من كذا يوم']],
             ], 'next' => 'contact'],
-            'order' => ['type' => 'order', 'field' => 'order', 'text' => self::ASK_ORDER_TEXT, 'verify_owner' => true, 'next' => 'contact'],
+            'order' => ['type' => 'order', 'field' => 'order', 'text' => self::ASK_ORDER_TEXT, 'verify_owner' => true, 'branches' => [
+                // The order's pieces as cards (owner, 2026-09-22): which one the complaint is about; she may skip.
+                ['field' => 'order_verified', 'in' => [true], 'next' => 'complaint_items'],
+            ], 'next' => 'contact'],
+            'complaint_items' => ['type' => 'order_items', 'text' => self::COMPLAINT_ITEMS_TEXT, 'return_rules' => false, 'optional' => true, 'pick_button' => self::COMPLAINT_PICK_BUTTON, 'next' => 'contact'],
             // Skipped when the order above proved who she is (its name and mobile are used).
             'contact' => ['type' => 'contact', 'next' => 'description'],
             'description' => ['type' => 'text', 'field' => 'description', 'text' => self::DESCRIPTION_TEXT, 'photos' => true, 'next' => 'record'],
