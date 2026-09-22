@@ -38,6 +38,7 @@ use App\Models\BotSetting;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\MessageAttachment;
+use App\Models\SupportCase;
 use App\Models\User;
 use App\Support\SafeBroadcast;
 use Illuminate\Database\Eloquent\Builder;
@@ -587,13 +588,23 @@ class BotEngine
             ->count();
     }
 
+    /**
+     * The runs the turn limit counts: since a person last wrote, since the last request the bot
+     * recorded (a case is a resolution, not a loop), and only within the last
+     * `crm.bot.turn_limit_minutes` (2026-09-22: the owner's Messenger test conversation, with
+     * no staff reply for days, hit the limit on a button tap and was handed over mid-flow).
+     */
     private function runsSinceLastHuman(Conversation $c): Builder
     {
-        $lastHumanAt = $c->messages()->where('sender_type', SenderType::User->value)->latest('id')->value('created_at');
+        $since = collect([
+            $c->messages()->where('sender_type', SenderType::User->value)->latest('id')->value('created_at'),
+            SupportCase::query()->where('conversation_id', $c->id)->latest('id')->value('created_at'),
+            now()->subMinutes(max(1, (int) config('crm.bot.turn_limit_minutes', 120))),
+        ])->filter()->max();
 
         return BotRun::query()
             ->where('conversation_id', $c->id)
-            ->when($lastHumanAt, fn ($q) => $q->where('created_at', '>', $lastHumanAt));
+            ->where('created_at', '>', $since);
     }
 
     /**

@@ -32,6 +32,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Shipment;
+use App\Models\SupportCase;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -1301,6 +1302,24 @@ it('still hands over at the turn limit counted in agent turns', function () {
     say('m3', 'التوصيل بياخد كام يوم؟');
     expect(Conversation::first()->handler)->toBe(Handler::Human)
         ->and(BotRun::latest('id')->value('engine'))->toBe('limit');
+});
+
+it('counts the turn limit within a sitting only: old turns and turns before a recorded case are forgotten', function () {
+    BotSetting::current()->update(['max_bot_turns' => 2]);
+
+    say('m1', 'التوصيل بياخد كام يوم؟');
+    say('m2', 'والشحن خارج مصر؟');
+    // The owner's Messenger test conversation (2026-09-22): a day of turns, no staff reply, then a tap → handover.
+    BotRun::query()->update(['created_at' => now()->subHours(3)]);
+
+    say('m3', 'التوصيل بياخد كام يوم؟');
+    expect(Conversation::first()->handler)->toBe(Handler::Bot);
+
+    say('m4', 'والشحن خارج مصر؟');
+    SupportCase::factory()->create(['conversation_id' => Conversation::first()->id]);
+
+    say('m5', 'التوصيل بياخد كام يوم؟');
+    expect(Conversation::first()->handler)->toBe(Handler::Bot);
 });
 
 it('runs a lookup without a flow and does not start the flow of another intent in the same burst', function () {

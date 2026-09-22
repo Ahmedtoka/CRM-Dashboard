@@ -215,6 +215,10 @@ return [
         // «لسه بدور» when the store takes longer than this to answer a product-link lookup.
         'product_lookup_notice_seconds' => (int) env('CRM_BOT_PRODUCT_LOOKUP_NOTICE_SECONDS', 6),
 
+        // The turn limit (bot_settings.max_bot_turns) counts bot turns within this many minutes only:
+        // a loop happens in one sitting, not across days of an unanswered conversation.
+        'turn_limit_minutes' => (int) env('CRM_BOT_TURN_LIMIT_MINUTES', 120),
+
         // The store agent (2026-09-22): free text outside the flows is answered by one Claude
         // conversation with tools (catalog, orders, branches, shipping) over the owner's knowledge.
         'agent' => [
