@@ -164,6 +164,8 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
 
         // Every reply the bot can give, on one page (owner, 2026-09-22).
         Route::get('bot-replies', [BotReplyController::class, 'index'])->name('bot-replies.index');
+        Route::put('bot-replies/text', [BotReplyController::class, 'updateText'])->name('bot-replies.text.update');
+        Route::delete('bot-replies/text', [BotReplyController::class, 'resetText'])->name('bot-replies.text.reset');
 
         Route::get('bot-knowledge', [BotKnowledgeController::class, 'index'])->name('bot-knowledge.index');
         Route::post('bot-knowledge/entries', [BotKnowledgeController::class, 'storeEntry'])->name('bot-knowledge.entries.store');

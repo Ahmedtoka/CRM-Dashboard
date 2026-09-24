@@ -18,7 +18,7 @@ use Illuminate\Support\Collection;
  *  - Both known on her profile (the channel's name, the phone from WhatsApp or Shopify):
  *    «هنتواصل مع حضرتك باسم «سارة» على رقم 0106•••6611 — تمام كده؟» [أيوه تمام] [رقم تاني];
  *    «رقم تاني» asks for the mobile only.
- *  - Otherwise one question for both: «… ابعتيلي اسمك ورقم موبايلك في رسالة واحدة (مثلاً: سارة 01012345678)»;
+ *  - Otherwise one question for both: «ممكن اسم حضرتك ورقم الموبايل اللي نتواصل عليه؟» (owner's wording, 2026-09-24);
  *    the name and the Egyptian mobile (Arabic digits too) are read from that one message, and
  *    only the missing one is asked for next.
  *
@@ -28,7 +28,7 @@ final class ContactStep extends BaseStep
 {
     public const CONFIRM_TEXT = 'هنتواصل مع حضرتك باسم «%s» على رقم %s — تمام كده؟';
 
-    public const ASK_BOTH_TEXT = 'عشان الفريق يقدر يتواصل مع حضرتك 🌸 ابعتيلي اسمك ورقم موبايلك في رسالة واحدة (مثلاً: سارة 01012345678)';
+    public const ASK_BOTH_TEXT = 'ممكن اسم حضرتك ورقم الموبايل اللي نتواصل عليه؟ 🌸';
 
     public const ASK_NAME_TEXT = 'تمام 🌸 وممكن اسم حضرتك؟';
 

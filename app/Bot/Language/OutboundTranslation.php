@@ -18,6 +18,7 @@ final class OutboundTranslation
     public function __construct(
         private readonly BotTranslator $translator,
         private readonly ConversationLanguage $language,
+        private readonly ArabicOverrides $overrides,
     ) {}
 
     /**
@@ -27,10 +28,6 @@ final class OutboundTranslation
     public function apply(Conversation $c, string $body, array $buttons = [], ?array $cards = null): array
     {
         $locale = $this->language->of($c);
-
-        if ($locale === LanguageDetector::AR) {
-            return [$body, $buttons, $cards];
-        }
 
         // One collected list, so a whole message costs one engine call.
         $texts = [$body];
@@ -70,7 +67,9 @@ final class OutboundTranslation
             }
         }
 
-        $done = $this->translator->many($texts, $locale, 'outbound', $short);
+        // The owner's own wording first (ArabicOverrides, 2026-09-24), then the language.
+        $texts = array_map(fn (string $t) => $this->overrides->apply($t), $texts);
+        $done = $locale === LanguageDetector::AR ? $texts : $this->translator->many($texts, $locale, 'outbound', $short);
 
         foreach ($slots as $k => $slot) {
             $value = $done[$k] ?? $texts[$k];

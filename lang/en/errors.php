@@ -118,4 +118,7 @@ return [
         'date_range_invalid' => 'The end date must be on or after the start date.',
     ],
 
+    'bot_replies' => [
+        'values_missing' => 'The new sentence must keep the numbers, names and links of the original',
+    ],
 ];

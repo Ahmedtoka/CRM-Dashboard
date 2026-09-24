@@ -18,9 +18,11 @@ interface ReplyRow {
     when: string;
     reply: string;
     buttons: string[];
-    source: 'entry' | 'flow' | 'rule';
+    source: 'entry' | 'flow' | 'rule' | 'text';
+    original?: string | null;
     entry_id: number | null;
     key: string;
+    raw?: string;
     active: boolean;
     edit_url: string | null;
 }
@@ -57,14 +59,29 @@ const visible = computed(() =>
 
 const total = computed(() => visible.value.reduce((n, s) => n + s.rows.length, 0));
 
+/** «رجّعي الأصل»: drops the owner's wording of a code sentence. */
+async function reset(source: string): Promise<void> {
+    busy.value = true;
+    error.value = null;
+    try {
+        await api.delete('/settings/bot-replies/text', { data: { source } });
+        toast.push(t('settings.bot_replies.saved'));
+        router.reload({ only: ['sections'] });
+    } catch (e) {
+        error.value = apiErrorMessage(e, t('common.error'));
+    } finally {
+        busy.value = false;
+    }
+}
+
 function edit(id: string, body: string): void {
     editingId.value = id;
     draft.value = body;
     error.value = null;
 }
 
-async function save(entryId: number | null, original: string): Promise<void> {
-    if (entryId === null || draft.value.trim() === '' || draft.value === original) {
+async function save(entryId: number | null, original: string, source?: string): Promise<void> {
+    if ((entryId === null && !source) || draft.value.trim() === '' || draft.value === original) {
         editingId.value = null;
         return;
     }
@@ -72,7 +89,8 @@ async function save(entryId: number | null, original: string): Promise<void> {
     busy.value = true;
     error.value = null;
     try {
-        await api.put(`/settings/bot-knowledge/entries/${entryId}`, { body: draft.value });
+        if (source) await api.put('/settings/bot-replies/text', { source, text: draft.value });
+        else await api.put(`/settings/bot-knowledge/entries/${entryId}`, { body: draft.value });
         toast.push(t('settings.bot_replies.saved'));
         editingId.value = null;
         router.reload({ only: ['sections', 'agent'] });
@@ -151,9 +169,10 @@ async function save(entryId: number | null, original: string): Promise<void> {
                         <p class="text-2xs font-semibold text-muted-foreground">{{ t('settings.bot_replies.reply') }}</p>
                         <template v-if="editingId === row.id">
                             <textarea v-model="draft" dir="auto" rows="5" maxlength="5000" class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                            <p v-if="row.source === 'text' && row.key.includes('⟦')" class="text-2xs text-muted-foreground">{{ t('settings.bot_replies.values_hint') }}</p>
                             <p v-if="error" role="alert" class="text-xs text-destructive">{{ error }}</p>
                             <div class="mt-1 flex gap-2">
-                                <button type="button" class="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50" :disabled="busy" @click="save(row.entry_id, row.reply)">
+                                <button type="button" class="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50" :disabled="busy" @click="save(row.entry_id, row.reply, row.source === 'text' ? row.raw : undefined)">
                                     {{ t('settings.bot_replies.save') }}
                                 </button>
                                 <button type="button" class="h-8 rounded-md border border-input px-3 text-xs" :disabled="busy" @click="editingId = null">{{ t('settings.bot_replies.cancel') }}</button>
@@ -161,6 +180,7 @@ async function save(entryId: number | null, original: string): Promise<void> {
                         </template>
                         <template v-else>
                             <p class="text-sm break-words whitespace-pre-line text-foreground" dir="auto">{{ row.reply }}</p>
+                            <p v-if="row.original" class="mt-1 text-2xs text-muted-foreground" dir="auto">{{ t('settings.bot_replies.original') }}: {{ row.original }}</p>
                             <p v-if="row.buttons.length" class="mt-1.5 flex flex-wrap gap-1" :aria-label="t('settings.bot_replies.buttons')">
                                 <span v-for="(b, i) in row.buttons" :key="i" class="rounded-full border border-border px-2 py-0.5 text-2xs text-muted-foreground" dir="auto">{{ b }}</span>
                             </p>
@@ -168,9 +188,14 @@ async function save(entryId: number | null, original: string): Promise<void> {
                     </div>
 
                     <div class="flex items-start justify-end">
-                        <button v-if="row.source === 'entry' && editingId !== row.id" type="button" class="inline-flex h-7 items-center gap-1 rounded-md border border-input px-2 text-xs" @click="edit(row.id, row.reply)">
-                            <Pencil class="size-3" aria-hidden="true" />{{ t('settings.bot_replies.edit') }}
-                        </button>
+                        <div v-if="(row.source === 'entry' || row.source === 'text') && editingId !== row.id" class="flex flex-col items-end gap-1">
+                            <button type="button" class="inline-flex h-7 items-center gap-1 rounded-md border border-input px-2 text-xs" @click="edit(row.id, row.reply)">
+                                <Pencil class="size-3" aria-hidden="true" />{{ t('settings.bot_replies.edit') }}
+                            </button>
+                            <button v-if="row.original" type="button" class="inline-flex h-7 items-center rounded-md border border-input px-2 text-xs text-muted-foreground" :disabled="busy" @click="reset(row.raw ?? row.key)">
+                                {{ t('settings.bot_replies.reset') }}
+                            </button>
+                        </div>
                         <Link v-else-if="row.edit_url" :href="row.edit_url" class="inline-flex h-7 items-center gap-1 rounded-md border border-input px-2 text-xs">
                             <ExternalLink class="size-3" aria-hidden="true" />{{ t('settings.bot_replies.open_editor') }}
                         </Link>

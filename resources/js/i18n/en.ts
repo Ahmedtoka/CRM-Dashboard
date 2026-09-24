@@ -1430,7 +1430,12 @@ const en: Messages = {
                 flow_sentences: 'Fixed sentences inside the flows',
                 handover: 'Handover to a person and waiting',
                 rules: 'Keyword rules (they answer before the agent)',
+                steps: 'Step sentences (written in code — edit them here)',
+                status_words: 'Order status words and delivery estimates',
             },
+            original: 'Original',
+            reset: 'Restore original',
+            values_hint: 'The numbers, names and links in the sentence are filled in automatically — keep them as they are',
         },
         bot_knowledge: {
             title: 'Bot knowledge & policies',

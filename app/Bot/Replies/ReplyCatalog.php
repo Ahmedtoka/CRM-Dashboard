@@ -4,6 +4,9 @@ namespace App\Bot\Replies;
 
 use App\Bot\Agent\StoreAgent;
 use App\Bot\Flows\FlowLabels;
+use App\Bot\Language\ArabicOverrides;
+use App\Bot\Language\TranslationMask;
+use App\Bot\Language\TranslationSources;
 use App\Models\BotFlow;
 use App\Models\BotIntent;
 use App\Models\BotKnowledgeEntry;
@@ -21,7 +24,29 @@ use Illuminate\Support\Collection;
  */
 class ReplyCatalog
 {
-    public const SECTIONS = ['agent', 'greeting', 'questions', 'facts', 'products', 'flows', 'flow_sentences', 'handover', 'rules'];
+    public function __construct(private readonly ArabicOverrides $overrides, private readonly TranslationMask $mask) {}
+
+    public const SECTIONS = ['agent', 'greeting', 'questions', 'facts', 'products', 'flows', 'flow_sentences', 'handover', 'rules', 'steps', 'status_words'];
+
+    /** The step classes whose sentences are listed under «جمل الخطوات», with what each step is. */
+    private const STEP_LABELS = [
+        'ContactStep' => ['الاسم ورقم الموبايل', 'Name and mobile'],
+        'OrderStep' => ['رقم الأوردر والتأكد منه', 'Order number and verification'],
+        'OrderItemsStep' => ['اختيار قطع الأوردر', 'Picking the order\'s pieces'],
+        'ProductLinkStep' => ['المنتج البديل', 'The replacement product'],
+        'PhotoStep' => ['طلب الصورة', 'Asking for a photo'],
+        'ItemChangesStep' => ['تعديل القطع', 'Changing pieces'],
+        'StatusStep' => ['كارت حالة الأوردر', 'Order status card'],
+        'AreaStep' => ['اختيار المنطقة', 'Picking the area'],
+        'BranchStep' => ['اختيار الفرع', 'Picking the branch'],
+        'BranchesListStep' => ['عرض الفروع', 'Listing branches'],
+        'HumanHandover' => ['التحويل لموظف', 'Handover to a person'],
+        'FlowEngine' => ['جمل عامة في الفلوهات', 'General flow sentences'],
+        'FlowPrompter' => ['جمل عامة', 'General sentences'],
+        'FlowLabels' => ['أسماء الفلوهات', 'Flow names'],
+        'OrderStatusText' => ['كلمات حالة الأوردر', 'Order status words'],
+        'DeliveryEstimate' => ['مواعيد التوصيل', 'Delivery estimates'],
+    ];
 
     /** When a wording script is said, by key prefix or exact key (Arabic, shown to the owner). */
     private const WHEN = [
@@ -177,6 +202,34 @@ class ReplyCatalog
             ]);
         }
 
+        // 5. The sentences written in code (steps, handover, status words): shown with the owner's
+        //    override when she rewrote one (ArabicOverrides, 2026-09-24).
+        foreach (TranslationSources::all() as $source) {
+            [$class, $constant] = array_pad(explode('::', $source['context'], 2), 2, '');
+
+            if ($constant === '' || ! isset(self::STEP_LABELS[$class])) {
+                continue;
+            }
+
+            // Keyed by the masked source, like the override rows themselves.
+            $masked = $this->mask->mask($source['text'])[0];
+            $override = $this->overrides->display($source['text']);
+            $rows->push([
+                'id' => 'text:'.md5($masked),
+                'section' => in_array($class, ['OrderStatusText', 'DeliveryEstimate'], true) ? 'status_words' : 'steps',
+                'when' => $this->l(self::STEP_LABELS[$class][0], self::STEP_LABELS[$class][1]).' — '.$this->constantHint($constant),
+                'reply' => $override ?? $source['text'],
+                'original' => $override !== null ? $source['text'] : null,
+                'buttons' => [],
+                'source' => 'text',
+                'entry_id' => null,
+                'key' => $masked,
+                'raw' => $source['text'],
+                'active' => true,
+                'edit_url' => null,
+            ]);
+        }
+
         $instructions = $entries->firstWhere('key', StoreAgent::INSTRUCTIONS_KEY);
 
         return [
@@ -217,6 +270,12 @@ class ReplyCatalog
         }
 
         return null;
+    }
+
+    /** «ASK_BOTH_TEXT» → «ask both text»: readable enough next to the sentence itself. */
+    private function constantHint(string $constant): string
+    {
+        return mb_strtolower(str_replace('_', ' ', preg_replace('/_(TEXT|BUTTON|QUESTION|LINES?|LABELS?)$/', '', $constant) ?? $constant));
     }
 
     /** The dashboard language: Arabic wording in ع, English in EN. */

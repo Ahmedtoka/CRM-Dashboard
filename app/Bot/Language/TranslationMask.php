@@ -17,9 +17,9 @@ namespace App\Bot\Language;
  */
 final class TranslationMask
 {
-    private const OPEN = '⟦';
+    public const OPEN = '⟦';
 
-    private const CLOSE = '⟧';
+    public const CLOSE = '⟧';
 
     /**
      * One pass, alternation in priority order: links, e-mail, `{placeholder}`, `%s`,
