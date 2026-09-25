@@ -59,11 +59,13 @@ const en: Messages = {
         blocked_by_facebook: 'Connect the Facebook page first',
         open: 'Open',
         connect: 'Connect',
+        start: 'Start',
         skip: 'Skip for now',
         skip_hint: 'It will no longer open by itself after login; it stays in the menu',
         resume: 'Open it by itself again',
         go_inbox: 'Open the inbox',
         all_done: 'Everything is connected 🎉 the system is ready for customers',
+        required_done: 'The essentials are ready ✅ the system can take customers now; the remaining steps complete the picture.',
         steps: {
             facebook: { title: 'Connect the Facebook page', text: 'Messenger messages and page comments arrive here. Sign in with the Facebook account that owns the page and pick it.' },
             instagram: { title: 'Connect Instagram', text: 'The Instagram business account linked to the page: messages and comments on posts and ads.' },

@@ -38,6 +38,9 @@ const icons = { facebook: Facebook, instagram: Instagram, whatsapp: MessageCircl
 const colors = { facebook: '#0866FF', instagram: '#E1306C', whatsapp: '#25D366', shopify: '#96BF48', store_info: '#7C3AED', bot: '#0EA5E9', test_link: '#F59E0B' } as const;
 
 const next = computed(() => props.progress.steps.find((s) => !s.done && !s.blocked_by) ?? null);
+const allDone = computed(() => props.progress.done === props.progress.total);
+const connectKeys = ['facebook', 'instagram', 'whatsapp', 'shopify'];
+const ctaLabel = (step: Step) => (step.done ? t('onboarding.open') : connectKeys.includes(step.key) ? t('onboarding.connect') : t('onboarding.start'));
 
 function detailOf(step: Step): string | null {
     if (!step.detail) return null;
@@ -73,7 +76,8 @@ const breadcrumbs = computed(() => [{ title: t('onboarding.title'), href: '/onbo
                         <div class="h-full rounded-full bg-primary transition-all" :style="{ width: `${progress.percent}%` }" />
                     </div>
                 </div>
-                <p v-if="progress.complete" class="rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">{{ t('onboarding.all_done') }}</p>
+                <p v-if="allDone" class="rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">{{ t('onboarding.all_done') }}</p>
+                <p v-else-if="progress.complete" class="rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">{{ t('onboarding.required_done') }}</p>
             </header>
 
             <ol class="space-y-3">
@@ -107,7 +111,7 @@ const breadcrumbs = computed(() => [{ title: t('onboarding.title'), href: '/onbo
                                 {{ t('onboarding.connect') }}
                             </a>
                             <Link v-else-if="!step.blocked_by" :href="step.href" :class="cn(buttonVariants({ variant: step.done ? 'outline' : 'default', size: 'sm' }))">
-                                {{ step.done ? t('onboarding.open') : t('onboarding.connect') }}
+                                {{ ctaLabel(step) }}
                             </Link>
                         </div>
                     </div>
@@ -119,8 +123,8 @@ const breadcrumbs = computed(() => [{ title: t('onboarding.title'), href: '/onbo
                     <template v-if="!progress.dismissed">{{ t('onboarding.skip_hint') }}</template>
                 </div>
                 <div class="flex gap-2">
-                    <button v-if="!progress.dismissed && !progress.complete" type="button" :class="cn(buttonVariants({ variant: 'ghost', size: 'sm' }))" @click="skip">{{ t('onboarding.skip') }}</button>
-                    <button v-else-if="progress.dismissed && !progress.complete" type="button" :class="cn(buttonVariants({ variant: 'ghost', size: 'sm' }))" @click="resume">{{ t('onboarding.resume') }}</button>
+                    <button v-if="!progress.dismissed && !allDone" type="button" :class="cn(buttonVariants({ variant: 'ghost', size: 'sm' }))" @click="skip">{{ t('onboarding.skip') }}</button>
+                    <button v-else-if="progress.dismissed && !allDone" type="button" :class="cn(buttonVariants({ variant: 'ghost', size: 'sm' }))" @click="resume">{{ t('onboarding.resume') }}</button>
                     <Link href="/inbox" :class="cn(buttonVariants({ size: 'sm' }))">{{ t('onboarding.go_inbox') }}</Link>
                 </div>
             </footer>
