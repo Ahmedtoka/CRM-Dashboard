@@ -80,6 +80,7 @@ class InboxIngestor
                 );
 
                 $conversation = $this->openConversationFor($identity, $account);
+                $opened = $conversation->wasRecentlyCreated;
 
                 $message = $conversation->messages()->create([
                     'platform' => $d->platform,
@@ -114,6 +115,11 @@ class InboxIngestor
                 $identity->customer->forceFill(['last_contact_at' => now()])->save();
 
                 $this->logger->log(ActorType::System, null, ActivityLogger::MESSAGE_RECEIVED, $message, $conversation);
+
+                // Which ad or link she came through (2026-09-25): kept on the conversation, first touch wins.
+                if ($d->referral !== null) {
+                    app(AdAttribution::class)->apply($conversation, $d->referral, $opened);
+                }
 
                 return [$message, $conversation, $pendingAttachments];
             });
@@ -262,6 +268,11 @@ class InboxIngestor
     {
         // Spam never reaches the bot and never flips needs_human (spec §11.1).
         if ($message->is_spam) {
+            return;
+        }
+
+        // A `messaging_referrals` event on its own (she opened the thread from an ad, said nothing yet).
+        if (trim((string) $message->body) === '' && empty($message->attachments) && str_starts_with((string) $message->external_id, 'referral:')) {
             return;
         }
 

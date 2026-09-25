@@ -47,5 +47,7 @@
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="CRM_OUTBOUND_ORDER_WAIT" value="0"/>
+        <env name="APP_LOCALE" value="ar"/>
+        <env name="APP_FALLBACK_LOCALE" value="en"/>
     </php>
 </phpunit>

@@ -20,5 +20,7 @@ final readonly class InboundMessageData
         public ?string $customerAvatar = null,
         public ?string $customerPhone = null,
         public ?string $payload = null,
+        /** The ad / link the message came through (Messenger and Instagram `referral`, 2026-09-25). */
+        public ?AdReferralData $referral = null,
     ) {}
 }

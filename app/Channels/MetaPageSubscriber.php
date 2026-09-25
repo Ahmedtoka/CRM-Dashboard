@@ -16,7 +16,8 @@ use App\Models\ChannelAccount;
  */
 class MetaPageSubscriber
 {
-    public const FIELDS = 'messages,messaging_postbacks,message_deliveries,message_reads,feed';
+    /** `messaging_referrals` (2026-09-25): which ad or m.me link a conversation came through. */
+    public const FIELDS = 'messages,messaging_postbacks,messaging_referrals,message_deliveries,message_reads,feed';
 
     public function __construct(private readonly MetaGraphClient $graph) {}
 

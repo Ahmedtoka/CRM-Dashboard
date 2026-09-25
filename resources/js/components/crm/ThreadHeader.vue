@@ -44,6 +44,14 @@ const busy = computed(() => props.busyAction !== null);
 const headerBg = computed(() => skinClasses(props.skin).header);
 const ghostIcon = cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'rounded-full');
 
+const adTooltip = computed(() => {
+    const ad = props.conversation.ad;
+    if (!ad) return '';
+    return [ad.campaign && `${t('thread.ad_campaign')}: ${ad.campaign}`, ad.adset && `${t('thread.ad_adset')}: ${ad.adset}`, ad.name && `${t('thread.ad_name')}: ${ad.name}`, ad.ref && `ref: ${ad.ref}`]
+        .filter(Boolean)
+        .join('\n');
+});
+
 const tagsOpen = ref(false);
 const hint = (id: string) => {
     const key = shortcutHint(id);
@@ -99,8 +107,17 @@ defineExpose({ openTags: () => (tagsOpen.value = true) });
                 <StatusChip v-else :label="conversation.handler === 'bot' ? `🤖 ${t('thread.handler_bot')}` : t('thread.handler_human')" :tone="conversation.handler === 'bot' ? 'info' : 'neutral'" />
                 <StatusChip v-if="conversation.priority === 'spam'" :label="t('thread.priority_spam')" tone="negative" />
                 <StatusChip v-else-if="conversation.priority === 'low'" :label="t('thread.priority_low')" tone="neutral" />
+                <!-- Which ad she came from (2026-09-25): the ad's title, the campaign on hover. -->
                 <span
-                    v-if="conversation.source === 'comment' || conversation.source === 'ad'"
+                    v-if="conversation.ad"
+                    class="hidden max-w-56 shrink-0 truncate rounded-full bg-amber-500/15 px-2 py-0.5 text-2xs text-amber-800 lg:inline dark:text-amber-200"
+                    :title="adTooltip"
+                    dir="auto"
+                >
+                    📣 {{ conversation.ad.title || conversation.ad.name || (conversation.ad.ref ? t('thread.source_link') : t('thread.source_ad')) }}
+                </span>
+                <span
+                    v-else-if="conversation.source === 'comment' || conversation.source === 'ad'"
                     class="hidden shrink-0 rounded-full bg-elevated px-2 py-0.5 text-2xs text-muted-foreground lg:inline"
                 >
                     {{ t(`thread.source_${conversation.source}`) }}

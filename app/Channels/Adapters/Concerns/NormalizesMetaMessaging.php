@@ -2,6 +2,7 @@
 
 namespace App\Channels\Adapters\Concerns;
 
+use App\Channels\Data\AdReferralData;
 use App\Channels\Data\DeliveryReceiptData;
 use App\Channels\Data\InboundMessageData;
 use App\Enums\MessageStatus;
@@ -48,6 +49,8 @@ trait NormalizesMetaMessaging
                     occurredAt: $this->fromMsTimestamp($item['timestamp'] ?? 0),
                     attachments: $this->mapAttachments($item['message']),
                     payload: isset($item['message']['quick_reply']['payload']) ? (string) $item['message']['quick_reply']['payload'] : null,
+                    // A Click-to-Messenger ad puts the referral on the first message itself.
+                    referral: $this->referralOf($item['message']['referral'] ?? $item['referral'] ?? null),
                 );
 
                 continue;
@@ -68,6 +71,25 @@ trait NormalizesMetaMessaging
                     body: $item['postback']['title'] ?? '',
                     occurredAt: $this->fromMsTimestamp($item['timestamp'] ?? 0),
                     payload: isset($item['postback']['payload']) ? (string) $item['postback']['payload'] : null,
+                    referral: $this->referralOf($item['postback']['referral'] ?? null),
+                );
+
+                continue;
+            }
+
+            // `messaging_referrals` on its own (an existing thread opened again from an ad or an
+            // m.me link): nothing was said, so it rides an empty message the ingestor only reads
+            // the attribution from (InboxIngestor::ingestMessage).
+            if (isset($item['referral']) && ($referral = $this->referralOf($item['referral'])) !== null) {
+                $events[] = new InboundMessageData(
+                    platform: $platform,
+                    channelExternalId: $channelExternalId,
+                    customerExternalId: (string) ($item['sender']['id'] ?? ''),
+                    customerName: $item['sender']['name'] ?? '',
+                    externalMessageId: 'referral:'.($item['sender']['id'] ?? '').':'.($item['timestamp'] ?? ''),
+                    body: '',
+                    occurredAt: $this->fromMsTimestamp($item['timestamp'] ?? 0),
+                    referral: $referral,
                 );
 
                 continue;
@@ -105,6 +127,11 @@ trait NormalizesMetaMessaging
         }
 
         return $events;
+    }
+
+    protected function referralOf(mixed $referral): ?AdReferralData
+    {
+        return is_array($referral) ? AdReferralData::fromMeta($referral) : null;
     }
 
     protected function fromMsTimestamp(int|string $timestampMs): CarbonImmutable

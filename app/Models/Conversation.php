@@ -34,6 +34,16 @@ class Conversation extends Model
         // Bilingual bot (design 2026-09-21 §1): 'ar' | 'en', decided from her own messages.
         'language',
         'source_comment_id',
+        // Which ad she came from (2026-09-25): AdAttribution.
+        'ad_id',
+        'ad_title',
+        'ad_name',
+        'ad_adset_name',
+        'ad_campaign_name',
+        'ad_post_id',
+        'ad_photo_url',
+        'ad_ref',
+        'ad_attributed_at',
         'first_responder_id',
         'last_responder_id',
         'locked_by_id',
@@ -74,6 +84,7 @@ class Conversation extends Model
             'bot_due_at' => 'datetime',
             'bot_state' => 'array',
             'is_test' => 'boolean',
+            'ad_attributed_at' => 'datetime',
         ];
     }
 

@@ -23,6 +23,9 @@ class ActivityLogger
 
     public const CONVERSATION_REOPENED = 'conversation.reopened';
 
+    /** The ad or m.me link a conversation came through (2026-09-25). */
+    public const CONVERSATION_REFERRAL = 'conversation.referral';
+
     public const CONVERSATION_HANDOVER = 'conversation.handover';
 
     public const CONVERSATION_PRIORITY_CHANGED = 'conversation.priority_changed';

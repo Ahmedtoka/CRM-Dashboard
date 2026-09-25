@@ -50,6 +50,17 @@ class ConversationResource extends JsonResource
             'handler' => $c->handler?->value,
             'needs_human' => (bool) $c->needs_human,
             'source' => $c->source?->value,
+            // Which ad she came from (2026-09-25): null until a referral with an ad arrived.
+            'ad' => $c->ad_attributed_at !== null && ($c->ad_id !== null || $c->ad_ref !== null) ? [
+                'id' => $c->ad_id,
+                'title' => $c->ad_title,
+                'name' => $c->ad_name,
+                'adset' => $c->ad_adset_name,
+                'campaign' => $c->ad_campaign_name,
+                'post_id' => $c->ad_post_id,
+                'photo_url' => $c->ad_photo_url,
+                'ref' => $c->ad_ref,
+            ] : null,
             // «تجربة» badge (design 2026-09-21 §4): a run of a public team test link.
             'is_test' => (bool) $c->is_test,
             'unread_count' => (int) $c->unread_count,

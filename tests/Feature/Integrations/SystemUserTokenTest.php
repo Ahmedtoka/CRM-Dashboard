@@ -1,5 +1,6 @@
 <?php
 
+use App\Channels\MetaPageSubscriber;
 use App\Enums\UserRole;
 use App\Models\ChannelAccount;
 use App\Models\User;
@@ -60,7 +61,7 @@ it('lists the pages of a system user token without returning any token, then con
 
     Http::assertSent(fn (ClientRequest $r) => $r->method() === 'POST' && str_contains($r->url(), '459028320806456/subscribed_apps')
         && $r->hasHeader('Authorization', 'Bearer PAGE-TOKEN-LV')
-        && $r['subscribed_fields'] === 'messages,messaging_postbacks,message_deliveries,message_reads,feed');
+        && $r['subscribed_fields'] === MetaPageSubscriber::FIELDS);
 
     // The stored system token is single-use.
     expect(session()->has('integrations.system_token'))->toBeFalse();

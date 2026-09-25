@@ -1,7 +1,9 @@
 <?php
 
+use App\Channels\MetaPageSubscriber;
 use App\Enums\UserRole;
-use App\Models\{ChannelAccount, User};
+use App\Models\ChannelAccount;
+use App\Models\User;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\Http;
 
@@ -167,7 +169,7 @@ it('saves the picked page on a new live messenger account and subscribes it', fu
         ->and($account->credentials['access_token'])->toBe('PAGE-TOKEN-111');
 
     Http::assertSent(fn ($r) => $r->method() === 'POST' && str_contains($r->url(), '/111/subscribed_apps') && $r->hasHeader('Authorization', 'Bearer PAGE-TOKEN-111')
-        && $r['subscribed_fields'] === 'messages,messaging_postbacks,message_deliveries,message_reads,feed');
+        && $r['subscribed_fields'] === MetaPageSubscriber::FIELDS);
 
     // The list is single-use.
     expect(session()->has('facebook_login.pages'))->toBeFalse();
