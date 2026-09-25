@@ -39,6 +39,8 @@ class BotSetting extends Model
         'order_lookup_enabled',
         'non_returnable_keywords',
         'store_url',
+        // «ابدأ من هنا» skipped by the admin (2026-09-26).
+        'onboarding_dismissed_at',
     ];
 
     /** Seeded from the existing "حذف السبام" comment rule keywords (spec §11.1). */
@@ -72,6 +74,7 @@ class BotSetting extends Model
     {
         return [
             'enabled' => 'boolean',
+            'onboarding_dismissed_at' => 'datetime',
             'ai_enabled' => 'boolean',
             'min_confidence' => 'decimal:2',
             'max_bot_turns' => 'integer',

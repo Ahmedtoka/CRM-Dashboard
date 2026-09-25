@@ -9,6 +9,7 @@ use App\Http\Controllers\Web\InboxController;
 use App\Http\Controllers\Web\LocaleController;
 use App\Http\Controllers\Web\MediaController;
 use App\Http\Controllers\Web\NotificationController;
+use App\Http\Controllers\Web\OnboardingController;
 use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\PresenceController;
 use App\Http\Controllers\Web\ProductController;
@@ -118,6 +119,13 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
     Route::get('/customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
     Route::get('/customers/{customer}/merge-suggestions', [CustomerController::class, 'mergeSuggestions'])->name('customers.merge-suggestions');
     Route::post('/customers/{customer}/merge', [CustomerController::class, 'merge'])->middleware('role:supervisor')->name('customers.merge');
+
+    // «ابدأ من هنا» (2026-09-26): the admin's connect-everything page; a fresh admin lands here after login.
+    Route::middleware('role:admin')->group(function () {
+        Route::get('/onboarding', [OnboardingController::class, 'index'])->name('onboarding.index');
+        Route::post('/onboarding/dismiss', [OnboardingController::class, 'dismiss'])->name('onboarding.dismiss');
+        Route::delete('/onboarding/dismiss', [OnboardingController::class, 'resume'])->name('onboarding.resume');
+    });
 
     // Reports
     Route::get('/reports/me', [ReportController::class, 'me'])->name('reports.me');

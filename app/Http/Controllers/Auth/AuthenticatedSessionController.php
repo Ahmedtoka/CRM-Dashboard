@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
+use App\Onboarding\HomeRoute;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -49,7 +50,7 @@ class AuthenticatedSessionController extends Controller
         Auth::login(User::findOrFail($data['user_id']), remember: true);
         $request->session()->regenerate();
 
-        return redirect()->intended(route('inbox', absolute: false));
+        return redirect()->intended(HomeRoute::for($request->user()));
     }
 
     public static function quickLoginEnabled(): bool
@@ -66,7 +67,7 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        return redirect()->intended(route('inbox', absolute: false));
+        return redirect()->intended(HomeRoute::for($request->user()));
     }
 
     /**

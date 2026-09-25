@@ -6,11 +6,12 @@ use App\Http\Controllers\Web\LocaleController;
 use App\Http\Controllers\Web\MediaController;
 use App\Http\Controllers\Web\TryController;
 use App\Http\Middleware\SetLocale;
+use App\Onboarding\HomeRoute;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // There is no landing page or dashboard: the inbox is the home screen.
-Route::get('/', fn (Request $request) => redirect()->route($request->user() ? 'inbox' : 'login'))->name('home');
+Route::get('/', fn (Request $request) => $request->user() ? redirect(HomeRoute::for($request->user())) : redirect()->route('login'))->name('home');
 
 // Staging health check (live-test phase-1 task 4). Outside auth; token-gated in the
 // controller itself (wrong/missing X-Health-Token -> 404, not 401 — see HealthController).

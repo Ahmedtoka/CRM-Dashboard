@@ -2,6 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Models\User;
+use App\Onboarding\HomeRoute;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 
 it('shows the quick-login users on the login page when enabled locally', function () {
@@ -19,7 +20,7 @@ it('signs a user in with one click when enabled', function () {
     config(['crm.dev_quick_login' => true]);
     $user = User::factory()->create(['role' => UserRole::Admin]);
 
-    $this->post('/login/quick', ['user_id' => $user->id])->assertRedirect(route('inbox', absolute: false));
+    $this->post('/login/quick', ['user_id' => $user->id])->assertRedirect(HomeRoute::for($user)); // a fresh admin lands on «ابدأ من هنا»
 
     $this->assertAuthenticatedAs($user);
 });

@@ -6,6 +6,7 @@ use App\Channels\Integrations\ConnectionHealthCheck;
 use App\Enums\Platform;
 use App\Models\ChannelAccount;
 use App\Models\User;
+use App\Onboarding\OnboardingProgress;
 use App\Shopify\Connection\IntegrationRepository;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
@@ -86,6 +87,8 @@ class HandleInertiaRequests extends Middleware
                 : [],
             'broadcasting' => fn () => $this->broadcasting(),
             'whatsappTemplates' => fn () => config('crm.whatsapp_templates', []),
+            // «ابدأ من هنا» (2026-09-26): the admin's setup progress, for the menu item and its badge.
+            'onboarding' => fn () => $user?->isAdmin() ? collect(app(OnboardingProgress::class)->build())->only(['done', 'total', 'percent', 'complete', 'dismissed'])->all() : null,
             // Developer-only nav entries (simulator, latency report) show only when this is on.
             'devTools' => (bool) config('crm.dev_tools'),
         ]);
