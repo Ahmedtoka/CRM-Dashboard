@@ -179,6 +179,11 @@ return [
 
     'notify_customer_on_shipment' => env('CRM_NOTIFY_CUSTOMER_ON_SHIPMENT', false),
 
+    // WhatsApp menus (owner, 2026-09-26): 4–9 bot buttons go out as reply buttons, three per message
+    // («زي الماسنجر»), instead of a one-button list. `list` restores the list.
+    'whatsapp_menu_style' => env('CRM_WHATSAPP_MENU_STYLE', 'buttons'),
+    'whatsapp_more_options_text' => env('CRM_WHATSAPP_MORE_OPTIONS_TEXT', '👇'),
+
     // A queued outbound message waits this long for the ones created before it in the same
     // conversation to go out first (several workers must never reorder greeting and menu).
     'outbound_order_wait_seconds' => (float) env('CRM_OUTBOUND_ORDER_WAIT', 8),

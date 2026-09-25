@@ -5,7 +5,10 @@ use App\Channels\Data\DeliveryReceiptData;
 use App\Channels\Data\InboundMessageData;
 use App\Enums\MessageStatus;
 use App\Enums\Platform;
+use App\Inbox\InboxIngestor;
+use App\Media\InboundMediaFetcher;
 use App\Models\ChannelAccount;
+use App\Models\Conversation;
 use App\Models\CustomerIdentity;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\Http;
@@ -104,13 +107,13 @@ it('normalizes sent / delivered / read / failed statuses, keeping the failure re
 
 it('stores the failure reason on the outgoing message', function () {
     $account = ChannelAccount::factory()->create(['platform' => 'whatsapp', 'driver' => 'live', 'external_id' => '1098765432']);
-    $conversation = App\Models\Conversation::factory()->create(['channel_account_id' => $account->id]);
+    $conversation = Conversation::factory()->create(['channel_account_id' => $account->id]);
     $message = $conversation->messages()->create([
         'platform' => 'whatsapp', 'direction' => 'out', 'sender_type' => 'user', 'body' => 'hi',
         'external_id' => 'wamid.outgoing-1', 'status' => MessageStatus::Sent,
     ]);
 
-    app(App\Inbox\InboxIngestor::class)->ingestReceipt(new DeliveryReceiptData(Platform::WhatsApp, 'wamid.outgoing-1', MessageStatus::Failed, now()->toImmutable(), '(131047) 24 hours passed'));
+    app(InboxIngestor::class)->ingestReceipt(new DeliveryReceiptData(Platform::WhatsApp, 'wamid.outgoing-1', MessageStatus::Failed, now()->toImmutable(), '(131047) 24 hours passed'));
 
     expect($message->fresh()->status)->toBe(MessageStatus::Failed)->and($message->fresh()->error)->toBe('(131047) 24 hours passed');
 });
@@ -136,12 +139,27 @@ describe('sending', function () {
             && $r['interactive']['action']['buttons'][1] === ['type' => 'reply', 'reply' => ['id' => 'flow:shipping', 'title' => 'الشحن']]);
     });
 
-    it('sends four to ten buttons as a list, and falls back to numbered text beyond the limits', function () {
-        $buttons = array_map(fn ($i) => ['title' => "اختيار {$i}", 'payload' => "p{$i}"], range(1, 5));
+    it('sends four to nine buttons as reply buttons three per message, ten as a list, and falls back to numbered text beyond the limits', function () {
+        // Owner, 2026-09-26: the 7-option main menu «زي الماسنجر», not a one-button list.
+        $buttons = array_map(fn ($i) => ['title' => "اختيار {$i}", 'payload' => "p{$i}"], range(1, 7));
         app(WhatsAppAdapter::class)->sendText($this->account, $this->to, 'اختاري', ['quick_replies' => $buttons]);
+        $sent = Http::recorded()->map(fn ($pair) => $pair[0]->data())->filter(fn ($d) => ($d['interactive']['type'] ?? null) === 'button')->values();
+        expect($sent)->toHaveCount(3)
+            ->and($sent[0]['interactive']['body']['text'])->toBe('اختاري')
+            ->and(count($sent[0]['interactive']['action']['buttons']))->toBe(3)
+            ->and($sent[1]['interactive']['body']['text'])->toBe('👇')
+            ->and($sent[2]['interactive']['action']['buttons'][0]['reply'])->toBe(['id' => 'p7', 'title' => 'اختيار 7']);
+
+        config(['crm.whatsapp_menu_style' => 'list']);
+        app(WhatsAppAdapter::class)->sendText($this->account, $this->to, 'اختاري', ['quick_replies' => array_slice($buttons, 0, 5)]);
         Http::assertSent(fn (ClientRequest $r) => ($r['interactive']['type'] ?? null) === 'list'
             && count($r['interactive']['action']['sections'][0]['rows']) === 5
             && $r['interactive']['action']['sections'][0]['rows'][0] === ['id' => 'p1', 'title' => 'اختيار 1']);
+        config(['crm.whatsapp_menu_style' => 'buttons']);
+
+        $ten = array_map(fn ($i) => ['title' => "اختيار {$i}", 'payload' => "p{$i}"], range(1, 10));
+        app(WhatsAppAdapter::class)->sendText($this->account, $this->to, 'اختاري', ['quick_replies' => $ten]);
+        Http::assertSent(fn (ClientRequest $r) => ($r['interactive']['type'] ?? null) === 'list' && count($r['interactive']['action']['sections'][0]['rows']) === 10);
 
         $long = [['title' => str_repeat('ط', 30), 'payload' => 'x']];
         app(WhatsAppAdapter::class)->sendText($this->account, $this->to, 'اختاري', ['quick_replies' => $long]);
@@ -161,7 +179,7 @@ describe('sending', function () {
 it('downloads whatsapp media via the media id lookup then the url with the bearer token', function () {
     config(['crm.drivers.channels' => 'live']);
     $account = ChannelAccount::factory()->create(['platform' => 'whatsapp', 'driver' => 'live', 'external_id' => '1098765432', 'credentials' => ['access_token' => 'WA-TOKEN']]);
-    $conversation = App\Models\Conversation::factory()->create(['channel_account_id' => $account->id]);
+    $conversation = Conversation::factory()->create(['channel_account_id' => $account->id]);
     $message = $conversation->messages()->create(['platform' => 'whatsapp', 'direction' => 'in', 'sender_type' => 'customer', 'body' => '', 'external_id' => 'wamid.in', 'status' => 'received']);
     $attachment = $message->mediaAttachments()->create(['type' => 'image', 'disk' => 'media', 'mime' => 'image/jpeg', 'remote_id' => '1234567890123456', 'status' => 'pending']);
 
@@ -170,7 +188,7 @@ it('downloads whatsapp media via the media id lookup then the url with the beare
         'lookaside.fbsbx.com/*' => Http::response('JPEGBYTES', 200, ['Content-Type' => 'image/jpeg']),
     ]);
 
-    $fetched = app(App\Media\InboundMediaFetcher::class)->fetch($attachment);
+    $fetched = app(InboundMediaFetcher::class)->fetch($attachment);
 
     expect($fetched->bytes)->toBe('JPEGBYTES');
     Http::assertSent(fn (ClientRequest $r) => str_contains($r->url(), 'graph.facebook.com/v23.0/1234567890123456') && $r->hasHeader('Authorization', 'Bearer WA-TOKEN'));

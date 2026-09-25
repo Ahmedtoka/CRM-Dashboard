@@ -4,6 +4,7 @@ use App\Bot\Catalog\ProductCards;
 use App\Channels\Adapters\InstagramAdapter;
 use App\Channels\Adapters\MessengerAdapter;
 use App\Channels\Adapters\WhatsAppAdapter;
+use App\Channels\Cards\OutboundCards;
 use App\Enums\Platform;
 use App\Models\ChannelAccount;
 use App\Models\CustomerIdentity;
@@ -63,14 +64,16 @@ it('sends the product carousel as a whatsapp media carousel with one link button
 
     app(WhatsAppAdapter::class)->sendText($account, $to, 'fallback', ['cards' => productCardsFor(2)]);
 
+    // A catalog card carries a link and a postback; WhatsApp allows one shape, and the in-chat
+    // «التفاصيل والمقاسات» quick reply wins (its answer carries the product link anyway).
     Http::assertSent(fn ($r) => ($r['interactive']['type'] ?? null) === 'carousel'
         && count($r['interactive']['action']['cards']) === 2
         && $r['interactive']['action']['cards'][1]['card_index'] === 1
         && $r['interactive']['action']['cards'][0]['header']['image']['link'] !== ''
-        && $r['interactive']['action']['cards'][0]['action']['name'] === 'cta_url');
+        && $r['interactive']['action']['cards'][0]['action']['buttons'][0]['quick_reply']['title'] === 'التفاصيل والمقاسات');
 });
 
-it('sends a single whatsapp product as a picture with a link button, and pictures one by one when the carousel is refused', function () {
+it('sends a single whatsapp product as a picture with its buttons, and pictures one by one when the carousel is refused', function () {
     Http::fakeSequence('graph.facebook.com/*')
         ->push(['messages' => [['id' => 'wamid.1']]])
         ->push(['error' => ['message' => 'unsupported', 'code' => 131009]], 400)
@@ -84,10 +87,35 @@ it('sends a single whatsapp product as a picture with a link button, and picture
     $result = app(WhatsAppAdapter::class)->sendText($account, $to, 'fallback', ['cards' => productCardsFor(2)]);
 
     $sent = Http::recorded()->map(fn ($pair) => $pair[0]->data());
-    expect($sent[0]['interactive']['type'])->toBe('cta_url')
+    expect($sent[0]['interactive']['type'])->toBe('button')
         ->and($sent[0]['interactive']['header']['image']['link'])->toContain('format=jpg')
         ->and($sent[1]['interactive']['type'])->toBe('carousel')
         ->and($sent[3]['type'])->toBe('image')
         ->and($sent[4]['image']['caption'])->toContain('/products/')
         ->and($result->success)->toBeTrue();
+});
+
+it('sends picture cards with postback buttons as a whatsapp quick-reply carousel, drops the card without a picture, and one card as buttons with an image header', function () {
+    Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.1']]])]);
+    $account = ChannelAccount::factory()->create(['platform' => Platform::WhatsApp, 'driver' => 'live', 'external_id' => 'PHONE', 'credentials' => ['access_token' => 'tok']]);
+    $to = CustomerIdentity::factory()->create(['platform' => Platform::WhatsApp, 'external_id' => '201001234567']);
+
+    $pieces = OutboundCards::generic([
+        ['title' => '1. فستان', 'subtitle' => 'أسود / M × 1', 'image_url' => 'https://cdn.shopify.com/s/files/a.jpg', 'buttons' => [OutboundCards::postback('أرجّع دي', 'step:return_exchange:return_items:item:1')]],
+        ['title' => '2. عباية', 'subtitle' => 'بيج / L × 1', 'image_url' => 'https://cdn.shopify.com/s/files/b.jpg', 'buttons' => [OutboundCards::postback('أرجّع دي', 'step:return_exchange:return_items:item:2')]],
+        ['title' => '🛍️ أرجع الأوردر كله', 'subtitle' => 'كل القطع', 'buttons' => [OutboundCards::postback('أرجع الأوردر كله', 'step:return_exchange:return_items:all')]],
+    ]);
+    app(WhatsAppAdapter::class)->sendText($account, $to, 'fallback', ['cards' => $pieces]);
+
+    Http::assertSent(fn ($r) => ($r['interactive']['type'] ?? null) === 'carousel'
+        && count($r['interactive']['action']['cards']) === 2
+        && $r['interactive']['action']['cards'][0]['type'] === 'cta_url'
+        && $r['interactive']['action']['cards'][1]['action']['buttons'][0] === ['type' => 'quick_reply', 'quick_reply' => ['id' => 'step:return_exchange:return_items:item:2', 'title' => 'أرجّع دي']]);
+
+    $one = OutboundCards::generic([$pieces['cards'][0]]);
+    app(WhatsAppAdapter::class)->sendText($account, $to, 'fallback', ['cards' => $one]);
+
+    Http::assertSent(fn ($r) => ($r['interactive']['type'] ?? null) === 'button'
+        && $r['interactive']['header']['image']['link'] === 'https://cdn.shopify.com/s/files/a.jpg'
+        && $r['interactive']['action']['buttons'][0] === ['type' => 'reply', 'reply' => ['id' => 'step:return_exchange:return_items:item:1', 'title' => 'أرجّع دي']]);
 });

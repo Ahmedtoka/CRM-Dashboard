@@ -249,6 +249,26 @@ class WhatsAppAdapter implements ChannelAdapter
                     'parameters' => array_map(fn ($param) => ['type' => 'text', 'text' => (string) $param], array_values($params)),
                 ]];
             }
+        } elseif (! empty($options['quick_replies']) && ($chunks = $this->buttonChunks($text, $options['quick_replies'])) !== null) {
+            // 4–9 options as reply buttons, three per message (owner, 2026-09-26: «زي الماسنجر» — the
+            // one-button list hid the menu). Any tap works whichever message it sits on.
+            $result = SendResult::fail('no_buttons');
+
+            foreach ($chunks as $interactive) {
+                $result = $this->graph->post($account, "{$phoneNumberId}/messages", [
+                    'messaging_product' => 'whatsapp',
+                    'recipient_type' => 'individual',
+                    'to' => $to->external_id,
+                    'type' => 'interactive',
+                    'interactive' => $interactive,
+                ]);
+
+                if (! $result->success) {
+                    return $result;
+                }
+            }
+
+            return $result;
         } elseif (! empty($options['quick_replies']) && ($interactive = $this->interactive($text, $options['quick_replies'])) !== null) {
             $payload = [
                 'messaging_product' => 'whatsapp',
@@ -278,30 +298,90 @@ class WhatsAppAdapter implements ChannelAdapter
     }
 
     /**
-     * Picture cards as one interactive message: `carousel` for 2–10 cards, `cta_url` with an image
-     * header for one. Every card needs a picture and a link button (WhatsApp wants the same button
-     * shape on all cards); null when they do not fit.
+     * 4–9 bot buttons as reply-button messages of three (`crm.whatsapp_menu_style` = buttons): the
+     * first carries the text, the rest a short «👇». Null when the list/text path should run
+     * instead (three or fewer, ten or more, a title over 20 characters, or the style is `list`).
+     *
+     * @param  array<int, array{title: string, payload: string}>  $buttons
+     * @return list<array<string, mixed>>|null
+     */
+    private function buttonChunks(string $text, array $buttons): ?array
+    {
+        $buttons = array_values($buttons);
+        $count = count($buttons);
+
+        if (config('crm.whatsapp_menu_style', 'buttons') !== 'buttons' || $count < 4 || $count > 9 || mb_strlen($text) > 1024) {
+            return null;
+        }
+
+        foreach ($buttons as $b) {
+            if (mb_strlen((string) $b['title']) > 20 || mb_strlen((string) $b['payload']) > 200) {
+                return null;
+            }
+        }
+
+        $more = (string) config('crm.whatsapp_more_options_text', '👇');
+
+        return array_map(fn (int $i, array $chunk) => [
+            'type' => 'button',
+            'body' => ['text' => $i === 0 ? (trim($text) === '' ? '…' : $text) : $more],
+            'action' => ['buttons' => array_map(fn (array $b) => [
+                'type' => 'reply',
+                'reply' => ['id' => (string) $b['payload'], 'title' => (string) $b['title']],
+            ], $chunk)],
+        ], array_keys($chunks = array_chunk($buttons, 3)), $chunks);
+    }
+
+    /**
+     * Picture cards as one interactive message (2026-09-22; postback buttons 2026-09-26):
+     * `carousel` for 2–10 cards, one picture card as reply buttons with an image header (or
+     * `cta_url` for a link). WhatsApp wants every card to carry a picture and the same button
+     * shape, so a card's postback buttons become quick replies (up to two), a link-only card a
+     * `cta_url`, the shape of the first card wins, and a card without a picture («أرجع الأوردر
+     * كله») is left to the quick replies that follow the carousel. Null when nothing fits.
      *
      * @return array<string, mixed>|null
      */
     private function mediaCards(CustomerIdentity $to, array $cards): ?array
     {
         $items = [];
+        $shape = null;
 
         foreach (array_slice((array) ($cards['cards'] ?? []), 0, OutboundCards::MAX_CARDS) as $card) {
-            $link = collect((array) ($card['buttons'] ?? []))->firstWhere('type', 'web_url');
+            if (! filled($card['image_url'] ?? null)) {
+                continue;
+            }
 
-            if (! filled($card['image_url'] ?? null) || $link === null) {
-                return null;
+            $buttons = collect((array) ($card['buttons'] ?? []));
+            $postbacks = $buttons->where('type', 'postback')->take(2)->values();
+            $link = $buttons->firstWhere('type', 'web_url');
+
+            if ($postbacks->isNotEmpty()) {
+                $cardShape = 'reply:'.$postbacks->count();
+                $action = ['buttons' => $postbacks->map(fn (array $b) => [
+                    'type' => 'quick_reply',
+                    'quick_reply' => ['id' => mb_substr((string) $b['payload'], 0, 256), 'title' => mb_substr((string) $b['title'], 0, OutboundCards::BUTTON_TITLE_MAX)],
+                ])->all()];
+            } elseif ($link !== null) {
+                $cardShape = 'cta_url';
+                $action = ['name' => 'cta_url', 'parameters' => [
+                    'display_text' => mb_substr((string) $link['title'], 0, OutboundCards::BUTTON_TITLE_MAX),
+                    'url' => (string) $link['url'],
+                ]];
+            } else {
+                continue;
+            }
+
+            $shape ??= $cardShape;
+
+            if ($cardShape !== $shape) {
+                continue;
             }
 
             $items[] = [
                 'header' => ['type' => 'image', 'image' => ['link' => (string) $card['image_url']]],
                 'body' => ['text' => mb_substr(trim('*'.$card['title']."*\n".($card['subtitle'] ?? '')), 0, 160)],
-                'action' => ['name' => 'cta_url', 'parameters' => [
-                    'display_text' => mb_substr((string) $link['title'], 0, OutboundCards::BUTTON_TITLE_MAX),
-                    'url' => (string) $link['url'],
-                ]],
+                'action' => $action,
             ];
         }
 
@@ -309,13 +389,21 @@ class WhatsAppAdapter implements ChannelAdapter
             return null;
         }
 
-        $interactive = count($items) === 1
-            ? ['type' => 'cta_url'] + $items[0]
-            : [
+        if (count($items) === 1) {
+            $one = $items[0];
+            $interactive = $shape === 'cta_url'
+                ? ['type' => 'cta_url'] + $one
+                : ['type' => 'button', 'header' => $one['header'], 'body' => $one['body'], 'action' => ['buttons' => array_map(fn (array $b) => [
+                    'type' => 'reply',
+                    'reply' => $b['quick_reply'],
+                ], $one['action']['buttons'])]];
+        } else {
+            $interactive = [
                 'type' => 'carousel',
                 'body' => ['text' => mb_substr((string) ($cards['label'] ?? '🛍️'), 0, 1024)],
                 'action' => ['cards' => array_map(fn (int $i, array $item) => ['card_index' => $i, 'type' => 'cta_url'] + $item, array_keys($items), $items)],
             ];
+        }
 
         return [
             'messaging_product' => 'whatsapp',
