@@ -24,7 +24,12 @@ const newCount = computed(() => props.comments.filter((c) => c.status === 'new')
             <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-1.5">
                     <PlatformBadge :platform="post?.platform" show-label />
-                    <StatusChip v-if="post?.is_ad" :label="t('comments.ad')" tone="info" />
+                    <StatusChip
+                        v-if="post?.is_ad"
+                        :label="post.ad?.campaign ? `${t('comments.ad')} · ${post.ad.campaign}` : t('comments.ad')"
+                        :title="[post.ad?.title, post.ad?.name, post.ad?.adset].filter(Boolean).join(' · ')"
+                        tone="info"
+                    />
                     <span class="text-2xs tabular-nums text-muted-foreground">{{ t('comments.count', { n: comments.length }) }}</span>
                     <span v-if="newCount" class="text-2xs font-medium tabular-nums text-foreground">· {{ t('comments.new_count', { n: newCount }) }}</span>
                 </div>

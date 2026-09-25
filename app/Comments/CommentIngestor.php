@@ -4,8 +4,10 @@ namespace App\Comments;
 
 use App\Channels\ChannelRegistry;
 use App\Channels\Data\InboundCommentData;
+use App\Comments\Jobs\ClassifyAdPost;
 use App\Comments\Jobs\RunCommentBot;
 use App\Enums\CommentStatus;
+use App\Enums\Platform;
 use App\Events\CommentUpdated;
 use App\Inbox\CustomerResolver;
 use App\Models\BotSetting;
@@ -47,8 +49,20 @@ class CommentIngestor
                 'caption' => $d->postCaption,
                 'permalink' => $d->postPermalink,
                 'is_ad' => $d->isAd,
+                'ad_id' => $d->adId,
+                'ad_title' => $d->adTitle,
             ],
         );
+
+        // Comments on ads (2026-09-25): Instagram names the ad on the webhook; a post seen for the
+        // first time on either platform is looked up once (dark post? which campaign?).
+        if ($d->adId !== null && ($post->ad_id === null || ! $post->is_ad)) {
+            $post->forceFill(['is_ad' => true, 'ad_id' => $d->adId, 'ad_title' => $post->ad_title ?? $d->adTitle])->save();
+        }
+
+        if ($post->ad_checked_at === null && $account->driver === 'live' && in_array($d->platform, [Platform::Facebook, Platform::Instagram], true)) {
+            ClassifyAdPost::dispatch($post->id);
+        }
 
         $identity = $this->resolver->resolve($d->platform, $d->customerExternalId, $d->customerName);
 

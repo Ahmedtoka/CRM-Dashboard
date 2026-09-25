@@ -73,6 +73,10 @@ class InstagramAdapter implements ChannelAdapter
                     body: $value['text'] ?? '',
                     occurredAt: $entryOccurredAt,
                     parentExternalId: $value['parent_id'] ?? null,
+                    // A comment on an Instagram ad carries the ad on its media (2026-09-25).
+                    isAd: filled($value['media']['ad_id'] ?? null),
+                    adId: filled($value['media']['ad_id'] ?? null) ? (string) $value['media']['ad_id'] : null,
+                    adTitle: filled($value['media']['ad_title'] ?? null) ? mb_substr((string) $value['media']['ad_title'], 0, 190) : null,
                 );
             }
         }

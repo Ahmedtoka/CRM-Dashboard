@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Platform;
+use Database\Factories\PostFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Post extends Model
 {
-    /** @use HasFactory<\Database\Factories\PostFactory> */
+    /** @use HasFactory<PostFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -21,6 +22,13 @@ class Post extends Model
         'permalink',
         'thumbnail_url',
         'is_ad',
+        // The ad behind the post (2026-09-25): ClassifyAdPost / the Instagram comment webhook.
+        'ad_id',
+        'ad_title',
+        'ad_name',
+        'ad_adset_name',
+        'ad_campaign_name',
+        'ad_checked_at',
     ];
 
     protected function casts(): array
@@ -28,6 +36,7 @@ class Post extends Model
         return [
             'platform' => Platform::class,
             'is_ad' => 'boolean',
+            'ad_checked_at' => 'datetime',
         ];
     }
 

@@ -11,6 +11,8 @@ export interface PostRef {
     permalink: string | null;
     thumbnail_url: string | null;
     is_ad: boolean;
+    /** The ad behind the post (2026-09-25), when known. */
+    ad?: { id?: string; title?: string; name?: string; adset?: string; campaign?: string } | null;
 }
 
 export interface CommentItem {

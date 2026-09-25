@@ -20,5 +20,8 @@ final readonly class InboundCommentData
         public ?string $postCaption = null,
         public ?string $postPermalink = null,
         public bool $isAd = false,
+        /** Instagram names the ad on the comment itself (`media.ad_id` / `ad_title`, 2026-09-25). */
+        public ?string $adId = null,
+        public ?string $adTitle = null,
     ) {}
 }

@@ -24,6 +24,14 @@ class CommentResource extends JsonResource
                 'permalink' => $post->permalink,
                 'thumbnail_url' => $post->thumbnail_url,
                 'is_ad' => (bool) $post->is_ad,
+                // The ad behind the post (2026-09-25), when known.
+                'ad' => $post->is_ad ? array_filter([
+                    'id' => $post->ad_id,
+                    'title' => $post->ad_title,
+                    'name' => $post->ad_name,
+                    'adset' => $post->ad_adset_name,
+                    'campaign' => $post->ad_campaign_name,
+                ]) ?: null : null,
             ] : null,
             'customer' => $customer ? ['id' => $customer->id, 'name' => $customer->name, 'avatar_url' => $customer->avatar_url] : null,
             'parent_external_id' => $this->parent_external_id,
