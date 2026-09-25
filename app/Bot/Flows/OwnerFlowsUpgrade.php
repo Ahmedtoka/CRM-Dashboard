@@ -61,13 +61,15 @@ final class OwnerFlowsUpgrade
 
     public const VISIT_DATE_TEXT = 'كانت الزيارة إمتى تقريبًا؟';
 
-    public const COMPLAINT_ITEMS_TEXT = 'الشكوى بخصوص أنهي قطعة؟ 👇 ولو على الأوردر كله اضغطي الزرار الأخير';
+    public const COMPLAINT_ITEMS_TEXT = 'الشكوى بخصوص أنهي قطعة؟ 👇';
 
-    public const COMPLAINT_PICK_BUTTON = 'الشكوى عن دي';
+    public const COMPLAINT_PICK_BUTTON = 'الشكوى عن القطعة دي';
 
     public const COMPLAINT_SKIP_BUTTON = 'كل الأوردر';
 
     public const NOTE_2026_09_22 = 'فلو الشكوى: قطع الأوردر بالصور بعد التأكد من الأوردر';
+
+    public const NOTE_2026_09_26 = 'فلو الشكوى: سؤال القطعة أقصر، والاختيار من الصور';
 
     public const DESCRIPTION_TEXT = 'احكيلي حصل إيه بالتفصيل عشان نقدر نساعد حضرتك 🙏 (ولو فيه صورة ابعتيها)';
 

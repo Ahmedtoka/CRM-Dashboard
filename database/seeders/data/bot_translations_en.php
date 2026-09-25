@@ -581,4 +581,17 @@ What would you like instead?',
     '⟦0⟧ شوفي المنتج' => '⟦0⟧ View product',
     'التفاصيل والمقاسات' => 'Details & sizes',
     'الموديلات ⟦0⟧' => 'Our models ⟦0⟧',
+
+    // 2026-09-26: the pieces as pictures — the card button and the line under the pictures.
+    'اختاري القطعة دي' => 'Pick this piece',
+    'رجّع القطعة دي' => 'Return this piece',
+    'بدّل القطعة دي' => 'Exchange this piece',
+    'عدّل القطعة دي' => 'Change this piece',
+    'الشكوى عن القطعة دي' => 'Complaint about this piece',
+    'الشكوى بخصوص أنهي قطعة؟ ⟦0⟧' => 'Which piece is the complaint about? ⟦0⟧',
+    'اختاري القطعة اللي عايزة ترجعيها — اختاري من الصور ⟦0⟧ أو اكتبي رقم القطعة' => 'Pick the piece you want to return — choose from the pictures ⟦0⟧ or type its number',
+    'اختاري القطعة اللي عايزة تبدليها — اختاري من الصور ⟦0⟧ أو اكتبي رقم القطعة' => 'Pick the piece you want to exchange — choose from the pictures ⟦0⟧ or type its number',
+    'اختاري القطعة اللي عايزة ترجعيها أو تبدليها — اختاري من الصور ⟦0⟧ أو اكتبي رقم القطعة' => 'Pick the piece you want to return or exchange — choose from the pictures ⟦0⟧ or type its number',
+    'اختاري القطعة اللي عايزة تعدلي فيها — اختاري من الصور ⟦0⟧ أو اكتبي رقم القطعة' => 'Pick the piece you want to change — choose from the pictures ⟦0⟧ or type its number',
+    'الشكوى بخصوص أنهي قطعة؟ — اختاري من الصور ⟦0⟧ أو اكتبي رقم القطعة' => 'Which piece is the complaint about? — choose from the pictures ⟦0⟧ or type its number',
 ];

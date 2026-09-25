@@ -66,14 +66,17 @@ final class OrderItemsStep extends BaseStep
 
     public const MULTI_BUTTON = 'كذا قطعة';
 
-    /** The one button on a piece's picture card (2026-09-22). */
-    public const PICK_BUTTON = 'اختاري دي';
+    /** The one button on a piece's picture card (owner's wording, 2026-09-26). */
+    public const PICK_BUTTON = 'اختاري القطعة دي';
 
-    public const PICK_BUTTON_RETURN = 'أرجّع دي';
+    public const PICK_BUTTON_RETURN = 'رجّع القطعة دي';
 
-    public const PICK_BUTTON_EXCHANGE = 'أبدّل دي';
+    public const PICK_BUTTON_EXCHANGE = 'بدّل القطعة دي';
 
-    public const PICK_BUTTON_EDIT = 'أعدّل دي';
+    public const PICK_BUTTON_EDIT = 'عدّل القطعة دي';
+
+    /** Under the pictures (owner, 2026-09-26): «اختاري من الصور 👆 أو اكتبي رقمها». */
+    public const PICTURES_HINT = 'اختاري من الصور 👆 أو اكتبي رقم القطعة';
 
     /** One tap for the whole order (owner, 2026-09-21): «أرجع كله» / «أبدل كله». */
     public const ALL_BUTTON_RETURN = 'أرجع كله';
@@ -84,13 +87,6 @@ final class OrderItemsStep extends BaseStep
     public const REST_BUTTON_RETURN = 'أرجع الباقي كله';
 
     public const REST_BUTTON_EXCHANGE = 'أبدل الباقي كله';
-
-    /** The last card of the carousel (owner, 2026-09-22): the whole order. */
-    public const ALL_CARD_RETURN = 'أرجع الأوردر كله';
-
-    public const ALL_CARD_EXCHANGE = 'أبدل الأوردر كله';
-
-    public const ALL_CARD_SUBTITLE = 'كل القطع اللي فاضلة في طلب واحد';
 
     public const YES_BUTTON = 'أيوه';
 
@@ -591,9 +587,8 @@ final class OrderItemsStep extends BaseStep
         $numbers = $order->items->values()->pluck('id')->flip();
         $items = $selected === [] ? $order->items->values() : $this->remaining($state, $order);
         $pictures = $items->map(fn (OrderItem $i) => ProductCards::jpeg($i->image_url ?: $i->variant?->image_url ?: $i->variant?->product?->image_url));
-        $allCard = $items->count() > 1 && ! $this->plain;
 
-        if ($items->count() + ($allCard ? 1 : 0) > OutboundCards::MAX_CARDS || $pictures->filter()->isEmpty()) {
+        if ($items->count() > OutboundCards::MAX_CARDS || $pictures->filter()->isEmpty()) {
             return [$list];
         }
 
@@ -613,26 +608,45 @@ final class OrderItemsStep extends BaseStep
             'buttons' => [OutboundCards::postback($pick, "step:{$state['key']}:{$state['step']}:item:{$item->id}")],
         ])->all();
 
-        if ($allCard) {
-            $all = $this->kind($state) === 'exchange' ? self::ALL_CARD_EXCHANGE : self::ALL_CARD_RETURN;
-            $cards[] = [
-                'title' => '🛍️ '.$all,
-                'subtitle' => self::ALL_CARD_SUBTITLE,
-                'text' => $all,
-                'buttons' => [OutboundCards::postback($all, "step:{$state['key']}:{$state['step']}:all")],
-            ];
-        }
-
-        $cards = OutboundCards::generic($cards);
-
         $question = trim($this->prompter->renderText((string) ($step['text'] ?? ''), $state['data'] ?? [])) ?: ($this->plain ? self::PLAIN_TEXT : self::DEFAULT_TEXT);
+        $cards = OutboundCards::generic($cards);
+        // WhatsApp's carousel carries a body of its own: the question sits above the pictures there.
+        $cards['label'] = $question;
         $header = $withHeader ? $this->header($state, $order) : null;
+
+        // Under the pictures (owner, 2026-09-26): the question once more with «اختاري من الصور 👆 أو
+        // اكتبي رقم القطعة», and only the whole-order button — every piece already has its own
+        // button on its card, so the names are not repeated as buttons.
+        $hint = rtrim(preg_replace('/\s*👇\s*$/u', '', $question) ?? $question).' — '.self::PICTURES_HINT;
 
         return [
             // The body is the numbered list: what a channel without cards shows instead.
             ['text' => $list['text'], 'cards' => $cards],
-            ['text' => trim(($header !== null ? $header."\n" : '').$question), 'buttons' => $list['buttons']],
+            ['text' => trim(($header !== null ? $header."\n" : '').$hint), 'buttons' => $this->wholeOrderButtons($state, $order, $selected !== [])],
         ];
+    }
+
+    /**
+     * The buttons under the pictures: «أرجع كله» / «أبدل كله» (after a pick «…الباقي كله») when more than
+     * one piece is still open, «كل الأوردر» on the optional picker; nothing on the edit picker.
+     *
+     * @return list<array{title:string, payload:string}>
+     */
+    private function wholeOrderButtons(array $state, Order $order, bool $openOnly): array
+    {
+        $buttons = [];
+        $items = $openOnly ? $this->remaining($state, $order) : $order->items->values();
+
+        if (! $this->plain && $items->count() > 1) {
+            $exchange = $this->kind($state) === 'exchange';
+            $buttons[] = $this->stepButton($state, $openOnly ? ($exchange ? self::REST_BUTTON_EXCHANGE : self::REST_BUTTON_RETURN) : ($exchange ? self::ALL_BUTTON_EXCHANGE : self::ALL_BUTTON_RETURN), 'all');
+        }
+
+        if ($this->optional && ! $openOnly) {
+            $buttons[] = $this->stepButton($state, OwnerFlowsUpgrade::COMPLAINT_SKIP_BUTTON, 'done');
+        }
+
+        return $buttons;
     }
 
     /** @param  list<array<string, mixed>>  $selected */
