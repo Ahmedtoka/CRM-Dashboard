@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Analytics\ActivityLogger;
+use App\Analytics\AdsReport;
 use App\Analytics\LatencyRecorder;
 use App\Analytics\MetricsService;
 use App\Analytics\PresenceTracker;
@@ -48,6 +49,19 @@ class ReportController extends Controller
     public function bot(Request $request, MetricsService $metrics): Response
     {
         return Inertia::render('Reports/Bot', $this->botReport($request, $metrics));
+    }
+
+    /** «الإعلانات» (owner, 2026-09-25): campaign → conversations → orders → spend. */
+    public function ads(Request $request, AdsReport $report): Response
+    {
+        $range = DateRange::fromRequest($request);
+        $platform = $this->reportPlatform($request);
+
+        return Inertia::render('Reports/Ads', [
+            'range' => $range->toArray(),
+            'platform' => $platform?->value,
+            'report' => $report->build($range->from, $range->to, $platform),
+        ]);
     }
 
     /**

@@ -39,6 +39,7 @@ const mainNavItems = computed<NavItem[]>(() => {
         reports.push(
             { title: t('nav.reports_team'), href: '/reports/team' },
             { title: t('nav.reports_bot'), href: '/reports/bot' },
+            { title: t('nav.reports_ads'), href: '/reports/ads' },
             { title: t('nav.reports_activity'), href: '/reports/activity' },
             { title: t('nav.reports_quick_replies'), href: '/reports/quick-replies' },
             { title: t('nav.reports_team_test'), href: '/reports/team-test' },

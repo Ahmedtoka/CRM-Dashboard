@@ -125,6 +125,7 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
         Route::get('/reports/team', [ReportController::class, 'team'])->name('reports.team');
         Route::get('/reports/users/{user}', [ReportController::class, 'user'])->name('reports.users.show');
         Route::get('/reports/bot', [ReportController::class, 'bot'])->name('reports.bot');
+        Route::get('/reports/ads', [ReportController::class, 'ads'])->name('reports.ads');
         Route::get('/reports/activity', [ReportController::class, 'activity'])->name('reports.activity');
         Route::get('/reports/quick-replies', [ReportController::class, 'quickReplies'])->name('reports.quick-replies');
         Route::get('/reports/quick-replies/export', [ReportController::class, 'quickRepliesExport'])->name('reports.quick-replies.export');
