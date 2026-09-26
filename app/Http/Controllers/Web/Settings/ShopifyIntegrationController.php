@@ -13,6 +13,7 @@ use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Jobs\RunManualSync;
 use App\Shopify\Sync\BulkImporter;
 use App\Shopify\Sync\ImportAlreadyRunningException;
+use App\Shopify\Sync\SyncRunRecorder;
 use App\Shopify\Webhooks\WebhookRegistrar;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -40,10 +41,12 @@ class ShopifyIntegrationController extends Controller
         private readonly ConnectShopify $connector,
         private readonly WebhookRegistrar $webhooks,
         private readonly BulkImporter $importer,
+        private readonly SyncRunRecorder $recorder,
     ) {}
 
     public function index(): InertiaResponse
     {
+        $this->recorder->closeAbandoned();
         $integration = $this->integrations->current();
 
         return Inertia::render('settings/Shopify', [
@@ -140,7 +143,11 @@ class ShopifyIntegrationController extends Controller
         }
 
         try {
-            RunManualSync::dispatch($data['resource'], $data['from'] ?? null, $data['to'] ?? null);
+            // Orders go through a Bulk Operation (thousands of orders a month would
+            // outlive any single paged job); the rest stay small paged syncs.
+            $data['resource'] === 'orders'
+                ? $this->importer->importOrders($data['from'], $data['to'])
+                : RunManualSync::dispatch($data['resource'], $data['from'] ?? null, $data['to'] ?? null);
         } catch (ImportAlreadyRunningException) {
             return $this->importConflict($request);
         }
@@ -172,6 +179,25 @@ class ShopifyIntegrationController extends Controller
         }
 
         $integration->forceFill(['settings' => $data])->save();
+
+        return $this->done($request, ['ok' => true]);
+    }
+
+    /**
+     * Adds (or replaces) the app's API secret key on a connected store without
+     * reconnecting: Shopify signs every webhook with it, and without it the
+     * server answers 401 so nothing updates live. Never echoed back.
+     */
+    public function updateSecret(Request $request): HttpResponse
+    {
+        $data = $request->validate(['api_secret' => ['required', 'string', 'min:10', 'max:255']]);
+        $integration = $this->integrations->current();
+
+        if ($integration === null) {
+            return $this->failure($request, ['ok' => false, 'error' => __('errors.shopify.no_integration')], 404);
+        }
+
+        $integration->forceFill(['api_secret' => trim($data['api_secret'])])->save();
 
         return $this->done($request, ['ok' => true]);
     }
@@ -257,6 +283,8 @@ class ShopifyIntegrationController extends Controller
             'settings' => $integration->settingsWithDefaults(),
             'import_state' => $integration->import_state,
             'granted_scopes' => $granted,
+            // Without a secret production rejects every Shopify webhook (HMAC), so nothing updates live.
+            'has_webhook_secret' => filled($integration->api_secret) || filled(config('crm.shopify.webhook_secret')),
             'missing_scopes' => array_values(array_diff($required, $granted)),
         ];
     }

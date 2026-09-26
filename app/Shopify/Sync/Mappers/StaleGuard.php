@@ -30,4 +30,24 @@ final class StaleGuard
 
         return $incoming->getTimestamp() <= $stored->getTimestamp();
     }
+
+    /**
+     * True only when incoming is strictly older than stored. A bulk re-import
+     * re-applies the same version (equal timestamps) so columns added since the
+     * row was first stored get filled; an older copy is still never applied.
+     */
+    public static function isOlder(?CarbonInterface $stored, ?string $incomingIso): bool
+    {
+        if ($stored === null || $incomingIso === null || trim($incomingIso) === '') {
+            return false;
+        }
+
+        try {
+            $incoming = CarbonImmutable::parse($incomingIso);
+        } catch (Throwable) {
+            return false;
+        }
+
+        return $incoming->getTimestamp() < $stored->getTimestamp();
+    }
 }

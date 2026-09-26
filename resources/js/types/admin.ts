@@ -503,11 +503,13 @@ export interface ShopifyStageState {
     processed: number;
     failed: number;
     bulk_operation_id: string | null;
+    skipped?: boolean;
 }
 
 export interface ShopifyImportState {
     stages?: Partial<Record<ShopifyStage, ShopifyStageState>>;
     orders_since?: string;
+    orders_until?: string | null;
 }
 
 export interface ShopifyIntegrationRow {
@@ -527,6 +529,7 @@ export interface ShopifyIntegrationRow {
     import_state: ShopifyImportState | null;
     granted_scopes: string[];
     missing_scopes: string[];
+    has_webhook_secret: boolean;
 }
 
 export interface ShopifyWebhookRow {
@@ -572,6 +575,28 @@ export interface ShopifyStatusResponse {
     integration: ShopifyIntegrationRow | null;
     runs: ShopifySyncRunRow[];
     webhooks: ShopifyWebhookRow[];
+}
+
+// Settings → Shopify → order reconciliation (OrderReconciler::compare).
+export interface ShopifyReconcileCount {
+    shopify: number;
+    crm: number;
+    diff: number;
+}
+
+export interface ShopifyReconcileResult {
+    from: string;
+    to: string;
+    timezone: string;
+    checked_at: string;
+    matched: boolean;
+    totals: ShopifyReconcileCount;
+    days: (ShopifyReconcileCount & { date: string })[];
+    statuses: (ShopifyReconcileCount & { group: 'financial' | 'fulfillment' | 'state'; key: string })[];
+    missing: { date: string; id: string; name: string | null }[];
+    extra: { date: string; id: string; name: string | null }[];
+    missing_checked_days: string[];
+    breakdown: Record<'payment_gateway' | 'province' | 'shipment', { key: string | null; count: number }[]>;
 }
 
 // Bot knowledge base, size chart and settings screen (Task 10, spec §4.2).

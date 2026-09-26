@@ -85,6 +85,14 @@ return [
         // Initial import pulls orders created in the last N months (spec §4.1).
         'import_orders_months' => (int) env('CRM_SHOPIFY_IMPORT_ORDERS_MONTHS', 12),
 
+        // The initial import skips the full customer export (each order brings
+        // its own customer); true re-enables it for small stores.
+        'import_all_customers' => (bool) env('CRM_SHOPIFY_IMPORT_ALL_CUSTOMERS', false),
+
+        // Day boundaries for date-range imports and the reconciliation page:
+        // the store's own timezone, so "September" matches Shopify's admin.
+        'shop_timezone' => env('CRM_SHOPIFY_TIMEZONE', 'Africa/Cairo'),
+
         // RunBulkImportStage runs on the `commerce` queue of the `redis`
         // connection: retry_after 90 s, job $timeout 80 s, worker --timeout=80.
         // Each step stops after a 45 s wall-clock budget (import_job_seconds)

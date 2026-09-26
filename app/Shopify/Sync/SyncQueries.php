@@ -46,7 +46,7 @@ final class SyncQueries
         GRAPHQL,
         'orders' => <<<'GRAPHQL'
             id name email phone createdAt updatedAt processedAt cancelledAt cancelReason currencyCode
-            displayFinancialStatus displayFulfillmentStatus note paymentGatewayNames
+            displayFinancialStatus displayFulfillmentStatus note paymentGatewayNames tags
             customAttributes { key value }
             currentSubtotalPriceSet { shopMoney { amount currencyCode } }
             currentTotalPriceSet { shopMoney { amount currencyCode } }
@@ -155,12 +155,14 @@ final class SyncQueries
     }
 
     /** `bulkOperationRunQuery` mutation with the export query inlined as a block string. */
-    public static function bulkRun(string $resource, ?string $ordersSince = null): string
+    public static function bulkRun(string $resource, ?string $ordersSince = null, ?string $ordersUntil = null): string
     {
         $nested = self::nested($resource);
-        $filter = $resource === 'orders' && $ordersSince !== null
-            ? "(query: \"created_at:>='{$ordersSince}'\")"
-            : '';
+        $conditions = $resource === 'orders' ? array_filter([
+            $ordersSince !== null ? "created_at:>='{$ordersSince}'" : null,
+            $ordersUntil !== null ? "created_at:<='{$ordersUntil}'" : null,
+        ]) : [];
+        $filter = $conditions !== [] ? '(query: "'.implode(' AND ', $conditions).'")' : '';
 
         $node = self::sized(self::NODE[$resource], false)
             ." {$nested['select']} { edges { node { {$nested['node']} } } }";

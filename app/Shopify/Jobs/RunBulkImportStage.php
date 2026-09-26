@@ -58,7 +58,7 @@ class RunBulkImportStage implements ShouldBeUniqueUntilProcessing, ShouldQueue
             static::dispatch($this->stage, $this->pollAttempt + 1)->delay(self::pollDelay($this->pollAttempt));
         } elseif ($outcome === BulkImporter::OUTCOME_WORKING) {
             static::dispatch($this->stage);
-        } elseif ($outcome === BulkImporter::OUTCOME_COMPLETED && ($next = BulkImporter::nextStage($this->stage)) !== null) {
+        } elseif ($outcome === BulkImporter::OUTCOME_COMPLETED && ($next = $importer->nextPendingStage($this->stage)) !== null) {
             static::dispatch($next);
         }
         // OUTCOME_LOCKED: another worker owns this stage and continues the chain.

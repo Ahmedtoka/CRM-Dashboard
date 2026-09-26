@@ -2,6 +2,7 @@
 import ConnectForm from '@/components/crm/shopify/ConnectForm.vue';
 import ConnectGuide from '@/components/crm/shopify/ConnectGuide.vue';
 import ImportProgress from '@/components/crm/shopify/ImportProgress.vue';
+import LiveUpdatesCard from '@/components/crm/shopify/LiveUpdatesCard.vue';
 import ShopifySettingsForm from '@/components/crm/shopify/ShopifySettingsForm.vue';
 import StatusCard from '@/components/crm/shopify/StatusCard.vue';
 import SyncLog from '@/components/crm/shopify/SyncLog.vue';
@@ -173,6 +174,22 @@ async function reregisterWebhooks(): Promise<void> {
     }
 }
 
+// --- API secret (webhook signatures) ---
+const savingSecret = ref(false);
+
+async function saveSecret(secret: string): Promise<void> {
+    savingSecret.value = true;
+    try {
+        await api.put('/settings/shopify/secret', { api_secret: secret });
+        toast.push(t('settings.shopify.live.saved'));
+        await refreshStatus();
+    } catch (error) {
+        toast.push(apiErrorMessage(error, t('common.error')), 'error');
+    } finally {
+        savingSecret.value = false;
+    }
+}
+
 // --- operational settings ---
 const savingSettings = ref(false);
 
@@ -218,6 +235,8 @@ const syncResources: ShopifySyncResource[] = ['shipping', 'products', 'customers
             </template>
 
             <template v-else-if="integration">
+                <LiveUpdatesCard :has-secret="integration.has_webhook_secret" :webhooks="webhooks" :saving="savingSecret" @save-secret="saveSecret" />
+
                 <ImportProgress :import-state="integration.import_state" :live="live" :resuming="resuming" @resume="resumeImport" />
 
                 <section class="grid gap-3 rounded-lg bg-card p-4 text-xs shadow-card">

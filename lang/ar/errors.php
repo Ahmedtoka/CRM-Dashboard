@@ -76,6 +76,7 @@ return [
         'no_integration' => 'مفيش ربط بـ Shopify متسجل',
         'orders_range_required' => 'مزامنة الطلبات محتاجة تاريخ من وإلى',
         'orders_range_max' => 'أقصى مدى للمزامنة سنة واحدة (:days يوم)',
+        'reconcile_range_max' => 'أقصى مدى للمطابقة :days يوم في المرة',
     ],
 
     'bot' => [

@@ -28,6 +28,19 @@ final class ResourceRowMapper
         return $this->orders;
     }
 
+    /** Bulk mode for both mappers (the customers stage maps through its own CustomerMapper). */
+    public function beginBulk(): void
+    {
+        $this->orders->beginBulk();
+        $this->customers->muteBroadcasts(true);
+    }
+
+    public function endBulk(): void
+    {
+        $this->orders->endBulk();
+        $this->customers->muteBroadcasts(false);
+    }
+
     /**
      * Every export selects `updatedAt`; a row without it cannot be stale-guarded
      * and is rejected as a row error.

@@ -77,6 +77,7 @@ return [
         'no_integration' => 'No Shopify integration on file.',
         'orders_range_required' => 'Syncing orders needs a from and a to date.',
         'orders_range_max' => 'The longest sync range is one year (:days days).',
+        'reconcile_range_max' => 'The longest reconciliation range is :days days at a time.',
     ],
 
     'bot' => [

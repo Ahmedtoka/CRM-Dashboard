@@ -33,6 +33,7 @@ use App\Http\Controllers\Web\Settings\IntegrationController;
 use App\Http\Controllers\Web\Settings\QuickReplyCategoryController;
 use App\Http\Controllers\Web\Settings\QuickReplyController;
 use App\Http\Controllers\Web\Settings\ShopifyIntegrationController;
+use App\Http\Controllers\Web\Settings\ShopifyReconcileController;
 use App\Http\Controllers\Web\Settings\TagController;
 use App\Http\Controllers\Web\Settings\UserController;
 use App\Http\Controllers\Web\ShippingController;
@@ -283,6 +284,9 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
         Route::post('shopify/sync', [ShopifyIntegrationController::class, 'sync'])->name('shopify.sync');
         Route::post('shopify/webhooks/reregister', [ShopifyIntegrationController::class, 'reregisterWebhooks'])->name('shopify.webhooks.reregister');
         Route::put('shopify/settings', [ShopifyIntegrationController::class, 'updateSettings'])->name('shopify.settings.update');
+        Route::put('shopify/secret', [ShopifyIntegrationController::class, 'updateSecret'])->name('shopify.secret.update');
+        Route::get('shopify/reconcile', [ShopifyReconcileController::class, 'index'])->name('shopify.reconcile');
+        Route::post('shopify/reconcile', [ShopifyReconcileController::class, 'run'])->name('shopify.reconcile.run');
         Route::delete('shopify', [ShopifyIntegrationController::class, 'destroy'])->name('shopify.destroy');
     });
 

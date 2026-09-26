@@ -27,6 +27,28 @@ final class SyncRunRecorder
         ]);
     }
 
+    /**
+     * A run still "running" with no progress for $minutes was killed mid-way
+     * (e.g. a worker timeout): close it as failed so the log stops showing it
+     * as in progress. Returns how many were closed.
+     */
+    public function closeAbandoned(int $minutes = 60): int
+    {
+        $count = 0;
+
+        ShopifySyncRun::query()
+            ->where('status', 'running')
+            ->where('updated_at', '<', now()->subMinutes($minutes))
+            ->get()
+            ->each(function (ShopifySyncRun $run) use (&$count) {
+                $this->recordError($run, 'run', 'Stopped before finishing (no progress for a long time) — run the sync again.');
+                $run->forceFill(['status' => 'failed', 'finished_at' => now()])->save();
+                $count++;
+            });
+
+        return $count;
+    }
+
     /** Appends one error; beyond MAX_ERRORS only the `failed` counter keeps growing. */
     public function recordError(ShopifySyncRun $run, string $ref, string $message): void
     {

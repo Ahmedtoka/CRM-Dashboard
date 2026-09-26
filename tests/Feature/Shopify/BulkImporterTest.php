@@ -127,6 +127,7 @@ it('resumes from the first incomplete stage', function () {
 });
 
 it('maps fulfillments, refunds and line items and recomputes customer flags once the chunk commits', function () {
+    config(['crm.shopify.import_all_customers' => true]); // the customers stage brings the address book
     app(BulkImporter::class)->start();
 
     $order = Order::where('shopify_order_id', '5002')->firstOrFail();
@@ -390,4 +391,101 @@ it('imports from the fake driver catalog without a real store', function () {
         ->and(Product::count())->toBeGreaterThan(0)
         ->and(Order::where('source', 'store')->count())->toBeGreaterThan(0);
     Http::assertNothingSent();
+});
+
+it('skips the full customer export by default and still links each order to its customer', function () {
+    app(BulkImporter::class)->start();
+
+    $state = ShopifyIntegration::first()->import_state;
+    $order = Order::where('shopify_order_id', '5001')->firstOrFail();
+
+    expect($state['stages']['customers'])->toMatchArray(['status' => 'completed', 'skipped' => true])
+        ->and(ShopifySyncRun::where('resource', 'customers')->exists())->toBeFalse()
+        ->and($order->customer->shopify_customer_id)->toBe('3001');
+});
+
+it('keeps the latest store state of an order in its own columns', function () {
+    app(BulkImporter::class)->start();
+
+    $order = Order::where('shopify_order_id', '5001')->firstOrFail();
+
+    expect($order->shipping_province)->toBe('Cairo')
+        ->and($order->shipping_province_code)->toBe('C')
+        ->and($order->payment_gateway)->toBe('paymob')
+        ->and($order->financial_status)->toBe('paid')
+        ->and($order->fulfillment_status)->toBe('fulfilled')
+        ->and($order->shipment_status)->toBe('delivered');
+});
+
+it('imports the orders of a date range through one bulk operation and logs it as a manual run', function () {
+    Queue::fake();
+    $integration = ShopifyIntegration::first();
+    $integration->update(['import_state' => ['stages' => [
+        'shipping' => ['status' => 'completed'], 'products' => ['status' => 'completed'],
+        'customers' => ['status' => 'pending', 'processed' => 13000], 'orders' => ['status' => 'completed', 'processed' => 5],
+    ]]]);
+
+    app(BulkImporter::class)->importOrders('2026-09-01', '2026-09-30');
+
+    $state = $integration->fresh()->import_state;
+    expect($state['orders_since'])->toBe('2026-09-01T00:00:00+03:00')
+        ->and($state['orders_until'])->toBe('2026-09-30T23:59:59+03:00')
+        ->and($state['stages']['orders']['status'])->toBe('running')
+        ->and($state['stages']['orders']['processed'])->toBe(0)
+        ->and($state['stages']['customers']['processed'])->toBe(13000);
+    Queue::assertPushed(RunBulkImportStage::class, fn ($job) => $job->stage === 'orders');
+
+    app(BulkImporter::class)->runStage('orders');
+
+    $bulk = collect(Http::recorded())->map(fn ($pair) => $pair[0]['query'] ?? '')->first(fn ($q) => str_contains($q, 'bulkOperationRunQuery'));
+    expect($bulk)->toContain("created_at:>='2026-09-01T00:00:00+03:00' AND created_at:<='2026-09-30T23:59:59+03:00'")
+        ->and(ShopifySyncRun::where('resource', 'orders')->latest('id')->first())->type->toBe('manual')->status->toBe('completed');
+});
+
+it('refuses a date-range orders import while an import stage is running', function () {
+    ShopifyIntegration::first()->update(['import_state' => ['stages' => [
+        'products' => ['status' => 'running', 'updated_at' => now()->toIso8601String()],
+    ]]]);
+
+    app(BulkImporter::class)->importOrders('2026-09-01', '2026-09-30');
+})->throws(ImportAlreadyRunningException::class);
+
+it('continues the chain past stages that are already completed', function () {
+    ShopifyIntegration::first()->update(['import_state' => ['stages' => [
+        'products' => ['status' => 'completed'], 'customers' => ['status' => 'completed', 'skipped' => true], 'orders' => ['status' => 'pending'],
+    ]]]);
+
+    expect(app(BulkImporter::class)->nextPendingStage('products'))->toBe('orders')
+        ->and(app(BulkImporter::class)->nextPendingStage('orders'))->toBeNull();
+});
+
+it('closes a run that stopped making progress', function () {
+    $stale = ShopifySyncRun::create(['type' => 'manual', 'resource' => 'orders', 'status' => 'running', 'errors' => [], 'started_at' => now()->subHours(3)]);
+    ShopifySyncRun::whereKey($stale->id)->update(['updated_at' => now()->subHours(2)]);
+    $live = ShopifySyncRun::create(['type' => 'manual', 'resource' => 'products', 'status' => 'running', 'errors' => [], 'started_at' => now()]);
+
+    expect(app(\App\Shopify\Sync\SyncRunRecorder::class)->closeAbandoned())->toBe(1)
+        ->and($stale->fresh()->status)->toBe('failed')
+        ->and($stale->fresh()->finished_at)->not->toBeNull()
+        ->and($live->fresh()->status)->toBe('running');
+});
+
+it('pushes no per-customer realtime update while importing history', function () {
+    config(['crm.shopify.import_all_customers' => true]);
+
+    app(BulkImporter::class)->start();
+
+    expect(Order::where('source', 'store')->count())->toBeGreaterThan(0);
+    Event::assertNotDispatched(\App\Events\CustomerUpdated::class);
+});
+
+it('refreshes an already-imported order of the same version on a re-import, but never applies an older one', function () {
+    app(BulkImporter::class)->start();
+    Order::where('shopify_order_id', '5001')->update(['payment_gateway' => null]);
+    Order::where('shopify_order_id', '5002')->update(['payment_gateway' => null, 'shopify_updated_at' => now()->addYear()]);
+
+    app(BulkImporter::class)->start();
+
+    expect(Order::where('shopify_order_id', '5001')->value('payment_gateway'))->toBe('paymob')
+        ->and(Order::where('shopify_order_id', '5002')->value('payment_gateway'))->toBeNull();
 });

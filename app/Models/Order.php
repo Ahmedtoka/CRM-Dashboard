@@ -60,6 +60,11 @@ class Order extends Model
         'shipping_province_code',
         'discount_type',
         'discount_value',
+        'shipping_province',
+        'payment_gateway',
+        'tags',
+        'shipment_status',
+        'delivered_at',
     ];
 
     protected function casts(): array
@@ -77,6 +82,7 @@ class Order extends Model
             'paid_at' => 'datetime',
             'cancelled_at' => 'datetime',
             'placed_at' => 'datetime',
+            'delivered_at' => 'datetime',
             'shopify_updated_at' => 'datetime',
             'submit_attempts' => 'integer',
             'mismatch' => 'boolean',

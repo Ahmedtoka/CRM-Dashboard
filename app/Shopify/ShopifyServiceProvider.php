@@ -7,6 +7,7 @@ use App\Shopify\Client\HttpShopifyTransport;
 use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Client\ShopifyTransport;
 use App\Shopify\Commands\ReconcileCommand;
+use App\Shopify\Commands\ReconcileCountsCommand;
 use App\Shopify\Commands\SyncShippingCommand;
 use App\Shopify\Commands\PurgeStoreDataCommand;
 use App\Shopify\Commands\WebhooksCheckCommand;
@@ -34,6 +35,7 @@ class ShopifyServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 ReconcileCommand::class,
+                ReconcileCountsCommand::class,
                 SyncShippingCommand::class,
                 PurgeStoreDataCommand::class,
                 WebhooksCheckCommand::class,

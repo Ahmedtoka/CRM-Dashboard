@@ -44,12 +44,14 @@ final class OrderMapper
     public function beginBulk(): void
     {
         $this->deferredCustomerIds ??= [];
+        $this->customers->muteBroadcasts(true);
     }
 
     public function endBulk(): void
     {
         $this->flushDeferredFlags();
         $this->deferredCustomerIds = null;
+        $this->customers->muteBroadcasts(false);
     }
 
     /** Recomputes flags once per customer touched since the last flush; call after the chunk commits. */
@@ -63,7 +65,7 @@ final class OrderMapper
         $this->deferredCustomerIds = [];
 
         foreach (array_chunk($ids, 500) as $chunk) {
-            Customer::whereKey($chunk)->get()->each(fn (Customer $customer) => $this->flags->recompute($customer));
+            Customer::whereKey($chunk)->get()->each(fn (Customer $customer) => $this->flags->recompute($customer, broadcast: false));
         }
     }
 
@@ -91,6 +93,14 @@ final class OrderMapper
         }
     }
 
+    /** Webhooks skip any copy not strictly newer; a bulk import only skips older copies (StaleGuard::isOlder). */
+    private function isStale(mixed $stored, ?string $incoming): bool
+    {
+        return $this->deferredCustomerIds !== null
+            ? StaleGuard::isOlder($stored, $incoming)
+            : StaleGuard::isStale($stored, $incoming);
+    }
+
     /**
      * MySQL/MariaDB SQLSTATE 40001 (serialization failure) / error 1213
      * (deadlock found when trying to get lock).
@@ -114,7 +124,7 @@ final class OrderMapper
         return DB::transaction(function () use ($o, $shopifyId) {
             $local = $this->findLocal($o, $shopifyId, lock: true);
 
-            if ($local !== null && StaleGuard::isStale($local->shopify_updated_at, $o['updated_at'] ?? null)) {
+            if ($local !== null && $this->isStale($local->shopify_updated_at, $o['updated_at'] ?? null)) {
                 return MapResult::Skipped;
             }
 
@@ -155,7 +165,7 @@ final class OrderMapper
 
         $existing = Fulfillment::where('shopify_fulfillment_id', $fulfillmentId)->first();
 
-        if ($existing !== null && StaleGuard::isStale($existing->shopify_updated_at, $f['updated_at'] ?? null)) {
+        if ($existing !== null && $this->isStale($existing->shopify_updated_at, $f['updated_at'] ?? null)) {
             return MapResult::Skipped;
         }
 
@@ -173,6 +183,7 @@ final class OrderMapper
             'shopify_updated_at' => Payload::time($f['updated_at'] ?? null),
         ]);
 
+        $this->syncShipmentStatus($order);
         $this->afterChange($order);
 
         return $existing === null ? MapResult::Created : MapResult::Updated;
@@ -290,6 +301,10 @@ final class OrderMapper
             'shopify_updated_at' => Payload::time($o['updated_at'] ?? null),
         ]);
 
+        if (array_key_exists('tags', $o)) {
+            $order->tags = $this->tags($o['tags']);
+        }
+
         if (blank($order->order_number)) {
             $order->order_number = $this->orderNumber($o);
         }
@@ -365,12 +380,14 @@ final class OrderMapper
     {
         $shipping = $o['shipping_address'] ?? [];
         $financial = Payload::lower($o['financial_status'] ?? null);
-        $gateways = strtolower(implode(' ', (array) ($o['payment_gateway_names'] ?? [$o['gateway'] ?? ''])));
+        $gatewayNames = array_values(array_filter(array_map(fn ($g) => Payload::string($g), (array) ($o['payment_gateway_names'] ?? [$o['gateway'] ?? null]))));
+        $gateways = strtolower(implode(' ', $gatewayNames));
         $isCod = str_contains($gateways, 'cash on delivery') || str_contains($gateways, 'cod') || $financial === 'pending';
 
         $order->fill([
             'customer_id' => $customer->id,
             'type' => $isCod ? OrderType::Cod : OrderType::PaymentLink,
+            'payment_gateway' => $gatewayNames !== [] ? mb_substr(implode(', ', $gatewayNames), 0, 191) : null,
             'shopify_order_id' => $shopifyId,
             'shopify_order_name' => Payload::string($o['name'] ?? null),
             'order_number' => $this->orderNumber($o),
@@ -386,6 +403,8 @@ final class OrderMapper
             'shipping_phone' => Payload::string($shipping['phone'] ?? null) ?? Payload::string($o['phone'] ?? null),
             'billing_phone' => Payload::string($o['billing_address']['phone'] ?? null),
             'shipping_city' => Payload::string($shipping['city'] ?? null) ?? Payload::string($shipping['province'] ?? null),
+            'shipping_province' => Payload::string($shipping['province'] ?? null),
+            'shipping_province_code' => Payload::string($shipping['province_code'] ?? null),
             'shipping_address' => $this->addressLine($shipping),
             'shipping_title' => Payload::string($o['shipping_lines'][0]['title'] ?? null),
             'note' => Payload::string($o['note'] ?? null),
@@ -393,6 +412,10 @@ final class OrderMapper
             'cancel_reason' => Payload::string($o['cancel_reason'] ?? null),
             'shopify_updated_at' => Payload::time($o['updated_at'] ?? null),
         ]);
+
+        if (array_key_exists('tags', $o)) {
+            $order->tags = $this->tags($o['tags']);
+        }
 
         // When the customer placed it in the store (orders.created_at is the import time). Never blanked.
         $placedAt = Payload::time($o['created_at'] ?? null) ?? Payload::time($o['processed_at'] ?? null);
@@ -481,6 +504,34 @@ final class OrderMapper
         // Mismatch recompute (spec §6.1); bulk mode is covered by the post-import pass.
         DB::afterCommit(fn () => rescue(fn () => RefreshOrderStatus::dispatch($orderId), null, report: true));
         DB::afterCommit(fn () => SafeBroadcast::send(new OrderUpdated(Order::find($orderId) ?? $order)));
+    }
+
+    /**
+     * The order's delivery progress is its latest live fulfillment's shipment
+     * status (a cancelled fulfillment no longer ships anything); "fulfilled"
+     * with no carrier update yet reads as the fulfillment status itself.
+     */
+    private function syncShipmentStatus(Order $order): void
+    {
+        $latest = $order->fulfillments()
+            ->where(fn ($q) => $q->whereNull('status')->orWhereNotIn('status', ['cancelled', 'failure', 'error']))
+            ->orderByDesc('shopify_created_at')
+            ->orderByDesc('id')
+            ->first();
+
+        $order->forceFill([
+            'shipment_status' => $latest === null ? null : ($latest->shipment_status ?? ($latest->status === 'success' ? 'fulfilled' : $latest->status)),
+            'delivered_at' => $latest?->delivered_at,
+        ])->saveQuietly();
+    }
+
+    /** REST sends "a, b", GraphQL a list; stored as one comma-separated line. */
+    private function tags(mixed $tags): ?string
+    {
+        $list = is_array($tags) ? $tags : explode(',', (string) $tags);
+        $list = array_values(array_filter(array_map(fn ($t) => trim((string) $t), $list), fn ($t) => $t !== ''));
+
+        return $list === [] ? null : implode(', ', $list);
     }
 
     private function refundAmount(array $r): float
@@ -611,6 +662,10 @@ final class OrderMapper
         }
         if (array_key_exists('totalShippingPriceSet', $node)) {
             $o['total_shipping_price_set'] = $node['totalShippingPriceSet'];
+        }
+
+        if (array_key_exists('tags', $node)) {
+            $o['tags'] = $node['tags'];
         }
 
         if (isset($node['customer']['id'])) {

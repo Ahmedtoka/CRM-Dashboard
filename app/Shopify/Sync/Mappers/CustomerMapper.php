@@ -13,7 +13,15 @@ use InvalidArgumentException;
 
 final class CustomerMapper
 {
+    /** Off during a bulk import: one synchronous realtime push per historical customer is pure cost. */
+    private bool $broadcast = true;
+
     public function __construct(private readonly CustomerLinker $linker) {}
+
+    public function muteBroadcasts(bool $mute): void
+    {
+        $this->broadcast = ! $mute;
+    }
 
     /**
      * Upserts the customer and its addresses, then links it to matching CRM customers.
@@ -75,7 +83,10 @@ final class CustomerMapper
 
         if ($result !== MapResult::Skipped) {
             $survivor = $this->linker->link($model) ?? $model;
-            SafeBroadcast::send(new CustomerUpdated($survivor));
+
+            if ($this->broadcast) {
+                SafeBroadcast::send(new CustomerUpdated($survivor));
+            }
         }
 
         return $result;

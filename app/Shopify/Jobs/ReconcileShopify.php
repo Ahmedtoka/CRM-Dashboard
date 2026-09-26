@@ -10,6 +10,7 @@ use App\Shopify\Client\ShopifyException;
 use App\Shopify\Connection\IntegrationRepository;
 use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Sync\IncrementalSync;
+use App\Shopify\Sync\SyncRunRecorder;
 use App\Support\SafeBroadcast;
 use Carbon\CarbonInterface;
 use Illuminate\Bus\Queueable;
@@ -57,6 +58,8 @@ class ReconcileShopify implements ShouldQueue
         if ($integration?->status !== 'connected' || $integration->shop_domain === ShopifyIntegration::DEMO_SHOP_DOMAIN) {
             return;
         }
+
+        app(SyncRunRecorder::class)->closeAbandoned();
 
         $now = now();
         $ordersFixed = 0;

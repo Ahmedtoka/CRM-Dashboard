@@ -55,8 +55,9 @@ const barTone: Record<ShopifyStageState['status'], string> = {
                 <div class="flex items-center justify-between gap-2">
                     <span class="font-medium">{{ t(`settings.shopify.import.stage.${stage}`) }}</span>
                     <span class="text-muted-foreground">
-                        {{ t(`settings.shopify.import.stage_status.${state.status}`) }}
-                        <template v-if="state.status === 'running' || state.status === 'completed'">
+                        <template v-if="state.skipped">{{ t('settings.shopify.import.skipped_with_orders') }}</template>
+                        <template v-else>{{ t(`settings.shopify.import.stage_status.${state.status}`) }}</template>
+                        <template v-if="!state.skipped && (state.status === 'running' || state.status === 'completed')">
                             ·
                             {{ state.total !== null && state.status === 'running' ? t('settings.shopify.import.processed_of_total', { processed: state.processed, total: state.total }) : t('settings.shopify.import.processed_only', { processed: state.processed }) }}
                         </template>

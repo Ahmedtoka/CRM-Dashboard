@@ -98,7 +98,14 @@ final class BulkImporter
             $stages[self::STAGES[0]]['status'] = 'running';
             $stages[self::STAGES[0]]['updated_at'] = now()->toIso8601String();
 
-            $state = ['stages' => $stages, 'orders_since' => $this->defaultOrdersSince()];
+            // A big store has hundreds of thousands of customers; every imported
+            // order brings (and upserts) its own customer, so the full customer
+            // export is opt-in.
+            if (! config('crm.shopify.import_all_customers', false)) {
+                $stages['customers'] = array_merge($stages['customers'], ['status' => 'completed', 'skipped' => true]);
+            }
+
+            $state = ['stages' => $stages, 'orders_since' => $this->defaultOrdersSince(), 'orders_until' => null];
             $integration->forceFill(['import_state' => $state])->save();
 
             return $state;
@@ -106,6 +113,70 @@ final class BulkImporter
 
         SafeBroadcast::send(new IntegrationProgress($state));
         RunBulkImportStage::dispatch(self::STAGES[0]);
+    }
+
+    /**
+     * Imports (creates or updates) every order created between two shop-local
+     * days through one Bulk Operation — the same short, resumable job chain as
+     * the initial import's orders stage, so a month of thousands of orders never
+     * runs inside one long job. Only the orders stage is reset; the others keep
+     * their state and the chain stops after orders.
+     *
+     * @throws ImportAlreadyRunningException while any import stage is running
+     */
+    public function importOrders(string $from, string $to): void
+    {
+        $this->integrations->requireConnected();
+        $this->recorder->closeAbandoned();
+
+        $timezone = self::shopTimezone();
+        $since = CarbonImmutable::parse($from, $timezone)->startOfDay()->toIso8601String();
+        $until = CarbonImmutable::parse($to, $timezone)->endOfDay()->toIso8601String();
+
+        $state = DB::transaction(function () use ($since, $until) {
+            $integration = $this->lockedIntegration()
+                ?? throw new ShopifyException('not_connected', 'No connected Shopify integration');
+            $state = $integration->import_state ?? [];
+
+            foreach (self::STAGES as $stage) {
+                if ($this->isActive($state['stages'][$stage] ?? [])) {
+                    throw new ImportAlreadyRunningException($stage);
+                }
+
+                $state['stages'][$stage] = array_merge(self::freshStage(), $state['stages'][$stage] ?? []);
+            }
+
+            $state['stages']['orders'] = array_merge(self::freshStage(), [
+                'status' => 'running',
+                'updated_at' => now()->toIso8601String(),
+            ]);
+            $state['orders_since'] = $since;
+            $state['orders_until'] = $until;
+            $integration->forceFill(['import_state' => $state])->save();
+
+            return $state;
+        });
+
+        SafeBroadcast::send(new IntegrationProgress($state));
+        RunBulkImportStage::dispatch('orders');
+    }
+
+    /** The store's own day boundaries (Shopify's admin and reports use them). */
+    public static function shopTimezone(): string
+    {
+        return (string) config('crm.shopify.shop_timezone', 'Africa/Cairo');
+    }
+
+    /** The next stage after $stage that is not already completed (e.g. skipped customers). */
+    public function nextPendingStage(string $stage): ?string
+    {
+        while (($stage = self::nextStage($stage)) !== null) {
+            if ($this->stageStatus($stage) !== 'completed') {
+                return $stage;
+            }
+        }
+
+        return null;
     }
 
     /** Dispatches the first incomplete stage, unless a live chain is already working on it. */
@@ -179,7 +250,7 @@ final class BulkImporter
         $current = $this->stageState($stage);
         $continuing = ($current['status'] ?? null) === 'running' && ! empty($current['bulk_operation_id']);
         $run = ($continuing && isset($current['run_id'])) ? ShopifySyncRun::find($current['run_id']) : null;
-        $run ??= $this->recorder->open('initial', $stage);
+        $run ??= $this->openRun($stage);
         $file = $continuing && is_string($current['file'] ?? null) ? $current['file'] : null;
         $temporary = $continuing && (bool) ($current['file_temporary'] ?? false);
 
@@ -270,6 +341,18 @@ final class BulkImporter
 
             throw $e;
         }
+    }
+
+    /** A date-range orders import is logged as a manual run with its range; everything else as the initial import. */
+    private function openRun(string $stage): ShopifySyncRun
+    {
+        $state = $this->integrations->current()?->import_state ?? [];
+
+        if ($stage === 'orders' && is_string($state['orders_until'] ?? null) && is_string($state['orders_since'] ?? null)) {
+            return $this->recorder->open('manual', 'orders', CarbonImmutable::parse($state['orders_since']), CarbonImmutable::parse($state['orders_until']));
+        }
+
+        return $this->recorder->open('initial', $stage);
     }
 
     private function complete(string $stage, ShopifySyncRun $run, SyncRunSummary $summary, ?string $file, bool $temporary): string
@@ -454,12 +537,16 @@ final class BulkImporter
     {
         $since = null;
 
+        $until = null;
+
         if ($stage === 'orders') {
-            $since = $this->integrations->current()?->import_state['orders_since'] ?? $this->defaultOrdersSince();
+            $state = $this->integrations->current()?->import_state ?? [];
+            $since = $state['orders_since'] ?? $this->defaultOrdersSince();
+            $until = is_string($state['orders_until'] ?? null) ? $state['orders_until'] : null;
             $this->updateStage($stage, ['orders_since' => $since]);
         }
 
-        $data = $this->client->mutate(SyncQueries::bulkRun($stage, $since), [], 'bulkOperationRunQuery');
+        $data = $this->client->mutate(SyncQueries::bulkRun($stage, $since, $until), [], 'bulkOperationRunQuery');
         $id = $data['bulkOperationRunQuery']['bulkOperation']['id'] ?? null;
 
         if (! is_string($id) || $id === '') {
@@ -568,8 +655,7 @@ final class BulkImporter
         $buffer = [];
         $end = $offset;
         $chunks = 0;
-        $orders = $this->rows->orders();
-        $orders->beginBulk();
+        $this->rows->beginBulk();
 
         try {
             foreach ($this->reader->objects($path, $offset) as [$row, , $next]) {
@@ -597,7 +683,7 @@ final class BulkImporter
                 $summary = $this->mapChunk($stage, $buffer, $run, $summary, $end);
             }
         } finally {
-            $orders->endBulk();
+            $this->rows->endBulk();
         }
 
         return [$summary, true];

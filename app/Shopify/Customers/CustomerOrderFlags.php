@@ -22,7 +22,12 @@ final class CustomerOrderFlags
 
     public function __construct(private readonly IntegrationRepository $integrations) {}
 
-    public function recompute(Customer $customer): void
+    /**
+     * $broadcast is false for a bulk import: thousands of historical orders must
+     * not push one realtime update per customer (each is a synchronous call to
+     * the broadcast server, seconds apiece when it is unreachable).
+     */
+    public function recompute(Customer $customer, bool $broadcast = true): void
     {
         $id = $customer->getKey();
         $orders = fn (): Builder => Order::query()->where('customer_id', $id);
@@ -64,6 +69,9 @@ final class CustomerOrderFlags
         }
 
         Customer::query()->whereKey($id)->update($flags + ['updated_at' => now()]);
-        SafeBroadcast::send(new CustomerUpdated($customer));
+
+        if ($broadcast) {
+            SafeBroadcast::send(new CustomerUpdated($customer));
+        }
     }
 }
