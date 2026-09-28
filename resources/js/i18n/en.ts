@@ -1539,6 +1539,7 @@ const en: Messages = {
                 flows: 'Flow and menu steps',
                 flow_sentences: 'Fixed sentences inside the flows',
                 handover: 'Handover to a person and waiting',
+                queue: 'Queue',
                 rules: 'Keyword rules (they answer before the agent)',
                 steps: 'Step sentences (written in code — edit them here)',
                 status_words: 'Order status words and delivery estimates',

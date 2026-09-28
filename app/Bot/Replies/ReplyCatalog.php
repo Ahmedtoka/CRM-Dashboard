@@ -26,7 +26,7 @@ class ReplyCatalog
 {
     public function __construct(private readonly ArabicOverrides $overrides, private readonly TranslationMask $mask) {}
 
-    public const SECTIONS = ['agent', 'greeting', 'questions', 'facts', 'products', 'flows', 'flow_sentences', 'handover', 'rules', 'steps', 'status_words'];
+    public const SECTIONS = ['agent', 'greeting', 'questions', 'facts', 'products', 'flows', 'flow_sentences', 'handover', 'queue', 'rules', 'steps', 'status_words'];
 
     /** The step classes whose sentences are listed under «جمل الخطوات», with what each step is. */
     private const STEP_LABELS = [
@@ -81,6 +81,7 @@ class ReplyCatalog
         'script.waiting_ack_' => 'بتكتب وهي مستنية الموظف',
         'script.delayed_response' => 'كررت سؤالها ومحدش رد',
         'script.offer_human' => 'آخر أول رد — عرض موظف',
+        'script.queue_' => 'بتتبعت من نظام الطابور لما العميلة تستنى موظفة أو يجي دورها',
     ];
 
     /** The same moments in English (the dashboard is fully English in EN). */
@@ -116,6 +117,7 @@ class ReplyCatalog
         'script.waiting_ack_' => 'She keeps writing while waiting for a person',
         'script.delayed_response' => 'She repeated her question and nobody answered',
         'script.offer_human' => 'End of the first reply — offer of a person',
+        'script.queue_' => 'Sent by the queue system while she waits for a person or when her turn comes',
     ];
 
     /** @return array{sections: list<array{key:string, rows:list<array<string, mixed>>}>, agent: array<string, mixed>} */
@@ -290,6 +292,7 @@ class ReplyCatalog
             str_starts_with($key, 'script.greeting'), $key === 'script.thanks' => 'greeting',
             str_starts_with($key, 'script.product') => 'products',
             str_starts_with($key, 'script.flow_') => 'flow_sentences',
+            str_starts_with($key, 'script.queue_') => 'queue',
             default => 'handover',
         };
     }
