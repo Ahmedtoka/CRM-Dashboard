@@ -62,6 +62,10 @@ class Conversation extends Model
         'handover_category',
         'handover_topic',
         'queue',
+        'assignee_id',
+        'assigned_at',
+        'queue_entry_id',
+        'return_priority_until',
     ];
 
     protected function casts(): array
@@ -85,6 +89,8 @@ class Conversation extends Model
             'bot_state' => 'array',
             'is_test' => 'boolean',
             'ad_attributed_at' => 'datetime',
+            'assigned_at' => 'datetime',
+            'return_priority_until' => 'datetime',
         ];
     }
 
@@ -206,6 +212,22 @@ class Conversation extends Model
     public function resolvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'resolved_by_id');
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function assignee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assignee_id');
+    }
+
+    /**
+     * @return BelongsTo<QueueEntry, $this>
+     */
+    public function queueEntry(): BelongsTo
+    {
+        return $this->belongsTo(QueueEntry::class, 'queue_entry_id');
     }
 
     /**
