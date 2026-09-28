@@ -17,7 +17,7 @@ class QueueScripts
 
     public function text(string $key, array $vars = []): ?string
     {
-        $body = $this->prompter->script($key);
+        $body = $this->prompter->script($key, $vars);
         if ($body === null) {
             if (BotKnowledgeEntry::query()->where('key', 'script.'.$key)->exists()) {
                 return null; // the owner turned it off

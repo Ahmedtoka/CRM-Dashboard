@@ -12,3 +12,11 @@ it('seeds queue scripts and fills placeholders', function () {
     BotKnowledgeEntry::where('key', 'script.queue_left_5')->update(['is_active' => false]);
     expect(app(QueueScripts::class)->text('queue_left_5'))->toBeNull();
 });
+
+it('fills case_id on the active seeded row, not an empty gap', function () {
+    expect(BotKnowledgeEntry::where('key', 'script.queue_case_opened')->value('is_active'))->toBeTrue()
+        ->and(BotKnowledgeEntry::where('key', 'script.queue_case_resolved')->value('is_active'))->toBeTrue();
+
+    expect(app(QueueScripts::class)->text('queue_case_opened', ['case_id' => 4321]))->toContain('4321')
+        ->and(app(QueueScripts::class)->text('queue_case_resolved', ['case_id' => 4321]))->toContain('4321');
+});
