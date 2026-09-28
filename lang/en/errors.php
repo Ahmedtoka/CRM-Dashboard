@@ -85,6 +85,10 @@ return [
         'burst_max_wait_attribute' => 'burst max wait seconds',
     ],
 
+    'queue' => [
+        'warn_before_close' => 'The warning timer must be shorter than the close timer.',
+    ],
+
     'users' => [
         'cannot_remove_own_admin' => 'You cannot remove your own admin access.',
         'cannot_deactivate_self' => 'You cannot deactivate yourself.',

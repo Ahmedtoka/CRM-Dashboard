@@ -224,6 +224,42 @@ export interface BotSettings {
     store_url?: string | null;
 }
 
+/** One row of `queue_settings.shifts` / `queue_settings.default_roster` shift templates. */
+export interface QueueShiftTemplate {
+    key: string;
+    name: string;
+    from: string;
+    to: string;
+    location: 'office' | 'home';
+    leader_user_id: number | null;
+}
+
+/** The handover-queue settings singleton (`QueueSetting::current()`). */
+export interface QueueSettings {
+    id: number;
+    enabled: boolean;
+    windows_per_moderator: number;
+    silence_warn_seconds: number;
+    silence_close_seconds: number;
+    return_priority_minutes: number;
+    close_confirm_minutes: number;
+    sla_first_reply_seconds: number;
+    sla_target_pct: number;
+    occupancy_cap_pct: number;
+    break_minutes: number;
+    break_after_minutes: number;
+    review_sample_pct: number;
+    review_delay_seconds: number;
+    case_sla_hours: number;
+    night_message_enabled: boolean;
+    speed_fast_seconds: number;
+    speed_ok_seconds: number;
+    eta_default_handle_seconds: number;
+    points: Record<string, number> | null;
+    shifts: QueueShiftTemplate[] | null;
+    default_roster: Record<string, unknown> | null;
+}
+
 export type BotIntentRoute = 'answer' | 'lookup' | 'collect_then_handover' | 'handover';
 
 /** One row of `bot_intents` (settings/BotIntents). */

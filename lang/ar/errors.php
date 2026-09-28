@@ -84,6 +84,10 @@ return [
         'burst_max_wait_attribute' => 'أقصى مدة انتظار لتجميع الرسايل بالثواني',
     ],
 
+    'queue' => [
+        'warn_before_close' => 'مهلة التحذير لازم تكون أقل من مهلة القفل',
+    ],
+
     'users' => [
         'cannot_remove_own_admin' => 'مينفعش تشيل صلاحية الأدمن من نفسك.',
         'cannot_deactivate_self' => 'مينفعش توقف حسابك بنفسك.',

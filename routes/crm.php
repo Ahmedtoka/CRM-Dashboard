@@ -30,6 +30,7 @@ use App\Http\Controllers\Web\Settings\ChannelController;
 use App\Http\Controllers\Web\Settings\CityController;
 use App\Http\Controllers\Web\Settings\FacebookLoginController;
 use App\Http\Controllers\Web\Settings\IntegrationController;
+use App\Http\Controllers\Web\Settings\QueueSettingController;
 use App\Http\Controllers\Web\Settings\QuickReplyCategoryController;
 use App\Http\Controllers\Web\Settings\QuickReplyController;
 use App\Http\Controllers\Web\Settings\ShopifyIntegrationController;
@@ -167,6 +168,11 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
     Route::prefix('settings')->name('settings.')->middleware('role:supervisor')->group(function () {
         Route::get('bot', [BotController::class, 'index'])->name('bot.index');
         Route::put('bot', [BotController::class, 'update'])->name('bot.update');
+
+        // Handover queue settings (queue routing design 2026-09-26): windows, timers, SLA,
+        // points and shift templates. Points/shifts are admin-only inside the controller.
+        Route::get('queue', [QueueSettingController::class, 'index'])->name('queue');
+        Route::put('queue', [QueueSettingController::class, 'update'])->name('queue.update');
 
         // Intent catalog (human bot flow Task 5): routing/priority/queue/scripts per intent.
         Route::get('bot-intents', [BotIntentController::class, 'index'])->name('bot-intents.index');
