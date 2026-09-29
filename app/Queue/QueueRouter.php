@@ -136,7 +136,15 @@ class QueueRouter
         // or the assignment failed: the window stays free for the next customer.
         $give = function (QueueEntry $e, ShiftMember $m, string $rule, string $key) use (&$load, &$lines, $setting): bool {
             if (! rescue(fn () => $this->assign($e, $m, $rule, $key, $setting), false, report: true)) {
-                $lines[] = '<span class="no">#'.$e->ticket_no.': خرجت من الصالة قبل التسليم</span>';
+                if ($e->fresh()?->status === 'waiting') {
+                    // The customer is still there, so the moderator was refused (or the write
+                    // failed): her desk is not what the snapshot said, nothing more for her in
+                    // this pass. The customer waits for the next one.
+                    $lines[] = '<span class="no">#'.$e->ticket_no.': '.e($m->user->name).' مبقتش متاحة، مستنية الدور الجاي</span>';
+                    $load[$m->user_id] = PHP_INT_MAX;
+                } else {
+                    $lines[] = '<span class="no">#'.$e->ticket_no.': خرجت من الصالة قبل التسليم</span>';
+                }
 
                 return false;
             }
@@ -303,18 +311,31 @@ class QueueRouter
     /**
      * Gives the entry to the user's lowest free window and tells everyone once committed.
      * One short transaction (retried on a deadlock) that locks the conversation, then the entry
-     * (the queue's lock order), and checks under the locks that she is still waiting. False, and
-     * nothing changes, when she is not (cancelled, resolved elsewhere, already given to somebody).
+     * then the moderator's shift-member row (the queue's lock order), and checks under the locks
+     * that the customer is still waiting and that the moderator may still take her
+     * (`assignable()`). False, and nothing changes, when not: the entry stays waiting for the
+     * next pass (or, when the customer left, stays as it is).
      */
     public function assign(QueueEntry $e, ShiftMember $m, string $rule, string $ruleKey, ?QueueSetting $setting = null): bool
     {
-        return DB::transaction(function () use ($e, $m, $rule, $ruleKey) {
+        return DB::transaction(function () use ($e, $m, $rule, $ruleKey, $setting) {
             $locked = WindowLifecycle::lockBoth($e->id);
             $c = $locked?->conversation;
 
             if ($locked === null || $c === null || $locked->status !== 'waiting') {
                 return false;
             }
+
+            // Third lock, after the conversation and the entry: her desk. The pass chose her from
+            // a snapshot; she may have gone on break, gone offline, left, or filled her windows since.
+            $desk = ShiftMember::query()->with(['shift', 'user'])->lockForUpdate()->find($m->id);
+
+            if ($desk === null || ! $this->assignable($desk, $setting ?? QueueSetting::current())) {
+                return false;
+            }
+
+            $m->setRawAttributes($desk->getAttributes(), true);
+            $m->setRelation('user', $desk->user);
 
             $used = $this->openForUser($m->user_id)->whereNotNull('window_no')->pluck('window_no')->map(fn ($w) => (int) $w)->all();
             $window = 1;
@@ -351,6 +372,19 @@ class QueueRouter
 
             return true;
         }, attempts: 3);
+    }
+
+    /**
+     * May this desk take one more window right now: serving (available / busy, so not on break,
+     * waiting for her break, offline or gone), her shift still open, her account active, and her
+     * open windows (per USER) below her cap.
+     */
+    private function assignable(ShiftMember $m, QueueSetting $setting): bool
+    {
+        return in_array($m->status, ['available', 'busy'], true)
+            && $m->shift?->status === 'open'
+            && $m->user !== null && $m->user->is_active
+            && $this->openForUser((int) $m->user_id)->count() < $this->capOf($m, $setting);
     }
 
     /** An escalation nobody on the shift can take: alert active supervisors, at most once per entry per 15 min. */

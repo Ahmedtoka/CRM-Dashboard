@@ -292,3 +292,84 @@ it('writes no decision line when nobody is waiting', function () {
 
     expect(app(QueueRouter::class)->run('t'))->toBe(0)->and(QueueDecision::count())->toBe(0);
 });
+
+it('refuses a member who stopped serving between the selection and the assignment', function (Closure $change) {
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
+    $e = routerWaiting();
+    $snapshot = ShiftMember::query()->with('user')->find($a->id); // what the pass read
+    $change($a);
+
+    expect(app(QueueRouter::class)->assign($e, $snapshot, 'قاعدة', 'live'))->toBeFalse();
+
+    $fresh = $e->fresh();
+    expect($fresh->status)->toBe('waiting')
+        ->and($fresh->assigned_user_id)->toBeNull()
+        ->and($fresh->window_no)->toBeNull()
+        ->and($fresh->conversation->assignee_id)->toBeNull()
+        ->and($a->fresh()->status)->not->toBe('busy')
+        ->and(UserNotification::where('type', 'queue.assigned')->count())->toBe(0);
+})->with([
+    'went on break' => [fn (ShiftMember $m) => $m->update(['status' => 'break', 'break_started_at' => now(), 'break_ends_at' => now()->addMinutes(30)])],
+    'asked for her break' => [fn (ShiftMember $m) => $m->update(['status' => 'pending_break'])],
+    'went offline' => [fn (ShiftMember $m) => $m->update(['status' => 'offline'])],
+    'left the shift' => [fn (ShiftMember $m) => $m->update(['status' => 'left', 'left_at' => now()])],
+    'shift closed' => [fn (ShiftMember $m) => $m->shift->update(['status' => 'closed', 'closed_at' => now()])],
+    'account deactivated' => [fn (ShiftMember $m) => $m->user->forceFill(['is_active' => false])->save()],
+]);
+
+it('refuses a member who reached her cap, counted per user across shift-member rows', function () {
+    $early = Shift::factory()->create(['shift_key' => 'early', 'status' => 'closed']);
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift); // cap 2 from the settings
+    $old = ShiftMember::factory()->for($early)->create(['user_id' => $a->user_id, 'status' => 'left']);
+    QueueEntry::factory()->create(['shift_member_id' => $old->id, 'assigned_user_id' => $a->user_id, 'status' => 'active', 'window_no' => 1]);
+    $first = routerWaiting();
+    $second = routerWaiting();
+
+    expect(app(QueueRouter::class)->assign($first, $a, 'قاعدة', 'live'))->toBeTrue()
+        ->and($first->fresh()->window_no)->toBe(2)
+        ->and(app(QueueRouter::class)->assign($second, $a, 'قاعدة', 'live'))->toBeFalse()
+        ->and($second->fresh()->status)->toBe('waiting')
+        ->and($second->fresh()->assigned_user_id)->toBeNull()
+        ->and(UserNotification::where('type', 'queue.assigned')->count())->toBe(1);
+});
+
+it('respects her own windows cap over the default when re-checking', function () {
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift, attrs: ['windows_cap' => 1]);
+    $first = routerWaiting();
+    $second = routerWaiting();
+
+    expect(app(QueueRouter::class)->assign($first, $a, 'قاعدة', 'live'))->toBeTrue()
+        ->and(app(QueueRouter::class)->assign($second, $a, 'قاعدة', 'live'))->toBeFalse()
+        ->and($second->fresh()->status)->toBe('waiting');
+});
+
+it('leaves the customer waiting and gives her to somebody else when the chosen member went on break during the pass', function () {
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
+    $b = routerMember($shift);
+    QueueEntry::factory()->create(['shift_member_id' => $b->id, 'assigned_user_id' => $b->user_id, 'status' => 'active', 'window_no' => 1]);
+    $e = routerWaiting();
+    $next = routerWaiting();
+    // The pass has read the desks; the least loaded one goes on break before the assignment.
+    // (Her conversation is read once with the lounge and a second time under the lock in assign().)
+    $seen = 0;
+    Conversation::retrieved(function (Conversation $c) use ($a, $e, &$seen) {
+        if ($c->id === $e->conversation_id && ++$seen === 2) {
+            ShiftMember::query()->whereKey($a->id)->update(['status' => 'break']);
+        }
+    });
+
+    expect(app(QueueRouter::class)->run('t'))->toBe(1);
+
+    expect($e->fresh()->status)->toBe('waiting')
+        ->and($next->fresh()->assigned_user_id)->toBe($b->user_id)
+        ->and($a->fresh()->status)->toBe('break')
+        ->and(QueueEntry::query()->where('assigned_user_id', $a->user_id)->count())->toBe(0);
+
+    ShiftMember::query()->whereKey($a->id)->update(['status' => 'available']);
+    app(QueueRouter::class)->run('t');
+    expect($e->fresh()->status)->toBe('active');
+});
