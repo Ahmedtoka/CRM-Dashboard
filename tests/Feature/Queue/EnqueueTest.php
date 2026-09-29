@@ -78,12 +78,63 @@ it('still alerts supervisors for a high-priority handover the queue takes', func
 });
 
 it('sends the 5/3/1 messages once each as the estimate shrinks', function () {
-    openMorningShift();
-    $e = app(QueueService::class)->enqueue(queueConv(), new HandoverContext('x', 'x', 'medium', null, [], 'unknown'));
+    // One member, one window, busy with a customer delivered just now; a handle takes 10 minutes.
+    QueueSetting::current()->update(['eta_default_handle_seconds' => 600]);
+    $shift = Shift::factory()->create();
+    $c = queueConv();
+    $user = User::factory()->create(['role' => 'moderator']);
+    $user->userPlatforms()->create(['platform' => $c->platform]);
+    $m = ShiftMember::factory()->for($shift)->create(['user_id' => $user->id, 'windows_cap' => 1, 'status' => 'busy']);
+    QueueEntry::factory()->create(['shift_id' => $shift->id, 'shift_member_id' => $m->id, 'assigned_user_id' => $user->id, 'status' => 'active', 'ticket_no' => 900, 'delivered_at' => now()]);
+
+    $e = app(QueueService::class)->enqueue($c, new HandoverContext('x', 'x', 'medium', null, [], 'unknown'));
+    expect($e->eta_seconds)->toBe(600)->and($e->waiting_messages)->toBe([]);
+
     $est = app(WaitEstimator::class);
-    $e->update(['eta_seconds' => 290]); $est->tickWaiting($e->fresh()); $est->tickWaiting($e->fresh());
-    $bodies = $e->conversation->messages()->where('sender_type', 'bot')->pluck('body');
-    expect($bodies->filter(fn ($b) => str_contains($b, '5 دقايق'))->count())->toBe(1);
+    $count = fn (string $needle) => $c->messages()->where('sender_type', 'bot')->pluck('body')->filter(fn ($b) => str_contains($b, $needle))->count();
+    $tickAt = function (int $seconds) use ($est, $e) {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo')->addSeconds($seconds));
+        $est->tickWaiting($e->fresh());
+    };
+
+    // Each message goes out on the very tick the estimate crosses its threshold (no one-tick lag), and only once.
+    $tickAt(310);   // 290 s left
+    expect($count('5 دقايق'))->toBe(1)->and($e->fresh()->eta_seconds)->toBe(290)->and($count('3 دقايق'))->toBe(0);
+    $tickAt(320);   // 280 s
+    expect($count('5 دقايق'))->toBe(1)->and($e->fresh()->eta_seconds)->toBe(280);
+    $tickAt(430);   // 170 s
+    expect($count('3 دقايق'))->toBe(1)->and($count('دقيقة واحدة'))->toBe(0);
+    $tickAt(550); $tickAt(560);   // 50 s, 40 s
+    expect($count('دقيقة واحدة'))->toBe(1)->and($count('5 دقايق'))->toBe(1)->and($count('3 دقايق'))->toBe(1);
+});
+
+it('numbers tickets 1, 2, 3 per business day with one row per day', function () {
+    $svc = app(QueueService::class);
+    expect([$svc->nextTicket('2026-10-05'), $svc->nextTicket('2026-10-05'), $svc->nextTicket('2026-10-05')])->toBe([1, 2, 3])
+        ->and($svc->nextTicket('2026-10-06'))->toBe(1)
+        ->and($svc->nextTicket('2026-10-05'))->toBe(4)
+        ->and(\App\Models\QueueDay::count())->toBe(2)
+        ->and(\App\Models\QueueDay::where('date', '2026-10-05')->value('next_ticket'))->toBe(5);
+});
+
+it('gives a returning customer at night the night message and no estimate', function () {
+    Carbon::setTestNow(Carbon::parse('2026-10-05 02:30', 'Africa/Cairo'));
+    $c = queueConv();
+    $c->forceFill(['return_priority_until' => now()->addHour()])->save();
+    $svc = app(QueueService::class);
+    $a = $svc->enqueue($c, new HandoverContext('returning', 'x', 'medium', null, [], 'unknown'));
+    $b = $svc->enqueue(queueConv(), new HandoverContext('returning', 'x', 'medium', null, [], 'unknown'), 'returning');
+    expect([$a->priority, $b->priority])->toBe(['overnight', 'overnight'])->and($a->eta_seconds)->toBeNull()
+        ->and($c->messages()->where('sender_type', 'bot')->latest('id')->value('body'))->toContain('خارج مواعيد العمل')->toContain('نفتح الساعة 10 الصبح')
+        ->not->toContain('الساعة الساعة');
+});
+
+it('keeps returning priority while a shift is open', function () {
+    openMorningShift();
+    $c = queueConv();
+    $c->forceFill(['return_priority_until' => now()->addHour()])->save();
+    $e = app(QueueService::class)->enqueue($c, new HandoverContext('returning', 'x', 'medium', null, [], 'unknown'));
+    expect($e->priority)->toBe('returning')->and($c->messages()->where('sender_type', 'bot')->latest('id')->value('body'))->toContain('أهلاً بيكي تاني');
 });
 
 it('lets the queue script replace the working-hours transfer sentence', function () {

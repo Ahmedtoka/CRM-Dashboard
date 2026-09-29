@@ -70,22 +70,37 @@ class QueueService
         return CarbonImmutable::instance($at ?? now())->setTimezone(self::TZ)->toDateString();
     }
 
-    /** The next ticket of the day, under a row lock (the day's row is created on first use). */
+    /**
+     * The next ticket of the day ('Y-m-d', Cairo business date).
+     *
+     * Lock order: the upsert is the FIRST statement touching the day's row, and it is a write —
+     * it inserts the row (next_ticket 2, ticket 1 is ours) or bumps next_ticket on the unique
+     * `date` key, taking the row's exclusive lock in one step. A concurrent caller blocks on that
+     * same upsert until we commit, so nobody ever holds a shared lock it then has to upgrade
+     * (the insert-ignore + SELECT … FOR UPDATE pattern deadlocks on MySQL with error 1213).
+     * The SELECT … FOR UPDATE afterwards re-reads the row we already own, by the unique index.
+     * `attempts: 3` retries a deadlock only when this is the outermost transaction; nested
+     * inside the ingest transaction the outer one decides (acceptable: the webhook is retried).
+     *
+     * `queue_days.date` is always written and compared as the plain 'Y-m-d' string (query-builder
+     * upsert, no Eloquent date cast), so the unique key matches on MySQL (DATE) and SQLite alike.
+     */
     public function nextTicket(string $date): int
     {
+        $date = CarbonImmutable::parse($date)->toDateString();
+
         return DB::transaction(function () use ($date) {
             $stamp = now();
-            // Two first-of-the-day handovers at once: only one row is ever created.
-            QueueDay::query()->insertOrIgnore([
-                'date' => (new QueueDay)->fromDateTime($date), 'next_ticket' => 1, 'opened_at' => $stamp, 'created_at' => $stamp, 'updated_at' => $stamp,
-            ]);
+            QueueDay::query()->upsert(
+                [['date' => $date, 'next_ticket' => 2, 'opened_at' => $stamp, 'created_at' => $stamp, 'updated_at' => $stamp]],
+                ['date'],
+                ['next_ticket' => DB::raw('next_ticket + 1'), 'updated_at' => $stamp],
+            );
 
-            $day = QueueDay::query()->whereDate('date', $date)->lockForUpdate()->firstOrFail();
-            $n = (int) $day->next_ticket;
-            $day->update(['next_ticket' => $n + 1]);
+            $day = QueueDay::query()->where('date', $date)->lockForUpdate()->firstOrFail();
 
-            return $n;
-        });
+            return (int) $day->next_ticket - 1;
+        }, attempts: 3);
     }
 
     public function activeEntry(Conversation $c): ?QueueEntry
@@ -107,9 +122,12 @@ class QueueService
         }
 
         $shift = $this->openShift();
-        $priority ??= match (true) {
+        // No shift open: overnight first — a returning customer at night gets the night message
+        // and no ETA; her returning priority applies only while a shift is serving.
+        $priority = match (true) {
+            $shift === null && in_array($priority, [null, 'returning'], true) => 'overnight',
+            $priority !== null => $priority,
             $c->return_priority_until !== null && $c->return_priority_until->isFuture() => 'returning',
-            $shift === null => 'overnight',
             default => 'live',
         };
         $date = $this->businessDate();
@@ -200,15 +218,15 @@ class QueueService
         return true;
     }
 
-    /** «الساعة 10 الصبح»: the first shift template's start. */
+    /** «10 الصبح»: the first shift template's start (the script itself says «الساعة {opening}»). */
     private function nextOpeningPhrase(): string
     {
         $from = (string) ($this->settings()->shiftTemplates()[0]['from'] ?? '10:00');
 
         try {
-            return 'الساعة '.WorkingHours::clock(CarbonImmutable::createFromFormat('H:i', $from, self::TZ));
+            return WorkingHours::clock(CarbonImmutable::createFromFormat('H:i', $from, self::TZ));
         } catch (\Throwable) {
-            return 'الساعة '.$from;
+            return $from;
         }
     }
 }

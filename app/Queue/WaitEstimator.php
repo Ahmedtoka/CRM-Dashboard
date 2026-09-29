@@ -103,7 +103,8 @@ class WaitEstimator
             return;
         }
 
-        $left = $e->eta_seconds ?? $this->eta($e);
+        // One fresh estimate drives this tick's messages and is the one saved (no one-tick lag).
+        $left = $this->eta($e);
         $sent = $e->waiting_messages ?? [];
 
         foreach (self::THRESHOLDS as $m => $sec) {
@@ -123,6 +124,6 @@ class WaitEstimator
             }
         }
 
-        $e->forceFill(['waiting_messages' => $sent, 'eta_seconds' => $this->eta($e)])->save();
+        $e->forceFill(['waiting_messages' => $sent, 'eta_seconds' => $left])->save();
     }
 }
