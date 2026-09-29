@@ -4,6 +4,7 @@ import NotificationBell from '@/components/crm/NotificationBell.vue';
 import ShortcutsDialog from '@/components/crm/ShortcutsDialog.vue';
 import ToastStack from '@/components/crm/ToastStack.vue';
 import { useCommandPalette } from '@/composables/useCommandPalette';
+import { useHeartbeat } from '@/composables/useHeartbeat';
 import { useI18n } from '@/composables/useI18n';
 import { useNotifications } from '@/composables/useNotifications';
 import { formatKeys, useShortcuts } from '@/composables/useShortcuts';
@@ -36,6 +37,7 @@ const shortcutsOpen = ref(false);
 const palette = useCommandPalette();
 const notifications = useNotifications();
 notifications.start();
+useHeartbeat().start();
 useShortcuts([
     { id: 'global.help', keys: ['shift+?'], labelKey: 'shortcuts.help', group: 'global', handler: () => (shortcutsOpen.value = true) },
     { id: 'global.escape', keys: ['escape'], labelKey: 'shortcuts.close', group: 'global', allowInInput: true },
