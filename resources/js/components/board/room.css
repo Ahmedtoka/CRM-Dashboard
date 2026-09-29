@@ -1263,3 +1263,20 @@
     color: var(--case);
     font-weight: 700;
 }
+
+/* Flow revision: a customer with an open case. */
+.board-room .badge.case {
+    background: var(--case);
+}
+.board-room .slot .cs {
+    position: absolute;
+    left: 3px;
+    top: 18px;
+    font-weight: 700;
+    font-size: 9px;
+    line-height: 12px;
+    background: var(--case);
+    color: #1b1400;
+    border-radius: 6px;
+    padding: 0 4px;
+}

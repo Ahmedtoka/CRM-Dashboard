@@ -6,6 +6,7 @@ use App\Bot\HandoverSummary;
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
 use App\Models\Conversation;
+use App\Models\SupportCase;
 use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -82,6 +83,9 @@ class ConversationResource extends JsonResource
             'assignee' => self::assignee($c),
             // The handover-queue ticket (not the older `queue` agents/senior badge above).
             'queue_entry' => self::queueEntry($c),
+            // Her open support case (flow revision §6): the thread shows «عندها كيس مفتوح #N» even
+            // before a ticket is called, so it is not read off the queue entry.
+            'open_case_id' => self::openCaseId($c),
             // Fix round 1, minor (i): the claim button needs to know whether the
             // viewer may reply at all — computed here (not per row in the list
             // query) so a moderator scoped away from this platform never sees it.
@@ -123,6 +127,15 @@ class ConversationResource extends JsonResource
             'bot_summary' => $e->bot_summary,
             'open_case_id' => $e->open_case_id,
         ] : null;
+    }
+
+    /** Her open support case id: from the list query's sub-select, else one lookup for a single row. */
+    public static function openCaseId(Conversation $c): ?int
+    {
+        $attributes = $c->getAttributes();
+        $id = array_key_exists('open_case_id', $attributes) ? $attributes['open_case_id'] : SupportCase::openIdFor($c);
+
+        return $id !== null ? (int) $id : null;
     }
 
     /** Arabic handover category label from HandoverSummary, the one labels source (human bot flow Task 5). */

@@ -2372,6 +2372,7 @@ const en: Messages = {
         waiting_reply: 'Waiting for your reply',
         reply_overdue: 'Reply overdue',
         handoff_left: 'Handed to a colleague in',
+        open_case: 'Open case #{id}',
         unread: 'New messages',
         priority: {
             returning: 'Returning',
@@ -2513,6 +2514,7 @@ const en: Messages = {
             overnight: 'From the night',
             waiting_for: 'Waiting {time}',
             reserved_for: 'For {name}',
+            open_case: 'Case #{id}',
             eta: 'about {n} min',
             more: '+{n} more',
         },
@@ -2546,6 +2548,7 @@ const en: Messages = {
             reply_overdue: 'Reply overdue',
             handoff: 'Handed to a colleague in {time}',
             no_handoff: 'Escalation: not handed on',
+            open_case: 'Open case',
         },
         assign: {
             title: 'Assign to a moderator',
@@ -2654,6 +2657,9 @@ const en: Messages = {
         queue_assigned_item: '{name} reached you · ticket #{ticket}',
         queue_escalation_waiting_item: 'Escalation waiting for a leader · {name} · ticket #{ticket}',
         queue_mass_offline_item: 'Connection lost for {count} of {serving} moderators at once; their windows were left as they are',
+        queue_reply_overdue_item: '{name} is waiting for your reply · ticket #{ticket}',
+        queue_reply_overdue_leader_item: '{agent} has not replied to {name} · ticket #{ticket}',
+        queue_member_not_arrived_item: '{name} has not logged in yet · {shift} shift',
         channel_problem_codes: {
             token_missing: 'No token saved — reconnect the account',
             token_invalid: 'The token is no longer valid — reconnect the account',
@@ -2672,6 +2678,9 @@ const en: Messages = {
             queue_assigned: 'A customer reached you',
             queue_escalation_waiting: 'Escalation waiting for a leader',
             queue_mass_offline: 'Many moderators went offline at once',
+            queue_reply_overdue: 'A customer is waiting for your reply',
+            queue_reply_overdue_leader: 'A moderator has not replied',
+            queue_member_not_arrived: 'A moderator has not logged in',
         },
     },
     shortcuts: {

@@ -110,6 +110,10 @@ async function cancel(): Promise<void> {
                     <dt class="text-muted-foreground">{{ t('board.entry.priority') }}</dt>
                     <dd class="font-semibold text-foreground">{{ t(`board.priority.${entry.priority}`) }}</dd>
                 </div>
+                <div v-if="entry.open_case_id" class="rounded-md bg-muted px-3 py-2">
+                    <dt class="text-muted-foreground">{{ t('board.entry.open_case') }}</dt>
+                    <dd class="font-semibold tabular-nums text-foreground" dir="ltr">#{{ entry.open_case_id }}</dd>
+                </div>
                 <div v-if="waiting && reservedName" class="rounded-md bg-muted px-3 py-2">
                     <dt class="text-muted-foreground">{{ t('board.entry.reserved') }}</dt>
                     <dd class="truncate font-semibold text-foreground">{{ reservedName }}</dd>

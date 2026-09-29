@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\SupportCaseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -70,6 +71,36 @@ class SupportCase extends Model
             'sla_due_at' => 'datetime',
             'resolved_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The id of the customer's open case (not closed, not resolved), newest first: on her customer
+     * record, else — no customer — on this conversation. The same rule as QueueService::openCaseFor,
+     * so the inbox chip and the ticket agree (flow revision §6).
+     */
+    public static function openIdFor(Conversation $c): ?int
+    {
+        $id = static::query()->where('status', '!=', 'closed')->whereNull('resolved_at')
+            ->when($c->customer_id !== null, fn ($q) => $q->where('customer_id', $c->customer_id), fn ($q) => $q->where('conversation_id', $c->id))
+            ->latest('id')->value('id');
+
+        return $id !== null ? (int) $id : null;
+    }
+
+    /**
+     * The same lookup as a correlated sub-select over `conversations`, so a list of conversations
+     * carries `open_case_id` in its one query instead of one per row.
+     *
+     * @return Builder<SupportCase>
+     */
+    public static function openIdSubquery(): Builder
+    {
+        return static::query()->select('support_cases.id')
+            ->where('support_cases.status', '!=', 'closed')->whereNull('support_cases.resolved_at')
+            ->where(fn (Builder $w) => $w
+                ->whereColumn('support_cases.customer_id', 'conversations.customer_id')
+                ->orWhere(fn (Builder $x) => $x->whereNull('conversations.customer_id')->whereColumn('support_cases.conversation_id', 'conversations.id')))
+            ->orderByDesc('support_cases.id')->limit(1);
     }
 
     /** The case type in the viewer's language. */

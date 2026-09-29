@@ -11,6 +11,7 @@ use App\Enums\Platform;
 use App\Enums\SenderType;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\SupportCase;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -163,6 +164,8 @@ class ConversationQuery
                     ->whereColumn('messages.conversation_id', 'conversations.id')
                     ->where('sender_type', SenderType::User->value)
                     ->orderByDesc('id')->limit(1),
+                // Her open support case, for «عندها كيس مفتوح #N» (flow revision §6), no query per row.
+                'open_case_id' => SupportCase::openIdSubquery(),
             ])
             ->with(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags', 'assignee', 'queueEntry']);
     }

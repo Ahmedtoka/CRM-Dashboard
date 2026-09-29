@@ -31,6 +31,7 @@ function describe(entry: QueueEntry) {
         priority: entry.priority,
         badge: entry.priority === 'live' ? null : t(`board.priority.${entry.priority}`),
         request: entry.request_line,
+        openCase: entry.open_case_id,
         overnight: entry.priority === 'overnight',
         waited,
         eta: entry.eta_seconds === null || entry.priority === 'overnight' ? null : Math.max(1, Math.ceil(entry.eta_seconds / 60)),
@@ -96,6 +97,7 @@ const call = computed(() => {
                     ></span>
                     <span class="who">{{ seat.name }}</span>
                     <span v-if="seat.badge" class="badge" :class="seat.priority">{{ seat.badge }}</span>
+                    <span v-if="seat.openCase" class="badge case">{{ t('board.lounge.open_case', { id: seat.openCase }) }}</span>
                 </span>
                 <span class="tx" style="display: block">{{ seat.request ?? t('board.lounge.no_request') }}</span>
                 <span class="wt num">

@@ -2327,6 +2327,7 @@ const ar = {
         waiting_reply: 'مستنية ردك',
         reply_overdue: 'متأخرة في الرد',
         handoff_left: 'تتحوّل لزميلة بعد',
+        open_case: 'عندها كيس مفتوح #{id}',
         unread: 'رسايل جديدة',
         priority: {
             returning: 'راجعة',
@@ -2468,6 +2469,7 @@ const ar = {
             overnight: 'من الليل',
             waiting_for: 'مستنية {time}',
             reserved_for: 'لـ {name}',
+            open_case: 'كيس #{id}',
             eta: 'حوالي {n} د',
             more: '+{n} كمان',
         },
@@ -2501,6 +2503,7 @@ const ar = {
             reply_overdue: 'متأخرة في الرد',
             handoff: 'تتحوّل لزميلة بعد {time}',
             no_handoff: 'تصعيد: مش هيتحوّل لحد',
+            open_case: 'عندها كيس مفتوح',
         },
         assign: {
             title: 'تعيين لموظفة',
@@ -2609,6 +2612,9 @@ const ar = {
         queue_assigned_item: 'وصلتك {name} · دور #{ticket}',
         queue_escalation_waiting_item: 'تصعيد مستني ليدر · {name} · دور #{ticket}',
         queue_mass_offline_item: 'الاتصال وقع عند {count} من {serving} موظفات مرة واحدة، سبنا شبابيكهم زي ما هي',
+        queue_reply_overdue_item: '{name} مستنية ردك · دور #{ticket}',
+        queue_reply_overdue_leader_item: '{agent} ما ردّتش على {name} · دور #{ticket}',
+        queue_member_not_arrived_item: '{name} لسه ما فتحتش السيستم · شيفت {shift}',
         channel_problem_codes: {
             token_missing: 'مفيش توكن محفوظ — اعمل إعادة ربط',
             token_invalid: 'التوكن مبقاش صالح — اعمل إعادة ربط',
@@ -2627,6 +2633,9 @@ const ar = {
             queue_assigned: 'وصلتك عميلة',
             queue_escalation_waiting: 'تصعيد مستني ليدر',
             queue_mass_offline: 'موظفات كتير فصلوا مرة واحدة',
+            queue_reply_overdue: 'عميلة مستنية ردك',
+            queue_reply_overdue_leader: 'موظفة ما ردّتش',
+            queue_member_not_arrived: 'موظفة ما فتحتش السيستم',
         },
     },
     shortcuts: {

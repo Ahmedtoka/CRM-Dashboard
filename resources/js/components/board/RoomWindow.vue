@@ -47,6 +47,7 @@ const view = computed(() => {
         escalation: entry.priority === 'escalation',
         tone,
         overdue,
+        openCase: entry.open_case_id,
         waitingReply: entry.first_reply_at === null,
         // The ring empties as the silence runs out; full while the clock is not running.
         dash: left === null ? 0 : RING * (1 - Math.min(1, left / Math.max(1, total))),
@@ -80,7 +81,7 @@ const view = computed(() => {
             last: view.tone === 'last',
             overdue: view.overdue,
         }"
-        :aria-label="view.label"
+        :aria-label="view.openCase ? `${view.label} · ${t('queue.open_case', { id: view.openCase })}` : view.label"
         :aria-pressed="selected"
         @click="$emit('select', view.id)"
     >
@@ -93,6 +94,7 @@ const view = computed(() => {
             <svg><use :href="`#br-i-${view.platform}`" /></svg>
         </span>
         <span class="tk num" aria-hidden="true">{{ view.ticket }}</span>
+        <span v-if="view.openCase" class="cs num" aria-hidden="true">#{{ view.openCase }}</span>
         <span class="tm num" aria-hidden="true">{{ view.time }}</span>
         <span class="nm" aria-hidden="true">{{ view.name }}</span>
     </button>

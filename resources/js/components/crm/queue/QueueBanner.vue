@@ -3,7 +3,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useMyQueueContext } from '@/composables/useMyQueue';
 import { formatCount, formatSeconds } from '@/lib/format';
 import type { Conversation, QueuePriority } from '@/types/crm';
-import { ArrowUpCircle, Bot, Hand, Hourglass, Moon, Star, Ticket, type LucideIcon } from 'lucide-vue-next';
+import { ArrowUpCircle, Bot, FolderOpen, Hand, Hourglass, Moon, Star, Ticket, type LucideIcon } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps<{ conversation: Conversation; meId: number }>();
@@ -21,6 +21,8 @@ const badges: Partial<Record<QueuePriority, { icon: LucideIcon; tone: string }>>
 };
 
 const entry = computed(() => (queue?.enabled.value ? props.conversation.queue_entry : null));
+/** Her open support case: on the ticket, else on the conversation (she can hold a case before a ticket is called). */
+const caseId = computed(() => (queue?.enabled.value ? (props.conversation.open_case_id ?? entry.value?.open_case_id ?? null) : null));
 const mine = computed(() => entry.value?.assigned_user_id === props.meId);
 /** Her own window as the strip knows it: that is where the silence clock lives. */
 const myWindow = computed(() => (mine.value ? (queue?.entryOf(props.conversation.id) ?? null) : null));
@@ -60,20 +62,25 @@ const summary = computed(() => {
 
 <template>
     <section
-        v-if="entry"
+        v-if="entry || caseId"
         class="scrollbar-thin flex items-center gap-2 overflow-x-auto whitespace-nowrap border-b bg-surface-accent px-4 py-1.5 text-xs"
         :aria-label="t('queue.banner.label')"
         data-queue-banner
     >
-        <span class="inline-flex shrink-0 items-center gap-1 font-bold text-primary">
-            <Ticket class="size-3.5" aria-hidden="true" />
-            <span class="tabular-nums">{{ t('queue.ticket', { n: formatCount(entry.ticket % 100000, locale) }) }}</span>
-        </span>
-        <span v-if="entry.window_no !== null" class="shrink-0 rounded bg-card px-1.5 text-2xs font-medium text-foreground">
-            {{ t('queue.banner.window', { n: formatCount(entry.window_no, locale) }) }}
-        </span>
-        <span v-if="badge" class="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full px-1.5 text-2xs font-medium" :class="badge.tone">
-            <component :is="badge.icon" class="size-2.5" aria-hidden="true" />{{ t(`queue.priority.${entry.priority}`) }}
+        <template v-if="entry">
+            <span class="inline-flex shrink-0 items-center gap-1 font-bold text-primary">
+                <Ticket class="size-3.5" aria-hidden="true" />
+                <span class="tabular-nums">{{ t('queue.ticket', { n: formatCount(entry.ticket % 100000, locale) }) }}</span>
+            </span>
+            <span v-if="entry.window_no !== null" class="shrink-0 rounded bg-card px-1.5 text-2xs font-medium text-foreground">
+                {{ t('queue.banner.window', { n: formatCount(entry.window_no, locale) }) }}
+            </span>
+            <span v-if="badge" class="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full px-1.5 text-2xs font-medium" :class="badge.tone">
+                <component :is="badge.icon" class="size-2.5" aria-hidden="true" />{{ t(`queue.priority.${entry.priority}`) }}
+            </span>
+        </template>
+        <span v-if="caseId" class="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-card px-1.5 text-2xs font-medium text-primary">
+            <FolderOpen class="size-2.5" aria-hidden="true" />{{ t('queue.open_case', { id: caseId }) }}
         </span>
 
         <span v-if="since !== null" class="shrink-0 tabular-nums text-muted-foreground">{{ t('queue.banner.received_since', { time: since }) }}</span>

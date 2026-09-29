@@ -69,6 +69,8 @@ export interface Conversation {
     assignee: UserRef | null;
     /** Her open handover-queue ticket (called / active window); null otherwise. Not the `queue` agents/senior badge. */
     queue_entry: ConversationQueueEntry | null;
+    /** Her open support case (even before a ticket is called): the thread shows «عندها كيس مفتوح #N». */
+    open_case_id: number | null;
     can: { reply: boolean; reset?: boolean };
 }
 
@@ -82,6 +84,7 @@ export interface ConversationQueueEntry {
     kind: string;
     delivered_at: string | null;
     bot_summary: Record<string, unknown> | null;
+    open_case_id: number | null;
 }
 
 export type QueuePriority = 'returning' | 'escalation' | 'live' | 'overnight' | 'manual';
@@ -128,6 +131,8 @@ export interface QueueEntry {
     handoff_left_seconds: number | null;
     return_priority_until: string | null;
     reopened_from_entry_id: number | null;
+    /** Her open support case when she took the ticket: «عندها كيس مفتوح #N». */
+    open_case_id: number | null;
 }
 
 /** ShiftMemberResource: one moderator's desk. */
@@ -586,7 +591,17 @@ export interface ChannelAlert {
 /** A persisted bell notification (spec §5.4, Dashboard Experience Task 14). */
 export interface AppNotification {
     id: number;
-    type: 'conversation.handover' | 'conversation.handover_urgent' | 'note.mention' | 'channel.problem' | 'queue.assigned' | 'queue.escalation_waiting' | 'queue.mass_offline';
+    type:
+        | 'conversation.handover'
+        | 'conversation.handover_urgent'
+        | 'note.mention'
+        | 'channel.problem'
+        | 'queue.assigned'
+        | 'queue.escalation_waiting'
+        | 'queue.mass_offline'
+        | 'queue.reply_overdue'
+        | 'queue.reply_overdue_leader'
+        | 'queue.member_not_arrived';
     data: Record<string, unknown>;
     read_at: string | null;
     created_at: string | null;

@@ -6,7 +6,7 @@ import { useMyQueueContext } from '@/composables/useMyQueue';
 import { formatCount, formatSeconds } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { QueueEntry, QueuePriority } from '@/types/crm';
-import { ArrowUpCircle, Clock, Coffee, Hand, Hourglass, LoaderCircle, MessageCircleReply, Moon, Play, Star, type LucideIcon } from 'lucide-vue-next';
+import { ArrowUpCircle, Clock, Coffee, FolderOpen, Hand, Hourglass, LoaderCircle, MessageCircleReply, Moon, Play, Star, type LucideIcon } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -175,7 +175,15 @@ const silenceTone: Record<Card['tone'], string> = {
                         </span>
                     </span>
 
-                    <span class="truncate text-xs font-medium" dir="auto">{{ card.name }}</span>
+                    <span class="flex min-w-0 items-center gap-1">
+                        <span class="truncate text-xs font-medium" dir="auto">{{ card.name }}</span>
+                        <span
+                            v-if="card.entry.open_case_id"
+                            class="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-primary/10 px-1.5 text-2xs font-medium text-primary"
+                        >
+                            <FolderOpen class="size-2.5" aria-hidden="true" />{{ t('queue.open_case', { id: card.entry.open_case_id }) }}
+                        </span>
+                    </span>
 
                     <span class="flex items-center gap-2 text-2xs tabular-nums">
                         <span class="inline-flex items-center gap-1 text-muted-foreground" :title="t('queue.timer')">

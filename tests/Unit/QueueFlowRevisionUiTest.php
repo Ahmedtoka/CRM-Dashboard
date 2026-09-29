@@ -38,3 +38,18 @@ it('shows a desk whose moderator is not logged in and the overdue windows, in bo
         ->and(revisionSource('resources/js/components/crm/queue/MyWindowsStrip.vue'))->toContain("'overdue'")->toContain('handoffLeft(')
         ->and(revisionSource('resources/js/components/board/room.css'))->toContain('.cell.notonline')->toContain('.slot.overdue');
 });
+
+it('shows the open case and the new notifications, in both languages', function () {
+    expect(revisionSource('resources/js/i18n/ar.ts'))->toContain("open_case: 'عندها كيس مفتوح #{id}'")
+        ->toContain("queue_reply_overdue_item: '{name} مستنية ردك · دور #{ticket}'")
+        ->toContain("queue_reply_overdue_leader_item: '{agent} ما ردّتش على {name} · دور #{ticket}'")
+        ->toContain("queue_member_not_arrived_item: '{name} لسه ما فتحتش السيستم · شيفت {shift}'")
+        ->and(revisionSource('resources/js/i18n/en.ts'))->toContain("open_case: 'Open case #{id}'")->toContain("queue_member_not_arrived: 'A moderator has not logged in'")
+        ->and(revisionSource('resources/js/composables/useNotifications.ts'))->toContain("'queue.reply_overdue_leader': 'queue_reply_overdue_leader'")->toContain("'queue.member_not_arrived': 'queue_member_not_arrived'")
+        ->and(revisionSource('resources/js/components/crm/NotificationBell.vue'))->toContain("'queue.reply_overdue'")->toContain("'queue.member_not_arrived'")
+        ->and(revisionSource('resources/js/components/crm/queue/MyWindowsStrip.vue'))->toContain('open_case_id')
+        ->and(revisionSource('resources/js/components/crm/queue/QueueBanner.vue'))->toContain('open_case_id')
+        ->and(revisionSource('resources/js/components/board/RoomLounge.vue'))->toContain('open_case_id')
+        ->and(revisionSource('resources/js/components/board/RoomWindow.vue'))->toContain('open_case_id')
+        ->and(revisionSource('resources/js/components/board/BoardEntryPanel.vue'))->toContain('open_case_id');
+});

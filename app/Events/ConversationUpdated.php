@@ -62,6 +62,7 @@ class ConversationUpdated implements ShouldBroadcastNow
             'handling' => ConversationResource::handling($c),
             'assignee' => ConversationResource::assignee($c),
             'queue_entry' => ConversationResource::queueEntry($c),
+            'open_case_id' => ConversationResource::openCaseId($c),
         ];
     }
 }
