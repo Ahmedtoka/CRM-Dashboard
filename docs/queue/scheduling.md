@@ -12,7 +12,11 @@
 4. moderator reply (the customer waits for the moderator): apology at `agent_apology_seconds`
    (180), hand-off to a free logged-in colleague as `no_reply` at `agent_reassign_first_seconds`
    (300, first reply) or `agent_reassign_seconds` (480, later message), else one alert to the
-   leader per waiting period and another try on every tick;
+   leader per waiting period and another try on every tick. An escalation entry at the leader
+   gets the apology but is never handed off: the admins are alerted instead
+   (`queue.reply_overdue_leader`). While the assignee is not logged in there is no `no_reply`
+   hand-off, no penalty and no leader alert: her windows follow the offline path (step 2, 5
+   minutes) instead;
 5. confirm sweep: closes whose confirm window passed (safety net for a lost `ConfirmClose` job);
 6. the router (only logged-in desks, never the leader for a live customer);
 7. countdown («باقي 5 / 3 / 1 دقايق») and apology messages to waiting customers, only while there
@@ -34,6 +38,16 @@ in the settings the command does nothing.
   first in the lounge and never gives her back to the same moderator (`excluded_user_id`).
 - Until Part 2's points ledger exists, a `no_reply` hand-off is recorded as the close reason plus
   the activity-log line `queue.no_reply` (with `points: -points.no_reply`).
+
+## The waiting customer's position reply (flow revision §3)
+
+- When a customer writes while her entry is `waiting`, she gets her position (`queue_position_update`:
+  her ticket, how many are ahead, and the estimate when there is one). At most once per
+  `waiting_update_seconds` (120) per entry (`queue_entries.position_update_sent_at`); the enqueue
+  message does not count, and messages in between get no reply.
+- Overnight entries are excluded: they keep the one night message.
+- While the queue holds her (queue on, entry `waiting`, `called` or `active`) the bot's own
+  reassurance stays silent, so she never gets two answers. With the queue off nothing changes.
 
 ## Server with a one-minute cron (Cloudways)
 
