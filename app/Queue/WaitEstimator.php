@@ -20,10 +20,14 @@ class WaitEstimator
     /** Estimate when nobody who can take this platform is on shift. */
     public const NO_MEMBERS_SECONDS = 30 * 60;
 
-    /** Average handle time of the last 20 manual closes (at least 5 of them), else the setting. */
+    /**
+     * Average handle time of the last 20 windows a moderator really handled (inquiry / problem /
+     * case / auto; at least 5 of them), else the setting. A transfer, a cancel or a resolve
+     * elsewhere is not a handled window and would skew the estimate.
+     */
     public function avgHandleSeconds(): int
     {
-        $recent = QueueEntry::query()->whereNotNull('handle_seconds')->where('close_reason', '!=', 'auto')
+        $recent = QueueEntry::query()->whereNotNull('handle_seconds')->whereIn('close_reason', QueueEntry::HANDLED_REASONS)
             ->latest('closed_at')->limit(20)->pluck('handle_seconds');
 
         return $recent->count() >= 5 ? max(60, (int) round($recent->avg())) : (int) QueueSetting::current()->eta_default_handle_seconds;

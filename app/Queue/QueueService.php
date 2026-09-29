@@ -177,45 +177,77 @@ class QueueService
         }
     }
 
-    /** A customer wrote after an auto-close inside the return window, or after a manual close inside the confirm window. */
+    /**
+     * A customer wrote on a conversation whose queue entry already ended (no waiting / open
+     * entry). Judged on the LATEST terminal entry of any status (closed, cancelled, abandoned):
+     *  - inside the return window (after an auto-close) or the confirm window (after an
+     *    inquiry / problem close): back in the lounge as `returning`, preferring the same
+     *    moderator; a close still awaiting confirmation is reversed, at most once;
+     *  - otherwise, on a human-handled conversation while the queue takes handovers
+     *    (`takesHandover()`): a new entry so somebody is called — `returning` within
+     *    `return_priority_minutes` of that last close (whatever its reason, a case included),
+     *    else `live`. Outside shift hours both follow the overnight path.
+     * She gets the usual queue message of the path. Returns true when an entry was created.
+     *
+     * Lock order: conversation, then entries. Two messages arriving together are serialised on
+     * the conversation row and the second one finds the first one's entry (locking read).
+     */
     public function customerReturned(Conversation $c): bool
     {
         $s = $this->settings();
 
-        if (! $s->enabled || $this->activeEntry($c)) {
+        if (! $s->enabled) {
             return false;
         }
 
-        $last = QueueEntry::query()->where('conversation_id', $c->id)->where('status', 'closed')->latest('id')->first();
+        return DB::transaction(function () use ($c, $s) {
+            Conversation::query()->whereKey($c->id)->lockForUpdate()->first(['id']);
 
-        if (! $last) {
-            return false;
-        }
+            if (QueueEntry::query()->where('conversation_id', $c->id)->whereIn('status', ['waiting', 'called', 'active'])->lockForUpdate()->first(['id'])) {
+                return false;
+            }
 
-        $returnWindow = $c->return_priority_until !== null && $c->return_priority_until->isFuture();
-        $confirmWindow = in_array($last->close_reason, ['inquiry', 'problem'], true) && $last->confirmed_at === null
-            && $last->closed_at !== null && $last->closed_at->copy()->addMinutes($s->close_confirm_minutes)->isFuture();
+            $last = QueueEntry::query()->where('conversation_id', $c->id)->whereIn('status', QueueEntry::TERMINAL_STATUSES)
+                ->latest('id')->lockForUpdate()->first();
 
-        if (! $returnWindow && ! $confirmWindow) {
-            return false;
-        }
+            if (! $last) {
+                return false;
+            }
 
-        $summary = $last->bot_summary ?? [];
-        $ctx = new HandoverContext('returning', (string) ($summary['category'] ?? 'returning'), 'medium', $summary['topic'] ?? null, $summary['lines'] ?? [], $last->kind, $summary['order_number'] ?? null);
-        $c->forceFill(['handler' => Handler::Human, 'needs_human' => true])->save();
-        $entry = $this->enqueue($c, $ctx, 'returning');
+            $returnWindow = $c->return_priority_until !== null && $c->return_priority_until->isFuture();
+            $confirmWindow = WindowLifecycle::awaitsConfirmation($last)
+                && $last->closed_at !== null && $last->closed_at->copy()->addMinutes($s->close_confirm_minutes)->isFuture();
+            $returning = $returnWindow || $confirmWindow;
 
-        if ($entry === null) {
-            return false;
-        }
+            if (! $returning) {
+                // After the windows: only a conversation a human handles, only while the queue takes handovers.
+                if ($c->handler !== Handler::Human || ! $this->takesHandover()) {
+                    return false;
+                }
 
-        $entry->forceFill(['reopened_from_entry_id' => $last->id, 'reserved_user_id' => $last->assigned_user_id, 'reopen_count' => $last->reopen_count + 1])->save();
+                $returning = $last->closed_at !== null && $last->closed_at->copy()->addMinutes($s->return_priority_minutes)->isFuture();
+            }
 
-        if ($confirmWindow) {
-            app(WindowLifecycle::class)->reverseClose($last); // Task 7
-        }
+            $summary = $last->bot_summary ?? [];
+            $ctx = new HandoverContext('returning', (string) ($summary['category'] ?? 'returning'), 'medium', $summary['topic'] ?? null, $summary['lines'] ?? [], $last->kind, $summary['order_number'] ?? null);
+            $c->forceFill(['handler' => Handler::Human, 'needs_human' => true])->save();
+            // null = live, or overnight when no shift is open (enqueue() decides).
+            $entry = $this->enqueue($c, $ctx, $returning ? 'returning' : null);
 
-        return true;
+            if ($entry === null) {
+                return false;
+            }
+
+            if ($returning) {
+                $entry->forceFill(['reopened_from_entry_id' => $last->id, 'reserved_user_id' => $last->assigned_user_id, 'reopen_count' => $last->reopen_count + 1])->save();
+            }
+
+            if ($confirmWindow) {
+                app(WindowLifecycle::class)->reverseClose($last);
+            }
+
+            return true;
+        }, attempts: 3);
     }
 
     /** «10 الصبح»: the first shift template's start (the script itself says «الساعة {opening}»). */

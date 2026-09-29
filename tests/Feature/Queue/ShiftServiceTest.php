@@ -1,7 +1,18 @@
 <?php
-use App\Models\{ChannelAccount, Conversation, QueueEntry, QueueSetting, Shift, ShiftMember, User};
-use App\Queue\{QueueService, ShiftService};
+
+use App\Http\Resources\ShiftMemberResource;
+use App\Models\ChannelAccount;
+use App\Models\Conversation;
+use App\Models\QueueEntry;
+use App\Models\QueueSetting;
+use App\Models\Shift;
+use App\Models\ShiftMember;
+use App\Models\User;
 use App\Queue\Data\HandoverContext;
+use App\Queue\QueueService;
+use App\Queue\ShiftService;
+use App\Queue\WindowLifecycle;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Carbon;
 
 beforeEach(fn () => QueueSetting::factory()->create(['id' => 1, 'enabled' => true]));
@@ -11,7 +22,9 @@ it('starts the day from templates, splits the overnight backlog evenly and sched
     $svc = app(QueueService::class);
     // The conversation factory takes its platform from the channel account, so the account is Facebook.
     $fb = ChannelAccount::factory()->create(['platform' => 'facebook']);
-    for ($i = 0; $i < 4; $i++) { $svc->enqueue(Conversation::factory()->for($fb)->create(['platform' => 'facebook']), new HandoverContext('x', 'x', 'medium', null, [], 'unknown')); }
+    for ($i = 0; $i < 4; $i++) {
+        $svc->enqueue(Conversation::factory()->for($fb)->create(['platform' => 'facebook']), new HandoverContext('x', 'x', 'medium', null, [], 'unknown'));
+    }
     expect(QueueEntry::where('priority', 'overnight')->count())->toBe(4);
     Carbon::setTestNow(Carbon::parse('2026-10-05 10:00', 'Africa/Cairo'));
     $leader = User::factory()->create(['role' => 'supervisor']);
@@ -25,7 +38,9 @@ it('starts the day from templates, splits the overnight backlog evenly and sched
 
 it('closes the morning shift at 18:00 and opens the evening one with the default roster', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 10:00', 'Africa/Cairo'));
-    $leader = User::factory()->create(['role' => 'supervisor']); $m = User::factory()->create(); $e = User::factory()->create();
+    $leader = User::factory()->create(['role' => 'supervisor']);
+    $m = User::factory()->create();
+    $e = User::factory()->create();
     app(ShiftService::class)->startDay(['morning' => [$m->id], 'evening' => [$e->id]], $leader);
     Carbon::setTestNow(Carbon::parse('2026-10-05 18:01', 'Africa/Cairo'));
     app(ShiftService::class)->transition();
@@ -35,7 +50,8 @@ it('closes the morning shift at 18:00 and opens the evening one with the default
 
 it('puts a busy member on pending break, then on break when her windows close, then back', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 13:00', 'Africa/Cairo'));
-    $shift = Shift::factory()->create(); $m = ShiftMember::factory()->for($shift)->create(['break_at' => now()]);
+    $shift = Shift::factory()->create();
+    $m = ShiftMember::factory()->for($shift)->create(['break_at' => now()]);
     // She is online (a never-seen member is offline immediately — ruling (d)).
     $m->user->forceFill(['last_seen_at' => now()])->save();
     QueueEntry::factory()->create(['shift_member_id' => $m->id, 'assigned_user_id' => $m->user_id, 'status' => 'active', 'delivered_at' => now()]);
@@ -51,7 +67,8 @@ it('puts a busy member on pending break, then on break when her windows close, t
 
 it('marks a member offline after 3 minutes without heartbeat and re-queues her windows after 5', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
-    $shift = Shift::factory()->create(); $m = ShiftMember::factory()->for($shift)->create(['status' => 'busy']);
+    $shift = Shift::factory()->create();
+    $m = ShiftMember::factory()->for($shift)->create(['status' => 'busy']);
     $m->user->forceFill(['last_seen_at' => now()->subMinutes(4)])->save();
     $e = QueueEntry::factory()->create(['shift_member_id' => $m->id, 'assigned_user_id' => $m->user_id, 'status' => 'active', 'delivered_at' => now()->subMinutes(4)]);
     $e->conversation->update(['assignee_id' => $m->user_id, 'queue_entry_id' => $e->id]);
@@ -65,7 +82,8 @@ it('marks a member offline after 3 minutes without heartbeat and re-queues her w
 
 it('closes the evening shift after midnight even though the business date moved on', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 18:30', 'Africa/Cairo'));
-    $leader = User::factory()->create(['role' => 'supervisor']); $e = User::factory()->create();
+    $leader = User::factory()->create(['role' => 'supervisor']);
+    $e = User::factory()->create();
     $shift = app(ShiftService::class)->startDay(['morning' => [], 'evening' => [$e->id]], $leader);
     expect($shift->shift_key)->toBe('evening')->and($shift->status)->toBe('open')
         ->and($shift->ends_at->setTimezone('Africa/Cairo')->format('Y-m-d H:i'))->toBe('2026-10-06 00:00');
@@ -78,10 +96,10 @@ it('closes the evening shift after midnight even though the business date moved 
 it('describes a member desk with her open windows and today counters', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
     $m = ShiftMember::factory()->for(Shift::factory())->create(['status' => 'busy']);
-    QueueEntry::factory()->create(['shift_member_id' => $m->id, 'status' => 'active', 'window_no' => 1, 'delivered_at' => now()->subSeconds(100)]);
+    QueueEntry::factory()->create(['shift_member_id' => $m->id, 'status' => 'active', 'window_no' => 1, 'delivered_at' => now()->subSeconds(130), 'last_customer_message_at' => now()->subSeconds(120), 'last_agent_message_at' => now()->subSeconds(100)]); // the clock runs from her last reply
     QueueEntry::factory()->create(['shift_member_id' => $m->id, 'status' => 'closed', 'close_reason' => 'inquiry']);
     QueueEntry::factory()->create(['shift_member_id' => $m->id, 'status' => 'closed', 'close_reason' => 'auto']);
-    $data = (new App\Http\Resources\ShiftMemberResource($m))->resolve();
+    $data = (new ShiftMemberResource($m))->resolve();
     expect($data['open_count'])->toBe(1)->and($data['windows'][0]['window_no'])->toBe(1)
         ->and($data['windows'][0]['silence_left_seconds'])->toBe(200)
         ->and($data['today'])->toBe(['received' => 3, 'inquiry' => 1, 'problem' => 0, 'case' => 0, 'auto' => 1, 'escalation' => 0])
@@ -90,9 +108,10 @@ it('describes a member desk with her open windows and today counters', function 
 
 it('transfers the same customer twice in one day without a ticket collision', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
-    $shift = Shift::factory()->create(); $m = ShiftMember::factory()->for($shift)->create(['status' => 'busy']);
+    $shift = Shift::factory()->create();
+    $m = ShiftMember::factory()->for($shift)->create(['status' => 'busy']);
     $first = QueueEntry::factory()->create(['ticket_no' => 5, 'shift_member_id' => $m->id, 'assigned_user_id' => $m->user_id, 'status' => 'active', 'delivered_at' => now()]);
-    $lifecycle = app(App\Queue\WindowLifecycle::class);
+    $lifecycle = app(WindowLifecycle::class);
     $second = $lifecycle->transferAway($first, 'offline');
     $second->update(['status' => 'active', 'shift_member_id' => $m->id, 'assigned_user_id' => $m->user_id, 'delivered_at' => now()]);
     $third = $lifecycle->transferAway($second, 'offline');
@@ -104,7 +123,8 @@ it('transfers the same customer twice in one day without a ticket collision', fu
 
 it('anchors breaks at the real start when the day is started late', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 14:00', 'Africa/Cairo'));
-    $leader = User::factory()->create(['role' => 'supervisor']); [$a, $b] = User::factory()->count(2)->create()->all();
+    $leader = User::factory()->create(['role' => 'supervisor']);
+    [$a, $b] = User::factory()->count(2)->create()->all();
     $shift = app(ShiftService::class)->startDay(['morning' => [$a->id, $b->id], 'evening' => []], $leader);
     expect($shift->members->first()->break_at->setTimezone('Africa/Cairo')->format('H:i'))->toBe('17:00')
         ->and($shift->members->last()->break_at->setTimezone('Africa/Cairo')->format('H:i'))->toBe('17:20');
@@ -112,9 +132,10 @@ it('anchors breaks at the real start when the day is started late', function () 
 
 it('adds nothing when the roster names an unknown user', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 10:00', 'Africa/Cairo'));
-    $leader = User::factory()->create(['role' => 'supervisor']); $a = User::factory()->create();
+    $leader = User::factory()->create(['role' => 'supervisor']);
+    $a = User::factory()->create();
     expect(fn () => app(ShiftService::class)->startDay(['morning' => [$a->id, 999999], 'evening' => []], $leader))
-        ->toThrow(Illuminate\Database\Eloquent\ModelNotFoundException::class);
+        ->toThrow(ModelNotFoundException::class);
     expect(ShiftMember::count())->toBe(0)->and(Shift::where('status', 'open')->count())->toBe(0)
         ->and(QueueSetting::current()->default_roster)->toBe([]);
 });

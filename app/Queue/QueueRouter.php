@@ -8,6 +8,7 @@ use App\Enums\ActorType;
 use App\Enums\Platform;
 use App\Events\ConversationUpdated;
 use App\Inbox\UserNotifier;
+use App\Models\Conversation;
 use App\Models\QueueDecision;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
@@ -105,6 +106,9 @@ class QueueRouter
             ->each(fn (ShiftMember $m) => $m->setRelation('shift', $shift))
             ->filter(fn (ShiftMember $m) => $m->user !== null && $this->presence->isOnline($m->user))
             ->values();
+        // Lock order (WindowLifecycle): conversations before their queue entries.
+        Conversation::query()->whereIn('id', QueueEntry::query()->where('status', 'waiting')->select('conversation_id'))
+            ->orderBy('id')->lockForUpdate()->get(['id']);
         $waiting = QueueEntry::query()->with('conversation.customer')->where('status', 'waiting')->lockForUpdate()->orderBy('enqueued_at')->orderBy('id')->get()
             ->filter(fn (QueueEntry $e) => $e->conversation !== null);
         $lines[] = '<b>الشيفت:</b> '.$members->count().' موظفات · في الصالة '.$waiting->count();

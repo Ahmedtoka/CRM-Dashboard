@@ -95,6 +95,12 @@ class ConversationActions
             ->whereNotNull('path')
             ->get(['disk', 'path']);
 
+        // Handover queue: a reset test conversation gives its window (or lounge place) back.
+        if ($e = app(QueueService::class)->activeEntry($c)) {
+            app(WindowLifecycle::class)->close($e, 'cancelled', $u);
+            $c->refresh();
+        }
+
         DB::transaction(function () use ($c) {
             $c->messages()->delete();
             $c->notes()->delete();
@@ -126,6 +132,10 @@ class ConversationActions
                 'handover_category' => null,
                 'handover_topic' => null,
                 'queue' => null,
+                'assignee_id' => null,
+                'assigned_at' => null,
+                'queue_entry_id' => null,
+                'return_priority_until' => null,
             ])->save();
         });
 

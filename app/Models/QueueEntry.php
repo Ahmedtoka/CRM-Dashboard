@@ -11,10 +11,22 @@ class QueueEntry extends Model
     use HasFactory;
 
     public const KINDS = ['inquiry', 'problem', 'case', 'unknown'];
+
     public const PRIORITIES = ['returning', 'escalation', 'live', 'overnight', 'manual'];
+
     public const STATUSES = ['waiting', 'called', 'active', 'closed', 'abandoned', 'cancelled'];
+
     public const CLOSE_REASONS = ['inquiry', 'problem', 'case', 'auto', 'escalation', 'transfer', 'resolved_elsewhere', 'cancelled'];
+
     public const OPEN_STATUSES = ['called', 'active'];
+
+    public const TERMINAL_STATUSES = ['closed', 'abandoned', 'cancelled'];
+
+    /** Closes a moderator really handled (average handle time); a transfer / cancel / resolve elsewhere is not one. */
+    public const HANDLED_REASONS = ['inquiry', 'problem', 'case', 'auto'];
+
+    /** Manual closes that wait `close_confirm_minutes` before they stand. */
+    public const CONFIRMABLE_REASONS = ['inquiry', 'problem'];
 
     protected $guarded = ['id'];
 
@@ -22,16 +34,38 @@ class QueueEntry extends Model
     {
         return [
             'business_date' => 'date', 'enqueued_at' => 'datetime', 'called_at' => 'datetime', 'delivered_at' => 'datetime', 'first_reply_at' => 'datetime',
-            'closed_at' => 'datetime', 'last_customer_message_at' => 'datetime', 'silence_warned_at' => 'datetime', 'confirmed_at' => 'datetime',
+            'closed_at' => 'datetime', 'last_customer_message_at' => 'datetime', 'silence_warned_at' => 'datetime', 'confirmed_at' => 'datetime', 'last_agent_message_at' => 'datetime', 'reversed_at' => 'datetime',
             'return_priority_until' => 'datetime', 'waiting_messages' => 'array', 'bot_summary' => 'array', 'sla_met' => 'boolean', 'is_test' => 'boolean',
         ];
     }
 
-    public function conversation(): BelongsTo { return $this->belongsTo(Conversation::class); }
-    public function assignee(): BelongsTo { return $this->belongsTo(User::class, 'assigned_user_id'); }
-    public function reservedFor(): BelongsTo { return $this->belongsTo(User::class, 'reserved_user_id'); }
-    public function shift(): BelongsTo { return $this->belongsTo(Shift::class); }
-    public function member(): BelongsTo { return $this->belongsTo(ShiftMember::class, 'shift_member_id'); }
+    public function conversation(): BelongsTo
+    {
+        return $this->belongsTo(Conversation::class);
+    }
 
-    public function isOpen(): bool { return in_array($this->status, self::OPEN_STATUSES, true); }
+    public function assignee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
+    }
+
+    public function reservedFor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reserved_user_id');
+    }
+
+    public function shift(): BelongsTo
+    {
+        return $this->belongsTo(Shift::class);
+    }
+
+    public function member(): BelongsTo
+    {
+        return $this->belongsTo(ShiftMember::class, 'shift_member_id');
+    }
+
+    public function isOpen(): bool
+    {
+        return in_array($this->status, self::OPEN_STATUSES, true);
+    }
 }

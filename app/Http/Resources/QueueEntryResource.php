@@ -10,9 +10,9 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * One ticket on the live board / waiting hall. `silence_left_seconds` counts down to the
- * auto-close from the later of her last message and the moment the window was delivered
- * (null while the entry is not open); `wait_seconds` is the stored wait once called, else
- * the time waited so far.
+ * auto-close from the moderator's last reply (WindowLifecycle::silentSince(); null while the
+ * entry is not open, the moderator has not replied yet or the customer wrote last);
+ * `wait_seconds` is the stored wait once called, else the time waited so far.
  *
  * @mixin QueueEntry
  */

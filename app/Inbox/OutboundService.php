@@ -174,8 +174,9 @@ class OutboundService
                 $this->logger->log(ActorType::User, $u, ActivityLogger::CONVERSATION_FIRST_RESPONSE, $created->first(), $c, ['seconds' => $seconds]);
             }
 
-            // Handover queue: the window's first reply (and its SLA), text or attachments alike.
-            app(WindowLifecycle::class)->markFirstReply($c, $u);
+            // Handover queue: every reply of the assignee restarts the customer-silence clock; the
+            // first one is the window's first reply (and its SLA). Text or attachments alike.
+            app(WindowLifecycle::class)->agentReplied($c, $u);
 
             $this->lock->release($c, $u, broadcast: false);
 

@@ -1,25 +1,46 @@
 <?php
-use App\Models\{Conversation, QueueEntry, QueueSetting, Shift, ShiftMember, User, UserNotification};
+
+use App\Http\Resources\ConversationResource;
+use App\Models\QueueDecision;
+use App\Models\QueueEntry;
+use App\Models\QueueSetting;
+use App\Models\Shift;
+use App\Models\ShiftMember;
+use App\Models\User;
+use App\Models\UserNotification;
+use App\Queue\Events\QueueAssigned;
+use App\Queue\Events\QueueEntryUpdated;
+use App\Queue\Events\RouterDecided;
 use App\Queue\QueueRouter;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
     QueueSetting::factory()->create(['id' => 1, 'enabled' => true, 'windows_per_moderator' => 2]);
 });
 
-function routerMember(Shift $shift, array $platforms = ['facebook', 'instagram', 'whatsapp', 'tiktok'], array $attrs = []): ShiftMember {
+function routerMember(Shift $shift, array $platforms = ['facebook', 'instagram', 'whatsapp', 'tiktok'], array $attrs = []): ShiftMember
+{
     $u = User::factory()->create(['last_seen_at' => now()]);
-    foreach ($platforms as $p) { $u->userPlatforms()->create(['platform' => $p]); }
+    foreach ($platforms as $p) {
+        $u->userPlatforms()->create(['platform' => $p]);
+    }
+
     return ShiftMember::factory()->for($shift)->create(['user_id' => $u->id] + $attrs);
 }
-function routerWaiting(array $attrs = []): QueueEntry {
+function routerWaiting(array $attrs = []): QueueEntry
+{
     static $n = 100;
+
     return QueueEntry::factory()->create(['ticket_no' => ++$n, 'enqueued_at' => now()->subSeconds(1000 - $n)] + $attrs);
 }
 
 it('routes live entries to the least loaded member and sets the window', function () {
-    $shift = Shift::factory()->create(); $a = routerMember($shift); $b = routerMember($shift);
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
+    $b = routerMember($shift);
     QueueEntry::factory()->create(['shift_member_id' => $a->id, 'assigned_user_id' => $a->user_id, 'status' => 'active', 'window_no' => 1]);
     $e = routerWaiting();
     expect(app(QueueRouter::class)->run('test'))->toBe(1);
@@ -30,7 +51,9 @@ it('routes live entries to the least loaded member and sets the window', functio
 });
 
 it('returns a returning customer to the same member when she has a free window, else to anyone', function () {
-    $shift = Shift::factory()->create(); $a = routerMember($shift); $b = routerMember($shift);
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
+    $b = routerMember($shift);
     $e = routerWaiting(['priority' => 'returning', 'reserved_user_id' => $a->user_id]);
     app(QueueRouter::class)->run('t');
     expect($e->fresh()->assigned_user_id)->toBe($a->user_id)->and($e->fresh()->rule)->toContain('نفس الموظفة');
@@ -41,7 +64,8 @@ it('returns a returning customer to the same member when she has a free window, 
 });
 
 it('serves live customers before the overnight backlog and drains the backlog into gaps per member', function () {
-    $shift = Shift::factory()->create(); $a = routerMember($shift);
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
     $night = routerWaiting(['priority' => 'overnight', 'reserved_user_id' => $a->user_id, 'enqueued_at' => now()->subHours(8)]);
     $live = routerWaiting(['priority' => 'live']);
     app(QueueRouter::class)->run('t');
@@ -49,9 +73,12 @@ it('serves live customers before the overnight backlog and drains the backlog in
 });
 
 it('respects platform permissions and offline members', function () {
-    $shift = Shift::factory()->create(); $a = routerMember($shift, ['facebook']); $b = routerMember($shift);
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift, ['facebook']);
+    $b = routerMember($shift);
     $b->user->forceFill(['last_seen_at' => now()->subMinutes(10)])->save();
-    $e = routerWaiting(); $e->conversation->update(['platform' => 'instagram']);
+    $e = routerWaiting();
+    $e->conversation->update(['platform' => 'instagram']);
     expect(app(QueueRouter::class)->run('t'))->toBe(0)->and($e->fresh()->status)->toBe('waiting');
     $b->user->forceFill(['last_seen_at' => now()])->save();
     app(QueueRouter::class)->run('t');
@@ -71,39 +98,49 @@ it('sends escalations to the shift leader and keeps them waiting when the leader
 });
 
 it('logs decision lines', function () {
-    $shift = Shift::factory()->create(); routerMember($shift); routerWaiting();
+    $shift = Shift::factory()->create();
+    routerMember($shift);
+    routerWaiting();
     app(QueueRouter::class)->run('اختبار');
-    expect(\App\Models\QueueDecision::latest('id')->first()->lines)->toBeArray()->and(\App\Models\QueueDecision::latest('id')->first()->trigger)->toBe('اختبار');
+    expect(QueueDecision::latest('id')->first()->lines)->toBeArray()->and(QueueDecision::latest('id')->first()->trigger)->toBe('اختبار');
 });
 
 it('routes an overnight entry to anyone when its reserved member is not serving', function () {
-    $shift = Shift::factory()->create(); $a = routerMember($shift, attrs: ['status' => 'break']); $b = routerMember($shift);
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift, attrs: ['status' => 'break']);
+    $b = routerMember($shift);
     $night = routerWaiting(['priority' => 'overnight', 'reserved_user_id' => $a->user_id]);
     app(QueueRouter::class)->run('t');
     expect($night->fresh()->assigned_user_id)->toBe($b->user_id)->and($night->fresh()->status)->toBe('active');
 });
 
 it('broadcasts the assignment to the moderator and the decision to the board', function () {
-    \Illuminate\Support\Facades\Event::fake([\App\Queue\Events\QueueAssigned::class, \App\Queue\Events\RouterDecided::class, \App\Queue\Events\QueueEntryUpdated::class]);
-    $shift = Shift::factory()->create(); $a = routerMember($shift); $e = routerWaiting();
+    Event::fake([QueueAssigned::class, RouterDecided::class, QueueEntryUpdated::class]);
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
+    $e = routerWaiting();
     app(QueueRouter::class)->run('t');
-    \Illuminate\Support\Facades\Event::assertDispatched(\App\Queue\Events\QueueAssigned::class, fn ($ev) => $ev->broadcastOn()[0]->name === 'private-user.'.$a->user_id
+    Event::assertDispatched(QueueAssigned::class, fn ($ev) => $ev->broadcastOn()[0]->name === 'private-user.'.$a->user_id
         && $ev->broadcastWith() === ['entry_id' => $e->id, 'conversation_id' => $e->conversation_id, 'ticket' => $e->ticket_no, 'window_no' => 1, 'bot_summary' => null]);
-    \Illuminate\Support\Facades\Event::assertDispatched(\App\Queue\Events\RouterDecided::class, fn ($ev) => $ev->broadcastWith()['trigger'] === 't' && is_array($ev->broadcastWith()['lines']));
-    \Illuminate\Support\Facades\Event::assertDispatched(\App\Queue\Events\QueueEntryUpdated::class, fn ($ev) => $ev->broadcastWith()['ticket'] === $e->ticket_no && $ev->broadcastWith()['silence_left_seconds'] === 300);
+    Event::assertDispatched(RouterDecided::class, fn ($ev) => $ev->broadcastWith()['trigger'] === 't' && is_array($ev->broadcastWith()['lines']));
+    Event::assertDispatched(QueueEntryUpdated::class, fn ($ev) => $ev->broadcastWith()['ticket'] === $e->ticket_no && $ev->broadcastWith()['silence_left_seconds'] === null); // no moderator reply yet: the silence clock is not running
 });
 
 it('exposes the assignee and the open queue ticket on the conversation resource', function () {
-    $shift = Shift::factory()->create(); $a = routerMember($shift); $e = routerWaiting();
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
+    $e = routerWaiting();
     app(QueueRouter::class)->run('t');
-    $data = (new \App\Http\Resources\ConversationResource($e->conversation->fresh()))->resolve(request());
+    $data = (new ConversationResource($e->conversation->fresh()))->resolve(request());
     expect($data['assignee'])->toBe(['id' => $a->user_id, 'name' => $a->user->name])
         ->and($data['queue_entry'])->toMatchArray(['ticket' => $e->ticket_no, 'window_no' => 1, 'status' => 'active', 'kind' => 'unknown']);
 });
 
 it('creates the queue.assigned notification only after the surrounding transaction commits', function () {
-    $shift = Shift::factory()->create(); $a = routerMember($shift); routerWaiting();
-    \Illuminate\Support\Facades\DB::transaction(function () use ($a) {
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
+    routerWaiting();
+    DB::transaction(function () use ($a) {
         expect(app(QueueRouter::class)->run('t'))->toBe(1)
             ->and(UserNotification::where('user_id', $a->user_id)->where('type', 'queue.assigned')->exists())->toBeFalse();
     });
@@ -112,13 +149,16 @@ it('creates the queue.assigned notification only after the surrounding transacti
 
 it('counts open windows per user across shift-member rows at the shift handover', function () {
     $u = User::factory()->create(['last_seen_at' => now()]);
-    foreach (['facebook', 'instagram', 'whatsapp', 'tiktok'] as $p) { $u->userPlatforms()->create(['platform' => $p]); }
+    foreach (['facebook', 'instagram', 'whatsapp', 'tiktok'] as $p) {
+        $u->userPlatforms()->create(['platform' => $p]);
+    }
     $early = Shift::factory()->create(['shift_key' => 'early', 'status' => 'closed', 'starts_at' => now()->subHours(8), 'ends_at' => now()->subMinute()]);
     $old = ShiftMember::factory()->for($early)->create(['user_id' => $u->id, 'status' => 'left']);
     QueueEntry::factory()->create(['shift_member_id' => $old->id, 'shift_id' => $early->id, 'assigned_user_id' => $u->id, 'status' => 'active', 'window_no' => 1]);
     $shift = Shift::factory()->create();
     ShiftMember::factory()->for($shift)->create(['user_id' => $u->id]);
-    $first = routerWaiting(); $second = routerWaiting();
+    $first = routerWaiting();
+    $second = routerWaiting();
     expect(app(QueueRouter::class)->run('t'))->toBe(1)
         ->and($first->fresh()->window_no)->toBe(2)->and($first->fresh()->assigned_user_id)->toBe($u->id)
         ->and($second->fresh()->status)->toBe('waiting');
@@ -126,7 +166,8 @@ it('counts open windows per user across shift-member rows at the shift handover'
 
 it('prefers members under the occupancy cap', function () {
     $shift = Shift::factory()->create(['opened_at' => now()->subHour()]);
-    $busy = routerMember($shift); $fresh = routerMember($shift);
+    $busy = routerMember($shift);
+    $fresh = routerMember($shift);
     // Without the cap $busy wins the tiebreak (fewer entries this shift); 3 h handled in a 1 h shift puts her over 80 %.
     QueueEntry::factory()->create(['shift_member_id' => $busy->id, 'assigned_user_id' => $busy->user_id, 'status' => 'closed', 'handle_seconds' => 3 * 3600]);
     QueueEntry::factory()->count(3)->create(['shift_member_id' => $fresh->id, 'assigned_user_id' => $fresh->user_id, 'status' => 'closed', 'handle_seconds' => 60]);
@@ -136,8 +177,10 @@ it('prefers members under the occupancy cap', function () {
 });
 
 it('reuses a freed window number', function () {
-    $shift = Shift::factory()->create(); $a = routerMember($shift);
-    $one = routerWaiting(); $two = routerWaiting();
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
+    $one = routerWaiting();
+    $two = routerWaiting();
     app(QueueRouter::class)->run('t');
     expect($one->fresh()->window_no)->toBe(1)->and($two->fresh()->window_no)->toBe(2);
     $one->forceFill(['status' => 'closed', 'closed_at' => now()])->save();
@@ -153,7 +196,8 @@ it('sends an escalation to a supervisor with access when the leader cannot serve
     ShiftMember::factory()->for($shift)->create(['user_id' => $leaderUser->id]);
     $sup = User::factory()->create(['role' => 'supervisor', 'last_seen_at' => now()]);
     ShiftMember::factory()->for($shift)->create(['user_id' => $sup->id]);
-    $e = routerWaiting(['priority' => 'escalation']); $e->conversation->update(['platform' => 'instagram']);
+    $e = routerWaiting(['priority' => 'escalation']);
+    $e->conversation->update(['platform' => 'instagram']);
     app(QueueRouter::class)->run('t');
     expect($e->fresh()->assigned_user_id)->toBe($sup->id);
 });

@@ -3,7 +3,6 @@
 namespace App\Http\Resources;
 
 use App\Models\QueueEntry;
-use App\Models\QueueSetting;
 use App\Models\ShiftMember;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -24,13 +23,9 @@ class ShiftMemberResource extends JsonResource
         /** @var ShiftMember $m */
         $m = $this->resource;
         $user = $m->user;
-        $silenceClose = (int) QueueSetting::current()->silence_close_seconds;
 
         $windows = $m->openEntries()->with('conversation')->orderBy('window_no')->orderBy('id')->get()
-            ->map(function (QueueEntry $e) use ($silenceClose) {
-                $last = $e->conversation?->last_customer_message_at ?? $e->delivered_at ?? $e->enqueued_at;
-                $idle = $last ? (int) $last->diffInSeconds(now()) : 0;
-
+            ->map(function (QueueEntry $e) {
                 return [
                     'entry_id' => $e->id,
                     'ticket' => $e->ticket_no,
@@ -38,7 +33,8 @@ class ShiftMemberResource extends JsonResource
                     'kind' => $e->kind,
                     'platform' => $e->conversation?->platform?->value,
                     'delivered_at' => $e->delivered_at?->toIso8601String(),
-                    'silence_left_seconds' => max(0, $silenceClose - $idle),
+                    // Null while the silence clock is not running (no reply yet, or she wrote last).
+                    'silence_left_seconds' => QueueEntryResource::silenceLeft($e),
                 ];
             })->values()->all();
 
