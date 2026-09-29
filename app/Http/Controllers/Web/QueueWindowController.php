@@ -32,13 +32,13 @@ class QueueWindowController extends Controller
      * Cheap on purpose: with the queue off it reads the settings row and nothing else, and the
      * inbox then behaves exactly as it does without the queue.
      */
-    public function me(Request $request): JsonResponse
+    public function me(Request $request, QueueService $queue): JsonResponse
     {
         $s = QueueSetting::current();
 
         if (! $s->enabled) {
             return response()->json(['data' => [
-                'enabled' => false, 'member' => null, 'entries' => [], 'settings' => null, 'server_time' => now()->toIso8601String(),
+                'enabled' => false, 'member' => null, 'entries' => [], 'settings' => null, 'leader_user_id' => null, 'server_time' => now()->toIso8601String(),
             ]]);
         }
 
@@ -51,13 +51,16 @@ class QueueWindowController extends Controller
         return response()->json(['data' => [
             'enabled' => true,
             'member' => $member ? (new ShiftMemberResource($member))->resolve($request) : null,
-            'entries' => $entries->map(fn (QueueEntry $e) => (new QueueEntryResource($e))->resolve($request))->values()->all(),
+            // The settings read above, not once more per window.
+            'entries' => $entries->map(fn (QueueEntry $e) => QueueEntryResource::data($e, $s))->values()->all(),
             'settings' => [
                 'silence_warn_seconds' => (int) $s->silence_warn_seconds,
                 'silence_close_seconds' => (int) $s->silence_close_seconds,
                 'windows_per_moderator' => (int) $s->windows_per_moderator,
                 'break_minutes' => (int) $s->break_minutes,
             ],
+            // The leader of the open shift: nobody above her to escalate to (the menu hides it).
+            'leader_user_id' => $queue->openShift()?->leader_user_id,
             'server_time' => now()->toIso8601String(),
         ]]);
     }

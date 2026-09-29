@@ -13,19 +13,20 @@ use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Models\Shift;
 use App\Models\ShiftMember;
-use App\Models\User;
 use App\Queue\Events\QueueAssigned;
 use App\Queue\Events\QueueEntryUpdated;
 use App\Queue\Events\QueueMemberUpdated;
 use App\Queue\Events\RouterDecided;
 use App\Queue\Jobs\SendQueueMessage;
 use App\Support\SafeBroadcast;
+use Closure;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Hands waiting entries to free moderator windows, one pass per trigger (enqueue, join, leave,
@@ -42,14 +43,26 @@ use Illuminate\Support\Facades\Log;
  * Every pass that found somebody waiting writes one `queue_decisions` row (the board's decision
  * lines); an empty lounge (most of the 30-second ticks) writes nothing.
  *
- * Locks: passes are serialised by the `queue:router` cache lock. The pass itself reads the lounge
- * without row locks; each assignment is its own short transaction that locks the conversation and
- * then the entry of that ONE customer (`assign()`), so the inbound messages of everybody else in
- * the lounge are never held up by the router.
+ * The leader of the open shift is never given a live, returning or overnight customer: her desk
+ * serves escalations, and whatever the board assigns her by hand. With only the leader on the
+ * shift, live customers wait.
+ *
+ * Locks: passes are serialised by the `queue:router` cache lock (30 s). The pass itself reads the
+ * lounge without row locks; each assignment is its own short transaction that locks the
+ * conversation and then the entry of that ONE customer (`assign()`), so the inbound messages of
+ * everybody else in the lounge are never held up by the router. The notifications and real-time
+ * pushes of a pass are collected and sent once the cache lock is released, so a slow broadcaster
+ * never keeps the lock (and the next pass) waiting.
  */
 class QueueRouter
 {
     public const ESCALATION_ALERT_MINUTES = 15;
+
+    /** The router's cache lock: longer than any sane pass; released in `finally` anyway. */
+    public const LOCK_SECONDS = 30;
+
+    /** @var list<Closure>|null pushes of the running pass, sent after the lock is released; null outside a pass */
+    private ?array $outbox = null;
 
     public function __construct(
         private readonly QueueService $queue,
@@ -81,7 +94,7 @@ class QueueRouter
 
         // Wait briefly for a concurrent pass instead of dropping this trigger: an entry enqueued
         // while another pass runs would otherwise sit until the next, unrelated trigger.
-        $lock = Cache::lock('queue:router', 10);
+        $lock = Cache::lock('queue:router', self::LOCK_SECONDS);
 
         try {
             $lock->block(5);
@@ -91,11 +104,36 @@ class QueueRouter
             return 0;
         }
 
+        $this->outbox = [];
+
         try {
             return $this->pass($shift, $setting, $trigger);
         } finally {
             $lock->release();
+            $pushes = $this->outbox;
+            $this->outbox = null;
+
+            foreach ($pushes as $push) {
+                rescue($push, null, report: true);
+            }
         }
+    }
+
+    /**
+     * Notifications and broadcasts: once the surrounding transaction committed, and while a pass
+     * is running only after its lock is released (collected in the outbox).
+     */
+    private function push(Closure $push): void
+    {
+        DB::afterCommit(function () use ($push) {
+            if ($this->outbox !== null) {
+                $this->outbox[] = $push;
+
+                return;
+            }
+
+            $push();
+        });
     }
 
     /** Open (called / active) entries assigned to this user, whatever shift-member row they hang on. */
@@ -120,6 +158,9 @@ class QueueRouter
             ->filter(fn (ShiftMember $m) => $m->user !== null && $this->presence->isOnline($m->user))
             ->values();
         $lines[] = '<b>الشيفت:</b> '.$members->count().' موظفات · في الصالة '.$waiting->count();
+        // The leader's desk serves escalations (and manual assignments from the board) only.
+        $leaderId = $shift->leader_user_id !== null ? (int) $shift->leader_user_id : null;
+        $lounge = $members->reject(fn (ShiftMember $m) => (int) $m->user_id === $leaderId)->values();
 
         // Per-user open windows, snapshotted once (passes are serialised) and kept current as we assign.
         $load = $members->mapWithKeys(fn (ShiftMember $m) => [$m->user_id => $this->openForUser($m->user_id)->count()])->all();
@@ -131,15 +172,28 @@ class QueueRouter
         $loadOf = function (ShiftMember $m) use (&$load): int {
             return $load[$m->user_id];
         };
-        $anyOpen = fn () => $members->contains(fn (ShiftMember $m) => $open($m));
-        // False when she left the lounge since the read above (cancelled, resolved, taken by hand)
-        // or the assignment failed: the window stays free for the next customer.
+        $anyOpen = fn () => $lounge->contains(fn (ShiftMember $m) => $open($m));
+        // False when she left the lounge since the read above (cancelled, resolved, taken by hand),
+        // the moderator was refused under the lock, or the assignment threw: the window stays free
+        // for the next customer.
         $give = function (QueueEntry $e, ShiftMember $m, string $rule, string $key) use (&$load, &$lines, $setting): bool {
-            if (! rescue(fn () => $this->assign($e, $m, $rule, $key, $setting), false, report: true)) {
+            try {
+                $assigned = $this->assign($e, $m, $rule, $key, $setting);
+            } catch (Throwable $ex) {
+                // Something about THIS customer (a bad row, a listener, a constraint): she is
+                // skipped for this pass and tried again on the next one. The moderator is fine
+                // and goes on serving the customers behind her.
+                report($ex);
+                $lines[] = '<span class="no">#'.$e->ticket_no.': التسليم وقع، هتتجرّب في الدور الجاي</span>';
+
+                return false;
+            }
+
+            if (! $assigned) {
                 if ($e->fresh()?->status === 'waiting') {
-                    // The customer is still there, so the moderator was refused (or the write
-                    // failed): her desk is not what the snapshot said, nothing more for her in
-                    // this pass. The customer waits for the next one.
+                    // The customer is still there, so the moderator was refused under the lock:
+                    // her desk is not what the snapshot said, nothing more for her in this pass.
+                    // The customer waits for the next one.
                     $lines[] = '<span class="no">#'.$e->ticket_no.': '.e($m->user->name).' مبقتش متاحة، مستنية الدور الجاي</span>';
                     $load[$m->user_id] = PHP_INT_MAX;
                 } else {
@@ -154,12 +208,12 @@ class QueueRouter
 
             return true;
         };
-        $pick = fn (QueueEntry $e) => $this->choose($this->candidates($members, $e->conversation->platform, $open, $setting), $loadOf);
+        $pick = fn (QueueEntry $e) => $this->choose($this->candidates($lounge, $e->conversation->platform, $open, $setting), $loadOf);
         $n = 0;
 
         // 0) returning → the same member if she has a free window, else the least loaded.
         foreach ($waiting->where('priority', 'returning') as $e) {
-            $same = $e->reserved_user_id ? $members->firstWhere('user_id', $e->reserved_user_id) : null;
+            $same = $e->reserved_user_id ? $lounge->firstWhere('user_id', $e->reserved_user_id) : null;
             $m = ($same && $open($same) && $same->user->canAccessPlatform($e->conversation->platform)) ? $same : null;
             $rule = 'راجعة ★ لنفس الموظفة';
 
@@ -179,7 +233,7 @@ class QueueRouter
 
         // 0b) escalations → the leader when she may serve the platform, else any supervisor on
         //     the shift who may; nobody free → it waits and supervisors are alerted once.
-        $leader = $shift->leader_user_id ? $members->firstWhere('user_id', $shift->leader_user_id) : null;
+        $leader = $leaderId !== null ? $members->firstWhere('user_id', $leaderId) : null;
 
         foreach ($waiting->where('priority', 'escalation') as $e) {
             $platform = $e->conversation->platform;
@@ -223,7 +277,7 @@ class QueueRouter
                 break;
             }
 
-            $own = $e->reserved_user_id ? $members->firstWhere('user_id', $e->reserved_user_id) : null;
+            $own = $e->reserved_user_id ? $lounge->firstWhere('user_id', $e->reserved_user_id) : null;
 
             if ($own !== null && ! $own->user->canAccessPlatform($e->conversation->platform)) {
                 $own = null;
@@ -250,7 +304,7 @@ class QueueRouter
         $decision = QueueDecision::create([
             'shift_id' => $shift->id, 'trigger' => mb_substr($trigger, 0, 120), 'lines' => array_slice($lines, 0, 8), 'created_at' => now(),
         ]);
-        DB::afterCommit(fn () => SafeBroadcast::send(new RouterDecided($decision)));
+        $this->push(fn () => SafeBroadcast::send(new RouterDecided($decision)));
 
         return $n;
     }
@@ -319,7 +373,7 @@ class QueueRouter
     public function assign(QueueEntry $e, ShiftMember $m, string $rule, string $ruleKey, ?QueueSetting $setting = null): bool
     {
         return DB::transaction(function () use ($e, $m, $rule, $ruleKey, $setting) {
-            $locked = WindowLifecycle::lockBoth($e->id);
+            $locked = WindowLifecycle::lockBoth($e);
             $c = $locked?->conversation;
 
             if ($locked === null || $c === null || $locked->status !== 'waiting') {
@@ -358,8 +412,9 @@ class QueueRouter
             SendQueueMessage::dispatch($locked->id, 'queue_called', ['ticket' => $locked->ticket_no, 'name' => $user->name, 'window' => $window]);
 
             // The notification row and every real-time push only once the assignment is committed,
-            // so a client that refetches sees it (and a rolled-back assignment notifies nobody).
-            DB::afterCommit(function () use ($locked, $m, $c, $user, $window) {
+            // so a client that refetches sees it (and a rolled-back assignment notifies nobody), and
+            // during a pass only once the router lock is released.
+            $this->push(function () use ($locked, $m, $c, $user, $window) {
                 $this->notifier->notify($user, 'queue.assigned', [
                     'entry_id' => $locked->id, 'conversation_id' => $c->id, 'ticket' => $locked->ticket_no, 'window_no' => $window,
                     'customer_name' => $c->customer?->name, 'platform' => $c->platform?->value, 'bot_summary' => $locked->bot_summary,
@@ -402,14 +457,10 @@ class QueueRouter
             'customer_name' => $c->customer?->name, 'platform' => $c->platform?->value, 'bot_summary' => $e->bot_summary,
         ];
 
-        DB::afterCommit(function () use ($key, $data) {
-            if (! Cache::add($key, true, now()->addMinutes(self::ESCALATION_ALERT_MINUTES))) {
-                return;
+        $this->push(function () use ($key, $data) {
+            if (Cache::add($key, true, now()->addMinutes(self::ESCALATION_ALERT_MINUTES))) {
+                $this->notifier->notifySupervisors('queue.escalation_waiting', $data);
             }
-
-            User::query()->where('is_active', true)->get()
-                ->filter(fn (User $u) => $u->isSupervisorOrAbove())
-                ->each(fn (User $u) => $this->notifier->notify($u, 'queue.escalation_waiting', $data));
         });
     }
 

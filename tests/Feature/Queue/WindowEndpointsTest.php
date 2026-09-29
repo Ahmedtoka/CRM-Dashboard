@@ -9,6 +9,7 @@ use App\Models\SupportCase;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\Sanctum;
 
 beforeEach(function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
@@ -385,4 +386,82 @@ it('leaves the old resolve as it was while the queue is off', function () {
     $this->actingAs($other)->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
 
     expect($e->conversation->fresh()->status->value)->toBe('resolved');
+});
+
+// ───── review I1: «رجوع للبوت» on somebody else's window ─────
+
+it('does not let another moderator return somebody else\'s open window to the bot', function () {
+    [, $m, $e] = deskWithWindow();
+    [$other] = deskWithWindow($m->shift);
+    $other->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
+    $other->forceFill(['locale' => 'ar'])->save();
+
+    $this->actingAs($other)->postJson("/inbox/conversations/{$e->conversation_id}/return-to-bot")->assertForbidden()
+        ->assertJsonPath('message', 'الشباك ده مش بتاعك.');
+
+    expect($e->fresh()->status)->toBe('active')->and($e->fresh()->close_reason)->toBeNull()
+        ->and($e->conversation->fresh()->handler->value)->toBe('human');
+});
+
+it('lets the assignee, a supervisor or an admin return an open window to the bot', function (string $who) {
+    [$u, , $e] = deskWithWindow();
+    $u->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
+    $actor = $who === 'assignee' ? $u : User::factory()->create(['role' => $who]);
+
+    $this->actingAs($actor)->postJson("/inbox/conversations/{$e->conversation_id}/return-to-bot")->assertOk();
+
+    expect($e->fresh()->status)->toBe('closed')->and($e->fresh()->close_reason)->toBe('cancelled')
+        ->and($e->conversation->fresh()->handler->value)->toBe('bot');
+})->with(['assignee', 'supervisor', 'admin']);
+
+it('lets any moderator return a customer still waiting in the lounge to the bot', function () {
+    $e = QueueEntry::factory()->create();
+    $u = User::factory()->create(['role' => 'moderator']);
+    $u->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
+
+    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/return-to-bot")->assertOk();
+
+    expect($e->fresh()->status)->toBe('cancelled')->and($e->fresh()->closed_by_id)->toBe($u->id);
+});
+
+it('leaves return-to-bot as it was while the queue is off', function () {
+    [, $m, $e] = deskWithWindow();
+    [$other] = deskWithWindow($m->shift);
+    $other->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
+    QueueSetting::current()->update(['enabled' => false]);
+
+    $this->actingAs($other)->postJson("/inbox/conversations/{$e->conversation_id}/return-to-bot")->assertOk();
+
+    expect($e->conversation->fresh()->handler->value)->toBe('bot');
+});
+
+it('applies the same rule to the API (mobile) resolve and return-to-bot', function () {
+    [, $m, $e] = deskWithWindow();
+    [$other] = deskWithWindow($m->shift);
+    $other->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
+    Sanctum::actingAs($other);
+
+    $this->postJson("/api/v1/conversations/{$e->conversation_id}/resolve")->assertForbidden();
+    $this->postJson("/api/v1/conversations/{$e->conversation_id}/return-to-bot")->assertForbidden();
+
+    expect($e->fresh()->status)->toBe('active');
+});
+
+// ───── minors: the leader in /queue/me, rate limit ─────
+
+it('tells the inbox who leads the open shift', function () {
+    [$u, $m] = deskWithWindow();
+
+    $this->actingAs($u)->getJson('/queue/me')->assertOk()->assertJsonPath('data.leader_user_id', $m->shift->leader_user_id);
+});
+
+it('rate limits the queue endpoints per user', function () {
+    [$u] = deskWithWindow();
+
+    for ($i = 0; $i < 60; $i++) {
+        $this->actingAs($u)->getJson('/queue/me')->assertOk();
+    }
+
+    $this->actingAs($u)->getJson('/queue/me')->assertStatus(429);
+    $this->actingAs(User::factory()->create(['role' => 'moderator']))->getJson('/queue/me')->assertOk();
 });

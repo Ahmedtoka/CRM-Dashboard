@@ -43,6 +43,10 @@ return [
             ],
             'client_options' => [
                 // Guzzle client options: https://docs.guzzlephp.org/en/stable/request-options.html
+                // Every broadcast is synchronous (ShouldBroadcastNow): a slow or dead Reverb must
+                // cost a request (or a queue:tick / router pass) a couple of seconds, not Laravel's 30 s default.
+                'timeout' => (float) env('REVERB_HTTP_TIMEOUT', 2),
+                'connect_timeout' => (float) env('REVERB_HTTP_CONNECT_TIMEOUT', 1),
             ],
         ],
 

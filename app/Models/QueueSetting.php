@@ -29,12 +29,17 @@ class QueueSetting extends Model
         ];
     }
 
+    /**
+     * The settings row: one query once it exists. Callers that loop (the tick, the router, the
+     * board snapshot) read it once and pass it down.
+     */
     public static function current(): self
     {
         // firstOrCreate() only hydrates attributes it was given; a freshly-created
         // row's DB-default columns (enabled, windows_per_moderator, ...) would
         // otherwise read back as null in memory instead of their real values.
-        return static::firstOrCreate(['id' => 1], ['points' => self::DEFAULT_POINTS, 'shifts' => self::DEFAULT_SHIFTS, 'default_roster' => []])->fresh();
+        return static::query()->find(1)
+            ?? static::firstOrCreate(['id' => 1], ['points' => self::DEFAULT_POINTS, 'shifts' => self::DEFAULT_SHIFTS, 'default_roster' => []])->fresh();
     }
 
     public function point(string $key): int

@@ -62,7 +62,7 @@ function tickSpies(array &$order, ?string $throwing = null): void
         $m->shouldReceive('confirmDue')->once()->andReturnUsing($step('confirmDue', 0));
     });
     test()->mock(WaitEstimator::class, function ($m) use ($step) {
-        $m->shouldReceive('tickWaiting')->andReturnUsing($step('tickWaiting'));
+        $m->shouldReceive('tickLounge')->once()->andReturnUsing($step('tickLounge'));
     });
     test()->mock(QueueRouter::class, function ($m) use ($step) {
         $m->shouldReceive('run')->once()->with('التيك الدوري')->andReturnUsing($step('router', 0));
@@ -89,8 +89,8 @@ it('runs every step once, in order', function () {
 
     $this->artisan('queue:tick')->assertSuccessful();
 
-    // The overnight ticket gets no countdown: one tickWaiting for the one live customer.
-    expect($order)->toBe(['transition', 'tickMembers', 'tickSilence', 'confirmDue', 'tickWaiting', 'router']);
+    // The router runs before the countdown: a customer served now gets no «باقي» message.
+    expect($order)->toBe(['transition', 'tickMembers', 'tickSilence', 'confirmDue', 'router', 'tickLounge']);
 });
 
 it('keeps going when a step throws, and reports it', function (string $throwing) {
@@ -102,11 +102,11 @@ it('keeps going when a step throws, and reports it', function (string $throwing)
 
     $this->artisan('queue:tick')->assertSuccessful();
 
-    expect($order)->toBe(['transition', 'tickMembers', 'tickSilence', 'confirmDue', 'tickWaiting', 'tickWaiting', 'router']);
+    expect($order)->toBe(['transition', 'tickMembers', 'tickSilence', 'confirmDue', 'router', 'tickLounge']);
     Exceptions::assertReported(fn (RuntimeException $e) => $e->getMessage() === 'step '.$throwing.' failed');
     // The lock is given back, so the next tick runs.
     expect(Cache::lock('queue:tick', 5)->get())->toBeTrue();
-})->with(['transition', 'tickMembers', 'tickSilence', 'confirmDue', 'tickWaiting', 'router']);
+})->with(['transition', 'tickMembers', 'tickSilence', 'confirmDue', 'router', 'tickLounge']);
 
 it('does nothing while the queue is switched off', function () {
     tickSettings(['enabled' => false]);
@@ -114,7 +114,7 @@ it('does nothing while the queue is switched off', function () {
     tickMember($shift);
     $e = QueueEntry::factory()->create();
     foreach ([ShiftService::class, WindowLifecycle::class, WaitEstimator::class, QueueRouter::class] as $class) {
-        $this->mock($class, fn ($m) => $m->shouldNotReceive('transition', 'tickMembers', 'tickSilence', 'confirmDue', 'tickWaiting', 'run'));
+        $this->mock($class, fn ($m) => $m->shouldNotReceive('transition', 'tickMembers', 'tickSilence', 'confirmDue', 'tickLounge', 'tickWaiting', 'run'));
     }
 
     $this->artisan('queue:tick')->assertSuccessful();
@@ -213,4 +213,100 @@ it('deletes decision lines older than a week, once an hour', function () {
     Carbon::setTestNow(now()->addHour());
     $this->artisan('queue:tick')->assertSuccessful();
     expect(QueueDecision::find($again->id))->toBeNull();
+});
+
+// ───── review I5: several thresholds in one tick ─────
+
+it('sends only the lowest countdown message when the estimate falls through several thresholds at once', function () {
+    Queue::fake([SendQueueMessage::class]);
+    tickSettings(['windows_per_moderator' => 1, 'eta_default_handle_seconds' => 600]);
+    $shift = Shift::factory()->create();
+    $m = tickMember($shift, ['status' => 'busy']);
+    QueueEntry::factory()->create(['shift_id' => $shift->id, 'shift_member_id' => $m->id, 'assigned_user_id' => $m->user_id, 'status' => 'active', 'window_no' => 1, 'delivered_at' => now()->subSeconds(200)]);
+    $e = QueueEntry::factory()->create(['enqueued_at' => now()->subSeconds(200), 'waiting_messages' => []]);
+
+    app(WaitEstimator::class)->tickLounge();   // 400 s left: nothing yet
+    Queue::assertNotPushed(SendQueueMessage::class);
+    expect($e->fresh()->eta_seconds)->toBe(400);
+
+    Carbon::setTestNow(now()->addSeconds(350));   // 50 s left: past 5, 3 and 1 in one step
+    app(WaitEstimator::class)->tickLounge();
+
+    Queue::assertPushed(SendQueueMessage::class, 1);
+    Queue::assertPushed(SendQueueMessage::class, fn (SendQueueMessage $job) => $job->scriptKey === 'queue_left_1' && $job->entryId === $e->id);
+    expect($e->fresh()->waiting_messages)->toMatchArray(['5' => true, '3' => true, '1' => true])
+        ->and($e->fresh()->eta_seconds)->toBe(50);
+});
+
+it('marks the passed thresholds and sends the lower one on the everyday two-step drop', function () {
+    Queue::fake([SendQueueMessage::class]);
+    tickSettings(['windows_per_moderator' => 1, 'eta_default_handle_seconds' => 600]);
+    $shift = Shift::factory()->create();
+    $m = tickMember($shift, ['status' => 'busy']);
+    QueueEntry::factory()->create(['shift_id' => $shift->id, 'shift_member_id' => $m->id, 'assigned_user_id' => $m->user_id, 'status' => 'active', 'window_no' => 1, 'delivered_at' => now()->subSeconds(290)]);
+    $e = QueueEntry::factory()->create(['enqueued_at' => now()->subSeconds(290), 'waiting_messages' => []]);
+
+    app(WaitEstimator::class)->tickLounge();   // 310 s
+    Carbon::setTestNow(now()->addSeconds(140));   // 170 s
+    app(WaitEstimator::class)->tickLounge();
+
+    expect(Queue::pushed(SendQueueMessage::class)->map(fn (SendQueueMessage $job) => $job->scriptKey)->all())->toBe(['queue_left_3'])
+        ->and($e->fresh()->waiting_messages)->toMatchArray(['5' => true, '3' => true]);
+});
+
+// ───── review I6: tick cost ─────
+
+it('keeps a tick with a full lounge to a fixed number of queries, whatever the size of the lounge', function () {
+    tickSettings(['windows_per_moderator' => 2]);
+    $shift = Shift::factory()->create();
+
+    foreach (range(1, 3) as $i) {
+        $m = tickMember($shift, ['status' => 'busy', 'break_at' => now()->addHours(3)]);
+
+        foreach ([1, 2] as $w) {
+            QueueEntry::factory()->create(['shift_id' => $shift->id, 'shift_member_id' => $m->id, 'assigned_user_id' => $m->user_id, 'status' => 'active', 'window_no' => $w, 'delivered_at' => now()->subSeconds(60 * $w)]);
+        }
+    }
+
+    $measure = function (int $waiting): int {
+        QueueEntry::factory()->count($waiting)->create(['enqueued_at' => now()->subMinutes(2)]);
+        $this->artisan('queue:tick')->assertSuccessful();   // first tick: flags and estimates written
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->artisan('queue:tick')->assertSuccessful();
+        $count = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $count;
+    };
+
+    $ten = $measure(10);
+    $fifty = $measure(40);   // 50 waiting now
+
+    expect(QueueEntry::where('status', 'waiting')->count())->toBe(50)
+        ->and($fifty)->toBeLessThan(45)   // 30 at the time of writing
+        ->and($fifty - $ten)->toBeLessThanOrEqual(2);
+});
+
+it('keeps estimating the other customers when one estimate throws', function () {
+    Queue::fake([SendQueueMessage::class]);
+    Exceptions::fake();
+    // Estimates 50 s and 300 s: both customers are due a countdown message.
+    tickSettings(['windows_per_moderator' => 1, 'eta_default_handle_seconds' => 250]);
+    $shift = Shift::factory()->create();
+    $m = tickMember($shift, ['status' => 'busy']);
+    QueueEntry::factory()->create(['shift_id' => $shift->id, 'shift_member_id' => $m->id, 'assigned_user_id' => $m->user_id, 'status' => 'active', 'window_no' => 1, 'delivered_at' => now()->subSeconds(200)]);
+    $bad = QueueEntry::factory()->create(['enqueued_at' => now()->subSeconds(20), 'waiting_messages' => []]);
+    $good = QueueEntry::factory()->create(['enqueued_at' => now()->subSeconds(10), 'waiting_messages' => []]);
+    QueueEntry::updating(function (QueueEntry $e) use ($bad) {
+        if ($e->id === $bad->id) {
+            throw new RuntimeException('bad row');
+        }
+    });
+
+    app(WaitEstimator::class)->tickLounge();
+
+    Exceptions::assertReported(RuntimeException::class);
+    expect($good->fresh()->waiting_messages)->toMatchArray(['5' => true])->and($bad->fresh()->waiting_messages)->toBe([]);
+    Queue::assertPushed(SendQueueMessage::class, fn (SendQueueMessage $job) => $job->entryId === $good->id && $job->scriptKey === 'queue_left_5');
 });

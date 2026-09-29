@@ -14,6 +14,7 @@ use App\Queue\Events\QueueEntryUpdated;
 use App\Queue\Events\RouterDecided;
 use App\Queue\QueueRouter;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
@@ -267,11 +268,12 @@ it('skips an entry cancelled between the selection and the assignment and gives 
     Event::assertDispatchedTimes(QueueAssigned::class, 1);
 });
 
-it('keeps the assignments already made when a later one fails', function () {
+it('keeps the assignments already made when a later one fails, and skips only the failing customer', function () {
     $shift = Shift::factory()->create();
     $a = routerMember($shift);
     $first = routerWaiting();
     $second = routerWaiting();
+    $third = routerWaiting();
     QueueEntry::updating(function (QueueEntry $e) use ($second) {
         if ($e->id === $second->id) {
             throw new RuntimeException('boom');
@@ -279,10 +281,34 @@ it('keeps the assignments already made when a later one fails', function () {
     });
     Exceptions::fake();
 
-    expect(app(QueueRouter::class)->run('t'))->toBe(1);
+    // Review I8: the throwing customer is skipped, the moderator keeps serving (cap 2: first + third).
+    expect(app(QueueRouter::class)->run('t'))->toBe(2);
 
     expect($first->fresh()->status)->toBe('active')->and($first->fresh()->assigned_user_id)->toBe($a->user_id)
-        ->and($second->fresh()->status)->toBe('waiting')->and($second->conversation->fresh()->assignee_id)->toBeNull();
+        ->and($second->fresh()->status)->toBe('waiting')->and($second->conversation->fresh()->assignee_id)->toBeNull()
+        ->and($third->fresh()->status)->toBe('active')->and($third->fresh()->assigned_user_id)->toBe($a->user_id)
+        ->and(QueueDecision::latest('id')->first()->lines)->toContain('<span class="no">#'.$second->ticket_no.': التسليم وقع، هتتجرّب في الدور الجاي</span>');
+    Exceptions::assertReported(RuntimeException::class);
+});
+
+it('serves the customers behind one whose assignment always throws, with a single moderator', function () {
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift, attrs: ['windows_cap' => 1]);
+    $broken = routerWaiting();
+    $next = routerWaiting();
+    QueueEntry::updating(function (QueueEntry $e) use ($broken) {
+        if ($e->id === $broken->id) {
+            throw new RuntimeException('bad row');
+        }
+    });
+    Exceptions::fake();
+
+    app(QueueRouter::class)->run('t');
+    app(QueueRouter::class)->run('t'); // every pass tries the broken one first again
+
+    expect($broken->fresh()->status)->toBe('waiting')
+        ->and($next->fresh()->status)->toBe('active')->and($next->fresh()->assigned_user_id)->toBe($a->user_id)
+        ->and($a->fresh()->status)->toBe('busy');
     Exceptions::assertReported(RuntimeException::class);
 });
 
@@ -372,4 +398,102 @@ it('leaves the customer waiting and gives her to somebody else when the chosen m
     ShiftMember::query()->whereKey($a->id)->update(['status' => 'available']);
     app(QueueRouter::class)->run('t');
     expect($e->fresh()->status)->toBe('active');
+});
+
+// ───── smoke test: the leader's desk ─────
+
+/** The shift's leader, seated at her own desk. */
+function routerLeader(Shift $shift, array $attrs = []): ShiftMember
+{
+    $m = routerMember($shift, attrs: $attrs);
+    $shift->update(['leader_user_id' => $m->user_id]);
+    $m->user->update(['role' => 'supervisor']);
+
+    return $m->fresh();
+}
+
+it('never gives a live customer to the leader of the shift', function () {
+    $shift = Shift::factory()->create();
+    $leader = routerLeader($shift);
+    $a = routerMember($shift);
+    // She has fewer open windows than the moderator: the old rule would have picked her.
+    QueueEntry::factory()->create(['shift_member_id' => $a->id, 'assigned_user_id' => $a->user_id, 'status' => 'active', 'window_no' => 1]);
+    $e = routerWaiting();
+
+    app(QueueRouter::class)->run('t');
+
+    expect($e->fresh()->assigned_user_id)->toBe($a->user_id)
+        ->and(QueueEntry::where('assigned_user_id', $leader->user_id)->count())->toBe(0);
+});
+
+it('keeps live, returning and overnight customers waiting when the leader is the only one on the shift', function () {
+    $shift = Shift::factory()->create();
+    $leader = routerLeader($shift);
+    $live = routerWaiting();
+    $back = routerWaiting(['priority' => 'returning', 'reserved_user_id' => $leader->user_id]);
+    $night = routerWaiting(['priority' => 'overnight', 'reserved_user_id' => $leader->user_id]);
+
+    expect(app(QueueRouter::class)->run('t'))->toBe(0);
+
+    expect($live->fresh()->status)->toBe('waiting')->and($back->fresh()->status)->toBe('waiting')->and($night->fresh()->status)->toBe('waiting')
+        ->and(QueueDecision::latest('id')->first()->lines)->toContain('<span class="no">كل الشبابيك مليانة</span>');
+});
+
+it('gives a returning or overnight customer reserved for the leader to another moderator', function () {
+    $shift = Shift::factory()->create();
+    $leader = routerLeader($shift);
+    $a = routerMember($shift);
+    $back = routerWaiting(['priority' => 'returning', 'reserved_user_id' => $leader->user_id]);
+    $night = routerWaiting(['priority' => 'overnight', 'reserved_user_id' => $leader->user_id]);
+
+    app(QueueRouter::class)->run('t');
+
+    expect($back->fresh()->assigned_user_id)->toBe($a->user_id)->and($night->fresh()->assigned_user_id)->toBe($a->user_id);
+});
+
+it('still sends escalations to the leader desk, and the board may assign her by hand', function () {
+    $shift = Shift::factory()->create();
+    $leader = routerLeader($shift);
+    routerMember($shift);
+    $esc = routerWaiting(['priority' => 'escalation']);
+
+    app(QueueRouter::class)->run('t');
+    expect($esc->fresh()->assigned_user_id)->toBe($leader->user_id);
+
+    $manual = routerWaiting();
+    expect(app(QueueRouter::class)->assign($manual, $leader->fresh(), 'يدوي', 'manual'))->toBeTrue()
+        ->and($manual->fresh()->assigned_user_id)->toBe($leader->user_id);
+});
+
+// ───── review I7: locks ─────
+
+it('sends the notifications and broadcasts of a pass only after the router lock is released', function () {
+    $shift = Shift::factory()->create();
+    routerMember($shift);
+    routerWaiting();
+    $lockFree = [];
+    Event::listen(QueueAssigned::class, function () use (&$lockFree) {
+        $lock = Cache::lock('queue:router', 1);
+        $lockFree[] = $lock->get();
+        $lock->release();
+    });
+
+    expect(app(QueueRouter::class)->run('t'))->toBe(1)->and($lockFree)->toBe([true])
+        ->and(UserNotification::where('type', 'queue.assigned')->count())->toBe(1);
+});
+
+it('starts the assignment transaction with the locking read of the conversation, never a plain read of the entry', function () {
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
+    $e = routerWaiting();
+    DB::enableQueryLog();
+
+    app(QueueRouter::class)->assign($e, $a, 'r', 'live');
+
+    $first = collect(DB::getQueryLog())->pluck('query')->first(fn (string $q) => str_starts_with(strtolower($q), 'select'));
+    expect($first)->toContain('from "conversations"');
+});
+
+it('holds the router lock for 30 seconds', function () {
+    expect(QueueRouter::LOCK_SECONDS)->toBe(30);
 });

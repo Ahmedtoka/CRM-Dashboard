@@ -22,4 +22,12 @@ final class UserNotifier
 
         return $notification;
     }
+
+    /** The same notification for every active supervisor and admin (queue alerts). */
+    public function notifySupervisors(string $type, array $data): void
+    {
+        User::query()->where('is_active', true)->get()
+            ->filter(fn (User $u) => $u->isSupervisorOrAbove())
+            ->each(fn (User $u) => $this->notify($u, $type, $data));
+    }
 }

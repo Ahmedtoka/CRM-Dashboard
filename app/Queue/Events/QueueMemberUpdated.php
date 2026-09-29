@@ -10,7 +10,11 @@ use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 
-/** A moderator's desk changed (status, break, windows, counters). */
+/**
+ * A moderator's desk changed (status, break, windows, counters, joined or left the shift): on the
+ * board, and on her own `user.{id}` channel so her inbox (which does not join the board) shows or
+ * drops her strip without a reload.
+ */
 class QueueMemberUpdated implements ShouldBroadcastNow
 {
     use Dispatchable;
@@ -21,7 +25,13 @@ class QueueMemberUpdated implements ShouldBroadcastNow
     /** @return array<int, Channel> */
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('board')];
+        $channels = [new PrivateChannel('board')];
+
+        if ($this->member->user_id !== null) {
+            $channels[] = new PrivateChannel('user.'.$this->member->user_id);
+        }
+
+        return $channels;
     }
 
     public function broadcastWith(): array

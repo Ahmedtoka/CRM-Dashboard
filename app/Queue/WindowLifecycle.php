@@ -48,12 +48,17 @@ class WindowLifecycle
     /**
      * Conversation first, then the entry (see the class docblock). Returns the locked entry with
      * the locked conversation as its relation. Call inside a transaction.
+     *
+     * The FIRST statement of the transaction is a locking read (the conversation, by the entry's
+     * `conversation_id`, which never changes). On MySQL / MariaDB (REPEATABLE READ) the first
+     * plain SELECT fixes the snapshot every later plain SELECT answers from; starting with a
+     * locking read means the snapshot is taken only after the locks are held, so the counts read
+     * under them (open windows, window numbers) see what a concurrent assignment committed.
      */
-    public static function lockBoth(int $entryId): ?QueueEntry
+    public static function lockBoth(QueueEntry $entry): ?QueueEntry
     {
-        $conversationId = QueueEntry::query()->whereKey($entryId)->value('conversation_id');
-        $c = $conversationId ? Conversation::query()->lockForUpdate()->find($conversationId) : null;
-        $e = QueueEntry::query()->lockForUpdate()->find($entryId);
+        $c = $entry->conversation_id ? Conversation::query()->lockForUpdate()->find($entry->conversation_id) : null;
+        $e = QueueEntry::query()->lockForUpdate()->find($entry->id);
 
         if ($e !== null && $c !== null) {
             $e->setRelation('conversation', $c);
@@ -119,7 +124,7 @@ class WindowLifecycle
         }
 
         return DB::transaction(function () use ($e, $reason, $by, $opts) {
-            $locked = self::lockBoth($e->id);
+            $locked = self::lockBoth($e);
 
             if ($locked === null) {
                 return $e;
@@ -154,7 +159,7 @@ class WindowLifecycle
     public function confirm(QueueEntry $e): bool
     {
         return DB::transaction(function () use ($e) {
-            $locked = self::lockBoth($e->id);
+            $locked = self::lockBoth($e);
 
             if ($locked === null || ! self::awaitsConfirmation($locked)) {
                 return false;
@@ -172,9 +177,9 @@ class WindowLifecycle
      * confirmation time has passed and that is neither confirmed nor reversed. Returns how many
      * it confirmed. (`queue:tick` will call it.)
      */
-    public function confirmDue(): int
+    public function confirmDue(?QueueSetting $settings = null): int
     {
-        $before = now()->subMinutes((int) QueueSetting::current()->close_confirm_minutes);
+        $before = now()->subMinutes((int) ($settings ?? QueueSetting::current())->close_confirm_minutes);
         $ids = QueueEntry::query()->where('status', 'closed')->whereIn('close_reason', QueueEntry::CONFIRMABLE_REASONS)
             ->whereNull('confirmed_at')->whereNull('reversed_at')->where('closed_at', '<=', $before)->orderBy('id')->pluck('id');
         $n = 0;
@@ -194,7 +199,7 @@ class WindowLifecycle
     public function reverseClose(QueueEntry $e): bool
     {
         return DB::transaction(function () use ($e) {
-            $locked = self::lockBoth($e->id);
+            $locked = self::lockBoth($e);
 
             if ($locked === null || ! self::awaitsConfirmation($locked)) {
                 return false;
@@ -238,9 +243,9 @@ class WindowLifecycle
      * Every open window whose customer is silent after the moderator's last reply: one warning
      * message per silence period at `silence_warn_seconds`, auto-close at `silence_close_seconds`.
      */
-    public function tickSilence(): void
+    public function tickSilence(?QueueSetting $settings = null): void
     {
-        $s = QueueSetting::current();
+        $s = $settings ?? QueueSetting::current();
 
         if (! $s->enabled) {
             return;
@@ -317,7 +322,7 @@ class WindowLifecycle
     private function warnIfSilent(QueueEntry $e, QueueSetting $s): void
     {
         DB::transaction(function () use ($e, $s) {
-            $locked = self::lockBoth($e->id);
+            $locked = self::lockBoth($e);
             $idle = $locked && $locked->isOpen() ? self::idleSeconds($locked) : null;
 
             if ($idle === null || $idle < $s->silence_warn_seconds || $locked->silence_warned_at !== null) {
@@ -336,7 +341,7 @@ class WindowLifecycle
     private function closeIfSilent(QueueEntry $e, QueueSetting $s): void
     {
         DB::transaction(function () use ($e, $s) {
-            $locked = self::lockBoth($e->id);
+            $locked = self::lockBoth($e);
             $idle = $locked && $locked->isOpen() ? self::idleSeconds($locked) : null;
 
             if ($idle !== null && $idle >= $s->silence_close_seconds) {
@@ -359,7 +364,7 @@ class WindowLifecycle
     private function reroute(QueueEntry $e, string $reason, ?User $by, string $priority, string $trigger): ?QueueEntry
     {
         return DB::transaction(function () use ($e, $reason, $by, $priority, $trigger) {
-            $e = self::lockBoth($e->id);
+            $e = self::lockBoth($e);
 
             if ($e === null || ! $e->isOpen()) {
                 return null;

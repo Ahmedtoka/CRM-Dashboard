@@ -298,20 +298,28 @@ trait ConversationEndpoints
     public function resolve(Request $request, Conversation $conversation, ConversationActions $actions): ConversationResource
     {
         Gate::authorize('reply', $conversation);
+        $this->guardQueueWindow($request->user(), $conversation);
 
-        // Handover queue on: an open window is closed by its moderator, a supervisor or an admin
-        // only (the same rule as the queue's own endpoints). Queue off: nothing is read or changed.
-        $user = $request->user();
+        return new ConversationResource($actions->resolve($conversation, $request->user()));
+    }
 
-        if (! $user->isSupervisorOrAbove() && QueueSetting::current()->enabled) {
-            $entry = app(QueueService::class)->activeEntry($conversation);
-
-            if ($entry !== null && $entry->isOpen() && (int) $entry->assigned_user_id !== (int) $user->id) {
-                abort(response()->json(['message' => __('errors.queue.not_your_window')], 403));
-            }
+    /**
+     * Handover queue on: a conversation with an OPEN window (called / active) is resolved or
+     * returned to the bot by its moderator, a supervisor or an admin only (the same rule as the
+     * queue's own endpoints; web, API and mobile). A customer still waiting in the lounge has no
+     * owner yet: anybody who may reply may take her out. Queue off: nothing is read.
+     */
+    private function guardQueueWindow(User $user, Conversation $conversation): void
+    {
+        if ($user->isSupervisorOrAbove() || ! QueueSetting::current()->enabled) {
+            return;
         }
 
-        return new ConversationResource($actions->resolve($conversation, $user));
+        $entry = app(QueueService::class)->activeEntry($conversation);
+
+        if ($entry !== null && $entry->isOpen() && (int) $entry->assigned_user_id !== (int) $user->id) {
+            abort(response()->json(['message' => __('errors.queue.not_your_window')], 403));
+        }
     }
 
     public function reopen(Request $request, Conversation $conversation, ConversationActions $actions): ConversationResource
@@ -324,6 +332,7 @@ trait ConversationEndpoints
     public function returnToBot(Request $request, Conversation $conversation, BotEngine $bot): ConversationResource
     {
         Gate::authorize('reply', $conversation);
+        $this->guardQueueWindow($request->user(), $conversation);
 
         $bot->returnToBot($conversation, $request->user());
 

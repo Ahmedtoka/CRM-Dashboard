@@ -3,7 +3,6 @@
 namespace App\Queue\Commands;
 
 use App\Models\QueueDecision;
-use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Queue\QueueRouter;
 use App\Queue\ShiftService;
@@ -19,9 +18,11 @@ use Illuminate\Support\Facades\Cache;
  *   2. members: breaks, offline moderators, hand-off of their windows;
  *   3. customer silence: warning, then auto-close;
  *   4. confirm sweep: closes whose confirm window passed (safety net for a lost ConfirmClose job);
- *   5. the «باقي 5 / 3 / 1» countdown and apology messages to the lounge;
- *   6. the router;
+ *   5. the router (before the countdown, so a customer served now gets no «باقي» message);
+ *   6. the «باقي 5 / 3 / 1» countdown and apology messages to the lounge (desks read once);
  *   7. once an hour, decision lines older than 7 days are deleted.
+ *
+ * The settings row is read once and handed to the steps that loop.
  *
  * Two ticks never run side by side (`queue:tick` cache lock, on top of the schedule's
  * withoutOverlapping): the second one leaves at once. Every customer message is decided under the
@@ -59,7 +60,9 @@ TXT;
 
     public function handle(ShiftService $shifts, WindowLifecycle $windows, WaitEstimator $estimator, QueueRouter $router): int
     {
-        if (! QueueSetting::current()->enabled) {
+        $settings = QueueSetting::current();
+
+        if (! $settings->enabled) {
             return self::SUCCESS;
         }
 
@@ -73,12 +76,12 @@ TXT;
 
         try {
             $steps = [
-                'shifts' => fn () => $shifts->transition(),
-                'members' => fn () => $shifts->tickMembers(),
-                'silence' => fn () => $windows->tickSilence(),
-                'confirm' => fn () => $windows->confirmDue(),
-                'waiting' => fn () => $this->tickWaiting($estimator),
+                'shifts' => fn () => $shifts->transition($settings),
+                'members' => fn () => $shifts->tickMembers($settings),
+                'silence' => fn () => $windows->tickSilence($settings),
+                'confirm' => fn () => $windows->confirmDue($settings),
                 'router' => fn () => $router->run('التيك الدوري'),
+                'waiting' => fn () => $estimator->tickLounge($settings),
                 'prune' => fn () => $this->pruneDecisions(),
             ];
 
@@ -90,15 +93,6 @@ TXT;
         }
 
         return self::SUCCESS;
-    }
-
-    /** One customer whose estimate fails never stops the messages of the others. */
-    private function tickWaiting(WaitEstimator $estimator): void
-    {
-        QueueEntry::query()->with('conversation')->where('status', 'waiting')->where('priority', '!=', 'overnight')
-            ->orderBy('enqueued_at')->orderBy('id')->get()
-            ->filter(fn (QueueEntry $e) => $e->conversation !== null)
-            ->each(fn (QueueEntry $e) => rescue(fn () => $estimator->tickWaiting($e), null, report: true));
     }
 
     private function pruneDecisions(): void

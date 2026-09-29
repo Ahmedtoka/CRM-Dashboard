@@ -10,7 +10,10 @@ use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 
-/** A queue entry changed (enqueued, customer wrote, called, closed…): the board's ticket row. */
+/**
+ * A queue entry changed (enqueued, customer wrote, called, closed…): the board's ticket row, and
+ * the assignee's own `user.{id}` channel (her inbox strip) while the entry has one.
+ */
 class QueueEntryUpdated implements ShouldBroadcastNow
 {
     use Dispatchable;
@@ -21,7 +24,13 @@ class QueueEntryUpdated implements ShouldBroadcastNow
     /** @return array<int, Channel> */
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('board')];
+        $channels = [new PrivateChannel('board')];
+
+        if ($this->entry->assigned_user_id !== null) {
+            $channels[] = new PrivateChannel('user.'.$this->entry->assigned_user_id);
+        }
+
+        return $channels;
     }
 
     public function broadcastWith(): array

@@ -4,6 +4,7 @@ namespace App\Queue;
 
 use App\Analytics\ActivityLogger;
 use App\Enums\ActorType;
+use App\Inbox\UserNotifier;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Models\Shift;
@@ -15,7 +16,9 @@ use App\Support\SafeBroadcast;
 use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Shifts and the people in them: «ابدأ اليوم» (today's shifts from the templates + roster),
@@ -32,7 +35,17 @@ class ShiftService
     /** Breaks are staggered this many minutes apart, in groups of five. */
     private const BREAK_STAGGER_MINUTES = 20;
 
-    public function __construct(private readonly ActivityLogger $logger, private readonly QueueService $queue) {}
+    /** Supervisors hear about a mass offline at most this often while it lasts. */
+    public const MASS_OFFLINE_ALERT_MINUTES = 15;
+
+    /** The desks that count as serving for the mass-offline safeguard. */
+    private const SERVING = ['available', 'busy', 'pending_break'];
+
+    public function __construct(
+        private readonly ActivityLogger $logger,
+        private readonly QueueService $queue,
+        private readonly UserNotifier $notifier,
+    ) {}
 
     /**
      * Today's shifts (the Cairo business date) from the templates, created as `planned` when missing.
@@ -182,7 +195,17 @@ class ShiftService
 
         $this->logger->log($by ? ActorType::User : ActorType::System, $by, ActivityLogger::SHIFT_OPEN, $shift, null, ['shift' => $shift->shift_key]);
         DB::afterCommit(fn () => SafeBroadcast::send(new ShiftUpdated($shift->fresh(['members.user', 'leader']))));
+        // Each moderator's own channel too: an inbox opened before the day started shows her desk at once.
+        $this->announceDesks($shift);
         app(QueueRouter::class)->runAfterCommit('بداية شيفت '.$shift->name);
+    }
+
+    /** `QueueMemberUpdated` (board + her own channel) for every desk of the shift, once committed. */
+    private function announceDesks(Shift $shift): void
+    {
+        DB::afterCommit(function () use ($shift) {
+            $shift->members()->with('user')->get()->each(fn (ShiftMember $m) => SafeBroadcast::send(new QueueMemberUpdated($m)));
+        });
     }
 
     /**
@@ -203,7 +226,10 @@ class ShiftService
     /** Overnight waiting entries are shared evenly (in ticket order, platform-aware) as personal queues. */
     private function splitOvernight(Shift $shift): void
     {
-        $members = $shift->members()->with('user.userPlatforms')->whereIn('status', ['available', 'busy'])->orderBy('id')->get();
+        // Not the leader: her desk serves escalations only (the router would hand her share to somebody else anyway).
+        $members = $shift->members()->with('user.userPlatforms')->whereIn('status', ['available', 'busy'])
+            ->when($shift->leader_user_id !== null, fn ($q) => $q->where('user_id', '!=', $shift->leader_user_id))
+            ->orderBy('id')->get();
 
         if ($members->isEmpty()) {
             return;
@@ -232,9 +258,9 @@ class ShiftService
      * evening shift that ran past midnight — and opens today's planned shift whose time came,
      * with the default roster when the leader did not set one.
      */
-    public function transition(): void
+    public function transition(?QueueSetting $settings = null): void
     {
-        $s = QueueSetting::current();
+        $s = $settings ?? QueueSetting::current();
 
         if (! $s->enabled) {
             return;
@@ -261,9 +287,11 @@ class ShiftService
     {
         $shift->update(['status' => 'closed', 'closed_at' => now()]);
 
-        foreach ($shift->members()->where('status', '!=', 'left')->get() as $m) {
+        foreach ($shift->members()->with('user')->where('status', '!=', 'left')->get() as $m) {
             $m->update(['status' => 'left', 'left_at' => now()]);
             $this->releaseReserved($m);
+            // Her own channel: the inbox strip of this shift goes away without a reload.
+            SafeBroadcast::send(new QueueMemberUpdated($m));
         }
 
         SafeBroadcast::send(new ShiftUpdated($shift->fresh(['members.user', 'leader'])));
@@ -276,43 +304,99 @@ class ShiftService
             ->update(['reserved_user_id' => null]);
     }
 
-    /** `available | break | offline` (by the member, the leader, or the tick). A break with open windows waits as `pending_break`. */
+    /**
+     * `available | break | offline` (by the member, the leader, or the tick), decided under the
+     * member's row lock (the router locks it last when it assigns, so the two never cross: a
+     * break asked while a customer is being given to her sees that window). A break with open
+     * windows (counted per USER, across her shift rows) waits as `pending_break`. A break is the
+     * configured length and is not extended: asking again while on break (or waiting for it)
+     * changes nothing. A member who left the shift is not changed.
+     */
     public function setStatus(ShiftMember $m, string $status, ?User $by = null): void
     {
-        $s = QueueSetting::current();
-
-        if ($status === 'break') {
-            if ($m->openEntries()->exists()) {
-                $m->update(['status' => 'pending_break']);
-            } else {
-                $m->update(['status' => 'break', 'break_started_at' => now(), 'break_ends_at' => now()->addMinutes($s->break_minutes), 'break_at' => $m->break_at ?? now()]);
-            }
-        } elseif ($status === 'available') {
-            $m->update(['status' => $m->openEntries()->exists() ? 'busy' : 'available', 'break_ends_at' => null]);
-        } elseif ($status === 'offline') {
-            $m->update(['status' => 'offline']);
-        } else {
+        if (! in_array($status, ['available', 'break', 'offline'], true)) {
             throw new \InvalidArgumentException('Unknown member status: '.$status);
         }
 
-        SafeBroadcast::send(new QueueMemberUpdated($m->fresh()));
+        $s = QueueSetting::current();
+
+        $changed = DB::transaction(function () use ($m, $status, $s) {
+            // The first statement is the locking read: the open-window count below then sees
+            // whatever an assignment committed while we waited for the row.
+            $locked = ShiftMember::query()->lockForUpdate()->find($m->id);
+
+            if ($locked === null || $locked->status === 'left') {
+                return false;
+            }
+
+            $open = app(QueueRouter::class)->openForUser((int) $locked->user_id)->exists();
+
+            $attrs = match ($status) {
+                'break' => match (true) {
+                    $locked->status === 'break' => null,
+                    $open => $locked->status === 'pending_break' ? null : ['status' => 'pending_break'],
+                    default => ['status' => 'break', 'break_started_at' => now(), 'break_ends_at' => now()->addMinutes($s->break_minutes), 'break_at' => $locked->break_at ?? now()],
+                },
+                'available' => ['status' => $open ? 'busy' : 'available', 'break_ends_at' => null],
+                'offline' => $locked->status === 'offline' ? null : ['status' => 'offline'],
+            };
+
+            if ($attrs === null) {
+                return false;
+            }
+
+            $locked->update($attrs);
+
+            return true;
+        }, attempts: 3);
+
+        if (! $changed) {
+            return;
+        }
+
+        $m->refresh();
+        SafeBroadcast::send(new QueueMemberUpdated($m));
         app(QueueRouter::class)->runAfterCommit('تغيير حالة '.$m->user->name);
     }
 
-    /** Scheduled (every minute): breaks start and end; heartbeats decide offline and the hand-off of her windows. */
-    public function tickMembers(): void
+    /**
+     * Scheduled (every tick): breaks start and end; heartbeats decide offline and the hand-off of
+     * her windows (all her open windows, per user).
+     *
+     * Mass-offline safeguard: when in one tick every serving desk would turn offline (two or more
+     * serving), or more than half of them with at least 3 serving, the heartbeats are what failed (Reverb, the network,
+     * the office), not the moderators. Then nobody is marked offline and no window is handed off:
+     * a warning is logged, supervisors are told (at most every 15 minutes) and the next tick
+     * looks again. One or two moderators going quiet on their own is handled as before.
+     */
+    public function tickMembers(?QueueSetting $settings = null): void
     {
-        if (! QueueSetting::current()->enabled) {
+        if (! ($settings ?? QueueSetting::current())->enabled) {
             return;
         }
 
         $members = ShiftMember::query()->with('user')->whereHas('shift', fn ($q) => $q->where('status', 'open'))
-            ->where('status', '!=', 'left')->get();
+            ->where('status', '!=', 'left')->get()
+            ->filter(fn (ShiftMember $m) => $m->user !== null);
+
+        // Never seen (no heartbeat ever) or deactivated mid-shift counts as offline from the start.
+        $offlineFor = fn (ShiftMember $m): int => ($m->user->last_seen_at && $m->user->is_active)
+            ? (int) $m->user->last_seen_at->diffInSeconds(now()) : PHP_INT_MAX;
+
+        $serving = $members->filter(fn (ShiftMember $m) => in_array($m->status, self::SERVING, true));
+        $goingDark = $serving->filter(fn (ShiftMember $m) => $offlineFor($m) >= self::OFFLINE_AFTER_SECONDS);
+        // A lone serving desk going quiet is the isolated case (nothing to compare her with).
+        $mass = $serving->count() >= 2 && $goingDark->isNotEmpty()
+            && ($goingDark->count() === $serving->count() || ($serving->count() >= 3 && $goingDark->count() * 2 > $serving->count()));
+
+        if ($mass) {
+            $this->alertMassOffline($goingDark->count(), $serving->count());
+        }
+
+        $router = app(QueueRouter::class);
 
         foreach ($members as $m) {
-            // Never seen (no heartbeat ever) or deactivated mid-shift counts as offline from the start.
-            $seen = $m->user->last_seen_at;
-            $offlineFor = ($seen && $m->user->is_active) ? (int) $seen->diffInSeconds(now()) : PHP_INT_MAX;
+            $away = $offlineFor($m);
 
             if ($m->status === 'break') {
                 if ($m->break_ends_at && $m->break_ends_at->lte(now())) {
@@ -322,14 +406,18 @@ class ShiftService
                 continue;
             }
 
-            if ($offlineFor >= self::REASSIGN_AFTER_SECONDS && $m->openEntries()->exists()) {
-                foreach ($m->openEntries()->get() as $e) {
-                    app(WindowLifecycle::class)->transferAway($e, 'offline');
+            if ($away >= self::OFFLINE_AFTER_SECONDS) {
+                if ($mass) {
+                    continue; // the safeguard: not offline, no hand-off, try again next tick
                 }
-                $m->refresh();
-            }
 
-            if ($offlineFor >= self::OFFLINE_AFTER_SECONDS) {
+                if ($away >= self::REASSIGN_AFTER_SECONDS) {
+                    foreach ($router->openForUser((int) $m->user_id)->get() as $e) {
+                        app(WindowLifecycle::class)->transferAway($e, 'offline');
+                    }
+                    $m->refresh();
+                }
+
                 if ($m->status !== 'offline') {
                     $this->setStatus($m, 'offline');
                 }
@@ -348,9 +436,19 @@ class ShiftService
                 continue;
             }
 
-            if ($m->status === 'pending_break' && ! $m->openEntries()->exists()) {
+            if ($m->status === 'pending_break' && ! $router->openForUser((int) $m->user_id)->exists()) {
                 $this->setStatus($m, 'break');
             }
+        }
+    }
+
+    /** Log every time, tell the supervisors at most every 15 minutes. */
+    private function alertMassOffline(int $dark, int $serving): void
+    {
+        Log::warning('queue.mass_offline', ['dark' => $dark, 'serving' => $serving]);
+
+        if (Cache::add('queue:mass-offline-notified', true, now()->addMinutes(self::MASS_OFFLINE_ALERT_MINUTES))) {
+            $this->notifier->notifySupervisors('queue.mass_offline', ['count' => $dark, 'serving' => $serving]);
         }
     }
 }

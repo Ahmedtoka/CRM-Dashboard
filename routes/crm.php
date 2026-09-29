@@ -73,10 +73,14 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
     });
 
     // Handover queue, the moderator's side (queue routing Task 9): her desk and windows in the inbox.
-    Route::get('/queue/me', [QueueWindowController::class, 'me'])->name('queue.me');
-    Route::post('/queue/me/status', [QueueWindowController::class, 'status'])->name('queue.me.status');
-    Route::post('/queue/entries/{entry}/close', [QueueWindowController::class, 'close'])->name('queue.close');
-    Route::post('/queue/entries/{entry}/escalate', [QueueWindowController::class, 'escalate'])->name('queue.escalate');
+    // 60 a minute per user: far above the inbox's own use (a poll every 30-60 s and a few clicks),
+    // and `/queue/me/status` runs a router pass per call.
+    Route::middleware('throttle:60,1')->group(function () {
+        Route::get('/queue/me', [QueueWindowController::class, 'me'])->name('queue.me');
+        Route::post('/queue/me/status', [QueueWindowController::class, 'status'])->name('queue.me.status');
+        Route::post('/queue/entries/{entry}/close', [QueueWindowController::class, 'close'])->name('queue.close');
+        Route::post('/queue/entries/{entry}/escalate', [QueueWindowController::class, 'escalate'])->name('queue.escalate');
+    });
 
     // Handover queue, the manager's live board (queue routing Task 11). Supervisors, admins and the
     // leader of the open shift: decided per request in the controller (BoardAccess), since the
