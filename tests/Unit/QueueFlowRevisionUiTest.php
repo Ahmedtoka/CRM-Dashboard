@@ -53,3 +53,9 @@ it('shows the open case and the new notifications, in both languages', function 
         ->and(revisionSource('resources/js/components/board/RoomWindow.vue'))->toContain('open_case_id')
         ->and(revisionSource('resources/js/components/board/BoardEntryPanel.vue'))->toContain('open_case_id');
 });
+
+it('refuses a manual assignment to a desk whose moderator is not logged in, in both languages', function () {
+    expect(revisionSource('resources/js/components/board/BoardEntryPanel.vue'))->toContain("if (notOnline(member)) return t('board.assign.not_online');")
+        ->and(revisionSource('resources/js/i18n/ar.ts'))->toContain("not_online: 'مش فاتحة السيستم دلوقتي، مش هتقدر ترد'")
+        ->and(revisionSource('resources/js/i18n/en.ts'))->toContain("not_online: 'Not logged in right now, she cannot reply'");
+});

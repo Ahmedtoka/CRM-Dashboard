@@ -2557,6 +2557,7 @@ const en: Messages = {
             full: 'All her windows are taken',
             platform: 'Does not reply on this platform',
             unavailable: 'Not available',
+            not_online: 'Not logged in right now, she cannot reply',
         },
         cancel: {
             button: 'Take out of the lounge',

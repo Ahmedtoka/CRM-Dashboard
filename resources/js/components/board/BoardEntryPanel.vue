@@ -3,6 +3,7 @@ import BoardPanel from '@/components/board/BoardPanel.vue';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useBoardContext } from '@/lib/board/context';
+import { notOnline } from '@/lib/board/state';
 import { formatCount, formatSeconds } from '@/lib/format';
 import type { BoardMember } from '@/types/board';
 import { Link } from '@inertiajs/vue3';
@@ -42,6 +43,8 @@ function refusal(member: BoardMember): string | null {
     const e = entry.value;
     if (e === null || member.user === null) return t('board.assign.unavailable');
     if (!['available', 'busy'].includes(member.status)) return t(`board.status.${member.status}`);
+    // «مش فاتحة»: on the roster but not logged in — she could not answer, so no manual assignment either.
+    if (notOnline(member)) return t('board.assign.not_online');
     if (e.platform !== null && member.platforms !== undefined && !member.platforms.includes(e.platform)) return t('board.assign.platform');
     if (board.windowsOf(member.user.id).length >= member.cap) return t('board.assign.full');
 
