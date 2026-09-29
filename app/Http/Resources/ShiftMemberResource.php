@@ -59,6 +59,8 @@ class ShiftMemberResource extends JsonResource
             'open_count' => count($windows),
             'windows' => $windows,
             'break_at' => $m->break_at?->toIso8601String(),
+            // When her break started: the board and her strip count the time since (attendance §3).
+            'break_started_at' => $m->break_started_at?->toIso8601String(),
             'break_ends_at' => $m->break_ends_at?->toIso8601String(),
             'joined_at' => $m->joined_at?->toIso8601String(),
             'today' => $today,

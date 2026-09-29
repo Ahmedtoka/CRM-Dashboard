@@ -11,13 +11,14 @@ class ShiftMember extends Model
 {
     use HasFactory;
 
-    public const STATUSES = ['available', 'busy', 'pending_break', 'break', 'offline', 'left'];
+    /** `checking_out`: she pressed «خروج» with windows open; no new chats, she leaves when the last one closes. */
+    public const STATUSES = ['available', 'busy', 'pending_break', 'break', 'offline', 'checking_out', 'left'];
 
     protected $guarded = ['id'];
 
     protected function casts(): array
     {
-        return ['joined_at' => 'datetime', 'left_at' => 'datetime', 'break_at' => 'datetime', 'break_started_at' => 'datetime', 'break_ends_at' => 'datetime', 'last_heartbeat_at' => 'datetime', 'not_arrived_alerted_at' => 'datetime', 'stats' => 'array'];
+        return ['joined_at' => 'datetime', 'left_at' => 'datetime', 'break_at' => 'datetime', 'break_started_at' => 'datetime', 'break_ends_at' => 'datetime', 'last_heartbeat_at' => 'datetime', 'not_arrived_alerted_at' => 'datetime', 'break_overrun_alerted_at' => 'datetime', 'stats' => 'array'];
     }
 
     public function shift(): BelongsTo
