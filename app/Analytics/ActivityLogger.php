@@ -83,6 +83,13 @@ class ActivityLogger
 
     public const BOT_FLOW_UPDATED = 'bot_flow.updated';
 
+    /** Handover queue (2026-09-29): a customer took a ticket / was given a window / her window closed. */
+    public const QUEUE_ENQUEUE = 'queue.enqueue';
+
+    public const QUEUE_ASSIGN = 'queue.assign';
+
+    public const QUEUE_CLOSE = 'queue.close';
+
     public function log(ActorType $actor, ?User $user, string $action, ?Model $subject = null, ?Conversation $conversation = null, array $meta = []): ActivityLog
     {
         $platform = $conversation?->platform;

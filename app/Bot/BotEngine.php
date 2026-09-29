@@ -40,6 +40,8 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\SupportCase;
 use App\Models\User;
+use App\Queue\Data\HandoverContext;
+use App\Queue\QueueService;
 use App\Support\SafeBroadcast;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -238,7 +240,25 @@ class BotEngine
             $this->summary->note($c, $reason, $customerText, $intent, $ctx, $routing['summary_extra'] ?? []);
         }
 
-        $this->notifyActiveUsers($c, $reason, $priority, $queue, $category);
+        // Handover queue (2026-09-29): when it is on, the customer takes a ticket and the router
+        // calls one moderator instead of everyone being notified; off, the legacy notify runs.
+        $queueService = app(QueueService::class);
+        $queued = $queueService->shouldQueue()
+            ? $queueService->enqueue($c, new HandoverContext(
+                reason: $reason,
+                category: $category,
+                priority: $priority,
+                topic: $c->handover_topic,
+                summaryLines: $routing['summary_extra'] ?? [],
+                kind: HandoverContext::kindFor($category),
+            ))
+            : null;
+
+        if ($queued === null) {
+            $this->notifyActiveUsers($c, $reason, $priority, $queue, $category);
+        } elseif ($priority === 'high') {
+            $this->notifySupervisorsUrgent($c, $reason, $category);
+        }
 
         SafeBroadcast::send(new ConversationUpdated($c));
 
@@ -663,6 +683,26 @@ class BotEngine
                 'priority_level' => $priority,
                 'queue' => $queue,
                 'category' => $category ?? $reason,
+            ]));
+    }
+
+    /** A high-priority handover the queue took: supervisors still get the urgent alert (spec §5). */
+    private function notifySupervisorsUrgent(Conversation $c, string $reason, string $category): void
+    {
+        $platform = $c->platform instanceof Platform ? $c->platform : Platform::from((string) $c->platform);
+
+        User::query()
+            ->where('is_active', true)
+            ->get()
+            ->filter(fn (User $u) => $u->isSupervisorOrAbove())
+            ->each(fn (User $u) => $this->notifier->notify($u, 'conversation.handover_urgent', [
+                'conversation_id' => $c->id,
+                'reason' => $reason,
+                'customer_name' => $c->customer?->name,
+                'platform' => $platform->value,
+                'priority_level' => 'high',
+                'queue' => $c->queue,
+                'category' => $category,
             ]));
     }
 

@@ -28,6 +28,7 @@ use App\Models\Customer;
 use App\Models\CustomerIdentity;
 use App\Models\Message;
 use App\Models\WebhookEvent;
+use App\Queue\QueueService;
 use App\Support\SafeBroadcast;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -113,6 +114,16 @@ class InboxIngestor
                 ])->save();
 
                 $identity->customer->forceFill(['last_contact_at' => now()])->save();
+
+                // Handover queue: she came back inside the return / confirm window (re-queued with
+                // priority), or she wrote while queued / in a window (the silence clock restarts).
+                if ($conversation->handler === Handler::Human && ! $message->is_spam) {
+                    $queue = app(QueueService::class);
+
+                    if (! $queue->customerReturned($conversation)) {
+                        $queue->customerMessage($conversation);
+                    }
+                }
 
                 $this->logger->log(ActorType::System, null, ActivityLogger::MESSAGE_RECEIVED, $message, $conversation);
 

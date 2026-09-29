@@ -28,6 +28,7 @@ use App\Models\BotSetting;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\SupportCase;
+use App\Queue\QueueService;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -589,7 +590,8 @@ class TurnRunner
             return null;
         }
 
-        $transfer = $this->transferLine();
+        // With the handover queue on, its «رقمك في الدور …» message replaces the transfer sentence.
+        $transfer = app(QueueService::class)->takesHandover() ? null : $this->transferLine();
 
         if ($category === 'repeated' && empty($previousState['delayed_response_sent']) && ($text = $this->bodies(['delayed_response'])[0] ?? null) !== null) {
             return ['text' => $this->joinLines([$text, $transfer]), 'delayed_response' => true];

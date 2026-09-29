@@ -16,6 +16,7 @@ use App\Models\BotSetting;
 use App\Models\Conversation;
 use App\Models\ConversationNote;
 use App\Models\Message;
+use App\Queue\QueueService;
 use App\Support\SafeBroadcast;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -207,7 +208,8 @@ class HumanHandover
     {
         $this->clearPending($c);
 
-        if (($reply = $this->hoursReply()) !== null) {
+        // With the handover queue on, its «رقمك في الدور …» message replaces the transfer sentence.
+        if (! app(QueueService::class)->takesHandover() && ($reply = $this->hoursReply()) !== null) {
             $this->send($c, $reply);
         }
 

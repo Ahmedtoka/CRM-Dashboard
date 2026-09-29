@@ -19,6 +19,9 @@ Broadcast::channel('conversation.{conversation}', function (User $user, Conversa
     return ['id' => $user->id, 'name' => $user->name, 'color' => $user->color];
 });
 
+// Handover queue live board: any active user (Task 6 narrows what each one sees).
+Broadcast::channel('board', fn (User $user) => (bool) $user->is_active);
+
 // Integration progress (Shopify import): active admins only.
 Broadcast::channel('integrations', fn (User $user) => (bool) $user->is_active && $user->isAdmin());
 
