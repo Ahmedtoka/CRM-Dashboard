@@ -71,7 +71,7 @@ it('puts a busy member on pending break, then on break when her windows close, t
 
 it('marks a member offline after 3 minutes without heartbeat and re-queues her windows after 5', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
-    $shift = Shift::factory()->create();
+    $shift = Shift::factory()->create(['opened_at' => now()->subHour()]);
     $m = ShiftMember::factory()->for($shift)->create(['status' => 'busy', 'joined_at' => now()->subHour()]);
     $m->user->forceFill(['last_seen_at' => now()->subMinutes(4)])->save();
     $e = QueueEntry::factory()->create(['shift_member_id' => $m->id, 'assigned_user_id' => $m->user_id, 'status' => 'active', 'delivered_at' => now()->subMinutes(4)]);
@@ -207,9 +207,10 @@ it('leaves a member who left the shift as she is', function () {
 
 // ───── smoke test: mass offline ─────
 
-/** A serving desk that has worked since an hour ago and whose heartbeat stopped `$silentFor` seconds ago, with one open window. */
+/** A serving desk on a shift opened an hour ago, that has worked since then, and whose heartbeat stopped `$silentFor` seconds ago, with one open window. */
 function darkDesk(Shift $shift, int $silentFor): array
 {
+    $shift->update(['opened_at' => now()->subHour()]);
     $u = User::factory()->create(['last_seen_at' => now()->subSeconds($silentFor)]);
     $m = ShiftMember::factory()->for($shift)->create(['user_id' => $u->id, 'status' => 'busy', 'break_at' => now()->addHours(3), 'joined_at' => now()->subHour()]);
     $e = QueueEntry::factory()->create(['shift_member_id' => $m->id, 'assigned_user_id' => $u->id, 'status' => 'active', 'window_no' => 1, 'delivered_at' => now()->subMinutes(10)]);
@@ -386,4 +387,29 @@ it('says on the desk whether its moderator is logged in, in the resource and in 
     expect((new ShiftMemberResource($on))->resolve()['online'])->toBeTrue()
         ->and((new ShiftMemberResource($off))->resolve()['online'])->toBeFalse()
         ->and((new QueueMemberUpdated($off->fresh()))->broadcastWith()['online'])->toBeFalse();
+});
+
+it('counts an evening moderator rostered in the morning and seen at noon as not arrived when her shift opens', function () {
+    Carbon::setTestNow(Carbon::parse('2026-10-05 18:00', 'Africa/Cairo'));
+    $leader = User::factory()->create(['role' => 'moderator', 'last_seen_at' => now()]);
+    $shift = Shift::factory()->create(['shift_key' => 'evening', 'leader_user_id' => $leader->id, 'opened_at' => now()]);
+    $members = collect([1, 2])->map(fn () => ShiftMember::factory()->for($shift)->create([
+        'status' => 'available', 'joined_at' => now()->subHours(9),
+        'user_id' => User::factory()->create(['last_seen_at' => now()->subHours(5)])->id,
+    ]));
+    $svc = app(ShiftService::class);
+
+    expect(ShiftService::notArrived($members[0]->fresh()->load('user')))->toBeTrue()
+        ->and(ShiftService::notArrived($members[0]->fresh()))->toBeTrue();
+
+    $svc->tickMembers();
+
+    expect($members->map(fn ($m) => $m->fresh()->status)->all())->toBe(['offline', 'offline'])
+        ->and(UserNotification::where('type', 'queue.mass_offline')->count())->toBe(0)
+        ->and(UserNotification::where('type', 'queue.member_not_arrived')->count())->toBe(0);
+
+    Carbon::setTestNow(now()->addMinutes(10));
+    $svc->tickMembers();
+
+    expect(UserNotification::where('type', 'queue.member_not_arrived')->where('user_id', $leader->id)->count())->toBe(2);
 });

@@ -43,10 +43,23 @@ class ShiftService
     private const SERVING = ['available', 'busy', 'pending_break'];
 
     /**
-     * She has not logged in since she was put on this shift: no heartbeat ever, or none since
-     * ONLINE_MINUTES before she joined (a moderator added while she is online has arrived).
-     * Such a desk never "went dark": the tick marks it offline at once and the mass-offline
-     * safeguard does not count it (flow revision §2).
+     * The moment she was expected at this shift's desk: when the shift opened (its start when it
+     * has not opened yet), or when she was put on it if that is later. A roster adds her to every
+     * shift of the day when the day starts, so `joined_at` alone can be hours before her shift.
+     */
+    public static function expectedFrom(ShiftMember $m): ?Carbon
+    {
+        $shift = $m->shift;
+        $from = $shift !== null ? ($shift->opened_at ?? $shift->starts_at) : null;
+
+        return collect([$from, $m->joined_at])->filter()->max();
+    }
+
+    /**
+     * She has not logged in since she was expected at this shift (see `expectedFrom()`): no
+     * heartbeat ever, or none since ONLINE_MINUTES before that (a moderator who is online when
+     * her shift opens has arrived). Such a desk never "went dark": the tick marks it offline at
+     * once and the mass-offline safeguard does not count it (flow revision §2).
      */
     public static function notArrived(ShiftMember $m): bool
     {
@@ -56,7 +69,9 @@ class ShiftService
             return true;
         }
 
-        return $m->joined_at !== null && $seen->lt($m->joined_at->copy()->subMinutes(PresenceTracker::ONLINE_MINUTES));
+        $from = self::expectedFrom($m);
+
+        return $from !== null && $seen->lt($from->copy()->subMinutes(PresenceTracker::ONLINE_MINUTES));
     }
 
     public function __construct(
@@ -500,7 +515,7 @@ class ShiftService
                 continue;
             }
 
-            $since = collect([$m->shift->opened_at ?? $m->shift->starts_at, $m->joined_at])->filter()->max();
+            $since = self::expectedFrom($m);
 
             if ($since === null || $since->copy()->addMinutes((int) $s->not_arrived_alert_minutes)->gt(now())) {
                 continue;
