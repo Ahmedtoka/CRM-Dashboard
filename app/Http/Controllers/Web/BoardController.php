@@ -8,7 +8,6 @@ use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Models\Shift;
 use App\Models\ShiftMember;
-use App\Models\User;
 use App\Queue\BoardAccess;
 use App\Queue\BoardState;
 use App\Queue\Events\QueueMemberUpdated;
@@ -25,10 +24,12 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * The manager's live board: the room (state), the start of the day, the roster during the day,
- * breaks, handing a waiting customer to a moderator by hand and taking one out of the lounge.
- * Supervisors, admins and the leader of the open shift only (BoardAccess). Every action
- * answers with the fresh state, so the screen that acted never waits for the websocket.
+ * The manager's live board: the room (state), a moderator's break and number of windows,
+ * taking her off the shift, handing a waiting customer to a moderator by hand and taking one
+ * out of the lounge. Nobody is seated from here: moderators check themselves in from the inbox
+ * (attendance design 2026-09-29). Supervisors, admins and the leader of the open shift only
+ * (BoardAccess). Every action answers with the fresh state, so the screen that acted never
+ * waits for the websocket.
  */
 class BoardController extends Controller
 {
@@ -49,66 +50,21 @@ class BoardController extends Controller
         return $this->fresh($board);
     }
 
-    public function start(Request $request, ShiftService $shifts, BoardState $board): JsonResponse
-    {
-        $this->authorizeBoard($request);
-        $settings = $this->enabledSettings();
-
-        $activeUser = Rule::exists('users', 'id')->where('is_active', true);
-        $data = $request->validate([
-            'roster' => ['required', 'array'],
-            'roster.*' => ['array', 'max:50'],
-            'roster.*.*' => ['integer', $activeUser], // a name ticked twice is kept once (startDay() de-duplicates)
-            'leaders' => ['sometimes', 'array'],
-            'leaders.*' => ['nullable', 'integer', $activeUser],
-        ], [
-            'roster.required' => __('errors.queue.roster_empty'),
-            'roster.*.*.exists' => __('errors.queue.user_unavailable'),
-            'leaders.*.exists' => __('errors.queue.user_unavailable'),
-        ]);
-
-        $keys = array_column($settings->shiftTemplates(), 'key');
-        $leaders = $data['leaders'] ?? [];
-
-        if (array_diff(array_keys($data['roster']), $keys) !== [] || array_diff(array_keys($leaders), $keys) !== []) {
-            return $this->refuse('unknown_shift', 422);
-        }
-
-        if (collect($data['roster'])->flatten()->isEmpty() && collect($leaders)->filter()->isEmpty()) {
-            return $this->refuse('roster_empty', 422);
-        }
-
-        $shifts->startDay($data['roster'], $request->user(), $leaders);
-
-        return $this->fresh($board);
-    }
-
-    public function addMember(Request $request, Shift $shift, ShiftService $shifts, QueueService $queue, BoardState $board): JsonResponse
+    /** Her number of windows (null = the settings' default). She keeps her status and her windows. */
+    public function cap(Request $request, ShiftMember $member, BoardState $board): JsonResponse
     {
         $this->authorizeBoard($request);
         $this->enabledSettings();
 
-        $data = $request->validate([
-            'user_id' => ['required', 'integer', Rule::exists('users', 'id')->where('is_active', true)],
-            'windows_cap' => ['nullable', 'integer', 'min:1', 'max:10'],
-        ], ['user_id.exists' => __('errors.queue.user_unavailable')]);
+        $data = $request->validate(['windows_cap' => ['present', 'nullable', 'integer', 'min:1', 'max:10']]);
 
-        if (! $this->usable($shift, $queue)) {
-            return $this->refuse('shift_closed', 409);
+        if ($member->status === 'left' || $member->shift?->status !== 'open') {
+            return $this->refuse('member_gone', 409);
         }
 
-        $user = User::query()->findOrFail($data['user_id']);
-        $cap = $data['windows_cap'] ?? null;
-        $desk = ShiftMember::query()->where('shift_id', $shift->id)->where('user_id', $user->id)->where('status', '!=', 'left')->first();
-
-        if ($desk !== null) {
-            // Already at her desk: only her number of windows may change.
-            $desk->update(['windows_cap' => $cap]);
-            SafeBroadcast::send(new QueueMemberUpdated($desk->fresh()));
-            app(QueueRouter::class)->runAfterCommit('شبابيك '.$user->name);
-        } else {
-            $shifts->addMember($shift, $user, $cap, $request->user());
-        }
+        $member->update(['windows_cap' => $data['windows_cap']]);
+        SafeBroadcast::send(new QueueMemberUpdated($member->fresh()));
+        app(QueueRouter::class)->runAfterCommit('شبابيك '.$member->user?->name);
 
         return $this->fresh($board);
     }
@@ -242,16 +198,6 @@ class BoardController extends Controller
         }
 
         return $settings;
-    }
-
-    /** A shift somebody can still be added to: the open one, or one of today's that has not closed. */
-    private function usable(Shift $shift, QueueService $queue): bool
-    {
-        if ($shift->status === 'closed' || $shift->ends_at->lte(now())) {
-            return false;
-        }
-
-        return $shift->status === 'open' || $shift->date?->toDateString() === $queue->businessDate();
     }
 
     /** A line on the wall screen for what a person decided, next to the router's own. */

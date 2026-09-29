@@ -10,6 +10,7 @@ use App\Queue\BoardState;
 use App\Queue\Events\QueueMemberUpdated;
 use App\Queue\Events\RouterDecided;
 use App\Queue\QueueRouter;
+use App\Queue\ShiftService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -68,8 +69,7 @@ function boardEndpoints(Shift $shift, ShiftMember $m, QueueEntry $waiting): arra
 {
     return [
         ['get', '/board/state', []],
-        ['post', '/board/start', ['roster' => ['morning' => [$m->user_id]]]],
-        ['post', "/board/shifts/{$shift->id}/members", ['user_id' => $m->user_id]],
+        ['post', "/board/members/{$m->id}/cap", ['windows_cap' => 2]],
         ['delete', "/board/members/{$m->id}", []],
         ['post', "/board/members/{$m->id}/status", ['status' => 'break']],
         ['post', "/board/entries/{$waiting->id}/assign", ['user_id' => $m->user_id]],
@@ -107,7 +107,7 @@ it('keeps a moderator out of the page and of every endpoint', function () {
     expect($waiting->fresh()->status)->toBe('waiting')->and($m->fresh()->status)->toBe('available');
 });
 
-it('does not let the leader of a closed shift in, and lets a template leader start the day when no shift is open', function () {
+it('does not let the leader of a closed shift in, and lets a template leader in before and after her shift opens by the clock', function () {
     $old = boardModerator();
     Shift::factory()->create(['shift_key' => 'early', 'status' => 'closed', 'leader_user_id' => $old->id]);
     $this->actingAs($old)->getJson('/board/state')->assertForbidden();
@@ -118,10 +118,10 @@ it('does not let the leader of a closed shift in, and lets a template leader sta
     QueueSetting::current()->update(['shifts' => $templates]);
 
     $this->actingAs($next)->getJson('/board/state')->assertOk();
-    $this->actingAs($next)->postJson('/board/start', ['roster' => ['morning' => [$old->id]]])->assertOk();
+    app(ShiftService::class)->transition(); // 12:00: the morning shift opens by the clock
 
     // A shift is open now and she leads it (the template's leader): still allowed; the other moderator is not.
-    expect(Shift::where('status', 'open')->first()->leader_user_id)->toBe($next->id);
+    expect(Shift::where('status', 'open')->where('shift_key', 'morning')->first()->leader_user_id)->toBe($next->id);
     $this->actingAs($next)->getJson('/board/state')->assertOk();
     $this->actingAs($old)->getJson('/board/state')->assertForbidden();
 });
@@ -156,125 +156,7 @@ it('explains itself and refuses every action while the queue is off', function (
     expect($waiting->fresh()->status)->toBe('waiting')->and($m->fresh()->status)->toBe('available');
 });
 
-// ───── the start of the day ─────
-
-it('starts the day: today\'s shifts, the roster, the leader at her desk, and the shift that covers now is open', function () {
-    $sup = boardSupervisor();
-    [$a, $b, $c, $leader] = [boardModerator(), boardModerator(), boardModerator(), boardModerator()];
-
-    $response = $this->actingAs($sup)->postJson('/board/start', [
-        'roster' => ['morning' => [$a->id, $b->id], 'evening' => [$c->id]],
-        'leaders' => ['morning' => $leader->id, 'evening' => null],
-    ])->assertOk();
-
-    $morning = Shift::where('shift_key', 'morning')->first();
-    $evening = Shift::where('shift_key', 'evening')->first();
-
-    expect($morning->status)->toBe('open')->and($morning->leader_user_id)->toBe($leader->id)->and($morning->opened_by_id)->toBe($sup->id)
-        ->and($evening->status)->toBe('planned')->and($evening->leader_user_id)->toBeNull()
-        ->and($morning->members()->pluck('user_id')->sort()->values()->all())->toBe(collect([$a->id, $b->id, $leader->id])->sort()->values()->all())
-        ->and($evening->members()->pluck('user_id')->all())->toBe([$c->id])
-        ->and(QueueSetting::current()->default_roster['evening'])->toBe([$c->id]);
-
-    $response->assertJsonPath('data.shift.id', $morning->id)
-        ->assertJsonPath('data.shift.leader.id', $leader->id)
-        ->assertJsonCount(3, 'data.members')
-        ->assertJsonCount(2, 'data.shifts');
-    expect(collect($response->json('data.members'))->firstWhere('user.id', $leader->id)['is_leader'])->toBeTrue();
-});
-
-it('starts the day when a moderator is ticked twice in one shift, and seats her once', function () {
-    $sup = boardSupervisor();
-    [$a, $leader] = [boardModerator(), boardModerator()];
-
-    $this->actingAs($sup)->postJson('/board/start', [
-        'roster' => ['morning' => [$a->id, $leader->id, $a->id], 'evening' => []],
-        'leaders' => ['morning' => $leader->id, 'evening' => null],
-    ])->assertOk();
-
-    $morning = Shift::where('shift_key', 'morning')->first();
-    expect($morning->members()->pluck('user_id')->sort()->values()->all())->toBe(collect([$a->id, $leader->id])->sort()->values()->all());
-});
-
-it('keeps a moderator\'s desk as it is when the day is started again', function () {
-    $sup = boardSupervisor();
-    $a = boardModerator();
-    $this->actingAs($sup)->postJson('/board/start', ['roster' => ['morning' => [$a->id]]])->assertOk();
-    $desk = ShiftMember::where('user_id', $a->id)->first();
-    $desk->update(['status' => 'break', 'break_ends_at' => now()->addMinutes(10)]);
-
-    $b = boardModerator();
-    $this->actingAs($sup)->postJson('/board/start', ['roster' => ['morning' => [$a->id, $b->id]]])->assertOk()->assertJsonCount(2, 'data.members');
-
-    expect($desk->fresh()->status)->toBe('break')->and(Shift::where('status', 'open')->count())->toBe(1);
-});
-
-it('validates the start of the day', function (array $body, string $messageKey) {
-    $gone = User::factory()->create(['is_active' => false]);
-    $body = json_decode(str_replace(['"GONE"', '"MOD"'], [(string) $gone->id, (string) boardModerator()->id], json_encode($body)), true);
-
-    $response = $this->actingAs(boardSupervisor())->postJson('/board/start', $body)->assertStatus(422);
-
-    expect(json_encode($response->json(), JSON_UNESCAPED_UNICODE))->toContain(__($messageKey));
-    expect(Shift::where('status', 'open')->count())->toBe(0)->and(ShiftMember::count())->toBe(0);
-})->with([
-    'no roster' => [[], 'errors.queue.roster_empty'],
-    'nobody ticked' => [['roster' => ['morning' => [], 'evening' => []]], 'errors.queue.roster_empty'],
-    'a shift that is not in the settings' => [['roster' => ['night' => ['MOD']]], 'errors.queue.unknown_shift'],
-    'a deactivated user' => [['roster' => ['morning' => ['GONE']]], 'errors.queue.user_unavailable'],
-    'a deactivated leader' => [['roster' => ['morning' => []], 'leaders' => ['morning' => 'GONE']], 'errors.queue.user_unavailable'],
-]);
-
-it('leaves no half roster behind when the start fails half-way', function () {
-    $a = boardModerator();
-
-    $this->actingAs(boardSupervisor())->postJson('/board/start', ['roster' => ['morning' => [$a->id, 999999]]])->assertStatus(422);
-
-    expect(ShiftMember::count())->toBe(0);
-});
-
 // ───── the roster during the day ─────
-
-it('adds a moderator to the open shift and a customer who was waiting goes to her', function () {
-    $shift = Shift::factory()->create();
-    $waiting = boardWaiting();
-    $u = boardModerator();
-
-    $this->actingAs(boardSupervisor())->postJson("/board/shifts/{$shift->id}/members", ['user_id' => $u->id, 'windows_cap' => 2])
-        ->assertOk()->assertJsonCount(1, 'data.members')->assertJsonPath('data.members.0.cap', 2)->assertJsonPath('data.members.0.user.id', $u->id);
-
-    expect($waiting->fresh()->assigned_user_id)->toBe($u->id)->and(ShiftMember::where('user_id', $u->id)->first()->break_at)->not->toBeNull();
-});
-
-it('changes only the number of windows of a moderator who is already at her desk', function () {
-    $shift = Shift::factory()->create();
-    $m = boardDesk($shift, attrs: ['status' => 'break', 'break_ends_at' => now()->addMinutes(5)]);
-    Event::fake([QueueMemberUpdated::class]);
-
-    $this->actingAs(boardSupervisor())->postJson("/board/shifts/{$shift->id}/members", ['user_id' => $m->user_id, 'windows_cap' => 5])->assertOk();
-
-    expect($m->fresh()->windows_cap)->toBe(5)->and($m->fresh()->status)->toBe('break')->and(ShiftMember::count())->toBe(1);
-    Event::assertDispatched(QueueMemberUpdated::class);
-});
-
-it('validates a new desk and refuses a closed shift', function () {
-    $sup = boardSupervisor();
-    $shift = Shift::factory()->create();
-    $gone = User::factory()->create(['is_active' => false]);
-
-    $this->actingAs($sup)->postJson("/board/shifts/{$shift->id}/members", [])->assertStatus(422)->assertJsonValidationErrors('user_id');
-    $this->actingAs($sup)->postJson("/board/shifts/{$shift->id}/members", ['user_id' => $gone->id])->assertStatus(422)
-        ->assertJsonPath('errors.user_id.0', __('errors.queue.user_unavailable'));
-    $this->actingAs($sup)->postJson("/board/shifts/{$shift->id}/members", ['user_id' => boardModerator()->id, 'windows_cap' => 11])->assertStatus(422)
-        ->assertJsonValidationErrors('windows_cap');
-
-    $shift->update(['status' => 'closed']);
-    $this->actingAs($sup)->postJson("/board/shifts/{$shift->id}/members", ['user_id' => boardModerator()->id])->assertStatus(409)
-        ->assertJsonPath('message', __('errors.queue.shift_closed'));
-    $this->actingAs($sup)->postJson('/board/shifts/999999/members', ['user_id' => boardModerator()->id])->assertNotFound();
-
-    expect(ShiftMember::count())->toBe(0);
-});
 
 it('removes a moderator and sends her customers back to the lounge with their tickets', function () {
     $shift = Shift::factory()->create();
@@ -497,7 +379,6 @@ it('draws the room from real data', function () {
 
 it('shows empty desks and the templates when no shift is open', function () {
     $waiting = boardWaiting(['priority' => 'overnight']);
-    QueueSetting::current()->update(['default_roster' => ['morning' => [5]]]);
     User::factory()->create(['is_active' => false, 'name' => 'موقوفة']);
 
     $data = $this->actingAs(boardSupervisor())->getJson('/board/state')->assertOk()->json('data');
@@ -506,7 +387,7 @@ it('shows empty desks and the templates when no shift is open', function () {
         ->and(collect($data['waiting'])->pluck('id')->all())->toBe([$waiting->id])
         ->and($data['kpis'])->toMatchArray(['waiting' => 1, 'longest_wait_seconds' => null, 'open' => 0, 'capacity' => 0, 'sla_pct' => null])
         ->and($data['last_call'])->toBeNull()
-        ->and($data['default_roster'])->toBe(['morning' => [5]])
+        ->and($data)->not->toHaveKey('default_roster')
         ->and(collect($data['templates'])->pluck('key')->all())->toBe(['morning', 'evening'])
         ->and(collect($data['users'])->pluck('name'))->not->toContain('موقوفة');
 });
@@ -550,4 +431,37 @@ it('reads the state with a number of queries that does not grow with the lounge 
     $many = $count();
 
     expect($many)->toBe($few)->and($many)->toBeLessThanOrEqual(30);
+});
+
+// ───── attendance design §2: nobody is seated from the board ─────
+
+it('no longer starts the day or seats anybody from the board', function () {
+    $shift = Shift::factory()->create();
+    $sup = boardSupervisor();
+    $u = boardModerator();
+
+    $this->actingAs($sup)->postJson('/board/start', ['roster' => ['morning' => [$u->id]]])->assertNotFound();
+    $this->actingAs($sup)->postJson("/board/shifts/{$shift->id}/members", ['user_id' => $u->id])->assertNotFound();
+
+    expect(ShiftMember::count())->toBe(0);
+});
+
+it('changes the number of windows of a moderator at her desk, and nothing else', function () {
+    $shift = Shift::factory()->create();
+    $m = boardDesk($shift, attrs: ['status' => 'break', 'break_ends_at' => now()->addMinutes(5)]);
+    $sup = boardSupervisor();
+    Event::fake([QueueMemberUpdated::class]);
+
+    $this->actingAs($sup)->postJson("/board/members/{$m->id}/cap", ['windows_cap' => 5])->assertOk()->assertJsonPath('data.members.0.cap', 5);
+
+    expect($m->fresh()->windows_cap)->toBe(5)->and($m->fresh()->status)->toBe('break')->and(ShiftMember::count())->toBe(1);
+    Event::assertDispatched(QueueMemberUpdated::class);
+
+    $this->actingAs($sup)->postJson("/board/members/{$m->id}/cap", ['windows_cap' => null])->assertOk()->assertJsonPath('data.members.0.cap', 3);
+    $this->actingAs($sup)->postJson("/board/members/{$m->id}/cap", ['windows_cap' => 11])->assertStatus(422)->assertJsonValidationErrors('windows_cap');
+    $this->actingAs($sup)->postJson("/board/members/{$m->id}/cap", [])->assertStatus(422)->assertJsonValidationErrors('windows_cap');
+
+    $m->update(['status' => 'left']);
+    $this->actingAs($sup)->postJson("/board/members/{$m->id}/cap", ['windows_cap' => 2])->assertStatus(409)
+        ->assertJsonPath('message', __('errors.queue.member_gone'));
 });

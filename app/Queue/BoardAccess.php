@@ -9,7 +9,7 @@ use App\Models\User;
 /**
  * Who may open and run the live board: supervisors and admins, and the leader of a shift that
  * is open (whatever her role). While no shift is open the leaders named in the shift templates
- * are let in too, so the morning leader can start the day herself.
+ * are let in too, so a leader can watch the lounge before her shift opens by the clock.
  */
 class BoardAccess
 {

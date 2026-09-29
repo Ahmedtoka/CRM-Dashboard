@@ -100,7 +100,6 @@ class BoardState
             ],
             'templates' => $this->templates($s, $shifts),
             'users' => $this->users(),
-            'default_roster' => (object) ($s->default_roster ?? []),
         ];
     }
 

@@ -88,8 +88,7 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
     Route::get('/board', [BoardController::class, 'index'])->name('board');
     Route::prefix('board')->name('board.')->group(function () {
         Route::get('state', [BoardController::class, 'state'])->name('state');
-        Route::post('start', [BoardController::class, 'start'])->name('start');
-        Route::post('shifts/{shift}/members', [BoardController::class, 'addMember'])->name('members.store');
+        Route::post('members/{member}/cap', [BoardController::class, 'cap'])->name('members.cap');
         Route::delete('members/{member}', [BoardController::class, 'removeMember'])->name('members.destroy');
         Route::post('members/{member}/status', [BoardController::class, 'memberStatus'])->name('members.status');
         Route::post('entries/{entry}/assign', [BoardController::class, 'assign'])->name('entries.assign');

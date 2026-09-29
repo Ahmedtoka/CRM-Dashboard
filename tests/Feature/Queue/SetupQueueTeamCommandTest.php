@@ -24,7 +24,7 @@ it('creates فاطمة as leader of every shift and seven moderators on every pl
 
     $settings = QueueSetting::current();
     expect(collect($settings->shiftTemplates())->pluck('leader_user_id')->unique()->all())->toBe([$fatma->id])
-        ->and($settings->default_roster['morning'])->toEqualCanonicalizing($mods->where('role', UserRole::Moderator)->pluck('id')->all())
+        ->and($settings->default_roster)->toBe([]) // nobody is seated from a roster any more (attendance design)
         ->and($settings->enabled)->toBeFalse();
 });
 

@@ -22,8 +22,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Shifts and the people in them: «ابدأ اليوم» (today's shifts from the templates + roster),
- * the scheduled open/close transition, breaks, and offline detection from heartbeats.
+ * Shifts and the people in them: the shift templates open and close by the clock
+ * (`transition()`, run by `queue:tick`); nobody starts the day and nobody picks a roster
+ * (attendance design 2026-09-29). Breaks, and offline detection from heartbeats.
  */
 class ShiftService
 {
@@ -32,9 +33,6 @@ class ShiftService
 
     /** No heartbeat for this long: her open windows are handed to someone else. */
     public const REASSIGN_AFTER_SECONDS = 300;
-
-    /** Breaks are staggered this many minutes apart, in groups of five. */
-    private const BREAK_STAGGER_MINUTES = 20;
 
     /** Supervisors hear about a mass offline at most this often while it lasts. */
     public const MASS_OFFLINE_ALERT_MINUTES = 15;
@@ -116,90 +114,6 @@ class ShiftService
         })->values();
     }
 
-    /**
-     * «ابدأ اليوم»: members for each of today's shifts, the roster remembered as the default,
-     * and the shift that covers now opened (else the next one still ahead, else the first).
-     *
-     * `$leaders` names today's leader per shift key (null = nobody); a shift key that is not in
-     * it keeps the leader of its template. A leader always gets a desk on her shift.
-     *
-     * @param  array<string, list<int>>  $roster  user ids per shift key
-     * @param  array<string, int|null>  $leaders  leader user id per shift key
-     */
-    public function startDay(array $roster, User $by, array $leaders = []): Shift
-    {
-        $roster = array_map(fn ($ids) => array_values(array_unique(array_map('intval', (array) $ids))), $roster);
-
-        // All or nothing: a bad user id leaves no half-added roster, and the router runs once after commit.
-        return DB::transaction(fn () => $this->startDayInTransaction($roster, $by, $leaders));
-    }
-
-    /**
-     * @param  array<string, list<int>>  $roster
-     * @param  array<string, int|null>  $leaders
-     */
-    private function startDayInTransaction(array $roster, User $by, array $leaders): Shift
-    {
-        $shifts = $this->todayShifts();
-
-        foreach ($shifts as $shift) {
-            if ($shift->status === 'closed') {
-                continue;
-            }
-
-            if (array_key_exists($shift->shift_key, $leaders)) {
-                $leaderId = $leaders[$shift->shift_key] === null ? null : (int) $leaders[$shift->shift_key];
-                $shift->update(['leader_user_id' => $leaderId]);
-
-                if ($leaderId !== null && ! in_array($leaderId, $roster[$shift->shift_key] ?? [], true)) {
-                    $roster[$shift->shift_key][] = $leaderId;
-                }
-            }
-
-            $serving = $shift->members()->where('status', '!=', 'left')->pluck('user_id')->map(fn ($id) => (int) $id)->all();
-            foreach ($roster[$shift->shift_key] ?? [] as $userId) {
-                // Already at her desk (the day was started before): she keeps her status and her break.
-                if (in_array($userId, $serving, true)) {
-                    continue;
-                }
-
-                $this->addMember($shift->fresh(), User::query()->findOrFail($userId), null, $by);
-            }
-        }
-
-        QueueSetting::current()->update(['default_roster' => $roster]);
-
-        $current = $shifts->first(fn (Shift $sh) => $sh->status !== 'closed' && $sh->starts_at->lte(now()) && $sh->ends_at->gt(now()))
-            ?? $shifts->first(fn (Shift $sh) => $sh->status !== 'closed' && $sh->ends_at->gt(now()))
-            ?? $shifts->first();
-        $current = $current->fresh();
-
-        if ($current->status !== 'open') {
-            $this->open($current, $by);
-        }
-
-        return $current->fresh(['members.user']);
-    }
-
-    public function addMember(Shift $shift, User $user, ?int $cap, ?User $by = null): ShiftMember
-    {
-        $m = ShiftMember::query()->updateOrCreate(
-            ['shift_id' => $shift->id, 'user_id' => $user->id],
-            // She may come back with a window still open from before she left.
-            ['status' => app(QueueRouter::class)->openForUser($user->id)->exists() ? 'busy' : 'available', 'windows_cap' => $cap, 'joined_at' => now(), 'left_at' => null],
-        );
-
-        if ($shift->status === 'open') {
-            $index = $shift->members()->where('status', '!=', 'left')->where('id', '<', $m->id)->count();
-            $this->scheduleBreak($m, $shift, $index);
-            // After the commit: a start of day that rolls back shows no phantom desk on the board.
-            DB::afterCommit(fn () => SafeBroadcast::send(new QueueMemberUpdated($m->fresh())));
-            app(QueueRouter::class)->runAfterCommit('انضمام '.$user->name);
-        }
-
-        return $m;
-    }
-
     public function removeMember(ShiftMember $m, ?User $by = null): void
     {
         $m->update(['status' => 'left', 'left_at' => now()]);
@@ -208,88 +122,37 @@ class ShiftService
         app(QueueRouter::class)->runAfterCommit('خروج '.$m->user->name);
     }
 
-    private function open(Shift $shift, ?User $by): void
+    /**
+     * Opens a planned shift by the clock, with nobody on it: moderators check themselves in
+     * (attendance design §2). The conditional update claims the row, so the tick and a check-in
+     * that race for the same shift open it once. Escalations still waiting move to its leader;
+     * overnight customers stay in the shared pool and go, in ticket order, to whoever checks in.
+     */
+    private function open(Shift $shift): void
     {
         $s = QueueSetting::current();
-        $shift->update([
-            'status' => 'open', 'opened_at' => now(), 'opened_by_id' => $by?->id,
-            'settings_snapshot' => $s->only(['windows_per_moderator', 'silence_warn_seconds', 'silence_close_seconds', 'break_minutes', 'break_after_minutes']),
-        ]);
+        $claimed = Shift::query()->whereKey($shift->id)->where('status', 'planned')->update(['status' => 'open', 'opened_at' => now()]);
 
-        foreach ($shift->members()->where('status', '!=', 'left')->orderBy('id')->get()->values() as $i => $m) {
-            $this->scheduleBreak($m, $shift, $i);
+        if ($claimed !== 1) {
+            return;
         }
 
-        $this->splitOvernight($shift);
+        $shift->refresh();
+        $shift->update(['settings_snapshot' => $s->only(['windows_per_moderator', 'silence_warn_seconds', 'silence_close_seconds', 'break_minutes', 'break_after_minutes'])]);
 
         // Escalations still waiting from the previous shift now belong to this shift's leader.
         QueueEntry::query()->where('status', 'waiting')->where('priority', 'escalation')
             ->update(['shift_id' => $shift->id, 'reserved_user_id' => $shift->leader_user_id]);
 
-        $this->logger->log($by ? ActorType::User : ActorType::System, $by, ActivityLogger::SHIFT_OPEN, $shift, null, ['shift' => $shift->shift_key]);
+        $this->logger->log(ActorType::System, null, ActivityLogger::SHIFT_OPEN, $shift, null, ['shift' => $shift->shift_key]);
         DB::afterCommit(fn () => SafeBroadcast::send(new ShiftUpdated($shift->fresh(['members.user', 'leader']))));
-        // Each moderator's own channel too: an inbox opened before the day started shows her desk at once.
-        $this->announceDesks($shift);
         app(QueueRouter::class)->runAfterCommit('بداية شيفت '.$shift->name);
     }
 
-    /** `QueueMemberUpdated` (board + her own channel) for every desk of the shift, once committed. */
-    private function announceDesks(Shift $shift): void
-    {
-        DB::afterCommit(function () use ($shift) {
-            $shift->members()->with('user')->get()->each(fn (ShiftMember $m) => SafeBroadcast::send(new QueueMemberUpdated($m)));
-        });
-    }
-
     /**
-     * Break time: `break_after_minutes` after she actually started (the shift start, or now when
-     * the day was started late / she joined mid-shift), staggered by position (0, 20, 40, 60, 80 minutes, then again).
-     */
-    private function scheduleBreak(ShiftMember $m, Shift $shift, int $index): void
-    {
-        if ($m->break_at !== null) {
-            return;
-        }
-
-        $s = QueueSetting::current();
-        $anchor = $shift->starts_at->copy()->max(now());
-        $m->update(['break_at' => $anchor->addMinutes($s->break_after_minutes + ($index % 5) * self::BREAK_STAGGER_MINUTES)]);
-    }
-
-    /** Overnight waiting entries are shared evenly (in ticket order, platform-aware) as personal queues. */
-    private function splitOvernight(Shift $shift): void
-    {
-        // Not the leader: her desk serves escalations only (the router would hand her share to somebody else anyway).
-        $members = $shift->members()->with('user.userPlatforms')->whereIn('status', ['available', 'busy'])
-            ->when($shift->leader_user_id !== null, fn ($q) => $q->where('user_id', '!=', $shift->leader_user_id))
-            ->orderBy('id')->get();
-
-        if ($members->isEmpty()) {
-            return;
-        }
-
-        $counts = $members->mapWithKeys(fn (ShiftMember $m) => [$m->user_id => 0])->all();
-        $entries = QueueEntry::query()->with('conversation')->where('status', 'waiting')->where('priority', 'overnight')
-            ->whereNull('reserved_user_id')->orderBy('business_date')->orderBy('ticket_no')->get();
-
-        foreach ($entries as $e) {
-            $platform = $e->conversation?->platform;
-            $cand = $members->filter(fn (ShiftMember $m) => $platform !== null && $m->user->canAccessPlatform($platform));
-
-            if ($cand->isEmpty()) {
-                continue; // nobody on this shift may serve that platform: it stays in the shared pool
-            }
-
-            $pick = $cand->sort(fn (ShiftMember $x, ShiftMember $y) => [$counts[$x->user_id], $x->id] <=> [$counts[$y->user_id], $y->id])->first();
-            $e->update(['reserved_user_id' => $pick->user_id, 'shift_id' => $shift->id]);
-            $counts[$pick->user_id]++;
-        }
-    }
-
-    /**
-     * Scheduled (every minute): closes open shifts whose end passed — including yesterday's
+     * Scheduled (every tick): closes open shifts whose end passed — including yesterday's
      * evening shift that ran past midnight — and opens today's planned shift whose time came,
-     * with the default roster when the leader did not set one.
+     * with nobody on it (attendance design §2: no roster, no «ابدأ اليوم»).
      */
     public function transition(?QueueSetting $settings = null): void
     {
@@ -304,14 +167,7 @@ class ShiftService
 
         foreach ($this->todayShifts() as $shift) {
             if ($shift->status === 'planned' && $shift->starts_at->lte(now()) && $shift->ends_at->gt(now())) {
-                if ($shift->members()->count() === 0) {
-                    foreach ($s->default_roster[$shift->shift_key] ?? [] as $userId) {
-                        if ($u = User::query()->find($userId)) {
-                            $this->addMember($shift, $u, null);
-                        }
-                    }
-                }
-                $this->open($shift, null);
+                $this->open($shift);
             }
         }
     }
@@ -406,9 +262,6 @@ class ShiftService
      * marked offline and no window is handed off: a warning is logged, supervisors are told (at
      * most every 15 minutes) and the next tick looks again. One or two moderators going quiet on
      * their own is handled as before.
-     *
-     * Last, the leader hears about members still not arrived `not_arrived_alert_minutes` into
-     * their shift (once per member per shift).
      */
     public function tickMembers(?QueueSetting $settings = null): void
     {
@@ -486,8 +339,6 @@ class ShiftService
                 $this->setStatus($m, 'break');
             }
         }
-
-        $this->alertNotArrived($members, $s);
     }
 
     /** Log every time, tell the supervisors at most every 15 minutes. */
@@ -497,43 +348,6 @@ class ShiftService
 
         if (Cache::add('queue:mass-offline-notified', true, now()->addMinutes(self::MASS_OFFLINE_ALERT_MINUTES))) {
             $this->notifier->notifySupervisors('queue.mass_offline', ['count' => $dark, 'serving' => $serving]);
-        }
-    }
-
-    /**
-     * Once per member per shift: a rostered moderator still not logged in
-     * `not_arrived_alert_minutes` after the shift opened, or after she was added when that is
-     * later. The shift leader, the supervisors and the admins are told, each once, never the
-     * member herself. The claim on her row makes two overlapping ticks tell them once.
-     *
-     * @param  Collection<int, ShiftMember>  $members
-     */
-    private function alertNotArrived(Collection $members, QueueSetting $s): void
-    {
-        foreach ($members as $m) {
-            if ($m->not_arrived_alerted_at !== null || $m->shift === null || ! self::notArrived($m)) {
-                continue;
-            }
-
-            $since = self::expectedFrom($m);
-
-            if ($since === null || $since->copy()->addMinutes((int) $s->not_arrived_alert_minutes)->gt(now())) {
-                continue;
-            }
-
-            $claimed = ShiftMember::query()->whereKey($m->id)->whereNull('not_arrived_alerted_at')->toBase()
-                ->update(['not_arrived_alerted_at' => now()]);
-
-            if ($claimed !== 1) {
-                continue;
-            }
-
-            $data = ['member_id' => $m->id, 'user_id' => (int) $m->user_id, 'name' => $m->user->name, 'shift' => $m->shift->name, 'minutes' => (int) $s->not_arrived_alert_minutes];
-
-            User::query()->where('is_active', true)->get()
-                ->filter(fn (User $u) => $u->isSupervisorOrAbove() || (int) $u->id === (int) $m->shift->leader_user_id)
-                ->reject(fn (User $u) => (int) $u->id === (int) $m->user_id)
-                ->each(fn (User $u) => $this->notifier->notify($u, 'queue.member_not_arrived', $data));
         }
     }
 }

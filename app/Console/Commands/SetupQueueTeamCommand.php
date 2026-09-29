@@ -46,7 +46,6 @@ class SetupQueueTeamCommand extends Command
 
         DB::transaction(function () use ($domain, &$rows) {
             $leader = null;
-            $moderatorIds = [];
 
             foreach (self::LEADER + self::MODERATORS as $local => $name) {
                 $isLeader = array_key_exists($local, self::LEADER);
@@ -55,18 +54,14 @@ class SetupQueueTeamCommand extends Command
 
                 if ($isLeader) {
                     $leader = $user;
-                } else {
-                    $moderatorIds[] = $user->id;
                 }
             }
 
             $settings = QueueSetting::current();
             $shifts = array_map(fn (array $s) => array_replace($s, ['leader_user_id' => $leader->id]), $settings->shiftTemplates());
 
-            $settings->update([
-                'shifts' => $shifts,
-                'default_roster' => [($shifts[0]['key'] ?? 'morning') => $moderatorIds],
-            ]);
+            // Nobody is seated from a roster (attendance design): the moderators check themselves in.
+            $settings->update(['shifts' => $shifts]);
         });
 
         $this->table(['Name', 'Email', 'Role', 'Password'], $rows);

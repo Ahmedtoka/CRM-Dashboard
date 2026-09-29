@@ -536,3 +536,15 @@ it('still says every window is taken when the desks are logged in and full', fun
 
     expect(collect(QueueDecision::latest('id')->first()->lines)->contains(fn ($l) => str_contains($l, 'كل الشبابيك مليانة')))->toBeTrue();
 });
+
+// ───── attendance design §5: nobody checked in ─────
+
+it('says that nobody has started work when the open shift has no desk', function () {
+    Shift::factory()->create();
+    $e = routerWaiting();
+
+    expect(app(QueueRouter::class)->run('t'))->toBe(0);
+
+    expect($e->fresh()->status)->toBe('waiting')
+        ->and(collect(QueueDecision::latest('id')->first()->lines)->contains(fn ($l) => str_contains($l, 'مفيش موظفة بدأت شغل في الشيفت')))->toBeTrue();
+});

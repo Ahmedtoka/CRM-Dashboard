@@ -588,7 +588,7 @@ class QueueRouter
 
     /**
      * Why no live customer can be given to anybody right now, for the decision line: nobody
-     * serving but the leader (her desk takes escalations only), nobody serving at all, or serving
+     * serving but the leader (her desk takes escalations only), nobody checked in at all, or serving
      * desks whose moderators are not logged in («مش فاتحة» on the board).
      *
      * @param  Collection<int, ShiftMember>  $serving  available / busy desks of the open shift
@@ -601,7 +601,7 @@ class QueueRouter
         if ($others->isEmpty()) {
             return $leaderId !== null && $online->contains(fn (ShiftMember $m) => (int) $m->user_id === $leaderId)
                 ? 'مفيش غير الليدر فاتحة، ومكتبها للتصعيد بس'
-                : 'مفيش موظفة متاحة في الشيفت';
+                : 'مفيش موظفة بدأت شغل في الشيفت';
         }
 
         return 'مفيش موظفة فاتحة: '.$others->count().' متاحة على اللوحة ومش فاتحة السيستم';
