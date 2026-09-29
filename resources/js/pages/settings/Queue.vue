@@ -40,36 +40,15 @@ function emptyShift(): QueueShiftTemplate {
     return { key: '', name: '', from: '09:00', to: '17:00', location: 'office', leader_user_id: null };
 }
 
-const form = useForm({
-    enabled: props.settings.enabled,
-    windows_per_moderator: props.settings.windows_per_moderator,
-    silence_warn_seconds: props.settings.silence_warn_seconds,
-    silence_close_seconds: props.settings.silence_close_seconds,
-    return_priority_minutes: props.settings.return_priority_minutes,
-    close_confirm_minutes: props.settings.close_confirm_minutes,
-    sla_first_reply_seconds: props.settings.sla_first_reply_seconds,
-    sla_target_pct: props.settings.sla_target_pct,
-    occupancy_cap_pct: props.settings.occupancy_cap_pct,
-    break_minutes: props.settings.break_minutes,
-    break_after_minutes: props.settings.break_after_minutes,
-    review_sample_pct: props.settings.review_sample_pct,
-    review_delay_seconds: props.settings.review_delay_seconds,
-    case_sla_hours: props.settings.case_sla_hours,
-    night_message_enabled: props.settings.night_message_enabled,
-    speed_fast_seconds: props.settings.speed_fast_seconds,
-    speed_ok_seconds: props.settings.speed_ok_seconds,
-    eta_default_handle_seconds: props.settings.eta_default_handle_seconds,
-    points: { ...(props.settings.points ?? {}) } as Record<string, number>,
-    shifts: (props.settings.shifts ?? []).map((s) => ({ ...s })) as QueueShiftTemplate[],
-});
-
-function addShift(): void {
-    form.shifts.push(emptyShift());
-}
-
-function removeShift(index: number): void {
-    form.shifts.splice(index, 1);
-}
+// Type aliases, not interfaces: Inertia's form data constraint needs an index signature, which
+// an interface never has, and without an explicit shape every field degrades to `FormDataConvertible`.
+type ShiftRow = { [K in keyof QueueShiftTemplate]: QueueShiftTemplate[K] };
+type QueueForm = {
+    enabled: boolean;
+    night_message_enabled: boolean;
+    points: Record<string, number>;
+    shifts: ShiftRow[];
+} & Record<(typeof NUMERIC_KEYS)[number], number>;
 
 const NUMERIC_KEYS = [
     'windows_per_moderator',
@@ -89,6 +68,37 @@ const NUMERIC_KEYS = [
     'speed_ok_seconds',
     'eta_default_handle_seconds',
 ] as const;
+
+const form = useForm<QueueForm>({
+    enabled: props.settings.enabled,
+    windows_per_moderator: props.settings.windows_per_moderator,
+    silence_warn_seconds: props.settings.silence_warn_seconds,
+    silence_close_seconds: props.settings.silence_close_seconds,
+    return_priority_minutes: props.settings.return_priority_minutes,
+    close_confirm_minutes: props.settings.close_confirm_minutes,
+    sla_first_reply_seconds: props.settings.sla_first_reply_seconds,
+    sla_target_pct: props.settings.sla_target_pct,
+    occupancy_cap_pct: props.settings.occupancy_cap_pct,
+    break_minutes: props.settings.break_minutes,
+    break_after_minutes: props.settings.break_after_minutes,
+    review_sample_pct: props.settings.review_sample_pct,
+    review_delay_seconds: props.settings.review_delay_seconds,
+    case_sla_hours: props.settings.case_sla_hours,
+    night_message_enabled: props.settings.night_message_enabled,
+    speed_fast_seconds: props.settings.speed_fast_seconds,
+    speed_ok_seconds: props.settings.speed_ok_seconds,
+    eta_default_handle_seconds: props.settings.eta_default_handle_seconds,
+    points: { ...(props.settings.points ?? {}) },
+    shifts: (props.settings.shifts ?? []).map((s) => ({ ...s })),
+});
+
+function addShift(): void {
+    form.shifts.push(emptyShift());
+}
+
+function removeShift(index: number): void {
+    form.shifts.splice(index, 1);
+}
 
 // The wrapped <Input> component's own v-model never sees a `.number` modifier applied at the call site
 // (that only works on a native element's v-model), so every numeric field arrives here as a string typed

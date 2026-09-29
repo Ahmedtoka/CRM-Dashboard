@@ -5,12 +5,14 @@ import ConversationTagMenu from '@/components/crm/ConversationTagMenu.vue';
 import CreateOrderDrawer from '@/components/crm/CreateOrderDrawer.vue';
 import CustomerPanel from '@/components/crm/CustomerPanel.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
+import MyWindowsStrip from '@/components/crm/queue/MyWindowsStrip.vue';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useConversationList } from '@/composables/inbox/useConversationList';
 import { useConversationThread } from '@/composables/inbox/useConversationThread';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
+import { useMyQueue } from '@/composables/useMyQueue';
 import { useShortcuts } from '@/composables/useShortcuts';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -24,6 +26,7 @@ import type {
     CursorPage,
     InboxFilters,
     Order,
+    QueueEntry,
     QuickReply,
     QuickReplyCategory,
     SupportCase,
@@ -72,7 +75,10 @@ const list = useConversationList(props.conversations, props.filters, {
     me,
     selectedId,
     handlers: {
-        onMessage: (message) => thread.mergeMessage(message),
+        onMessage: (message) => {
+            thread.mergeMessage(message);
+            queue.noteMessage(message);
+        },
         onConversation: (patch) => {
             thread.applyConversation(patch);
             // New customer messages in the open thread are read immediately.
@@ -86,7 +92,42 @@ const list = useConversationList(props.conversations, props.filters, {
 });
 
 const { detail, messages, hasMore, loading: loadingThread, loadingOlder, viewers, typingNames, lockHolder, mentionable, busyAction, retrying, retryingAttachments, error } = thread;
-const { conversations, filters, loading, loadingMore, nextCursor, live } = list;
+// Renamed on the way out: the page's props are called `conversations` and `filters` too (the first page and the
+// filters it was loaded with), and the live list must never be mistaken for them.
+const { conversations: listRows, filters: listFilters, loading, loadingMore, nextCursor, live } = list;
+
+// Handover queue (the moderator's side). With the queue off, or for somebody who is not on the
+// shift, this is one request and nothing of it is rendered.
+const queue = useMyQueue({ userId: me.id, onAssigned: onWindowAssigned, onReleased: onWindowReleased });
+
+const windowUnread = computed<Record<number, number>>(() => {
+    const ids = new Set(queue.entries.value.map((e) => e.conversation_id));
+
+    return Object.fromEntries(listRows.value.filter((c) => ids.has(c.id)).map((c) => [c.id, c.unread_count]));
+});
+
+// A customer was just given to her: the chat opens by itself, unless she is in the middle of
+// typing to somebody else. Then the toast carries the way there.
+function onWindowAssigned(entry: QueueEntry): void {
+    const typing = selectedId.value !== null && selectedId.value !== entry.conversation_id && (drafts.value[selectedId.value] ?? '').trim() !== '';
+    if (!typing) select(entry.conversation_id);
+    toast.push(
+        t('queue.assigned_toast', { ticket: entry.ticket % 100000 }),
+        'info',
+        typing ? { href: `/inbox?c=${entry.conversation_id}`, label: t('queue.assigned_open') } : undefined,
+    );
+}
+
+// Closed or transferred from here: the header and the list drop the window at once (the
+// broadcast, or the next poll, brings the rest).
+function onWindowReleased(entryId: number): void {
+    const row = listRows.value.find((c) => c.queue_entry?.id === entryId);
+    if (row) list.applyConversation({ id: row.id, queue_entry: null, assignee: null });
+    if (detail.value?.conversation.queue_entry?.id === entryId) {
+        thread.applyConversation({ id: detail.value.conversation.id, queue_entry: null, assignee: null });
+        void thread.silentReload().catch(() => undefined);
+    }
+}
 
 const canDiscount = computed(() => me.role === 'admin' || me.role === 'supervisor');
 const breadcrumbs = computed(() => [{ title: t('inbox.title'), href: '/inbox' }]);
@@ -167,6 +208,9 @@ function sendTemplate(template: TemplatePayload): void {
 }
 
 async function runAction(name: ConversationAction): Promise<void> {
+    // An open queue window is never closed without a reason: resolve (and its shortcut) opens the reasons.
+    if (name === 'resolve' && threadView.value?.header?.openCloseWindow()) return;
+
     const conversation = await thread.action(name);
     if (conversation) list.applyConversation(conversation);
 }
@@ -204,7 +248,7 @@ function openTagMenu(id: number, x: number, y: number): void {
 const tagToggleChains = new Map<number, Promise<void>>();
 
 async function applyTagToggle(id: number, tagId: number): Promise<void> {
-    const current = conversations.value.find((c) => c.id === id);
+    const current = listRows.value.find((c) => c.id === id);
     const ids = current?.tags.map((tag) => tag.id) ?? [];
     const next = ids.includes(tagId) ? ids.filter((x) => x !== tagId) : [...ids, tagId];
     try {
@@ -265,7 +309,7 @@ function onOrderCreated(order: Order): void {
 
 // `j`/`k`/arrow-down/arrow-up: moves the selection by one row and scrolls it into view.
 function move(delta: 1 | -1): void {
-    const rows = conversations.value;
+    const rows = listRows.value;
     if (!rows.length) return;
     const index = rows.findIndex((c) => c.id === selectedId.value);
     const next = rows[Math.min(rows.length - 1, Math.max(0, index === -1 ? 0 : index + delta))];
@@ -316,12 +360,14 @@ onBeforeUnmount(() => {
     <Head :title="t('inbox.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs" fill>
+        <MyWindowsStrip :selected-id="selectedId" :unread="windowUnread" @select="select" />
+
         <!-- Fills the space left under the header and any admin alert strip (no fixed calc). -->
         <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background md:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)_320px]">
             <ConversationList
                 :class="selectedId !== null ? 'hidden md:flex' : 'flex'"
-                :conversations="conversations"
-                :filters="filters"
+                :conversations="listRows"
+                :filters="listFilters"
                 :selected-id="selectedId"
                 :loading="loading"
                 :loading-more="loadingMore"
@@ -411,7 +457,7 @@ onBeforeUnmount(() => {
         <ConversationTagMenu
             v-if="tagMenu"
             :tags="tags"
-            :selected="(conversations.find((c) => c.id === tagMenu!.id)?.tags ?? []).map((tag) => tag.id)"
+            :selected="(listRows.find((c) => c.id === tagMenu!.id)?.tags ?? []).map((tag) => tag.id)"
             :x="tagMenu.x"
             :y="tagMenu.y"
             @toggle="quickToggleTag"

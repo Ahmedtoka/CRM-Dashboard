@@ -25,6 +25,13 @@ function itemText(n: AppNotification): string {
         return `${urgent}${t('notifications.handover_item', { name })} · ${reasonLabel(n)}`;
     }
 
+    if (n.type === 'queue.assigned' || n.type === 'queue.escalation_waiting') {
+        return t(n.type === 'queue.assigned' ? 'notifications.queue_assigned_item' : 'notifications.queue_escalation_waiting_item', {
+            ticket: Number(n.data.ticket ?? 0) % 100000,
+            name: String(n.data.customer_name ?? t('notifications.customer')),
+        });
+    }
+
     if (n.type === 'channel.problem') {
         const title = t('notifications.channel_problem_item', { name: String(n.data.name ?? '') });
         // The health check writes the notification from the scheduler, so its `excerpt` is

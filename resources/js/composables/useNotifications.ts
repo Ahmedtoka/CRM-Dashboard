@@ -7,7 +7,14 @@ import { router, usePage } from '@inertiajs/vue3';
 import { effectScope, ref, watch, type EffectScope } from 'vue';
 
 /** Maps a notification/broadcast `type` to its i18n leaf under `notifications.types.*`. */
-export const TYPE_KEY = { 'conversation.handover': 'handover', 'conversation.handover_urgent': 'handover_urgent', 'note.mention': 'mention', 'channel.problem': 'channel_problem' } as const;
+export const TYPE_KEY = {
+    'conversation.handover': 'handover',
+    'conversation.handover_urgent': 'handover_urgent',
+    'note.mention': 'mention',
+    'channel.problem': 'channel_problem',
+    'queue.assigned': 'queue_assigned',
+    'queue.escalation_waiting': 'queue_escalation_waiting',
+} as const;
 
 /** Desktop notification bodies never carry more than this many characters of a message (privacy ruling). */
 const PREVIEW_MAX = 80;

@@ -105,13 +105,16 @@ class ConversationResource extends JsonResource
     /**
      * Her open queue ticket (called / active window), null once closed or never queued.
      *
-     * @return array{ticket:int,window_no:?int,status:string,kind:string,delivered_at:?string,bot_summary:?array}|null
+     * @return array{id:int,assigned_user_id:?int,priority:string,ticket:int,window_no:?int,status:string,kind:string,delivered_at:?string,bot_summary:?array}|null
      */
     public static function queueEntry(Conversation $c): ?array
     {
         $e = $c->queue_entry_id !== null ? $c->queueEntry : null;
 
         return $e !== null && $e->isOpen() ? [
+            'id' => $e->id,
+            'assigned_user_id' => $e->assigned_user_id,
+            'priority' => $e->priority,
             'ticket' => $e->ticket_no,
             'window_no' => $e->window_no,
             'status' => $e->status,

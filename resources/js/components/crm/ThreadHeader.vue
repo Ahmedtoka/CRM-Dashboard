@@ -2,6 +2,7 @@
 import HandlerAvatar from '@/components/crm/HandlerAvatar.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import PresenceBar from '@/components/crm/PresenceBar.vue';
+import CloseWindowMenu from '@/components/crm/queue/CloseWindowMenu.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { buttonVariants } from '@/components/ui/button';
 import {
@@ -16,9 +17,12 @@ import { skinClasses, type ChatSkin } from '@/composables/inbox/useChatSkin';
 import { useI18n } from '@/composables/useI18n';
 import { formatCount } from '@/lib/format';
 import { useInitials } from '@/composables/useInitials';
+import { useMyQueueContext } from '@/composables/useMyQueue';
 import { shortcutHint } from '@/composables/useShortcuts';
 import { cn } from '@/lib/utils';
+import type { SharedData } from '@/types';
 import type { Conversation, ConversationAction, ConversationPriority, Tag, UserRef } from '@/types/crm';
+import { usePage } from '@inertiajs/vue3';
 import { Bot, CheckCircle2, ChevronLeft, Eraser, Hand, LoaderCircle, RotateCcw, ShieldAlert, Star, Tags, UserRound } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
@@ -52,6 +56,20 @@ const adTooltip = computed(() => {
         .join('\n');
 });
 
+// Handover queue: an open window is closed with a reason (or handed to the shift leader), by
+// its moderator or a supervisor. With the queue off, or for anybody else, the resolve button stays as it was.
+const queue = useMyQueueContext();
+const page = usePage<SharedData>();
+const closeMenu = ref<InstanceType<typeof CloseWindowMenu> | null>(null);
+const queueWindow = computed(() => {
+    const entry = queue?.enabled.value ? props.conversation.queue_entry : null;
+    if (!entry) return null;
+    const role = page.props.auth.user?.role;
+
+    return entry.assigned_user_id === props.meId || role === 'supervisor' || role === 'admin' ? entry : null;
+});
+const windowOwner = computed(() => (queueWindow.value && queueWindow.value.assigned_user_id !== props.meId ? (props.conversation.assignee?.name ?? null) : null));
+
 const tagsOpen = ref(false);
 const hint = (id: string) => {
     const key = shortcutHint(id);
@@ -62,7 +80,16 @@ function confirmReset(): void {
     if (window.confirm(t('thread.reset_confirm'))) emit('action', 'reset');
 }
 
-defineExpose({ openTags: () => (tagsOpen.value = true) });
+defineExpose({
+    openTags: () => (tagsOpen.value = true),
+    /** Opens the close-window menu; false when this conversation has no window the user may close. */
+    openCloseWindow: (): boolean => {
+        if (!queueWindow.value) return false;
+        closeMenu.value?.open();
+
+        return true;
+    },
+});
 </script>
 
 <template>
@@ -225,8 +252,9 @@ defineExpose({ openTags: () => (tagsOpen.value = true) });
                 <span class="hidden lg:inline">{{ t('thread.reset') }}</span>
             </button>
 
+            <CloseWindowMenu v-if="queueWindow" ref="closeMenu" :entry="queueWindow" :owner-name="windowOwner" :disabled="busy" :hint="hint('inbox.resolve')" />
             <button
-                v-if="conversation.status !== 'resolved'"
+                v-else-if="conversation.status !== 'resolved'"
                 type="button"
                 :title="`${t('thread.resolve')}${hint('inbox.resolve')}`"
                 :class="cn(buttonVariants({ size: 'sm' }), 'h-9 rounded-full px-2.5')"

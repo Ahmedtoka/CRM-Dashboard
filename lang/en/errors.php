@@ -87,6 +87,13 @@ return [
 
     'queue' => [
         'warn_before_close' => 'The warning timer must be shorter than the close timer.',
+        'disabled' => 'The queue is switched off.',
+        'not_your_window' => 'This window is not yours.',
+        'window_not_open' => 'This window is already closed.',
+        'not_on_shift' => 'You are not on an open shift right now.',
+        'already_with_leader' => 'This chat is already with the shift leader.',
+        'reason_required' => 'Choose why you are closing: inquiry, problem or case.',
+        'case_type_required' => 'Choose the case type.',
     ],
 
     'users' => [

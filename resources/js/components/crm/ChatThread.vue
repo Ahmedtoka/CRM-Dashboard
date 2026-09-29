@@ -2,6 +2,7 @@
 import Composer from '@/components/crm/Composer.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import MessageBubble from '@/components/crm/MessageBubble.vue';
+import QueueBanner from '@/components/crm/queue/QueueBanner.vue';
 import TemplatePicker from '@/components/crm/TemplatePicker.vue';
 import ThreadHeader from '@/components/crm/ThreadHeader.vue';
 import WindowBanner from '@/components/crm/WindowBanner.vue';
@@ -278,6 +279,8 @@ defineExpose({ composer, header });
             @toggle-tag="emit('toggleTag', $event)"
             @claim="emit('claim')"
         />
+
+        <QueueBanner :conversation="detail.conversation" :me-id="meId" />
 
         <div v-if="lockedByOther" role="status" class="flex items-center gap-2 border-b bg-warning/15 px-4 py-1.5 text-xs text-foreground">
             <PenLine class="size-3.5 shrink-0" aria-hidden="true" />{{ t('thread.replying', { name: lockedByOther.name }) }}

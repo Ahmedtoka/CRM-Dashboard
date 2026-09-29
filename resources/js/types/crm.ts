@@ -73,12 +73,73 @@ export interface Conversation {
 }
 
 export interface ConversationQueueEntry {
+    id: number;
+    assigned_user_id: number | null;
+    priority: QueuePriority;
     ticket: number;
     window_no: number | null;
     status: string;
     kind: string;
     delivered_at: string | null;
     bot_summary: Record<string, unknown> | null;
+}
+
+export type QueuePriority = 'returning' | 'escalation' | 'live' | 'overnight' | 'manual';
+export type QueueEntryStatus = 'waiting' | 'called' | 'active' | 'closed' | 'abandoned' | 'cancelled';
+/** The reasons a person closes a window with; every other close reason is the system's. */
+export type QueueCloseReason = 'inquiry' | 'problem' | 'case';
+export type SupportCaseType = 'return_exchange' | 'return' | 'exchange' | 'complaint' | 'cancel_edit' | 'delivery_followup';
+export type ShiftMemberStatus = 'available' | 'busy' | 'pending_break' | 'break' | 'offline' | 'left';
+
+/** QueueEntryResource: one ticket (GET /queue/me, the `QueueEntryUpdated` broadcast). */
+export interface QueueEntry {
+    id: number;
+    /** Show `ticket % 100000`: a transferred ticket is parked at +100000 so the follow-up keeps the number. */
+    ticket: number;
+    status: QueueEntryStatus;
+    priority: QueuePriority;
+    kind: string;
+    platform: PlatformValue | null;
+    customer: { id: number; name: string | null; avatar_url: string | null } | null;
+    conversation_id: number;
+    assigned_user_id: number | null;
+    reserved_user_id: number | null;
+    window_no: number | null;
+    enqueued_at: string | null;
+    delivered_at: string | null;
+    first_reply_at: string | null;
+    eta_seconds: number | null;
+    wait_seconds: number | null;
+    bot_summary: Record<string, unknown> | null;
+    rule: string | null;
+    /** Seconds to the auto-close, as of the moment the server answered; null while the clock is not running. */
+    silence_left_seconds: number | null;
+    silence_warned: boolean;
+    return_priority_until: string | null;
+    reopened_from_entry_id: number | null;
+}
+
+/** ShiftMemberResource: one moderator's desk. */
+export interface ShiftMember {
+    id: number;
+    shift_id: number;
+    user: UserRef | null;
+    status: ShiftMemberStatus;
+    cap: number;
+    open_count: number;
+    break_at: string | null;
+    break_ends_at: string | null;
+    joined_at: string | null;
+    today: Record<string, number>;
+}
+
+/** GET /queue/me. With the queue off everything but `enabled` is empty. */
+export interface MyQueuePayload {
+    enabled: boolean;
+    member: ShiftMember | null;
+    entries: QueueEntry[];
+    settings: { silence_warn_seconds: number; silence_close_seconds: number; windows_per_moderator: number; break_minutes: number } | null;
+    server_time: string;
 }
 
 /** ConversationUpdated broadcast: a subset of Conversation. */
@@ -510,7 +571,7 @@ export interface ChannelAlert {
 /** A persisted bell notification (spec §5.4, Dashboard Experience Task 14). */
 export interface AppNotification {
     id: number;
-    type: 'conversation.handover' | 'conversation.handover_urgent' | 'note.mention' | 'channel.problem';
+    type: 'conversation.handover' | 'conversation.handover_urgent' | 'note.mention' | 'channel.problem' | 'queue.assigned' | 'queue.escalation_waiting';
     data: Record<string, unknown>;
     read_at: string | null;
     created_at: string | null;

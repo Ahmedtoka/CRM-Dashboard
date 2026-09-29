@@ -13,6 +13,7 @@ use App\Http\Controllers\Web\OnboardingController;
 use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\PresenceController;
 use App\Http\Controllers\Web\ProductController;
+use App\Http\Controllers\Web\QueueWindowController;
 use App\Http\Controllers\Web\QuickReplyAttachmentController;
 use App\Http\Controllers\Web\ReportController;
 use App\Http\Controllers\Web\SearchController;
@@ -69,6 +70,12 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
         Route::post('conversations/{conversation}/orders', [InboxController::class, 'storeOrder'])->name('conversations.orders.store');
         Route::post('conversations/{conversation}/quick-replies/{quickReply}/render', [InboxController::class, 'renderQuickReply'])->name('conversations.quick-replies.render');
     });
+
+    // Handover queue, the moderator's side (queue routing Task 9): her desk and windows in the inbox.
+    Route::get('/queue/me', [QueueWindowController::class, 'me'])->name('queue.me');
+    Route::post('/queue/me/status', [QueueWindowController::class, 'status'])->name('queue.me.status');
+    Route::post('/queue/entries/{entry}/close', [QueueWindowController::class, 'close'])->name('queue.close');
+    Route::post('/queue/entries/{entry}/escalate', [QueueWindowController::class, 'escalate'])->name('queue.escalate');
 
     Route::get('/products/search', [ProductController::class, 'search'])->name('products.search');
 
