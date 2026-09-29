@@ -2,21 +2,20 @@
 
 namespace App\Queue\Events;
 
-use App\Http\Resources\QueueEntryResource;
-use App\Models\QueueEntry;
+use App\Models\QueueDecision;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 
-/** A queue entry changed (enqueued, customer wrote, called, closed…): the board's ticket row. */
-class QueueEntryUpdated implements ShouldBroadcastNow
+/** One router pass finished: its decision lines for the board's log. */
+class RouterDecided implements ShouldBroadcastNow
 {
     use Dispatchable;
     use InteractsWithSockets;
 
-    public function __construct(public QueueEntry $entry) {}
+    public function __construct(public QueueDecision $decision) {}
 
     /** @return array<int, Channel> */
     public function broadcastOn(): array
@@ -26,6 +25,13 @@ class QueueEntryUpdated implements ShouldBroadcastNow
 
     public function broadcastWith(): array
     {
-        return (new QueueEntryResource($this->entry->loadMissing('conversation.customer')))->resolve();
+        $d = $this->decision;
+
+        return [
+            'id' => $d->id,
+            'trigger' => $d->trigger,
+            'lines' => $d->lines ?? [],
+            'at' => $d->created_at?->toIso8601String(),
+        ];
     }
 }

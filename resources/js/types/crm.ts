@@ -65,7 +65,20 @@ export interface Conversation {
     first_responder: UserRef | null;
     tags: Tag[];
     handling: Handling | null;
+    /** The moderator the handover queue gave this conversation to. */
+    assignee: UserRef | null;
+    /** Her open handover-queue ticket (called / active window); null otherwise. Not the `queue` agents/senior badge. */
+    queue_entry: ConversationQueueEntry | null;
     can: { reply: boolean; reset?: boolean };
+}
+
+export interface ConversationQueueEntry {
+    ticket: number;
+    window_no: number | null;
+    status: string;
+    kind: string;
+    delivered_at: string | null;
+    bot_summary: Record<string, unknown> | null;
 }
 
 /** ConversationUpdated broadcast: a subset of Conversation. */

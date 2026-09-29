@@ -60,6 +60,8 @@ class ConversationUpdated implements ShouldBroadcastNow
             ] : null,
             'locked_by' => $lockedBy ? ['id' => $lockedBy->id, 'name' => $lockedBy->name] : null,
             'handling' => ConversationResource::handling($c),
+            'assignee' => ConversationResource::assignee($c),
+            'queue_entry' => ConversationResource::queueEntry($c),
         ];
     }
 }

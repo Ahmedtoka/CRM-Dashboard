@@ -164,7 +164,7 @@ class ConversationQuery
                     ->where('sender_type', SenderType::User->value)
                     ->orderByDesc('id')->limit(1),
             ])
-            ->with(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags']);
+            ->with(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags', 'assignee', 'queueEntry']);
     }
 
     /**

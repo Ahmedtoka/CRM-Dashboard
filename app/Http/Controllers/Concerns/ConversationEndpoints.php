@@ -59,7 +59,7 @@ trait ConversationEndpoints
     {
         Gate::authorize('view', $conversation);
 
-        $conversation->load(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags']);
+        $conversation->load(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags', 'assignee', 'queueEntry']);
 
         $messages = $conversation->messages()->with(['user', 'mediaAttachments'])->orderByDesc('id')->limit(50)->get()->reverse()->values();
         $notes = $conversation->notes()->with('user')->orderByDesc('id')->get();
@@ -275,7 +275,7 @@ trait ConversationEndpoints
 
         $lock->claim($conversation, $request->user());
 
-        return new ConversationResource($conversation->fresh(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags']));
+        return new ConversationResource($conversation->fresh(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags', 'assignee', 'queueEntry']));
     }
 
     /**
@@ -322,7 +322,7 @@ trait ConversationEndpoints
 
         $actions->reset($conversation, $request->user());
 
-        return new ConversationResource($conversation->fresh(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags']));
+        return new ConversationResource($conversation->fresh(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags', 'assignee', 'queueEntry']));
     }
 
     public function read(Request $request, Conversation $conversation, ConversationActions $actions): ConversationResource

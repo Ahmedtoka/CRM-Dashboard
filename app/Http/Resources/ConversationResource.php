@@ -79,6 +79,9 @@ class ConversationResource extends JsonResource
             'first_responder' => $firstResponder ? ['id' => $firstResponder->id, 'name' => $firstResponder->name] : null,
             'tags' => $c->tags->map(fn (Tag $t) => ['id' => $t->id, 'name' => $t->name, 'color' => $t->color])->values()->all(),
             'handling' => self::handling($c),
+            'assignee' => self::assignee($c),
+            // The handover-queue ticket (not the older `queue` agents/senior badge above).
+            'queue_entry' => self::queueEntry($c),
             // Fix round 1, minor (i): the claim button needs to know whether the
             // viewer may reply at all — computed here (not per row in the list
             // query) so a moderator scoped away from this platform never sees it.
@@ -91,6 +94,31 @@ class ConversationResource extends JsonResource
                 'reset' => (bool) $request->user()?->isSupervisorOrAbove(),
             ],
         ];
+    }
+
+    /** The moderator the handover queue gave this conversation to. @return array{id:int,name:?string}|null */
+    public static function assignee(Conversation $c): ?array
+    {
+        return $c->assignee_id !== null ? ['id' => $c->assignee_id, 'name' => $c->assignee?->name] : null;
+    }
+
+    /**
+     * Her open queue ticket (called / active window), null once closed or never queued.
+     *
+     * @return array{ticket:int,window_no:?int,status:string,kind:string,delivered_at:?string,bot_summary:?array}|null
+     */
+    public static function queueEntry(Conversation $c): ?array
+    {
+        $e = $c->queue_entry_id !== null ? $c->queueEntry : null;
+
+        return $e !== null && $e->isOpen() ? [
+            'ticket' => $e->ticket_no,
+            'window_no' => $e->window_no,
+            'status' => $e->status,
+            'kind' => $e->kind,
+            'delivered_at' => $e->delivered_at?->toIso8601String(),
+            'bot_summary' => $e->bot_summary,
+        ] : null;
     }
 
     /** Arabic handover category label from HandoverSummary, the one labels source (human bot flow Task 5). */
