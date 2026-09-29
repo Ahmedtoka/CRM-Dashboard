@@ -34,6 +34,9 @@ const view = computed(() => {
     const name = entry.customer?.name || t('queue.customer_fallback');
     const ticket = entry.ticket % 100000;
     const elapsed = formatSeconds(board.secondsSince(entry.delivered_at), locale.value);
+    // She waits for the moderator past the apology: orange, counting down to the hand-off.
+    const overdue = entry.reply_overdue === true;
+    const handoff = board.handoffLeft(entry);
 
     return {
         id: entry.id,
@@ -43,14 +46,22 @@ const view = computed(() => {
         platform: entry.platform ?? 'facebook',
         escalation: entry.priority === 'escalation',
         tone,
+        overdue,
         waitingReply: entry.first_reply_at === null,
         // The ring empties as the silence runs out; full while the clock is not running.
         dash: left === null ? 0 : RING * (1 - Math.min(1, left / Math.max(1, total))),
-        time: left !== null && tone !== 'calm' ? formatSeconds(left, locale.value) : elapsed,
+        time:
+            overdue && handoff !== null
+                ? formatSeconds(handoff, locale.value)
+                : left !== null && tone !== 'calm'
+                  ? formatSeconds(left, locale.value)
+                  : elapsed,
         label:
-            left === null
-                ? t('board.window.label', { n: props.number, name, ticket, time: elapsed })
-                : t('board.window.label_silence', { n: props.number, name, ticket, time: elapsed, left: formatSeconds(left, locale.value) }),
+            overdue && handoff !== null
+                ? t('board.window.label_overdue', { n: props.number, name, ticket, left: formatSeconds(handoff, locale.value) })
+                : left === null
+                  ? t('board.window.label', { n: props.number, name, ticket, time: elapsed })
+                  : t('board.window.label_silence', { n: props.number, name, ticket, time: elapsed, left: formatSeconds(left, locale.value) }),
     };
 });
 </script>
@@ -67,6 +78,7 @@ const view = computed(() => {
             wait: view.waitingReply,
             armed: view.tone === 'warning' || view.tone === 'last',
             last: view.tone === 'last',
+            overdue: view.overdue,
         }"
         :aria-label="view.label"
         :aria-pressed="selected"

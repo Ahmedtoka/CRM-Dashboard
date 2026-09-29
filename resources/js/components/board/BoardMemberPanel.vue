@@ -4,6 +4,7 @@ import BoardPlatforms from '@/components/board/BoardPlatforms.vue';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useBoardContext } from '@/lib/board/context';
+import { notOnline } from '@/lib/board/state';
 import { formatClock, formatCount, formatSeconds } from '@/lib/format';
 import { Link } from '@inertiajs/vue3';
 import { Coffee, ExternalLink, LoaderCircle, UserMinus, UserRoundCheck } from 'lucide-vue-next';
@@ -29,6 +30,8 @@ const statusText = computed(() => {
         return left === null ? t('board.status.break') : t('board.status.break_left', { time: formatSeconds(left, locale.value) });
     }
     if (m.status === 'available' || m.status === 'busy') {
+        if (notOnline(m)) return t('board.status.not_online');
+
         return windows.value.length > 0
             ? t('board.status.busy', { n: formatCount(windows.value.length, locale.value) })
             : t('board.status.available');
@@ -40,7 +43,7 @@ const statusText = computed(() => {
 const counters = computed(() => {
     const today = member.value?.today ?? {};
 
-    return (['received', 'inquiry', 'problem', 'case', 'auto', 'escalation'] as const).map((key) => ({
+    return (['received', 'inquiry', 'problem', 'case', 'auto', 'escalation', 'no_reply'] as const).map((key) => ({
         key,
         label: t(`board.member.today.${key}`),
         value: formatCount(today[key] ?? 0, locale.value),
@@ -97,7 +100,10 @@ async function remove(): Promise<void> {
         <template v-else>
             <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <BoardPlatforms :platforms="member.platforms ?? []" />
-                <span v-if="member.online === false" class="rounded-full bg-muted px-2 py-0.5">{{ t('board.status.offline') }}</span>
+                <span v-if="notOnline(member)" class="rounded-full border border-dashed border-muted-foreground/50 px-2 py-0.5">{{
+                    t('board.status.not_online')
+                }}</span>
+                <span v-else-if="member.online === false" class="rounded-full bg-muted px-2 py-0.5">{{ t('board.status.offline') }}</span>
                 <span v-if="breakAt && !onBreak" class="tabular-nums">{{ t('board.member.break_at', { time: breakAt }) }}</span>
             </div>
 

@@ -12,13 +12,12 @@ export interface BoardWindowRef {
 }
 
 /**
- * A desk of the open shift. The last three fields come with the board state only; the
+ * A desk of the open shift. The last two fields come with the board state only; the
  * `QueueMemberUpdated` broadcast does not carry them, so they are kept from the state.
  */
 export interface BoardMember extends ShiftMember {
     windows: BoardWindowRef[];
     is_leader?: boolean;
-    online?: boolean;
     platforms?: PlatformValue[];
 }
 

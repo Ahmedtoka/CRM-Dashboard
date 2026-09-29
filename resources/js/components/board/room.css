@@ -1236,3 +1236,30 @@
         transition: none !important;
     }
 }
+
+/* Flow revision: a desk on the roster whose moderator is not logged in («مش فاتحة»). */
+.board-room .cell.notonline {
+    --st: #5b6477;
+}
+.board-room .cell.notonline .pill {
+    color: var(--ink-3);
+    border-style: dashed;
+}
+.board-room .cell.notonline .person,
+.board-room .cell.notonline .deskunit,
+.board-room .cell.notonline .chair {
+    opacity: 0.55;
+    filter: grayscale(1);
+}
+/* Flow revision: the customer waits for the moderator past the apology — orange until the hand-off. */
+.board-room .slot.overdue {
+    border-color: var(--case);
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35);
+}
+.board-room .slot.overdue .ring .fg {
+    stroke: var(--case);
+}
+.board-room .slot.overdue .tm {
+    color: var(--case);
+    font-weight: 700;
+}

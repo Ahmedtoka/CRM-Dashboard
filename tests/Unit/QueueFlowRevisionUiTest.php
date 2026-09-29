@@ -27,3 +27,14 @@ it('has the «رد الموظفة» settings section in both languages', functio
         ->and(revisionSource('resources/js/i18n/en.ts'))->toContain("reply_section: 'Moderator reply'")->toContain("no_reply: 'No reply (deducted)'")
         ->and(revisionSource('resources/js/pages/settings/Queue.vue'))->toContain("'agent_reassign_first_seconds'")->toContain('form.case_follow_owner')->toContain("'no_reply'");
 });
+
+it('shows a desk whose moderator is not logged in and the overdue windows, in both languages', function () {
+    expect(revisionSource('resources/js/i18n/ar.ts'))->toContain("not_online: 'مش فاتحة'")->toContain("handoff_left: 'تتحوّل لزميلة بعد'")
+        ->toContain("stats_no_reply: '{stats} · ما ردّتش {n}'")->toContain("no_reply: 'ما ردّتش'")
+        ->and(revisionSource('resources/js/i18n/en.ts'))->toContain("not_online: 'Not logged in'")->toContain("handoff_left: 'Handed to a colleague in'")
+        ->and(revisionSource('resources/js/lib/board/state.ts'))->toContain('export function notOnline(')
+        ->and(revisionSource('resources/js/components/board/RoomDesk.vue'))->toContain('notOnline(')
+        ->and(revisionSource('resources/js/components/board/RoomWindow.vue'))->toContain('board.handoffLeft(')
+        ->and(revisionSource('resources/js/components/crm/queue/MyWindowsStrip.vue'))->toContain("'overdue'")->toContain('handoffLeft(')
+        ->and(revisionSource('resources/js/components/board/room.css'))->toContain('.cell.notonline')->toContain('.slot.overdue');
+});

@@ -118,6 +118,14 @@ export interface QueueEntry {
     /** Seconds to the auto-close, as of the moment the server answered; null while the clock is not running. */
     silence_left_seconds: number | null;
     silence_warned: boolean;
+    /** The moderator this customer was taken from for not replying: never given back to her. */
+    excluded_user_id: number | null;
+    /** She has been waiting for the assignee's reply since then; null when she is not (open windows only). */
+    awaiting_reply_since: string | null;
+    /** She waited past the apology: the window shows orange. */
+    reply_overdue: boolean;
+    /** Seconds to the hand-off to a colleague, as of the server's answer; null without that clock and for an escalation. */
+    handoff_left_seconds: number | null;
     return_priority_until: string | null;
     reopened_from_entry_id: number | null;
 }
@@ -128,6 +136,8 @@ export interface ShiftMember {
     shift_id: number;
     user: UserRef | null;
     status: ShiftMemberStatus;
+    /** Her moderator is logged in right now (heartbeat in the last 2 minutes). */
+    online: boolean;
     cap: number;
     open_count: number;
     break_at: string | null;

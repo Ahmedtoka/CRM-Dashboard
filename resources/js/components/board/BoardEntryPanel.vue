@@ -35,6 +35,7 @@ const summary = computed(() => {
 });
 
 const silence = computed(() => (entry.value ? board.silenceLeft(entry.value) : null));
+const handoff = computed(() => (entry.value ? board.handoffLeft(entry.value) : null));
 
 /** Why a desk cannot take her now; null when it can. */
 function refusal(member: BoardMember): string | null {
@@ -126,6 +127,12 @@ async function cancel(): Promise<void> {
                                     : t('board.entry.customer_wrote')
                                 : formatSeconds(silence, locale)
                         }}
+                    </dd>
+                </div>
+                <div v-if="!waiting && entry.reply_overdue" class="rounded-md bg-muted px-3 py-2">
+                    <dt class="text-muted-foreground">{{ t('board.entry.reply_overdue') }}</dt>
+                    <dd class="font-semibold tabular-nums text-orange-600 dark:text-orange-400">
+                        {{ handoff === null ? t('board.entry.no_handoff') : t('board.entry.handoff', { time: formatSeconds(handoff, locale) }) }}
                     </dd>
                 </div>
             </dl>

@@ -76,6 +76,8 @@ export interface Board {
     secondsSince: (iso: string | null | undefined) => number;
     silenceLeft: (entry: QueueEntry) => number | null;
     silenceTone: (entry: QueueEntry) => SilenceTone;
+    /** Seconds to the hand-off of a window whose customer waits for the moderator; null without that clock. */
+    handoffLeft: (entry: QueueEntry) => number | null;
     breakLeft: (member: BoardMember) => number | null;
     userName: (id: number | null | undefined) => string | null;
     windowsOf: (userId: number) => QueueEntry[];
@@ -324,6 +326,13 @@ export function useBoard(options: { enabled: boolean }): Board {
         return entry.silence_warned || (s !== null && left <= s.silence_close_seconds - s.silence_warn_seconds) ? 'warning' : 'calm';
     }
 
+    function handoffLeft(entry: QueueEntry): number | null {
+        if (entry.handoff_left_seconds === null || entry.handoff_left_seconds === undefined) return null;
+        const since = stampedAt.get(entry.id) ?? Date.now();
+
+        return Math.max(0, Math.round(entry.handoff_left_seconds - Math.max(0, now.value - skew - since) / 1000));
+    }
+
     function breakLeft(member: BoardMember): number | null {
         if (member.status !== 'break' || !member.break_ends_at) return null;
         const until = Date.parse(member.break_ends_at);
@@ -414,6 +423,7 @@ export function useBoard(options: { enabled: boolean }): Board {
         secondsSince,
         silenceLeft,
         silenceTone,
+        handoffLeft,
         breakLeft,
         userName,
         windowsOf,

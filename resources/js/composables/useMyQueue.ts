@@ -45,6 +45,8 @@ export interface MyQueue {
     silenceLeft: (entry: QueueEntry) => number | null;
     /** The countdown is in its warning stretch (the customer got the warning, or is about to). */
     silenceWarning: (entry: QueueEntry) => boolean;
+    /** Seconds to the hand-off of a window whose customer waits for her reply; null without that clock (flow revision §4). */
+    handoffLeft: (entry: QueueEntry) => number | null;
     /** Seconds left of her break; null when she is not on one. */
     breakLeft: ComputedRef<number | null>;
     entryOf: (conversationId: number) => QueueEntry | null;
@@ -265,6 +267,13 @@ export function useMyQueue(options: Options): MyQueue {
         return entry.silence_warned || (s !== null && left <= s.silence_close_seconds - s.silence_warn_seconds);
     }
 
+    function handoffLeft(entry: QueueEntry): number | null {
+        if (entry.handoff_left_seconds === null || entry.handoff_left_seconds === undefined) return null;
+        const since = stampedAt.get(entry.id) ?? tick.value;
+
+        return Math.max(0, Math.round(entry.handoff_left_seconds - Math.max(0, tick.value - since) / 1000));
+    }
+
     function entryOf(conversationId: number): QueueEntry | null {
         return entries.value.find((e) => e.conversation_id === conversationId) ?? null;
     }
@@ -392,6 +401,7 @@ export function useMyQueue(options: Options): MyQueue {
         elapsed,
         silenceLeft,
         silenceWarning,
+        handoffLeft,
         breakLeft,
         entryOf,
         closeEntry,

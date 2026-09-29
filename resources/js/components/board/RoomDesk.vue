@@ -3,7 +3,7 @@ import RoomWindow from '@/components/board/RoomWindow.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useBoardContext } from '@/lib/board/context';
 import { CELL, LEADER, slotScale, type DeskBox } from '@/lib/board/layout';
-import { teamColour, windowKey, windowSlots } from '@/lib/board/state';
+import { notOnline, teamColour, windowKey, windowSlots } from '@/lib/board/state';
 import { formatCount, formatSeconds } from '@/lib/format';
 import type { BoardMember, BoardSelection } from '@/types/board';
 import type { UserRef } from '@/types/crm';
@@ -34,6 +34,8 @@ const mood = computed(() => {
     if (m === null) return 'off';
     if (m.status === 'offline') return 'off';
     if (m.status === 'break' || m.status === 'pending_break') return 'break';
+    // On the roster but not logged in: grey, the router skips her (flow revision §2).
+    if (notOnline(m)) return 'notonline';
     if (windows.value.some((e) => ['warning', 'last'].includes(board.silenceTone(e)))) return 'alert';
 
     return windows.value.length > 0 ? 'busy' : 'free';
@@ -54,6 +56,8 @@ const pill = computed(() => {
         case 'offline':
             return t('board.status.offline');
         default:
+            if (notOnline(m)) return t('board.status.not_online');
+
             return windows.value.length > 0
                 ? t('board.status.busy', { n: formatCount(windows.value.length, locale.value) })
                 : t('board.status.available');
@@ -66,11 +70,14 @@ const stats = computed(() => {
     const today = m.today ?? {};
     const n = (value: number | undefined) => formatCount(value ?? 0, locale.value);
 
-    return t('board.desk.stats', {
+    const base = t('board.desk.stats', {
         received: n(today.received),
         manual: n((today.inquiry ?? 0) + (today.problem ?? 0) + (today.case ?? 0)),
         auto: n(today.auto),
     });
+
+    // «ما ردّتش» today: windows handed on because she did not reply (flow revision §4.4).
+    return (today.no_reply ?? 0) > 0 ? t('board.desk.stats_no_reply', { stats: base, n: n(today.no_reply) }) : base;
 });
 
 const label = computed(() => {

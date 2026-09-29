@@ -2325,6 +2325,8 @@ const ar = {
         timer: 'مدة الشات',
         silence_left: 'قفل تلقائي بعد',
         waiting_reply: 'مستنية ردك',
+        reply_overdue: 'متأخرة في الرد',
+        handoff_left: 'تتحوّل لزميلة بعد',
         unread: 'رسايل جديدة',
         priority: {
             returning: 'راجعة',
@@ -2416,6 +2418,7 @@ const ar = {
         desks: { caption: 'مكاتب الموظفات', more: '+{n} مكتب كمان', empty: 'مكتب فاضي' },
         desk: {
             stats: 'استلمت {received} · قفلت {manual} · تلقائي {auto}',
+            stats_no_reply: '{stats} · ما ردّتش {n}',
             label: '{name}، {status}، {open} من {cap} شبابيك',
         },
         status: {
@@ -2426,12 +2429,14 @@ const ar = {
             break_left: 'استراحة · باقي {time}',
             offline: 'أوفلاين',
             left: 'خرجت من الشيفت',
+            not_online: 'مش فاتحة',
         },
         window: {
             free: 'فاضي',
             free_label: 'شباك {n} فاضي',
             label: 'شباك {n}: {name}، دور {ticket}، من {time}',
             label_silence: 'شباك {n}: {name}، دور {ticket}، من {time}، قفل تلقائي بعد {left}',
+            label_overdue: 'شباك {n}: {name}، دور {ticket}، مستنية ردها، تتحوّل لزميلة بعد {left}',
         },
         wall: { title: 'شاشة التوزيع', idle: 'لسه مفيش قرارات النهارده' },
         kpi: {
@@ -2486,13 +2491,16 @@ const ar = {
             waiting_since: 'مستنية من',
             chat_time: 'مدة الشات',
             priority: 'الأولوية',
-            reserved: 'محجوزة لـ',
+            reserved: 'الأولوية عند',
             silence: 'قفل تلقائي بعد',
             no_reply_yet: 'لسه مفيش رد',
             customer_wrote: 'العميلة كتبت آخر حاجة',
             request: 'طلبها',
             open_chat: 'افتحي الشات في الإنبوكس',
             see_desk: 'شوفي مكتب {name}',
+            reply_overdue: 'متأخرة في الرد',
+            handoff: 'تتحوّل لزميلة بعد {time}',
+            no_handoff: 'تصعيد: مش هيتحوّل لحد',
         },
         assign: {
             title: 'تعيين لموظفة',
@@ -2514,7 +2522,7 @@ const ar = {
         member: {
             gone_title: 'المكتب فضي',
             gone: 'الموظفة دي مبقتش على مكتب في الشيفت المفتوح.',
-            today: { received: 'استلمت', inquiry: 'استفسار', problem: 'مشكلة', case: 'كيس', auto: 'تلقائي', escalation: 'تصعيد' },
+            today: { received: 'استلمت', inquiry: 'استفسار', problem: 'مشكلة', case: 'كيس', auto: 'تلقائي', escalation: 'تصعيد', no_reply: 'ما ردّتش' },
             break_at: 'استراحتها الساعة {time}',
             windows: 'شبابيكها المفتوحة · {open} من {cap}',
             no_windows: 'مفيش شبابيك مفتوحة معاها دلوقتي.',

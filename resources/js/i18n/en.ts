@@ -2370,6 +2370,8 @@ const en: Messages = {
         timer: 'Chat time',
         silence_left: 'Closes automatically in',
         waiting_reply: 'Waiting for your reply',
+        reply_overdue: 'Reply overdue',
+        handoff_left: 'Handed to a colleague in',
         unread: 'New messages',
         priority: {
             returning: 'Returning',
@@ -2461,6 +2463,7 @@ const en: Messages = {
         desks: { caption: 'Moderator desks', more: '+{n} more desks', empty: 'Empty desk' },
         desk: {
             stats: 'Received {received} · closed {manual} · auto {auto}',
+            stats_no_reply: '{stats} · no reply {n}',
             label: '{name}, {status}, {open} of {cap} windows',
         },
         status: {
@@ -2471,12 +2474,14 @@ const en: Messages = {
             break_left: 'Break · {time} left',
             offline: 'Offline',
             left: 'Left the shift',
+            not_online: 'Not logged in',
         },
         window: {
             free: 'Free',
             free_label: 'Window {n} is free',
             label: 'Window {n}: {name}, ticket {ticket}, for {time}',
             label_silence: 'Window {n}: {name}, ticket {ticket}, for {time}, auto-close in {left}',
+            label_overdue: 'Window {n}: {name}, ticket {ticket}, waiting for a reply, handed to a colleague in {left}',
         },
         wall: { title: 'Router screen', idle: 'No decisions yet today' },
         kpi: {
@@ -2531,13 +2536,16 @@ const en: Messages = {
             waiting_since: 'Waiting for',
             chat_time: 'Chat time',
             priority: 'Priority',
-            reserved: 'Reserved for',
+            reserved: 'Preferred for',
             silence: 'Auto-close in',
             no_reply_yet: 'No reply yet',
             customer_wrote: 'The customer wrote last',
             request: 'What she asked for',
             open_chat: 'Open the chat in the inbox',
             see_desk: 'See the desk of {name}',
+            reply_overdue: 'Reply overdue',
+            handoff: 'Handed to a colleague in {time}',
+            no_handoff: 'Escalation: not handed on',
         },
         assign: {
             title: 'Assign to a moderator',
@@ -2559,7 +2567,7 @@ const en: Messages = {
         member: {
             gone_title: 'The desk is empty',
             gone: 'This moderator no longer has a desk on the open shift.',
-            today: { received: 'Received', inquiry: 'Inquiry', problem: 'Problem', case: 'Case', auto: 'Auto', escalation: 'Escalation' },
+            today: { received: 'Received', inquiry: 'Inquiry', problem: 'Problem', case: 'Case', auto: 'Auto', escalation: 'Escalation', no_reply: 'No reply' },
             break_at: 'Her break is at {time}',
             windows: 'Her open windows · {open} of {cap}',
             no_windows: 'She has no open windows right now.',

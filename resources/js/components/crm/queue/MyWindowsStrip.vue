@@ -38,13 +38,16 @@ interface Card {
     unread: number;
     elapsed: string;
     silence: string | null;
-    tone: 'calm' | 'warning' | 'last';
+    /** Time to the hand-off while she is late with her reply (flow revision §4). */
+    handoff: string | null;
+    tone: 'calm' | 'warning' | 'last' | 'overdue';
     badge: { icon: LucideIcon; tone: string; label: string } | null;
 }
 
 const cards = computed<Card[]>(() =>
     (queue?.entries.value ?? []).map((entry) => {
         const left = queue!.silenceLeft(entry);
+        const handoff = queue!.handoffLeft(entry);
         const badge = badges[entry.priority];
 
         return {
@@ -55,7 +58,14 @@ const cards = computed<Card[]>(() =>
             unread: props.unread[entry.conversation_id] ?? 0,
             elapsed: formatSeconds(queue!.elapsed(entry), locale.value),
             silence: left === null ? null : formatSeconds(left, locale.value),
-            tone: left === null || !queue!.silenceWarning(entry) ? 'calm' : left <= LAST_SECONDS ? 'last' : 'warning',
+            handoff: handoff === null ? null : formatSeconds(handoff, locale.value),
+            tone: entry.reply_overdue
+                ? 'overdue'
+                : left === null || !queue!.silenceWarning(entry)
+                  ? 'calm'
+                  : left <= LAST_SECONDS
+                    ? 'last'
+                    : 'warning',
             badge: badge ? { ...badge, label: t(`queue.priority.${entry.priority}`) } : null,
         };
     }),
@@ -106,11 +116,13 @@ const cardTone: Record<Card['tone'], string> = {
     calm: 'border-border bg-background hover:bg-elevated',
     warning: 'border-warning/60 bg-warning/10 hover:bg-warning/15',
     last: 'border-destructive/50 bg-destructive/10 hover:bg-destructive/15',
+    overdue: 'border-orange-500/70 bg-orange-500/10 hover:bg-orange-500/15',
 };
 const silenceTone: Record<Card['tone'], string> = {
     calm: 'text-muted-foreground',
     warning: 'font-semibold text-foreground',
     last: 'font-semibold text-destructive',
+    overdue: 'font-semibold text-orange-700 dark:text-orange-300',
 };
 </script>
 
@@ -170,7 +182,16 @@ const silenceTone: Record<Card['tone'], string> = {
                             <Clock class="size-3" aria-hidden="true" /><span class="sr-only">{{ t('queue.timer') }}: </span>{{ card.elapsed }}
                         </span>
                         <span
-                            v-if="card.silence !== null"
+                            v-if="card.tone === 'overdue'"
+                            class="ms-auto inline-flex items-center gap-1"
+                            :class="silenceTone.overdue"
+                            :title="t('queue.handoff_left')"
+                        >
+                            <Hourglass class="size-3 motion-safe:animate-pulse" aria-hidden="true" />
+                            <span class="sr-only">{{ t('queue.reply_overdue') }}: </span>{{ card.handoff ?? t('queue.reply_overdue') }}
+                        </span>
+                        <span
+                            v-else-if="card.silence !== null"
                             class="ms-auto inline-flex items-center gap-1"
                             :class="silenceTone[card.tone]"
                             :title="t('queue.silence_left')"
