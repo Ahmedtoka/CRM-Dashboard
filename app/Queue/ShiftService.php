@@ -15,6 +15,7 @@ use App\Queue\Events\QueueMemberUpdated;
 use App\Queue\Events\ShiftUpdated;
 use App\Support\SafeBroadcast;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -22,9 +23,22 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Shifts and the people in them: the shift templates open and close by the clock
- * (`transition()`, run by `queue:tick`); nobody starts the day and nobody picks a roster
- * (attendance design 2026-09-29). Breaks, and offline detection from heartbeats.
+ * Shifts and the people in them (attendance design 2026-09-29). The shift templates open and
+ * close by the clock (`transition()`, run by `queue:tick`); nobody starts the day and nobody
+ * picks a roster. Each moderator checks herself in and out from her inbox strip:
+ * «بدأت شغل» `checkIn()` · «استراحة» / «رجعت» `setStatus()` · «خروج» `checkOut()` (also when she
+ * logs out, and by the leader on her behalf) · «رجّعي شبابيكي للصالة» `handBack()`.
+ * A break or a check-out asked while she still holds windows waits (`pending_break`,
+ * `checking_out`: no new chats) and `settle()` completes it when her last window closes. Every
+ * step is written to `queue_attendance_events` (Attendance) when it really happens.
+ *
+ * The tick (`tickMembers()`): offline after 3 minutes without a heartbeat, her windows handed on
+ * after 5, checked out after 10 (`auto_out`); a break never ends by itself, and the leader hears
+ * once when it runs past `break_minutes`. The close of a shift checks out whoever is still in.
+ *
+ * Lock order: a shift-member row is always the LAST lock (the router takes the conversation,
+ * then the entry, then the member). Nothing here touches a conversation or a queue entry while
+ * it holds a member row: reserved overnight entries are released after the member transaction.
  */
 class ShiftService
 {
@@ -34,16 +48,21 @@ class ShiftService
     /** No heartbeat for this long: her open windows are handed to someone else. */
     public const REASSIGN_AFTER_SECONDS = 300;
 
+    /** No heartbeat for this long: she is checked out (`auto_out`, attendance §3). */
+    public const AUTO_OUT_AFTER_SECONDS = 600;
+
     /** Supervisors hear about a mass offline at most this often while it lasts. */
     public const MASS_OFFLINE_ALERT_MINUTES = 15;
 
-    /** The desks that count as serving for the mass-offline safeguard. */
-    private const SERVING = ['available', 'busy', 'pending_break'];
+    /** The desks that count as serving for the mass-offline safeguard: checked in and not on a break. */
+    private const SERVING = ['available', 'busy', 'pending_break', 'checking_out'];
+
+    /** Waiting for her last window to close: a break to start, or her check-out to complete. */
+    private const WAITING_FOR_WINDOWS = ['pending_break', 'checking_out'];
 
     /**
      * The moment she was expected at this shift's desk: when the shift opened (its start when it
-     * has not opened yet), or when she was put on it if that is later. A roster adds her to every
-     * shift of the day when the day starts, so `joined_at` alone can be hours before her shift.
+     * has not opened yet), or when she was put on it if that is later.
      */
     public static function expectedFrom(ShiftMember $m): ?Carbon
     {
@@ -55,9 +74,9 @@ class ShiftService
 
     /**
      * She has not logged in since she was expected at this shift (see `expectedFrom()`): no
-     * heartbeat ever, or none since ONLINE_MINUTES before that (a moderator who is online when
-     * her shift opens has arrived). Such a desk never "went dark": the tick marks it offline at
-     * once and the mass-offline safeguard does not count it (flow revision §2).
+     * heartbeat ever, or none since ONLINE_MINUTES before that. A check-in records a heartbeat,
+     * so only a desk left from before the attendance design can be "not arrived"; the tick
+     * checks it out and the mass-offline safeguard does not count it (flow revision §2).
      */
     public static function notArrived(ShiftMember $m): bool
     {
@@ -72,10 +91,18 @@ class ShiftService
         return $from !== null && $seen->lt($from->copy()->subMinutes(PresenceTracker::ONLINE_MINUTES));
     }
 
+    /** «بدأت شغل» is for an active account with at least one platform in Settings → Users (the role alone does not count). */
+    public static function mayCheckIn(User $user): bool
+    {
+        return (bool) $user->is_active && $user->userPlatforms()->exists();
+    }
+
     public function __construct(
         private readonly ActivityLogger $logger,
         private readonly QueueService $queue,
         private readonly UserNotifier $notifier,
+        private readonly PresenceTracker $presence,
+        private readonly Attendance $attendance,
     ) {}
 
     /**
@@ -114,12 +141,282 @@ class ShiftService
         })->values();
     }
 
-    public function removeMember(ShiftMember $m, ?User $by = null): void
+    /**
+     * The template hours of one business date (Cairo), in template order, without touching the
+     * `shifts` table. A template whose `to` is not after its `from` ends the next day.
+     *
+     * @return list<array{key: string, name: string, leader_user_id: ?int, starts: Carbon, ends: Carbon}>
+     */
+    public function templateHours(string $date, ?QueueSetting $settings = null): array
     {
-        $m->update(['status' => 'left', 'left_at' => now()]);
-        $this->releaseReserved($m);
-        SafeBroadcast::send(new QueueMemberUpdated($m->fresh()));
-        app(QueueRouter::class)->runAfterCommit('خروج '.$m->user->name);
+        $day = Carbon::parse($date, QueueService::TZ)->startOfDay();
+
+        return array_values(array_map(function (array $t) use ($day) {
+            [$fh, $fm] = array_map('intval', explode(':', (string) $t['from']) + [0, 0]);
+            [$th, $tm] = array_map('intval', explode(':', (string) $t['to']) + [0, 0]);
+            $starts = $day->copy()->setTime($fh, $fm);
+            $ends = $day->copy()->setTime($th, $tm);
+
+            if ($ends->lte($starts)) {
+                $ends->addDay();
+            }
+
+            return [
+                'key' => (string) $t['key'], 'name' => (string) $t['name'],
+                'leader_user_id' => isset($t['leader_user_id']) ? (int) $t['leader_user_id'] : null,
+                'starts' => $starts, 'ends' => $ends,
+            ];
+        }, ($settings ?? QueueSetting::current())->shiftTemplates()));
+    }
+
+    /** The template whose hours cover this moment (yesterday's evening may run past midnight), or null. */
+    public function coveringTemplate(?CarbonInterface $at = null, ?QueueSetting $settings = null): ?array
+    {
+        $at ??= now();
+        $today = $this->queue->businessDate($at);
+        $yesterday = Carbon::parse($today, QueueService::TZ)->subDay()->toDateString();
+
+        foreach ([$yesterday, $today] as $date) {
+            foreach ($this->templateHours($date, $settings) as $t) {
+                if ($t['starts']->lte($at) && $t['ends']->gt($at)) {
+                    return $t;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** When the next shift starts after this moment (today's or tomorrow's templates); null without templates. */
+    public function nextStart(?CarbonInterface $at = null, ?QueueSetting $settings = null): ?Carbon
+    {
+        $at ??= now();
+        $today = $this->queue->businessDate($at);
+        $tomorrow = Carbon::parse($today, QueueService::TZ)->addDay()->toDateString();
+
+        return collect([...$this->templateHours($today, $settings), ...$this->templateHours($tomorrow, $settings)])
+            ->pluck('starts')->filter(fn (Carbon $starts) => $starts->gt($at))
+            ->sortBy(fn (Carbon $starts) => $starts->getTimestamp())->first();
+    }
+
+    /**
+     * «بدأت شغل» (attendance §3): an active user with at least one platform, while a shift is
+     * open, gets her desk on it — created, or her row of this shift reactivated (her counters
+     * and attendance go on) — as `available` (`busy` while she still holds a window), an `in`
+     * event, and a router pass (the lounge goes to her in order). Pressing it proves she is
+     * here: a heartbeat is recorded. Already checked in: nothing changes. A shift whose time
+     * came but that the tick has not opened yet is opened first.
+     *
+     * @throws AttendanceRefused `disabled`, `no_platforms`, `shift_not_open` (with `time`), `no_shift`
+     */
+    public function checkIn(User $user): ShiftMember
+    {
+        $s = QueueSetting::current();
+
+        if (! $s->enabled) {
+            throw new AttendanceRefused('disabled', 409);
+        }
+
+        if (! self::mayCheckIn($user)) {
+            throw new AttendanceRefused('no_platforms', 403);
+        }
+
+        $shift = $this->queue->openShift();
+
+        if ($shift === null && $this->coveringTemplate(null, $s) !== null) {
+            $this->transition($s);
+            $shift = $this->queue->openShift();
+        }
+
+        if ($shift === null) {
+            $next = $this->nextStart(null, $s);
+
+            throw $next === null
+                ? new AttendanceRefused('no_shift', 409)
+                : new AttendanceRefused('shift_not_open', 409, ['time' => $next->copy()->setTimezone(QueueService::TZ)->format('H:i')]);
+        }
+
+        $this->presence->heartbeat($user, 'web');
+
+        try {
+            [$desk, $changed] = DB::transaction(fn () => $this->checkInLocked($shift, $user), attempts: 3);
+        } catch (UniqueConstraintViolationException) {
+            // A second click raced the first one: her desk exists now.
+            $desk = ShiftMember::query()->where('shift_id', $shift->id)->where('user_id', $user->id)->firstOrFail();
+            $changed = false;
+        }
+
+        if ($changed) {
+            $this->changed($desk, 'بدأت شغل');
+        }
+
+        return $desk->fresh(['user', 'shift']);
+    }
+
+    /** @return array{0: ShiftMember, 1: bool} her desk, and whether it changed */
+    private function checkInLocked(Shift $shift, User $user): array
+    {
+        $desk = ShiftMember::query()->where('shift_id', $shift->id)->where('user_id', $user->id)->lockForUpdate()->first();
+
+        if ($desk !== null && $desk->status !== 'left') {
+            return [$desk, false];
+        }
+
+        $attrs = [
+            'status' => app(QueueRouter::class)->openForUser((int) $user->id)->exists() ? 'busy' : 'available',
+            'left_at' => null, 'requested_by_id' => null, 'break_started_at' => null, 'break_ends_at' => null, 'break_overrun_alerted_at' => null,
+        ];
+
+        if ($desk === null) {
+            $desk = ShiftMember::query()->create(['shift_id' => $shift->id, 'user_id' => $user->id, 'joined_at' => now()] + $attrs);
+        } else {
+            $desk->update($attrs);
+        }
+
+        $desk->setRelation('shift', $shift);
+        $this->attendance->record($desk, 'in');
+
+        return [$desk, true];
+    }
+
+    /**
+     * «خروج» (attendance §3) — by her, by the leader or a supervisor on her behalf, or by logging
+     * out. No open window: she leaves at once (`out`). Otherwise `checking_out`: no new chats, she
+     * finishes what she has and leaves when her last window closes (`settle()`), or sends them
+     * back to the lounge (`handBack()`). Returns her status afterwards (`left` or `checking_out`).
+     */
+    public function checkOut(ShiftMember $m, ?User $by = null): string
+    {
+        $by = $this->actor($m, $by);
+
+        $result = DB::transaction(function () use ($m, $by) {
+            $locked = ShiftMember::query()->with('shift')->lockForUpdate()->find($m->id);
+
+            if ($locked === null || $locked->status === 'left') {
+                return null;
+            }
+
+            if (app(QueueRouter::class)->openForUser((int) $locked->user_id)->exists()) {
+                if ($locked->status === 'checking_out') {
+                    return ['checking_out', false];
+                }
+
+                $locked->update(['status' => 'checking_out', 'requested_by_id' => $by?->id]);
+
+                return ['checking_out', true];
+            }
+
+            $this->leaveLocked($locked, 'out', $by);
+
+            return ['left', true];
+        }, attempts: 3);
+
+        if ($result === null) {
+            return 'left';
+        }
+
+        [$status, $changed] = $result;
+
+        if ($status === 'left') {
+            $this->releaseReserved($m);
+        }
+
+        if ($changed) {
+            $this->changed($m, $status === 'left' ? 'خروج' : 'بتقفل');
+        }
+
+        return $status;
+    }
+
+    /**
+     * «رجّعي شبابيكي للصالة» (attendance §3): while she is checking out, every open window of hers
+     * goes back to the lounge with its ticket, at the top (the transfer path: close reason
+     * `transfer`, never `no_reply`, no penalty), and then she leaves. Her `out` is credited to
+     * whoever pressed the hand-back (null when she did it herself), whoever pressed «خروج».
+     * Returns how many went back; 0 when she is not checking out.
+     */
+    public function handBack(ShiftMember $m, ?User $by = null): int
+    {
+        $m->loadMissing('user');
+
+        if ($m->fresh()?->status !== 'checking_out') {
+            return 0;
+        }
+
+        // The presser, recorded before the transfers by a plain conditional update (no lock is
+        // held while the transfers take the conversation → entry → member locks). Its row count
+        // is not used: MySQL reports 0 when the value was already the same.
+        ShiftMember::query()->whereKey($m->id)->where('status', 'checking_out')
+            ->update(['requested_by_id' => $this->actor($m, $by)?->id]);
+
+        $n = 0;
+
+        foreach (app(QueueRouter::class)->openForUser((int) $m->user_id)->get() as $e) {
+            $n += (int) (app(WindowLifecycle::class)->transferAway($e, 'خروج '.$m->user?->name) !== null);
+        }
+
+        // Each transfer settles her after its commit; this covers a window that closed on its own meanwhile.
+        $this->settle($m);
+
+        return $n;
+    }
+
+    /** Logging out of the CRM = «خروج» on every desk she holds on an open shift (attendance §3). */
+    public function checkOutEverywhere(User $user): void
+    {
+        // A plain read: logging out never creates the settings row.
+        if (! (bool) QueueSetting::query()->find(1)?->enabled) {
+            return;
+        }
+
+        ShiftMember::query()->with('user')->where('user_id', $user->id)->where('status', '!=', 'left')
+            ->whereHas('shift', fn ($q) => $q->where('status', 'open'))->get()
+            ->each(fn (ShiftMember $m) => $this->checkOut($m));
+    }
+
+    /**
+     * Her pending step, once she has no open window left (per user, across her shift rows):
+     * `pending_break` → `break`, `checking_out` → `left` (`out`, by whoever asked for it).
+     * Called after every window close (WindowLifecycle) and by the tick as a safety net.
+     */
+    public function settle(ShiftMember $m): void
+    {
+        $result = DB::transaction(function () use ($m) {
+            $locked = ShiftMember::query()->with('shift')->lockForUpdate()->find($m->id);
+
+            if ($locked === null || ! in_array($locked->status, self::WAITING_FOR_WINDOWS, true)
+                || app(QueueRouter::class)->openForUser((int) $locked->user_id)->exists()) {
+                return null;
+            }
+
+            $by = $locked->requested_by_id !== null ? User::query()->find($locked->requested_by_id) : null;
+
+            if ($locked->status === 'pending_break') {
+                $this->startBreakLocked($locked, $by, QueueSetting::current());
+
+                return 'break';
+            }
+
+            $this->leaveLocked($locked, 'out', $by);
+
+            return 'left';
+        }, attempts: 3);
+
+        if ($result === 'left') {
+            $this->releaseReserved($m);
+        }
+
+        if ($result !== null) {
+            $this->changed($m, $result === 'left' ? 'خروج' : 'استراحة');
+        }
+    }
+
+    /** `settle()` every desk of hers on an open shift that waits for her windows to close. */
+    public function settleUser(int $userId): void
+    {
+        ShiftMember::query()->with('user')->where('user_id', $userId)->whereIn('status', self::WAITING_FOR_WINDOWS)
+            ->whereHas('shift', fn ($q) => $q->where('status', 'open'))->get()
+            ->each(fn (ShiftMember $m) => $this->settle($m));
     }
 
     /**
@@ -217,21 +514,27 @@ class ShiftService
         }
     }
 
+    /**
+     * The shift is over: whoever is still checked in leaves (`auto_out`, attendance §3); her open
+     * windows stay with her (Part 1: she finishes them) and her unfinished reserved overnight
+     * customers go back to the pool. Claimed by a conditional update, like `open()`.
+     */
     private function close(Shift $shift): void
     {
-        $shift->update(['status' => 'closed', 'closed_at' => now()]);
+        $claimed = Shift::query()->whereKey($shift->id)->where('status', 'open')->update(['status' => 'closed', 'closed_at' => now()]);
 
-        foreach ($shift->members()->with('user')->where('status', '!=', 'left')->get() as $m) {
-            $m->update(['status' => 'left', 'left_at' => now()]);
-            $this->releaseReserved($m);
-            // Her own channel: the inbox strip of this shift goes away without a reload.
-            SafeBroadcast::send(new QueueMemberUpdated($m));
+        if ($claimed !== 1) {
+            return;
         }
 
-        SafeBroadcast::send(new ShiftUpdated($shift->fresh(['members.user', 'leader'])));
+        foreach ($shift->members()->with('user')->where('status', '!=', 'left')->get() as $m) {
+            $this->leave($m, 'auto_out');
+        }
+
+        DB::afterCommit(fn () => SafeBroadcast::send(new ShiftUpdated($shift->fresh(['members.user', 'leader']))));
     }
 
-    /** Her unfinished reserved (overnight) entries go back to the shared pool. */
+    /** Her unfinished reserved (overnight) entries go back to the shared pool. Never under a member lock. */
     private function releaseReserved(ShiftMember $m): void
     {
         QueueEntry::query()->where('reserved_user_id', $m->user_id)->where('status', 'waiting')->where('priority', 'overnight')
@@ -239,12 +542,16 @@ class ShiftService
     }
 
     /**
-     * `available | break | offline` (by the member, the leader, or the tick), decided under the
-     * member's row lock (the router locks it last when it assigns, so the two never cross: a
-     * break asked while a customer is being given to her sees that window). A break with open
-     * windows (counted per USER, across her shift rows) waits as `pending_break`. A break is the
-     * configured length and is not extended: asking again while on break (or waiting for it)
-     * changes nothing. A member who left the shift is not changed.
+     * «استراحة» / «رجعت» (by her, or on her behalf from the board) and `offline` (the tick),
+     * decided under the member's row lock (the router locks it last when it assigns, so the two
+     * never cross: a break asked while a customer is being given to her sees that window).
+     *
+     * - `break`: at once (a `break` event) when she holds no open window (per USER, across her
+     *   shift rows), else `pending_break` (no new chats; `settle()` starts it when her last window
+     *   closes). The break lasts until she presses «رجعت»: `break_ends_at` only marks where the
+     *   overrun starts (`break_minutes`). Asking again while on a break changes nothing.
+     * - `available`: back from a break (a `back` event), a pending break cancelled, or back online.
+     * - A member who left, or who is checking out, is not changed.
      */
     public function setStatus(ShiftMember $m, string $status, ?User $by = null): void
     {
@@ -253,33 +560,48 @@ class ShiftService
         }
 
         $s = QueueSetting::current();
+        $by = $this->actor($m, $by);
 
-        $changed = DB::transaction(function () use ($m, $status, $s) {
+        $changed = DB::transaction(function () use ($m, $status, $s, $by) {
             // The first statement is the locking read: the open-window count below then sees
             // whatever an assignment committed while we waited for the row.
-            $locked = ShiftMember::query()->lockForUpdate()->find($m->id);
+            $locked = ShiftMember::query()->with('shift')->lockForUpdate()->find($m->id);
 
-            if ($locked === null || $locked->status === 'left') {
+            if ($locked === null || in_array($locked->status, ['left', 'checking_out'], true)) {
                 return false;
             }
 
             $open = app(QueueRouter::class)->openForUser((int) $locked->user_id)->exists();
 
-            $attrs = match ($status) {
-                'break' => match (true) {
-                    $locked->status === 'break' => null,
-                    $open => $locked->status === 'pending_break' ? null : ['status' => 'pending_break'],
-                    default => ['status' => 'break', 'break_started_at' => now(), 'break_ends_at' => now()->addMinutes($s->break_minutes), 'break_at' => $locked->break_at ?? now()],
-                },
-                'available' => ['status' => $open ? 'busy' : 'available', 'break_ends_at' => null],
-                'offline' => $locked->status === 'offline' ? null : ['status' => 'offline'],
-            };
+            if ($status === 'break') {
+                if ($locked->status === 'break' || ($open && $locked->status === 'pending_break')) {
+                    return false;
+                }
 
-            if ($attrs === null) {
+                if ($open) {
+                    $locked->update(['status' => 'pending_break', 'requested_by_id' => $by?->id]);
+                } else {
+                    $this->startBreakLocked($locked, $by, $s);
+                }
+
+                return true;
+            }
+
+            if ($status === 'available') {
+                if ($locked->status === 'break') {
+                    $this->attendance->record($locked, 'back', $by);
+                }
+
+                $locked->update(['status' => $open ? 'busy' : 'available', 'break_ends_at' => null, 'requested_by_id' => null]);
+
+                return true;
+            }
+
+            if ($locked->status === 'offline') {
                 return false;
             }
 
-            $locked->update($attrs);
+            $locked->update(['status' => 'offline']);
 
             return true;
         }, attempts: 3);
@@ -294,19 +616,23 @@ class ShiftService
     }
 
     /**
-     * Scheduled (every tick): breaks start and end; heartbeats decide offline and the hand-off of
-     * her windows (all her open windows, per user).
+     * Scheduled (every tick), per checked-in desk of an open shift:
+     * - on a break: nothing ends it but her «رجعت» (or the leader's); past `break_ends_at` the
+     *   leader hears once (`queue.break_overrun`);
+     * - heartbeats: offline after 3 minutes (no new chats), her open windows (all of them, per
+     *   user) handed on after 5, checked out after 10 (`auto_out`); a desk that is checking out
+     *   keeps «بتقفل» while offline;
+     * - back online: `available` again;
+     * - a pending break or check-out whose windows are all closed is settled (safety net).
      *
-     * Not arrived (flow revision §2): a member who never logged in since she joined is marked
-     * offline at once (her windows, only ever given by hand, follow the usual 5-minute hand-off)
-     * and is left out of the safeguard below.
+     * Not arrived (flow revision §2): a desk never seen since it was expected is left out of the
+     * safeguard below (it is checked out at once: no heartbeat at all counts as forever).
      *
      * Mass-offline safeguard: when in one tick every serving desk that had arrived would turn
      * offline (two or more of them), or more than half of them with at least 3, the heartbeats
      * are what failed (Reverb, the network, the office), not the moderators. Then none of them is
-     * marked offline and no window is handed off: a warning is logged, supervisors are told (at
-     * most every 15 minutes) and the next tick looks again. One or two moderators going quiet on
-     * their own is handled as before.
+     * marked offline, handed off or checked out: a warning is logged, supervisors are told (at
+     * most every 15 minutes) and the next tick looks again.
      */
     public function tickMembers(?QueueSetting $settings = null): void
     {
@@ -338,21 +664,20 @@ class ShiftService
         $router = app(QueueRouter::class);
 
         foreach ($members as $m) {
-            $away = $offlineFor($m);
-
             if ($m->status === 'break') {
-                if ($m->break_ends_at && $m->break_ends_at->lte(now())) {
-                    $this->setStatus($m, 'available');
+                if ($m->break_ends_at !== null && $m->break_ends_at->lte(now()) && $m->break_overrun_alerted_at === null) {
+                    $this->alertBreakOverrun($m, $s);
                 }
 
                 continue;
             }
 
+            $away = $offlineFor($m);
             $absent = self::notArrived($m);
 
             if ($absent || $away >= self::OFFLINE_AFTER_SECONDS) {
                 if ($mass && ! $absent) {
-                    continue; // the safeguard: not offline, no hand-off, try again next tick
+                    continue; // the safeguard: not offline, no hand-off, no check-out; try again next tick
                 }
 
                 if ($away >= self::REASSIGN_AFTER_SECONDS) {
@@ -362,7 +687,13 @@ class ShiftService
                     $m->refresh();
                 }
 
-                if ($m->status !== 'offline') {
+                if ($away >= self::AUTO_OUT_AFTER_SECONDS) {
+                    $this->leave($m, 'auto_out');
+
+                    continue;
+                }
+
+                if (! in_array($m->status, ['offline', 'checking_out', 'left'], true)) {
                     $this->setStatus($m, 'offline');
                 }
 
@@ -374,14 +705,8 @@ class ShiftService
                 $m->refresh();
             }
 
-            if ($m->break_at && $m->break_at->lte(now()) && $m->break_started_at === null && in_array($m->status, ['available', 'busy'], true)) {
-                $this->setStatus($m, 'break');
-
-                continue;
-            }
-
-            if ($m->status === 'pending_break' && ! $router->openForUser((int) $m->user_id)->exists()) {
-                $this->setStatus($m, 'break');
+            if (in_array($m->status, self::WAITING_FOR_WINDOWS, true) && ! $router->openForUser((int) $m->user_id)->exists()) {
+                $this->settle($m);
             }
         }
     }
@@ -394,5 +719,98 @@ class ShiftService
         if (Cache::add('queue:mass-offline-notified', true, now()->addMinutes(self::MASS_OFFLINE_ALERT_MINUTES))) {
             $this->notifier->notifySupervisors('queue.mass_offline', ['count' => $dark, 'serving' => $serving]);
         }
+    }
+
+    /**
+     * Once per break (attendance §3): she is past `break_minutes`. The leader of her shift is
+     * told; the active supervisors and admins instead when the shift has no active leader or it
+     * is the leader's own break (never the member herself). The claim on her row makes two
+     * overlapping ticks tell once; a new break clears it.
+     */
+    private function alertBreakOverrun(ShiftMember $m, QueueSetting $s): void
+    {
+        $claimed = ShiftMember::query()->whereKey($m->id)->where('status', 'break')->whereNull('break_overrun_alerted_at')->toBase()
+            ->update(['break_overrun_alerted_at' => now()]);
+
+        if ($claimed !== 1) {
+            return;
+        }
+
+        $data = [
+            'member_id' => $m->id, 'user_id' => (int) $m->user_id, 'name' => $m->user->name, 'shift' => $m->shift?->name,
+            'minutes' => (int) $s->break_minutes, 'since' => $m->break_started_at?->toIso8601String(),
+        ];
+        $leaderId = $m->shift?->leader_user_id !== null ? (int) $m->shift->leader_user_id : null;
+        $leader = $leaderId !== null && $leaderId !== (int) $m->user_id ? User::query()->where('is_active', true)->find($leaderId) : null;
+
+        if ($leader !== null) {
+            $this->notifier->notify($leader, 'queue.break_overrun', $data);
+
+            return;
+        }
+
+        User::query()->where('is_active', true)->get()
+            ->filter(fn (User $u) => $u->isSupervisorOrAbove() && (int) $u->id !== (int) $m->user_id)
+            ->each(fn (User $u) => $this->notifier->notify($u, 'queue.break_overrun', $data));
+    }
+
+    /** The break starts now (a `break` event); the overrun line is `break_minutes` from now. */
+    private function startBreakLocked(ShiftMember $locked, ?User $by, QueueSetting $s): void
+    {
+        $locked->update([
+            'status' => 'break', 'break_started_at' => now(), 'break_ends_at' => now()->addMinutes((int) $s->break_minutes),
+            'break_overrun_alerted_at' => null, 'requested_by_id' => null,
+        ]);
+        $this->attendance->record($locked, 'break', $by);
+    }
+
+    /** `left` with its attendance event, on a row the caller holds locked (her reservations are released after the commit). */
+    private function leaveLocked(ShiftMember $locked, string $event, ?User $by): void
+    {
+        $locked->update(['status' => 'left', 'left_at' => now(), 'requested_by_id' => null, 'break_ends_at' => null]);
+        $this->attendance->record($locked, $event, $by);
+    }
+
+    /** She leaves whatever she holds (the shift closed, or 10 minutes offline). False when she had already left. */
+    private function leave(ShiftMember $m, string $event, ?User $by = null): bool
+    {
+        $done = DB::transaction(function () use ($m, $event, $by) {
+            $locked = ShiftMember::query()->with('shift')->lockForUpdate()->find($m->id);
+
+            if ($locked === null || $locked->status === 'left') {
+                return false;
+            }
+
+            $this->leaveLocked($locked, $event, $by);
+
+            return true;
+        }, attempts: 3);
+
+        if ($done) {
+            $this->releaseReserved($m);
+            $this->changed($m, 'خروج');
+        }
+
+        return $done;
+    }
+
+    /** Her desk on the board and on her own channel once committed, then a router pass. */
+    private function changed(ShiftMember $m, string $trigger): void
+    {
+        $id = $m->id;
+        $m->loadMissing('user');
+
+        DB::afterCommit(function () use ($id) {
+            if ($desk = ShiftMember::query()->with('user')->find($id)) {
+                SafeBroadcast::send(new QueueMemberUpdated($desk));
+            }
+        });
+        app(QueueRouter::class)->runAfterCommit($trigger.' '.$m->user?->name);
+    }
+
+    /** Who acted, for the attendance log: null when she did it herself. */
+    private function actor(ShiftMember $m, ?User $by): ?User
+    {
+        return $by !== null && (int) $by->id !== (int) $m->user_id ? $by : null;
     }
 }

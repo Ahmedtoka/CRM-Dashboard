@@ -742,6 +742,14 @@ class WindowLifecycle
             DB::afterCommit(fn () => SafeBroadcast::send(new QueueMemberUpdated($m->fresh())));
         }
 
+        // Attendance: a break or a check-out she asked for while this window was open starts /
+        // completes once her last window is closed. After the commit, in its own transaction
+        // (the member row is always the last lock), and never failing the close.
+        if ($e->assigned_user_id !== null) {
+            $userId = (int) $e->assigned_user_id;
+            DB::afterCommit(fn () => rescue(fn () => app(ShiftService::class)->settleUser($userId), null, report: true));
+        }
+
         $this->logger->log($by ? ActorType::User : ActorType::System, $by, ActivityLogger::QUEUE_CLOSE, null, $c, [
             'ticket' => $e->ticket_no, 'reason' => $reason, 'handle_seconds' => $handle,
         ]);

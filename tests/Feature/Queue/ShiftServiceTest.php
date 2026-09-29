@@ -16,20 +16,25 @@ use Illuminate\Support\Facades\Log;
 
 beforeEach(fn () => QueueSetting::factory()->create(['id' => 1, 'enabled' => true]));
 
-it('puts a busy member on pending break, then on break when her windows close, then back', function () {
+it('puts a busy member on pending break, then on break when her windows close, and she stays on it until she comes back', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 13:00', 'Africa/Cairo'));
     $shift = Shift::factory()->create();
-    $m = ShiftMember::factory()->for($shift)->create(['break_at' => now()]);
-    // She is online (a never-seen member is offline immediately — ruling (d)).
+    $m = ShiftMember::factory()->for($shift)->create();
     $m->user->forceFill(['last_seen_at' => now()])->save();
     QueueEntry::factory()->create(['shift_member_id' => $m->id, 'assigned_user_id' => $m->user_id, 'status' => 'active', 'delivered_at' => now()]);
-    app(ShiftService::class)->tickMembers();
+    $svc = app(ShiftService::class);
+
+    $svc->setStatus($m, 'break');
     expect($m->fresh()->status)->toBe('pending_break');
     QueueEntry::query()->update(['status' => 'closed']);
-    app(ShiftService::class)->tickMembers();
+    $svc->tickMembers();
     expect($m->fresh()->status)->toBe('break');
-    Carbon::setTestNow(now()->addMinutes(31));
-    app(ShiftService::class)->tickMembers();
+
+    Carbon::setTestNow(now()->addMinutes(31)); // no automatic return (attendance §3)
+    $svc->tickMembers();
+    expect($m->fresh()->status)->toBe('break');
+
+    $svc->setStatus($m, 'available');
     expect($m->fresh()->status)->toBe('available');
 });
 
@@ -76,12 +81,14 @@ it('transfers the same customer twice in one day without a ticket collision', fu
         ->and($third->conversation->queue_entry_id)->toBe($third->id);
 });
 
-it('treats a member deactivated mid-shift as offline right away', function () {
+it('checks a member deactivated mid-shift out right away', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
     $m = ShiftMember::factory()->for(Shift::factory())->create(['status' => 'available']);
     $m->user->forceFill(['last_seen_at' => now(), 'is_active' => false])->save();
+
     app(ShiftService::class)->tickMembers();
-    expect($m->fresh()->status)->toBe('offline');
+
+    expect($m->fresh()->status)->toBe('left');
 });
 
 // ───── review I9: status changes under the member lock ─────
@@ -209,7 +216,7 @@ it('still takes one quiet moderator offline and hands her windows on when the ot
 
 // ───── flow revision §2: not arrived vs went dark ─────
 
-it('marks rostered moderators who never logged in offline at once, without the mass-offline hold', function () {
+it('checks out desks never seen since they joined at once, without the mass-offline hold', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
     $shift = Shift::factory()->create(['opened_at' => now()->subMinutes(2)]);
     $a = ShiftMember::factory()->for($shift)->create(['status' => 'available', 'joined_at' => now()->subMinutes(2)]);
@@ -217,7 +224,7 @@ it('marks rostered moderators who never logged in offline at once, without the m
 
     app(ShiftService::class)->tickMembers();
 
-    expect($a->fresh()->status)->toBe('offline')->and($b->fresh()->status)->toBe('offline')
+    expect($a->fresh()->status)->toBe('left')->and($b->fresh()->status)->toBe('left')
         ->and(UserNotification::where('type', 'queue.mass_offline')->count())->toBe(0);
 });
 
@@ -233,7 +240,7 @@ it('counts a moderator last seen before she joined as not arrived, and one onlin
         ->and(ShiftService::notArrived($here->load('user')))->toBeFalse();
 });
 
-it('still holds back working desks that go dark together while a desk that never arrived goes offline', function () {
+it('still holds back working desks that go dark together while a desk that never arrived is checked out', function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
     $shift = Shift::factory()->create();
     [$a, $ea] = darkDesk($shift, 400);
@@ -243,7 +250,7 @@ it('still holds back working desks that go dark together while a desk that never
     app(ShiftService::class)->tickMembers();
 
     expect($a->fresh()->status)->toBe('busy')->and($b->fresh()->status)->toBe('busy')->and($ea->fresh()->status)->toBe('active')
-        ->and($never->fresh()->status)->toBe('offline')
+        ->and($never->fresh()->status)->toBe('left')
         ->and(UserNotification::where('type', 'queue.mass_offline')->first()->data)->toMatchArray(['count' => 2, 'serving' => 2]);
 });
 

@@ -81,8 +81,9 @@ class BoardController extends Controller
         $held = $member->shift?->status === 'open' ? $router->openForUser((int) $member->user_id)->get() : collect();
         $name = (string) $member->user?->name;
 
-        // She leaves first, so the router does not hand her own customers back to her.
-        $shifts->removeMember($member, $request->user());
+        // She checks out first (`checking_out` while she holds windows), so the router never hands
+        // her own customers back to her; the last transfer below completes her check-out.
+        $shifts->checkOut($member, $request->user());
 
         // Her customers go back to the lounge (same ticket, ahead of the line) for somebody else.
         foreach ($held as $entry) {
