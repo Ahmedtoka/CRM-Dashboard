@@ -7,6 +7,7 @@ use App\Models\QueueSetting;
 use App\Models\ShiftMember;
 use App\Queue\Jobs\SendQueueMessage;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * How long a waiting customer still has to wait, and the «باقي 5 / 3 / 1 دقايق» messages
@@ -101,6 +102,10 @@ class WaitEstimator
         return $out;
     }
 
+    /**
+     * The flags are read and written under the entry's row lock, so two ticks that overlap never
+     * send the same message twice; the messages leave once that transaction commits.
+     */
     public function tickWaiting(QueueEntry $e): void
     {
         if ($e->status !== 'waiting' || $e->priority === 'overnight') {
@@ -109,25 +114,35 @@ class WaitEstimator
 
         // One fresh estimate drives this tick's messages and is the one saved (no one-tick lag).
         $left = $this->eta($e);
-        $sent = $e->waiting_messages ?? [];
 
-        foreach (self::THRESHOLDS as $m => $sec) {
-            if ($left <= $sec && empty($sent[(string) $m])) {
-                $sent[(string) $m] = true;
-                SendQueueMessage::dispatch($e->id, 'queue_left_'.$m, []);
+        DB::transaction(function () use ($e, $left) {
+            $locked = QueueEntry::query()->lockForUpdate()->find($e->id);
+
+            if ($locked === null || $locked->status !== 'waiting' || $locked->priority === 'overnight') {
+                return;
             }
-        }
 
-        // The last estimate ran out and she is still waiting: apologise, at most every 5 minutes.
-        if (! empty($sent['1']) && $left <= 35 && abs($e->enqueued_at->diffInSeconds(now())) > 90) {
-            $last = isset($sent['apology_at']) ? Carbon::parse($sent['apology_at']) : null;
+            $sent = $locked->waiting_messages ?? [];
 
-            if ($last === null || abs($last->diffInSeconds(now())) >= 300) {
-                $sent['apology_at'] = now()->toIso8601String();
-                SendQueueMessage::dispatch($e->id, 'queue_apology', []);
+            foreach (self::THRESHOLDS as $m => $sec) {
+                if ($left <= $sec && empty($sent[(string) $m])) {
+                    $sent[(string) $m] = true;
+                    SendQueueMessage::dispatch($locked->id, 'queue_left_'.$m, []);
+                }
             }
-        }
 
-        $e->forceFill(['waiting_messages' => $sent, 'eta_seconds' => $left])->save();
+            // The last estimate ran out and she is still waiting: apologise, at most every 5 minutes.
+            if (! empty($sent['1']) && $left <= 35 && abs($locked->enqueued_at->diffInSeconds(now())) > 90) {
+                $last = isset($sent['apology_at']) ? Carbon::parse($sent['apology_at']) : null;
+
+                if ($last === null || abs($last->diffInSeconds(now())) >= 300) {
+                    $sent['apology_at'] = now()->toIso8601String();
+                    SendQueueMessage::dispatch($locked->id, 'queue_apology', []);
+                }
+            }
+
+            $locked->forceFill(['waiting_messages' => $sent, 'eta_seconds' => $left])->save();
+            $e->setRawAttributes($locked->getAttributes(), true);
+        }, attempts: 3);
     }
 }

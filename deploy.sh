@@ -22,6 +22,8 @@ php artisan migrate --force
 php artisan optimize:clear
 php artisan optimize
 php artisan storage:link 2>/dev/null || true
+# Stops the running schedule:run from repeating sub-minute tasks (queue:tick) with the old code.
+php artisan schedule:interrupt
 php artisan queue:restart
 php artisan up
 echo "Deployed."

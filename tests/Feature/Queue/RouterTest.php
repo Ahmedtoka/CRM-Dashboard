@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Resources\ConversationResource;
+use App\Models\Conversation;
 use App\Models\QueueDecision;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
@@ -15,6 +16,7 @@ use App\Queue\QueueRouter;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 
 beforeEach(function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
@@ -213,4 +215,80 @@ it('alerts supervisors once when an escalation cannot be taken', function () {
     expect($stuck->fresh()->status)->toBe('waiting')
         ->and(UserNotification::where('type', 'queue.escalation_waiting')->where('user_id', $leader->id)->count())->toBe(1)
         ->and(UserNotification::where('type', 'queue.escalation_waiting')->first()->data['entry_id'])->toBe($stuck->id);
+});
+
+it('refuses to assign an entry that stopped waiting after it was read', function (array $now) {
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
+    $other = User::factory()->create();
+    $stale = routerWaiting();
+    QueueEntry::query()->whereKey($stale->id)->update(['assigned_user_id' => $now['status'] === 'active' ? $other->id : null, 'window_no' => $now['status'] === 'active' ? 1 : null] + $now);
+
+    expect($stale->status)->toBe('waiting')
+        ->and(app(QueueRouter::class)->assign($stale, $a, 'قاعدة', 'live'))->toBeFalse();
+
+    $fresh = $stale->fresh();
+    expect($fresh->status)->toBe($now['status'])
+        ->and($fresh->assigned_user_id)->toBe($now['status'] === 'active' ? $other->id : null)
+        ->and($fresh->conversation->assignee_id)->toBeNull()
+        ->and($a->fresh()->status)->toBe('available')
+        ->and(UserNotification::where('type', 'queue.assigned')->count())->toBe(0);
+})->with([
+    'cancelled' => [['status' => 'cancelled', 'close_reason' => 'cancelled']],
+    'given to somebody else' => [['status' => 'active']],
+]);
+
+it('skips an entry cancelled between the selection and the assignment and gives the window to the next customer', function () {
+    Event::fake([QueueAssigned::class]);
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift, attrs: ['windows_cap' => 1]);
+    $gone = routerWaiting();
+    $next = routerWaiting();
+    // The pass has read the lounge (her conversation is loaded right after the entries); she leaves now.
+    $left = false;
+    Conversation::retrieved(function (Conversation $c) use ($gone, &$left) {
+        if (! $left && $c->id === $gone->conversation_id) {
+            $left = true;
+            QueueEntry::query()->whereKey($gone->id)->update(['status' => 'cancelled', 'close_reason' => 'cancelled']);
+        }
+    });
+
+    expect(app(QueueRouter::class)->run('t'))->toBe(1);
+
+    expect($left)->toBeTrue()
+        ->and($gone->fresh()->status)->toBe('cancelled')
+        ->and($gone->fresh()->assigned_user_id)->toBeNull()
+        ->and($gone->conversation->fresh()->assignee_id)->toBeNull()
+        ->and($next->fresh()->status)->toBe('active')
+        ->and($next->fresh()->assigned_user_id)->toBe($a->user_id)
+        ->and($next->fresh()->window_no)->toBe(1)
+        ->and(UserNotification::where('type', 'queue.assigned')->count())->toBe(1)
+        ->and(QueueDecision::latest('id')->first()->lines)->toContain('<span class="no">#'.$gone->ticket_no.': خرجت من الصالة قبل التسليم</span>');
+    Event::assertDispatchedTimes(QueueAssigned::class, 1);
+});
+
+it('keeps the assignments already made when a later one fails', function () {
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
+    $first = routerWaiting();
+    $second = routerWaiting();
+    QueueEntry::updating(function (QueueEntry $e) use ($second) {
+        if ($e->id === $second->id) {
+            throw new RuntimeException('boom');
+        }
+    });
+    Exceptions::fake();
+
+    expect(app(QueueRouter::class)->run('t'))->toBe(1);
+
+    expect($first->fresh()->status)->toBe('active')->and($first->fresh()->assigned_user_id)->toBe($a->user_id)
+        ->and($second->fresh()->status)->toBe('waiting')->and($second->conversation->fresh()->assignee_id)->toBeNull();
+    Exceptions::assertReported(RuntimeException::class);
+});
+
+it('writes no decision line when nobody is waiting', function () {
+    $shift = Shift::factory()->create();
+    routerMember($shift);
+
+    expect(app(QueueRouter::class)->run('t'))->toBe(0)->and(QueueDecision::count())->toBe(0);
 });
