@@ -53,6 +53,11 @@ class SupportCase extends Model
         'assigned_to_id',
         'closed_at',
         'closed_by_id',
+        'opened_by_id',
+        'queue_entry_id',
+        'sla_due_at',
+        'resolved_at',
+        'resolved_by_id',
     ];
 
     protected function casts(): array
@@ -62,6 +67,8 @@ class SupportCase extends Model
             'photo_attachment_ids' => 'array',
             'policy_notes' => 'array',
             'closed_at' => 'datetime',
+            'sla_due_at' => 'datetime',
+            'resolved_at' => 'datetime',
         ];
     }
 
@@ -101,5 +108,17 @@ class SupportCase extends Model
     public function closedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'closed_by_id');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function openedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'opened_by_id');
+    }
+
+    /** The queue ticket whose window was closed as a case (null for a flow-collected case). @return BelongsTo<QueueEntry, $this> */
+    public function queueEntry(): BelongsTo
+    {
+        return $this->belongsTo(QueueEntry::class);
     }
 }

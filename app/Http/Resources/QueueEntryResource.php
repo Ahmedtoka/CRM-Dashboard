@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
+use App\Queue\WindowLifecycle;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -44,6 +45,7 @@ class QueueEntryResource extends JsonResource
             'bot_summary' => $e->bot_summary,
             'rule' => $e->rule,
             'silence_left_seconds' => self::silenceLeft($e),
+            'silence_warned' => $e->isOpen() && $e->silence_warned_at !== null,
             'return_priority_until' => $e->return_priority_until?->toIso8601String(),
             'reopened_from_entry_id' => $e->reopened_from_entry_id,
         ];
@@ -55,12 +57,12 @@ class QueueEntryResource extends JsonResource
             return null;
         }
 
-        $last = collect([$e->conversation?->last_customer_message_at, $e->delivered_at])->filter()->max();
+        $idle = WindowLifecycle::idleSeconds($e);
 
-        if ($last === null) {
+        if ($idle === null) {
             return null;
         }
 
-        return max(0, (int) QueueSetting::current()->silence_close_seconds - max(0, (int) $last->diffInSeconds(now())));
+        return max(0, (int) QueueSetting::current()->silence_close_seconds - $idle);
     }
 }

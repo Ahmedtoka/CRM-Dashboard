@@ -42,6 +42,7 @@ use App\Models\SupportCase;
 use App\Models\User;
 use App\Queue\Data\HandoverContext;
 use App\Queue\QueueService;
+use App\Queue\WindowLifecycle;
 use App\Support\SafeBroadcast;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -268,6 +269,12 @@ class BotEngine
 
     public function returnToBot(Conversation $c, User $u): void
     {
+        // Handover queue: the bot takes her back, so her window (or lounge place) is cancelled.
+        if ($e = app(QueueService::class)->activeEntry($c)) {
+            app(WindowLifecycle::class)->close($e, 'cancelled', $u);
+            $c->refresh();
+        }
+
         $c->handler = Handler::Bot;
         $c->needs_human = false;
         $c->priority_level = null;

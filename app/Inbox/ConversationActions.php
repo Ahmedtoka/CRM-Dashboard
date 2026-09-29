@@ -14,6 +14,8 @@ use App\Models\ConversationParticipant;
 use App\Models\MessageAttachment;
 use App\Models\SupportCase;
 use App\Models\User;
+use App\Queue\QueueService;
+use App\Queue\WindowLifecycle;
 use App\Support\SafeBroadcast;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -29,6 +31,12 @@ class ConversationActions
 
     public function resolve(Conversation $c, User $u): Conversation
     {
+        // Handover queue: her window (or her place in the lounge) ends here.
+        if ($e = app(QueueService::class)->activeEntry($c)) {
+            app(WindowLifecycle::class)->close($e, 'resolved_elsewhere', $u);
+            $c->refresh();
+        }
+
         // A resolved conversation has nobody "replying", whoever held the soft lock.
         // The bot handover routing (priority_level/queue/handover_category) is done once
         // resolved (Task 4 ruling 3); a human reply along the way does not clear it.

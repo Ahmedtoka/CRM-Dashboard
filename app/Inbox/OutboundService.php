@@ -21,6 +21,7 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\User;
+use App\Queue\WindowLifecycle;
 use App\Support\SafeBroadcast;
 use DomainException;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -172,6 +173,9 @@ class OutboundService
             if ($isFirstResponse) {
                 $this->logger->log(ActorType::User, $u, ActivityLogger::CONVERSATION_FIRST_RESPONSE, $created->first(), $c, ['seconds' => $seconds]);
             }
+
+            // Handover queue: the window's first reply (and its SLA), text or attachments alike.
+            app(WindowLifecycle::class)->markFirstReply($c, $u);
 
             $this->lock->release($c, $u, broadcast: false);
 
