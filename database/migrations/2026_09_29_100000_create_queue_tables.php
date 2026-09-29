@@ -1,4 +1,5 @@
 <?php
+
 // database/migrations/2026_09_29_100000_create_queue_tables.php
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -39,8 +40,8 @@ return new class extends Migration
             $t->date('date');
             $t->string('shift_key', 40);
             $t->string('name', 60);
-            $t->timestamp('starts_at');
-            $t->timestamp('ends_at');
+            $t->dateTime('starts_at');
+            $t->dateTime('ends_at');
             $t->foreignId('leader_user_id')->nullable()->constrained('users')->nullOnDelete();
             $t->foreignId('opened_by_id')->nullable()->constrained('users')->nullOnDelete();
             $t->timestamp('opened_at')->nullable();
@@ -93,7 +94,7 @@ return new class extends Migration
             $t->unsignedTinyInteger('window_no')->nullable();
             $t->foreignId('shift_id')->nullable()->constrained()->nullOnDelete();
             $t->foreignId('shift_member_id')->nullable()->constrained('shift_members')->nullOnDelete();
-            $t->timestamp('enqueued_at');
+            $t->dateTime('enqueued_at');
             $t->timestamp('called_at')->nullable();
             $t->timestamp('delivered_at')->nullable();
             $t->timestamp('first_reply_at')->nullable();
@@ -144,10 +145,16 @@ return new class extends Migration
 
     public function down(): void
     {
+        // MySQL/MariaDB back the assignee foreign key with the (assignee_id, status) index, and
+        // dropping the column alone would shrink that index to (status) and keep it. So: foreign
+        // key, then index, then columns.
         Schema::table('conversations', function (Blueprint $t) {
-            $t->dropConstrainedForeignId('queue_entry_id');
-            $t->dropConstrainedForeignId('assignee_id');
-            $t->dropColumn(['assigned_at', 'return_priority_until']);
+            $t->dropForeign(['assignee_id']);
+            $t->dropForeign(['queue_entry_id']);
+        });
+        Schema::table('conversations', function (Blueprint $t) {
+            $t->dropIndex(['assignee_id', 'status']);
+            $t->dropColumn(['assignee_id', 'assigned_at', 'queue_entry_id', 'return_priority_until']);
         });
         foreach (['queue_decisions', 'queue_entries', 'queue_days', 'shift_members', 'shifts', 'queue_settings'] as $table) {
             Schema::dropIfExists($table);
