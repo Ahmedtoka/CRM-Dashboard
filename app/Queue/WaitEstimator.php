@@ -2,6 +2,7 @@
 
 namespace App\Queue;
 
+use App\Analytics\PresenceTracker;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Models\ShiftMember;
@@ -24,8 +25,7 @@ class WaitEstimator
     /** Minutes-left message => the estimate (seconds) at or below which it is sent. */
     public const THRESHOLDS = [5 => 300, 3 => 180, 1 => 60];
 
-    /** Estimate when nobody who can take this platform is on shift. */
-    public const NO_MEMBERS_SECONDS = 30 * 60;
+    public function __construct(private readonly PresenceTracker $presence) {}
 
     /**
      * Average handle time of the last 20 windows a moderator really handled (inquiry / problem /
@@ -66,7 +66,9 @@ class WaitEstimator
             ->whereHas('shift', fn ($q) => $q->where('status', 'open'))
             ->whereIn('status', ['available', 'busy'])
             ->get()
-            ->filter(fn (ShiftMember $m) => $m->user !== null)
+            // Only desks whose moderator is logged in serve (the router skips the others): a desk
+            // on the roster that nobody opened must not promise the customer a minute.
+            ->filter(fn (ShiftMember $m) => $m->user !== null && $m->user->is_active && $this->presence->isOnline($m->user))
             ->values();
 
         $spent = [];
@@ -96,13 +98,16 @@ class WaitEstimator
     }
 
     /**
-     * Seconds until a window frees up for her: every window of every member who may take her
-     * frees after the average handle time minus what it has already spent (an empty window is
-     * free now); she gets the `position`-th one, round-robin. A live / returning / overnight
-     * customer is never served by the leader of the shift (her desk takes escalations), an
-     * escalation only by the leader or a supervisor.
+     * Seconds until a window frees up for her: every window of every logged-in member who may
+     * take her frees after the average handle time minus what it has already spent (an empty
+     * window is free now); she gets the `position`-th one, round-robin. A live / returning /
+     * overnight customer is never served by the leader of the shift (her desk takes escalations),
+     * an escalation only by the leader or a supervisor.
+     *
+     * Null when nobody who may take her is logged in: there is no estimate, so the customer is
+     * promised no minutes and gets no countdown (flow revision §2).
      */
-    public function eta(QueueEntry $e, ?DeskSnapshot $snapshot = null): int
+    public function eta(QueueEntry $e, ?DeskSnapshot $snapshot = null): ?int
     {
         $snapshot ??= $this->snapshot();
         $pos = ($snapshot->positions[$e->id] ?? $this->position($e)) - 1;
@@ -116,7 +121,7 @@ class WaitEstimator
         });
 
         if ($members->isEmpty()) {
-            return self::NO_MEMBERS_SECONDS;
+            return null;
         }
 
         $avg = $snapshot->avg;
@@ -132,7 +137,7 @@ class WaitEstimator
         }
 
         if ($rem === []) {
-            return self::NO_MEMBERS_SECONDS;
+            return null;
         }
 
         sort($rem);
@@ -191,6 +196,17 @@ class WaitEstimator
 
         // One fresh estimate drives this tick's messages and is the one saved (no one-tick lag).
         $left = $this->eta($e, $snapshot);
+
+        // No estimate (nobody who may take her is logged in): no countdown and no apology; only
+        // the stored estimate is cleared so the board shows no minutes.
+        if ($left === null) {
+            if ($e->eta_seconds !== null) {
+                QueueEntry::query()->whereKey($e->id)->where('status', 'waiting')->update(['eta_seconds' => null]);
+                $e->eta_seconds = null;
+            }
+
+            return;
+        }
 
         if (! $this->decide($e->waiting_messages ?? [], $left, $e)['changed']) {
             if ($e->eta_seconds === null || (int) $e->eta_seconds !== $left) {

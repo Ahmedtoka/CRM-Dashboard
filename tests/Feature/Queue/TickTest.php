@@ -230,6 +230,7 @@ it('sends only the lowest countdown message when the estimate falls through seve
     expect($e->fresh()->eta_seconds)->toBe(400);
 
     Carbon::setTestNow(now()->addSeconds(350));   // 50 s left: past 5, 3 and 1 in one step
+    User::query()->update(['last_seen_at' => now()]); // her heartbeat: she is still logged in
     app(WaitEstimator::class)->tickLounge();
 
     Queue::assertPushed(SendQueueMessage::class, 1);
@@ -248,6 +249,7 @@ it('marks the passed thresholds and sends the lower one on the everyday two-step
 
     app(WaitEstimator::class)->tickLounge();   // 310 s
     Carbon::setTestNow(now()->addSeconds(140));   // 170 s
+    User::query()->update(['last_seen_at' => now()]);
     app(WaitEstimator::class)->tickLounge();
 
     expect(Queue::pushed(SendQueueMessage::class)->map(fn (SendQueueMessage $job) => $job->scriptKey)->all())->toBe(['queue_left_3'])
@@ -309,4 +311,21 @@ it('keeps estimating the other customers when one estimate throws', function () 
     Exceptions::assertReported(RuntimeException::class);
     expect($good->fresh()->waiting_messages)->toMatchArray(['5' => true])->and($bad->fresh()->waiting_messages)->toBe([]);
     Queue::assertPushed(SendQueueMessage::class, fn (SendQueueMessage $job) => $job->entryId === $good->id && $job->scriptKey === 'queue_left_5');
+});
+
+// ───── flow revision §2: no countdown without an estimate ─────
+
+it('sends no countdown and keeps no estimate while nobody is logged in', function () {
+    Queue::fake([SendQueueMessage::class]);
+    tickSettings(['windows_per_moderator' => 1, 'eta_default_handle_seconds' => 600]);
+    $shift = Shift::factory()->create();
+    $m = tickMember($shift, ['status' => 'busy']);
+    QueueEntry::factory()->create(['shift_id' => $shift->id, 'shift_member_id' => $m->id, 'assigned_user_id' => $m->user_id, 'status' => 'active', 'window_no' => 1, 'delivered_at' => now()->subSeconds(590)]);
+    $e = QueueEntry::factory()->create(['enqueued_at' => now()->subSeconds(590), 'waiting_messages' => [], 'eta_seconds' => 10]);
+    $m->user->forceFill(['last_seen_at' => now()->subMinutes(10)])->save(); // she closed the CRM
+
+    app(WaitEstimator::class)->tickLounge();
+
+    Queue::assertNotPushed(SendQueueMessage::class);
+    expect($e->fresh()->eta_seconds)->toBeNull()->and($e->fresh()->waiting_messages)->toBe([]);
 });

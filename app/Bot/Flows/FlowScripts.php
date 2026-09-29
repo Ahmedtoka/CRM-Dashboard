@@ -83,6 +83,8 @@ final class FlowScripts
             'queue_review_thanks' => ['title' => 'الطابور: شكر على التقييم', 'body' => 'شكراً لتقييمك 🌸'],
             'queue_case_opened' => ['title' => 'الطابور: كيس اتفتح', 'body' => 'فتحنالك طلب رقم {case_id} 📝 وهيتم التواصل معاكي خلال يوم عمل.'],
             'queue_case_resolved' => ['title' => 'الطابور: كيس اتحل', 'body' => 'تم حل طلبك رقم {case_id} ✅ شكراً لصبرك 🌸'],
+            // Flow revision (2026-09-29): nobody who may take her is logged in yet — her ticket, no minutes.
+            'queue_enqueued_no_eta' => ['title' => 'الطابور: دخلت الدور ومفيش تقدير', 'body' => 'رقمك في الدور {ticket} 🎟️ الفريق بيبدأ دلوقتي وهنكون معاكي في أقرب وقت، خليكي معانا 🙏'],
         ];
     }
 }

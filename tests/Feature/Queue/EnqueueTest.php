@@ -2,9 +2,18 @@
 
 use App\Bot\BotEngine;
 use App\Bot\Flows\HumanHandover;
-use App\Models\{BotSetting, Conversation, QueueEntry, QueueSetting, Shift, ShiftMember, User, UserNotification};
-use App\Queue\{QueueService, WaitEstimator};
+use App\Models\BotSetting;
+use App\Models\Conversation;
+use App\Models\QueueDay;
+use App\Models\QueueEntry;
+use App\Models\QueueSetting;
+use App\Models\Shift;
+use App\Models\ShiftMember;
+use App\Models\User;
+use App\Models\UserNotification;
 use App\Queue\Data\HandoverContext;
+use App\Queue\QueueService;
+use App\Queue\WaitEstimator;
 use Illuminate\Support\Carbon;
 
 beforeEach(function () {
@@ -12,14 +21,17 @@ beforeEach(function () {
     QueueSetting::factory()->create(['id' => 1, 'enabled' => true]);
 });
 
-function openMorningShift(int $members = 1): Shift {
+function openMorningShift(int $members = 1): Shift
+{
     $shift = Shift::factory()->create();
     ShiftMember::factory()->count($members)->for($shift)->create();
+
     return $shift;
 }
 
 /** A conversation whose reply window is open (the customer just wrote), so the queue's texts can go out. */
-function queueConv(): Conversation {
+function queueConv(): Conversation
+{
     return Conversation::factory()->create(['last_customer_message_at' => now()]);
 }
 
@@ -82,7 +94,7 @@ it('sends the 5/3/1 messages once each as the estimate shrinks', function () {
     QueueSetting::current()->update(['eta_default_handle_seconds' => 600]);
     $shift = Shift::factory()->create();
     $c = queueConv();
-    $user = User::factory()->create(['role' => 'moderator']);
+    $user = User::factory()->create(['role' => 'moderator', 'last_seen_at' => now()]);
     $user->userPlatforms()->create(['platform' => $c->platform]);
     $m = ShiftMember::factory()->for($shift)->create(['user_id' => $user->id, 'windows_cap' => 1, 'status' => 'busy']);
     QueueEntry::factory()->create(['shift_id' => $shift->id, 'shift_member_id' => $m->id, 'assigned_user_id' => $user->id, 'status' => 'active', 'ticket_no' => 900, 'delivered_at' => now()]);
@@ -92,8 +104,9 @@ it('sends the 5/3/1 messages once each as the estimate shrinks', function () {
 
     $est = app(WaitEstimator::class);
     $count = fn (string $needle) => $c->messages()->where('sender_type', 'bot')->pluck('body')->filter(fn ($b) => str_contains($b, $needle))->count();
-    $tickAt = function (int $seconds) use ($est, $e) {
+    $tickAt = function (int $seconds) use ($est, $e, $user) {
         Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo')->addSeconds($seconds));
+        $user->forceFill(['last_seen_at' => now()])->save(); // her heartbeat
         $est->tickWaiting($e->fresh());
     };
 
@@ -104,7 +117,8 @@ it('sends the 5/3/1 messages once each as the estimate shrinks', function () {
     expect($count('5 دقايق'))->toBe(1)->and($e->fresh()->eta_seconds)->toBe(280);
     $tickAt(430);   // 170 s
     expect($count('3 دقايق'))->toBe(1)->and($count('دقيقة واحدة'))->toBe(0);
-    $tickAt(550); $tickAt(560);   // 50 s, 40 s
+    $tickAt(550);
+    $tickAt(560);   // 50 s, 40 s
     expect($count('دقيقة واحدة'))->toBe(1)->and($count('5 دقايق'))->toBe(1)->and($count('3 دقايق'))->toBe(1);
 });
 
@@ -113,8 +127,8 @@ it('numbers tickets 1, 2, 3 per business day with one row per day', function () 
     expect([$svc->nextTicket('2026-10-05'), $svc->nextTicket('2026-10-05'), $svc->nextTicket('2026-10-05')])->toBe([1, 2, 3])
         ->and($svc->nextTicket('2026-10-06'))->toBe(1)
         ->and($svc->nextTicket('2026-10-05'))->toBe(4)
-        ->and(\App\Models\QueueDay::count())->toBe(2)
-        ->and(\App\Models\QueueDay::where('date', '2026-10-05')->value('next_ticket'))->toBe(5);
+        ->and(QueueDay::count())->toBe(2)
+        ->and(QueueDay::where('date', '2026-10-05')->value('next_ticket'))->toBe(5);
 });
 
 it('gives a returning customer at night the night message and no estimate', function () {
@@ -130,8 +144,12 @@ it('gives a returning customer at night the night message and no estimate', func
 });
 
 it('keeps returning priority while a shift is open', function () {
-    openMorningShift();
+    $shift = openMorningShift();
     $c = queueConv();
+    $busy = User::factory()->create(['last_seen_at' => now()]);
+    $busy->userPlatforms()->create(['platform' => $c->platform]);
+    $m = ShiftMember::factory()->for($shift)->create(['user_id' => $busy->id, 'windows_cap' => 1, 'status' => 'busy']);
+    QueueEntry::factory()->create(['shift_id' => $shift->id, 'shift_member_id' => $m->id, 'assigned_user_id' => $busy->id, 'status' => 'active', 'delivered_at' => now()]);
     $c->forceFill(['return_priority_until' => now()->addHour()])->save();
     $e = app(QueueService::class)->enqueue($c, new HandoverContext('returning', 'x', 'medium', null, [], 'unknown'));
     expect($e->priority)->toBe('returning')->and($c->messages()->where('sender_type', 'bot')->latest('id')->value('body'))->toContain('أهلاً بيكي تاني');
@@ -153,4 +171,37 @@ it('refreshes the waiting entry when the customer writes again', function () {
     Carbon::setTestNow(now()->addMinutes(2));
     app(QueueService::class)->customerMessage($c);
     expect($e->fresh()->last_customer_message_at->equalTo(now()))->toBeTrue();
+});
+
+// ───── flow revision §2: the estimate counts only desks that are logged in ─────
+
+it('promises no minutes when nobody on the open shift is logged in', function () {
+    $shift = Shift::factory()->create();
+    ShiftMember::factory()->count(2)->for($shift)->create(); // on the roster, never logged in
+    $c = queueConv();
+
+    $e = app(QueueService::class)->enqueue($c, new HandoverContext('human_request', 'human_request', 'medium', null, [], 'unknown'));
+
+    $body = $c->messages()->where('sender_type', 'bot')->latest('id')->value('body');
+    expect($e->eta_seconds)->toBeNull()->and($e->waiting_messages)->toBe([])
+        ->and($body)->toContain('رقمك في الدور '.$e->ticket_no)->toContain('الفريق بيبدأ دلوقتي')->not->toContain('دقيقة');
+});
+
+it('estimates from logged-in desks only, never from the leader', function () {
+    QueueSetting::current()->update(['eta_default_handle_seconds' => 400]);
+    $c = queueConv();
+    $leader = User::factory()->create(['role' => 'supervisor', 'last_seen_at' => now()]);
+    $shift = Shift::factory()->create(['leader_user_id' => $leader->id]);
+    ShiftMember::factory()->for($shift)->create(['user_id' => $leader->id]);
+    $absent = ShiftMember::factory()->for($shift)->create(); // never logged in, three empty windows
+    $absent->user->userPlatforms()->create(['platform' => $c->platform]);
+    $here = User::factory()->create(['last_seen_at' => now()]);
+    $here->userPlatforms()->create(['platform' => $c->platform]);
+    $m = ShiftMember::factory()->for($shift)->create(['user_id' => $here->id, 'windows_cap' => 1, 'status' => 'busy']);
+    QueueEntry::factory()->create(['shift_id' => $shift->id, 'shift_member_id' => $m->id, 'assigned_user_id' => $here->id, 'status' => 'active', 'delivered_at' => now()->subSeconds(100)]);
+
+    $e = app(QueueService::class)->enqueue($c, new HandoverContext('x', 'x', 'medium', null, [], 'unknown'));
+
+    // Only $here counts: her one window frees in 400 − 100 = 300 s (the absent desk's empty windows would say 0).
+    expect($e->eta_seconds)->toBe(300);
 });

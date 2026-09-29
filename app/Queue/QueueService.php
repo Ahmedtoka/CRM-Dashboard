@@ -147,13 +147,20 @@ class QueueService
                 SendQueueMessage::dispatch($entry->id, 'queue_night', ['ticket' => $entry->ticket_no, 'opening' => $this->nextOpeningPhrase()]);
             }
         } else {
-            $entry->eta_seconds = $this->estimator->eta($entry);
+            $eta = $this->estimator->eta($entry);
+            $entry->eta_seconds = $eta;
             $entry->position_at_enqueue = $this->estimator->position($entry);
-            $entry->waiting_messages = $this->estimator->alreadyPassed($entry->eta_seconds);
+            $entry->waiting_messages = $eta === null ? [] : $this->estimator->alreadyPassed($eta);
             $entry->save();
-            SendQueueMessage::dispatch($entry->id, $priority === 'returning' ? 'queue_returning' : 'queue_enqueued', [
-                'ticket' => $entry->ticket_no, 'eta_minutes' => max(1, (int) ceil($entry->eta_seconds / 60)), 'position' => $entry->position_at_enqueue,
-            ]);
+
+            if ($eta === null) {
+                // Nobody who may take her is logged in: her ticket, and no minutes (flow revision §2).
+                SendQueueMessage::dispatch($entry->id, 'queue_enqueued_no_eta', ['ticket' => $entry->ticket_no, 'position' => $entry->position_at_enqueue]);
+            } else {
+                SendQueueMessage::dispatch($entry->id, $priority === 'returning' ? 'queue_returning' : 'queue_enqueued', [
+                    'ticket' => $entry->ticket_no, 'eta_minutes' => max(1, (int) ceil($eta / 60)), 'position' => $entry->position_at_enqueue,
+                ]);
+            }
         }
 
         SafeBroadcast::send(new QueueEntryUpdated($entry));
