@@ -45,8 +45,13 @@ return new class extends Migration
                 continue;
             }
 
-            DB::table('bot_knowledge_entries')->where('key', 'script.'.$key)->where('body', $from)
-                ->update(['body' => $to, 'updated_at' => now()]);
+            // Compared in PHP, byte for byte: the database collation (utf8mb4_unicode_ci) would treat
+            // a changed emoji, a dropped diacritic or a trailing space as "the same" and overwrite an edit.
+            foreach (DB::table('bot_knowledge_entries')->where('key', 'script.'.$key)->get(['id', 'body']) as $row) {
+                if ($row->body === $from) {
+                    DB::table('bot_knowledge_entries')->where('id', $row->id)->update(['body' => $to, 'updated_at' => now()]);
+                }
+            }
         }
     }
 };

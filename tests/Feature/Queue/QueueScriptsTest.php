@@ -39,3 +39,32 @@ it('rewords the stored ticket texts only where the owner has not edited them, an
     expect(BotKnowledgeEntry::where('key', 'script.queue_enqueued')->value('body'))->toBe($old)
         ->and(BotKnowledgeEntry::where('key', 'script.queue_returning')->value('body'))->toBe('نصي أنا {ticket}');
 });
+
+it('matches the previous default byte for byte, so an edit a collation would ignore is kept', function () {
+    $wording = require database_path('migrations/2026_09_29_200032_reword_queue_ticket_scripts.php');
+    $oldEnqueued = 'تمام ✅ هيتم تحويلك لموظفة خدمة العملاء. رقمك في الدور {ticket} وقدامك حوالي {eta_minutes} دقيقة 🌸';
+    $oldReturning = 'أهلاً بيكي تاني 🌸 بنرجّعك لنفس الموظفة بأولوية، رقمك {ticket} وقدامك حوالي {eta_minutes} دقيقة.';
+    $newEnqueued = FlowScripts::all()['queue_enqueued']['body'];
+
+    // Owner edits that utf8mb4_unicode_ci equates with the default: another emoji, a dropped shadda, a trailing space.
+    $editedEmoji = str_replace('🌸', '🌹', $oldEnqueued);
+    $editedShadda = str_replace('ّ', '', $oldReturning);
+    BotKnowledgeEntry::where('key', 'script.queue_enqueued')->update(['body' => $editedEmoji]);
+    BotKnowledgeEntry::where('key', 'script.queue_returning')->update(['body' => $editedShadda]);
+    BotKnowledgeEntry::where('key', 'script.queue_enqueued_no_eta')->update(['body' => FlowScripts::all()['queue_enqueued_no_eta']['body'].' ']);
+
+    $wording->up();
+
+    expect(BotKnowledgeEntry::where('key', 'script.queue_enqueued')->value('body'))->toBe($editedEmoji)
+        ->and(BotKnowledgeEntry::where('key', 'script.queue_returning')->value('body'))->toBe($editedShadda);
+
+    // down() is just as exact: the new default plus a trailing space, or with another emoji, is not restored.
+    BotKnowledgeEntry::where('key', 'script.queue_enqueued')->update(['body' => $newEnqueued.' ']);
+    BotKnowledgeEntry::where('key', 'script.queue_returning')->update(['body' => str_replace('🌸', '🌹', FlowScripts::all()['queue_returning']['body'])]);
+
+    $wording->down();
+
+    expect(BotKnowledgeEntry::where('key', 'script.queue_enqueued')->value('body'))->toBe($newEnqueued.' ')
+        ->and(BotKnowledgeEntry::where('key', 'script.queue_returning')->value('body'))->toBe(str_replace('🌸', '🌹', FlowScripts::all()['queue_returning']['body']))
+        ->and(BotKnowledgeEntry::where('key', 'script.queue_enqueued_no_eta')->value('body'))->toEndWith(' ');
+});
