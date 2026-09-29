@@ -21,6 +21,24 @@ class WindowLifecycle
     public function reverseClose(QueueEntry $e): void {}
 
     /**
+     * Move a closed entry's ticket out of the way so a follow-up entry (transfer, escalation) can
+     * keep the customer's number under the unique [business_date, ticket_no] index. The parked
+     * number is the first free `ticket + k*100000`, so `ticket_no % 100000` stays the original.
+     * Call inside the transaction that holds the entry's row lock.
+     */
+    public function parkTicket(QueueEntry $e): void
+    {
+        $date = $e->getRawOriginal('business_date');
+        $park = $e->ticket_no + 100000;
+
+        while (QueueEntry::query()->where('business_date', $date)->where('ticket_no', $park)->exists()) {
+            $park += 100000;
+        }
+
+        $e->forceFill(['ticket_no' => $park])->save();
+    }
+
+    /**
      * Close this window as `transfer` and put the customer back in the lounge as `returning`
      * (same ticket, no reserved moderator) so the router gives her to someone else.
      * Minimal version for the offline hand-off (Task 5); Task 7 routes it through close().
@@ -37,12 +55,12 @@ class WindowLifecycle
 
             $ticket = $e->ticket_no;
             $c = $e->conversation;
-            // unique [business_date, ticket_no]: the returning entry keeps the ticket, so the closed one moves aside first.
             $e->forceFill([
                 'status' => 'closed', 'close_reason' => 'transfer', 'closed_at' => now(),
                 'handle_seconds' => $e->delivered_at ? (int) $e->delivered_at->diffInSeconds(now()) : 0,
-                'ticket_no' => $ticket + 100000,
             ])->save();
+            // unique [business_date, ticket_no]: the returning entry keeps the ticket, so the closed one moves aside first.
+            $this->parkTicket($e);
 
             $new = QueueEntry::create($e->only(['conversation_id', 'customer_id', 'business_date', 'kind', 'bot_summary', 'is_test', 'last_customer_message_at']) + [
                 'ticket_no' => $ticket, 'priority' => 'returning', 'status' => 'waiting', 'shift_id' => $e->shift_id, 'enqueued_at' => now(),

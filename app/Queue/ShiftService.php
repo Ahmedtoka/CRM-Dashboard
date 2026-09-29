@@ -15,6 +15,7 @@ use App\Support\SafeBroadcast;
 use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Shifts and the people in them: «ابدأ اليوم» (today's shifts from the templates + roster),
@@ -54,8 +55,9 @@ class ShiftService
                 $ends->addDay();
             }
 
-            // `date` is cast, so it is stored as 'Y-m-d 00:00:00' on SQLite: look it up with whereDate.
-            $find = fn () => Shift::query()->whereDate('date', $date)->where('shift_key', $t['key'])->first();
+            // `date` is cast: compare with the exact string Eloquent writes (matches on SQLite, uses the unique index on MySQL).
+            $stored = (new Shift)->fromDateTime(Carbon::parse($date));
+            $find = fn () => Shift::query()->where('date', $stored)->where('shift_key', $t['key'])->first();
 
             try {
                 return $find() ?? Shift::query()->create([
@@ -77,6 +79,14 @@ class ShiftService
     public function startDay(array $roster, User $by): Shift
     {
         $roster = array_map(fn ($ids) => array_values(array_map('intval', (array) $ids)), $roster);
+
+        // All or nothing: a bad user id leaves no half-added roster, and the router runs once after commit.
+        return DB::transaction(fn () => $this->startDayInTransaction($roster, $by));
+    }
+
+    /** @param  array<string, list<int>>  $roster */
+    private function startDayInTransaction(array $roster, User $by): Shift
+    {
         $shifts = $this->todayShifts();
 
         foreach ($shifts as $shift) {
@@ -150,7 +160,10 @@ class ShiftService
         app(QueueRouter::class)->runAfterCommit('بداية شيفت '.$shift->name);
     }
 
-    /** Break time: `break_after_minutes` into the shift, staggered by position (0, 20, 40, 60, 80 minutes, then again). */
+    /**
+     * Break time: `break_after_minutes` after she actually started (the shift start, or now when
+     * the day was started late / she joined mid-shift), staggered by position (0, 20, 40, 60, 80 minutes, then again).
+     */
     private function scheduleBreak(ShiftMember $m, Shift $shift, int $index): void
     {
         if ($m->break_at !== null) {
@@ -158,7 +171,8 @@ class ShiftService
         }
 
         $s = QueueSetting::current();
-        $m->update(['break_at' => $shift->starts_at->copy()->addMinutes($s->break_after_minutes + ($index % 5) * self::BREAK_STAGGER_MINUTES)]);
+        $anchor = $shift->starts_at->copy()->max(now());
+        $m->update(['break_at' => $anchor->addMinutes($s->break_after_minutes + ($index % 5) * self::BREAK_STAGGER_MINUTES)]);
     }
 
     /** Overnight waiting entries are shared evenly (in ticket order, platform-aware) as personal queues. */
@@ -271,9 +285,9 @@ class ShiftService
             ->where('status', '!=', 'left')->get();
 
         foreach ($members as $m) {
-            // Never seen (no heartbeat ever) counts as offline from the start.
+            // Never seen (no heartbeat ever) or deactivated mid-shift counts as offline from the start.
             $seen = $m->user->last_seen_at;
-            $offlineFor = $seen ? (int) $seen->diffInSeconds(now()) : PHP_INT_MAX;
+            $offlineFor = ($seen && $m->user->is_active) ? (int) $seen->diffInSeconds(now()) : PHP_INT_MAX;
 
             if ($m->status === 'break') {
                 if ($m->break_ends_at && $m->break_ends_at->lte(now())) {
