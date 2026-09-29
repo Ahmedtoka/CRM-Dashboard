@@ -53,6 +53,13 @@ use InvalidArgumentException;
  */
 class WindowLifecycle
 {
+    /**
+     * The no-reply hand-off never goes out in the tick that sent the apology: the apology must be
+     * at least this old (one tick), so she never reads «زميلتنا X معاكي حالاً» and, seconds later,
+     * «دورك جه… الموظفة Y» (a tick gap after a deploy, or an apology close to the limit).
+     */
+    public const APOLOGY_BEFORE_HANDOFF_SECONDS = 30;
+
     public function __construct(
         private readonly ActivityLogger $logger,
         private readonly PresenceTracker $presence,
@@ -326,6 +333,13 @@ class WindowLifecycle
         return max(0, (int) $e->awaiting_reply_since->diffInSeconds(now()));
     }
 
+    /** The apology of this waiting period went out at least one tick ago (never a hand-off in the same tick). */
+    public static function apologySettled(QueueEntry $e): bool
+    {
+        return $e->apology_sent_at !== null
+            && $e->apology_sent_at->lessThanOrEqualTo(now()->subSeconds(self::APOLOGY_BEFORE_HANDOFF_SECONDS));
+    }
+
     /** The hand-off limit that applies: before her first reply, else for a later unanswered message. */
     public static function handOffLimit(QueueEntry $e, QueueSetting $s): int
     {
@@ -378,7 +392,8 @@ class WindowLifecycle
      * activity log `queue.no_reply` records the penalty until Part 2's points ledger exists.
      * Re-checked under the locks: null when she replied (or the window closed) meanwhile, for an
      * escalation, when the assignee is not logged in (the offline path takes her windows, with no
-     * penalty) and when nobody is free any more.
+     * penalty), when nobody is free any more, and until the apology is at least one tick old
+     * (`apologySettled()`).
      */
     public function handOffNoReply(QueueEntry $e, ?QueueSetting $settings = null): ?QueueEntry
     {
@@ -388,7 +403,7 @@ class WindowLifecycle
             $locked = self::lockBoth($e);
             $waited = $locked !== null ? self::awaitingSeconds($locked) : null;
 
-            if ($waited === null || $locked->priority === 'escalation' || $waited < self::handOffLimit($locked, $s)) {
+            if ($waited === null || $locked->priority === 'escalation' || $waited < self::handOffLimit($locked, $s) || ! self::apologySettled($locked)) {
                 return null;
             }
 
@@ -466,8 +481,11 @@ class WindowLifecycle
         }
 
         if (app(QueueRouter::class)->hasFreeDeskFor($e, $s)) {
+            // Not in the tick that sent the apology (`$e` was read before it): the next tick hands off.
             // Null: she replied (or the window closed, or the free desk filled) since the read.
-            $this->handOffNoReply($e, $s);
+            if (self::apologySettled($e)) {
+                $this->handOffNoReply($e, $s);
+            }
 
             return;
         }

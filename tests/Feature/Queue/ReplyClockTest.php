@@ -164,6 +164,8 @@ it('uses the later limit once she has replied', function () {
     clockAt(10);
     app(OutboundService::class)->sendHuman($e->conversation, $a->user, 'ثواني');
     clockCustomerWritesAt($e, 20);
+    clockAt(20 + 180);
+    app(WindowLifecycle::class)->tickReplies();   // the apology
 
     clockAt(20 + 479);
     app(WindowLifecycle::class)->tickReplies();
@@ -255,6 +257,8 @@ it('counts «ما ردّتش» on her desk today, and not a hand-off because she
     $a = clockDesk($shift);
     clockWindow($a);
     clockDesk($shift);
+    clockAt(180);
+    app(WindowLifecycle::class)->tickReplies();   // the apology
     clockAt(300);
     app(WindowLifecycle::class)->tickReplies();
 
@@ -283,8 +287,35 @@ it('never hands off (nor penalises) a moderator who is not logged in: her window
     // Re-checked under the lock too: the tick read her online, then she dropped.
     expect(app(WindowLifecycle::class)->handOffNoReply($e->fresh()))->toBeNull()->and($e->fresh()->status)->toBe('active');
 
-    // Online again: the next tick hands off.
-    clockAt(310);
+    // Online again: the next tick hands off (the apology went out at 300, a tick ago).
+    clockAt(330);
     app(WindowLifecycle::class)->tickReplies();
     expect($e->fresh()->close_reason)->toBe('no_reply');
+});
+
+it('never hands off in the tick that sent the apology: the apology alone, the hand-off on the next tick', function () {
+    Bus::fake([SendQueueMessage::class]);
+    $shift = Shift::factory()->create();
+    $a = clockDesk($shift);
+    $e = clockWindow($a);
+    clockDesk($shift);   // a free colleague
+    $sent = fn (string $key) => Bus::dispatched(SendQueueMessage::class, fn ($job) => $job->scriptKey === $key)->count();
+
+    // A tick gap (a deploy): the first tick after delivery runs at 400 s, past both the apology and the limit.
+    clockAt(400);
+    app(WindowLifecycle::class)->tickReplies();
+
+    expect($e->fresh()->status)->toBe('active')->and($e->fresh()->apology_sent_at)->not->toBeNull()
+        ->and($sent('queue_agent_delay_apology'))->toBe(1)
+        ->and(ActivityLog::where('action', ActivityLogger::QUEUE_NO_REPLY)->count())->toBe(0);
+
+    // Re-checked under the lock too: an apology younger than one tick blocks a direct hand-off.
+    clockAt(429);
+    expect(app(WindowLifecycle::class)->handOffNoReply($e->fresh()))->toBeNull()->and($e->fresh()->status)->toBe('active');
+
+    // The next tick, 30 s after the apology: the hand-off.
+    clockAt(430);
+    app(WindowLifecycle::class)->tickReplies();
+
+    expect($e->fresh()->close_reason)->toBe('no_reply')->and($sent('queue_agent_delay_apology'))->toBe(1);
 });
