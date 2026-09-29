@@ -15,10 +15,22 @@ use Illuminate\Support\Facades\Log;
 /**
  * One queue script to the customer (enqueued, night, 5/3/1, apology…). Nothing is sent when the
  * entry is gone or the owner turned the script off; a closed reply window is logged, not retried.
+ *
+ * Stale messages are dropped at send time (final review of the flow revision): a lounge message —
+ * the position update, the 5/3/1 countdown, the lounge apology — only while she is still
+ * `waiting`; the moderator-delay apology only while her window is open and she still waits for
+ * the reply it apologises for. A job that runs after she was called, or after the moderator
+ * answered, says nothing. Every other script goes out as before.
  */
 class SendQueueMessage implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable;
+
+    /** Scripts that only make sense while she waits in the lounge. */
+    public const WHILE_WAITING = ['queue_position_update', 'queue_left_5', 'queue_left_3', 'queue_left_1', 'queue_apology'];
+
+    /** Scripts that only make sense while her open window waits for the moderator's reply. */
+    public const WHILE_AWAITING_REPLY = ['queue_agent_delay_apology'];
 
     public int $tries = 2;
 
@@ -34,7 +46,7 @@ class SendQueueMessage implements ShouldQueue
         $e = QueueEntry::with('conversation')->find($this->entryId);
         $text = $e ? $scripts->text($this->scriptKey, $this->vars) : null;
 
-        if ($e === null || $e->conversation === null || $text === null) {
+        if ($e === null || $e->conversation === null || $text === null || $this->stale($e)) {
             return;
         }
 
@@ -43,5 +55,20 @@ class SendQueueMessage implements ShouldQueue
         } catch (WindowClosedException) {
             Log::info('queue.window_closed', ['entry' => $e->id, 'script' => $this->scriptKey]);
         }
+    }
+
+    /** True when what the script says is no longer so (see the class docblock). */
+    private function stale(QueueEntry $e): bool
+    {
+        if (in_array($this->scriptKey, self::WHILE_WAITING, true)) {
+            return $e->status !== 'waiting';
+        }
+
+        if (in_array($this->scriptKey, self::WHILE_AWAITING_REPLY, true)) {
+            // A reply clears both; a later message restarts the clock with no apology yet.
+            return ! $e->isOpen() || $e->awaiting_reply_since === null || $e->apology_sent_at === null;
+        }
+
+        return false;
     }
 }
