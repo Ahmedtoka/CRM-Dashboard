@@ -2,7 +2,8 @@
 
 namespace App\Queue;
 
-use App\Bot\Flows\{FlowPrompter, FlowScripts};
+use App\Bot\Flows\FlowPrompter;
+use App\Bot\Flows\FlowScripts;
 use App\Models\BotKnowledgeEntry;
 
 /**
@@ -31,6 +32,7 @@ class QueueScripts
             $body = str_replace('{'.$k.'}', (string) $v, $body);
         }
 
-        return $body;
+        // An empty placeholder at the end (the time sentence without an estimate) leaves no trailing space.
+        return trim($body);
     }
 }

@@ -2,6 +2,7 @@
 
 use App\Bot\BotEngine;
 use App\Bot\Flows\HumanHandover;
+use App\Bot\Flows\WaitingReply;
 use App\Models\BotSetting;
 use App\Models\Conversation;
 use App\Models\QueueDay;
@@ -12,9 +13,12 @@ use App\Models\ShiftMember;
 use App\Models\User;
 use App\Models\UserNotification;
 use App\Queue\Data\HandoverContext;
+use App\Queue\Jobs\SendQueueMessage;
+use App\Queue\QueueScripts;
 use App\Queue\QueueService;
 use App\Queue\WaitEstimator;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
@@ -42,7 +46,7 @@ it('assigns daily ticket numbers in order and sends the enqueue script', functio
     $b = $svc->enqueue(queueConv(), new HandoverContext(reason: 'human_request', category: 'human_request', priority: 'medium', topic: null, summaryLines: [], kind: 'unknown'));
     expect([$a->ticket_no, $b->ticket_no])->toBe([1, 2])->and($a->business_date->toDateString())->toBe('2026-10-05')
         ->and($a->priority)->toBe('live')->and($a->bot_summary['topic'])->toBe('استرجاع');
-    expect($a->conversation->messages()->where('sender_type', 'bot')->latest('id')->first()->body)->toContain('رقمك في الدور 1');
+    expect($a->conversation->messages()->where('sender_type', 'bot')->latest('id')->first()->body)->toContain('رقم تذكرتك #1')->not->toContain('رقمك في الدور');
 });
 
 it('is idempotent per conversation', function () {
@@ -161,7 +165,7 @@ it('lets the queue script replace the working-hours transfer sentence', function
     $c = queueConv();
     app(HumanHandover::class)->handover($c, null, 'عايزة موظفة');
     $bodies = $c->messages()->where('sender_type', 'bot')->pluck('body');
-    expect($bodies)->toHaveCount(1)->and($bodies[0])->toContain('رقمك في الدور 1');
+    expect($bodies)->toHaveCount(1)->and($bodies[0])->toContain('رقم تذكرتك #1');
 });
 
 it('refreshes the waiting entry when the customer writes again', function () {
@@ -184,7 +188,7 @@ it('promises no minutes when nobody on the open shift is logged in', function ()
 
     $body = $c->messages()->where('sender_type', 'bot')->latest('id')->value('body');
     expect($e->eta_seconds)->toBeNull()->and($e->waiting_messages)->toBe([])
-        ->and($body)->toContain('رقمك في الدور '.$e->ticket_no)->toContain('الفريق بيبدأ دلوقتي')->not->toContain('دقيقة');
+        ->and($body)->toContain('رقم تذكرتك #'.$e->ticket_no)->toContain('الفريق بيبدأ دلوقتي')->not->toContain('دقيقة');
 });
 
 it('estimates from logged-in desks only, never from the leader', function () {
@@ -204,4 +208,122 @@ it('estimates from logged-in desks only, never from the leader', function () {
 
     // Only $here counts: her one window frees in 400 − 100 = 300 s (the absent desk's empty windows would say 0).
     expect($e->eta_seconds)->toBe(300);
+});
+
+// ───── flow revision §3: she writes while waiting in the lounge ─────
+
+/** A logged-in moderator on every platform, busy with one customer (10-minute chats): the lounge has an estimate. */
+function busyDesk(Shift $shift): ShiftMember
+{
+    QueueSetting::current()->update(['eta_default_handle_seconds' => 600]);
+    $u = User::factory()->create(['last_seen_at' => now()]);
+    foreach (['facebook', 'instagram', 'whatsapp', 'tiktok'] as $p) {
+        $u->userPlatforms()->create(['platform' => $p]);
+    }
+    $m = ShiftMember::factory()->for($shift)->create(['user_id' => $u->id, 'windows_cap' => 1, 'status' => 'busy']);
+    QueueEntry::factory()->create(['shift_id' => $shift->id, 'shift_member_id' => $m->id, 'assigned_user_id' => $u->id, 'status' => 'active', 'ticket_no' => 900, 'delivered_at' => now()]);
+
+    return $m;
+}
+
+it('answers a waiting customer who writes with her ticket, who is ahead and the estimate, at most every two minutes', function () {
+    $shift = Shift::factory()->create();
+    busyDesk($shift);
+    $svc = app(QueueService::class);
+    $svc->enqueue(queueConv(), new HandoverContext('x', 'x', 'medium', null, [], 'unknown'));   // ticket 1, ahead of her
+    $c = queueConv();
+    $e = $svc->enqueue($c, new HandoverContext('x', 'x', 'medium', null, [], 'unknown'));      // ticket 2
+    $updates = fn () => $c->messages()->where('sender_type', 'bot')->where('body', 'like', '%لسه معاكي%')->pluck('body');
+    $writes = function (int $seconds) use ($c, $svc) {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo')->addSeconds($seconds));
+        User::query()->update(['last_seen_at' => now()]);   // the busy moderator stays logged in
+        $c->forceFill(['last_customer_message_at' => now()])->save();
+        $svc->customerMessage($c->fresh());
+    };
+
+    $writes(10);
+    // One window, 590 s left on it; she is second: 590 + 600 = 1190 s ≈ 20 minutes.
+    expect($updates())->toHaveCount(1)
+        ->and($updates()->first())->toBe('لسه معاكي 💛 رقم تذكرتك #'.$e->ticket_no.'، وقدامك 1 وهنكون معاكي خلال حوالي 20 دقايق');
+
+    $writes(70);   // a minute later: no reply
+    expect($updates())->toHaveCount(1);
+
+    $writes(131);  // two minutes after the first update
+    expect($updates())->toHaveCount(2)->and($e->fresh()->position_update_sent_at->equalTo(now()))->toBeTrue();
+});
+
+it('leaves the minutes out of the update when there is no estimate', function () {
+    openMorningShift(); // nobody logged in
+    $c = queueConv();
+    $e = app(QueueService::class)->enqueue($c, new HandoverContext('x', 'x', 'medium', null, [], 'unknown'));
+
+    app(QueueService::class)->customerMessage($c);
+
+    $body = $c->messages()->where('sender_type', 'bot')->latest('id')->value('body');
+    expect($body)->toContain('رقم تذكرتك #'.$e->ticket_no)->toEndWith('وقدامك 0')->not->toContain('خلال');
+});
+
+it('sends no position update to an overnight customer nor to one already at a window', function () {
+    Queue::fake([SendQueueMessage::class]);
+    Carbon::setTestNow(Carbon::parse('2026-10-05 02:30', 'Africa/Cairo'));
+    $night = queueConv();
+    app(QueueService::class)->enqueue($night, new HandoverContext('x', 'x', 'medium', null, [], 'unknown'));
+    app(QueueService::class)->customerMessage($night);
+
+    $open = QueueEntry::factory()->create(['status' => 'active', 'assigned_user_id' => User::factory()->create()->id, 'delivered_at' => now()]);
+    $open->conversation->update(['queue_entry_id' => $open->id]);
+    app(QueueService::class)->customerMessage($open->conversation->fresh());
+
+    Queue::assertNotPushed(SendQueueMessage::class, fn (SendQueueMessage $job) => $job->scriptKey === 'queue_position_update');
+});
+
+it('sends no position update while the queue is switched off', function () {
+    Queue::fake([SendQueueMessage::class]);
+    $waiting = QueueEntry::factory()->create(['status' => 'waiting', 'priority' => 'live']);
+    $waiting->conversation->update(['queue_entry_id' => $waiting->id]);
+    QueueSetting::current()->update(['enabled' => false]);
+
+    app(QueueService::class)->customerMessage($waiting->conversation->fresh());
+
+    Queue::assertNotPushed(SendQueueMessage::class);
+    expect($waiting->fresh()->position_update_sent_at)->toBeNull();
+});
+
+it('leaves the reassurance to the queue while she waits in its lounge', function () {
+    $c = queueConv();
+    $c->forceFill(['handler' => 'human', 'needs_human' => true, 'handover_at' => now()->subMinute()])->save();
+    $e = QueueEntry::factory()->create(['conversation_id' => $c->id]);
+    $c->forceFill(['queue_entry_id' => $e->id])->save();
+
+    expect(app(WaitingReply::class)->maybeSend($c->fresh()))->toBeFalse()
+        ->and($c->messages()->where('sender_type', 'bot')->count())->toBe(0);
+});
+
+it('keeps the bot reassurance for a waiting customer while the queue is switched off', function () {
+    QueueSetting::current()->update(['enabled' => false]);
+    $c = queueConv();
+    $c->forceFill(['handler' => 'human', 'needs_human' => true, 'handover_at' => now()->subMinute()])->save();
+    $e = QueueEntry::factory()->create(['conversation_id' => $c->id]);
+    $c->forceFill(['queue_entry_id' => $e->id])->save();
+
+    expect(app(WaitingReply::class)->maybeSend($c->fresh()))->toBeTrue();
+});
+
+// ───── wording: the ticket is named as a ticket, never as a place in line ─────
+
+it('names the ticket and who is ahead in every queue message', function () {
+    busyDesk(Shift::factory()->create());
+    $svc = app(QueueService::class);
+    $svc->enqueue(queueConv(), new HandoverContext('x', 'x', 'medium', null, [], 'unknown'));
+    $c = queueConv();
+    $e = $svc->enqueue($c, new HandoverContext('x', 'x', 'medium', null, [], 'unknown'));
+
+    expect($c->messages()->where('sender_type', 'bot')->latest('id')->value('body'))
+        ->toContain('رقم تذكرتك #'.$e->ticket_no.'، وقدامك 1 وحوالي 20 دقيقة')->not->toContain('رقمك في الدور');
+
+    $texts = app(QueueScripts::class);
+    expect($texts->text('queue_returning', ['ticket' => 7, 'ahead' => 2, 'eta_minutes' => 9]))->toContain('رقم تذكرتك #7 وقدامك حوالي 9 دقيقة')
+        ->and($texts->text('queue_enqueued_no_eta', ['ticket' => 7, 'ahead' => 0]))->toStartWith('رقم تذكرتك #7')
+        ->and($texts->text('queue_night', ['ticket' => 7, 'opening' => 'الساعة 10 الصبح']))->toContain('رقم تذكرتك #7')->not->toContain('رقمك في الدور');
 });

@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * The handover queue's front door: a customer the bot hands over takes a daily ticket
- * (`queue_days`), gets the «رقمك في الدور …» (or the night) message, and waits for the
+ * (`queue_days`), gets the «رقم تذكرتك #…» (or the night) message, and waits for the
  * router (Task 6) to give her a moderator window. When `queue_settings.enabled` is off
  * nothing here runs and the legacy «notify everyone» handover stays as it was.
  */
@@ -31,7 +31,11 @@ class QueueService
 {
     public const TZ = 'Africa/Cairo';
 
-    public function __construct(private readonly ActivityLogger $logger, private readonly WaitEstimator $estimator) {}
+    public function __construct(
+        private readonly ActivityLogger $logger,
+        private readonly WaitEstimator $estimator,
+        private readonly QueueScripts $scripts,
+    ) {}
 
     public function settings(): QueueSetting
     {
@@ -152,13 +156,14 @@ class QueueService
             $entry->position_at_enqueue = $this->estimator->position($entry);
             $entry->waiting_messages = $eta === null ? [] : $this->estimator->alreadyPassed($eta);
             $entry->save();
+            $ahead = max(0, $entry->position_at_enqueue - 1);
 
             if ($eta === null) {
                 // Nobody who may take her is logged in: her ticket, and no minutes (flow revision §2).
-                SendQueueMessage::dispatch($entry->id, 'queue_enqueued_no_eta', ['ticket' => $entry->ticket_no, 'position' => $entry->position_at_enqueue]);
+                SendQueueMessage::dispatch($entry->id, 'queue_enqueued_no_eta', ['ticket' => $entry->ticket_no, 'ahead' => $ahead, 'position' => $entry->position_at_enqueue]);
             } else {
                 SendQueueMessage::dispatch($entry->id, $priority === 'returning' ? 'queue_returning' : 'queue_enqueued', [
-                    'ticket' => $entry->ticket_no, 'eta_minutes' => max(1, (int) ceil($eta / 60)), 'position' => $entry->position_at_enqueue,
+                    'ticket' => $entry->ticket_no, 'ahead' => $ahead, 'eta_minutes' => max(1, (int) ceil($eta / 60)), 'position' => $entry->position_at_enqueue,
                 ]);
             }
         }
@@ -171,24 +176,60 @@ class QueueService
     }
 
     /**
-     * She wrote while queued / in a window: the silence clock restarts. The board and the
-     * moderator's strip are told once the inbound message is committed (a rolled-back ingest
-     * pushes nothing), for a waiting entry and for an open window alike.
+     * She wrote while queued / in a window: the silence clock restarts. A customer waiting in the
+     * lounge (not overnight) gets her ticket and who is ahead (flow revision §3). The board and the
+     * moderator's strip are told once the inbound message is committed (a rolled-back ingest pushes
+     * nothing), for a waiting entry and for an open window alike.
      */
     public function customerMessage(Conversation $c): void
     {
         $e = $this->activeEntry($c);
 
-        if ($e) {
-            $e->forceFill(['last_customer_message_at' => now(), 'silence_warned_at' => null])->save();
-            $id = $e->id;
-
-            DB::afterCommit(function () use ($id) {
-                if ($fresh = QueueEntry::query()->find($id)) {
-                    SafeBroadcast::send(new QueueEntryUpdated($fresh));
-                }
-            });
+        if (! $e) {
+            return;
         }
+
+        $e->forceFill(['last_customer_message_at' => now(), 'silence_warned_at' => null])->save();
+
+        if ($e->status === 'waiting' && $e->priority !== 'overnight' && $this->settings()->enabled) {
+            $e->setRelation('conversation', $c);
+            $this->sendPosition($e);
+        }
+
+        $id = $e->id;
+
+        DB::afterCommit(function () use ($id) {
+            if ($fresh = QueueEntry::query()->find($id)) {
+                SafeBroadcast::send(new QueueEntryUpdated($fresh));
+            }
+        });
+    }
+
+    /**
+     * Her ticket, who is ahead of her in the lounge and, when there is one, the estimate — at most
+     * once per `waiting_update_seconds` per entry, claimed by a conditional update so two messages
+     * that arrive together send one; the messages in between get no reply. The enqueue message
+     * does not count: her first message after it is answered.
+     */
+    private function sendPosition(QueueEntry $e): void
+    {
+        $cut = now()->subSeconds((int) $this->settings()->waiting_update_seconds);
+        $claimed = QueueEntry::query()->whereKey($e->id)->where('status', 'waiting')
+            ->where(fn ($q) => $q->whereNull('position_update_sent_at')->orWhere('position_update_sent_at', '<=', $cut))
+            ->update(['position_update_sent_at' => now()]);
+
+        if ($claimed !== 1) {
+            return;
+        }
+
+        $eta = $this->estimator->eta($e);
+        $sentence = $eta === null ? '' : (string) ($this->scripts->text('queue_eta_sentence', ['minutes' => max(1, (int) ceil($eta / 60))]) ?? '');
+
+        SendQueueMessage::dispatch($e->id, 'queue_position_update', [
+            'ticket' => $e->ticket_no,
+            'ahead' => max(0, $this->estimator->position($e) - 1),
+            'eta_sentence' => $sentence,
+        ]);
     }
 
     /**

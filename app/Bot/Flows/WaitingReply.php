@@ -9,6 +9,8 @@ use App\Inbox\WindowClosedException;
 use App\Models\BotSetting;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\QueueEntry;
+use App\Models\QueueSetting;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 
@@ -33,6 +35,14 @@ class WaitingReply
         $at ??= CarbonImmutable::now();
 
         if (! $c->needs_human || $c->handover_at === null) {
+            return false;
+        }
+
+        // The handover queue answers her itself while she is in its lounge or at a window
+        // (position updates, flow revision §3): no second reassurance from the bot. With the
+        // queue switched off nothing changes.
+        if ($c->queue_entry_id !== null && QueueSetting::current()->enabled
+            && QueueEntry::query()->whereKey($c->queue_entry_id)->whereIn('status', ['waiting', 'called', 'active'])->exists()) {
             return false;
         }
 

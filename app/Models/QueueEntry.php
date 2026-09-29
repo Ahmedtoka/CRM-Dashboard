@@ -35,6 +35,7 @@ class QueueEntry extends Model
         return [
             'business_date' => 'date', 'enqueued_at' => 'datetime', 'called_at' => 'datetime', 'delivered_at' => 'datetime', 'first_reply_at' => 'datetime',
             'closed_at' => 'datetime', 'last_customer_message_at' => 'datetime', 'silence_warned_at' => 'datetime', 'confirmed_at' => 'datetime', 'last_agent_message_at' => 'datetime', 'reversed_at' => 'datetime',
+            'position_update_sent_at' => 'datetime',
             'return_priority_until' => 'datetime', 'waiting_messages' => 'array', 'bot_summary' => 'array', 'sla_met' => 'boolean', 'is_test' => 'boolean',
         ];
     }

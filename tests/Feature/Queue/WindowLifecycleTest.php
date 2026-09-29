@@ -425,7 +425,7 @@ it('puts a customer who writes after a case close back in the queue as returning
     expect($new->priority)->toBe('returning')->and($new->status)->toBe('waiting')->and($new->reserved_user_id)->toBe($u->id)
         ->and($new->reopened_from_entry_id)->toBe($e->id)->and($c->fresh()->queue_entry_id)->toBe($new->id)
         ->and($e->fresh()->reversed_at)->toBeNull() // a case close has no confirm window: nothing to reverse
-        ->and($c->messages()->where('sender_type', 'bot')->latest('id')->first()->body)->toContain('رقمك في الدور '.$new->ticket_no);
+        ->and($c->messages()->where('sender_type', 'bot')->latest('id')->first()->body)->toContain('رقم تذكرتك #'.$new->ticket_no);
 
     ingestFromCustomer('after-case-2', 'ألو؟'); // already waiting: no second ticket
     expect(QueueEntry::where('conversation_id', $c->id)->count())->toBe(2)
@@ -443,7 +443,7 @@ it('puts her in the live lane once the return priority has passed', function () 
     expect($new->id)->not->toBe($e->id)->and($new->priority)->toBe('live')->and($new->reserved_user_id)->toBeNull()
         ->and($new->reopened_from_entry_id)->toBeNull()->and($new->reopen_count)->toBe(0)
         ->and($c->fresh()->needs_human)->toBeTrue()
-        ->and($c->messages()->where('sender_type', 'bot')->latest('id')->first()->body)->toContain('رقمك في الدور '.$new->ticket_no);
+        ->and($c->messages()->where('sender_type', 'bot')->latest('id')->first()->body)->toContain('رقم تذكرتك #'.$new->ticket_no);
 });
 
 it('follows the overnight path when she writes after a close outside shift hours', function () {
