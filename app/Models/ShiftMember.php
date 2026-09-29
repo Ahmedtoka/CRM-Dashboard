@@ -17,7 +17,7 @@ class ShiftMember extends Model
 
     protected function casts(): array
     {
-        return ['joined_at' => 'datetime', 'left_at' => 'datetime', 'break_at' => 'datetime', 'break_started_at' => 'datetime', 'break_ends_at' => 'datetime', 'last_heartbeat_at' => 'datetime', 'stats' => 'array'];
+        return ['joined_at' => 'datetime', 'left_at' => 'datetime', 'break_at' => 'datetime', 'break_started_at' => 'datetime', 'break_ends_at' => 'datetime', 'last_heartbeat_at' => 'datetime', 'not_arrived_alerted_at' => 'datetime', 'stats' => 'array'];
     }
 
     public function shift(): BelongsTo

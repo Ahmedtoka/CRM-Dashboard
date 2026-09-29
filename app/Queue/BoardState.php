@@ -154,7 +154,6 @@ class BoardState
                 (int) ($m->windows_cap ?? $s->windows_per_moderator),
             ) + [
                 'is_leader' => $open !== null && $open->leader_user_id !== null && (int) $open->leader_user_id === (int) $m->user_id,
-                'online' => $user !== null && (bool) $user->is_active && $this->presence->isOnline($user),
                 'platforms' => $user ? $this->platformsOf($user) : [],
             ];
         })->values()->all();

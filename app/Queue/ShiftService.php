@@ -3,6 +3,7 @@
 namespace App\Queue;
 
 use App\Analytics\ActivityLogger;
+use App\Analytics\PresenceTracker;
 use App\Enums\ActorType;
 use App\Inbox\UserNotifier;
 use App\Models\QueueEntry;
@@ -40,6 +41,23 @@ class ShiftService
 
     /** The desks that count as serving for the mass-offline safeguard. */
     private const SERVING = ['available', 'busy', 'pending_break'];
+
+    /**
+     * She has not logged in since she was put on this shift: no heartbeat ever, or none since
+     * ONLINE_MINUTES before she joined (a moderator added while she is online has arrived).
+     * Such a desk never "went dark": the tick marks it offline at once and the mass-offline
+     * safeguard does not count it (flow revision §2).
+     */
+    public static function notArrived(ShiftMember $m): bool
+    {
+        $seen = $m->user?->last_seen_at;
+
+        if ($seen === null) {
+            return true;
+        }
+
+        return $m->joined_at !== null && $seen->lt($m->joined_at->copy()->subMinutes(PresenceTracker::ONLINE_MINUTES));
+    }
 
     public function __construct(
         private readonly ActivityLogger $logger,
@@ -363,19 +381,29 @@ class ShiftService
      * Scheduled (every tick): breaks start and end; heartbeats decide offline and the hand-off of
      * her windows (all her open windows, per user).
      *
-     * Mass-offline safeguard: when in one tick every serving desk would turn offline (two or more
-     * serving), or more than half of them with at least 3 serving, the heartbeats are what failed (Reverb, the network,
-     * the office), not the moderators. Then nobody is marked offline and no window is handed off:
-     * a warning is logged, supervisors are told (at most every 15 minutes) and the next tick
-     * looks again. One or two moderators going quiet on their own is handled as before.
+     * Not arrived (flow revision §2): a member who never logged in since she joined is marked
+     * offline at once (her windows, only ever given by hand, follow the usual 5-minute hand-off)
+     * and is left out of the safeguard below.
+     *
+     * Mass-offline safeguard: when in one tick every serving desk that had arrived would turn
+     * offline (two or more of them), or more than half of them with at least 3, the heartbeats
+     * are what failed (Reverb, the network, the office), not the moderators. Then none of them is
+     * marked offline and no window is handed off: a warning is logged, supervisors are told (at
+     * most every 15 minutes) and the next tick looks again. One or two moderators going quiet on
+     * their own is handled as before.
+     *
+     * Last, the leader hears about members still not arrived `not_arrived_alert_minutes` into
+     * their shift (once per member per shift).
      */
     public function tickMembers(?QueueSetting $settings = null): void
     {
-        if (! ($settings ?? QueueSetting::current())->enabled) {
+        $s = $settings ?? QueueSetting::current();
+
+        if (! $s->enabled) {
             return;
         }
 
-        $members = ShiftMember::query()->with('user')->whereHas('shift', fn ($q) => $q->where('status', 'open'))
+        $members = ShiftMember::query()->with(['user', 'shift'])->whereHas('shift', fn ($q) => $q->where('status', 'open'))
             ->where('status', '!=', 'left')->get()
             ->filter(fn (ShiftMember $m) => $m->user !== null);
 
@@ -383,7 +411,8 @@ class ShiftService
         $offlineFor = fn (ShiftMember $m): int => ($m->user->last_seen_at && $m->user->is_active)
             ? (int) $m->user->last_seen_at->diffInSeconds(now()) : PHP_INT_MAX;
 
-        $serving = $members->filter(fn (ShiftMember $m) => in_array($m->status, self::SERVING, true));
+        // Only desks that were online at some point since joining can "go dark together".
+        $serving = $members->filter(fn (ShiftMember $m) => in_array($m->status, self::SERVING, true) && ! self::notArrived($m));
         $goingDark = $serving->filter(fn (ShiftMember $m) => $offlineFor($m) >= self::OFFLINE_AFTER_SECONDS);
         // A lone serving desk going quiet is the isolated case (nothing to compare her with).
         $mass = $serving->count() >= 2 && $goingDark->isNotEmpty()
@@ -406,8 +435,10 @@ class ShiftService
                 continue;
             }
 
-            if ($away >= self::OFFLINE_AFTER_SECONDS) {
-                if ($mass) {
+            $absent = self::notArrived($m);
+
+            if ($absent || $away >= self::OFFLINE_AFTER_SECONDS) {
+                if ($mass && ! $absent) {
                     continue; // the safeguard: not offline, no hand-off, try again next tick
                 }
 
@@ -440,6 +471,8 @@ class ShiftService
                 $this->setStatus($m, 'break');
             }
         }
+
+        $this->alertNotArrived($members, $s);
     }
 
     /** Log every time, tell the supervisors at most every 15 minutes. */
@@ -449,6 +482,43 @@ class ShiftService
 
         if (Cache::add('queue:mass-offline-notified', true, now()->addMinutes(self::MASS_OFFLINE_ALERT_MINUTES))) {
             $this->notifier->notifySupervisors('queue.mass_offline', ['count' => $dark, 'serving' => $serving]);
+        }
+    }
+
+    /**
+     * Once per member per shift: a rostered moderator still not logged in
+     * `not_arrived_alert_minutes` after the shift opened, or after she was added when that is
+     * later. The shift leader, the supervisors and the admins are told, each once, never the
+     * member herself. The claim on her row makes two overlapping ticks tell them once.
+     *
+     * @param  Collection<int, ShiftMember>  $members
+     */
+    private function alertNotArrived(Collection $members, QueueSetting $s): void
+    {
+        foreach ($members as $m) {
+            if ($m->not_arrived_alerted_at !== null || $m->shift === null || ! self::notArrived($m)) {
+                continue;
+            }
+
+            $since = collect([$m->shift->opened_at ?? $m->shift->starts_at, $m->joined_at])->filter()->max();
+
+            if ($since === null || $since->copy()->addMinutes((int) $s->not_arrived_alert_minutes)->gt(now())) {
+                continue;
+            }
+
+            $claimed = ShiftMember::query()->whereKey($m->id)->whereNull('not_arrived_alerted_at')->toBase()
+                ->update(['not_arrived_alerted_at' => now()]);
+
+            if ($claimed !== 1) {
+                continue;
+            }
+
+            $data = ['member_id' => $m->id, 'user_id' => (int) $m->user_id, 'name' => $m->user->name, 'shift' => $m->shift->name, 'minutes' => (int) $s->not_arrived_alert_minutes];
+
+            User::query()->where('is_active', true)->get()
+                ->filter(fn (User $u) => $u->isSupervisorOrAbove() || (int) $u->id === (int) $m->shift->leader_user_id)
+                ->reject(fn (User $u) => (int) $u->id === (int) $m->user_id)
+                ->each(fn (User $u) => $this->notifier->notify($u, 'queue.member_not_arrived', $data));
         }
     }
 }

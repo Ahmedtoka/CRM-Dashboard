@@ -436,7 +436,7 @@ it('keeps live, returning and overnight customers waiting when the leader is the
     expect(app(QueueRouter::class)->run('t'))->toBe(0);
 
     expect($live->fresh()->status)->toBe('waiting')->and($back->fresh()->status)->toBe('waiting')->and($night->fresh()->status)->toBe('waiting')
-        ->and(QueueDecision::latest('id')->first()->lines)->toContain('<span class="no">كل الشبابيك مليانة</span>');
+        ->and(QueueDecision::latest('id')->first()->lines)->toContain('<span class="no">مفيش غير الليدر فاتحة، ومكتبها للتصعيد بس</span>');
 });
 
 it('gives a returning or overnight customer reserved for the leader to another moderator', function () {
@@ -496,4 +496,43 @@ it('starts the assignment transaction with the locking read of the conversation,
 
 it('holds the router lock for 30 seconds', function () {
     expect(QueueRouter::LOCK_SECONDS)->toBe(30);
+});
+
+// ───── flow revision §2: the decision line says why nobody was assigned ─────
+
+it('says why nobody was assigned when no moderator is logged in', function () {
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift);
+    $b = routerMember($shift);
+    User::query()->whereIn('id', [$a->user_id, $b->user_id])->update(['last_seen_at' => now()->subMinutes(10)]);
+    $e = routerWaiting();
+
+    expect(app(QueueRouter::class)->run('t'))->toBe(0);
+
+    $lines = collect(QueueDecision::latest('id')->first()->lines);
+    expect($e->fresh()->status)->toBe('waiting')
+        ->and($lines->contains(fn ($l) => str_contains($l, 'مفيش موظفة فاتحة')))->toBeTrue()
+        ->and($lines->contains(fn ($l) => str_contains($l, 'كل الشبابيك مليانة')))->toBeFalse();
+});
+
+it('says why nobody was assigned when only the leader is on the shift', function () {
+    $leader = User::factory()->create(['role' => 'supervisor', 'last_seen_at' => now()]);
+    $shift = Shift::factory()->create(['leader_user_id' => $leader->id]);
+    ShiftMember::factory()->for($shift)->create(['user_id' => $leader->id]);
+    routerWaiting();
+
+    app(QueueRouter::class)->run('t');
+
+    expect(collect(QueueDecision::latest('id')->first()->lines)->contains(fn ($l) => str_contains($l, 'مفيش غير الليدر')))->toBeTrue();
+});
+
+it('still says every window is taken when the desks are logged in and full', function () {
+    $shift = Shift::factory()->create();
+    $a = routerMember($shift, attrs: ['windows_cap' => 1, 'status' => 'busy']);
+    QueueEntry::factory()->create(['shift_member_id' => $a->id, 'assigned_user_id' => $a->user_id, 'status' => 'active', 'window_no' => 1]);
+    routerWaiting();
+
+    app(QueueRouter::class)->run('t');
+
+    expect(collect(QueueDecision::latest('id')->first()->lines)->contains(fn ($l) => str_contains($l, 'كل الشبابيك مليانة')))->toBeTrue();
 });

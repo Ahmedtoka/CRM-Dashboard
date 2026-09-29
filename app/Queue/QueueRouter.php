@@ -153,14 +153,21 @@ class QueueRouter
         }
 
         $lines = ['<b>المحفّز:</b> '.e($trigger)];
-        $members = $shift->members()->with('user.userPlatforms')->whereIn('status', ['available', 'busy'])->get()
+        // Serving desks, then those whose moderator is logged in and active: only they take customers.
+        $serving = $shift->members()->with('user.userPlatforms')->whereIn('status', ['available', 'busy'])->get()
             ->each(fn (ShiftMember $m) => $m->setRelation('shift', $shift))
-            ->filter(fn (ShiftMember $m) => $m->user !== null && $this->presence->isOnline($m->user))
+            ->filter(fn (ShiftMember $m) => $m->user !== null)
             ->values();
+        $members = $serving->filter(fn (ShiftMember $m) => (bool) $m->user->is_active && $this->presence->isOnline($m->user))->values();
         $lines[] = '<b>الشيفت:</b> '.$members->count().' موظفات · في الصالة '.$waiting->count();
         // The leader's desk serves escalations (and manual assignments from the board) only.
         $leaderId = $shift->leader_user_id !== null ? (int) $shift->leader_user_id : null;
         $lounge = $members->reject(fn (ShiftMember $m) => (int) $m->user_id === $leaderId)->values();
+
+        // Nobody can take a live customer: say why, right under the shift line (flow revision §2).
+        if ($lounge->isEmpty()) {
+            $lines[] = '<span class="no">'.e($this->nobodyReason($serving, $members, $leaderId)).'</span>';
+        }
 
         // Per-user open windows, snapshotted once (passes are serialised) and kept current as we assign.
         $load = $members->mapWithKeys(fn (ShiftMember $m) => [$m->user_id => $this->openForUser($m->user_id)->count()])->all();
@@ -254,7 +261,9 @@ class QueueRouter
         // 1) live (and manual), oldest first.
         foreach ($waiting->whereIn('priority', ['live', 'manual']) as $e) {
             if (! $anyOpen()) {
-                $lines[] = '<span class="no">كل الشبابيك مليانة</span>';
+                if ($lounge->isNotEmpty()) {
+                    $lines[] = '<span class="no">كل الشبابيك مليانة</span>';
+                }
 
                 break;
             }
@@ -467,5 +476,26 @@ class QueueRouter
     private function line(QueueEntry $e, ShiftMember $m, string $rule): string
     {
         return '<b>#'.$e->ticket_no.'</b> <span class="hi">'.e($rule).'</span> ← <span class="ok">'.e($m->user->name).'</span>';
+    }
+
+    /**
+     * Why no live customer can be given to anybody right now, for the decision line: nobody
+     * serving but the leader (her desk takes escalations only), nobody serving at all, or serving
+     * desks whose moderators are not logged in («مش فاتحة» on the board).
+     *
+     * @param  Collection<int, ShiftMember>  $serving  available / busy desks of the open shift
+     * @param  Collection<int, ShiftMember>  $online  the same, logged in
+     */
+    private function nobodyReason(Collection $serving, Collection $online, ?int $leaderId): string
+    {
+        $others = $serving->reject(fn (ShiftMember $m) => (int) $m->user_id === $leaderId);
+
+        if ($others->isEmpty()) {
+            return $leaderId !== null && $online->contains(fn (ShiftMember $m) => (int) $m->user_id === $leaderId)
+                ? 'مفيش غير الليدر فاتحة، ومكتبها للتصعيد بس'
+                : 'مفيش موظفة متاحة في الشيفت';
+        }
+
+        return 'مفيش موظفة فاتحة: '.$others->count().' متاحة على اللوحة ومش فاتحة السيستم';
     }
 }

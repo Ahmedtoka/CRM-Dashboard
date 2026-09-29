@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Analytics\PresenceTracker;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Models\ShiftMember;
@@ -51,6 +52,9 @@ class ShiftMemberResource extends JsonResource
             'shift_id' => $m->shift_id,
             'user' => $user ? ['id' => $user->id, 'name' => $user->name, 'color' => $user->color] : null,
             'status' => $m->status,
+            // Logged in right now (a heartbeat in the last 2 minutes, account active). A serving
+            // desk whose moderator is not is «مش فاتحة» on the board: the router skips it.
+            'online' => $user !== null && (bool) $user->is_active && app(PresenceTracker::class)->isOnline($user),
             'cap' => $cap,
             'open_count' => count($windows),
             'windows' => $windows,
