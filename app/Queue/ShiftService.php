@@ -137,8 +137,13 @@ class ShiftService
             return;
         }
 
+        // Its leader is the template's as it stands now: the row was made early in the day (§2).
+        $template = collect($s->shiftTemplates())->firstWhere('key', $shift->shift_key);
         $shift->refresh();
-        $shift->update(['settings_snapshot' => $s->only(['windows_per_moderator', 'silence_warn_seconds', 'silence_close_seconds', 'break_minutes', 'break_after_minutes'])]);
+        $shift->update([
+            'leader_user_id' => $template !== null ? self::leaderOf($template) : $shift->leader_user_id,
+            'settings_snapshot' => $s->only(['windows_per_moderator', 'silence_warn_seconds', 'silence_close_seconds', 'break_minutes', 'break_after_minutes']),
+        ]);
 
         // Escalations still waiting from the previous shift now belong to this shift's leader.
         QueueEntry::query()->where('status', 'waiting')->where('priority', 'escalation')
@@ -147,6 +152,46 @@ class ShiftService
         $this->logger->log(ActorType::System, null, ActivityLogger::SHIFT_OPEN, $shift, null, ['shift' => $shift->shift_key]);
         DB::afterCommit(fn () => SafeBroadcast::send(new ShiftUpdated($shift->fresh(['members.user', 'leader']))));
         app(QueueRouter::class)->runAfterCommit('بداية شيفت '.$shift->name);
+    }
+
+    /**
+     * The leader of a shift is its template's (attendance design §2). After the templates change
+     * (Settings → Queue, `queue:setup-team`), every shift row not yet closed takes its template's
+     * leader at once. On an open shift, the waiting escalations that were hers follow the new
+     * leader, and the board and the router hear about it once committed.
+     */
+    public function syncLeaders(): void
+    {
+        $templates = collect(QueueSetting::current()->shiftTemplates())->keyBy('key');
+
+        Shift::query()->whereIn('status', ['planned', 'open'])->whereIn('shift_key', $templates->keys())->get()
+            ->each(function (Shift $shift) use ($templates) {
+                $old = $shift->leader_user_id !== null ? (int) $shift->leader_user_id : null;
+                $new = self::leaderOf($templates[$shift->shift_key]);
+
+                if ($old === $new) {
+                    return;
+                }
+
+                $shift->update(['leader_user_id' => $new]);
+
+                if ($shift->status !== 'open') {
+                    return;
+                }
+
+                QueueEntry::query()->where('status', 'waiting')->where('priority', 'escalation')->where('shift_id', $shift->id)
+                    ->when($old === null, fn ($q) => $q->whereNull('reserved_user_id'), fn ($q) => $q->where('reserved_user_id', $old))
+                    ->update(['reserved_user_id' => $new]);
+
+                DB::afterCommit(fn () => SafeBroadcast::send(new ShiftUpdated($shift->fresh(['members.user', 'leader']))));
+                app(QueueRouter::class)->runAfterCommit('ليدر جديد لشيفت '.$shift->name);
+            });
+    }
+
+    /** @param  array<string, mixed>  $template */
+    private static function leaderOf(array $template): ?int
+    {
+        return isset($template['leader_user_id']) ? (int) $template['leader_user_id'] : null;
     }
 
     /**

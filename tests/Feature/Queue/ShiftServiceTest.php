@@ -324,3 +324,20 @@ it('no longer tells anybody that a moderator has not arrived', function () {
 
     expect(UserNotification::where('type', 'queue.member_not_arrived')->count())->toBe(0);
 });
+
+it('opens a shift with the leader its template names when it opens, not when its row was made', function () {
+    Carbon::setTestNow(Carbon::parse('2026-10-05 09:00', 'Africa/Cairo'));
+    $svc = app(ShiftService::class);
+    $svc->todayShifts(); // the tick makes today's rows early, with the templates' leaders of that moment (nobody)
+    $leader = User::factory()->create(['role' => 'supervisor']);
+    $templates = QueueSetting::DEFAULT_SHIFTS;
+    $templates[0]['leader_user_id'] = $leader->id;
+    QueueSetting::current()->update(['shifts' => $templates]);
+    QueueEntry::factory()->create(['priority' => 'escalation']);
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 10:00', 'Africa/Cairo'));
+    $svc->transition();
+
+    expect(Shift::where('shift_key', 'morning')->first()->leader_user_id)->toBe($leader->id)
+        ->and(QueueEntry::where('priority', 'escalation')->first()->reserved_user_id)->toBe($leader->id);
+});

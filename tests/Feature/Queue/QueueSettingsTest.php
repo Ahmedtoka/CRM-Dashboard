@@ -1,7 +1,11 @@
 <?php
 
+use App\Models\QueueEntry;
 use App\Models\QueueSetting;
+use App\Models\Shift;
 use App\Models\User;
+use App\Queue\Events\ShiftUpdated;
+use Illuminate\Support\Facades\Event;
 use Inertia\Testing\AssertableInertia;
 
 it('lets a supervisor change timers but only an admin change points and shifts', function () {
@@ -63,4 +67,24 @@ it('lets only an admin change the no-reply points, and shows the default on a ro
 
     $this->actingAs(User::factory()->create(['role' => 'admin']))->put('/settings/queue', ['points' => ['no_reply' => 2]])->assertRedirect();
     expect(QueueSetting::current()->point('no_reply'))->toBe(2);
+});
+
+// ───── attendance design §2: the leader is the template's ─────
+
+it('gives a shift that is not closed its new leader as soon as the templates are saved', function () {
+    $old = User::factory()->create(['role' => 'supervisor']);
+    $new = User::factory()->create(['role' => 'supervisor']);
+    $open = Shift::factory()->create(['leader_user_id' => $old->id]);
+    $closed = Shift::factory()->create(['status' => 'closed', 'date' => now()->subDay()->toDateString(), 'leader_user_id' => $old->id]);
+    $escalation = QueueEntry::factory()->create(['priority' => 'escalation', 'shift_id' => $open->id, 'reserved_user_id' => $old->id]);
+    Event::fake([ShiftUpdated::class]);
+
+    $templates = QueueSetting::DEFAULT_SHIFTS;
+    $templates[0]['leader_user_id'] = $new->id;
+    $this->actingAs(User::factory()->create(['role' => 'admin']))->put('/settings/queue', ['shifts' => $templates])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect($open->fresh()->leader_user_id)->toBe($new->id)
+        ->and($closed->fresh()->leader_user_id)->toBe($old->id)
+        ->and($escalation->fresh()->reserved_user_id)->toBe($new->id);
+    Event::assertDispatched(ShiftUpdated::class, fn (ShiftUpdated $e) => $e->shift->id === $open->id);
 });

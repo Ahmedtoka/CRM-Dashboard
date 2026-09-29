@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Web\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\QueueSetting;
 use App\Models\User;
+use App\Queue\ShiftService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -83,7 +85,14 @@ class QueueSettingController extends Controller
         if (isset($data['points'])) {
             $data['points'] = array_merge($s->points ?? QueueSetting::DEFAULT_POINTS, $data['points']);
         }
-        $s->fill($data)->save();
+        DB::transaction(function () use ($s, $data) {
+            $s->fill($data)->save();
+
+            // A leader named or changed in the templates takes her shift at once, even mid-shift (attendance design §2).
+            if (array_key_exists('shifts', $data)) {
+                app(ShiftService::class)->syncLeaders();
+            }
+        });
 
         return back()->with('status', 'saved');
     }

@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Enums\UserRole;
 use App\Models\QueueSetting;
 use App\Models\User;
+use App\Queue\ShiftService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -62,6 +63,8 @@ class SetupQueueTeamCommand extends Command
 
             // Nobody is seated from a roster (attendance design): the moderators check themselves in.
             $settings->update(['shifts' => $shifts]);
+            // Today's shifts that are not closed take her at once, the open one included.
+            app(ShiftService::class)->syncLeaders();
         });
 
         $this->table(['Name', 'Email', 'Role', 'Password'], $rows);

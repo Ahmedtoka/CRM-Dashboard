@@ -2,6 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Models\QueueSetting;
+use App\Models\Shift;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 
@@ -50,4 +51,12 @@ it('gives existing accounts a new password only when asked', function () {
     $this->artisan('queue:setup-team', ['--domain' => 'team.test', '--reset-passwords' => true])->assertSuccessful();
 
     expect(Hash::check('old-one-123', User::query()->where('email', 'fatma@team.test')->firstOrFail()->password))->toBeFalse();
+});
+
+it('makes فاطمة the leader of today\'s shift that is already open', function () {
+    $shift = Shift::factory()->create();
+
+    $this->artisan('queue:setup-team', ['--domain' => 'team.test'])->assertSuccessful();
+
+    expect($shift->fresh()->leader_user_id)->toBe(User::query()->where('email', 'fatma@team.test')->value('id'));
 });
