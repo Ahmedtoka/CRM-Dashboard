@@ -491,7 +491,7 @@ it('starts the assignment transaction with the locking read of the conversation,
     app(QueueRouter::class)->assign($e, $a, 'r', 'live');
 
     $first = collect(DB::getQueryLog())->pluck('query')->first(fn (string $q) => str_starts_with(strtolower($q), 'select'));
-    expect($first)->toContain('from "conversations"');
+    expect(str_replace(['"', '`'], '', $first))->toContain('from conversations');
 });
 
 it('holds the router lock for 30 seconds', function () {

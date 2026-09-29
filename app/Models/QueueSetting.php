@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 class QueueSetting extends Model
 {
@@ -35,11 +36,20 @@ class QueueSetting extends Model
      */
     public static function current(): self
     {
-        // firstOrCreate() only hydrates attributes it was given; a freshly-created
-        // row's DB-default columns (enabled, windows_per_moderator, ...) would
-        // otherwise read back as null in memory instead of their real values.
-        return static::query()->find(1)
-            ?? static::firstOrCreate(['id' => 1], ['points' => self::DEFAULT_POINTS, 'shifts' => self::DEFAULT_SHIFTS, 'default_roster' => []])->fresh();
+        if ($row = static::query()->find(1)) {
+            return $row;
+        }
+
+        // `id` is guarded, so firstOrCreate(['id' => 1]) would insert under the next auto-increment
+        // id and the next call would create yet another row (MySQL keeps counting; sqlite hid it).
+        // Two first requests at once: the loser hits the primary key and reads the winner's row.
+        try {
+            (new static)->forceFill(['id' => 1, 'points' => self::DEFAULT_POINTS, 'shifts' => self::DEFAULT_SHIFTS, 'default_roster' => []])->save();
+        } catch (UniqueConstraintViolationException) {
+        }
+
+        // Read back so the DB-default columns (enabled, windows_per_moderator, ...) are hydrated.
+        return static::query()->findOrFail(1);
     }
 
     public function point(string $key): int

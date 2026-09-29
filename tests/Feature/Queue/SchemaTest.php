@@ -1,6 +1,12 @@
 <?php
+
 // tests/Feature/Queue/SchemaTest.php
-use App\Models\{Conversation, QueueEntry, QueueSetting, Shift, ShiftMember, User};
+use App\Models\Conversation;
+use App\Models\QueueEntry;
+use App\Models\QueueSetting;
+use App\Models\Shift;
+use App\Models\ShiftMember;
+use App\Models\User;
 
 it('creates the queue tables with defaults', function () {
     $s = QueueSetting::current();
@@ -13,4 +19,16 @@ it('creates the queue tables with defaults', function () {
         ->and($e->conversation->fresh()->assignee)->toBeNull();
     $e->conversation->update(['assignee_id' => $m->user_id]);
     expect($e->conversation->fresh()->assignee)->toBeInstanceOf(User::class);
+});
+
+it('keeps one settings row with id 1 even when the auto-increment has moved on', function () {
+    QueueSetting::query()->forceCreate(['id' => 5])->delete();
+
+    $first = QueueSetting::current();
+    $first->update(['silence_close_seconds' => 420]);
+
+    expect($first->id)->toBe(1)
+        ->and(QueueSetting::current()->silence_close_seconds)->toBe(420)
+        ->and(QueueSetting::query()->count())->toBe(1)
+        ->and(QueueSetting::current()->windows_per_moderator)->toBe(3);
 });

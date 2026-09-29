@@ -463,9 +463,10 @@ it('creates nothing after a close when the queue is off, when it takes no handov
     Carbon::setTestNow(now()->addMinutes(20));
 
     QueueSetting::current()->update(['enabled' => false]);
+    $botBefore = $c->messages()->where('sender_type', 'bot')->count(); // the case message (+ the greeting of her first message)
     $msg = ingestFromCustomer('off', 'ألو');
     expect($msg)->not->toBeNull()->and(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1)
-        ->and($c->fresh()->queue_entry_id)->toBe($e->id)->and($c->messages()->where('sender_type', 'bot')->count())->toBe(1); // only the case message
+        ->and($c->fresh()->queue_entry_id)->toBe($e->id)->and($c->messages()->where('sender_type', 'bot')->count())->toBe($botBefore);
 
     QueueSetting::current()->update(['enabled' => true, 'night_message_enabled' => false]);
     Shift::query()->update(['status' => 'closed']); // no shift, no night message: the queue takes no handovers
