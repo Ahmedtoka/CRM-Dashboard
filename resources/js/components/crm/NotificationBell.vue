@@ -32,6 +32,10 @@ function itemText(n: AppNotification): string {
         });
     }
 
+    if (n.type === 'queue.mass_offline') {
+        return t('notifications.queue_mass_offline_item', { count: Number(n.data.count ?? 0), serving: Number(n.data.serving ?? 0) });
+    }
+
     if (n.type === 'channel.problem') {
         const title = t('notifications.channel_problem_item', { name: String(n.data.name ?? '') });
         // The health check writes the notification from the scheduler, so its `excerpt` is
@@ -51,6 +55,10 @@ function open(n: AppNotification): void {
     void notifications.markRead([n.id]);
     if (n.type === 'channel.problem') {
         router.visit('/settings/integrations');
+        return;
+    }
+    if (n.type === 'queue.mass_offline') {
+        router.visit('/board');
         return;
     }
     const conversationId = n.data.conversation_id;

@@ -33,10 +33,10 @@ import type {
     Tag,
     TemplatePayload,
 } from '@/types/crm';
-import { Head, usePage } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { useMediaQuery } from '@vueuse/core';
 import { CircleAlert, MessageSquareText } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const props = defineProps<{
     conversations: CursorPage<Conversation>;
@@ -106,15 +106,45 @@ const windowUnread = computed<Record<number, number>>(() => {
     return Object.fromEntries(listRows.value.filter((c) => ids.has(c.id)).map((c) => [c.id, c.unread_count]));
 });
 
+let unmounted = false;
+
+/**
+ * Something on screen that switching chats would throw away or yank from under her: a reply or
+ * note draft, files waiting in the composer, a recording, the order drawer, the customer sheet,
+ * the quick-tag menu, a note being saved, the close-window menu or any open dialog / menu, or a
+ * text box with text in it that has the focus.
+ */
+function isBusy(): boolean {
+    const id = selectedId.value;
+    if (id !== null && (drafts.value[id] ?? '').trim() !== '') return true;
+    if (threadView.value?.composer?.hasWork() || threadView.value?.header?.closeMenuOpen()) return true;
+    if (orderOpen.value || (customerOpen.value && !isXl.value) || tagMenu.value !== null || addingNote.value) return true;
+    if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]')) return true;
+
+    const el = document.activeElement;
+    if (el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && ['text', 'search', 'tel', 'email', 'number', 'url'].includes(el.type))) {
+        return el.value.trim() !== '';
+    }
+
+    return el instanceof HTMLElement && el.isContentEditable && (el.textContent ?? '').trim() !== '';
+}
+
+/** From the toast: in place (drafts kept) while the inbox is open, else a normal visit. */
+function openFromToast(conversationId: number): void {
+    if (unmounted) router.visit(`/inbox?c=${conversationId}`);
+    else select(conversationId);
+}
+
 // A customer was just given to her: the chat opens by itself, unless she is in the middle of
-// typing to somebody else. Then the toast carries the way there.
+// something (isBusy). Then only the toast, whose button opens the chat in place.
 function onWindowAssigned(entry: QueueEntry): void {
-    const typing = selectedId.value !== null && selectedId.value !== entry.conversation_id && (drafts.value[selectedId.value] ?? '').trim() !== '';
-    if (!typing) select(entry.conversation_id);
+    const busy = selectedId.value !== entry.conversation_id && isBusy();
+    if (!busy) select(entry.conversation_id);
     toast.push(
         t('queue.assigned_toast', { ticket: entry.ticket % 100000 }),
         'info',
-        typing ? { href: `/inbox?c=${entry.conversation_id}`, label: t('queue.assigned_open') } : undefined,
+        undefined,
+        busy ? { label: t('queue.assigned_open'), run: () => openFromToast(entry.conversation_id) } : undefined,
     );
 }
 
@@ -208,8 +238,18 @@ function sendTemplate(template: TemplatePayload): void {
 }
 
 async function runAction(name: ConversationAction): Promise<void> {
-    // An open queue window is never closed without a reason: resolve (and its shortcut) opens the reasons.
-    if (name === 'resolve' && threadView.value?.header?.openCloseWindow()) return;
+    // An open queue window is never ended without a reason: resolve and return-to-bot (and their
+    // shortcuts, and send-and-resolve) open the reasons; somebody else's window is not hers to end.
+    if (name === 'resolve' || name === 'return-to-bot') {
+        const header = threadView.value?.header;
+        const gate = header?.openCloseWindow(name === 'return-to-bot' ? 'bot' : 'close') ?? 'none';
+        if (gate === 'menu') return;
+        if (gate === 'blocked') {
+            toast.push(t('queue.held_by', { name: header?.holder() ?? '' }), 'error');
+
+            return;
+        }
+    }
 
     const conversation = await thread.action(name);
     if (conversation) list.applyConversation(conversation);
@@ -350,7 +390,14 @@ onMounted(() => {
     if (requested > 0) select(requested);
 });
 
+// The order drawer belongs to the chat it was opened for: never carried over to the next one.
+watch(selectedId, () => {
+    orderOpen.value = false;
+    editingOrder.value = null;
+});
+
 onBeforeUnmount(() => {
+    unmounted = true;
     window.clearTimeout(flashTimer);
     window.clearTimeout(readTimer);
 });

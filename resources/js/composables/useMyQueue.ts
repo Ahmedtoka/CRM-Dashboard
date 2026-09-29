@@ -6,8 +6,15 @@ import type { Message, MyQueuePayload, QueueCloseReason, QueueEntry, ShiftMember
 import { AxiosError } from 'axios';
 import { computed, inject, onScopeDispose, provide, ref, watch, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 
-/** How often `/queue/me` is re-read while the websocket is down. */
+/** How often `/queue/me` is re-read while the websocket is down and she has a desk or a window. */
 export const QUEUE_POLL_MS = 30_000;
+
+/** The same while the websocket is down and she has neither (she may be put on the roster any minute). */
+export const QUEUE_IDLE_POLL_MS = 60_000;
+
+/** Retries of the first `/queue/me` when it fails (a deploy, a network blip): then every minute until it answers. */
+export const FIRST_LOAD_RETRY_MS = [5_000, 15_000, 30_000];
+export const FIRST_LOAD_RETRY_EVERY_MS = 60_000;
 
 /** The queue's events live outside Echo's default `App.Events` namespace, hence the leading dot. */
 const EVENT_ENTRY = '.App\\Queue\\Events\\QueueEntryUpdated';
@@ -28,6 +35,8 @@ export interface MyQueue {
     entries: Readonly<Ref<QueueEntry[]>>;
     /** How many windows she may hold. */
     cap: ComputedRef<number>;
+    /** The leader of the open shift: a window of hers cannot be escalated (nobody above her). */
+    leaderUserId: Readonly<Ref<number | null>>;
     /** The action in flight: `close-{id}`, `escalate-{id}` or `status`. */
     busy: Readonly<Ref<string | null>>;
     /** Seconds since the conversation reached her window. */
@@ -66,11 +75,17 @@ export function useMyQueueContext(): MyQueue | null {
  * The moderator's own desk inside the inbox: her open windows with their timers, her status,
  * closing and transferring a window.
  *
- * One `/queue/me` on start. With the queue off nothing else happens: no listeners, no timers,
- * no further requests. With it on, everybody listens for `QueueAssigned` on her own channel
- * (the bell already holds it, so it costs nothing). Only somebody with a desk or a window also
- * joins the board channel (`QueueEntryUpdated` / `QueueMemberUpdated`) and, while the websocket
- * is down, re-reads `/queue/me` every 30 s. Everything stops with the calling scope.
+ * One `/queue/me` on start, retried with a backoff until it answers. With the queue off nothing
+ * else happens: no listeners, no timers, no further requests. With it on, she listens on her own
+ * `user.{id}` channel only (the bell already holds it, so it costs nothing): `QueueAssigned`,
+ * `QueueEntryUpdated` of her windows and `QueueMemberUpdated` of her desks, so being put on (or
+ * taken off) the roster after the page loaded shows at once. While the websocket is down
+ * `/queue/me` is re-read every 30 s (every 60 s while she has no desk and no window), and once
+ * more when the tab comes back or the socket reconnects. Everything stops with the calling scope.
+ *
+ * A late answer never undoes what an event already told us: an answer to a request that started
+ * before the last event is dropped and asked again, and a window known to be closed never comes
+ * back.
  */
 export function useMyQueue(options: Options): MyQueue {
     const api = useApi();
@@ -82,6 +97,7 @@ export function useMyQueue(options: Options): MyQueue {
     const member = ref<ShiftMember | null>(null);
     const entries = ref<QueueEntry[]>([]);
     const settings = ref<MyQueuePayload['settings']>(null);
+    const leaderUserId = ref<number | null>(null);
     const busy = ref<string | null>(null);
     const tick = ref(Date.now());
 
@@ -89,16 +105,21 @@ export function useMyQueue(options: Options): MyQueue {
     const stampedAt = new Map<number, number>();
     /** Every window she has been shown, so an assignment is announced once. */
     const known = new Set<number>();
+    /** Windows closed, transferred or not hers: an old answer or a late event never brings them back. */
+    const gone = new Set<number>();
     /** Server clock minus this machine's, so a wrong local clock does not skew the chat timers. */
     let skew = 0;
     let loaded = false;
     let disposed = false;
-    let onOwnChannel = false;
-    let onBoard = false;
+    let listening = false;
     let loadSeq = 0;
+    /** Bumped by every queue event: an answer to a request older than the last event is stale. */
+    let eventSeq = 0;
+    let firstLoadFailures = 0;
     let ticker: number | undefined;
     let poller: number | undefined;
     let refetchTimer: number | undefined;
+    let retryTimer: number | undefined;
 
     const active = computed(() => enabled.value && (member.value !== null || entries.value.length > 0));
     const cap = computed(() => Math.max(member.value?.cap ?? settings.value?.windows_per_moderator ?? 0, entries.value.length));
@@ -124,12 +145,14 @@ export function useMyQueue(options: Options): MyQueue {
     }
 
     function upsert(entry: QueueEntry): void {
+        if (gone.has(entry.id)) return;
         stampedAt.set(entry.id, Date.now());
         entries.value = sort([...entries.value.filter((e) => e.id !== entry.id), entry]);
         announce(entry);
     }
 
     function remove(id: number): void {
+        gone.add(id);
         stampedAt.delete(id);
         if (entries.value.some((e) => e.id === id)) entries.value = entries.value.filter((e) => e.id !== id);
     }
@@ -137,65 +160,85 @@ export function useMyQueue(options: Options): MyQueue {
     function apply(payload: MyQueuePayload): void {
         const at = Date.now();
         const serverNow = Date.parse(payload.server_time);
+        const list = payload.entries.filter((e) => !gone.has(e.id));
         skew = Number.isNaN(serverNow) ? 0 : serverNow - at;
         enabled.value = payload.enabled;
         member.value = payload.member;
         settings.value = payload.settings;
+        leaderUserId.value = payload.leader_user_id ?? null;
         stampedAt.clear();
-        payload.entries.forEach((e) => stampedAt.set(e.id, at));
-        entries.value = sort(payload.entries);
-        payload.entries.forEach(announce);
+        list.forEach((e) => stampedAt.set(e.id, at));
+        entries.value = sort(list);
+        list.forEach(announce);
         loaded = true;
     }
 
     async function refresh(): Promise<void> {
         const seq = ++loadSeq;
+        const since = eventSeq;
         const { data } = await api.get<{ data: MyQueuePayload }>('/queue/me', { silent: true });
         if (disposed || seq !== loadSeq) return; // answered for a newer request, or after the inbox closed
+
+        // An event arrived while this request was on its way: the answer may predate it. The
+        // event already updated what it is about; ask again for the rest.
+        if (loaded && since !== eventSeq) {
+            refreshSoon();
+
+            return;
+        }
 
         apply(data.data);
     }
 
-    /** Several events of one assignment arrive together: one request for all of them. */
+    /** Several events of one change arrive together: one request for all of them. */
     function refreshSoon(): void {
         window.clearTimeout(refetchTimer);
         refetchTimer = window.setTimeout(() => void refresh().catch(() => undefined), 300);
     }
 
+    /** The first `/queue/me`: until it answers the inbox does not know whether the queue is on, so keep asking. */
+    function firstLoad(): void {
+        window.clearTimeout(retryTimer);
+        if (disposed || loaded) return;
+
+        refresh().catch(() => {
+            if (disposed || loaded) return;
+            const wait = FIRST_LOAD_RETRY_MS[firstLoadFailures] ?? FIRST_LOAD_RETRY_EVERY_MS;
+            firstLoadFailures++;
+            retryTimer = window.setTimeout(firstLoad, wait);
+        });
+    }
+
     function onEntry(entry: QueueEntry): void {
+        eventSeq++;
         if (isMine(entry)) upsert(entry);
         else remove(entry.id);
     }
 
     function onMember(payload: ShiftMember): void {
         if (payload.user?.id !== options.userId) return;
+        eventSeq++;
 
-        if (member.value?.id === payload.id) member.value = payload;
-        // Another desk of hers (she joined, or the shift changed hands): the server knows which one is open.
+        // Her desk changed in place: take it. Put on (or taken off) a shift, or another desk of
+        // hers: the server knows which one is open now.
+        if (member.value?.id === payload.id && payload.status !== 'left') member.value = payload;
         else refreshSoon();
     }
 
-    // Both channels are shared (the bell, the live board): our callbacks are detached, the
-    // channels are never left. A socket already gone has nothing left to detach.
-    function listenOwnChannel(on: boolean): void {
-        if (!echo || on === onOwnChannel) return;
-        onOwnChannel = on;
-        try {
-            const channel = echo.private(`user.${options.userId}`);
-            if (on) channel.listen(EVENT_ASSIGNED, refreshSoon);
-            else channel.stopListening(EVENT_ASSIGNED, refreshSoon);
-        } catch {
-            // see above
-        }
+    function onAssigned(): void {
+        eventSeq++;
+        refreshSoon();
     }
 
-    function listenBoard(on: boolean): void {
-        if (!echo || on === onBoard) return;
-        onBoard = on;
+    // Her own channel is shared with the bell: our callbacks are detached, the channel is never
+    // left. A socket already gone has nothing left to detach.
+    function listen(on: boolean): void {
+        if (!echo || on === listening) return;
+        listening = on;
         try {
-            const channel = echo.private('board');
-            if (on) channel.listen(EVENT_ENTRY, onEntry).listen(EVENT_MEMBER, onMember);
-            else channel.stopListening(EVENT_ENTRY, onEntry).stopListening(EVENT_MEMBER, onMember);
+            const channel = echo.private(`user.${options.userId}`);
+            if (on) channel.listen(EVENT_ASSIGNED, onAssigned).listen(EVENT_ENTRY, onEntry).listen(EVENT_MEMBER, onMember);
+            else channel.stopListening(EVENT_ASSIGNED, onAssigned).stopListening(EVENT_ENTRY, onEntry).stopListening(EVENT_MEMBER, onMember);
         } catch {
             // see above
         }
@@ -253,6 +296,7 @@ export function useMyQueue(options: Options): MyQueue {
     }
 
     function release(id: number): void {
+        eventSeq++;
         remove(id);
         options.onReleased?.(id);
     }
@@ -277,8 +321,15 @@ export function useMyQueue(options: Options): MyQueue {
         return act(
             'status',
             () => api.post<{ data: ShiftMember }>('/queue/me/status', { status }),
-            (response) => (member.value = response.data.data),
+            (response) => {
+                eventSeq++;
+                member.value = response.data.data;
+            },
         );
+    }
+
+    function onVisible(): void {
+        if (!document.hidden && enabled.value && !disposed) refreshSoon();
     }
 
     // The one-second clock runs only while there is something to count.
@@ -297,33 +348,38 @@ export function useMyQueue(options: Options): MyQueue {
     watch([enabled, active], ([on, mine]) => {
         if (disposed) return;
 
-        listenOwnChannel(on);
-        listenBoard(mine);
+        listen(on);
 
         window.clearInterval(poller);
         poller = undefined;
-        if (mine) {
-            poller = window.setInterval(() => {
-                if (!live.value && !document.hidden) void refresh().catch(() => undefined);
-            }, QUEUE_POLL_MS);
+        if (on) {
+            poller = window.setInterval(
+                () => {
+                    if (!live.value && !document.hidden) void refresh().catch(() => undefined);
+                },
+                mine ? QUEUE_POLL_MS : QUEUE_IDLE_POLL_MS,
+            );
         }
     });
 
     // Back on the websocket after a drop: whatever was missed meanwhile.
     watch(live, (now, before) => {
-        if (now && before === false && active.value) refreshSoon();
+        if (now && before === false && enabled.value) refreshSoon();
     });
+
+    document.addEventListener('visibilitychange', onVisible);
 
     onScopeDispose(() => {
         disposed = true;
-        listenOwnChannel(false);
-        listenBoard(false);
+        listen(false);
+        document.removeEventListener('visibilitychange', onVisible);
         window.clearInterval(ticker);
         window.clearInterval(poller);
         window.clearTimeout(refetchTimer);
+        window.clearTimeout(retryTimer);
     });
 
-    void refresh().catch(() => undefined);
+    firstLoad();
 
     const queue: MyQueue = {
         enabled,
@@ -331,6 +387,7 @@ export function useMyQueue(options: Options): MyQueue {
         member,
         entries,
         cap,
+        leaderUserId,
         busy,
         elapsed,
         silenceLeft,

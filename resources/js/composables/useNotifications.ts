@@ -14,6 +14,7 @@ export const TYPE_KEY = {
     'channel.problem': 'channel_problem',
     'queue.assigned': 'queue_assigned',
     'queue.escalation_waiting': 'queue_escalation_waiting',
+    'queue.mass_offline': 'queue_mass_offline',
 } as const;
 
 /** Desktop notification bodies never carry more than this many characters of a message (privacy ruling). */

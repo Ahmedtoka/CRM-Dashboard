@@ -2414,6 +2414,14 @@ const en: Messages = {
             not_mine: 'This window belongs to {name}',
             closed: 'Window closed · ticket #{ticket}',
             escalated: 'Transferred to the shift leader · ticket #{ticket}',
+            bot_label: 'Back to the bot? First pick why the window closes',
+            bot_done: 'Window closed and the chat went back to the bot · ticket #{ticket}',
+        },
+        held_by: 'This chat is with {name}',
+        held_by_hint: 'Only she or a supervisor can close it or return it to the bot',
+        announce: {
+            warning: 'The customer has not replied; the chat will close by itself soon',
+            last: 'Less than a minute before the chat closes by itself',
         },
         assigned_toast: 'A customer reached you · ticket #{ticket}',
         assigned_open: 'Open the chat',
@@ -2629,6 +2637,7 @@ const en: Messages = {
         channel_problem_item: '{name} needs attention',
         queue_assigned_item: '{name} reached you · ticket #{ticket}',
         queue_escalation_waiting_item: 'Escalation waiting for a leader · {name} · ticket #{ticket}',
+        queue_mass_offline_item: 'Connection lost for {count} of {serving} moderators at once; their windows were left as they are',
         channel_problem_codes: {
             token_missing: 'No token saved — reconnect the account',
             token_invalid: 'The token is no longer valid — reconnect the account',
@@ -2646,6 +2655,7 @@ const en: Messages = {
             channel_problem: 'Connection problem',
             queue_assigned: 'A customer reached you',
             queue_escalation_waiting: 'Escalation waiting for a leader',
+            queue_mass_offline: 'Many moderators went offline at once',
         },
     },
     shortcuts: {

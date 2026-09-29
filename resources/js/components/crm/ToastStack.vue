@@ -27,6 +27,17 @@ const icons = { success: CircleCheck, error: CircleAlert, info: Info };
             <div class="min-w-0 flex-1">
                 <p class="break-words text-foreground">{{ toast.message }}</p>
                 <Link v-if="toast.link" :href="toast.link.href" class="mt-0.5 inline-block font-medium text-primary hover:underline">{{ toast.link.label }}</Link>
+                <button
+                    v-else-if="toast.action"
+                    type="button"
+                    class="mt-0.5 inline-block font-medium text-primary hover:underline"
+                    @click="
+                        toast.action.run();
+                        dismiss(toast.id);
+                    "
+                >
+                    {{ toast.action.label }}
+                </button>
             </div>
             <button type="button" class="rounded p-0.5 text-muted-foreground hover:text-foreground" :aria-label="t('common.close')" @click="dismiss(toast.id)">
                 <X class="size-3.5" aria-hidden="true" />

@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 import type { SharedData } from '@/types';
 import type { Conversation, ConversationAction, ConversationPriority, Tag, UserRef } from '@/types/crm';
 import { usePage } from '@inertiajs/vue3';
-import { Bot, CheckCircle2, ChevronLeft, Eraser, Hand, LoaderCircle, RotateCcw, ShieldAlert, Star, Tags, UserRound } from 'lucide-vue-next';
+import { Bot, CheckCircle2, ChevronLeft, Eraser, Hand, LoaderCircle, Lock, RotateCcw, ShieldAlert, Star, Tags, UserRound } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = withDefaults(
@@ -56,18 +56,24 @@ const adTooltip = computed(() => {
         .join('\n');
 });
 
-// Handover queue: an open window is closed with a reason (or handed to the shift leader), by
-// its moderator or a supervisor. With the queue off, or for anybody else, the resolve button stays as it was.
+// Handover queue: an open window is closed with a reason (or handed to the shift leader), and
+// returned to the bot through the same reasons, by its moderator or a supervisor / admin only.
+// For anybody else «حل» and «رجوع للبوت» are hidden (the server refuses them too); the chat
+// stays open to her for reading, replying and notes. With the queue off nothing changes.
 const queue = useMyQueueContext();
 const page = usePage<SharedData>();
 const closeMenu = ref<InstanceType<typeof CloseWindowMenu> | null>(null);
+const openWindow = computed(() => (queue?.enabled.value ? props.conversation.queue_entry : null));
 const queueWindow = computed(() => {
-    const entry = queue?.enabled.value ? props.conversation.queue_entry : null;
+    const entry = openWindow.value;
     if (!entry) return null;
     const role = page.props.auth.user?.role;
 
     return entry.assigned_user_id === props.meId || role === 'supervisor' || role === 'admin' ? entry : null;
 });
+/** Somebody else's open window: she may read and reply, not end it. */
+const heldByOther = computed(() => openWindow.value !== null && queueWindow.value === null);
+const holderName = computed(() => props.conversation.assignee?.name ?? '');
 const windowOwner = computed(() => (queueWindow.value && queueWindow.value.assigned_user_id !== props.meId ? (props.conversation.assignee?.name ?? null) : null));
 
 const tagsOpen = ref(false);
@@ -82,13 +88,22 @@ function confirmReset(): void {
 
 defineExpose({
     openTags: () => (tagsOpen.value = true),
-    /** Opens the close-window menu; false when this conversation has no window the user may close. */
-    openCloseWindow: (): boolean => {
-        if (!queueWindow.value) return false;
-        closeMenu.value?.open();
+    /**
+     * «حل» / «رجوع للبوت» on a queue window: `menu` when the reasons were opened (her window, or a
+     * supervisor), `blocked` when the window is somebody else's, `none` when there is no open
+     * window (the plain action applies).
+     */
+    openCloseWindow: (mode: 'close' | 'bot' = 'close'): 'menu' | 'blocked' | 'none' => {
+        if (heldByOther.value) return 'blocked';
+        if (!queueWindow.value) return 'none';
+        closeMenu.value?.open(mode);
 
-        return true;
+        return 'menu';
     },
+    /** Who holds the open window this user may not end ('' when none). */
+    holder: (): string => (heldByOther.value ? holderName.value : ''),
+    /** The close menu or one of its dialogs is open. */
+    closeMenuOpen: (): boolean => closeMenu.value?.isOpen() ?? false,
 });
 </script>
 
@@ -225,7 +240,7 @@ defineExpose({
             </button>
 
             <button
-                v-if="conversation.handler === 'human'"
+                v-if="conversation.handler === 'human' && !heldByOther"
                 type="button"
                 :title="`${t('thread.return_to_bot')}${hint('inbox.bot')}`"
                 :class="cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'h-9 rounded-full px-2')"
@@ -252,7 +267,24 @@ defineExpose({
                 <span class="hidden lg:inline">{{ t('thread.reset') }}</span>
             </button>
 
-            <CloseWindowMenu v-if="queueWindow" ref="closeMenu" :entry="queueWindow" :owner-name="windowOwner" :disabled="busy" :hint="hint('inbox.resolve')" />
+            <CloseWindowMenu
+                v-if="queueWindow"
+                ref="closeMenu"
+                :entry="queueWindow"
+                :owner-name="windowOwner"
+                :disabled="busy"
+                :hint="hint('inbox.resolve')"
+                @closed-for-bot="emit('action', 'return-to-bot')"
+            />
+            <span
+                v-else-if="heldByOther"
+                class="inline-flex h-9 max-w-[12rem] items-center gap-1 rounded-full bg-elevated px-2.5 text-xs text-muted-foreground"
+                :title="t('queue.held_by_hint')"
+                data-held-by
+            >
+                <Lock class="size-3.5 shrink-0" aria-hidden="true" />
+                <span class="truncate" dir="auto">{{ t('queue.held_by', { name: holderName }) }}</span>
+            </span>
             <button
                 v-else-if="conversation.status !== 'resolved'"
                 type="button"

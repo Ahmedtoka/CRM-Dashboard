@@ -28,6 +28,15 @@ const badge = computed(() => (entry.value ? (badges[entry.value.priority] ?? nul
 
 const since = computed(() => (mine.value && entry.value ? formatSeconds(queue!.elapsed(entry.value), locale.value) : null));
 const silenceLeft = computed(() => (myWindow.value ? queue!.silenceLeft(myWindow.value) : null));
+/**
+ * What a screen reader hears: only when the countdown crosses into its warning stretch or its
+ * last minute, never the seconds ticking (the countdown itself is outside the live region).
+ */
+const announcement = computed(() => {
+    if (!myWindow.value || silenceLeft.value === null || !queue!.silenceWarning(myWindow.value)) return '';
+
+    return silenceLeft.value <= LAST_SECONDS ? t('queue.announce.last') : t('queue.announce.warning');
+});
 const silenceTone = computed(() => {
     if (!myWindow.value || silenceLeft.value === null || !queue!.silenceWarning(myWindow.value)) return 'text-muted-foreground';
 
@@ -50,9 +59,8 @@ const summary = computed(() => {
 </script>
 
 <template>
-    <div
+    <section
         v-if="entry"
-        role="status"
         class="scrollbar-thin flex items-center gap-2 overflow-x-auto whitespace-nowrap border-b bg-surface-accent px-4 py-1.5 text-xs"
         :aria-label="t('queue.banner.label')"
         data-queue-banner
@@ -88,5 +96,6 @@ const summary = computed(() => {
         <span v-if="silenceLeft !== null" class="ms-auto inline-flex shrink-0 items-center gap-1 tabular-nums" :class="silenceTone">
             <Hourglass class="size-3.5" aria-hidden="true" />{{ t('queue.silence_left') }} {{ formatSeconds(silenceLeft, locale) }}
         </span>
-    </div>
+        <span class="sr-only" role="status">{{ announcement }}</span>
+    </section>
 </template>

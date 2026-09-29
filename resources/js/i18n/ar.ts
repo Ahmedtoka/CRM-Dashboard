@@ -2369,6 +2369,14 @@ const ar = {
             not_mine: 'الشباك ده بتاع {name}',
             closed: 'اتقفل الشباك · دور #{ticket}',
             escalated: 'اتحوّل للتيم ليدر · دور #{ticket}',
+            bot_label: 'رجوع للبوت؟ اختاري الأول سبب قفل الشباك',
+            bot_done: 'اتقفل الشباك والشات رجع للبوت · دور #{ticket}',
+        },
+        held_by: 'الشات ده عند {name}',
+        held_by_hint: 'هي أو المشرفة بس اللي يقدروا يقفلوه أو يرجّعوه للبوت',
+        announce: {
+            warning: 'العميلة ما ردّتش، الشات هيتقفل لوحده قريب',
+            last: 'أقل من دقيقة والشات يتقفل لوحده',
         },
         assigned_toast: 'وصلتك عميلة · دور #{ticket}',
         assigned_open: 'افتحي الشات',
@@ -2584,6 +2592,7 @@ const ar = {
         channel_problem_item: 'فيه مشكلة في ربط {name}',
         queue_assigned_item: 'وصلتك {name} · دور #{ticket}',
         queue_escalation_waiting_item: 'تصعيد مستني ليدر · {name} · دور #{ticket}',
+        queue_mass_offline_item: 'الاتصال وقع عند {count} من {serving} موظفات مرة واحدة، سبنا شبابيكهم زي ما هي',
         channel_problem_codes: {
             token_missing: 'مفيش توكن محفوظ — اعمل إعادة ربط',
             token_invalid: 'التوكن مبقاش صالح — اعمل إعادة ربط',
@@ -2601,6 +2610,7 @@ const ar = {
             channel_problem: 'مشكلة في الربط',
             queue_assigned: 'وصلتك عميلة',
             queue_escalation_waiting: 'تصعيد مستني ليدر',
+            queue_mass_offline: 'موظفات كتير فصلوا مرة واحدة',
         },
     },
     shortcuts: {

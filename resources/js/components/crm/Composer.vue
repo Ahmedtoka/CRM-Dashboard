@@ -300,6 +300,8 @@ onMounted(() => {
 });
 
 defineExpose({
+    /** Work that switching chats would lose besides the text: files waiting to be sent, a recording, the locked-send confirm. */
+    hasWork: (): boolean => uploads.items.value.length > 0 || recording.value || recorder.starting.value || confirming.value,
     addFiles: (files: File[]) => uploads.add(files),
     openFilePicker: () => fileInput.value?.click(),
     focus: focusEnd,

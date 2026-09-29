@@ -15,7 +15,7 @@ import { useToast } from '@/composables/useToast';
 import { cn } from '@/lib/utils';
 import type { ConversationQueueEntry, QueueCloseReason, SupportCaseType } from '@/types/crm';
 import { ArrowUpCircle, CheckCircle2, ChevronDown, CircleHelp, FolderPlus, LoaderCircle, Wrench, type LucideIcon } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
     entry: ConversationQueueEntry;
@@ -24,6 +24,10 @@ const props = defineProps<{
     disabled?: boolean;
     /** Shown next to the button's title, e.g. the keyboard shortcut. */
     hint?: string;
+}>();
+const emit = defineEmits<{
+    /** Opened for «رجوع للبوت»: the window closed with its reason, the conversation may now go back to the bot. */
+    closedForBot: [];
 }>();
 
 const { t } = useI18n();
@@ -42,17 +46,28 @@ const menuOpen = ref(false);
 const caseOpen = ref(false);
 const escalateOpen = ref(false);
 const caseType = ref<SupportCaseType>('complaint');
+/** Opened by «رجوع للبوت»: the reasons close the window, then the conversation goes back to the bot. */
+const forBot = ref(false);
 
 const ticket = computed(() => props.entry.ticket % 100000);
+/** The shift leader's own window has nobody above it: no «تحويل للتيم ليدر». Nor on the way back to the bot. */
+const canEscalate = computed(() => !forBot.value && (queue?.leaderUserId.value ?? null) !== props.entry.assigned_user_id);
 const working = computed(() => queue?.busy.value === `close-${props.entry.id}` || queue?.busy.value === `escalate-${props.entry.id}`);
 const blocked = computed(() => props.disabled || (queue?.busy.value ?? null) !== null);
 
 async function close(reason: QueueCloseReason, type: SupportCaseType | null = null): Promise<void> {
     if (!queue || blocked.value) return;
 
+    const bot = forBot.value;
+
     if (await queue.closeEntry(props.entry.id, reason, type)) {
         caseOpen.value = false;
-        toast.push(t('queue.close.closed', { ticket: ticket.value }));
+        if (bot) {
+            toast.push(t('queue.close.bot_done', { ticket: ticket.value }));
+            emit('closedForBot');
+        } else {
+            toast.push(t('queue.close.closed', { ticket: ticket.value }));
+        }
     }
 }
 
@@ -76,7 +91,21 @@ async function escalate(): Promise<void> {
     }
 }
 
-defineExpose({ open: () => (menuOpen.value = true) });
+// Closed without a pick (and not on to the case dialog): the trigger opens a plain «خلصت» again.
+watch(menuOpen, (open) => {
+    if (!open && !caseOpen.value) forBot.value = false;
+});
+
+defineExpose({
+    /** Opens the reasons; `bot` when the user asked to return the conversation to the bot. Does nothing while the trigger is disabled. */
+    open: (mode: 'close' | 'bot' = 'close'): void => {
+        if (blocked.value) return;
+        forBot.value = mode === 'bot';
+        menuOpen.value = true;
+    },
+    /** The menu or one of its dialogs is open (the inbox does not switch chats under it). */
+    isOpen: (): boolean => menuOpen.value || caseOpen.value || escalateOpen.value,
+});
 </script>
 
 <template>
@@ -94,7 +123,7 @@ defineExpose({ open: () => (menuOpen.value = true) });
             <ChevronDown class="size-3.5 opacity-80" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" class="w-64">
-            <DropdownMenuLabel class="text-xs">{{ t('queue.close.menu_label') }}</DropdownMenuLabel>
+            <DropdownMenuLabel class="text-xs">{{ forBot ? t('queue.close.bot_label') : t('queue.close.menu_label') }}</DropdownMenuLabel>
             <p v-if="ownerName" class="px-2 pb-1 text-2xs text-muted-foreground" dir="auto">{{ t('queue.close.not_mine', { name: ownerName }) }}</p>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -110,8 +139,8 @@ defineExpose({ open: () => (menuOpen.value = true) });
                     <span class="text-2xs text-muted-foreground">{{ t(`queue.close.${reason.value}_hint`) }}</span>
                 </span>
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem class="items-start" data-reason="escalate" @select="escalateOpen = true">
+            <DropdownMenuSeparator v-if="canEscalate" />
+            <DropdownMenuItem v-if="canEscalate" class="items-start" data-reason="escalate" @select="escalateOpen = true">
                 <ArrowUpCircle class="mt-0.5 text-destructive" aria-hidden="true" />
                 <span class="flex min-w-0 flex-col">
                     <span class="text-sm font-medium">{{ t('queue.close.escalate') }}</span>

@@ -196,10 +196,13 @@ const silenceTone: Record<Card['tone'], string> = {
         </ul>
 
         <div class="flex shrink-0 flex-col items-end justify-center gap-1" role="group" :aria-label="t('queue.status.label')">
-            <p class="flex items-center gap-1.5 text-xs font-medium" role="status">
+            <p class="flex items-center gap-1.5 text-xs font-medium">
                 <span class="size-2 rounded-full" :class="statusDot" aria-hidden="true" />
-                <span class="hidden md:inline">{{ statusLabel }}</span>
-                <span class="sr-only md:hidden">{{ statusLabel }}</span>
+                <!-- Announced when the status changes; the break countdown stays out of the live region (no reading every second). -->
+                <span role="status">
+                    <span class="hidden md:inline">{{ statusLabel }}</span>
+                    <span class="sr-only md:hidden">{{ statusLabel }}</span>
+                </span>
                 <span v-if="breakLeft !== null" class="tabular-nums text-muted-foreground">{{ t('queue.break_left', { time: breakLeft }) }}</span>
             </p>
             <button

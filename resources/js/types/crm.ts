@@ -142,6 +142,8 @@ export interface MyQueuePayload {
     member: ShiftMember | null;
     entries: QueueEntry[];
     settings: { silence_warn_seconds: number; silence_close_seconds: number; windows_per_moderator: number; break_minutes: number } | null;
+    /** The leader of the open shift (nobody above her to escalate to); null with no shift or no leader. */
+    leader_user_id: number | null;
     server_time: string;
 }
 
@@ -574,7 +576,7 @@ export interface ChannelAlert {
 /** A persisted bell notification (spec §5.4, Dashboard Experience Task 14). */
 export interface AppNotification {
     id: number;
-    type: 'conversation.handover' | 'conversation.handover_urgent' | 'note.mention' | 'channel.problem' | 'queue.assigned' | 'queue.escalation_waiting';
+    type: 'conversation.handover' | 'conversation.handover_urgent' | 'note.mention' | 'channel.problem' | 'queue.assigned' | 'queue.escalation_waiting' | 'queue.mass_offline';
     data: Record<string, unknown>;
     read_at: string | null;
     created_at: string | null;
