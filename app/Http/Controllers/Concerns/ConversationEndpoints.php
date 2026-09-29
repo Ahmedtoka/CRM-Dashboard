@@ -33,9 +33,11 @@ use App\Models\Conversation;
 use App\Models\ConversationParticipant;
 use App\Models\Message;
 use App\Models\MessageAttachment;
+use App\Models\QueueSetting;
 use App\Models\QuickReply;
 use App\Models\QuickReplyAttachment;
 use App\Models\User;
+use App\Queue\QueueService;
 use App\Support\SafeBroadcast;
 use DomainException;
 use Illuminate\Http\JsonResponse;
@@ -297,7 +299,19 @@ trait ConversationEndpoints
     {
         Gate::authorize('reply', $conversation);
 
-        return new ConversationResource($actions->resolve($conversation, $request->user()));
+        // Handover queue on: an open window is closed by its moderator, a supervisor or an admin
+        // only (the same rule as the queue's own endpoints). Queue off: nothing is read or changed.
+        $user = $request->user();
+
+        if (! $user->isSupervisorOrAbove() && QueueSetting::current()->enabled) {
+            $entry = app(QueueService::class)->activeEntry($conversation);
+
+            if ($entry !== null && $entry->isOpen() && (int) $entry->assigned_user_id !== (int) $user->id) {
+                abort(response()->json(['message' => __('errors.queue.not_your_window')], 403));
+            }
+        }
+
+        return new ConversationResource($actions->resolve($conversation, $user));
     }
 
     public function reopen(Request $request, Conversation $conversation, ConversationActions $actions): ConversationResource

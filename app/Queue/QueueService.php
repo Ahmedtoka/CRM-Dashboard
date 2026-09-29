@@ -163,17 +163,24 @@ class QueueService
         return $entry;
     }
 
-    /** She wrote while queued / in a window: the silence clock restarts. */
+    /**
+     * She wrote while queued / in a window: the silence clock restarts. The board and the
+     * moderator's strip are told once the inbound message is committed (a rolled-back ingest
+     * pushes nothing), for a waiting entry and for an open window alike.
+     */
     public function customerMessage(Conversation $c): void
     {
         $e = $this->activeEntry($c);
 
         if ($e) {
             $e->forceFill(['last_customer_message_at' => now(), 'silence_warned_at' => null])->save();
+            $id = $e->id;
 
-            if ($e->status === 'waiting') {
-                SafeBroadcast::send(new QueueEntryUpdated($e));
-            }
+            DB::afterCommit(function () use ($id) {
+                if ($fresh = QueueEntry::query()->find($id)) {
+                    SafeBroadcast::send(new QueueEntryUpdated($fresh));
+                }
+            });
         }
     }
 

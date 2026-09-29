@@ -333,3 +333,56 @@ it('gives the inbox what it needs to act on the window of a conversation', funct
 
     expect($data['queue_entry'])->toMatchArray(['id' => $e->id, 'assigned_user_id' => $u->id, 'priority' => 'returning', 'window_no' => 1]);
 });
+
+// ───── the old «حل» path and somebody else's window ─────
+
+it('does not let another moderator resolve somebody else\'s open window through the inbox', function () {
+    [, $m, $e] = deskWithWindow();
+    [$other] = deskWithWindow($m->shift);
+    $other->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
+    $other->forceFill(['locale' => 'ar'])->save();
+
+    $this->actingAs($other)->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertForbidden()
+        ->assertJsonPath('message', 'الشباك ده مش بتاعك.');
+
+    expect($e->fresh()->status)->toBe('active')->and($e->fresh()->close_reason)->toBeNull()
+        ->and($e->conversation->fresh()->status->value)->toBe('open');
+});
+
+it('lets the assignee resolve her own window through the inbox', function () {
+    [$u, , $e] = deskWithWindow();
+    $u->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
+
+    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
+
+    expect($e->fresh()->close_reason)->toBe('resolved_elsewhere')->and($e->conversation->fresh()->status->value)->toBe('resolved');
+});
+
+it('lets a supervisor or an admin resolve a moderator\'s window through the inbox', function (string $role) {
+    [, , $e] = deskWithWindow();
+
+    $this->actingAs(User::factory()->create(['role' => $role]))->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
+
+    expect($e->fresh()->status)->toBe('closed')->and($e->fresh()->close_reason)->toBe('resolved_elsewhere');
+})->with(['supervisor', 'admin']);
+
+it('lets any moderator resolve a customer who is still waiting in the lounge', function () {
+    $e = QueueEntry::factory()->create();
+    $u = User::factory()->create(['role' => 'moderator']);
+    $u->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
+
+    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
+
+    expect($e->fresh()->status)->toBe('cancelled');
+});
+
+it('leaves the old resolve as it was while the queue is off', function () {
+    [, $m, $e] = deskWithWindow();
+    [$other] = deskWithWindow($m->shift);
+    $other->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
+    QueueSetting::current()->update(['enabled' => false]);
+
+    $this->actingAs($other)->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
+
+    expect($e->conversation->fresh()->status->value)->toBe('resolved');
+});

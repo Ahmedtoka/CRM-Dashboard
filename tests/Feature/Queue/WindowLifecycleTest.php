@@ -21,6 +21,7 @@ use App\Models\ShiftMember;
 use App\Models\User;
 use App\Queue\Events\CloseConfirmed;
 use App\Queue\Events\CloseReversed;
+use App\Queue\Events\QueueEntryUpdated;
 use App\Queue\Events\WindowClosed;
 use App\Queue\Jobs\ConfirmClose;
 use App\Queue\Jobs\SendQueueMessage;
@@ -625,4 +626,31 @@ it('logs a ticket that leaves the lounge cancelled', function () {
     app(WindowLifecycle::class)->close($w, 'cancelled', $u);
     $log = ActivityLog::where('action', ActivityLogger::QUEUE_CLOSE)->where('conversation_id', $w->conversation_id)->first();
     expect($w->fresh()->status)->toBe('cancelled')->and($log)->not->toBeNull()->and($log->meta['reason'])->toBe('cancelled')->and($log->user_id)->toBe($u->id);
+});
+
+it('tells the board when the customer writes in an open window, once the message is committed', function () {
+    [$e] = activeWindow();
+    agentRepliedAgo($e, 100);
+    Event::fake([QueueEntryUpdated::class]);
+
+    DB::transaction(function () use ($e) {
+        app(QueueService::class)->customerMessage($e->conversation);
+        Event::assertNotDispatched(QueueEntryUpdated::class); // not before the commit
+    });
+
+    Event::assertDispatchedTimes(QueueEntryUpdated::class, 1);
+    Event::assertDispatched(QueueEntryUpdated::class, fn ($ev) => $ev->entry->id === $e->id && $ev->broadcastWith()['status'] === 'active'
+        && $ev->broadcastWith()['silence_left_seconds'] === null && $ev->broadcastOn()[0]->name === 'private-board');
+});
+
+it('still tells the board when a waiting customer writes, and nothing when she has no entry', function () {
+    $w = QueueEntry::factory()->create();
+    Event::fake([QueueEntryUpdated::class]);
+
+    app(QueueService::class)->customerMessage($w->conversation);
+    Event::assertDispatchedTimes(QueueEntryUpdated::class, 1);
+
+    $w->update(['status' => 'cancelled']);
+    app(QueueService::class)->customerMessage($w->conversation);
+    Event::assertDispatchedTimes(QueueEntryUpdated::class, 1);
 });
