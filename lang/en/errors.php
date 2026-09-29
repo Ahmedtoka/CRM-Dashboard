@@ -94,6 +94,18 @@ return [
         'already_with_leader' => 'This chat is already with the shift leader.',
         'reason_required' => 'Choose why you are closing: inquiry, problem or case.',
         'case_type_required' => 'Choose the case type.',
+        'board_forbidden' => 'The live board is for supervisors and the shift leader only.',
+        'roster_empty' => 'Pick at least one moderator before you start the day.',
+        'user_unavailable' => 'This moderator does not exist or her account is deactivated.',
+        'unknown_shift' => 'This shift is not in the queue settings.',
+        'shift_closed' => 'This shift is already closed.',
+        'member_gone' => 'This moderator is not at her desk any more.',
+        'not_waiting' => 'This customer is no longer in the waiting lounge.',
+        'member_not_on_shift' => 'This moderator is not on the open shift.',
+        'member_unavailable' => 'This moderator is not available right now (on a break or offline).',
+        'member_platform' => 'This moderator may not reply on this platform.',
+        'member_full' => 'All the windows of this moderator are taken.',
+        'cancel_reason_required' => 'Write why you are cancelling.',
     ],
 
     'users' => [

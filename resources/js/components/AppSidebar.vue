@@ -5,7 +5,7 @@ import { useI18n } from '@/composables/useI18n';
 import { type NavItem, type SharedData } from '@/types';
 import type { Role } from '@/types/crm';
 import { Link, usePage } from '@inertiajs/vue3';
-import { BarChart3, ClipboardList, FlaskConical, Inbox, MessagesSquare, Package, Rocket, Settings, Users } from 'lucide-vue-next';
+import { BarChart3, ClipboardList, FlaskConical, Inbox, LayoutGrid, MessagesSquare, Package, Rocket, Settings, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -83,6 +83,7 @@ const mainNavItems = computed<NavItem[]>(() => {
             ? [{ title: `${t('nav.onboarding')} · ${onboarding.done}/${onboarding.total}`, href: '/onboarding', icon: Rocket }]
             : []),
         { title: t('nav.inbox'), href: '/inbox', icon: Inbox },
+        ...(page.props.canSeeBoard === true ? [{ title: t('nav.board'), href: '/board', icon: LayoutGrid }] : []),
         { title: t('nav.cases'), href: '/cases', icon: ClipboardList },
         { title: t('nav.comments'), href: '/comments', icon: MessagesSquare },
         { title: t('nav.orders'), href: '/orders', icon: Package },

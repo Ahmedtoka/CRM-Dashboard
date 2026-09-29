@@ -30,6 +30,8 @@ export interface SharedData {
     platforms: PlatformOption[];
     channelAlerts: ChannelAlert[];
     devTools?: boolean;
+    /** The live board is in the menu: supervisors, admins and the leader of the open shift. */
+    canSeeBoard?: boolean;
     broadcasting: BroadcastingConfig | null;
     ziggy: {
         location: string;

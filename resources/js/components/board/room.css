@@ -1,0 +1,1238 @@
+/*
+ * The live board's room. The look is the approved simulator's
+ * (docs/design/queue-routing-simulator.html): one dark scene with its own palette, the same in
+ * the app's light and dark modes, like a picture on the page. Everything is under .board-room.
+ */
+.board-room {
+    --floor: #121a28;
+    --floor-2: #0d1420;
+    --surface: #1a2333;
+    --surface-2: #222d40;
+    --line: #2f3b52;
+    --line-2: #3c4a66;
+    --ink: #eef2f8;
+    --ink-2: #b4bfd3;
+    --ink-3: #8a96ad;
+    --free: #3ddc97;
+    --busy: #f5b544;
+    --warn: #ff6b6b;
+    --break: #8b97ad;
+    --brain: #a78bfa;
+    --brain-2: #7c5cf0;
+    --gold: #ffd166;
+    --bot: #5ee6ec;
+    --case: #f59e0b;
+    --fb: #1877f2;
+    --ig: #e1306c;
+    --wa: #25d366;
+    --tt: #5ee6ec;
+
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    direction: ltr;
+    color: var(--ink);
+    color-scheme: dark;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background:
+        radial-gradient(800px 260px at 50% 0%, rgba(167, 139, 250, 0.1), transparent 60%),
+        repeating-linear-gradient(0deg, transparent 0 47px, rgba(255, 255, 255, 0.03) 47px 48px),
+        repeating-linear-gradient(90deg, transparent 0 47px, rgba(255, 255, 255, 0.03) 47px 48px), var(--floor-2);
+    line-height: 1.6;
+}
+.board-room.is-max {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    border-radius: 0;
+    border: 0;
+    width: 100vw;
+    height: 100vh;
+}
+.board-room:fullscreen {
+    border-radius: 0;
+    border: 0;
+    width: 100vw;
+    height: 100vh;
+}
+.board-room .stage {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1280px;
+    height: 760px;
+    transform-origin: top left;
+    direction: ltr;
+}
+.board-room .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+}
+.board-room button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+.board-room .stage button:focus-visible {
+    outline: 3px solid var(--brain);
+    outline-offset: 2px;
+}
+.board-room .stage svg {
+    display: block;
+}
+
+/* The buttons that float over the room. */
+/* A strip above the stage, never over the room itself. */
+.board-room .room-bar {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 48px;
+    padding: 4px 10px;
+    z-index: 9;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.board-room .room-bar .grow {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+    color: var(--ink-2);
+}
+.board-room .room-bar .grow b {
+    color: var(--ink);
+    font-weight: 600;
+}
+.board-room .room-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 10px;
+    background: rgba(26, 35, 51, 0.9);
+    color: var(--ink);
+    border: 1px solid var(--line-2);
+}
+.board-room .room-btn:hover {
+    background: #2a374d;
+}
+.board-room .room-btn:focus-visible {
+    outline: 3px solid var(--brain);
+    outline-offset: 2px;
+}
+.board-room .room-btn svg {
+    width: 16px;
+    height: 16px;
+}
+.board-room .room-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 2px 10px;
+    font-size: 12px;
+    border-radius: 999px;
+    background: rgba(26, 35, 51, 0.9);
+    color: var(--ink-2);
+    border: 1px solid var(--line-2);
+}
+.board-room .room-chip i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--busy);
+}
+.board-room .room-chip.live i {
+    background: var(--free);
+    box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.6);
+    animation: br-pulse 2s ease-out infinite;
+}
+
+/* carpet */
+.board-room .carpet {
+    position: absolute;
+    border-radius: 18px;
+    background:
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.02) 0 2px, transparent 2px 60px),
+        linear-gradient(180deg, rgba(124, 92, 240, 0.09), rgba(124, 92, 240, 0.04));
+    border: 1px solid rgba(124, 92, 240, 0.2);
+}
+.board-room .carpet .lbl {
+    position: absolute;
+    inset-inline-end: 12px;
+    top: 4px;
+    font-size: 11px;
+    color: var(--ink-3);
+}
+.board-room .carpet .more {
+    position: absolute;
+    inset-inline-start: 12px;
+    top: 4px;
+    font-size: 11px;
+    color: var(--gold);
+}
+
+/* desk cell */
+.board-room .cell {
+    position: absolute;
+    width: 210px;
+    height: 244px;
+    transform-origin: top left;
+}
+.board-room .cell .hit {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 68px;
+    bottom: 0;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    border-radius: 14px;
+}
+.board-room .cell.leader .hit {
+    top: 0;
+    bottom: 70px;
+}
+.board-room .cell .hit:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+.board-room .cell .st {
+    position: absolute;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 9.5px;
+    color: var(--ink-3);
+    white-space: nowrap;
+    line-height: 1.2;
+    pointer-events: none;
+}
+.board-room .cell .deskunit {
+    position: absolute;
+    left: 12px;
+    width: 186px;
+    height: 100px;
+    pointer-events: none;
+}
+.board-room .cell .chair {
+    position: absolute;
+    width: 76px;
+    height: 40px;
+    pointer-events: none;
+}
+.board-room .cell .person {
+    position: absolute;
+    width: 64px;
+    height: 80px;
+    filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.4));
+    pointer-events: none;
+    transition: opacity 0.4s;
+}
+.board-room .cell .name {
+    position: absolute;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 6px;
+    pointer-events: none;
+}
+.board-room .cell .name small {
+    color: var(--gold);
+    font-size: 10px;
+    font-weight: 600;
+}
+.board-room .cell .pill {
+    position: absolute;
+    font-size: 11px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--ink-2);
+    border: 1px solid var(--line-2);
+    white-space: nowrap;
+    pointer-events: none;
+}
+.board-room .cell.free .pill {
+    color: var(--free);
+    border-color: rgba(61, 220, 151, 0.4);
+}
+.board-room .cell.busy .pill {
+    color: var(--busy);
+    border-color: rgba(245, 181, 68, 0.4);
+}
+.board-room .cell.alert .pill {
+    color: var(--warn);
+    border-color: rgba(255, 107, 107, 0.5);
+}
+.board-room .cell.break .pill {
+    color: var(--break);
+}
+.board-room .cell.off .person,
+.board-room .cell.off .deskunit,
+.board-room .cell.off .chair {
+    opacity: 0.4;
+}
+.board-room .cell.away .person {
+    opacity: 0;
+}
+.board-room .cell.sel::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border: 2px solid var(--brain);
+    border-radius: 16px;
+    pointer-events: none;
+}
+.board-room .cell .load {
+    position: absolute;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-2);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
+    padding: 1px 8px;
+    pointer-events: none;
+}
+.board-room .cell .slots {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 66px;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    transform-origin: top center;
+    direction: ltr;
+}
+.board-room .cell .glow {
+    fill: var(--st, #3ddc97);
+}
+.board-room .cell.busy {
+    --st: #f5b544;
+}
+.board-room .cell.alert {
+    --st: #ff6b6b;
+}
+.board-room .cell.break {
+    --st: #8b97ad;
+}
+.board-room .cell.off {
+    --st: #3a4356;
+}
+.board-room .cell.flip .slots {
+    top: 2px;
+}
+.board-room .cell.flip .deskunit {
+    top: 70px;
+}
+.board-room .cell.flip .chair {
+    left: 67px;
+    top: 168px;
+    z-index: 2;
+}
+.board-room .cell.flip .person {
+    left: 73px;
+    top: 126px;
+    z-index: 3;
+}
+.board-room .cell.flip .name,
+.board-room .cell.flip .st,
+.board-room .cell.flip .pill,
+.board-room .cell.flip .load {
+    z-index: 4;
+}
+.board-room .cell.flip .name {
+    top: 200px;
+}
+.board-room .cell.flip .st {
+    top: 216px;
+}
+.board-room .cell.flip .pill {
+    bottom: 4px;
+    left: 6px;
+}
+.board-room .cell.flip .load {
+    bottom: 4px;
+    right: 6px;
+}
+.board-room .cell.leader {
+    width: 300px;
+    height: 236px;
+}
+.board-room .cell.leader .deskunit {
+    left: 18px;
+    top: 64px;
+    width: 264px;
+    height: 100px;
+}
+.board-room .cell.leader .chair {
+    left: 112px;
+    top: 8px;
+}
+.board-room .cell.leader .person {
+    left: 118px;
+    top: 0;
+}
+.board-room .cell.leader .slots {
+    top: 168px;
+}
+.board-room .cell.leader .pill {
+    top: 6px;
+    left: 6px;
+}
+.board-room .cell.leader .load {
+    top: 6px;
+    right: 6px;
+}
+.board-room .cell.leader .plate {
+    position: absolute;
+    left: 34px;
+    top: 109px;
+    width: 80px;
+    height: 12px;
+    font-size: 8.5px;
+    font-weight: 700;
+    line-height: 12px;
+    color: #3b2a10;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    z-index: 2;
+}
+.board-room .cell.leader .none {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 24px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--ink-3);
+    pointer-events: none;
+}
+
+/* a window */
+.board-room .slot {
+    position: relative;
+    flex: none;
+    width: 58px;
+    height: 64px;
+    padding: 0;
+    border-radius: 12px;
+    border: 1px dashed var(--line);
+    background: rgba(255, 255, 255, 0.02);
+    transition:
+        box-shadow 0.4s,
+        border-color 0.4s;
+}
+.board-room .slot .idx {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 14px;
+    text-align: center;
+    font-size: 10px;
+    color: var(--ink-3);
+    line-height: 1.3;
+}
+.board-room .slot .idx b {
+    display: block;
+    color: var(--free);
+    font-weight: 600;
+}
+.board-room .slot.on {
+    border-style: solid;
+    border-color: var(--line-2);
+    background: var(--surface);
+}
+.board-room .slot.on:hover {
+    border-color: var(--ink-3);
+}
+.board-room .slot.sel {
+    outline: 2px solid var(--brain);
+    outline-offset: 1px;
+}
+.board-room .slot.freed {
+    border-color: var(--free);
+    box-shadow: 0 0 0 3px rgba(61, 220, 151, 0.35);
+    animation: br-freed 1.5s ease-out;
+}
+.board-room .slot.arriving .av {
+    opacity: 0;
+}
+.board-room .slot .av {
+    position: absolute;
+    left: 14px;
+    top: 11px;
+    width: 30px;
+    height: 36px;
+    transition: opacity 0.3s;
+}
+.board-room .slot .ring {
+    position: absolute;
+    left: 9px;
+    top: 6px;
+    width: 40px;
+    height: 40px;
+    transform: rotate(-90deg);
+}
+.board-room .slot .ring circle {
+    fill: none;
+    stroke-width: 3;
+}
+.board-room .slot .ring .bg {
+    stroke: var(--surface-2);
+}
+.board-room .slot .ring .fg {
+    stroke: var(--busy);
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.3s linear;
+}
+.board-room .slot.wait .ring .fg {
+    stroke: var(--ink-3);
+}
+.board-room .slot.armed {
+    border-color: var(--warn);
+    box-shadow: 0 0 0 2px rgba(255, 107, 107, 0.3);
+}
+.board-room .slot.armed .ring .fg {
+    stroke: var(--warn);
+}
+.board-room .slot.last {
+    animation: br-blink 1.1s ease-in-out infinite;
+}
+.board-room .slot.esc {
+    border-color: var(--gold);
+}
+.board-room .slot .pl,
+.board-room .lseat .pl {
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    color: #0b1220;
+}
+.board-room .slot .pl {
+    position: absolute;
+    right: 3px;
+    top: 3px;
+    width: 16px;
+    height: 16px;
+}
+.board-room .slot .pl svg {
+    width: 10px;
+    height: 10px;
+}
+.board-room .slot .tk {
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    font-weight: 700;
+    font-size: 9px;
+    line-height: 12px;
+    background: var(--gold);
+    color: #1b1400;
+    border-radius: 6px;
+    padding: 0 4px;
+}
+.board-room .slot .tm {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 2px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--ink-2);
+    line-height: 1;
+}
+.board-room .slot.armed .tm {
+    color: var(--warn);
+    font-weight: 700;
+}
+.board-room .slot .nm {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: -19px;
+    max-width: 96px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 10px;
+    line-height: 15px;
+    background: #2b3a55;
+    color: #fff;
+    padding: 0 7px;
+    border-radius: 9px;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.board-room .slot:hover .nm,
+.board-room .slot:focus-visible .nm,
+.board-room .slot.sel .nm {
+    opacity: 1;
+}
+
+/* wall screen */
+.board-room .wall {
+    position: absolute;
+    left: 24px;
+    top: 20px;
+    width: 440px;
+    height: 232px;
+    background: #121829;
+    border: 1px solid #3b3566;
+    border-radius: 16px;
+    padding: 10px 14px;
+    box-shadow:
+        inset 0 0 0 1px rgba(167, 139, 250, 0.15),
+        0 0 40px rgba(124, 92, 240, 0.12);
+    overflow: hidden;
+}
+.board-room .wall .hd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--brain);
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+.board-room .wall .hd svg {
+    width: 18px;
+    height: 18px;
+}
+.board-room .wall .hd time {
+    margin-inline-start: auto;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--ink-3);
+}
+.board-room .wall .pulse {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--brain);
+    box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.6);
+}
+.board-room .wall.thinking .pulse {
+    animation: br-pulse-brain 1s ease-out 3;
+}
+.board-room .wall ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 2px;
+    font-size: 12px;
+    color: var(--ink-2);
+    line-height: 1.4;
+}
+.board-room .wall li {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: br-stepin 0.35s ease-out both;
+}
+.board-room .wall .strong {
+    color: var(--ink);
+    font-weight: 600;
+}
+.board-room .wall .ok {
+    color: var(--free);
+}
+.board-room .wall .no {
+    color: var(--warn);
+}
+.board-room .wall .hi {
+    color: var(--gold);
+}
+.board-room .wall .idle {
+    color: var(--ink-3);
+    font-size: 13px;
+}
+.board-room .wall .loads {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 5px;
+    max-height: 40px;
+    overflow: hidden;
+}
+.board-room .wall .loads span {
+    font-size: 10.5px;
+    background: var(--surface-2);
+    border-radius: 6px;
+    padding: 1px 6px;
+    color: var(--ink-2);
+}
+.board-room .wall .loads b {
+    color: var(--ink);
+}
+.board-room .wall .rule {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: 6px;
+    font-size: 10.5px;
+    color: var(--brain);
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.board-room .wall .rule span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* leader KPI card */
+.board-room .kpicard {
+    position: absolute;
+    left: 796px;
+    top: 20px;
+    width: 112px;
+    height: 232px;
+    background: var(--surface);
+    border: 1px solid rgba(255, 209, 102, 0.35);
+    border-radius: 14px;
+    padding: 6px 8px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.board-room .kpicard .t {
+    font-size: 10px;
+    color: var(--gold);
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.board-room .kpicard .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 4px;
+    font-size: 9.5px;
+    color: var(--ink-2);
+    line-height: 1.32;
+    white-space: nowrap;
+}
+.board-room .kpicard .row b {
+    font-size: 13px;
+    color: var(--ink);
+    line-height: 1;
+}
+.board-room .kpicard .row.good b {
+    color: var(--free);
+}
+.board-room .kpicard .row.bad b {
+    color: var(--warn);
+}
+.board-room .kpicard .row.case b {
+    color: var(--case);
+}
+.board-room .kpicard .sep {
+    height: 1px;
+    background: var(--line);
+    margin: 2px 0;
+}
+
+/* robot */
+.board-room .robot {
+    position: absolute;
+    left: 14px;
+    top: 0;
+    width: 40px;
+    height: 48px;
+    z-index: 6;
+    filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.45));
+}
+.board-room .robot svg {
+    width: 40px;
+    height: 48px;
+}
+.board-room .robot .eye {
+    fill: #5ee6ec;
+    animation: br-eyes 3s infinite;
+}
+.board-room .robot.calling svg {
+    animation: br-bob 0.4s ease-in-out infinite alternate;
+}
+.board-room .say {
+    position: absolute;
+    left: 62px;
+    top: 8px;
+    max-width: 276px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: #2a3246;
+    color: var(--ink-2);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 20px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    border-end-start-radius: 2px;
+    transition:
+        background 0.3s,
+        color 0.3s;
+}
+.board-room .say.calling {
+    background: #fff3c4;
+    color: #1b1400;
+}
+
+/* reception (bot) + lounge */
+.board-room .recep {
+    position: absolute;
+    left: 916px;
+    top: 20px;
+    width: 348px;
+    height: 182px;
+    border: 1px solid rgba(94, 230, 236, 0.35);
+    border-radius: 16px;
+    background: rgba(94, 230, 236, 0.04);
+}
+.board-room .recep .door {
+    position: absolute;
+    left: 134px;
+    top: -1px;
+    width: 80px;
+    height: 30px;
+    border: 2px solid var(--line-2);
+    border-top: 0;
+    border-radius: 0 0 12px 12px;
+    color: var(--ink-3);
+    font-size: 11px;
+    text-align: center;
+    line-height: 26px;
+    background: var(--floor-2);
+}
+.board-room .recep .ttl {
+    position: absolute;
+    inset-inline-end: 10px;
+    top: 4px;
+    max-width: 120px;
+    font-size: 11px;
+    color: var(--bot);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.board-room .recep .kiosk {
+    position: absolute;
+    left: 14px;
+    top: 34px;
+    width: 74px;
+    height: 66px;
+    background: #0e1626;
+    border: 2px solid #2d6f74;
+    border-radius: 10px;
+    box-shadow: 0 0 18px rgba(94, 230, 236, 0.18);
+    padding: 5px 6px;
+}
+.board-room .recep .kiosk .face {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+.board-room .recep .kiosk .face i {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--bot);
+    box-shadow: 0 0 6px var(--bot);
+    animation: br-eyes 3s infinite;
+}
+.board-room .recep .kiosk .mouth {
+    width: 22px;
+    height: 6px;
+    border-bottom: 2px solid var(--bot);
+    border-radius: 0 0 10px 10px;
+    margin: 6px auto 0;
+}
+.board-room .recep .kiosk .lb {
+    font-size: 9px;
+    color: var(--bot);
+    text-align: center;
+    margin-top: 6px;
+    white-space: nowrap;
+}
+.board-room .recep .kstat {
+    position: absolute;
+    left: 100px;
+    right: 12px;
+    top: 40px;
+    font-size: 12px;
+    color: var(--ink-2);
+    line-height: 1.5;
+}
+.board-room .recep .kstat b {
+    color: var(--bot);
+    font-size: 20px;
+    line-height: 1;
+}
+.board-room .recep .bspot {
+    position: absolute;
+    top: 118px;
+    width: 44px;
+    height: 56px;
+    animation: br-stepin 0.4s ease-out both;
+}
+.board-room .recep .bspot svg {
+    width: 44px;
+    height: 56px;
+}
+.board-room .lounge {
+    position: absolute;
+    left: 916px;
+    top: 208px;
+    width: 348px;
+    height: 536px;
+    border: 1px dashed var(--line-2);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.015);
+}
+.board-room .lounge .ttl {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 32px;
+    text-align: center;
+    font-size: 10.5px;
+    color: var(--ink-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 8px;
+}
+.board-room .lounge .ttl b {
+    color: var(--ink-2);
+    font-weight: 600;
+}
+.board-room .lounge .empty {
+    position: absolute;
+    left: 20px;
+    right: 20px;
+    top: 200px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--ink-3);
+}
+.board-room .lseat {
+    position: absolute;
+    width: 164px;
+    height: 64px;
+    animation: br-stepin 0.35s ease-out both;
+}
+.board-room .lseat .card {
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 164px;
+    height: 58px;
+    background: var(--surface);
+    border: 1px solid var(--line-2);
+    border-radius: 12px;
+    padding: 3px 46px 3px 6px;
+    text-align: start;
+    display: block;
+}
+.board-room .lseat .card:hover {
+    border-color: var(--ink-3);
+}
+.board-room .lseat.sel .card {
+    outline: 2px solid var(--brain);
+}
+.board-room .lseat.going {
+    opacity: 0.25;
+}
+.board-room .lseat .nm {
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.25;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.board-room .lseat .nm .who {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.board-room .lseat .nm .pl {
+    width: 13px;
+    height: 13px;
+    flex: none;
+}
+.board-room .lseat .nm .pl svg {
+    width: 8px;
+    height: 8px;
+}
+.board-room .lseat .nm .tk {
+    font-weight: 700;
+    font-size: 10.5px;
+    line-height: 14px;
+    color: var(--gold);
+    flex: none;
+}
+.board-room .lseat .tx {
+    font-size: 9.5px;
+    color: var(--ink-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.35;
+}
+.board-room .lseat .wt {
+    font-size: 10px;
+    color: var(--busy);
+    line-height: 1.25;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+.board-room .lseat .wt .night {
+    color: var(--ink-3);
+}
+.board-room .badge {
+    flex: none;
+    font-size: 9px;
+    line-height: 13px;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 0 5px;
+    color: #0d1320;
+    background: var(--brain);
+    white-space: nowrap;
+}
+.board-room .badge.returning {
+    background: var(--gold);
+}
+.board-room .badge.escalation {
+    background: var(--warn);
+}
+.board-room .badge.overnight {
+    background: var(--brain);
+}
+.board-room .badge.manual {
+    background: var(--ink-2);
+}
+.board-room .badge.live {
+    background: var(--free);
+}
+.board-room .badge.for {
+    background: var(--for, var(--brain));
+    max-width: 70px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.board-room .lseat .girl {
+    position: absolute;
+    left: 122px;
+    top: 8px;
+    width: 38px;
+    height: 48px;
+    pointer-events: none;
+}
+.board-room .heads {
+    position: absolute;
+    left: 10px;
+    top: 446px;
+    width: 328px;
+    height: 86px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 3px;
+    align-content: flex-start;
+    direction: ltr;
+}
+.board-room .head {
+    width: 20px;
+    height: 28px;
+    position: relative;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    animation: br-stepin 0.35s ease-out both;
+}
+.board-room .head svg {
+    width: 20px;
+    height: 24px;
+}
+.board-room .head i {
+    position: absolute;
+    left: -2px;
+    right: -2px;
+    bottom: -3px;
+    font-weight: 700;
+    font-size: 8px;
+    line-height: 10px;
+    text-align: center;
+    color: var(--gold);
+    font-style: normal;
+}
+.board-room .head.sel svg {
+    outline: 2px solid var(--brain);
+    border-radius: 6px;
+}
+.board-room .lmore {
+    position: absolute;
+    left: 0;
+    bottom: 2px;
+    width: 348px;
+    text-align: center;
+    font-size: 10.5px;
+    color: var(--ink-3);
+}
+
+/* a customer walking to her window */
+.board-room .walker {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 40px;
+    height: 50px;
+    margin: -25px 0 0 -20px;
+    z-index: 7;
+    will-change: transform;
+    pointer-events: none;
+    filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.4));
+    transition:
+        transform 1.3s cubic-bezier(0.45, 0.05, 0.3, 1),
+        opacity 0.3s ease 1.25s;
+}
+.board-room .walker svg {
+    width: 40px;
+    height: 50px;
+    animation: br-bob 0.35s ease-in-out infinite alternate;
+}
+.board-room .walker.there {
+    opacity: 0;
+}
+.board-room .walker .tk {
+    position: absolute;
+    left: 50%;
+    top: -13px;
+    transform: translateX(-50%);
+    font-weight: 700;
+    font-size: 10px;
+    line-height: 14px;
+    background: var(--gold);
+    color: #1b1400;
+    border-radius: 8px;
+    padding: 0 5px;
+    white-space: nowrap;
+}
+
+/* what lies over the room: the start of the day, a notice, the side panel */
+.board-room .veil {
+    position: absolute;
+    /* Below the strip of buttons: full screen and the connection stay in reach. */
+    inset: 48px 0 0 0;
+    z-index: 10;
+    display: flex;
+    padding: 12px;
+    background: rgba(13, 20, 32, 0.6);
+    backdrop-filter: blur(2px);
+    overflow: auto;
+}
+.board-room .veil > * {
+    /* Centred while it fits; a tall panel scrolls from its top instead of being cut off. */
+    margin: auto;
+    max-width: 100%;
+    direction: inherit;
+}
+.board-room .side {
+    position: absolute;
+    inset-block: 48px 0;
+    inset-inline-end: 0;
+    z-index: 11;
+    width: min(360px, 100%);
+    overflow: auto;
+    padding: 10px;
+}
+
+@keyframes br-blink {
+    50% {
+        filter: brightness(1.3);
+    }
+}
+@keyframes br-pulse {
+    to {
+        box-shadow: 0 0 0 8px rgba(61, 220, 151, 0);
+    }
+}
+@keyframes br-pulse-brain {
+    to {
+        box-shadow: 0 0 0 12px rgba(167, 139, 250, 0);
+    }
+}
+@keyframes br-stepin {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+}
+@keyframes br-eyes {
+    0%,
+    92%,
+    100% {
+        opacity: 1;
+    }
+    95% {
+        opacity: 0.1;
+    }
+}
+@keyframes br-bob {
+    to {
+        transform: translateY(-2px);
+    }
+}
+@keyframes br-freed {
+    0% {
+        box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.7);
+    }
+    100% {
+        box-shadow: 0 0 0 10px rgba(61, 220, 151, 0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .board-room *,
+    .board-room *::before,
+    .board-room *::after {
+        animation: none !important;
+        transition: none !important;
+    }
+}

@@ -107,7 +107,8 @@ class WindowLifecycle
 
     /**
      * Closes an open window for `$reason` (QueueEntry::CLOSE_REASONS). `$opts['case_type']` is the
-     * support case type for a `case` close; `$opts['kind']` overrides the entry's kind.
+     * support case type for a `case` close; `$opts['kind']` overrides the entry's kind;
+     * `$opts['note']` is why a waiting customer was taken out of the lounge (`close_note`).
      * A still-waiting entry resolved / cancelled elsewhere leaves the lounge as `cancelled`.
      * Anything else that is no longer open is returned untouched.
      */
@@ -125,7 +126,8 @@ class WindowLifecycle
             }
 
             if ($locked->status === 'waiting' && in_array($reason, ['resolved_elsewhere', 'cancelled'], true)) {
-                $locked->forceFill(['status' => 'cancelled', 'close_reason' => $reason, 'closed_at' => now(), 'closed_by_id' => $by?->id])->save();
+                $note = is_string($opts['note'] ?? null) && trim($opts['note']) !== '' ? mb_substr(trim($opts['note']), 0, 200) : null;
+                $locked->forceFill(['status' => 'cancelled', 'close_reason' => $reason, 'close_note' => $note, 'closed_at' => now(), 'closed_by_id' => $by?->id])->save();
                 $this->logger->log($by ? ActorType::User : ActorType::System, $by, ActivityLogger::QUEUE_CLOSE, null, $locked->conversation, [
                     'ticket' => $locked->ticket_no, 'reason' => $reason, 'handle_seconds' => null, 'left_the_lounge' => true,
                 ]);

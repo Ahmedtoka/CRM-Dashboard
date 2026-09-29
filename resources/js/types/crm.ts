@@ -111,7 +111,10 @@ export interface QueueEntry {
     eta_seconds: number | null;
     wait_seconds: number | null;
     bot_summary: Record<string, unknown> | null;
+    /** The first line of what she asked for, from the bot's summary. */
+    request_line: string | null;
     rule: string | null;
+    close_reason: string | null;
     /** Seconds to the auto-close, as of the moment the server answered; null while the clock is not running. */
     silence_left_seconds: number | null;
     silence_warned: boolean;

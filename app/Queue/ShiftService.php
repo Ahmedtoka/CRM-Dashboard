@@ -74,18 +74,25 @@ class ShiftService
      * «ابدأ اليوم»: members for each of today's shifts, the roster remembered as the default,
      * and the shift that covers now opened (else the next one still ahead, else the first).
      *
+     * `$leaders` names today's leader per shift key (null = nobody); a shift key that is not in
+     * it keeps the leader of its template. A leader always gets a desk on her shift.
+     *
      * @param  array<string, list<int>>  $roster  user ids per shift key
+     * @param  array<string, int|null>  $leaders  leader user id per shift key
      */
-    public function startDay(array $roster, User $by): Shift
+    public function startDay(array $roster, User $by, array $leaders = []): Shift
     {
-        $roster = array_map(fn ($ids) => array_values(array_map('intval', (array) $ids)), $roster);
+        $roster = array_map(fn ($ids) => array_values(array_unique(array_map('intval', (array) $ids))), $roster);
 
         // All or nothing: a bad user id leaves no half-added roster, and the router runs once after commit.
-        return DB::transaction(fn () => $this->startDayInTransaction($roster, $by));
+        return DB::transaction(fn () => $this->startDayInTransaction($roster, $by, $leaders));
     }
 
-    /** @param  array<string, list<int>>  $roster */
-    private function startDayInTransaction(array $roster, User $by): Shift
+    /**
+     * @param  array<string, list<int>>  $roster
+     * @param  array<string, int|null>  $leaders
+     */
+    private function startDayInTransaction(array $roster, User $by, array $leaders): Shift
     {
         $shifts = $this->todayShifts();
 
@@ -93,7 +100,23 @@ class ShiftService
             if ($shift->status === 'closed') {
                 continue;
             }
+
+            if (array_key_exists($shift->shift_key, $leaders)) {
+                $leaderId = $leaders[$shift->shift_key] === null ? null : (int) $leaders[$shift->shift_key];
+                $shift->update(['leader_user_id' => $leaderId]);
+
+                if ($leaderId !== null && ! in_array($leaderId, $roster[$shift->shift_key] ?? [], true)) {
+                    $roster[$shift->shift_key][] = $leaderId;
+                }
+            }
+
+            $serving = $shift->members()->where('status', '!=', 'left')->pluck('user_id')->map(fn ($id) => (int) $id)->all();
             foreach ($roster[$shift->shift_key] ?? [] as $userId) {
+                // Already at her desk (the day was started before): she keeps her status and her break.
+                if (in_array($userId, $serving, true)) {
+                    continue;
+                }
+
                 $this->addMember($shift->fresh(), User::query()->findOrFail($userId), null, $by);
             }
         }
@@ -116,13 +139,15 @@ class ShiftService
     {
         $m = ShiftMember::query()->updateOrCreate(
             ['shift_id' => $shift->id, 'user_id' => $user->id],
-            ['status' => 'available', 'windows_cap' => $cap, 'joined_at' => now(), 'left_at' => null],
+            // She may come back with a window still open from before she left.
+            ['status' => app(QueueRouter::class)->openForUser($user->id)->exists() ? 'busy' : 'available', 'windows_cap' => $cap, 'joined_at' => now(), 'left_at' => null],
         );
 
         if ($shift->status === 'open') {
             $index = $shift->members()->where('status', '!=', 'left')->where('id', '<', $m->id)->count();
             $this->scheduleBreak($m, $shift, $index);
-            SafeBroadcast::send(new QueueMemberUpdated($m->fresh()));
+            // After the commit: a start of day that rolls back shows no phantom desk on the board.
+            DB::afterCommit(fn () => SafeBroadcast::send(new QueueMemberUpdated($m->fresh())));
             app(QueueRouter::class)->runAfterCommit('انضمام '.$user->name);
         }
 
@@ -156,7 +181,7 @@ class ShiftService
             ->update(['shift_id' => $shift->id, 'reserved_user_id' => $shift->leader_user_id]);
 
         $this->logger->log($by ? ActorType::User : ActorType::System, $by, ActivityLogger::SHIFT_OPEN, $shift, null, ['shift' => $shift->shift_key]);
-        SafeBroadcast::send(new ShiftUpdated($shift->fresh(['members.user', 'leader'])));
+        DB::afterCommit(fn () => SafeBroadcast::send(new ShiftUpdated($shift->fresh(['members.user', 'leader']))));
         app(QueueRouter::class)->runAfterCommit('بداية شيفت '.$shift->name);
     }
 

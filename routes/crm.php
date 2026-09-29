@@ -2,6 +2,7 @@
 
 // CRM application routes (loaded with web + auth middleware in bootstrap/app.php).
 
+use App\Http\Controllers\Web\BoardController;
 use App\Http\Controllers\Web\CaseController;
 use App\Http\Controllers\Web\CommentController;
 use App\Http\Controllers\Web\CustomerController;
@@ -76,6 +77,20 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
     Route::post('/queue/me/status', [QueueWindowController::class, 'status'])->name('queue.me.status');
     Route::post('/queue/entries/{entry}/close', [QueueWindowController::class, 'close'])->name('queue.close');
     Route::post('/queue/entries/{entry}/escalate', [QueueWindowController::class, 'escalate'])->name('queue.escalate');
+
+    // Handover queue, the manager's live board (queue routing Task 11). Supervisors, admins and the
+    // leader of the open shift: decided per request in the controller (BoardAccess), since the
+    // leader may be a moderator by role.
+    Route::get('/board', [BoardController::class, 'index'])->name('board');
+    Route::prefix('board')->name('board.')->group(function () {
+        Route::get('state', [BoardController::class, 'state'])->name('state');
+        Route::post('start', [BoardController::class, 'start'])->name('start');
+        Route::post('shifts/{shift}/members', [BoardController::class, 'addMember'])->name('members.store');
+        Route::delete('members/{member}', [BoardController::class, 'removeMember'])->name('members.destroy');
+        Route::post('members/{member}/status', [BoardController::class, 'memberStatus'])->name('members.status');
+        Route::post('entries/{entry}/assign', [BoardController::class, 'assign'])->name('entries.assign');
+        Route::post('entries/{entry}/cancel', [BoardController::class, 'cancel'])->name('entries.cancel');
+    });
 
     Route::get('/products/search', [ProductController::class, 'search'])->name('products.search');
 
