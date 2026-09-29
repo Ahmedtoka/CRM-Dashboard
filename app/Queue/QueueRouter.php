@@ -13,6 +13,7 @@ use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Models\Shift;
 use App\Models\ShiftMember;
+use App\Models\User;
 use App\Queue\Events\QueueAssigned;
 use App\Queue\Events\QueueEntryUpdated;
 use App\Queue\Events\QueueMemberUpdated;
@@ -20,23 +21,30 @@ use App\Queue\Events\RouterDecided;
 use App\Queue\Jobs\SendQueueMessage;
 use App\Support\SafeBroadcast;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Hands waiting entries to free moderator windows, one pass per trigger (enqueue, join, leave,
  * break end, window close…). Order of a pass:
  *   0) returning ★ → the same moderator when she has a free window, else the least loaded;
- *   0b) escalations → the shift leader (or any supervisor on the shift), else they wait;
+ *   0b) escalations → the shift leader (or any supervisor on the shift) who may serve the
+ *       platform, else they wait and supervisors are alerted once;
  *   1) live (and manual) customers, oldest first → the least loaded moderator;
  *   2) the overnight backlog → each moderator drains her own reserved share into her free
  *      windows; orphans (no reservation, or the reserved moderator is off / on break / gone)
  *      go to anyone.
+ * Load (open windows, window numbers) is counted per USER, not per shift-member row, so a
+ * moderator working both shifts (or the leader) keeps her windows across the handover.
  * Every pass writes one `queue_decisions` row (the board's decision lines).
  */
 class QueueRouter
 {
+    public const ESCALATION_ALERT_MINUTES = 15;
+
     public function __construct(
         private readonly QueueService $queue,
         private readonly UserNotifier $notifier,
@@ -44,16 +52,18 @@ class QueueRouter
         private readonly PresenceTracker $presence,
     ) {}
 
-    /** Routes once the surrounding transaction (if any) has committed. */
+    /** Routes once the surrounding transaction (if any) has committed; a router failure never breaks the caller. */
     public function runAfterCommit(string $trigger): void
     {
-        DB::afterCommit(fn () => $this->run($trigger));
+        DB::afterCommit(fn () => rescue(fn () => $this->run($trigger), 0, report: true));
     }
 
     /** @return int assignments made */
     public function run(string $trigger): int
     {
-        if (! QueueSetting::current()->enabled) {
+        $setting = QueueSetting::current();
+
+        if (! $setting->enabled) {
             return 0;
         }
 
@@ -70,17 +80,25 @@ class QueueRouter
         try {
             $lock->block(5);
         } catch (LockTimeoutException) {
+            Log::warning('queue.router_lock_timeout', ['trigger' => $trigger]);
+
             return 0;
         }
 
         try {
-            return DB::transaction(fn () => $this->pass($shift, $trigger));
+            return DB::transaction(fn () => $this->pass($shift, $setting, $trigger), 3);
         } finally {
             $lock->release();
         }
     }
 
-    private function pass(Shift $shift, string $trigger): int
+    /** Open (called / active) entries assigned to this user, whatever shift-member row they hang on. */
+    public function openForUser(int $userId): Builder
+    {
+        return QueueEntry::query()->where('assigned_user_id', $userId)->whereIn('status', QueueEntry::OPEN_STATUSES);
+    }
+
+    private function pass(Shift $shift, QueueSetting $setting, string $trigger): int
     {
         $lines = ['<b>المحفّز:</b> '.e($trigger)];
         $members = $shift->members()->with('user.userPlatforms')->whereIn('status', ['available', 'busy'])->lockForUpdate()->get()
@@ -90,23 +108,36 @@ class QueueRouter
         $waiting = QueueEntry::query()->with('conversation.customer')->where('status', 'waiting')->lockForUpdate()->orderBy('enqueued_at')->orderBy('id')->get()
             ->filter(fn (QueueEntry $e) => $e->conversation !== null);
         $lines[] = '<b>الشيفت:</b> '.$members->count().' موظفات · في الصالة '.$waiting->count();
+
+        // Per-user open windows, snapshotted once under the lock and kept current as we assign.
+        $load = $members->mapWithKeys(fn (ShiftMember $m) => [$m->user_id => $this->openForUser($m->user_id)->count()])->all();
+        $capOf = fn (ShiftMember $m) => $this->capOf($m, $setting);
+        // By reference: arrow functions would freeze $load at creation and never see an assignment.
+        $open = function (ShiftMember $m) use (&$load, $capOf): bool {
+            return $load[$m->user_id] < $capOf($m);
+        };
+        $loadOf = function (ShiftMember $m) use (&$load): int {
+            return $load[$m->user_id];
+        };
+        $anyOpen = fn () => $members->contains(fn (ShiftMember $m) => $open($m));
+        $give = function (QueueEntry $e, ShiftMember $m, string $rule, string $key) use (&$load, &$lines, $setting) {
+            $this->assign($e, $m, $rule, $key, $setting);
+            $load[$m->user_id]++;
+            $lines[] = $this->line($e, $m, $rule);
+        };
+        $pick = fn (QueueEntry $e) => $this->choose($this->candidates($members, $e->conversation->platform, $open, $setting), $loadOf);
         $n = 0;
-        $open = fn (ShiftMember $m) => $m->openEntries()->count() < $m->cap();
 
         // 0) returning → the same member if she has a free window, else the least loaded.
         foreach ($waiting->where('priority', 'returning') as $e) {
             $same = $e->reserved_user_id ? $members->firstWhere('user_id', $e->reserved_user_id) : null;
+            $m = ($same && $open($same) && $same->user->canAccessPlatform($e->conversation->platform)) ? $same : null;
+            $rule = 'راجعة ★ لنفس الموظفة';
 
-            if ($same && $open($same) && $same->user->canAccessPlatform($e->conversation->platform)) {
-                $rule = 'راجعة ★ لنفس الموظفة';
-                $this->assign($e, $same, $rule, 'returning');
-                $n++;
-                $lines[] = $this->line($e, $same, $rule);
-
-                continue;
+            if ($m === null) {
+                $m = $pick($e);
+                $rule = 'راجعة ★ (الأقل حملاً)';
             }
-
-            $m = $this->choose($this->candidates($members, $e->conversation->platform, $open));
 
             if ($m === null) {
                 $lines[] = '<span class="no">#'.$e->ticket_no.' راجعة: مفيش شباك فاضي</span>';
@@ -114,30 +145,40 @@ class QueueRouter
                 continue;
             }
 
-            $rule = 'راجعة ★ (الأقل حملاً)';
-            $this->assign($e, $m, $rule, 'returning');
+            $give($e, $m, $rule, 'returning');
             $n++;
-            $lines[] = $this->line($e, $m, $rule);
         }
 
-        // 0b) escalations → the leader (or any supervisor on the shift); otherwise they wait.
+        // 0b) escalations → the leader when she may serve the platform, else any supervisor on
+        //     the shift who may; nobody free → it waits and supervisors are alerted once.
         $leader = $shift->leader_user_id ? $members->firstWhere('user_id', $shift->leader_user_id) : null;
-        $leader ??= $members->first(fn (ShiftMember $m) => $m->user->isSupervisorOrAbove());
 
         foreach ($waiting->where('priority', 'escalation') as $e) {
-            if ($leader && $open($leader)) {
-                $rule = 'طابور التصعيد';
-                $this->assign($e, $leader, $rule, 'escalation');
-                $n++;
-                $lines[] = $this->line($e, $leader, $rule);
-            } else {
+            $platform = $e->conversation->platform;
+            $m = ($leader && $leader->user->canAccessPlatform($platform))
+                ? ($open($leader) ? $leader : null)
+                : $members->first(fn (ShiftMember $s) => $s->user->isSupervisorOrAbove() && $s->user->canAccessPlatform($platform) && $open($s));
+
+            if ($m === null) {
                 $lines[] = '<span class="no">#'.$e->ticket_no.' تصعيد مستني الليدر</span>';
+                $this->alertEscalationWaiting($e);
+
+                continue;
             }
+
+            $give($e, $m, 'طابور التصعيد', 'escalation');
+            $n++;
         }
 
         // 1) live (and manual), oldest first.
         foreach ($waiting->whereIn('priority', ['live', 'manual']) as $e) {
-            $m = $this->choose($this->candidates($members, $e->conversation->platform, $open));
+            if (! $anyOpen()) {
+                $lines[] = '<span class="no">كل الشبابيك مليانة</span>';
+
+                break;
+            }
+
+            $m = $pick($e);
 
             if ($m === null) {
                 $lines[] = '<span class="no">#'.$e->ticket_no.': مفيش شباك فاضي</span>';
@@ -145,15 +186,17 @@ class QueueRouter
                 continue;
             }
 
-            $rule = 'حيّة دلوقتي · الأقل حملاً ('.$m->openEntries()->count().' مفتوح)';
-            $this->assign($e, $m, $rule, 'live');
+            $give($e, $m, 'حيّة دلوقتي · الأقل حملاً ('.$loadOf($m).' مفتوح)', 'live');
             $n++;
-            $lines[] = $this->line($e, $m, $rule);
         }
 
         // 2) overnight: each member drains her own share into her free windows. An entry whose
         //    reserved member is not serving now (offline, on break, left) is an orphan: anyone.
         foreach ($waiting->where('priority', 'overnight')->sortBy('ticket_no') as $e) {
+            if (! $anyOpen()) {
+                break;
+            }
+
             $own = $e->reserved_user_id ? $members->firstWhere('user_id', $e->reserved_user_id) : null;
 
             if ($own !== null && ! $own->user->canAccessPlatform($e->conversation->platform)) {
@@ -167,7 +210,7 @@ class QueueRouter
                 $m = $own;
                 $rule = 'معلّق من الليل في فراغ '.$m->user->name;
             } else {
-                $m = $this->choose($this->candidates($members, $e->conversation->platform, $open));
+                $m = $pick($e);
 
                 if ($m === null) {
                     continue;
@@ -175,9 +218,8 @@ class QueueRouter
                 $rule = $e->reserved_user_id ? 'معلّق من الليل (موظفتها مش متاحة)' : 'معلّق من الليل (بدون موظفة)';
             }
 
-            $this->assign($e, $m, $rule, 'overnight');
+            $give($e, $m, $rule, 'overnight');
             $n++;
-            $lines[] = $this->line($e, $m, $rule);
         }
 
         $decision = QueueDecision::create([
@@ -196,35 +238,44 @@ class QueueRouter
      * @param  callable(ShiftMember): bool  $open
      * @return Collection<int, ShiftMember>
      */
-    public function candidates(Collection $members, Platform $platform, callable $open): Collection
+    public function candidates(Collection $members, Platform $platform, callable $open, ?QueueSetting $setting = null): Collection
     {
-        $cap = QueueSetting::current()->occupancy_cap_pct / 100;
+        $setting ??= QueueSetting::current();
+        $cap = $setting->occupancy_cap_pct / 100;
         $all = $members->filter(fn (ShiftMember $m) => $open($m) && $m->user->canAccessPlatform($platform));
-        $under = $all->filter(fn (ShiftMember $m) => $this->occupancy($m) <= $cap);
+        $under = $all->filter(fn (ShiftMember $m) => $this->occupancy($m, $setting) <= $cap);
 
         return $under->isNotEmpty() ? $under->values() : $all->values();
     }
 
     /**
-     * Least open windows, then fewest entries this shift, then the one idle longest
+     * Least open windows (per user), then fewest entries this shift, then the one idle longest
      * (`shift_members.updated_at` as the proxy).
      *
      * @param  Collection<int, ShiftMember>  $cand
+     * @param  (callable(ShiftMember): int)|null  $loadOf  open windows of a member; defaults to a per-user count
      */
-    public function choose(Collection $cand): ?ShiftMember
+    public function choose(Collection $cand, ?callable $loadOf = null): ?ShiftMember
     {
-        return $cand->sortBy(fn (ShiftMember $m) => [$m->openEntries()->count(), $this->shiftCount($m), $m->updated_at?->timestamp ?? 0])->first();
+        $loadOf ??= fn (ShiftMember $m) => $this->openForUser($m->user_id)->count();
+
+        return $cand->sortBy(fn (ShiftMember $m) => [$loadOf($m), $this->shiftCount($m), $m->updated_at?->timestamp ?? 0])->first();
     }
 
     /** Share of her window-time this shift spent on customers: handled + currently open, over cap × shift length. */
-    public function occupancy(ShiftMember $m): float
+    public function occupancy(ShiftMember $m, ?QueueSetting $setting = null): float
     {
         $start = $m->shift->opened_at ?? $m->shift->starts_at;
         $shiftSec = max(1, (int) $start->diffInSeconds(now()));
         $handled = (int) QueueEntry::query()->where('shift_member_id', $m->id)->sum('handle_seconds');
         $openSec = (int) $m->openEntries()->get()->sum(fn (QueueEntry $e) => max(0, (int) ($e->delivered_at?->diffInSeconds(now()) ?? 0)));
 
-        return ($handled + $openSec) / (max(1, $m->cap()) * $shiftSec);
+        return ($handled + $openSec) / (max(1, $this->capOf($m, $setting ?? QueueSetting::current())) * $shiftSec);
+    }
+
+    private function capOf(ShiftMember $m, QueueSetting $setting): int
+    {
+        return (int) ($m->windows_cap ?? $setting->windows_per_moderator);
     }
 
     private function shiftCount(ShiftMember $m): int
@@ -232,10 +283,10 @@ class QueueRouter
         return QueueEntry::query()->where('shift_member_id', $m->id)->count();
     }
 
-    /** Gives the entry to the member's lowest free window and tells everyone. */
-    public function assign(QueueEntry $e, ShiftMember $m, string $rule, string $ruleKey): void
+    /** Gives the entry to the user's lowest free window and tells everyone once committed. */
+    public function assign(QueueEntry $e, ShiftMember $m, string $rule, string $ruleKey, ?QueueSetting $setting = null): void
     {
-        $used = $m->openEntries()->whereNotNull('window_no')->pluck('window_no')->map(fn ($w) => (int) $w)->all();
+        $used = $this->openForUser($m->user_id)->whereNotNull('window_no')->pluck('window_no')->map(fn ($w) => (int) $w)->all();
         $window = 1;
         while (in_array($window, $used, true)) {
             $window++;
@@ -254,17 +305,44 @@ class QueueRouter
 
         $this->logger->log(ActorType::System, null, ActivityLogger::QUEUE_ASSIGN, null, $c, ['ticket' => $e->ticket_no, 'user_id' => $m->user_id, 'window' => $window, 'rule' => $ruleKey]);
         SendQueueMessage::dispatch($e->id, 'queue_called', ['ticket' => $e->ticket_no, 'name' => $user->name, 'window' => $window]);
-        $this->notifier->notify($user, 'queue.assigned', [
-            'entry_id' => $e->id, 'conversation_id' => $c->id, 'ticket' => $e->ticket_no, 'window_no' => $window,
-            'customer_name' => $c->customer?->name, 'platform' => $c->platform?->value, 'bot_summary' => $e->bot_summary,
-        ]);
 
-        // Real-time pushes only once the assignment is committed, so a client that refetches sees it.
-        DB::afterCommit(function () use ($e, $m, $c) {
+        // The notification row and every real-time push only once the assignment is committed,
+        // so a client that refetches sees it (and a rolled-back pass notifies nobody).
+        DB::afterCommit(function () use ($e, $m, $c, $user, $window) {
+            $this->notifier->notify($user, 'queue.assigned', [
+                'entry_id' => $e->id, 'conversation_id' => $c->id, 'ticket' => $e->ticket_no, 'window_no' => $window,
+                'customer_name' => $c->customer?->name, 'platform' => $c->platform?->value, 'bot_summary' => $e->bot_summary,
+            ]);
             SafeBroadcast::send(new QueueAssigned($m->user_id, $e));
             SafeBroadcast::send(new QueueEntryUpdated($e));
             SafeBroadcast::send(new QueueMemberUpdated($m->fresh()));
             SafeBroadcast::send(new ConversationUpdated($c->fresh()));
+        });
+    }
+
+    /** An escalation nobody on the shift can take: alert active supervisors, at most once per entry per 15 min. */
+    private function alertEscalationWaiting(QueueEntry $e): void
+    {
+        $key = 'queue:esc-notified:'.$e->id;
+
+        if (Cache::has($key)) {
+            return;
+        }
+
+        $c = $e->conversation;
+        $data = [
+            'entry_id' => $e->id, 'conversation_id' => $c->id, 'ticket' => $e->ticket_no,
+            'customer_name' => $c->customer?->name, 'platform' => $c->platform?->value, 'bot_summary' => $e->bot_summary,
+        ];
+
+        DB::afterCommit(function () use ($key, $data) {
+            if (! Cache::add($key, true, now()->addMinutes(self::ESCALATION_ALERT_MINUTES))) {
+                return;
+            }
+
+            User::query()->where('is_active', true)->get()
+                ->filter(fn (User $u) => $u->isSupervisorOrAbove())
+                ->each(fn (User $u) => $this->notifier->notify($u, 'queue.escalation_waiting', $data));
         });
     }
 
