@@ -33,6 +33,7 @@ const pointKeys = [
     'qa_per_point',
     'auto_close',
     'escalation',
+    'no_reply',
     'daily_cap',
 ] as const;
 
@@ -46,6 +47,7 @@ type ShiftRow = { [K in keyof QueueShiftTemplate]: QueueShiftTemplate[K] };
 type QueueForm = {
     enabled: boolean;
     night_message_enabled: boolean;
+    case_follow_owner: boolean;
     points: Record<string, number>;
     shifts: ShiftRow[];
 } & Record<(typeof NUMERIC_KEYS)[number], number>;
@@ -67,6 +69,10 @@ const NUMERIC_KEYS = [
     'speed_fast_seconds',
     'speed_ok_seconds',
     'eta_default_handle_seconds',
+    'waiting_update_seconds',
+    'agent_apology_seconds',
+    'agent_reassign_first_seconds',
+    'agent_reassign_seconds',
 ] as const;
 
 const form = useForm<QueueForm>({
@@ -88,6 +94,11 @@ const form = useForm<QueueForm>({
     speed_fast_seconds: props.settings.speed_fast_seconds,
     speed_ok_seconds: props.settings.speed_ok_seconds,
     eta_default_handle_seconds: props.settings.eta_default_handle_seconds,
+    waiting_update_seconds: props.settings.waiting_update_seconds,
+    agent_apology_seconds: props.settings.agent_apology_seconds,
+    agent_reassign_first_seconds: props.settings.agent_reassign_first_seconds,
+    agent_reassign_seconds: props.settings.agent_reassign_seconds,
+    case_follow_owner: props.settings.case_follow_owner,
     points: { ...(props.settings.points ?? {}) },
     shifts: (props.settings.shifts ?? []).map((s) => ({ ...s })),
 });
@@ -147,6 +158,10 @@ const hint = 'text-2xs text-muted-foreground';
                         <Checkbox id="queue-night-message" v-model:checked="form.night_message_enabled" />
                         <Label for="queue-night-message">{{ t('settings.queue.night_message_enabled') }}</Label>
                     </div>
+                    <div class="flex items-center gap-2">
+                        <Checkbox id="queue-case-follow" v-model:checked="form.case_follow_owner" />
+                        <Label for="queue-case-follow">{{ t('settings.queue.case_follow_owner') }}</Label>
+                    </div>
 
                     <div :class="grid">
                         <label class="grid content-start gap-1">
@@ -188,6 +203,38 @@ const hint = 'text-2xs text-muted-foreground';
                         <label class="grid content-start gap-1">
                             <Label>{{ t('settings.queue.case_sla_hours') }}</Label>
                             <Input v-model="form.case_sla_hours" type="number" min="1" max="168" dir="ltr" :class="input" />
+                        </label>
+                        <label class="grid content-start gap-1">
+                            <Label>{{ t('settings.queue.waiting_update_seconds') }}</Label>
+                            <Input v-model="form.waiting_update_seconds" type="number" min="30" max="900" dir="ltr" :class="input" />
+                            <span v-if="form.errors.waiting_update_seconds" class="text-2xs text-destructive">{{ form.errors.waiting_update_seconds }}</span>
+                        </label>
+                    </div>
+                </section>
+
+                <!-- Moderator reply (flow revision §4) -->
+                <section :class="card">
+                    <header>
+                        <h2 class="text-sm font-semibold">{{ t('settings.queue.reply_section') }}</h2>
+                        <p :class="hint">{{ t('settings.queue.reply_section_hint') }}</p>
+                    </header>
+                    <div :class="grid">
+                        <label class="grid content-start gap-1">
+                            <Label>{{ t('settings.queue.agent_apology_seconds') }}</Label>
+                            <Input v-model="form.agent_apology_seconds" type="number" min="30" max="3600" dir="ltr" :class="input" />
+                            <span v-if="form.errors.agent_apology_seconds" class="text-2xs text-destructive">{{ form.errors.agent_apology_seconds }}</span>
+                        </label>
+                        <label class="grid content-start gap-1">
+                            <Label>{{ t('settings.queue.agent_reassign_first_seconds') }}</Label>
+                            <Input v-model="form.agent_reassign_first_seconds" type="number" min="120" max="3600" dir="ltr" :class="input" />
+                            <span v-if="form.errors.agent_reassign_first_seconds" class="text-2xs text-destructive">{{
+                                form.errors.agent_reassign_first_seconds
+                            }}</span>
+                        </label>
+                        <label class="grid content-start gap-1">
+                            <Label>{{ t('settings.queue.agent_reassign_seconds') }}</Label>
+                            <Input v-model="form.agent_reassign_seconds" type="number" min="120" max="3600" dir="ltr" :class="input" />
+                            <span v-if="form.errors.agent_reassign_seconds" class="text-2xs text-destructive">{{ form.errors.agent_reassign_seconds }}</span>
                         </label>
                     </div>
                 </section>

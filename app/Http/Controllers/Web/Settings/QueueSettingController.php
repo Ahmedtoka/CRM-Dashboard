@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Web\Settings;
 
 use App\Http\Controllers\Controller;
-use App\Models\{QueueSetting, User};
-use Illuminate\Http\{RedirectResponse, Request};
+use App\Models\QueueSetting;
+use App\Models\User;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
-use Inertia\{Inertia, Response};
+use Inertia\Inertia;
+use Inertia\Response;
 
 class QueueSettingController extends Controller
 {
@@ -14,8 +17,12 @@ class QueueSettingController extends Controller
 
     public function index(Request $request): Response
     {
+        $settings = QueueSetting::current();
+        // A row saved before a points key existed (points.no_reply, flow revision §7) shows its default.
+        $settings->points = array_merge(QueueSetting::DEFAULT_POINTS, $settings->points ?? []);
+
         return Inertia::render('settings/Queue', [
-            'settings' => QueueSetting::current(),
+            'settings' => $settings,
             'supervisors' => User::query()->where('is_active', true)->whereIn('role', ['admin', 'supervisor'])->orderBy('name')->get(['id', 'name', 'role']),
             'canEditAdmin' => $request->user()->isAdmin(),
         ]);
@@ -43,6 +50,12 @@ class QueueSettingController extends Controller
             'speed_fast_seconds' => ['sometimes', 'integer', 'min:10', 'max:3600'],
             'speed_ok_seconds' => ['sometimes', 'integer', 'min:10', 'max:3600'],
             'eta_default_handle_seconds' => ['sometimes', 'integer', 'min:30', 'max:3600'],
+            // Flow revision §7.
+            'waiting_update_seconds' => ['sometimes', 'integer', 'min:30', 'max:900'],
+            'agent_apology_seconds' => ['sometimes', 'integer', 'min:30', 'max:3600'],
+            'agent_reassign_first_seconds' => ['sometimes', 'integer', 'min:120', 'max:3600'],
+            'agent_reassign_seconds' => ['sometimes', 'integer', 'min:120', 'max:3600'],
+            'case_follow_owner' => ['sometimes', 'boolean'],
             'points' => ['sometimes', 'array'],
             'points.*' => ['integer', 'min:-100', 'max:1000'],
             'shifts' => ['sometimes', 'array', 'min:1', 'max:4'],
@@ -59,6 +72,13 @@ class QueueSettingController extends Controller
         $close = (int) ($data['silence_close_seconds'] ?? $s->silence_close_seconds);
         if ($warn >= $close) {
             throw ValidationException::withMessages(['silence_warn_seconds' => __('errors.queue.warn_before_close')]);
+        }
+        // The apology comes before either hand-off (flow revision §7).
+        $apology = (int) ($data['agent_apology_seconds'] ?? $s->agent_apology_seconds);
+        $first = (int) ($data['agent_reassign_first_seconds'] ?? $s->agent_reassign_first_seconds);
+        $later = (int) ($data['agent_reassign_seconds'] ?? $s->agent_reassign_seconds);
+        if ($apology >= min($first, $later)) {
+            throw ValidationException::withMessages(['agent_apology_seconds' => __('errors.queue.apology_before_handoff')]);
         }
         if (isset($data['points'])) {
             $data['points'] = array_merge($s->points ?? QueueSetting::DEFAULT_POINTS, $data['points']);

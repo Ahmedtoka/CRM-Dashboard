@@ -255,6 +255,16 @@ export interface QueueSettings {
     speed_fast_seconds: number;
     speed_ok_seconds: number;
     eta_default_handle_seconds: number;
+    /** Flow revision (2026-09-29): position update interval to a waiting customer. */
+    waiting_update_seconds: number;
+    /** Apology to the customer when the moderator has not replied. */
+    agent_apology_seconds: number;
+    /** Hand-off when the first reply is late. */
+    agent_reassign_first_seconds: number;
+    /** Hand-off when a later customer message is unanswered. */
+    agent_reassign_seconds: number;
+    /** An open case goes to the moderator who opened it. */
+    case_follow_owner: boolean;
     points: Record<string, number> | null;
     shifts: QueueShiftTemplate[] | null;
     default_roster: Record<string, unknown> | null;

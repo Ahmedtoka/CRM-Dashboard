@@ -87,6 +87,7 @@ return [
 
     'queue' => [
         'warn_before_close' => 'The warning timer must be shorter than the close timer.',
+        'apology_before_handoff' => 'The apology must come before both hand-off times (first reply and later message).',
         'disabled' => 'The queue is switched off.',
         'not_your_window' => 'This window is not yours.',
         'window_not_open' => 'This window is already closed.',
