@@ -183,6 +183,19 @@ it('starts the day: today\'s shifts, the roster, the leader at her desk, and the
     expect(collect($response->json('data.members'))->firstWhere('user.id', $leader->id)['is_leader'])->toBeTrue();
 });
 
+it('starts the day when a moderator is ticked twice in one shift, and seats her once', function () {
+    $sup = boardSupervisor();
+    [$a, $leader] = [boardModerator(), boardModerator()];
+
+    $this->actingAs($sup)->postJson('/board/start', [
+        'roster' => ['morning' => [$a->id, $leader->id, $a->id], 'evening' => []],
+        'leaders' => ['morning' => $leader->id, 'evening' => null],
+    ])->assertOk();
+
+    $morning = Shift::where('shift_key', 'morning')->first();
+    expect($morning->members()->pluck('user_id')->sort()->values()->all())->toBe(collect([$a->id, $leader->id])->sort()->values()->all());
+});
+
 it('keeps a moderator\'s desk as it is when the day is started again', function () {
     $sup = boardSupervisor();
     $a = boardModerator();

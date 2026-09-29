@@ -58,7 +58,7 @@ class BoardController extends Controller
         $data = $request->validate([
             'roster' => ['required', 'array'],
             'roster.*' => ['array', 'max:50'],
-            'roster.*.*' => ['integer', 'distinct', $activeUser],
+            'roster.*.*' => ['integer', $activeUser], // a name ticked twice is kept once (startDay() de-duplicates)
             'leaders' => ['sometimes', 'array'],
             'leaders.*' => ['nullable', 'integer', $activeUser],
         ], [
