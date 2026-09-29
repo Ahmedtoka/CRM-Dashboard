@@ -176,10 +176,11 @@ class QueueService
 
             if ($eta === null) {
                 // Nobody who may take her is logged in: her ticket, and no minutes (flow revision §2).
-                SendQueueMessage::dispatch($entry->id, 'queue_enqueued_no_eta', ['ticket' => $entry->ticket_no, 'ahead' => $ahead, 'position' => $entry->position_at_enqueue]);
+                SendQueueMessage::dispatch($entry->id, 'queue_enqueued_no_eta', ['ticket' => $entry->ticket_no, 'ahead' => QueueWording::ahead($ahead), 'position' => $entry->position_at_enqueue]);
             } else {
+                // Counts go out worded («قدامك عميلتين», «حوالي دقيقتين»): the scripts read them as whole phrases.
                 SendQueueMessage::dispatch($entry->id, $priority === 'returning' ? 'queue_returning' : 'queue_enqueued', [
-                    'ticket' => $entry->ticket_no, 'ahead' => $ahead, 'eta_minutes' => max(1, (int) ceil($eta / 60)), 'position' => $entry->position_at_enqueue,
+                    'ticket' => $entry->ticket_no, 'ahead' => QueueWording::ahead($ahead), 'eta_minutes' => QueueWording::minutes((int) ceil($eta / 60)), 'position' => $entry->position_at_enqueue,
                 ]);
             }
         }
@@ -246,11 +247,11 @@ class QueueService
         }
 
         $eta = $this->estimator->eta($e);
-        $sentence = $eta === null ? '' : (string) ($this->scripts->text('queue_eta_sentence', ['minutes' => max(1, (int) ceil($eta / 60))]) ?? '');
+        $sentence = $eta === null ? '' : (string) ($this->scripts->text('queue_eta_sentence', ['minutes' => QueueWording::minutes((int) ceil($eta / 60))]) ?? '');
 
         SendQueueMessage::dispatch($e->id, 'queue_position_update', [
             'ticket' => $e->ticket_no,
-            'ahead' => max(0, $this->estimator->position($e) - 1),
+            'ahead' => QueueWording::ahead($this->estimator->position($e) - 1),
             'eta_sentence' => $sentence,
         ]);
     }

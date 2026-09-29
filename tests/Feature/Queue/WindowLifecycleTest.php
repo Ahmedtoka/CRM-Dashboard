@@ -316,7 +316,7 @@ it('sends the silence warning once per silence period, 180 seconds after the mod
     Carbon::setTestNow(now()->addSeconds(1)); // 180 s
     app(WindowLifecycle::class)->tickSilence();
     $warning = $e->conversation->messages()->where('sender_type', 'bot')->latest('id')->first();
-    expect(warningsSent())->toBe(1)->and($warning->body)->toContain('بعد 2 دقيقة')->and($e->fresh()->silence_warned_at)->not->toBeNull()
+    expect(warningsSent())->toBe(1)->and($warning->body)->toContain('بعد دقيقتين لو مفيش رد')->and($e->fresh()->silence_warned_at)->not->toBeNull()
         ->and((new ShiftMemberResource($m->fresh()))->resolve()['windows'][0]['silence_left_seconds'])->toBe(120);
 
     Carbon::setTestNow(now()->addSeconds(30)); // same silence period: not again
@@ -342,7 +342,7 @@ it('dispatches the warning through the queue message job with the minutes left',
     app(WindowLifecycle::class)->tickSilence();
     app(WindowLifecycle::class)->tickSilence();
     Bus::assertDispatchedTimes(SendQueueMessage::class, 1);
-    Bus::assertDispatched(SendQueueMessage::class, fn ($job) => $job->entryId === $e->id && $job->scriptKey === 'queue_silence_warning' && $job->vars === ['minutes' => 2]);
+    Bus::assertDispatched(SendQueueMessage::class, fn ($job) => $job->entryId === $e->id && $job->scriptKey === 'queue_silence_warning' && $job->vars === ['minutes' => 'دقيقتين']);
 });
 
 it('says nothing at the warning when the owner turned the script off, and still marks the window', function () {

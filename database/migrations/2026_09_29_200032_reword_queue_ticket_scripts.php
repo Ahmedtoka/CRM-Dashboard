@@ -1,6 +1,5 @@
 <?php
 
-use App\Bot\Flows\FlowScripts;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -21,14 +20,25 @@ return new class extends Migration
         'queue_night' => 'شكراً لرسالتك 🌸 إحنا خارج مواعيد العمل دلوقتي. رقمك في الدور {ticket} وهنكلمك أول ما نفتح الساعة {opening} بالترتيب. من فضلك ما تبعتيش رسايل تانية عشان الدور ما يتأثرش.',
     ];
 
+    /**
+     * key => the default this migration wrote, fixed here (not read from FlowScripts, which moved on
+     * in 200060), so up() and down() stay exact whatever the defaults say later.
+     */
+    private const NEW = [
+        'queue_enqueued' => 'تمام ✅ هيتم تحويلك لموظفة خدمة العملاء. رقم تذكرتك #{ticket}، وقدامك {ahead} وحوالي {eta_minutes} دقيقة 🌸',
+        'queue_returning' => 'أهلاً بيكي تاني 🌸 بنرجّعك لنفس الموظفة بأولوية، رقم تذكرتك #{ticket} وقدامك حوالي {eta_minutes} دقيقة.',
+        'queue_enqueued_no_eta' => 'رقم تذكرتك #{ticket} 🎟️ الفريق بيبدأ دلوقتي وهنكون معاكي في أقرب وقت، خليكي معانا 🙏',
+        'queue_night' => 'شكراً لرسالتك 🌸 إحنا خارج مواعيد العمل دلوقتي. رقم تذكرتك #{ticket} وهنكلمك أول ما نفتح الساعة {opening} بالترتيب. من فضلك ما تبعتيش رسايل تانية عشان الدور ما يتأثرش.',
+    ];
+
     public function up(): void
     {
-        $this->swap(fn (string $key) => [self::OLD[$key], FlowScripts::all()[$key]['body'] ?? null]);
+        $this->swap(fn (string $key) => [self::OLD[$key], self::NEW[$key]]);
     }
 
     public function down(): void
     {
-        $this->swap(fn (string $key) => [FlowScripts::all()[$key]['body'] ?? null, self::OLD[$key]]);
+        $this->swap(fn (string $key) => [self::NEW[$key], self::OLD[$key]]);
     }
 
     /** @param  callable(string): array{0: ?string, 1: ?string}  $pair  [from, to] for a key */

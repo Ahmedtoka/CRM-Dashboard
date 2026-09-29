@@ -244,7 +244,7 @@ it('answers a waiting customer who writes with her ticket, who is ahead and the 
     $writes(10);
     // One window, 590 s left on it; she is second: 590 + 600 = 1190 s ≈ 20 minutes.
     expect($updates())->toHaveCount(1)
-        ->and($updates()->first())->toBe('لسه معاكي 💛 رقم تذكرتك #'.$e->ticket_no.'، وقدامك 1 وهنكون معاكي خلال حوالي 20 دقايق');
+        ->and($updates()->first())->toBe('لسه معاكي 💛 رقم تذكرتك #'.$e->ticket_no.'، وقدامك عميلة واحدة وهنكون معاكي خلال حوالي 20 دقيقة');
 
     $writes(70);   // a minute later: no reply
     expect($updates())->toHaveCount(1);
@@ -261,7 +261,7 @@ it('leaves the minutes out of the update when there is no estimate', function ()
     app(QueueService::class)->customerMessage($c);
 
     $body = $c->messages()->where('sender_type', 'bot')->latest('id')->value('body');
-    expect($body)->toContain('رقم تذكرتك #'.$e->ticket_no)->toEndWith('وقدامك 0')->not->toContain('خلال');
+    expect($body)->toContain('رقم تذكرتك #'.$e->ticket_no)->toEndWith('وإنتي أول واحدة في الدور')->not->toContain('خلال')->not->toContain('قدامك 0');
 });
 
 it('sends no position update to an overnight customer nor to one already at a window', function () {
@@ -320,10 +320,10 @@ it('names the ticket and who is ahead in every queue message', function () {
     $e = $svc->enqueue($c, new HandoverContext('x', 'x', 'medium', null, [], 'unknown'));
 
     expect($c->messages()->where('sender_type', 'bot')->latest('id')->value('body'))
-        ->toContain('رقم تذكرتك #'.$e->ticket_no.'، وقدامك 1 وحوالي 20 دقيقة')->not->toContain('رقمك في الدور');
+        ->toContain('رقم تذكرتك #'.$e->ticket_no.'، وقدامك عميلة واحدة، وهنكون معاكي خلال حوالي 20 دقيقة')->not->toContain('رقمك في الدور');
 
     $texts = app(QueueScripts::class);
-    expect($texts->text('queue_returning', ['ticket' => 7, 'ahead' => 2, 'eta_minutes' => 9]))->toContain('رقم تذكرتك #7 وقدامك حوالي 9 دقيقة')
-        ->and($texts->text('queue_enqueued_no_eta', ['ticket' => 7, 'ahead' => 0]))->toStartWith('رقم تذكرتك #7')
+    expect($texts->text('queue_returning', ['ticket' => 7, 'ahead' => 'قدامك عميلتين', 'eta_minutes' => '9 دقايق']))->toContain('رقم تذكرتك #7 وهنكون معاكي خلال حوالي 9 دقايق')
+        ->and($texts->text('queue_enqueued_no_eta', ['ticket' => 7, 'ahead' => 'إنتي أول واحدة في الدور']))->toStartWith('رقم تذكرتك #7')
         ->and($texts->text('queue_night', ['ticket' => 7, 'opening' => 'الساعة 10 الصبح']))->toContain('رقم تذكرتك #7')->not->toContain('رقمك في الدور');
 });

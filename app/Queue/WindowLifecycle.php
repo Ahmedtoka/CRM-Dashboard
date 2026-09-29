@@ -593,7 +593,7 @@ class WindowLifecycle
 
             $locked->forceFill(['silence_warned_at' => now()])->save();
             SendQueueMessage::dispatch($locked->id, 'queue_silence_warning', [
-                'minutes' => max(1, (int) ceil(($s->silence_close_seconds - $idle) / 60)),
+                'minutes' => QueueWording::minutes((int) ceil(($s->silence_close_seconds - $idle) / 60)),
             ]);
             DB::afterCommit(fn () => SafeBroadcast::send(new QueueEntryUpdated($locked->fresh())));
         }, attempts: 3);

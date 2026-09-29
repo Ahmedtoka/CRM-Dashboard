@@ -14,6 +14,9 @@ final class FlowScripts
     /** @return array<string, array{title:string, body:string}> */
     public static function all(): array
     {
+        // The queue's counts arrive already worded (App\Queue\QueueWording): {ahead} is a whole
+        // phrase («إنتي أول واحدة في الدور» / «قدامك عميلتين» …), {eta_minutes} / {minutes} carry
+        // their unit («دقيقة» / «دقيقتين» / «5 دقايق» / «15 دقيقة»).
         return [
             'flow_return_policy_short' => ['title' => 'سياسة المرتجع (مختصرة)', 'body' => "حابة أوضح لحضرتك إن الاستبدال أو الاسترجاع بيكون خلال 14 يوم من استلام الأوردر، والقطعة تكون بحالتها الأصلية 🌸\nوفي منتجات مش متاحة للاستبدال أو الاسترجاع زي المنتجات القطنية والإكسسوارات ومكملات الحجاب والإسدالات الـ portable والبوركيني والكاش مايوه، والقطعة اللي عليها خصم متاح استبدالها بس."],
             'flow_photo_received' => ['title' => 'استلام صورة', 'body' => 'تمام وصلتني الصورة 🌸'],
@@ -68,16 +71,16 @@ final class FlowScripts
             'greeting_mirror_masa_noor' => ['title' => 'رد التحية: مساء النور', 'body' => 'مساء النور'],
             'greeting_mirror_hi' => ['title' => 'رد التحية: أهلاً / هاي', 'body' => 'أهلاً بيكي 🌸'],
             // The handover queue's customer-facing texts (2026-09-29 design spec).
-            'queue_enqueued' => ['title' => 'الطابور: دخلت الدور', 'body' => 'تمام ✅ هيتم تحويلك لموظفة خدمة العملاء. رقم تذكرتك #{ticket}، وقدامك {ahead} وحوالي {eta_minutes} دقيقة 🌸'],
+            'queue_enqueued' => ['title' => 'الطابور: دخلت الدور', 'body' => 'تمام ✅ هيتم تحويلك لموظفة خدمة العملاء. رقم تذكرتك #{ticket}، و{ahead}، وهنكون معاكي خلال حوالي {eta_minutes} 🌸'],
             'queue_night' => ['title' => 'الطابور: خارج مواعيد العمل', 'body' => 'شكراً لرسالتك 🌸 إحنا خارج مواعيد العمل دلوقتي. رقم تذكرتك #{ticket} وهنكلمك أول ما نفتح الساعة {opening} بالترتيب. من فضلك ما تبعتيش رسايل تانية عشان الدور ما يتأثرش.'],
             'queue_left_5' => ['title' => 'الطابور: باقي 5 دقايق', 'body' => 'باقي حوالي 5 دقايق وهتكوني مع الموظفة ⏳'],
             'queue_left_3' => ['title' => 'الطابور: باقي 3 دقايق', 'body' => 'باقي 3 دقايق تقريباً 🙏'],
             'queue_left_1' => ['title' => 'الطابور: باقي دقيقة', 'body' => 'دقيقة واحدة وهتكوني مع الموظفة 🙌'],
             'queue_apology' => ['title' => 'الطابور: اعتذار عن التأخير', 'body' => 'آسفين على التأخير 🙏 كل الموظفات مشغولات دلوقتي، هتتحولي أول ما حد يفضى.'],
             'queue_called' => ['title' => 'الطابور: جه دورك', 'body' => 'دورك جه 🌸 الموظفة {name} هترد عليكي دلوقتي.'],
-            'queue_silence_warning' => ['title' => 'الطابور: تنبيه قبل القفل التلقائي', 'body' => 'لسه معانا يا فندم؟ 🌸 المحادثة هتتقفل تلقائي بعد {minutes} دقيقة لو مفيش رد، وتقدري تكتبيلنا في أي وقت وهنرجّعك بأولوية.'],
+            'queue_silence_warning' => ['title' => 'الطابور: تنبيه قبل القفل التلقائي', 'body' => 'لسه معانا يا فندم؟ 🌸 المحادثة هتتقفل تلقائي بعد {minutes} لو مفيش رد، وتقدري تكتبيلنا في أي وقت وهنرجّعك بأولوية.'],
             'queue_auto_closed' => ['title' => 'الطابور: قفل تلقائي بعد سكوت', 'body' => 'اتقفلت المحادثة مؤقتاً 🌸 أول ما ترجعي ابعتي أي رسالة وهنرجّعك لنفس الموظفة بأولوية.'],
-            'queue_returning' => ['title' => 'الطابور: رجعت بأولوية', 'body' => 'أهلاً بيكي تاني 🌸 بنرجّعك لنفس الموظفة بأولوية، رقم تذكرتك #{ticket} وقدامك حوالي {eta_minutes} دقيقة.'],
+            'queue_returning' => ['title' => 'الطابور: رجعت بأولوية', 'body' => 'أهلاً بيكي تاني 🌸 بنرجّعك لنفس الموظفة بأولوية، رقم تذكرتك #{ticket} وهنكون معاكي خلال حوالي {eta_minutes}.'],
             'queue_reassigned' => ['title' => 'الطابور: تحويل لموظفة تانية', 'body' => 'هنكمّل معاكي مع موظفة تانية بأولوية 🌸 ثواني.'],
             'queue_review_ask' => ['title' => 'الطابور: طلب تقييم', 'body' => 'قيّمي خدمة {name} من 1 لـ5 🌸'],
             'queue_review_thanks' => ['title' => 'الطابور: شكر على التقييم', 'body' => 'شكراً لتقييمك 🌸'],
@@ -86,8 +89,8 @@ final class FlowScripts
             // Flow revision (2026-09-29): nobody who may take her is logged in yet — her ticket, no minutes.
             'queue_enqueued_no_eta' => ['title' => 'الطابور: دخلت الدور ومفيش تقدير', 'body' => 'رقم تذكرتك #{ticket} 🎟️ الفريق بيبدأ دلوقتي وهنكون معاكي في أقرب وقت، خليكي معانا 🙏'],
             // Flow revision (2026-09-29) §3: she writes while waiting — her ticket and who is ahead, plus the time sentence when there is an estimate.
-            'queue_position_update' => ['title' => 'الطابور: كتبت وهي مستنية', 'body' => 'لسه معاكي 💛 رقم تذكرتك #{ticket}، وقدامك {ahead} {eta_sentence}'],
-            'queue_eta_sentence' => ['title' => 'الطابور: جملة الوقت في تحديث الدور', 'body' => 'وهنكون معاكي خلال حوالي {minutes} دقايق'],
+            'queue_position_update' => ['title' => 'الطابور: كتبت وهي مستنية', 'body' => 'لسه معاكي 💛 رقم تذكرتك #{ticket}، و{ahead} {eta_sentence}'],
+            'queue_eta_sentence' => ['title' => 'الطابور: جملة الوقت في تحديث الدور', 'body' => 'وهنكون معاكي خلال حوالي {minutes}'],
             // Flow revision (2026-09-29) §4.2: the moderator has not replied yet.
             'queue_agent_delay_apology' => ['title' => 'الطابور: اعتذار عن تأخير الموظفة', 'body' => 'معلش على التأخير 🙏 زميلتنا {agent} معاكي حالاً'],
         ];
