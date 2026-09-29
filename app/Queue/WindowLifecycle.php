@@ -3,9 +3,12 @@
 namespace App\Queue;
 
 use App\Analytics\ActivityLogger;
+use App\Analytics\PresenceTracker;
 use App\Enums\ActorType;
 use App\Enums\Handler;
 use App\Events\ConversationUpdated;
+use App\Inbox\OutboundService;
+use App\Inbox\UserNotifier;
 use App\Models\Conversation;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
@@ -40,10 +43,20 @@ use InvalidArgumentException;
  * The customer-silence clock (`silentSince()`) starts at the ASSIGNEE's last reply and runs only
  * while that reply is later than the customer's last message. No reply yet, or she wrote last:
  * no clock, no warning, no auto-close (a slow moderator is an SLA matter).
+ *
+ * The moderator-reply clock (flow revision §4, `awaiting_reply_since`) runs only while the
+ * customer waits for the ASSIGNEE: from delivery, or from the customer's message after the
+ * assignee had answered everything; every reply of the assignee stops it. The two clocks never
+ * run together. `tickReplies()` apologises, then hands the window off (`no_reply`) or alerts.
+ * A moderator who is not logged in is never handed off (nor penalised) by this clock: her
+ * windows follow the offline path of `ShiftService::tickMembers()`.
  */
 class WindowLifecycle
 {
-    public function __construct(private readonly ActivityLogger $logger) {}
+    public function __construct(
+        private readonly ActivityLogger $logger,
+        private readonly PresenceTracker $presence,
+    ) {}
 
     /**
      * Conversation first, then the entry (see the class docblock). Returns the locked entry with
@@ -69,8 +82,9 @@ class WindowLifecycle
 
     /**
      * Every reply of the assignee in her open window: the customer-silence clock restarts here
-     * (a new silence period, so the warning may be sent again) and the first one is the window's
-     * first reply. Called inside the send's transaction, which already holds the conversation.
+     * (a new silence period, so the warning may be sent again), the moderator-reply clock stops
+     * (a new waiting period for the apology and the leader alert), and the first one is the
+     * window's first reply. Called inside the send's transaction, which already holds the conversation.
      */
     public function agentReplied(Conversation $c, User $u): void
     {
@@ -81,8 +95,10 @@ class WindowLifecycle
         }
 
         $first = $e->first_reply_at === null;
-        QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)
-            ->update(['last_agent_message_at' => now(), 'silence_warned_at' => null, 'updated_at' => now()]);
+        QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)->update([
+            'last_agent_message_at' => now(), 'silence_warned_at' => null,
+            'awaiting_reply_since' => null, 'apology_sent_at' => null, 'overdue_alerted_at' => null, 'updated_at' => now(),
+        ]);
 
         if ($first) {
             $this->markFirstReply($c, $u);
@@ -300,6 +316,109 @@ class WindowLifecycle
         return $since === null ? null : max(0, (int) $since->diffInSeconds(now()));
     }
 
+    /** Seconds the customer has been waiting for the assignee in this open window; null when she is not (no clock). */
+    public static function awaitingSeconds(QueueEntry $e): ?int
+    {
+        if (! $e->isOpen() || $e->awaiting_reply_since === null) {
+            return null;
+        }
+
+        return max(0, (int) $e->awaiting_reply_since->diffInSeconds(now()));
+    }
+
+    /** The hand-off limit that applies: before her first reply, else for a later unanswered message. */
+    public static function handOffLimit(QueueEntry $e, QueueSetting $s): int
+    {
+        return (int) ($e->first_reply_at === null ? $s->agent_reassign_first_seconds : $s->agent_reassign_seconds);
+    }
+
+    /** Seconds to the hand-off; null without a clock, and for an escalation (never handed off). */
+    public static function handOffLeft(QueueEntry $e, ?QueueSetting $settings = null): ?int
+    {
+        $waited = self::awaitingSeconds($e);
+
+        if ($waited === null || $e->priority === 'escalation') {
+            return null;
+        }
+
+        return max(0, self::handOffLimit($e, $settings ?? QueueSetting::current()) - $waited);
+    }
+
+    /**
+     * Flow revision §4: every open window whose customer waits for the assignee. At
+     * `agent_apology_seconds` the customer gets one apology per waiting period and the moderator a
+     * `queue.reply_overdue`; at the limit the window goes to another logged-in moderator with a
+     * free window (`no_reply`), or, when nobody is free, stays and the leader hears once per
+     * waiting period — tried again on every tick. An escalation is never handed off: the admins
+     * hear instead. An assignee who is not logged in is left to the offline path (no hand-off,
+     * no penalty, no alert). One window that throws never stops the others.
+     */
+    public function tickReplies(?QueueSetting $settings = null): void
+    {
+        $s = $settings ?? QueueSetting::current();
+
+        if (! $s->enabled) {
+            return;
+        }
+
+        $open = QueueEntry::query()->with(['conversation.customer', 'assignee'])->whereIn('status', QueueEntry::OPEN_STATUSES)
+            ->whereNotNull('awaiting_reply_since')->orderBy('awaiting_reply_since')->get();
+
+        foreach ($open as $e) {
+            rescue(fn () => $this->tickReply($e, $s), null, report: true);
+        }
+    }
+
+    /**
+     * Flow revision §4.3: the customer waited the whole limit and another logged-in moderator has
+     * a free window. Her window closes as `no_reply` (her handle time counted), the customer goes
+     * back to the top of the lounge keeping her ticket (`returning`, parked like a transfer) with
+     * `excluded_user_id` = the moderator who did not reply, so the router never gives her back.
+     * No message to the customer (the apology already went out); a system line in the thread; the
+     * activity log `queue.no_reply` records the penalty until Part 2's points ledger exists.
+     * Re-checked under the locks: null when she replied (or the window closed) meanwhile, for an
+     * escalation, when the assignee is not logged in (the offline path takes her windows, with no
+     * penalty) and when nobody is free any more.
+     */
+    public function handOffNoReply(QueueEntry $e, ?QueueSetting $settings = null): ?QueueEntry
+    {
+        $s = $settings ?? QueueSetting::current();
+
+        return DB::transaction(function () use ($e, $s) {
+            $locked = self::lockBoth($e);
+            $waited = $locked !== null ? self::awaitingSeconds($locked) : null;
+
+            if ($waited === null || $locked->priority === 'escalation' || $waited < self::handOffLimit($locked, $s)) {
+                return null;
+            }
+
+            // Plain reads, taken after the locks: her heartbeat and the colleagues' desks as they are now.
+            $agent = $locked->assigned_user_id !== null ? User::query()->find($locked->assigned_user_id) : null;
+
+            if (! $this->loggedIn($agent) || ! app(QueueRouter::class)->hasFreeDeskFor($locked, $s)) {
+                return null;
+            }
+
+            $agentId = (int) $agent->id;
+            $agentName = (string) $agent->name;
+            $minutes = max(1, (int) round(self::handOffLimit($locked, $s) / 60));
+            $ticket = $locked->ticket_no;
+            $c = $locked->conversation;
+
+            // Registered before the reroute's router run, so the thread reads the hand-off before the new call.
+            $line = __('queue.system.no_reply_handoff', ['agent' => $agentName, 'minutes' => $minutes], 'ar');
+            DB::afterCommit(fn () => rescue(fn () => $c !== null ? app(OutboundService::class)->sendSystem($c->fresh(), $line) : null, null, true));
+
+            $new = $this->rerouteLocked($locked, 'no_reply', null, 'returning', 'ما ردّتش '.$agentName, ['excluded_user_id' => $agentId, 'tell_customer' => false]);
+
+            $this->logger->log(ActorType::System, null, ActivityLogger::QUEUE_NO_REPLY, null, $c, [
+                'ticket' => $ticket, 'entry_id' => $locked->id, 'user_id' => $agentId, 'minutes' => $minutes, 'points' => -$s->point('no_reply'),
+            ]);
+
+            return $new;
+        }, attempts: 3);
+    }
+
     /**
      * Move a closed entry's ticket out of the way so a follow-up entry (transfer, escalation) can
      * keep the customer's number under the unique [business_date, ticket_no] index. The parked
@@ -316,6 +435,131 @@ class WindowLifecycle
         }
 
         $e->forceFill(['ticket_no' => $park])->save();
+    }
+
+    /** One window on the reply tick: the apology, then at the limit the hand-off or the alert. */
+    private function tickReply(QueueEntry $e, QueueSetting $s): void
+    {
+        $waited = self::awaitingSeconds($e);
+
+        if ($waited === null) {
+            return;
+        }
+
+        if ($waited >= (int) $s->agent_apology_seconds && $e->apology_sent_at === null) {
+            $this->apologise($e, $s);
+        }
+
+        if ($waited < self::handOffLimit($e, $s)) {
+            return;
+        }
+
+        if ($e->priority === 'escalation') {
+            $this->alertOverdue($e, $waited, true, $s);
+
+            return;
+        }
+
+        // Not logged in: the offline path hands her windows off (after its own delay, no penalty).
+        if (! $this->loggedIn($e->assignee)) {
+            return;
+        }
+
+        if (app(QueueRouter::class)->hasFreeDeskFor($e, $s)) {
+            // Null: she replied (or the window closed, or the free desk filled) since the read.
+            $this->handOffNoReply($e, $s);
+
+            return;
+        }
+
+        $this->alertOverdue($e, $waited, false, $s);
+    }
+
+    /** Logged in by the router's rule: an active account with a recent heartbeat. */
+    private function loggedIn(?User $u): bool
+    {
+        return $u !== null && (bool) $u->is_active && $this->presence->isOnline($u);
+    }
+
+    /** The apology, once per waiting period, re-checked under the locks; the moderator hears once it is committed. */
+    private function apologise(QueueEntry $e, QueueSetting $s): void
+    {
+        DB::transaction(function () use ($e, $s) {
+            $locked = self::lockBoth($e);
+            $waited = $locked !== null ? self::awaitingSeconds($locked) : null;
+
+            if ($waited === null || $waited < (int) $s->agent_apology_seconds || $locked->apology_sent_at !== null) {
+                return;
+            }
+
+            $locked->forceFill(['apology_sent_at' => now()])->save();
+            $agent = $locked->assignee;
+            SendQueueMessage::dispatch($locked->id, 'queue_agent_delay_apology', ['agent' => (string) ($agent?->name ?? '')]);
+
+            DB::afterCommit(function () use ($locked, $agent, $s) {
+                $fresh = $locked->fresh();
+
+                if ($fresh === null) {
+                    return;
+                }
+
+                SafeBroadcast::send(new QueueEntryUpdated($fresh));
+
+                if ($agent !== null) {
+                    rescue(fn () => app(UserNotifier::class)->notify($agent, 'queue.reply_overdue', $this->overdueData($fresh, $s)), null, true);
+                }
+            });
+        }, attempts: 3);
+    }
+
+    /**
+     * At the limit with nobody free (or on an escalation): the shift leader hears — the admins for
+     * an escalation, the supervisors when the shift has no leader or the late window is the
+     * leader's own — once per waiting period (`overdue_alerted_at`, claimed by a conditional
+     * update, so two ticks never both alert). Sent at once: the claim is the only write.
+     */
+    private function alertOverdue(QueueEntry $e, int $waited, bool $escalation, QueueSetting $s): void
+    {
+        $claimed = QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)
+            ->whereNotNull('awaiting_reply_since')->whereNull('overdue_alerted_at')
+            ->update(['overdue_alerted_at' => now()]);
+
+        if ($claimed !== 1) {
+            return;
+        }
+
+        $data = $this->overdueData($e, $s) + ['minutes' => intdiv($waited, 60), 'escalation' => $escalation];
+        $notifier = app(UserNotifier::class);
+
+        if ($escalation) {
+            $notifier->notifyAdmins('queue.reply_overdue_leader', $data);
+
+            return;
+        }
+
+        $leaderId = app(QueueService::class)->openShift()?->leader_user_id;
+        $leader = $leaderId !== null && (int) $leaderId !== (int) $e->assigned_user_id
+            ? User::query()->where('is_active', true)->find($leaderId)
+            : null;
+
+        if ($leader !== null) {
+            $notifier->notify($leader, 'queue.reply_overdue_leader', $data);
+        } else {
+            $notifier->notifySupervisors('queue.reply_overdue_leader', $data);
+        }
+    }
+
+    /** @return array<string, mixed> what the reply notifications carry */
+    private function overdueData(QueueEntry $e, QueueSetting $s): array
+    {
+        $c = $e->conversation;
+
+        return [
+            'entry_id' => $e->id, 'conversation_id' => $e->conversation_id, 'ticket' => $e->ticket_no,
+            'customer_name' => $c?->customer?->name, 'platform' => $c?->platform?->value,
+            'agent_id' => $e->assigned_user_id !== null ? (int) $e->assigned_user_id : null, 'agent_name' => $e->assignee?->name,
+            'handoff_seconds' => self::handOffLeft($e, $s),
+        ];
     }
 
     /** The warning, once per silence period, re-checking the silence under the locks. */
@@ -370,29 +614,42 @@ class WindowLifecycle
                 return null;
             }
 
-            $ticket = $e->ticket_no;
-            $this->closeLocked($e, $reason, $by, [], null, route: false);
-            $this->parkTicket($e);
-
-            $new = QueueEntry::create($e->only(['conversation_id', 'customer_id', 'business_date', 'kind', 'bot_summary', 'is_test', 'last_customer_message_at']) + [
-                'ticket_no' => $ticket, 'priority' => $priority, 'status' => 'waiting', 'shift_id' => $e->shift_id, 'enqueued_at' => now(),
-                'reopened_from_entry_id' => $e->id, 'reopen_count' => $e->reopen_count, 'waiting_messages' => ['5' => true, '3' => true, '1' => true],
-            ]);
-
-            $e->conversation?->forceFill([
-                'assignee_id' => null, 'assigned_at' => null, 'queue_entry_id' => $new->id, 'handler' => Handler::Human, 'needs_human' => true,
-            ])->save();
-
-            if ($priority === 'returning') {
-                SendQueueMessage::dispatch($new->id, 'queue_reassigned', []);
-            }
-
-            // closeLocked() already pushes the conversation (read fresh after commit, so with the new entry).
-            DB::afterCommit(fn () => SafeBroadcast::send(new QueueEntryUpdated($new->fresh())));
-            app(QueueRouter::class)->runAfterCommit($trigger.' #'.$ticket);
-
-            return $new;
+            return $this->rerouteLocked($e, $reason, $by, $priority, $trigger);
         }, attempts: 3);
+    }
+
+    /**
+     * The reroute on an entry the caller holds locked and knows to be open. `$opts`:
+     * `excluded_user_id` (the moderator the new entry must never go back to; else the old
+     * entry's exclusion is carried), `tell_customer` (false: no «هنكمّل معاكي مع موظفة تانية»).
+     *
+     * @param  array{excluded_user_id?: int|null, tell_customer?: bool}  $opts
+     */
+    private function rerouteLocked(QueueEntry $e, string $reason, ?User $by, string $priority, string $trigger, array $opts = []): QueueEntry
+    {
+        $ticket = $e->ticket_no;
+        $this->closeLocked($e, $reason, $by, [], null, route: false);
+        $this->parkTicket($e);
+
+        $new = QueueEntry::create($e->only(['conversation_id', 'customer_id', 'business_date', 'kind', 'bot_summary', 'is_test', 'last_customer_message_at']) + [
+            'ticket_no' => $ticket, 'priority' => $priority, 'status' => 'waiting', 'shift_id' => $e->shift_id, 'enqueued_at' => now(),
+            'reopened_from_entry_id' => $e->id, 'reopen_count' => $e->reopen_count, 'waiting_messages' => ['5' => true, '3' => true, '1' => true],
+            'excluded_user_id' => $opts['excluded_user_id'] ?? $e->excluded_user_id,
+        ]);
+
+        $e->conversation?->forceFill([
+            'assignee_id' => null, 'assigned_at' => null, 'queue_entry_id' => $new->id, 'handler' => Handler::Human, 'needs_human' => true,
+        ])->save();
+
+        if ($priority === 'returning' && ($opts['tell_customer'] ?? true)) {
+            SendQueueMessage::dispatch($new->id, 'queue_reassigned', []);
+        }
+
+        // closeLocked() already pushes the conversation (read fresh after commit, so with the new entry).
+        DB::afterCommit(fn () => SafeBroadcast::send(new QueueEntryUpdated($new->fresh())));
+        app(QueueRouter::class)->runAfterCommit($trigger.' #'.$ticket);
+
+        return $new;
     }
 
     /** The close itself, on an entry the caller holds locked and knows to be open. */

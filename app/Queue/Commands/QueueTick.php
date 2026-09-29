@@ -15,12 +15,13 @@ use Illuminate\Support\Facades\Cache;
  * The heartbeat of the handover queue, scheduled every 30 seconds (QueueServiceProvider).
  * Steps, in this order, each on its own: a step that throws is reported and the next ones still run.
  *   1. shifts open / close on time;
- *   2. members: breaks, offline moderators, hand-off of their windows;
+ *   2. members: breaks, not arrived, offline moderators, hand-off of their windows, not-arrived alert;
  *   3. customer silence: warning, then auto-close;
- *   4. confirm sweep: closes whose confirm window passed (safety net for a lost ConfirmClose job);
- *   5. the router (before the countdown, so a customer served now gets no «باقي» message);
- *   6. the «باقي 5 / 3 / 1» countdown and apology messages to the lounge (desks read once);
- *   7. once an hour, decision lines older than 7 days are deleted.
+ *   4. moderator reply: apology, hand-off (`no_reply`) or leader alert (flow revision §4);
+ *   5. confirm sweep: closes whose confirm window passed (safety net for a lost ConfirmClose job);
+ *   6. the router (before the countdown, so a customer served now gets no «باقي» message);
+ *   7. the «باقي 5 / 3 / 1» countdown and apology messages to the lounge (desks read once);
+ *   8. once an hour, decision lines older than 7 days are deleted.
  *
  * The settings row is read once and handed to the steps that loop.
  *
@@ -79,6 +80,7 @@ TXT;
                 'shifts' => fn () => $shifts->transition($settings),
                 'members' => fn () => $shifts->tickMembers($settings),
                 'silence' => fn () => $windows->tickSilence($settings),
+                'replies' => fn () => $windows->tickReplies($settings),
                 'confirm' => fn () => $windows->confirmDue($settings),
                 'router' => fn () => $router->run('التيك الدوري'),
                 'waiting' => fn () => $estimator->tickLounge($settings),

@@ -142,6 +142,31 @@ class QueueRouter
         return QueueEntry::query()->where('assigned_user_id', $userId)->whereIn('status', QueueEntry::OPEN_STATUSES);
     }
 
+    /**
+     * Is there, right now, another moderator who could take this customer: on the open shift,
+     * serving (available / busy), logged in, allowed on her platform, with a free window — never
+     * the current assignee and never the leader (her desk takes escalations only). The reply
+     * clock hands a window off only then (flow revision §4.3). Plain reads, no locks.
+     */
+    public function hasFreeDeskFor(QueueEntry $e, ?QueueSetting $setting = null): bool
+    {
+        $setting ??= QueueSetting::current();
+        $shift = $this->queue->openShift();
+        $platform = $e->conversation?->platform;
+
+        if ($shift === null || $platform === null) {
+            return false;
+        }
+
+        $exclude = array_values(array_filter([(int) $e->assigned_user_id, (int) $shift->leader_user_id]));
+
+        return $shift->members()->with('user.userPlatforms')->whereIn('status', ['available', 'busy'])
+            ->when($exclude !== [], fn ($q) => $q->whereNotIn('user_id', $exclude))->get()
+            ->contains(fn (ShiftMember $m) => $m->user !== null && $m->user->is_active && $this->presence->isOnline($m->user)
+                && $m->user->canAccessPlatform($platform)
+                && $this->openForUser((int) $m->user_id)->count() < $this->capOf($m, $setting));
+    }
+
     private function pass(Shift $shift, QueueSetting $setting, string $trigger): int
     {
         // A plain read: whoever is picked is locked (and checked again) one by one in assign().
@@ -215,12 +240,16 @@ class QueueRouter
 
             return true;
         };
-        $pick = fn (QueueEntry $e) => $this->choose($this->candidates($lounge, $e->conversation->platform, $open, $setting), $loadOf);
+        // Never the moderator she was taken from for not replying (flow revision §4.3).
+        $pick = fn (QueueEntry $e) => $this->choose($this->candidates(
+            $e->excluded_user_id !== null ? $lounge->reject(fn (ShiftMember $m) => (int) $m->user_id === (int) $e->excluded_user_id)->values() : $lounge,
+            $e->conversation->platform, $open, $setting,
+        ), $loadOf);
         $n = 0;
 
         // 0) returning → the same member if she has a free window, else the least loaded.
         foreach ($waiting->where('priority', 'returning') as $e) {
-            $same = $e->reserved_user_id ? $lounge->firstWhere('user_id', $e->reserved_user_id) : null;
+            $same = $e->reserved_user_id && (int) $e->reserved_user_id !== (int) $e->excluded_user_id ? $lounge->firstWhere('user_id', $e->reserved_user_id) : null;
             $m = ($same && $open($same) && $same->user->canAccessPlatform($e->conversation->platform)) ? $same : null;
             $rule = 'راجعة ★ لنفس الموظفة';
 
@@ -410,6 +439,8 @@ class QueueRouter
                 'status' => 'active', 'assigned_user_id' => $m->user_id, 'shift_member_id' => $m->id, 'shift_id' => $m->shift_id, 'window_no' => $window,
                 'called_at' => now(), 'delivered_at' => now(), 'wait_seconds' => max(0, (int) $locked->enqueued_at->diffInSeconds(now())), 'rule' => mb_substr($rule, 0, 120),
                 'last_customer_message_at' => $locked->last_customer_message_at ?? now(), 'reserved_user_id' => null,
+                // Flow revision §4.1: she now waits for this moderator's first reply.
+                'awaiting_reply_since' => now(), 'apology_sent_at' => null, 'overdue_alerted_at' => null,
             ])->save();
             $e->setRawAttributes($locked->getAttributes(), true);
 

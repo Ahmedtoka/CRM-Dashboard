@@ -106,7 +106,7 @@ it('describes a member desk with her open windows and today counters', function 
     $data = (new ShiftMemberResource($m))->resolve();
     expect($data['open_count'])->toBe(1)->and($data['windows'][0]['window_no'])->toBe(1)
         ->and($data['windows'][0]['silence_left_seconds'])->toBe(200)
-        ->and($data['today'])->toBe(['received' => 3, 'inquiry' => 1, 'problem' => 0, 'case' => 0, 'auto' => 1, 'escalation' => 0])
+        ->and($data['today'])->toBe(['received' => 3, 'inquiry' => 1, 'problem' => 0, 'case' => 0, 'auto' => 1, 'escalation' => 0, 'no_reply' => 0])
         ->and($data['user']['id'])->toBe($m->user_id);
 });
 

@@ -266,4 +266,4 @@ it('keeps the PHP lang files on exactly the same keys', function (string $file) 
 
     expect($missingInEnglish)->toBe([], "{$file}: no English for ".implode(', ', $missingInEnglish));
     expect($missingInArabic)->toBe([], "{$file}: no Arabic for ".implode(', ', $missingInArabic));
-})->with(['cases', 'commerce', 'errors', 'labels', 'legal']);
+})->with(['cases', 'commerce', 'errors', 'labels', 'legal', 'queue']);

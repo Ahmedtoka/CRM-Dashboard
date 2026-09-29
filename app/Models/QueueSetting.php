@@ -15,6 +15,8 @@ class QueueSetting extends Model
     public const DEFAULT_POINTS = [
         'inquiry' => 8, 'problem' => 12, 'case_open' => 0, 'case_resolved_in_time' => 14, 'case_resolved_late' => 4,
         'speed_fast' => 6, 'speed_ok' => 3, 'review_per_star' => 5, 'qa_per_point' => 5, 'auto_close' => 0, 'escalation' => 0, 'daily_cap' => 350,
+        // Deducted per `no_reply` hand-off (flow revision §4.4); Part 2's ledger books −no_reply.
+        'no_reply' => 1,
     ];
 
     public const DEFAULT_SHIFTS = [

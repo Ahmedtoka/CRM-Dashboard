@@ -59,6 +59,7 @@ function tickSpies(array &$order, ?string $throwing = null): void
     });
     test()->mock(WindowLifecycle::class, function ($m) use ($step) {
         $m->shouldReceive('tickSilence')->once()->andReturnUsing($step('tickSilence'));
+        $m->shouldReceive('tickReplies')->once()->andReturnUsing($step('tickReplies'));
         $m->shouldReceive('confirmDue')->once()->andReturnUsing($step('confirmDue', 0));
     });
     test()->mock(WaitEstimator::class, function ($m) use ($step) {
@@ -90,7 +91,7 @@ it('runs every step once, in order', function () {
     $this->artisan('queue:tick')->assertSuccessful();
 
     // The router runs before the countdown: a customer served now gets no «باقي» message.
-    expect($order)->toBe(['transition', 'tickMembers', 'tickSilence', 'confirmDue', 'router', 'tickLounge']);
+    expect($order)->toBe(['transition', 'tickMembers', 'tickSilence', 'tickReplies', 'confirmDue', 'router', 'tickLounge']);
 });
 
 it('keeps going when a step throws, and reports it', function (string $throwing) {
@@ -102,11 +103,11 @@ it('keeps going when a step throws, and reports it', function (string $throwing)
 
     $this->artisan('queue:tick')->assertSuccessful();
 
-    expect($order)->toBe(['transition', 'tickMembers', 'tickSilence', 'confirmDue', 'router', 'tickLounge']);
+    expect($order)->toBe(['transition', 'tickMembers', 'tickSilence', 'tickReplies', 'confirmDue', 'router', 'tickLounge']);
     Exceptions::assertReported(fn (RuntimeException $e) => $e->getMessage() === 'step '.$throwing.' failed');
     // The lock is given back, so the next tick runs.
     expect(Cache::lock('queue:tick', 5)->get())->toBeTrue();
-})->with(['transition', 'tickMembers', 'tickSilence', 'confirmDue', 'router', 'tickLounge']);
+})->with(['transition', 'tickMembers', 'tickSilence', 'tickReplies', 'confirmDue', 'router', 'tickLounge']);
 
 it('does nothing while the queue is switched off', function () {
     tickSettings(['enabled' => false]);
@@ -114,7 +115,7 @@ it('does nothing while the queue is switched off', function () {
     tickMember($shift);
     $e = QueueEntry::factory()->create();
     foreach ([ShiftService::class, WindowLifecycle::class, WaitEstimator::class, QueueRouter::class] as $class) {
-        $this->mock($class, fn ($m) => $m->shouldNotReceive('transition', 'tickMembers', 'tickSilence', 'confirmDue', 'tickLounge', 'tickWaiting', 'run'));
+        $this->mock($class, fn ($m) => $m->shouldNotReceive('transition', 'tickMembers', 'tickSilence', 'tickReplies', 'confirmDue', 'tickLounge', 'tickWaiting', 'run'));
     }
 
     $this->artisan('queue:tick')->assertSuccessful();

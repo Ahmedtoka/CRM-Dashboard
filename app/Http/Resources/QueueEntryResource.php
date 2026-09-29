@@ -14,6 +14,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * entry is not open, the moderator has not replied yet or the customer wrote last);
  * `wait_seconds` is the stored wait once called, else the time waited so far.
  * `request_line` is the first line of what she asked for, from the bot's summary.
+ * `handoff_left_seconds` counts down to the `no_reply` hand-off (null without the moderator-reply
+ * clock and for an escalation); `reply_overdue` is true once the customer got the apology.
  *
  * @mixin QueueEntry
  */
@@ -59,6 +61,10 @@ class QueueEntryResource extends JsonResource
             'close_reason' => $e->close_reason,
             'silence_left_seconds' => self::silenceLeft($e, $settings),
             'silence_warned' => $e->isOpen() && $e->silence_warned_at !== null,
+            'excluded_user_id' => $e->excluded_user_id,
+            'awaiting_reply_since' => $e->isOpen() ? $e->awaiting_reply_since?->toIso8601String() : null,
+            'reply_overdue' => $e->isOpen() && $e->awaiting_reply_since !== null && $e->apology_sent_at !== null,
+            'handoff_left_seconds' => WindowLifecycle::handOffLeft($e, $settings),
             'return_priority_until' => $e->return_priority_until?->toIso8601String(),
             'reopened_from_entry_id' => $e->reopened_from_entry_id,
         ];

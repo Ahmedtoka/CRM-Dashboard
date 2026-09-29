@@ -30,4 +30,12 @@ final class UserNotifier
             ->filter(fn (User $u) => $u->isSupervisorOrAbove())
             ->each(fn (User $u) => $this->notify($u, $type, $data));
     }
+
+    /** The same notification for every active admin (an escalation left unanswered at the leader's desk). */
+    public function notifyAdmins(string $type, array $data): void
+    {
+        User::query()->where('is_active', true)->get()
+            ->filter(fn (User $u) => $u->isAdmin())
+            ->each(fn (User $u) => $this->notify($u, $type, $data));
+    }
 }

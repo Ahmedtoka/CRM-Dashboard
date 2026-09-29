@@ -88,6 +88,8 @@ final class FlowScripts
             // Flow revision (2026-09-29) §3: she writes while waiting — her ticket and who is ahead, plus the time sentence when there is an estimate.
             'queue_position_update' => ['title' => 'الطابور: كتبت وهي مستنية', 'body' => 'لسه معاكي 💛 رقم تذكرتك #{ticket}، وقدامك {ahead} {eta_sentence}'],
             'queue_eta_sentence' => ['title' => 'الطابور: جملة الوقت في تحديث الدور', 'body' => 'وهنكون معاكي خلال حوالي {minutes} دقايق'],
+            // Flow revision (2026-09-29) §4.2: the moderator has not replied yet.
+            'queue_agent_delay_apology' => ['title' => 'الطابور: اعتذار عن تأخير الموظفة', 'body' => 'معلش على التأخير 🙏 زميلتنا {agent} معاكي حالاً'],
         ];
     }
 }

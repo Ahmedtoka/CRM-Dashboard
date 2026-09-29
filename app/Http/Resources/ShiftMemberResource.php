@@ -18,7 +18,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class ShiftMemberResource extends JsonResource
 {
-    public const COUNTED_REASONS = ['inquiry', 'problem', 'case', 'auto', 'escalation'];
+    public const COUNTED_REASONS = ['inquiry', 'problem', 'case', 'auto', 'escalation', 'no_reply'];
 
     public function toArray(Request $request): array
     {

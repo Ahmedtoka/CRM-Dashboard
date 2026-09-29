@@ -90,6 +90,9 @@ class ActivityLogger
 
     public const QUEUE_CLOSE = 'queue.close';
 
+    /** A window handed to a colleague because the moderator did not reply in time (flow revision §4.4): the penalty record until Part 2's points ledger. */
+    public const QUEUE_NO_REPLY = 'queue.no_reply';
+
     /** A handover-queue shift opened (by the leader's «ابدأ اليوم» or the scheduled transition). */
     public const SHIFT_OPEN = 'shift.open';
 

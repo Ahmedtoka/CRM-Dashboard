@@ -176,10 +176,11 @@ class QueueService
     }
 
     /**
-     * She wrote while queued / in a window: the silence clock restarts. A customer waiting in the
-     * lounge (not overnight) gets her ticket and who is ahead (flow revision §3). The board and the
-     * moderator's strip are told once the inbound message is committed (a rolled-back ingest pushes
-     * nothing), for a waiting entry and for an open window alike.
+     * She wrote while queued / in a window: the silence clock restarts. In an open window whose
+     * assignee had answered everything, the moderator-reply clock starts now (flow revision §4.1).
+     * A customer waiting in the lounge (not overnight) gets her ticket and who is ahead (§3). The
+     * board and the moderator's strip are told once the inbound message is committed (a
+     * rolled-back ingest pushes nothing), for a waiting entry and for an open window alike.
      */
     public function customerMessage(Conversation $c): void
     {
@@ -190,6 +191,12 @@ class QueueService
         }
 
         $e->forceFill(['last_customer_message_at' => now(), 'silence_warned_at' => null])->save();
+
+        // The reply clock, by a conditional update: it reads the row as committed (not the
+        // ingest's snapshot), so a reply of the assignee that committed a moment ago is never
+        // missed, and a clock already running keeps its first moment. Waiting / closed: no clock.
+        QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)->whereNull('awaiting_reply_since')
+            ->update(['awaiting_reply_since' => now()]);
 
         if ($e->status === 'waiting' && $e->priority !== 'overnight' && $this->settings()->enabled) {
             $e->setRelation('conversation', $c);
