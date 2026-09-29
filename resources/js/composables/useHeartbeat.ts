@@ -32,10 +32,10 @@ function stop(): void {
 }
 
 /**
- * Tells the server this tab is open and in front, so presence (and the queue's
- * offline detection) follows the moderator. A hidden tab sends nothing: she goes
- * offline once the server stops hearing from her, and comes back on the first
- * beat after the tab is shown again.
+ * Tells the server the CRM is open, so presence (and the queue's offline
+ * detection) follows the moderator. A hidden tab keeps beating: moderators work
+ * in Shopify and other tabs beside the inbox and must not drop out of the queue
+ * for it. She goes offline when the tab is closed or the machine sleeps.
  */
 export function useHeartbeat() {
     const api = useApi();
@@ -51,7 +51,7 @@ export function useHeartbeat() {
         }
 
         const now = Date.now();
-        if (document.hidden || inFlight || now - lastBeatAt < MIN_GAP_MS) return;
+        if (inFlight || now - lastBeatAt < MIN_GAP_MS) return;
 
         lastBeatAt = now;
         inFlight = true;
