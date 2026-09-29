@@ -631,7 +631,7 @@ class WindowLifecycle
         $this->closeLocked($e, $reason, $by, [], null, route: false);
         $this->parkTicket($e);
 
-        $new = QueueEntry::create($e->only(['conversation_id', 'customer_id', 'business_date', 'kind', 'bot_summary', 'is_test', 'last_customer_message_at']) + [
+        $new = QueueEntry::create($e->only(['conversation_id', 'customer_id', 'business_date', 'kind', 'bot_summary', 'is_test', 'last_customer_message_at', 'open_case_id']) + [
             'ticket_no' => $ticket, 'priority' => $priority, 'status' => 'waiting', 'shift_id' => $e->shift_id, 'enqueued_at' => now(),
             'reopened_from_entry_id' => $e->id, 'reopen_count' => $e->reopen_count, 'waiting_messages' => ['5' => true, '3' => true, '1' => true],
             'excluded_user_id' => $opts['excluded_user_id'] ?? $e->excluded_user_id,

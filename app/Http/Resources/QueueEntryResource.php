@@ -67,6 +67,8 @@ class QueueEntryResource extends JsonResource
             'handoff_left_seconds' => WindowLifecycle::handOffLeft($e, $settings),
             'return_priority_until' => $e->return_priority_until?->toIso8601String(),
             'reopened_from_entry_id' => $e->reopened_from_entry_id,
+            // Her open support case when she took the ticket: «عندها كيس مفتوح #N».
+            'open_case_id' => $e->open_case_id,
         ];
     }
 

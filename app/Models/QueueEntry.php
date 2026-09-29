@@ -65,6 +65,18 @@ class QueueEntry extends Model
         return $this->belongsTo(ShiftMember::class, 'shift_member_id');
     }
 
+    /** The entry she came back from (a reopen, a transfer, an escalation or a no-reply hand-off). */
+    public function reopenedFrom(): BelongsTo
+    {
+        return $this->belongsTo(QueueEntry::class, 'reopened_from_entry_id');
+    }
+
+    /** Her open support case when she took this ticket (flow revision §6). */
+    public function openCase(): BelongsTo
+    {
+        return $this->belongsTo(SupportCase::class, 'open_case_id');
+    }
+
     public function isOpen(): bool
     {
         return in_array($this->status, self::OPEN_STATUSES, true);

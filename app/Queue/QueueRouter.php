@@ -31,13 +31,17 @@ use Throwable;
 /**
  * Hands waiting entries to free moderator windows, one pass per trigger (enqueue, join, leave,
  * break end, window close…). Order of a pass:
- *   0) returning ★ → the same moderator when she has a free window, else the least loaded;
+ *   0) returning ★ → her case owner, else the same moderator, when she has a free window; else
+ *      the least loaded;
  *   0b) escalations → the shift leader (or any supervisor on the shift) who may serve the
  *       platform, else they wait and supervisors are alerted once;
- *   1) live (and manual) customers, oldest first → the least loaded moderator;
+ *   1) live (and manual) customers, oldest first → her case owner when free, else the least
+ *      loaded moderator;
  *   2) the overnight backlog → each moderator drains her own reserved share into her free
  *      windows; orphans (no reservation, or the reserved moderator is off / on break / gone)
- *      go to anyone.
+ *      and case customers whose owner is busy go to anyone.
+ * The case owner is the moderator who opened the customer's open support case (flow revision
+ * §6); like every preference she is used only while logged in with a free window.
  * Load (open windows, window numbers) is counted per USER, not per shift-member row, so a
  * moderator working both shifts (or the leader) keeps her windows across the handover.
  * Every pass that found somebody waiting writes one `queue_decisions` row (the board's decision
@@ -170,7 +174,7 @@ class QueueRouter
     private function pass(Shift $shift, QueueSetting $setting, string $trigger): int
     {
         // A plain read: whoever is picked is locked (and checked again) one by one in assign().
-        $waiting = QueueEntry::query()->with('conversation.customer')->where('status', 'waiting')->orderBy('enqueued_at')->orderBy('id')->get()
+        $waiting = QueueEntry::query()->with(['conversation.customer', 'reopenedFrom:id,assigned_user_id,close_reason', 'openCase:id,opened_by_id'])->where('status', 'waiting')->orderBy('enqueued_at')->orderBy('id')->get()
             ->filter(fn (QueueEntry $e) => $e->conversation !== null);
 
         if ($waiting->isEmpty()) {
@@ -245,18 +249,42 @@ class QueueRouter
             $e->excluded_user_id !== null ? $lounge->reject(fn (ShiftMember $m) => (int) $m->user_id === (int) $e->excluded_user_id)->values() : $lounge,
             $e->conversation->platform, $open, $setting,
         ), $loadOf);
+        // Who she should go to first (flow revision §6): the moderator who opened her open case,
+        // then (a returning customer) her last moderator — each only when logged in (in the
+        // lounge) with a free window and allowed on her platform, never the excluded one.
+        // Null: anyone.
+        $preferred = function (QueueEntry $e) use ($lounge, $open): ?array {
+            $candidates = [];
+            $owner = $e->openCase?->opened_by_id;
+
+            if ($e->open_case_id !== null && $owner !== null && (int) $e->reserved_user_id === (int) $owner) {
+                $candidates[] = [(int) $owner, 'كيس مفتوح #'.$e->open_case_id.' ← اللي فتحته'];
+            }
+
+            if (($same = $this->sameModerator($e)) !== null) {
+                $candidates[] = [$same, 'راجعة ★ لنفس الموظفة'];
+            }
+
+            foreach ($candidates as [$userId, $rule]) {
+                if ($e->excluded_user_id !== null && $userId === (int) $e->excluded_user_id) {
+                    continue;
+                }
+
+                $m = $lounge->firstWhere('user_id', $userId);
+
+                if ($m !== null && $open($m) && $m->user->canAccessPlatform($e->conversation->platform)) {
+                    return [$m, $rule];
+                }
+            }
+
+            return null;
+        };
         $n = 0;
 
-        // 0) returning → the same member if she has a free window, else the least loaded.
+        // 0) returning → her case owner, else the same moderator, when free; else the least loaded.
         foreach ($waiting->where('priority', 'returning') as $e) {
-            $same = $e->reserved_user_id && (int) $e->reserved_user_id !== (int) $e->excluded_user_id ? $lounge->firstWhere('user_id', $e->reserved_user_id) : null;
-            $m = ($same && $open($same) && $same->user->canAccessPlatform($e->conversation->platform)) ? $same : null;
-            $rule = 'راجعة ★ لنفس الموظفة';
-
-            if ($m === null) {
-                $m = $pick($e);
-                $rule = 'راجعة ★ (الأقل حملاً)';
-            }
+            [$m, $rule] = $preferred($e) ?? [null, 'راجعة ★ (الأقل حملاً)'];
+            $m ??= $pick($e);
 
             if ($m === null) {
                 $lines[] = '<span class="no">#'.$e->ticket_no.' راجعة: مفيش شباك فاضي</span>';
@@ -287,7 +315,7 @@ class QueueRouter
             $n += (int) $give($e, $m, 'طابور التصعيد', 'escalation');
         }
 
-        // 1) live (and manual), oldest first.
+        // 1) live (and manual), oldest first: her case owner when free, else the least loaded.
         foreach ($waiting->whereIn('priority', ['live', 'manual']) as $e) {
             if (! $anyOpen()) {
                 if ($lounge->isNotEmpty()) {
@@ -297,36 +325,48 @@ class QueueRouter
                 break;
             }
 
-            $m = $pick($e);
+            [$m, $rule] = $preferred($e) ?? [null, null];
 
             if ($m === null) {
-                $lines[] = '<span class="no">#'.$e->ticket_no.': مفيش شباك فاضي</span>';
+                $m = $pick($e);
 
-                continue;
+                if ($m === null) {
+                    $lines[] = '<span class="no">#'.$e->ticket_no.': مفيش شباك فاضي</span>';
+
+                    continue;
+                }
+
+                $rule = 'حيّة دلوقتي · الأقل حملاً ('.$loadOf($m).' مفتوح)';
             }
 
-            $n += (int) $give($e, $m, 'حيّة دلوقتي · الأقل حملاً ('.$loadOf($m).' مفتوح)', 'live');
+            $n += (int) $give($e, $m, $rule, 'live');
         }
 
         // 2) overnight: each member drains her own share into her free windows. An entry whose
         //    reserved member is not serving now (offline, on break, left) is an orphan: anyone.
+        //    A case customer is not held for a busy owner (the reservation is a preference).
         foreach ($waiting->where('priority', 'overnight')->sortBy('ticket_no') as $e) {
             if (! $anyOpen()) {
                 break;
             }
 
-            $own = $e->reserved_user_id ? $lounge->firstWhere('user_id', $e->reserved_user_id) : null;
+            $own = $e->reserved_user_id && (int) $e->reserved_user_id !== (int) $e->excluded_user_id ? $lounge->firstWhere('user_id', $e->reserved_user_id) : null;
 
             if ($own !== null && ! $own->user->canAccessPlatform($e->conversation->platform)) {
                 $own = null;
             }
 
-            if ($own !== null) {
-                if (! $open($own)) {
+            if ($own !== null && ! $open($own)) {
+                if ($e->open_case_id === null) {
                     continue; // she is serving: her backlog waits for her next gap
                 }
+
+                $own = null;
+            }
+
+            if ($own !== null) {
                 $m = $own;
-                $rule = 'معلّق من الليل في فراغ '.$m->user->name;
+                $rule = $e->open_case_id !== null ? 'كيس مفتوح #'.$e->open_case_id.' ← اللي فتحته' : 'معلّق من الليل في فراغ '.$m->user->name;
             } else {
                 $m = $pick($e);
 
@@ -507,6 +547,31 @@ class QueueRouter
     private function line(QueueEntry $e, ShiftMember $m, string $rule): string
     {
         return '<b>#'.$e->ticket_no.'</b> <span class="hi">'.e($rule).'</span> ← <span class="ok">'.e($m->user->name).'</span>';
+    }
+
+    /**
+     * Her last moderator, for a returning customer (flow revision §6): Part 1's reservation when
+     * she has no open case; with a case (the reservation is then her case owner's) the moderator
+     * of the window she came back from. Null for any other lane.
+     */
+    private function sameModerator(QueueEntry $e): ?int
+    {
+        if ($e->priority !== 'returning') {
+            return null;
+        }
+
+        if ($e->open_case_id === null) {
+            return $e->reserved_user_id !== null ? (int) $e->reserved_user_id : null;
+        }
+
+        // A window closed by a transfer or a no-reply hand-off is one she was taken OUT of.
+        $from = $e->reopenedFrom;
+
+        if ($from === null || $from->assigned_user_id === null || in_array($from->close_reason, ['transfer', 'no_reply'], true)) {
+            return null;
+        }
+
+        return (int) $from->assigned_user_id;
     }
 
     /**

@@ -27,7 +27,7 @@ class QueueSetting extends Model
     protected function casts(): array
     {
         return [
-            'enabled' => 'boolean', 'night_message_enabled' => 'boolean',
+            'enabled' => 'boolean', 'night_message_enabled' => 'boolean', 'case_follow_owner' => 'boolean',
             'points' => 'array', 'shifts' => 'array', 'default_roster' => 'array',
         ];
     }

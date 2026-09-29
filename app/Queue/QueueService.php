@@ -13,6 +13,7 @@ use App\Models\QueueDay;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Models\Shift;
+use App\Models\SupportCase;
 use App\Queue\Data\HandoverContext;
 use App\Queue\Events\QueueEntryUpdated;
 use App\Queue\Jobs\SendQueueMessage;
@@ -112,6 +113,17 @@ class QueueService
         return QueueEntry::query()->where('conversation_id', $c->id)->whereIn('status', ['waiting', 'called', 'active'])->latest('id')->first();
     }
 
+    /**
+     * Her open support case — not closed and not resolved — newest first: on her customer
+     * record, else (no customer) on this conversation (flow revision §6).
+     */
+    public function openCaseFor(Conversation $c): ?SupportCase
+    {
+        return SupportCase::query()->where('status', '!=', 'closed')->whereNull('resolved_at')
+            ->when($c->customer_id !== null, fn ($q) => $q->where('customer_id', $c->customer_id), fn ($q) => $q->where('conversation_id', $c->id))
+            ->latest('id')->first();
+    }
+
     /** Idempotent per conversation: an entry still waiting / called / active is returned as is. */
     public function enqueue(Conversation $c, HandoverContext $ctx, ?string $priority = null): ?QueueEntry
     {
@@ -135,13 +147,17 @@ class QueueService
             default => 'live',
         };
         $date = $this->businessDate();
+        // An open support case: the ticket carries it, and the moderator who opened it is preferred
+        // (a reservation the router honours only while she is logged in with a free window).
+        $case = $this->openCaseFor($c);
+        $owner = $case !== null && $s->case_follow_owner && $case->opened_by_id !== null ? (int) $case->opened_by_id : null;
 
         $entry = QueueEntry::create([
             'conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'business_date' => $date, 'ticket_no' => $this->nextTicket($date),
             'kind' => in_array($ctx->kind, QueueEntry::KINDS, true) ? $ctx->kind : 'unknown', 'priority' => $priority, 'status' => 'waiting',
             'shift_id' => $shift?->id, 'enqueued_at' => now(), 'last_customer_message_at' => $c->last_customer_message_at, 'is_test' => (bool) $c->is_test,
             'bot_summary' => ['topic' => $ctx->topic, 'category' => $ctx->category, 'reason' => $ctx->reason, 'order_number' => $ctx->orderNumber, 'lines' => $ctx->summaryLines],
-            'waiting_messages' => [],
+            'waiting_messages' => [], 'open_case_id' => $case?->id, 'reserved_user_id' => $owner,
         ]);
         $c->forceFill(['queue_entry_id' => $entry->id, 'assignee_id' => null, 'assigned_at' => null])->save();
         $this->logger->log(ActorType::System, null, ActivityLogger::QUEUE_ENQUEUE, null, $c, ['ticket' => $entry->ticket_no, 'priority' => $priority]);
@@ -301,7 +317,8 @@ class QueueService
             }
 
             if ($returning) {
-                $entry->forceFill(['reopened_from_entry_id' => $last->id, 'reserved_user_id' => $last->assigned_user_id, 'reopen_count' => $last->reopen_count + 1])->save();
+                // Her case owner (set by enqueue) comes first; else, as before, her last moderator.
+                $entry->forceFill(['reopened_from_entry_id' => $last->id, 'reserved_user_id' => $entry->reserved_user_id ?? $last->assigned_user_id, 'reopen_count' => $last->reopen_count + 1])->save();
             }
 
             if ($confirmWindow) {
