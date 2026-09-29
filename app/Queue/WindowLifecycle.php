@@ -635,6 +635,9 @@ class WindowLifecycle
             'ticket_no' => $ticket, 'priority' => $priority, 'status' => 'waiting', 'shift_id' => $e->shift_id, 'enqueued_at' => now(),
             'reopened_from_entry_id' => $e->id, 'reopen_count' => $e->reopen_count, 'waiting_messages' => ['5' => true, '3' => true, '1' => true],
             'excluded_user_id' => $opts['excluded_user_id'] ?? $e->excluded_user_id,
+            // Flow revision §6: her open case's owner is preferred again (the router never gives her
+            // back to the excluded moderator, whoever that is).
+            'reserved_user_id' => $this->caseOwnerOf($e),
         ]);
 
         $e->conversation?->forceFill([
@@ -650,6 +653,18 @@ class WindowLifecycle
         app(QueueRouter::class)->runAfterCommit($trigger.' #'.$ticket);
 
         return $new;
+    }
+
+    /** The moderator who opened her still-open support case, when the switch is on; else null. */
+    private function caseOwnerOf(QueueEntry $e): ?int
+    {
+        $case = $e->open_case_id !== null ? $e->openCase : null;
+
+        if ($case === null || $case->status === 'closed' || $case->resolved_at !== null || $case->opened_by_id === null || ! QueueSetting::current()->case_follow_owner) {
+            return null;
+        }
+
+        return (int) $case->opened_by_id;
     }
 
     /** The close itself, on an entry the caller holds locked and knows to be open. */

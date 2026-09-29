@@ -253,15 +253,14 @@ class QueueRouter
         // then (a returning customer) her last moderator — each only when logged in (in the
         // lounge) with a free window and allowed on her platform, never the excluded one.
         // Null: anyone.
-        $preferred = function (QueueEntry $e) use ($lounge, $open): ?array {
+        $preferred = function (QueueEntry $e) use ($lounge, $open, $setting): ?array {
             $candidates = [];
-            $owner = $e->openCase?->opened_by_id;
 
-            if ($e->open_case_id !== null && $owner !== null && (int) $e->reserved_user_id === (int) $owner) {
-                $candidates[] = [(int) $owner, 'كيس مفتوح #'.$e->open_case_id.' ← اللي فتحته'];
+            if (($owner = $this->caseOwner($e, $setting)) !== null) {
+                $candidates[] = [$owner, 'كيس مفتوح #'.$e->open_case_id.' ← اللي فتحته'];
             }
 
-            if (($same = $this->sameModerator($e)) !== null) {
+            if (($same = $this->sameModerator($e, $setting)) !== null) {
                 $candidates[] = [$same, 'راجعة ★ لنفس الموظفة'];
             }
 
@@ -350,6 +349,7 @@ class QueueRouter
                 break;
             }
 
+            $owned = $this->caseOwner($e, $setting) !== null;
             $own = $e->reserved_user_id && (int) $e->reserved_user_id !== (int) $e->excluded_user_id ? $lounge->firstWhere('user_id', $e->reserved_user_id) : null;
 
             if ($own !== null && ! $own->user->canAccessPlatform($e->conversation->platform)) {
@@ -357,7 +357,7 @@ class QueueRouter
             }
 
             if ($own !== null && ! $open($own)) {
-                if ($e->open_case_id === null) {
+                if (! $owned) {
                     continue; // she is serving: her backlog waits for her next gap
                 }
 
@@ -366,7 +366,7 @@ class QueueRouter
 
             if ($own !== null) {
                 $m = $own;
-                $rule = $e->open_case_id !== null ? 'كيس مفتوح #'.$e->open_case_id.' ← اللي فتحته' : 'معلّق من الليل في فراغ '.$m->user->name;
+                $rule = $owned ? 'كيس مفتوح #'.$e->open_case_id.' ← اللي فتحته' : 'معلّق من الليل في فراغ '.$m->user->name;
             } else {
                 $m = $pick($e);
 
@@ -550,17 +550,29 @@ class QueueRouter
     }
 
     /**
-     * Her last moderator, for a returning customer (flow revision §6): Part 1's reservation when
-     * she has no open case; with a case (the reservation is then her case owner's) the moderator
-     * of the window she came back from. Null for any other lane.
+     * The moderator whose open case reserved this ticket (flow revision §6): only when the switch
+     * is on AND the reservation is the very moderator who opened the case. A share of the overnight
+     * split (or Part 1's last moderator) that merely sits on a ticket with a case is not it.
      */
-    private function sameModerator(QueueEntry $e): ?int
+    private function caseOwner(QueueEntry $e, QueueSetting $setting): ?int
+    {
+        $opener = $e->openCase?->opened_by_id;
+
+        return $setting->case_follow_owner && $e->open_case_id !== null && $opener !== null && (int) $e->reserved_user_id === (int) $opener ? (int) $opener : null;
+    }
+
+    /**
+     * Her last moderator, for a returning customer (flow revision §6): Part 1's reservation unless
+     * that reservation is her case owner's; then the moderator of the window she came back from.
+     * Null for any other lane.
+     */
+    private function sameModerator(QueueEntry $e, QueueSetting $setting): ?int
     {
         if ($e->priority !== 'returning') {
             return null;
         }
 
-        if ($e->open_case_id === null) {
+        if ($this->caseOwner($e, $setting) === null) {
             return $e->reserved_user_id !== null ? (int) $e->reserved_user_id : null;
         }
 

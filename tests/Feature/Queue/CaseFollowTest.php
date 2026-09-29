@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Queue\Data\HandoverContext;
 use App\Queue\QueueRouter;
 use App\Queue\QueueService;
+use App\Queue\WindowLifecycle;
 use Illuminate\Support\Carbon;
 
 beforeEach(function () {
@@ -168,3 +169,74 @@ it('does not send a transferred customer back to the moderator she was taken fro
 
     expect($e->fresh()->assigned_user_id)->toBe($other->user_id);
 });
+
+it('keeps a bot-collected case customer in her overnight share, even when the share-holder is busy', function () {
+    $shift = Shift::factory()->create();
+    $holder = caseDesk($shift, ['windows_cap' => 1, 'status' => 'busy']);
+    QueueEntry::factory()->create(['shift_member_id' => $holder->id, 'assigned_user_id' => $holder->user_id, 'status' => 'active', 'window_no' => 1]);
+    caseDesk($shift);
+    $c = caseConv();
+    $case = caseOpenedBy($c, null);   // the bot collected it: nobody opened it
+    $night = QueueEntry::factory()->create(['conversation_id' => $c->id, 'priority' => 'overnight', 'reserved_user_id' => $holder->user_id, 'open_case_id' => $case->id]);
+
+    app(QueueRouter::class)->run('t');
+
+    expect($night->fresh()->status)->toBe('waiting')->and($night->fresh()->assigned_user_id)->toBeNull();
+});
+
+it('treats a case customer overnight exactly as before when the switch is off', function () {
+    QueueSetting::current()->update(['case_follow_owner' => false]);
+    $shift = Shift::factory()->create();
+    $owner = caseDesk($shift, ['windows_cap' => 1, 'status' => 'busy']);
+    QueueEntry::factory()->create(['shift_member_id' => $owner->id, 'assigned_user_id' => $owner->user_id, 'status' => 'active', 'window_no' => 1]);
+    caseDesk($shift);
+    $c = caseConv();
+    $case = caseOpenedBy($c, $owner->user);
+    $night = QueueEntry::factory()->create(['conversation_id' => $c->id, 'priority' => 'overnight', 'reserved_user_id' => $owner->user_id, 'open_case_id' => $case->id]);
+
+    app(QueueRouter::class)->run('t');
+
+    expect($night->fresh()->status)->toBe('waiting');   // her share waits for her next gap
+});
+
+it('labels a return with the switch off as the same moderator, not as the case owner', function () {
+    QueueSetting::current()->update(['case_follow_owner' => false]);
+    $shift = Shift::factory()->create();
+    $same = caseDesk($shift);
+    $c = caseConv();
+    caseOpenedBy($c, $same->user);
+    QueueEntry::factory()->create([
+        'conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'status' => 'closed', 'close_reason' => 'auto',
+        'assigned_user_id' => $same->user_id, 'closed_at' => now()->subMinutes(5),
+    ]);
+    $c->forceFill(['handler' => 'human', 'return_priority_until' => now()->addHour()])->save();
+
+    app(QueueService::class)->customerReturned($c->fresh());
+
+    $e = QueueEntry::where('conversation_id', $c->id)->latest('id')->first();
+    expect($e->assigned_user_id)->toBe($same->user_id)->and($e->rule)->toContain('لنفس الموظفة')->and($e->rule)->not->toContain('كيس مفتوح');
+});
+
+it('sends a transferred customer to her case owner when free, but never to the excluded one', function (bool $ownerExcluded) {
+    $shift = Shift::factory()->create();
+    $from = caseDesk($shift, ['status' => 'busy']);
+    $owner = caseDesk($shift);
+    $other = caseDesk($shift);
+    // Least loaded first: the owner is the busier one when she is preferred, the idler one when she is excluded.
+    $busy = $ownerExcluded ? $other : $owner;
+    QueueEntry::factory()->create(['shift_member_id' => $busy->id, 'assigned_user_id' => $busy->user_id, 'status' => 'active', 'window_no' => 1]);
+    $c = caseConv();
+    caseOpenedBy($c, $owner->user);
+    $case = SupportCase::where('conversation_id', $c->id)->first();
+    $old = QueueEntry::factory()->create([
+        'conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'status' => 'active', 'shift_member_id' => $from->id, 'assigned_user_id' => $from->user_id,
+        'window_no' => 1, 'delivered_at' => now(), 'open_case_id' => $case->id, 'excluded_user_id' => $ownerExcluded ? $owner->user_id : null,
+    ]);
+    $c->forceFill(['queue_entry_id' => $old->id, 'assignee_id' => $from->user_id])->save();
+
+    $from->user->forceFill(['last_seen_at' => now()->subHour()])->save();   // she is the one who went offline
+
+    $new = app(WindowLifecycle::class)->transferAway($old, 'test');
+
+    expect($new->fresh()->assigned_user_id)->toBe($ownerExcluded ? $other->user_id : $owner->user_id);
+})->with(['owner free and not excluded' => [false], 'owner is the excluded one' => [true]]);
