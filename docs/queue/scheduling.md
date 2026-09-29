@@ -4,15 +4,36 @@
 `App\Queue\QueueServiceProvider` to run every 30 seconds and does, in order:
 
 1. opens / closes shifts on time;
-2. members: breaks, offline moderators, hand-off of their windows;
-3. customer silence: warning message, then auto-close;
-4. confirm sweep: closes whose confirm window passed (safety net for a lost `ConfirmClose` job);
-5. countdown («باقي 5 / 3 / 1 دقايق») and apology messages to waiting customers;
-6. the router;
-7. once an hour, deletes decision lines older than 7 days.
+2. members: breaks; a rostered moderator who never logged in since she joined ("not arrived") is
+   marked offline at once; a moderator whose heartbeat stopped goes offline after 3 minutes and
+   her windows are handed on after 5; the leader, supervisors and admins hear once per shift when
+   somebody is still not logged in `not_arrived_alert_minutes` (10) into it;
+3. customer silence (after the moderator's reply): warning message, then auto-close;
+4. moderator reply (the customer waits for the moderator): apology at `agent_apology_seconds`
+   (180), hand-off to a free logged-in colleague as `no_reply` at `agent_reassign_first_seconds`
+   (300, first reply) or `agent_reassign_seconds` (480, later message), else one alert to the
+   leader per waiting period and another try on every tick;
+5. confirm sweep: closes whose confirm window passed (safety net for a lost `ConfirmClose` job);
+6. the router (only logged-in desks, never the leader for a live customer);
+7. countdown («باقي 5 / 3 / 1 دقايق») and apology messages to waiting customers, only while there
+   is an estimate (a logged-in desk that may take her);
+8. once an hour, deletes decision lines older than 7 days.
 
 A failing step is reported to the log and the next steps still run. With the queue switched off
 in the settings the command does nothing.
+
+## Presence and the two clocks (flow revision, 2026-09-29)
+
+- A desk serves only while its moderator is logged in (a heartbeat in the last 2 minutes). The
+  board shows a serving desk whose moderator is not logged in in grey, «مش فاتحة».
+- The mass-offline safeguard counts only desks that were online since they joined; moderators who
+  never logged in are "not arrived", never "gone dark together".
+- Two clocks run on an open window, never together: the customer-silence clock (after the
+  moderator's last reply) and the moderator-reply clock (`queue_entries.awaiting_reply_since`,
+  while the customer waits for her). A `no_reply` hand-off keeps the ticket, puts the customer
+  first in the lounge and never gives her back to the same moderator (`excluded_user_id`).
+- Until Part 2's points ledger exists, a `no_reply` hand-off is recorded as the close reason plus
+  the activity-log line `queue.no_reply` (with `points: -points.no_reply`).
 
 ## Server with a one-minute cron (Cloudways)
 
