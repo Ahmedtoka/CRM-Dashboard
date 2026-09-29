@@ -52,6 +52,12 @@ class PresenceTracker
         $u->forceFill(['last_seen_at' => $now])->save();
     }
 
+    /** Seen (any heartbeat) within the last ONLINE_MINUTES. Never seen = offline. */
+    public function isOnline(User $u): bool
+    {
+        return $u->last_seen_at !== null && $u->last_seen_at->gt(now()->subMinutes(self::ONLINE_MINUTES));
+    }
+
     /**
      * @return array<int, int>
      */

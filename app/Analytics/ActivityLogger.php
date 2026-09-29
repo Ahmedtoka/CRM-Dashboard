@@ -90,6 +90,9 @@ class ActivityLogger
 
     public const QUEUE_CLOSE = 'queue.close';
 
+    /** A handover-queue shift opened (by the leader's «ابدأ اليوم» or the scheduled transition). */
+    public const SHIFT_OPEN = 'shift.open';
+
     public function log(ActorType $actor, ?User $user, string $action, ?Model $subject = null, ?Conversation $conversation = null, array $meta = []): ActivityLog
     {
         $platform = $conversation?->platform;
