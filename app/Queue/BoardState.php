@@ -152,7 +152,8 @@ class BoardState
         // Today's attendance of every desk, from one query (attendance §4).
         $attendance = $this->attendance->figuresFor(
             $desks->pluck('user_id')->map(fn ($id) => (int) $id)->unique()->values()->all(),
-            $this->queue->businessDate(),
+            // The events sit under her SHIFT's date: an evening shift running past midnight is still yesterday's.
+            $open?->date->toDateString() ?? $this->queue->businessDate(),
             (int) $s->break_minutes,
         );
 

@@ -506,3 +506,19 @@ it('reads the attendance of every desk in one query', function () {
 
     expect($one)->toBe(1)->and($attendanceQueries())->toBe(1);
 });
+
+it('keeps her figures after midnight while the evening shift of the day before is still open', function () {
+    Carbon::setTestNow(Carbon::parse('2026-10-05 18:05', 'Africa/Cairo'));
+    $shift = Shift::factory()->create([
+        'date' => '2026-10-05', 'starts_at' => Carbon::parse('2026-10-05 18:00', 'Africa/Cairo')->utc(),
+        'ends_at' => Carbon::parse('2026-10-06 02:00', 'Africa/Cairo')->utc(),
+    ]);
+    $m = app(ShiftService::class)->checkIn(boardModerator());
+    Carbon::setTestNow(Carbon::parse('2026-10-06 00:30', 'Africa/Cairo'));
+
+    $desk = collect($this->actingAs(boardSupervisor())->getJson('/board/state')->assertOk()->json('data.members'))->firstWhere('id', $m->id);
+
+    expect($m->shift_id)->toBe($shift->id)->and($desk['attendance']['checked_in'])->toBeTrue()
+        ->and($desk['attendance']['worked_seconds'])->toBe((6 * 60 + 25) * 60)
+        ->and(Carbon::parse($desk['attendance']['first_in'])->equalTo(Carbon::parse('2026-10-05 18:05', 'Africa/Cairo')))->toBeTrue();
+});
