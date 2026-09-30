@@ -8,6 +8,7 @@ use App\Models\Shift;
 use App\Models\ShiftMember;
 use App\Models\User;
 use App\Models\UserNotification;
+use App\Queue\Attendance;
 use App\Queue\AttendanceRefused;
 use App\Queue\Data\HandoverContext;
 use App\Queue\Events\QueueMemberUpdated;
@@ -401,4 +402,109 @@ it('at the clock close checks out every desk on the shift, frees their overnight
                 && collect($ev->broadcastOn())->contains(fn ($ch) => $ch->name === 'private-user.'.$desk->user_id),
         );
     }
+});
+
+// ───── attendance §4: the day's figures ─────
+
+it('adds up her day: first in, last out, time worked, breaks and overruns', function () {
+    QueueSetting::current()->update(['break_minutes' => 30]);
+    Carbon::setTestNow(Carbon::parse('2026-10-05 10:00', 'Africa/Cairo'));
+    app(ShiftService::class)->transition();
+    $u = attModerator();
+    $svc = app(ShiftService::class);
+    $at = function (string $time) use ($u) {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 '.$time, 'Africa/Cairo'));
+        $u->forceFill(['last_seen_at' => now()])->save();
+    };
+
+    $at('10:02');
+    $m = $svc->checkIn($u);
+    $at('12:00');
+    $svc->setStatus($m, 'break', $u);
+    $at('12:20');
+    $svc->setStatus($m, 'available', $u); // 20 minutes
+    $at('15:00');
+    $svc->setStatus($m, 'break', $u);
+    $at('15:40');
+    $svc->setStatus($m, 'available', $u); // 40 minutes: past the 30
+    $at('16:00');
+    $svc->checkOut($m->fresh());
+    $at('16:30');
+    $m = $svc->checkIn($u); // back the same shift
+    $at('17:00');
+
+    $f = app(Attendance::class)->figuresFor([$u->id], '2026-10-05', 30)[$u->id];
+
+    expect(Carbon::parse($f['first_in'])->equalTo(Carbon::parse('2026-10-05 10:02', 'Africa/Cairo')))->toBeTrue()
+        ->and($f['last_out'])->toBeNull()->and($f['checked_in'])->toBeTrue()
+        ->and($f['break_count'])->toBe(2)->and($f['break_seconds'])->toBe(60 * 60)->and($f['overruns'])->toBe(1)
+        // (10:02 → 16:00) + (16:30 → 17:00) = 358 + 30 minutes, less the 60 minutes of breaks
+        ->and($f['worked_seconds'])->toBe((358 + 30 - 60) * 60);
+
+    $at('17:10');
+    $svc->checkOut($m);
+    $f = app(Attendance::class)->figuresFor([$u->id], '2026-10-05', 30)[$u->id];
+
+    expect(Carbon::parse($f['last_out'])->equalTo(Carbon::parse('2026-10-05 17:10', 'Africa/Cairo')))->toBeTrue()
+        ->and($f['checked_in'])->toBeFalse()
+        ->and($f['worked_seconds'])->toBe((358 + 40 - 60) * 60)
+        ->and(app(Attendance::class)->figuresFor([999999], '2026-10-05', 30)[999999])->toBe(Attendance::EMPTY);
+});
+
+it('counts a break still running up to now, and as an overrun once it is past the limit', function () {
+    Shift::factory()->create();
+    $u = attModerator();
+    $svc = app(ShiftService::class);
+    $m = $svc->checkIn($u); // 12:00
+    Carbon::setTestNow(now()->addHour());
+    $svc->setStatus($m, 'break', $u); // 13:00
+    Carbon::setTestNow(now()->addMinutes(35)); // 13:35, still on it
+
+    $f = app(Attendance::class)->figuresFor([$u->id], '2026-10-05', 30)[$u->id];
+
+    expect($f['checked_in'])->toBeTrue()->and($f['break_count'])->toBe(1)->and($f['break_seconds'])->toBe(35 * 60)
+        ->and($f['overruns'])->toBe(1)->and($f['worked_seconds'])->toBe(60 * 60);
+});
+
+/** The figures of one day from [event, H:i] steps, as the log would return them. */
+function attCompute(array $steps, string $now, int $limit = 30): array
+{
+    $events = array_map(fn (array $s) => new QueueAttendanceEvent([
+        // In the app timezone, as the column is stored and read back.
+        'event' => $s[0], 'at' => Carbon::parse('2026-10-05 '.$s[1], 'Africa/Cairo')->setTimezone(config('app.timezone')),
+    ]), $steps);
+
+    return Attendance::compute($events, $limit, Carbon::parse('2026-10-05 '.$now, 'Africa/Cairo'));
+}
+
+it('closes an open break at the check-out, which writes no back', function () {
+    $f = attCompute([['in', '10:00'], ['break', '12:00'], ['out', '12:45']], '18:00');
+
+    expect($f['break_seconds'])->toBe(45 * 60)->and($f['break_count'])->toBe(1)->and($f['overruns'])->toBe(1)
+        ->and($f['worked_seconds'])->toBe(120 * 60)->and($f['checked_in'])->toBeFalse()->and($f['last_out'])->not->toBeNull();
+});
+
+it('closes an open break at the automatic check-out, and at a new check-in', function () {
+    $auto = attCompute([['in', '10:00'], ['break', '11:00'], ['auto_out', '11:10']], '18:00');
+    expect($auto['break_seconds'])->toBe(10 * 60)->and($auto['overruns'])->toBe(0)->and($auto['worked_seconds'])->toBe(60 * 60);
+
+    // Two in rows in a row (the out never written): the break ends at the second, the stay is not counted twice.
+    $again = attCompute([['in', '10:00'], ['break', '11:00'], ['in', '11:20']], '12:00');
+    expect($again['break_seconds'])->toBe(20 * 60)->and($again['worked_seconds'])->toBe((120 - 20) * 60);
+});
+
+it('adds a double shift and a re-check-in as separate stays', function () {
+    $f = attCompute([['in', '09:00'], ['out', '11:00'], ['in', '11:30'], ['break', '12:00'], ['back', '12:10'], ['auto_out', '14:00'], ['in', '18:00'], ['out', '20:00']], '23:00');
+
+    expect($f['worked_seconds'])->toBe((120 + 150 - 10 + 120) * 60)->and($f['break_seconds'])->toBe(10 * 60)->and($f['break_count'])->toBe(1)
+        ->and($f['overruns'])->toBe(0)
+        ->and(Carbon::parse($f['first_in'])->equalTo(Carbon::parse('2026-10-05 09:00', 'Africa/Cairo')))->toBeTrue()
+        ->and(Carbon::parse($f['last_out'])->equalTo(Carbon::parse('2026-10-05 20:00', 'Africa/Cairo')))->toBeTrue();
+});
+
+it('counts a running day up to now, an exact-limit break is not an overrun, and an empty day is the empty figures', function () {
+    $f = attCompute([['in', '10:00'], ['break', '11:00'], ['back', '11:30']], '13:00');
+    expect($f['worked_seconds'])->toBe(150 * 60)->and($f['overruns'])->toBe(0)->and($f['checked_in'])->toBeTrue()->and($f['last_out'])->toBeNull();
+
+    expect(attCompute([], '13:00'))->toBe(Attendance::EMPTY);
 });

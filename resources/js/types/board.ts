@@ -11,14 +11,29 @@ export interface BoardWindowRef {
     silence_left_seconds: number | null;
 }
 
+/** Her attendance of the day (attendance design §4), from `queue_attendance_events`. */
+export interface AttendanceFigures {
+    first_in: string | null;
+    /** Null while she is still checked in. */
+    last_out: string | null;
+    checked_in: boolean;
+    worked_seconds: number;
+    break_seconds: number;
+    break_count: number;
+    /** Breaks longer than `break_minutes` (an open one counts once it is past). */
+    overruns: number;
+}
+
 /**
- * A desk of the open shift. The last two fields come with the board state only; the
+ * A desk of the open shift. The last three fields come with the board state only; the
  * `QueueMemberUpdated` broadcast does not carry them, so they are kept from the state.
  */
 export interface BoardMember extends ShiftMember {
     windows: BoardWindowRef[];
     is_leader?: boolean;
     platforms?: PlatformValue[];
+    /** Board state only; kept across `QueueMemberUpdated` like the platforms. */
+    attendance?: AttendanceFigures;
 }
 
 export interface BoardShift {

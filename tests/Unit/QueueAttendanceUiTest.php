@@ -32,3 +32,11 @@ it('draws the board from check-ins: no start of the day, no roster form, the bre
         ->and(attendanceSource('resources/js/components/crm/NotificationBell.vue'))->toContain("'queue.break_overrun'")
         ->and(attendanceSource('resources/js/pages/settings/Queue.vue'))->not->toContain("t('settings.queue.break_after_minutes')");
 });
+
+it('shows her attendance of the day in the member panel, in both languages', function () {
+    expect(attendanceSource('resources/js/i18n/ar.ts'))->toContain("title: 'حضورها النهارده'")->toContain("overruns: 'استراحات طوّلت'")
+        ->and(attendanceSource('resources/js/i18n/en.ts'))->toContain("title: 'Her attendance today'")
+        ->and(attendanceSource('resources/js/types/board.ts'))->toContain('export interface AttendanceFigures')
+        ->and(attendanceSource('resources/js/lib/board/state.ts'))->toContain('attendance: m.attendance')
+        ->and(attendanceSource('resources/js/components/board/BoardMemberPanel.vue'))->toContain("t('board.member.attendance.title')");
+});

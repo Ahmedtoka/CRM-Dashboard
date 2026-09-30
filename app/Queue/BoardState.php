@@ -40,6 +40,7 @@ class BoardState
         private readonly QueueService $queue,
         private readonly PresenceTracker $presence,
         private readonly ShiftService $shifts,
+        private readonly Attendance $attendance,
     ) {}
 
     /** The board with the queue switched off: nothing but the fact. Reads the settings row only. */
@@ -132,6 +133,7 @@ class BoardState
     /**
      * The desks of the open shift. Windows and load are counted per USER (a window she got in
      * the morning shift is still hers in the evening), the day's counters per desk.
+     * Each desk carries her attendance of the day (first in, last out, worked, breaks).
      *
      * @param  Collection<int, ShiftMember>  $desks
      * @param  Collection<int, QueueEntry>  $windows
@@ -147,8 +149,14 @@ class BoardState
             ->selectRaw('shift_member_id, close_reason, COUNT(*) as n')->groupBy('shift_member_id', 'close_reason')->get()
             ->groupBy('shift_member_id');
         $byUser = $windows->groupBy('assigned_user_id');
+        // Today's attendance of every desk, from one query (attendance §4).
+        $attendance = $this->attendance->figuresFor(
+            $desks->pluck('user_id')->map(fn ($id) => (int) $id)->unique()->values()->all(),
+            $this->queue->businessDate(),
+            (int) $s->break_minutes,
+        );
 
-        return $desks->map(function (ShiftMember $m) use ($counts, $byUser, $open, $s) {
+        return $desks->map(function (ShiftMember $m) use ($counts, $byUser, $open, $s, $attendance) {
             $rows = $counts->get($m->id, collect());
             $mine = $byUser->get($m->user_id, collect())
                 ->map(fn (QueueEntry $e) => ShiftMemberResource::window($e, $s))->values()->all();
@@ -162,6 +170,7 @@ class BoardState
             ) + [
                 'is_leader' => $open !== null && $open->leader_user_id !== null && (int) $open->leader_user_id === (int) $m->user_id,
                 'platforms' => $user ? $this->platformsOf($user) : [],
+                'attendance' => $attendance[(int) $m->user_id] ?? Attendance::EMPTY,
             ];
         })->values()->all();
     }

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useBoardContext } from '@/lib/board/context';
 import { notOnline } from '@/lib/board/state';
-import { formatCount, formatSeconds } from '@/lib/format';
+import { formatClock, formatCount, formatMinutes, formatSeconds } from '@/lib/format';
 import { Link } from '@inertiajs/vue3';
 import { Coffee, ExternalLink, LoaderCircle, LogOut, Undo2, UserRoundCheck } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
@@ -49,6 +49,27 @@ const counters = computed(() => {
         label: t(`board.member.today.${key}`),
         value: formatCount(today[key] ?? 0, locale.value),
     }));
+});
+
+/** Her attendance of the day (attendance §4): shown only, nothing is paid or penalised from it. */
+const attendance = computed(() => {
+    const a = member.value?.attendance;
+    if (!a) return [];
+    const hours = (seconds: number) => formatMinutes(Math.floor(seconds / 60), locale.value);
+
+    return [
+        { key: 'first_in', label: t('board.member.attendance.first_in'), value: a.first_in ? formatClock(a.first_in, locale.value) : '—', alert: false },
+        {
+            key: 'last_out',
+            label: t('board.member.attendance.last_out'),
+            value: a.last_out ? formatClock(a.last_out, locale.value) : t('board.member.attendance.still_in'),
+            alert: false,
+        },
+        { key: 'worked', label: t('board.member.attendance.worked'), value: hours(a.worked_seconds), alert: false },
+        { key: 'break_time', label: t('board.member.attendance.break_time'), value: hours(a.break_seconds), alert: false },
+        { key: 'break_count', label: t('board.member.attendance.break_count'), value: formatCount(a.break_count, locale.value), alert: false },
+        { key: 'overruns', label: t('board.member.attendance.overruns'), value: formatCount(a.overruns, locale.value), alert: a.overruns > 0 },
+    ];
 });
 
 const onBreak = computed(() => member.value?.status === 'break' || member.value?.status === 'pending_break');
@@ -119,6 +140,16 @@ async function handBack(): Promise<void> {
                     <dd class="text-base font-bold tabular-nums text-foreground">{{ c.value }}</dd>
                 </div>
             </dl>
+
+            <div v-if="attendance.length > 0">
+                <h3 class="mb-1 text-xs font-semibold text-muted-foreground">{{ t('board.member.attendance.title') }}</h3>
+                <dl class="grid grid-cols-2 gap-2 text-xs">
+                    <div v-for="row in attendance" :key="row.key" class="flex items-center justify-between gap-2 rounded-md bg-muted px-2 py-1.5">
+                        <dt class="truncate text-muted-foreground">{{ row.label }}</dt>
+                        <dd class="font-semibold tabular-nums" :class="row.alert ? 'text-destructive' : 'text-foreground'">{{ row.value }}</dd>
+                    </div>
+                </dl>
+            </div>
 
             <div>
                 <h3 class="mb-1 text-xs font-semibold text-muted-foreground">

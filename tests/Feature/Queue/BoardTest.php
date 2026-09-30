@@ -6,6 +6,7 @@ use App\Models\QueueSetting;
 use App\Models\Shift;
 use App\Models\ShiftMember;
 use App\Models\User;
+use App\Queue\Attendance;
 use App\Queue\BoardState;
 use App\Queue\Events\QueueMemberUpdated;
 use App\Queue\Events\RouterDecided;
@@ -470,4 +471,38 @@ it('says when the next shift starts while none is open, and that it is opening o
     Shift::factory()->create();
     $this->actingAs($sup)->getJson('/board/state')->assertOk()
         ->assertJsonPath('data.shift_opening', false)->assertJsonPath('data.next_shift_starts_at', null);
+});
+
+// ───── attendance §4: the figures in the member panel ─────
+
+it('gives each desk her attendance of the day', function () {
+    Carbon::setTestNow(Carbon::parse('2026-10-05 11:00', 'Africa/Cairo'));
+    Shift::factory()->create();
+    $m = app(ShiftService::class)->checkIn(boardModerator());
+    Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
+
+    $desk = collect($this->actingAs(boardSupervisor())->getJson('/board/state')->assertOk()->json('data.members'))->firstWhere('id', $m->id);
+
+    expect($desk['attendance'])->toMatchArray(['checked_in' => true, 'last_out' => null, 'worked_seconds' => 3600, 'break_seconds' => 0, 'break_count' => 0, 'overruns' => 0])
+        ->and(Carbon::parse($desk['attendance']['first_in'])->equalTo(Carbon::parse('2026-10-05 11:00', 'Africa/Cairo')))->toBeTrue();
+});
+
+it('reads the attendance of every desk in one query', function () {
+    Carbon::setTestNow(Carbon::parse('2026-10-05 11:00', 'Africa/Cairo'));
+    Shift::factory()->create();
+    $attendanceQueries = function () {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        app(Attendance::class)->figuresFor(ShiftMember::query()->pluck('user_id')->map(fn ($id) => (int) $id)->all(), '2026-10-05', 30);
+
+        return collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'queue_attendance_events'))->count();
+    };
+
+    app(ShiftService::class)->checkIn(boardModerator());
+    $one = $attendanceQueries();
+    foreach (range(1, 4) as $_) {
+        app(ShiftService::class)->checkIn(boardModerator());
+    }
+
+    expect($one)->toBe(1)->and($attendanceQueries())->toBe(1);
 });
