@@ -2,7 +2,6 @@
 import BoardNotice from '@/components/board/BoardNotice.vue';
 import BoardRoom from '@/components/board/BoardRoom.vue';
 import BoardSidePanel from '@/components/board/BoardSidePanel.vue';
-import BoardStartPanel from '@/components/board/BoardStartPanel.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import { useBoard } from '@/composables/useBoard';
 import { useI18n } from '@/composables/useI18n';
@@ -33,13 +32,13 @@ const wide = useMediaQuery('(min-width: 1024px)');
 
 const selection = ref<BoardSelection>(null);
 
-/** What lies over the room instead of the day: a notice, or the start of the day. */
-const veil = computed<'loading' | 'failed' | 'disabled' | 'start' | null>(() => {
+/** What lies over the room instead of the day: a notice (no shift runs: they open by the clock). */
+const veil = computed<'loading' | 'failed' | 'disabled' | 'closed' | null>(() => {
     if (!board.enabled.value) return 'disabled';
     if (board.failed.value) return 'failed';
     if (!board.loaded.value) return 'loading';
 
-    return board.shift.value === null ? 'start' : null;
+    return board.shift.value === null ? 'closed' : null;
 });
 
 // A desk or a customer picked before the room was veiled means nothing any more.
@@ -78,8 +77,7 @@ useEventListener(document, 'keydown', (event: KeyboardEvent) => {
                         {{ t('board.loading') }}
                     </p>
                     <template v-else-if="wide">
-                        <BoardStartPanel v-if="veil === 'start'" :can-manage="canManage" />
-                        <BoardNotice v-else-if="veil === 'disabled' || veil === 'failed'" :kind="veil" :can-edit-settings="canEditSettings" />
+                        <BoardNotice v-if="veil === 'disabled' || veil === 'failed' || veil === 'closed'" :kind="veil" :can-edit-settings="canEditSettings" />
                     </template>
                 </template>
 
@@ -90,9 +88,8 @@ useEventListener(document, 'keydown', (event: KeyboardEvent) => {
 
             <!-- Narrow screens: what the room would show over itself comes under it. -->
             <template v-if="!wide">
-                <BoardStartPanel v-if="veil === 'start'" :can-manage="canManage" />
                 <BoardNotice
-                    v-else-if="veil === 'disabled' || veil === 'failed'"
+                    v-if="veil === 'disabled' || veil === 'failed' || veil === 'closed'"
                     class="max-w-none"
                     :kind="veil"
                     :can-edit-settings="canEditSettings"

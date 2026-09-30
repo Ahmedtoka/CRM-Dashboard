@@ -452,3 +452,22 @@ it('changes the number of windows of a moderator at her desk, and nothing else',
     $this->actingAs($sup)->postJson("/board/members/{$m->id}/cap", ['windows_cap' => 2])->assertStatus(409)
         ->assertJsonPath('message', __('errors.queue.member_gone'));
 });
+
+// ───── attendance design §2: no shift open ─────
+
+it('says when the next shift starts while none is open, and that it is opening once its time came', function () {
+    Carbon::setTestNow(Carbon::parse('2026-10-06 00:30', 'Africa/Cairo'));
+    $sup = boardSupervisor();
+
+    $data = $this->actingAs($sup)->getJson('/board/state')->assertOk()->json('data');
+
+    expect($data['shift'])->toBeNull()->and($data['shift_opening'])->toBeFalse()
+        ->and(Carbon::parse($data['next_shift_starts_at'])->equalTo(Carbon::parse('2026-10-06 10:00', 'Africa/Cairo')))->toBeTrue();
+
+    Carbon::setTestNow(Carbon::parse('2026-10-06 10:00:10', 'Africa/Cairo')); // the tick has not opened it yet
+    expect($this->actingAs($sup)->getJson('/board/state')->assertOk()->json('data.shift_opening'))->toBeTrue();
+
+    Shift::factory()->create();
+    $this->actingAs($sup)->getJson('/board/state')->assertOk()
+        ->assertJsonPath('data.shift_opening', false)->assertJsonPath('data.next_shift_starts_at', null);
+});

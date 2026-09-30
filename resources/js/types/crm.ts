@@ -617,7 +617,8 @@ export interface AppNotification {
         | 'queue.mass_offline'
         | 'queue.reply_overdue'
         | 'queue.reply_overdue_leader'
-        | 'queue.member_not_arrived';
+        | 'queue.member_not_arrived'
+        | 'queue.break_overrun';
     data: Record<string, unknown>;
     read_at: string | null;
     created_at: string | null;

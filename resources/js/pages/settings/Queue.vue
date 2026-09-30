@@ -260,10 +260,6 @@ const hint = 'text-2xs text-muted-foreground';
                             <Input v-model="form.break_minutes" type="number" min="0" max="120" dir="ltr" :class="input" />
                         </label>
                         <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.break_after_minutes') }}</Label>
-                            <Input v-model="form.break_after_minutes" type="number" min="0" max="600" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
                             <Label>{{ t('settings.queue.review_sample_pct') }}</Label>
                             <Input v-model="form.review_sample_pct" type="number" min="0" max="100" dir="ltr" :class="input" />
                         </label>

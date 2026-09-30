@@ -36,6 +36,10 @@ function itemText(n: AppNotification): string {
         return t('notifications.queue_mass_offline_item', { count: Number(n.data.count ?? 0), serving: Number(n.data.serving ?? 0) });
     }
 
+    if (n.type === 'queue.break_overrun') {
+        return t('notifications.queue_break_overrun_item', { name: String(n.data.name ?? ''), minutes: Number(n.data.minutes ?? 0) });
+    }
+
     if (n.type === 'queue.reply_overdue') {
         return t('notifications.queue_reply_overdue_item', {
             ticket: Number(n.data.ticket ?? 0) % 100000,
@@ -76,7 +80,7 @@ function open(n: AppNotification): void {
         router.visit('/settings/integrations');
         return;
     }
-    if (n.type === 'queue.mass_offline' || n.type === 'queue.member_not_arrived') {
+    if (n.type === 'queue.mass_offline' || n.type === 'queue.member_not_arrived' || n.type === 'queue.break_overrun') {
         router.visit('/board');
         return;
     }

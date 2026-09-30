@@ -1280,3 +1280,26 @@
     border-radius: 6px;
     padding: 0 4px;
 }
+
+/* Attendance: a break past break_minutes - red until she presses «رجعت». */
+.board-room .cell.overrun {
+    --st: #ff6b6b;
+}
+.board-room .cell.overrun .pill {
+    color: var(--warn);
+    border-color: rgba(255, 107, 107, 0.6);
+    font-weight: 700;
+}
+/* Attendance: checking out - she finishes her windows and gets no new chats («بتقفل»). */
+.board-room .cell.closing {
+    --st: #8b97ad;
+}
+.board-room .cell.closing .pill {
+    color: var(--ink-2);
+    border-style: dashed;
+}
+/* Attendance: the leader's desk before she checks in - drawn, grey. */
+.board-room .cell.leader.off .person {
+    opacity: 0.35;
+    filter: grayscale(1);
+}

@@ -5,13 +5,13 @@ import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useBoardContext } from '@/lib/board/context';
 import { notOnline } from '@/lib/board/state';
-import { formatClock, formatCount, formatSeconds } from '@/lib/format';
+import { formatCount, formatSeconds } from '@/lib/format';
 import { Link } from '@inertiajs/vue3';
-import { Coffee, ExternalLink, LoaderCircle, UserMinus, UserRoundCheck } from 'lucide-vue-next';
+import { Coffee, ExternalLink, LoaderCircle, LogOut, Undo2, UserRoundCheck } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 // A desk: her day so far, her open windows (each a link to the conversation), her break, her
-// number of windows, and taking her out of the shift. Part 2 adds points, reviews and QA.
+// number of windows, and «خروج» / «رجّعي شبابيكها للصالة» on her behalf. Part 2 adds points, reviews and QA.
 const props = defineProps<{ memberId: number; canManage: boolean }>();
 const emit = defineEmits<{ close: []; entry: [entryId: number] }>();
 
@@ -25,9 +25,10 @@ const statusText = computed(() => {
     const m = member.value;
     if (m === null) return '';
     if (m.status === 'break') {
-        const left = board.breakLeft(m);
+        const since = board.breakSince(m);
+        if (since === null) return t('board.status.break');
 
-        return left === null ? t('board.status.break') : t('board.status.break_left', { time: formatSeconds(left, locale.value) });
+        return t(board.breakOver(m) ? 'board.status.break_over' : 'board.status.break_since', { time: formatSeconds(since, locale.value) });
     }
     if (m.status === 'available' || m.status === 'busy') {
         if (notOnline(m)) return t('board.status.not_online');
@@ -51,10 +52,10 @@ const counters = computed(() => {
 });
 
 const onBreak = computed(() => member.value?.status === 'break' || member.value?.status === 'pending_break');
-const breakAt = computed(() => (member.value?.break_at ? formatClock(member.value.break_at, locale.value) : null));
+const closing = computed(() => member.value?.status === 'checking_out');
 
 const cap = ref(1);
-const removing = ref(false);
+const confirming = ref(false);
 
 watch(
     () => [props.memberId, member.value?.cap] as const,
@@ -66,7 +67,7 @@ watch(
 watch(
     () => props.memberId,
     () => {
-        removing.value = false;
+        confirming.value = false;
         board.clearError();
     },
 );
@@ -79,12 +80,16 @@ async function toggleBreak(): Promise<void> {
 async function saveCap(): Promise<void> {
     const m = member.value;
     if (m === null || m.user === null || cap.value === m.cap) return;
-    await board.addMember(m.shift_id, m.user.id, cap.value);
+    await board.setMemberCap(m.id, cap.value);
 }
 
-async function remove(): Promise<void> {
+async function checkOut(): Promise<void> {
     if (member.value === null) return;
-    if (await board.removeMember(member.value.id)) emit('close');
+    if (await board.checkOut(member.value.id)) confirming.value = false;
+}
+
+async function handBack(): Promise<void> {
+    if (member.value !== null) await board.handBack(member.value.id);
 }
 </script>
 
@@ -104,7 +109,6 @@ async function remove(): Promise<void> {
                     t('board.status.not_online')
                 }}</span>
                 <span v-else-if="member.online === false" class="rounded-full bg-muted px-2 py-0.5">{{ t('board.status.offline') }}</span>
-                <span v-if="breakAt && !onBreak" class="tabular-nums">{{ t('board.member.break_at', { time: breakAt }) }}</span>
             </div>
 
             <dl class="grid grid-cols-3 gap-2 text-xs">
@@ -154,7 +158,7 @@ async function remove(): Promise<void> {
             </div>
 
             <template v-if="canManage">
-                <div class="space-y-1 border-t border-border pt-3">
+                <div v-if="!closing" class="space-y-1 border-t border-border pt-3">
                     <Button variant="outline" class="w-full" :disabled="board.busy.value !== null" @click="toggleBreak">
                         <LoaderCircle v-if="board.busy.value === `status-${member.id}`" class="animate-spin" aria-hidden="true" />
                         <UserRoundCheck v-else-if="onBreak" aria-hidden="true" />
@@ -184,30 +188,33 @@ async function remove(): Promise<void> {
                         </select>
                     </div>
                     <Button type="submit" variant="outline" :disabled="cap === member.cap || board.busy.value !== null">
-                        <LoaderCircle v-if="board.busy.value === `add-${member.user?.id}`" class="animate-spin" aria-hidden="true" />
+                        <LoaderCircle v-if="board.busy.value === `cap-${member.id}`" class="animate-spin" aria-hidden="true" />
                         {{ t('board.member.cap_save') }}
                     </Button>
                 </form>
 
-                <div class="border-t border-border pt-3">
-                    <Button v-if="!removing" variant="ghost" class="w-full text-destructive hover:text-destructive" @click="removing = true">
-                        <UserMinus aria-hidden="true" />
-                        {{ t('board.member.remove') }}
+                <div class="space-y-1 border-t border-border pt-3">
+                    <template v-if="closing">
+                        <p class="text-xs text-foreground">{{ t('board.member.closing') }}</p>
+                        <Button class="w-full" :disabled="board.busy.value !== null" @click="handBack">
+                            <LoaderCircle v-if="board.busy.value === `handback-${member.id}`" class="animate-spin" aria-hidden="true" />
+                            <Undo2 v-else aria-hidden="true" />
+                            {{ t('board.member.hand_back') }}
+                        </Button>
+                        <p class="text-2xs text-muted-foreground">{{ t('board.member.hand_back_hint') }}</p>
+                    </template>
+                    <Button v-else-if="!confirming" variant="ghost" class="w-full text-destructive hover:text-destructive" @click="confirming = true">
+                        <LogOut class="rtl-flip" aria-hidden="true" />
+                        {{ t('board.member.check_out') }}
                     </Button>
-                    <div v-else class="space-y-2" role="alertdialog" :aria-label="t('board.member.remove')">
-                        <p class="text-xs text-foreground">
-                            {{
-                                windows.length > 0
-                                    ? t('board.member.remove_hint_windows', { n: formatCount(windows.length, locale) })
-                                    : t('board.member.remove_hint')
-                            }}
-                        </p>
+                    <div v-else class="space-y-2" role="alertdialog" :aria-label="t('board.member.check_out')">
+                        <p class="text-xs text-foreground">{{ t('board.member.check_out_hint') }}</p>
                         <div class="flex gap-2">
-                            <Button variant="destructive" class="flex-1" :disabled="board.busy.value !== null" @click="remove">
-                                <LoaderCircle v-if="board.busy.value === `remove-${member.id}`" class="animate-spin" aria-hidden="true" />
-                                {{ t('board.member.remove_confirm') }}
+                            <Button variant="destructive" class="flex-1" :disabled="board.busy.value !== null" @click="checkOut">
+                                <LoaderCircle v-if="board.busy.value === `checkout-${member.id}`" class="animate-spin" aria-hidden="true" />
+                                {{ t('board.member.check_out_confirm') }}
                             </Button>
-                            <Button variant="outline" @click="removing = false">{{ t('board.cancel.back') }}</Button>
+                            <Button variant="outline" @click="confirming = false">{{ t('board.cancel.back') }}</Button>
                         </div>
                     </div>
                 </div>

@@ -91,7 +91,7 @@ export interface BoardTemplate {
     /** What became of it today; null while today's shift does not exist yet. */
     status: 'planned' | 'open' | 'closed' | null;
     shift_id: number | null;
-    /** The one «ابدأ اليوم» opens. */
+    /** The one covering now, else the next ahead. */
     opens_now: boolean;
 }
 
@@ -121,7 +121,10 @@ export interface BoardSnapshot {
     settings?: BoardSettings;
     templates?: BoardTemplate[];
     users?: BoardUser[];
-    default_roster?: Record<string, number[]>;
+    /** No shift open, but its hours came: the next tick opens it (attendance §2). */
+    shift_opening?: boolean;
+    /** When the next shift starts; null while one is open. */
+    next_shift_starts_at?: string | null;
 }
 
 /** A customer walking from her lounge seat to the window she was called to. */

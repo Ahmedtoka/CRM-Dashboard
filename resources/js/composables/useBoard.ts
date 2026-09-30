@@ -59,7 +59,10 @@ export interface Board {
     settings: Readonly<Ref<BoardSettings | null>>;
     templates: Readonly<Ref<BoardTemplate[]>>;
     users: Readonly<Ref<BoardUser[]>>;
-    defaultRoster: Readonly<Ref<Record<string, number[]>>>;
+    /** No shift open but its hours came: the next tick opens it. */
+    shiftOpening: Readonly<Ref<boolean>>;
+    /** When the next shift starts, while none is open. */
+    nextShiftStartsAt: Readonly<Ref<string | null>>;
     withBot: Readonly<Ref<number>>;
     lastCall: Readonly<Ref<BoardCall | null>>;
     /** The newest call is fresh: the robot announces it. */
@@ -69,7 +72,7 @@ export interface Board {
     freed: Readonly<Ref<string[]>>;
     /** The server's clock, ticking every second. */
     now: Readonly<Ref<number>>;
-    /** The action in flight, e.g. `assign-12`, `start`. */
+    /** The action in flight, e.g. `assign-12`, `checkout-5`. */
     busy: Readonly<Ref<string | null>>;
     /** Why the last action was refused; cleared by the next one. */
     error: Readonly<Ref<string | null>>;
@@ -78,14 +81,20 @@ export interface Board {
     silenceTone: (entry: QueueEntry) => SilenceTone;
     /** Seconds to the hand-off of a window whose customer waits for the moderator; null without that clock. */
     handoffLeft: (entry: QueueEntry) => number | null;
-    breakLeft: (member: BoardMember) => number | null;
+    /** Seconds since her break started; null when she is not on one (no automatic return). */
+    breakSince: (member: BoardMember) => number | null;
+    /** Her break is past `break_minutes`: the desk is red. */
+    breakOver: (member: BoardMember) => boolean;
     userName: (id: number | null | undefined) => string | null;
     windowsOf: (userId: number) => QueueEntry[];
     refresh: () => Promise<void>;
     clearError: () => void;
-    startDay: (roster: Record<string, number[]>, leaders: Record<string, number | null>) => Promise<boolean>;
-    addMember: (shiftId: number, userId: number, cap: number | null) => Promise<boolean>;
-    removeMember: (memberId: number) => Promise<boolean>;
+    /** Her number of windows (null = the settings' default). */
+    setMemberCap: (memberId: number, cap: number | null) => Promise<boolean>;
+    /** «خروج» on her behalf: at once without windows, else «بتقفل» until they close. */
+    checkOut: (memberId: number) => Promise<boolean>;
+    /** «رجّعي شبابيكها للصالة» on her behalf, while she is checking out. */
+    handBack: (memberId: number) => Promise<boolean>;
     setMemberStatus: (memberId: number, status: 'available' | 'break') => Promise<boolean>;
     assign: (entryId: number, userId: number) => Promise<boolean>;
     cancel: (entryId: number, reason: string) => Promise<boolean>;
@@ -117,7 +126,8 @@ export function useBoard(options: { enabled: boolean }): Board {
     const settings = ref<BoardSettings | null>(null);
     const templates = ref<BoardTemplate[]>([]);
     const users = ref<BoardUser[]>([]);
-    const defaultRoster = ref<Record<string, number[]>>({});
+    const shiftOpening = ref(false);
+    const nextShiftStartsAt = ref<string | null>(null);
     const withBot = ref(0);
     const lastCall = ref<BoardCall | null>(null);
     const calledAt = ref(0);
@@ -223,7 +233,8 @@ export function useBoard(options: { enabled: boolean }): Board {
         kpis.value = snapshot.kpis ?? null;
         settings.value = snapshot.settings ?? null;
         templates.value = snapshot.templates ?? [];
-        defaultRoster.value = snapshot.default_roster ?? {};
+        shiftOpening.value = snapshot.shift_opening === true;
+        nextShiftStartsAt.value = snapshot.next_shift_starts_at ?? null;
         withBot.value = snapshot.reception?.with_bot ?? 0;
         setEntries(snapshot.waiting ?? [], snapshot.open ?? [], animate);
 
@@ -333,11 +344,18 @@ export function useBoard(options: { enabled: boolean }): Board {
         return Math.max(0, Math.round(entry.handoff_left_seconds - Math.max(0, now.value - skew - since) / 1000));
     }
 
-    function breakLeft(member: BoardMember): number | null {
-        if (member.status !== 'break' || !member.break_ends_at) return null;
+    function breakSince(member: BoardMember): number | null {
+        if (member.status !== 'break' || !member.break_started_at) return null;
+        const from = Date.parse(member.break_started_at);
+
+        return Number.isNaN(from) ? null : Math.max(0, Math.floor((now.value - from) / 1000));
+    }
+
+    function breakOver(member: BoardMember): boolean {
+        if (member.status !== 'break' || !member.break_ends_at) return false;
         const until = Date.parse(member.break_ends_at);
 
-        return Number.isNaN(until) ? null : Math.max(0, Math.round((until - now.value) / 1000));
+        return !Number.isNaN(until) && now.value >= until;
     }
 
     function windowsOf(userId: number): QueueEntry[] {
@@ -411,7 +429,8 @@ export function useBoard(options: { enabled: boolean }): Board {
         settings,
         templates,
         users,
-        defaultRoster,
+        shiftOpening,
+        nextShiftStartsAt,
         withBot,
         lastCall,
         calling,
@@ -424,15 +443,15 @@ export function useBoard(options: { enabled: boolean }): Board {
         silenceLeft,
         silenceTone,
         handoffLeft,
-        breakLeft,
+        breakSince,
+        breakOver,
         userName,
         windowsOf,
         refresh,
         clearError: () => (error.value = null),
-        startDay: (roster, leaders) => act('start', () => api.post('/board/start', { roster, leaders })),
-        addMember: (shiftId, userId, cap) =>
-            act(`add-${userId}`, () => api.post(`/board/shifts/${shiftId}/members`, { user_id: userId, windows_cap: cap })),
-        removeMember: (memberId) => act(`remove-${memberId}`, () => api.delete(`/board/members/${memberId}`)),
+        setMemberCap: (memberId, cap) => act(`cap-${memberId}`, () => api.post(`/board/members/${memberId}/cap`, { windows_cap: cap })),
+        checkOut: (memberId) => act(`checkout-${memberId}`, () => api.post(`/board/members/${memberId}/check-out`)),
+        handBack: (memberId) => act(`handback-${memberId}`, () => api.post(`/board/members/${memberId}/hand-back`)),
         setMemberStatus: (memberId, status) => act(`status-${memberId}`, () => api.post(`/board/members/${memberId}/status`, { status })),
         assign: (entryId, userId) => act(`assign-${entryId}`, () => api.post(`/board/entries/${entryId}/assign`, { user_id: userId })),
         cancel: (entryId, reason) => act(`cancel-${entryId}`, () => api.post(`/board/entries/${entryId}/cancel`, { reason })),

@@ -33,7 +33,11 @@ const mood = computed(() => {
     const m = props.member;
     if (m === null) return 'off';
     if (m.status === 'offline') return 'off';
-    if (m.status === 'break' || m.status === 'pending_break') return 'break';
+    // Past `break_minutes`: red until she presses «رجعت» (attendance §3).
+    if (m.status === 'break') return board.breakOver(m) ? 'overrun' : 'break';
+    if (m.status === 'pending_break') return 'break';
+    // «بتقفل»: she finishes her windows and takes no new chats.
+    if (m.status === 'checking_out') return 'closing';
     // On the roster but not logged in: grey, the router skips her (flow revision §2).
     if (notOnline(m)) return 'notonline';
     if (windows.value.some((e) => ['warning', 'last'].includes(board.silenceTone(e)))) return 'alert';
@@ -47,10 +51,14 @@ const pill = computed(() => {
 
     switch (m.status) {
         case 'break': {
-            const left = board.breakLeft(m);
+            // The time since she left her desk; red once it is past `break_minutes`.
+            const since = board.breakSince(m);
+            if (since === null) return t('board.status.break');
 
-            return left === null ? t('board.status.break') : t('board.status.break_left', { time: formatSeconds(left, locale.value) });
+            return t(board.breakOver(m) ? 'board.status.break_over' : 'board.status.break_since', { time: formatSeconds(since, locale.value) });
         }
+        case 'checking_out':
+            return t('board.status.checking_out');
         case 'pending_break':
             return t('board.status.pending_break');
         case 'offline':
@@ -92,12 +100,13 @@ const plate = computed(() => props.member?.user?.name ?? props.leaderUser?.name 
 </script>
 
 <template>
+    <!-- The leader's desk before she checks in keeps her figure, grey (attendance §2); an empty desk has nobody. -->
     <div
         class="cell"
         :class="[
             leader ? 'leader' : 'flip',
             mood,
-            { sel: selected, away: member?.status === 'break' || member?.status === 'offline' || member === null },
+            { sel: selected, away: member?.status === 'break' || member?.status === 'offline' || (member === null && !(leader && leaderUser)) },
         ]"
         :style="{ left: `${box.x}px`, top: `${box.y}px`, transform: box.scale === 1 ? undefined : `scale(${box.scale})` }"
         :dir="dir"

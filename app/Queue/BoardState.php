@@ -36,7 +36,11 @@ class BoardState
     /** Customers who wrote to the bot this recently are shown at the reception. */
     public const RECEPTION_MINUTES = 15;
 
-    public function __construct(private readonly QueueService $queue, private readonly PresenceTracker $presence) {}
+    public function __construct(
+        private readonly QueueService $queue,
+        private readonly PresenceTracker $presence,
+        private readonly ShiftService $shifts,
+    ) {}
 
     /** The board with the queue switched off: nothing but the fact. Reads the settings row only. */
     public static function disabled(): array
@@ -80,6 +84,10 @@ class BoardState
             'now' => now()->toIso8601String(),
             'business_date' => $date,
             'shift' => $open ? $this->shift($open) : null,
+            // No shift open (attendance §2, shifts run by the clock): its hours came and the next
+            // tick opens it, or when the next one starts.
+            'shift_opening' => $open === null && $this->shifts->coveringTemplate(null, $s) !== null,
+            'next_shift_starts_at' => $open === null ? $this->shifts->nextStart(null, $s)?->toIso8601String() : null,
             'shifts' => $shifts->map(fn (Shift $sh) => $this->shift($sh) + [
                 'member_user_ids' => $members->where('shift_id', $sh->id)->pluck('user_id')->map(fn ($id) => (int) $id)->values()->all(),
             ])->values()->all(),
@@ -241,7 +249,7 @@ class BoardState
     /**
      * The shift templates with today's hours and what became of each (`planned`, `open`,
      * `closed`, or null when today's row does not exist yet). `opens_now` marks the one
-     * «ابدأ اليوم» would open: the one covering now, else the next ahead, else the first.
+     * covering now, else the next ahead, else the first.
      *
      * @param  Collection<int, Shift>  $shifts
      * @return list<array<string, mixed>>

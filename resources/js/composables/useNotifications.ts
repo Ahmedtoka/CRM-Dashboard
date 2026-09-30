@@ -15,6 +15,7 @@ export const TYPE_KEY = {
     'queue.assigned': 'queue_assigned',
     'queue.escalation_waiting': 'queue_escalation_waiting',
     'queue.mass_offline': 'queue_mass_offline',
+    'queue.break_overrun': 'queue_break_overrun',
     'queue.reply_overdue': 'queue_reply_overdue',
     'queue.reply_overdue_leader': 'queue_reply_overdue_leader',
     'queue.member_not_arrived': 'queue_member_not_arrived',
