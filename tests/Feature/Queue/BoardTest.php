@@ -70,7 +70,8 @@ function boardEndpoints(Shift $shift, ShiftMember $m, QueueEntry $waiting): arra
     return [
         ['get', '/board/state', []],
         ['post', "/board/members/{$m->id}/cap", ['windows_cap' => 2]],
-        ['delete', "/board/members/{$m->id}", []],
+        ['post', "/board/members/{$m->id}/check-out", []],
+        ['post', "/board/members/{$m->id}/hand-back", []],
         ['post', "/board/members/{$m->id}/status", ['status' => 'break']],
         ['post', "/board/entries/{$waiting->id}/assign", ['user_id' => $m->user_id]],
         ['post', "/board/entries/{$waiting->id}/cancel", ['reason' => 'تجربة']],
@@ -157,20 +158,6 @@ it('explains itself and refuses every action while the queue is off', function (
 });
 
 // ───── the roster during the day ─────
-
-it('removes a moderator and sends her customers back to the lounge with their tickets', function () {
-    $shift = Shift::factory()->create();
-    $m = boardDesk($shift);
-    $window = boardWindow($m, ['ticket_no' => 41]);
-
-    $this->actingAs(boardSupervisor())->deleteJson("/board/members/{$m->id}")->assertOk()
-        ->assertJsonCount(0, 'data.members')->assertJsonCount(0, 'data.open')->assertJsonCount(1, 'data.waiting')
-        ->assertJsonPath('data.waiting.0.ticket', 41)->assertJsonPath('data.waiting.0.priority', 'returning');
-
-    expect($m->fresh()->status)->toBe('left')->and($window->fresh()->close_reason)->toBe('transfer');
-
-    $this->actingAs(boardSupervisor())->deleteJson("/board/members/{$m->id}")->assertStatus(409)->assertJsonPath('message', __('errors.queue.member_gone'));
-});
 
 it('sends a moderator on her break and brings her back', function () {
     $shift = Shift::factory()->create();

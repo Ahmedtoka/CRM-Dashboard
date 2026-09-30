@@ -100,7 +100,7 @@ it('answers cheaply and empty when the queue is off', function () {
     DB::disableQueryLog();
 
     $response->assertJsonPath('data.enabled', false)->assertJsonPath('data.member', null)
-        ->assertJsonPath('data.entries', [])->assertJsonPath('data.settings', null);
+        ->assertJsonPath('data.entries', [])->assertJsonPath('data.settings', null)->assertJsonPath('data.attendance', null);
     expect($queueQueries)->toBeEmpty();
 });
 

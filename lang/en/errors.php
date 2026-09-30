@@ -107,6 +107,10 @@ return [
         'member_platform' => 'This moderator may not reply on this platform.',
         'member_full' => 'All the windows of this moderator are taken.',
         'cancel_reason_required' => 'Write why you are cancelling.',
+        'shift_not_open' => 'No shift is running right now. The shift starts at :time.',
+        'no_shift' => 'There are no shifts in the queue settings.',
+        'no_platforms' => 'Your account may not serve any platform; ask a supervisor.',
+        'not_checking_out' => 'No check-out is waiting for open windows right now.',
     ],
 
     'users' => [

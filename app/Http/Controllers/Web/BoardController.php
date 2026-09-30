@@ -25,7 +25,7 @@ use Inertia\Response;
 
 /**
  * The manager's live board: the room (state), a moderator's break and number of windows,
- * taking her off the shift, handing a waiting customer to a moderator by hand and taking one
+ * checking her out or sending her windows back on her behalf, handing a waiting customer to a moderator by hand and taking one
  * out of the lounge. Nobody is seated from here: moderators check themselves in from the inbox
  * (attendance design 2026-09-29). Supervisors, admins and the leader of the open shift only
  * (BoardAccess). Every action answers with the fresh state, so the screen that acted never
@@ -69,26 +69,32 @@ class BoardController extends Controller
         return $this->fresh($board);
     }
 
-    public function removeMember(Request $request, ShiftMember $member, ShiftService $shifts, WindowLifecycle $windows, QueueRouter $router, BoardState $board): JsonResponse
+    /** «خروج» on her behalf (she left without pressing it): the same rules as her own button. */
+    public function checkOut(Request $request, ShiftMember $member, ShiftService $shifts, BoardState $board): JsonResponse
     {
         $this->authorizeBoard($request);
         $this->enabledSettings();
 
-        if ($member->status === 'left' || $member->shift?->status === 'closed') {
+        if ($member->status === 'left' || $member->shift?->status !== 'open') {
             return $this->refuse('member_gone', 409);
         }
 
-        $held = $member->shift?->status === 'open' ? $router->openForUser((int) $member->user_id)->get() : collect();
-        $name = (string) $member->user?->name;
-
-        // She checks out first (`checking_out` while she holds windows), so the router never hands
-        // her own customers back to her; the last transfer below completes her check-out.
         $shifts->checkOut($member, $request->user());
 
-        // Her customers go back to the lounge (same ticket, ahead of the line) for somebody else.
-        foreach ($held as $entry) {
-            $windows->transferAway($entry, 'خروج '.$name.' من الشيفت');
+        return $this->fresh($board);
+    }
+
+    /** «رجّعي شبابيكها للصالة» on her behalf, while she is checking out: her customers go back to the top of the lounge. */
+    public function handBack(Request $request, ShiftMember $member, ShiftService $shifts, BoardState $board): JsonResponse
+    {
+        $this->authorizeBoard($request);
+        $this->enabledSettings();
+
+        if ($member->status !== 'checking_out' || $member->shift?->status !== 'open') {
+            return $this->refuse('not_checking_out', 409);
         }
+
+        $shifts->handBack($member, $request->user());
 
         return $this->fresh($board);
     }

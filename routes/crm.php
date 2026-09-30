@@ -78,6 +78,9 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
     Route::middleware('throttle:60,1')->group(function () {
         Route::get('/queue/me', [QueueWindowController::class, 'me'])->name('queue.me');
         Route::post('/queue/me/status', [QueueWindowController::class, 'status'])->name('queue.me.status');
+        Route::post('/queue/me/check-in', [QueueWindowController::class, 'checkIn'])->name('queue.me.check-in');
+        Route::post('/queue/me/check-out', [QueueWindowController::class, 'checkOut'])->name('queue.me.check-out');
+        Route::post('/queue/me/hand-back', [QueueWindowController::class, 'handBack'])->name('queue.me.hand-back');
         Route::post('/queue/entries/{entry}/close', [QueueWindowController::class, 'close'])->name('queue.close');
         Route::post('/queue/entries/{entry}/escalate', [QueueWindowController::class, 'escalate'])->name('queue.escalate');
     });
@@ -89,7 +92,8 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
     Route::prefix('board')->name('board.')->group(function () {
         Route::get('state', [BoardController::class, 'state'])->name('state');
         Route::post('members/{member}/cap', [BoardController::class, 'cap'])->name('members.cap');
-        Route::delete('members/{member}', [BoardController::class, 'removeMember'])->name('members.destroy');
+        Route::post('members/{member}/check-out', [BoardController::class, 'checkOut'])->name('members.check-out');
+        Route::post('members/{member}/hand-back', [BoardController::class, 'handBack'])->name('members.hand-back');
         Route::post('members/{member}/status', [BoardController::class, 'memberStatus'])->name('members.status');
         Route::post('entries/{entry}/assign', [BoardController::class, 'assign'])->name('entries.assign');
         Route::post('entries/{entry}/cancel', [BoardController::class, 'cancel'])->name('entries.cancel');

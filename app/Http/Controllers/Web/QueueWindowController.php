@@ -10,6 +10,7 @@ use App\Models\QueueSetting;
 use App\Models\ShiftMember;
 use App\Models\SupportCase;
 use App\Models\User;
+use App\Queue\AttendanceRefused;
 use App\Queue\QueueService;
 use App\Queue\ShiftService;
 use App\Queue\WindowLifecycle;
@@ -20,8 +21,9 @@ use Illuminate\Validation\Rule;
 /**
  * The moderator's side of the handover queue inside the inbox: her desk and open windows
  * (`me`), closing a window with a reason, handing it to the shift leader, and her own
- * available / break switch. A moderator acts on her own windows only; a supervisor or an admin
- * on any window.
+ * attendance (attendance design 2026-09-29): «بدأت شغل» (`checkIn`), «استراحة» / «رجعت»
+ * (`status`), «خروج» (`checkOut`) and «رجّعي شبابيكي للصالة» (`handBack`). A moderator acts
+ * on her own windows only; a supervisor or an admin on any window.
  */
 class QueueWindowController extends Controller
 {
@@ -32,23 +34,84 @@ class QueueWindowController extends Controller
      * Cheap on purpose: with the queue off it reads the settings row and nothing else, and the
      * inbox then behaves exactly as it does without the queue.
      */
-    public function me(Request $request, QueueService $queue): JsonResponse
+    public function me(Request $request, QueueService $queue, ShiftService $shifts): JsonResponse
     {
         $s = QueueSetting::current();
 
         if (! $s->enabled) {
             return response()->json(['data' => [
-                'enabled' => false, 'member' => null, 'entries' => [], 'settings' => null, 'leader_user_id' => null, 'server_time' => now()->toIso8601String(),
+                'enabled' => false, 'member' => null, 'entries' => [], 'settings' => null, 'leader_user_id' => null, 'attendance' => null,
+                'server_time' => now()->toIso8601String(),
             ]]);
         }
 
+        return response()->json(['data' => $this->payload($request, $s, $queue, $shifts)]);
+    }
+
+    /** «بدأت شغل» (attendance §3). Answers the same payload as `me`. */
+    public function checkIn(Request $request, QueueService $queue, ShiftService $shifts): JsonResponse
+    {
+        $this->abortIfDisabled();
+
+        try {
+            $shifts->checkIn($request->user());
+        } catch (AttendanceRefused $e) {
+            return response()->json(['message' => __('errors.queue.'.$e->key, $e->replace)], $e->status);
+        }
+
+        return response()->json(['data' => $this->payload($request, QueueSetting::current(), $queue, $shifts)]);
+    }
+
+    /** «خروج»: she leaves at once without windows, else she is `checking_out` until her last one closes. */
+    public function checkOut(Request $request, QueueService $queue, ShiftService $shifts): JsonResponse
+    {
+        $this->abortIfDisabled();
         $member = $this->myMember($request->user());
+
+        if ($member === null) {
+            return response()->json(['message' => __('errors.queue.not_on_shift')], 404);
+        }
+
+        $shifts->checkOut($member, $request->user());
+
+        return response()->json(['data' => $this->payload($request, QueueSetting::current(), $queue, $shifts)]);
+    }
+
+    /** «رجّعي شبابيكي للصالة»: only while she is checking out; then she leaves. */
+    public function handBack(Request $request, QueueService $queue, ShiftService $shifts): JsonResponse
+    {
+        $this->abortIfDisabled();
+        $member = $this->myMember($request->user());
+
+        if ($member === null || $member->status !== 'checking_out') {
+            return response()->json(['message' => __('errors.queue.not_checking_out')], 409);
+        }
+
+        $shifts->handBack($member, $request->user());
+
+        return response()->json(['data' => $this->payload($request, QueueSetting::current(), $queue, $shifts)]);
+    }
+
+    /**
+     * Her desk, her open windows, the timers and her attendance buttons (the queue is on).
+     * Reads the shift templates from the settings it is given; creates no shift row.
+     *
+     * @return array<string, mixed>
+     */
+    private function payload(Request $request, QueueSetting $s, QueueService $queue, ShiftService $shifts): array
+    {
+        $user = $request->user();
+        $member = $this->myMember($user);
         // Per user, not per shift-member row: a window she got in the morning shift is still hers in the evening.
         $entries = QueueEntry::query()->with('conversation.customer')
-            ->where('assigned_user_id', $request->user()->id)->whereIn('status', QueueEntry::OPEN_STATUSES)
+            ->where('assigned_user_id', $user->id)->whereIn('status', QueueEntry::OPEN_STATUSES)
             ->orderBy('window_no')->orderBy('id')->get();
+        $open = $queue->openShift();
+        // Its time came but the tick has not opened it yet: «بدأت شغل» opens it.
+        $covering = $open === null ? $shifts->coveringTemplate(null, $s) : null;
+        $next = $open === null && $covering === null ? $shifts->nextStart(null, $s) : null;
 
-        return response()->json(['data' => [
+        return [
             'enabled' => true,
             'member' => $member ? (new ShiftMemberResource($member))->resolve($request) : null,
             // The settings read above, not once more per window.
@@ -60,9 +123,16 @@ class QueueWindowController extends Controller
                 'break_minutes' => (int) $s->break_minutes,
             ],
             // The leader of the open shift: nobody above her to escalate to (the menu hides it).
-            'leader_user_id' => $queue->openShift()?->leader_user_id,
+            'leader_user_id' => $open?->leader_user_id,
+            // «بدأت شغل» (attendance §3): whether she may check in at all, and whether a shift runs now.
+            'attendance' => [
+                'eligible' => ShiftService::mayCheckIn($user),
+                'shift_open' => $open !== null || $covering !== null,
+                'shift_name' => $open?->name ?? $covering['name'] ?? null,
+                'next_starts_at' => $next?->toIso8601String(),
+            ],
             'server_time' => now()->toIso8601String(),
-        ]]);
+        ];
     }
 
     public function close(Request $request, QueueEntry $entry, WindowLifecycle $windows): JsonResponse

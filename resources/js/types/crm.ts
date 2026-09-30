@@ -92,7 +92,8 @@ export type QueueEntryStatus = 'waiting' | 'called' | 'active' | 'closed' | 'aba
 /** The reasons a person closes a window with; every other close reason is the system's. */
 export type QueueCloseReason = 'inquiry' | 'problem' | 'case';
 export type SupportCaseType = 'return_exchange' | 'return' | 'exchange' | 'complaint' | 'cancel_edit' | 'delivery_followup';
-export type ShiftMemberStatus = 'available' | 'busy' | 'pending_break' | 'break' | 'offline' | 'left';
+/** `checking_out`: she pressed «خروج» with windows open (no new chats until they close). */
+export type ShiftMemberStatus = 'available' | 'busy' | 'pending_break' | 'break' | 'offline' | 'checking_out' | 'left';
 
 /** QueueEntryResource: one ticket (GET /queue/me, the `QueueEntryUpdated` broadcast). */
 export interface QueueEntry {
@@ -146,9 +147,22 @@ export interface ShiftMember {
     cap: number;
     open_count: number;
     break_at: string | null;
+    /** When her break started; the strip and the board count the time since (no automatic return). */
+    break_started_at: string | null;
     break_ends_at: string | null;
     joined_at: string | null;
     today: Record<string, number>;
+}
+
+/** GET /queue/me `attendance` (attendance design §3): «بدأت شغل» and when it can be pressed. */
+export interface MyAttendance {
+    /** An active account with at least one platform: she may check in. */
+    eligible: boolean;
+    /** A shift runs now (or its time came): «بدأت شغل» is enabled. */
+    shift_open: boolean;
+    shift_name: string | null;
+    /** When the next shift starts, while none runs; null otherwise or without templates. */
+    next_starts_at: string | null;
 }
 
 /** GET /queue/me. With the queue off everything but `enabled` is empty. */
@@ -159,6 +173,8 @@ export interface MyQueuePayload {
     settings: { silence_warn_seconds: number; silence_close_seconds: number; windows_per_moderator: number; break_minutes: number } | null;
     /** The leader of the open shift (nobody above her to escalate to); null with no shift or no leader. */
     leader_user_id: number | null;
+    /** Null with the queue off. */
+    attendance: MyAttendance | null;
     server_time: string;
 }
 

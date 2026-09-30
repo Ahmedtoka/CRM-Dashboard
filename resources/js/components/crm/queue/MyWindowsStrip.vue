@@ -3,10 +3,26 @@ import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import { buttonVariants } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useMyQueueContext } from '@/composables/useMyQueue';
-import { formatCount, formatSeconds } from '@/lib/format';
+import { formatClock, formatCount, formatSeconds } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { QueueEntry, QueuePriority } from '@/types/crm';
-import { ArrowUpCircle, Clock, Coffee, FolderOpen, Hand, Hourglass, LoaderCircle, MessageCircleReply, Moon, Play, Star, type LucideIcon } from 'lucide-vue-next';
+import {
+    ArrowUpCircle,
+    Clock,
+    Coffee,
+    FolderOpen,
+    Hand,
+    Hourglass,
+    LoaderCircle,
+    LogIn,
+    LogOut,
+    MessageCircleReply,
+    Moon,
+    Play,
+    Star,
+    Undo2,
+    type LucideIcon,
+} from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -71,9 +87,14 @@ const cards = computed<Card[]>(() =>
     }),
 );
 
-const freeSlots = computed(() => Math.max(0, (queue?.cap.value ?? 0) - cards.value.length));
+/** No new chats while she is not checked in or is on her way out: no free window to show then. */
+const freeSlots = computed(() => {
+    const s = queue?.member.value?.status;
+    if (!s || s === 'checking_out') return 0;
+
+    return Math.max(0, (queue?.cap.value ?? 0) - cards.value.length);
+});
 const status = computed(() => queue?.member.value?.status ?? null);
-const busyStatus = computed(() => queue?.busy.value === 'status');
 
 const statusDot = computed(() => {
     switch (status.value) {
@@ -81,7 +102,9 @@ const statusDot = computed(() => {
         case 'busy':
             return 'bg-success';
         case 'break':
+            return queue?.breakOver.value ? 'bg-destructive' : 'bg-warning';
         case 'pending_break':
+        case 'checking_out':
             return 'bg-warning';
         default:
             return 'bg-muted-foreground/50';
@@ -89,28 +112,113 @@ const statusDot = computed(() => {
 });
 
 const statusLabel = computed(() => (status.value ? t(`queue.status.${status.value}`) : t('queue.status.off_shift')));
-const breakLeft = computed(() =>
-    queue?.breakLeft.value === null || queue?.breakLeft.value === undefined ? null : formatSeconds(queue.breakLeft.value, locale.value),
+const breakSince = computed(() =>
+    queue?.breakSince.value === null || queue?.breakSince.value === undefined ? null : formatSeconds(queue.breakSince.value, locale.value),
 );
-/** What the one status button does from here: off to a break, or back to work. */
-const nextStatus = computed<'available' | 'break' | null>(() => {
-    if (status.value === 'available' || status.value === 'busy') return 'break';
-    if (status.value === 'break' || status.value === 'pending_break' || status.value === 'offline') return 'available';
+const breakOver = computed(() => queue?.breakOver.value === true);
 
-    return null;
-});
-const nextLabel = computed(() => {
-    if (nextStatus.value === 'break') return t('queue.go_break');
+interface Action {
+    key: string;
+    label: string;
+    hint: string;
+    icon: LucideIcon;
+    variant: 'default' | 'outline' | 'ghost';
+    /** The `busy` key of the request it sends (its spinner). */
+    busy: string;
+    disabled?: boolean;
+    flip?: boolean;
+    run: () => void;
+}
 
-    return status.value === 'pending_break' ? t('queue.cancel_break') : t('queue.back_to_work');
+/**
+ * Her buttons (attendance §3): «بدأت شغل» before she checks in (enabled only while a shift
+ * runs), «استراحة» and «خروج» at her desk, «رجعت» on a break, «رجّعي شبابيكي للصالة» on her way out.
+ */
+const actions = computed<Action[]>(() => {
+    const q = queue;
+    if (!q) return [];
+
+    const checkOut: Action = {
+        key: 'check-out',
+        label: t('queue.attendance.check_out'),
+        hint: t('queue.attendance.check_out_hint'),
+        icon: LogOut,
+        variant: 'ghost',
+        busy: 'check-out',
+        flip: true,
+        run: () => void q.checkOut(),
+    };
+    const back = (label: string, hint: string): Action => ({
+        key: 'back',
+        label,
+        hint,
+        icon: Play,
+        variant: 'default',
+        busy: 'status',
+        flip: true,
+        run: () => void q.setStatus('available'),
+    });
+
+    switch (status.value) {
+        case null:
+            return [
+                {
+                    key: 'check-in',
+                    label: t('queue.attendance.check_in'),
+                    hint: t('queue.attendance.check_in_hint'),
+                    icon: LogIn,
+                    variant: 'default',
+                    busy: 'check-in',
+                    flip: true,
+                    disabled: q.attendance.value?.shift_open !== true,
+                    run: () => void q.checkIn(),
+                },
+            ];
+        case 'available':
+        case 'busy':
+            return [
+                {
+                    key: 'break',
+                    label: t('queue.go_break'),
+                    hint: t('queue.go_break_hint'),
+                    icon: Coffee,
+                    variant: 'outline',
+                    busy: 'status',
+                    run: () => void q.setStatus('break'),
+                },
+                checkOut,
+            ];
+        case 'pending_break':
+            return [back(t('queue.cancel_break'), t('queue.cancel_break')), checkOut];
+        case 'break':
+            return [back(t('queue.back_to_work'), t('queue.back_to_work_hint'))];
+        case 'offline':
+            return [back(t('queue.back_to_work'), t('queue.back_to_work_hint')), checkOut];
+        case 'checking_out':
+            return [
+                {
+                    key: 'hand-back',
+                    label: t('queue.attendance.hand_back'),
+                    hint: t('queue.attendance.hand_back_hint'),
+                    icon: Undo2,
+                    variant: 'default',
+                    busy: 'hand-back',
+                    run: () => void q.handBack(),
+                },
+            ];
+        default:
+            return [];
+    }
 });
-const nextHint = computed(() =>
-    nextStatus.value === 'break'
-        ? t('queue.go_break_hint')
-        : status.value === 'pending_break'
-          ? t('queue.cancel_break')
-          : t('queue.back_to_work_hint'),
-);
+
+/** Under the buttons: when the shift starts (while «بدأت شغل» is disabled), or what «بتقفلي» means. */
+const note = computed(() => {
+    if (status.value === 'checking_out') return t('queue.attendance.closing');
+    const a = queue?.attendance.value ?? null;
+    if (status.value !== null || a === null || a.shift_open) return null;
+
+    return a.next_starts_at ? t('queue.attendance.starts_at', { time: formatClock(a.next_starts_at, locale.value) }) : t('queue.attendance.no_shift');
+});
 
 const cardTone: Record<Card['tone'], string> = {
     calm: 'border-border bg-background hover:bg-elevated',
@@ -128,7 +236,7 @@ const silenceTone: Record<Card['tone'], string> = {
 
 <template>
     <section
-        v-if="queue?.active.value"
+        v-if="queue?.shown.value"
         class="flex shrink-0 items-stretch gap-2 border-b bg-card px-3 py-2 sm:gap-3"
         :aria-label="t('queue.my_windows')"
         data-my-windows
@@ -222,37 +330,44 @@ const silenceTone: Record<Card['tone'], string> = {
                 <span class="text-xs font-medium text-muted-foreground">{{ t('queue.free_window') }}</span>
                 <span class="text-2xs text-muted-foreground/80">{{ t('queue.free_window_hint') }}</span>
             </li>
+
+            <li
+                v-if="queue.member.value === null && cards.length === 0"
+                class="flex shrink-0 items-center rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground"
+            >
+                {{ t('queue.attendance.idle') }}
+            </li>
         </ul>
 
         <div class="flex shrink-0 flex-col items-end justify-center gap-1" role="group" :aria-label="t('queue.status.label')">
             <p class="flex items-center gap-1.5 text-xs font-medium">
                 <span class="size-2 rounded-full" :class="statusDot" aria-hidden="true" />
-                <!-- Announced when the status changes; the break countdown stays out of the live region (no reading every second). -->
+                <!-- Announced when the status changes; the break clock stays out of the live region (no reading every second). -->
                 <span role="status">
                     <span class="hidden md:inline">{{ statusLabel }}</span>
                     <span class="sr-only md:hidden">{{ statusLabel }}</span>
                 </span>
-                <span v-if="breakLeft !== null" class="tabular-nums text-muted-foreground">{{ t('queue.break_left', { time: breakLeft }) }}</span>
+                <span v-if="breakSince !== null" class="tabular-nums" :class="breakOver ? 'font-semibold text-destructive' : 'text-muted-foreground'">
+                    {{ t('queue.attendance.break_since', { time: breakSince }) }}
+                </span>
             </p>
-            <button
-                v-if="nextStatus"
-                type="button"
-                :class="
-                    cn(
-                        buttonVariants({ variant: nextStatus === 'break' ? 'outline' : 'default', size: 'sm' }),
-                        'h-7 gap-1 rounded-full px-2.5 text-xs',
-                    )
-                "
-                :disabled="queue.busy.value !== null"
-                :title="nextHint"
-                :aria-label="nextLabel"
-                @click="queue.setStatus(nextStatus)"
-            >
-                <LoaderCircle v-if="busyStatus" class="size-3.5 animate-spin" aria-hidden="true" />
-                <Coffee v-else-if="nextStatus === 'break'" class="size-3.5" aria-hidden="true" />
-                <Play v-else class="rtl-flip size-3.5" aria-hidden="true" />
-                {{ nextLabel }}
-            </button>
+            <div class="flex items-center gap-1">
+                <button
+                    v-for="action in actions"
+                    :key="action.key"
+                    type="button"
+                    :class="cn(buttonVariants({ variant: action.variant, size: 'sm' }), 'h-7 gap-1 rounded-full px-2.5 text-xs')"
+                    :disabled="queue.busy.value !== null || action.disabled === true"
+                    :title="action.hint"
+                    :aria-label="action.label"
+                    @click="action.run()"
+                >
+                    <LoaderCircle v-if="queue.busy.value === action.busy" class="size-3.5 animate-spin" aria-hidden="true" />
+                    <component :is="action.icon" v-else class="size-3.5" :class="action.flip ? 'rtl-flip' : ''" aria-hidden="true" />
+                    {{ action.label }}
+                </button>
+            </div>
+            <p v-if="note" class="max-w-56 text-end text-2xs text-muted-foreground">{{ note }}</p>
         </div>
     </section>
 </template>

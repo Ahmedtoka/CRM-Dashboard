@@ -2,14 +2,14 @@ import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useEcho } from '@/composables/useEcho';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
-import type { Message, MyQueuePayload, QueueCloseReason, QueueEntry, ShiftMember, SupportCaseType } from '@/types/crm';
+import type { Message, MyAttendance, MyQueuePayload, QueueCloseReason, QueueEntry, ShiftMember, SupportCaseType } from '@/types/crm';
 import { AxiosError } from 'axios';
 import { computed, inject, onScopeDispose, provide, ref, watch, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 
 /** How often `/queue/me` is re-read while the websocket is down and she has a desk or a window. */
 export const QUEUE_POLL_MS = 30_000;
 
-/** The same while the websocket is down and she has neither (she may be put on the roster any minute). */
+/** The same while the websocket is down and she has neither (a shift may open, or she may check in from another tab). */
 export const QUEUE_IDLE_POLL_MS = 60_000;
 
 /** Retries of the first `/queue/me` when it fails (a deploy, a network blip): then every minute until it answers. */
@@ -37,7 +37,7 @@ export interface MyQueue {
     cap: ComputedRef<number>;
     /** The leader of the open shift: a window of hers cannot be escalated (nobody above her). */
     leaderUserId: Readonly<Ref<number | null>>;
-    /** The action in flight: `close-{id}`, `escalate-{id}` or `status`. */
+    /** The action in flight: `close-{id}`, `escalate-{id}`, `status`, `check-in`, `check-out` or `hand-back`. */
     busy: Readonly<Ref<string | null>>;
     /** Seconds since the conversation reached her window. */
     elapsed: (entry: Pick<QueueEntry, 'delivered_at'>) => number;
@@ -47,12 +47,21 @@ export interface MyQueue {
     silenceWarning: (entry: QueueEntry) => boolean;
     /** Seconds to the hand-off of a window whose customer waits for her reply; null without that clock (flow revision §4). */
     handoffLeft: (entry: QueueEntry) => number | null;
-    /** Seconds left of her break; null when she is not on one. */
-    breakLeft: ComputedRef<number | null>;
+    /** Seconds since her break started; null when she is not on one (no automatic return, attendance §3). */
+    breakSince: ComputedRef<number | null>;
+    /** Her break is past `break_minutes`: shown red (the leader was told). */
+    breakOver: ComputedRef<boolean>;
+    /** «بدأت شغل»: may she check in, does a shift run; null until known or with the queue off. */
+    attendance: Readonly<Ref<MyAttendance | null>>;
+    /** The strip is shown: she holds a desk or a window, or she may check in. */
+    shown: ComputedRef<boolean>;
     entryOf: (conversationId: number) => QueueEntry | null;
     closeEntry: (id: number, reason: QueueCloseReason, caseType?: SupportCaseType | null) => Promise<boolean>;
     escalate: (id: number) => Promise<boolean>;
     setStatus: (status: MyStatus) => Promise<boolean>;
+    checkIn: () => Promise<boolean>;
+    checkOut: () => Promise<boolean>;
+    handBack: () => Promise<boolean>;
     /** Feed of the inbox's `MessageCreated`: a customer message stops the silence clock of her window. */
     noteMessage: (message: Pick<Message, 'direction' | 'conversation_id'>) => void;
     refresh: () => Promise<void>;
@@ -100,6 +109,7 @@ export function useMyQueue(options: Options): MyQueue {
     const entries = ref<QueueEntry[]>([]);
     const settings = ref<MyQueuePayload['settings']>(null);
     const leaderUserId = ref<number | null>(null);
+    const attendance = ref<MyAttendance | null>(null);
     const busy = ref<string | null>(null);
     const tick = ref(Date.now());
 
@@ -122,14 +132,24 @@ export function useMyQueue(options: Options): MyQueue {
     let poller: number | undefined;
     let refetchTimer: number | undefined;
     let retryTimer: number | undefined;
+    let startTimer: number | undefined;
 
     const active = computed(() => enabled.value && (member.value !== null || entries.value.length > 0));
     const cap = computed(() => Math.max(member.value?.cap ?? settings.value?.windows_per_moderator ?? 0, entries.value.length));
-    const breakLeft = computed(() => {
+    const shown = computed(() => active.value || (enabled.value && attendance.value?.eligible === true));
+    const breakSince = computed(() => {
         const m = member.value;
-        if (!m || m.status !== 'break' || !m.break_ends_at) return null;
+        if (!m || m.status !== 'break' || !m.break_started_at) return null;
+        const from = Date.parse(m.break_started_at);
 
-        return Math.max(0, Math.round((Date.parse(m.break_ends_at) - (tick.value + skew)) / 1000));
+        return Number.isNaN(from) ? null : Math.max(0, Math.floor((tick.value + skew - from) / 1000));
+    });
+    const breakOver = computed(() => {
+        const m = member.value;
+        if (!m || m.status !== 'break' || !m.break_ends_at) return false;
+        const until = Date.parse(m.break_ends_at);
+
+        return !Number.isNaN(until) && tick.value + skew >= until;
     });
 
     function sort(list: QueueEntry[]): QueueEntry[] {
@@ -168,6 +188,7 @@ export function useMyQueue(options: Options): MyQueue {
         member.value = payload.member;
         settings.value = payload.settings;
         leaderUserId.value = payload.leader_user_id ?? null;
+        attendance.value = payload.attendance ?? null;
         stampedAt.clear();
         list.forEach((e) => stampedAt.set(e.id, at));
         entries.value = sort(list);
@@ -337,6 +358,32 @@ export function useMyQueue(options: Options): MyQueue {
         );
     }
 
+    /** The attendance actions answer with the whole `/queue/me`: her desk, her windows and her buttons. */
+    function applyPayload(response: { data: { data: MyQueuePayload } }): void {
+        const before = entries.value.map((e) => e.id);
+        eventSeq++;
+        apply(response.data.data);
+        // Windows sent back to the lounge: the open thread and the list drop them too.
+        before
+            .filter((id) => !entries.value.some((e) => e.id === id))
+            .forEach((id) => {
+                gone.add(id);
+                options.onReleased?.(id);
+            });
+    }
+
+    function checkIn(): Promise<boolean> {
+        return act('check-in', () => api.post<{ data: MyQueuePayload }>('/queue/me/check-in'), applyPayload);
+    }
+
+    function checkOut(): Promise<boolean> {
+        return act('check-out', () => api.post<{ data: MyQueuePayload }>('/queue/me/check-out'), applyPayload);
+    }
+
+    function handBack(): Promise<boolean> {
+        return act('hand-back', () => api.post<{ data: MyQueuePayload }>('/queue/me/hand-back'), applyPayload);
+    }
+
     function onVisible(): void {
         if (!document.hidden && enabled.value && !disposed) refreshSoon();
     }
@@ -371,6 +418,19 @@ export function useMyQueue(options: Options): MyQueue {
         }
     });
 
+    // The next shift's start comes while she waits: read `/queue/me` then, so «بدأت شغل» enables itself.
+    watch(
+        () => attendance.value?.next_starts_at ?? null,
+        (at) => {
+            window.clearTimeout(startTimer);
+            startTimer = undefined;
+            const wait = at === null ? NaN : Date.parse(at) - (Date.now() + skew);
+            // Ignore a clock further away than a timer can hold (about 24 days).
+            if (disposed || Number.isNaN(wait) || wait > 2_000_000_000) return;
+            startTimer = window.setTimeout(() => void refresh().catch(() => undefined), Math.max(0, wait) + 1500);
+        },
+    );
+
     // Back on the websocket after a drop: whatever was missed meanwhile.
     watch(live, (now, before) => {
         if (now && before === false && enabled.value) refreshSoon();
@@ -386,6 +446,7 @@ export function useMyQueue(options: Options): MyQueue {
         window.clearInterval(poller);
         window.clearTimeout(refetchTimer);
         window.clearTimeout(retryTimer);
+        window.clearTimeout(startTimer);
     });
 
     firstLoad();
@@ -402,11 +463,17 @@ export function useMyQueue(options: Options): MyQueue {
         silenceLeft,
         silenceWarning,
         handoffLeft,
-        breakLeft,
+        breakSince,
+        breakOver,
+        attendance,
+        shown,
         entryOf,
         closeEntry,
         escalate,
         setStatus,
+        checkIn,
+        checkOut,
+        handBack,
         noteMessage,
         refresh,
     };
