@@ -47,7 +47,9 @@ watch(veil, (v) => {
 });
 
 function select(next: BoardSelection): void {
-    selection.value = next;
+    // Clicking the desk (or customer) that is already open closes its panel.
+    const same = next !== null && selection.value !== null && next.kind === selection.value.kind && 'id' in next && 'id' in selection.value && next.id === selection.value.id;
+    selection.value = same ? null : next;
     board.clearError();
 }
 
