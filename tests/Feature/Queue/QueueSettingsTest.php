@@ -55,6 +55,7 @@ it('rejects an apology that is not before both hand-offs, and timers out of rang
     'later hand-off too long' => [['agent_reassign_seconds' => 3601], 'agent_reassign_seconds'],
     'update too often' => [['waiting_update_seconds' => 29], 'waiting_update_seconds'],
     'update too rarely' => [['waiting_update_seconds' => 901], 'waiting_update_seconds'],
+    'a break of no minutes' => [['break_minutes' => 0], 'break_minutes'],
 ]);
 
 it('lets only an admin change the no-reply points, and shows the default on a row saved before it existed', function () {

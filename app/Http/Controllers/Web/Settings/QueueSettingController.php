@@ -43,7 +43,7 @@ class QueueSettingController extends Controller
             'sla_first_reply_seconds' => ['sometimes', 'integer', 'min:30', 'max:7200'],
             'sla_target_pct' => ['sometimes', 'integer', 'min:1', 'max:100'],
             'occupancy_cap_pct' => ['sometimes', 'integer', 'min:10', 'max:100'],
-            'break_minutes' => ['sometimes', 'integer', 'min:0', 'max:120'],
+            'break_minutes' => ['sometimes', 'integer', 'min:1', 'max:120'],
             'break_after_minutes' => ['sometimes', 'integer', 'min:0', 'max:600'],
             'review_sample_pct' => ['sometimes', 'integer', 'min:0', 'max:100'],
             'review_delay_seconds' => ['sometimes', 'integer', 'min:0', 'max:3600'],
@@ -88,9 +88,9 @@ class QueueSettingController extends Controller
         DB::transaction(function () use ($s, $data) {
             $s->fill($data)->save();
 
-            // A leader named or changed in the templates takes her shift at once, even mid-shift (attendance design §2).
+            // Hours, names and leaders changed in the templates reach today's shifts at once, even mid-shift (attendance design §2).
             if (array_key_exists('shifts', $data)) {
-                app(ShiftService::class)->syncLeaders();
+                app(ShiftService::class)->syncTemplates();
             }
         });
 

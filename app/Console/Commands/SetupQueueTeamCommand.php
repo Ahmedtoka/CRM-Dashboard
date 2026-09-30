@@ -63,8 +63,8 @@ class SetupQueueTeamCommand extends Command
 
             // Nobody is seated from a roster (attendance design): the moderators check themselves in.
             $settings->update(['shifts' => $shifts]);
-            // Today's shifts that are not closed take her at once, the open one included.
-            app(ShiftService::class)->syncLeaders();
+            // Today's shifts that are not closed follow the templates at once (her as leader), the open one included.
+            app(ShiftService::class)->syncTemplates();
         });
 
         $this->table(['Name', 'Email', 'Role', 'Password'], $rows);

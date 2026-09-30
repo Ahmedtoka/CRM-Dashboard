@@ -508,3 +508,139 @@ it('counts a running day up to now, an exact-limit break is not an overrun, and 
 
     expect(attCompute([], '13:00'))->toBe(Attendance::EMPTY);
 });
+
+// ───── final review: template hours on the day, «رجعت» while closing, the tick and a break ─────
+
+it('moves today\'s planned shift when its hours are edited on the day: moved earlier, it opens at the new time on «بدأت شغل»', function () {
+    Carbon::setTestNow(Carbon::parse('2026-10-05 08:00', 'Africa/Cairo'));
+    app(ShiftService::class)->transition(); // the tick makes today's rows early, with the hours of that moment
+    $morning = Shift::query()->where('shift_key', 'morning')->firstOrFail();
+    expect($morning->status)->toBe('planned');
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 09:15', 'Africa/Cairo'));
+    $templates = QueueSetting::DEFAULT_SHIFTS;
+    $templates[0]['from'] = '09:00';
+    $templates[0]['name'] = 'صباحي بدري';
+    $this->actingAs(User::factory()->create(['role' => 'admin']))->put('/settings/queue', ['shifts' => $templates])
+        ->assertRedirect()->assertSessionHasNoErrors();
+
+    $morning->refresh();
+    expect($morning->starts_at->equalTo(Carbon::parse('2026-10-05 09:00', 'Africa/Cairo')))->toBeTrue()
+        ->and($morning->ends_at->equalTo(Carbon::parse('2026-10-05 18:00', 'Africa/Cairo')))->toBeTrue()
+        ->and($morning->name)->toBe('صباحي بدري')->and($morning->status)->toBe('planned');
+
+    $u = attModerator();
+    $this->actingAs($u)->getJson('/queue/me')->assertOk()->assertJsonPath('data.attendance.shift_open', true);
+    $this->actingAs($u)->postJson('/queue/me/check-in')->assertOk()->assertJsonPath('data.member.status', 'available');
+
+    expect($morning->fresh()->status)->toBe('open')->and(attLog($u))->toBe(['in']);
+});
+
+it('moves the end of the open shift when its hours are edited, not its start, and the next tick closes it when the new end has passed', function () {
+    app(ShiftService::class)->transition(); // 12:00: the morning opens
+    $morning = Shift::query()->where('shift_key', 'morning')->firstOrFail();
+    $u = attModerator();
+    $m = app(ShiftService::class)->checkIn($u);
+
+    $templates = QueueSetting::DEFAULT_SHIFTS;
+    $templates[0]['from'] = '09:00';
+    $templates[0]['to'] = '11:30';
+    $this->actingAs(User::factory()->create(['role' => 'admin']))->put('/settings/queue', ['shifts' => $templates])
+        ->assertRedirect()->assertSessionHasNoErrors();
+
+    $morning->refresh();
+    expect($morning->status)->toBe('open')
+        ->and($morning->starts_at->equalTo(Carbon::parse('2026-10-05 10:00', 'Africa/Cairo')))->toBeTrue()
+        ->and($morning->ends_at->equalTo(Carbon::parse('2026-10-05 11:30', 'Africa/Cairo')))->toBeTrue();
+
+    app(ShiftService::class)->transition();
+
+    expect($morning->fresh()->status)->toBe('closed')->and($m->fresh()->status)->toBe('left')->and(attLog($u))->toBe(['in', 'auto_out']);
+});
+
+it('cancels her check-out on «رجعت»: back at her desk with her windows, no attendance event, and her last window no longer checks her out', function () {
+    Shift::factory()->create();
+    $svc = app(ShiftService::class);
+    $u = attModerator();
+    $m = $svc->checkIn($u);
+    $e = attWindow($m);
+
+    $this->actingAs($u)->postJson('/queue/me/check-out')->assertOk()->assertJsonPath('data.member.status', 'checking_out');
+    $this->actingAs($u)->postJson('/queue/me/status', ['status' => 'available'])->assertOk()->assertJsonPath('data.status', 'busy');
+
+    expect($m->fresh()->status)->toBe('busy')->and($m->fresh()->requested_by_id)->toBeNull()->and(attLog($u))->toBe(['in']);
+
+    app(WindowLifecycle::class)->close($e, 'inquiry', $u);
+
+    expect($m->fresh()->status)->not->toBe('left')->and(attLog($u))->toBe(['in']);
+});
+
+it('lets the leader cancel a check-out from the board, and a desk checking out without windows comes back available', function () {
+    $shift = Shift::factory()->create();
+    $leader = User::query()->findOrFail($shift->leader_user_id);
+    $svc = app(ShiftService::class);
+    $u = attModerator();
+    $m = $svc->checkIn($u);
+    attWindow($m);
+    $svc->checkOut($m, $leader);
+    expect($m->fresh()->requested_by_id)->toBe($leader->id);
+
+    $this->actingAs($leader)->postJson("/board/members/{$m->id}/status", ['status' => 'available'])->assertOk()
+        ->assertJsonPath('data.members.0.status', 'busy');
+    expect($m->fresh()->requested_by_id)->toBeNull()->and(attLog($u))->toBe(['in']);
+
+    // A break is still not taken over a check-out: only «رجعت» changes it.
+    $v = attModerator();
+    $n = $svc->checkIn($v);
+    $n->update(['status' => 'checking_out']); // her last window closed a moment ago; settle() has not run yet
+    $svc->setStatus($n, 'break', $v);
+    expect($n->fresh()->status)->toBe('checking_out');
+
+    $svc->setStatus($n, 'available', $v);
+    expect($n->fresh()->status)->toBe('available')->and(attLog($v))->toBe(['in']);
+});
+
+it('starts the pending break when the tick hands her windows on, and does not turn it into offline', function () {
+    Shift::factory()->create();
+    $svc = app(ShiftService::class);
+    $u = attModerator();
+    $m = $svc->checkIn($u);
+    $e = attWindow($m);
+    // Two colleagues who stay online, so the mass-offline safeguard does not hold her.
+    $others = [attModerator(), attModerator()];
+    foreach ($others as $o) {
+        $svc->checkIn($o);
+    }
+    $stay = fn () => User::query()->whereIn('id', array_map(fn (User $o) => $o->id, $others))->update(['last_seen_at' => now()]);
+    $svc->setStatus($m, 'break', $u);
+    expect($m->fresh()->status)->toBe('pending_break');
+
+    // Four minutes quiet: offline, but the pending break stays (her window is not handed on yet).
+    Carbon::setTestNow(now()->addMinutes(4));
+    $stay();
+    $svc->tickMembers();
+    expect($m->fresh()->status)->toBe('pending_break')->and($e->fresh()->status)->toBe('active');
+
+    // Six minutes: her window goes on, the break starts, and it stays a break.
+    Carbon::setTestNow(now()->addMinutes(2));
+    $stay();
+    $svc->tickMembers();
+    expect($e->fresh()->close_reason)->toBe('transfer')->and($m->fresh()->status)->toBe('break')->and(attLog($u))->toBe(['in', 'break']);
+
+    Carbon::setTestNow(now()->addMinutes(1));
+    $stay();
+    $svc->tickMembers();
+    expect($m->fresh()->status)->toBe('break')->and(attLog($u))->toBe(['in', 'break']);
+});
+
+it('never marks a desk on a break or a pending break offline', function () {
+    $shift = Shift::factory()->create();
+    $svc = app(ShiftService::class);
+    $a = tap(ShiftMember::factory()->for($shift)->create(['user_id' => attModerator()->id, 'status' => 'break']))->load('user');
+    $b = tap(ShiftMember::factory()->for($shift)->create(['user_id' => attModerator()->id, 'status' => 'pending_break']))->load('user');
+
+    $svc->setStatus($a, 'offline');
+    $svc->setStatus($b, 'offline');
+
+    expect($a->fresh()->status)->toBe('break')->and($b->fresh()->status)->toBe('pending_break');
+});

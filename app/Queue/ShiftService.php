@@ -452,27 +452,51 @@ class ShiftService
     }
 
     /**
-     * The leader of a shift is its template's (attendance design §2). After the templates change
-     * (Settings → Queue, `queue:setup-team`), every shift row not yet closed takes its template's
-     * leader at once. On an open shift, the waiting escalations that were hers follow the new
-     * leader, and the board and the router hear about it once committed.
+     * The templates are the single source of a shift's name, hours and leader (attendance design
+     * §2). After they change (Settings → Queue, `queue:setup-team`), every shift row not yet
+     * closed follows its template for the row's own date, at once:
+     * - `planned`: name, `starts_at`, `ends_at` and leader (so hours moved earlier on the day
+     *   let the shift open — by the tick or by the first «بدأت شغل» — at the new time);
+     * - `open`: name, `ends_at` and leader (it already started; the next tick closes it when the
+     *   new end has passed).
+     * On an open shift, the waiting escalations that were the old leader's follow the new one, and
+     * the board (and, for a new leader, the router) hear about it once committed.
      */
-    public function syncLeaders(): void
+    public function syncTemplates(): void
     {
-        $templates = collect(QueueSetting::current()->shiftTemplates())->keyBy('key');
+        $s = QueueSetting::current();
+        $keys = array_map(fn (array $t) => (string) $t['key'], $s->shiftTemplates());
 
-        Shift::query()->whereIn('status', ['planned', 'open'])->whereIn('shift_key', $templates->keys())->get()
-            ->each(function (Shift $shift) use ($templates) {
-                $old = $shift->leader_user_id !== null ? (int) $shift->leader_user_id : null;
-                $new = self::leaderOf($templates[$shift->shift_key]);
+        Shift::query()->whereIn('status', ['planned', 'open'])->whereIn('shift_key', $keys)->get()
+            ->each(function (Shift $shift) use ($s) {
+                $t = collect($this->templateHours($shift->date->toDateString(), $s))->firstWhere('key', $shift->shift_key);
 
-                if ($old === $new) {
+                if ($t === null) {
                     return;
                 }
 
-                $shift->update(['leader_user_id' => $new]);
+                $old = $shift->leader_user_id !== null ? (int) $shift->leader_user_id : null;
+                $new = $t['leader_user_id'];
+                // Stored in UTC like every other shift time (Eloquent writes a Carbon in its own zone).
+                $shift->fill(['name' => $t['name'], 'ends_at' => $t['ends']->copy()->utc(), 'leader_user_id' => $new]);
+
+                if ($shift->status === 'planned') {
+                    $shift->starts_at = $t['starts']->copy()->utc();
+                }
+
+                if (! $shift->isDirty()) {
+                    return;
+                }
+
+                $shift->save();
 
                 if ($shift->status !== 'open') {
+                    return;
+                }
+
+                DB::afterCommit(fn () => SafeBroadcast::send(new ShiftUpdated($shift->fresh(['members.user', 'leader']))));
+
+                if ($old === $new) {
                     return;
                 }
 
@@ -480,7 +504,6 @@ class ShiftService
                     ->when($old === null, fn ($q) => $q->whereNull('reserved_user_id'), fn ($q) => $q->where('reserved_user_id', $old))
                     ->update(['reserved_user_id' => $new]);
 
-                DB::afterCommit(fn () => SafeBroadcast::send(new ShiftUpdated($shift->fresh(['members.user', 'leader']))));
                 app(QueueRouter::class)->runAfterCommit('ليدر جديد لشيفت '.$shift->name);
             });
     }
@@ -550,8 +573,12 @@ class ShiftService
      *   shift rows), else `pending_break` (no new chats; `settle()` starts it when her last window
      *   closes). The break lasts until she presses «رجعت»: `break_ends_at` only marks where the
      *   overrun starts (`break_minutes`). Asking again while on a break changes nothing.
-     * - `available`: back from a break (a `back` event), a pending break cancelled, or back online.
-     * - A member who left, or who is checking out, is not changed.
+     * - `available`: back from a break (a `back` event), a pending break cancelled, back online, or
+     *   a check-out cancelled («رجعت» while `checking_out`, by her or from the board: `busy` while
+     *   she holds a window, no attendance event — she never left).
+     * - `offline` (the tick): never over a break or a pending break (she keeps it; the hand-off
+     *   of her windows lets `settle()` start it), nor over a check-out.
+     * - A member who left is not changed; one who is checking out only by `available`.
      */
     public function setStatus(ShiftMember $m, string $status, ?User $by = null): void
     {
@@ -567,7 +594,7 @@ class ShiftService
             // whatever an assignment committed while we waited for the row.
             $locked = ShiftMember::query()->with('shift')->lockForUpdate()->find($m->id);
 
-            if ($locked === null || in_array($locked->status, ['left', 'checking_out'], true)) {
+            if ($locked === null || $locked->status === 'left' || ($locked->status === 'checking_out' && $status !== 'available')) {
                 return false;
             }
 
@@ -597,7 +624,7 @@ class ShiftService
                 return true;
             }
 
-            if ($locked->status === 'offline') {
+            if (in_array($locked->status, ['offline', 'break', 'pending_break'], true)) {
                 return false;
             }
 
@@ -621,7 +648,7 @@ class ShiftService
      *   leader hears once (`queue.break_overrun`);
      * - heartbeats: offline after 3 minutes (no new chats), her open windows (all of them, per
      *   user) handed on after 5, checked out after 10 (`auto_out`); a desk that is checking out
-     *   keeps «بتقفل» while offline;
+     *   keeps «بتقفل» while offline, and a pending break stays pending (the hand-off starts it);
      * - back online: `available` again;
      * - a pending break or check-out whose windows are all closed is settled (safety net).
      *
@@ -693,7 +720,9 @@ class ShiftService
                     continue;
                 }
 
-                if (! in_array($m->status, ['offline', 'checking_out', 'left'], true)) {
+                // Not over a break the hand-off above just started (her last window left), nor over
+                // a pending break: it stays, and settle() starts it once her windows are handed on.
+                if (! in_array($m->status, ['offline', 'checking_out', 'left', 'break', 'pending_break'], true)) {
                     $this->setStatus($m, 'offline');
                 }
 

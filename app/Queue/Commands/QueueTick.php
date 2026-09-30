@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\Cache;
  * The heartbeat of the handover queue, scheduled every 30 seconds (QueueServiceProvider).
  * Steps, in this order, each on its own: a step that throws is reported and the next ones still run.
  *   1. shifts open / close on time;
- *   2. members: breaks, not arrived, offline moderators, hand-off of their windows, not-arrived alert;
+ *   2. members: break overrun alert, offline moderators, hand-off of their windows, check-out after
+ *      10 minutes offline (`auto_out`), pending breaks and check-outs settled;
  *   3. customer silence: warning, then auto-close;
  *   4. moderator reply: apology, hand-off (`no_reply`) or leader alert (flow revision §4);
  *   5. confirm sweep: closes whose confirm window passed (safety net for a lost ConfirmClose job);
