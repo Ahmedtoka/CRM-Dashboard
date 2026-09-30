@@ -2612,6 +2612,8 @@ const en: Messages = {
             closing: 'Checking out: she finishes her windows and gets no new ones.',
             hand_back: 'Send her windows back to the lounge',
             hand_back_hint: 'Her customers go back to the lounge with their tickets, at the front of the line, and she leaves the shift.',
+            hand_back_confirm_hint: 'Her open chats ({n}) go back to the lounge with their tickets, at the front of the line, and she leaves the shift. Are you sure?',
+            hand_back_confirm: 'Yes, send them back',
         },
         roster: {
             button: 'Team',

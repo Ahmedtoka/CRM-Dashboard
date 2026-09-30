@@ -56,6 +56,7 @@ const closing = computed(() => member.value?.status === 'checking_out');
 
 const cap = ref(1);
 const confirming = ref(false);
+const confirmingBack = ref(false);
 
 watch(
     () => [props.memberId, member.value?.cap] as const,
@@ -68,6 +69,7 @@ watch(
     () => props.memberId,
     () => {
         confirming.value = false;
+        confirmingBack.value = false;
         board.clearError();
     },
 );
@@ -89,7 +91,7 @@ async function checkOut(): Promise<void> {
 }
 
 async function handBack(): Promise<void> {
-    if (member.value !== null) await board.handBack(member.value.id);
+    if (member.value !== null && (await board.handBack(member.value.id))) confirmingBack.value = false;
 }
 </script>
 
@@ -196,12 +198,23 @@ async function handBack(): Promise<void> {
                 <div class="space-y-1 border-t border-border pt-3">
                     <template v-if="closing">
                         <p class="text-xs text-foreground">{{ t('board.member.closing') }}</p>
-                        <Button class="w-full" :disabled="board.busy.value !== null" @click="handBack">
-                            <LoaderCircle v-if="board.busy.value === `handback-${member.id}`" class="animate-spin" aria-hidden="true" />
-                            <Undo2 v-else aria-hidden="true" />
+                        <Button v-if="!confirmingBack" class="w-full" :disabled="board.busy.value !== null" @click="confirmingBack = true">
+                            <Undo2 aria-hidden="true" />
                             {{ t('board.member.hand_back') }}
                         </Button>
-                        <p class="text-2xs text-muted-foreground">{{ t('board.member.hand_back_hint') }}</p>
+                        <div v-else class="space-y-2" role="alertdialog" :aria-label="t('board.member.hand_back')">
+                            <p class="text-xs text-foreground">
+                                {{ t('board.member.hand_back_confirm_hint', { n: formatCount(windows.length, locale) }) }}
+                            </p>
+                            <div class="flex gap-2">
+                                <Button class="flex-1" :disabled="board.busy.value !== null" @click="handBack">
+                                    <LoaderCircle v-if="board.busy.value === `handback-${member.id}`" class="animate-spin" aria-hidden="true" />
+                                    {{ t('board.member.hand_back_confirm') }}
+                                </Button>
+                                <Button variant="outline" @click="confirmingBack = false">{{ t('board.cancel.back') }}</Button>
+                            </div>
+                        </div>
+                        <p v-if="!confirmingBack" class="text-2xs text-muted-foreground">{{ t('board.member.hand_back_hint') }}</p>
                     </template>
                     <Button v-else-if="!confirming" variant="ghost" class="w-full text-destructive hover:text-destructive" @click="confirming = true">
                         <LogOut class="rtl-flip" aria-hidden="true" />

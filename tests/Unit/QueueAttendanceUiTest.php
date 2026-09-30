@@ -23,6 +23,7 @@ it('draws the board from check-ins: no start of the day, no roster form, the bre
         ->and(attendanceSource('resources/js/composables/useBoard.ts'))->not->toContain('/board/start')->not->toContain('/board/shifts/')
         ->not->toContain('breakLeft')->toContain('/check-out')->toContain('/hand-back')->toContain('/cap')->toContain('breakOver')
         ->and(attendanceSource('resources/js/components/board/BoardRosterPanel.vue'))->not->toContain('addMember')
+        ->and(attendanceSource('resources/js/components/board/BoardMemberPanel.vue'))->toContain('confirmingBack')->toContain('hand_back_confirm_hint')->toContain('@click="confirmingBack = true"')
         ->and(attendanceSource('resources/js/components/board/RoomDesk.vue'))->toContain("'overrun'")->toContain("'closing'")
         ->and(attendanceSource('resources/js/components/board/room.css'))->toContain('.cell.overrun')->toContain('.cell.closing')
         ->and(attendanceSource('resources/js/i18n/ar.ts'))->toContain("checking_out: 'بتقفل'")->toContain("break_since: 'استراحة · {time}'")
