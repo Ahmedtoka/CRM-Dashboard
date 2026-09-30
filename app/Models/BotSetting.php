@@ -6,6 +6,7 @@ use App\Bot\Knowledge\SizeChart;
 use Database\Factories\BotSettingFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 class BotSetting extends Model
 {
@@ -120,28 +121,40 @@ class BotSetting extends Model
 
     public static function current(): self
     {
+        if ($row = static::query()->find(1)) {
+            return $row;
+        }
+
         [$delayMin, $delayMax] = config('crm.comment_bot_delay', [5, 30]);
 
-        return static::firstOrCreate(['id' => 1], [
-            'enabled' => true,
-            'ai_enabled' => true,
-            'ai_classifier_model' => config('crm.anthropic.classifier_model'),
-            'ai_reply_model' => config('crm.anthropic.reply_model'),
-            'min_confidence' => 0.60,
-            'max_bot_turns' => 6,
-            'handover_keywords' => ['عايز اكلم حد', 'موظف'],
-            'comment_reply_delay_min' => $delayMin,
-            'comment_reply_delay_max' => $delayMax,
-            'spam_phrases' => self::DEFAULT_SPAM_PHRASES,
-            'low_value_phrases' => self::DEFAULT_LOW_VALUE_PHRASES,
-            'allowed_link_domains' => self::DEFAULT_ALLOWED_LINK_DOMAINS,
-            'spam_repeat_threshold' => self::DEFAULT_SPAM_REPEAT_THRESHOLD,
-            'size_chart' => SizeChart::DEFAULT,
-            'burst_wait_seconds' => config('crm.bot.burst_wait_seconds'),
-            'burst_max_wait_seconds' => config('crm.bot.burst_max_wait_seconds'),
-            'typing_ms_per_char' => config('crm.bot.typing_ms_per_char'),
-            'order_lookup_enabled' => true,
-            'non_returnable_keywords' => self::DEFAULT_NON_RETURNABLE_KEYWORDS,
-        ]);
+        // `id` is guarded, so firstOrCreate(['id' => 1]) would insert under the next auto-increment id
+        // and the next call would create yet another row (MySQL keeps counting; sqlite hid it).
+        // Two first requests at once: the loser hits the primary key and reads the winner's row.
+        try {
+            (new static)->forceFill(['id' => 1] + [
+                'enabled' => true,
+                'ai_enabled' => true,
+                'ai_classifier_model' => config('crm.anthropic.classifier_model'),
+                'ai_reply_model' => config('crm.anthropic.reply_model'),
+                'min_confidence' => 0.60,
+                'max_bot_turns' => 6,
+                'handover_keywords' => ['عايز اكلم حد', 'موظف'],
+                'comment_reply_delay_min' => $delayMin,
+                'comment_reply_delay_max' => $delayMax,
+                'spam_phrases' => self::DEFAULT_SPAM_PHRASES,
+                'low_value_phrases' => self::DEFAULT_LOW_VALUE_PHRASES,
+                'allowed_link_domains' => self::DEFAULT_ALLOWED_LINK_DOMAINS,
+                'spam_repeat_threshold' => self::DEFAULT_SPAM_REPEAT_THRESHOLD,
+                'size_chart' => SizeChart::DEFAULT,
+                'burst_wait_seconds' => config('crm.bot.burst_wait_seconds'),
+                'burst_max_wait_seconds' => config('crm.bot.burst_max_wait_seconds'),
+                'typing_ms_per_char' => config('crm.bot.typing_ms_per_char'),
+                'order_lookup_enabled' => true,
+                'non_returnable_keywords' => self::DEFAULT_NON_RETURNABLE_KEYWORDS,
+            ])->save();
+        } catch (UniqueConstraintViolationException) {
+        }
+
+        return static::query()->findOrFail(1);
     }
 }

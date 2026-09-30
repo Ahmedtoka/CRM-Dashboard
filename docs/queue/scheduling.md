@@ -3,11 +3,12 @@
 `php artisan queue:tick` is the heartbeat of the customer-service queue. It is registered in
 `App\Queue\QueueServiceProvider` to run every 30 seconds and does, in order:
 
-1. opens / closes shifts on time;
-2. members: breaks; a rostered moderator who never logged in since she joined ("not arrived") is
-   marked offline at once; a moderator whose heartbeat stopped goes offline after 3 minutes and
-   her windows are handed on after 5; the leader, supervisors and admins hear once per shift when
-   somebody is still not logged in `not_arrived_alert_minutes` (10) into it;
+1. opens / closes shifts on time, by the clock, with nobody on them (no roster, no «ابدأ اليوم»);
+   the close checks out whoever is still in (`auto_out`);
+2. members (checked in with «بدأت شغل»): a moderator whose heartbeat stopped goes offline after 3
+   minutes, her windows are handed on after 5 and she is checked out after 10 (`auto_out`); a
+   break never ends by itself — the leader hears once when it runs past `break_minutes`
+   (`queue.break_overrun`); a pending break or check-out whose windows are all closed is settled;
 3. customer silence (after the moderator's reply): warning message, then auto-close;
 4. moderator reply (the customer waits for the moderator): apology at `agent_apology_seconds`
    (180), hand-off to a free logged-in colleague as `no_reply` at `agent_reassign_first_seconds`
@@ -30,8 +31,10 @@ in the settings the command does nothing.
 
 - A desk serves only while its moderator is logged in (a heartbeat in the last 2 minutes). The
   board shows a serving desk whose moderator is not logged in in grey, «مش فاتحة».
-- The mass-offline safeguard counts only desks that were online since they joined; moderators who
-  never logged in are "not arrived", never "gone dark together".
+- The mass-offline safeguard counts only desks that were online since they joined. The old
+  "not arrived" state (a rostered moderator who never logged in, and its leader alert) is gone:
+  a moderator is on a shift only once she has checked herself in (see Attendance below), so
+  there is nobody to wait for.
 - Two clocks run on an open window, never together: the customer-silence clock (after the
   moderator's last reply) and the moderator-reply clock (`queue_entries.awaiting_reply_since`,
   while the customer waits for her). A `no_reply` hand-off keeps the ticket, puts the customer
@@ -48,6 +51,29 @@ in the settings the command does nothing.
 - Overnight entries are excluded: they keep the one night message.
 - While the queue holds her (queue on, entry `waiting`, `called` or `active`) the bot's own
   reassurance stays silent, so she never gets two answers. With the queue off nothing changes.
+
+## Attendance: self check-in (2026-09-29)
+
+- Shifts open and close by the clock from Settings → Queue (defaults صباحي 10:00–18:00, مسائي
+  18:00–00:00). Nobody starts the day and nobody picks a roster; the leader is the template's.
+- A moderator (active, with at least one platform) presses «بدأت شغل» in her inbox strip while a
+  shift runs; outside the hours the button is disabled with «الشيفت بيبدأ {time}». Then
+  «استراحة» (at once, or after her open windows), «رجعت», «خروج» (at once, or «بتقفل» until her
+  last window closes; «رجّعي شبابيكي للصالة» sends her windows back to the top of the lounge
+  through the transfer path, no penalty). Logging out of the CRM is «خروج».
+- Automatic check-out: the shift's close, and 10 minutes without a heartbeat (her windows were
+  already handed on after 5). A break never ends by itself; a moderator on a break is not
+  checked out for being offline (the overrun alert and the shift's close cover her).
+- The board draws only checked-in desks plus the leader's desk (grey until she checks in). The
+  leader or a supervisor can send someone on a break or check her out on her behalf; nobody is
+  added from the board.
+- Every step is logged in `queue_attendance_events` (`in | break | back | out | auto_out`,
+  `by_user_id` when somebody did it for her). The member panel shows today's first in, last out,
+  time worked, break time, breaks and overruns (`App\Queue\Attendance::figuresFor()`); nothing is
+  paid or penalised from them.
+- With nobody checked in during a shift the bot keeps answering; a customer who asks for a human
+  gets `queue_enqueued_no_eta` and waits in the lounge; the first moderator who checks in
+  receives the lounge in order.
 
 ## Server with a one-minute cron (Cloudways)
 
