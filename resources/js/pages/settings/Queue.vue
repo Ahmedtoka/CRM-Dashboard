@@ -257,7 +257,7 @@ const hint = 'text-2xs text-muted-foreground';
                         </label>
                         <label class="grid content-start gap-1">
                             <Label>{{ t('settings.queue.break_minutes') }}</Label>
-                            <Input v-model="form.break_minutes" type="number" min="0" max="120" dir="ltr" :class="input" />
+                            <Input v-model="form.break_minutes" type="number" min="1" max="120" dir="ltr" :class="input" />
                         </label>
                         <label class="grid content-start gap-1">
                             <Label>{{ t('settings.queue.review_sample_pct') }}</Label>

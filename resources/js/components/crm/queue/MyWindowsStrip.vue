@@ -23,7 +23,7 @@ import {
     Undo2,
     type LucideIcon,
 } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
     /** The conversation open in the thread, so its window is marked. */
@@ -130,9 +130,14 @@ interface Action {
     run: () => void;
 }
 
+/** «رجّعي شبابيكي للصالة» asks first: one click would pull every customer off her desk. */
+const confirmingHandBack = ref(false);
+watch(status, () => (confirmingHandBack.value = false));
+
 /**
  * Her buttons (attendance §3): «بدأت شغل» before she checks in (enabled only while a shift
- * runs), «استراحة» and «خروج» at her desk, «رجعت» on a break, «رجّعي شبابيكي للصالة» on her way out.
+ * runs), «استراحة» and «خروج» at her desk, «رجعت» on a break, «رجّعي شبابيكي للصالة» (after a
+ * confirm) or «رجعت» (she changed her mind: back at her desk) on her way out.
  */
 const actions = computed<Action[]>(() => {
     const q = queue;
@@ -203,17 +208,32 @@ const actions = computed<Action[]>(() => {
                     icon: Undo2,
                     variant: 'default',
                     busy: 'hand-back',
-                    run: () => void q.handBack(),
+                    run: () => {
+                        confirmingHandBack.value = true;
+                        // The second click of a double-click must not land on the confirm.
+                        q.holdAttendance();
+                    },
                 },
+                back(t('queue.back_to_work'), t('queue.attendance.cancel_check_out_hint')),
             ];
         default:
             return [];
     }
 });
 
+/** A click on one of her attendance buttons, ignored for a moment after the last one completed. */
+function press(run: () => void): void {
+    if (queue?.attendanceHeld()) return;
+    run();
+}
+
+function confirmHandBack(): void {
+    press(() => void queue?.handBack());
+}
+
 /** Under the buttons: when the shift starts (while «بدأت شغل» is disabled), or what «بتقفلي» means. */
 const note = computed(() => {
-    if (status.value === 'checking_out') return t('queue.attendance.closing');
+    if (status.value === 'checking_out') return confirmingHandBack.value ? null : t('queue.attendance.closing');
     const a = queue?.attendance.value ?? null;
     if (status.value !== null || a === null || a.shift_open) return null;
 
@@ -351,7 +371,38 @@ const silenceTone: Record<Card['tone'], string> = {
                     {{ t('queue.attendance.break_since', { time: breakSince }) }}
                 </span>
             </p>
-            <div class="flex items-center gap-1">
+            <div
+                v-if="confirmingHandBack && status === 'checking_out'"
+                class="flex max-w-72 flex-col items-end gap-1"
+                role="alertdialog"
+                :aria-label="t('queue.attendance.hand_back')"
+                aria-describedby="hand-back-confirm-hint"
+            >
+                <p id="hand-back-confirm-hint" class="text-end text-2xs text-foreground">
+                    {{ t('queue.attendance.hand_back_confirm_hint', { n: formatCount(cards.length, locale) }) }}
+                </p>
+                <div class="flex items-center gap-1">
+                    <button
+                        type="button"
+                        :class="cn(buttonVariants({ variant: 'default', size: 'sm' }), 'h-7 gap-1 rounded-full px-2.5 text-xs')"
+                        :disabled="queue.busy.value !== null"
+                        @click="confirmHandBack"
+                    >
+                        <LoaderCircle v-if="queue.busy.value === 'hand-back'" class="size-3.5 animate-spin" aria-hidden="true" />
+                        <Undo2 v-else class="size-3.5" aria-hidden="true" />
+                        {{ t('queue.attendance.hand_back_confirm') }}
+                    </button>
+                    <button
+                        type="button"
+                        :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-7 rounded-full px-2.5 text-xs')"
+                        :disabled="queue.busy.value !== null"
+                        @click="confirmingHandBack = false"
+                    >
+                        {{ t('queue.attendance.hand_back_cancel') }}
+                    </button>
+                </div>
+            </div>
+            <div v-else class="flex items-center gap-1">
                 <button
                     v-for="action in actions"
                     :key="action.key"
@@ -360,7 +411,7 @@ const silenceTone: Record<Card['tone'], string> = {
                     :disabled="queue.busy.value !== null || action.disabled === true"
                     :title="action.hint"
                     :aria-label="action.label"
-                    @click="action.run()"
+                    @click="press(action.run)"
                 >
                     <LoaderCircle v-if="queue.busy.value === action.busy" class="size-3.5 animate-spin" aria-hidden="true" />
                     <component :is="action.icon" v-else class="size-3.5" :class="action.flip ? 'rtl-flip' : ''" aria-hidden="true" />

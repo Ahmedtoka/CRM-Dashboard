@@ -12,7 +12,7 @@ it('gives the moderator her attendance buttons in the inbox strip, in both langu
         ->and(attendanceSource('resources/js/i18n/en.ts'))->toContain("check_in: 'Start work'")->toContain("hand_back: 'Send my windows back to the lounge'")
         ->and(attendanceSource('resources/js/composables/useMyQueue.ts'))->toContain("'/queue/me/check-in'")->toContain("'/queue/me/check-out'")
         ->toContain("'/queue/me/hand-back'")->toContain('breakOver')->not->toContain('breakLeft')
-        ->and(attendanceSource('resources/js/components/crm/queue/MyWindowsStrip.vue'))->toContain('q.checkIn()')->toContain('q.handBack()')
+        ->and(attendanceSource('resources/js/components/crm/queue/MyWindowsStrip.vue'))->toContain('q.checkIn()')->toContain('queue?.handBack()')
         ->toContain("t('queue.attendance.starts_at'")->toContain('queue?.shown.value')
         ->and(attendanceSource('resources/js/types/crm.ts'))->toContain("'checking_out'")->toContain('export interface MyAttendance');
 });
@@ -39,4 +39,16 @@ it('shows her attendance of the day in the member panel, in both languages', fun
         ->and(attendanceSource('resources/js/types/board.ts'))->toContain('export interface AttendanceFigures')
         ->and(attendanceSource('resources/js/lib/board/state.ts'))->toContain('attendance: m.attendance')
         ->and(attendanceSource('resources/js/components/board/BoardMemberPanel.vue'))->toContain("t('board.member.attendance.title')");
+});
+
+it('guards her strip against mis-clicks: a confirm before the hand-back, a short hold after each press, and «رجعت» on her way out', function () {
+    $strip = attendanceSource('resources/js/components/crm/queue/MyWindowsStrip.vue');
+
+    expect($strip)->toContain('role="alertdialog"')->toContain('confirmingHandBack')->toContain('q.holdAttendance()')
+        ->toContain('@click="press(action.run)"')->toContain("t('queue.attendance.hand_back_confirm_hint'")
+        ->toContain("back(t('queue.back_to_work'), t('queue.attendance.cancel_check_out_hint'))")
+        ->and(attendanceSource('resources/js/composables/useMyQueue.ts'))->toContain('ATTENDANCE_HOLD_MS = 700')->toContain('attendanceHeld()')
+        ->and(attendanceSource('resources/js/components/board/BoardMemberPanel.vue'))->toContain('cancelCheckOut')->toContain("t('board.member.cancel_check_out_hint')")
+        ->and(attendanceSource('resources/js/i18n/ar.ts'))->toContain("hand_back_confirm_hint: 'شبابيكك المفتوحة ({n})")->toContain("hand_back_cancel: 'رجوع'")
+        ->and(attendanceSource('resources/js/i18n/en.ts'))->toContain("hand_back_confirm_hint: 'Your open chats ({n})")->toContain("hand_back_cancel: 'Back'");
 });

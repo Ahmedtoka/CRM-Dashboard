@@ -2406,6 +2406,10 @@ const en: Messages = {
             hand_back: 'Send my windows back to the lounge',
             hand_back_hint: 'Your customers go back to the lounge with their tickets, at the front of the line, for a colleague',
             closing: 'Finish your windows and you are checked out',
+            cancel_check_out_hint: 'Changed your mind? The check-out is cancelled: you stay at your desk with your windows and receive customers again',
+            hand_back_confirm_hint: 'Your open chats ({n}) go back to the lounge with their tickets, at the front of the line, and you leave the shift. Are you sure?',
+            hand_back_confirm: 'Yes, send them back',
+            hand_back_cancel: 'Back',
             break_since: 'for {time}',
         },
         banner: {
@@ -2624,6 +2628,7 @@ const en: Messages = {
             hand_back_hint: 'Her customers go back to the lounge with their tickets, at the front of the line, and she leaves the shift.',
             hand_back_confirm_hint: 'Her open chats ({n}) go back to the lounge with their tickets, at the front of the line, and she leaves the shift. Are you sure?',
             hand_back_confirm: 'Yes, send them back',
+            cancel_check_out_hint: 'The check-out is cancelled: she stays at her desk with her windows and receives customers again.',
         },
         roster: {
             button: 'Team',

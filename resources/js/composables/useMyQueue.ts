@@ -23,6 +23,12 @@ const EVENT_ASSIGNED = '.App\\Queue\\Events\\QueueAssigned';
 
 const OPEN_STATUSES = ['called', 'active'];
 
+/** How long her attendance buttons ignore clicks after one of them completes (a double-click's second click). */
+const ATTENDANCE_HOLD_MS = 700;
+
+/** The `busy` keys of her attendance actions (the others are per window). */
+const ATTENDANCE_KEYS = ['status', 'check-in', 'check-out', 'hand-back'];
+
 export type MyStatus = 'available' | 'break';
 
 export interface MyQueue {
@@ -62,6 +68,12 @@ export interface MyQueue {
     checkIn: () => Promise<boolean>;
     checkOut: () => Promise<boolean>;
     handBack: () => Promise<boolean>;
+    /**
+     * Her attendance buttons ignore clicks for a moment after one of them completes (or a confirm
+     * opens): the second click of a double-click never lands on the button that replaced it.
+     */
+    attendanceHeld: () => boolean;
+    holdAttendance: () => void;
     /** Feed of the inbox's `MessageCreated`: a customer message stops the silence clock of her window. */
     noteMessage: (message: Pick<Message, 'direction' | 'conversation_id'>) => void;
     refresh: () => Promise<void>;
@@ -112,6 +124,8 @@ export function useMyQueue(options: Options): MyQueue {
     const attendance = ref<MyAttendance | null>(null);
     const busy = ref<string | null>(null);
     const tick = ref(Date.now());
+    /** Until when (this machine's clock) her attendance buttons ignore clicks. */
+    let attendanceHeldUntil = 0;
 
     /** When each entry's `silence_left_seconds` was true, on this machine's clock. */
     const stampedAt = new Map<number, number>();
@@ -307,8 +321,17 @@ export function useMyQueue(options: Options): MyQueue {
         entries.value = entries.value.map((e) => (e.id === entry.id ? { ...e, silence_left_seconds: null, silence_warned: false } : e));
     }
 
+    function holdAttendance(): void {
+        attendanceHeldUntil = Date.now() + ATTENDANCE_HOLD_MS;
+    }
+
+    function attendanceHeld(): boolean {
+        return Date.now() < attendanceHeldUntil;
+    }
+
     async function act<T>(key: string, request: () => Promise<T>, done: (result: T) => void): Promise<boolean> {
-        if (busy.value !== null) return false;
+        const attendanceKey = ATTENDANCE_KEYS.includes(key);
+        if (busy.value !== null || (attendanceKey && attendanceHeld())) return false;
         busy.value = key;
         try {
             done(await request());
@@ -322,6 +345,7 @@ export function useMyQueue(options: Options): MyQueue {
             return false;
         } finally {
             busy.value = null;
+            if (attendanceKey) holdAttendance();
         }
     }
 
@@ -474,6 +498,8 @@ export function useMyQueue(options: Options): MyQueue {
         checkIn,
         checkOut,
         handBack,
+        attendanceHeld,
+        holdAttendance,
         noteMessage,
         refresh,
     };

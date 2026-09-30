@@ -100,6 +100,11 @@ async function toggleBreak(): Promise<void> {
     await board.setMemberStatus(member.value.id, onBreak.value ? 'available' : 'break');
 }
 
+/** «رجعت» while she is checking out: the check-out is cancelled, she stays at her desk with her windows. */
+async function cancelCheckOut(): Promise<void> {
+    if (member.value !== null) await board.setMemberStatus(member.value.id, 'available');
+}
+
 async function saveCap(): Promise<void> {
     const m = member.value;
     if (m === null || m.user === null || cap.value === m.cap) return;
@@ -246,6 +251,14 @@ async function handBack(): Promise<void> {
                             </div>
                         </div>
                         <p v-if="!confirmingBack" class="text-2xs text-muted-foreground">{{ t('board.member.hand_back_hint') }}</p>
+                        <template v-if="!confirmingBack">
+                            <Button variant="outline" class="w-full" :disabled="board.busy.value !== null" @click="cancelCheckOut">
+                                <LoaderCircle v-if="board.busy.value === `status-${member.id}`" class="animate-spin" aria-hidden="true" />
+                                <UserRoundCheck v-else aria-hidden="true" />
+                                {{ t('board.member.back') }}
+                            </Button>
+                            <p class="text-2xs text-muted-foreground">{{ t('board.member.cancel_check_out_hint') }}</p>
+                        </template>
                     </template>
                     <Button v-else-if="!confirming" variant="ghost" class="w-full text-destructive hover:text-destructive" @click="confirming = true">
                         <LogOut class="rtl-flip" aria-hidden="true" />
