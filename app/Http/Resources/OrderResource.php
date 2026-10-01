@@ -56,6 +56,8 @@ class OrderResource extends JsonResource
         return [
             'id' => $this->id,
             'order_number' => $this->order_number,
+            // Shopify's own name for the order (e.g. "#1381"); null until it is on Shopify.
+            'shopify_order_name' => $this->shopify_order_name,
             'status' => $this->status?->value,
             'type' => $this->type?->value,
             'source' => $this->source?->value,
@@ -96,6 +98,8 @@ class OrderResource extends JsonResource
             'last_synced_at' => $this->last_synced_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
             'on_shopify' => $this->shopify_order_id !== null,
+            // Final orders (Order::scopeOpenForSync) are never refreshed in the background.
+            'is_final' => $this->resource->isFinalForSync(),
             // Why it is not on Shopify yet; null once it is.
             'last_error' => $this->shopify_order_id === null ? $this->last_error : null,
             'items' => $this->items->map(fn (OrderItem $i) => [

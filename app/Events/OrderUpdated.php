@@ -33,6 +33,7 @@ class OrderUpdated implements ShouldBroadcastNow
         return [
             'id' => $o->id,
             'order_number' => $o->order_number,
+            'shopify_order_name' => $o->shopify_order_name,
             'status' => $o->status?->value,
             'type' => $o->type?->value,
             'total' => $o->total,
@@ -52,6 +53,7 @@ class OrderUpdated implements ShouldBroadcastNow
             'shopify_updated_at' => $o->shopify_updated_at?->toIso8601String(),
             'last_synced_at' => $o->last_synced_at?->toIso8601String(),
             'updated_at' => $o->updated_at?->toIso8601String(),
+            'is_final' => $o->isFinalForSync(),
         ];
     }
 }

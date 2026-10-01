@@ -117,6 +117,19 @@ class Order extends Model
     }
 
     /**
+     * The row-level twin of scopeOpenForSync(): true when the order is FINAL
+     * (cancelled, refunded/voided, or delivered) and is never auto-refreshed.
+     * The list uses it to skip such rows in the on-view refresh.
+     */
+    public function isFinalForSync(): bool
+    {
+        return $this->cancelled_at !== null
+            || $this->delivered_at !== null
+            || in_array($this->financial_status, ['refunded', 'voided'], true)
+            || ($this->fulfillment_status === 'fulfilled' && $this->shipment_status === 'delivered');
+    }
+
+    /**
      * @return BelongsTo<Customer, $this>
      */
     public function customer(): BelongsTo

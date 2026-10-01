@@ -369,6 +369,20 @@ export interface Order {
     refunds?: Refund[];
     timeline?: OrderTimelineEntry[];
     created_at: string | null;
+    /** Shopify's own name for the order ("#1381"); null until it is on Shopify. */
+    shopify_order_name?: string | null;
+    /** When the order was placed in the store. */
+    placed_at?: string | null;
+    /** Shopify's own updated_at: the last change made in Shopify. */
+    shopify_updated_at?: string | null;
+    /** The last time the CRM read the order from Shopify (any read, even one that changed nothing). */
+    last_synced_at?: string | null;
+    /** The last change to the CRM row. */
+    updated_at?: string | null;
+    on_shopify?: boolean;
+    /** Cancelled, refunded/voided or delivered: never refreshed in the background (Order::isFinalForSync). */
+    is_final?: boolean;
+    paid_at?: string | null;
 }
 
 export interface Identity {

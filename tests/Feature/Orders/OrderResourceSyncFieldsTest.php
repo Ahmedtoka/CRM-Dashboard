@@ -45,3 +45,23 @@ it('shows the last error and no sync times for an order not on Shopify yet', fun
         ->and($data['placed_at'])->toBeNull()
         ->and($data['updated_at'])->toBeString();
 });
+
+it('marks final orders with the same rule as the openForSync scope and carries the Shopify name', function () {
+    $open = Order::factory()->create(['shopify_order_id' => '1', 'shopify_order_name' => '#1381', 'financial_status' => 'paid', 'fulfillment_status' => null]);
+    $cancelled = Order::factory()->create(['shopify_order_id' => '2', 'cancelled_at' => now()]);
+    $refunded = Order::factory()->create(['shopify_order_id' => '3', 'financial_status' => 'refunded']);
+    $delivered = Order::factory()->create(['shopify_order_id' => '4', 'fulfillment_status' => 'fulfilled', 'shipment_status' => 'delivered']);
+    $fulfilledOnly = Order::factory()->create(['shopify_order_id' => '5', 'fulfillment_status' => 'fulfilled', 'shipment_status' => 'in_transit']);
+
+    expect(syncFieldsPayload($open))->toMatchArray(['is_final' => false, 'shopify_order_name' => '#1381'])
+        ->and(syncFieldsPayload($cancelled)['is_final'])->toBeTrue()
+        ->and(syncFieldsPayload($refunded)['is_final'])->toBeTrue()
+        ->and(syncFieldsPayload($delivered)['is_final'])->toBeTrue()
+        ->and(syncFieldsPayload($fulfilledOnly)['is_final'])->toBeFalse();
+
+    // The row rule and the scope agree on every order.
+    $openIds = Order::query()->openForSync()->pluck('id')->all();
+    foreach ([$open, $cancelled, $refunded, $delivered, $fulfilledOnly] as $order) {
+        expect(in_array($order->id, $openIds, true))->toBe(! $order->fresh()->isFinalForSync());
+    }
+});
