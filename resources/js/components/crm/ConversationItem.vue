@@ -14,7 +14,8 @@ import { computed } from 'vue';
  * name · tag dots · time, then the one state badge · preview · unread pill (spec §1.2).
  */
 const props = withDefaults(defineProps<{ conversation: Conversation; state: RowState | null; active?: boolean }>(), { active: false });
-const emit = defineEmits<{ select: [id: number]; contextmenu: [id: number, event: MouseEvent] }>();
+/** `pointer`: opened by a mouse / touch click (the composer takes the focus), not by the keyboard. */
+const emit = defineEmits<{ select: [id: number, pointer: boolean]; contextmenu: [id: number, event: MouseEvent] }>();
 
 const { t, locale } = useI18n();
 const { getInitials } = useInitials();
@@ -36,7 +37,7 @@ const dotColor = (color: string | null) => (color && /^#[0-9a-f]{6}$/i.test(colo
         :aria-current="active ? 'true' : undefined"
         class="flex h-[72px] w-full items-center gap-3 px-3 text-start outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         :class="active ? 'bg-surface-accent' : 'hover:bg-muted'"
-        @click="emit('select', conversation.id)"
+        @click="emit('select', conversation.id, $event.detail > 0)"
         @contextmenu.prevent="emit('contextmenu', conversation.id, $event)"
     >
         <span class="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-elevated text-xs font-semibold text-muted-foreground">

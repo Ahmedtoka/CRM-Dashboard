@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import { buttonVariants } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useI18n } from '@/composables/useI18n';
 import { useMyQueueContext } from '@/composables/useMyQueue';
 import { formatClock, formatCount, formatSeconds } from '@/lib/format';
@@ -8,7 +9,6 @@ import { cn } from '@/lib/utils';
 import type { QueueEntry, QueuePriority } from '@/types/crm';
 import {
     ArrowUpCircle,
-    Clock,
     Coffee,
     FolderOpen,
     Hand,
@@ -31,7 +31,7 @@ const props = defineProps<{
     /** Unread customer messages per conversation id (from the list the inbox already holds). */
     unread: Record<number, number>;
 }>();
-const emit = defineEmits<{ select: [conversationId: number] }>();
+const emit = defineEmits<{ select: [conversationId: number, pointer: boolean] }>();
 
 const { t, locale } = useI18n();
 const queue = useMyQueueContext();
@@ -51,6 +51,8 @@ interface Card {
     ticket: number;
     name: string;
     selected: boolean;
+    /** The first name only: the card is one compact line. */
+    first: string;
     unread: number;
     elapsed: string;
     silence: string | null;
@@ -71,6 +73,7 @@ const cards = computed<Card[]>(() =>
             ticket: entry.ticket % 100000,
             name: entry.customer?.name || t('queue.customer_fallback'),
             selected: entry.conversation_id === props.selectedId,
+            first: (entry.customer?.name || t('queue.customer_fallback')).trim().split(/\s+/)[0],
             unread: props.unread[entry.conversation_id] ?? 0,
             elapsed: formatSeconds(queue!.elapsed(entry), locale.value),
             silence: left === null ? null : formatSeconds(left, locale.value),
@@ -244,8 +247,25 @@ const cardTone: Record<Card['tone'], string> = {
     calm: 'border-border bg-background hover:bg-elevated',
     warning: 'border-warning/60 bg-warning/10 hover:bg-warning/15',
     last: 'border-destructive/50 bg-destructive/10 hover:bg-destructive/15',
-    overdue: 'border-orange-500/70 bg-orange-500/10 hover:bg-orange-500/15',
+    overdue: 'border-overdue/70 bg-overdue/10 hover:bg-overdue/15',
 };
+
+/**
+ * The hand-back confirm (attendance review, deferred item): focus lands on the confirm button
+ * when it opens, Escape cancels, and focus goes back to the button that opened it.
+ */
+function onHandBackOpen(open: boolean): void {
+    // Opening goes through the same guard as her other buttons (no double-click landing here).
+    if (open && queue?.attendanceHeld()) return;
+    confirmingHandBack.value = open;
+    // The second click of a double-click must not land on the confirm.
+    if (open) queue?.holdAttendance();
+}
+function focusConfirm(event: Event): void {
+    event.preventDefault();
+    // The popover sits in the actions' v-for (a template ref there would be an array): find it in the DOM.
+    document.querySelector<HTMLButtonElement>('[data-hand-back-confirm]')?.focus();
+}
 const silenceTone: Record<Card['tone'], string> = {
     calm: 'text-muted-foreground',
     warning: 'font-semibold text-foreground',
@@ -255,170 +275,133 @@ const silenceTone: Record<Card['tone'], string> = {
 </script>
 
 <template>
-    <section
-        v-if="queue?.shown.value"
-        class="flex shrink-0 items-stretch gap-2 border-b bg-card px-3 py-2 sm:gap-3"
-        :aria-label="t('queue.my_windows')"
-        data-my-windows
-    >
-        <div class="hidden shrink-0 flex-col justify-center sm:flex">
-            <h2 class="text-sm font-bold leading-5">{{ t('queue.my_windows') }}</h2>
-            <p class="text-2xs tabular-nums text-muted-foreground">
-                {{ t('queue.windows_count', { open: formatCount(cards.length, locale), cap: formatCount(queue.cap.value, locale) }) }}
-            </p>
-        </div>
-
-        <ul class="scrollbar-thin -my-1 flex min-w-0 flex-1 items-stretch gap-2 overflow-x-auto py-1" role="list">
-            <li v-for="card in cards" :key="card.entry.id" class="shrink-0">
-                <button
-                    type="button"
-                    class="relative flex h-full w-52 flex-col gap-1 rounded-lg border px-2.5 py-1.5 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    :class="[cardTone[card.tone], card.selected ? 'ring-2 ring-primary' : '']"
-                    :aria-label="t('queue.open_chat', { name: card.name, ticket: card.ticket, window: card.entry.window_no ?? '' })"
-                    :aria-current="card.selected ? 'true' : undefined"
-                    :data-window="card.entry.window_no"
-                    @click="emit('select', card.entry.conversation_id)"
-                >
-                    <span class="flex items-center gap-1.5">
-                        <span class="rounded bg-elevated px-1.5 text-2xs font-medium text-muted-foreground">{{
-                            t('queue.window', { n: formatCount(card.entry.window_no, locale) })
-                        }}</span>
-                        <span class="text-sm font-bold tabular-nums" dir="ltr">#{{ formatCount(card.ticket, locale) }}</span>
-                        <span
-                            v-if="card.badge"
-                            class="inline-flex h-4 items-center gap-0.5 rounded-full px-1.5 text-2xs font-medium"
-                            :class="card.badge.tone"
-                        >
-                            <component :is="card.badge.icon" class="size-2.5" aria-hidden="true" />{{ card.badge.label }}
-                        </span>
-                        <span class="ms-auto flex items-center gap-1">
-                            <span
-                                v-if="card.unread > 0"
-                                class="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs font-semibold text-primary-foreground"
-                                :title="t('queue.unread')"
-                            >
-                                <span class="sr-only">{{ t('queue.unread') }}: </span>{{ formatCount(card.unread, locale) }}
-                            </span>
-                            <PlatformBadge :platform="card.entry.platform" size="xs" />
-                        </span>
-                    </span>
-
-                    <span class="flex min-w-0 items-center gap-1">
-                        <span class="truncate text-xs font-medium" dir="auto">{{ card.name }}</span>
-                        <span
-                            v-if="card.entry.open_case_id"
-                            class="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-primary/10 px-1.5 text-2xs font-medium text-primary"
-                        >
-                            <FolderOpen class="size-2.5" aria-hidden="true" />{{ t('queue.open_case', { id: card.entry.open_case_id }) }}
-                        </span>
-                    </span>
-
-                    <span class="flex items-center gap-2 text-2xs tabular-nums">
-                        <span class="inline-flex items-center gap-1 text-muted-foreground" :title="t('queue.timer')">
-                            <Clock class="size-3" aria-hidden="true" /><span class="sr-only">{{ t('queue.timer') }}: </span>{{ card.elapsed }}
-                        </span>
-                        <span
-                            v-if="card.tone === 'overdue'"
-                            class="ms-auto inline-flex items-center gap-1"
-                            :class="silenceTone.overdue"
-                            :title="t('queue.handoff_left')"
-                        >
-                            <Hourglass class="size-3 motion-safe:animate-pulse" aria-hidden="true" />
-                            <span class="sr-only">{{ t('queue.reply_overdue') }}: </span>{{ card.handoff ?? t('queue.reply_overdue') }}
-                        </span>
-                        <span
-                            v-else-if="card.silence !== null"
-                            class="ms-auto inline-flex items-center gap-1"
-                            :class="silenceTone[card.tone]"
-                            :title="t('queue.silence_left')"
-                        >
-                            <Hourglass class="size-3" :class="card.tone === 'last' ? 'motion-safe:animate-pulse' : ''" aria-hidden="true" />
-                            <span class="sr-only">{{ t('queue.silence_left') }}: </span>{{ card.silence }}
-                        </span>
-                        <span v-else class="ms-auto inline-flex items-center gap-1 text-primary">
-                            <MessageCircleReply class="size-3" aria-hidden="true" />{{ t('queue.waiting_reply') }}
-                        </span>
-                    </span>
-                </button>
-            </li>
-
-            <li
-                v-for="slot in freeSlots"
-                :key="`free-${slot}`"
-                class="flex w-36 shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-border px-2 py-1.5 text-center"
+    <!-- One 44 px row: her state and button, a divider, then her windows (scrolls sideways on a phone). -->
+    <section v-if="queue?.shown.value" class="flex h-11 shrink-0 items-center gap-2 border-b bg-card px-3" :aria-label="t('queue.my_windows')" data-my-windows>
+        <div class="flex shrink-0 items-center gap-1.5" role="group" :aria-label="t('queue.status.label')">
+            <span
+                class="inline-flex h-7 items-center gap-1.5 rounded-full bg-muted px-2.5 text-xs font-medium"
+                :title="`${t('queue.my_windows')}: ${t('queue.windows_count', { open: formatCount(cards.length, locale), cap: formatCount(queue.cap.value, locale) })}`"
+                data-attendance-chip
             >
-                <span class="text-xs font-medium text-muted-foreground">{{ t('queue.free_window') }}</span>
-                <span class="text-2xs text-muted-foreground/80">{{ t('queue.free_window_hint') }}</span>
-            </li>
-
-            <li
-                v-if="queue.member.value === null && cards.length === 0"
-                class="flex shrink-0 items-center rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground"
-            >
-                {{ t('queue.attendance.idle') }}
-            </li>
-        </ul>
-
-        <div class="flex shrink-0 flex-col items-end justify-center gap-1" role="group" :aria-label="t('queue.status.label')">
-            <p class="flex items-center gap-1.5 text-xs font-medium">
-                <span class="size-2 rounded-full" :class="statusDot" aria-hidden="true" />
+                <span class="size-2 shrink-0 rounded-full" :class="statusDot" aria-hidden="true" />
                 <!-- Announced when the status changes; the break clock stays out of the live region (no reading every second). -->
                 <span role="status">
-                    <span class="hidden md:inline">{{ statusLabel }}</span>
-                    <span class="sr-only md:hidden">{{ statusLabel }}</span>
+                    <span class="hidden sm:inline">{{ statusLabel }}</span>
+                    <span class="sr-only sm:hidden">{{ statusLabel }}</span>
                 </span>
                 <span v-if="breakSince !== null" class="tabular-nums" :class="breakOver ? 'font-semibold text-destructive' : 'text-muted-foreground'">
                     {{ t('queue.attendance.break_since', { time: breakSince }) }}
                 </span>
-            </p>
-            <div
-                v-if="confirmingHandBack && status === 'checking_out'"
-                class="flex max-w-72 flex-col items-end gap-1"
-                role="alertdialog"
-                :aria-label="t('queue.attendance.hand_back')"
-                aria-describedby="hand-back-confirm-hint"
-            >
-                <p id="hand-back-confirm-hint" class="text-end text-2xs text-foreground">
-                    {{ t('queue.attendance.hand_back_confirm_hint', { n: formatCount(cards.length, locale) }) }}
-                </p>
-                <div class="flex items-center gap-1">
-                    <button
-                        type="button"
-                        :class="cn(buttonVariants({ variant: 'default', size: 'sm' }), 'h-7 gap-1 rounded-full px-2.5 text-xs')"
+            </span>
+
+            <template v-for="action in actions" :key="action.key">
+                <Popover v-if="action.key === 'hand-back'" :open="confirmingHandBack" @update:open="onHandBackOpen">
+                    <PopoverTrigger
+                        :class="cn(buttonVariants({ variant: action.variant, size: 'sm' }), 'h-7 gap-1 rounded-full px-2.5 text-xs')"
                         :disabled="queue.busy.value !== null"
-                        @click="confirmHandBack"
+                        :title="action.hint"
+                        data-hand-back
                     >
-                        <LoaderCircle v-if="queue.busy.value === 'hand-back'" class="size-3.5 animate-spin" aria-hidden="true" />
-                        <Undo2 v-else class="size-3.5" aria-hidden="true" />
-                        {{ t('queue.attendance.hand_back_confirm') }}
-                    </button>
-                    <button
-                        type="button"
-                        :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-7 rounded-full px-2.5 text-xs')"
-                        :disabled="queue.busy.value !== null"
-                        @click="confirmingHandBack = false"
-                    >
-                        {{ t('queue.attendance.hand_back_cancel') }}
-                    </button>
-                </div>
-            </div>
-            <div v-else class="flex items-center gap-1">
+                        <LoaderCircle v-if="queue.busy.value === action.busy" class="size-3.5 animate-spin" aria-hidden="true" />
+                        <component :is="action.icon" v-else class="size-3.5" aria-hidden="true" />
+                        {{ action.label }}
+                    </PopoverTrigger>
+                    <PopoverContent align="start" class="w-72 p-3" aria-describedby="hand-back-confirm-hint" @open-auto-focus="focusConfirm">
+                        <p id="hand-back-confirm-hint" class="text-xs text-foreground">
+                            {{ t('queue.attendance.hand_back_confirm_hint', { n: formatCount(cards.length, locale) }) }}
+                        </p>
+                        <div class="mt-3 flex items-center justify-end gap-1.5">
+                            <button
+                                type="button"
+                                :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-8 px-3 text-xs')"
+                                :disabled="queue.busy.value !== null"
+                                @click="confirmingHandBack = false"
+                            >
+                                {{ t('queue.attendance.hand_back_cancel') }}
+                            </button>
+                            <button
+                                type="button"
+                                :class="cn(buttonVariants({ variant: 'default', size: 'sm' }), 'h-8 gap-1 px-3 text-xs')"
+                                :disabled="queue.busy.value !== null"
+                                data-hand-back-confirm
+                                @click="confirmHandBack"
+                            >
+                                <LoaderCircle v-if="queue.busy.value === 'hand-back'" class="size-3.5 animate-spin" aria-hidden="true" />
+                                <Undo2 v-else class="size-3.5" aria-hidden="true" />
+                                {{ t('queue.attendance.hand_back_confirm') }}
+                            </button>
+                        </div>
+                    </PopoverContent>
+                </Popover>
                 <button
-                    v-for="action in actions"
-                    :key="action.key"
+                    v-else
                     type="button"
                     :class="cn(buttonVariants({ variant: action.variant, size: 'sm' }), 'h-7 gap-1 rounded-full px-2.5 text-xs')"
                     :disabled="queue.busy.value !== null || action.disabled === true"
                     :title="action.hint"
-                    :aria-label="action.label"
                     @click="press(action.run)"
                 >
                     <LoaderCircle v-if="queue.busy.value === action.busy" class="size-3.5 animate-spin" aria-hidden="true" />
                     <component :is="action.icon" v-else class="size-3.5" :class="action.flip ? 'rtl-flip' : ''" aria-hidden="true" />
                     {{ action.label }}
                 </button>
-            </div>
-            <p v-if="note" class="max-w-56 text-end text-2xs text-muted-foreground">{{ note }}</p>
+            </template>
         </div>
+
+        <span class="h-6 w-px shrink-0 bg-border" aria-hidden="true" />
+
+        <ul class="scrollbar-none flex h-full min-w-0 flex-1 items-center gap-1.5 overflow-x-auto" role="list">
+            <li v-for="card in cards" :key="card.entry.id" class="shrink-0">
+                <button
+                    type="button"
+                    class="flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    :class="[cardTone[card.tone], card.selected ? 'ring-2 ring-inset ring-primary' : '']"
+                    :aria-label="t('queue.open_chat', { name: card.name, ticket: card.ticket, window: card.entry.window_no ?? '' })"
+                    :aria-current="card.selected ? 'true' : undefined"
+                    :title="card.name"
+                    :data-window="card.entry.window_no"
+                    @click="emit('select', card.entry.conversation_id, $event.detail > 0)"
+                >
+                    <span class="font-bold tabular-nums" dir="ltr">#{{ formatCount(card.ticket, locale) }}</span>
+                    <span class="max-w-[6rem] truncate font-medium" dir="auto">{{ card.first }}</span>
+                    <span v-if="card.badge" class="inline-flex size-4 shrink-0 items-center justify-center rounded-full" :class="card.badge.tone" :title="card.badge.label">
+                        <component :is="card.badge.icon" class="size-2.5" aria-hidden="true" />
+                    </span>
+                    <FolderOpen v-if="card.entry.open_case_id" class="size-3 shrink-0 text-primary" aria-hidden="true" />
+                    <span v-if="card.tone === 'overdue'" class="inline-flex items-center gap-0.5 tabular-nums" :class="silenceTone.overdue" :title="t('queue.handoff_left')">
+                        <Hourglass class="size-3 motion-safe:animate-pulse" aria-hidden="true" />{{ card.handoff ?? t('queue.reply_overdue') }}
+                    </span>
+                    <span v-else-if="card.silence !== null" class="inline-flex items-center gap-0.5 tabular-nums" :class="silenceTone[card.tone]" :title="t('queue.silence_left')">
+                        <Hourglass class="size-3" :class="card.tone === 'last' ? 'motion-safe:animate-pulse' : ''" aria-hidden="true" />{{ card.silence }}
+                    </span>
+                    <span v-else class="inline-flex items-center gap-0.5 tabular-nums text-primary" :title="`${t('queue.waiting_reply')} · ${t('queue.timer')}`">
+                        <MessageCircleReply class="size-3" aria-hidden="true" /><span class="sr-only">{{ t('queue.waiting_reply') }}: </span>{{ card.elapsed }}
+                    </span>
+                    <span
+                        v-if="card.unread > 0"
+                        class="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs font-semibold text-primary-foreground"
+                        :title="t('queue.unread')"
+                    >
+                        <span class="sr-only">{{ t('queue.unread') }}: </span>{{ formatCount(card.unread, locale) }}
+                    </span>
+                    <PlatformBadge :platform="card.entry.platform" size="xs" />
+                </button>
+            </li>
+
+            <li
+                v-for="slot in freeSlots"
+                :key="`free-${slot}`"
+                class="flex h-8 shrink-0 items-center rounded-lg border border-dashed border-border px-2.5 text-2xs text-muted-foreground"
+                :title="t('queue.free_window_hint')"
+            >
+                {{ t('queue.free_window') }}
+            </li>
+
+            <li v-if="queue.member.value === null && cards.length === 0" class="shrink-0 text-xs text-muted-foreground">
+                {{ t('queue.attendance.idle') }}
+            </li>
+            <li v-if="note" class="shrink-0 text-2xs text-muted-foreground">{{ note }}</li>
+        </ul>
     </section>
 </template>
+

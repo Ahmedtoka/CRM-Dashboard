@@ -48,7 +48,7 @@ const emit = defineEmits<{
     update: [patch: Partial<InboxFilters>];
     clear: [];
     refresh: [];
-    select: [id: number];
+    select: [id: number, pointer: boolean];
     /** `manual`: the person asked (button), so retry at once even after a failure. */
     loadMore: [manual: boolean];
     tagMenu: [id: number, x: number, y: number];
@@ -359,7 +359,7 @@ defineExpose({
                         :conversation="conversations[item.index]"
                         :state="states.get(conversations[item.index].id) ?? null"
                         :active="conversations[item.index].id === selectedId"
-                        @select="emit('select', $event)"
+                        @select="(id, pointer) => emit('select', id, pointer)"
                         @contextmenu="(id, event) => emit('tagMenu', id, event.clientX, event.clientY)"
                     />
                     <div v-else class="flex h-[72px] items-center justify-center">

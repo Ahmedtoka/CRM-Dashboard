@@ -17,7 +17,8 @@ import type { Attachment, PlatformValue, QuickReply, QuickReplyCategory, Rendere
 import { LoaderCircle, MessageSquareText, Mic, NotebookPen, Paperclip, SendHorizontal } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue';
 
-const props = defineProps<{
+const props = withDefaults(
+    defineProps<{
     disabled: boolean;
     lockHolderName: string | null;
     quickReplies: QuickReply[];
@@ -31,7 +32,11 @@ const props = defineProps<{
     addingNote: boolean;
     /** The signed-in user's id — excluded from the note box's @mention suggestions. */
     meId: number;
-}>();
+    /** Focus the text box on mount: only when the chat was opened by a pointer click (never by j/k). */
+    autofocus?: boolean;
+}>(),
+    { autofocus: false },
+);
 const text = defineModel<string>({ required: true });
 const mode = defineModel<ComposerMode>('mode', { default: 'reply' });
 const emit = defineEmits<{
@@ -48,6 +53,8 @@ const noteInput = ref<InstanceType<typeof MentionTextarea> | null>(null);
 const confirmButton = ref<HTMLButtonElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const autoStopNotice = ref(false);
+/** The hint line under the box shows only while she is typing in it (and only on md and up). */
+const focused = ref(false);
 const noteMentions = ref<number[]>([]);
 let autoStopTimer: number | undefined;
 
@@ -296,7 +303,7 @@ function onCancelRecording(): void {
 
 onMounted(() => {
     autosize();
-    if (window.matchMedia('(min-width: 768px)').matches) textarea.value?.focus();
+    if (props.autofocus && window.matchMedia('(min-width: 768px)').matches) textarea.value?.focus();
 });
 
 defineExpose({
@@ -337,7 +344,7 @@ defineExpose({
             <button type="button" :class="cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'h-7')" @click="onCancelConfirm">{{ t('common.cancel') }}</button>
         </div>
 
-        <ComposerModeToggle :mode="mode" @update:mode="setMode" />
+        <ComposerModeToggle class="mb-1.5 md:hidden" :mode="mode" @update:mode="setMode" />
 
         <p v-if="recorder.state.value === 'denied'" role="alert" class="mb-1.5 px-1 text-2xs text-warning">{{ t('media.mic_denied') }}</p>
         <p v-if="recorder.state.value === 'unsupported'" role="alert" class="mb-1.5 px-1 text-2xs text-warning">{{ t('media.mic_unsupported') }}</p>
@@ -345,17 +352,17 @@ defineExpose({
         <p v-if="quickRendering" role="status" class="mb-1.5 px-1 text-2xs text-muted-foreground">{{ t('replies.rendering') }}</p>
         <p v-if="quickError" role="alert" class="mb-1.5 px-1 text-2xs text-destructive">{{ quickError }}</p>
         <p v-if="quickMissing.length" role="status" class="mb-1.5 px-1 text-2xs text-warning">{{ missingMessage }}</p>
-        <p v-if="mode === 'note'" class="mb-1.5 px-1 text-2xs text-muted-foreground">{{ t('notes.mention_hint') }} · {{ t('notes.newline_hint') }}</p>
 
         <AttachmentTray v-if="mode === 'reply' && uploads.items.value.length" :items="uploads.items.value" @remove="uploads.remove" @retry="uploads.retry" />
 
         <div
-            class="flex items-end gap-2 rounded-3xl px-3 py-1.5 focus-within:ring-2 focus-within:ring-ring"
-            :class="[
-                mode === 'note' ? 'border-s-4 border-[var(--note-border)] bg-[var(--note-bg)]' : 'bg-elevated',
-                { 'opacity-60': disabled && mode === 'reply' },
-            ]"
+            class="flex items-end gap-2 rounded-2xl px-2 py-1.5 transition-colors focus-within:ring-2 focus-within:ring-ring"
+            :class="[mode === 'note' ? 'bg-note/10 ring-1 ring-note/40 dark:bg-note/[0.12]' : 'bg-elevated', { 'opacity-60': disabled && mode === 'reply' }]"
+            :data-composer-note="mode === 'note' ? '' : undefined"
+            @focusin="focused = ($event.target as HTMLElement).tagName === 'TEXTAREA'"
+            @focusout="focused = false"
         >
+            <ComposerModeToggle class="hidden self-end md:inline-flex" :mode="mode" @update:mode="setMode" />
             <template v-if="mode === 'reply'">
                 <button
                     type="button"
@@ -394,7 +401,7 @@ defineExpose({
                 :me-id="meId"
                 size="sm"
                 :placeholder="t('composer.note_placeholder')"
-                class="min-h-8 flex-1 px-1 py-1.5"
+                class="min-h-8 flex-1 px-1 py-1.5 [&_textarea]:ring-0 [&_textarea]:ring-offset-0"
                 @submit="submit"
             />
             <textarea
@@ -449,6 +456,8 @@ defineExpose({
                 <NotebookPen v-else class="size-3.5" aria-hidden="true" />{{ t('composer.add_note') }}
             </button>
         </div>
-        <p class="mt-1 hidden px-1 text-2xs text-muted-foreground md:block">{{ t('composer.hint') }}</p>
+        <p v-if="focused" class="mt-1 hidden px-1 text-2xs text-muted-foreground md:block" data-composer-hint>
+            {{ mode === 'note' ? `${t('notes.mention_hint')} · ${t('notes.newline_hint')}` : t('composer.hint') }}
+        </p>
     </div>
 </template>

@@ -69,6 +69,8 @@ export function matchesKeys(event: KeyboardEvent, combo: string): boolean {
     if (key === '?') return event.key === '?' || event.code === 'Slash';
     if (key === '/') return event.code === 'Slash';
     if (/^[a-z]$/.test(key)) return event.code === `Key${key.toUpperCase()}`;
+    if (key === '[') return event.code === 'BracketLeft';
+    if (key === ']') return event.code === 'BracketRight';
     return false;
 }
 

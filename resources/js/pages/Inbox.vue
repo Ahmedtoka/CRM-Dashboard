@@ -79,12 +79,20 @@ function toggleDetails(): void {
     if (isXl.value) detailsOpen.value = !detailsOpen.value;
     else customerOpen.value = !customerOpen.value;
 }
-provide('inboxDetails', { open: detailsOpen, toggle: toggleDetails });
 const showDetails = computed(() => isXl.value && detailsOpen.value);
+/** What the header's details toggle reports as pressed: the column on xl, the sheet below it. */
+const detailsActive = computed(() => (isXl.value ? detailsOpen.value : customerOpen.value));
+provide('inboxDetails', { open: detailsOpen, active: detailsActive, toggle: toggleDetails });
 
 const api = useApi();
 const toast = useToast();
 const selectedId = ref<number | null>(null);
+/**
+ * The composer takes the focus when the chat was opened by a pointer click (row or window card),
+ * never by j/k, the keyboard on a row, a URL or a queue assignment: the next `j` must not type
+ * into it (Task 6 controller addition). `r` / `n` and a click in the box focus it as always.
+ */
+const focusComposer = ref(false);
 const customerOpen = ref(false);
 const orderOpen = ref(false);
 const editingOrder = ref<Order | null>(null);
@@ -208,8 +216,12 @@ function syncSelectionUrl(id: number | null): void {
     syncInertiaUrl(url);
 }
 
-function select(id: number): void {
-    if (selectedId.value === id) return;
+function select(id: number, pointer = false): void {
+    if (selectedId.value === id) {
+        if (pointer) threadView.value?.composer?.focus();
+        return;
+    }
+    focusComposer.value = pointer;
     selectedId.value = id;
     customerOpen.value = false;
     syncSelectionUrl(id);
@@ -392,6 +404,32 @@ function move(delta: 1 | -1): void {
 
 const hasThread = () => detail.value !== null;
 
+/**
+ * `[` / `]`: focus the previous / next note toggle in the thread (spec §1.2 keyboard). With no
+ * note toggle focused it starts from what is on screen: `]` the first one at or below the top of
+ * the thread, `[` the last one above its bottom. Toggles inside a closed group are skipped.
+ */
+function moveNote(step: 1 | -1): void {
+    const log = document.querySelector<HTMLElement>('[role="log"]');
+    if (!log) return;
+    const toggles = Array.from(log.querySelectorAll<HTMLElement>('[data-note-toggle]')).filter((el) => el.offsetParent !== null);
+    if (!toggles.length) return;
+    const current = toggles.indexOf(document.activeElement as HTMLElement);
+    let next: HTMLElement | undefined;
+    if (current !== -1) {
+        next = toggles[current + step];
+    } else {
+        const box = log.getBoundingClientRect();
+        next =
+            step === 1
+                ? toggles.find((el) => el.getBoundingClientRect().bottom > box.top)
+                : [...toggles].reverse().find((el) => el.getBoundingClientRect().top < box.bottom);
+    }
+    if (!next) return;
+    next.focus({ preventScroll: true });
+    next.scrollIntoView({ block: 'nearest' });
+}
+
 // `arrowdown`/`arrowup` only move the selection when focus is inside the
 // conversation list (or nowhere in particular, i.e. `document.body`) — anywhere
 // else, most importantly inside the thread, the arrow key is left alone to do
@@ -416,6 +454,8 @@ useShortcuts([
     { id: 'inbox.search', keys: ['/'], labelKey: 'shortcuts.focus_search', group: 'inbox', handler: () => listView.value?.focusSearch() },
     { id: 'inbox.filters', keys: ['f'], labelKey: 'shortcuts.open_filters', group: 'inbox', handler: () => listView.value?.openFilters() },
     { id: 'inbox.details', keys: ['i'], labelKey: 'shortcuts.toggle_details', group: 'inbox', handler: () => toggleDetails() },
+    { id: 'inbox.prev_note', keys: ['['], labelKey: 'shortcuts.prev_note', group: 'inbox', handler: () => hasThread() && moveNote(-1) },
+    { id: 'inbox.next_note', keys: [']'], labelKey: 'shortcuts.next_note', group: 'inbox', handler: () => hasThread() && moveNote(1) },
     { id: 'inbox.attach', keys: ['a'], labelKey: 'shortcuts.attach', group: 'inbox', handler: () => hasThread() && threadView.value?.composer?.openFilePicker() },
 ]);
 
@@ -441,7 +481,7 @@ onBeforeUnmount(() => {
     <Head :title="t('inbox.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs" fill workspace>
-        <MyWindowsStrip :selected-id="selectedId" :unread="windowUnread" @select="select" />
+        <MyWindowsStrip :selected-id="selectedId" :unread="windowUnread" @select="(id, pointer) => select(id, pointer)" />
 
         <!-- Fills the space left under the header and any admin alert strip (no fixed calc). -->
         <div
@@ -468,7 +508,7 @@ onBeforeUnmount(() => {
                 @update="list.setFilters"
                 @clear="list.clearFilters"
                 @refresh="list.reload().catch(() => undefined)"
-                @select="select"
+                @select="(id, pointer) => select(id, pointer)"
                 @load-more="(manual: boolean) => list.loadMore({ manual }).catch(() => undefined)"
                 @tag-menu="openTagMenu"
             />
@@ -497,6 +537,7 @@ onBeforeUnmount(() => {
                     :flash="flash"
                     :mentionable="mentionable"
                     :adding-note="addingNote"
+                    :autofocus="focusComposer"
                     @back="back"
                     @open-customer="toggleDetails"
                     @load-older="thread.loadOlder"

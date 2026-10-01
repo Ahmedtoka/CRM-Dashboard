@@ -2,8 +2,9 @@
 import Composer from '@/components/crm/Composer.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import MessageBubble from '@/components/crm/MessageBubble.vue';
-import QueueBanner from '@/components/crm/queue/QueueBanner.vue';
 import TemplatePicker from '@/components/crm/TemplatePicker.vue';
+import NoteGroup from '@/components/crm/thread/NoteGroup.vue';
+import NoteLine from '@/components/crm/thread/NoteLine.vue';
 import ThreadHeader from '@/components/crm/ThreadHeader.vue';
 import WindowBanner from '@/components/crm/WindowBanner.vue';
 import { useChatSkin } from '@/composables/inbox/useChatSkin';
@@ -30,7 +31,8 @@ import type {
 import { CircleAlert, LoaderCircle, MessageSquareDashed, PenLine, X } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
-const props = defineProps<{
+const props = withDefaults(
+    defineProps<{
     detail: ConversationDetail;
     messages: Message[];
     hasMore: boolean;
@@ -52,7 +54,11 @@ const props = defineProps<{
     mentionable: UserRef[];
     /** True while the last internal-note POST is still in flight. */
     addingNote: boolean;
-}>();
+    /** Put the caret in the composer on open: a pointer click on the row, never j/k (Task 6 controller addition). */
+    autofocus?: boolean;
+}>(),
+    { autofocus: false },
+);
 
 const draft = defineModel<string>('draft', { required: true });
 
@@ -111,8 +117,24 @@ const timeline = computed<Entry[]>(() => {
     return entries.sort((a, b) => a.at - b.at);
 });
 
-// Consecutive image-only messages from the same sender fold into one bubble (spec §1.5).
-const groupedTimeline = computed(() => groupImageRuns(timeline.value));
+type TimelineEntry = Entry & { group?: Message[]; notes?: Note[] };
+
+/**
+ * Consecutive image-only messages from the same sender fold into one bubble (spec §1.5), and two
+ * or more notes in a row on the same day (no message between them) into one note line (§1.2).
+ */
+const groupedTimeline = computed<TimelineEntry[]>(() => {
+    const out: TimelineEntry[] = [];
+    for (const entry of groupImageRuns(timeline.value)) {
+        const last = out[out.length - 1];
+        if (entry.note && last?.note && last.day === entry.day) {
+            last.notes = [...(last.notes ?? [last.note]), entry.note];
+            continue;
+        }
+        out.push({ ...entry });
+    }
+    return out;
+});
 
 const FIVE_MINUTES = 5 * 60 * 1000;
 
@@ -266,6 +288,7 @@ defineExpose({ composer, header });
         <ThreadHeader
             ref="header"
             :conversation="detail.conversation"
+            :customer="detail.customer"
             :viewers="viewers"
             :me-id="meId"
             :typing="typing"
@@ -279,8 +302,6 @@ defineExpose({ composer, header });
             @toggle-tag="emit('toggleTag', $event)"
             @claim="emit('claim')"
         />
-
-        <QueueBanner :conversation="detail.conversation" :me-id="meId" />
 
         <div v-if="lockedByOther" role="status" class="flex items-center gap-2 border-b bg-warning/15 px-4 py-1.5 text-xs text-foreground">
             <PenLine class="size-3.5 shrink-0" aria-hidden="true" />{{ t('thread.replying', { name: lockedByOther.name }) }}
@@ -318,9 +339,11 @@ defineExpose({ composer, header });
                 <div v-if="index === 0 || groupedTimeline[index - 1].day !== entry.day" class="sticky top-0 z-[1] flex justify-center py-1">
                     <span class="rounded-md bg-card/90 px-2.5 py-0.5 text-2xs font-medium text-muted-foreground shadow-card">{{ formatDay(entry.iso, locale) }}</span>
                 </div>
+                <NoteGroup v-if="entry.notes" :notes="entry.notes" :mentionable="mentionable" />
+                <NoteLine v-else-if="entry.note" :note="entry.note" :mentionable="mentionable" />
                 <MessageBubble
+                    v-else-if="entry.message"
                     :message="entry.message"
-                    :note="entry.note"
                     :group="entry.group"
                     :platform-color="platform.color"
                     :retrying="entry.message ? retrying.includes(retryKey(entry.message)) : false"
@@ -329,7 +352,6 @@ defineExpose({ composer, header });
                     :show-avatar="runStarts[index] && isIncomingCustomer(entry)"
                     :tail="runStarts[index]"
                     :customer-name="customerName"
-                    :mentionable="mentionable"
                     @retry="emit('retry', $event)"
                     @retry-attachment="emit('retryAttachment', $event)"
                 />
@@ -353,6 +375,7 @@ defineExpose({ composer, header });
             :mentionable="mentionable"
             :adding-note="addingNote"
             :me-id="meId"
+            :autofocus="autofocus"
             @send="onSend"
             @send-and-resolve="(...args) => emit('sendAndResolve', ...args)"
             @note="(...args) => emit('note', ...args)"

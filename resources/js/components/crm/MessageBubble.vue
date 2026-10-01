@@ -5,14 +5,13 @@ import { skinClasses, type ChatSkin } from '@/composables/inbox/useChatSkin';
 import { useI18n } from '@/composables/useI18n';
 import { useInitials } from '@/composables/useInitials';
 import { formatClock } from '@/lib/format';
-import type { Attachment, Message, Note, UserRef } from '@/types/crm';
-import { AlertCircle, Bot, Check, CheckCheck, CircleDot, Clock3, RotateCw, StickyNote } from 'lucide-vue-next';
+import type { Attachment, Message } from '@/types/crm';
+import { AlertCircle, Bot, Check, CheckCheck, CircleDot, Clock3, RotateCw } from 'lucide-vue-next';
 import { computed, type Component } from 'vue';
 
 const props = withDefaults(
     defineProps<{
-        message?: Message;
-        note?: Note;
+        message: Message;
         group?: Message[];
         platformColor: string;
         retrying?: boolean;
@@ -24,20 +23,18 @@ const props = withDefaults(
         tail?: boolean;
         /** Customer display name, for the suite-skin run avatar's initials. */
         customerName?: string | null;
-        /** Roster used to resolve a note's `mentions` ids to `@name` text for highlighting (Task 15). */
-        mentionable?: UserRef[];
     }>(),
-    { skin: 'suite', showAvatar: false, tail: false, customerName: null, mentionable: () => [] },
+    { group: undefined, retrying: false, retryingAttachments: () => [], skin: 'suite', showAvatar: false, tail: false, customerName: null },
 );
 const emit = defineEmits<{ retry: [message: Message]; retryAttachment: [attachment: Attachment] }>();
 
 const { t, locale } = useI18n();
 const { getInitials } = useInitials();
 
-type Kind = 'customer' | 'user' | 'bot' | 'system' | 'note';
+// Internal notes are not bubbles: they render as NoteLine / NoteGroup (Task 6a).
+type Kind = 'customer' | 'user' | 'bot' | 'system';
 
 const kind = computed<Kind>(() => {
-    if (props.note || !props.message) return 'note';
     const m = props.message;
     if (m.sender_type === 'system') return 'system';
     if (m.direction === 'in') return 'customer';
@@ -46,41 +43,13 @@ const kind = computed<Kind>(() => {
 
 // A carousel's body is only its plain-text fallback: the cards show instead (2026-09-19).
 const carousel = computed(() => props.message?.cards?.type === 'generic');
-const body = computed(() => props.note?.body ?? (carousel.value ? '' : (props.message?.body ?? '')));
+const body = computed(() => (carousel.value ? '' : (props.message?.body ?? '')));
 
-// @mentions in a note bubble are highlighted as plain text spans (never v-html) —
-// only tokens that match one of THIS note's actual mentioned users, resolved
-// against the mentionable roster, not just anything shaped like "@word". Fix
-// round 1, ruling 3: a fixed "@word (word)?" guess regex missed any mention
-// whose name has 3+ words (or trailing punctuation right after the name), so
-// the highlight regex is now built directly from this note's own mentioned
-// names instead — escaped, longest-first (so "Sara Ahmed" wins over the
-// shorter "Sara" alternative at the same position), joined with `|`.
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-const mentionNames = computed<string[]>(() => {
-    const ids = props.note?.mentions ?? [];
-    if (!ids.length) return [];
-    return ids.map((id) => props.mentionable.find((u) => u.id === id)?.name).filter((name): name is string => !!name);
-});
-const mentionPattern = computed<RegExp | null>(() => {
-    if (!mentionNames.value.length) return null;
-    const alternatives = [...mentionNames.value].sort((a, b) => b.length - a.length).map(escapeRegExp);
-    return new RegExp(`(@(?:${alternatives.join('|')}))`, 'u');
-});
-const bodyParts = computed<Array<{ text: string; mention: boolean }>>(() => {
-    const pattern = mentionPattern.value;
-    if (!pattern) return [{ text: body.value, mention: false }];
-    const mentionTokens = new Set(mentionNames.value.map((name) => `@${name}`));
-    return body.value.split(pattern).map((part) => ({ text: part, mention: mentionTokens.has(part) }));
-});
 // A single sticker with no caption renders bare — no bubble chrome (spec §1.5).
 const bareSticker = computed(
     () => !!props.message && !body.value && props.message.attachments.length === 1 && props.message.attachments[0].type === 'sticker',
 );
-const stamp = computed(() => formatClock(props.note?.created_at ?? props.message?.created_at, locale.value));
+const stamp = computed(() => formatClock(props.message?.created_at, locale.value));
 const outbound = computed(() => kind.value === 'user' || kind.value === 'bot');
 const failed = computed(() => props.message?.status === 'failed');
 
@@ -136,19 +105,6 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
     <div v-if="kind === 'system'" class="flex justify-center py-1">
         <p class="max-w-[85%] rounded-full bg-elevated px-3 py-1 text-center text-2xs text-muted-foreground">
             {{ body }} <span class="tabular-nums opacity-70">· {{ stamp }}</span>
-        </p>
-    </div>
-
-    <div v-else-if="kind === 'note'" class="mx-auto w-full max-w-2xl rounded-lg border-s-4 border-[var(--note-border)] bg-[var(--note-bg)] px-3 py-2 text-sm text-foreground">
-        <header class="mb-1 flex items-center gap-1.5 text-2xs font-medium opacity-80">
-            <StickyNote class="size-3.5 shrink-0" aria-hidden="true" />
-            <span>{{ t('thread.note') }}<template v-if="note?.user"> · {{ note.user.name }}</template> · {{ stamp }}</span>
-        </header>
-        <p class="whitespace-pre-wrap break-words leading-relaxed" dir="auto">
-            <template v-for="(part, index) in bodyParts" :key="index">
-                <span v-if="part.mention" class="font-semibold text-primary">{{ part.text }}</span>
-                <template v-else>{{ part.text }}</template>
-            </template>
         </p>
     </div>
 
