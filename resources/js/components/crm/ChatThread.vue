@@ -175,7 +175,9 @@ list.expect(props.restoreView);
 // The floating day label: the day of the row at the top edge, once the list is scrolled.
 const topDay = computed<string | null>(() => {
     const index = list.topIndex.value;
-    if (index <= 1) return null;
+    // At the top the first day row is itself on screen (it sits after the «older» row, if any).
+    const firstDay = rows.value.findIndex((row) => row.kind === 'day');
+    if (index <= firstDay) return null;
     for (let i = index; i < rows.value.length; i++) {
         const row = rows.value[i];
         if (row.kind === 'entry') return formatDay(row.entry.iso, locale.value);
@@ -196,6 +198,15 @@ watch(
         galleryId.value = null;
         // A cached chat comes back where she left it; any other at the bottom.
         list.expect(props.restoreView);
+    },
+    { flush: 'pre' },
+);
+
+// The same chat asked to show a new view (a revalidation that replaced its list): apply it.
+watch(
+    () => props.restoreView,
+    (view, before) => {
+        if (view && view !== before) list.expect(view);
     },
     { flush: 'pre' },
 );

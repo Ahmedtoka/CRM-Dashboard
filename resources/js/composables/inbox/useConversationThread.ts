@@ -38,6 +38,10 @@ const TYPING_VISIBLE_MS = 5000;
 const PREFETCH_FRESH_MS = 60_000;
 /** Read receipts wait this long, so j/k through rows does not mark every one read. */
 const READ_DEBOUNCE_MS = 400;
+/** A chat left at the bottom keeps only its newest messages in the cache (older ones reload on scroll). */
+const CACHE_TAIL = 300;
+/** A chat left scrolled up keeps every row (her position needs them), unless it is this big: then it reloads. */
+const CACHE_MAX = 1500;
 
 /** Same message, nothing new to render (a broadcast or a reload repeating what is shown). */
 function sameMessage(a: Message, b: Message): boolean {
@@ -265,16 +269,31 @@ export function useConversationThread(options: Options) {
         const id = current.value;
         if (id === null || !detail.value) return;
         const view = options.viewState?.() ?? null;
+        const pinned = view?.pinned ?? true;
+        let list = toRaw(messages.value);
+        let more = hasMore.value;
+        if (pinned && list.length > CACHE_TAIL) {
+            // At the bottom: the newest 300 are all she will see on return; older pages reload on scroll.
+            list = list.slice(-CACHE_TAIL);
+            more = true;
+        } else if (!pinned && list.length > CACHE_MAX) {
+            // Scrolled deep into a huge thread: not worth holding in memory, it reopens fresh.
+            cache.delete(id);
+            return;
+        }
         cache.set(id, {
             detail: toRaw(detail.value),
-            messages: toRaw(messages.value),
-            hasMore: hasMore.value,
+            messages: list,
+            hasMore: more,
             scrollTop: view?.scrollTop ?? null,
-            pinned: view?.pinned ?? true,
-            anchor: view?.anchor ?? null,
+            pinned,
+            anchor: pinned ? null : (view?.anchor ?? null),
             at: validatedAt,
         });
     }
+
+    /** Sends not confirmed yet (optimistic, failed): never dropped when a list is replaced. */
+    const localOnly = (list: Message[]) => list.filter((m) => m.id < 0);
 
     async function open(id: number | null): Promise<void> {
         if (current.value === id) return;
@@ -291,6 +310,8 @@ export function useConversationThread(options: Options) {
         typingUsers.value = {};
         error.value = null;
         lastTypingPost = 0;
+        // An older page still on its way belongs to the chat she left (loadOlder writes it into its cache entry).
+        loadingOlder.value = false;
         if (id === null) {
             detail.value = null;
             messages.value = [];
@@ -347,6 +368,8 @@ export function useConversationThread(options: Options) {
     async function revalidate(id: number, seq: number | null): Promise<void> {
         const list = seq !== null ? messages.value : cache.peek(id)?.messages;
         if (!list) return;
+        // The newest server id in array order: realtime / sends only ever append, and ids grow with time, so
+        // the last positive id is the newest one the copy has (optimistic rows have negative ids and are skipped).
         let lastId: number | null = null;
         for (let i = list.length - 1; i >= 0 && lastId === null; i--) if (list[i].id > 0) lastId = list[i].id;
         const controller = new AbortController();
@@ -368,7 +391,12 @@ export function useConversationThread(options: Options) {
 
         if (seq !== null) {
             if (newer?.has_more_after && data) {
+                // Too far behind to patch: the fresh last page replaces the list, her unconfirmed sends
+                // stay at its end, and the view goes to the bottom (the old anchor rows are gone).
+                const local = localOnly(messages.value);
+                restoredView.value = { scrollTop: null, pinned: true, anchor: null };
                 applyDetail(data);
+                if (local.length) messages.value = [...messages.value, ...local];
             } else {
                 newer?.data.forEach(mergeMessage);
                 if (data) applyDetail(data, true);
@@ -378,7 +406,7 @@ export function useConversationThread(options: Options) {
         }
         cache.patch(id, (entry) => {
             if (newer?.has_more_after && data) {
-                entry.messages = data.messages;
+                entry.messages = [...data.messages, ...localOnly(entry.messages)];
                 entry.hasMore = data.messages.length >= 50;
                 entry.anchor = null;
                 entry.pinned = true;
@@ -687,9 +715,10 @@ export function useConversationThread(options: Options) {
             messages.value = [...data.data.filter((m) => !known.has(m.id)), ...messages.value];
             hasMore.value = data.has_more;
         } catch (e) {
-            error.value = apiErrorMessage(e, t('common.error'));
+            if (id === current.value) error.value = apiErrorMessage(e, t('common.error'));
         } finally {
-            loadingOlder.value = false;
+            // A switch already reset it; never clear the flag of a load the new chat started since.
+            if (id === current.value) loadingOlder.value = false;
         }
     }
 
