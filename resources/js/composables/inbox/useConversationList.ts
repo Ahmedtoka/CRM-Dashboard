@@ -1,6 +1,7 @@
 import { useApi } from '@/composables/useApi';
 import { useEcho } from '@/composables/useEcho';
 import { useI18n } from '@/composables/useI18n';
+import { listenInbox } from '@/lib/inboxChannels';
 import { compareConversations, matchesInboxFilters } from '@/lib/inboxListOrder';
 import type { User } from '@/types';
 import type { Conversation, ConversationPatch, CursorPage, InboxFilters, Message, Order } from '@/types/crm';
@@ -21,7 +22,7 @@ interface Options {
 const FILTER_KEYS = ['platform', 'status', 'filter', 'q', 'tag'] as const;
 
 /**
- * Conversation list state: filters, cursor paging, and realtime upserts from `private-inbox`
+ * Conversation list state: filters, cursor paging, and realtime upserts from the inbox channels (`private-inbox`, or `private-inbox.platform.<p>` for a moderator)
  * (ConversationUpdated / MessageCreated), with a 5 s poll of the first page when the socket is down.
  */
 export function useConversationList(initial: CursorPage<Conversation>, initialFilters: InboxFilters, options: Options) {
@@ -169,9 +170,9 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
         sortList();
     }
 
-    // Named handlers so dispose can detach exactly these. The `inbox` channel is
-    // shared with useNotifications (sound, desktop alerts, badge refresh), so this
-    // composable must never `leave('inbox')` — that would unbind every listener on it.
+    // Named handlers so dispose can detach exactly these. The inbox channels (`inbox` for supervisors,
+    // `inbox.platform.<p>` for moderators) are shared with useNotifications (sound, desktop alerts,
+    // badge refresh), so this composable must never `leave()` one — that would unbind every listener on it.
     const onConversationUpdated = (patch: ConversationPatch) => {
         applyConversation(patch);
         options.handlers.onConversation?.(patch);
@@ -183,21 +184,17 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
     const onMessageUpdated = (message: Message) => options.handlers.onMessage?.(message);
     const onOrderUpdated = (order: Order) => options.handlers.onOrder?.(order);
 
-    const inboxChannel = echo
-        ?.private('inbox')
-        .listen('ConversationUpdated', onConversationUpdated)
-        .listen('MessageCreated', onMessageCreated)
-        .listen('MessageUpdated', onMessageUpdated)
-        .listen('OrderUpdated', onOrderUpdated);
+    const detachInbox = listenInbox(echo, options.me, {
+        ConversationUpdated: onConversationUpdated,
+        MessageCreated: onMessageCreated,
+        MessageUpdated: onMessageUpdated,
+        OrderUpdated: onOrderUpdated,
+    });
 
     poll(refreshFirstPage);
 
     onScopeDispose(() => {
-        inboxChannel
-            ?.stopListening('ConversationUpdated', onConversationUpdated)
-            .stopListening('MessageCreated', onMessageCreated)
-            .stopListening('MessageUpdated', onMessageUpdated)
-            .stopListening('OrderUpdated', onOrderUpdated);
+        detachInbox();
         window.clearTimeout(refreshTimer);
     });
 

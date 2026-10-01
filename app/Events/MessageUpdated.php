@@ -3,6 +3,8 @@
 namespace App\Events;
 
 use App\Models\Message;
+use App\Support\InboxChannels;
+use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -17,12 +19,13 @@ class MessageUpdated implements ShouldBroadcastNow
     public function __construct(public Message $message) {}
 
     /**
-     * @return array<int, \Illuminate\Broadcasting\Channel>
+     * @return array<int, Channel>
      */
     public function broadcastOn(): array
     {
         return [
             new PrivateChannel('inbox'),
+            ...InboxChannels::forPlatform($this->message->conversation?->platform),
             new PresenceChannel('conversation.'.$this->message->conversation_id),
         ];
     }

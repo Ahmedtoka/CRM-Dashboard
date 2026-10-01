@@ -17,9 +17,14 @@ final class MediaUrls
         return route('media.show', $a, false);
     }
 
+    /** The small grid image when one exists, else the original (`media.thumb` itself falls back too). */
     public static function thumb(MessageAttachment $a): ?string
     {
-        return $a->isStored() && in_array($a->type, [AttachmentType::Image, AttachmentType::Sticker], true) ? self::show($a) : null;
+        if (! $a->isStored() || ! in_array($a->type, [AttachmentType::Image, AttachmentType::Sticker], true)) {
+            return null;
+        }
+
+        return $a->thumb_path !== null ? route('media.thumb', $a, false) : self::show($a);
     }
 
     public static function temporaryPublic(MessageAttachment $a): string

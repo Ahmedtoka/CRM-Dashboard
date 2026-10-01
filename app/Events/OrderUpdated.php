@@ -3,6 +3,7 @@
 namespace App\Events;
 
 use App\Models\Order;
+use App\Support\InboxChannels;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -21,7 +22,7 @@ class OrderUpdated implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('inbox')];
+        return [new PrivateChannel('inbox'), ...InboxChannels::forPlatform($this->order->platform)];
     }
 
     public function broadcastWith(): array

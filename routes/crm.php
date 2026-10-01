@@ -112,6 +112,7 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
 
     // Media (Dashboard Experience Task 1): authorised inline/download serving + inbound retry.
     Route::get('/media/{attachment}', [MediaController::class, 'show'])->name('media.show');
+    Route::get('/media/{attachment}/thumb', [MediaController::class, 'thumb'])->name('media.thumb');
     Route::post('/media/{attachment}/retry', [MediaController::class, 'retry'])->name('media.retry');
 
     // Saved replies (Dashboard Experience Task 4): a reply's own attachment thumbnail/download.

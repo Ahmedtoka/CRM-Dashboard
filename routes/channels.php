@@ -1,11 +1,20 @@
 <?php
 
+use App\Enums\Platform;
 use App\Models\Conversation;
 use App\Models\User;
 use Illuminate\Support\Facades\Broadcast;
 
-// Shared inbox feed: any active user.
-Broadcast::channel('inbox', fn (User $user) => (bool) $user->is_active);
+// All-platform inbox feed: supervisors and admins only. Moderators get the per-platform feeds below,
+// so a message body never reaches a moderator who may not see that platform (UI overhaul Task 4b).
+Broadcast::channel('inbox', fn (User $user) => (bool) $user->is_active && $user->isSupervisorOrAbove());
+
+// Per-platform inbox feed: active users who may see that platform (supervisor+ see all).
+Broadcast::channel('inbox.platform.{platform}', function (User $user, string $platform) {
+    $p = Platform::tryFrom($platform);
+
+    return $p !== null && (bool) $user->is_active && $user->canAccessPlatform($p);
+});
 
 // Comments screen feed: any active user.
 Broadcast::channel('comments', fn (User $user) => (bool) $user->is_active);

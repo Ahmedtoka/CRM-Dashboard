@@ -4,6 +4,9 @@ namespace App\Models;
 
 use App\Enums\AttachmentStatus;
 use App\Enums\AttachmentType;
+use App\Media\Jobs\MakeThumbnail;
+use App\Media\Thumbnailer;
+use Database\Factories\MessageAttachmentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,13 +14,23 @@ use Illuminate\Support\Facades\Storage;
 
 class MessageAttachment extends Model
 {
-    /** @use HasFactory<\Database\Factories\MessageAttachmentFactory> */
+    /** @use HasFactory<MessageAttachmentFactory> */
     use HasFactory;
 
     protected $fillable = [
         'message_id', 'uploaded_by', 'type', 'disk', 'path', 'mime', 'size_bytes', 'original_name',
-        'width', 'height', 'duration_ms', 'remote_url', 'remote_id', 'status', 'error',
+        'width', 'height', 'duration_ms', 'thumb_path', 'remote_url', 'remote_id', 'status', 'error',
     ];
+
+    protected static function booted(): void
+    {
+        // A stored image/sticker gets its inbox thumbnail (the job runs after the commit).
+        static::saved(function (self $a): void {
+            if ($a->thumb_path === null && Thumbnailer::supports($a) && ($a->wasRecentlyCreated || $a->wasChanged(['status', 'path']))) {
+                MakeThumbnail::dispatch($a->id);
+            }
+        });
+    }
 
     protected function casts(): array
     {

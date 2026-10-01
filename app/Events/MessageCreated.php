@@ -4,6 +4,7 @@ namespace App\Events;
 
 use App\Http\Resources\AttachmentResource;
 use App\Models\Message;
+use App\Support\InboxChannels;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
@@ -25,6 +26,7 @@ class MessageCreated implements ShouldBroadcastNow
     {
         return [
             new PrivateChannel('inbox'),
+            ...InboxChannels::forPlatform($this->message->conversation?->platform),
             new PresenceChannel('conversation.'.$this->message->conversation_id),
         ];
     }

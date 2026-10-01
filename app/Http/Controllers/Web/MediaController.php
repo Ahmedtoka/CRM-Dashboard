@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Web;
 
 use App\Enums\AttachmentStatus;
+use App\Enums\AttachmentType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AttachmentResource;
 use App\Media\Jobs\DownloadInboundMedia;
 use App\Media\MediaResponder;
 use App\Models\MessageAttachment;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
@@ -25,6 +27,21 @@ class MediaController extends Controller
     public function show(MessageAttachment $attachment): BinaryFileResponse
     {
         Gate::authorize('view', $attachment);
+
+        return $this->file($attachment);
+    }
+
+    /** The inbox thumbnail; the original when none was made (yet). Same gate as show(). */
+    public function thumb(MessageAttachment $attachment): BinaryFileResponse
+    {
+        Gate::authorize('view', $attachment);
+        abort_unless($attachment->isStored(), 404);
+
+        if ($attachment->thumb_path !== null && Storage::disk($attachment->disk)->exists($attachment->thumb_path)) {
+            $mime = str_ends_with($attachment->thumb_path, '.webp') ? 'image/webp' : 'image/jpeg';
+
+            return MediaResponder::file($attachment->disk, $attachment->thumb_path, AttachmentType::Image, $mime, null);
+        }
 
         return $this->file($attachment);
     }

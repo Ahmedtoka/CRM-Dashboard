@@ -5,6 +5,7 @@ namespace App\Events;
 use App\Http\Resources\ConversationResource;
 use App\Models\Conversation;
 use App\Models\User;
+use App\Support\InboxChannels;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -24,7 +25,7 @@ class ConversationUpdated implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('inbox')];
+        return [new PrivateChannel('inbox'), ...InboxChannels::forPlatform($this->conversation->platform)];
     }
 
     public function broadcastWith(): array
