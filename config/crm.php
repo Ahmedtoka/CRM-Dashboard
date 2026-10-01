@@ -362,6 +362,21 @@ return [
     // default: both disappear from the nav and their routes 404 (EnsureDevToolsEnabled).
     'dev_tools' => (bool) env('CRM_DEV_TOOLS', false),
 
+    // Ads Hub (media buyers, ad accounts, creatives, materials library).
+    'ads' => [
+        'drivers' => [
+            'meta' => env('CRM_ADS_META_DRIVER', 'fake'),    // live | fake
+            'tiktok' => env('CRM_ADS_TIKTOK_DRIVER', 'fake'),
+            'google' => env('CRM_ADS_GOOGLE_DRIVER', 'fake'),
+        ],
+        'meta' => ['graph_version' => env('META_ADS_GRAPH_VERSION', 'v23.0')],
+        'tiktok' => ['base_url' => 'https://business-api.tiktok.com/open_api/v1.3'],
+        'google' => ['base_url' => 'https://googleads.googleapis.com/v21', 'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN')],
+        'tax_rate' => (float) env('CRM_ADS_TAX_RATE', 0.14),
+        'backfill_days' => 90,
+        'material_max_mb' => ['video' => 500, 'image' => 20],
+    ],
+
     // Approved WhatsApp templates (spec §5.6), shared with the web
     // TemplatePicker (resources/js/components/crm/TemplatePicker.vue) and the
     // mobile app so both stop hardcoding the name/param-count list.

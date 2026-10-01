@@ -110,6 +110,8 @@ const en: Messages = {
         reports_team: 'Team',
         reports_bot: 'Bot',
         reports_ads: 'Ads',
+        ads: 'Ads',
+        ads_materials: 'Materials library',
         reports_activity: 'Activity log',
         reports_quick_replies: 'Saved replies',
         reports_team_test: 'Team test',
@@ -176,7 +178,7 @@ const en: Messages = {
         appearance_dark: 'Dark',
         appearance_system: 'System',
     },
-    roles: { admin: 'Admin', supervisor: 'Supervisor', moderator: 'Moderator' },
+    roles: { admin: 'Admin', supervisor: 'Supervisor', moderator: 'Moderator', media_buyer: 'Media buyer', content: 'Content' },
     common: {
         cancel: 'Cancel',
         close: 'Close',

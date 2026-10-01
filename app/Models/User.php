@@ -113,6 +113,17 @@ class User extends Authenticatable
         return $this->role === UserRole::Admin;
     }
 
+    /** The Ads Hub roles: they live in /ads and never in the inbox, the queue or the board. */
+    public function isAdsRole(): bool
+    {
+        return in_array($this->role, [UserRole::MediaBuyer, UserRole::Content], true);
+    }
+
+    public function isInboxStaff(): bool
+    {
+        return ! $this->isAdsRole();
+    }
+
     public function isSupervisorOrAbove(): bool
     {
         return in_array($this->role, [UserRole::Admin, UserRole::Supervisor], true);

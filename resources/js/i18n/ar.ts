@@ -94,6 +94,8 @@ const ar = {
         reports_team: 'الفريق',
         reports_bot: 'البوت',
         reports_ads: 'الإعلانات',
+        ads: 'الإعلانات',
+        ads_materials: 'مكتبة المواد',
         reports_activity: 'سجل النشاط',
         reports_quick_replies: 'الردود الجاهزة',
         reports_team_test: 'تجربة الفريق',
@@ -160,7 +162,7 @@ const ar = {
         appearance_dark: 'داكن',
         appearance_system: 'حسب الجهاز',
     },
-    roles: { admin: 'مدير النظام', supervisor: 'مشرف', moderator: 'مودريتور' },
+    roles: { admin: 'مدير النظام', supervisor: 'مشرف', moderator: 'مودريتور', media_buyer: 'ميديا بايير', content: 'محتوى' },
     common: {
         cancel: 'إلغاء',
         close: 'إغلاق',

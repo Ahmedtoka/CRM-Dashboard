@@ -141,6 +141,8 @@ return [
             'moderator' => 'moderator',
             'supervisor' => 'supervisor',
             'admin' => 'admin',
+            'media_buyer' => 'media buyer',
+            'content' => 'content',
         ],
     ],
 

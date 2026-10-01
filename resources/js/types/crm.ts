@@ -2,7 +2,7 @@
 
 export type PlatformValue = 'facebook' | 'instagram' | 'whatsapp' | 'tiktok';
 export type AttachmentType = 'image' | 'audio' | 'video' | 'file' | 'sticker';
-export type Role = 'admin' | 'supervisor' | 'moderator';
+export type Role = 'admin' | 'supervisor' | 'moderator' | 'media_buyer' | 'content';
 export type ConversationStatus = 'open' | 'pending' | 'resolved';
 export type ConversationPriority = 'normal' | 'low' | 'spam';
 export type MessageStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed';

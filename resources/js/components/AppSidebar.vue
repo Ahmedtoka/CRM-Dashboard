@@ -5,14 +5,14 @@ import { useI18n } from '@/composables/useI18n';
 import { type NavItem, type SharedData } from '@/types';
 import type { Role } from '@/types/crm';
 import { Link, usePage } from '@inertiajs/vue3';
-import { BarChart3, ClipboardList, FlaskConical, Inbox, LayoutGrid, MessagesSquare, Package, Rocket, Settings, Users } from 'lucide-vue-next';
+import { BarChart3, ClipboardList, FlaskConical, Images, Inbox, LayoutGrid, Megaphone, MessagesSquare, Package, Rocket, Settings, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
 const page = usePage<SharedData>();
 const { t, dir } = useI18n();
 
-const rank: Record<Role, number> = { moderator: 1, supervisor: 2, admin: 3 };
+const rank: Record<Role, number> = { moderator: 1, supervisor: 2, admin: 3, media_buyer: 0, content: 0 };
 
 const role = computed<Role>(() => page.props.auth.user?.role ?? 'moderator');
 const allows = (min: Role) => rank[role.value] >= rank[min];
@@ -20,6 +20,10 @@ const allows = (min: Role) => rank[role.value] >= rank[min];
 // Nav by role (spec §6): reports/settings subsets for supervisor+, admin-only tools last.
 // Settings children carry a `section` so NavMain renders them under small headings.
 const mainNavItems = computed<NavItem[]>(() => {
+    // Ads roles see only the Ads Hub (RestrictAdsRoles keeps them out of everything else).
+    if (role.value === 'media_buyer') return [{ title: t('nav.ads'), href: '/ads', icon: Megaphone }];
+    if (role.value === 'content') return [{ title: t('nav.ads_materials'), href: '/ads/materials', icon: Images }];
+
     const devTools = page.props.devTools === true;
     const reports: NavItem[] = [{ title: t('nav.reports_me'), href: '/reports/me' }];
 

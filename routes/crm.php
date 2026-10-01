@@ -43,10 +43,11 @@ use App\Http\Controllers\Web\ShippingController;
 use App\Http\Controllers\Web\SimulatorController;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\RestrictAdsRoles;
 use App\Http\Middleware\TrackPresence;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::class])->group(function () {
+Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale::class, TrackPresence::class])->group(function () {
     // Inbox
     Route::get('/inbox', [InboxController::class, 'index'])->name('inbox');
     Route::prefix('inbox')->name('inbox.')->group(function () {
@@ -340,4 +341,7 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
 
     Route::post('/locale/{locale}', [LocaleController::class, 'update'])->whereIn('locale', SetLocale::SUPPORTED)->name('locale.update');
     Route::post('/presence/heartbeat', [PresenceController::class, 'heartbeat'])->name('presence.heartbeat');
+
+    // Ads Hub (media buyers and content): their own area, see RestrictAdsRoles.
+    require __DIR__.'/ads.php';
 });

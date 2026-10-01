@@ -140,6 +140,8 @@ return [
             'moderator' => 'مشرف',
             'supervisor' => 'مشرف عام',
             'admin' => 'أدمن',
+            'media_buyer' => 'ميديا بايير',
+            'content' => 'محتوى',
         ],
     ],
 
