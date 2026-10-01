@@ -42,8 +42,8 @@ use App\Http\Controllers\Web\Settings\UserController;
 use App\Http\Controllers\Web\ShippingController;
 use App\Http\Controllers\Web\SimulatorController;
 use App\Http\Middleware\EnsureUserIsActive;
-use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\RestrictAdsRoles;
+use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\TrackPresence;
 use Illuminate\Support\Facades\Route;
 

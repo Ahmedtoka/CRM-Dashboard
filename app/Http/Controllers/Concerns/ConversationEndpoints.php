@@ -336,7 +336,7 @@ trait ConversationEndpoints
     {
         Gate::authorize('view', $conversation);
 
-        $users = User::query()->where('is_active', true)->with('userPlatforms')->orderBy('name')->get()
+        $users = User::query()->where('is_active', true)->inboxStaff()->with('userPlatforms')->orderBy('name')->get()
             ->filter(fn (User $u) => $u->canAccessPlatform($conversation->platform))
             ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'color' => $u->color])->values();
 

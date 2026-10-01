@@ -29,6 +29,10 @@ class AuthController extends Controller
             throw ValidationException::withMessages(['email' => __('auth.failed')]);
         }
 
+        if ($user->isAdsRole()) {
+            throw ValidationException::withMessages(['email' => __('errors.auth.ads_role_no_mobile')]);
+        }
+
         $token = $user->createToken($data['device_name'])->plainTextToken;
 
         $logger->log(ActorType::User, $user, ActivityLogger::USER_LOGIN, null, null, [

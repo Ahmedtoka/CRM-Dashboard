@@ -37,7 +37,7 @@ class OrderController extends Controller
                 'source' => null, 'financial_status' => null, 'fulfillment_status' => null, 'shipment_step' => null, 'mismatch' => null, 'stuck' => null,
             ], $filters),
             // Options for the "created by" filter.
-            'team' => User::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'team' => User::query()->where('is_active', true)->inboxStaff()->orderBy('name')->get(['id', 'name']),
         ]);
     }
 

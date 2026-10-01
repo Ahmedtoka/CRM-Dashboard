@@ -94,7 +94,7 @@ class ShiftService
     /** «بدأت شغل» is for an active account with at least one platform in Settings → Users (the role alone does not count). */
     public static function mayCheckIn(User $user): bool
     {
-        return (bool) $user->is_active && $user->userPlatforms()->exists();
+        return (bool) $user->is_active && $user->isInboxStaff() && $user->userPlatforms()->exists();
     }
 
     public function __construct(

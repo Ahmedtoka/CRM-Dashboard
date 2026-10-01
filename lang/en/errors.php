@@ -133,6 +133,7 @@ return [
     'auth' => [
         'reset_link_sent' => 'A reset link will be sent if the account exists.',
         'account_inactive' => 'Your account is inactive.',
+        'ads_role_no_mobile' => 'Ads accounts cannot use the mobile app.',
     ],
 
     'roles' => [

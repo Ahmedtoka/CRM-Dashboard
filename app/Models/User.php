@@ -6,6 +6,7 @@ use App\Enums\Platform;
 use App\Enums\UserRole;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -106,6 +107,12 @@ class User extends Authenticatable
         }
 
         return in_array($platform, $this->platforms(), true);
+    }
+
+    /** Admins, supervisors and moderators: the people who work the inbox (never the Ads Hub roles). */
+    public function scopeInboxStaff(Builder $query): Builder
+    {
+        return $query->whereIn('role', [UserRole::Admin->value, UserRole::Supervisor->value, UserRole::Moderator->value]);
     }
 
     public function isAdmin(): bool

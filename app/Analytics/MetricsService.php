@@ -366,7 +366,7 @@ class MetricsService
     {
         [$from, $to] = $this->normalize($from, $to);
 
-        $users = User::query()->where('is_active', true)->orderBy('id')->get(['id', 'name', 'color']);
+        $users = User::query()->where('is_active', true)->inboxStaff()->orderBy('id')->get(['id', 'name', 'color']);
 
         if ($users->isEmpty()) {
             return [];
