@@ -65,6 +65,15 @@ class Order extends Model
         'tags',
         'shipment_status',
         'delivered_at',
+        'utm_source',
+        'utm_medium',
+        'utm_campaign',
+        'utm_content',
+        'utm_term',
+        'landing_site',
+        'ad_id',
+        'ad_campaign_id',
+        'ad_attribution',
     ];
 
     protected function casts(): array
@@ -93,6 +102,11 @@ class Order extends Model
     /**
      * @return BelongsTo<Customer, $this>
      */
+    public function ad(): BelongsTo
+    {
+        return $this->belongsTo(Ad::class);
+    }
+
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
