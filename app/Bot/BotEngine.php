@@ -24,6 +24,7 @@ use App\Enums\Handler;
 use App\Enums\Platform;
 use App\Enums\SenderType;
 use App\Events\ConversationUpdated;
+use App\Inbox\EmptyBotMessageException;
 use App\Inbox\OutboundService;
 use App\Inbox\SavedReplies\AttachmentCopier;
 use App\Inbox\UserNotifier;
@@ -478,6 +479,12 @@ class BotEngine
 
         try {
             $this->outbound->sendBot($c, $reply->text);
+        } catch (EmptyBotMessageException) {
+            // A reply that was nothing but emoji is empty once the send gate strips it: the same
+            // path as an empty AI reply above, not a closed window.
+            $this->handover($c, 'ai_handover', $text, $cl->intent, $ctx);
+
+            return $this->recordRun($c, $m, ...$replyMeta, decision: 'handover');
         } catch (WindowClosedException) {
             $this->handover($c, 'window_closed', $text, $cl->intent, $ctx);
 

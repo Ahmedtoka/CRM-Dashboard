@@ -19,6 +19,7 @@ use App\Bot\Knowledge\KnowledgeBase;
 use App\Enums\AttachmentType;
 use App\Enums\Handler;
 use App\Enums\SenderType;
+use App\Inbox\EmptyBotMessageException;
 use App\Inbox\OutboundService;
 use App\Inbox\WindowClosedException;
 use App\Models\BotFlow;
@@ -563,6 +564,10 @@ class TurnRunner
                 $this->outbound->sendBot($c, $part, $delayMs, $i === 0 ? false : $skipLaterPartsIfHumanTakesOver, $partButtons);
                 $this->queuedDelayMs = max($this->queuedDelayMs, $delayMs);
                 $sent = true;
+            } catch (EmptyBotMessageException) {
+                // A part that was nothing but emoji is empty once the send gate strips it
+                // (spec 2026-10-01 §6): nothing to send, the window is fine, go on to the next part.
+                continue;
             } catch (WindowClosedException) {
                 return ['sent' => $sent, 'stopped' => 'window_closed'];
             }

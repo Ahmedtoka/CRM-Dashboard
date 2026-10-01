@@ -4,6 +4,7 @@ use App\Bot\BotEngine;
 use App\Bot\BotServiceProvider;
 use App\Bot\Flow\ClaudeTurnUnderstanding;
 use App\Bot\Flow\FakeTurnUnderstanding;
+use App\Bot\Flow\HumanPacing;
 use App\Bot\Flow\Orders\FakeOmsClient;
 use App\Bot\Flow\Orders\OmsClient;
 use App\Bot\Flow\Orders\OmsStatus;
@@ -1345,4 +1346,25 @@ it('counts a turn that started a flow as an agent turn for the limit', function 
     say('m2', 'منيو');
     expect(Conversation::first()->handler)->toBe(Handler::Human)
         ->and(BotRun::latest('id')->value('engine'))->toBe('limit');
+});
+
+it('skips a reply part that was nothing but emoji and sends the rest, with no window_closed handover', function () {
+    // A pacing split whose first part is nothing but emoji (spec 2026-10-01 §6).
+    app()->instance(HumanPacing::class, new class extends HumanPacing
+    {
+        public function split(string $text): array
+        {
+            return ['🌸', $text];
+        }
+    });
+
+    say('m1', 'شكرا جدا');
+
+    $c = Conversation::first();
+    $bodies = Message::where('sender_type', SenderType::Bot->value)->pluck('body')->all();
+    expect($bodies)->toHaveCount(1)
+        ->and($bodies[0])->toContain('العفو يا فندم تحت أمرك في أي وقت')
+        ->and($c->handler)->toBe(Handler::Bot)
+        ->and($c->needs_human)->toBeFalse()
+        ->and($c->handover_category)->toBeNull();
 });

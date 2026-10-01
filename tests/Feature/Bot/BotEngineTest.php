@@ -1,6 +1,9 @@
 <?php
 
 use App\Analytics\ActivityLogger;
+use App\Bot\Ai\AiReply;
+use App\Bot\Ai\AiResponder;
+use App\Bot\Ai\FakeAiResponder;
 use App\Bot\Ai\MessageClassification;
 use App\Bot\Ai\MessageClassifier;
 use App\Bot\BotEngine;
@@ -102,3 +105,24 @@ it('tracks classifier token cost on a complaint handover', function () {
         ->and($run->output_tokens)->toBe(500)
         ->and((float) $run->cost_usd)->toBeGreaterThan(0.0);
 });
+
+it('treats an AI reply that was nothing but emoji like an empty one, not a closed window', function (string $aiText) {
+    $p = Product::factory()->create(['title' => 'فستان ستان']);
+    ProductVariant::factory()->for($p)->create(['price' => 1250, 'sku' => 'DR-101', 'inventory_quantity' => 7]);
+    app()->instance(AiResponder::class, new class($aiText) extends FakeAiResponder
+    {
+        public function __construct(private string $text) {}
+
+        public function reply(array $history, array $catalogLines, string $systemPrompt): AiReply
+        {
+            return new AiReply('reply', $this->text, 'fake');
+        }
+    });
+
+    $run = app(BotEngine::class)->handleInbound(inbound($this->conv, 'فستان ستان بكام'));
+
+    // An emoji-only reply ('🙏') ends exactly like an empty one (''): the AI produced nothing usable.
+    expect($run->decision)->toBe('handover')
+        ->and($this->conv->fresh()->handover_category)->toBe('ai_handover')
+        ->and($this->conv->messages()->where('sender_type', 'bot')->count())->toBe(0);
+})->with(['emoji only' => ['🙏'], 'empty' => ['']]);
