@@ -135,9 +135,11 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
 
     // Orders
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
+    Route::post('/orders/refresh-stale', [OrderController::class, 'refreshStale'])->middleware('throttle:30,1')->name('orders.refresh-stale');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
     Route::post('/orders/{order}/retry', [OrderController::class, 'retry'])->name('orders.retry');
+    Route::post('/orders/{order}/refresh', [OrderController::class, 'refresh'])->middleware('throttle:20,1')->name('orders.refresh');
     Route::middleware('role:supervisor')->group(function () {
         Route::post('/orders/{order}/mark-paid', [OrderController::class, 'markPaid'])->name('orders.mark-paid');
         Route::post('/orders/{order}/ship', [OrderController::class, 'ship'])->name('orders.ship');

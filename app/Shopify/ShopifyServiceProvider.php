@@ -6,10 +6,11 @@ use App\Shopify\Client\FakeShopifyTransport;
 use App\Shopify\Client\HttpShopifyTransport;
 use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Client\ShopifyTransport;
+use App\Shopify\Commands\PurgeStoreDataCommand;
 use App\Shopify\Commands\ReconcileCommand;
 use App\Shopify\Commands\ReconcileCountsCommand;
+use App\Shopify\Commands\RefreshOpenOrdersCommand;
 use App\Shopify\Commands\SyncShippingCommand;
-use App\Shopify\Commands\PurgeStoreDataCommand;
 use App\Shopify\Commands\WebhooksCheckCommand;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
@@ -39,6 +40,7 @@ class ShopifyServiceProvider extends ServiceProvider
                 SyncShippingCommand::class,
                 PurgeStoreDataCommand::class,
                 WebhooksCheckCommand::class,
+                RefreshOpenOrdersCommand::class,
             ]);
         }
 
@@ -53,6 +55,12 @@ class ShopifyServiceProvider extends ServiceProvider
             $schedule->command(SyncShippingCommand::class)
                 ->dailyAt('03:30')
                 ->timezone('Africa/Cairo')
+                ->withoutOverlapping()
+                ->onOneServer();
+
+            // Open orders read back from Shopify (R8); the command skips when not connected.
+            $schedule->command(RefreshOpenOrdersCommand::class)
+                ->everyTenMinutes()
                 ->withoutOverlapping()
                 ->onOneServer();
 

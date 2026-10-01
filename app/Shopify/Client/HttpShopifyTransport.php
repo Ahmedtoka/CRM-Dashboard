@@ -13,6 +13,18 @@ use Illuminate\Support\Facades\Http;
  */
 final class HttpShopifyTransport implements ShopifyTransport
 {
+    /** Seconds before one HTTP call gives up. */
+    private int $timeout = 30;
+
+    /** A copy whose calls give up after $seconds (interactive requests). */
+    public function withTimeout(int $seconds): self
+    {
+        $copy = clone $this;
+        $copy->timeout = max(1, $seconds);
+
+        return $copy;
+    }
+
     public function post(string $url, array $headers, array $body): array
     {
         // Independent of everything upstream (driver config, which integration
@@ -23,7 +35,7 @@ final class HttpShopifyTransport implements ShopifyTransport
         }
 
         $response = Http::withHeaders($headers)
-            ->timeout(30)
+            ->timeout($this->timeout)
             ->post($url, $body);
 
         return [

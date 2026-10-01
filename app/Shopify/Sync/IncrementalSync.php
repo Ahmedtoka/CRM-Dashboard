@@ -6,7 +6,6 @@ use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Sync\Mappers\Payload;
 use Carbon\CarbonInterface;
 use InvalidArgumentException;
-use RuntimeException;
 use Throwable;
 
 /**
@@ -21,6 +20,7 @@ final class IncrementalSync
         private readonly ShopifyClient $client,
         private readonly ResourceRowMapper $rows,
         private readonly SyncRunRecorder $recorder,
+        private readonly NestedCompleter $nested,
     ) {}
 
     public function run(string $resource, CarbonInterface $since, ?CarbonInterface $until = null, string $type = 'manual'): SyncRunSummary
@@ -48,7 +48,7 @@ final class IncrementalSync
 
                 foreach (Payload::list($page) as $node) {
                     try {
-                        $summary = $summary->withResult($this->rows->map($resource, $this->completeNested($resource, $node)));
+                        $summary = $summary->withResult($this->rows->map($resource, $this->nested->complete($resource, $node)));
                     } catch (Throwable $e) {
                         $summary = $summary->withFailure();
                         $this->recorder->recordError($run, (string) ($node['id'] ?? '?'), $e->getMessage());
@@ -68,42 +68,6 @@ final class IncrementalSync
         $this->recorder->close($run, $summary, 'completed');
 
         return $summary;
-    }
-
-    /**
-     * Fetches the remaining pages of the node's nested list (variants, addresses,
-     * line items): the mappers delete whatever is missing from it.
-     */
-    private function completeNested(string $resource, array $node): array
-    {
-        $key = SyncQueries::nestedKey($resource);
-        $connection = $node[$key] ?? null;
-
-        if (! is_array($connection)) {
-            return $node;
-        }
-
-        $items = Payload::list($connection);
-        $pageInfo = $connection['pageInfo'] ?? [];
-
-        while (($pageInfo['hasNextPage'] ?? false) && is_string($pageInfo['endCursor'] ?? null)) {
-            $data = $this->client->query(SyncQueries::nestedPage($resource), [
-                'id' => (string) ($node['id'] ?? ''),
-                'cursor' => $pageInfo['endCursor'],
-            ]);
-            $more = $data['node'][$key] ?? null;
-
-            if (! is_array($more)) {
-                throw new RuntimeException("Shopify returned no further {$key} for ".($node['id'] ?? '?').'.');
-            }
-
-            array_push($items, ...Payload::list($more));
-            $pageInfo = $more['pageInfo'] ?? [];
-        }
-
-        $node[$key] = ['nodes' => $items];
-
-        return $node;
     }
 
     private function iso(CarbonInterface $time): string

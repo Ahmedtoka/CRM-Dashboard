@@ -7,6 +7,7 @@ use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Enums\Platform;
 use Database\Factories\OrderFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -65,6 +66,7 @@ class Order extends Model
         'tags',
         'shipment_status',
         'delivered_at',
+        'last_synced_at',
     ];
 
     protected function casts(): array
@@ -84,10 +86,34 @@ class Order extends Model
             'placed_at' => 'datetime',
             'delivered_at' => 'datetime',
             'shopify_updated_at' => 'datetime',
+            'last_synced_at' => 'datetime',
             'submit_attempts' => 'integer',
             'mismatch' => 'boolean',
             'mismatch_notified_reasons' => 'array',
         ];
+    }
+
+    /**
+     * Orders whose Shopify state can still change, so the scheduled and on-view
+     * refreshes keep reading them (spec §3.2, R8). An order is FINAL, and never
+     * auto-refreshed, when any of these holds:
+     *  - it is cancelled (`cancelled_at` set);
+     *  - its payment is `refunded` or `voided`;
+     *  - it is delivered: `delivered_at` set, or `fulfillment_status = fulfilled`
+     *    AND `shipment_status = delivered`.
+     * A NULL column never makes an order final (every test is written NULL-safe).
+     *
+     * @param  Builder<Order>  $query
+     */
+    public function scopeOpenForSync(Builder $query): void
+    {
+        $query->whereNull('cancelled_at')
+            ->whereNull('delivered_at')
+            ->where(fn (Builder $q) => $q->whereNull('financial_status')->orWhereNotIn('financial_status', ['refunded', 'voided']))
+            ->where(fn (Builder $q) => $q->whereNull('fulfillment_status')
+                ->orWhere('fulfillment_status', '!=', 'fulfilled')
+                ->orWhereNull('shipment_status')
+                ->orWhere('shipment_status', '!=', 'delivered'));
     }
 
     /**

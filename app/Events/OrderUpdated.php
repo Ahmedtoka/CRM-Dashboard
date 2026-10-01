@@ -44,6 +44,14 @@ class OrderUpdated implements ShouldBroadcastNow
                 'tracking_number' => $shipment->tracking_number,
             ] : null,
             'created_at' => $o->created_at?->toIso8601String(),
+            // Lets an open list patch its row in place after a Shopify refresh (spec §3.2).
+            'financial_status' => $o->financial_status,
+            'fulfillment_status' => $o->fulfillment_status,
+            'shipment_status' => $o->shipment_status,
+            'note' => $o->note,
+            'shopify_updated_at' => $o->shopify_updated_at?->toIso8601String(),
+            'last_synced_at' => $o->last_synced_at?->toIso8601String(),
+            'updated_at' => $o->updated_at?->toIso8601String(),
         ];
     }
 }

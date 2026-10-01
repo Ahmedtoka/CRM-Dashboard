@@ -128,6 +128,8 @@ return [
         'idempotency_conflict' => 'This order key is already used by another order — open the order form again.',
         'only_awaiting_payment_can_be_paid' => 'Only orders awaiting payment can be paid (status: :status).',
         'shipment_cannot_advance' => 'A :status shipment cannot be advanced.',
+        'refresh_failed' => 'Shopify did not answer right now. Try again in a moment.',
+        'not_on_shopify' => 'This order has not been sent to Shopify yet.',
     ],
 
     'auth' => [
