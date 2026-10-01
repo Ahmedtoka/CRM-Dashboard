@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Times the inbox JSON endpoints in-process (no network) with a query counter, so the UI overhaul
- * has before/after numbers on the same dataset (spec §1.3). Local/staging only.
+ * has before/after numbers on the same dataset (spec §1.3). Local/staging on a database named *load* only (it writes presence/latency rows).
  */
 class InboxBenchCommand extends Command
 {
@@ -26,8 +26,15 @@ class InboxBenchCommand extends Command
 
     public function handle(): int
     {
-        if (app()->environment('production')) {
-            $this->error('Refusing to run crm:inbox-bench in production.');
+        $environment = app()->environment();
+        $database = (string) config('database.connections.'.config('database.default').'.database');
+
+        if (! in_array($environment, ['local', 'staging'], true) || ! str_contains(strtolower($database), 'load')) {
+            $this->error(sprintf(
+                'Refusing to run crm:inbox-bench: requires APP_ENV in [local, staging] (got "%s") and a database name containing "load", e.g. crm_perf_load (got "%s").',
+                $environment,
+                $database,
+            ));
 
             return self::FAILURE;
         }

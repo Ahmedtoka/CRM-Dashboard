@@ -40,7 +40,7 @@ class SeedLoadDatasetCommand extends Command
     private const CHUNK = 500;
 
     /** Messages dominate the volume (10 per conversation): bigger statements, fewer commits. */
-    private const MESSAGE_CHUNK = 2000;
+    private const MESSAGE_CHUNK = 1800; // 18 columns x 1800 rows stays under the SQLite 32,766 bind-variable limit
 
     public function handle(): int
     {
