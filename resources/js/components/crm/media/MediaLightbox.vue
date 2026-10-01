@@ -137,13 +137,12 @@ function onPointerCancel(): void {
 }
 
 // The full file is loading: a quiet spinner sits behind it until `load`.
-// Keyed by id: the items list rebuilds its objects on every message change, and an
-// unchanged <img :key> never fires `load` again.
+// Keyed by id + url: the items list rebuilds its objects on every message change (same
+// key, no reset: an unchanged <img> never fires `load` again), while a new url for the
+// same attachment re-keys the element, shows the spinner and loads the new file.
+const mediaKey = computed(() => (current.value ? `${current.value.id}:${current.value.url}` : null));
 const loaded = ref(false);
-watch(
-    () => current.value?.id,
-    () => (loaded.value = false),
-);
+watch(mediaKey, () => (loaded.value = false));
 
 // Warm the neighbours' thumbnails (never their full files); forgotten on close.
 const warmed = new Set<string>();
@@ -265,7 +264,7 @@ function jump(): void {
 
                     <video
                         v-if="current?.type === 'video'"
-                        :key="`v-${current.id}`"
+                        :key="`v-${mediaKey}`"
                         :src="current.url"
                         controls
                         playsinline
@@ -274,7 +273,7 @@ function jump(): void {
                     />
                     <img
                         v-else-if="current"
-                        :key="`i-${current.id}`"
+                        :key="`i-${mediaKey}`"
                         :src="current.url"
                         :alt="current.name || fallbackName"
                         decoding="async"
