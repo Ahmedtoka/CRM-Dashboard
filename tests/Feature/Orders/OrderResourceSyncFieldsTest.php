@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\OrderSource;
+use App\Events\OrderUpdated;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
 use Illuminate\Http\Request;
@@ -64,4 +65,28 @@ it('marks final orders with the same rule as the openForSync scope and carries t
     foreach ([$open, $cancelled, $refunded, $delivered, $fulfilledOnly] as $order) {
         expect(in_array($order->id, $openIds, true))->toBe(! $order->fresh()->isFinalForSync());
     }
+});
+
+it('carries the name, final flag, mismatch and the resolved display on the OrderUpdated broadcast', function () {
+    $order = Order::factory()->create([
+        'shopify_order_id' => '9',
+        'shopify_order_name' => '#1500',
+        'financial_status' => 'refunded',
+        'fulfillment_status' => 'fulfilled',
+        'mismatch' => true,
+        'mismatch_reason' => 'shopify_total_differs',
+    ])->fresh();
+
+    $payload = (new OrderUpdated($order))->broadcastWith();
+    $resource = syncFieldsPayload($order);
+
+    expect($payload)->toMatchArray([
+        'shopify_order_name' => '#1500',
+        'is_final' => true,
+        'mismatch' => true,
+        'mismatch_reason' => 'shopify_total_differs',
+    ])
+        // The same resolver output the list row was rendered from.
+        ->and($payload['display'])->toBe($resource['display'])
+        ->and($payload['display']['payment'])->toBe('refunded');
 });

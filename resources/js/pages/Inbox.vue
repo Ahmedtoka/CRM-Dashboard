@@ -17,6 +17,7 @@ import { useShortcuts } from '@/composables/useShortcuts';
 import { useToast } from '@/composables/useToast';
 import { syncInertiaUrl } from '@/composables/useUrlFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { stripBidiControls } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type {
     Attachment,
@@ -389,7 +390,9 @@ function editOrder(order: Order): void {
 // the user has already typed for this conversation, then confirm it landed in the reply
 // (the button's own clipboard write is a silent best-effort extra, not what this toasts).
 function onCopyStatus(text: string): void {
-    draft.value = draft.value.trim() ? `${draft.value}\n${text}` : text;
+    // Defensive: whatever built `text`, no invisible bidi controls reach the customer.
+    const clean = stripBidiControls(text);
+    draft.value = draft.value.trim() ? `${draft.value}\n${clean}` : clean;
     showFlash(t('order.copy_status_done'));
 }
 

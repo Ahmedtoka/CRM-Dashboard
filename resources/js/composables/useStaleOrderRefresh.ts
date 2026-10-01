@@ -1,13 +1,12 @@
 import { useApi } from '@/composables/useApi';
 import { useEcho } from '@/composables/useEcho';
 import { listenInbox } from '@/lib/inboxChannels';
+import { isSyncStale, REFRESH_AFTER_MINUTES } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
-import type { Order } from '@/types/crm';
+import type { MismatchReason, Order, OrderDisplay } from '@/types/crm';
 import { usePage } from '@inertiajs/vue3';
 import { onScopeDispose, watch, type Ref } from 'vue';
 
-/** The on-view refresh asks for orders not read from Shopify for this long (the server checks again). */
-export const STALE_AFTER_MINUTES = 30;
 /** The server accepts at most this many ids per request. */
 const MAX_IDS = 50;
 
@@ -26,16 +25,15 @@ export interface OrderUpdatedPayload {
     is_final?: boolean;
     invoice_url?: string | null;
     shipment?: { status: string | null; tracking_number: string | null } | null;
+    /** Shopify's own shipment status column (the fulfilment's), not the carrier step. */
+    shipment_status?: string | null;
+    mismatch?: boolean;
+    mismatch_reason?: MismatchReason | null;
+    /** OrderStatusResolver's output, the same `display` the resource carries. */
+    display?: OrderDisplay;
 }
 
-export function isStaleForRefresh(o: Order, now: number): boolean {
-    if (!(o.on_shopify ?? !!o.shopify_order_id) || o.is_final) return false;
-    if (!o.last_synced_at) return true;
-
-    return now - new Date(o.last_synced_at).getTime() > STALE_AFTER_MINUTES * 60_000;
-}
-
-/** Applies a broadcast to a row in place, keeping `display` in step with the raw columns it came from. */
+/** Applies a broadcast to a row in place, `display` and the mismatch flag included. */
 export function applyOrderUpdate(row: Order, p: OrderUpdatedPayload): void {
     const keys = [
         'status',
@@ -49,16 +47,23 @@ export function applyOrderUpdate(row: Order, p: OrderUpdatedPayload): void {
         'updated_at',
         'is_final',
         'invoice_url',
+        'mismatch',
+        'mismatch_reason',
     ] as const;
     for (const key of keys) {
         if (key in p) (row as unknown as Record<string, unknown>)[key] = p[key];
     }
-    if (row.display) {
+    if (p.display) {
+        // The server resolved it (OrderStatusResolver): take it as is.
+        row.display = { ...p.display };
+    } else if (row.display) {
+        // Older payloads: keep `display` in step with the raw columns. The resolver's step is the carrier
+        // shipment's, so the CRM shipment's status comes first and Shopify's shipment_status second.
         row.display = {
             ...row.display,
             payment: p.financial_status ?? row.display.payment,
             fulfillment: p.fulfillment_status ?? row.display.fulfillment,
-            shipment_step: p.shipment?.status ?? row.display.shipment_step,
+            shipment_step: p.shipment?.status ?? p.shipment_status ?? row.display.shipment_step,
         };
     }
     if (row.shipment && p.shipment) row.shipment = { ...row.shipment, status: p.shipment.status as typeof row.shipment.status };
@@ -80,7 +85,7 @@ export function useStaleOrderRefresh(orders: Readonly<Ref<Order[]>>, opts: { lis
         () => {
             const now = Date.now();
             const ids = orders.value
-                .filter((o) => !asked.has(o.id) && isStaleForRefresh(o, now))
+                .filter((o) => !asked.has(o.id) && isSyncStale(o, now, REFRESH_AFTER_MINUTES))
                 .map((o) => o.id)
                 .slice(0, MAX_IDS);
             if (!ids.length) return;

@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Commerce\OrderStatusResolver;
 use App\Models\Order;
 use App\Support\InboxChannels;
 use Illuminate\Broadcasting\Channel;
@@ -54,6 +55,11 @@ class OrderUpdated implements ShouldBroadcastNow
             'last_synced_at' => $o->last_synced_at?->toIso8601String(),
             'updated_at' => $o->updated_at?->toIso8601String(),
             'is_final' => $o->isFinalForSync(),
+            // A refresh can raise or clear a mismatch; the row shows it without a reload.
+            'mismatch' => (bool) $o->mismatch,
+            'mismatch_reason' => $o->mismatch_reason,
+            // The same resolved payment / fulfilment / carrier step the OrderResource carries.
+            'display' => app(OrderStatusResolver::class)->resolve($o)->toArray(),
         ];
     }
 }

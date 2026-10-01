@@ -12,7 +12,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatDateTime } from '@/lib/format';
-import { orderFamilies, orderLabel, orderStatusTone, shipmentTone, statusLabel as shopifyLabel } from '@/lib/orderStatus';
+import { orderFamilies, orderLabel, orderName, stripBidiControls, orderStatusTone, shipmentTone, statusLabel as shopifyLabel } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type { OrderRow } from '@/types/admin';
 import type { Order } from '@/types/crm';
@@ -105,7 +105,8 @@ async function copyStatus(): Promise<void> {
     const payment = statusLabel('orders.payment_status', order.value.display?.payment);
     const shipment = order.value.display?.shipment_step ? t(`shipment.status.${order.value.display.shipment_step}`) : '';
     const tracking = trackingUrl.value ? ` ${trackingUrl.value}` : '';
-    const text = t('order.status_message', { number: number.value, payment, shipment, tracking });
+    // Customer-facing: the plain name (never «مسودة», no bidi controls), and nothing invisible left in it.
+    const text = stripBidiControls(t('order.status_message', { number: orderName(order.value), payment, shipment, tracking }));
 
     // This page has no reply composer to insert into, so this is clipboard-only — the toast
     // must not claim the text went anywhere but the clipboard (see OrderCard.vue's copyStatus).
@@ -125,7 +126,7 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
 </script>
 
 <template>
-    <Head :title="number" />
+    <Head :title="orderName(order)" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full min-w-0 max-w-7xl space-y-4 p-3 md:p-6">

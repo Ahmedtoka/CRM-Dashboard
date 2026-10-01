@@ -7,7 +7,7 @@ import StatusChip from '@/components/crm/StatusChip.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
-import { notOnShopifyText, orderLabel } from '@/lib/orderStatus';
+import { notOnShopifyText, orderLabel, orderName, stripBidiControls } from '@/lib/orderStatus';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { Order } from '@/types/crm';
@@ -100,7 +100,8 @@ async function copyStatus(): Promise<void> {
     const payment = paymentLabel(current.value.display?.payment);
     const shipment = current.value.display?.shipment_step ? t(`shipment.status.${current.value.display.shipment_step}`) : '';
     const tracking = trackingUrl.value ? ` ${trackingUrl.value}` : '';
-    const text = t('order.status_message', { number: number.value, payment, shipment, tracking });
+    // Customer-facing: the plain name (never «مسودة», no bidi controls), and nothing invisible left in it.
+    const text = stripBidiControls(t('order.status_message', { number: orderName(current.value), payment, shipment, tracking }));
 
     // Clipboard write is a best-effort convenience only (it can be blocked by permissions or
     // an insecure context) and never claims to have reached the reply composer — the parent

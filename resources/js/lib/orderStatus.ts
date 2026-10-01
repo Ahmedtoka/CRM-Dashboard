@@ -56,8 +56,9 @@ const IN_MOTION = ['picked_up', 'in_transit', 'out_for_delivery'];
  *  7. shipped (step)       — shipment created, then picked up / in transit / out for delivery;
  *  8. fulfilled / partial  — Shopify fulfilled it but no carrier step yet;
  *  9. paid + unfulfilled   — paid, waiting to be prepared;
- * 10. awaiting payment     — CRM `awaiting_payment`, or a payment link still pending;
- * 11. otherwise            — confirmed cash on delivery.
+ * 10. awaiting payment     — CRM `awaiting_payment`, or any payment-link order not paid yet
+ *                            (pending, authorized, partially paid, unknown);
+ * 11. otherwise            — a cash-on-delivery order: confirmed, paid on delivery.
  * `detail` spells out the three families («الدفع: … · التجهيز: … · الشحن: …») for the chip's tooltip.
  */
 export function combinedStatus(o: Order, t: Translate): { label: string; tone: StatusChipTone; detail: string } {
@@ -90,17 +91,21 @@ export function combinedStatus(o: Order, t: Translate): { label: string; tone: S
     if (fulfillment === 'fulfilled') return chip('fulfilled', 'info');
     if (fulfillment === 'partial') return chip('partial', 'info');
     if (payment === 'paid') return chip('paid_unfulfilled', 'positive');
-    if (o.status === 'awaiting_payment' || (o.type === 'payment_link' && (payment === 'pending' || payment === 'partially_paid')))
-        return chip('awaiting_payment', 'warning');
+    // A payment link not paid yet (pending, authorized, partially paid, or any other unpaid state) is
+    // waiting for the money; only a cash-on-delivery order is «الدفع عند الاستلام».
+    if (o.status === 'awaiting_payment' || o.type === 'payment_link') return chip('awaiting_payment', 'warning');
 
     return chip('cod_confirmed', 'info');
 }
 
-/** The order's name: Shopify's own («#1381»), else «مسودة #id» (not on Shopify yet). */
-// First-strong / left-to-right isolates: «#1381» keeps its «#» on the left inside Arabic text.
+// Left-to-right isolates: «#1381» keeps its «#» on the left inside Arabic text. DISPLAY ONLY.
 const LRI = String.fromCharCode(0x2066);
 const PDI = String.fromCharCode(0x2069);
 
+/**
+ * The order's name for the SCREEN: Shopify's own («#1381») or «مسودة #id», wrapped in bidi isolates.
+ * Never put it in text that leaves the screen (clipboard, reply draft): use orderName() there.
+ */
 export function orderLabel(o: Order, t: Translate): { text: string; draft: boolean } {
     if (o.shopify_order_name) return { text: LRI + o.shopify_order_name + PDI, draft: false };
     if ((o.on_shopify ?? !!o.shopify_order_id) && o.order_number) return { text: `${LRI}#${o.order_number.replace(/^#/, '')}${PDI}`, draft: false };
@@ -108,15 +113,38 @@ export function orderLabel(o: Order, t: Translate): { text: string; draft: boole
     return { text: t('orders.list.draft', { id: `${LRI}#${o.id}${PDI}` }), draft: true };
 }
 
+/**
+ * The order's plain name for text a CUSTOMER may read (status message, clipboard, reply draft):
+ * Shopify's name, else the order number, else «#id». No control characters, never «مسودة».
+ */
+export function orderName(o: Order): string {
+    const name = o.shopify_order_name || (o.order_number ? `#${o.order_number.replace(/^#/, '')}` : `#${o.id}`);
+
+    return stripBidiControls(name);
+}
+
+// Built from code points so the source carries no invisible characters.
+const BIDI_CONTROLS = new RegExp(
+    `[${String.fromCharCode(0x202a)}-${String.fromCharCode(0x202e)}${String.fromCharCode(0x2066)}-${String.fromCharCode(0x2069)}]`,
+    'g',
+);
+
+/** Removes bidi embedding/isolate controls (U+202A–U+202E, U+2066–U+2069) from text leaving the screen. */
+export function stripBidiControls(text: string): string {
+    return text.replace(BIDI_CONTROLS, '');
+}
+
 /** Minutes after which an open order's «آخر مزامنة» turns amber. */
 export const SYNC_STALE_MINUTES = 60;
+/** The on-view refresh asks for orders not read from Shopify for this long (the server checks again). */
+export const REFRESH_AFTER_MINUTES = 30;
 
-/** An open order on Shopify not read for an hour (or never). */
-export function isSyncStale(o: Order, now: number): boolean {
+/** An open order on Shopify not read for `minutes` (or never). Final orders and drafts are never stale. */
+export function isSyncStale(o: Order, now: number, minutes: number = SYNC_STALE_MINUTES): boolean {
     if (!(o.on_shopify ?? !!o.shopify_order_id) || o.is_final) return false;
     if (!o.last_synced_at) return true;
 
-    return now - new Date(o.last_synced_at).getTime() > SYNC_STALE_MINUTES * 60_000;
+    return now - new Date(o.last_synced_at).getTime() > minutes * 60_000;
 }
 
 /** Not on Shopify as an order yet: a payment-link draft waiting for payment, or never sent. */
