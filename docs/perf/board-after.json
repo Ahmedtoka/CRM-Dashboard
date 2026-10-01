@@ -1,0 +1,178 @@
+{
+  "note": "Task 7 build, same script and demo as the baseline runs.",
+  "mean": {
+    "scripting_ms_per_s": 1.83,
+    "frames_over_16_7ms": 17,
+    "frames_over_33ms": 2.75,
+    "long_tasks": 0,
+    "dom_nodes": 910,
+    "min_font_px": 11.62,
+    "stage_scale": 0.99
+  },
+  "runs": [
+    {
+      "label": "after2",
+      "at": "2026-10-01T21:36:37.248Z",
+      "seconds": 60,
+      "steps": [
+        "step closed=25 assigned=0",
+        "step closed=26 assigned=0",
+        "step closed=27 assigned=0",
+        "step closed=28 assigned=0",
+        "step closed=29 assigned=0",
+        "step closed=30 assigned=0"
+      ],
+      "script_events_ms": {
+        "TimerFire": 83,
+        "FunctionCall": 22,
+        "RunMicrotasks": 97,
+        "EventDispatch": 1
+      },
+      "scripting_ms_per_s": 2.09,
+      "long_tasks": {
+        "count": 0,
+        "max_ms": 0,
+        "list": []
+      },
+      "frames": {
+        "drawn": 8522,
+        "over_16_7ms": 33,
+        "over_20ms": 22,
+        "over_33ms": 6
+      },
+      "dom_nodes": 910,
+      "stage_scale": 0.986,
+      "min_font": {
+        "px": 11.62,
+        "stagePx": 12,
+        "text": "٠/٣",
+        "cls": "num"
+      },
+      "text_nodes_under_11px": 0,
+      "text_nodes": 164
+    },
+    {
+      "label": "after3",
+      "at": "2026-10-01T21:40:58.402Z",
+      "seconds": 60,
+      "steps": [
+        "step closed=43 assigned=0",
+        "step closed=44 assigned=0",
+        "step closed=45 assigned=0",
+        "step closed=46 assigned=0",
+        "step closed=47 assigned=0",
+        "step closed=48 assigned=0"
+      ],
+      "script_events_ms": {
+        "TimerFire": 73,
+        "FunctionCall": 20,
+        "RunMicrotasks": 80,
+        "EventDispatch": 1
+      },
+      "scripting_ms_per_s": 1.77,
+      "long_tasks": {
+        "count": 0,
+        "max_ms": 0,
+        "list": []
+      },
+      "frames": {
+        "drawn": 8620,
+        "over_16_7ms": 6,
+        "over_20ms": 3,
+        "over_33ms": 2
+      },
+      "dom_nodes": 910,
+      "stage_scale": 0.986,
+      "min_font": {
+        "px": 11.62,
+        "stagePx": 12,
+        "text": "٠/٣",
+        "cls": "num"
+      },
+      "text_nodes_under_11px": 0,
+      "text_nodes": 164
+    },
+    {
+      "label": "after4",
+      "at": "2026-10-01T21:42:46.767Z",
+      "seconds": 60,
+      "steps": [
+        "step closed=49 assigned=0",
+        "step closed=50 assigned=0",
+        "step closed=51 assigned=0",
+        "step closed=52 assigned=0",
+        "step closed=53 assigned=0",
+        "step closed=54 assigned=0"
+      ],
+      "script_events_ms": {
+        "TimerFire": 71,
+        "FunctionCall": 21,
+        "RunMicrotasks": 75,
+        "EventDispatch": 1
+      },
+      "scripting_ms_per_s": 1.7,
+      "long_tasks": {
+        "count": 0,
+        "max_ms": 0,
+        "list": []
+      },
+      "frames": {
+        "drawn": 8621,
+        "over_16_7ms": 5,
+        "over_20ms": 4,
+        "over_33ms": 2
+      },
+      "dom_nodes": 910,
+      "stage_scale": 0.986,
+      "min_font": {
+        "px": 11.62,
+        "stagePx": 12,
+        "text": "٠/٣",
+        "cls": "num"
+      },
+      "text_nodes_under_11px": 0,
+      "text_nodes": 164
+    },
+    {
+      "label": "after5",
+      "at": "2026-10-01T21:43:57.414Z",
+      "seconds": 60,
+      "steps": [
+        "step closed=55 assigned=0",
+        "step closed=56 assigned=0",
+        "step closed=57 assigned=0",
+        "step closed=58 assigned=0",
+        "step closed=59 assigned=0",
+        "step closed=60 assigned=0"
+      ],
+      "script_events_ms": {
+        "TimerFire": 75,
+        "FunctionCall": 21,
+        "RunMicrotasks": 77,
+        "EventDispatch": 1
+      },
+      "scripting_ms_per_s": 1.75,
+      "long_tasks": {
+        "count": 0,
+        "max_ms": 0,
+        "list": []
+      },
+      "frames": {
+        "drawn": 8570,
+        "over_16_7ms": 24,
+        "over_20ms": 15,
+        "over_33ms": 1
+      },
+      "dom_nodes": 910,
+      "stage_scale": 0.986,
+      "min_font": {
+        "px": 11.62,
+        "stagePx": 12,
+        "text": "٠/٣",
+        "cls": "num"
+      },
+      "text_nodes_under_11px": 0,
+      "text_nodes": 164
+    }
+  ]
+}

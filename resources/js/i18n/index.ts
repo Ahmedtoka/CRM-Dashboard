@@ -53,8 +53,18 @@ export function translate(locale: Locale, key: string, params?: TranslationParam
     });
 }
 
+/** Building an Intl.NumberFormat costs far more than using one: the live board formats dozens of clocks a second. */
+const numberFormats = new Map<string, Intl.NumberFormat>();
+
 export function formatNumber(locale: Locale, value: number, options?: Intl.NumberFormatOptions): string {
-    return new Intl.NumberFormat(locale === 'ar' ? 'ar-EG' : 'en-EG', options).format(value);
+    const key = options ? `${locale}|${JSON.stringify(options)}` : locale;
+    let format = numberFormats.get(key);
+    if (format === undefined) {
+        format = new Intl.NumberFormat(locale === 'ar' ? 'ar-EG' : 'en-EG', options);
+        numberFormats.set(key, format);
+    }
+
+    return format.format(value);
 }
 
 export function applyDocumentLocale(locale: Locale): void {

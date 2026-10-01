@@ -1,0 +1,179 @@
+{
+  "note": "HEAD build (before Task 7), tools/perf/board-trace.mjs, 60 s, 1440x900, sidebar collapsed, demo step every 10 s. first_run: the Step 1 run, which also ran an in-page rAF loop (its scripting number includes that loop; not comparable).",
+  "mean": {
+    "scripting_ms_per_s": 6.53,
+    "frames_over_16_7ms": 28.67,
+    "frames_over_33ms": 5.33,
+    "long_tasks": 0,
+    "dom_nodes": 863,
+    "min_font_px": 7.18,
+    "stage_scale": 0.9
+  },
+  "runs": [
+    {
+      "label": "baseline2",
+      "at": "2026-10-01T21:38:06.538Z",
+      "seconds": 60,
+      "steps": [
+        "step closed=31 assigned=0",
+        "step closed=32 assigned=0",
+        "step closed=33 assigned=0",
+        "step closed=34 assigned=0",
+        "step closed=35 assigned=0",
+        "step closed=36 assigned=0"
+      ],
+      "script_events_ms": {
+        "TimerFire": 233,
+        "FunctionCall": 18,
+        "RunMicrotasks": 248,
+        "FireAnimationFrame": 1,
+        "EventDispatch": 1
+      },
+      "scripting_ms_per_s": 4.55,
+      "long_tasks": {
+        "count": 0,
+        "max_ms": 0,
+        "list": []
+      },
+      "frames": {
+        "drawn": 5180,
+        "over_16_7ms": 6,
+        "over_20ms": 4,
+        "over_33ms": 0
+      },
+      "dom_nodes": 863,
+      "stage_scale": 0.897,
+      "min_font": {
+        "px": 7.18,
+        "stagePx": 8,
+        "text": "55",
+        "cls": "num"
+      },
+      "text_nodes_under_11px": 175,
+      "text_nodes": 193
+    },
+    {
+      "label": "baseline3",
+      "at": "2026-10-01T21:45:19.857Z",
+      "seconds": 60,
+      "steps": [
+        "step closed=61 assigned=0",
+        "step closed=62 assigned=0",
+        "step closed=63 assigned=0",
+        "step closed=64 assigned=0",
+        "step closed=65 assigned=0",
+        "step closed=66 assigned=0"
+      ],
+      "script_events_ms": {
+        "TimerFire": 361,
+        "FunctionCall": 27,
+        "RunMicrotasks": 389,
+        "FireAnimationFrame": 2,
+        "EventDispatch": 1
+      },
+      "scripting_ms_per_s": 7.1,
+      "long_tasks": {
+        "count": 0,
+        "max_ms": 0,
+        "list": []
+      },
+      "frames": {
+        "drawn": 5005,
+        "over_16_7ms": 41,
+        "over_20ms": 32,
+        "over_33ms": 11
+      },
+      "dom_nodes": 863,
+      "stage_scale": 0.897,
+      "min_font": {
+        "px": 7.18,
+        "stagePx": 8,
+        "text": "85",
+        "cls": "num"
+      },
+      "text_nodes_under_11px": 175,
+      "text_nodes": 193
+    },
+    {
+      "label": "baseline4",
+      "at": "2026-10-01T21:46:32.713Z",
+      "seconds": 60,
+      "steps": [
+        "step closed=67 assigned=0",
+        "step closed=68 assigned=0",
+        "step closed=69 assigned=0",
+        "step closed=70 assigned=0",
+        "step closed=71 assigned=0",
+        "step closed=72 assigned=0"
+      ],
+      "script_events_ms": {
+        "TimerFire": 402,
+        "FunctionCall": 32,
+        "RunMicrotasks": 433,
+        "FireAnimationFrame": 2,
+        "EventDispatch": 1
+      },
+      "scripting_ms_per_s": 7.94,
+      "long_tasks": {
+        "count": 0,
+        "max_ms": 0,
+        "list": []
+      },
+      "frames": {
+        "drawn": 4982,
+        "over_16_7ms": 39,
+        "over_20ms": 32,
+        "over_33ms": 5
+      },
+      "dom_nodes": 863,
+      "stage_scale": 0.897,
+      "min_font": {
+        "px": 7.18,
+        "stagePx": 8,
+        "text": "91",
+        "cls": "num"
+      },
+      "text_nodes_under_11px": 175,
+      "text_nodes": 193
+    }
+  ],
+  "first_run": {
+    "label": "baseline",
+    "at": "2026-10-01T21:04:59.398Z",
+    "seconds": 60,
+    "steps": [
+      "step closed=10 assigned=0",
+      "step closed=11 assigned=0",
+      "step closed=13 assigned=0",
+      "step closed=15 assigned=0",
+      "step closed=16 assigned=0",
+      "step closed=17 assigned=0"
+    ],
+    "scripting_ms_per_s": 14.34,
+    "long_tasks": {
+      "count": 0,
+      "max_ms": 0,
+      "list": []
+    },
+    "frames": {
+      "drawn": 5162,
+      "over_16_7ms": 8,
+      "over_20ms": 5,
+      "over_33ms": 3,
+      "raf_deltas": 9265,
+      "raf_over_16_7ms": 5,
+      "raf_over_20ms": 5,
+      "raf_over_33ms": 0
+    },
+    "dom_nodes": 872,
+    "stage_scale": 0.897,
+    "min_font": {
+      "px": 7.18,
+      "stagePx": 8,
+      "text": "36",
+      "cls": "num"
+    },
+    "text_nodes_under_11px": 175,
+    "text_nodes": 193
+  }
+}
