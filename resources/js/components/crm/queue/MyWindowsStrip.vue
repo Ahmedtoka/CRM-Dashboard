@@ -270,7 +270,9 @@ const silenceTone: Record<Card['tone'], string> = {
     calm: 'text-muted-foreground',
     warning: 'font-semibold text-foreground',
     last: 'font-semibold text-destructive',
-    overdue: 'font-semibold text-orange-700 dark:text-orange-300',
+    // Text keeps the overdue chip's text pair (StatusChip): the raw --overdue orange is ~2.8:1 on white;
+    // the token itself colours the icon (and the card's border / tint in cardTone).
+    overdue: 'font-semibold text-orange-800 dark:text-orange-100 [&>svg]:text-overdue',
 };
 </script>
 

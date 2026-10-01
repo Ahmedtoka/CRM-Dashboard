@@ -141,6 +141,11 @@ const canReturnToBot = computed(() => props.conversation.handler === 'human' && 
 const moreOpen = ref(false);
 const tagsOpen = ref(false);
 const resetOpen = ref(false);
+const headerEl = ref<HTMLElement | null>(null);
+/** The reset dialog closed: focus back on the «⋯» that led to it. */
+function focusMore(): void {
+    headerEl.value?.querySelector<HTMLElement>('[data-more-menu]')?.focus();
+}
 // A submenu left open must not pop open again with the next «⋯».
 watch(moreOpen, (open) => {
     if (!open) tagsOpen.value = false;
@@ -183,7 +188,7 @@ defineExpose({
 </script>
 
 <template>
-    <header class="shrink-0 border-b shadow-card" :class="headerBg" data-thread-header>
+    <header ref="headerEl" class="shrink-0 border-b shadow-card" :class="headerBg" data-thread-header>
         <!-- Row 1: who she is, and what to do. The name truncates; the actions never do. -->
         <div class="flex h-14 min-w-0 items-center gap-2 pe-2 ps-2 md:pe-3 md:ps-4" data-header-row1>
             <button type="button" :class="cn(iconButton, 'md:hidden')" :aria-label="t('inbox.back')" :title="t('inbox.back')" @click="emit('back')">
@@ -386,6 +391,6 @@ defineExpose({
         </div>
         <QueueBanner :conversation="conversation" :me-id="meId" part="bar" />
 
-        <ResetDialog v-model:open="resetOpen" :busy="busyAction === 'reset'" @confirm="emit('action', 'reset')" />
+        <ResetDialog v-model:open="resetOpen" :busy="busyAction === 'reset'" @confirm="emit('action', 'reset')" @close-focus="focusMore" />
     </header>
 </template>

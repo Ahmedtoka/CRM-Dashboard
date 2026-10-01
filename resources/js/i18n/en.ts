@@ -310,7 +310,6 @@ const en: Messages = {
             priority_low: 'Low priority',
             priority_spam: 'Spam',
             chips: 'Conversation details',
-            countdown: 'Time left on the window',
         },
         reset_dialog: {
             title: 'Reset this conversation?',
@@ -2473,7 +2472,6 @@ const en: Messages = {
             received_since: 'With you for {time}',
             with: 'With {name}',
             bot_summary: 'Bot summary',
-            order: 'Order {number}',
             order_chip: 'Order #{number}',
             case_chip: 'Case #{id}',
         },

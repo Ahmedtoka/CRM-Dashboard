@@ -456,7 +456,9 @@ defineExpose({
                 <NotebookPen v-else class="size-3.5" aria-hidden="true" />{{ t('composer.add_note') }}
             </button>
         </div>
-        <p v-if="focused" class="mt-1 hidden px-1 text-2xs text-muted-foreground md:block" data-composer-hint>
+        <!-- Always laid out on md+ (only made invisible): a hint that appeared / vanished on focus moved the
+             bottom-anchored box between mousedown and mouseup, and the click on Send / attach was lost. -->
+        <p class="mt-1 hidden px-1 text-2xs text-muted-foreground transition-opacity md:block" :class="focused ? 'opacity-100' : 'invisible opacity-0'" :aria-hidden="!focused" data-composer-hint>
             {{ mode === 'note' ? `${t('notes.mention_hint')} · ${t('notes.newline_hint')}` : t('composer.hint') }}
         </p>
     </div>

@@ -5,7 +5,7 @@ import { formatCount, formatSeconds } from '@/lib/format';
 import { queueReason } from '@/lib/queueReason';
 import type { Conversation, QueuePriority } from '@/types/crm';
 import { ArrowUpCircle, Bot, FolderOpen, Hand, Hourglass, Moon, Star, Ticket, type LucideIcon } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 /**
  * The queue's part of the thread header (spec §1.2): `chips` renders inline in header row 2
@@ -19,7 +19,7 @@ const queue = useMyQueueContext();
 
 const LAST_SECONDS = 60;
 /** The first hand-off value seen per ticket: the bar's full width (the payload has no total). */
-const handoffSpan = new Map<number, number>();
+const handoffSpan = ref(new Map<number, number>());
 
 const chip = 'inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 text-2xs font-medium';
 const badges: Partial<Record<QueuePriority, { icon: LucideIcon; tone: string }>> = {
@@ -40,6 +40,16 @@ const badge = computed(() => (entry.value ? (badges[entry.value.priority] ?? nul
 const since = computed(() => (mine.value && entry.value ? formatSeconds(queue!.elapsed(entry.value), locale.value) : null));
 const silenceLeft = computed(() => (myWindow.value ? queue!.silenceLeft(myWindow.value) : null));
 const handoffLeft = computed(() => (myWindow.value?.reply_overdue ? queue!.handoffLeft(myWindow.value) : null));
+// Remember the largest hand-off value seen per ticket (the bar's full width), outside the computed.
+watch(
+    handoffLeft,
+    (left) => {
+        const id = myWindow.value?.id;
+        if (id === undefined || left === null || left <= (handoffSpan.value.get(id) ?? 0)) return;
+        handoffSpan.value.set(id, left);
+    },
+    { immediate: true },
+);
 
 type Tone = 'calm' | 'warning' | 'last' | 'overdue';
 const tone = computed<Tone>(() => {
@@ -83,10 +93,7 @@ const barShare = computed<number | null>(() => {
     if (tone.value === 'overdue') {
         const left = handoffLeft.value;
         if (left === null) return 1;
-        const span = Math.max(handoffSpan.get(w.id) ?? 0, left, 1);
-        handoffSpan.set(w.id, span);
-
-        return left / span;
+        return left / Math.max(handoffSpan.value.get(w.id) ?? 0, left, 1);
     }
     const left = silenceLeft.value;
     const total = queue?.silenceTotal.value ?? null;
@@ -147,9 +154,6 @@ const summary = computed(() => {
         </span>
         <span v-if="since !== null" class="shrink-0 text-2xs tabular-nums text-muted-foreground">{{
             t('queue.banner.received_since', { time: since })
-        }}</span>
-        <span v-else-if="entry && conversation.assignee?.name" class="shrink-0 text-2xs text-muted-foreground" dir="auto">{{
-            t('queue.banner.with', { name: conversation.assignee.name })
         }}</span>
         <span v-if="countdown" :class="[chip, 'tabular-nums', countdownTone[tone]]" data-countdown>
             <Hourglass class="size-3" :class="tone === 'last' || tone === 'overdue' ? 'motion-safe:animate-pulse' : ''" aria-hidden="true" />

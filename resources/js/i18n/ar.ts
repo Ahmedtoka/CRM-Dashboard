@@ -293,7 +293,6 @@ const ar = {
             priority_low: 'أقل أهمية',
             priority_spam: 'سبام',
             chips: 'تفاصيل المحادثة',
-            countdown: 'الوقت الباقي للشباك',
         },
         reset_dialog: {
             title: 'تصفّري المحادثة؟',
@@ -2428,7 +2427,6 @@ const ar = {
             received_since: 'استلمتيها من {time}',
             with: 'عند {name}',
             bot_summary: 'ملخص البوت',
-            order: 'أوردر {number}',
             order_chip: 'أوردر #{number}',
             case_chip: 'كيس #{id}',
         },

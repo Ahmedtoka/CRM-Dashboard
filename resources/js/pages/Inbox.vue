@@ -218,7 +218,8 @@ function syncSelectionUrl(id: number | null): void {
 
 function select(id: number, pointer = false): void {
     if (selectedId.value === id) {
-        if (pointer) threadView.value?.composer?.focus();
+        // Same rule as on open: only where the composer is next to the list (md and up).
+        if (pointer && window.matchMedia('(min-width: 768px)').matches) threadView.value?.composer?.focus();
         return;
     }
     focusComposer.value = pointer;
