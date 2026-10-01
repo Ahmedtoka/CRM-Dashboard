@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Pagination\Cursor;
 use Illuminate\Pagination\CursorPaginator as CursorPaginatorImpl;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -78,6 +79,36 @@ class ConversationQuery
      */
     public function paginate(User $u, array $f): CursorPaginator
     {
+        $page = $this->pageOf($u, $f);
+
+        // The indexed search (name prefix / FULLTEXT word prefix / phone prefix or suffix) cannot see
+        // a substring inside a word ("الله" in "عبدالله") or middle phone digits. When it finds
+        // nothing on the first page, run the old %term% LIKE once for this request. LIMIT still
+        // applies; later pages and counts-less paging never repeat it.
+        if ($page->isEmpty() && trim((string) ($f['q'] ?? '')) !== '' && $this->usesIndexedSearch()
+            && CursorPaginatorImpl::resolveCurrentCursor('cursor') === null) {
+            $this->likeSearch = true;
+            try {
+                $page = $this->pageOf($u, $f);
+            } finally {
+                $this->likeSearch = false;
+            }
+        }
+
+        return $page;
+    }
+
+    /** @var bool Set only while the substring fallback re-runs a search that the indexed path left empty. */
+    private bool $likeSearch = false;
+
+    /** MariaDB/MySQL search through indexes; every other driver (sqlite) has only the substring LIKE. */
+    protected function usesIndexedSearch(): bool
+    {
+        return in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true);
+    }
+
+    private function pageOf(User $u, array $f): CursorPaginator
+    {
         $assignee = $f['assignee'] ?? null;
 
         if ($assignee === null || $assignee === '' || $assignee === 'none') {
@@ -87,7 +118,7 @@ class ConversationQuery
             $this->assigneePage($q, $u, $f, $assignee === 'me' ? $u->id : (int) $assignee);
         }
 
-        $page = $q->cursorPaginate(self::PER_PAGE)->withQueryString();
+        $page = $this->cursorPage($q);
         static::completeListRows($page->getCollection());
 
         return $page;
@@ -113,7 +144,7 @@ class ConversationQuery
             $b = $this->filtered($u, array_merge($f, ['assignee' => null]))->select('conversations.id');
             $side($b);
             if ($cursor !== null) {
-                self::applyCursor($b, $orders, $cursor);
+                self::seek($b, $orders, $cursor);
             }
             foreach ($orders as $o) {
                 $b->orderBy($o['column'], $o['direction']);
@@ -128,23 +159,81 @@ class ConversationQuery
         $q->whereIn('conversations.id', DB::query()->fromSub($ids, 'assignee_page')->select('assignee_page.id'));
     }
 
+    /** Sort columns that may hold NULL (the cursor must seek past them: SQL `> NULL` is never true). */
+    private const NULLABLE_SORT_COLUMNS = ['conversations.last_customer_message_at'];
+
     /**
-     * The cursor condition Laravel's cursorPaginate() adds to the outer query, for a branch query:
-     * (c1 > v1) OR (c1 = v1 AND ((c2 > v2) OR (c2 = v2 AND ...))), per the order directions.
+     * One page of $q. Laravel's cursorPaginate() seeks with `col > ?`, which is never true for a
+     * NULL cursor value and silently drops every row after a NULL last_customer_message_at; so a
+     * list ordered on that column is paged by hand with a NULL-aware seek (NULL sorts first
+     * ascending, last descending, on both MariaDB and sqlite). Other orders use Laravel's own.
+     */
+    private function cursorPage(Builder $q): CursorPaginator
+    {
+        $orders = array_values(array_filter($q->getQuery()->orders ?? [], fn ($o) => isset($o['column'])));
+        if (array_intersect(self::NULLABLE_SORT_COLUMNS, array_column($orders, 'column')) === []) {
+            return $q->cursorPaginate(self::PER_PAGE)->withQueryString();
+        }
+
+        $cursor = CursorPaginatorImpl::resolveCurrentCursor('cursor');
+        if ($cursor?->pointsToPreviousItems()) {
+            $orders = array_map(fn ($o) => ['column' => $o['column'], 'direction' => $o['direction'] === 'asc' ? 'desc' : 'asc'], $orders);
+        }
+        if ($cursor !== null) {
+            self::seek($q, $orders, $cursor);
+        }
+        $q->reorder();
+        foreach ($orders as $o) {
+            $q->orderBy($o['column'], $o['direction']);
+        }
+        $items = $q->limit(self::PER_PAGE + 1)->get();
+
+        return (new CursorPaginatorImpl($items, self::PER_PAGE, $cursor, [
+            'path' => Paginator::resolveCurrentPath(),
+            'cursorName' => 'cursor',
+            'parameters' => array_column($orders, 'column'),
+        ]))->withQueryString();
+    }
+
+    /**
+     * The rows after the cursor row in the given order, for a hand-built page or an assignee branch:
+     * (c1 > v1) OR (c1 = v1 AND ((c2 > v2) OR (c2 = v2 AND ...))), per the order directions, with the
+     * NULL cases of NULLABLE_SORT_COLUMNS spelled out (NULL sorts first ascending, last descending).
      *
      * @param  list<array{column: string, direction: string}>  $orders
      */
-    private static function applyCursor(Builder $b, array $orders, Cursor $cursor, int $i = 0): void
+    private static function seek(Builder $b, array $orders, Cursor $cursor, int $i = 0): void
     {
         ['column' => $column, 'direction' => $direction] = $orders[$i];
+        $value = $cursor->parameter($column);
+        $asc = $direction === 'asc';
+        $nullable = in_array($column, self::NULLABLE_SORT_COLUMNS, true);
+        $more = $i < count($orders) - 1;
 
-        $b->where(function (Builder $w) use ($orders, $cursor, $i, $column, $direction) {
-            $w->where($column, $direction === 'asc' ? '>' : '<', $cursor->parameter($column));
-            if ($i < count($orders) - 1) {
-                $w->orWhere(function (Builder $x) use ($orders, $cursor, $i, $column) {
-                    $x->where($column, '=', $cursor->parameter($column));
-                    self::applyCursor($x, $orders, $cursor, $i + 1);
-                });
+        $b->where(function (Builder $w) use ($orders, $cursor, $i, $column, $value, $asc, $nullable, $more) {
+            $tie = function (Builder $x) use ($orders, $cursor, $i, $column, $value) {
+                $value === null ? $x->whereNull($column) : $x->where($column, '=', $value);
+                self::seek($x, $orders, $cursor, $i + 1);
+            };
+
+            if ($value === null) {
+                // Ascending: every non-NULL row follows. Descending: only the NULL rows are left to tie-break.
+                if ($asc) {
+                    $w->whereNotNull($column);
+                    $more ? $w->orWhere($tie) : null;
+                } else {
+                    $more ? $w->where($tie) : $w->whereRaw('1 = 0');
+                }
+
+                return;
+            }
+
+            $w->where($column, $asc ? '>' : '<', $value);
+            if ($nullable && ! $asc) {
+                $w->orWhereNull($column);
+            }
+            if ($more) {
+                $w->orWhere($tie);
             }
         });
     }
@@ -167,6 +256,7 @@ class ConversationQuery
             // Priority (high, medium, low), then oldest customer message first (spec §2.3,
             // owner: "بالتوقيت حسب ميعاد الرساله"). priority_rank is a generated column (Task 4a),
             // so the cursor can page on it and conv_queue_rank_idx serves the order.
+            // last_customer_message_at can be NULL: cursorPage() seeks past it by hand.
             $q->orderBy('conversations.priority_rank')
                 ->orderBy('conversations.last_customer_message_at')
                 ->orderBy('conversations.id');
@@ -258,6 +348,18 @@ class ConversationQuery
         $status = [];
         foreach (self::COUNT_STATUSES as $s) {
             $status[$s] = $count(['status' => $s]);
+        }
+
+        // Same substring fallback as the list: an indexed search that matched nothing in any state.
+        if (array_sum($status) === 0 && trim((string) ($f['q'] ?? '')) !== '' && $this->usesIndexedSearch()) {
+            $this->likeSearch = true;
+            try {
+                foreach (self::COUNT_STATUSES as $s) {
+                    $status[$s] = $count(['status' => $s]);
+                }
+            } finally {
+                $this->likeSearch = false;
+            }
         }
 
         $queue = null;
@@ -375,14 +477,14 @@ class ConversationQuery
     }
 
     /**
-     * Customer search. sqlite keeps the substring LIKE. MariaDB/MySQL avoid scanning every
+     * Customer search. sqlite keeps the substring LIKE (so does the paginate() fallback). MariaDB/MySQL avoid scanning every
      * conversation's customer with a leading wildcard (spec §1.3 fallback): 4+ digits search the
      * phone by prefix or suffix; text searches the name by prefix or a FULLTEXT word-prefix match.
      * The matching customer ids are a derived-table UNION so the planner starts from customers.
      */
     private function search(Builder $q, string $term): void
     {
-        if (! in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+        if (! $this->usesIndexedSearch() || $this->likeSearch) {
             $q->whereHas('customer', fn (Builder $c) => $c
                 ->where('name', 'like', "%{$term}%")
                 ->orWhere('phone', 'like', "%{$term}%"));
@@ -390,6 +492,12 @@ class ConversationQuery
             return;
         }
 
+        $this->searchIndexed($q, $term);
+    }
+
+    /** The MariaDB/MySQL index lookups behind search(): a seam, so tests can stand in for MariaDB on sqlite. */
+    protected function searchIndexed(Builder $q, string $term): void
+    {
         $like = fn (string $s): string => str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $s);
         $digits = (string) preg_replace('/[\s\-+()]/', '', $term);
 
