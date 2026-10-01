@@ -30,6 +30,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class OutboundService
 {
@@ -229,6 +230,15 @@ class OutboundService
         // Spec 2026-10-01 §6: nothing the bot says carries an emoji — stored texts, AI output, translations.
         [$body, $buttons, $cards] = [Emoji::strip($body), Emoji::stripDeep($buttons), $cards === null ? null : Emoji::stripDeep($cards)];
 
+        // A text that was nothing but emoji, with no buttons or cards: never queue an empty
+        // message. Thrown as a WindowClosedException, which every caller already handles as
+        // "this send could not happen".
+        if (trim($body) === '' && $buttons === [] && ($cards === null || $cards === [])) {
+            Log::warning('outbound.bot_empty_after_emoji_strip', ['conversation_id' => $c->id]);
+
+            throw new EmptyBotMessageException;
+        }
+
         $message = DB::transaction(function () use ($c, $body, $buttons, $cards) {
             $message = $c->messages()->create([
                 'platform' => $c->platform,
@@ -417,7 +427,7 @@ class OutboundService
                 ->whereIn('sender_type', [SenderType::User->value, SenderType::Bot->value])
                 ->max('id');
 
-            // Spam/low-value customer messages (e.g. "شكرا 👍", emoji-input) never count as the
+            // Spam/low-value customer messages (e.g. "شكرا" with a thumbs-up) never count as the
             // message a human is responding to (spec §11.1).
             $inbound = fn () => $c->messages()->where('direction', MessageDirection::In->value)
                 ->where('is_spam', false)

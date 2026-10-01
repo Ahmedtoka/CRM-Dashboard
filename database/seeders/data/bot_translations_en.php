@@ -81,15 +81,15 @@ Thanks for your patience',
 Good evening! Hope you\'re having a lovely day ⟦1⟧ I\'m Mayar from Le Voile
 How can I help you?',
     'أهلاً بيكي' => 'Welcome',
-    'أهلاً يا ⟦0⟧، أوردر #⟦1⟧ — تحبي تلغيه ولا تعدلي فيه؟' => 'Hi ⟦0⟧  order #⟦1⟧ — want to cancel it or make changes?',
+    'أهلاً يا ⟦0⟧، أوردر #⟦1⟧ — تحبي تلغيه ولا تعدلي فيه؟' => 'Hi ⟦0⟧, order #⟦1⟧ — want to cancel it or make changes?',
     'أهلاً يا ⟦0⟧، أوردر #⟦1⟧ (اتطلب يوم ⟦2⟧ — ⟦3⟧)
 الحالة: ⟦4⟧
 متوقع يوصل: ⟦5⟧
-تتبع الشحنة: ⟦6⟧' => 'Hi ⟦0⟧  order #⟦1⟧ (placed ⟦2⟧ — ⟦3⟧)
+تتبع الشحنة: ⟦6⟧' => 'Hi ⟦0⟧, order #⟦1⟧ (placed ⟦2⟧ — ⟦3⟧)
 Status: ⟦4⟧
 Expected delivery: ⟦5⟧
 Track shipment: ⟦6⟧',
-    'أهلاً يا ⟦0⟧، لقيت أوردر #⟦1⟧ — تحبي ترجعي ولا تبدلي؟' => 'Hi ⟦0⟧  found order #⟦1⟧ — want to return it or exchange?',
+    'أهلاً يا ⟦0⟧، لقيت أوردر #⟦1⟧ — تحبي ترجعي ولا تبدلي؟' => 'Hi ⟦0⟧, found order #⟦1⟧ — want to return it or exchange?',
     'أيوه' => 'Yes',
     'أيوه تمام' => 'Yeah, that\'s fine',
     'إرجاع' => 'Return',
@@ -327,7 +327,7 @@ Just let us know which one you need and we\'ll send you the details
     'رقمي' => 'My number',
     'سبب الإلغاء' => 'Reason for cancellation',
     'سبتمبر' => 'September',
-    'سجلت طلب متابعة للأوردر #⟦0⟧، الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت' => 'Logged follow-up for order #⟦0⟧  the team will check with shipping and get back to you soon',
+    'سجلت طلب متابعة للأوردر #⟦0⟧، الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت' => 'Logged follow-up for order #⟦0⟧, the team will check with shipping and get back to you soon',
     'سمحت' => 'please',
     'سياسة الاستبدال او الاسترجاع:-
 -غير متاح معاينة الأوردر قبل الاستلام أو تجزئته
@@ -431,7 +431,7 @@ Also, if an item is on discount, it can only be exchanged, not refunded',
     'لسه فاكرين طلبك، تحبي نكمل من حيث ما وقفنا؟' => 'We remember your order — want to pick up where we left off?',
     'لقيت الأوردر. للتأكيد، اكتبي آخر ⟦0⟧ أرقام من الموبايل اللي طلبتي بيه' => 'Got your order, to confirm it — text the last ⟦0⟧ digits of the phone number you ordered with',
     'للأسف الأوردر #⟦0⟧ اتشحن خلاص فمينفعش نلغيه أو نعدل فيه' => 'Sorry, order #⟦0⟧ has already shipped so we can\'t cancel or edit it',
-    'للأسف مش لاقية الأوردر، تحبي أحولك لحد من الفريق يتابعه معاكي؟' => 'Sorry, I can\'t find order — want me to connect you with someone from the team?',
+    'للأسف مش لاقية الأوردر، تحبي أحولك لحد من الفريق يتابعه معاكي؟' => 'Sorry, I can\'t find the order — want me to connect you with someone from the team?',
     'للأسف يا فندم، المعاينة مش متاحة وقت الاستلام، بس حضرتك بتستلمي المنتج زي ما هو متصور بالظبط على الموقع. ولو بعد الاستلام فيه أي مشكلة في المنتج، حضرتك بتتواصلي مع خدمة العملاء، وإحنا بنساعد حضرتك في الاستبدال أو حل أي مشكلة إن شاء الله' => 'Unfortunately, inspection at delivery isn\'t available, but you\'ll receive the product exactly as pictured on our site. If there\'s any issue after you receive it, just contact customer service and we\'ll help with an exchange or solution',
     'للاسف حاليا المنتج غير متاح تابعينا دائما و بمجرد ما يتوفر بيكون متاح علي الويب سايت
 تقدري تشوفي الموديلات المتاحة من هنا

@@ -103,7 +103,13 @@ class CommentBot
             : ($capabilities->privateReply ? self::GENERIC_PUBLIC_REPLY : self::NO_PRIVATE_CAPABILITY_PUBLIC_REPLY);
 
         // Spec 2026-10-01 §6: a stored rule reply may still carry an emoji; the bot never sends one.
-        $this->actions->reply($c, Emoji::strip($text), null);
+        // A reply that was nothing but emoji (a heart, say) would post an empty comment, which the
+        // Graph API rejects: the generic line for this platform is posted instead.
+        $text = Emoji::strip($text);
+        if ($text === '') {
+            $text = $capabilities->privateReply ? self::GENERIC_PUBLIC_REPLY : self::NO_PRIVATE_CAPABILITY_PUBLIC_REPLY;
+        }
+        $this->actions->reply($c, $text, null);
 
         $conversation = null;
 
@@ -225,7 +231,10 @@ class CommentBot
         }
 
         try {
-            return $this->actions->privateReply($fresh, Emoji::strip($text), null);
+            // Emoji-only (a flower, say): the safe private line, never an empty message.
+            $text = Emoji::strip($text);
+
+            return $this->actions->privateReply($fresh, $text !== '' ? $text : self::FALLBACK_PRIVATE_REPLY, null);
         } catch (PrivateReplyNotAllowedException) {
             // Lost the atomic claim to a concurrent sender: nothing more to do.
             return $fresh->fresh()?->conversation;

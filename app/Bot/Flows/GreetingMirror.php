@@ -21,7 +21,7 @@ use App\Models\BotKnowledgeEntry;
  * `script.greeting_mirror_<key>`, Settings → معرفة البوت): the owner may reword any of
  * them, and a script she turns off simply stops mirroring that greeting. The matcher is
  * normalized with App\Bot\ArabicNormalizer (tashkeel, أ/إ/آ→ا, ة→ه, ى→ي, elongation) plus
- * punctuation/emoji stripping and a repeated-letter squeeze, so «اهلاااا!!! 😍» (emoji-input) and
+ * punctuation/emoji stripping and a repeated-letter squeeze, so «اهلاااا!!!» followed by an emoji and
  * «hiii» match too.
  */
 final class GreetingMirror

@@ -661,7 +661,7 @@ class FlowEngine
         };
     }
 
-    /** At least one letter or digit: "🙏" or "." alone does not answer a question (emoji-input). */
+    /** At least one letter or digit: an emoji or "." alone does not answer a question. */
     public static function meaningful(string $text): bool
     {
         return preg_match('/[\p{L}\p{N}]/u', $text) === 1;

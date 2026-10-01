@@ -103,7 +103,7 @@ International Shipping (Outside Egypt): Orders can be placed through our website
         'للأسف مش لاقية الأوردر تحبي أحولك لحد من الفريق يتابعه معاكي؟' => 'للأسف مش لاقية الأوردر، تحبي أحولك لحد من الفريق يتابعه معاكي؟',
         'أهلاً بيكي في متجرنا بنبيع ملابس حريمي بتصميمات مختارة، وبنوصل لكل محافظات مصر.' => 'أهلاً بيكي في متجرنا، بنبيع ملابس حريمي بتصميمات مختارة، وبنوصل لكل محافظات مصر.',
         'أهلاً بيكي في Le Voile Le Voile براند ملابس محتشمة للستات: طرح، إسدالات، فساتين وأكتر.
-تقدري تطلبي أونلاين من الويب سايت https://levoilestores.com/ أو تزورينا في فروعنا في مصر.' => 'أهلاً بيكي في Le Voile Le Voile، براند ملابس محتشمة للستات: طرح، إسدالات، فساتين وأكتر.
+تقدري تطلبي أونلاين من الويب سايت https://levoilestores.com/ أو تزورينا في فروعنا في مصر.' => 'أهلاً بيكي في Le Voile، براند ملابس محتشمة للستات: طرح، إسدالات، فساتين وأكتر.
 تقدري تطلبي أونلاين من الويب سايت https://levoilestores.com/ أو تزورينا في فروعنا في مصر.',
         'الاوردر بيوصل القاهرة / الجيزة / الاسكندريه خلال 3-5 ايام عمل، وباقي المحافظات خلال 5-7 ايام عمل غير محسوب الاجازات الرسميه والاسبوعيه.
 مصاريف الشحن بتتحسب حسب المحافظة وبتظهر لحضرتك قبل تأكيد الأوردر على الويب سايت.
@@ -114,6 +114,12 @@ International Shipping (Outside Egypt): Orders can be placed through our website
         'أهلًا بيكي يا {الاسم_الأول} نورتينا! أقدر أساعدك في إيه؟' => 'أهلًا بيكي يا {الاسم_الأول}، نورتينا! أقدر أساعدك في إيه؟',
         'آسفين جدًا على التأخير في الرد أنا معاكي دلوقتي وهخلّص طلبك على طول.' => 'آسفين جدًا على التأخير في الرد، أنا معاكي دلوقتي وهخلّص طلبك على طول.',
         'شكرًا لذوقك يا {الاسم_الأول} لو احتجتي أي حاجة إحنا موجودين.' => 'شكرًا لذوقك يا {الاسم_الأول}، لو احتجتي أي حاجة إحنا موجودين.',
+    ];
+
+    /** table => column => the word a name gets when it was nothing but emoji. */
+    private const EMPTY_FALLBACK = [
+        'quick_replies' => ['title' => 'رد سريع'],
+        'quick_reply_categories' => ['name' => 'تصنيف'],
     ];
 
     public function up(): void
@@ -137,6 +143,10 @@ International Shipping (Outside Egypt): Orders can be placed through our website
                             $v = $row->{$col};
                             if (is_string($v)) {
                                 $new = self::clean($table === 'bot_settings' && $col === 'system_prompt' ? self::promptWording($v) : $v);
+                                if ($new === '' && isset(self::EMPTY_FALLBACK[$table][$col])) {
+                                    // A name that was nothing but emoji gets a neutral word, never ''.
+                                    $new = self::EMPTY_FALLBACK[$table][$col];
+                                }
                                 if ($new !== $v) {
                                     $update[$col] = $new;
                                 }
@@ -151,6 +161,18 @@ International Shipping (Outside Egypt): Orders can be placed through our website
                                 continue;
                             }
                             $clean = self::clean($decoded);
+                            if ($table === 'bot_rules' && $col === 'public_replies' && is_array($clean)) {
+                                // A reply that was nothing but emoji is dropped from the list; when every
+                                // reply would go, the row is left as it is (the comment bot falls back to
+                                // its generic line at send time) and logged for the owner to reword.
+                                $kept = array_values(array_filter($clean, fn ($r) => ! is_string($r) || trim($r) !== ''));
+                                if ($kept === [] && $clean !== []) {
+                                    Log::warning('migration.strip_emoji.public_replies_all_emoji', ['bot_rule_id' => $row->id]);
+
+                                    continue;
+                                }
+                                $clean = $kept;
+                            }
                             if ($clean !== $decoded) {
                                 $update[$col] = json_encode($clean, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                             }

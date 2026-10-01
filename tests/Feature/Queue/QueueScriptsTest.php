@@ -105,14 +105,16 @@ it('words the counts of the stored scripts only where they are still the previou
     BotKnowledgeEntry::where('key', 'script.queue_position_update')->update(['body' => $oldUpdate.' ']);
     BotKnowledgeEntry::where('key', 'script.queue_silence_warning')->update(['body' => 'لسه معانا يا فندم؟ 🌸 المحادثة هتتقفل تلقائي بعد {minutes} لو مفيش رد، وتقدري تكتبيلنا في أي وقت وهنرجّعك بأولوية.']);
 
-    BotKnowledgeEntry::where('key', 'script.queue_returning')->update(['body' => str_replace('🌸', '🌹', FlowScripts::all()['queue_returning']['body'])]);
+    // The 2026-09-29 default with another emoji: a collation would call it equal, 200060 must not.
+    $editedReturning = 'أهلاً بيكي تاني 🌹 بنرجّعك لنفس الموظفة بأولوية، رقم تذكرتك #{ticket} وهنكون معاكي خلال حوالي {eta_minutes}.';
+    BotKnowledgeEntry::where('key', 'script.queue_returning')->update(['body' => $editedReturning]);
 
     $wording->down();
 
     expect($body('queue_enqueued'))->toBe(WORDED_TICKET_ENQUEUED)
         ->and($body('queue_eta_sentence'))->toBe($oldSentence)
         ->and($body('queue_silence_warning'))->toBe($oldWarning)
-        ->and($body('queue_returning'))->toBe(str_replace('🌸', '🌹', FlowScripts::all()['queue_returning']['body']))
+        ->and($body('queue_returning'))->toBe($editedReturning)
         ->and($body('queue_position_update'))->toBe($oldUpdate.' ');
 });
 

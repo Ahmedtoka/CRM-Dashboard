@@ -146,3 +146,13 @@ it('strips emoji from a stored rule reply, public and private (spec 2026-10-01 �
     expect($c->public_reply)->toBe('ردينا عليكي في الخاص')
         ->and($c->conversation->messages()->where('direction', 'out')->latest('id')->value('body'))->toBe('السعر 1250 جنيه');
 });
+
+it('never posts an empty reply when a stored rule reply was nothing but emoji', function () {
+    BotRule::factory()->create(['scope' => 'comment', 'keywords' => ['بكام'], 'public_replies' => ['❤️'], 'private_reply' => '🌸', 'action' => 'reply', 'platforms' => [], 'is_active' => true]);
+    $c = Comment::factory()->for($this->post)->for($this->cust)->create(['body' => 'بكام؟']);
+    app(CommentBot::class)->handle($c);
+    $c->refresh();
+
+    expect($c->public_reply)->toBe('ردينا عليك في الخاص')
+        ->and($c->conversation->messages()->where('direction', 'out')->latest('id')->value('body'))->toBe('أهلاً! ابعتلنا تحب تعرف إيه عن المنتج');
+});

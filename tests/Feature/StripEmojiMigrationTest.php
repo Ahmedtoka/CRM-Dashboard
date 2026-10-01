@@ -10,6 +10,7 @@ use App\Models\QuickReplyCategory;
 use App\Models\SupportCase;
 use App\Support\Emoji;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Spec 2026-10-01 §6: the strip migration cleans every stored customer-facing text, row by row in PHP.
@@ -116,4 +117,21 @@ it('does nothing on a clean database and its down() restores nothing', function 
     stripEmojiMigration()->down();
 
     expect((array) DB::table('quick_replies')->where('id', $qr->id)->first())->toBe($before);
+});
+
+it('never leaves an empty reply, title or name behind when a text was nothing but emoji', function () {
+    Log::spy();
+    $mixed = BotRule::factory()->create(['public_replies' => ['❤️', 'ردينا في الخاص 💌', '🌸']]);
+    $allEmoji = BotRule::factory()->create(['public_replies' => ['❤️', '🙏']]);
+    $qr = QuickReply::factory()->create(['title' => '🌸', 'body' => 'شكراً 🌸']);
+    $category = QuickReplyCategory::factory()->create(['name' => '⭐']);
+
+    stripEmojiMigration()->up();
+
+    expect($mixed->fresh()->public_replies)->toBe(['ردينا في الخاص'])
+        ->and($allEmoji->fresh()->public_replies)->toBe(['❤️', '🙏'])
+        ->and($qr->fresh()->title)->toBe('رد سريع')
+        ->and($qr->fresh()->body)->toBe('شكراً')
+        ->and($category->fresh()->name)->toBe('تصنيف');
+    Log::shouldHaveReceived('warning')->with('migration.strip_emoji.public_replies_all_emoji', ['bot_rule_id' => $allEmoji->id]);
 });

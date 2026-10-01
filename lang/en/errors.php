@@ -38,6 +38,7 @@ return [
     'inbox' => [
         'window_template_only' => 'The 24-hour reply window has closed; only an approved template can be sent (window mode: template_only).',
         'window_closed' => 'The reply window for this conversation is closed; the message cannot be sent (window mode: closed).',
+        'nothing_to_send' => 'The bot message is empty once its emoji are removed, so it was not sent.',
         'window_other' => 'The message cannot be sent in the current reply window (window mode: :mode).',
         'retry_only_failed' => 'Only failed outbound messages can be retried.',
         'platform_not_allowed' => 'You are not allowed to reply on :platform.',

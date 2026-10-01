@@ -145,14 +145,14 @@ class WhatsAppAdapter implements ChannelAdapter
             $lng = $location['longitude'] ?? null;
             $place = trim(($location['name'] ?? '').' '.($location['address'] ?? ''));
             $body = trim(implode("\n", array_filter([
-                $place !== '' ? 'Location: '.$place : 'Location',
+                $place !== '' ? 'الموقع: '.$place : 'الموقع',
                 $lat !== null && $lng !== null ? "https://maps.google.com/?q={$lat},{$lng}" : null,
             ])));
         } elseif ($type === 'contacts') {
             $body = collect($message['contacts'] ?? [])
                 ->map(fn (array $c) => trim(($c['name']['formatted_name'] ?? '').' '.collect($c['phones'] ?? [])->pluck('phone')->filter()->implode(' ')))
                 ->filter()
-                ->map(fn (string $line) => 'Contact: '.$line)
+                ->map(fn (string $line) => 'جهة اتصال: '.$line)
                 ->implode("\n");
         }
 

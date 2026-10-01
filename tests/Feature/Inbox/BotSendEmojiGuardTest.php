@@ -1,7 +1,10 @@
 <?php
 
 use App\Enums\Platform;
+use App\Inbox\EmptyBotMessageException;
+use App\Inbox\Jobs\SendOutboundMessage;
 use App\Inbox\OutboundService;
+use App\Inbox\WindowClosedException;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
 use App\Models\Message;
@@ -9,6 +12,7 @@ use App\Models\MessageAttachment;
 use App\Models\User;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 
 /** Spec 2026-10-01 §6: the send gate strips what a stored text, a translation or the AI may still carry. */
 function emojiGuardConversation(): Conversation
@@ -62,4 +66,19 @@ it('never touches what a moderator types by hand', function () {
     $m = app(OutboundService::class)->sendHuman($c, $user, 'تمام يا قمر 🌸');
 
     expect($m->body)->toBe('تمام يا قمر 🌸');
+});
+
+it('never queues an empty message when a bot text was nothing but emoji', function () {
+    $c = emojiGuardConversation();
+    Log::spy();
+
+    expect(fn () => app(OutboundService::class)->sendBot($c, '🌸 🙏'))->toThrow(EmptyBotMessageException::class)
+        ->and(fn () => app(OutboundService::class)->sendBot($c, '🌸'))->toThrow(WindowClosedException::class)
+        ->and($c->messages()->where('sender_type', 'bot')->count())->toBe(0);
+    Bus::assertNotDispatched(SendOutboundMessage::class);
+    Log::shouldHaveReceived('warning')->with('outbound.bot_empty_after_emoji_strip', ['conversation_id' => $c->id]);
+
+    // With a button there is still something to send.
+    $m = app(OutboundService::class)->sendBot($c, '👇', buttons: [['title' => 'القائمة', 'payload' => 'menu:main_menu']]);
+    expect($m->body)->toBe('')->and($m->buttons[0]['title'])->toBe('القائمة');
 });

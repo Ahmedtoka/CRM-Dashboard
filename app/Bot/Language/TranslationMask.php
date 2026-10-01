@@ -8,8 +8,8 @@ namespace App\Bot\Language;
  *
  * Links, e-mail addresses, `{placeholders}`, numbers (prices, order numbers, dates,
  * phone numbers) and emoji are replaced by `⟦0⟧`, `⟦1⟧`… before the text is hashed and
- * sent to the model, and put back afterwards. So «الأوردر #1234 — 1,200 ج.م 🌸» (emoji-input) and
- * «الأوردر #9876 — 950 ج.م 🌸» (emoji-input) are one cached source, «الأوردر #⟦0⟧ — ⟦1⟧ ج.م ⟦2⟧», and
+ * sent to the model, and put back afterwards. So «الأوردر #1234 — 1,200 ج.م» and
+ * «الأوردر #9876 — 950 ج.م», each ending in the same emoji, are one cached source, «الأوردر #⟦0⟧ — ⟦1⟧ ج.م ⟦2⟧», and
  * no order number, price, link or emoji can ever come back changed.
  *
  * `⟦` / `⟧` (U+27E6/U+27E7) are used as the marker because they appear in no text the
