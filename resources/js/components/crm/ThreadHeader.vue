@@ -214,7 +214,7 @@ defineExpose({
                 <PresenceBar :viewers="viewers" :me-id="meId" :typing="typing" />
             </div>
 
-            <!-- The primary action: «خلصت ▾» on her queue window, else resolve / reopen as always. -->
+            <!-- The primary action: «خلصت» (with its reasons menu) on her queue window, else resolve / reopen as always. -->
             <CloseWindowMenu
                 v-if="queueWindow"
                 ref="closeMenu"

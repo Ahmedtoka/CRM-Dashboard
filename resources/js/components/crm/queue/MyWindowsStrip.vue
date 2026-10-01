@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import { buttonVariants } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverContent } from '@/components/ui/popover';
 import { useI18n } from '@/composables/useI18n';
 import { useMyQueueContext } from '@/composables/useMyQueue';
 import { formatClock, formatCount, formatSeconds } from '@/lib/format';
@@ -23,6 +23,7 @@ import {
     Undo2,
     type LucideIcon,
 } from 'lucide-vue-next';
+import { PopoverAnchor } from 'radix-vue';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
@@ -251,15 +252,17 @@ const cardTone: Record<Card['tone'], string> = {
 };
 
 /**
- * The hand-back confirm (attendance review, deferred item): focus lands on the confirm button
- * when it opens, Escape cancels, and focus goes back to the button that opened it.
+ * The hand-back confirm (attendance review, deferred item): an alert dialog anchored to the button.
+ * It is opened only through the button's `press(action.run)` (the same hold guard as her other
+ * buttons); focus lands on the confirm button, Escape or an outside click cancels, and focus goes
+ * back to the button that opened it.
  */
 function onHandBackOpen(open: boolean): void {
-    // Opening goes through the same guard as her other buttons (no double-click landing here).
-    if (open && queue?.attendanceHeld()) return;
-    confirmingHandBack.value = open;
-    // The second click of a double-click must not land on the confirm.
-    if (open) queue?.holdAttendance();
+    if (!open) confirmingHandBack.value = false;
+}
+function focusHandBack(event: Event): void {
+    event.preventDefault();
+    document.querySelector<HTMLButtonElement>('[data-hand-back]')?.focus();
 }
 function focusConfirm(event: Event): void {
     event.preventDefault();
@@ -278,7 +281,12 @@ const silenceTone: Record<Card['tone'], string> = {
 
 <template>
     <!-- One 44 px row: her state and button, a divider, then her windows (scrolls sideways on a phone). -->
-    <section v-if="queue?.shown.value" class="flex h-11 shrink-0 items-center gap-2 border-b bg-card px-3" :aria-label="t('queue.my_windows')" data-my-windows>
+    <section
+        v-if="queue?.shown.value"
+        class="flex h-11 shrink-0 items-center gap-2 border-b bg-card px-3"
+        :aria-label="t('queue.my_windows')"
+        data-my-windows
+    >
         <div class="flex shrink-0 items-center gap-1.5" role="group" :aria-label="t('queue.status.label')">
             <span
                 class="inline-flex h-7 items-center gap-1.5 rounded-full bg-muted px-2.5 text-xs font-medium"
@@ -298,40 +306,55 @@ const silenceTone: Record<Card['tone'], string> = {
 
             <template v-for="action in actions" :key="action.key">
                 <Popover v-if="action.key === 'hand-back'" :open="confirmingHandBack" @update:open="onHandBackOpen">
-                    <PopoverTrigger
-                        :class="cn(buttonVariants({ variant: action.variant, size: 'sm' }), 'h-7 gap-1 rounded-full px-2.5 text-xs')"
-                        :disabled="queue.busy.value !== null"
-                        :title="action.hint"
-                        data-hand-back
-                    >
-                        <LoaderCircle v-if="queue.busy.value === action.busy" class="size-3.5 animate-spin" aria-hidden="true" />
-                        <component :is="action.icon" v-else class="size-3.5" aria-hidden="true" />
-                        {{ action.label }}
-                    </PopoverTrigger>
-                    <PopoverContent align="start" class="w-72 p-3" aria-describedby="hand-back-confirm-hint" @open-auto-focus="focusConfirm">
-                        <p id="hand-back-confirm-hint" class="text-xs text-foreground">
-                            {{ t('queue.attendance.hand_back_confirm_hint', { n: formatCount(cards.length, locale) }) }}
-                        </p>
-                        <div class="mt-3 flex items-center justify-end gap-1.5">
-                            <button
-                                type="button"
-                                :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-8 px-3 text-xs')"
-                                :disabled="queue.busy.value !== null"
-                                @click="confirmingHandBack = false"
-                            >
-                                {{ t('queue.attendance.hand_back_cancel') }}
-                            </button>
-                            <button
-                                type="button"
-                                :class="cn(buttonVariants({ variant: 'default', size: 'sm' }), 'h-8 gap-1 px-3 text-xs')"
-                                :disabled="queue.busy.value !== null"
-                                data-hand-back-confirm
-                                @click="confirmHandBack"
-                            >
-                                <LoaderCircle v-if="queue.busy.value === 'hand-back'" class="size-3.5 animate-spin" aria-hidden="true" />
-                                <Undo2 v-else class="size-3.5" aria-hidden="true" />
-                                {{ t('queue.attendance.hand_back_confirm') }}
-                            </button>
+                    <PopoverAnchor as-child>
+                        <button
+                            type="button"
+                            :class="cn(buttonVariants({ variant: action.variant, size: 'sm' }), 'h-7 gap-1 rounded-full px-2.5 text-xs')"
+                            :disabled="queue.busy.value !== null || action.disabled === true"
+                            :title="action.hint"
+                            :aria-expanded="confirmingHandBack"
+                            aria-haspopup="dialog"
+                            data-hand-back
+                            @click="press(action.run)"
+                        >
+                            <LoaderCircle v-if="queue.busy.value === action.busy" class="size-3.5 animate-spin" aria-hidden="true" />
+                            <component :is="action.icon" v-else class="size-3.5" aria-hidden="true" />
+                            {{ action.label }}
+                        </button>
+                    </PopoverAnchor>
+                    <PopoverContent align="start" class="w-72 p-3" @open-auto-focus="focusConfirm" @close-auto-focus="focusHandBack">
+                        <!-- The popover's own element is role="dialog" (Radix sets it and the wrapper drops attrs):
+                             the confirm inside is announced as an alert dialog with its name and description. -->
+                        <div
+                            role="alertdialog"
+                            :aria-label="t('queue.attendance.hand_back')"
+                            aria-describedby="hand-back-confirm-hint"
+                            data-hand-back-dialog
+                        >
+                            <p id="hand-back-confirm-hint" class="text-xs text-foreground">
+                                {{ t('queue.attendance.hand_back_confirm_hint', { n: formatCount(cards.length, locale) }) }}
+                            </p>
+                            <div class="mt-3 flex items-center justify-end gap-1.5">
+                                <button
+                                    type="button"
+                                    :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-8 px-3 text-xs')"
+                                    :disabled="queue.busy.value !== null"
+                                    @click="confirmingHandBack = false"
+                                >
+                                    {{ t('queue.attendance.hand_back_cancel') }}
+                                </button>
+                                <button
+                                    type="button"
+                                    :class="cn(buttonVariants({ variant: 'default', size: 'sm' }), 'h-8 gap-1 px-3 text-xs')"
+                                    :disabled="queue.busy.value !== null"
+                                    data-hand-back-confirm
+                                    @click="confirmHandBack"
+                                >
+                                    <LoaderCircle v-if="queue.busy.value === 'hand-back'" class="size-3.5 animate-spin" aria-hidden="true" />
+                                    <Undo2 v-else class="size-3.5" aria-hidden="true" />
+                                    {{ t('queue.attendance.hand_back_confirm') }}
+                                </button>
+                            </div>
                         </div>
                     </PopoverContent>
                 </Popover>
@@ -366,18 +389,40 @@ const silenceTone: Record<Card['tone'], string> = {
                 >
                     <span class="font-bold tabular-nums" dir="ltr">#{{ formatCount(card.ticket, locale) }}</span>
                     <span class="max-w-[6rem] truncate font-medium" dir="auto">{{ card.first }}</span>
-                    <span v-if="card.badge" class="inline-flex size-4 shrink-0 items-center justify-center rounded-full" :class="card.badge.tone" :title="card.badge.label">
+                    <span
+                        v-if="card.badge"
+                        class="inline-flex size-4 shrink-0 items-center justify-center rounded-full"
+                        :class="card.badge.tone"
+                        :title="card.badge.label"
+                    >
                         <component :is="card.badge.icon" class="size-2.5" aria-hidden="true" />
                     </span>
                     <FolderOpen v-if="card.entry.open_case_id" class="size-3 shrink-0 text-primary" aria-hidden="true" />
-                    <span v-if="card.tone === 'overdue'" class="inline-flex items-center gap-0.5 tabular-nums" :class="silenceTone.overdue" :title="t('queue.handoff_left')">
+                    <span
+                        v-if="card.tone === 'overdue'"
+                        class="inline-flex items-center gap-0.5 tabular-nums"
+                        :class="silenceTone.overdue"
+                        :title="t('queue.handoff_left')"
+                    >
                         <Hourglass class="size-3 motion-safe:animate-pulse" aria-hidden="true" />{{ card.handoff ?? t('queue.reply_overdue') }}
                     </span>
-                    <span v-else-if="card.silence !== null" class="inline-flex items-center gap-0.5 tabular-nums" :class="silenceTone[card.tone]" :title="t('queue.silence_left')">
-                        <Hourglass class="size-3" :class="card.tone === 'last' ? 'motion-safe:animate-pulse' : ''" aria-hidden="true" />{{ card.silence }}
+                    <span
+                        v-else-if="card.silence !== null"
+                        class="inline-flex items-center gap-0.5 tabular-nums"
+                        :class="silenceTone[card.tone]"
+                        :title="t('queue.silence_left')"
+                    >
+                        <Hourglass class="size-3" :class="card.tone === 'last' ? 'motion-safe:animate-pulse' : ''" aria-hidden="true" />{{
+                            card.silence
+                        }}
                     </span>
-                    <span v-else class="inline-flex items-center gap-0.5 tabular-nums text-primary" :title="`${t('queue.waiting_reply')} · ${t('queue.timer')}`">
-                        <MessageCircleReply class="size-3" aria-hidden="true" /><span class="sr-only">{{ t('queue.waiting_reply') }}: </span>{{ card.elapsed }}
+                    <span
+                        v-else
+                        class="inline-flex items-center gap-0.5 tabular-nums text-primary"
+                        :title="`${t('queue.waiting_reply')} · ${t('queue.timer')}`"
+                    >
+                        <MessageCircleReply class="size-3" aria-hidden="true" /><span class="sr-only">{{ t('queue.waiting_reply') }}: </span
+                        >{{ card.elapsed }}
                     </span>
                     <span
                         v-if="card.unread > 0"
@@ -406,4 +451,3 @@ const silenceTone: Record<Card['tone'], string> = {
         </ul>
     </section>
 </template>
-
