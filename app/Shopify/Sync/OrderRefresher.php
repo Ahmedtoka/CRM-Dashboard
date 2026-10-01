@@ -98,9 +98,11 @@ final class OrderRefresher
                     $summary = $summary->withResult($result);
                     $counts['refreshed']++;
 
-                    // Created/Updated broadcast from the mapper; an unchanged order
-                    // still has a new sync time the open screens should show.
-                    if ($result === MapResult::Skipped && ($order = Order::find($orderId)) !== null) {
+                    // Created/Updated (and an applied fulfillment/refund) broadcast from
+                    // the mapper; an order where nothing was applied still has a new
+                    // sync time the open screens should show: broadcast it once here.
+                    if ($result === MapResult::Skipped && ! $this->rows->lastOrderChildrenApplied()
+                        && ($order = Order::find($orderId)) !== null) {
                         SafeBroadcast::send(new OrderUpdated($order));
                     }
                 } catch (Throwable $e) {

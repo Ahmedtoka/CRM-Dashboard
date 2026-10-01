@@ -12,13 +12,18 @@ use Illuminate\Console\Command;
  * Scheduled every 10 minutes (ShopifyServiceProvider, R8): queues the open
  * Shopify orders not read for --older-than minutes, oldest sync first, at most
  * --limit per run, in jobs of JOB_SIZE orders.
+ *
+ * The default limit is 60 (controller ruling, not the spec's 250): 60 orders
+ * are ~9 refresh queries of up to ~938 requested points each per 10 minutes,
+ * well inside Shopify's 50 points/s restore, which the bot's live order
+ * lookups share. 250 would be ~36 such queries per run.
  */
 class RefreshOpenOrdersCommand extends Command
 {
     /** Order ids per queued job (each job queries Shopify in OrderRefresher::BATCH batches). */
     public const JOB_SIZE = 25;
 
-    protected $signature = 'shopify:refresh-orders {--limit=250} {--older-than=10}';
+    protected $signature = 'shopify:refresh-orders {--limit=60} {--older-than=10}';
 
     protected $description = 'Queue a Shopify refresh of open orders not synced recently';
 

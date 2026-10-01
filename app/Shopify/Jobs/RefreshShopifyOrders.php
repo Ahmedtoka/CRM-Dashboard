@@ -21,6 +21,11 @@ class RefreshShopifyOrders implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    /**
+     * tries/backoff barely apply: OrderRefresher::refresh() catches Shopify errors
+     * per batch and counts them as `failed` in the `refresh` sync run, so only an
+     * error outside that (e.g. the database) fails the job and retries it.
+     */
     public int $tries = 2;
 
     public int $backoff = 60;

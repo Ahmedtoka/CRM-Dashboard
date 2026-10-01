@@ -288,8 +288,11 @@ final class FakeShopifyTransport implements ShopifyTransport
             'createdAt' => ($order->placed_at ?? $order->created_at)?->toIso8601String(),
             'updatedAt' => ($order->shopify_updated_at ?? $order->updated_at)?->toIso8601String(),
             'cancelledAt' => $order->cancelled_at?->toIso8601String(),
-            'cancelReason' => $order->cancel_reason !== null ? strtoupper($order->cancel_reason) : null,
+            // As stored: the mapper lower-cases it again (Payload::lower), so a stored
+            // (lower-case) Shopify reason round-trips unchanged.
+            'cancelReason' => $order->cancel_reason,
             'displayFinancialStatus' => $order->financial_status !== null ? strtoupper($order->financial_status) : null,
+            // Inverse of OrderMapper::fulfillmentStatusFromGraphql(): NULL <-> UNFULFILLED.
             'displayFulfillmentStatus' => match ($order->fulfillment_status) {
                 null => 'UNFULFILLED',
                 'partial' => 'PARTIALLY_FULFILLED',

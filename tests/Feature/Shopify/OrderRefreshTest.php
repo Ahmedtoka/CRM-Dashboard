@@ -462,3 +462,58 @@ it('keeps order refresh runs out of the Shopify settings sync log and last-sync 
         ->assertJsonCount(1, 'runs')
         ->assertJsonPath('runs.0.type', 'manual');
 });
+
+// Fix round 1.
+it('queues at most 60 orders per run by default', function () {
+    refreshConnectShop();
+    Queue::fake();
+    collect(range(1, 70))->each(fn () => refreshStoreOrder(['last_synced_at' => null]));
+
+    $this->artisan('shopify:refresh-orders')->expectsOutputToContain('queued=60')->assertSuccessful();
+
+    Queue::assertPushed(RefreshShopifyOrders::class, fn (RefreshShopifyOrders $job) => true);
+    expect(collect(Queue::pushed(RefreshShopifyOrders::class))->sum(fn ($job) => count($job->orderIds)))->toBe(60);
+});
+
+it('does not broadcast twice when an unchanged order brings a new fulfillment', function () {
+    refreshConnectShop();
+    $order = refreshStoreOrder(['shopify_order_id' => '8501', 'shopify_updated_at' => '2030-01-01 00:00:00']);
+    refreshNodesTransport(fn (string $id) => refreshNode($id, [
+        'updatedAt' => '2030-01-01T00:00:00Z',
+        'fulfillments' => [[
+            'id' => 'gid://shopify/Fulfillment/77', 'status' => 'SUCCESS', 'displayStatus' => 'IN_TRANSIT',
+            'createdAt' => '2030-01-01T00:00:00Z', 'updatedAt' => '2030-01-01T00:00:00Z', 'deliveredAt' => null,
+            'trackingInfo' => [['company' => 'Bosta', 'number' => 'B1', 'url' => null]],
+        ]],
+    ]));
+
+    $result = app(OrderRefresher::class)->refresh([$order->id]);
+
+    expect($result['refreshed'])->toBe(1)->and($order->fulfillments()->count())->toBe(1);
+    Event::assertDispatchedTimes(OrderUpdated::class, 1);
+});
+
+it('maps a fake node built from a stored chat order back onto the same row', function (array $state) {
+    $this->freezeTime();
+    refreshConnectShop(ShopifyIntegration::DEMO_SHOP_DOMAIN);
+    config(['crm.shopify.driver' => 'fake']);
+    app()->forgetInstance(ShopifyTransport::class);
+    app()->forgetScopedInstances();
+    $order = Order::factory()->create(array_merge([
+        'source' => OrderSource::Chat, 'shopify_order_id' => '8601', 'shopify_order_name' => '#8601',
+        'order_number' => '8601', 'shopify_updated_at' => null, 'note' => 'سيبيه عند البواب',
+    ], $state));
+    $before = $order->fresh()->getAttributes();
+
+    expect(app(OrderRefresher::class)->refresh([$order->id]))->toBe(['refreshed' => 1, 'skipped' => 0, 'failed' => 0]);
+
+    $after = $order->fresh()->getAttributes();
+    $ignored = ['last_synced_at', 'shopify_updated_at'];
+    expect(array_diff_key($after, array_flip($ignored)))->toBe(array_diff_key($before, array_flip($ignored)))
+        ->and($after['fulfillment_status'])->toBe($before['fulfillment_status'])
+        ->and($after['last_synced_at'])->not->toBeNull();
+})->with([
+    'open, unfulfilled, no cancel reason' => [['financial_status' => 'pending', 'fulfillment_status' => null, 'cancel_reason' => null, 'cancelled_at' => null]],
+    'cancelled, partial, lower-case reason' => [['financial_status' => 'paid', 'fulfillment_status' => 'partial', 'cancel_reason' => 'customer', 'cancelled_at' => '2026-09-20 10:00:00']],
+    'fulfilled, refunded' => [['financial_status' => 'partially_refunded', 'fulfillment_status' => 'fulfilled', 'cancel_reason' => null, 'cancelled_at' => null]],
+]);
