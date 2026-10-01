@@ -2538,7 +2538,7 @@ const ar = {
         wall: { title: 'شاشة التوزيع', idle: 'لسه مفيش قرارات النهارده' },
         kpi: {
             lounge: 'في الصالة',
-            oldest: 'أقدم واحدة',
+            oldest: 'أقدم واحدة {time}',
             windows: 'في الشبابيك',
             of_capacity: 'من {n}',
             overdue: 'متأخر الرد',
@@ -2551,6 +2551,8 @@ const ar = {
             case: 'كيس',
             auto: 'قفل تلقائي',
             escalation: 'تصعيد',
+            issued: 'أدوار اتطلعت',
+            breakdown: 'التفاصيل',
         },
         reception: { title: 'الاستقبال', door: 'الباب', bot: 'البوت', with_bot: 'بيكلموا البوت دلوقتي' },
         robot: {

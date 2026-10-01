@@ -178,6 +178,7 @@ export function useBoard(options: { enabled: boolean }): Board {
     /** The lounge and the windows change together, so what moved between them is seen here. */
     function setEntries(nextWaiting: QueueEntry[], nextOpen: QueueEntry[], animate: boolean): void {
         const change = diffEntries(waiting.value, open.value, nextOpen);
+        const waitingBefore = waiting.value.length;
         const at = Date.now();
 
         nextOpen.forEach((e) => stampedAt.set(e.id, at));
@@ -209,6 +210,7 @@ export function useBoard(options: { enabled: boolean }): Board {
                 entryId: entry.id,
                 ticket: entry.ticket,
                 seat,
+                waitingBefore,
                 userId: entry.assigned_user_id,
                 windowNo: entry.window_no,
             };

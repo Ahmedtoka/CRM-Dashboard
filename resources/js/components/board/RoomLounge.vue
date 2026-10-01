@@ -102,6 +102,8 @@ const call = computed(() => {
                 seat.reservedFor?.name,
                 seat.request,
                 seat.name,
+                seat.enqueued,
+                seat.reservedFor?.colour,
                 i,
                 seats.cardW,
                 locale,

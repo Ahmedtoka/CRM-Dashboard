@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import RelativeTime from '@/components/crm/RelativeTime.vue';
+import TickText from '@/components/board/TickText.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useBoardContext } from '@/lib/board/context';
 import { formatCount } from '@/lib/format';
-import { Maximize2, Minimize2, Presentation, Users } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { onClickOutside, useEventListener } from '@vueuse/core';
+import { ChevronDown, Maximize2, Minimize2, Presentation, Users } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 /**
  * The board's numbers in HTML above the room (never scaled with it), the shift, the connection,
@@ -43,6 +44,18 @@ const oldest = computed(() => {
     return at;
 });
 
+/** Past the first-reply target: «أقدم واحدة» turns red (a flag, so the bar does not tick with the clock). */
+const oldestLate = computed(() => oldest.value !== null && board.secondsSince(oldest.value) > (board.settings.value?.sla_first_reply_seconds ?? 600));
+const oldestTemplate = computed(() => t('board.kpi.oldest', { time: '{time}' }));
+
+/** The closed-today breakdown, opened by a button (works on touch). */
+const breakdownOpen = ref(false);
+const closedTile = ref<HTMLElement | null>(null);
+onClickOutside(closedTile, () => (breakdownOpen.value = false));
+useEventListener(document, 'keydown', (event: KeyboardEvent) => {
+    if (event.key === 'Escape') breakdownOpen.value = false;
+});
+
 const tiles = computed(() => {
     const k = board.kpis.value;
     const overdue = board.open.value.filter((e) => e.reply_overdue === true).length;
@@ -55,11 +68,12 @@ const tiles = computed(() => {
         breaks: n(board.members.value.filter((m) => m.status === 'break' || m.status === 'pending_break').length),
         bot: n(board.withBot.value),
         closed: n(k?.closed_total),
-        closedHint: k
-            ? (['inquiry', 'problem', 'case', 'auto', 'escalation'] as const)
-                  .map((key) => `${t(`board.kpi.${key}`)} ${n(k.closed?.[key])}`)
-                  .join(t('board.platforms.separator'))
-            : '',
+        issued: n(k?.issued),
+        breakdown: (['inquiry', 'problem', 'case', 'auto', 'escalation'] as const).map((key) => ({
+            key,
+            label: t(`board.kpi.${key}`),
+            value: n(k?.closed?.[key]),
+        })),
         sla: k?.sla_pct === null || k?.sla_pct === undefined ? null : { value: `${n(k.sla_pct)}%`, good: k.sla_pct >= k.sla_target_pct },
     };
 });
@@ -94,7 +108,9 @@ const tiles = computed(() => {
             <div class="kpi">
                 <dt>{{ t('board.kpi.lounge') }}</dt>
                 <dd class="val num">{{ tiles.lounge }}</dd>
-                <dd v-if="oldest" class="sub">{{ t('board.kpi.oldest') }} <RelativeTime :iso="oldest" /></dd>
+                <dd v-if="oldest" class="sub" :class="{ bad: oldestLate }">
+                    <TickText :since="oldest" format="short" :template="oldestTemplate" />
+                </dd>
             </div>
             <div class="kpi">
                 <dt>{{ t('board.kpi.windows') }}</dt>
@@ -116,11 +132,27 @@ const tiles = computed(() => {
                 <dt>{{ t('board.kpi.with_bot') }}</dt>
                 <dd class="val num">{{ tiles.bot }}</dd>
             </div>
-            <div class="kpi" :title="tiles.closedHint">
+            <div ref="closedTile" class="kpi closed">
                 <dt>{{ t('board.kpi.closed_today') }}</dt>
                 <dd class="val num">{{ tiles.closed }}</dd>
-                <dd v-if="tiles.sla && !phone" class="sub num" :class="tiles.sla.good ? 'good' : 'bad'">
-                    {{ t('board.kpi.sla') }} {{ tiles.sla.value }}
+                <dd v-if="tiles.sla" class="sub num" :class="tiles.sla.good ? 'good' : 'bad'">{{ t('board.kpi.sla') }} {{ tiles.sla.value }}</dd>
+                <dd class="sub num">
+                    {{ t('board.kpi.issued') }} {{ tiles.issued }}
+                    <button
+                        type="button"
+                        class="kpi-more"
+                        :aria-expanded="breakdownOpen"
+                        aria-controls="board-kpi-breakdown"
+                        @click="breakdownOpen = !breakdownOpen"
+                    >
+                        {{ t('board.kpi.breakdown') }}
+                        <ChevronDown class="size-3.5" :class="{ 'rotate-180': breakdownOpen }" aria-hidden="true" />
+                    </button>
+                    <ul v-if="breakdownOpen" id="board-kpi-breakdown" class="kpi-breakdown">
+                        <li v-for="item in tiles.breakdown" :key="item.key">
+                            {{ item.label }} <b class="num">{{ item.value }}</b>
+                        </li>
+                    </ul>
                 </dd>
             </div>
         </dl>

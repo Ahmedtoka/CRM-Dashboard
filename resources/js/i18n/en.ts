@@ -2583,7 +2583,7 @@ const en: Messages = {
         wall: { title: 'Router screen', idle: 'No decisions yet today' },
         kpi: {
             lounge: 'In the lounge',
-            oldest: 'Oldest',
+            oldest: 'Oldest {time}',
             windows: 'At windows',
             of_capacity: 'of {n}',
             overdue: 'Reply overdue',
@@ -2596,6 +2596,8 @@ const en: Messages = {
             case: 'Case',
             auto: 'Auto-close',
             escalation: 'Escalation',
+            issued: 'Tickets issued',
+            breakdown: 'Details',
         },
         reception: { title: 'Reception', door: 'Door', bot: 'Bot', with_bot: 'talking to the bot now' },
         robot: {

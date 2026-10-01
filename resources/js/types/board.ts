@@ -149,6 +149,8 @@ export interface BoardMove {
     ticket: number;
     /** Her place in the lounge before she was called; -1 when she was not seated (beyond the seats). */
     seat: number;
+    /** How many waited in the lounge before she was called: the lounge's width (and so her seat) then. */
+    waitingBefore: number;
     userId: number;
     windowNo: number | null;
 }

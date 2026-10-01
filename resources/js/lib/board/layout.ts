@@ -85,7 +85,8 @@ export function roomGeometry(waiting: number): RoomGeometry {
 
 /**
  * Any number of desks from 1 to 12 on the carpet: the grid (columns × rows) that keeps the
- * desks largest, centred, never larger than life. Beyond what fits, the cells shrink together.
+ * desks largest, centred, never larger than life (scale ≤ 1). When several grids give the same
+ * size, the one with the fewest columns wins. Beyond what fits, the cells shrink together.
  */
 export function deskLayout(count: number, carpet: Box): DeskBox[] {
     const n = Math.max(0, Math.min(MAX_DESKS, Math.floor(count)));
@@ -101,7 +102,7 @@ export function deskLayout(count: number, carpet: Box): DeskBox[] {
     for (let cols = 1; cols <= n; cols++) {
         const rows = Math.ceil(n / cols);
         const scale = Math.min(1, availW / (cols * stepX - CELL.gapX), availH / (rows * stepY - CELL.gapY));
-        // Prefer the larger desks; with equal size, the wider room (fewer rows).
+        // Only a strictly larger desk replaces the grid found first (fewer columns).
         if (scale > best.scale + 0.001) best = { cols, rows, scale };
     }
 
