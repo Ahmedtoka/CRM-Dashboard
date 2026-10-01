@@ -6,7 +6,6 @@ use App\Bot\BotEngine;
 use App\Commerce\OrderService;
 use App\Enums\AttachmentStatus;
 use App\Enums\ConversationPriority;
-use App\Enums\ConversationStatus;
 use App\Enums\OrderType;
 use App\Enums\Platform;
 use App\Enums\SenderType;
@@ -30,22 +29,28 @@ use App\Inbox\SoftLock;
 use App\Inbox\WindowPolicy;
 use App\Media\MediaStorage;
 use App\Models\Conversation;
+use App\Models\ConversationNote;
 use App\Models\ConversationParticipant;
 use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\QueueSetting;
 use App\Models\QuickReply;
 use App\Models\QuickReplyAttachment;
+use App\Models\SupportCase;
 use App\Models\User;
 use App\Queue\QueueService;
 use App\Support\SafeBroadcast;
 use DomainException;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Conversation JSON endpoints shared by the web inbox (/inbox/...) and API v1 (/api/v1/...).
@@ -57,20 +62,45 @@ trait ConversationEndpoints
         return ConversationResource::collection($query->paginate($request->user(), $this->conversationFilters($request)));
     }
 
-    public function show(Request $request, Conversation $conversation, WindowPolicy $windows, SoftLock $lock): JsonResponse
+    /**
+     * The thread detail (spec §1.3: ≤ 15 queries). `$conversation` is the raw route key, not a
+     * bound model: the row is read once, with the list sub-selects (preview, direction, last human
+     * reply, open case) and exists-flags that skip the notes/participants/cases queries when empty.
+     * Every user the thread shows (responders, assignee, lock holder, message and note authors,
+     * participants, case owners) is read in one query instead of one per relation.
+     */
+    public function show(Request $request, int|string $conversation, WindowPolicy $windows, SoftLock $lock): JsonResponse
     {
+        $conversation = ConversationQuery::withListColumns(Conversation::query()->whereKey((int) $conversation))
+            ->without(['lockedBy', 'firstResponder', 'lastResponder', 'assignee'])
+            ->withExists(['notes', 'participants', 'cases'])
+            ->firstOrFail();
+
         Gate::authorize('view', $conversation);
 
-        $conversation->load(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags', 'assignee', 'queueEntry']);
-
-        $messages = $conversation->messages()->with(['user', 'mediaAttachments'])->orderByDesc('id')->limit(50)->get()->reverse()->values();
-        $notes = $conversation->notes()->with('user')->orderByDesc('id')->get();
+        $messages = $conversation->messages()->with('mediaAttachments')->orderByDesc('id')->limit(50)->get()->reverse()->values();
+        $notes = $conversation->notes_exists
+            ? $conversation->notes()->orderByDesc('id')->limit(100)->get()
+            : new EloquentCollection;
+        $participantRows = $conversation->participants_exists
+            ? $conversation->participants()->orderBy('first_message_at')->get()
+            : new EloquentCollection;
+        $cases = $conversation->cases_exists
+            ? $conversation->cases()->with('order.items.variant')->latest('id')->limit(5)->get()
+            : new EloquentCollection;
 
         $customer = $conversation->customer;
         // Nested identities/orders are platform-scoped for moderators too.
         $customer?->load(ModeratorScope::customerRelations($request->user(), orderLimit: 20));
 
-        $participants = $conversation->participants()->with('user')->orderBy('first_message_at')->get()
+        $this->attachUsers($conversation, $messages, $notes, $participantRows, $cases);
+        foreach ($cases as $case) {
+            if ($customer !== null && (int) $case->customer_id === (int) $customer->id) {
+                $case->setRelation('customer', $customer);
+            }
+        }
+
+        $participants = $participantRows
             ->map(fn (ConversationParticipant $p) => [
                 'user' => $p->user ? ['id' => $p->user->id, 'name' => $p->user->name, 'color' => $p->user->color] : null,
                 'role' => $p->role?->value,
@@ -88,9 +118,7 @@ trait ConversationEndpoints
             'notes' => NoteResource::collection($notes)->resolve($request),
             'customer' => $customer ? (new CustomerResource($customer))->resolve($request) : null,
             'participants' => $participants,
-            'cases' => SupportCaseResource::collection(
-                $conversation->cases()->with(['customer', 'assignedTo', 'order.items.variant'])->latest('id')->limit(5)->get()
-            )->resolve($request),
+            'cases' => SupportCaseResource::collection($cases)->resolve($request),
             'window' => ['mode' => $window->mode, 'expires_at' => $window->expiresAt?->toIso8601String()],
             'lock' => [
                 'holder' => $holder ? ['id' => $holder->id, 'name' => $holder->name] : null,
@@ -103,7 +131,24 @@ trait ConversationEndpoints
     {
         Gate::authorize('view', $conversation);
 
-        $data = $request->validate(['before_id' => ['nullable', 'integer']]);
+        $data = $request->validate([
+            'before_id' => ['nullable', 'integer', 'prohibits:after_id'],
+            'after_id' => ['nullable', 'integer', 'prohibits:before_id'],
+        ]);
+
+        // Forward paging (catch-up after a reconnect): newer than after_id, oldest first, max 200.
+        if (($after = $data['after_id'] ?? null) !== null) {
+            $max = 200;
+            $rows = $conversation->messages()->with(['user', 'mediaAttachments'])
+                ->where('id', '>', $after)
+                ->orderBy('id')
+                ->limit($max + 1)
+                ->get();
+
+            return MessageResource::collection($rows->take($max)->values())
+                ->additional(['has_more_after' => $rows->count() > $max]);
+        }
+
         $limit = 50;
 
         $rows = $conversation->messages()->with(['user', 'mediaAttachments'])
@@ -236,7 +281,7 @@ trait ConversationEndpoints
             abort(response()->json(['message' => $e->getMessage()], 422));
         }
 
-        return new MessageResource($message->load('user'));
+        return new MessageResource($message->load(['user', 'mediaAttachments']));
     }
 
     public function typing(Request $request, Conversation $conversation, SoftLock $lock): JsonResponse
@@ -277,7 +322,7 @@ trait ConversationEndpoints
 
         $lock->claim($conversation, $request->user());
 
-        return new ConversationResource($conversation->fresh(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags', 'assignee', 'queueEntry']));
+        return new ConversationResource($this->listRow($conversation));
     }
 
     /**
@@ -300,7 +345,7 @@ trait ConversationEndpoints
         Gate::authorize('reply', $conversation);
         $this->guardQueueWindow($request->user(), $conversation);
 
-        return new ConversationResource($actions->resolve($conversation, $request->user()));
+        return new ConversationResource($this->listRow($actions->resolve($conversation, $request->user())));
     }
 
     /**
@@ -326,7 +371,7 @@ trait ConversationEndpoints
     {
         Gate::authorize('reply', $conversation);
 
-        return new ConversationResource($actions->reopen($conversation, $request->user()));
+        return new ConversationResource($this->listRow($actions->reopen($conversation, $request->user())));
     }
 
     public function returnToBot(Request $request, Conversation $conversation, BotEngine $bot): ConversationResource
@@ -336,7 +381,7 @@ trait ConversationEndpoints
 
         $bot->returnToBot($conversation, $request->user());
 
-        return new ConversationResource($conversation);
+        return new ConversationResource($this->listRow($conversation));
     }
 
     public function reset(Request $request, Conversation $conversation, ConversationActions $actions): ConversationResource
@@ -345,14 +390,14 @@ trait ConversationEndpoints
 
         $actions->reset($conversation, $request->user());
 
-        return new ConversationResource($conversation->fresh(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags', 'assignee', 'queueEntry']));
+        return new ConversationResource($this->listRow($conversation));
     }
 
     public function read(Request $request, Conversation $conversation, ConversationActions $actions): ConversationResource
     {
         Gate::authorize('view', $conversation);
 
-        return new ConversationResource($actions->markRead($conversation));
+        return new ConversationResource($this->listRow($actions->markRead($conversation)));
     }
 
     public function syncTags(Request $request, Conversation $conversation, ConversationActions $actions): ConversationResource
@@ -364,7 +409,7 @@ trait ConversationEndpoints
             'tag_ids.*' => ['integer', 'exists:tags,id'],
         ]);
 
-        return new ConversationResource($actions->syncTags($conversation, $data['tag_ids']));
+        return new ConversationResource($this->listRow($actions->syncTags($conversation, $data['tag_ids'])));
     }
 
     /**
@@ -381,7 +426,7 @@ trait ConversationEndpoints
 
         $classifier->setManually($conversation, ConversationPriority::from($data['priority']), $request->user());
 
-        $conversation = $conversation->fresh();
+        $conversation = $this->listRow($conversation);
         SafeBroadcast::send(new ConversationUpdated($conversation));
 
         return new ConversationResource($conversation);
@@ -467,16 +512,92 @@ trait ConversationEndpoints
     }
 
     /**
-     * @return array{platform?: ?string, status?: ?string, filter?: ?string, q?: ?string, tag?: ?int}
+     * GET conversations/counts: per-state counts for the filter bar under the other list params
+     * (status/queue ignored), each capped (see ConversationQuery::counts), cached 15 s per user + params.
+     */
+    public function counts(Request $request, ConversationQuery $query): JsonResponse
+    {
+        $user = $request->user();
+        $params = $this->conversationFilters($request);
+        unset($params['status'], $params['queue']);
+        ksort($params);
+
+        $counts = Cache::remember(
+            'inbox.counts.'.$user->id.'.'.md5((string) json_encode($params)),
+            15,
+            fn () => $query->counts($user, $params),
+        );
+
+        return response()->json($counts);
+    }
+
+    /**
+     * A single conversation as the list shows it: the list sub-selects and eager loads, so every
+     * single-conversation response matches a list row and ConversationResource runs no extra query.
+     */
+    protected function listRow(Conversation $conversation): Conversation
+    {
+        return ConversationQuery::withListColumns(Conversation::query()->whereKey($conversation->getKey()))->firstOrFail();
+    }
+
+    /**
+     * Reads every user the thread detail shows in one query and sets the relations.
+     *
+     * @param  Collection<int, Message>  $messages
+     * @param  Collection<int, ConversationNote>  $notes
+     * @param  Collection<int, ConversationParticipant>  $participants
+     * @param  Collection<int, SupportCase>  $cases
+     */
+    private function attachUsers(Conversation $conversation, Collection $messages, Collection $notes, Collection $participants, Collection $cases): void
+    {
+        $conversationKeys = ['lockedBy' => 'locked_by_id', 'firstResponder' => 'first_responder_id', 'lastResponder' => 'last_responder_id', 'assignee' => 'assignee_id'];
+
+        $ids = collect(array_map(fn (string $col) => $conversation->{$col}, $conversationKeys))
+            ->merge($messages->pluck('user_id'))->merge($notes->pluck('user_id'))
+            ->merge($participants->pluck('user_id'))->merge($cases->pluck('assigned_to_id'))
+            ->filter()->map(fn ($id) => (int) $id)->unique()->values();
+
+        $users = $ids->isEmpty() ? collect() : User::query()->whereIn('id', $ids)->get()->keyBy('id');
+        $find = fn ($id) => $id !== null ? $users->get((int) $id) : null;
+
+        foreach ($conversationKeys as $relation => $col) {
+            $conversation->setRelation($relation, $find($conversation->{$col}));
+        }
+        $messages->each(fn (Message $m) => $m->setRelation('user', $find($m->user_id)));
+        $notes->each(fn (ConversationNote $n) => $n->setRelation('user', $find($n->user_id)));
+        $participants->each(fn (ConversationParticipant $p) => $p->setRelation('user', $find($p->user_id)));
+        $cases->each(fn (SupportCase $c) => $c->setRelation('assignedTo', $find($c->assigned_to_id)));
+    }
+
+    /**
+     * List params (spec §1.2). `flags` is returned as a list with the legacy single `filter` merged in.
+     *
+     * @return array{platform?: ?string, status?: ?string, queue?: ?string, assignee?: ?string, flags: list<string>, q?: ?string, tag?: ?int}
      */
     protected function conversationFilters(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'platform' => ['nullable', Rule::enum(Platform::class)],
-            'status' => ['nullable', Rule::enum(ConversationStatus::class)],
+            'status' => ['nullable', Rule::in(ConversationQuery::STATUSES)],
+            'queue' => ['nullable', Rule::in(ConversationQuery::QUEUE_STATES)],
+            'assignee' => ['nullable', 'regex:/^(me|none|\d+)$/'],
+            'flags' => ['nullable', 'string', 'max:300'],
             'filter' => ['nullable', Rule::in(ConversationQuery::FILTERS)],
             'q' => ['nullable', 'string', 'max:100'],
             'tag' => ['nullable', 'integer', 'exists:tags,id'],
         ]);
+
+        $flags = ConversationQuery::flagsOf(['flags' => $data['flags'] ?? null, 'filter' => $data['filter'] ?? null]);
+        $unknown = array_diff($flags, ConversationQuery::FILTERS);
+        if ($unknown !== []) {
+            throw ValidationException::withMessages([
+                'flags' => __('validation.in', ['attribute' => 'flags']).' ('.implode(', ', $unknown).')',
+            ]);
+        }
+
+        unset($data['filter']);
+        $data['flags'] = $flags;
+
+        return array_filter($data, fn ($v) => $v !== null);
     }
 }

@@ -51,6 +51,8 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
     Route::get('/inbox', [InboxController::class, 'index'])->name('inbox');
     Route::prefix('inbox')->name('inbox.')->group(function () {
         Route::get('conversations', [InboxController::class, 'list'])->middleware('record-list-latency')->name('conversations.index');
+        // Before conversations/{conversation}, or the binding swallows "counts".
+        Route::get('conversations/counts', [InboxController::class, 'counts'])->name('conversations.counts');
         Route::get('conversations/{conversation}', [InboxController::class, 'show'])->name('conversations.show');
         Route::get('conversations/{conversation}/messages', [InboxController::class, 'messages'])->name('conversations.messages.index');
         Route::post('conversations/{conversation}/messages', [InboxController::class, 'sendMessage'])->name('conversations.messages.store');

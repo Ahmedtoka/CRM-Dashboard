@@ -1,0 +1,199 @@
+{
+    "label": "baseline-fresh-stats",
+    "at": "2026-10-01T15:58:05+00:00",
+    "database": "crm_perf_load",
+    "driver": "mysql",
+    "counts": {
+        "conversations": 300007,
+        "messages": 3005000
+    },
+    "scenarios": [
+        {
+            "name": "list.default",
+            "uri": "/inbox/conversations",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 18.6,
+            "p95_ms": 19.4,
+            "max_ms": 19.4,
+            "queries_avg": 8,
+            "queries_max": 8
+        },
+        {
+            "name": "list.status_open",
+            "uri": "/inbox/conversations?status=open",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 13.9,
+            "p95_ms": 40.3,
+            "max_ms": 40.3,
+            "queries_avg": 8,
+            "queries_max": 8
+        },
+        {
+            "name": "list.waiting",
+            "uri": "/inbox/conversations?filter=waiting",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 2563.1,
+            "p95_ms": 3323.4,
+            "max_ms": 3323.4,
+            "queries_avg": 8,
+            "queries_max": 8
+        },
+        {
+            "name": "list.queue_all",
+            "uri": "/inbox/conversations?filter=queue_all",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 13737.9,
+            "p95_ms": 16120.2,
+            "max_ms": 16120.2,
+            "queries_avg": 8.6,
+            "queries_max": 11
+        },
+        {
+            "name": "list.platform",
+            "uri": "/inbox/conversations?platform=whatsapp",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 20,
+            "p95_ms": 27.9,
+            "max_ms": 27.9,
+            "queries_avg": 8,
+            "queries_max": 8
+        },
+        {
+            "name": "list.mine",
+            "uri": "/inbox/conversations?filter=mine",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 40351.4,
+            "p95_ms": 45971.7,
+            "max_ms": 45971.7,
+            "queries_avg": 4.8,
+            "queries_max": 6
+        },
+        {
+            "name": "list.search_name",
+            "uri": "/inbox/conversations?q=Customer%201234",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 16713.7,
+            "p95_ms": 17861.4,
+            "max_ms": 17861.4,
+            "queries_avg": 9.2,
+            "queries_max": 11
+        },
+        {
+            "name": "list.search_phone",
+            "uri": "/inbox/conversations?q=0100012",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 290.4,
+            "p95_ms": 345.2,
+            "max_ms": 345.2,
+            "queries_avg": 7,
+            "queries_max": 7
+        },
+        {
+            "name": "list.state_bot",
+            "uri": "/inbox/conversations?status=bot",
+            "status": 422,
+            "runs": 5,
+            "p50_ms": 5.1,
+            "p95_ms": 5.7,
+            "max_ms": 5.7,
+            "queries_avg": 2,
+            "queries_max": 2
+        },
+        {
+            "name": "list.state_with_moderator",
+            "uri": "/inbox/conversations?status=with_moderator",
+            "status": 422,
+            "runs": 5,
+            "p50_ms": 5.1,
+            "p95_ms": 6.3,
+            "max_ms": 6.3,
+            "queries_avg": 2,
+            "queries_max": 2
+        },
+        {
+            "name": "list.queue_waiting",
+            "uri": "/inbox/conversations?queue=waiting",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 27.1,
+            "p95_ms": 81.4,
+            "max_ms": 81.4,
+            "queries_avg": 8,
+            "queries_max": 8
+        },
+        {
+            "name": "list.tag",
+            "uri": "/inbox/conversations?tag=1",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 191.6,
+            "p95_ms": 213.8,
+            "max_ms": 213.8,
+            "queries_avg": 4,
+            "queries_max": 4
+        },
+        {
+            "name": "list.assignee",
+            "uri": "/inbox/conversations?assignee=2",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 13.9,
+            "p95_ms": 16.7,
+            "max_ms": 16.7,
+            "queries_avg": 8,
+            "queries_max": 8
+        },
+        {
+            "name": "detail.hot",
+            "uri": "/inbox/conversations/300001",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 34.9,
+            "p95_ms": 39.5,
+            "max_ms": 39.5,
+            "queries_avg": 19,
+            "queries_max": 19
+        },
+        {
+            "name": "detail.typical",
+            "uri": "/inbox/conversations/122391",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 9.5,
+            "p95_ms": 9.9,
+            "max_ms": 9.9,
+            "queries_avg": 18,
+            "queries_max": 18
+        },
+        {
+            "name": "messages.older",
+            "uri": "/inbox/conversations/300001/messages?before_id=3002501",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 7.8,
+            "p95_ms": 8.2,
+            "max_ms": 8.2,
+            "queries_avg": 5,
+            "queries_max": 5
+        },
+        {
+            "name": "messages.after",
+            "uri": "/inbox/conversations/300001/messages?after_id=3004996",
+            "status": 200,
+            "runs": 5,
+            "p50_ms": 7.6,
+            "p95_ms": 8.2,
+            "max_ms": 8.2,
+            "queries_avg": 5,
+            "queries_max": 5
+        }
+    ]
+}

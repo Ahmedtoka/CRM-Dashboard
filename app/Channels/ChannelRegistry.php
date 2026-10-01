@@ -46,20 +46,17 @@ class ChannelRegistry
         // a demo seed creates a fake account per platform with a lower id, and a real
         // Instagram/WhatsApp account connected later from Settings → Integrations must
         // not have its Meta webhooks parsed (and its replies "sent") by the fake adapter.
-        $hasLive = ChannelAccount::where('platform', $platform)
-            ->where('driver', 'live')
-            ->where('status', '!=', 'disconnected')
-            ->exists();
+        // One read of the platform's few accounts decides both (Task 4a: the thread detail ran two).
+        // Test-link accounts are not a channel at all, so they never decide this.
+        $accounts = ChannelAccount::query()->where('platform', $platform)
+            ->where('driver', '!=', TestScope::DRIVER)
+            ->orderBy('id')
+            ->get(['id', 'driver', 'status']);
 
-        if (! $hasLive) {
-            // Test-link accounts are not a channel at all, so they never decide this.
-            $account = ChannelAccount::where('platform', $platform)
-                ->where('driver', '!=', TestScope::DRIVER)
-                ->first();
+        $hasLive = $accounts->contains(fn (ChannelAccount $a) => $a->driver === 'live' && $a->status !== 'disconnected');
 
-            if ($account && $account->driver === 'fake') {
-                return new FakeChannelAdapter($platform);
-            }
+        if (! $hasLive && $accounts->first()?->driver === 'fake') {
+            return new FakeChannelAdapter($platform);
         }
 
         return match ($platform) {
