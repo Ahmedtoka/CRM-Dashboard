@@ -65,10 +65,10 @@ const selectValue = (event: Event) => (event.target as HTMLSelectElement).value 
 const inputValue = (event: Event) => (event.target as HTMLInputElement).value || null;
 
 const columns = computed<Column[]>(() => [
-    { key: 'order_number', label: t('orders.columns.number') },
+    { key: 'order_number', label: t('orders.columns.number'), primary: true },
     { key: 'customer', label: t('orders.columns.customer') },
-    { key: 'platform', label: t('orders.columns.platform') },
-    { key: 'created_by', label: t('orders.columns.created_by') },
+    { key: 'platform', label: t('orders.columns.platform'), hideOnMobile: true },
+    { key: 'created_by', label: t('orders.columns.created_by'), hideOnMobile: true },
     { key: 'type', label: t('orders.columns.type') },
     { key: 'total', label: t('orders.columns.total'), align: 'end' },
     { key: 'payment', label: t('orders.columns.payment') },

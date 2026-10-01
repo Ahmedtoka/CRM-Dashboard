@@ -12,5 +12,6 @@ defineProps<{ icon?: Component; title: string; body?: string }>();
         <p class="text-base font-semibold text-foreground">{{ title }}</p>
         <p v-if="body" class="max-w-xs text-xs text-muted-foreground">{{ body }}</p>
         <slot />
+        <div v-if="$slots.action" class="mt-2"><slot name="action" /></div>
     </div>
 </template>

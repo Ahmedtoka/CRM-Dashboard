@@ -496,6 +496,12 @@ const en: Messages = {
             cancelled: 'Cancelled',
         },
     },
+    filters: {
+        more: 'Filters',
+        active: 'Active filters',
+        remove: 'Remove {label}',
+        clear_all: 'Clear all',
+    },
     ui: {
         add: 'Add',
         edit: 'Edit',

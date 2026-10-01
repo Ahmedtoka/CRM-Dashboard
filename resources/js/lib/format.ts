@@ -186,3 +186,11 @@ export function addDays(ymd: string, days: number): string {
 
     return date.toISOString().slice(0, 10);
 }
+
+/** A KPI or table figure: a dash when there is no value (a lone zero reads as a dot in Arabic digits). */
+export function formatStat(value: number | null | undefined, locale: Locale, opts: { zeroAsDash?: boolean; money?: boolean } = {}): string {
+    if (value === null || value === undefined || Number.isNaN(value)) return '—';
+    if (opts.zeroAsDash && Number(value) === 0) return '—';
+
+    return opts.money ? formatMoney(value, locale) : formatCount(value, locale);
+}

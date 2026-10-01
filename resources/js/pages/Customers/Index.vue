@@ -36,9 +36,9 @@ watch(search, (value) => {
 onBeforeUnmount(() => window.clearTimeout(timer));
 
 const columns = computed<Column[]>(() => [
-    { key: 'name', label: t('customers.columns.name') },
-    { key: 'phone', label: t('customers.columns.phone') },
-    { key: 'identities', label: t('customers.columns.platforms') },
+    { key: 'name', label: t('customers.columns.name'), primary: true },
+    { key: 'phone', label: t('customers.columns.phone'), dir: 'ltr' },
+    { key: 'identities', label: t('customers.columns.platforms'), hideOnMobile: true },
     { key: 'orders_count', label: t('customers.columns.orders'), align: 'end' },
     { key: 'total_spent', label: t('customers.columns.spent'), align: 'end' },
     { key: 'last_contact_at', label: t('customers.columns.last_contact') },

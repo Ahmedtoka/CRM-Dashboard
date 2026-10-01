@@ -18,6 +18,16 @@ const fallback: Record<PlatformValue, { label: string; color: string }> = {
     tiktok: { label: 'TikTok', color: '#000000' },
 };
 
+/** A near-black brand colour (TikTok) vanishes on a dark background: follow the theme's foreground instead. */
+function readable(hex: string): string {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    const lum = (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+
+    return lum < 0.05 ? 'hsl(var(--foreground))' : hex;
+}
+
 export interface PlatformInfo {
     label: string;
     color: string;
@@ -35,7 +45,7 @@ export function usePlatform(platform: MaybeRefOrGetter<PlatformValue | null | un
 
         return {
             label: shared?.label ?? base.label,
-            color: shared?.color ?? base.color,
+            color: readable(shared?.color ?? base.color),
             icon: icons[value] ?? MessageCircle,
         };
     });

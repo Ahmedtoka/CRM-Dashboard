@@ -64,7 +64,7 @@ useEventListener(document, 'keydown', (event: KeyboardEvent) => {
 <template>
     <Head :title="t('board.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
+    <AppLayout :breadcrumbs="breadcrumbs" workspace>
         <div class="w-full space-y-3 p-3 md:p-4">
             <PageHeader :title="t('board.title')" :description="t('board.description')" />
 

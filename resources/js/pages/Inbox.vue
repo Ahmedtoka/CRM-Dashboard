@@ -406,7 +406,7 @@ onBeforeUnmount(() => {
 <template>
     <Head :title="t('inbox.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs" fill>
+    <AppLayout :breadcrumbs="breadcrumbs" fill workspace>
         <MyWindowsStrip :selected-id="selectedId" :unread="windowUnread" @select="select" />
 
         <!-- Fills the space left under the header and any admin alert strip (no fixed calc). -->

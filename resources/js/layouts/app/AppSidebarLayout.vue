@@ -8,16 +8,18 @@ import type { BreadcrumbItemType } from '@/types';
 interface Props {
     breadcrumbs?: BreadcrumbItemType[];
     contentClass?: string;
+    workspace?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
     breadcrumbs: () => [],
     contentClass: undefined,
+    workspace: false,
 });
 </script>
 
 <template>
-    <AppShell variant="sidebar">
+    <AppShell variant="sidebar" :workspace="workspace">
         <AppSidebar />
         <AppContent variant="sidebar" class="bg-background" :class="contentClass">
             <AppTopBar :breadcrumbs="breadcrumbs">

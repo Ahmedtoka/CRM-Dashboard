@@ -473,6 +473,12 @@ const ar = {
             cancelled: 'ملغي',
         },
     },
+    filters: {
+        more: 'فلاتر',
+        active: 'الفلاتر المفعّلة',
+        remove: 'شيلي {label}',
+        clear_all: 'مسح الكل',
+    },
     ui: {
         add: 'إضافة',
         edit: 'تعديل',
