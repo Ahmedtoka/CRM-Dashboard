@@ -90,7 +90,7 @@ final class HandoverSummary
         app()->setLocale('ar');
 
         try {
-            $lines = ['🤖 تحويل من البوت', 'السبب: '.self::reasonLabel($reason)];
+            $lines = ['تحويل من البوت', 'السبب: '.self::reasonLabel($reason)];
 
             if ($c->handover_category !== null && $c->handover_category !== '') {
                 $lines[] = 'التصنيف: '.self::categoryLabel((string) $c->handover_category);

@@ -26,13 +26,13 @@ use Illuminate\Support\Facades\Http;
 // on the agent (AI/rules) path as well as in the guided flows. "Now" is Saturday
 // 19 September 2026, noon in Cairo.
 
-const HT_IN_HOURS = 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء خلال دقايق 🌸';
+const HT_IN_HOURS = 'تمام، هيتم تحويلك لموظف خدمة العملاء خلال دقايق';
 
-const HT_NO_HOURS = 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸';
+const HT_NO_HOURS = 'تمام، هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت';
 
-const HT_AFTER_HOURS = 'تمام ✅ سجلت طلبك، وهيتم تحويلك لموظف خدمة العملاء أول ما نفتح بكرة الساعة 10 الصبح 🌸';
+const HT_AFTER_HOURS = 'تمام، سجلت طلبك، وهيتم تحويلك لموظف خدمة العملاء أول ما نفتح بكرة الساعة 10 الصبح';
 
-const HT_OLD_ACK = 'تمام يا فندم، هراجع طلب حضرتك مع الفريق حالًا وهرد عليكي 🌸';
+const HT_OLD_ACK = 'تمام يا فندم، هراجع طلب حضرتك مع الفريق حالًا وهرد عليكي';
 
 const HT_ALL_DAY = ['days' => [0, 1, 2, 3, 4, 5, 6], 'from' => '10:00', 'to' => '22:00'];
 
@@ -126,7 +126,7 @@ it('keeps a handover intent’s own script and adds the transfer sentence under 
     $c = htTurn();
 
     expect($c->handover_category)->toBe('order_via_agent')
-        ->and(htLastBot())->toBe('تمام يا فندم، استني ثواني هحولك لموظف يسجل الأوردر مع حضرتك 🌸'."\n".HT_NO_HOURS);
+        ->and(htLastBot())->toBe('تمام يا فندم، استني ثواني هحولك لموظف يسجل الأوردر مع حضرتك'."\n".HT_NO_HOURS);
 });
 
 it('says nothing at all when the reply window is closed', function () {

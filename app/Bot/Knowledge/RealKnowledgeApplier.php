@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Schema;
  * save) AND its body is still the old placeholder (or already the new default).
  * Every other row is left exactly as the owner left it.
  *
- * Also fills the ❓ placeholder script.payment_info (menu "طرق الدفع") and adds
+ * Also fills the placeholder script.payment_info (menu "طرق الدفع") and adds
  * the shipping_cost intent + script.shipping_fee when missing.
  * Run by the 2026_09_18_500010 data migration.
  */

@@ -44,12 +44,12 @@ final class OrderStep extends BaseStep
     /** Messenger's quick-reply limit: at most this many orders are offered as buttons. */
     public const MAX_ORDER_BUTTONS = 13;
 
-    public const VERIFY_TEXT = 'لقيت الأوردر 🌸 للتأكيد، اكتبي آخر ٤ أرقام من الموبايل اللي طلبتي بيه';
+    public const VERIFY_TEXT = 'لقيت الأوردر. للتأكيد، اكتبي آخر ٤ أرقام من الموبايل اللي طلبتي بيه';
 
-    public const VERIFY_RETRY_TEXT = 'الأرقام دي مش مطابقة 🙏 جربي تاني، اكتبي آخر ٤ أرقام من الموبايل اللي طلبتي بيه';
+    public const VERIFY_RETRY_TEXT = 'الأرقام دي مش مطابقة. جربي تاني، اكتبي آخر ٤ أرقام من الموبايل اللي طلبتي بيه';
 
     // The handover reply that follows says she is with the team (flow 7, 2026-09-19).
-    public const VERIFY_FAILED_TEXT = 'مش قادر أتأكد من الأوردر ده 🙏';
+    public const VERIFY_FAILED_TEXT = 'مش قادر أتأكد من الأوردر ده';
 
     /** `order_editable`: still at the company (cancel/edit possible), already shipped, or cancelled. */
     public const EDITABLE = 'yes';

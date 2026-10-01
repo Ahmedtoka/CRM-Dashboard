@@ -44,7 +44,7 @@ final class CaseSummary
         ]);
     }
 
-    /** @return list<array{key:string, icon:string, title:string, lines:list<string>, empty?:bool}> */
+    /** @return list<array{key:string, title:string, lines:list<string>, empty?:bool}> */
     public static function sections(SupportCase $case): array
     {
         $data = is_array($case->data) ? $case->data : [];
@@ -53,11 +53,11 @@ final class CaseSummary
         return array_values(array_filter([
             self::customer($case, $data),
             self::order($case, $data),
-            self::section('items', '🛍️', __('cases.sections.items'), self::selectedItemLines($data)),
-            self::section('request', '📝', __('cases.sections.request'), self::requestLines($case, $data)),
-            self::section('attachments', '📎', __('cases.sections.attachments'), self::attachmentLines($case, $data)),
-            self::section('alerts', '⚠️', __('cases.sections.alerts'), $alerts !== [] ? $alerts : [__('cases.no_alerts')], $alerts === []),
-            self::section('team_action', '➡️', __('cases.sections.team_action'), [self::teamAction($case, $data)]),
+            self::section('items', __('cases.sections.items'), self::selectedItemLines($data)),
+            self::section('request', __('cases.sections.request'), self::requestLines($case, $data)),
+            self::section('attachments', __('cases.sections.attachments'), self::attachmentLines($case, $data)),
+            self::section('alerts', __('cases.sections.alerts'), $alerts !== [] ? $alerts : [__('cases.no_alerts')], $alerts === []),
+            self::section('team_action', __('cases.sections.team_action'), [self::teamAction($case, $data)]),
         ]));
     }
 
@@ -113,7 +113,7 @@ final class CaseSummary
             $blocks = [self::header($case)];
 
             foreach (self::sections($case) as $s) {
-                $blocks[] = implode("\n", array_merge([$s['icon'].' '.$s['title']], $s['lines']));
+                $blocks[] = implode("\n", array_merge([$s['title']], $s['lines']));
             }
 
             return implode("\n\n", $blocks);
@@ -150,14 +150,14 @@ final class CaseSummary
         }
     }
 
-    /** @return array{key:string, icon:string, title:string, lines:list<string>, empty?:bool}|null */
-    private static function section(string $key, string $icon, string $title, array $lines, bool $empty = false): ?array
+    /** @return array{key:string, title:string, lines:list<string>, empty?:bool}|null */
+    private static function section(string $key, string $title, array $lines, bool $empty = false): ?array
     {
         if ($lines === []) {
             return null;
         }
 
-        $section = ['key' => $key, 'icon' => $icon, 'title' => $title, 'lines' => $lines];
+        $section = ['key' => $key, 'title' => $title, 'lines' => $lines];
 
         if ($empty) {
             $section['empty'] = true;
@@ -172,7 +172,7 @@ final class CaseSummary
         $name = self::str($data['name'] ?? null) ?? self::str($customer?->name) ?? __('cases.customer.unknown');
         $phone = self::str($data['phone'] ?? null) ?? self::str($customer?->phone) ?? self::str($customer?->normalized_phone);
 
-        return ['key' => 'customer', 'icon' => '👤', 'title' => __('cases.sections.customer'), 'lines' => [$phone !== null ? "{$name} · {$phone}" : $name]];
+        return ['key' => 'customer', 'title' => __('cases.sections.customer'), 'lines' => [$phone !== null ? "{$name} · {$phone}" : $name]];
     }
 
     private static function order(SupportCase $case, array $data): ?array
@@ -183,7 +183,7 @@ final class CaseSummary
         if ($order === null && $number === null) {
             $typed = self::str($data['order_ref_text'] ?? null);
 
-            return $typed === null ? null : ['key' => 'order', 'icon' => '📦', 'title' => __('cases.order.not_found', ['ref' => $typed]), 'lines' => []];
+            return $typed === null ? null : ['key' => 'order', 'title' => __('cases.order.not_found', ['ref' => $typed]), 'lines' => []];
         }
 
         $details = array_values(array_filter([
@@ -199,7 +199,7 @@ final class CaseSummary
 
         $title = $number !== null ? __('cases.order.numbered', ['number' => ltrim($number, '#')]) : __('cases.sections.order');
 
-        return ['key' => 'order', 'icon' => '📦', 'title' => $title, 'lines' => $lines];
+        return ['key' => 'order', 'title' => $title, 'lines' => $lines];
     }
 
     /**
@@ -399,19 +399,19 @@ final class CaseSummary
     private static function attachmentLines(SupportCase $case, array $data): array
     {
         if ($case->type === 'return') {
-            return [__('cases.attachments.item_photo').' '.(! empty($data['product_photo']) ? '✅' : __('cases.attachments.no_photo'))];
+            return [__('cases.attachments.item_photo').' '.(! empty($data['product_photo']) ? __('cases.attachments.received') : __('cases.attachments.no_photo'))];
         }
 
         if ($case->type === 'exchange') {
-            return ! empty($data['exchange_product_photo']) ? [__('cases.attachments.replacement_photo').' ✅'] : [];
+            return ! empty($data['exchange_product_photo']) ? [__('cases.attachments.replacement_photo').' '.__('cases.attachments.received')] : [];
         }
 
         if ($case->type === 'complaint') {
-            return ! empty($data['description_photo']) ? [__('cases.attachments.customer_photos').' ✅'] : [];
+            return ! empty($data['description_photo']) ? [__('cases.attachments.customer_photos').' '.__('cases.attachments.received')] : [];
         }
 
         if ($case->type === 'cancel_edit') {
-            return collect((array) ($data['item_changes'] ?? []))->contains(fn ($c) => is_array($c) && ! empty($c['photo'])) ? [__('cases.attachments.change_photo').' ✅'] : [];
+            return collect((array) ($data['item_changes'] ?? []))->contains(fn ($c) => is_array($c) && ! empty($c['photo'])) ? [__('cases.attachments.change_photo').' '.__('cases.attachments.received')] : [];
         }
 
         if ($case->type !== 'return_exchange') {
@@ -427,7 +427,7 @@ final class CaseSummary
         $parts = [];
 
         foreach ($fields as $field => $label) {
-            $parts[] = $label.' '.(! empty($data[$field]) ? '✅' : '—');
+            $parts[] = $label.' '.(! empty($data[$field]) ? __('cases.attachments.received') : '—');
         }
 
         return [implode(' · ', $parts)];

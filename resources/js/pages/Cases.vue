@@ -78,7 +78,7 @@ const columns = computed<Column[]>(() => [
     { key: 'date', label: t('cases.columns.date') },
 ]);
 
-/** The first line of the 📝 request section, shown under the case type. */
+/** The first line of the request section, shown under the case type. */
 function requestLine(row: SupportCase): string | null {
     return row.summary_sections.find((s) => s.key === 'request')?.lines[0] ?? null;
 }

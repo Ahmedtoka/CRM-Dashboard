@@ -85,7 +85,7 @@ function burstTurn(array $texts): ?BotRun
 it('seeds the Le Voile catalog and scripts', function () {
     expect(BotIntent::where('key', 'cancel_order')->value('route'))->toBe('collect_then_handover')
         ->and(BotIntent::where('key', 'store_complaint')->value('queue'))->toBe('senior')
-        ->and(BotKnowledgeEntry::where('key', 'script.greeting')->value('body'))->toBe('{time_greeting} يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من Le Voile')
+        ->and(BotKnowledgeEntry::where('key', 'script.greeting')->value('body'))->toBe('{time_greeting} يا فندم يومك حلو ان شاء الله، مع حضرتك ميار من Le Voile')
         ->and(BotKnowledgeEntry::where('key', 'script.payment_info')->value('is_active'))->toBeTrue()
         ->and(BotIntent::where('key', 'urgent')->value('is_active'))->toBeFalse()
         ->and(BotIntent::where('key', 'angry')->value('is_active'))->toBeTrue()
@@ -98,7 +98,7 @@ it('seeds the Le Voile catalog and scripts', function () {
         ->and(BotKnowledgeEntry::where('key', 'script.availability')->value('body'))->toEndWith('https://levoilestores.com/')
         ->and(BotKnowledgeEntry::where('key', 'like', 'script.%')->count())->toBe(102)
         ->and(BotKnowledgeEntry::where('key', 'script.handover_ack')->value('is_active'))->toBeTrue()
-        ->and(BotKnowledgeEntry::where('key', 'script.thanks')->value('body'))->toBe('العفو يا فندم تحت أمرك في أي وقت 🌸')
+        ->and(BotKnowledgeEntry::where('key', 'script.thanks')->value('body'))->toBe('العفو يا فندم تحت أمرك في أي وقت')
         ->and(BotIntent::where('key', 'order_status')->first()->keywords)->toContain('فين الاوردر', 'الاوردر فين', 'اوردري', 'طلبي', 'تتبع', 'tracking')
         ->and(BotIntent::where('key', 'how_to_order')->first()->keywords)->toContain('احجز', 'عايزة اطلب', 'عاوزه اطلب', 'اطلب');
 });
@@ -394,7 +394,7 @@ it('polishes several scripts with claude when configured', function () {
 
     say('m1', 'التوصيل بياخد كام يوم؟');
 
-    expect(botText())->toBe('أهلا بيكي 🌸 التوصيل خلال 3-5 ايام عمل'."\n\n".OFFER_HUMAN);
+    expect(botText())->toBe('أهلا بيكي التوصيل خلال 3-5 ايام عمل'."\n\n".OFFER_HUMAN);
     Http::assertSent(fn ($r) => ($r['output_config']['format']['type'] ?? null) === 'json_schema'
         && str_contains($r['messages'][0]['content'], 'Greet: yes')
         && str_contains($r['messages'][0]['content'], 'APPROVED TEXTS:')
@@ -411,7 +411,7 @@ it('sends the plain scripts when the polished reply invents a number', function 
 });
 
 it('hands over with only the transfer sentence, never a greeting alone, when the intent has no active script', function () {
-    say('m1', 'الفروع فين؟'); // branches_hours: script still a ❓ placeholder
+    say('m1', 'الفروع فين؟'); // branches_hours: script still a placeholder
 
     $c = Conversation::first();
     expect($c->handler)->toBe(Handler::Human)
@@ -501,10 +501,10 @@ it('points a seeded refund intent at the order ask without touching an owner-edi
     expect(BotIntent::where('key', 'refund')->first()->script_keys)->toBe(['refund_followup']);
 });
 
-const HANDOVER_ACK = 'تمام يا فندم، هراجع طلب حضرتك مع الفريق حالًا وهرد عليكي 🌸';
+const HANDOVER_ACK = 'تمام يا فندم، هراجع طلب حضرتك مع الفريق حالًا وهرد عليكي';
 
 /** 2026-09-21: the sentence every handover now ends with (no working hours set in these tests). */
-const HANDOVER_TRANSFER = 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸';
+const HANDOVER_TRANSFER = 'تمام، هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت';
 
 /** I2 + 2026-09-21: every silent handover tells her, in the working-hours wording, that she is being transferred. */
 it('acknowledges a handover that had nothing else to say', function (Closure $turn, string $category) {
@@ -768,7 +768,7 @@ it('greets with the agent name and the morning greeting in the first bot reply, 
     CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-15 07:00:00', 'Africa/Cairo'));
 
     say('m1', 'التوصيل بياخد كام يوم؟');
-    expect(botText())->toContain('صباح الخير يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من Le Voile');
+    expect(botText())->toContain('صباح الخير يا فندم يومك حلو ان شاء الله، مع حضرتك ميار من Le Voile');
 
     say('m2', 'والشحن خارج مصر؟');
     expect(substr_count(botText(), 'مع حضرتك ميار من Le Voile'))->toBe(1);
@@ -779,7 +779,7 @@ it('greets with the evening greeting outside the morning window', function () {
 
     say('m1', 'التوصيل بياخد كام يوم؟');
 
-    expect(botText())->toContain('مساء الخير يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من Le Voile');
+    expect(botText())->toContain('مساء الخير يا فندم يومك حلو ان شاء الله، مع حضرتك ميار من Le Voile');
 });
 
 /*
@@ -811,7 +811,7 @@ it('hands a sale/offer question over as sale_offer', function () {
 it('answers a thank-you with the thanks script and does not hand over', function () {
     say('m1', 'شكرا جدا');
 
-    expect(botText())->toContain('العفو يا فندم تحت أمرك في أي وقت 🌸')
+    expect(botText())->toContain('العفو يا فندم تحت أمرك في أي وقت')
         ->and(Conversation::first()->handler)->toBe(Handler::Bot);
 });
 
@@ -912,7 +912,7 @@ it('inserts the new intents and the thanks script once, without duplicating on r
         ->and(BotIntent::where('key', 'sale_offer')->value('priority'))->toBe('medium')
         ->and(BotIntent::where('key', 'thanks')->value('route'))->toBe('answer')
         ->and(BotIntent::where('key', 'fabric_season')->value('priority'))->toBe('low')
-        ->and(BotKnowledgeEntry::where('key', 'script.thanks')->value('body'))->toBe('العفو يا فندم تحت أمرك في أي وقت 🌸');
+        ->and(BotKnowledgeEntry::where('key', 'script.thanks')->value('body'))->toBe('العفو يا فندم تحت أمرك في أي وقت');
 
     BotKnowledgeEntry::where('key', 'script.thanks')->update(['body' => 'نص المالك']);
     $migration->up();
@@ -946,7 +946,7 @@ it('adds the alternative-models link to the out-of-stock script, without touchin
     $migration->up();
 
     $body = BotKnowledgeEntry::where('key', 'script.not_available')->value('body');
-    expect($body)->toContain('تقدري تشوفي الموديلات المتاحة من هنا 👇')
+    expect($body)->toContain('تقدري تشوفي الموديلات المتاحة من هنا')
         ->and($body)->toContain('https://levoilestores.com/');
 
     BotKnowledgeEntry::where('key', 'script.not_available')->update(['body' => 'نص المالك']);
@@ -986,7 +986,7 @@ it('does not route a product compliment containing تحفه to thanks', function
     say('m1', 'الفستان ده تحفه');
 
     expect(Conversation::first()->handover_category)->not->toBe('thanks')
-        ->and(botText())->not->toContain('العفو يا فندم تحت أمرك في أي وقت 🌸');
+        ->and(botText())->not->toContain('العفو يا فندم تحت أمرك في أي وقت');
 });
 
 // Issue 5: whole-word scarves matching (integration, through the wired "availability" intent).
@@ -1062,8 +1062,8 @@ it('seeds the reply flow v2 data once, without overwriting owner edits', functio
         ->and(BotIntent::where('key', 'how_to_order')->value('script_keys'))->toBe(['order_on_website'])
         ->and(BotIntent::where('key', 'defect')->value('required_details'))->toBe(['order_ref|phone|email', 'photos'])
         ->and(BotIntent::where('key', 'exchange_return')->value('required_details'))->toBe(['order_ref|phone|email', 'photos'])
-        ->and(BotKnowledgeEntry::where('key', 'script.offer_human')->value('body'))->toBe('لو حابة أحولك لموظف في أي وقت قوليلي 🌸')
-        ->and(BotKnowledgeEntry::where('key', 'script.order_via_agent')->value('body'))->toBe('تمام يا فندم، استني ثواني هحولك لموظف يسجل الأوردر مع حضرتك 🌸');
+        ->and(BotKnowledgeEntry::where('key', 'script.offer_human')->value('body'))->toBe('لو حابة أحولك لموظف في أي وقت قوليلي')
+        ->and(BotKnowledgeEntry::where('key', 'script.order_via_agent')->value('body'))->toBe('تمام يا فندم، استني ثواني هحولك لموظف يسجل الأوردر مع حضرتك');
 
     BotIntent::where('key', 'price')->update(['script_keys' => json_encode(['price'])]);
     BotIntent::where('key', 'defect')->update(['required_details' => json_encode(['photos'])]);
@@ -1121,7 +1121,7 @@ it('does not hand a defect over on the order number alone', function () {
         ->and(Conversation::first()->bot_state['awaiting_intent'])->toBe('defect');
 });
 
-const ORDER_VIA_AGENT = 'تمام يا فندم، استني ثواني هحولك لموظف يسجل الأوردر مع حضرتك 🌸';
+const ORDER_VIA_AGENT = 'تمام يا فندم، استني ثواني هحولك لموظف يسجل الأوردر مع حضرتك';
 
 it('hands an order-through-us request over with its own message', function () {
     say('m1', 'ممكن تعملولي الاوردر انتوا');
@@ -1148,7 +1148,7 @@ it('falls back to the transfer sentence alone when the order-through-us script i
     expect(botText())->toBe(HANDOVER_TRANSFER);
 });
 
-const OFFER_HUMAN = 'لو حابة أحولك لموظف في أي وقت قوليلي 🌸';
+const OFFER_HUMAN = 'لو حابة أحولك لموظف في أي وقت قوليلي';
 
 it('ends only the first bot reply with the offer of a human', function () {
     say('m1', 'التوصيل بياخد كام يوم؟');

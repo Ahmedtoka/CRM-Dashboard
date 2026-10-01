@@ -145,14 +145,14 @@ class WhatsAppAdapter implements ChannelAdapter
             $lng = $location['longitude'] ?? null;
             $place = trim(($location['name'] ?? '').' '.($location['address'] ?? ''));
             $body = trim(implode("\n", array_filter([
-                '📍 '.($place !== '' ? $place : 'Location'),
+                $place !== '' ? 'Location: '.$place : 'Location',
                 $lat !== null && $lng !== null ? "https://maps.google.com/?q={$lat},{$lng}" : null,
             ])));
         } elseif ($type === 'contacts') {
             $body = collect($message['contacts'] ?? [])
                 ->map(fn (array $c) => trim(($c['name']['formatted_name'] ?? '').' '.collect($c['phones'] ?? [])->pluck('phone')->filter()->implode(' ')))
                 ->filter()
-                ->map(fn (string $line) => '👤 '.$line)
+                ->map(fn (string $line) => 'Contact: '.$line)
                 ->implode("\n");
         }
 
@@ -299,7 +299,7 @@ class WhatsAppAdapter implements ChannelAdapter
 
     /**
      * 4–9 bot buttons as reply-button messages of three (`crm.whatsapp_menu_style` = buttons): the
-     * first carries the text, the rest a short «👇». Null when the list/text path should run
+     * first carries the text, the rest a short «اختاري من هنا». Null when the list/text path should run
      * instead (three or fewer, ten or more, a title over 20 characters, or the style is `list`).
      *
      * @param  array<int, array{title: string, payload: string}>  $buttons
@@ -320,7 +320,7 @@ class WhatsAppAdapter implements ChannelAdapter
             }
         }
 
-        $more = (string) config('crm.whatsapp_more_options_text', '👇');
+        $more = (string) config('crm.whatsapp_more_options_text', 'اختاري من هنا');
 
         return array_map(fn (int $i, array $chunk) => [
             'type' => 'button',
@@ -400,7 +400,7 @@ class WhatsAppAdapter implements ChannelAdapter
         } else {
             $interactive = [
                 'type' => 'carousel',
-                'body' => ['text' => mb_substr((string) ($cards['label'] ?? '🛍️'), 0, 1024)],
+                'body' => ['text' => mb_substr((string) ($cards['label'] ?? 'الموديلات'), 0, 1024)],
                 'action' => ['cards' => array_map(fn (int $i, array $item) => ['card_index' => $i, 'type' => 'cta_url'] + $item, array_keys($items), $items)],
             ];
         }

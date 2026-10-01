@@ -31,15 +31,15 @@ final class TrackingFlowUpgrade
 
     public const NOTE = 'فلو متابعة الأوردر الجديد: كارت الحالة وميعاد التوصيل، ومتابعة التأخير بس لما العميلة تطلب';
 
-    public const ASK_TEXT = 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟ 🌸';
+    public const ASK_TEXT = 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟';
 
-    public const THANKS_TEXT = 'العفو 🌸 لو احتجتي أي حاجة أنا موجودة';
+    public const THANKS_TEXT = 'العفو، لو احتجتي أي حاجة أنا موجودة';
 
-    public const LATE_RECORDED_TEXT = 'سجلت طلب متابعة للأوردر #{order_number} 🌸 الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت';
+    public const LATE_RECORDED_TEXT = 'سجلت طلب متابعة للأوردر #{order_number}، الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت';
 
-    public const ON_TIME_TEXT = 'الأوردر لسه في معاده 🌸 متوقع يوصل من {order_eta}، ولو اتأخر عن كده ابعتيلي وهتابعه فورًا';
+    public const ON_TIME_TEXT = 'الأوردر لسه في معاده، متوقع يوصل من {order_eta}، ولو اتأخر عن كده ابعتيلي وهتابعه فورًا';
 
-    public const NOT_FOUND_TEXT = 'للأسف مش لاقية الأوردر 🙏 تحبي أحولك لحد من الفريق يتابعه معاكي؟';
+    public const NOT_FOUND_TEXT = 'للأسف مش لاقية الأوردر، تحبي أحولك لحد من الفريق يتابعه معاكي؟';
 
     /** Every status key an order found by the `order` step carries (OrderSnapshot::$statusKey). */
     public const STATUS_KEYS = ['confirmed', 'prepared', 'shipped', 'on_the_way', 'delivered', 'cancelled', 'hold', 'returned'];

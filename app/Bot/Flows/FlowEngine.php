@@ -52,7 +52,7 @@ class FlowEngine
 
     public const STORE_LINK_SCRIPTS = ['availability', 'size', 'delivery_time', 'payment_info'];
 
-    public const STORE_BUTTON = '🛍️ تسوقي من الموقع';
+    public const STORE_BUTTON = 'تسوقي من الموقع';
 
     /** Types whose prompt waits for an answer handled by this engine. */
     private const ANSWERABLE = ['menu', 'choice', 'text', 'name', 'phone', 'summary'];
@@ -100,7 +100,7 @@ class FlowEngine
     /**
      * @param  int  $delayMs  queue the flow's messages after this delay (a reply part still on its way)
      * @param  string|null  $lead  a line put above the flow's first question, on the same message
-     *                             (design 2026-09-21 §6.6: «أقدر أساعدك في 👇» + the menu)
+     *                             (design 2026-09-21 §6.6: «أقدر أساعدك في حاجة من دول:» + the menu)
      */
     public function start(Conversation $c, string $flowKey, array $prefill = [], int $delayMs = 0, ?string $lead = null): void
     {
@@ -161,7 +161,7 @@ class FlowEngine
             // button title, so never read it as a typed answer — re-ask the waiting step, no retry counted.
             if (str_starts_with($payload, 'step:') || in_array($payload, ['yes', 'no'], true)) {
                 // Never word for word (design 2026-09-21 §3): the waiting step comes back
-                // under «إحنا خلصنا الخطوة دي فعلًا 🌸», so she can see why it changed.
+                // under «إحنا خلصنا الخطوة دي فعلًا», so she can see why it changed.
                 $this->repromptCurrent($c, 0, $this->prompter->script('flow_stale_tap'));
 
                 return new FlowResult(true);
@@ -257,7 +257,7 @@ class FlowEngine
 
     /**
      * Design 2026-09-21 §6.1: a question was answered in the middle of a flow. She is always
-     * brought back — «نرجع لطلب المرتجع 🌸» on the same message as the step's question and its
+     * brought back — «نرجع لطلب المرتجع» on the same message as the step's question and its
      * buttons, so nothing is ever repeated word for word. After `crm.bot.flow_max_detours`
      * questions in one flow a person is offered instead.
      *
@@ -282,7 +282,7 @@ class FlowEngine
             return true;
         }
 
-        $lead = $this->prompter->script('flow_back_to') ?? 'نرجع لـ{flow_label} 🌸';
+        $lead = $this->prompter->script('flow_back_to') ?? 'نرجع لـ{flow_label}';
         $this->repromptCurrent($c, $delayMs, str_replace('{flow_label}', FlowLabels::of($state['key']), $lead));
 
         return true;
@@ -661,7 +661,7 @@ class FlowEngine
         };
     }
 
-    /** At least one letter or digit: "🙏" or "." alone does not answer a question. */
+    /** At least one letter or digit: "🙏" or "." alone does not answer a question (emoji-input). */
     public static function meaningful(string $text): bool
     {
         return preg_match('/[\p{L}\p{N}]/u', $text) === 1;
@@ -828,7 +828,7 @@ class FlowEngine
      * She did not answer the step (design 2026-09-21 §3). The same question is never asked
      * again word for word:
      *
-     *   first miss  → ONE message: «معلش مش واضحة ليا 🙏 اختاري من دول:» carrying the step's
+     *   first miss  → ONE message: «معلش مش واضحة ليا، اختاري من دول:» carrying the step's
      *                 own buttons (a step with no buttons gets the question under the apology);
      *   second miss → the apology plus [كلم موظف] [القائمة الرئيسية], and an `unanswered`
      *                 learning note so the owner sees what the bot could not read.
@@ -840,7 +840,7 @@ class FlowEngine
 
         if ($state['retries'] < 2) {
             $prompt = $this->promptFor($state, $step);
-            $apology = $this->prompter->script('flow_retry') ?? 'معلش مش واضحة ليا 🙏 اختاري من دول:';
+            $apology = $this->prompter->script('flow_retry') ?? 'معلش مش واضحة ليا، اختاري من دول:';
             $text = $prompt['buttons'] === [] ? $apology."\n".$prompt['text'] : $apology;
 
             $this->send($c, $text, $prompt['buttons']);
@@ -850,7 +850,7 @@ class FlowEngine
 
         $this->noteNotUnderstood($c, $state, $step);
 
-        $offer = $this->prompter->script('flow_not_understood') ?? 'معلش، لسه مش قادرة أفهم قصدك 🙏 تحبي أوصلك لموظف يساعدك؟';
+        $offer = $this->prompter->script('flow_not_understood') ?? 'معلش، لسه مش قادرة أفهم قصدك، تحبي أوصلك لموظف يساعدك؟';
         $this->send($c, $offer, [FlowLabels::AGENT_BUTTON, FlowLabels::MENU_BUTTON]);
         FlowState::setConfirm($c, 'handover_offer');
 
@@ -950,7 +950,7 @@ class FlowEngine
 
     /**
      * §6.5: a flow she left hanging longer than `crm.bot.flow_resume_minutes` asks
-     * «لسه فاكرين طلبك 🌸 تحبي نكمل من حيث ما وقفنا؟» [نكمل] [ابدأ من جديد] before anything
+     * «لسه فاكرين طلبك، تحبي نكمل من حيث ما وقفنا؟» [نكمل] [ابدأ من جديد] before anything
      * she now writes is read as an answer to a step she may not even remember.
      */
     private function offerResume(Conversation $c, array $state, Collection $burst): bool
@@ -971,7 +971,7 @@ class FlowEngine
             return false;
         }
 
-        $offer = $this->prompter->script('flow_resume_offer') ?? 'لسه فاكرين طلبك 🌸 تحبي نكمل من حيث ما وقفنا؟';
+        $offer = $this->prompter->script('flow_resume_offer') ?? 'لسه فاكرين طلبك، تحبي نكمل من حيث ما وقفنا؟';
         $this->send($c, $offer, [FlowLabels::RESUME_BUTTON, FlowLabels::RESTART_BUTTON]);
         FlowState::setConfirm($c, 'resume');
         FlowState::put($c, $state);
@@ -1049,7 +1049,7 @@ class FlowEngine
 
     /**
      * The store-link button under a script sent from the products menu (the owner's flow 6,
-     * 2026-09-19): «🛍️ تسوقي من الموقع» → bot_settings.store_url.
+     * 2026-09-19): «تسوقي من الموقع» → bot_settings.store_url.
      */
     private function storeLinkCards(Conversation $c, string $scriptKey): ?array
     {

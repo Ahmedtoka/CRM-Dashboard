@@ -100,7 +100,7 @@ function ocpPhoto(string $caption = ''): MessageAttachment
 it('asks what the complaint is about with the five buttons', function () {
     ocpStart();
 
-    expect(ocpBot()->body)->toBe('آسفين جدًا لده 🙏 الشكوى بخصوص إيه؟')
+    expect(ocpBot()->body)->toBe('آسفين جدًا لده، الشكوى بخصوص إيه؟')
         ->and(ocpButtons())->toBe(['فرع', 'شحن وتوصيل', 'منتج', 'خدمة العملاء', 'حاجة تانية', 'القائمة الرئيسية']);
 });
 
@@ -109,7 +109,7 @@ it('takes a typed branch name directly, then the visit date in her own words', f
     ocpStart();
     ocpTap('type', 'branch', 'فرع');
 
-    expect(ocpBot()->body)->toBe('اكتبي اسم الفرع، أو اختاري المنطقة من هنا 👇')
+    expect(ocpBot()->body)->toBe('اكتبي اسم الفرع، أو اختاري المنطقة من هنا')
         ->and(ocpBot()->buttons[0]['payload'])->toStartWith('step:complaint:branch:area:');
 
     ocpTurn('فرع المرغني');
@@ -165,8 +165,8 @@ it('confirms a known name and mobile with the number masked, then records the co
         ->and($case->data['phone'])->toBe('01061236611')
         ->and($case->data['description'])->toBe('محدش رد عليا يومين')
         ->and($case->photo_attachment_ids)->toBe([$photo->id])
-        ->and($case->summary)->toContain('سارة محمد · 01061236611')->toContain('صور من العميلة ✅')
-        ->and(ocpBot()->body)->toBe("تمام ✅ سجلت الشكوى رقم #{$case->id}، والفريق هيتواصل معاكي في أقرب وقت 🌸")
+        ->and($case->summary)->toContain('سارة محمد · 01061236611')->toContain('صور من العميلة (وصلت)')
+        ->and(ocpBot()->body)->toBe("تمام، سجلت الشكوى رقم #{$case->id}، والفريق هيتواصل معاكي في أقرب وقت")
         ->and(ocpFlow())->toBeNull();
 });
 
@@ -247,7 +247,7 @@ it('validates and walks the published complaint in the designer sandbox', functi
 
     $case = collect($r['events'])->firstWhere('type', 'case');
     expect($case['data'])->toMatchArray(['branch_name' => 'El Hegaz', 'visit_date' => 'today', 'name' => 'منى', 'phone' => '01012345678'])
-        ->and(end($r['messages'])['text'])->toStartWith('تمام ✅ سجلت الشكوى رقم #')->not->toContain('#0')
+        ->and(end($r['messages'])['text'])->toStartWith('تمام، سجلت الشكوى رقم #')->not->toContain('#0')
         ->and(SupportCase::count())->toBe(0);
 });
 

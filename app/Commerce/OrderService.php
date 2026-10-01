@@ -699,7 +699,7 @@ class OrderService
                 ? $this->announce($order, $order->conversation, $order->createdBy)
                 : $this->outbound->sendSystem(
                     $order->conversation,
-                    '🔗 رابط دفع لطلب '.($result->orderNumber ?? '#'.$order->id).' — '.($result->total !== null ? $this->money($result->total) : $order->total).' ج.م',
+                    'رابط دفع لطلب '.($result->orderNumber ?? '#'.$order->id).' — '.($result->total !== null ? $this->money($result->total) : $order->total).' ج.م',
                 );
         });
 
@@ -1096,7 +1096,7 @@ class OrderService
 
         $this->outbound->sendSystem(
             $conversation,
-            "🛒 أوردر {$number} اتعمل بواسطة {$by} — {$order->total} جنيه",
+            "أوردر {$number} اتعمل بواسطة {$by} — {$order->total} جنيه",
         );
     }
 

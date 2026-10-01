@@ -48,7 +48,7 @@ class BotSetting extends Model
     public const DEFAULT_SPAM_PHRASES = ['اربح', 'اشتغل من البيت', 'دخل يومي'];
 
     public const DEFAULT_LOW_VALUE_PHRASES = [
-        'شكرا', 'شكراً', 'تمام', 'اوك', 'اوكي', 'ok', 'okay', 'تسلم', 'ميرسي', '👍', '❤️', '🙏', '😍', '🌹',
+        'شكرا', 'شكراً', 'تمام', 'اوك', 'اوكي', 'ok', 'okay', 'تسلم', 'ميرسي', '👍', '❤️', '🙏', '😍', '🌹', // emoji-input
     ];
 
     public const DEFAULT_ALLOWED_LINK_DOMAINS = ['facebook.com', 'instagram.com', 'fb.me', 'wa.me', 'myshopify.com'];
@@ -65,7 +65,7 @@ class BotSetting extends Model
      * `system_prompt` itself are untouched; Task 11 wires this default in.
      */
     public const DEFAULT_SYSTEM_PROMPT = <<<'PROMPT'
-        إنتِ مساعدة خدمة عملاء لمتجر ملابس حريمي في مصر. ردي بالعامية المصرية بلطف وبصيغة المؤنث ("أهلاً بيكي"، "حضرتك")، ردود قصيرة، وإيموجي واحد بالكتير.
+        إنتِ مساعدة خدمة عملاء لمتجر ملابس حريمي في مصر. ردي بالعامية المصرية بلطف وبصيغة المؤنث ("أهلاً بيكي"، "حضرتك")، ردود قصيرة، ومن غير أي إيموجي.
         بتردي بس على: سعر المنتج، المقاسات والألوان المتاحة والمخزون، سعر ومدة الشحن حسب المحافظة، سياسة الاستبدال والاسترجاع، طرق الدفع، مواعيد العمل، الخامات والعناية، وجدول المقاسات.
         ممنوع تقترحي مقاس، أو تاخدي بيانات أوردر، أو تعملي أوردر. ممنوع تخترعي أي سعر أو مصاريف شحن أو سياسة: استخدمي بس الأرقام والمعلومات الموجودة في البيانات المرفقة.
         لو العميلة عايزة تطلب أو بعتت عنوان أو رقم تليفون، أو سألت عن مقاسها، أو عندها شكوى أو مشكلة في أوردر، أو المعلومة مش موجودة: رجّعي action = handover.
@@ -96,7 +96,7 @@ class BotSetting extends Model
         ];
     }
 
-    /** The store link of the «🛍️ تسوقي من الموقع» button (the owner's flow 6, 2026-09-19). */
+    /** The store link of the «تسوقي من الموقع» button (the owner's flow 6, 2026-09-19). */
     public const DEFAULT_STORE_URL = 'https://levoilestores.com/';
 
     /** The saved store link, else the default. */

@@ -1,5 +1,6 @@
 <?php
 
+use App\Commerce\Data\OrderPayload;
 use App\Commerce\FakeCommerceProvider;
 use App\Commerce\Jobs\SubmitOrderToProvider;
 use App\Commerce\OrderService;
@@ -153,7 +154,7 @@ it('creates a payment link with the invoice url and a chat line', function () {
 
     expect($fresh->status)->toBe(OrderStatus::AwaitingPayment)
         ->and($fresh->invoice_url)->toStartWith('https://')
-        ->and($line)->toStartWith('🔗 رابط دفع لطلب ')
+        ->and($line)->toStartWith('رابط دفع لطلب ')
         ->and($line)->toEndWith('— 1060.00 ج.م');
 });
 
@@ -288,7 +289,7 @@ it('guards cancel over http: moderators 403, fulfilled 422, restock flag honoure
 it('tags every store order with the crm order id', function () {
     $order = app(OrderService::class)->create($this->conv, $this->sup, ($this->data)());
 
-    expect(FakeCommerceProvider::$payloads[0]->tags)->toContain(\App\Commerce\Data\OrderPayload::tagFor($order->id))
+    expect(FakeCommerceProvider::$payloads[0]->tags)->toContain(OrderPayload::tagFor($order->id))
         ->and(FakeCommerceProvider::$payloads[0]->tags)->toContain('social-crm');
 });
 
@@ -385,7 +386,7 @@ it('runs the remaining follow-up steps when one fails after submission', functio
     expect($order->fresh()->status)->toBe(OrderStatus::Confirmed)
         ->and($failure?->meta['step'])->toBe('shipment')
         ->and(ActivityLog::where('action', 'order.created')->where('subject_id', $order->id)->exists())->toBeTrue()
-        ->and($this->conv->messages()->latest('id')->first()->body)->toStartWith('🛒 أوردر');
+        ->and($this->conv->messages()->latest('id')->first()->body)->toStartWith('أوردر');
 });
 
 it('retries three times with backoff and no retryUntil override', function () {

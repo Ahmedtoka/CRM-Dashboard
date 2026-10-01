@@ -64,7 +64,7 @@ it('runs the whole demo flow over HTTP', function () {
     $conversation = Conversation::where('customer_id', $identity->customer_id)->sole();
     $botReply = $conversation->messages()->where('sender_type', 'bot')->sole();
 
-    expect($botReply->body)->toBe('الأسعار في الكتالوج 👗')
+    expect($botReply->body)->toBe('الأسعار في الكتالوج')
         ->and($botReply->status)->toBe(MessageStatus::Sent)
         ->and($conversation->channelAccount->external_id)->toBe('demo-whatsapp');
 
@@ -124,12 +124,12 @@ it('runs the whole demo flow over HTTP', function () {
     $adConversation = Conversation::find($comment->conversation_id);
 
     expect($comment->status)->toBe(CommentStatus::Replied)
-        ->and($comment->public_reply)->toBe('ردينا عليك في الخاص 💌')
+        ->and($comment->public_reply)->toBe('ردينا عليك في الخاص')
         ->and($comment->private_reply_sent_at)->not->toBeNull()
         ->and($adConversation)->not->toBeNull()
         ->and($adConversation->source)->toBe(ConversationSource::Ad)
         ->and($adConversation->source_comment_id)->toBe($comment->id)
-        ->and($adConversation->messages()->where('direction', 'out')->value('body'))->toBe('الأسعار في الكتالوج 👗');
+        ->and($adConversation->messages()->where('direction', 'out')->value('body'))->toBe('الأسعار في الكتالوج');
 
     // 7) Reports for today (Cairo) are populated.
     $today = CarbonImmutable::now('Africa/Cairo')->toDateString();

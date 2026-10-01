@@ -11,7 +11,7 @@ import { orderStatusTone, paymentState, shipmentTone } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type { OrderRow, Paginated } from '@/types/admin';
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { AlertTriangle, Search } from 'lucide-vue-next';
+import { AlertTriangle, MessageCircle, Search, Store } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
 interface Filters {
@@ -158,7 +158,7 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2 text-
                 <DataTable :columns="columns" :rows="orders.data" clickable :loading="loading" :empty="t('orders.empty')" :caption="t('orders.title')" @row-click="router.visit(`/orders/${$event.id}`)">
                     <template #cell-order_number="{ row }">
                         <span class="font-medium" dir="ltr">{{ row.order_number || `#${row.id}` }}</span>
-                        <span>{{ row.source === 'store' ? '🛍️' : '🗨️' }}</span>
+                        <span class="ms-1 inline-flex align-middle text-muted-foreground" :title="t(`orders.source.${row.source ?? 'chat'}`)"><component :is="row.source === 'store' ? Store : MessageCircle" class="size-3.5" aria-hidden="true" /><span class="sr-only">{{ t(`orders.source.${row.source ?? 'chat'}`) }}</span></span>
                         <StatusChip class="ms-1.5" :label="t(`orders.statuses.${row.status}`)" :tone="orderStatusTone[row.status]" />
                         <span v-if="row.mismatch" class="ms-1 inline-flex size-4 items-center justify-center rounded-full bg-warning/15" :title="t('order.mismatch.title')">
                             <AlertTriangle class="size-3" :aria-label="t('order.mismatch.title')" />

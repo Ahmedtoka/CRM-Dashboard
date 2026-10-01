@@ -23,7 +23,7 @@ return [
         'contact' => 'تواصل معنا',
         'contact_email' => 'البريد الإلكتروني',
         'contact_page' => 'راسل صفحتنا على فيسبوك',
-        'rights' => '© :year :company. جميع الحقوق محفوظة.',
+        'rights' => 'حقوق النشر :year :company. جميع الحقوق محفوظة.',
         'skip' => 'الانتقال إلى المحتوى',
         'back_to_top' => 'العودة لأعلى',
         'lookup' => [

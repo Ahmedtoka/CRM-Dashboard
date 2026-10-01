@@ -18,10 +18,10 @@ use App\Bot\ArabicNormalizer;
 final class LeVoileScripts
 {
     /** Owner-confirmed payment methods (2026-09-18): COD, Visa, Mastercard, Apple Pay, any e-wallet. */
-    public const PAYMENT_TEXT = 'الدفع كاش عند الاستلام، أو فيزا / ماستركارد، أو Apple Pay، أو أي محفظة إلكترونية (من الموقع) 🌸';
+    public const PAYMENT_TEXT = 'الدفع كاش عند الاستلام، أو فيزا / ماستركارد، أو Apple Pay، أو أي محفظة إلكترونية (من الموقع)';
 
     /** The placeholder payment_info was seeded with; replaced only while still untouched. */
-    public const PAYMENT_PLACEHOLDER = '❓ محتاج طرق الدفع المتاحة';
+    public const PAYMENT_PLACEHOLDER = 'محتاج طرق الدفع المتاحة';
 
     /** Overnight refinement change 3/4: the owner's default store link. */
     public const STORE_URL = 'https://levoilestores.com/';
@@ -108,24 +108,24 @@ final class LeVoileScripts
     public static function scripts(): array
     {
         return [
-            'greeting' => ['title' => 'ترحيب', 'body' => '{time_greeting} يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من Le Voile', 'active' => true],
+            'greeting' => ['title' => 'ترحيب', 'body' => '{time_greeting} يا فندم يومك حلو ان شاء الله، مع حضرتك ميار من Le Voile', 'active' => true],
             'price' => ['title' => 'السعر', 'body' => 'Item name
-details..💬
+details..
 * Material :
 * Dimension :
-لتأكيد الأوردر عن طريق Website 👇
-Thanks for choosing Le Voile 🌸', 'active' => true],
+لتأكيد الأوردر عن طريق Website
+Thanks for choosing Le Voile', 'active' => true],
             'size' => ['title' => 'المقاسات', 'body' => 'المقاسات موضحه علي الويب سايت يا فندم بالطول و العرض فالافضل تراجعي المقاسات لانها ادق من الوزن اللي بيختلف من جسم للتاني', 'active' => true],
             'availability' => ['title' => 'الموديلات المتاحة', 'body' => 'ده لينك فيه جميع الموديلات المتاحه يا فندم
-ممكن حضرتك تحددلنا الشكل إللي حضرتك محتاجه وابعتلك التفاصيل ❤️
+ممكن حضرتك تحددلنا الشكل إللي حضرتك محتاجه وابعتلك التفاصيل
 https://levoilestores.com/', 'active' => true],
-            'availability_branch' => ['title' => 'التوفر في الفروع', 'body' => 'كل الموديلات متاحه في كل الفروع يافندم ✨
+            'availability_branch' => ['title' => 'التوفر في الفروع', 'body' => 'كل الموديلات متاحه في كل الفروع يافندم
 - ممكن حضرتك تتواصلي معاهم للتاكيد من وجود المنتج او تشرفينا بنفسك وتشوفي كل الموديلات المتاحه
-لكن مقدرش اضمن لحضرتك اللون او الكميه برجاء التواصل مع الفرع للتأكد 💕
-- بالاضافه ان وارد ان المنتج يكون غير متاح ف الفروع لانه راجع حسب الضغط علي كل فرع 🌸', 'active' => true],
+لكن مقدرش اضمن لحضرتك اللون او الكميه برجاء التواصل مع الفرع للتأكد
+- بالاضافه ان وارد ان المنتج يكون غير متاح ف الفروع لانه راجع حسب الضغط علي كل فرع', 'active' => true],
             'material' => ['title' => 'الخامة والعناية', 'body' => 'المنتج مصنوع من        و طريقة الغسيل و العناية موضحه علي الويب سايت بالفعل
 طريقة الغسيل بتكون يدوي بماء بارد و بمسحوق خفيف زي الجل و بدون فرك او عصر', 'active' => true],
-            'tracking_order' => ['title' => 'متابعة أوردر', 'body' => 'ممكن رقم الاوردر او رقم الموبايل او الميل اللي تم بيه الاوردر عشان اقدر اساعد حضرتك 🌸', 'active' => true],
+            'tracking_order' => ['title' => 'متابعة أوردر', 'body' => 'ممكن رقم الاوردر او رقم الموبايل او الميل اللي تم بيه الاوردر عشان اقدر اساعد حضرتك', 'active' => true],
             'placing_order' => ['title' => 'تأكيد أوردر', 'body' => 'لتاكيد الاوردر برجاء ارسال :
 الاسم بالكامل
 - العنوان تفصيلي "المحافظة - المنطقة"
@@ -135,15 +135,15 @@ https://levoilestores.com/', 'active' => true],
 مع العلم ان غير متاح استبدال او استرجاع في :
 "المنتجات القطنيه والإكسسوارات ومكملات الحجاب والاسدالات portable والبوركيني والكاش مايوه"
 بالاضافة ان في حالة وجود خصم علي القطعه بيكون متاح استبدال فقط غير متاح استرجاعها', 'active' => true],
-            'edit_order' => ['title' => 'تعديل أوردر', 'body' => 'ممكن رقم الاوردر او رقم الموبايل او الميل اللي تم بيه الاوردر عشان اقدر اساعد حضرتك 🌸
+            'edit_order' => ['title' => 'تعديل أوردر', 'body' => 'ممكن رقم الاوردر او رقم الموبايل او الميل اللي تم بيه الاوردر عشان اقدر اساعد حضرتك
 حابه اوضح لحضرتك ان الغاء الاوردر او تعديله بيكون في خلال ساعتين فقط من وقت طلب الأوردر', 'active' => true],
             'delivery_time' => ['title' => 'مدة التوصيل', 'body' => 'الاوردر بيوصل القاهرة / الجيزة / الاسكندريه خلال 3-5 ايام عمل .
-باقي المحافظات خلال 5-7 ايام عمل ✨
+باقي المحافظات خلال 5-7 ايام عمل
 غير محسوب الاجازات الرسميه والاسبوعيه', 'active' => true],
             // Never a number here: TurnRunner adds the live Shopify rate as a fact (ShippingFeeAnswer).
-            'shipping_fee' => ['title' => 'مصاريف الشحن', 'body' => 'مصاريف الشحن بتتحسب حسب المحافظة وبتظهر لحضرتك قبل تأكيد الأوردر على الويب سايت 🌸', 'active' => true],
+            'shipping_fee' => ['title' => 'مصاريف الشحن', 'body' => 'مصاريف الشحن بتتحسب حسب المحافظة وبتظهر لحضرتك قبل تأكيد الأوردر على الويب سايت', 'active' => true],
             'track_shipped' => ['title' => 'متابعة أوردر مشحون', 'body' => 'تم التواصل مع شركه الشحن لمتابعه الاوردر و هيتم التواصل مع حضرتك من خلالهم في اقرب وقت للتسليم', 'active' => true],
-            'cancel_order' => ['title' => 'إلغاء أوردر', 'body' => 'ممكن رقم الاوردر او رقم الموبايل او الميل اللي تم بيه الاوردر عشان اقدر اساعد حضرتك 🌸
+            'cancel_order' => ['title' => 'إلغاء أوردر', 'body' => 'ممكن رقم الاوردر او رقم الموبايل او الميل اللي تم بيه الاوردر عشان اقدر اساعد حضرتك
 حابه اوضح لحضرتك ان فيما بعد الغاء الاوردر بيكون في خلال ساعتين فقط من الطلب لان بيكون في تحمل لمصاريف الشحن', 'active' => true],
             'return_policy' => ['title' => 'سياسة الاستبدال والاسترجاع', 'body' => 'سياسة الاستبدال او الاسترجاع:-
 -غير متاح معاينة الأوردر قبل الاستلام أو تجزئته
@@ -152,13 +152,13 @@ https://levoilestores.com/', 'active' => true],
 اما لو المشكله في المقاس او الموديل مش مناسب حضرتك بتتحملي مصاريف الشحن او ترجعيها لأقرب فرع ليكي بالريسيت
 شرط ان تكون القطعه في حالتها الاصليه الي وصلت بيها
 مع العلم غير متاح استبدال او استرجاع بعض الموديلات مثل
-"المنتجات القطنيه (البونيهات , التربون , الباديهات) والإكسسوارات ومكملات الحجاب والاسدالات ال portable والبوركيني والكاش مايوه" 🌸
+"المنتجات القطنيه (البونيهات , التربون , الباديهات) والإكسسوارات ومكملات الحجاب والاسدالات ال portable والبوركيني والكاش مايوه"
 بالاضافه ان لو القطعه عليها خصم بيكون متاح استبدالها فقط', 'active' => true],
-            'product_defect' => ['title' => 'منتج به عيب', 'body' => 'ممكن رقم الاوردر او رقم الموبايل او الميل اللي تم بيه الاوردر عشان اقدر اساعد حضرتك 🌸
+            'product_defect' => ['title' => 'منتج به عيب', 'body' => 'ممكن رقم الاوردر او رقم الموبايل او الميل اللي تم بيه الاوردر عشان اقدر اساعد حضرتك
 او صورة الفاتورة
 • صورة واضحة للمنتج
 • صورة توضح الديفوه الموجود في المنتج
-• صورة الكود الموجود على التيكت 🌸', 'active' => true],
+• صورة الكود الموجود على التيكت', 'active' => true],
             'exchange_no_defect' => ['title' => 'استبدال/استرجاع بدون عيب', 'body' => 'ممكن رقم الاوردر او رقم الموبايل او الميل اللي تم بيه الاوردر عشان اقدر اساعد حضرتك
 او صورة الفاتورة
 • صورة واضحة للمنتج
@@ -170,27 +170,27 @@ https://levoilestores.com/', 'active' => true],
             'exchange_branch_defect' => ['title' => 'استبدال/استرجاع من الفرع - عيب', 'body' => 'ممكن حضرتك ترجعي للفرع نقسه توضحي لهم المشكله اللي مع حضرتك لان احنا اونلاين فقط ادارة منفصله عن الفروع ولو في اي خطا من ناحيتنا بعد المراجعه تأكدي ان هيتم حله', 'active' => true],
             'refund_request' => ['title' => 'طلب ريفوند', 'body' => 'تم عمل الريفوند لحضرتك بمجرد تحويل المبلغ نبعت لحضرتك سكرين شوت بالتحويل و بيسمع في حسابك في خلال من 7 ل 14 يوم عمل', 'active' => true],
             'refund_followup' => ['title' => 'متابعة ريفوند', 'body' => 'تم عمل ريفوند لحضرتك بعد رجوع القطعه لينا من شركه الشحن بيتم تحويل المبلغ لحضرتك من قبل قسم الحسابات و بنبعت لك سكرين شوت بالتحويل و بتسمع في حسابك خلال من 7 ل 14 يوم عمل', 'active' => true],
-            'refund_closing' => ['title' => 'رسالة ختام الريفوند', 'body' => 'أهلاً 🤍
+            'refund_closing' => ['title' => 'رسالة ختام الريفوند', 'body' => 'أهلاً
 شكرًا لتواصلك معنا بخصوص الريفوند. أحب أطمنك أن جميع الريفوندات تتم وفقًا للإجراءات الرسمية للشركة، وعادةً ما تستغرق من 7 إلى 14 يوم عمل منذ إتمام العملية من قبلنا.
 نحن ملتزمون بهذه الفترة لضمان أن جميع العمليات تتم بشكل آمن ومنظم، ولا يمكن تجاوز هذا الإطار الزمني.
 في حال تجاوز المدة، يمكنك التواصل معنا مرة أخرى لمتابعة حالتك، وسنقوم بالتحقق مع فريق الحسابات لضمان استلامك للمستحقات في أسرع وقت ممكن.
-شاكرين لك صبرك وتفهمك 🌸', 'active' => true],
+شاكرين لك صبرك وتفهمك', 'active' => true],
             'branch_complaint' => ['title' => 'شكوى فرع', 'body' => 'يرجى إرسال: الاسم، رقم للتواصل، مع حضرتك فاتورة ؟ ، تاريخ زيارة الفرع', 'active' => true],
             'delayed_refund_branch' => ['title' => 'تأخير ريفوند من الفرع', 'body' => 'يرجى إرسال: صورة الفاتورة، صورة إيصال الدفع بالفيزا، صورة إيصال الريفوند', 'active' => true],
             'payment_issue' => ['title' => 'مشكلة دفع', 'body' => 'يرجي توضيح طريقة الدفع , رقم الاوردر , و وصف المشكله بالتفصيل', 'active' => true],
             'price_too_high' => ['title' => 'السعر عالي', 'body' => 'السعر مناسب لجودة الخامة يا فندم و التفاصيل اللى بنهتم بيها عشان نضمن ان المنتج يكون بكواليتي عالية و مميز', 'active' => true],
             // Overnight refinement change 4: an out-of-stock answer now points the customer
             // at the available models instead of leaving her with nothing to do.
-            'not_available' => ['title' => 'منتج غير متاح', 'body' => "للاسف حاليا المنتج غير متاح تابعينا دائما و بمجرد ما يتوفر بيكون متاح علي الويب سايت\nتقدري تشوفي الموديلات المتاحة من هنا 👇\nhttps://levoilestores.com/", 'active' => true],
-            'delayed_response' => ['title' => 'تأخير الرد', 'body' => 'انا حابه اوضح لحضرتك ان في ضغط في الرسايل وبيتم الرد من الاقدم للاحدث فبالتالي الافضل يافندم ان يتم ارسال رساله او رسالتين في وقت واحد علي الاقل للرد علي حضرتك بشكل اسرع .. وفي حاله ارسال اكثر من رساله الشات بيطلع فوق والرد بيكون متاخر اكتر يافندم .. ويارب دايما عند حسن ظن حضرتك 🌸', 'active' => true],
+            'not_available' => ['title' => 'منتج غير متاح', 'body' => "للاسف حاليا المنتج غير متاح تابعينا دائما و بمجرد ما يتوفر بيكون متاح علي الويب سايت\nتقدري تشوفي الموديلات المتاحة من هنا\nhttps://levoilestores.com/", 'active' => true],
+            'delayed_response' => ['title' => 'تأخير الرد', 'body' => 'انا حابه اوضح لحضرتك ان في ضغط في الرسايل وبيتم الرد من الاقدم للاحدث فبالتالي الافضل يافندم ان يتم ارسال رساله او رسالتين في وقت واحد علي الاقل للرد علي حضرتك بشكل اسرع .. وفي حاله ارسال اكثر من رساله الشات بيطلع فوق والرد بيكون متاخر اكتر يافندم .. ويارب دايما عند حسن ظن حضرتك', 'active' => true],
             'international_shipping' => ['title' => 'الشحن خارج مصر', 'body' => 'الشحن خارج مصر :
 - الاوردر بيتم عن طريق الويب سايت
 - تكلفه الشحن بيتم تحدديها حسب وزن الشحنة
 - مدة التوصيل من 7 الي 10 ايام
-وده لينك الويب سايت 👇🏻 https://levoilestores.com/
-Thanks for choosing Le Voile 🌸
+وده لينك الويب سايت: https://levoilestores.com/
+Thanks for choosing Le Voile
 —
-International Shipping (Outside Egypt): Orders can be placed through our website. Shipping cost is calculated based on the weight of the package. Delivery time is between 7 to 10 days. Here\'s the website link 👇🏻 https://levoilestores.com/ Thanks for choosing Le Voile 🌸', 'active' => true],
+International Shipping (Outside Egypt): Orders can be placed through our website. Shipping cost is calculated based on the weight of the package. Delivery time is between 7 to 10 days. Here\'s the website link: https://levoilestores.com/ Thanks for choosing Le Voile', 'active' => true],
             'promo_code' => ['title' => 'كود خصم', 'body' => '- للاسف يا فندم غير متاح تفعيل كود خصم من خلالنا
 - للاسف حاليا غير متاح اكواد خصم', 'active' => true],
             'wholesale' => ['title' => 'الجملة', 'body' => 'نظام البيع "جمله"
@@ -200,38 +200,38 @@ International Shipping (Outside Egypt): Orders can be placed through our website
 و الشيلان و الملابس مش اقل من 6. قطع
 وتوتال الفاتوره 5000
 - لابد يكون في منفذ بيع
-ممكن حضرتك تتوصلي مع رقم مسئول الجمله : 01050092780 🌸', 'active' => true],
-            'colors' => ['title' => 'الألوان', 'body' => 'جميع الالوان الموجودة علي الويب سايت حاليا .. في حاله عدم تواجد اللون بيكون خلص والالوان المتاحه هي المتوفرة فقط 🌸', 'active' => true],
-            'inspection' => ['title' => 'المعاينة وقت الاستلام', 'body' => 'للأسف يا فندم، المعاينة مش متاحة وقت الاستلام، بس حضرتك بتستلمي المنتج زي ما هو متصور بالظبط على الموقع. ولو بعد الاستلام فيه أي مشكلة في المنتج، حضرتك بتتواصلي مع خدمة العملاء، وإحنا بنساعد حضرتك في الاستبدال أو حل أي مشكلة إن شاء الله 💖', 'active' => true],
+ممكن حضرتك تتوصلي مع رقم مسئول الجمله : 01050092780', 'active' => true],
+            'colors' => ['title' => 'الألوان', 'body' => 'جميع الالوان الموجودة علي الويب سايت حاليا .. في حاله عدم تواجد اللون بيكون خلص والالوان المتاحه هي المتوفرة فقط', 'active' => true],
+            'inspection' => ['title' => 'المعاينة وقت الاستلام', 'body' => 'للأسف يا فندم، المعاينة مش متاحة وقت الاستلام، بس حضرتك بتستلمي المنتج زي ما هو متصور بالظبط على الموقع. ولو بعد الاستلام فيه أي مشكلة في المنتج، حضرتك بتتواصلي مع خدمة العملاء، وإحنا بنساعد حضرتك في الاستبدال أو حل أي مشكلة إن شاء الله', 'active' => true],
             'owner_question' => ['title' => 'سؤال عن صاحبة البراند', 'body' => 'للاسف معندناش علم تحديدا احنا هنا خدمه العملاء
-دا الاكونت البرايفت ل مدام ساره تقدري تستفسري منها 🌸
+دا الاكونت البرايفت ل مدام ساره تقدري تستفسري منها
 https://instagram.com/sarahesham_1_1_1?igshid=YmMyMTA2M2Y=', 'active' => true],
             'inner_caps_price' => ['title' => 'سعر البونيهات', 'body' => 'البونيهات
 من 60 ج حتي 150 ج
-لتأكيد الأوردر عن طريق ال Website 👇🏼
+لتأكيد الأوردر عن طريق ال Website
 https://levoilestores.com/collections/inner-caps
-Thanks for choosing Le Voile 🌸', 'active' => true],
-            'feedback' => ['title' => 'رأي العميل', 'body' => 'شكرا لاهتمامك و إبداء رأيك ♥️ أحنا بنسمع لكل عميل و هنوصل ملاحظتك', 'active' => true],
+Thanks for choosing Le Voile', 'active' => true],
+            'feedback' => ['title' => 'رأي العميل', 'body' => 'شكرا لاهتمامك و إبداء رأيك، أحنا بنسمع لكل عميل و هنوصل ملاحظتك', 'active' => true],
             'return_policy_en' => ['title' => 'Return & Exchange Policy (EN)', 'body' => 'Orders cannot be opened in the presence of the delivery agent. Returns or exchanges are allowed within 14 days from the order delivery date. In case of an issue with the order, please contact us to create a return order. If the defect is from our side, the item will be replaced without any shipping charges. If the issue is due to the size or model not being suitable, you will be responsible for the shipping costs, or you can return it to the nearest branch with the receipt. The item must be in its original condition as received. Please note that some items cannot be returned or exchanged, including: Cotton products (bonnets, turbans, bodysuits), accessories, hijab supplements, abayas, burkinis, and swimwear. Additionally, if the item was purchased at a discounted price, it is eligible for exchange only.', 'active' => true],
             'discounts_branches' => ['title' => 'الخصومات في الفروع', 'body' => 'الخصومات متاحه اونلاين و في كل فروعنا يا فندم و لكن احنا اونلاين فقط ادارة منفصله عن الفروع لو حضرتك بتسألي علي قطعه محددة ممكن تتواصلي مع الفرع بنفسك تتأكدي من توافرها قبل التوجه للفرع و تم توضيح لحضرتك كل عناوين الفروع و ارقامهم', 'active' => true],
             'b2b_service_offer' => ['title' => 'عروض خدمات (B2B)', 'body' => 'Thank you for reaching out and for your interest. At the moment, we don\'t require this service, but we\'ll keep your details in case we need it in the future. Appreciate it.
 شكرًا لرسالتكم واهتمامكم. في الوقت الحالي إحنا مش محتاجين الخدمة، ولو احتجنا مستقبلاً هنرجع نتواصل معاكم. تقديرنا ليكم.', 'active' => true],
-            'events' => ['title' => 'دعوات الفعاليات', 'body' => 'Thank you for contacting us. We\'re not planning to participate in any events at the moment, but we look forward to potential collaboration in the near future 🙏🏻
-شكرًا لتواصلكم معنا. في الوقت الحالي لا نشارك في أي فعاليات، لكن نتطلع بكل سرور إلى فرص تعاون مستقبلية قريبة 🙏🏻', 'active' => true],
-            'careers' => ['title' => 'الوظائف والموديلز', 'body' => 'Hello beautiful 💕 Thank you for your interest in joining our team. Kindly send your pics (without filter) and IG account to this email careers@levoilestores.com and if your profile is accepted, one of our marketing team will contact you. Good luck dear 🤍', 'active' => true],
+            'events' => ['title' => 'دعوات الفعاليات', 'body' => 'Thank you for contacting us. We\'re not planning to participate in any events at the moment, but we look forward to potential collaboration in the near future
+شكرًا لتواصلكم معنا. في الوقت الحالي لا نشارك في أي فعاليات، لكن نتطلع بكل سرور إلى فرص تعاون مستقبلية قريبة', 'active' => true],
+            'careers' => ['title' => 'الوظائف والموديلز', 'body' => 'Hello beautiful. Thank you for your interest in joining our team. Kindly send your pics (without filter) and IG account to this email careers@levoilestores.com and if your profile is accepted, one of our marketing team will contact you. Good luck dear', 'active' => true],
             // Controller ruling (not in the owner reference): one acknowledgement before a collect intent hands over.
-            'handover_ack' => ['title' => 'تأكيد التحويل للفريق', 'body' => 'تمام يا فندم، هراجع طلب حضرتك مع الفريق حالًا وهرد عليكي 🌸', 'active' => true],
+            'handover_ack' => ['title' => 'تأكيد التحويل للفريق', 'body' => 'تمام يا فندم، هراجع طلب حضرتك مع الفريق حالًا وهرد عليكي', 'active' => true],
             // Overnight refinement change 2: a plain "thank you" answer, no handover.
-            'thanks' => ['title' => 'شكر', 'body' => 'العفو يا فندم تحت أمرك في أي وقت 🌸', 'active' => true],
+            'thanks' => ['title' => 'شكر', 'body' => 'العفو يا فندم تحت أمرك في أي وقت', 'active' => true],
             // Reply flow v2 (2026-09-16): product questions answer with the website link, ordering
             // through us hands over with its own message, and the first reply offers a person.
-            'material_link' => ['title' => 'الخامة والعناية (لينك)', 'body' => "طريقة الغسيل والعناية وتفاصيل الخامة موضحة على الويب سايت في صفحة كل منتج يا فندم 🌸\nhttps://levoilestores.com/", 'active' => true],
-            'order_on_website' => ['title' => 'الطلب من الموقع', 'body' => "تقدري تطلبي مباشرة من الموقع يا فندم 👇\nhttps://levoilestores.com/\nولو حابة نسجل الأوردر مع حضرتك قوليلي وهحولك لموظف 🌸", 'active' => true],
-            'order_via_agent' => ['title' => 'تسجيل الأوردر مع موظف', 'body' => 'تمام يا فندم، استني ثواني هحولك لموظف يسجل الأوردر مع حضرتك 🌸', 'active' => true],
-            'offer_human' => ['title' => 'عرض التحويل لموظف', 'body' => 'لو حابة أحولك لموظف في أي وقت قوليلي 🌸', 'active' => true],
+            'material_link' => ['title' => 'الخامة والعناية (لينك)', 'body' => "طريقة الغسيل والعناية وتفاصيل الخامة موضحة على الويب سايت في صفحة كل منتج يا فندم\nhttps://levoilestores.com/", 'active' => true],
+            'order_on_website' => ['title' => 'الطلب من الموقع', 'body' => "تقدري تطلبي مباشرة من الموقع يا فندم\nhttps://levoilestores.com/\nولو حابة نسجل الأوردر مع حضرتك قوليلي وهحولك لموظف", 'active' => true],
+            'order_via_agent' => ['title' => 'تسجيل الأوردر مع موظف', 'body' => 'تمام يا فندم، استني ثواني هحولك لموظف يسجل الأوردر مع حضرتك', 'active' => true],
+            'offer_human' => ['title' => 'عرض التحويل لموظف', 'body' => 'لو حابة أحولك لموظف في أي وقت قوليلي', 'active' => true],
             // Placeholders the owner has not supplied yet (inactive until filled in).
-            'branches_hours' => ['title' => 'الفروع ومواعيد العمل', 'body' => '❓ محتاج عناوين الفروع ومواعيد العمل', 'active' => false],
-            // Owner-confirmed 2026-09-18 (was a ❓ placeholder).
+            'branches_hours' => ['title' => 'الفروع ومواعيد العمل', 'body' => 'محتاج عناوين الفروع ومواعيد العمل', 'active' => false],
+            // Owner-confirmed 2026-09-18 (was a placeholder).
             'payment_info' => ['title' => 'طرق الدفع', 'body' => self::PAYMENT_TEXT, 'active' => true],
         ];
     }

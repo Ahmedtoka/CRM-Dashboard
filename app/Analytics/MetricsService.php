@@ -1039,7 +1039,7 @@ class MetricsService
             }
 
             if ($r->direction === MessageDirection::In->value) {
-                // A spam/low-value customer message (e.g. "شكرا 👍") never starts a
+                // A spam/low-value customer message (e.g. "شكرا 👍", emoji-input) never starts a
                 // response-time sample (spec §11.1).
                 if (! $r->is_low_value && ! $r->is_spam) {
                     $pending ??= $r->created_at;

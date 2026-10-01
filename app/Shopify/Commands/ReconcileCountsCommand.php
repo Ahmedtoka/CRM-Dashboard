@@ -30,11 +30,11 @@ class ReconcileCountsCommand extends Command
         $result = $reconciler->compare($from, $to, (bool) $this->option('missing'));
 
         $this->table(['Day', 'Shopify', 'CRM', 'Diff'], array_map(
-            fn ($d) => [$d['date'], $d['shopify'], $d['crm'], $d['diff'] === 0 ? '✓' : sprintf('%+d', $d['diff'])],
+            fn ($d) => [$d['date'], $d['shopify'], $d['crm'], $d['diff'] === 0 ? 'OK' : sprintf('%+d', $d['diff'])],
             $result['days'],
         ));
         $this->table(['Status', 'Shopify', 'CRM', 'Diff'], array_map(
-            fn ($s) => ["{$s['group']}:{$s['key']}", $s['shopify'], $s['crm'], $s['diff'] === 0 ? '✓' : sprintf('%+d', $s['diff'])],
+            fn ($s) => ["{$s['group']}:{$s['key']}", $s['shopify'], $s['crm'], $s['diff'] === 0 ? 'OK' : sprintf('%+d', $s['diff'])],
             $result['statuses'],
         ));
 

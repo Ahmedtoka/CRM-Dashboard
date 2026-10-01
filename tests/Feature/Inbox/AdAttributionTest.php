@@ -60,7 +60,7 @@ it('keeps the first ad on the conversation, marks the source, writes the thread 
         ->and($c->ad_title)->toBe('كولكشن الصيف 🌸')
         ->and($c->source)->toBe(ConversationSource::Ad)
         ->and($c->ad_attributed_at)->not->toBeNull()
-        ->and(Message::where('sender_type', SenderType::System->value)->value('body'))->toBe('📣 العميلة جات من إعلان: كولكشن الصيف 🌸');
+        ->and(Message::where('sender_type', SenderType::System->value)->value('body'))->toBe('العميلة جات من إعلان: كولكشن الصيف');
     Queue::assertPushed(EnrichAdAttribution::class, fn ($job) => $job->conversationId === $c->id);
 
     // A second ad later on does not overwrite the first touch.

@@ -75,8 +75,8 @@ export function matchesKeys(event: KeyboardEvent, combo: string): boolean {
 export function formatKeys(combo: string): string {
     return combo
         .split('+')
-        .map((p) => ({ mod: isMac ? '⌘' : 'Ctrl', shift: 'Shift', escape: 'Esc', enter: 'Enter', arrowdown: '↓', arrowup: '↑' })[p] ?? p.toUpperCase())
-        .join(isMac ? '' : '+');
+        .map((p) => ({ mod: isMac ? 'Cmd' : 'Ctrl', shift: 'Shift', escape: 'Esc', enter: 'Enter', arrowdown: '↓', arrowup: '↑' })[p] ?? p.toUpperCase())
+        .join('+');
 }
 
 function onKeydown(event: KeyboardEvent): void {

@@ -92,11 +92,11 @@ it('records a return/exchange case at the end of the whole return flow', functio
 
     rfSay('استبدال');
     expect(FlowState::flow($c->fresh())['step'])->toBe('product_photo')
-        ->and(rfLastBot()->body)->toBe('ممكن صورة واضحة للمنتج؟ 📸');
+        ->and(rfLastBot()->body)->toBe('ممكن صورة واضحة للمنتج؟');
 
     rfPhoto();
     expect(FlowState::flow($c->fresh())['step'])->toBe('defect_photo')
-        ->and(rfLastBot()->body)->toBe('وممكن صورة توضح العيب اللي في المنتج؟ 📸');
+        ->and(rfLastBot()->body)->toBe('وممكن صورة توضح العيب اللي في المنتج؟');
 
     rfPhoto();
     $summary = rfLastBot();
@@ -119,7 +119,7 @@ it('records a return/exchange case at the end of the whole return flow', functio
         ->and($case->data['selected_items'])->toHaveCount(1)
         ->and($case->data['order_verified'])->toBeTrue()
         ->and($case->photo_attachment_ids)->toHaveCount(2)
-        ->and(ConversationNote::where('conversation_id', $c->id)->where('body', 'like', '%📋 حالة #%')->exists())->toBeTrue()
+        ->and(ConversationNote::where('conversation_id', $c->id)->where('body', 'like', 'حالة #%')->exists())->toBeTrue()
         ->and(rfLastBot()->body)->toContain("تم تسجيل طلب حضرتك برقم #{$case->id}")
         ->and($c->handler)->toBe(Handler::Bot)
         ->and(FlowState::flow($c))->toBeNull();

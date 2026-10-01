@@ -190,7 +190,7 @@ return [
     // WhatsApp menus (owner, 2026-09-26): 4–9 bot buttons go out as reply buttons, three per message
     // («زي الماسنجر»), instead of a one-button list. `list` restores the list.
     'whatsapp_menu_style' => env('CRM_WHATSAPP_MENU_STYLE', 'buttons'),
-    'whatsapp_more_options_text' => env('CRM_WHATSAPP_MORE_OPTIONS_TEXT', '👇'),
+    'whatsapp_more_options_text' => env('CRM_WHATSAPP_MORE_OPTIONS_TEXT', 'اختاري من هنا'),
 
     // A queued outbound message waits this long for the ones created before it in the same
     // conversation to go out first (several workers must never reorder greeting and menu).

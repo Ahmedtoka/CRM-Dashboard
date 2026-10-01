@@ -168,11 +168,11 @@ function ofuTap(string $payload, string $title): Message
     return Message::where('sender_type', SenderType::Bot->value)->latest('id')->firstOrFail();
 }
 
-it('adds «🛍️ تسوقي من الموقع» to the products menu answers, with the store link from the settings', function () {
+it('adds «تسوقي من الموقع» to the products menu answers, with the store link from the settings', function () {
     ofuProducts();
     $size = ofuTap('script:size', 'المقاسات');
 
-    expect($size->cards)->toBe(['type' => 'button', 'buttons' => [['type' => 'web_url', 'title' => '🛍️ تسوقي من الموقع', 'url' => 'https://levoilestores.com/']]])
+    expect($size->cards)->toBe(['type' => 'button', 'buttons' => [['type' => 'web_url', 'title' => 'تسوقي من الموقع', 'url' => 'https://levoilestores.com/']]])
         ->and($size->buttons)->toBe([['title' => 'القائمة الرئيسية', 'payload' => 'menu:main_menu']]);
 
     BotSetting::current()->update(['store_url' => 'https://shop.example/']);
@@ -204,7 +204,7 @@ it('sends the store link as a button template on Messenger and Instagram, and as
     Http::preventStrayRequests();
     Http::fake(['graph.facebook.com/*' => Http::response(['message_id' => 'm.1', 'messages' => [['id' => 'wamid.1']]])]);
     config(['crm.drivers.channels' => 'live']);
-    $cards = OutboundCards::button([OutboundCards::webUrl('🛍️ تسوقي من الموقع', 'https://levoilestores.com/')]);
+    $cards = OutboundCards::button([OutboundCards::webUrl('تسوقي من الموقع', 'https://levoilestores.com/')]);
 
     foreach ([[MessengerAdapter::class, Platform::Facebook], [InstagramAdapter::class, Platform::Instagram], [WhatsAppAdapter::class, Platform::WhatsApp]] as [$adapter, $platform]) {
         $account = ChannelAccount::factory()->create(['platform' => $platform, 'driver' => 'live', 'credentials' => ['access_token' => 'tok']]);
@@ -215,9 +215,9 @@ it('sends the store link as a button template on Messenger and Instagram, and as
     Http::assertSent(fn (Request $r) => ($r['message']['attachment']['payload'] ?? null) === [
         'template_type' => 'button',
         'text' => 'المقاسات من S لـ XXL',
-        'buttons' => [['type' => 'web_url', 'url' => 'https://levoilestores.com/', 'title' => '🛍️ تسوقي من الموقع']],
+        'buttons' => [['type' => 'web_url', 'url' => 'https://levoilestores.com/', 'title' => 'تسوقي من الموقع']],
     ] && ($r['message']['quick_replies'][0]['payload'] ?? null) === 'menu:main_menu');
 
     Http::assertSent(fn (Request $r) => ($r['messaging_product'] ?? null) === 'whatsapp'
-        && (data_get($r->data(), 'interactive.body.text') ?? data_get($r->data(), 'text.body')) === "المقاسات من S لـ XXL\n\n🛍️ تسوقي من الموقع:\nhttps://levoilestores.com/");
+        && (data_get($r->data(), 'interactive.body.text') ?? data_get($r->data(), 'text.body')) === "المقاسات من S لـ XXL\n\nتسوقي من الموقع:\nhttps://levoilestores.com/");
 });

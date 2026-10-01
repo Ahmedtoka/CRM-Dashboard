@@ -37,16 +37,16 @@ use Throwable;
  */
 final class ProductLinkStep extends BaseStep
 {
-    public const ASK_TEXT = 'تحبي أعرضلك المنتجات هنا، ولا تبعتيلي لينك المنتج أو اسمه؟ 🌸';
+    public const ASK_TEXT = 'تحبي أعرضلك المنتجات هنا، ولا تبعتيلي لينك المنتج أو اسمه؟';
 
-    /** Above ASK_TEXT when the pieces are known (owner, 2026-09-22): «تمام ✅ هنبدل «…». تحبي تبدلي بإيه؟». */
-    public const ASK_LEAD = "تمام ✅ هنبدل %s\nتحبي تبدلي بإيه؟";
+    /** Above ASK_TEXT when the pieces are known (owner, 2026-09-22): «تمام، هنبدل «…». تحبي تبدلي بإيه؟». */
+    public const ASK_LEAD = "تمام، هنبدل %s\nتحبي تبدلي بإيه؟";
 
     public const BROWSE_BUTTON = 'اعرضيلي المنتجات';
 
     public const SEND_BUTTON = 'هبعت لينك أو اسم';
 
-    public const BROWSE_TEXT = 'اختاري المنتج اللي تحبي تبدلي بيه 👇';
+    public const BROWSE_TEXT = 'اختاري المنتج اللي تحبي تبدلي بيه';
 
     public const PICK_BUTTON = 'أبدّل بده';
 
@@ -56,19 +56,19 @@ final class ProductLinkStep extends BaseStep
 
     public const CONFIRM_NO = 'لأ منتج تاني';
 
-    public const CONFIRMED_TEXT = 'تمام ✅ هنبدل بـ «%s»';
+    public const CONFIRMED_TEXT = 'تمام، هنبدل بـ «%s»';
 
-    public const SEVERAL_TEXT = 'لقيت أكتر من منتج بالاسم ده، اختاري منهم 👇';
+    public const SEVERAL_TEXT = 'لقيت أكتر من منتج بالاسم ده، اختاري منهم';
 
-    public const NOT_FOUND_TEXT = 'مش لاقية منتج بالاسم ده 🙏 ابعتيلي لينك المنتج من الموقع، أو جربي اسم تاني';
+    public const NOT_FOUND_TEXT = 'مش لاقية منتج بالاسم ده، ابعتيلي لينك المنتج من الموقع، أو جربي اسم تاني';
 
-    public const RETRY_TEXT = 'اللينك ده مش واضح، ابعتيه من صفحة المنتج على الموقع 🙏';
+    public const RETRY_TEXT = 'اللينك ده مش واضح، ابعتيه من صفحة المنتج على الموقع';
 
     /** Sent before the store is asked, so she is not left watching nothing (owner, 2026-09-21). */
-    public const CHECKING_TEXT = 'ثانية واحدة 🌸 بشوف المنتج ده على الموقع';
+    public const CHECKING_TEXT = 'ثانية واحدة، بشوف المنتج ده على الموقع';
 
     /** Sent by ProductLookupStillSearching when the store is slow to answer. */
-    public const STILL_SEARCHING_TEXT = 'لسه بدور 🌸 ثواني كمان';
+    public const STILL_SEARCHING_TEXT = 'لسه بدور، ثواني كمان';
 
     public const DEFAULT_FIELD = 'exchange_product';
 
@@ -232,14 +232,14 @@ final class ProductLinkStep extends BaseStep
         $card = OutboundCards::generic([[
             'title' => $title,
             'subtitle' => $subtitle !== '' ? $subtitle : null,
-            'text' => implode("\n", array_filter(['✨ '.$title, $subtitle, $product['url'] ?? null])),
+            'text' => implode("\n", array_filter([$title, $subtitle, $product['url'] ?? null])),
             'image_url' => ProductCards::jpeg($product['image'] ?? null),
             'url' => $product['url'] ?? null,
             'buttons' => [OutboundCards::webUrl(ProductCards::VIEW_BUTTON, (string) $product['url'])],
         ]]);
 
         return StepOutcome::wait([
-            ['text' => implode("\n", array_filter(['✨ '.$title, $subtitle])), 'cards' => $card],
+            ['text' => implode("\n", array_filter([$title, $subtitle])), 'cards' => $card],
             ['text' => self::CONFIRM_TEXT, 'buttons' => $this->confirmButtons($state)],
         ], null, [$this->field($step).'_pending' => ['mode' => 'confirm', 'product' => $product]]);
     }

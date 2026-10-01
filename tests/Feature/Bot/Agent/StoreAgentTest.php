@@ -65,7 +65,7 @@ it('searches the catalog with a tool and shows the products as picture cards und
 
     $bot = agentBotMessages();
     expect($bot)->toHaveCount(2)
-        ->and($bot[0]->body)->toBe('أيوه متوفر يا فندم 🌸 هتلاقي الصور تحت')
+        ->and($bot[0]->body)->toBe('أيوه متوفر يا فندم هتلاقي الصور تحت')
         ->and($bot[1]->cards['cards'][0]['title'])->toBe('فستان ستان')
         ->and($bot[1]->cards['cards'][0]['image_url'])->toContain('format=jpg')
         ->and(BotRun::latest('id')->first()->engine)->toBe('agent')
@@ -84,7 +84,7 @@ it('tells the model the catalog has no such product instead of letting it guess'
 
     agentSay('عندكم عبايات سودا؟');
 
-    expect(agentBotMessages()->pluck('body')->all())->toBe(['للأسف مش لاقية عبايات عندنا يا فندم 🌸']);
+    expect(agentBotMessages()->pluck('body')->all())->toBe(['للأسف مش لاقية عبايات عندنا يا فندم']);
     Http::assertSent(fn ($r) => collect($r['messages'] ?? [])->contains(
         fn ($m) => is_array($m['content']) && str_contains((string) ($m['content'][0]['content'] ?? ''), 'NO PRODUCTS FOUND')
     ));

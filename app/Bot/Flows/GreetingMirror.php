@@ -10,10 +10,10 @@ use App\Models\BotKnowledgeEntry;
  * «ترد التحية بنفس التحية» (2026-09-21): when the customer opens with a greeting the bot
  * mirrors it on its own first line, before the usual `{time_greeting}` line and the menu.
  *
- *   السلام عليكم (أي كتابة)          → وعليكم السلام ورحمة الله 🌸
+ *   السلام عليكم (أي كتابة)          → وعليكم السلام ورحمة الله
  *   صباح الخير / الفل / النور        → صباح النور / صباح الفل والنور / صباح النور
  *   مساء الخير / الفل / النور        → مساء النور / مساء الفل والنور / مساء النور
- *   أهلاً / اهلين / هاي / hi / hello → أهلاً بيكي 🌸
+ *   أهلاً / اهلين / هاي / hi / hello → أهلاً بيكي
  *
  * Nothing matches (or she did not open with a greeting) → no extra line at all.
  *
@@ -21,7 +21,7 @@ use App\Models\BotKnowledgeEntry;
  * `script.greeting_mirror_<key>`, Settings → معرفة البوت): the owner may reword any of
  * them, and a script she turns off simply stops mirroring that greeting. The matcher is
  * normalized with App\Bot\ArabicNormalizer (tashkeel, أ/إ/آ→ا, ة→ه, ى→ي, elongation) plus
- * punctuation/emoji stripping and a repeated-letter squeeze, so «اهلاااا!!! 😍» and
+ * punctuation/emoji stripping and a repeated-letter squeeze, so «اهلاااا!!! 😍» (emoji-input) and
  * «hiii» match too.
  */
 final class GreetingMirror

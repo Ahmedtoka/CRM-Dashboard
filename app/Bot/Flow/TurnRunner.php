@@ -48,7 +48,7 @@ use Throwable;
 class TurnRunner
 {
     /** The one button a direct answer carries (agent rebuild §5). */
-    public const MENU_BUTTON = ['title' => 'القائمة 📋', 'payload' => 'menu:main_menu'];
+    public const MENU_BUTTON = ['title' => 'القائمة', 'payload' => 'menu:main_menu'];
 
     /** A case of the same flow younger than this is offered to a person instead of restarting the flow. */
     public const CASE_EXISTS_HOURS = 24;
@@ -62,9 +62,9 @@ class TurnRunner
     /** A price word bound to a shipping word, on ArabicNormalizer-normalized text. */
     private const SHIPPING_PRICE_PATTERN = '/(?:شحن|توصيل)\S*(?:\s+\S+){0,3}?\s+ب\s?كام|ب\s?كام\s+(?:ال)?(?:شحن|توصيل)|سعر\s+(?:ال)?(?:شحن|توصيل)/u';
 
-    public const CLARIFY_TEXT = 'ممكن توضحيلي حضرتك محتاجة إيه بالظبط عشان أقدر أساعدك؟ 🌸';
+    public const CLARIFY_TEXT = 'ممكن توضحيلي حضرتك محتاجة إيه بالظبط عشان أقدر أساعدك؟';
 
-    public const NOT_FOUND_TEXT = 'مش لاقية أوردر بالبيانات دي 🌸';
+    public const NOT_FOUND_TEXT = 'مش لاقية أوردر بالبيانات دي';
 
     /** Collect intents whose handover summary carries the 2-hour cancel/edit window. */
     public const WINDOW_INTENTS = ['cancel_order', 'edit_order'];
@@ -378,7 +378,7 @@ class TurnRunner
             } elseif ($menuFallback) {
                 // §6.6: the menu below is the answer; never a handover for "I did not understand".
             } elseif (! $flowContext || $handover !== null || $aiError) {
-                // Nothing approved to say (e.g. the script is still a ❓ placeholder, or an ai_error):
+                // Nothing approved to say (e.g. the script is still a placeholder, or an ai_error):
                 // a greeting alone is not an answer, so a person takes it. Inside a flow an unanswerable
                 // question just gets the waiting step again.
                 $handover ??= ['priority' => 'medium', 'queue' => 'agents', 'category' => 'no_script', 'reason' => 'no_script'];
@@ -419,7 +419,7 @@ class TurnRunner
             $reply = null;
         }
 
-        // §6.6: «أقدر أساعدك في 👇» on the same message as the main menu and its buttons.
+        // §6.6: «أقدر أساعدك في حاجة من دول:» on the same message as the main menu and its buttons.
         if ($menuFallback && $handover === null && $delivery['stopped'] === null) {
             app(FlowEngine::class)->start(
                 $c,

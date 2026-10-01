@@ -9,7 +9,7 @@ import { formatDateTime, formatMoney } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { Order } from '@/types/crm';
 import { usePage } from '@inertiajs/vue3';
-import { ExternalLink, LoaderCircle, Package, RotateCcw, SquarePen, Truck, XCircle } from 'lucide-vue-next';
+import { ExternalLink, LoaderCircle, MessageCircle, Package, RotateCcw, SquarePen, Store, TriangleAlert, Truck, XCircle } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = withDefaults(defineProps<{ order: Order; showEdit?: boolean }>(), { showEdit: false });
@@ -114,7 +114,7 @@ async function copyStatus(): Promise<void> {
     <article class="rounded-lg bg-card p-3 text-xs shadow-card">
         <div class="flex items-center gap-2">
             <span class="font-semibold" dir="ltr">{{ number }}</span>
-            <span :title="t(`orders.source.${current.source ?? 'chat'}`)">{{ current.source === 'store' ? '🛍️' : '🗨️' }}</span>
+            <span class="inline-flex text-muted-foreground" :title="t(`orders.source.${current.source ?? 'chat'}`)"><component :is="current.source === 'store' ? Store : MessageCircle" class="size-3.5" aria-hidden="true" /><span class="sr-only">{{ t(`orders.source.${current.source ?? 'chat'}`) }}</span></span>
             <StatusChip :label="t(`order.status.${current.status}`)" :tone="orderStatusTone[current.status] ?? 'neutral'" />
             <span class="ms-auto font-bold tabular-nums">{{ formatMoney(current.total, locale) }}</span>
         </div>
@@ -140,8 +140,9 @@ async function copyStatus(): Promise<void> {
             <StatusChip v-if="current.display?.fulfillment" :label="fulfillmentLabel(current.display.fulfillment)" tone="neutral" />
         </div>
 
-        <p v-if="current.mismatch" class="mt-1.5 rounded-md bg-destructive/10 px-2 py-1 text-foreground">
-            ⚠️ {{ current.mismatch_reason ? t(`order.mismatch.reasons.${current.mismatch_reason}`) : t('order.mismatch.title') }}
+        <p v-if="current.mismatch" class="mt-1.5 flex items-start gap-1.5 rounded-md bg-destructive/10 px-2 py-1 text-foreground">
+            <TriangleAlert class="mt-px size-3.5 shrink-0 text-destructive" aria-hidden="true" />
+            <span>{{ current.mismatch_reason ? t(`order.mismatch.reasons.${current.mismatch_reason}`) : t('order.mismatch.title') }}</span>
         </p>
 
         <p v-if="current.status === 'failed' && current.last_error" class="mt-1.5 rounded-md bg-destructive/10 px-2 py-1 text-foreground" dir="auto">

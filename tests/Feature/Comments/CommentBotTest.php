@@ -1,25 +1,41 @@
 <?php
 
 use App\Analytics\ActivityLogger;
-use App\Bot\Ai\{AiReply, AiResponder, Classification};
+use App\Bot\Ai\AiReply;
+use App\Bot\Ai\AiResponder;
+use App\Bot\Ai\Classification;
 use App\Comments\CommentBot;
-use App\Enums\{ActorType, Handler, Platform, CommentStatus, CommentIntent, UserRole};
+use App\Enums\ActorType;
+use App\Enums\CommentIntent;
+use App\Enums\CommentStatus;
+use App\Enums\Handler;
+use App\Enums\Platform;
+use App\Enums\UserRole;
 use App\Events\UserNotified;
-use App\Models\{ActivityLog, BotRule, BotSetting, ChannelAccount, Comment, Conversation, Post, Customer, CustomerIdentity, User};
+use App\Models\ActivityLog;
+use App\Models\BotRule;
+use App\Models\BotSetting;
+use App\Models\ChannelAccount;
+use App\Models\Comment;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\CustomerIdentity;
+use App\Models\Post;
+use App\Models\User;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
     Event::fake();
-    BotSetting::current()->update(['enabled'=>true,'ai_enabled'=>true]);
-    $acc = ChannelAccount::factory()->create(['platform'=>Platform::Instagram]);
+    BotSetting::current()->update(['enabled' => true, 'ai_enabled' => true]);
+    $acc = ChannelAccount::factory()->create(['platform' => Platform::Instagram]);
     $this->cust = Customer::factory()->create();
-    CustomerIdentity::factory()->for($this->cust)->create(['platform'=>Platform::Instagram]);
-    $this->post = Post::factory()->for($acc,'channelAccount')->create(['platform'=>Platform::Instagram]);
+    CustomerIdentity::factory()->for($this->cust)->create(['platform' => Platform::Instagram]);
+    $this->post = Post::factory()->for($acc, 'channelAccount')->create(['platform' => Platform::Instagram]);
 });
 
 it('replies publicly and privately on rule match', function () {
-    BotRule::factory()->create(['scope'=>'comment','keywords'=>['بكام'],'public_replies'=>['ردينا عليكي في الخاص 💌'],'private_reply'=>'السعر 1250 جنيه','action'=>'reply','platforms'=>[],'is_active'=>true]);
-    $c = Comment::factory()->for($this->post)->for($this->cust)->create(['body'=>'بكام؟']);
+    BotRule::factory()->create(['scope' => 'comment', 'keywords' => ['بكام'], 'public_replies' => ['ردينا عليكي في الخاص 💌'], 'private_reply' => 'السعر 1250 جنيه', 'action' => 'reply', 'platforms' => [], 'is_active' => true]);
+    $c = Comment::factory()->for($this->post)->for($this->cust)->create(['body' => 'بكام؟']);
     app(CommentBot::class)->handle($c);
     $c->refresh();
     expect($c->status)->toBe(CommentStatus::Replied)->and($c->replied_by_type)->toBe(ActorType::Bot)
@@ -27,19 +43,19 @@ it('replies publicly and privately on rule match', function () {
 });
 
 it('hides spam via ai classification', function () {
-    $c = Comment::factory()->for($this->post)->for($this->cust)->create(['body'=>'اربح 5000 دولار من البيت http://x.y']);
+    $c = Comment::factory()->for($this->post)->for($this->cust)->create(['body' => 'اربح 5000 دولار من البيت http://x.y']);
     app(CommentBot::class)->handle($c);
     expect($c->fresh()->status)->toBe(CommentStatus::Hidden)->and($c->fresh()->intent)->toBe(CommentIntent::Spam);
 });
 
 it('never leaks the rule private_reply text publicly when no public_replies are set', function () {
-    BotRule::factory()->create(['scope'=>'comment','keywords'=>['السعر'],'public_replies'=>[],'private_reply'=>'السعر السري 1250 جنيه بس متقولش لحد','action'=>'reply','platforms'=>[],'is_active'=>true]);
-    $c = Comment::factory()->for($this->post)->for($this->cust)->create(['body'=>'السعر كام؟']);
+    BotRule::factory()->create(['scope' => 'comment', 'keywords' => ['السعر'], 'public_replies' => [], 'private_reply' => 'السعر السري 1250 جنيه بس متقولش لحد', 'action' => 'reply', 'platforms' => [], 'is_active' => true]);
+    $c = Comment::factory()->for($this->post)->for($this->cust)->create(['body' => 'السعر كام؟']);
     app(CommentBot::class)->handle($c);
     $c->refresh();
     expect($c->public_reply)->not->toBeNull()
         ->and($c->public_reply)->not->toBe('السعر السري 1250 جنيه بس متقولش لحد')
-        ->and($c->public_reply)->toBe('ردينا عليك في الخاص 💌');
+        ->and($c->public_reply)->toBe('ردينا عليك في الخاص');
 });
 
 it('does not promise a private reply on a platform without the capability', function () {
@@ -52,8 +68,8 @@ it('does not promise a private reply on a platform without the capability', func
     app(CommentBot::class)->handle($c);
     $c->refresh();
 
-    expect($c->public_reply)->not->toBe('ردينا عليك في الخاص 💌')
-        ->and($c->public_reply)->toBe('ابعتلنا على الخاص أو الواتساب للتفاصيل 💬')
+    expect($c->public_reply)->not->toBe('ردينا عليك في الخاص')
+        ->and($c->public_reply)->toBe('ابعتلنا على الخاص أو الواتساب للتفاصيل')
         ->and($c->conversation_id)->toBeNull();
 });
 
@@ -110,8 +126,8 @@ it('logs a comment.flagged activity entry for a complaint', function () {
 });
 
 it('hands the conversation to a human after a reply_and_handover rule', function () {
-    BotRule::factory()->create(['scope'=>'comment','keywords'=>['الغاء'],'public_replies'=>['هنتواصل معاك في الخاص'],'private_reply'=>'تفاصيل الالغاء','action'=>'reply_and_handover','platforms'=>[],'is_active'=>true]);
-    $c = Comment::factory()->for($this->post)->for($this->cust)->create(['body'=>'عايز الغاء الاوردر']);
+    BotRule::factory()->create(['scope' => 'comment', 'keywords' => ['الغاء'], 'public_replies' => ['هنتواصل معاك في الخاص'], 'private_reply' => 'تفاصيل الالغاء', 'action' => 'reply_and_handover', 'platforms' => [], 'is_active' => true]);
+    $c = Comment::factory()->for($this->post)->for($this->cust)->create(['body' => 'عايز الغاء الاوردر']);
 
     app(CommentBot::class)->handle($c);
     $c->refresh();
@@ -119,4 +135,14 @@ it('hands the conversation to a human after a reply_and_handover rule', function
     expect($c->conversation_id)->not->toBeNull();
     $conversation = Conversation::find($c->conversation_id);
     expect($conversation->handler)->toBe(Handler::Human)->and($conversation->needs_human)->toBeTrue();
+});
+
+it('strips emoji from a stored rule reply, public and private (spec 2026-10-01 §6)', function () {
+    BotRule::factory()->create(['scope' => 'comment', 'keywords' => ['بكام'], 'public_replies' => ['ردينا عليكي في الخاص 💌'], 'private_reply' => 'السعر 1250 جنيه 🌸', 'action' => 'reply', 'platforms' => [], 'is_active' => true]);
+    $c = Comment::factory()->for($this->post)->for($this->cust)->create(['body' => 'بكام؟']);
+    app(CommentBot::class)->handle($c);
+    $c->refresh();
+
+    expect($c->public_reply)->toBe('ردينا عليكي في الخاص')
+        ->and($c->conversation->messages()->where('direction', 'out')->latest('id')->value('body'))->toBe('السعر 1250 جنيه');
 });

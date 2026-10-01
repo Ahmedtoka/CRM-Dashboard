@@ -422,7 +422,7 @@ class TryController extends Controller
 
         if (RateLimiter::tooManyAttempts($sessionKey, $perSession)
             || RateLimiter::tooManyAttempts($ipKey, $perIp)) {
-            abort(Response::HTTP_TOO_MANY_REQUESTS, 'Slow down a little 🌸');
+            abort(Response::HTTP_TOO_MANY_REQUESTS, 'Slow down a little');
         }
 
         RateLimiter::hit($sessionKey, 60);

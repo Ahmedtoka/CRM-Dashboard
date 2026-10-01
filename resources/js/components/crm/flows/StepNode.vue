@@ -5,7 +5,7 @@ import { INLINE_EDIT } from '@/lib/flows/inlineEdit';
 import { stepColor, stepIcon } from '@/lib/flows/stepVisuals';
 import type { StepNodeData } from '@/types/flows';
 import { Handle, Position, type NodeProps } from '@vue-flow/core';
-import { CircleAlert, Flag, GitBranch } from 'lucide-vue-next';
+import { CircleAlert, FileText, Flag, GitBranch } from 'lucide-vue-next';
 import { computed, inject, nextTick, onBeforeUnmount, ref } from 'vue';
 
 const props = defineProps<NodeProps<StepNodeData>>();
@@ -27,7 +27,7 @@ const typeLabel = computed(() => {
 /** What the body shows when a step has no message text of its own. */
 const bodyText = computed(() => {
     if (step.value.text) return step.value.text;
-    if (step.value.type === 'script' || step.value.type === 'record_case') return step.value.script ? `📄 ${step.value.script}` : '';
+    if (step.value.type === 'script' || step.value.type === 'record_case') return step.value.script ?? '';
     if (step.value.type === 'status') return t('flows.status_hint');
     if (step.value.type === 'end') return t('flows.end_hint');
     return '';
@@ -222,7 +222,7 @@ onBeforeUnmount(() => {
                 :title="canEditText ? t('flows.inline.dblclick_edit') : undefined"
                 @dblclick.stop="startText"
             >
-                {{ bodyText }}
+                <FileText v-if="!step.text && (step.type === 'script' || step.type === 'record_case')" class="me-1 inline size-3.5 align-[-2px]" aria-hidden="true" />{{ bodyText }}
             </p>
             <p
                 v-else

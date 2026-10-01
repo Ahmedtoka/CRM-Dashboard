@@ -28,7 +28,7 @@ export const MAIN_MENU_CHIP = 'القائمة الرئيسية';
 export const SUMMARY_CHIPS = ['تمام، سجل', 'عايزة أعدل'];
 
 /** What the `order_items` step sends for a sample order (mirrors app/Bot/Flows/Steps/OrderItemsStep.php). */
-export const ORDER_ITEMS_DEFAULT_TEXT = 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها 👇';
+export const ORDER_ITEMS_DEFAULT_TEXT = 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها';
 export const ORDER_ITEMS_SAMPLE_HEADER = 'لقيت أوردر #1047 باسم سارة أحمد — اتسلم يوم 12 سبتمبر';
 export const ORDER_ITEMS_SAMPLE: { title: string; line: string }[] = [
     { title: 'فستان ليلى', line: 'فستان ليلى — أسود / M × 1 — 850 ج.م' },
@@ -40,7 +40,7 @@ export const ORDER_ITEMS_MULTI_CHIP = 'كذا قطعة';
 /** The `contact` step with a known name and mobile (app/Bot/Flows/Steps/ContactStep.php CONFIRM_TEXT). */
 export const CONTACT_CONFIRM_SAMPLE = 'هنتواصل مع حضرتك باسم «سارة» على رقم 0106•••6611 — تمام كده؟';
 export const CONTACT_CHIPS = ['أيوه تمام', 'رقم تاني'];
-export const CONTACT_DEFAULT_TEXT = 'عشان الفريق يقدر يتواصل مع حضرتك 🌸 ابعتيلي اسمك ورقم موبايلك في رسالة واحدة (مثلاً: سارة 01012345678)';
+export const CONTACT_DEFAULT_TEXT = 'عشان الفريق يقدر يتواصل مع حضرتك، ابعتيلي اسمك ورقم موبايلك في رسالة واحدة (مثلاً: سارة 01012345678)';
 
 /** The `item_changes` step for a sample piece (app/Bot/Flows/Steps/ItemChangesStep.php). */
 export const ITEM_CHANGES_SAMPLE = '«فستان ليلى (أسود / M)»\nتحبي تبدليها ولا تشيليها من الأوردر؟';
@@ -52,18 +52,18 @@ export const SAMPLE_BRANCH_CARDS: OutboundCards = {
     cards: [
         {
             title: 'El Marghany',
-            subtitle: '126 El-Marghany St., Next to Shawermer\n📞 01094538159',
+            subtitle: '126 El-Marghany St., Next to Shawermer\n01094538159',
             buttons: [
-                { type: 'web_url', title: '📍 الخريطة', url: 'https://goo.gl/maps/EbSV5rzAqCvvyAD37' },
-                { type: 'phone', title: '📞 اتصل بالفرع', phone: '+201094538159' },
+                { type: 'web_url', title: 'الخريطة', url: 'https://goo.gl/maps/EbSV5rzAqCvvyAD37' },
+                { type: 'phone', title: 'اتصلي بالفرع', phone: '+201094538159' },
             ],
         },
         {
             title: 'El Hegaz',
-            subtitle: '7 Ali Abd El-Razek St.\n📞 01063498056',
+            subtitle: '7 Ali Abd El-Razek St.\n01063498056',
             buttons: [
-                { type: 'web_url', title: '📍 الخريطة', url: 'https://goo.gl/maps/RFo6gESFKDgjSN8x5' },
-                { type: 'phone', title: '📞 اتصل بالفرع', phone: '+201063498056' },
+                { type: 'web_url', title: 'الخريطة', url: 'https://goo.gl/maps/RFo6gESFKDgjSN8x5' },
+                { type: 'phone', title: 'اتصلي بالفرع', phone: '+201063498056' },
             ],
         },
     ],
@@ -79,8 +79,8 @@ const SUMMARY_SAMPLES: [field: string, label: string, sample: string | null][] =
     ['request', 'الطلب', 'استبدال'],
     ['request_kind', 'نوع الطلب', 'استبدال'],
     ['exchange_product', 'المنتج البديل', 'عباية كتان'],
-    ['product_photo', 'صورة المنتج (✅)', null],
-    ['defect_photo', 'صورة العيب (✅)', null],
+    ['product_photo', 'صورة المنتج (تم)', null],
+    ['defect_photo', 'صورة العيب (تم)', null],
     ['complaint_type', 'نوع الشكوى', 'تأخير في التوصيل'],
     ['branch_name', 'الفرع', 'فرع مدينة نصر'],
     ['visit_date', 'تاريخ الزيارة', 'امبارح'],

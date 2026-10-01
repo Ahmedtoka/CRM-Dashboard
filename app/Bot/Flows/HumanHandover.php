@@ -27,7 +27,7 @@ use Illuminate\Support\Str;
  * «كلم موظف» (the owner's flow 7, 2026-09-19). When she asks for a person (the menu
  * option, or in words) the bot first asks what she needs:
  *
- *   «أكيد 🌸 ممكن تقوليلي باختصار محتاجة إيه؟ …» [حوّليني على طول]
+ *   «أكيد، ممكن تقوليلي باختصار محتاجة إيه؟ …» [حوّليني على طول]
  *
  * Her next message (text or a photo) is the topic: it is kept as an internal note
  * «موضوع التحويل: …» and as `conversations.handover_topic` (the inbox shows it as the
@@ -35,9 +35,9 @@ use Illuminate\Support\Str;
  * TOPIC_WAIT_SECONDS hands her over anyway. Every handover then gets one reply that
  * depends on the working hours (bot_settings.working_hours, Africa/Cairo):
  *
- *   in hours      «تمام ✅ هيتم تحويلك لموظف خدمة العملاء خلال دقايق 🌸»
- *   after hours   «تمام ✅ سجلت طلبك، وهيتم تحويلك لموظف خدمة العملاء أول ما نفتح {next_opening} 🌸»
- *   no hours set  «تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸»
+ *   in hours      «تمام، هيتم تحويلك لموظف خدمة العملاء خلال دقايق»
+ *   after hours   «تمام، سجلت طلبك، وهيتم تحويلك لموظف خدمة العملاء أول ما نفتح {next_opening}»
+ *   no hours set  «تمام، هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت»
  *
  * Handovers the bot decides itself (a failed verification, a flow's handover step, the
  * retry offer…) skip the question and only send that reply, and since 2026-09-21 the
@@ -56,7 +56,7 @@ class HumanHandover
 
     public const NOTE_PREFIX = 'موضوع التحويل: ';
 
-    public const PHOTO_TOPIC = '📷 صورة';
+    public const PHOTO_TOPIC = 'صورة';
 
     /** How long the bot waits for the topic before handing over anyway. */
     public const TOPIC_WAIT_SECONDS = 120;

@@ -22,6 +22,7 @@ use App\Models\BotSetting;
 use App\Models\Comment;
 use App\Models\Conversation;
 use App\Models\User;
+use App\Support\Emoji;
 use App\Support\SafeBroadcast;
 use Throwable;
 
@@ -31,13 +32,13 @@ use Throwable;
 class CommentBot
 {
     /** Public text used when a private reply will follow (platform supports it). */
-    private const GENERIC_PUBLIC_REPLY = 'ردينا عليك في الخاص 💌';
+    private const GENERIC_PUBLIC_REPLY = 'ردينا عليك في الخاص';
 
     /**
      * Public text used when the platform has no private-reply capability, so
      * we must not promise (or imply) that one is coming.
      */
-    private const NO_PRIVATE_CAPABILITY_PUBLIC_REPLY = 'ابعتلنا على الخاص أو الواتساب للتفاصيل 💬';
+    private const NO_PRIVATE_CAPABILITY_PUBLIC_REPLY = 'ابعتلنا على الخاص أو الواتساب للتفاصيل';
 
     private const FALLBACK_PRIVATE_REPLY = 'أهلاً! ابعتلنا تحب تعرف إيه عن المنتج';
 
@@ -101,7 +102,8 @@ class CommentBot
             ? $publicReplies[array_rand($publicReplies)]
             : ($capabilities->privateReply ? self::GENERIC_PUBLIC_REPLY : self::NO_PRIVATE_CAPABILITY_PUBLIC_REPLY);
 
-        $this->actions->reply($c, $text, null);
+        // Spec 2026-10-01 §6: a stored rule reply may still carry an emoji; the bot never sends one.
+        $this->actions->reply($c, Emoji::strip($text), null);
 
         $conversation = null;
 
@@ -223,7 +225,7 @@ class CommentBot
         }
 
         try {
-            return $this->actions->privateReply($fresh, $text, null);
+            return $this->actions->privateReply($fresh, Emoji::strip($text), null);
         } catch (PrivateReplyNotAllowedException) {
             // Lost the atomic claim to a concurrent sender: nothing more to do.
             return $fresh->fresh()?->conversation;

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from '@/composables/useI18n';
 import type { QuickReply, QuickReplyCategory } from '@/types/crm';
-import { Search, X } from 'lucide-vue-next';
+import { Paperclip, Search, X } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 const props = defineProps<{ items: QuickReply[]; categories: QuickReplyCategory[]; query: string; activeIndex: number; searchable?: boolean }>();
@@ -231,7 +231,7 @@ defineExpose({ visible });
             <div v-if="active.attachments.length" class="flex flex-wrap gap-1.5">
                 <template v-for="a in active.attachments" :key="a.id">
                     <img v-if="a.thumb_url" :src="a.thumb_url" class="size-10 rounded object-cover" alt="" />
-                    <span v-else class="flex size-10 items-center justify-center rounded bg-muted text-sm" :title="a.original_name ?? ''">📎</span>
+                    <span v-else class="flex size-10 items-center justify-center rounded bg-muted text-sm" :title="a.original_name ?? ''"><Paperclip class="size-4 text-muted-foreground" aria-hidden="true" /><span class="sr-only">{{ a.original_name }}</span></span>
                 </template>
             </div>
         </div>

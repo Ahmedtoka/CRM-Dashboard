@@ -27,7 +27,7 @@ return [
         'contact' => 'Contact',
         'contact_email' => 'Email',
         'contact_page' => 'Message our Facebook Page',
-        'rights' => '© :year :company. All rights reserved.',
+        'rights' => 'Copyright :year :company. All rights reserved.',
         'skip' => 'Skip to content',
         'back_to_top' => 'Back to top',
         'lookup' => [

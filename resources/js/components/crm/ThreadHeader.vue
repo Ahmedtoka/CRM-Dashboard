@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 import type { SharedData } from '@/types';
 import type { Conversation, ConversationAction, ConversationPriority, Tag, UserRef } from '@/types/crm';
 import { usePage } from '@inertiajs/vue3';
-import { Bot, CheckCircle2, ChevronLeft, Eraser, Hand, LoaderCircle, Lock, RotateCcw, ShieldAlert, Star, Tags, UserRound } from 'lucide-vue-next';
+import { Bot, CheckCircle2, ChevronLeft, Eraser, Hand, LoaderCircle, Lock, Megaphone, RotateCcw, ShieldAlert, Star, Tags, UserRound } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = withDefaults(
@@ -146,7 +146,12 @@ defineExpose({
                     <span class="truncate">{{ conversation.handover_topic || conversation.handover_category_label }}</span>
                 </span>
                 <StatusChip v-if="conversation.needs_human" :label="t('thread.needs_human')" tone="negative" />
-                <StatusChip v-else :label="conversation.handler === 'bot' ? `🤖 ${t('thread.handler_bot')}` : t('thread.handler_human')" :tone="conversation.handler === 'bot' ? 'info' : 'neutral'" />
+                <StatusChip
+                    v-else
+                    :label="conversation.handler === 'bot' ? t('thread.handler_bot') : t('thread.handler_human')"
+                    :icon="conversation.handler === 'bot' ? Bot : undefined"
+                    :tone="conversation.handler === 'bot' ? 'info' : 'neutral'"
+                />
                 <StatusChip v-if="conversation.priority === 'spam'" :label="t('thread.priority_spam')" tone="negative" />
                 <StatusChip v-else-if="conversation.priority === 'low'" :label="t('thread.priority_low')" tone="neutral" />
                 <!-- Which ad she came from (2026-09-25): the ad's title, the campaign on hover. -->
@@ -156,7 +161,7 @@ defineExpose({
                     :title="adTooltip"
                     dir="auto"
                 >
-                    📣 {{ conversation.ad.title || conversation.ad.name || (conversation.ad.ref ? t('thread.source_link') : t('thread.source_ad')) }}
+                    <Megaphone class="me-1 inline size-3 align-[-2px]" aria-hidden="true" />{{ conversation.ad.title || conversation.ad.name || (conversation.ad.ref ? t('thread.source_link') : t('thread.source_ad')) }}
                 </span>
                 <span
                     v-else-if="conversation.source === 'comment' || conversation.source === 'ad'"

@@ -85,11 +85,11 @@ function obrCards(): Message
 function obrSampleCards(): array
 {
     return OutboundCards::generic([
-        ['title' => 'El Marghany', 'subtitle' => "126 El-Marghany St.\n📞 01094538159", 'text' => "📍 El Marghany\n126 El-Marghany St.\n📞 01094538159\n🗺️ https://goo.gl/maps/a", 'buttons' => [
-            OutboundCards::webUrl('📍 الخريطة', 'https://goo.gl/maps/a'), OutboundCards::call('📞 اتصل بالفرع', '01094538159'),
+        ['title' => 'El Marghany', 'subtitle' => "126 El-Marghany St.\n01094538159", 'text' => "El Marghany\n126 El-Marghany St.\n01094538159\nhttps://goo.gl/maps/a", 'buttons' => [
+            OutboundCards::webUrl('الخريطة', 'https://goo.gl/maps/a'), OutboundCards::call('اتصلي بالفرع', '01094538159'),
         ]],
-        ['title' => 'El Hegaz', 'subtitle' => "7 Ali Abd El-Razek St.\n📞 01063498056", 'text' => "📍 El Hegaz\n7 Ali Abd El-Razek St.\n📞 01063498056", 'buttons' => [
-            OutboundCards::webUrl('📍 الخريطة', 'https://goo.gl/maps/b'), OutboundCards::call('📞 اتصل بالفرع', '01063498056'),
+        ['title' => 'El Hegaz', 'subtitle' => "7 Ali Abd El-Razek St.\n01063498056", 'text' => "El Hegaz\n7 Ali Abd El-Razek St.\n01063498056", 'buttons' => [
+            OutboundCards::webUrl('الخريطة', 'https://goo.gl/maps/b'), OutboundCards::call('اتصلي بالفرع', '01063498056'),
         ]],
     ]);
 }
@@ -107,13 +107,13 @@ it('asks for the area with one button per area, then sends the area branches as 
     expect($cards->cards['type'])->toBe('generic')
         ->and($cards->cards['cards'])->toHaveCount(2)
         ->and($first['title'])->toBe('El Marghany')
-        ->and($first['subtitle'])->toBe("126 El-Marghany St., Next to Shawermer\n📞 01094538159")
+        ->and($first['subtitle'])->toBe("126 El-Marghany St., Next to Shawermer\n01094538159")
         ->and($first['buttons'])->toBe([
-            ['type' => 'web_url', 'title' => '📍 الخريطة', 'url' => 'https://goo.gl/maps/EbSV5rzAqCvvyAD37'],
-            ['type' => 'phone', 'title' => '📞 اتصل بالفرع', 'phone' => '+201094538159'],
+            ['type' => 'web_url', 'title' => 'الخريطة', 'url' => 'https://goo.gl/maps/EbSV5rzAqCvvyAD37'],
+            ['type' => 'phone', 'title' => 'اتصلي بالفرع', 'phone' => '+201094538159'],
         ])
-        ->and($cards->body)->toStartWith("فروعنا في مصر الجديدة 🌸\n\n📍 El Marghany")
-        ->and($cards->body)->not->toContain('🕘')
+        ->and($cards->body)->toStartWith("فروعنا في مصر الجديدة\n\nEl Marghany")
+        ->and($cards->body)->not->toContain('يوميًا')
         ->and(obrBot()->body)->toBe('تحبي حاجة تانية؟')
         ->and(array_column(obrBot()->buttons, 'title'))->toBe(['فرع في منطقة تانية', 'القائمة الرئيسية']);
 
@@ -128,7 +128,7 @@ it('sends one card for a typed branch name', function () {
 
     expect(obrCards()->cards['cards'])->toHaveCount(1)
         ->and(obrCards()->cards['cards'][0]['title'])->toBe('El Marghany')
-        ->and(obrCards()->body)->toStartWith('📍 El Marghany')
+        ->and(obrCards()->body)->toStartWith('El Marghany')
         ->and(obrBot()->body)->toBe('تحبي حاجة تانية؟');
 });
 
@@ -138,15 +138,15 @@ it('shows the hours line only once the owner filled it in', function () {
     obrTurn('المرغني');
 
     $card = obrCards()->cards['cards'][0];
-    expect($card['subtitle'])->toContain("🕘 يوميًا من 10 الصبح لـ 11 بالليل\n📞 01094538159")
-        ->and($card['text'])->toContain('🕘 يوميًا من 10 الصبح لـ 11 بالليل');
+    expect($card['subtitle'])->toContain("يوميًا من 10 الصبح لـ 11 بالليل\n01094538159")
+        ->and($card['text'])->toContain('يوميًا من 10 الصبح لـ 11 بالليل');
 });
 
 it('keeps the phone in an 80-character subtitle by shortening a long address', function () {
     $b = Branch::factory()->create(['area_key' => 'long', 'area_ar' => 'منطقة', 'name' => 'Long', 'address' => str_repeat('شارع طويل جدا ', 12), 'phone' => '01000000000']);
     $card = app(BranchFinder::class)->cards([$b])['cards'][0];
 
-    expect(mb_strlen($card['subtitle']))->toBeLessThanOrEqual(80)->and($card['subtitle'])->toEndWith('📞 01000000000');
+    expect(mb_strlen($card['subtitle']))->toBeLessThanOrEqual(80)->and($card['subtitle'])->toEndWith('01000000000');
 });
 
 it('sends the first 10 of a big area, says there are more, and takes a typed name', function () {
@@ -218,8 +218,8 @@ it('sends a Messenger generic-template carousel with map and call buttons and th
             && count($payload['elements']) === 2
             && $payload['elements'][0]['title'] === 'El Marghany'
             && $payload['elements'][0]['buttons'] === [
-                ['type' => 'web_url', 'url' => 'https://goo.gl/maps/a', 'title' => '📍 الخريطة'],
-                ['type' => 'phone_number', 'title' => '📞 اتصل بالفرع', 'payload' => '+201094538159'],
+                ['type' => 'web_url', 'url' => 'https://goo.gl/maps/a', 'title' => 'الخريطة'],
+                ['type' => 'phone_number', 'title' => 'اتصلي بالفرع', 'payload' => '+201094538159'],
             ]
             && $r['message']['quick_replies'][0]['payload'] === 'menu:main_menu'
             && ! isset($r['message']['text']);
@@ -235,8 +235,8 @@ it('keeps only the web_url buttons on Instagram (the phone stays in the subtitle
     Http::assertSent(function (Request $r) {
         $element = $r['message']['attachment']['payload']['elements'][0] ?? [];
 
-        return $element['buttons'] === [['type' => 'web_url', 'url' => 'https://goo.gl/maps/a', 'title' => '📍 الخريطة']]
-            && str_contains($element['subtitle'], '📞 01094538159');
+        return $element['buttons'] === [['type' => 'web_url', 'url' => 'https://goo.gl/maps/a', 'title' => 'الخريطة']]
+            && str_contains($element['subtitle'], '01094538159');
     });
 });
 
@@ -257,11 +257,11 @@ it('falls back to the plain text when the platform refuses the template', functi
         : Http::response(['message_id' => 'm.2'])]);
     [$account, $to] = obrLive($platform);
 
-    $result = app($adapter)->sendText($account, $to, "فروعنا 🌸\n\n📍 El Marghany", ['cards' => obrSampleCards()]);
+    $result = app($adapter)->sendText($account, $to, "فروعنا\n\nEl Marghany", ['cards' => obrSampleCards()]);
 
     // The refused template (the Graph client's own retry included), then the text.
     expect($result->success)->toBeTrue()->and($result->externalId)->toBe('m.2');
-    Http::assertSent(fn (Request $r) => ($r['message']['text'] ?? null) === "فروعنا 🌸\n\n📍 El Marghany");
+    Http::assertSent(fn (Request $r) => ($r['message']['text'] ?? null) === "فروعنا\n\nEl Marghany");
 })->with([[MessengerAdapter::class, Platform::Facebook], [InstagramAdapter::class, Platform::Instagram]]);
 
 it('sends one WhatsApp text per branch card', function () {
@@ -272,8 +272,8 @@ it('sends one WhatsApp text per branch card', function () {
 
     expect($result->success)->toBeTrue();
     Http::assertSentCount(2);
-    Http::assertSent(fn (Request $r) => ($r['text']['body'] ?? null) === "📍 El Marghany\n126 El-Marghany St.\n📞 01094538159\n🗺️ https://goo.gl/maps/a");
-    Http::assertSent(fn (Request $r) => ($r['text']['body'] ?? null) === "📍 El Hegaz\n7 Ali Abd El-Razek St.\n📞 01063498056");
+    Http::assertSent(fn (Request $r) => ($r['text']['body'] ?? null) === "El Marghany\n126 El-Marghany St.\n01094538159\nhttps://goo.gl/maps/a");
+    Http::assertSent(fn (Request $r) => ($r['text']['body'] ?? null) === "El Hegaz\n7 Ali Abd El-Razek St.\n01063498056");
 });
 
 it('normalizes a branch phone to +20', function () {

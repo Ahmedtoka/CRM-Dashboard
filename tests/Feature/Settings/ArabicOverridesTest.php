@@ -34,7 +34,8 @@ it('lists the sentences written in code on the replies page, applies the owner\'
     $c = Conversation::factory()->create(['channel_account_id' => $account->id, 'platform' => Platform::Facebook, 'last_customer_message_at' => now()]);
     Message::factory()->create(['conversation_id' => $c->id, 'direction' => 'in', 'sender_type' => 'customer', 'created_at' => now()]);
     $sent = app(OutboundService::class)->sendBot($c, ContactStep::ASK_BOTH_TEXT);
-    expect($sent->body)->toBe('اسم حضرتك ورقم موبايلك لو سمحتي 💐');
+    // Her wording is applied; the send gate still takes the emoji off (spec 2026-10-01 §6).
+    expect($sent->body)->toBe('اسم حضرتك ورقم موبايلك لو سمحتي');
 
     $this->actingAs($supervisor)->deleteJson('/settings/bot-replies/text', ['source' => ContactStep::ASK_BOTH_TEXT])->assertOk();
     expect(app(ArabicOverrides::class)->apply(ContactStep::ASK_BOTH_TEXT))->toBe(ContactStep::ASK_BOTH_TEXT);

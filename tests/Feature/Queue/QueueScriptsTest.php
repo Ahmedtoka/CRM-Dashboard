@@ -89,11 +89,21 @@ it('words the counts of the stored scripts only where they are still the previou
 
     $wording->up();
 
-    expect($body('queue_enqueued'))->toBe(FlowScripts::all()['queue_enqueued']['body'])
-        ->and($body('queue_returning'))->toBe(FlowScripts::all()['queue_returning']['body'])
+    // The defaults of that day (2026-09-29), emoji and all; the 2026-10-01 strip migration takes them on to today's.
+    expect($body('queue_enqueued'))->toBe('تمام ✅ هيتم تحويلك لموظفة خدمة العملاء. رقم تذكرتك #{ticket}، و{ahead}، وهنكون معاكي خلال حوالي {eta_minutes} 🌸')
+        ->and($body('queue_returning'))->toBe('أهلاً بيكي تاني 🌸 بنرجّعك لنفس الموظفة بأولوية، رقم تذكرتك #{ticket} وهنكون معاكي خلال حوالي {eta_minutes}.')
         ->and($body('queue_eta_sentence'))->toBe('وهنكون معاكي خلال حوالي {minutes}')
-        ->and($body('queue_silence_warning'))->toBe(FlowScripts::all()['queue_silence_warning']['body'])
+        ->and($body('queue_silence_warning'))->toBe('لسه معانا يا فندم؟ 🌸 المحادثة هتتقفل تلقائي بعد {minutes} لو مفيش رد، وتقدري تكتبيلنا في أي وقت وهنرجّعك بأولوية.')
         ->and($body('queue_position_update'))->toBe($oldUpdate.' ');
+
+    (require database_path('migrations/2026_10_01_100010_strip_emoji_from_stored_texts.php'))->up();
+    foreach (['queue_enqueued', 'queue_returning', 'queue_silence_warning'] as $key) {
+        expect($body($key))->toBe(FlowScripts::all()[$key]['body']);
+    }
+    BotKnowledgeEntry::where('key', 'script.queue_enqueued')->update(['body' => 'تمام ✅ هيتم تحويلك لموظفة خدمة العملاء. رقم تذكرتك #{ticket}، و{ahead}، وهنكون معاكي خلال حوالي {eta_minutes} 🌸']);
+    BotKnowledgeEntry::where('key', 'script.queue_eta_sentence')->update(['body' => 'وهنكون معاكي خلال حوالي {minutes}']);
+    BotKnowledgeEntry::where('key', 'script.queue_position_update')->update(['body' => $oldUpdate.' ']);
+    BotKnowledgeEntry::where('key', 'script.queue_silence_warning')->update(['body' => 'لسه معانا يا فندم؟ 🌸 المحادثة هتتقفل تلقائي بعد {minutes} لو مفيش رد، وتقدري تكتبيلنا في أي وقت وهنرجّعك بأولوية.']);
 
     BotKnowledgeEntry::where('key', 'script.queue_returning')->update(['body' => str_replace('🌸', '🌹', FlowScripts::all()['queue_returning']['body'])]);
 
@@ -110,9 +120,9 @@ it('reads naturally with the worded counts', function () {
     $texts = app(QueueScripts::class);
 
     expect($texts->text('queue_enqueued', ['ticket' => 12, 'ahead' => 'إنتي أول واحدة في الدور', 'eta_minutes' => 'دقيقتين']))
-        ->toBe('تمام ✅ هيتم تحويلك لموظفة خدمة العملاء. رقم تذكرتك #12، وإنتي أول واحدة في الدور، وهنكون معاكي خلال حوالي دقيقتين 🌸')
+        ->toBe('تمام، هيتم تحويلك لموظفة خدمة العملاء. رقم تذكرتك #12، وإنتي أول واحدة في الدور، وهنكون معاكي خلال حوالي دقيقتين')
         ->and($texts->text('queue_returning', ['ticket' => 7, 'eta_minutes' => '5 دقايق']))
-        ->toBe('أهلاً بيكي تاني 🌸 بنرجّعك لنفس الموظفة بأولوية، رقم تذكرتك #7 وهنكون معاكي خلال حوالي 5 دقايق.')
+        ->toBe('أهلاً بيكي تاني، بنرجّعك لنفس الموظفة بأولوية، رقم تذكرتك #7 وهنكون معاكي خلال حوالي 5 دقايق.')
         ->and($texts->text('queue_eta_sentence', ['minutes' => '15 دقيقة']))->toBe('وهنكون معاكي خلال حوالي 15 دقيقة')
         ->and($texts->text('queue_silence_warning', ['minutes' => 'دقيقة']))->toContain('هتتقفل تلقائي بعد دقيقة لو مفيش رد');
 });

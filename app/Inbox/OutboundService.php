@@ -22,6 +22,7 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\User;
 use App\Queue\WindowLifecycle;
+use App\Support\Emoji;
 use App\Support\SafeBroadcast;
 use DomainException;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -225,6 +226,8 @@ class OutboundService
         // and card passes through, so nothing the bot says can escape the conversation's
         // language. Agent replies (sendHuman) are never touched.
         [$body, $buttons, $cards] = app(OutboundTranslation::class)->apply($c, $body, $buttons, $cards);
+        // Spec 2026-10-01 §6: nothing the bot says carries an emoji — stored texts, AI output, translations.
+        [$body, $buttons, $cards] = [Emoji::strip($body), Emoji::stripDeep($buttons), $cards === null ? null : Emoji::stripDeep($cards)];
 
         $message = DB::transaction(function () use ($c, $body, $buttons, $cards) {
             $message = $c->messages()->create([
@@ -273,6 +276,7 @@ class OutboundService
         }
 
         $this->media->assertSendable($attachment, $c->platform);
+        $caption = $caption === null ? null : Emoji::strip($caption);
 
         $message = DB::transaction(function () use ($c, $attachment, $caption) {
             $message = $c->messages()->create([
@@ -314,6 +318,7 @@ class OutboundService
      */
     public function sendSystem(Conversation $c, string $body): Message
     {
+        $body = Emoji::strip($body);
         $message = $c->messages()->create([
             'platform' => $c->platform,
             'direction' => MessageDirection::Out,
@@ -412,7 +417,7 @@ class OutboundService
                 ->whereIn('sender_type', [SenderType::User->value, SenderType::Bot->value])
                 ->max('id');
 
-            // Spam/low-value customer messages (e.g. "شكرا 👍") never count as the
+            // Spam/low-value customer messages (e.g. "شكرا 👍", emoji-input) never count as the
             // message a human is responding to (spec §11.1).
             $inbound = fn () => $c->messages()->where('direction', MessageDirection::In->value)
                 ->where('is_spam', false)

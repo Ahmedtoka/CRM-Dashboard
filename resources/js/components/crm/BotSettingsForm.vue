@@ -139,7 +139,7 @@ const hint = 'text-2xs text-muted-foreground';
                 <span :class="hint">{{ t('settings.bot.cards.max_turns_hint') }}</span>
             </label>
 
-            <!-- The products menu's «🛍️ تسوقي من الموقع» button (2026-09-19). -->
+            <!-- The products menu's «تسوقي من الموقع» button (2026-09-19). -->
             <label class="grid max-w-md content-start gap-1">
                 <span class="text-sm font-semibold">{{ t('settings.bot.store_url') }}</span>
                 <input v-model="form.store_url" type="url" dir="ltr" maxlength="255" placeholder="https://levoilestores.com/" :class="input" />

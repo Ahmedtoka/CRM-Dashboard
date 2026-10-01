@@ -14,7 +14,7 @@ import { orderStatusTone, paymentState } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type { OrderRow } from '@/types/admin';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { ExternalLink, LoaderCircle, MessagesSquare, Package, RotateCcw, Truck } from 'lucide-vue-next';
+import { ExternalLink, LoaderCircle, MessageCircle, MessagesSquare, Package, RotateCcw, Store, TriangleAlert, Truck } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{ order: OrderRow; canManage: boolean }>();
@@ -120,7 +120,7 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
             </div>
 
             <div class="flex flex-wrap items-center gap-1.5 text-xs">
-                <span :title="t(`orders.source.${order.source ?? 'chat'}`)">{{ order.source === 'store' ? '🛍️' : '🗨️' }}</span>
+                <span class="inline-flex text-muted-foreground" :title="t(`orders.source.${order.source ?? 'chat'}`)"><component :is="order.source === 'store' ? Store : MessageCircle" class="size-3.5" aria-hidden="true" /><span class="sr-only">{{ t(`orders.source.${order.source ?? 'chat'}`) }}</span></span>
                 <StatusChip :label="t(`orders.statuses.${order.status}`)" :tone="orderStatusTone[order.status]" />
                 <StatusChip :label="t(`orders.payment.${paymentState(order).key}`)" :tone="paymentState(order).tone" />
                 <PlatformBadge :platform="order.platform" show-label />
@@ -128,7 +128,8 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
             </div>
 
             <p v-if="order.mismatch" class="flex items-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
-                ⚠️ {{ order.mismatch_reason ? t(`order.mismatch.reasons.${order.mismatch_reason}`) : t('order.mismatch.title') }}
+                <TriangleAlert class="size-3.5 shrink-0" aria-hidden="true" />
+                {{ order.mismatch_reason ? t(`order.mismatch.reasons.${order.mismatch_reason}`) : t('order.mismatch.title') }}
             </p>
 
             <p v-if="order.status === 'failed' && order.last_error" class="rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive" dir="auto">

@@ -126,8 +126,8 @@ class ShipmentService
         }
 
         $body = $status === ShipmentStatus::Delivered
-            ? 'تم توصيل طلبك بنجاح! شكراً لتعاملك معنا 🎉'
-            : 'طلبك مع مندوب التوصيل وهيوصلك قريب 🚚';
+            ? 'تم توصيل طلبك بنجاح! شكراً لتعاملك معنا'
+            : 'طلبك مع مندوب التوصيل وهيوصلك قريب';
 
         try {
             $this->outbound->sendBot($conversation, $body);

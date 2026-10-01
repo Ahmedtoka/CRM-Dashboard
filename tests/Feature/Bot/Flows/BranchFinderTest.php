@@ -12,7 +12,7 @@ it('seeds the 26 website branches and lists every branch of an area', function (
         ->and(app(BranchFinder::class)->match('اسوان'))->toBeNull();
 
     $text = app(BranchFinder::class)->listText('nasr_city');
-    expect(substr_count($text, '📍'))->toBe(5)
+    expect(substr_count($text, "\n\n"))->toBe(5) // one block per branch under the heading
         ->and($text)->toContain('01094170690')->and($text)->toContain('https://goo.gl/maps/uRQpbNA7naTHhCTL8');
 });
 

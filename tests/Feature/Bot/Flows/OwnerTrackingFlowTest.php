@@ -152,7 +152,7 @@ it('asks for the order number or mobile from the main-menu button', function () 
     otfTurn('متابعة أوردر', 'flow:order_tracking');
 
     expect(otfFlow()['step'])->toBe('order')
-        ->and(otfBot()->body)->toBe('ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟ 🌸');
+        ->and(otfBot()->body)->toBe('ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟');
 });
 
 it('shows the status card straight away for her mobile, with the window and the tracking link', function () {
@@ -161,10 +161,10 @@ it('shows the status card straight away for her mobile, with the window and the 
     otfCard();
 
     expect(otfBot()->body)->toBe(implode("\n", [
-        'أهلاً يا سارة 🌸 أوردر #1047 (اتطلب يوم الخميس 17/9 — 3 قطع)',
-        '📦 الحالة: اتشحن ومع شركة الشحن',
-        '🚚 متوقع يوصل: الإثنين 21/9 لحد الأربعاء 23/9',
-        '🔗 تتبع الشحنة: https://track.example/1047',
+        'أهلاً يا سارة، أوردر #1047 (اتطلب يوم الخميس 17/9 — 3 قطع)',
+        'الحالة: اتشحن ومع شركة الشحن',
+        'متوقع يوصل: الإثنين 21/9 لحد الأربعاء 23/9',
+        'تتبع الشحنة: https://track.example/1047',
     ]))
         ->and(otfButtons())->toBe(['تمام شكرًا', 'الأوردر اتأخر', 'عايزة ألغي/أعدل', 'كلم موظف'])
         ->and(otfBodies())->not->toContain(OrderStep::VERIFY_TEXT)
@@ -176,8 +176,8 @@ it('uses the tracking number when there is no link, and 5-7 working days outside
     otfCard();
 
     // Thursday 17/9 + 5 working days (Friday skipped) = Wednesday 23/9 … + 7 = Saturday 26/9.
-    expect(otfBot()->body)->toContain('🚚 متوقع يوصل: الأربعاء 23/9 لحد السبت 26/9')
-        ->and(otfBot()->body)->toContain('🔗 تتبع الشحنة: BOSTA-77');
+    expect(otfBot()->body)->toContain('متوقع يوصل: الأربعاء 23/9 لحد السبت 26/9')
+        ->and(otfBot()->body)->toContain('تتبع الشحنة: BOSTA-77');
 });
 
 it('asks for the last 4 digits for an order number, then shows the card', function () {
@@ -191,9 +191,9 @@ it('asks for the last 4 digits for an order number, then shows the card', functi
     otfTurn('4567');
 
     expect(otfFlow()['step'])->toBe('status')
-        ->and(otfBot()->body)->toStartWith('أهلاً يا سارة 🌸 أوردر #1047 (اتطلب يوم الخميس 17/9 — 3 قطع)')
-        ->and(otfBot()->body)->toContain('📦 الحالة: اتأكد وجاري تجهيزه')
-        ->and(otfBot()->body)->not->toContain('🔗');
+        ->and(otfBot()->body)->toStartWith('أهلاً يا سارة، أوردر #1047 (اتطلب يوم الخميس 17/9 — 3 قطع)')
+        ->and(otfBot()->body)->toContain('الحالة: اتأكد وجاري تجهيزه')
+        ->and(otfBot()->body)->not->toContain('تتبع الشحنة');
 });
 
 it('hands over after 2 wrong digits, revealing nothing about the order', function () {
@@ -206,7 +206,7 @@ it('hands over after 2 wrong digits, revealing nothing about the order', functio
     expect(otfFlow())->toBeNull()
         ->and(Conversation::first()->handler)->toBe(Handler::Human)
         // The refusal, then the handover's working-hours reply (flow 7; no hours set here).
-        ->and(array_slice(otfBodies(), -2))->toBe([OrderStep::VERIFY_FAILED_TEXT, 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸'])
+        ->and(array_slice(otfBodies(), -2))->toBe([OrderStep::VERIFY_FAILED_TEXT, 'تمام، هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت'])
         ->and(implode("\n", otfBodies()))->not->toContain('سارة')->not->toContain('track.example')->not->toContain('الحالة')
         ->and(SupportCase::count())->toBe(0);
 });
@@ -231,7 +231,7 @@ it('lists several open orders on her mobile as buttons and shows the one she tap
     otfTap('order', 'pick:'.$first->id, '#1111 · 10/9');
     expect(otfFlow()['step'])->toBe('status')
         ->and(otfFlow()['data']['order_id'])->toBe($first->id)
-        ->and(otfBot()->body)->toStartWith('أهلاً يا سارة 🌸 أوردر #1111 (اتطلب يوم الخميس 10/9 — 3 قطع)');
+        ->and(otfBot()->body)->toStartWith('أهلاً يا سارة، أوردر #1111 (اتطلب يوم الخميس 10/9 — 3 قطع)');
 });
 
 it('offers at most 13 orders as buttons', function () {
@@ -248,7 +248,7 @@ it('asks once more when nothing is found, then offers a person or the main menu'
     otfStart();
 
     otfTurn('999999');
-    expect(otfBot()->body)->toBe('مش لاقية أوردر بالبيانات دي 🌸 ممكن تتأكدي من الرقم؟');
+    expect(otfBot()->body)->toBe('مش لاقية أوردر بالبيانات دي، ممكن تتأكدي من الرقم؟');
 
     otfTurn('888888');
     expect(otfFlow()['step'])->toBe('not_found')
@@ -274,7 +274,7 @@ it('records nothing for plain tracking, even for an order past its window, and t
 
     otfTap('status', 'thanks', 'تمام شكرًا');
 
-    expect(otfBot()->body)->toBe('العفو 🌸 لو احتجتي أي حاجة أنا موجودة')
+    expect(otfBot()->body)->toBe('العفو، لو احتجتي أي حاجة أنا موجودة')
         ->and(otfFlow())->toBeNull()
         ->and(Conversation::first()->handler)->toBe(Handler::Bot)
         ->and(SupportCase::count())->toBe(0);
@@ -284,8 +284,8 @@ it('says the delivery «was expected» once the window has passed', function () 
     otfOrder(['placed_at' => CarbonImmutable::parse('2026-09-01 10:00', 'Africa/Cairo')]);
     otfCard();
 
-    expect(otfBot()->body)->toContain("\n🚚 كان متوقع يوصل: ")
-        ->not->toContain("\n🚚 متوقع يوصل: ")
+    expect(otfBot()->body)->toContain("\nكان متوقع يوصل: ")
+        ->not->toContain("\nمتوقع يوصل: ")
         ->and(otfFlow()['data']['order_eta_passed'])->toBeTrue();
 });
 
@@ -293,7 +293,7 @@ it('keeps «متوقع يوصل» while the window is still ahead', function () 
     otfOrder();
     otfCard();
 
-    expect(otfBot()->body)->toContain("\n🚚 متوقع يوصل: ")->not->toContain('كان متوقع')
+    expect(otfBot()->body)->toContain("\nمتوقع يوصل: ")->not->toContain('كان متوقع')
         ->and(otfFlow()['data'])->not->toHaveKey('order_eta_passed');
 });
 
@@ -318,7 +318,7 @@ it('records a delivery follow-up when she says it is late and the window has pas
         ->and($case->data['order_status_key'])->toBe('confirmed')
         ->and($case->data['order_status'])->toBe('اتأكد وجاري تجهيزه')
         ->and($case->data)->not->toHaveKey('order_choices')
-        ->and(otfBot()->body)->toBe('سجلت طلب متابعة للأوردر #1047 🌸 الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت')
+        ->and(otfBot()->body)->toBe('سجلت طلب متابعة للأوردر #1047، الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت')
         ->and(otfFlow())->toBeNull()
         ->and(Conversation::first()->handler)->toBe(Handler::Bot);
 });
@@ -328,13 +328,13 @@ it('records a follow-up for a failed delivery attempt even inside the window', f
     Shipment::factory()->for($order)->create(['status' => ShipmentStatus::FailedAttempt]);
     otfCard();
 
-    expect(otfBot()->body)->toContain('📦 الحالة: المندوب حاول يسلمه ومعرفش')
+    expect(otfBot()->body)->toContain('الحالة: المندوب حاول يسلمه ومعرفش')
         ->and(SupportCase::count())->toBe(0);
 
     otfTap('status', 'late', 'الأوردر اتأخر');
 
     expect(SupportCase::sole()->type)->toBe('delivery_followup')
-        ->and(otfBot()->body)->toBe('سجلت طلب متابعة للأوردر #1047 🌸 الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت');
+        ->and(otfBot()->body)->toBe('سجلت طلب متابعة للأوردر #1047، الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت');
 });
 
 it('reassures her when the order is still inside its window, then offers thanks or a person', function () {
@@ -344,7 +344,7 @@ it('reassures her when the order is still inside its window, then offers thanks 
     otfTap('status', 'late', 'الأوردر اتأخر');
 
     expect(otfFlow()['step'])->toBe('late_ok')
-        ->and(otfBot()->body)->toBe('الأوردر لسه في معاده 🌸 متوقع يوصل من الإثنين 21/9 لحد الأربعاء 23/9، ولو اتأخر عن كده ابعتيلي وهتابعه فورًا')
+        ->and(otfBot()->body)->toBe('الأوردر لسه في معاده، متوقع يوصل من الإثنين 21/9 لحد الأربعاء 23/9، ولو اتأخر عن كده ابعتيلي وهتابعه فورًا')
         ->and(otfButtons())->toBe(['تمام شكرًا', 'كلم موظف', 'القائمة الرئيسية'])
         ->and(SupportCase::count())->toBe(0);
 
@@ -379,17 +379,17 @@ it('opens cancel/edit with the verified order carried, without asking the number
         ->and($flow['data']['order_verified'])->toBeTrue()
         ->and($flow['data'])->not->toHaveKey('order_eta')
         ->and($flow['data']['order_editable'])->toBe('yes')
-        ->and(otfBot()->body)->toBe('أهلاً يا سارة 🌸 أوردر #1047 — تحبي تلغيه ولا تعدلي فيه؟')
+        ->and(otfBot()->body)->toBe('أهلاً يا سارة، أوردر #1047 — تحبي تلغيه ولا تعدلي فيه؟')
         ->and(count(array_filter(otfBodies(), fn ($b) => $b === TrackingFlowUpgrade::ASK_TEXT)))->toBe($asked);
 
     otfTap('request', 'cancel', 'إلغاء', 'cancel_edit');
-    expect(otfBot()->body)->toBe('ممكن تكتبيلي سبب الإلغاء؟ 🙏');
+    expect(otfBot()->body)->toBe('ممكن تكتبيلي سبب الإلغاء؟');
     otfTurn('طلبت مقاس غلط');
 
     $case = SupportCase::sole();
     expect($case->type)->toBe('cancel_edit')->and($case->order_id)->toBe($order->id)
         ->and($case->data['cancel_reason'])->toBe('طلبت مقاس غلط')
-        ->and(otfBot()->body)->toBe('تمام ✅ سجلت طلب إلغاء أوردر #1047، والفريق هيأكد معاكي الإلغاء في أقرب وقت 🌸');
+        ->and(otfBot()->body)->toBe('تمام، سجلت طلب إلغاء أوردر #1047، والفريق هيأكد معاكي الإلغاء في أقرب وقت');
 });
 
 it('shows a delivered order without a window and opens return/exchange with the order carried', function () {
@@ -397,7 +397,7 @@ it('shows a delivered order without a window and opens return/exchange with the 
     Shipment::factory()->for($order)->create(['status' => ShipmentStatus::Delivered]);
     otfCard();
 
-    expect(otfBot()->body)->toBe("أهلاً يا سارة 🌸 أوردر #1047 (اتطلب يوم الخميس 17/9 — 3 قطع)\n📦 الحالة: اتسلم")
+    expect(otfBot()->body)->toBe("أهلاً يا سارة، أوردر #1047 (اتطلب يوم الخميس 17/9 — 3 قطع)\nالحالة: اتسلم")
         ->and(otfButtons())->toBe(['تمام شكرًا', 'عايزة أرجع أو أبدل', 'كلم موظف']);
 
     // The open-order buttons are not answers for a delivered one.
@@ -410,7 +410,7 @@ it('shows a delivered order without a window and opens return/exchange with the 
     expect($flow['key'])->toBe('return_exchange')
         ->and($flow['step'])->toBe('kind')
         ->and($flow['data']['order_id'])->toBe($order->id)
-        ->and(otfBot()->body)->toBe('أهلاً يا سارة 🌸 لقيت أوردر #1047 — تحبي ترجعي ولا تبدلي؟')
+        ->and(otfBot()->body)->toBe('أهلاً يا سارة، لقيت أوردر #1047 — تحبي ترجعي ولا تبدلي؟')
         ->and(otfBodies())->not->toContain(OrderStep::VERIFY_TEXT)
         ->and(implode("\n", otfBodies()))->toContain('14 يوم');
 
@@ -422,8 +422,8 @@ it('shows a cancelled order with the finished buttons', function () {
     otfOrder(['cancelled_at' => now()->subDay()]);
     otfCard();
 
-    expect(otfBot()->body)->toContain('📦 الحالة: اتلغى')
-        ->and(otfBot()->body)->not->toContain('🚚')
+    expect(otfBot()->body)->toContain('الحالة: اتلغى')
+        ->and(otfBot()->body)->not->toContain('متوقع يوصل')
         ->and(otfButtons())->toBe(['تمام شكرًا', 'عايزة أرجع أو أبدل', 'كلم موظف']);
 });
 
@@ -458,7 +458,7 @@ it('counts the delivery window in working days without Fridays, by the shipping 
 it('drops the card lines whose values are unknown', function () {
     $text = app(FlowPrompter::class)->renderText(StatusStep::CARD_TEXT, ['order_number' => '#9', 'order_date' => 'السبت 19/9', 'order_status' => 'اتلغى']);
 
-    expect($text)->toBe("أهلاً 🌸 أوردر #9 (اتطلب يوم السبت 19/9)\n📦 الحالة: اتلغى");
+    expect($text)->toBe("أهلاً، أوردر #9 (اتطلب يوم السبت 19/9)\nالحالة: اتلغى");
 });
 
 // ---- definition, designer and publishing --------------------------------------------------------
@@ -571,20 +571,20 @@ it('walks the tracking flow in the designer sandbox and saves nothing', function
 
     $card = otfSandbox($start['state'], ['text' => '01001234567']);
     expect($card['current']['step_id'])->toBe('status')
-        ->and($texts($card))->toStartWith('أهلاً يا سارة 🌸 أوردر #1047 (اتطلب يوم الثلاثاء 1/9 — 3 قطع)')
+        ->and($texts($card))->toStartWith('أهلاً يا سارة، أوردر #1047 (اتطلب يوم الثلاثاء 1/9 — 3 قطع)')
         ->and(array_column($card['messages'][0]['buttons'], 'title'))->toBe(['تمام شكرًا', 'الأوردر اتأخر', 'عايزة ألغي/أعدل', 'كلم موظف'])
         ->and($card['events'])->toBe([]);
 
     $late = otfSandbox($card['state'], ['payload' => 'step:order_tracking:status:late']);
     $case = collect($late['events'])->firstWhere('type', 'case');
     expect($case['label'])->toBe('هيتسجل حالة: '.SupportCase::TYPE_LABELS['delivery_followup'])
-        ->and($texts($late))->toBe('سجلت طلب متابعة للأوردر #1047 🌸 الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت')
+        ->and($texts($late))->toBe('سجلت طلب متابعة للأوردر #1047، الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت')
         ->and($late['current'])->toBeNull();
 
     $edit = otfSandbox($card['state'], ['payload' => 'step:order_tracking:status:cancel_edit']);
     expect($edit['current'])->toBe(['flow_key' => 'cancel_edit', 'step_id' => 'request'])
         ->and(collect($edit['events'])->firstWhere('type', 'flow_start'))->not->toBeNull()
-        ->and($texts($edit))->toBe('أهلاً يا سارة 🌸 أوردر #1047 — تحبي تلغيه ولا تعدلي فيه؟');
+        ->and($texts($edit))->toBe('أهلاً يا سارة، أوردر #1047 — تحبي تلغيه ولا تعدلي فيه؟');
 
     expect(SupportCase::count())->toBe(0)->and(Conversation::count())->toBe(0);
 });

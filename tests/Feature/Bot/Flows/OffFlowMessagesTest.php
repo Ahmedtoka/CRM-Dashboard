@@ -28,7 +28,7 @@ use Illuminate\Support\Facades\Http;
  * Design 2026-09-21 §6: everything she writes in the middle of a flow that is not an
  * answer to the waiting step, in Arabic and in English. One test per case:
  *
- *   1 a question we can answer → the answer, then «نرجع لطلب المرتجع 🌸» and the step
+ *   1 a question we can answer → the answer, then «نرجع لطلب المرتجع» and the step
  *     again; at most two detours, then a person (covered in ConversationRouterTest for
  *     the answering half, here for the return and the cap);
  *   2 she asks for another flow → «تحبي نسيب … ونتابع …؟» before anything is dropped;
@@ -235,7 +235,7 @@ it('brings her back to the flow with its own name and no repeated question', fun
     app(FlowEngine::class)->returnToFlow(Conversation::firstOrFail());
 
     $last = offLast();
-    expect($last->body)->toStartWith('نرجع لـ «الشكوى» 🌸')
+    expect($last->body)->toStartWith('نرجع لـ «الشكوى»')
         ->and($before)->not->toContain($last->body)
         ->and(collect($last->buttons)->pluck('payload')->all())->toContain('step:complaint:type:branch');
 });

@@ -6,7 +6,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useInitials } from '@/composables/useInitials';
 import { formatClock } from '@/lib/format';
 import type { Attachment, Message, Note, UserRef } from '@/types/crm';
-import { AlertCircle, Check, CheckCheck, Clock3, RotateCw } from 'lucide-vue-next';
+import { AlertCircle, Bot, Check, CheckCheck, CircleDot, Clock3, RotateCw, StickyNote } from 'lucide-vue-next';
 import { computed, type Component } from 'vue';
 
 const props = withDefaults(
@@ -141,7 +141,8 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
 
     <div v-else-if="kind === 'note'" class="mx-auto w-full max-w-2xl rounded-lg border-s-4 border-[var(--note-border)] bg-[var(--note-bg)] px-3 py-2 text-sm text-foreground">
         <header class="mb-1 flex items-center gap-1.5 text-2xs font-medium opacity-80">
-            <span>📝 {{ t('thread.note') }}<template v-if="note?.user"> · {{ note.user.name }}</template> · {{ stamp }}</span>
+            <StickyNote class="size-3.5 shrink-0" aria-hidden="true" />
+            <span>{{ t('thread.note') }}<template v-if="note?.user"> · {{ note.user.name }}</template> · {{ stamp }}</span>
         </header>
         <p class="whitespace-pre-wrap break-words leading-relaxed" dir="auto">
             <template v-for="(part, index) in bodyParts" :key="index">
@@ -172,12 +173,12 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
                 >
                     {{ message?.user?.name }}
                 </span>
-                <span v-else>🤖 {{ t('thread.bot') }}</span>
+                <span v-else class="inline-flex items-center gap-1"><Bot class="size-3.5 shrink-0" aria-hidden="true" />{{ t('thread.bot') }}</span>
                 <span v-if="message?.is_template" class="rounded bg-black/10 px-1 opacity-90 dark:bg-white/10">{{ t('thread.template') }}</span>
             </header>
 
             <p v-if="body" class="whitespace-pre-wrap break-words leading-relaxed" dir="auto">
-                <span v-if="kind === 'customer' && message?.payload" aria-hidden="true">🔘 </span>{{ body }}
+                <template v-if="kind === 'customer' && message?.payload"><CircleDot class="me-1 inline size-3.5 align-[-2px]" aria-hidden="true" /><span class="sr-only">{{ t('thread.tapped_button') }}: </span></template>{{ body }}
             </p>
 
             <!-- The quick replies the customer sees. Solid light chips so they stay readable

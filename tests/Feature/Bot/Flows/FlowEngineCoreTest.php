@@ -124,7 +124,7 @@ it('drives a complaint by taps and text through name, phone, description and sum
     expect(lastBot()->body)->toBe('ممكن اسم حضرتك؟');
 
     flowTurn('منى احمد');
-    expect(lastBot()->body)->toBe('ورقم موبايل نتواصل مع حضرتك عليه؟ 📞');
+    expect(lastBot()->body)->toBe('ورقم موبايل نتواصل مع حضرتك عليه؟');
 
     flowTurn('01012345678');
     expect(lastBot()->body)->toBe('احكيلي حصل إيه بالتفصيل');
@@ -167,7 +167,7 @@ it('offers a human after two unknown answers and hands over on yes', function ()
     // Design 2026-09-21 §3: the first miss is ONE message — an apology carrying the same
     // options, never the question again word for word.
     flowTurn('ايه ده');
-    expect(lastBot()->body)->toBe('معلش مش واضحة ليا 🙏 اختاري من دول:')
+    expect(lastBot()->body)->toBe('معلش مش واضحة ليا، اختاري من دول:')
         ->and(collect(lastBot()->buttons)->pluck('payload')->all())->toContain('step:complaint:type:delivery');
 
     flowTurn('مش فاهمة');
@@ -193,7 +193,7 @@ it('re-asks the step when she declines the human offer', function () {
     expect($c->handler)->toBe(Handler::Bot)
         ->and($c->bot_state['flow']['retries'])->toBe(0)
         ->and($c->bot_state['flow_confirm'] ?? null)->toBeNull()
-        ->and(lastBot()->body)->toBe('آسفين جدًا لده 🙏 الشكوى بخصوص إيه؟');
+        ->and(lastBot()->body)->toBe('آسفين جدًا لده، الشكوى بخصوص إيه؟');
 });
 
 it('exits the flow to the main menu on القائمة', function () {
@@ -228,7 +228,7 @@ it('returns a question without advancing the step', function () {
         ->and(Message::where('sender_type', SenderType::Bot->value)->count())->toBe($before);
 
     app(FlowEngine::class)->repromptCurrent(Conversation::first());
-    expect(lastBot()->body)->toBe('آسفين جدًا لده 🙏 الشكوى بخصوص إيه؟')->and(lastBot()->buttons)->toHaveCount(6);
+    expect(lastBot()->body)->toBe('آسفين جدًا لده، الشكوى بخصوص إيه؟')->and(lastBot()->buttons)->toHaveCount(6);
 });
 
 it('menu steps accept a typed synonym and an unknown flow is not handled', function () {
@@ -292,7 +292,7 @@ it('re-asks the waiting step on a stale button tap without saving or counting a 
         ->and($state['data'])->toBe($before['data'])
         ->and($state['data'])->not->toHaveKey('description')
         ->and($state['retries'])->toBe(0)
-        ->and(lastBot()->body)->toBe('إحنا خلصنا الخطوة دي فعلًا 🌸
+        ->and(lastBot()->body)->toBe('إحنا خلصنا الخطوة دي فعلًا
 احكيلي حصل إيه بالتفصيل');
 
     flowTurn('أيوه', 'yes');

@@ -349,7 +349,7 @@ it('loops tap → "another one?" → tap → "that is all" and moves on with bot
 
     oarTap("item:{$a->id}", 'فستان ليلى');
     expect(oarFlow()['step'])->toBe('order_items')
-        ->and(oarBot()->body)->toBe("تمام ✅ ضفت: فستان ليلى × 1\n".OrderItemsStep::MORE_QUESTION)
+        ->and(oarBot()->body)->toBe("تمام، ضفت: فستان ليلى × 1\n".OrderItemsStep::MORE_QUESTION)
         ->and(array_column(oarBot()->buttons, 'title'))->toBe(['أيوه', 'أرجع الباقي كله', 'لأ كده تمام']);
 
     // 2026-09-22: the second list shows only the open pieces, with their original numbers.
@@ -379,7 +379,7 @@ it('says so when she taps an item she already picked', function () {
     oarTap('more');
     oarTap("item:{$a->id}");
 
-    expect(oarBotBodies())->toContain('«فستان ليلى» موجودة في اختياراتك خلاص 🌸')
+    expect(oarBotBodies())->toContain('«فستان ليلى» موجودة في اختياراتك خلاص')
         ->and(oarFlow()['data']['selected_items'])->toHaveCount(1);
 });
 
@@ -410,7 +410,7 @@ it('picks every item with "الكل" and moves on without asking for more', func
 
     expect(oarFlow()['step'])->toBe('reason')
         ->and(oarFlow()['data']['selected_items'])->toHaveCount(2)
-        ->and(oarBotBodies())->toContain('تمام ✅ ضفت: فستان ليلى × 1، عباية كتان × 1');
+        ->and(oarBotBodies())->toContain('تمام، ضفت: فستان ليلى × 1، عباية كتان × 1');
 });
 
 it('reads "الاتنين" as both items when there are two', function () {
@@ -445,7 +445,7 @@ it('asks how many for a line with quantity above 1', function () {
 
     oarTurn('اتنين');
     expect(oarFlow()['data']['selected_items'][0]['qty'])->toBe(2)
-        ->and(oarBot()->body)->toBe("تمام ✅ ضفت: طرحة شيفون × 2\n".OrderItemsStep::MORE_QUESTION);
+        ->and(oarBot()->body)->toBe("تمام، ضفت: طرحة شيفون × 2\n".OrderItemsStep::MORE_QUESTION);
 });
 
 it('asks the quantity inside a typed multi-pick, then goes on with the rest', function () {
@@ -474,7 +474,7 @@ it('refuses a non-returnable item with the reason and offers another or finish',
     oarTap("item:{$order->items[0]->id}");
 
     $bodies = oarBotBodies();
-    expect($bodies[count($bodies) - 2])->toBe('«طرحة ساتان» من الإكسسوارات ومش بتترجع ولا بتتبدل 🙏')
+    expect($bodies[count($bodies) - 2])->toBe('«طرحة ساتان» من الإكسسوارات ومش بتترجع ولا بتتبدل')
         ->and(oarBot()->body)->toBe(OrderItemsStep::OTHER_QUESTION)
         ->and(array_column(oarBot()->buttons, 'title'))->toBe(['قطعة تانية', 'لأ كده تمام'])
         ->and(oarFlow()['data']['selected_items'])->toBe([]);
@@ -491,7 +491,7 @@ it('uses the owner keyword list from the bot settings', function () {
 
     oarTurn('1 و 2');
 
-    expect(oarBotBodies())->toContain('«جيبة قطيفة» من الأصناف اللي مش بتترجع ولا بتتبدل 🙏')
+    expect(oarBotBodies())->toContain('«جيبة قطيفة» من الأصناف اللي مش بتترجع ولا بتتبدل')
         ->and(array_column(oarFlow()['data']['selected_items'], 'title'))->toBe(['بونيه قطن']);
 });
 
@@ -501,7 +501,7 @@ it('makes a discounted item exchange only and removes the refund option', functi
 
     oarTap("item:{$order->items[0]->id}");
 
-    expect(oarBotBodies())->toContain('«فستان ليلى» عليها خصم، فمتاحة للاستبدال بس مش استرجاع الفلوس 🌸')
+    expect(oarBotBodies())->toContain('«فستان ليلى» عليها خصم، فمتاحة للاستبدال بس مش استرجاع الفلوس')
         ->and(oarFlow()['step'])->toBe('reason')
         ->and(oarFlow()['data']['selected_items'][0]['exchange_only'])->toBeTrue();
 
@@ -543,7 +543,7 @@ it('does not add an item past 14 days from delivery and offers a person', functi
 
     oarTap("item:{$order->items[0]->id}");
 
-    expect(oarBot()->body)->toBe("«فستان ليلى (أسود / M)» عدّى على استلامها أكتر من 14 يوم، والمرتجع والاستبدال عندنا خلال 14 يوم من الاستلام بس 🙏\nتحبي أحوّلك لحد من الفريق؟")
+    expect(oarBot()->body)->toBe("«فستان ليلى (أسود / M)» عدّى على استلامها أكتر من 14 يوم، والمرتجع والاستبدال عندنا خلال 14 يوم من الاستلام بس\nتحبي أحوّلك لحد من الفريق؟")
         ->and(oarBot()->buttons)->toBe([
             ['title' => 'كلم موظف', 'payload' => 'handover'],
             ['title' => 'لأ كده تمام', 'payload' => 'step:return_exchange:order_items:done'],
@@ -616,7 +616,7 @@ it('runs the whole return flow end to end and records the items on the case', fu
     oarTurn('1 و 2 و 3');                     // 1 → exchange only, 2 → how many?, 3 → refused
     oarTap('qty:1', '1');
     // Nothing else can be picked (the bonnet is refused), so the flow moves on by itself.
-    expect(oarBotBodies())->toContain('«بونيه قطن» من الأصناف اللي مش بتترجع ولا بتتبدل 🙏')
+    expect(oarBotBodies())->toContain('«بونيه قطن» من الأصناف اللي مش بتترجع ولا بتتبدل')
         ->and(oarFlow()['step'])->toBe('reason');
     oarTap('defective', 'بايظ / فيه عيب', 'reason');
     oarTap('exchange', 'استبدال', 'request');
@@ -643,7 +643,7 @@ it('runs the whole return flow end to end and records the items on the case', fu
     $items = collect(CaseSummary::sections($case))->firstWhere('key', 'items');
     expect($items['title'])->toBe('القطع المطلوبة')
         ->and($items['lines'])->toBe(['فستان ليلى — أسود / M × ١ — ٨٥٠ ج.م (استبدال بس)', 'طرحة شيفون × ١ — ١٥٠ ج.م'])
-        ->and($case->summary)->toContain('🛍️ القطع المطلوبة');
+        ->and($case->summary)->toContain('القطع المطلوبة');
 
     $this->actingAs($sup)->getJson("/cases/{$case->id}")
         ->assertOk()

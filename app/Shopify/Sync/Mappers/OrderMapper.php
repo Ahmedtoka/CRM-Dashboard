@@ -480,7 +480,7 @@ final class OrderMapper
             $name = $order->shopify_order_name ?? ('#'.$order->order_number);
             $total = $this->formatAmount((float) $order->total);
 
-            rescue(fn () => $this->outbound->sendSystem($conversation, "🛍️ طلب جديد من الموقع {$name} — {$total} ج.م"), null, report: true);
+            rescue(fn () => $this->outbound->sendSystem($conversation, "طلب جديد من الموقع {$name} — {$total} ج.م"), null, report: true);
         });
     }
 

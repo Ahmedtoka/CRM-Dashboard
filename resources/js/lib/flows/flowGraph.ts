@@ -45,10 +45,10 @@ export interface TerminalLabels {
 }
 
 export const DEFAULT_TERMINAL_LABELS: TerminalLabels = {
-    flow: (key) => `↗ فلو: ${key}`,
-    menu: (key) => `☰ قائمة: ${key}`,
-    script: (key) => `📄 سكريبت: ${key}`,
-    handover: '👤 موظف',
+    flow: (key) => `فلو: ${key}`,
+    menu: (key) => `قائمة: ${key}`,
+    script: (key) => `سكريبت: ${key}`,
+    handover: 'موظف',
     end: 'النهاية',
     branch: (condition) => `لو ${condition}`,
 };
@@ -374,8 +374,8 @@ export const DEFAULT_STEP_TEXT: Record<string, string> = {
     phone: 'ممكن رقم موبايلك؟',
     photo: 'ممكن تبعتيلنا صورة؟',
     order: 'ممكن رقم الأوردر؟',
-    order_items: 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها 👇',
-    product_link: 'ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع 🔗',
+    order_items: 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها',
+    product_link: 'ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع',
     branch: 'أنهي فرع؟',
     branches_list: 'دي فروعنا:',
     summary: 'راجعي بياناتك:',
@@ -384,9 +384,9 @@ export const DEFAULT_STEP_TEXT: Record<string, string> = {
     // Empty: a script step sends its script unless the owner writes her own text (2026-09-19).
     script: '',
     // app/Bot/Flows/Steps/ContactStep.php ASK_BOTH_TEXT (the one-message question)
-    contact: 'عشان الفريق يقدر يتواصل مع حضرتك 🌸 ابعتيلي اسمك ورقم موبايلك في رسالة واحدة (مثلاً: سارة 01012345678)',
+    contact: 'عشان الفريق يقدر يتواصل مع حضرتك، ابعتيلي اسمك ورقم موبايلك في رسالة واحدة (مثلاً: سارة 01012345678)',
     // app/Bot/Flows/Steps/StatusStep.php CARD_TEXT
-    status: 'أهلاً يا {customer_first_name} 🌸 أوردر #{order_number} (اتطلب يوم {order_date} — {order_items})\n📦 الحالة: {order_status}\n🚚 متوقع يوصل: {order_eta}\n🔗 تتبع الشحنة: {order_tracking}',
+    status: 'أهلاً يا {customer_first_name}، أوردر #{order_number} (اتطلب يوم {order_date} — {order_items})\nالحالة: {order_status}\nمتوقع يوصل: {order_eta}\nتتبع الشحنة: {order_tracking}',
 };
 
 /** Field names FlowPrompter already labels, so the summary shows them; used when the flow does not use them yet. */
@@ -514,7 +514,8 @@ function freeSpot(def: FlowDefinition, id: string, wanted: { x: number; y: numbe
     const others = Object.entries(def.layout ?? {})
         .filter(([key]) => key !== id)
         .map(([, p]) => p);
-    let { x, y } = { x: Math.round(wanted.x), y: Math.round(wanted.y) };
+    let x = Math.round(wanted.x);
+    const y = Math.round(wanted.y);
     for (let guard = 0; guard < 20 && others.some((p) => Math.abs(p.x - x) < NODE_WIDTH - 20 && Math.abs(p.y - y) < 100); guard++) {
         x += NODE_WIDTH + 40;
     }

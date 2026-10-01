@@ -31,7 +31,7 @@ use Throwable;
 /**
  * Hands waiting entries to free moderator windows, one pass per trigger (enqueue, join, leave,
  * break end, window close…). Order of a pass:
- *   0) returning ★ → her case owner, else the same moderator, when she has a free window; else
+ *   0) returning (أولوية) → her case owner, else the same moderator, when she has a free window; else
  *      the least loaded;
  *   0b) escalations → the shift leader (or any supervisor on the shift) who may serve the
  *       platform, else they wait and supervisors are alerted once;
@@ -261,7 +261,7 @@ class QueueRouter
             }
 
             if (($same = $this->sameModerator($e, $setting)) !== null) {
-                $candidates[] = [$same, 'راجعة ★ لنفس الموظفة'];
+                $candidates[] = [$same, 'راجعة (أولوية) لنفس الموظفة'];
             }
 
             foreach ($candidates as [$userId, $rule]) {
@@ -282,7 +282,7 @@ class QueueRouter
 
         // 0) returning → her case owner, else the same moderator, when free; else the least loaded.
         foreach ($waiting->where('priority', 'returning') as $e) {
-            [$m, $rule] = $preferred($e) ?? [null, 'راجعة ★ (الأقل حملاً)'];
+            [$m, $rule] = $preferred($e) ?? [null, 'راجعة (أولوية) (الأقل حملاً)'];
             $m ??= $pick($e);
 
             if ($m === null) {

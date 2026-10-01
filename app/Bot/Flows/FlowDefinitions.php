@@ -13,7 +13,7 @@ final class FlowDefinitions
     {
         return [
             'main_menu' => ['title_ar' => 'القائمة الرئيسية', 'definition' => ['start' => 'menu', 'steps' => [
-                'menu' => ['type' => 'menu', 'text' => 'أقدر أساعد حضرتك إزاي؟ اختاري من القائمة 👇', 'options' => [
+                'menu' => ['type' => 'menu', 'text' => 'أقدر أساعد حضرتك إزاي؟ اختاري من القائمة', 'options' => [
                     ['title' => 'المرتجع والاستبدال', 'action' => 'flow:return_exchange', 'synonyms' => ['مرتجع', 'استرجاع', 'استبدال', 'ارجع', 'ابدل']],
                     ['title' => 'متابعة أوردر', 'action' => 'flow:order_tracking', 'synonyms' => ['متابعة', 'فين الاوردر', 'تتبع', 'الاوردر']],
                     ['title' => 'شكوى', 'action' => 'flow:complaint', 'synonyms' => ['شكوي', 'شكوى', 'مشكلة']],
@@ -24,7 +24,7 @@ final class FlowDefinitions
                 ]],
             ]]],
             'products' => ['title_ar' => 'الموديلات والأسعار', 'definition' => ['start' => 'menu', 'steps' => [
-                'menu' => ['type' => 'menu', 'text' => 'تحبي تعرفي إيه؟ 👇', 'options' => [
+                'menu' => ['type' => 'menu', 'text' => 'تحبي تعرفي إيه؟', 'options' => [
                     ['title' => 'الموديلات والأسعار', 'action' => 'script:availability'],
                     ['title' => 'المقاسات', 'action' => 'script:size'],
                     ['title' => 'الشحن والتوصيل', 'action' => 'script:delivery_time'],

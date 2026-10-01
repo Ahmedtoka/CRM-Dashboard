@@ -13,7 +13,7 @@ use Illuminate\Support\Collection;
  */
 final class BranchStep extends AreaStep
 {
-    public const CHOOSE_BRANCH_TEXT = 'أنهي فرع بالظبط؟ 👇';
+    public const CHOOSE_BRANCH_TEXT = 'أنهي فرع بالظبط؟';
 
     public function payload(Conversation $c, array $state, array $step, string $value): ?StepOutcome
     {
