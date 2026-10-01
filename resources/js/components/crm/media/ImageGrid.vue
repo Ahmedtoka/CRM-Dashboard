@@ -1,40 +1,69 @@
 <script setup lang="ts">
-import MediaLightbox from '@/components/crm/media/MediaLightbox.vue';
+import MediaBox from '@/components/crm/media/MediaBox.vue';
+import { useI18n } from '@/composables/useI18n';
+import { formatNumber } from '@/i18n';
+import { boxStyle, fitBox, gridBox } from '@/lib/mediaSize';
 import type { Attachment } from '@/types/crm';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
+/**
+ * Images of one bubble (Task 6b): one image sized from its stored width/height (max
+ * 280×360); 2 side by side (280×160); 3 as one big + two small; 4+ as a 2×2 grid with
+ * «+N» on the fourth. Every box is reserved before the file loads.
+ */
 const props = defineProps<{ images: Attachment[] }>();
+const emit = defineEmits<{ open: [attachment: Attachment, opener: HTMLElement] }>();
 
-const lightboxIndex = ref<number | null>(null);
+const single = computed(() => fitBox(props.images[0]?.width ?? null, props.images[0]?.height ?? null));
+const grid = computed(() => gridBox(props.images.length));
 const visible = computed(() => props.images.slice(0, 4));
 const extra = computed(() => Math.max(0, props.images.length - 4));
 
-function open(index: number): void {
-    lightboxIndex.value = index;
-}
+const { locale } = useI18n();
+const extraLabel = computed(() => `+${formatNumber(locale.value, extra.value)}`);
+
+// The 3-image layout: the first image spans both rows on the start side.
+const cellClass = (i: number) => (props.images.length === 3 && i === 0 ? 'row-span-2' : undefined);
+// Half the grid box (minus the 2px gap) is the intrinsic size the browser reserves per cell.
+const cell = computed(() => ({
+    width: Math.round(grid.value.width / 2),
+    height: props.images.length === 2 ? grid.value.height : Math.round(grid.value.height / 2),
+}));
 </script>
 
 <template>
-    <div>
-        <button v-if="images.length === 1" type="button" class="block" @click="open(0)">
-            <img :src="images[0].thumb_url ?? images[0].url ?? ''" :alt="images[0].original_name ?? ''" class="max-w-80 rounded-lg object-cover" />
-        </button>
+    <MediaBox
+        v-if="images.length === 1"
+        :attachment="images[0]"
+        :width="single.width"
+        :height="single.height"
+        class="rounded-lg"
+        :style="boxStyle(single)"
+        @open="emit('open', images[0], $event)"
+    />
 
-        <div v-else class="grid max-w-80 grid-cols-2 gap-0.5 overflow-hidden rounded-lg">
-            <button
-                v-for="(image, i) in visible"
-                :key="image.id"
-                type="button"
-                class="relative aspect-square overflow-hidden"
-                @click="open(i)"
+    <div
+        v-else
+        class="grid grid-cols-2 gap-0.5 overflow-hidden rounded-lg"
+        :class="images.length === 2 ? 'grid-rows-1' : 'grid-rows-2'"
+        :style="boxStyle(grid)"
+    >
+        <MediaBox
+            v-for="(image, i) in visible"
+            :key="image.id"
+            :attachment="image"
+            :width="cell.width"
+            :height="cell.height"
+            fill
+            :class="cellClass(i)"
+            @open="emit('open', image, $event)"
+        >
+            <span
+                v-if="i === 3 && extra > 0"
+                class="absolute inset-0 flex items-center justify-center bg-black/55 text-lg font-semibold tabular-nums text-white"
+                dir="ltr"
+                >{{ extraLabel }}</span
             >
-                <img :src="image.thumb_url ?? image.url ?? ''" :alt="image.original_name ?? ''" class="size-full object-cover" />
-                <span v-if="i === 3 && extra > 0" class="absolute inset-0 flex items-center justify-center bg-black/50 text-lg font-semibold text-white">
-                    +{{ extra }}
-                </span>
-            </button>
-        </div>
-
-        <MediaLightbox v-model:index="lightboxIndex" :items="images" />
+        </MediaBox>
     </div>
 </template>

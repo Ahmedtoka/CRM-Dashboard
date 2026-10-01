@@ -58,6 +58,9 @@ const statusIcon = computed(() => (props.message?.status ? statusIcons[props.mes
 
 const classes = computed(() => skinClasses(props.skin));
 
+// The messages folded into this bubble's image run, so «روحي للرسالة» can find them (Task 6b; 6c reuses data-message-id).
+const groupIds = computed(() => (props.group?.length ? props.group.map((m) => m.id).join(' ') : undefined));
+
 // WhatsApp bubbles are pill-shaped with a tail on the first message of a run; suite
 // bubbles are simple rounded rectangles and use an avatar for grouping instead.
 const shapeClass = computed(() => {
@@ -102,13 +105,19 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
 </script>
 
 <template>
-    <div v-if="kind === 'system'" class="flex justify-center py-1">
+    <div v-if="kind === 'system'" class="flex justify-center py-1" :data-message-id="message?.id">
         <p class="max-w-[85%] rounded-full bg-elevated px-3 py-1 text-center text-2xs text-muted-foreground">
             {{ body }} <span class="tabular-nums opacity-70">· {{ stamp }}</span>
         </p>
     </div>
 
-    <div v-else class="flex items-end gap-2" :class="outbound ? 'justify-end' : 'justify-start'">
+    <div
+        v-else
+        class="flex items-end gap-2"
+        :class="outbound ? 'justify-end' : 'justify-start'"
+        :data-message-id="message?.id"
+        :data-group-ids="groupIds"
+    >
         <span
             v-if="showRunAvatar"
             class="mb-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-2xs font-semibold text-muted-foreground"

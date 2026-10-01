@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Composer from '@/components/crm/Composer.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
+import MediaLightbox from '@/components/crm/media/MediaLightbox.vue';
 import MessageBubble from '@/components/crm/MessageBubble.vue';
 import TemplatePicker from '@/components/crm/TemplatePicker.vue';
 import NoteGroup from '@/components/crm/thread/NoteGroup.vue';
@@ -9,6 +10,7 @@ import ThreadHeader from '@/components/crm/ThreadHeader.vue';
 import WindowBanner from '@/components/crm/WindowBanner.vue';
 import { useChatSkin } from '@/composables/inbox/useChatSkin';
 import type { ComposerMode } from '@/composables/inbox/useComposerShortcuts';
+import { THREAD_GALLERY, useThreadGallery } from '@/composables/inbox/useThreadGallery';
 import { useI18n } from '@/composables/useI18n';
 import { useNow } from '@/composables/useNow';
 import { usePlatform } from '@/composables/usePlatform';
@@ -29,7 +31,7 @@ import type {
     UserRef,
 } from '@/types/crm';
 import { CircleAlert, LoaderCircle, MessageSquareDashed, PenLine, X } from 'lucide-vue-next';
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, provide, ref, watch } from 'vue';
 
 const props = withDefaults(
     defineProps<{
@@ -117,6 +119,12 @@ const timeline = computed<Entry[]>(() => {
     return entries.sort((a, b) => a.at - b.at);
 });
 
+// One gallery for the whole thread (Task 6b): every stored image / video, in timeline order.
+const threadMessages = computed<Message[]>(() => timeline.value.flatMap((entry) => (entry.message ? [entry.message] : [])));
+const gallery = useThreadGallery(threadMessages);
+provide(THREAD_GALLERY, gallery);
+const { items: galleryItems, index: galleryIndex, opener: galleryOpener } = gallery;
+
 type TimelineEntry = Entry & { group?: Message[]; notes?: Note[] };
 
 /**
@@ -194,6 +202,7 @@ function onScroll(): void {
 watch(
     () => props.detail.conversation.id,
     () => {
+        galleryIndex.value = null;
         pinned = true;
         nextTick(scrollToBottom);
     },
@@ -222,6 +231,24 @@ watch(
 );
 
 onMounted(scrollToBottom);
+
+/**
+ * «روحي للرسالة»: close the gallery and bring the item's message into view. A message folded
+ * into an image run has no bubble of its own, so its run's bubble (`data-group-ids`) stands in.
+ * Task 6c swaps this for the virtualiser's scroll-to-index.
+ */
+function jumpToMessage(messageId: number): void {
+    galleryIndex.value = null;
+    nextTick(() => {
+        const root = scroller.value;
+        const el =
+            root?.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`) ?? root?.querySelector<HTMLElement>(`[data-group-ids~="${messageId}"]`);
+        if (!el) return;
+        pinned = false;
+        el.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        el.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: 700, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+    });
+}
 
 function onSend(body: string, attachments: Attachment[], quickReplyId: number | null): void {
     pinned = true;
@@ -357,6 +384,14 @@ defineExpose({ composer, header });
                 />
             </template>
         </div>
+
+        <MediaLightbox
+            v-model:index="galleryIndex"
+            :items="galleryItems"
+            :opener="galleryOpener"
+            can-jump
+            @jump="jumpToMessage"
+        />
 
         <WindowBanner :mode="detail.window.mode" :expires-at="detail.window.expires_at" :now="now" @expired="emit('windowExpired')" />
         <TemplatePicker v-if="mode === 'template_only'" @send="emit('sendTemplate', $event)" />
