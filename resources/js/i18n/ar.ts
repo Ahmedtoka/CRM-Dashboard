@@ -235,6 +235,8 @@ const ar = {
         platform_all: 'كل المنصات',
         empty_list: 'مفيش محادثات لسه',
         load_more: 'تحميل المزيد',
+        load_more_failed: 'معرفناش نجيب باقي المحادثات',
+        retry: 'حاولي تاني',
         waiting_for: 'منتظر {time}',
         select_title: 'اختر محادثة',
         select_body: 'اختر محادثة من القائمة للرد على العميل.',

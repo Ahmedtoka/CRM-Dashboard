@@ -251,6 +251,8 @@ const en: Messages = {
         platform_all: 'All platforms',
         empty_list: 'No conversations yet',
         load_more: 'Load more',
+        load_more_failed: "Couldn't load more conversations",
+        retry: 'Try again',
         waiting_for: 'Waiting {time}',
         select_title: 'Pick a conversation',
         select_body: 'Choose a conversation from the list to reply to the customer.',

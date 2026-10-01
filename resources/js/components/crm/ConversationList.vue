@@ -23,6 +23,8 @@ const props = withDefaults(
         tags: Tag[];
         loading?: boolean;
         loadingMore?: boolean;
+        /** The last page load failed: the end row offers «حاولي تاني» instead of the spinner. */
+        loadMoreFailed?: boolean;
         hasMore?: boolean;
         live?: boolean;
         pollFailed?: boolean;
@@ -30,7 +32,16 @@ const props = withDefaults(
         /** Any filter is active (the empty state then offers «مسح الفلاتر»). */
         filtered?: boolean;
     }>(),
-    { loading: false, loadingMore: false, hasMore: false, live: false, pollFailed: false, queueEnabled: false, filtered: false },
+    {
+        loading: false,
+        loadingMore: false,
+        loadMoreFailed: false,
+        hasMore: false,
+        live: false,
+        pollFailed: false,
+        queueEnabled: false,
+        filtered: false,
+    },
 );
 
 const emit = defineEmits<{
@@ -38,7 +49,8 @@ const emit = defineEmits<{
     clear: [];
     refresh: [];
     select: [id: number];
-    loadMore: [];
+    /** `manual`: the person asked (button), so retry at once even after a failure. */
+    loadMore: [manual: boolean];
     tagMenu: [id: number, x: number, y: number];
 }>();
 
@@ -93,8 +105,7 @@ function onTabKeydown(event: KeyboardEvent): void {
     const index = tabs.indexOf(document.activeElement as HTMLButtonElement);
     const rtl = getComputedStyle(tabList.value!).direction === 'rtl';
     const forward = event.key === (rtl ? 'ArrowLeft' : 'ArrowRight');
-    const next =
-        event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (forward ? 1 : -1) + tabs.length) % tabs.length;
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (forward ? 1 : -1) + tabs.length) % tabs.length;
     event.preventDefault();
     tabs[next]?.focus();
 }
@@ -108,7 +119,11 @@ const chips = computed(() => {
     if (f.queue) out.push({ key: 'queue', label: t(`inbox.queue_state.${f.queue}`) });
     if (f.assignee) {
         const label =
-            f.assignee === 'me' ? t('inbox.assignee.me') : f.assignee === 'none' ? t('inbox.assignee.none') : (names.value.get(Number(f.assignee)) ?? `#${f.assignee}`);
+            f.assignee === 'me'
+                ? t('inbox.assignee.me')
+                : f.assignee === 'none'
+                  ? t('inbox.assignee.none')
+                  : (names.value.get(Number(f.assignee)) ?? `#${f.assignee}`);
         out.push({ key: 'assignee', label });
     }
     if (f.platform) out.push({ key: 'platform', label: platformOptions.value.find((p) => p.value === f.platform)?.label ?? f.platform });
@@ -116,7 +131,10 @@ const chips = computed(() => {
     for (const flag of f.flags) out.push({ key: `flag:${flag}`, label: t(`inbox.filters.${flag}`) });
     return out;
 });
-const moreCount = computed(() => [props.filters.queue, props.filters.assignee, props.filters.platform, props.filters.tag].filter(Boolean).length + props.filters.flags.length);
+const moreCount = computed(
+    () =>
+        [props.filters.queue, props.filters.assignee, props.filters.platform, props.filters.tag].filter(Boolean).length + props.filters.flags.length,
+);
 
 function removeChip(key: string): void {
     if (key.startsWith('flag:')) {
@@ -156,7 +174,8 @@ const states = computed(() => {
 watch(
     () => [rows.value.at(-1)?.index ?? -1, props.conversations.length, props.hasMore, props.loadingMore, props.loading] as const,
     ([last, length, hasMore, loadingMore, loading]) => {
-        if (hasMore && !loadingMore && !loading && last >= length - 10) emit('loadMore');
+        // After a failure the composable holds automatic retries back (backoff), so this cannot loop.
+        if (hasMore && !loadingMore && !loading && last >= length - 10) emit('loadMore', false);
     },
 );
 
@@ -272,20 +291,32 @@ defineExpose({
                             :aria-selected="tabActive(tab)"
                             :tabindex="tabActive(tab) ? 0 : -1"
                             class="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            :class="tabActive(tab) ? 'bg-surface-accent font-semibold text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
+                            :class="
+                                tabActive(tab)
+                                    ? 'bg-surface-accent font-semibold text-primary'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                            "
                             @click="emit('update', { status: tab })"
                         >
                             {{ t(`inbox.tabs.${tab ?? 'all'}`) }}
-                            <span v-if="tabCount(tab)" class="tabular-nums" :class="tabActive(tab) ? 'text-primary/80' : 'text-muted-foreground/80'">{{
-                                tabCount(tab)
-                            }}</span>
+                            <span
+                                v-if="tabCount(tab)"
+                                class="tabular-nums"
+                                :class="tabActive(tab) ? 'text-primary/80' : 'text-muted-foreground/80'"
+                                >{{ tabCount(tab) }}</span
+                            >
                         </button>
                     </div>
                 </template>
             </FilterBar>
         </div>
 
-        <div ref="scrollEl" data-conversation-list class="scrollbar-thin relative min-h-0 flex-1 overflow-y-auto overscroll-contain" @keydown="onKeydown">
+        <div
+            ref="scrollEl"
+            data-conversation-list
+            class="scrollbar-thin relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
+            @keydown="onKeydown"
+        >
             <div v-if="loading" :aria-busy="true" :aria-label="t('common.loading')">
                 <div v-for="n in SKELETON_ROWS" :key="n" class="flex h-[72px] items-center gap-3 px-3" aria-hidden="true">
                     <div class="size-10 shrink-0 animate-pulse rounded-full bg-elevated" />
@@ -333,7 +364,15 @@ defineExpose({
                     />
                     <div v-else class="flex h-[72px] items-center justify-center">
                         <LoaderCircle v-if="loadingMore" class="size-4 animate-spin text-muted-foreground" :aria-label="t('common.loading')" />
-                        <button v-else type="button" class="text-xs text-primary hover:underline" @click="emit('loadMore')">{{ t('inbox.load_more') }}</button>
+                        <p v-else-if="loadMoreFailed" class="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+                            {{ t('inbox.load_more_failed') }}
+                            <button type="button" class="font-medium text-primary hover:underline" @click="emit('loadMore', true)">
+                                {{ t('inbox.retry') }}
+                            </button>
+                        </p>
+                        <button v-else type="button" class="text-xs text-primary hover:underline" @click="emit('loadMore', true)">
+                            {{ t('inbox.load_more') }}
+                        </button>
                     </div>
                 </div>
             </div>

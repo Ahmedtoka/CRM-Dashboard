@@ -5,7 +5,17 @@ import { syncInertiaUrl, useUrlFilters } from '@/composables/useUrlFilters';
 import { listenInbox } from '@/lib/inboxChannels';
 import { compareConversations, matchesInboxFilters } from '@/lib/inboxListOrder';
 import type { User } from '@/types';
-import type { Conversation, ConversationPatch, CursorPage, InboxCounts, InboxFilters, InboxQuickFilter, Message, Order, PlatformValue } from '@/types/crm';
+import type {
+    Conversation,
+    ConversationPatch,
+    CursorPage,
+    InboxCounts,
+    InboxFilters,
+    InboxQuickFilter,
+    Message,
+    Order,
+    PlatformValue,
+} from '@/types/crm';
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
 
 export interface InboxRealtimeHandlers {
@@ -22,6 +32,11 @@ interface Options {
 
 const COUNTS_DEBOUNCE_MS = 300;
 const COUNTS_INTERVAL_MS = 30_000;
+/** After a failed page load, no automatic retry for this long (a manual «حاولي تاني» always retries). */
+const LOAD_MORE_BACKOFF_MS = 10_000;
+/** Realtime bursts debounce the first-page refresh, but never postpone it longer than this. */
+const REFRESH_DEBOUNCE_MS = 400;
+const REFRESH_MAX_WAIT_MS = 2_000;
 
 /** The URL shape of the filters (useUrlFilters keeps strings and string lists). */
 const URL_DEFAULTS = {
@@ -68,7 +83,8 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
     const { echo, live, poll } = useEcho();
     const { t } = useI18n();
 
-    const url = useUrlFilters(URL_DEFAULTS, { history: 'push', keep: ['c'] });
+    // Typing in the search box replaces the entry instead of adding one per debounced keystroke.
+    const url = useUrlFilters(URL_DEFAULTS, { history: 'push', keep: ['c'], replaceKeys: ['q'] });
 
     // A fresh server render parsed the URL (and mapped the legacy single `filter=` into `flags`): its
     // `filters` prop is the truth. After a back/forward Inertia remounts the page with the props of the
@@ -93,6 +109,9 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
     const nextCursor = ref<string | null>(stale ? null : (initial.meta?.next_cursor ?? null));
     const loading = ref(stale);
     const loadingMore = ref(false);
+    /** The last page load failed: the list shows «حاولي تاني» and auto-loading waits LOAD_MORE_BACKOFF_MS. */
+    const loadMoreFailed = ref(false);
+    let loadMoreRetryAt = 0;
     const counts = ref<InboxCounts | null>(null);
     /** The 5 s poll itself failed (the list header icon turns amber). */
     const pollFailed = ref(false);
@@ -121,6 +140,7 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
     async function reload(): Promise<void> {
         const seq = ++requestSeq;
         loading.value = true;
+        loadMoreFailed.value = false;
         unverified.clear();
         scheduleCounts();
         try {
@@ -149,8 +169,14 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
         () => void reload().catch(() => undefined),
     );
 
-    async function loadMore(): Promise<void> {
+    /**
+     * The next cursor page. Never rejects: a failure sets loadMoreFailed and blocks the automatic
+     * (scroll-triggered) retry for LOAD_MORE_BACKOFF_MS, so a 500 / 429 / offline cannot turn the
+     * list's "near the end" watcher into a request storm. `manual` (the «حاولي تاني» button) retries at once.
+     */
+    async function loadMore(opts: { manual?: boolean } = {}): Promise<void> {
         if (!nextCursor.value || loadingMore.value || loading.value) return;
+        if (loadMoreFailed.value && !opts.manual && Date.now() < loadMoreRetryAt) return;
         const seq = requestSeq;
         loadingMore.value = true;
         try {
@@ -158,9 +184,15 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
                 params: { ...params(), ...(searchMode ? { qmode: searchMode } : {}), cursor: nextCursor.value },
             });
             if (seq !== requestSeq) return;
+            loadMoreFailed.value = false;
             data.data.forEach(upsertFull);
             nextCursor.value = data.meta?.next_cursor ?? null;
             sortList();
+        } catch {
+            if (seq === requestSeq) {
+                loadMoreFailed.value = true;
+                loadMoreRetryAt = Date.now() + LOAD_MORE_BACKOFF_MS;
+            }
         } finally {
             loadingMore.value = false;
         }
@@ -175,42 +207,75 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
         data.data.forEach(upsertFull);
 
         // A row the server left out although it sorts inside the page it returned no longer matches.
+        // One that sorts below that page cannot be judged from it: it stays unverified for the next refresh.
         if (unverified.size) {
             const fresh = new Set(data.data.map((c) => c.id));
             const compare = compareConversations(filters.value);
             const last = data.data[data.data.length - 1];
             const complete = !data.meta?.next_cursor;
+            const stillUnverified: number[] = [];
             conversations.value = conversations.value.filter((c) => {
-                if (!unverified.has(c.id) || fresh.has(c.id) || c.id === options.selectedId.value) return true;
-                return !(complete || (last && compare(c, last) <= 0));
+                if (!unverified.has(c.id) || fresh.has(c.id)) return true;
+                const insidePage = complete || (!!last && compare(c, last) <= 0);
+                if (!insidePage) {
+                    stillUnverified.push(c.id);
+                    return true;
+                }
+                return c.id === options.selectedId.value;
             });
             unverified.clear();
+            stillUnverified.forEach((id) => unverified.add(id));
         }
         sortList();
     }
 
+    // Debounced (400 ms) with a max wait: steady realtime traffic cannot postpone the refresh past 2 s.
+    let refreshFirstAt = 0;
     function scheduleRefresh(): void {
+        const now = Date.now();
+        if (refreshTimer === undefined) refreshFirstAt = now;
         window.clearTimeout(refreshTimer);
-        refreshTimer = window.setTimeout(() => void refreshFirstPage().catch(() => undefined), 400);
+        const delay = Math.max(0, Math.min(REFRESH_DEBOUNCE_MS, refreshFirstAt + REFRESH_MAX_WAIT_MS - now));
+        refreshTimer = window.setTimeout(() => {
+            refreshTimer = undefined;
+            void refreshFirstPage().catch(() => undefined);
+        }, delay);
     }
 
     // Counts: after every reload (debounced), then every 30 s while the tab is visible; never two at once.
+    // Each response is keyed by its params and dropped if the filters moved on meanwhile; a fetch asked
+    // for while one is in flight runs once that one finishes, so the last filter set always gets its counts.
     let countsTimer: number | undefined;
     let countsInFlight = false;
+    let countsDirty = false;
+
+    function countsParams(): Record<string, string | string[]> {
+        const { status: _s, queue: _q, ...rest } = params();
+        void _s;
+        void _q;
+        return rest;
+    }
 
     async function fetchCounts(): Promise<void> {
-        if (countsInFlight) return;
+        if (countsInFlight) {
+            countsDirty = true;
+            return;
+        }
         countsInFlight = true;
+        const asked = countsParams();
+        const key = JSON.stringify(asked);
         try {
-            const { status: _s, queue: _q, ...rest } = params();
-            void _s;
-            void _q;
-            const { data } = await api.get<InboxCounts>('/inbox/conversations/counts', { params: rest, silent: true });
-            counts.value = data;
+            const { data } = await api.get<InboxCounts>('/inbox/conversations/counts', { params: asked, silent: true });
+            if (key === JSON.stringify(countsParams())) counts.value = data;
+            else countsDirty = true;
         } catch {
             // Counts are decoration on the tabs: a failure keeps the last numbers.
         } finally {
             countsInFlight = false;
+            if (countsDirty) {
+                countsDirty = false;
+                void fetchCounts();
+            }
         }
     }
 
@@ -329,6 +394,7 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
         counts,
         loading,
         loadingMore,
+        loadMoreFailed,
         live,
         pollFailed,
         setFilters,

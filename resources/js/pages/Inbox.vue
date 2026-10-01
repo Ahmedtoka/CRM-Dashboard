@@ -125,7 +125,7 @@ const list = useConversationList(props.conversations, props.filters, {
 const { detail, messages, hasMore, loading: loadingThread, loadingOlder, viewers, typingNames, lockHolder, mentionable, busyAction, retrying, retryingAttachments, error } = thread;
 // Renamed on the way out: the page's props are called `conversations` and `filters` too (the first page and the
 // filters it was loaded with), and the live list must never be mistaken for them.
-const { conversations: listRows, filters: listFilters, loading, loadingMore, nextCursor, live, pollFailed, counts, activeKeys } = list;
+const { conversations: listRows, filters: listFilters, loading, loadingMore, loadMoreFailed, nextCursor, live, pollFailed, counts, activeKeys } = list;
 
 // Handover queue (the moderator's side). With the queue off, or for somebody who is not on the
 // shift, this is one request and nothing of it is rendered.
@@ -459,6 +459,7 @@ onBeforeUnmount(() => {
                 :tags="tags"
                 :loading="loading"
                 :loading-more="loadingMore"
+                :load-more-failed="loadMoreFailed"
                 :has-more="nextCursor !== null"
                 :live="live"
                 :poll-failed="pollFailed"
@@ -468,7 +469,7 @@ onBeforeUnmount(() => {
                 @clear="list.clearFilters"
                 @refresh="list.reload().catch(() => undefined)"
                 @select="select"
-                @load-more="list.loadMore"
+                @load-more="(manual: boolean) => list.loadMore({ manual }).catch(() => undefined)"
                 @tag-menu="openTagMenu"
             />
 
