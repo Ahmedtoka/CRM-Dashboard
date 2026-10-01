@@ -7,7 +7,7 @@ import { useInitials } from '@/composables/useInitials';
 import type { RowState } from '@/lib/conversationState';
 import { formatCount } from '@/lib/format';
 import type { Conversation } from '@/types/crm';
-import { computed } from 'vue';
+import { computed, onBeforeUnmount } from 'vue';
 
 /**
  * One inbox row, exactly 72 px (the list virtualises on that height): avatar + platform,
@@ -15,7 +15,21 @@ import { computed } from 'vue';
  */
 const props = withDefaults(defineProps<{ conversation: Conversation; state: RowState | null; active?: boolean }>(), { active: false });
 /** `pointer`: opened by a mouse / touch click (the composer takes the focus), not by the keyboard. */
-const emit = defineEmits<{ select: [id: number, pointer: boolean]; contextmenu: [id: number, event: MouseEvent] }>();
+const emit = defineEmits<{ select: [id: number, pointer: boolean]; contextmenu: [id: number, event: MouseEvent]; intent: [id: number] }>();
+
+// Intent to open (Task 6c): the pointer rests on the row for 150 ms, or the keyboard focuses it.
+// The page prefetches that chat, so the click paints from the cache.
+const INTENT_MS = 150;
+let intentTimer: number | undefined;
+function onPointerEnter(event: PointerEvent): void {
+    if (event.pointerType === 'touch') return; // a tap opens at once; nothing to win
+    window.clearTimeout(intentTimer);
+    intentTimer = window.setTimeout(() => emit('intent', props.conversation.id), INTENT_MS);
+}
+function onPointerLeave(): void {
+    window.clearTimeout(intentTimer);
+}
+onBeforeUnmount(() => window.clearTimeout(intentTimer));
 
 const { t, locale } = useI18n();
 const { getInitials } = useInitials();
@@ -38,6 +52,9 @@ const dotColor = (color: string | null) => (color && /^#[0-9a-f]{6}$/i.test(colo
         class="flex h-[72px] w-full items-center gap-3 px-3 text-start outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         :class="active ? 'bg-surface-accent' : 'hover:bg-muted'"
         @click="emit('select', conversation.id, $event.detail > 0)"
+        @pointerenter="onPointerEnter"
+        @pointerleave="onPointerLeave"
+        @focus="emit('intent', conversation.id)"
         @contextmenu.prevent="emit('contextmenu', conversation.id, $event)"
     >
         <span class="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-elevated text-xs font-semibold text-muted-foreground">

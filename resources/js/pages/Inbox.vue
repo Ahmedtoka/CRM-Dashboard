@@ -108,7 +108,12 @@ const resolvingSend = ref(false);
 let flashTimer: number | undefined;
 let readTimer: number | undefined;
 
-const thread = useConversationThread({ me, onRead: (id) => list.applyConversation({ id, unread_count: 0 }) });
+const thread = useConversationThread({
+    me,
+    onRead: (id) => list.applyConversation({ id, unread_count: 0 }),
+    // Saved with the chat she leaves, so it reopens where she was (Task 6c thread cache).
+    viewState: () => threadView.value?.viewState() ?? null,
+});
 
 const list = useConversationList(props.conversations, props.filters, {
     me,
@@ -130,7 +135,22 @@ const list = useConversationList(props.conversations, props.filters, {
     },
 });
 
-const { detail, messages, hasMore, loading: loadingThread, loadingOlder, viewers, typingNames, lockHolder, mentionable, busyAction, retrying, retryingAttachments, error } = thread;
+const {
+    detail,
+    messages,
+    hasMore,
+    loading: loadingThread,
+    loadingOlder,
+    viewers,
+    typingNames,
+    lockHolder,
+    mentionable,
+    restoredView,
+    busyAction,
+    retrying,
+    retryingAttachments,
+    error,
+} = thread;
 // Renamed on the way out: the page's props are called `conversations` and `filters` too (the first page and the
 // filters it was loaded with), and the live list must never be mistaken for them.
 const { conversations: listRows, filters: listFilters, loading, loadingMore, loadMoreFailed, nextCursor, live, pollFailed, counts, activeKeys } = list;
@@ -391,44 +411,27 @@ function onOrderCreated(order: Order): void {
     }
 }
 
-// `j`/`k`/arrow-down/arrow-up: moves the selection by one row and scrolls it into view.
+// `j`/`k`/arrow-down/arrow-up: moves the selection by one row and scrolls it into view. The row
+// after that one is prefetched, so the next press opens from the cache (Task 6c).
 function move(delta: 1 | -1): void {
     const rows = listRows.value;
     if (!rows.length) return;
     const index = rows.findIndex((c) => c.id === selectedId.value);
-    const next = rows[Math.min(rows.length - 1, Math.max(0, index === -1 ? 0 : index + delta))];
+    const nextIndex = Math.min(rows.length - 1, Math.max(0, index === -1 ? 0 : index + delta));
+    const next = rows[nextIndex];
     if (next) {
         select(next.id);
         listView.value?.scrollToId(next.id);
+        const ahead = rows[nextIndex + delta];
+        if (ahead) thread.prefetch(ahead.id);
     }
 }
 
 const hasThread = () => detail.value !== null;
 
-/**
- * `[` / `]`: focus the previous / next note toggle in the thread (spec §1.2 keyboard). With no
- * note toggle focused it starts from what is on screen: `]` the first one at or below the top of
- * the thread, `[` the last one above its bottom. Toggles inside a closed group are skipped.
- */
+/** `[` / `]`: the previous / next note toggle in the thread (spec §1.2); the virtualised thread finds it. */
 function moveNote(step: 1 | -1): void {
-    const log = document.querySelector<HTMLElement>('[role="log"]');
-    if (!log) return;
-    const toggles = Array.from(log.querySelectorAll<HTMLElement>('[data-note-toggle]')).filter((el) => el.offsetParent !== null);
-    if (!toggles.length) return;
-    const current = toggles.indexOf(document.activeElement as HTMLElement);
-    let next: HTMLElement | undefined;
-    if (current !== -1) {
-        next = toggles[current + step];
-    } else {
-        const box = log.getBoundingClientRect();
-        next =
-            step === 1
-                ? toggles.find((el) => el.getBoundingClientRect().bottom > box.top)
-                : [...toggles].reverse().find((el) => el.getBoundingClientRect().top < box.bottom);
-    }
-    if (!next) return;
-    next.focus({ preventScroll: true });
-    next.scrollIntoView({ block: 'nearest' });
+    threadView.value?.moveNote(step);
 }
 
 // `arrowdown`/`arrowup` only move the selection when focus is inside the
@@ -510,6 +513,7 @@ onBeforeUnmount(() => {
                 @clear="list.clearFilters"
                 @refresh="list.reload().catch(() => undefined)"
                 @select="(id, pointer) => select(id, pointer)"
+                @intent="thread.prefetch"
                 @load-more="(manual: boolean) => list.loadMore({ manual }).catch(() => undefined)"
                 @tag-menu="openTagMenu"
             />
@@ -539,6 +543,7 @@ onBeforeUnmount(() => {
                     :mentionable="mentionable"
                     :adding-note="addingNote"
                     :autofocus="focusComposer"
+                    :restore-view="restoredView"
                     @back="back"
                     @open-customer="toggleDetails"
                     @load-older="thread.loadOlder"

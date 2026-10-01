@@ -35,11 +35,16 @@ export function formatDateTime(iso: string | null | undefined, locale: Locale): 
         : '';
 }
 
+// One formatter for every day key: building an Intl.DateTimeFormat costs far more than formatting
+// with it, and a 5,000-message thread asks for thousands of day keys (Task 6c).
+let dayKeyFormat: Intl.DateTimeFormat | null = null;
+
 /** Cairo calendar day ("2026-09-12") used to group thread messages. */
 export function cairoDayKey(iso: string | null | undefined): string {
     const d = toDate(iso) ?? new Date();
+    dayKeyFormat ??= new Intl.DateTimeFormat('en-CA', { timeZone: DISPLAY_TIMEZONE });
 
-    return new Intl.DateTimeFormat('en-CA', { timeZone: DISPLAY_TIMEZONE }).format(d);
+    return dayKeyFormat.format(d);
 }
 
 /** Day divider label: "السبت ١٢ سبتمبر". */

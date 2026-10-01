@@ -49,6 +49,8 @@ const emit = defineEmits<{
     clear: [];
     refresh: [];
     select: [id: number, pointer: boolean];
+    /** Hover (150 ms) or keyboard focus on a row: worth prefetching that chat (Task 6c). */
+    intent: [id: number];
     /** `manual`: the person asked (button), so retry at once even after a failure. */
     loadMore: [manual: boolean];
     tagMenu: [id: number, x: number, y: number];
@@ -360,6 +362,7 @@ defineExpose({
                         :state="states.get(conversations[item.index].id) ?? null"
                         :active="conversations[item.index].id === selectedId"
                         @select="(id, pointer) => emit('select', id, pointer)"
+                        @intent="(id) => emit('intent', id)"
                         @contextmenu="(id, event) => emit('tagMenu', id, event.clientX, event.clientY)"
                     />
                     <div v-else class="flex h-[72px] items-center justify-center">

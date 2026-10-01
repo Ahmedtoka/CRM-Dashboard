@@ -122,6 +122,9 @@ watch(
         mode.value = 'reply';
         confirming.value = false;
         noteMentions.value = [];
+        // A chat opened from the cache keeps this composer mounted (Task 6c): the pointer-open rule
+        // applies on the switch as it does on mount; a j/k open (autofocus false) leaves focus alone.
+        if (props.autofocus && window.matchMedia('(min-width: 768px)').matches) nextTick(() => textarea.value?.focus());
     },
 );
 
