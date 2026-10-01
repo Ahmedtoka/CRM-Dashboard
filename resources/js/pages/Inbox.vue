@@ -15,6 +15,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useMyQueue } from '@/composables/useMyQueue';
 import { useShortcuts } from '@/composables/useShortcuts';
 import { useToast } from '@/composables/useToast';
+import { syncInertiaUrl } from '@/composables/useUrlFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { SharedData } from '@/types';
 import type {
@@ -25,6 +26,7 @@ import type {
     ConversationPriority,
     CursorPage,
     InboxFilters,
+    InboxModerator,
     Order,
     QueueEntry,
     QuickReply,
@@ -36,11 +38,13 @@ import type {
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { useMediaQuery } from '@vueuse/core';
 import { CircleAlert, MessageSquareText } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 
 const props = defineProps<{
     conversations: CursorPage<Conversation>;
     filters: InboxFilters;
+    moderators: InboxModerator[];
+    queueEnabled: boolean;
     quickReplies: QuickReply[];
     quickReplyCategories: QuickReplyCategory[];
     tags: Tag[];
@@ -52,6 +56,32 @@ const me = page.props.auth.user;
 const { t, dir } = useI18n();
 const isXl = useMediaQuery('(min-width: 1280px)');
 
+// The details column (R2): closed by default under 1600 px, her choice remembered. Below xl it is
+// the customer sheet instead (customerOpen). Task 6 puts the toggle in the thread header.
+function initialDetails(): boolean {
+    try {
+        const saved = window.localStorage.getItem('inbox:details');
+        if (saved === '1' || saved === '0') return saved === '1';
+    } catch {
+        // Storage blocked: fall back to the width rule.
+    }
+    return window.matchMedia('(min-width: 1600px)').matches;
+}
+const detailsOpen = ref(initialDetails());
+watch(detailsOpen, (open) => {
+    try {
+        window.localStorage.setItem('inbox:details', open ? '1' : '0');
+    } catch {
+        // Not remembered this time; still toggles.
+    }
+});
+function toggleDetails(): void {
+    if (isXl.value) detailsOpen.value = !detailsOpen.value;
+    else customerOpen.value = !customerOpen.value;
+}
+provide('inboxDetails', { open: detailsOpen, toggle: toggleDetails });
+const showDetails = computed(() => isXl.value && detailsOpen.value);
+
 const api = useApi();
 const toast = useToast();
 const selectedId = ref<number | null>(null);
@@ -62,6 +92,7 @@ const addingNote = ref(false);
 const flash = ref<string | null>(null);
 const drafts = ref<Record<number, string>>({});
 const threadView = ref<InstanceType<typeof ChatThread> | null>(null);
+const listView = ref<InstanceType<typeof ConversationList> | null>(null);
 const tagMenu = ref<{ id: number; x: number; y: number } | null>(null);
 // Blocks a second `mod+enter` from resolving twice (or resolving a conversation
 // whose send is still in flight) while one send-and-resolve is already running.
@@ -94,7 +125,7 @@ const list = useConversationList(props.conversations, props.filters, {
 const { detail, messages, hasMore, loading: loadingThread, loadingOlder, viewers, typingNames, lockHolder, mentionable, busyAction, retrying, retryingAttachments, error } = thread;
 // Renamed on the way out: the page's props are called `conversations` and `filters` too (the first page and the
 // filters it was loaded with), and the live list must never be mistaken for them.
-const { conversations: listRows, filters: listFilters, loading, loadingMore, nextCursor, live } = list;
+const { conversations: listRows, filters: listFilters, loading, loadingMore, nextCursor, live, pollFailed, counts, activeKeys } = list;
 
 // Handover queue (the moderator's side). With the queue off, or for somebody who is not on the
 // shift, this is one request and nothing of it is rendered.
@@ -174,7 +205,7 @@ function syncSelectionUrl(id: number | null): void {
     const url = new URL(window.location.href);
     if (id === null) url.searchParams.delete('c');
     else url.searchParams.set('c', String(id));
-    window.history.replaceState(window.history.state, '', url);
+    syncInertiaUrl(url);
 }
 
 function select(id: number): void {
@@ -355,7 +386,7 @@ function move(delta: 1 | -1): void {
     const next = rows[Math.min(rows.length - 1, Math.max(0, index === -1 ? 0 : index + delta))];
     if (next) {
         select(next.id);
-        document.querySelector(`[data-conversation-id="${next.id}"]`)?.scrollIntoView({ block: 'nearest' });
+        listView.value?.scrollToId(next.id);
     }
 }
 
@@ -382,6 +413,9 @@ useShortcuts([
     { id: 'inbox.bot', keys: ['b'], labelKey: 'shortcuts.return_to_bot', group: 'inbox', handler: () => hasThread() && void runAction('return-to-bot') },
     { id: 'inbox.tags', keys: ['t'], labelKey: 'shortcuts.tags', group: 'inbox', handler: () => hasThread() && threadView.value?.header?.openTags() },
     { id: 'inbox.order', keys: ['o'], labelKey: 'shortcuts.order', group: 'inbox', handler: () => hasThread() && openOrderDrawer() },
+    { id: 'inbox.search', keys: ['/'], labelKey: 'shortcuts.focus_search', group: 'inbox', handler: () => listView.value?.focusSearch() },
+    { id: 'inbox.filters', keys: ['f'], labelKey: 'shortcuts.open_filters', group: 'inbox', handler: () => listView.value?.openFilters() },
+    { id: 'inbox.details', keys: ['i'], labelKey: 'shortcuts.toggle_details', group: 'inbox', handler: () => toggleDetails() },
     { id: 'inbox.attach', keys: ['a'], labelKey: 'shortcuts.attach', group: 'inbox', handler: () => hasThread() && threadView.value?.composer?.openFilePicker() },
 ]);
 
@@ -410,18 +444,29 @@ onBeforeUnmount(() => {
         <MyWindowsStrip :selected-id="selectedId" :unread="windowUnread" @select="select" />
 
         <!-- Fills the space left under the header and any admin alert strip (no fixed calc). -->
-        <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background md:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+        <div
+            class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background"
+            :class="showDetails ? 'md:grid-cols-[360px_minmax(0,1fr)_340px]' : 'md:grid-cols-[360px_minmax(0,1fr)]'"
+        >
             <ConversationList
+                ref="listView"
                 :class="selectedId !== null ? 'hidden md:flex' : 'flex'"
                 :conversations="listRows"
                 :filters="listFilters"
+                :counts="counts"
                 :selected-id="selectedId"
+                :moderators="moderators"
+                :tags="tags"
                 :loading="loading"
                 :loading-more="loadingMore"
                 :has-more="nextCursor !== null"
                 :live="live"
-                :tags="tags"
-                @update:filters="list.setFilters"
+                :poll-failed="pollFailed"
+                :queue-enabled="queueEnabled"
+                :filtered="activeKeys.length > 0"
+                @update="list.setFilters"
+                @clear="list.clearFilters"
+                @refresh="list.reload().catch(() => undefined)"
                 @select="select"
                 @load-more="list.loadMore"
                 @tag-menu="openTagMenu"
@@ -452,7 +497,7 @@ onBeforeUnmount(() => {
                     :mentionable="mentionable"
                     :adding-note="addingNote"
                     @back="back"
-                    @open-customer="customerOpen = true"
+                    @open-customer="toggleDetails"
                     @load-older="thread.loadOlder"
                     @send="send"
                     @send-and-resolve="sendAndResolve"
@@ -480,7 +525,7 @@ onBeforeUnmount(() => {
                 <EmptyState v-else :icon="MessageSquareText" :title="t('inbox.select_title')" :body="t('inbox.select_body')" />
             </main>
 
-            <div v-if="isXl" class="hidden min-h-0 flex-col border-s bg-card xl:flex">
+            <div v-if="showDetails" class="hidden min-h-0 flex-col border-s bg-card xl:flex">
                 <CustomerPanel
                     v-if="detail"
                     class="flex-1"

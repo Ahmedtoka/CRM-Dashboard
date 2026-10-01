@@ -598,7 +598,7 @@ class ConversationQuery
         foreach ($rows as $c) {
             $extra = (array) ($values->get($c->getKey()) ?? []);
             unset($extra['id']);
-            foreach (['last_message_body', 'last_message_direction', 'last_human_reply_at', 'open_case_id'] as $key) {
+            foreach (['last_message_body', 'last_message_sender', 'last_message_direction', 'last_human_reply_at', 'open_case_id'] as $key) {
                 $extra[$key] ??= null;
             }
             $c->setRawAttributes(array_merge($c->getAttributes(), $extra), true);
@@ -615,6 +615,10 @@ class ConversationQuery
     {
         return [
             'last_message_body' => Message::query()->select('body')
+                ->whereColumn('messages.conversation_id', 'conversations.id')
+                ->orderByDesc('id')->limit(1),
+            // Who wrote the preview (the row prefixes a moderator's own reply with «إنتي: »).
+            'last_message_sender' => Message::query()->select('sender_type')
                 ->whereColumn('messages.conversation_id', 'conversations.id')
                 ->orderByDesc('id')->limit(1),
             'last_message_direction' => Message::query()->select('direction')

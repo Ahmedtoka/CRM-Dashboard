@@ -9,7 +9,11 @@ const props = withDefaults(
     { search: '', moreCount: 0, moreLabel: undefined },
 );
 const emit = defineEmits<{ 'update:search': [string]; remove: [key: string]; clear: [] }>();
+// The «فلاتر» popover can be opened from outside too (the inbox's `f` shortcut).
+const open = defineModel<boolean>('open', { default: false });
 const { t } = useI18n();
+const input = ref<HTMLInputElement | null>(null);
+defineExpose({ focusSearch: () => input.value?.focus() });
 
 // Debounced search (300 ms), as the inbox list does today.
 const term = ref(props.search);
@@ -33,10 +37,10 @@ onBeforeUnmount(() => window.clearTimeout(timer));
             <label class="relative min-w-0 flex-1">
                 <span class="sr-only">{{ searchPlaceholder }}</span>
                 <Search class="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <input v-model="term" type="search" :placeholder="searchPlaceholder" class="h-9 w-full rounded-full border-0 bg-elevated pe-3 ps-9 text-sm placeholder:text-muted-foreground" />
+                <input ref="input" v-model="term" type="search" :placeholder="searchPlaceholder" class="h-9 w-full rounded-full border-0 bg-elevated pe-3 ps-9 text-sm placeholder:text-muted-foreground" />
             </label>
             <div class="hidden items-center gap-2 sm:flex"><slot name="inline" /></div>
-            <Popover v-if="$slots.more || $slots.inline">
+            <Popover v-if="$slots.more || $slots.inline" v-model:open="open">
                 <PopoverTrigger
                     class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-input bg-card px-3 text-xs font-medium hover:bg-muted"
                     :aria-label="moreLabel ?? t('filters.more')"
@@ -51,6 +55,7 @@ onBeforeUnmount(() => window.clearTimeout(timer));
                 </PopoverContent>
             </Popover>
         </div>
+        <slot name="tabs" />
         <div v-if="chips.length" class="flex flex-wrap items-center gap-1.5" role="group" :aria-label="t('filters.active')">
             <button
                 v-for="chip in chips"

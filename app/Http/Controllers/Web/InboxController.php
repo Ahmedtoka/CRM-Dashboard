@@ -25,15 +25,13 @@ class InboxController extends Controller
     {
         $filters = $this->conversationFilters($request);
         $user = $request->user();
-        $flags = $filters['flags'];
 
         return Inertia::render('Inbox', [
             'conversations' => ConversationResource::collection($query->paginate($user, $filters))->additional(['search_mode' => $query->searchMode()]),
+            // An old single `filter=` link arrives here already mapped into `flags` (R4).
             'filters' => array_merge(
                 ['platform' => null, 'status' => null, 'queue' => null, 'assignee' => null, 'flags' => [], 'q' => null, 'tag' => null],
                 $filters,
-                // Legacy single-filter key the current list UI still reads (until the Task 5 filter bar).
-                ['filter' => count($flags) === 1 ? $flags[0] : null],
             ),
             // The moderator filter's options (spec §1.2): active moderators and supervisors, by name.
             'moderators' => User::query()->where('is_active', true)

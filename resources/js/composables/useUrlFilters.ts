@@ -1,3 +1,4 @@
+import { router } from '@inertiajs/vue3';
 import { computed, onScopeDispose, ref, type ComputedRef, type Ref } from 'vue';
 
 export type FilterValue = string | number | boolean | null | string[];
@@ -20,6 +21,19 @@ function serialise(v: FilterValue): string | null {
 }
 
 const same = (a: FilterValue, b: FilterValue) => serialise(a) === serialise(b);
+
+/**
+ * Changes the address through Inertia (a client-side visit: no request, state and scroll kept), not a bare
+ * history call: Inertia re-writes the address from its own page.url whenever it saves a scroll position
+ * (any scroll on the page), which silently undid a bare replaceState/pushState.
+ */
+export function syncInertiaUrl(url: URL, mode: 'push' | 'replace' = 'replace'): void {
+    const target = url.pathname + url.search + url.hash;
+    if (target === window.location.pathname + window.location.search + window.location.hash) return;
+    const visit = { url: target, preserveState: true, preserveScroll: true };
+    if (mode === 'push') router.push(visit);
+    else router.replace(visit);
+}
 
 /**
  * Page filters that live in the URL: shareable links, and back/forward restore them.
@@ -47,10 +61,7 @@ export function useUrlFilters<T extends Record<string, FilterValue>>(defaults: T
             if (v === null || same(filters.value[key], defaults[key])) url.searchParams.delete(key);
             else url.searchParams.set(key, v);
         }
-        // Inertia keeps its page object in history.state: pass it through untouched.
-        const state = window.history.state;
-        if (opts.history === 'push') window.history.pushState(state, '', url);
-        else window.history.replaceState(state, '', url);
+        syncInertiaUrl(url, opts.history === 'push' ? 'push' : 'replace');
     };
 
     const set = (patch: Partial<T>) => {

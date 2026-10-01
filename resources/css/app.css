@@ -166,6 +166,14 @@ html {
         scrollbar-color: hsl(var(--border)) transparent;
     }
 
+    /* A strip that scrolls sideways inside itself (the inbox status tabs) without a visible bar. */
+    .scrollbar-none {
+        scrollbar-width: none;
+    }
+    .scrollbar-none::-webkit-scrollbar {
+        display: none;
+    }
+
     .shadow-card {
         box-shadow: var(--shadow-card);
     }

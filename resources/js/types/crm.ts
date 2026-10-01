@@ -60,6 +60,8 @@ export interface Conversation {
     last_customer_message_at: string | null;
     waiting_since: string | null;
     last_message_preview: string | null;
+    /** Who wrote the preview (list rows only): a moderator's own reply gets «إنتي: ». */
+    last_message_sender?: 'customer' | 'user' | 'bot' | 'system' | null;
     customer: { id: number; name: string | null; avatar_url: string | null } | null;
     locked_by: UserRef | null;
     first_responder: UserRef | null;
@@ -69,9 +71,22 @@ export interface Conversation {
     assignee: UserRef | null;
     /** Her open handover-queue ticket (called / active window); null otherwise. Not the `queue` agents/senior badge. */
     queue_entry: ConversationQueueEntry | null;
+    /** Any non-terminal ticket (waiting included): the list row's state badge reads it. Null with no ticket. */
+    queue_state?: ConversationQueueState | null;
+    /** The last moderator who replied: «مع [اسم]» when nobody is assigned (R3). */
+    last_responder_id?: number | null;
     /** Her open support case (even before a ticket is called): the thread shows «عندها كيس مفتوح #N». */
     open_case_id: number | null;
     can: { reply: boolean; reset?: boolean };
+}
+
+export interface ConversationQueueState {
+    status: 'waiting' | 'called' | 'active';
+    ticket: number;
+    priority: string;
+    /** QueueEntryResource::reply_overdue: an open window whose customer already got the apology. */
+    overdue: boolean;
+    assigned_user_id: number | null;
 }
 
 export interface ConversationQueueEntry {
@@ -582,12 +597,35 @@ export type InboxQuickFilter =
     | 'has_return'
     | 'stuck_order';
 
+export type InboxStatusFilter = 'open' | 'pending' | 'resolved' | 'waiting' | 'with_moderator' | 'bot' | 'closed';
+export type InboxQueueFilter = 'waiting' | 'window' | 'overdue' | 'returning';
+
+/** The inbox list filters, all kept in the URL (spec §1.2). */
 export interface InboxFilters {
+    status: InboxStatusFilter | null;
+    queue: InboxQueueFilter | null;
+    /** 'me' | 'none' | '<user id>' */
+    assignee: string | null;
+    /** Several at once, joined with AND (R4). */
+    flags: InboxQuickFilter[];
     platform: PlatformValue | null;
-    status: ConversationStatus | null;
-    filter: InboxQuickFilter | null;
-    q: string | null;
     tag: number | null;
+    q: string | null;
+}
+
+/** GET /inbox/conversations/counts: each value over a capped sub-select (> capped_at shows "999+"). */
+export interface InboxCounts {
+    status: Record<'open' | 'waiting' | 'with_moderator' | 'bot' | 'closed', number>;
+    /** Null while the handover queue is off. */
+    queue: Record<InboxQueueFilter, number> | null;
+    capped_at: number;
+}
+
+/** An active moderator or supervisor, for the moderator filter and the row's «مع [اسم]». */
+export interface InboxModerator {
+    id: number;
+    name: string;
+    color: string | null;
 }
 
 export interface CursorPage<T> {

@@ -6,6 +6,7 @@ use App\Bot\HandoverSummary;
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
 use App\Models\Conversation;
+use App\Models\QueueEntry;
 use App\Models\SupportCase;
 use App\Models\Tag;
 use App\Models\User;
@@ -71,6 +72,8 @@ class ConversationResource extends JsonResource
                 ? $c->last_customer_message_at?->toIso8601String()
                 : null,
             'last_message_preview' => $preview !== null ? Str::limit((string) $preview, 80) : null,
+            // From the list sub-select only (null elsewhere): the row's «إنتي: » prefix for a moderator's reply.
+            'last_message_sender' => self::senderValue($attributes['last_message_sender'] ?? null),
             'customer' => $customer ? [
                 'id' => $customer->id,
                 'name' => $customer->name,
@@ -83,6 +86,10 @@ class ConversationResource extends JsonResource
             'assignee' => self::assignee($c),
             // The handover-queue ticket (not the older `queue` agents/senior badge above).
             'queue_entry' => self::queueEntry($c),
+            // The list row's state badge (UI overhaul Task 5): any non-terminal ticket, waiting included.
+            'queue_state' => self::queueState($c),
+            // «مع [اسم]» falls back to the last responder when nobody is assigned (R3).
+            'last_responder_id' => $c->last_responder_id,
             // Her open support case (flow revision §6): the thread shows «عندها كيس مفتوح #N» even
             // before a ticket is called, so it is not read off the queue entry.
             'open_case_id' => self::openCaseId($c),
@@ -127,6 +134,33 @@ class ConversationResource extends JsonResource
             'bot_summary' => $e->bot_summary,
             'open_case_id' => $e->open_case_id,
         ] : null;
+    }
+
+    /**
+     * Her non-terminal queue ticket (waiting / called / active) for the list row's state badge.
+     * `overdue` is QueueEntryResource::reply_overdue's rule. Reads the eager-loaded queueEntry.
+     *
+     * @return array{status:string,ticket:int,priority:string,overdue:bool,assigned_user_id:?int}|null
+     */
+    public static function queueState(Conversation $c): ?array
+    {
+        $e = $c->queue_entry_id !== null ? $c->queueEntry : null;
+        if ($e === null || ! in_array($e->status, ['waiting', ...QueueEntry::OPEN_STATUSES], true)) {
+            return null;
+        }
+
+        return [
+            'status' => $e->status,
+            'ticket' => (int) $e->ticket_no,
+            'priority' => (string) $e->priority,
+            'overdue' => $e->isOpen() && $e->awaiting_reply_since !== null && $e->apology_sent_at !== null,
+            'assigned_user_id' => $e->assigned_user_id,
+        ];
+    }
+
+    private static function senderValue(mixed $sender): ?string
+    {
+        return $sender instanceof SenderType ? $sender->value : ($sender !== null ? (string) $sender : null);
     }
 
     /** Her open support case id: from the list query's sub-select, else one lookup for a single row. */
