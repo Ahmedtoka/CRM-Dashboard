@@ -1,0 +1,30 @@
+{
+  "label": "baseline",
+  "at": "2026-10-01T13:31:53.310Z",
+  "first_list_paint_ms": 1258,
+  "switch_cold_ms": [
+    482,
+    235,
+    175,
+    257
+  ],
+  "switch_again_ms": [
+    194,
+    264,
+    194,
+    215
+  ],
+  "list_rows_loaded_hint": null,
+  "list_dom_rows": 2730,
+  "dom_nodes_after_list": 48471,
+  "long_tasks_list_scroll": {
+    "count": 4,
+    "max": 63
+  },
+  "thread_dom_bubbles": 0,
+  "dom_nodes_after_thread": 47025,
+  "long_tasks_thread_scroll": {
+    "count": 177,
+    "max": 687
+  }
+}
