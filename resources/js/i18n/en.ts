@@ -393,6 +393,7 @@ const en: Messages = {
         go_to_message: 'Go to message',
         fullscreen: 'Full screen',
         play_video: 'Play video',
+        unavailable: 'Not available',
         tab_details: 'Details',
         tab_media: 'Media',
         empty: 'No media in this conversation',

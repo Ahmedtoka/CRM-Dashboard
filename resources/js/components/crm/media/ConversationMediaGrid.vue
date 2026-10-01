@@ -19,7 +19,7 @@ const api = useApi();
 const items = ref<Attachment[]>([]);
 const loading = ref(false);
 const loadError = ref<string | null>(null);
-const lightboxIndex = ref<number | null>(null);
+const lightboxId = ref<number | null>(null);
 const lightboxOpener = ref<HTMLElement | null>(null);
 
 const visualItems = computed(() => items.value.filter((a) => a.type === 'image' || a.type === 'video'));
@@ -27,10 +27,9 @@ const galleryItems = computed(() => galleryItemsOf(visualItems.value));
 const otherItems = computed(() => items.value.filter((a) => a.type === 'audio' || a.type === 'file'));
 
 function openLightbox(attachment: Attachment, event: MouseEvent): void {
-    const index = galleryItems.value.findIndex((item) => item.id === attachment.id);
-    if (index === -1) return;
+    if (!galleryItems.value.some((item) => item.id === attachment.id)) return;
     lightboxOpener.value = event.currentTarget as HTMLElement;
-    lightboxIndex.value = index;
+    lightboxId.value = attachment.id;
 }
 
 let controller: AbortController | null = null;
@@ -117,6 +116,6 @@ onScopeDispose(() => controller?.abort());
             </div>
         </template>
 
-        <MediaLightbox v-model:index="lightboxIndex" :items="galleryItems" :opener="lightboxOpener" />
+        <MediaLightbox v-model:current-id="lightboxId" :items="galleryItems" :opener="lightboxOpener" />
     </div>
 </template>

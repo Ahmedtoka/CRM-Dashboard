@@ -48,7 +48,7 @@ const rest = computed(() => props.attachments.filter((a) => !isStoredImage(a)));
 // The thread gallery (one per ChatThread). Rendered outside a thread, the bubble falls
 // back to a gallery of its own media so a click still opens something.
 const threadGallery = injectThreadGallery();
-const localIndex = ref<number | null>(null);
+const localId = ref<number | null>(null);
 const localOpener = ref<HTMLElement | null>(null);
 const localItems = computed<GalleryItem[]>(() =>
     threadGallery ? [] : galleryItemsOf([...props.attachments, ...(props.group ?? []).flatMap((m) => m.attachments)]),
@@ -59,10 +59,9 @@ function openGallery(attachment: Attachment, opener: HTMLElement): void {
         threadGallery.openAt(attachment.id, opener);
         return;
     }
-    const i = localItems.value.findIndex((item) => item.id === attachment.id);
-    if (i === -1) return;
+    if (!localItems.value.some((item) => item.id === attachment.id)) return;
     localOpener.value = opener;
-    localIndex.value = i;
+    localId.value = attachment.id;
 }
 </script>
 
@@ -104,6 +103,6 @@ function openGallery(attachment: Attachment, opener: HTMLElement): void {
             <FileChip v-else :name="attachment.original_name ?? ''" :size="attachment.size_bytes" :mime="attachment.mime" :href="attachment.url" />
         </template>
 
-        <MediaLightbox v-if="!threadGallery && localItems.length" v-model:index="localIndex" :items="localItems" :opener="localOpener" />
+        <MediaLightbox v-if="!threadGallery && localItems.length" v-model:current-id="localId" :items="localItems" :opener="localOpener" />
     </div>
 </template>

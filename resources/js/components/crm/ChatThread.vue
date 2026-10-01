@@ -123,7 +123,7 @@ const timeline = computed<Entry[]>(() => {
 const threadMessages = computed<Message[]>(() => timeline.value.flatMap((entry) => (entry.message ? [entry.message] : [])));
 const gallery = useThreadGallery(threadMessages);
 provide(THREAD_GALLERY, gallery);
-const { items: galleryItems, index: galleryIndex, opener: galleryOpener } = gallery;
+const { items: galleryItems, currentId: galleryId, opener: galleryOpener } = gallery;
 
 type TimelineEntry = Entry & { group?: Message[]; notes?: Note[] };
 
@@ -202,7 +202,7 @@ function onScroll(): void {
 watch(
     () => props.detail.conversation.id,
     () => {
-        galleryIndex.value = null;
+        galleryId.value = null;
         pinned = true;
         nextTick(scrollToBottom);
     },
@@ -238,7 +238,7 @@ onMounted(scrollToBottom);
  * Task 6c swaps this for the virtualiser's scroll-to-index.
  */
 function jumpToMessage(messageId: number): void {
-    galleryIndex.value = null;
+    galleryId.value = null;
     nextTick(() => {
         const root = scroller.value;
         const el =
@@ -386,7 +386,7 @@ defineExpose({ composer, header });
         </div>
 
         <MediaLightbox
-            v-model:index="galleryIndex"
+            v-model:current-id="galleryId"
             :items="galleryItems"
             :opener="galleryOpener"
             can-jump

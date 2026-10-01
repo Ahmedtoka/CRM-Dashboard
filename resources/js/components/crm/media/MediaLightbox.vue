@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { GalleryItem } from '@/composables/inbox/useThreadGallery';
+import { downloadName, downloadUrl, type GalleryItem } from '@/composables/inbox/useThreadGallery';
 import { useI18n } from '@/composables/useI18n';
 import { ChevronLeft, ChevronRight, Download, LoaderCircle, MessageSquareShare, X } from 'lucide-vue-next';
 import { DialogClose, DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'radix-vue';
@@ -11,6 +11,10 @@ import { computed, ref, watch } from 'vue';
  * "next"), Escape closes, a 50 px horizontal swipe pages on touch, focus is trapped by the
  * Radix dialog and handed back to the thumbnail that opened it. Only the current item's
  * full file is requested; the neighbours warm their thumbnails.
+ *
+ * The open item is tracked by its attachment id (`v-model:current-id`), never by position:
+ * older pages prepending or a message being replaced must not swap the picture under the
+ * viewer. The index is derived from the id.
  */
 const props = withDefaults(
     defineProps<{
@@ -22,15 +26,50 @@ const props = withDefaults(
     }>(),
     { opener: null, canJump: false },
 );
-const index = defineModel<number | null>('index', { required: true });
+const currentId = defineModel<number | null>('currentId', { required: true });
 const emit = defineEmits<{ jump: [messageId: number] }>();
 
 const { t, dir } = useI18n();
 
+const index = computed<number | null>({
+    get: () => {
+        if (currentId.value === null) return null;
+        const i = props.items.findIndex((item) => item.id === currentId.value);
+        return i === -1 ? null : i;
+    },
+    set: (i) => {
+        currentId.value = i === null ? null : (props.items[i]?.id ?? null);
+    },
+});
+
+// The open item left the list (its message was removed or replaced without it): move to
+// its nearest surviving neighbour in the old order, or close when nothing is left.
+watch(
+    () => props.items,
+    (items, old) => {
+        const id = currentId.value;
+        if (id === null || items.some((item) => item.id === id)) return;
+        const alive = new Set(items.map((item) => item.id));
+        const was = old?.findIndex((item) => item.id === id) ?? -1;
+        if (old && was !== -1) {
+            for (let d = 1; d < old.length; d++) {
+                for (const j of [was + d, was - d]) {
+                    const candidate = old[j];
+                    if (candidate && alive.has(candidate.id)) {
+                        currentId.value = candidate.id;
+                        return;
+                    }
+                }
+            }
+        }
+        currentId.value = null;
+    },
+);
+
 const open = computed({
-    get: () => index.value !== null && props.items.length > 0,
+    get: () => index.value !== null,
     set: (value: boolean) => {
-        if (!value) index.value = null;
+        if (!value) currentId.value = null;
     },
 });
 
@@ -51,7 +90,7 @@ const next = () => step(1);
 function onEscapeCapture(event: KeyboardEvent): void {
     if (event.key !== 'Escape' || !(event.target instanceof HTMLVideoElement)) return;
     event.preventDefault();
-    index.value = null;
+    currentId.value = null;
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -98,11 +137,28 @@ function onPointerCancel(): void {
 }
 
 // The full file is loading: a quiet spinner sits behind it until `load`.
+// Keyed by id: the items list rebuilds its objects on every message change, and an
+// unchanged <img :key> never fires `load` again.
 const loaded = ref(false);
-watch(current, () => (loaded.value = false));
+watch(
+    () => current.value?.id,
+    () => (loaded.value = false),
+);
 
-// Warm the neighbours' thumbnails (never their full files).
+// Warm the neighbours' thumbnails (never their full files); forgotten on close.
 const warmed = new Set<string>();
+
+// Opening the gallery (from a thumbnail, a video's full-screen button, anywhere) stops any
+// video still playing inline in the page behind it.
+watch(open, (isOpen) => {
+    if (!isOpen) {
+        warmed.clear();
+        return;
+    }
+    for (const video of document.querySelectorAll('video')) {
+        if (!video.closest('[data-gallery]')) video.pause();
+    }
+});
 watch(
     index,
     (i) => {
@@ -180,8 +236,9 @@ function jump(): void {
                     </button>
                     <a
                         v-if="current"
-                        :href="current.url"
-                        download
+                        :href="downloadUrl(current)"
+                        :download="downloadName(current)"
+                        data-gallery-download
                         class="inline-flex size-9 items-center justify-center rounded-md text-white/90 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
                         :title="t('media.download')"
                         :aria-label="t('media.download')"

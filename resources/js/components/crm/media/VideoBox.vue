@@ -3,7 +3,7 @@ import { useI18n } from '@/composables/useI18n';
 import { formatBytes, formatDuration } from '@/lib/format';
 import { boxStyle, fitBox } from '@/lib/mediaSize';
 import type { Attachment } from '@/types/crm';
-import { Maximize2, Play } from 'lucide-vue-next';
+import { Maximize2, Play, VideoOff } from 'lucide-vue-next';
 import { computed, nextTick, ref } from 'vue';
 
 /**
@@ -38,8 +38,17 @@ function openFullscreen(event: MouseEvent): void {
 
 <template>
     <div class="relative overflow-hidden rounded-lg bg-black/80" :style="boxStyle(size)">
+        <div
+            v-if="!attachment.url"
+            class="flex size-full flex-col items-center justify-center gap-1 text-2xs text-white/75"
+            role="img"
+            :aria-label="`${t('media.preview_video')}: ${t('media.unavailable')}`"
+        >
+            <VideoOff class="size-5" aria-hidden="true" />
+            <span aria-hidden="true">{{ t('media.unavailable') }}</span>
+        </div>
         <video
-            v-if="playing"
+            v-else-if="playing"
             ref="player"
             :src="attachment.url ?? undefined"
             :width="size.width"
@@ -70,6 +79,7 @@ function openFullscreen(event: MouseEvent): void {
         </button>
 
         <button
+            v-if="attachment.url"
             type="button"
             class="absolute end-1.5 top-1.5 flex size-8 items-center justify-center rounded-full bg-black/55 text-white hover:bg-black/75 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
             :aria-label="t('media.fullscreen')"

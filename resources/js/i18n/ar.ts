@@ -376,6 +376,7 @@ const ar = {
         go_to_message: 'روحي للرسالة',
         fullscreen: 'ملء الشاشة',
         play_video: 'شغّلي الفيديو',
+        unavailable: 'مش متاحة',
         tab_details: 'البيانات',
         tab_media: 'الوسائط',
         empty: 'مفيش وسائط في المحادثة دي',
