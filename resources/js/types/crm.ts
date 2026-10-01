@@ -594,6 +594,8 @@ export interface CursorPage<T> {
     data: T[];
     meta?: { next_cursor: string | null; per_page?: number };
     links?: { next: string | null };
+    /** `like` when the list search fell back to a substring match: send `qmode=like` with every later page. */
+    search_mode?: 'like' | null;
 }
 
 export interface ChannelAlert {

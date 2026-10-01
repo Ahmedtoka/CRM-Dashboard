@@ -59,7 +59,10 @@ trait ConversationEndpoints
 {
     public function list(Request $request, ConversationQuery $query): AnonymousResourceCollection
     {
-        return ConversationResource::collection($query->paginate($request->user(), $this->conversationFilters($request)));
+        $page = $query->paginate($request->user(), $this->conversationFilters($request));
+
+        // search_mode=like tells the client to send qmode=like with every later page of this search.
+        return ConversationResource::collection($page)->additional(['search_mode' => $query->searchMode()]);
     }
 
     /**
@@ -519,7 +522,7 @@ trait ConversationEndpoints
     {
         $user = $request->user();
         $params = $this->conversationFilters($request);
-        unset($params['status'], $params['queue']);
+        unset($params['status'], $params['queue'], $params['qmode']);
         ksort($params);
 
         $counts = Cache::remember(
@@ -584,6 +587,7 @@ trait ConversationEndpoints
             'flags' => ['nullable', 'string', 'max:300'],
             'filter' => ['nullable', Rule::in(ConversationQuery::FILTERS)],
             'q' => ['nullable', 'string', 'max:100'],
+            'qmode' => ['nullable', Rule::in(['like'])],
             'tag' => ['nullable', 'integer', 'exists:tags,id'],
         ]);
 

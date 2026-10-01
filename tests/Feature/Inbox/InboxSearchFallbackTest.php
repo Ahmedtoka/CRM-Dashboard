@@ -6,9 +6,10 @@ use App\Inbox\ConversationQuery;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
 use App\Models\Customer;
+use App\Models\QueueEntry;
+use App\Models\QueueSetting;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Pagination\Cursor;
 use Illuminate\Support\Facades\DB;
 
 /*
@@ -40,8 +41,8 @@ function indexedMissQuery(): ConversationQuery
 beforeEach(function () {
     $this->admin = User::factory()->create(['role' => UserRole::Admin]);
     $account = ChannelAccount::factory()->create(['platform' => Platform::Facebook]);
-    $this->make = fn (array $c) => Conversation::factory()->for($account, 'channelAccount')
-        ->create(['customer_id' => Customer::factory()->create($c)->id]);
+    $this->make = fn (array $c, $at = null) => Conversation::factory()->for($account, 'channelAccount')
+        ->create(['customer_id' => Customer::factory()->create($c)->id, 'last_message_at' => $at]);
 });
 
 it('falls back to a substring LIKE when the indexed name search finds nothing on the first page', function () {
@@ -86,15 +87,47 @@ it('does not run the fallback when the indexed search found rows', function () {
     expect($q->paginate($this->admin, ['q' => 'محمد'])->getCollection()->pluck('id')->all())->toBe([$hit->id]);
 });
 
-it('never falls back on a later page', function () {
-    ($this->make)(['name' => 'عبدالله', 'phone' => null]);
-    $q = indexedMissQuery();
+it('pages through every substring-only hit: page 1 reports search_mode=like and later pages keep the LIKE with qmode=like', function () {
+    $expected = [];
+    for ($i = 0; $i < 70; $i++) {
+        $expected[] = ($this->make)(['name' => "عبدالله {$i}", 'phone' => null], now()->subMinutes($i))->id;
+    }
+    // The indexed path (a name prefix) can never match "الله": stand in for MariaDB.
+    app()->bind(ConversationQuery::class, fn () => indexedMissQuery());
 
-    // A cursor in the request means "page 2+": an empty indexed result there stays empty.
-    request()->merge(['cursor' => (new Cursor(['conversations.last_message_at' => now()->toDateTimeString(), 'conversations.id' => 999999], false))->encode()]);
+    $url = '/inbox/conversations?q='.urlencode('الله');
+    $seen = [];
+    $next = $url;
+    $pages = 0;
+    do {
+        $res = $this->actingAs($this->admin)->getJson($next)->assertOk();
+        $res->assertJsonPath('search_mode', 'like');
+        $seen = array_merge($seen, $res->json('data.*.id'));
+        $cursor = $res->json('meta.next_cursor');
+        $next = $url.'&qmode=like&cursor='.$cursor;
+        $pages++;
+    } while ($cursor !== null && $pages < 10);
 
-    expect($q->paginate($this->admin, ['q' => 'الله'])->getCollection())->toBeEmpty()
-        ->and($q->indexedRuns)->toBe(1);
+    expect($pages)->toBe(3)
+        ->and(count($seen))->toBe(70)
+        ->and(count(array_unique($seen)))->toBe(70)
+        ->and(array_diff($expected, $seen))->toBe([]);
+
+    // Without qmode a later page takes the indexed path again and finds nothing (why the client sends it).
+    $first = $this->actingAs($this->admin)->getJson($url)->json('meta.next_cursor');
+    $this->actingAs($this->admin)->getJson($url.'&cursor='.$first)->assertOk()->assertJsonCount(0, 'data');
+    $this->actingAs($this->admin)->getJson($url.'&qmode=bogus')->assertUnprocessable();
+});
+
+it('keeps status and queue counts in the same LIKE window', function () {
+    QueueSetting::current()->update(['enabled' => true]);
+    $conv = ($this->make)(['name' => 'عبدالله محمود', 'phone' => null]);
+    $entry = QueueEntry::factory()->create(['conversation_id' => $conv->id, 'status' => 'waiting']);
+    $conv->forceFill(['queue_entry_id' => $entry->id])->save();
+
+    $counts = indexedMissQuery()->counts($this->admin, ['q' => 'الله']);
+
+    expect($counts['status']['open'])->toBe(1)->and($counts['queue']['waiting'])->toBe(1);
 });
 
 it('lists substring matches through the real endpoint on every driver', function () {

@@ -25,11 +25,14 @@ class MessageAttachment extends Model
     protected static function booted(): void
     {
         // A stored image/sticker gets its inbox thumbnail (the job runs after the commit).
-        static::saved(function (self $a): void {
-            if ($a->thumb_path === null && Thumbnailer::supports($a) && ($a->wasRecentlyCreated || $a->wasChanged(['status', 'path']))) {
+        // Created already stored, or newly stored by an update of status/path: never on other saves.
+        $dispatch = function (self $a): void {
+            if ($a->thumb_path === null && Thumbnailer::supports($a)) {
                 MakeThumbnail::dispatch($a->id);
             }
-        });
+        };
+        static::created($dispatch);
+        static::updated(fn (self $a) => $a->wasChanged(['status', 'path']) ? $dispatch($a) : null);
     }
 
     protected function casts(): array

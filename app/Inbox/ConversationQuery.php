@@ -79,6 +79,23 @@ class ConversationQuery
      */
     public function paginate(User $u, array $f): CursorPaginator
     {
+        $this->searchMode = null;
+        $forced = ($f['qmode'] ?? null) === 'like' && trim((string) ($f['q'] ?? '')) !== '';
+
+        // Page 2+ of a search whose first page needed the fallback: the client sends qmode=like back,
+        // so every page of that search uses the same LIKE (the indexed path would find nothing).
+        if ($forced) {
+            $this->likeSearch = true;
+            try {
+                $page = $this->pageOf($u, $f);
+            } finally {
+                $this->likeSearch = false;
+            }
+            $this->searchMode = 'like';
+
+            return $page;
+        }
+
         $page = $this->pageOf($u, $f);
 
         // The indexed search (name prefix / FULLTEXT word prefix / phone prefix or suffix) cannot see
@@ -93,10 +110,19 @@ class ConversationQuery
             } finally {
                 $this->likeSearch = false;
             }
+            $this->searchMode = 'like';
         }
 
         return $page;
     }
+
+    /** `like` when the last paginate() call used the substring fallback (the client must send qmode=like on later pages). */
+    public function searchMode(): ?string
+    {
+        return $this->searchMode;
+    }
+
+    private ?string $searchMode = null;
 
     /** @var bool Set only while the substring fallback re-runs a search that the indexed path left empty. */
     private bool $likeSearch = false;
@@ -339,34 +365,39 @@ class ConversationQuery
      */
     public function counts(User $u, array $f): array
     {
-        unset($f['status'], $f['queue']);
+        unset($f['status'], $f['queue'], $f['qmode']);
 
         $count = fn (array $extra): int => DB::query()
             ->fromSub($this->filtered($u, $f + $extra)->select('conversations.id')->limit(self::COUNT_LIMIT), 'capped')
             ->count();
 
-        $status = [];
-        foreach (self::COUNT_STATUSES as $s) {
-            $status[$s] = $count(['status' => $s]);
-        }
+        $queueOn = QueueSetting::current()->enabled;
+        $run = function () use ($count, $queueOn): array {
+            $status = [];
+            foreach (self::COUNT_STATUSES as $s) {
+                $status[$s] = $count(['status' => $s]);
+            }
+            $queue = null;
+            if ($queueOn) {
+                $queue = [];
+                foreach (self::QUEUE_STATES as $s) {
+                    $queue[$s] = $count(['queue' => $s]);
+                }
+            }
+
+            return [$status, $queue];
+        };
+
+        [$status, $queue] = $run();
 
         // Same substring fallback as the list: an indexed search that matched nothing in any state.
+        // Status and queue counts are both recomputed inside the same LIKE window so they agree.
         if (array_sum($status) === 0 && trim((string) ($f['q'] ?? '')) !== '' && $this->usesIndexedSearch()) {
             $this->likeSearch = true;
             try {
-                foreach (self::COUNT_STATUSES as $s) {
-                    $status[$s] = $count(['status' => $s]);
-                }
+                [$status, $queue] = $run();
             } finally {
                 $this->likeSearch = false;
-            }
-        }
-
-        $queue = null;
-        if (QueueSetting::current()->enabled) {
-            $queue = [];
-            foreach (self::QUEUE_STATES as $s) {
-                $queue[$s] = $count(['queue' => $s]);
             }
         }
 

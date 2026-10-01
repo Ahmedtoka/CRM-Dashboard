@@ -25,15 +25,15 @@ export function priorityRank(level: Conversation['priority_level'] | undefined):
  * - queues / needs_human: priority high → medium → low → none, oldest customer message first, then id
  * - waiting: oldest waiting first
  * - everything else: newest activity first
- * Null timestamps sort last in ascending orders (the server's sqlite/mysql NULL order differs by engine).
+ * Null timestamps sort FIRST in ascending orders, like the server (NULL is smallest on MariaDB and sqlite).
  */
 export function compareConversations(filter: InboxFilters['filter']): (a: Conversation, b: Conversation) => number {
     if (filter && PRIORITY_ORDERED_FILTERS.includes(filter)) {
         return (a, b) => {
             const rank = priorityRank(a.priority_level) - priorityRank(b.priority_level);
             if (rank !== 0) return rank;
-            const ta = time(a.last_customer_message_at, Number.MAX_SAFE_INTEGER);
-            const tb = time(b.last_customer_message_at, Number.MAX_SAFE_INTEGER);
+            const ta = time(a.last_customer_message_at, Number.MIN_SAFE_INTEGER);
+            const tb = time(b.last_customer_message_at, Number.MIN_SAFE_INTEGER);
             return ta !== tb ? ta - tb : a.id - b.id;
         };
     }

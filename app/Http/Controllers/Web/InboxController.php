@@ -28,7 +28,7 @@ class InboxController extends Controller
         $flags = $filters['flags'];
 
         return Inertia::render('Inbox', [
-            'conversations' => ConversationResource::collection($query->paginate($user, $filters)),
+            'conversations' => ConversationResource::collection($query->paginate($user, $filters))->additional(['search_mode' => $query->searchMode()]),
             'filters' => array_merge(
                 ['platform' => null, 'status' => null, 'queue' => null, 'assignee' => null, 'flags' => [], 'q' => null, 'tag' => null],
                 $filters,

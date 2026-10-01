@@ -43,6 +43,8 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
     const loadingMore = ref(false);
 
     let requestSeq = 0;
+    // Set when the first page of a search used the server's substring fallback: later pages must too.
+    let searchMode: 'like' | null = initial.search_mode ?? null;
     let refreshTimer: number | undefined;
 
     const params = () => Object.fromEntries(Object.entries(filters.value).filter(([, v]) => v !== null && v !== ''));
@@ -75,6 +77,7 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
             const { data } = await api.get<CursorPage<Conversation>>('/inbox/conversations', { params: params() });
             if (seq !== requestSeq) return;
             conversations.value = data.data;
+            searchMode = data.search_mode ?? null;
             nextCursor.value = data.meta?.next_cursor ?? null;
             sortList();
         } finally {
@@ -93,7 +96,7 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
         const seq = requestSeq;
         loadingMore.value = true;
         try {
-            const { data } = await api.get<CursorPage<Conversation>>('/inbox/conversations', { params: { ...params(), cursor: nextCursor.value } });
+            const { data } = await api.get<CursorPage<Conversation>>('/inbox/conversations', { params: { ...params(), ...(searchMode ? { qmode: searchMode } : {}), cursor: nextCursor.value } });
             if (seq !== requestSeq) return;
             data.data.forEach(upsertFull);
             nextCursor.value = data.meta?.next_cursor ?? null;

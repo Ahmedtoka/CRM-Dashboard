@@ -5,6 +5,7 @@ use App\Enums\AttachmentType;
 use App\Enums\Platform;
 use App\Enums\UserRole;
 use App\Http\Resources\AttachmentResource;
+use App\Media\Jobs\MakeThumbnail;
 use App\Media\MediaStorage;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
@@ -13,6 +14,7 @@ use App\Models\MessageAttachment;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -129,4 +131,32 @@ it('backfills old rows with media:thumbnails --sync and queues nothing on the se
     $rows->each(fn ($a) => expect($a->fresh()->thumb_path)->not->toBeNull());
 
     $this->artisan('media:thumbnails', ['--sync' => true])->expectsOutput('queued=0')->assertSuccessful();
+});
+
+it('dispatches the thumbnail job when created stored or newly stored, not on unrelated saves', function () {
+    Queue::fake();
+
+    $a = MessageAttachment::factory()->stored()->create(['message_id' => $this->message->id]);
+    Queue::assertPushed(MakeThumbnail::class, 1);
+
+    $a->forceFill(['original_name' => 'x.png'])->save();   // unrelated save of a stored row
+    $a->forceFill(['error' => null])->save();
+    Queue::assertPushed(MakeThumbnail::class, 1);
+
+    $p = MessageAttachment::factory()->create(['message_id' => $this->message->id, 'status' => AttachmentStatus::Pending]);
+    Queue::assertPushed(MakeThumbnail::class, 1); // pending: none
+    $p->forceFill(['status' => AttachmentStatus::Stored, 'path' => 'inbound/2026/10/'.Str::uuid().'.png'])->save();
+    Queue::assertPushed(MakeThumbnail::class, 2);
+});
+
+it('deletes the thumbnail file when pruning an orphan attachment', function () {
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $a = app(MediaStorage::class)->storeUpload(jpegUpload(1600, 900), $admin)->fresh();
+    $a->forceFill(['created_at' => now()->subDays(3)])->saveQuietly();
+    Storage::disk('media')->assertExists($a->thumb_path);
+
+    $this->artisan('crm:prune-media-orphans')->assertSuccessful();
+
+    Storage::disk('media')->assertMissing($a->thumb_path);
+    Storage::disk('media')->assertMissing($a->path);
 });
