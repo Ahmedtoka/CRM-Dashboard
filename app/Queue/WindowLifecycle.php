@@ -4,6 +4,7 @@ namespace App\Queue;
 
 use App\Analytics\ActivityLogger;
 use App\Analytics\PresenceTracker;
+use App\Bot\BotEngine;
 use App\Enums\ActorType;
 use App\Enums\Handler;
 use App\Events\ConversationUpdated;
@@ -23,6 +24,7 @@ use App\Queue\Jobs\ConfirmClose;
 use App\Queue\Jobs\SendQueueMessage;
 use App\Support\SafeBroadcast;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -727,7 +729,26 @@ class WindowLifecycle
                 'assigned_to_id' => $by?->id, 'opened_by_id' => $by?->id, 'queue_entry_id' => $e->id, 'sla_due_at' => now()->addHours($s->case_sla_hours),
             ]);
             $e->forceFill(['support_case_id' => $case->id])->save();
-            SendQueueMessage::dispatch($e->id, 'queue_case_opened', ['case_id' => $case->id]);
+        }
+
+        // Spec 2026-09-30 §2: «خلصت» is the final close — hers, or a supervisor's on her behalf —
+        // and it ends with the closing message. A case close sends its case number first. One
+        // chain on the `outbound` queue keeps the two in that order (each is its own job, afterCommit).
+        // Automatic close, transfer, escalation, no_reply and cancels send nothing new.
+        //
+        // Addendum C2 (the R1 override): the conversation then goes back to the bot, with the same
+        // reset as «رجوع للبوت», on the conversation row this transaction holds locked. Her next
+        // real message is the bot's; a human request is a new ticket (`returning` within
+        // `return_priority_minutes`, see QueueService::enqueue()). The close is final: her return
+        // never reverses it. No bot turn is started here.
+        if (in_array($reason, QueueEntry::FINAL_CLOSE_REASONS, true) && $c) {
+            $messages = $reason === 'case' && $e->support_case_id !== null
+                ? [new SendQueueMessage($e->id, 'queue_case_opened', ['case_id' => $e->support_case_id])]
+                : [];
+            $messages[] = new SendQueueMessage($e->id, 'queue_closed_thanks', []);
+            Bus::chain($messages)->onQueue('outbound')->dispatch();
+
+            app(BotEngine::class)->resetToBot($c);
         }
 
         $confirmNow = false;

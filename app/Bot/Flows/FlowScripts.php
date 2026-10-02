@@ -93,6 +93,8 @@ final class FlowScripts
             'queue_eta_sentence' => ['title' => 'الطابور: جملة الوقت في تحديث الدور', 'body' => 'وهنكون معاكي خلال حوالي {minutes}'],
             // Flow revision (2026-09-29) §4.2: the moderator has not replied yet.
             'queue_agent_delay_apology' => ['title' => 'الطابور: اعتذار عن تأخير الموظفة', 'body' => 'معلش على التأخير، زميلتنا {agent} معاكي حالاً'],
+            // Spec 2026-09-30 §2: «خلصت» — the closing message of every manual close (the last word is ours).
+            'queue_closed_thanks' => ['title' => 'الطابور: رسالة القفل', 'body' => 'سعدنا بخدمتك يا فندم، لو احتجتي أي حاجة تانية ابعتيلنا في أي وقت.'],
         ];
     }
 }

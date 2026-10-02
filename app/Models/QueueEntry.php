@@ -28,6 +28,12 @@ class QueueEntry extends Model
     /** Manual closes that wait `close_confirm_minutes` before they stand. */
     public const CONFIRMABLE_REASONS = ['inquiry', 'problem'];
 
+    /**
+     * Spec 2026-09-30 §2: the final close — her «خلصت», or a supervisor's on her behalf — ends with
+     * `queue_closed_thanks` and (addendum C2, the R1 override) hands the conversation back to the bot.
+     */
+    public const FINAL_CLOSE_REASONS = ['inquiry', 'problem', 'case'];
+
     protected $guarded = ['id'];
 
     protected function casts(): array

@@ -114,11 +114,11 @@ class InboxIngestor
 
                 $identity->customer->forceFill(['last_contact_at' => now()])->save();
 
-                // Handover queue: she came back inside the return / confirm window (re-queued with
+                // Handover queue: she came back inside an auto-close's return window (re-queued with
                 // priority), or she wrote while queued / in a window (the silence clock restarts; a
                 // thanks starts no reply clock). A thanks / emoji / sticker after the close is
                 // "settled" (spec 2026-09-30 §1): it stays in the thread but asks for nothing: not
-                // unread, no queue hook (no ticket, no reversed close), no bot turn. The acknowledgement
+                // unread, no queue hook (no ticket), no bot turn. The acknowledgement
                 // is judged once here; the queue decides under the conversation lock, and the unread
                 // count and the bot follow that one decision.
                 $settled = ! $message->is_spam
