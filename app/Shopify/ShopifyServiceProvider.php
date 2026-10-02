@@ -34,6 +34,7 @@ class ShopifyServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->commands([
+                \App\Shopify\Commands\CheckJourneyCommand::class,
                 ReconcileCommand::class,
                 ReconcileCountsCommand::class,
                 SyncShippingCommand::class,

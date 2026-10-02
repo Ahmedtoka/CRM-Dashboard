@@ -39,21 +39,37 @@ final class OrderAttribution
         $count = 0;
 
         Order::query()
-            ->where('status', '!=', OrderStatus::Cancelled->value)
             ->whereBetween('placed_at', [$from, $to])
-            ->when(! $force, fn ($q) => $q->whereNull('ad_attribution'))
-            ->chunkById(500, function (Collection $orders) use (&$count) {
+            ->when(! $force, fn ($q) => $q->where(fn ($w) => $w->whereNull('ad_attribution')->orWhere('ad_attribution', 'inbox')
+                ->orWhere(fn ($c) => $c->where('status', OrderStatus::Cancelled->value)->whereNotNull('ad_attribution'))))
+            ->chunkById(500, function (Collection $orders) use (&$count, $force) {
                 $touches = $this->touches($orders);
                 $spend = $this->spendFor($orders);
 
                 foreach ($orders as $order) {
+                    $clear = ['ad_id' => null, 'ad_campaign_id' => null, 'ad_attribution' => null];
+
+                    // Cancelled orders carry no attribution (they never count as real orders).
+                    if ($order->status === OrderStatus::Cancelled) {
+                        if ($order->ad_attribution !== null || $order->ad_id !== null || $order->ad_campaign_id !== null) {
+                            Order::query()->whereKey($order->id)->toBase()->update($clear);
+                        }
+
+                        continue;
+                    }
+
                     $result = $this->resolve($order, $touches[$order->customer_id] ?? [], $spend);
 
                     if ($result === null) {
-                        if ($order->ad_attribution !== null) { // force run: the evidence is gone
-                            Order::query()->whereKey($order->id)->toBase()->update(['ad_id' => null, 'ad_campaign_id' => null, 'ad_attribution' => null]);
+                        if ($force && $order->ad_attribution !== null) { // the evidence is gone
+                            Order::query()->whereKey($order->id)->toBase()->update($clear);
                         }
 
+                        continue;
+                    }
+
+                    // Without --force an inbox attribution is only replaced by stronger (utm) evidence.
+                    if (! $force && $order->ad_attribution === 'inbox' && $result['ad_attribution'] === 'inbox') {
                         continue;
                     }
 

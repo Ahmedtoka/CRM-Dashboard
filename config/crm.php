@@ -76,6 +76,9 @@ return [
         'shop' => env('SHOPIFY_SHOP'),
         'token' => env('SHOPIFY_ADMIN_TOKEN'),
         'api_version' => env('SHOPIFY_API_VERSION', '2025-07'),
+
+        // Ask Shopify for the order's customer journey (utm). Off until `php artisan shopify:check-journey` says supported.
+        'capture_journey' => (bool) env('SHOPIFY_CAPTURE_JOURNEY', false),
         'webhook_secret' => env('SHOPIFY_WEBHOOK_SECRET'),
 
         // 'fake' (default) needs no real store — every screen and test works

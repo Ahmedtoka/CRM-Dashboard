@@ -3,7 +3,10 @@
 namespace App\Shopify\Client;
 
 use App\Shopify\Connection\IntegrationRepository;
+use App\Shopify\Sync\SyncQueries;
 use Closure;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -84,6 +87,16 @@ final class ShopifyClient
         return $data;
     }
 
+    /**
+     * Read-only probe: no journey fallback and never flags the integration as errored.
+     *
+     * @return array<mixed>
+     */
+    public function probe(string $query, array $variables = []): array
+    {
+        return $this->execute($query, $variables, false, true);
+    }
+
     /** @return array{maximumAvailable: float, currentlyAvailable: float, restoreRate: float}|null */
     public function lastThrottleStatus(): ?array
     {
@@ -91,7 +104,7 @@ final class ShopifyClient
     }
 
     /** @return array<mixed> */
-    private function execute(string $query, array $variables, bool $isMutation = false): array
+    private function execute(string $query, array $variables, bool $isMutation = false, bool $probe = false): array
     {
         [$domain, $token] = $this->resolveCredentials();
 
@@ -125,8 +138,12 @@ final class ShopifyClient
             $status = (int) ($response['status'] ?? 0);
             $json = $response['json'] ?? [];
 
+            if (! $probe && $this->journeyRejected($query, $status, $json)) {
+                return $this->retryWithoutJourney($query, $variables, $isMutation);
+            }
+
             if ($status === 401 || $status === 403 || $this->hasErrorCode($json, 'ACCESS_DENIED')) {
-                if ($this->useStoredIntegration) {
+                if ($this->useStoredIntegration && ! $probe) {
                     $this->integrations->markError('Shopify authentication failed (HTTP '.$status.')');
                 }
 
@@ -162,6 +179,35 @@ final class ShopifyClient
 
             return $json['data'] ?? [];
         }
+    }
+
+    /**
+     * The optional customerJourneySummary field was refused (ACCESS_DENIED or a field error naming it).
+     * That is a capability gap, not a broken integration: the caller retries without the field.
+     */
+    private function journeyRejected(string $query, int $status, array $json): bool
+    {
+        if ($status === 401 || ! str_contains($query, 'customerJourneySummary') || empty($json['errors'])) {
+            return false;
+        }
+
+        if ($this->hasErrorCode($json, 'ACCESS_DENIED')) {
+            return true;
+        }
+
+        return collect($json['errors'])->contains(fn ($e) => str_contains((string) ($e['message'] ?? ''), 'customerJourneySummary'));
+    }
+
+    /** @return array<mixed> */
+    private function retryWithoutJourney(string $query, array $variables, bool $isMutation): array
+    {
+        $data = $this->execute(SyncQueries::withoutJourney($query), $variables, $isMutation);
+
+        // Only a retry that worked proves the field was the problem.
+        Cache::put(SyncQueries::JOURNEY_UNSUPPORTED_CACHE_KEY, true, now()->addDay());
+        Log::warning('Shopify refused customerJourneySummary; skipping it for 24 hours (utm then comes from webhooks only).');
+
+        return $data;
     }
 
     /** @return array{0: string, 1: string} */

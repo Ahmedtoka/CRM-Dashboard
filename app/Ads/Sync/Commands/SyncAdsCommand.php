@@ -52,7 +52,7 @@ class SyncAdsCommand extends Command
                 $failed++;
             }
         }
-        if ($days >= 30) { // nightly deep sync: re-resolve recent orders against the freshly synced ads
+        if ($days >= 30) { // nightly deep sync: re-resolve recent orders against the ads already stored (a queued sync may not have finished yet; the hourly run catches up)
             $this->attributeOrders($attribution);
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Shopify\Sync;
 
+use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
 
 /**
@@ -56,7 +57,6 @@ final class SyncQueries
             billingAddress { name firstName lastName phone address1 address2 city province provinceCode zip countryCodeV2 }
             shippingLine { title }
             customer { id firstName lastName email phone updatedAt }
-            customerJourneySummary { firstVisit { landingPage utmParameters { source medium campaign content term } } lastVisit { landingPage utmParameters { source medium campaign content term } } }
             fulfillments{first:5} { id status displayStatus createdAt updatedAt deliveredAt trackingInfo { company number url } }
             refunds{first:5} { id note createdAt totalRefundedSet { shopMoney { amount currencyCode } } }
         GRAPHQL,
@@ -91,6 +91,12 @@ final class SyncQueries
             GRAPHQL,
         ],
     ];
+
+    /** Opt-in (config crm.shopify.capture_journey): needs access the live token may not have. */
+    public const JOURNEY_FIELD = 'customerJourneySummary { firstVisit { landingPage utmParameters { source medium campaign content term } } lastVisit { landingPage utmParameters { source medium campaign content term } } }';
+
+    /** Cache key set for 24 h after Shopify rejected the journey field. */
+    public const JOURNEY_UNSUPPORTED_CACHE_KEY = 'shopify.journey_unsupported';
 
     public const BULK_OPERATION = <<<'GRAPHQL'
         query bulkOperation($id: ID!) {
@@ -165,7 +171,7 @@ final class SyncQueries
         ]) : [];
         $filter = $conditions !== [] ? '(query: "'.implode(' AND ', $conditions).'")' : '';
 
-        $node = self::sized(self::NODE[$resource], false)
+        $node = self::sized(self::node($resource), false)
             ." {$nested['select']} { edges { node { {$nested['node']} } } }";
         $inner = "{ {$resource}{$filter} { edges { node { {$node} } } } }";
 
@@ -177,7 +183,7 @@ final class SyncQueries
     {
         $nested = self::nested($resource);
         $size = self::PAGE_SIZES[$resource];
-        $node = self::sized(self::NODE[$resource], true)
+        $node = self::sized(self::node($resource), true)
             ." {$nested['select']}(first: {$nested['page']}) { edges { node { {$nested['node']} } } pageInfo { hasNextPage endCursor } }";
 
         return "query sync(\$cursor: String, \$query: String) {\n"
@@ -326,6 +332,42 @@ final class SyncQueries
     private static function nested(string $resource): array
     {
         return self::NESTED[$resource] ?? throw new InvalidArgumentException("Unknown Shopify sync resource [{$resource}].");
+    }
+
+    /** Node selection; orders only carry the journey field when the flag is on and Shopify has not rejected it. */
+    private static function node(string $resource): string
+    {
+        $node = self::NODE[$resource];
+
+        if ($resource === 'orders' && config('crm.shopify.capture_journey', false) && ! Cache::has(self::JOURNEY_UNSUPPORTED_CACHE_KEY)) {
+            $node .= "\n".self::JOURNEY_FIELD;
+        }
+
+        return $node;
+    }
+
+    /** Removes the journey field (a balanced block) from a document. */
+    public static function withoutJourney(string $document): string
+    {
+        $start = strpos($document, 'customerJourneySummary');
+        if ($start === false) {
+            return $document;
+        }
+
+        $open = strpos($document, '{', $start);
+        if ($open === false) {
+            return substr($document, 0, $start).substr($document, $start + strlen('customerJourneySummary'));
+        }
+
+        $depth = 0;
+        for ($i = $open, $n = strlen($document); $i < $n; $i++) {
+            $depth += $document[$i] === '{' ? 1 : ($document[$i] === '}' ? -1 : 0);
+            if ($depth === 0) {
+                return self::withoutJourney(substr($document, 0, $start).substr($document, $i + 1));
+            }
+        }
+
+        return $document;
     }
 
     private static function sized(string $fields, bool $paged): string

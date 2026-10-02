@@ -89,7 +89,7 @@ it('matches an ad by name and picks the one with most spend when names collide',
 it('keeps existing attributions unless forced and ignores orders outside the range', function () {
     $ad = Ad::factory()->create(['external_id' => '777']);
     $other = Ad::factory()->create(['external_id' => '888']);
-    $done = placedOrder(['utm_content' => '888', 'ad_id' => $ad->id, 'ad_attribution' => 'inbox']);
+    $done = placedOrder(['utm_content' => '888', 'ad_id' => $ad->id, 'ad_attribution' => 'utm_ad']);
     $old = placedOrder(['utm_content' => '777', 'placed_at' => '2026-07-01 10:00']);
 
     [$from, $to] = attributionRange();
@@ -136,4 +136,29 @@ it('schedules attribution hourly at minute 40 Cairo time', function () {
         ->and($event->expression)->toBe('40 * * * *')
         ->and($event->timezone)->toBe('Africa/Cairo')
         ->and($event->command)->toContain('--days=35');
+});
+
+it('lets utm evidence replace an inbox attribution without force but keeps an unchanged inbox one', function () {
+    $inboxAd = Ad::factory()->create(['external_id' => '111']);
+    $utmAd = Ad::factory()->create(['external_id' => '222']);
+    $c = Customer::factory()->create();
+    Conversation::factory()->create(['customer_id' => $c->id, 'ad_id' => '111', 'ad_attributed_at' => '2026-09-09 10:00']);
+    $upgrade = placedOrder(['customer_id' => $c->id, 'utm_content' => '222', 'ad_id' => $inboxAd->id, 'ad_attribution' => 'inbox']);
+    $stay = placedOrder(['customer_id' => $c->id, 'ad_id' => $inboxAd->id, 'ad_attribution' => 'inbox']);
+
+    [$from, $to] = attributionRange();
+
+    expect(app(OrderAttribution::class)->run($from, $to))->toBe(1)
+        ->and($upgrade->fresh()->ad_id)->toBe($utmAd->id)->and($upgrade->fresh()->ad_attribution)->toBe('utm_ad')
+        ->and($stay->fresh()->ad_id)->toBe($inboxAd->id)->and($stay->fresh()->ad_attribution)->toBe('inbox');
+});
+
+it('clears the attribution of cancelled orders in range', function () {
+    $ad = Ad::factory()->create(['external_id' => '333']);
+    $o = placedOrder(['utm_content' => '333', 'status' => OrderStatus::Cancelled, 'ad_id' => $ad->id, 'ad_campaign_id' => $ad->ad_campaign_id, 'ad_attribution' => 'utm_ad']);
+
+    [$from, $to] = attributionRange();
+    app(OrderAttribution::class)->run($from, $to);
+
+    expect($o->fresh()->ad_id)->toBeNull()->and($o->fresh()->ad_campaign_id)->toBeNull()->and($o->fresh()->ad_attribution)->toBeNull();
 });
