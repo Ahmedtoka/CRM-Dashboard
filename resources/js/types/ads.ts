@@ -268,3 +268,100 @@ export interface AdsWinnersProps extends AdsCommonProps {
     window: { from: string; to: string };
     winners: WinnerRow[];
 }
+
+/* ---- Setup pages: AccountController::index and BuyerSetupController::index ---- */
+
+export type AdConnectionStatus = 'connected' | 'pending' | 'error' | 'disabled';
+
+/** AssignmentService::history — newest period first; `ends_on` null = the open period. */
+export interface AdAssignmentPeriod {
+    /** null = a period where the account was explicitly unassigned. */
+    buyer_id: number | null;
+    buyer: string | null;
+    starts_on: string;
+    ends_on: string | null;
+}
+
+export interface AdAccountRow {
+    id: number;
+    external_id: string;
+    name: string;
+    currency: string;
+    status: string | null;
+    is_active: boolean;
+    last_synced_at: string | null;
+    buyer: AdsOption | null;
+    history: AdAssignmentPeriod[];
+    spend_30d: number;
+}
+
+export interface AdConnectionRow {
+    id: number;
+    platform: AdPlatformValue;
+    name: string;
+    status: AdConnectionStatus;
+    last_error: string | null;
+    last_synced_at: string | null;
+    driver: 'live' | 'fake';
+    has_token: boolean;
+    /** Which credential fields hold a stored value; the values never leave the server. */
+    configured: Record<string, boolean>;
+    accounts: AdAccountRow[];
+}
+
+export interface AdPlatformField {
+    key: string;
+    /** Translated server-side (lang/ads.php `credentials.*`). */
+    label: string;
+    secret: boolean;
+}
+
+export interface AdPlatformDefinition {
+    value: AdPlatformValue;
+    label: string;
+    fields: AdPlatformField[];
+}
+
+export interface AdsAccountsProps {
+    connections: AdConnectionRow[];
+    buyers: AdsOption[];
+    platforms: AdPlatformDefinition[];
+}
+
+export interface AdBuyerTarget {
+    /** 'YYYY-MM' */
+    month: string;
+    budget: number;
+    target_roas: number | null;
+}
+
+export interface AdBuyerSetupRow {
+    id: number;
+    name: string;
+    color: string | null;
+    is_active: boolean;
+    user: AdsOption | null;
+    targets: AdBuyerTarget[];
+}
+
+export interface AdsWinnerThresholds {
+    winner: number;
+    promising: number;
+    loser: number;
+    loser_min_spend: number;
+    min_spend: number;
+    min_days: number;
+}
+
+export interface AdsSetupSettings {
+    /** Fraction (0.14). */
+    tax_rate: number;
+    tax_rate_percent: number;
+    winner_thresholds: AdsWinnerThresholds;
+}
+
+export interface AdsBuyersSetupProps {
+    buyers: AdBuyerSetupRow[];
+    users: { id: number; name: string; role: string }[];
+    settings: AdsSetupSettings;
+}
