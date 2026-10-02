@@ -17,12 +17,39 @@ const rank: Record<Role, number> = { moderator: 1, supervisor: 2, admin: 3, medi
 const role = computed<Role>(() => page.props.auth.user?.role ?? 'moderator');
 const allows = (min: Role) => rank[role.value] >= rank[min];
 
+// Ads Hub (spec §8): report pages for supervisor+ and media buyers (a buyer's «media buyers» page is
+// their own card), management pages for supervisor+, the materials library for content.
+const adsGroup = computed<NavItem | null>(() => {
+    const materials: NavItem = { title: t('nav.ads_materials'), href: '/ads/materials' };
+    if (role.value === 'content') {
+        return {
+            title: t('nav.ads'),
+            href: '/ads',
+            icon: Images,
+            children: [materials, { title: t('nav.ads_collections'), href: '/ads/collections' }, { title: t('nav.ads_stock'), href: '/ads/stock' }],
+        };
+    }
+    if (role.value !== 'media_buyer' && !allows('supervisor')) return null;
+
+    const children: NavItem[] = [
+        { title: t('nav.ads_overview'), href: '/ads', exact: true },
+        { title: t('nav.ads_buyers'), href: '/ads/buyers' },
+        { title: t('nav.ads_creatives'), href: '/ads/creatives' },
+        { title: t('nav.ads_winners'), href: '/ads/winners' },
+        materials,
+    ];
+    if (allows('supervisor')) {
+        children.push({ title: t('nav.ads_accounts'), href: '/ads/accounts' }, { title: t('nav.ads_buyers_setup'), href: '/ads/setup/buyers' });
+    }
+
+    return { title: t('nav.ads'), href: '/ads', icon: Megaphone, children };
+});
+
 // Nav by role (spec §6): reports/settings subsets for supervisor+, admin-only tools last.
 // Settings children carry a `section` so NavMain renders them under small headings.
 const mainNavItems = computed<NavItem[]>(() => {
     // Ads roles see only the Ads Hub (RestrictAdsRoles keeps them out of everything else).
-    if (role.value === 'media_buyer') return [{ title: t('nav.ads'), href: '/ads', icon: Megaphone }];
-    if (role.value === 'content') return [{ title: t('nav.ads_materials'), href: '/ads/materials', icon: Images }];
+    if (role.value === 'media_buyer' || role.value === 'content') return adsGroup.value ? [adsGroup.value] : [];
 
     const devTools = page.props.devTools === true;
     const reports: NavItem[] = [{ title: t('nav.reports_me'), href: '/reports/me' }];
@@ -92,6 +119,7 @@ const mainNavItems = computed<NavItem[]>(() => {
         { title: t('nav.comments'), href: '/comments', icon: MessagesSquare },
         { title: t('nav.orders'), href: '/orders', icon: Package },
         { title: t('nav.customers'), href: '/customers', icon: Users },
+        ...(adsGroup.value ? [adsGroup.value] : []),
         { title: t('nav.reports'), href: '/reports', icon: BarChart3, children: reports },
         { title: t('nav.settings'), href: '/settings', icon: Settings, children: settings },
     ];

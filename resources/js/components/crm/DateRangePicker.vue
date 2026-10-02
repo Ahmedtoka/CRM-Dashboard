@@ -4,13 +4,14 @@ import { addDays, cairoToday } from '@/lib/format';
 import type { ReportRange } from '@/types/admin';
 import { computed, ref, watch } from 'vue';
 
-const props = defineProps<{ modelValue: ReportRange }>();
+/** `month` adds a «this month» preset (1st of the Cairo month → today). */
+const props = defineProps<{ modelValue: ReportRange; month?: boolean }>();
 const emit = defineEmits<{ 'update:modelValue': [range: ReportRange] }>();
 
 const { t } = useI18n();
 
-type Preset = 'today' | 'yesterday' | 'd7' | 'd30';
-const PRESETS: Preset[] = ['today', 'yesterday', 'd7', 'd30'];
+type Preset = 'today' | 'yesterday' | 'd7' | 'd30' | 'month';
+const PRESETS = computed<Preset[]>(() => (props.month ? ['today', 'yesterday', 'd7', 'd30', 'month'] : ['today', 'yesterday', 'd7', 'd30']));
 
 // Presets are Cairo calendar days; the server converts them to UTC bounds.
 function presetRange(preset: Preset): ReportRange {
@@ -22,13 +23,15 @@ function presetRange(preset: Preset): ReportRange {
             return { from: addDays(today, -6), to: today };
         case 'd30':
             return { from: addDays(today, -29), to: today };
+        case 'month':
+            return { from: `${today.slice(0, 8)}01`, to: today };
         default:
             return { from: today, to: today };
     }
 }
 
 const active = computed<Preset | 'custom'>(() => {
-    const match = PRESETS.find((p) => {
+    const match = PRESETS.value.find((p) => {
         const r = presetRange(p);
         return r.from === props.modelValue.from && r.to === props.modelValue.to;
     });
