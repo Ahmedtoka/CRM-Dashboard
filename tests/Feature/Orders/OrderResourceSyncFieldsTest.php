@@ -90,3 +90,20 @@ it('carries the name, final flag, mismatch and the resolved display on the Order
         ->and($payload['display'])->toBe($resource['display'])
         ->and($payload['display']['payment'])->toBe('refunded');
 });
+
+it('caps the order note in the OrderUpdated broadcast at 500 characters (Reverb frames are 10 KB)', function () {
+    $long = str_repeat('ملاحظة طويلة ', 1000); // ~13k characters, ~24 KB of UTF-8
+    $order = Order::factory()->create(['source' => OrderSource::Store, 'shopify_order_id' => '124', 'note' => $long]);
+
+    $payload = (new OrderUpdated($order->fresh()))->broadcastWith();
+
+    expect(mb_strlen($payload['note']))->toBeLessThanOrEqual(503) // 500 + the "..." marker
+        ->and($payload['note'])->toStartWith(mb_substr($long, 0, 100))
+        ->and(strlen(json_encode($payload)))->toBeLessThan(10 * 1024)
+        ->and($order->fresh()->note)->toBe($long); // the stored note is untouched
+
+    $short = Order::factory()->create(['source' => OrderSource::Store, 'note' => 'سيبيه عند البواب']);
+    $none = Order::factory()->create(['source' => OrderSource::Store, 'note' => null]);
+    expect((new OrderUpdated($short))->broadcastWith()['note'])->toBe('سيبيه عند البواب')
+        ->and((new OrderUpdated($none))->broadcastWith()['note'])->toBeNull();
+});

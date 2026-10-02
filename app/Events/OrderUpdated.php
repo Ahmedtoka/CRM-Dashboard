@@ -10,6 +10,7 @@ use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
+use Illuminate\Support\Str;
 
 class OrderUpdated implements ShouldBroadcastNow
 {
@@ -50,7 +51,8 @@ class OrderUpdated implements ShouldBroadcastNow
             'financial_status' => $o->financial_status,
             'fulfillment_status' => $o->fulfillment_status,
             'shipment_status' => $o->shipment_status,
-            'note' => $o->note,
+            // Reverb frames are capped at 10 KB: a long Shopify note must not drop the whole event.
+            'note' => $o->note === null ? null : Str::limit($o->note, 500),
             'shopify_updated_at' => $o->shopify_updated_at?->toIso8601String(),
             'last_synced_at' => $o->last_synced_at?->toIso8601String(),
             'updated_at' => $o->updated_at?->toIso8601String(),
