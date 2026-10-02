@@ -19,6 +19,8 @@ use App\Models\AdMaterial;
 use App\Models\AdMaterialCollection;
 use App\Models\AdPlatformConnection;
 use App\Models\BuyerTarget;
+use App\Models\ChannelAccount;
+use App\Models\Conversation;
 use App\Models\MediaBuyer;
 use App\Models\Order;
 use App\Models\Product;
@@ -33,7 +35,8 @@ use Throwable;
  * Ads Hub demo data on top of the base demo (DemoSeeder): three media buyers and a content user, fake
  * Meta / TikTok / Google connections synced 90 days through the fake driver, dated account assignments
  * (one hand-over to show history), monthly targets, the Le Voile material collections, 30 materials with
- * images, and a handful of ad-attributed orders.
+ * images, a handful of ad-attributed orders, and inbox conversations that came from the demo ads (a third of
+ * those customers order after the ad touch, so «conversations -> ordered» shows numbers).
  *
  * Idempotent: re-running updates rows instead of duplicating them. When a real Meta connection imported by
  * `ads:import-arena-token` exists, no fake Meta connection is created and the real accounts and their
@@ -70,6 +73,9 @@ class AdsDemoSeeder extends Seeder
 
     /** How many orders end up with a utm ad attribution. */
     private const ATTRIBUTED_ORDERS = 12;
+
+    /** How many inbox conversations carry a demo ad (conversations.ad_id = ads.external_id). */
+    private const AD_CONVERSATIONS = 25;
 
     /** [title, types, collections (indexes into COLLECTIONS), status, buyer key|null] */
     private const MATERIALS = [
@@ -127,6 +133,7 @@ class AdsDemoSeeder extends Seeder
         $collections = $this->seedCollections();
         $this->seedMaterials($collections, $content, $files, $today);
         $this->attributeOrders($attribution);
+        $this->seedAdConversations($today);
         $stockWatcher->run();
     }
 
@@ -313,13 +320,58 @@ class AdsDemoSeeder extends Seeder
         return (string) ob_get_clean();
     }
 
+    /**
+     * Inbox conversations from the demo ads over the last 4 weeks: base-demo conversations without an ad are reused
+     * first, the rest are created. Every third customer places an order the day after the ad touch.
+     */
+    private function seedAdConversations(CarbonImmutable $today): void
+    {
+        $assigned = AdAccountAssignment::query()->pluck('ad_account_id')->unique();
+        $ads = Ad::whereIn('ad_account_id', $assigned)
+            ->whereIn('id', AdDailyMetric::query()->whereIn('ad_account_id', $assigned)->select('ad_id'))
+            ->orderBy('id')->get(['id', 'external_id', 'name']);
+        if ($ads->isEmpty()) {
+            return;
+        }
+
+        $missing = self::AD_CONVERSATIONS - Conversation::whereIn('ad_id', $ads->pluck('external_id'))->count();
+        if ($missing <= 0) {
+            return;
+        }
+
+        $reuse = Conversation::whereNull('ad_id')->whereNotNull('customer_id')->orderBy('id')->limit($missing)->get();
+        $channel = ChannelAccount::query()->orderBy('id')->first();
+        for ($k = 0; $k < $missing; $k++) {
+            $ad = $ads[($k * 5) % $ads->count()];
+            $touch = $today->subDays(1 + ($k * 3) % 27)->setTime(9 + $k % 12, 15)->utc();
+            $attrs = ['ad_id' => $ad->external_id, 'ad_name' => mb_substr((string) $ad->name, 0, 190), 'ad_attributed_at' => $touch];
+
+            $conversation = $reuse[$k] ?? null;
+            if ($conversation !== null) {
+                $conversation->forceFill($attrs)->save();
+            } else {
+                $conversation = Conversation::factory()->create($attrs + ($channel !== null ? ['channel_account_id' => $channel->id] : []));
+            }
+
+            if ($k % 3 === 0) {
+                Order::factory()->create([
+                    'customer_id' => $conversation->customer_id,
+                    'status' => OrderStatus::Confirmed,
+                    'placed_at' => $touch->addDay()->setTime(12, 30),
+                ]);
+            }
+        }
+    }
+
     /** Gives a handful of the latest orders a utm ad id from ads with spend, then runs the real attribution over them. */
     private function attributeOrders(OrderAttribution $attribution): void
     {
         $missing = self::ATTRIBUTED_ORDERS - Order::where('utm_medium', 'paid')->where('utm_source', 'facebook')->count();
         if ($missing > 0) {
             $ads = Ad::whereIn('id', AdDailyMetric::query()->select('ad_id'))->orderBy('id')->pluck('external_id')->all();
+            // Orders of customers who came through an ad conversation stay conversation-driven (seedAdConversations).
             $orders = Order::whereNull('utm_source')->where('status', '!=', OrderStatus::Cancelled->value)
+                ->whereNotIn('customer_id', Conversation::query()->whereNotNull('ad_id')->whereNotNull('customer_id')->select('customer_id'))
                 ->orderByDesc('placed_at')->orderByDesc('id')->limit($missing)->get(['id', 'placed_at']);
             $now = CarbonImmutable::now();
             foreach ($orders as $k => $order) {

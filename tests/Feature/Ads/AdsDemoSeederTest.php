@@ -1,6 +1,8 @@
 <?php
 
 use App\Ads\Commands\ImportArenaTokenCommand;
+use App\Ads\Reports\AdsFilter;
+use App\Ads\Reports\AdsOverview;
 use App\Enums\UserRole;
 use App\Models\AdAccount;
 use App\Models\AdAccountAssignment;
@@ -10,6 +12,7 @@ use App\Models\AdMaterialCollection;
 use App\Models\AdMaterialFile;
 use App\Models\AdPlatformConnection;
 use App\Models\BuyerTarget;
+use App\Models\Conversation;
 use App\Models\MediaBuyer;
 use App\Models\Order;
 use App\Models\Product;
@@ -17,6 +20,7 @@ use App\Models\ProductVariant;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Database\Seeders\AdsDemoSeeder;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
@@ -49,6 +53,7 @@ it('seeds buyers, accounts, assignments, targets, collections and materials, and
         AdPlatformConnection::count(), AdAccount::count(), AdAccountAssignment::count(), BuyerTarget::count(),
         AdMaterialCollection::count(), AdMaterial::count(), AdMaterialFile::count(), AdDailyMetric::count(),
         Order::where('ad_attribution', 'utm_ad')->whereNotNull('ad_id')->count(),
+        Conversation::whereNotNull('ad_id')->count(), Order::count(),
     ];
     $first = $counts();
 
@@ -64,7 +69,13 @@ it('seeds buyers, accounts, assignments, targets, collections and materials, and
         ->and($first[8])->toBe(30)
         ->and($first[9])->toBe(30)
         ->and($first[11])->toBe(3) // the demo orders got a utm ad attribution
+        ->and($first[12])->toBe(25) // inbox conversations from the demo ads
         ->and((float) AdDailyMetric::sum('spend'))->toBeGreaterThan(0.0);
+
+    // they land on the overview: conversations -> ordered both show numbers
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $totals = app(AdsOverview::class)->build(AdsFilter::fromRequest(Request::create('/ads'), $admin))['totals'];
+    expect($totals['conversations'])->toBe(25)->and($totals['conversations_ordered'])->toBeGreaterThanOrEqual(5);
 
     $ahmed = MediaBuyer::whereHas('user', fn ($q) => $q->where('email', 'ahmed.gamal@crm.test'))->firstOrFail();
     $mostafa = MediaBuyer::whereHas('user', fn ($q) => $q->where('email', 'mostafa@crm.test'))->firstOrFail();
