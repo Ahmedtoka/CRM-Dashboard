@@ -28,4 +28,16 @@ return [
         'refresh_token' => 'Refresh token',
         'login_customer_id' => 'رقم حساب المدير (اختياري)',
     ],
+    'materials' => [
+        'file_type' => 'الملف :name مش مدعوم. المسموح صور (JPG, PNG, WebP, GIF) وفيديو (MP4, MOV, WebM).',
+        'file_too_big' => 'الملف :name أكبر من الحد المسموح (:mb ميجا).',
+        'file_upload_failed' => 'فشل رفع الملف. جرّب تاني.',
+        'bad_link' => 'اللينك ده مش صحيح. لازم يبدأ بـ http أو https.',
+        'status' => ['not_started' => 'لسه مبدأش', 'activated' => 'شغّال', 'done' => 'خلص'],
+        'stock' => ['in' => 'متوفر', 'out' => 'خلص من المخزون', 'none' => 'من غير منتج'],
+        'csv' => [
+            'title' => 'العنوان', 'created' => 'تاريخ الإنشاء', 'product' => 'المنتج', 'collections' => 'المجموعات', 'types' => 'النوع',
+            'status' => 'الحالة', 'stock' => 'المخزون', 'drive_links' => 'لينكات درايف', 'ads' => 'الإعلانات المربوطة', 'spend' => 'الصرف', 'roas' => 'العائد على الإعلان',
+        ],
+    ],
 ];

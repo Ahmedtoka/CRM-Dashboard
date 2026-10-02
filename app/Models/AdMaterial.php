@@ -14,11 +14,11 @@ class AdMaterial extends Model
     /** @use HasFactory<AdMaterialFactory> */
     use HasFactory;
 
-    protected $fillable = ['title', 'product_id', 'types', 'status', 'website_links', 'drive_links', 'ig_links', 'content_notes', 'media_buyer_id', 'created_by_id', 'activated_at', 'done_at', 'need_stop_at'];
+    protected $fillable = ['title', 'product_id', 'types', 'status', 'website_links', 'drive_links', 'ig_links', 'content_notes', 'media_buyer_id', 'created_by_id', 'activated_at', 'done_at', 'need_stop_at', 'stock_override'];
 
     protected function casts(): array
     {
-        return ['types' => 'array', 'website_links' => 'array', 'drive_links' => 'array', 'ig_links' => 'array', 'activated_at' => 'datetime', 'done_at' => 'datetime', 'need_stop_at' => 'datetime'];
+        return ['types' => 'array', 'website_links' => 'array', 'drive_links' => 'array', 'ig_links' => 'array', 'activated_at' => 'datetime', 'done_at' => 'datetime', 'need_stop_at' => 'datetime', 'stock_override' => 'boolean'];
     }
 
     public function product(): BelongsTo

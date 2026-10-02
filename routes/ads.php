@@ -1,9 +1,12 @@
 <?php
 
 use App\Http\Controllers\Web\Ads\AccountController;
+use App\Http\Controllers\Web\Ads\AdStockController;
 use App\Http\Controllers\Web\Ads\BuyerController;
 use App\Http\Controllers\Web\Ads\BuyerSetupController;
 use App\Http\Controllers\Web\Ads\CreativeController;
+use App\Http\Controllers\Web\Ads\MaterialCollectionController;
+use App\Http\Controllers\Web\Ads\MaterialController;
 use App\Http\Controllers\Web\Ads\OverviewController;
 use Illuminate\Support\Facades\Route;
 
@@ -36,5 +39,27 @@ Route::middleware('ads:manage')->group(function () {
     Route::put('/ads/setup/settings', [BuyerSetupController::class, 'settings'])->name('ads.setup.settings');
 });
 
-// Task 12 replaces this placeholder with the materials library.
-Route::get('/ads/materials', fn () => response('ok'))->middleware('ads:materials')->name('ads.materials.index');
+// Materials library: content, media buyers and supervisors (write permissions are checked per action).
+Route::middleware('ads:materials')->group(function () {
+    Route::get('/ads/materials', [MaterialController::class, 'index'])->name('ads.materials.index');
+    Route::get('/ads/materials/create', [MaterialController::class, 'create'])->name('ads.materials.create');
+    Route::get('/ads/materials/export', [MaterialController::class, 'export'])->name('ads.materials.export');
+    Route::get('/ads/materials/ad-search', [MaterialController::class, 'adSearch'])->name('ads.materials.ad-search');
+    Route::get('/ads/materials/files/{file}', [MaterialController::class, 'file'])->name('ads.materials.files.show');
+    Route::get('/ads/materials/files/{file}/thumb', [MaterialController::class, 'thumb'])->name('ads.materials.files.thumb');
+    Route::post('/ads/materials', [MaterialController::class, 'store'])->name('ads.materials.store');
+    Route::get('/ads/materials/{material}/edit', [MaterialController::class, 'edit'])->name('ads.materials.edit');
+    Route::put('/ads/materials/{material}', [MaterialController::class, 'update'])->name('ads.materials.update');
+    Route::delete('/ads/materials/{material}', [MaterialController::class, 'destroy'])->name('ads.materials.destroy');
+    Route::post('/ads/materials/{material}/status', [MaterialController::class, 'status'])->name('ads.materials.status');
+    Route::post('/ads/materials/{material}/ads', [MaterialController::class, 'syncAds'])->name('ads.materials.ads');
+    Route::get('/ads/products/search', [MaterialController::class, 'productSearch'])->name('ads.products.search');
+
+    Route::get('/ads/collections', [MaterialCollectionController::class, 'index'])->name('ads.collections.index');
+    Route::post('/ads/collections', [MaterialCollectionController::class, 'store'])->name('ads.collections.store');
+    Route::put('/ads/collections/{collection}', [MaterialCollectionController::class, 'update'])->name('ads.collections.update');
+    Route::delete('/ads/collections/{collection}', [MaterialCollectionController::class, 'destroy'])->name('ads.collections.destroy');
+
+    Route::get('/ads/stock', [AdStockController::class, 'index'])->name('ads.stock.index');
+    Route::post('/ads/stock/{material}/availability', [AdStockController::class, 'availability'])->name('ads.stock.availability');
+});

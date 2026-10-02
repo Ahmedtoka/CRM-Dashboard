@@ -28,4 +28,16 @@ return [
         'refresh_token' => 'Refresh token',
         'login_customer_id' => 'Manager account ID (optional)',
     ],
+    'materials' => [
+        'file_type' => 'The file :name is not supported. Allowed: images (JPG, PNG, WebP, GIF) and video (MP4, MOV, WebM).',
+        'file_too_big' => 'The file :name is larger than the allowed :mb MB.',
+        'file_upload_failed' => 'The file could not be uploaded. Try again.',
+        'bad_link' => 'This link is not valid. It must start with http or https.',
+        'status' => ['not_started' => 'Not started', 'activated' => 'Activated', 'done' => 'Done'],
+        'stock' => ['in' => 'In stock', 'out' => 'Out of stock', 'none' => 'No product'],
+        'csv' => [
+            'title' => 'Title', 'created' => 'Created', 'product' => 'Product', 'collections' => 'Collections', 'types' => 'Types',
+            'status' => 'Status', 'stock' => 'Stock', 'drive_links' => 'Drive links', 'ads' => 'Linked ads', 'spend' => 'Spend', 'roas' => 'ROAS',
+        ],
+    ],
 ];

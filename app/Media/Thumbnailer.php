@@ -34,15 +34,52 @@ final class Thumbnailer
             return null;
         }
 
-        $disk = Storage::disk($a->disk);
+        try {
+            $path = $this->render((string) $a->disk, (string) $a->path);
+            if ($path === null) {
+                return null;
+            }
+            $a->forceFill(['thumb_path' => $path])->save();
+
+            return $path;
+        } catch (Throwable $e) {
+            Log::warning('media.thumbnail_failed', ['attachment_id' => $a->id, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Thumbnail of any stored image, by disk + path (not tied to a MessageAttachment): returns the new
+     * relative path under `$dir` on the same disk, or null for a non-image, a missing file or a decode failure.
+     */
+    public function thumbnailForPath(string $disk, string $path, string $mime, string $dir = 'thumbs'): ?string
+    {
+        if (! str_starts_with($mime, 'image/') || ! function_exists('imagecreatefromstring')) {
+            return null;
+        }
+
+        try {
+            return $this->render($disk, $path, $dir);
+        } catch (Throwable $e) {
+            Log::warning('media.thumbnail_failed', ['path' => $path, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /** @throws Throwable on a decode/encode failure; null when the source file is missing */
+    private function render(string $diskName, string $sourcePath, string $dir = 'thumbs'): ?string
+    {
+        $disk = Storage::disk($diskName);
         $source = null;
         $thumb = null;
 
         try {
-            if (! $disk->exists((string) $a->path)) {
+            if (! $disk->exists($sourcePath)) {
                 return null;
             }
-            $bytes = (string) $disk->get((string) $a->path);
+            $bytes = (string) $disk->get($sourcePath);
             $info = @getimagesizefromstring($bytes);
             if ($info === false || $info[0] < 1 || $info[1] < 1 || $info[0] * $info[1] > self::MAX_PIXELS) {
                 throw new \RuntimeException('not a decodable image');
@@ -80,15 +117,10 @@ final class Thumbnailer
                 throw new \RuntimeException('GD could not encode the thumbnail');
             }
 
-            $path = sprintf('thumbs/%s/%s.%s', now()->format('Y/m'), Str::uuid(), $webp ? 'webp' : 'jpg');
+            $path = sprintf('%s/%s/%s.%s', $dir, now()->format('Y/m'), Str::uuid(), $webp ? 'webp' : 'jpg');
             $disk->put($path, $out);
-            $a->forceFill(['thumb_path' => $path])->save();
 
             return $path;
-        } catch (Throwable $e) {
-            Log::warning('media.thumbnail_failed', ['attachment_id' => $a->id, 'error' => $e->getMessage()]);
-
-            return null;
         } finally {
             if ($source instanceof \GdImage) {
                 imagedestroy($source);
