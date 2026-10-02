@@ -6,6 +6,7 @@ use App\Ads\Platforms\RateLimited;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
 function adsFixture(string $name): array
@@ -75,6 +76,33 @@ it('raises a readable error when meta answers with an error', function () {
     expect(fn () => app(MetaAdsDriver::class)->accounts(metaConnection()))
         ->toThrow(AdsApiException::class, 'Invalid OAuth access token.');
     expect(app(MetaAdsDriver::class)->test(metaConnection()))->toContain('Invalid OAuth access token.');
+});
+
+it('never leaks the access token in connection errors', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*' => fn () => throw new ConnectionException('cURL error 6: https://graph.facebook.com/v23.0/me?access_token=SECRET123&fields=id')]);
+    $c = AdPlatformConnection::factory()->meta()->create(['credentials' => ['access_token' => 'SECRET123']]);
+
+    $message = app(MetaAdsDriver::class)->test($c);
+
+    expect($message)->toContain('unreachable')->not->toContain('SECRET123');
+});
+
+it('sends the token as a bearer header and not in the query', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*' => Http::response(['data' => []])]);
+    app(MetaAdsDriver::class)->accounts(metaConnection());
+
+    Http::assertSent(fn ($r) => $r->hasHeader('Authorization', 'Bearer tok') && ! str_contains($r->url(), 'access_token'));
+});
+
+it('fails loudly instead of truncating after too many pages', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*' => Http::response(['data' => [['id' => 'act_1']], 'paging' => ['next' => 'https://graph.facebook.com/more?access_token=SECRET123&after=x']])]);
+
+    expect(fn () => app(MetaAdsDriver::class)->accounts(metaConnection()))
+        ->toThrow(AdsApiException::class, 'narrow the date range');
+    Http::assertNotSent(fn ($r) => str_contains($r->url(), 'SECRET123'));
 });
 
 it('throws RateLimited when usage is above 85 percent', function () {

@@ -21,6 +21,15 @@ it('returns deterministic fake data', function () {
         ->and($driver->dailyMetrics($acc, $from, $to))->toEqual($driver->dailyMetrics($acc, $from, $to))
         ->and($driver->dailyMetrics($acc, $from, $to))->toHaveCount(18 * 3);
 
+    $wide = $driver->dailyMetrics($acc, $from, $to);
+    $narrow = $driver->dailyMetrics($acc, $to, $to->addDay());
+    $shared = array_values(array_filter($wide, fn ($r) => $r->date === $to->toDateString()));
+    expect(array_slice($narrow, 0, 18))->toEqual($shared);
+
+    $types = collect($driver->ads($acc));
+    expect($types->firstWhere('type', 'video')->videoId)->not->toBeNull()
+        ->and($types->firstWhere('type', 'carousel')->carousel)->toHaveCount(3);
+
     $m = $driver->dailyMetrics($acc, $from, $from)[0];
     expect($m->spend)->toBeGreaterThanOrEqual(300)->toBeLessThanOrEqual(3000)
         ->and($m->clicks)->toBeLessThanOrEqual($m->impressions);

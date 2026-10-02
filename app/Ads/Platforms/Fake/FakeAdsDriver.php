@@ -11,6 +11,8 @@ use App\Ads\Platforms\Data\DailyAdMetric;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
+use Random\Engine\Mt19937;
+use Random\Randomizer;
 
 /**
  * Deterministic demo data (no HTTP at all). Everything derives from
@@ -45,8 +47,13 @@ class FakeAdsDriver implements AdPlatformDriver
                 type: $ad['type'],
                 headline: 'Le Voile '.$ad['n'], body: 'Demo creative '.$ad['n'],
                 thumbnailUrl: "https://picsum.photos/seed/{$ad['id']}/400/400", imageUrl: "https://picsum.photos/seed/{$ad['id']}/800/800",
-                videoId: null, objectStoryId: null, instagramPermalinkUrl: null,
-                urlTags: null, carousel: null, createdTime: '2026-08-01T10:00:00+0000',
+                videoId: $ad['type'] === 'video' ? 'vid_'.$ad['id'] : null, objectStoryId: null, instagramPermalinkUrl: null,
+                urlTags: null,
+                carousel: $ad['type'] === 'carousel' ? array_map(fn ($k) => [
+                    'image_url' => "https://picsum.photos/seed/{$ad['id']}-{$k}/600/600",
+                    'link' => 'https://example.com/products/'.$k,
+                    'name' => 'Item '.$k,
+                ], [1, 2, 3]) : null, createdTime: '2026-08-01T10:00:00+0000',
             );
         }
 
@@ -60,12 +67,12 @@ class FakeAdsDriver implements AdPlatformDriver
         for ($day = $from->startOfDay(); $day->lte($to); $day = $day->addDay()) {
             foreach ($structure as $ad) {
                 // Seeded per (account, ad, date) so overlapping ranges agree.
-                mt_srand(crc32($a->external_id.'|'.$ad['id'].'|'.$day->toDateString()));
-                $spend = round(mt_rand(30000, 300000) / 100, 2);              // 300 - 3000
-                $impressions = mt_rand(20, 60) * (int) $spend;
-                $clicks = (int) round($impressions * mt_rand(100, 800) / 10000); // CTR 1 - 8 %
-                $reach = (int) round($impressions * mt_rand(70, 90) / 100);
-                $purchases = max(0, round($spend / 150 + mt_rand(-10, 10) / 10, 0));
+                $rng = new Randomizer(new Mt19937(crc32($a->external_id.'|'.$ad['id'].'|'.$day->toDateString())));
+                $spend = round($rng->getInt(30000, 300000) / 100, 2);              // 300 - 3000
+                $impressions = $rng->getInt(20, 60) * (int) $spend;
+                $clicks = (int) round($impressions * $rng->getInt(100, 800) / 10000); // CTR 1 - 8 %
+                $reach = (int) round($impressions * $rng->getInt(70, 90) / 100);
+                $purchases = max(0, round($spend / 150 + $rng->getInt(-10, 10) / 10, 0));
                 $out[] = new DailyAdMetric(
                     adExternalId: $ad['id'], date: $day->toDateString(),
                     spend: $spend, impressions: $impressions, clicks: $clicks, reach: $reach,
@@ -101,7 +108,6 @@ class FakeAdsDriver implements AdPlatformDriver
     private function structure(AdAccount $a): array
     {
         $seed = crc32($a->external_id);
-        mt_srand($seed);
         $campaignNames = match (AdPlatform::from($a->platform)) {
             AdPlatform::Tiktok => ['TikTok Main', 'TikTok Retargeting', 'TikTok Reach'],
             AdPlatform::Google => ['Google Search', 'Google Shopping', 'Google Brand'],

@@ -33,8 +33,8 @@ class MetaAdsApi
     /** GET one page. @return array<string, mixed> */
     public function get(string $token, string $path, array $query = []): array
     {
-        return $this->handle(fn () => Http::timeout(90)->connectTimeout(15)
-            ->get($this->url($path), ['access_token' => $token] + $query));
+        return $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)
+            ->get($this->url($path), $query));
     }
 
     /**
@@ -42,7 +42,7 @@ class MetaAdsApi
      *
      * @return list<array<string, mixed>> the merged data[] rows
      */
-    public function paginate(string $token, string $path, array $query = [], int $maxPages = 50): array
+    public function paginate(string $token, string $path, array $query = [], int $maxPages = 200): array
     {
         $rows = [];
         $page = $this->get($token, $path, $query);
@@ -51,10 +51,14 @@ class MetaAdsApi
         while (true) {
             $rows = array_merge($rows, $page['data'] ?? []);
             $next = $page['paging']['next'] ?? null;
-            if (! $next || $pages++ >= $maxPages) {
+            if (! $next) {
                 return $rows;
             }
-            $page = $this->handle(fn () => Http::timeout(90)->connectTimeout(15)->get($next));
+            if ($pages++ >= $maxPages) {
+                throw new AdsApiException('Meta result too large - narrow the date range.');
+            }
+            $next = $this->stripToken((string) $next);
+            $page = $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)->get($next));
         }
     }
 
@@ -93,21 +97,34 @@ class MetaAdsApi
         try {
             $response = $send();
         } catch (ConnectionException $e) {
-            throw new AdsApiException('Meta is unreachable: '.$e->getMessage(), 0, $e);
+            throw new AdsApiException($this->scrub('Meta is unreachable: '.$e->getMessage()));
         }
 
         if (! $response->successful()) {
             $message = (string) ($response->json('error.message') ?? 'Meta API error (HTTP '.$response->status().')');
             $code = (int) $response->json('error.code', 0);
             if (in_array($code, self::RATE_CODES, true)) {
-                throw new RateLimited($message);
+                throw new RateLimited($this->scrub($message));
             }
-            throw new AdsApiException($message);
+            throw new AdsApiException($this->scrub($message));
         }
 
         $this->guardUsage($response);
 
         return $response->json() ?? [];
+    }
+
+    private function scrub(string $text): string
+    {
+        return (string) preg_replace('/access_token=[^&\s"\']+/', 'access_token=***', $text);
+    }
+
+    /** The bearer header carries the token, so drop it from paging URLs. */
+    private function stripToken(string $url): string
+    {
+        $url = (string) preg_replace('/([?&])access_token=[^&]*(&|$)/', '$1', $url);
+
+        return rtrim($url, '?&');
     }
 
     private function guardUsage(Response $response): void
