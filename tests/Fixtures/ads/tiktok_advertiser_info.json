@@ -1,0 +1,4 @@
+{"code":0,"message":"OK","request_id":"202609300000000000000000000001","data":{"list":[
+{"advertiser_id":"7000000000001","name":"Le Voile TikTok","currency":"EGP","timezone":"Africa/Cairo","status":"STATUS_ENABLE","balance":1520.75},
+{"advertiser_id":"7000000000002","name":"Old Account","currency":"USD","timezone":"America/Los_Angeles","status":"STATUS_DISABLE","balance":0}
+]}}

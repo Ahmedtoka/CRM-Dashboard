@@ -3,7 +3,9 @@
 namespace App\Ads\Platforms;
 
 use App\Ads\Platforms\Fake\FakeAdsDriver;
+use App\Ads\Platforms\Google\GoogleAdsDriver;
 use App\Ads\Platforms\Meta\MetaAdsDriver;
+use App\Ads\Platforms\TikTok\TikTokAdsDriver;
 
 final class DriverFactory
 {
@@ -18,8 +20,8 @@ final class DriverFactory
 
         return match ($p) {
             AdPlatform::Meta => app(MetaAdsDriver::class),
-            // TikTok / Google live drivers arrive in a later release.
-            default => throw new AdsApiException($p->label().' live driver is not available yet.'),
+            AdPlatform::Tiktok => app(TikTokAdsDriver::class),
+            AdPlatform::Google => app(GoogleAdsDriver::class),
         };
     }
 }

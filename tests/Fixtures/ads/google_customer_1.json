@@ -1,0 +1,1 @@
+[{"results":[{"customer":{"resourceName":"customers/1234567890","id":"1234567890","descriptiveName":"Le Voile Search","currencyCode":"EGP","timeZone":"Africa/Cairo","status":"ENABLED"}}],"fieldMask":"customer.id,customer.descriptiveName,customer.currencyCode,customer.timeZone,customer.status","requestId":"r1"}]

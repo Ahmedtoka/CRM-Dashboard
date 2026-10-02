@@ -1,0 +1,8 @@
+[
+{"results":[
+{"campaign":{"resourceName":"customers/1234567890/campaigns/11","id":"11","name":"Search Sales","status":"ENABLED","advertisingChannelType":"SEARCH"},"adGroup":{"resourceName":"customers/1234567890/adGroups/22","id":"22","name":"Abayas","status":"ENABLED"},"adGroupAd":{"resourceName":"customers/1234567890/adGroupAds/22~33","status":"ENABLED","ad":{"resourceName":"customers/1234567890/ads/33","id":"33","name":"RSA one","type":"RESPONSIVE_SEARCH_AD","finalUrls":["https://shop.test/abayas"]}}}
+],"fieldMask":"adGroupAd.ad.id","requestId":"r3"},
+{"results":[
+{"campaign":{"resourceName":"customers/1234567890/campaigns/12","id":"12","name":"Display","status":"PAUSED","advertisingChannelType":"DISPLAY"},"adGroup":{"resourceName":"customers/1234567890/adGroups/23","id":"23","name":"Retarget","status":"PAUSED"},"adGroupAd":{"resourceName":"customers/1234567890/adGroupAds/23~34","status":"PAUSED","ad":{"resourceName":"customers/1234567890/ads/34","id":"34","type":"RESPONSIVE_DISPLAY_AD","finalUrls":[]}}}
+],"requestId":"r4"}
+]
