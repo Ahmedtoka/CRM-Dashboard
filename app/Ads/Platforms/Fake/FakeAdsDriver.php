@@ -21,16 +21,27 @@ use Random\Randomizer;
  */
 class FakeAdsDriver implements AdPlatformDriver
 {
+    public const META_CLOTING = 'act_demo_cloting';
+
+    public const META_MAIN = 'act_demo_main';
+
+    public const META_MAIN_22 = 'act_demo_main22';
+
+    public const TIKTOK = 'tt_demo_1';
+
+    public const GOOGLE = 'gg-demo-1';
+
     public function accounts(AdPlatformConnection $c): array
     {
         $list = match (AdPlatform::from($c->platform)) {
+            // Obviously fake ids and names: a fake run can never collide with (or pass for) a real account.
             AdPlatform::Meta => [
-                ['act_1648538895706851', 'Cloting'],
-                ['act_6746411735418687', 'Lv Main'],
-                ['act_950240346866068', 'Lv Main 22'],
+                [self::META_CLOTING, 'Cloting (تجريبي)'],
+                [self::META_MAIN, 'Lv Main (تجريبي)'],
+                [self::META_MAIN_22, 'Lv Main 22 (تجريبي)'],
             ],
-            AdPlatform::Tiktok => [['7400000000000000001', 'Le Voile TikTok']],
-            AdPlatform::Google => [['123-456-7890', 'Le Voile Google']],
+            AdPlatform::Tiktok => [[self::TIKTOK, 'Le Voile TikTok (تجريبي)']],
+            AdPlatform::Google => [[self::GOOGLE, 'Le Voile Google (تجريبي)']],
         };
 
         return array_map(fn ($r) => new AccountInfo($r[0], $r[1], 'EGP', 'Africa/Cairo', 'active', 0.0), $list);

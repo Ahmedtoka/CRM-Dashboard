@@ -7,6 +7,7 @@ use App\Ads\Buyers\AssignmentService;
 use App\Ads\Commands\ImportArenaTokenCommand;
 use App\Ads\Materials\MaterialFileStorage;
 use App\Ads\Materials\StockWatcher;
+use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Ads\Sync\AdsSyncService;
 use App\Enums\OrderStatus;
 use App\Enums\UserRole;
@@ -52,16 +53,16 @@ class AdsDemoSeeder extends Seeder
 
     public const CONTENT_EMAIL = 'content@crm.test';
 
-    /** Ad account external ids as the fake driver (and the real Le Voile Business Manager) name them. */
-    public const CLOTING = 'act_1648538895706851';
+    /** Ad account external ids as the fake driver names them (obviously fake, never a real account id). */
+    public const CLOTING = FakeAdsDriver::META_CLOTING;
 
-    public const LV_MAIN = 'act_6746411735418687';
+    public const LV_MAIN = FakeAdsDriver::META_MAIN;
 
-    public const LV_MAIN_22 = 'act_950240346866068';
+    public const LV_MAIN_22 = FakeAdsDriver::META_MAIN_22;
 
-    public const TIKTOK = '7400000000000000001';
+    public const TIKTOK = FakeAdsDriver::TIKTOK;
 
-    public const GOOGLE = '123-456-7890';
+    public const GOOGLE = FakeAdsDriver::GOOGLE;
 
     public const COLLECTIONS = ['SS25', 'Slow Movers', 'Basics & Extensions', 'scarves', 'offers', 'Clothing', 'Isdal', 'accessories', 'Mrs. Sara', 'Summer 2026', 'Burkini 26', 'Ramadan 2026'];
 

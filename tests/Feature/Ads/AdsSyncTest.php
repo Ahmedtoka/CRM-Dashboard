@@ -83,7 +83,7 @@ it('syncs accounts, ads and daily metrics idempotently', function () {
     $c = AdPlatformConnection::factory()->create(['platform' => 'meta']);
     $svc = app(AdsSyncService::class);
     expect($svc->syncAccounts($c))->toBe(3);
-    $acc = AdAccount::where('name', 'Lv Main')->firstOrFail();
+    $acc = AdAccount::where('external_id', 'act_demo_main')->firstOrFail();
     $svc->syncAccount($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-07'));
     $ads = Ad::count();
     $rows = AdDailyMetric::count();
@@ -155,7 +155,7 @@ it('refreshes creatives of recently active ads', function () {
     $c = AdPlatformConnection::factory()->create(['platform' => 'meta']);
     $svc = app(AdsSyncService::class);
     $svc->syncAccounts($c);
-    $acc = AdAccount::where('name', 'Lv Main')->firstOrFail();
+    $acc = AdAccount::where('external_id', 'act_demo_main')->firstOrFail();
     $today = CarbonImmutable::now('Africa/Cairo');
     $svc->syncAccount($acc, $today->subDays(2), $today);
     Ad::query()->update(['image_url' => null]);

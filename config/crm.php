@@ -367,10 +367,12 @@ return [
 
     // Ads Hub (media buyers, ad accounts, creatives, materials library).
     'ads' => [
+        // live | fake. Default: live on APP_ENV=production (fake spend must never land in the real
+        // tables), fake everywhere else; the env vars still override either way.
         'drivers' => [
-            'meta' => env('CRM_ADS_META_DRIVER', 'fake'),    // live | fake
-            'tiktok' => env('CRM_ADS_TIKTOK_DRIVER', 'fake'),
-            'google' => env('CRM_ADS_GOOGLE_DRIVER', 'fake'),
+            'meta' => env('CRM_ADS_META_DRIVER', env('APP_ENV') === 'production' ? 'live' : 'fake'),
+            'tiktok' => env('CRM_ADS_TIKTOK_DRIVER', env('APP_ENV') === 'production' ? 'live' : 'fake'),
+            'google' => env('CRM_ADS_GOOGLE_DRIVER', env('APP_ENV') === 'production' ? 'live' : 'fake'),
         ],
         'meta' => ['graph_version' => env('META_ADS_GRAPH_VERSION', 'v23.0')],
         'tiktok' => ['base_url' => 'https://business-api.tiktok.com/open_api/v1.3'],

@@ -84,7 +84,7 @@ it('seeds buyers, accounts, assignments, targets, collections and materials, and
 
 it('leaves a real Meta connection alone and creates no fake Meta connection next to it', function () {
     $live = AdPlatformConnection::create(['platform' => 'meta', 'name' => ImportArenaTokenCommand::CONNECTION_NAME, 'credentials' => ['access_token' => 'real'], 'status' => 'connected']);
-    $account = AdAccount::create(['connection_id' => $live->id, 'platform' => 'meta', 'external_id' => AdsDemoSeeder::LV_MAIN, 'name' => 'Lv Main']);
+    $account = AdAccount::create(['connection_id' => $live->id, 'platform' => 'meta', 'external_id' => AdsDemoSeeder::LV_MAIN, 'name' => 'Lv Main (تجريبي)']);
 
     seedAdsDemo();
 

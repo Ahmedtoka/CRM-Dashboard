@@ -228,7 +228,7 @@ it('queues backfill for new accounts only and a recent sync for known ones', fun
     Queue::fake();
     $admin = adsPgUser(UserRole::Admin);
     $c = AdPlatformConnection::factory()->create();
-    $known = AdAccount::factory()->create(['connection_id' => $c->id, 'external_id' => 'act_1648538895706851']);
+    $known = AdAccount::factory()->create(['connection_id' => $c->id, 'external_id' => 'act_demo_cloting']);
 
     $this->actingAs($admin)->post("/ads/connections/{$c->id}/sync")->assertRedirect()->assertSessionHas('status');
 
