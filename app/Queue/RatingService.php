@@ -5,6 +5,7 @@ namespace App\Queue;
 use App\Bot\ArabicNormalizer;
 use App\Channels\Adapters\WhatsAppAdapter;
 use App\Enums\MessageDirection;
+use App\Enums\MessageStatus;
 use App\Enums\SenderType;
 use App\Inbox\OutboundService;
 use App\Inbox\WindowClosedException;
@@ -15,6 +16,7 @@ use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Queue\Jobs\SendQueueMessage;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -171,7 +173,8 @@ class RatingService
         }
 
         $e = QueueEntry::query()->where('conversation_id', $c->id)->whereNotNull('review_message_id')->whereNull('review_stars')
-            ->where('review_requested_at', '>=', now()->subHours(self::ANSWER_HOURS))->latest('review_requested_at')->first();
+            ->where('review_requested_at', '>=', now()->subHours(self::ANSWER_HOURS))->tap(fn ($q) => self::withoutFailedAsk($q))
+            ->latest('review_requested_at')->first();
 
         if ($e === null) {
             return false;
@@ -264,8 +267,21 @@ class RatingService
     {
         return QueueEntry::query()->whereKeyNot($e->id)
             ->when($e->customer_id !== null, fn ($q) => $q->where('customer_id', $e->customer_id), fn ($q) => $q->where('conversation_id', $e->conversation_id))
-            ->where('review_requested_at', '>=', now()->subHours(self::ONCE_PER_HOURS))
+            ->where('review_requested_at', '>=', now()->subHours(self::ONCE_PER_HOURS))->tap(fn ($q) => self::withoutFailedAsk($q))
             ->exists();
+    }
+
+    /**
+     * A failed send leaves no mark, also when the platform fails it later (async): a question
+     * whose message ended `failed` never reached her, so it neither counts as asked today nor
+     * takes a typed answer. A question still being sent (no message yet) counts.
+     *
+     * @param  Builder<QueueEntry>  $q
+     */
+    private static function withoutFailedAsk(Builder $q): void
+    {
+        $q->whereNotExists(fn ($m) => $m->from('messages')->whereColumn('messages.id', 'queue_entries.review_message_id')
+            ->where('messages.status', MessageStatus::Failed->value));
     }
 
     private function firstName(string $name): string

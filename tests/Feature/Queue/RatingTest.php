@@ -360,3 +360,29 @@ it('rewords the rating scripts still on the old default and leaves an owner-edit
     expect(BotKnowledgeEntry::where('key', 'script.queue_review_ask')->value('body'))->toBe('قيّمي خدمة {name} من 1 لـ5')
         ->and(BotKnowledgeEntry::where('key', 'script.queue_review_thanks')->value('body'))->toBe('شكراً لتقييمك');
 });
+
+// ───── A failed send leaves no mark, also when the platform fails it later (async) ─────
+
+it('asks again within the day when the earlier question ended failed on the platform', function () {
+    [$e, $u, $c] = rtClosed();
+    expect(app(RatingService::class)->request($e))->toBeTrue();
+    rtAsk($e)->update(['status' => 'failed']); // the platform refused it after the send
+
+    Carbon::setTestNow(now()->addHours(3));
+    $c->forceFill(['last_customer_message_at' => now()])->save();
+    $second = QueueEntry::factory()->create(['conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'assigned_user_id' => $u->id,
+        'status' => 'closed', 'close_reason' => 'problem', 'closed_at' => now()->subSeconds(60)]);
+
+    expect(app(RatingService::class)->skipReason($second->fresh()))->toBeNull()
+        ->and(app(RatingService::class)->request($second))->toBeTrue();
+});
+
+it('reads a typed digit as a real message when the question ended failed on the platform', function () {
+    [$e, $u, $c] = rtClosed();
+    app(RatingService::class)->request($e);
+    rtAsk($e)->update(['status' => 'failed']);
+
+    rtIngest('five-failed', '5');
+
+    expect($e->fresh()->review_stars)->toBeNull();
+});
