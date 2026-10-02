@@ -3,6 +3,10 @@
 namespace App\Ads;
 
 use App\Ads\Platforms\DriverFactory;
+use App\Ads\Sync\Commands\BackfillAdsCommand;
+use App\Ads\Sync\Commands\RefreshCreativesCommand;
+use App\Ads\Sync\Commands\SyncAdsCommand;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
 
 class AdsServiceProvider extends ServiceProvider
@@ -10,5 +14,23 @@ class AdsServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(DriverFactory::class);
+    }
+
+    public function boot(): void
+    {
+        if ($this->app->runningInConsole()) {
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class]);
+        }
+
+        $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
+            $schedule->command(SyncAdsCommand::class, ['--days=3'])
+                ->hourlyAt(10)->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer();
+
+            $schedule->command(SyncAdsCommand::class, ['--days=30'])
+                ->dailyAt('03:15')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer();
+
+            $schedule->command(RefreshCreativesCommand::class, ['--days=14'])
+                ->dailyAt('05:20')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer();
+        });
     }
 }
