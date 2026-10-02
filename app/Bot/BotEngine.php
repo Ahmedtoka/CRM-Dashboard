@@ -276,6 +276,20 @@ class BotEngine
             $c->refresh();
         }
 
+        $this->resetToBot($c);
+
+        $this->logger->log(ActorType::User, $u, ActivityLogger::CONVERSATION_RETURN_TO_BOT, null, $c);
+
+        SafeBroadcast::send(new ConversationUpdated($c));
+    }
+
+    /**
+     * The conversation is the bot's again, with a fresh bot state: `returnToBot()` («رجوع للبوت»)
+     * and a manual queue close («خلصت», addendum C2) both end here. It only writes the row (the
+     * caller holds its lock when there is one); it never runs the bot, logs or broadcasts.
+     */
+    public function resetToBot(Conversation $c): void
+    {
         $c->handler = Handler::Bot;
         $c->needs_human = false;
         $c->priority_level = null;
@@ -285,10 +299,6 @@ class BotEngine
         // Task 5 ruling 6a: the bot starts fresh, keeping only the burst turn marker.
         $c->bot_state = $c->resetBotState();
         $c->save();
-
-        $this->logger->log(ActorType::User, $u, ActivityLogger::CONVERSATION_RETURN_TO_BOT, null, $c);
-
-        SafeBroadcast::send(new ConversationUpdated($c));
     }
 
     /**

@@ -10,6 +10,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useI18n } from '@/composables/useI18n';
 import { useInitials } from '@/composables/useInitials';
+import { useStaleOrderRefresh } from '@/composables/useStaleOrderRefresh';
 import { shortcutHint } from '@/composables/useShortcuts';
 import { formatNumber } from '@/i18n';
 import { formatMoney } from '@/lib/format';
@@ -47,6 +48,13 @@ const noteBody = ref('');
 const noteMentions = ref<number[]>([]);
 const noteInput = ref<InstanceType<typeof MentionTextarea> | null>(null);
 const name = computed(() => props.customer?.name || '—');
+
+// Orders shown here and not read from Shopify for 30 min get one background refresh; the inbox
+// already reloads this panel on OrderUpdated, so this only asks (no listener of its own).
+useStaleOrderRefresh(
+    computed(() => props.customer?.orders ?? []),
+    { listen: false },
+);
 const place = computed(() => [props.customer?.city, props.customer?.address].filter(Boolean).join(' · '));
 
 // Fix round 1, minor (b): refocus the note box once a note finishes saving (or

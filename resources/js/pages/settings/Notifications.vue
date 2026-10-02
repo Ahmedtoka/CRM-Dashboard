@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import HeadingSmall from '@/components/HeadingSmall.vue';
+import ToggleSwitch from '@/components/crm/ToggleSwitch.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useNotifications } from '@/composables/useNotifications';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -40,15 +41,15 @@ const permissionText = computed(() => {
                 <HeadingSmall :title="t('notifications.title')" />
 
                 <div class="space-y-6 rounded-lg bg-card p-4 shadow-card">
-                    <label class="flex items-center justify-between gap-2 text-sm">
-                        <span class="font-medium">{{ t('notifications.sound') }}</span>
-                        <input
-                            type="checkbox"
-                            class="size-4 rounded border-input"
-                            :checked="notifications.prefs.value.sound"
-                            @change="notifications.savePrefs({ sound: ($event.target as HTMLInputElement).checked })"
+                    <div class="flex items-center justify-between gap-2 text-sm">
+                        <label for="notifications-sound" class="font-medium">{{ t('notifications.sound') }}</label>
+                        <ToggleSwitch
+                            id="notifications-sound"
+                            :model-value="notifications.prefs.value.sound"
+                            :label="t('notifications.sound')"
+                            @update:model-value="notifications.savePrefs({ sound: $event })"
                         />
-                    </label>
+                    </div>
 
                     <div class="grid gap-2">
                         <label class="flex items-center justify-between gap-2 text-sm" for="notifications-volume">
@@ -72,16 +73,16 @@ const permissionText = computed(() => {
                     </div>
 
                     <div class="grid gap-2 border-t border-border pt-4">
-                        <label class="flex items-center justify-between gap-2 text-sm">
-                            <span class="font-medium">{{ t('notifications.desktop') }}</span>
-                            <input
+                        <div class="flex items-center justify-between gap-2 text-sm">
+                            <label for="notifications-desktop" class="font-medium">{{ t('notifications.desktop') }}</label>
+                            <ToggleSwitch
                                 v-if="notifications.permission.value === 'granted'"
-                                type="checkbox"
-                                class="size-4 rounded border-input"
-                                :checked="notifications.prefs.value.desktop_notifications"
-                                @change="notifications.savePrefs({ desktop_notifications: ($event.target as HTMLInputElement).checked })"
+                                id="notifications-desktop"
+                                :model-value="notifications.prefs.value.desktop_notifications"
+                                :label="t('notifications.desktop')"
+                                @update:model-value="notifications.savePrefs({ desktop_notifications: $event })"
                             />
-                        </label>
+                        </div>
                         <button
                             v-if="notifications.permission.value === 'default'"
                             type="button"

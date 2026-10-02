@@ -56,7 +56,8 @@ it('falls back to a substring LIKE when the indexed name search finds nothing on
 
     expect($page->getCollection()->pluck('id')->all())->toBe([$hit->id])
         ->and($q->indexedRuns)->toBe(1)                       // the indexed path ran first...
-        ->and(substr_count($sql, '("name" like ? or "phone" like ?)'))->toBe(1); // ...then the LIKE ran once
+        // ...then the LIKE ran once (sqlite quotes "name", MariaDB `name`: match either).
+        ->and(preg_match_all('/\(["`]name["`] like \? or ["`]phone["`] like \?\)/', $sql))->toBe(1);
 });
 
 it('finds middle phone digits through the fallback', function () {
@@ -144,4 +145,44 @@ it('counts substring matches too when the indexed search finds nothing', functio
     $counts = indexedMissQuery()->counts($this->admin, ['q' => 'الله']);
 
     expect($counts['status']['open'])->toBe(1);
+});
+
+it('resolves the substring match on customers first, not as a per-conversation EXISTS', function () {
+    $hit = ($this->make)(['name' => 'عبدالله محمود', 'phone' => null]);
+
+    DB::enableQueryLog();
+    $page = indexedMissQuery()->paginate($this->admin, ['q' => 'الله']);
+    $sql = collect(DB::getQueryLog())->pluck('query');
+
+    expect($page->getCollection()->pluck('id')->all())->toBe([$hit->id])
+        ->and($sql->filter(fn (string $s) => preg_match('/exists\s*\(select \* from ["`]customers["`]/i', $s) === 1)->all())->toBe([])
+        ->and($sql->filter(fn (string $s) => preg_match('/^select ["`]id["`] from ["`]customers["`]/', $s) === 1)->count())->toBe(1);
+});
+
+it('flags a too-broad substring search and keeps only the most recently contacted customers', function () {
+    $cap = ConversationQuery::LIKE_CUSTOMER_CAP;
+    $account = ChannelAccount::first();
+    // cap + 1 matching customers: the oldest contact falls outside the window.
+    $customers = Customer::factory()->count($cap + 1)->sequence(fn ($s) => [
+        'name' => 'عبدالله '.$s->index, 'phone' => null, 'last_contact_at' => now()->subMinutes($s->index),
+    ])->create();
+    foreach ($customers as $c) {
+        Conversation::factory()->for($account, 'channelAccount')->create(['customer_id' => $c->id, 'last_message_at' => now()]);
+    }
+    $oldest = $customers->last();
+
+    $q = indexedMissQuery();
+    $q->paginate($this->admin, ['q' => 'الله']);
+    expect($q->searchTruncated())->toBeTrue();
+    $counts = $q->counts($this->admin, ['q' => 'الله']);
+    expect($counts['status']['open'])->toBe($cap);
+
+    app()->bind(ConversationQuery::class, fn () => indexedMissQuery());
+    $res = $this->actingAs($this->admin)->getJson('/inbox/conversations?q='.urlencode('الله'))->assertOk()
+        ->assertJsonPath('meta.search_truncated', true)->assertJsonPath('search_mode', 'like');
+    expect($res->json('data.*.customer.id'))->not->toContain($oldest->id);
+
+    // A narrow search is not flagged.
+    $this->actingAs($this->admin)->getJson('/inbox/conversations?q='.urlencode('عبدالله 12'))->assertOk()
+        ->assertJsonPath('meta.search_truncated', false);
 });

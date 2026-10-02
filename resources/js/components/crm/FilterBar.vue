@@ -49,7 +49,7 @@ onBeforeUnmount(() => window.clearTimeout(timer));
                     <span class="hidden sm:inline">{{ moreLabel ?? t('filters.more') }}</span>
                     <span v-if="moreCount" class="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs text-primary-foreground tabular-nums">{{ moreCount }}</span>
                 </PopoverTrigger>
-                <PopoverContent class="w-80 max-w-[calc(100vw-2rem)] space-y-3">
+                <PopoverContent class="w-80 max-w-[calc(100vw-2rem)] space-y-3" :collision-padding="16">
                     <div class="space-y-3 sm:hidden"><slot name="inline" /></div>
                     <slot name="more" />
                 </PopoverContent>

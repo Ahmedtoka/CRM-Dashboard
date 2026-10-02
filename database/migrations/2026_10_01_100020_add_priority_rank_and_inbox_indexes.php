@@ -36,10 +36,15 @@ return new class extends Migration
 
     private const FULLTEXT = 'customers_name_fulltext';
 
+    /** Seconds an ALTER waits for a metadata lock before failing (MariaDB/MySQL default: one year). */
+    public const LOCK_WAIT_TIMEOUT = 20;
+
     private const PHONE_REVERSED_INDEX = 'customers_phone_reversed_index';
 
     public function up(): void
     {
+        $this->failFastOnLocks();
+
         Schema::table('conversations', function (Blueprint $t) {
             if (! Schema::hasColumn('conversations', 'priority_rank')) {
                 // VIRTUAL (not STORED): sqlite cannot ADD a stored generated column; MariaDB indexes virtual ones.
@@ -75,6 +80,8 @@ return new class extends Migration
 
     public function down(): void
     {
+        $this->failFastOnLocks();
+
         if (Schema::hasColumn('customers', 'phone_reversed')) {
             Schema::table('customers', function (Blueprint $t) {
                 $t->dropIndex(self::PHONE_REVERSED_INDEX);
@@ -154,5 +161,16 @@ return new class extends Migration
     private function isMysql(): bool
     {
         return in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true);
+    }
+
+    /**
+     * A blocked ALTER (a long transaction holding the table's metadata lock) queues every later
+     * query on that table behind it. Fail after LOCK_WAIT_TIMEOUT seconds instead; the deploy can retry.
+     */
+    private function failFastOnLocks(): void
+    {
+        if ($this->isMysql()) {
+            DB::statement('SET SESSION lock_wait_timeout = '.self::LOCK_WAIT_TIMEOUT);
+        }
     }
 };

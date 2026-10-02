@@ -103,6 +103,11 @@ async function openPhoneRoom(): Promise<void> {
 
 async function closePhoneRoom(): Promise<void> {
     phoneRoom.value = false;
+    try {
+        screen.orientation?.unlock?.();
+    } catch {
+        // Nothing was locked, or the browser cannot.
+    }
     if (document.fullscreenElement !== null) await document.exitFullscreen().catch(() => undefined);
 }
 
@@ -120,23 +125,27 @@ const phoneMode = computed(() => narrow.value || phoneRoom.value);
         <div class="w-full space-y-3 p-3 md:p-4">
             <!-- Phone: the numbers, then the desks and the lounge as cards. -->
             <template v-if="phoneMode">
+                <!-- Behind the open room nothing of the phone view is drawn, so its clocks stop. -->
                 <BoardKpiBar
+                    v-if="!phoneRoom"
                     phone
                     :roster-open="selection?.kind === 'roster'"
                     :can-roster="canManage && board.shift.value !== null"
                     @full="openPhoneRoom"
                     @roster="select(selection?.kind === 'roster' ? null : { kind: 'roster' })"
                 />
-                <p
-                    v-if="veil === 'loading'"
-                    class="flex items-center gap-2 rounded-lg bg-card px-4 py-3 text-sm text-card-foreground shadow"
-                    role="status"
-                >
-                    <LoaderCircle class="size-4 animate-spin" aria-hidden="true" />
-                    {{ t('board.loading') }}
-                </p>
-                <BoardNotice v-else-if="veil !== null" class="max-w-none" :kind="veil" :can-edit-settings="canEditSettings" />
-                <BoardPhone v-else :selection="selection" @select="select" />
+                <template v-if="!phoneRoom">
+                    <p
+                        v-if="veil === 'loading'"
+                        class="flex items-center gap-2 rounded-lg bg-card px-4 py-3 text-sm text-card-foreground shadow"
+                        role="status"
+                    >
+                        <LoaderCircle class="size-4 animate-spin" aria-hidden="true" />
+                        {{ t('board.loading') }}
+                    </p>
+                    <BoardNotice v-else-if="veil !== null" class="max-w-none" :kind="veil" :can-edit-settings="canEditSettings" />
+                    <BoardPhone v-else :selection="selection" @select="select" />
+                </template>
 
                 <Sheet v-if="!phoneRoom" :open="selection !== null && veil === null" @update:open="(open: boolean) => !open && (selection = null)">
                     <SheetContent

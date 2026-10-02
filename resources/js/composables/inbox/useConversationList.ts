@@ -119,6 +119,8 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
     let requestSeq = 0;
     // Set when the first page of a search used the server's substring fallback: later pages must too.
     let searchMode: 'like' | null = stale ? null : (initial.search_mode ?? null);
+    /** The substring search matched too many customers: the list shows «في نتايج كتير، دققي البحث». */
+    const searchTruncated = ref<boolean>(stale ? false : (initial.meta?.search_truncated ?? false));
     let refreshTimer: number | undefined;
     // Rows a realtime change touched under a filter only the server can decide: the next first-page
     // refresh drops the ones that no longer belong.
@@ -148,6 +150,7 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
             if (seq !== requestSeq) return;
             conversations.value = data.data;
             searchMode = data.search_mode ?? null;
+            searchTruncated.value = data.meta?.search_truncated ?? false;
             nextCursor.value = data.meta?.next_cursor ?? null;
             sortList();
         } finally {
@@ -397,6 +400,7 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
         loadMoreFailed,
         live,
         pollFailed,
+        searchTruncated,
         setFilters,
         clearFilters,
         loadMore,

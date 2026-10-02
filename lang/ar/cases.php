@@ -34,6 +34,7 @@ return [
 
     'priority' => [
         'low' => 'منخفضة',
+        'normal' => 'عادية',
         'medium' => 'متوسطة',
         'high' => 'عالية',
     ],

@@ -84,13 +84,26 @@ it('records first reply, SLA and handle time on a manual close', function () {
     expect($e->close_reason)->toBe('inquiry')->and($e->handle_seconds)->toBe(220)->and($e->confirmed_at)->toBeNull()->and($e->conversation->fresh()->assignee_id)->toBeNull();
 });
 
-it('reopens with returning priority to the same member when the customer writes within the confirm window', function () {
-    [$e, $m, $u] = activeWindow();
+// Addendum C2 (R1 override): replaces «reopens with returning priority to the same member when the
+// customer writes within the confirm window». A manual close is final and hands her to the bot.
+it('gives her next message to the bot after «خلصت», and a human request then a returning ticket for the same moderator', function () {
+    Event::fake([CloseReversed::class]);
+    [$e, $m, $u, $c] = ingestedWindow();
     app(WindowLifecycle::class)->close($e, 'problem', $u);
+    $u->update(['last_seen_at' => now()->subHour()]); // offline for the router: the ticket stays in the lounge
     Carbon::setTestNow(now()->addMinutes(20));
-    expect(app(QueueService::class)->customerReturned($e->conversation->fresh()))->toBeTrue();
-    $new = QueueEntry::where('conversation_id', $e->conversation_id)->latest('id')->first();
-    expect($new->priority)->toBe('returning')->and($new->reserved_user_id)->toBe($u->id)->and($new->reopened_from_entry_id)->toBe($e->id)->and($e->fresh()->reopen_count)->toBe(0)->and($new->reopen_count)->toBe(1);
+
+    ingestFromCustomer('after-problem', 'لسه المشكلة موجودة');
+    expect(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1)
+        ->and($c->fresh()->handler->value)->toBe('bot')
+        ->and($e->fresh()->reversed_at)->toBeNull();
+
+    app(BotEngine::class)->handover($c->fresh(), 'human_request');
+    $new = QueueEntry::where('conversation_id', $c->id)->latest('id')->first();
+    expect($new->id)->not->toBe($e->id)->and($new->priority)->toBe('returning')->and($new->status)->toBe('waiting')
+        ->and($new->reserved_user_id)->toBe($u->id)->and($new->reopened_from_entry_id)->toBe($e->id)
+        ->and($e->fresh()->reversed_at)->toBeNull()->and($e->fresh()->reopen_count)->toBe(0);
+    Event::assertNotDispatched(CloseReversed::class);
 });
 
 it('escalates to a new entry and frees the window immediately', function () {
@@ -169,17 +182,21 @@ it('confirms a close only once the confirm window has passed without a reopen', 
     Event::assertDispatchedTimes(CloseConfirmed::class, 1);
 });
 
-it('never confirms a close the customer reopened, and reverses it', function () {
+// Addendum C2 (R1 override): replaces «never confirms a close the customer reopened, and reverses
+// it». She writes inside the confirm window: the bot answers, the close stands and is confirmed.
+it('confirms a manual close on schedule although she wrote again inside the confirm window', function () {
     Event::fake([CloseConfirmed::class, CloseReversed::class]);
-    [$e, $m, $u] = activeWindow();
+    [$e, $m, $u, $c] = ingestedWindow();
     app(WindowLifecycle::class)->close($e, 'problem', $u);
     Carbon::setTestNow(now()->addMinutes(20));
-    app(QueueService::class)->customerReturned($e->conversation->fresh());
-    Event::assertDispatched(CloseReversed::class, fn ($ev) => $ev->entry->id === $e->id);
+    ingestFromCustomer('inside-confirm', 'لسه المشكلة موجودة');
+    expect(app(QueueService::class)->customerReturned($c->fresh()))->toBeFalse();
+    Event::assertNotDispatched(CloseReversed::class);
+
     Carbon::setTestNow(now()->addMinutes(60));
     (new ConfirmClose($e->id, $e->fresh()->closed_at->toIso8601String()))->handle(app(WindowLifecycle::class));
-    expect($e->fresh()->confirmed_at)->toBeNull();
-    Event::assertNotDispatched(CloseConfirmed::class);
+    expect($e->fresh()->confirmed_at)->not->toBeNull()->and($e->fresh()->reversed_at)->toBeNull();
+    Event::assertDispatchedTimes(CloseConfirmed::class, 1);
 });
 
 it('confirms at once when the confirm window is switched off', function () {
@@ -375,31 +392,29 @@ it('does not move the silence clock for a reply of someone who is not the assign
     expect($e->fresh()->last_agent_message_at)->toBeNull();
 });
 
-it('reverses a close at most once, whatever happens to the follow-up ticket', function () {
+// Addendum C2 (R1 override): replaces «reverses a close at most once, whatever happens to the
+// follow-up ticket». A manual close is final: even when a person took the chat back and she
+// writes inside the confirm window, her return is a new ticket and the close is not reversed.
+it('never reverses a manual close from her return, also on a chat a person took back', function () {
     Event::fake([CloseReversed::class, CloseConfirmed::class]);
     [$e1, $m, $u] = activeWindow();
     app(WindowLifecycle::class)->close($e1, 'inquiry', $u); // 12:00
+    $e1->conversation()->update(['handler' => 'human', 'needs_human' => true]); // a moderator took it back by hand
     Carbon::setTestNow(now()->addMinutes(10));
-    expect(app(QueueService::class)->customerReturned($e1->conversation->fresh()))->toBeTrue(); // E2, reverses E1
-    $e2 = QueueEntry::where('conversation_id', $e1->conversation_id)->latest('id')->first();
-    expect($e1->fresh()->reversed_at)->not->toBeNull()->and($e2->reopened_from_entry_id)->toBe($e1->id);
-
-    Carbon::setTestNow(now()->addMinutes(2));
-    // The router may have given E2 a window already; either way a supervisor's «حل» ends it.
-    app(ConversationActions::class)->resolve($e1->conversation->fresh(), User::factory()->create(['role' => 'supervisor']));
-    expect($e2->fresh()->isOpen())->toBeFalse()->and($e2->fresh()->status)->toBeIn(['cancelled', 'closed']);
-
-    Carbon::setTestNow(now()->addMinutes(18)); // 12:30, still inside E1's 60 minutes
     expect(app(QueueService::class)->customerReturned($e1->conversation->fresh()))->toBeTrue();
-    $e3 = QueueEntry::where('conversation_id', $e1->conversation_id)->latest('id')->first();
-    expect($e3->id)->not->toBe($e2->id)->and($e3->reopened_from_entry_id)->toBe($e2->id); // judged on the latest ended entry, not on E1
-    Event::assertDispatchedTimes(CloseReversed::class, 1);
+    $e2 = QueueEntry::where('conversation_id', $e1->conversation_id)->latest('id')->first();
+    expect($e2->priority)->toBe('returning')->and($e2->reopened_from_entry_id)->toBe($e1->id)
+        ->and($e1->fresh()->reversed_at)->toBeNull();
+    Event::assertNotDispatched(CloseReversed::class);
 
-    expect(app(WindowLifecycle::class)->reverseClose($e1->fresh()))->toBeFalse()
-        ->and(app(WindowLifecycle::class)->confirm($e1->fresh()))->toBeFalse()
-        ->and($e1->fresh()->confirmed_at)->toBeNull();
-    Event::assertDispatchedTimes(CloseReversed::class, 1);
-    Event::assertNotDispatched(CloseConfirmed::class);
+    // The safety net confirms it on schedule.
+    Carbon::setTestNow(now()->addMinutes(QueueSetting::current()->close_confirm_minutes));
+    expect(app(WindowLifecycle::class)->confirmDue())->toBe(1)->and($e1->fresh()->confirmed_at)->not->toBeNull();
+
+    // Called directly, a reversal still happens at most once and never after a confirm.
+    expect(app(WindowLifecycle::class)->reverseClose($e1->fresh()))->toBeFalse();
+    Event::assertNotDispatched(CloseReversed::class);
+    Event::assertDispatchedTimes(CloseConfirmed::class, 1);
 });
 
 it('never reverses a close that was already confirmed', function () {
@@ -413,23 +428,31 @@ it('never reverses a close that was already confirmed', function () {
     Event::assertNotDispatched(CloseReversed::class);
 });
 
-it('puts a customer who writes after a case close back in the queue as returning, to the same moderator', function () {
+// Addendum C2 (R1 override): replaces «puts a customer who writes after a case close back in the
+// queue as returning, to the same moderator». The bot answers first; her human request is a
+// returning ticket, and the open case still sends it to the moderator who opened it.
+it('gives her to the bot after a case close, and a human request to the moderator who opened the case', function () {
     [$e, $m, $u, $c] = ingestedWindow();
     app(WindowLifecycle::class)->close($e, 'case', $u, ['case_type' => 'return']);
-    $u->update(['last_seen_at' => now()->subHour()]); // offline for the router: the ticket stays in the lounge
+    $colleague = User::factory()->create(['last_seen_at' => now()]);
+    $colleague->userPlatforms()->create(['platform' => $c->platform->value]);
+    ShiftMember::factory()->for($m->shift)->create(['user_id' => $colleague->id, 'status' => 'available']);
     Carbon::setTestNow(now()->addMinutes(20));
-    $msg = ingestFromCustomer('after-case', 'إمتى هيتحل؟');
-    $entries = QueueEntry::where('conversation_id', $c->id)->orderBy('id')->get();
-    expect($msg)->not->toBeNull()->and($entries)->toHaveCount(2);
-    $new = $entries->last();
-    expect($new->priority)->toBe('returning')->and($new->status)->toBe('waiting')->and($new->reserved_user_id)->toBe($u->id)
-        ->and($new->reopened_from_entry_id)->toBe($e->id)->and($c->fresh()->queue_entry_id)->toBe($new->id)
-        ->and($e->fresh()->reversed_at)->toBeNull() // a case close has no confirm window: nothing to reverse
-        ->and($c->messages()->where('sender_type', 'bot')->latest('id')->first()->body)->toContain('رقم تذكرتك #'.$new->ticket_no);
 
-    ingestFromCustomer('after-case-2', 'ألو؟'); // already waiting: no second ticket
-    expect(QueueEntry::where('conversation_id', $c->id)->count())->toBe(2)
-        ->and($new->fresh()->last_customer_message_at->equalTo(now()))->toBeTrue();
+    $msg = ingestFromCustomer('after-case', 'إمتى هيتحل؟');
+    expect($msg)->not->toBeNull()->and(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1)
+        ->and($c->fresh()->handler->value)->toBe('bot');
+
+    User::whereKey([$u->id, $colleague->id])->update(['last_seen_at' => now()]); // both logged in and free
+    app(BotEngine::class)->handover($c->fresh(), 'human_request');
+    $entries = QueueEntry::where('conversation_id', $c->id)->orderBy('id')->get();
+    expect($entries)->toHaveCount(2);
+    $new = $entries->last();
+    expect($new->priority)->toBe('returning')->and($new->open_case_id)->toBe($e->fresh()->support_case_id)
+        ->and($new->assigned_user_id)->toBe($u->id)->and($new->status)->toBeIn(['called', 'active'])
+        ->and($new->rule)->toContain('كيس مفتوح')
+        ->and($new->reopened_from_entry_id)->toBe($e->id)->and($c->fresh()->queue_entry_id)->toBe($new->id)
+        ->and($e->fresh()->reversed_at)->toBeNull();
 });
 
 it('puts her in the live lane once the return priority has passed', function () {
@@ -438,7 +461,9 @@ it('puts her in the live lane once the return priority has passed', function () 
     $u->update(['last_seen_at' => now()->subDay()]);
     Carbon::setTestNow(now()->addMinutes(QueueSetting::current()->return_priority_minutes + 1)); // 14:01, shift still open
     app(WindowLifecycle::class)->confirmDue();
-    ingestFromCustomer('later', 'عندي سؤال تاني');
+    ingestFromCustomer('later', 'عندي سؤال تاني'); // the bot answers it (R1 override)
+    expect(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1);
+    app(BotEngine::class)->handover($c->fresh(), 'human_request');
     $new = QueueEntry::where('conversation_id', $c->id)->latest('id')->first();
     expect($new->id)->not->toBe($e->id)->and($new->priority)->toBe('live')->and($new->reserved_user_id)->toBeNull()
         ->and($new->reopened_from_entry_id)->toBeNull()->and($new->reopen_count)->toBe(0)
@@ -451,7 +476,9 @@ it('follows the overnight path when she writes after a close outside shift hours
     app(WindowLifecycle::class)->close($e, 'case', $u);
     Shift::query()->update(['status' => 'closed']);
     Carbon::setTestNow(now()->addMinutes(30));
-    ingestFromCustomer('night', 'ألو');
+    ingestFromCustomer('night', 'ألو'); // the bot answers it (R1 override)
+    expect(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1);
+    app(BotEngine::class)->handover($c->fresh(), 'human_request');
     $new = QueueEntry::where('conversation_id', $c->id)->latest('id')->first();
     expect($new->id)->not->toBe($e->id)->and($new->priority)->toBe('overnight')
         ->and($c->messages()->where('sender_type', 'bot')->latest('id')->first()->body)->toContain('خارج مواعيد العمل');
@@ -507,7 +534,9 @@ it('closes the window although a WindowClosed listener throws', function () {
     expect($e4->fresh()->close_reason)->toBe('auto');
 });
 
-it('keeps the inbound message and re-queues her although a CloseReversed listener throws', function () {
+// Addendum C2 (R1 override): the ingest no longer reverses a manual close, so the reversal is
+// driven directly; a throwing CloseReversed / CloseConfirmed listener still fails nothing.
+it('reverses and confirms although a CloseReversed or CloseConfirmed listener throws', function () {
     Event::listen(CloseReversed::class, fn () => throw new RuntimeException('score keeper is broken'));
     Event::listen(CloseConfirmed::class, fn () => throw new RuntimeException('score keeper is broken'));
     [$e, $m, $u, $c] = ingestedWindow();
@@ -515,8 +544,8 @@ it('keeps the inbound message and re-queues her although a CloseReversed listene
     Carbon::setTestNow(now()->addMinutes(20));
     $msg = ingestFromCustomer('back', 'لسه المشكلة موجودة');
     expect($msg)->not->toBeNull()->and(Message::whereKey($msg->id)->exists())->toBeTrue()
-        ->and($e->fresh()->reversed_at)->not->toBeNull()
-        ->and(QueueEntry::where('conversation_id', $c->id)->where('reopened_from_entry_id', $e->id)->count())->toBe(1);
+        ->and(app(WindowLifecycle::class)->reverseClose($e->fresh()))->toBeTrue()
+        ->and($e->fresh()->reversed_at)->not->toBeNull();
 
     [$e2, $m2, $u2] = activeWindow();
     app(WindowLifecycle::class)->close($e2, 'inquiry', $u2);
@@ -548,7 +577,7 @@ it('confirms only the due manual closes in the safety net', function () {
     expect($auto->fresh()->close_reason)->toBe('auto');
 
     Carbon::setTestNow(now()->addMinutes(30));
-    app(QueueService::class)->customerReturned($reversed->conversation->fresh());
+    $life->reverseClose($reversed->fresh()); // the ingest no longer reverses a manual close (addendum C2)
     [$fresh, , $u4] = activeWindow();
     $life->close($fresh, 'inquiry', $u4); // closed 12:30, due 13:30
     expect($life->confirmDue())->toBe(0);

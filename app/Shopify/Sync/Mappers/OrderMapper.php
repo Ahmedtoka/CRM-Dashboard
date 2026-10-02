@@ -126,12 +126,15 @@ final class OrderMapper
             $local = $this->findLocal($o, $shopifyId, lock: true);
 
             if ($local !== null && $this->isStale($local->shopify_updated_at, $o['updated_at'] ?? null)) {
+                $this->stampSynced($local);
+
                 return MapResult::Skipped;
             }
 
             if ($local !== null && $local->source === OrderSource::Chat) {
                 $this->syncChatCustomer($local, $o);
                 $this->updateChatOrder($local, $o, $shopifyId);
+                $this->stampSynced($local);
                 $this->afterChange($local);
 
                 return MapResult::Updated;
@@ -148,6 +151,8 @@ final class OrderMapper
                 $this->replaceItems($model, $o['line_items']);
             }
 
+            $this->stampSynced($model);
+
             if ($created && $this->deferredCustomerIds === null) {
                 $this->announce($model);
             }
@@ -163,6 +168,7 @@ final class OrderMapper
         $f = Payload::isGraphql($fulfillment) ? $this->fulfillmentFromGraphql($fulfillment) : $fulfillment;
         $fulfillmentId = Payload::id($f['id'] ?? null) ?? throw new InvalidArgumentException('Shopify fulfillment payload has no id.');
         $order = $this->orderForChild($f['order_id'] ?? null);
+        $this->stampSynced($order);
 
         $existing = Fulfillment::where('shopify_fulfillment_id', $fulfillmentId)->first();
 
@@ -203,6 +209,7 @@ final class OrderMapper
         }
 
         $order = $this->orderForChild($r['order_id'] ?? null);
+        $this->stampSynced($order);
 
         Refund::create([
             'order_id' => $order->id,
@@ -277,8 +284,8 @@ final class OrderMapper
     }
 
     /**
-     * Chat orders were created in the CRM: only Shopify identity, statuses and
-     * cancel bookkeeping fields change here, never attribution (created_by_id,
+     * Chat orders were created in the CRM: only Shopify identity, statuses,
+     * cancel bookkeeping fields and the note (R9) change here, never attribution (created_by_id,
      * source, conversation_id) or the order's customer.
      *
      * Crucially, this never moves `status` to Confirmed/Cancelled or sets
@@ -300,6 +307,8 @@ final class OrderMapper
             'cancelled_at' => Payload::time($o['cancelled_at'] ?? null),
             'cancel_reason' => Payload::string($o['cancel_reason'] ?? null),
             'shopify_updated_at' => Payload::time($o['updated_at'] ?? null),
+            // R9: the note is the Shopify note, also for an order made in the CRM.
+            'note' => array_key_exists('note', $o) ? Payload::string($o['note']) : $order->note,
         ]);
 
         if (array_key_exists('tags', $o)) {
@@ -530,6 +539,18 @@ final class OrderMapper
 
             rescue(fn () => $this->outbound->sendSystem($conversation, "طلب جديد من الموقع {$name} — {$total} ج.م"), null, report: true);
         });
+    }
+
+    /**
+     * Every read of the order from Shopify (webhook, sync, bulk import, refresh)
+     * stamps `last_synced_at`, also a read that changed nothing (spec §3.2). A
+     * base query update, so `updated_at` keeps meaning "the CRM row changed".
+     */
+    private function stampSynced(Order $order): void
+    {
+        $now = now();
+        Order::whereKey($order->id)->toBase()->update(['last_synced_at' => $now]);
+        $order->forceFill(['last_synced_at' => $now])->syncOriginalAttribute('last_synced_at');
     }
 
     private function afterChange(Order $order): void

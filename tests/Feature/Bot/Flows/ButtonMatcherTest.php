@@ -20,3 +20,15 @@ it('maps a payload, a number or an exact title to the last bot buttons', functio
         ->and(app(ButtonMatcher::class)->match($c, $m(['body' => 'عايزة ارجع'])))->toBeNull()
         ->and(app(ButtonMatcher::class)->match($c, $m(['body' => '5'])))->toBeNull();
 });
+
+it('never turns a typed digit or a tap on the queue rating buttons into a bot payload', function () {
+    $c = Conversation::factory()->for(ChannelAccount::factory(), 'channelAccount')->create();
+    Message::factory()->for($c, 'conversation')->create(['direction' => 'out', 'sender_type' => 'bot', 'body' => 'قيّمي', 'buttons' => array_map(
+        fn (int $n) => ['title' => (string) $n, 'payload' => "queue_rating:7:{$n}"], range(1, 5),
+    )]);
+    $m = fn (array $attrs) => Message::factory()->for($c, 'conversation')->create(['direction' => 'in', 'sender_type' => 'customer'] + $attrs);
+
+    expect(app(ButtonMatcher::class)->match($c, $m(['body' => '3'])))->toBeNull()
+        ->and(app(ButtonMatcher::class)->match($c, $m(['body' => '٥'])))->toBeNull()
+        ->and(app(ButtonMatcher::class)->match($c, $m(['body' => '4', 'payload' => 'queue_rating:7:4'])))->toBeNull();
+});

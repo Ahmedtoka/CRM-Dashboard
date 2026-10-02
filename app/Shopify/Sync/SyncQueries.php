@@ -27,6 +27,13 @@ final class SyncQueries
 
     public const MAX_QUERY_COST = 1000;
 
+    /**
+     * Orders per `nodes(ids:)` refresh query (ordersByIds): the largest batch whose
+     * worst-case cost, with the sync's full order selection, stays under
+     * MAX_QUERY_COST (SyncQueriesTest / OrderRefreshTest pin it).
+     */
+    public const ORDERS_BY_IDS_BATCH = 7;
+
     /** Top-level page size of the paged (non-bulk) query per resource. */
     public const PAGE_SIZES = ['products' => 10, 'customers' => 50, 'orders' => 6];
 
@@ -193,6 +200,20 @@ final class SyncQueries
             ."  }\n}";
     }
 
+    /**
+     * Orders by id (refresh, spec §3.2) with exactly the paged sync's selection;
+     * variables: ids (gids, at most ORDERS_BY_IDS_BATCH). Response: data.nodes,
+     * in the order of `ids`, null for an id Shopify no longer has.
+     */
+    public static function ordersByIds(): string
+    {
+        $nested = self::nested('orders');
+        $node = self::sized(self::NODE['orders'], true)
+            ." {$nested['select']}(first: {$nested['page']}) { edges { node { {$nested['node']} } } pageInfo { hasNextPage endCursor } }";
+
+        return "query refresh(\$ids: [ID!]!) {\n  nodes(ids: \$ids) {\n    ... on Order { {$node} }\n  }\n}";
+    }
+
     /** Follow-up page of a resource's nested connection; variables: id, cursor. Response: data.node.{nestedKey}. */
     public static function nestedPage(string $resource): string
     {
@@ -221,6 +242,7 @@ final class SyncQueries
             'bulk_operation' => self::BULK_OPERATION,
             'shipping' => self::shipping(),
             'shipping_zones' => self::shippingZones(),
+            'orders_by_ids' => self::ordersByIds(),
         ];
 
         foreach (self::RESOURCES as $resource) {
@@ -237,8 +259,10 @@ final class SyncQueries
      * 2 + first × (1 + cost of one node) + its own non-node fields (pageInfo);
      * `edges`/`nodes` (and an argument-less `node`) are free wrappers and inline
      * fragments add their fields. Nested `first` values therefore multiply.
+     * A list looked up by `ids` (`nodes(ids: $ids)`) has no literal size: it is
+     * costed as $idsListSize objects (default: the refresh batch).
      */
-    public static function estimatedWorstCaseCost(string $document): int
+    public static function estimatedWorstCaseCost(string $document, int $idsListSize = self::ORDERS_BY_IDS_BATCH): int
     {
         preg_match_all('/"""[\s\S]*?"""|"(?:[^"\\\\]|\\\\.)*"|\.\.\.|[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?|[{}():$!=@\[\],]/', $document, $m);
         $tokens = $m[0];
@@ -255,14 +279,14 @@ final class SyncQueries
             return 0;
         }
 
-        return (int) array_sum(array_column(self::selection($tokens, $i), 'cost'));
+        return (int) array_sum(array_column(self::selection($tokens, $i, $idsListSize), 'cost'));
     }
 
     /**
      * @param  list<string>  $t
      * @return list<array{name: string, cost: int}>
      */
-    private static function selection(array $t, int &$i): array
+    private static function selection(array $t, int &$i, int $idsListSize): array
     {
         $i++; // '{'
         $fields = [];
@@ -274,7 +298,7 @@ final class SyncQueries
                     $i += 2;
                 }
                 if (($t[$i] ?? null) === '{') {
-                    array_push($fields, ...self::selection($t, $i));
+                    array_push($fields, ...self::selection($t, $i, $idsListSize));
                 }
 
                 continue;
@@ -287,6 +311,7 @@ final class SyncQueries
             }
 
             $first = null;
+            $byIds = false;
             $hasArgs = ($t[$i] ?? null) === '(';
             if ($hasArgs) {
                 $depth = 0;
@@ -297,6 +322,8 @@ final class SyncQueries
                         $depth--;
                     } elseif (in_array($t[$i], ['first', 'last'], true) && ($t[$i + 1] ?? null) === ':' && is_numeric($t[$i + 2] ?? null)) {
                         $first = (int) $t[$i + 2];
+                    } elseif ($depth === 1 && $t[$i] === 'ids' && ($t[$i + 1] ?? null) === ':') {
+                        $byIds = true;
                     }
                     $i++;
                 } while ($depth > 0 && $i < count($t));
@@ -308,12 +335,14 @@ final class SyncQueries
                 continue;
             }
 
-            $children = self::selection($t, $i);
+            $children = self::selection($t, $i, $idsListSize);
             $sum = (int) array_sum(array_column($children, 'cost'));
 
             if ($first !== null) {
                 $perNode = (int) array_sum(array_column(array_filter($children, fn ($c) => in_array($c['name'], ['edges', 'nodes'], true)), 'cost'));
                 $cost = 2 + $first * (1 + $perNode) + ($sum - $perNode);
+            } elseif ($byIds) {
+                $cost = $idsListSize * (1 + $sum);
             } elseif (in_array($name, ['edges', 'nodes'], true) || ($name === 'node' && ! $hasArgs)) {
                 $cost = $sum;
             } else {

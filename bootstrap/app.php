@@ -9,12 +9,15 @@ use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RecordListLatency;
 use App\Http\Middleware\SetLocale;
 use App\Inbox\WindowClosedException;
+use App\Media\MediaRejected;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -29,6 +32,8 @@ return Application::configure(basePath: dirname(__DIR__))
             // start and write a session for every platform delivery).
             Route::group([], __DIR__.'/../routes/webhooks.php');
             Route::middleware(['web', 'auth'])->group(__DIR__.'/../routes/crm.php');
+            // Unknown addresses: the Error page, with a session only if the cookie is already there.
+            require __DIR__.'/../routes/fallback.php';
         },
     )
     ->withMiddleware(function (Middleware $middleware) {
@@ -67,7 +72,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ? response()->json(['message' => $e->getMessage()], 502)
             : null);
 
-        $exceptions->render(fn (\App\Media\MediaRejected $e, Request $request) => $wantsJson($request)
+        $exceptions->render(fn (MediaRejected $e, Request $request) => $wantsJson($request)
             ? response()->json(['message' => $e->getMessage(), 'errors' => ['file' => [$e->getMessage()]]], 422)
             : back()->withErrors(['file' => $e->getMessage()]));
 
@@ -76,4 +81,32 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (AccessDeniedHttpException $e, Request $request) => $wantsJson($request)
             ? response()->json(['message' => $e->getMessage() ?: 'This action is unauthorized.'], 403)
             : null);
+
+        // App-level error page (Inertia's documented pattern): 403 / 404 / 500 / 503 on a page
+        // request render the `Error` page in the interface language, inside the app shell when
+        // signed in. JSON requests keep JSON; a 500 keeps the debug page while debugging.
+        $exceptions->respond(function (Response $response, Throwable $e, Request $request) use ($wantsJson) {
+            $status = $response->getStatusCode();
+
+            if ($wantsJson($request) || ! in_array($status, [403, 404, 500, 503], true)) {
+                return $response;
+            }
+
+            if ($status === 500 && config('app.debug')) {
+                return $response;
+            }
+
+            // Maintenance mode (a deploy in progress): the framework's 503 as is. The build manifest
+            // may be mid-replace, so rendering the Error page would only fail and report
+            // ViteManifestNotFoundException; a 503 with no matched route is the same situation.
+            if (app()->isDownForMaintenance() || ($status === 503 && $request->route() === null)) {
+                return $response;
+            }
+
+            // A failing render (database down, missing build manifest) keeps the original response.
+            return rescue(
+                fn () => Inertia::render('Error', ['status' => $status])->toResponse($request)->setStatusCode($status),
+                $response,
+            );
+        });
     })->create();

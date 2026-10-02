@@ -165,7 +165,16 @@ onBeforeUnmount(() => {
                 <component :is="icon" class="size-4" aria-hidden="true" />
             </span>
             <span class="min-w-0 flex-1">
-                <span class="block truncate text-xs font-semibold">{{ typeLabel }}</span>
+                <!-- The step id (a slug such as «menu») lives in the tooltip; the node reads its type in words.
+                     Double-click still renames it here, and the inspector keeps the full id field. -->
+                <span
+                    v-if="editing?.kind !== 'id'"
+                    class="block truncate text-xs font-semibold"
+                    :class="edit ? 'cursor-text' : ''"
+                    :title="edit ? `${data.stepId} — ${t('flows.inline.dblclick_rename')}` : data.stepId"
+                    @dblclick.stop="startId"
+                    >{{ typeLabel }}</span
+                >
                 <template v-if="editing?.kind === 'id'">
                     <input
                         :ref="setEditor"
@@ -181,14 +190,6 @@ onBeforeUnmount(() => {
                     />
                     <span v-if="renameError" class="mt-0.5 block text-2xs leading-4 text-destructive" role="alert">{{ renameError }}</span>
                 </template>
-                <span
-                    v-else
-                    class="block cursor-text truncate text-2xs text-muted-foreground"
-                    dir="ltr"
-                    :title="edit ? t('flows.inline.dblclick_rename') : undefined"
-                    @dblclick.stop="startId"
-                    >{{ data.stepId }}</span
-                >
             </span>
             <span
                 v-if="errorCount"

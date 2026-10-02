@@ -34,6 +34,9 @@ final class ShopifyClient
 
     private ?string $token = null;
 
+    /** How many times a failed read is resent; null = once per BACKOFF_SECONDS entry. */
+    private ?int $maxRetries = null;
+
     public function __construct(
         private readonly ShopifyTransport $transport,
         private readonly IntegrationRepository $integrations,
@@ -54,6 +57,26 @@ final class ShopifyClient
         $clone->throttleStatus = null;
 
         return $clone;
+    }
+
+    /**
+     * A copy for an interactive web request (e.g. «تحديث من شوبيفاي»): each HTTP
+     * call gives up after $seconds and nothing is resent, so the request fails
+     * fast instead of sleeping through the backoff. Throttle state starts empty.
+     */
+    public function withTimeout(int $seconds): self
+    {
+        $client = new self(
+            $this->transport instanceof HttpShopifyTransport ? $this->transport->withTimeout($seconds) : $this->transport,
+            $this->integrations,
+            $this->sleeper,
+        );
+        $client->useStoredIntegration = $this->useStoredIntegration;
+        $client->domain = $this->domain;
+        $client->token = $this->token;
+        $client->maxRetries = 0;
+
+        return $client;
     }
 
     /**
@@ -126,7 +149,7 @@ final class ShopifyClient
             try {
                 $response = $this->transport->post($url, $headers, $body);
             } catch (Throwable $e) {
-                if ($isMutation || $attempt >= count(self::BACKOFF_SECONDS)) {
+                if ($isMutation || $attempt >= $this->retries()) {
                     throw new ShopifyException('transport', $e->getMessage(), [], $e);
                 }
                 $this->sleep(self::BACKOFF_SECONDS[$attempt]);
@@ -158,7 +181,7 @@ final class ShopifyClient
             }
 
             if ($throttled || $status >= 500) {
-                if ($attempt >= count(self::BACKOFF_SECONDS)) {
+                if ($attempt >= $this->retries()) {
                     throw $throttled
                         ? new ShopifyException('throttled', 'Shopify request throttled after retries')
                         : new ShopifyException('transport', 'Shopify request failed with HTTP '.$status.' after retries');
@@ -208,6 +231,11 @@ final class ShopifyClient
         Log::warning('Shopify refused customerJourneySummary; skipping it for 24 hours (utm then comes from webhooks only).');
 
         return $data;
+    }
+
+    private function retries(): int
+    {
+        return $this->maxRetries ?? count(self::BACKOFF_SECONDS);
     }
 
     /** @return array{0: string, 1: string} */

@@ -100,10 +100,9 @@ async function remove(): Promise<void> {
         <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-1.5">
-                    <h3 class="truncate text-sm font-semibold text-foreground" dir="auto">{{ entry.title }}</h3>
+                    <h3 class="truncate text-sm font-semibold text-foreground" dir="auto" :title="entry.key">{{ entry.title }}</h3>
                     <StatusChip v-if="entry.is_template" tone="warning" :label="t('settings.bot_knowledge.template')" />
                 </div>
-                <p class="text-2xs text-muted-foreground" dir="ltr">{{ entry.key }}</p>
             </div>
             <label class="inline-flex shrink-0 cursor-pointer items-center gap-1.5">
                 <span class="relative inline-flex h-5 w-9 items-center">

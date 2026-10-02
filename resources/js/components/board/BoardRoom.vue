@@ -108,7 +108,15 @@ const walkers = computed(() =>
         const entry = board.open.value.find((e) => e.id === move.entryId);
         if (to === null || !entry) return [];
 
-        return [{ id: move.id, from: seatCentre(move.seat, geometry.value.lounge), to, ticket: move.ticket % 100000, outfit: outfitOf(entry) }];
+        return [
+            {
+                id: move.id,
+                from: seatCentre(move.seat, roomGeometry(move.waitingBefore).lounge),
+                to,
+                ticket: move.ticket % 100000,
+                outfit: outfitOf(entry),
+            },
+        ];
     }),
 );
 

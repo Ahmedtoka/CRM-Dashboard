@@ -31,6 +31,8 @@ const props = withDefaults(
         queueEnabled?: boolean;
         /** Any filter is active (the empty state then offers «مسح الفلاتر»). */
         filtered?: boolean;
+        /** The substring search matched too many customers: hint to narrow it. */
+        searchTruncated?: boolean;
     }>(),
     {
         loading: false,
@@ -41,6 +43,7 @@ const props = withDefaults(
         pollFailed: false,
         queueEnabled: false,
         filtered: false,
+        searchTruncated: false,
     },
 );
 
@@ -311,6 +314,9 @@ defineExpose({
                     </div>
                 </template>
             </FilterBar>
+            <p v-if="searchTruncated && (filters.q ?? '') !== ''" data-search-truncated class="text-xs text-muted-foreground" role="status">
+                {{ t('inbox.search_truncated') }}
+            </p>
         </div>
 
         <div

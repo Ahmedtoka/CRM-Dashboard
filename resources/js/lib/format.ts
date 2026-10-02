@@ -199,3 +199,20 @@ export function formatStat(value: number | null | undefined, locale: Locale, opt
 
     return opts.money ? formatMoney(value, locale) : formatCount(value, locale);
 }
+
+/** An average duration where 0 / null means "nothing measured yet": «—», never a lone «٠:٠٠». */
+export function formatAvgSeconds(total: number | null | undefined, locale: Locale): string {
+    return total === null || total === undefined || !Number(total) ? '—' : formatSeconds(total, locale);
+}
+
+/** US dollars (AI cost) the way formatMoney writes pounds: «٠٫٠١٢ دولار» / "0.012 USD", no bidi-flipped «$US». */
+export function formatUsd(amount: number | null | undefined, locale: Locale): string {
+    if (amount === null || amount === undefined) return '—';
+
+    return `${formatNumber(locale, Number(amount), { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ${translate(locale, 'common.currency_usd')}`;
+}
+
+/** A quick-reply shortcut always reads «/apology»: stored with or without its slash, never «//apology». */
+export function slashShortcut(shortcut: string): string {
+    return shortcut.startsWith('/') ? shortcut : `/${shortcut}`;
+}

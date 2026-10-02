@@ -245,6 +245,28 @@ return [
         ],
     ],
 
+    // Handover queue (spec 2026-09-30 §1): a customer message made only of these phrases, plus the
+    // fillers, emoji and punctuation, is an acknowledgement, not a request: it starts no
+    // moderator-reply clock and never reopens a closed chat. Compared after App\Bot\ArabicNormalizer
+    // (no tashkeel, أ/إ/آ → ا, ة → ه, ى → ي, repeated letters collapsed, lowercase), so write them
+    // the natural way. App\Queue\Acknowledgement is the one place that reads them.
+    'queue' => [
+        'acknowledgements' => [
+            'phrases' => [
+                'شكرا', 'شكرا جزيلا', 'ألف شكر', 'متشكرة', 'متشكرين', 'متشكر', 'مشكورة', 'مشكورين',
+                'تسلمي', 'تسلم', 'تسلموا', 'تسلم إيدك', 'تسلمي إيدك', 'تسلم إيديكي', 'تسلم إيديك', 'الله يسلمك', 'ربنا يخليكي', 'ربنا يخليكم',
+                'جزاكم الله خيرا', 'جزاك الله خيرا', 'ميرسي', 'مرسي',
+                'تمام', 'تمام التمام', 'تمم', 'أوك', 'أوكي', 'أوكيه', 'ماشي', 'اشطا', 'اشطة', 'حلو', 'جميل', 'كويس', 'حاضر', 'خلاص', 'تم',
+                'ok', 'okay', 'okey', 'okk', 'k', 'kk', 'thanks', 'thank you', 'thank u', 'thx', 'thnx', 'thanx', 'ty', 'tysm', 'merci',
+                'great', 'perfect', 'good', 'nice', 'cool', 'fine', 'alright', 'all right', 'noted', 'done', 'got it',
+            ],
+            'fillers' => [
+                'يا', 'جدا', 'خالص', 'أوي', 'قوي', 'كتير', 'ليكي', 'ليكو', 'ليكم', 'لكم', 'ليك', 'فندم', 'حبيبتي', 'حبيبي', 'قمر', 'عسل', 'كده', 'بجد',
+                'so', 'much', 'very', 'a', 'lot', 'you', 'u', 'dear', 'again', 'guys',
+            ],
+        ],
+    ],
+
     'anthropic' => [
         'key' => env('ANTHROPIC_API_KEY'),
         'classifier_model' => 'claude-haiku-4-5-20251001',

@@ -7,6 +7,7 @@ use App\Enums\UserRole;
 use App\Http\Resources\AttachmentResource;
 use App\Media\Jobs\MakeThumbnail;
 use App\Media\MediaStorage;
+use App\Media\Thumbnailer;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
 use App\Models\Message;
@@ -159,4 +160,31 @@ it('deletes the thumbnail file when pruning an orphan attachment', function () {
 
     Storage::disk('media')->assertMissing($a->thumb_path);
     Storage::disk('media')->assertMissing($a->path);
+});
+
+/** Only a PNG signature + IHDR: getimagesize reads the size, GD cannot decode the (missing) pixels. */
+function pngHeaderOnly(int $w, int $h): string
+{
+    $ihdr = 'IHDR'.pack('NNCCCCC', $w, $h, 8, 2, 0, 0, 0);
+
+    return "\x89PNG\r\n\x1a\n".pack('N', 13).$ihdr.pack('N', crc32($ihdr));
+}
+
+it('refuses to decode an image above 24 megapixels before GD allocates it', function () {
+    expect(Thumbnailer::MAX_PIXELS)->toBe(24_000_000);
+    $errors = [];
+    Log::shouldReceive('warning')->andReturnUsing(function ($m, $ctx) use (&$errors) {
+        $errors[] = $ctx['error'] ?? null;
+    });
+    Log::shouldReceive('info', 'debug', 'error')->andReturnNull();
+
+    foreach ([[5000, 5000], [4000, 6000]] as [$w, $h]) { // 25 MP (was allowed under the old 50 MP cap), exactly 24 MP
+        $path = 'inbound/2026/10/'.Str::uuid().'.png';
+        Storage::disk('media')->put($path, pngHeaderOnly($w, $h));
+        $a = MessageAttachment::factory()->stored()->create(['message_id' => $this->message->id, 'path' => $path, 'mime' => 'image/png']);
+        expect($a->fresh()->thumb_path)->toBeNull();
+    }
+
+    // 25 MP stops at the cap; exactly 24 MP passes it and only fails because these bytes have no pixels.
+    expect($errors)->toBe(['image above the pixel cap', 'GD could not decode the image']);
 });

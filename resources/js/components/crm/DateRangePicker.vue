@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import DateInput from '@/components/crm/DateInput.vue';
 import { useI18n } from '@/composables/useI18n';
 import { addDays, cairoToday } from '@/lib/format';
 import type { ReportRange } from '@/types/admin';
+import { ArrowRight } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 /** `month` adds a «this month» preset (1st of the Cairo month → today). */
@@ -87,10 +89,10 @@ function apply(): void {
         </button>
         <form v-if="showCustom" class="flex flex-wrap items-center gap-1.5" @submit.prevent="apply">
             <label class="sr-only" for="range-from">{{ t('range.from') }}</label>
-            <input id="range-from" v-model="from" type="date" dir="ltr" class="h-9 rounded-md border border-input bg-background px-2 text-xs" :max="to" />
-            <span class="text-xs text-muted-foreground" aria-hidden="true">→</span>
+            <DateInput id="range-from" v-model="from" class="h-9 rounded-md border border-input bg-background px-2 text-xs" :max="to" />
+            <ArrowRight class="size-3.5 text-muted-foreground rtl:-scale-x-100" aria-hidden="true" />
             <label class="sr-only" for="range-to">{{ t('range.to') }}</label>
-            <input id="range-to" v-model="to" type="date" dir="ltr" class="h-9 rounded-md border border-input bg-background px-2 text-xs" :min="from" />
+            <DateInput id="range-to" v-model="to" class="h-9 rounded-md border border-input bg-background px-2 text-xs" :min="from" />
             <button type="submit" class="h-9 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50" :disabled="invalid">
                 {{ t('range.apply') }}
             </button>

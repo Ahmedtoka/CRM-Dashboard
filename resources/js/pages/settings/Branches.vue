@@ -193,7 +193,7 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
 
                 <DataTable :columns="columns" :rows="group.rows" :empty="t('settings.branches.empty')" :caption="group.label">
                     <template #cell-name="{ row }"><span class="font-medium" dir="rtl">{{ row.name }}</span></template>
-                    <template #cell-address="{ row }"><span class="text-xs" dir="rtl">{{ row.address }}</span></template>
+                    <template #cell-address="{ row }"><span class="text-xs" dir="auto">{{ row.address }}</span></template>
                     <template #cell-phone="{ row }"><span dir="ltr">{{ row.phone ?? '—' }}</span></template>
                     <template #cell-is_active="{ row }">
                         <button

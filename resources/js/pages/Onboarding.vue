@@ -6,7 +6,7 @@ import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { cn } from '@/lib/utils';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { Bot, CheckCircle2, Circle, Facebook, Instagram, Link2, MessageCircle, ShoppingBag, Store } from 'lucide-vue-next';
+import { Bot, CircleCheck, Facebook, Instagram, Link2, MessageCircle, ShoppingBag, Store } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 interface Step {
@@ -87,12 +87,15 @@ const breadcrumbs = computed(() => [{ title: t('onboarding.title'), href: '/onbo
                     class="flex gap-3 rounded-xl border bg-card p-4 shadow-card"
                     :class="[step.done ? 'border-emerald-500/30' : next?.key === step.key ? 'border-primary/50 ring-1 ring-primary/20' : 'border-border', { 'opacity-70': step.blocked_by }]"
                 >
-                    <div class="flex shrink-0 flex-col items-center gap-2">
-                        <span class="flex size-10 items-center justify-center rounded-full text-white" :style="{ background: colors[step.key] }" aria-hidden="true">
+                    <!-- Status is a badge on the step's icon, not a lone circle that reads like a radio button;
+                         «لسه» / «تمام» beside the title says it in words. -->
+                    <div class="relative size-10 shrink-0" aria-hidden="true">
+                        <span class="flex size-10 items-center justify-center rounded-full text-white" :style="{ background: colors[step.key] }">
                             <component :is="icons[step.key]" class="size-5" />
                         </span>
-                        <CheckCircle2 v-if="step.done" class="size-5 text-emerald-600" aria-hidden="true" />
-                        <Circle v-else class="size-5 text-muted-foreground/50" aria-hidden="true" />
+                        <span v-if="step.done" class="absolute -bottom-1 -end-1 flex size-5 items-center justify-center rounded-full bg-card">
+                            <CircleCheck class="size-5 fill-success text-card" />
+                        </span>
                     </div>
 
                     <div class="min-w-0 flex-1 space-y-1.5">

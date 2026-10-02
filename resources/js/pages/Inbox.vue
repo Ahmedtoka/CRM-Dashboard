@@ -17,6 +17,7 @@ import { useShortcuts } from '@/composables/useShortcuts';
 import { useToast } from '@/composables/useToast';
 import { syncInertiaUrl } from '@/composables/useUrlFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { stripBidiControls } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type {
     Attachment,
@@ -153,7 +154,7 @@ const {
 } = thread;
 // Renamed on the way out: the page's props are called `conversations` and `filters` too (the first page and the
 // filters it was loaded with), and the live list must never be mistaken for them.
-const { conversations: listRows, filters: listFilters, loading, loadingMore, loadMoreFailed, nextCursor, live, pollFailed, counts, activeKeys } = list;
+const { conversations: listRows, filters: listFilters, loading, loadingMore, loadMoreFailed, nextCursor, live, pollFailed, searchTruncated, counts, activeKeys } = list;
 
 // Handover queue (the moderator's side). With the queue off, or for somebody who is not on the
 // shift, this is one request and nothing of it is rendered.
@@ -389,7 +390,9 @@ function editOrder(order: Order): void {
 // the user has already typed for this conversation, then confirm it landed in the reply
 // (the button's own clipboard write is a silent best-effort extra, not what this toasts).
 function onCopyStatus(text: string): void {
-    draft.value = draft.value.trim() ? `${draft.value}\n${text}` : text;
+    // Defensive: whatever built `text`, no invisible bidi controls reach the customer.
+    const clean = stripBidiControls(text);
+    draft.value = draft.value.trim() ? `${draft.value}\n${clean}` : clean;
     showFlash(t('order.copy_status_done'));
 }
 
@@ -507,6 +510,7 @@ onBeforeUnmount(() => {
                 :has-more="nextCursor !== null"
                 :live="live"
                 :poll-failed="pollFailed"
+                :search-truncated="searchTruncated"
                 :queue-enabled="queueEnabled"
                 :filtered="activeKeys.length > 0"
                 @update="list.setFilters"

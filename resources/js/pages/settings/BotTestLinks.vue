@@ -3,6 +3,7 @@
  * Settings → «روابط التجربة» (design 2026-09-21 §1). One card per link: the address to
  * share, how often it was opened, how many runs it produced, and the runs themselves.
  */
+import DateInput from '@/components/crm/DateInput.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
@@ -262,7 +263,7 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
             </label>
             <label class="grid gap-1">
                 <span class="text-xs font-medium">{{ t('settings.test_links.expires_at') }}</span>
-                <input v-model="form.expires_at" type="date" :class="input" />
+                <DateInput v-model="form.expires_at" :class="input" wrapper-class="w-full" />
                 <span class="text-2xs text-muted-foreground">{{ t('settings.test_links.expires_hint') }}</span>
             </label>
             <div class="grid gap-3 sm:grid-cols-2">

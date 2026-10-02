@@ -27,7 +27,7 @@ class InboxController extends Controller
         $user = $request->user();
 
         return Inertia::render('Inbox', [
-            'conversations' => ConversationResource::collection($query->paginate($user, $filters))->additional(['search_mode' => $query->searchMode()]),
+            'conversations' => ConversationResource::collection($query->paginate($user, $filters))->additional(['search_mode' => $query->searchMode(), 'meta' => ['search_truncated' => $query->searchTruncated()]]),
             // An old single `filter=` link arrives here already mapped into `flags` (R4).
             'filters' => array_merge(
                 ['platform' => null, 'status' => null, 'queue' => null, 'assignee' => null, 'flags' => [], 'q' => null, 'tag' => null],

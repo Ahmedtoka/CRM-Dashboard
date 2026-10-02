@@ -1,0 +1,30 @@
+{
+  "label": "after-2",
+  "at": "2026-10-02T12:37:20.859Z",
+  "first_list_paint_ms": 809,
+  "switch_cold_ms": [
+    442,
+    1112,
+    180,
+    180
+  ],
+  "switch_again_ms": [
+    77,
+    84,
+    76,
+    76
+  ],
+  "list_rows_loaded_hint": 2730,
+  "list_dom_rows": 26,
+  "dom_nodes_after_list": 912,
+  "long_tasks_list_scroll": {
+    "count": 3,
+    "max": 59
+  },
+  "thread_dom_bubbles": 16,
+  "dom_nodes_after_thread": 812,
+  "long_tasks_thread_scroll": {
+    "count": 5,
+    "max": 73
+  }
+}

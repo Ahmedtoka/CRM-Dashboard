@@ -10,6 +10,7 @@ use App\Enums\MessageDirection;
 use App\Enums\Platform;
 use App\Enums\SenderType;
 use App\Models\Conversation;
+use App\Models\Customer;
 use App\Models\Message;
 use App\Models\QueueSetting;
 use App\Models\SupportCase;
@@ -80,6 +81,7 @@ class ConversationQuery
     public function paginate(User $u, array $f): CursorPaginator
     {
         $this->searchMode = null;
+        $this->searchTruncated = false;
         $forced = ($f['qmode'] ?? null) === 'like' && trim((string) ($f['q'] ?? '')) !== '';
 
         // Page 2+ of a search whose first page needed the fallback: the client sends qmode=like back,
@@ -123,6 +125,20 @@ class ConversationQuery
     }
 
     private ?string $searchMode = null;
+
+    /** True when the last substring search matched more than LIKE_CUSTOMER_CAP customers (only the most recent were used). */
+    public function searchTruncated(): bool
+    {
+        return $this->searchTruncated;
+    }
+
+    private bool $searchTruncated = false;
+
+    /** The substring search resolves at most this many customer ids before touching conversations. */
+    public const LIKE_CUSTOMER_CAP = 500;
+
+    /** @var array<string, array{ids: list<int>, truncated: bool}> Substring-matched customer ids per term, for this instance (counts reuse them). */
+    private array $likeIds = [];
 
     /** @var bool Set only while the substring fallback re-runs a search that the indexed path left empty. */
     private bool $likeSearch = false;
@@ -516,14 +532,39 @@ class ConversationQuery
     private function search(Builder $q, string $term): void
     {
         if (! $this->usesIndexedSearch() || $this->likeSearch) {
-            $q->whereHas('customer', fn (Builder $c) => $c
-                ->where('name', 'like', "%{$term}%")
-                ->orWhere('phone', 'like', "%{$term}%"));
+            $q->whereIn('conversations.customer_id', $this->likeCustomerIds($term));
 
             return;
         }
 
         $this->searchIndexed($q, $term);
+    }
+
+    /**
+     * The %term% LIKE, resolved on `customers` first (one scan, ~0.5 s on 300k rows) instead of a
+     * per-conversation EXISTS walked in last_message_at order (~100 s on 300k conversations).
+     * A term matching more than LIKE_CUSTOMER_CAP customers is too broad: the most recently
+     * contacted ones are used and searchTruncated() reports it. The moderator platform scope
+     * stays on the conversations query.
+     *
+     * @return list<int>
+     */
+    private function likeCustomerIds(string $term): array
+    {
+        if (! array_key_exists($term, $this->likeIds)) {
+            $ids = Customer::query()
+                ->where(fn (Builder $c) => $c->where('name', 'like', "%{$term}%")->orWhere('phone', 'like', "%{$term}%"))
+                ->orderByDesc('last_contact_at')->orderByDesc('id')
+                ->limit(self::LIKE_CUSTOMER_CAP + 1)
+                ->pluck('id')->map(fn ($id): int => (int) $id)->all();
+            $this->likeIds[$term] = [
+                'ids' => array_slice($ids, 0, self::LIKE_CUSTOMER_CAP),
+                'truncated' => count($ids) > self::LIKE_CUSTOMER_CAP,
+            ];
+        }
+        $this->searchTruncated = $this->searchTruncated || $this->likeIds[$term]['truncated'];
+
+        return $this->likeIds[$term]['ids'];
     }
 
     /** The MariaDB/MySQL index lookups behind search(): a seam, so tests can stand in for MariaDB on sqlite. */

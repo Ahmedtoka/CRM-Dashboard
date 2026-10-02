@@ -7,7 +7,7 @@ import CategoryManager from '@/components/crm/replies/CategoryManager.vue';
 import QuickReplyEditor from '@/components/crm/replies/QuickReplyEditor.vue';
 import { useCrud } from '@/composables/useCrud';
 import { useI18n } from '@/composables/useI18n';
-import { formatCount } from '@/lib/format';
+import { formatCount, slashShortcut } from '@/lib/format';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { QuickReplyRow, QuickReplyVariable } from '@/types/admin';
 import type { QuickReplyCategory } from '@/types/crm';
@@ -144,7 +144,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.quick_replies.title'), 
                     </button>
                 </div>
                 <DataTable v-if="shared.length" :columns="sharedColumns" :rows="shared" :empty="t('settings.quick_replies.empty')" :caption="t('replies.tab_shared')">
-                    <template #cell-shortcut="{ row }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">/{{ row.shortcut }}</code></template>
+                    <template #cell-shortcut="{ row }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">{{ slashShortcut(row.shortcut) }}</code></template>
                     <template #cell-body="{ row }"><span class="line-clamp-2 max-w-md" dir="auto">{{ row.body }}</span></template>
                     <template #cell-category="{ row }">{{ categoryName(row.category_id) }}</template>
                     <template #cell-use_count="{ row }">{{ formatCount(row.use_count, locale) }}</template>
@@ -190,7 +190,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.quick_replies.title'), 
                     </button>
                 </div>
                 <DataTable v-if="personal.length" :columns="personalColumns" :rows="personal" :empty="t('settings.quick_replies.empty')" :caption="t('replies.tab_mine')">
-                    <template #cell-shortcut="{ row }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">/{{ row.shortcut }}</code></template>
+                    <template #cell-shortcut="{ row }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">{{ slashShortcut(row.shortcut) }}</code></template>
                     <template #cell-body="{ row }"><span class="line-clamp-2 max-w-md" dir="auto">{{ row.body }}</span></template>
                     <template #cell-category="{ row }">{{ categoryName(row.category_id) }}</template>
                     <template #cell-use_count="{ row }">{{ formatCount(row.use_count, locale) }}</template>

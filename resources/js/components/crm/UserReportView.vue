@@ -5,7 +5,7 @@ import Heatmap from '@/components/crm/Heatmap.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import StatCard from '@/components/crm/StatCard.vue';
 import { useI18n } from '@/composables/useI18n';
-import { formatCount, formatMinutes, formatMoney, formatSeconds } from '@/lib/format';
+import { formatAvgSeconds, formatCount, formatMinutes, formatMoney } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { HeatmapGrid, ManagedUser, ReportRange, UserMetrics } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
@@ -24,8 +24,8 @@ const cards = computed(() => [
     { label: t('reports.user.messages_sent'), value: n(props.metrics.messages_sent) },
     { label: t('reports.user.conversations_handled'), value: n(props.metrics.conversations_handled) },
     { label: t('reports.user.resolved'), value: n(props.metrics.resolved) },
-    { label: t('reports.user.avg_first_response'), value: formatSeconds(props.metrics.avg_first_response_sec, locale.value) },
-    { label: t('reports.user.avg_response'), value: formatSeconds(props.metrics.avg_response_sec, locale.value) },
+    { label: t('reports.user.avg_first_response'), value: formatAvgSeconds(props.metrics.avg_first_response_sec, locale.value) },
+    { label: t('reports.user.avg_response'), value: formatAvgSeconds(props.metrics.avg_response_sec, locale.value) },
     { label: t('reports.user.comments_handled'), value: n(props.metrics.comments_handled) },
     { label: t('reports.user.private_replies'), value: n(props.metrics.private_replies) },
     { label: t('reports.user.orders_count'), value: n(props.metrics.orders_count) },
@@ -50,11 +50,11 @@ const activityHref = computed(() => `/reports/activity?user_id=${props.user.id}&
 
 <template>
     <div class="space-y-4">
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard v-for="card in cards" :key="card.label" :label="card.label" :value="card.value" />
         </div>
 
-        <div class="grid gap-4 lg:grid-cols-2">
+        <div class="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
             <BarChart :title="t('reports.roles_breakdown')" :items="roles" :format="n" />
             <section class="space-y-2">
                 <h2 class="text-xs font-medium text-foreground">{{ t('reports.platform_table') }}</h2>

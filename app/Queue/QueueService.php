@@ -9,6 +9,7 @@ use App\Enums\ActorType;
 use App\Enums\Handler;
 use App\Events\ConversationUpdated;
 use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\QueueDay;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
@@ -31,6 +32,12 @@ use Illuminate\Support\Facades\DB;
 class QueueService
 {
     public const TZ = 'Africa/Cairo';
+
+    /**
+     * On a conversation the bot handles, an acknowledgement stays quiet (no bot turn) for this long
+     * after her last queue entry ended; later the bot answers a thanks like any message (spec 2026-09-30 §1).
+     */
+    public const ACK_QUIET_HOURS = 24;
 
     public function __construct(
         private readonly ActivityLogger $logger,
@@ -124,7 +131,15 @@ class QueueService
             ->latest('id')->first();
     }
 
-    /** Idempotent per conversation: an entry still waiting / called / active is returned as is. */
+    /**
+     * Idempotent per conversation: an entry still waiting / called / active is returned as is.
+     *
+     * With no priority given, a customer whose latest queue entry closed within
+     * `return_priority_minutes` comes back as `returning` (addendum C2: after «خلصت» the bot has her,
+     * and her human request is a return), linked to that entry and reserved for its moderator
+     * unless an open case already reserves her case owner. The same holds inside an auto-close's
+     * return window (`return_priority_until`). Otherwise `live`; no shift open: `overnight`.
+     */
     public function enqueue(Conversation $c, HandoverContext $ctx, ?string $priority = null): ?QueueEntry
     {
         $s = $this->settings();
@@ -138,12 +153,15 @@ class QueueService
         }
 
         $shift = $this->openShift();
+        // Her latest ended entry, when it closed within the return priority (null otherwise).
+        $recent = $priority === null && $shift !== null ? $this->recentlyEnded($c, $s) : null;
         // No shift open: overnight first — a returning customer at night gets the night message
         // and no ETA; her returning priority applies only while a shift is serving.
         $priority = match (true) {
             $shift === null && in_array($priority, [null, 'returning'], true) => 'overnight',
             $priority !== null => $priority,
             $c->return_priority_until !== null && $c->return_priority_until->isFuture() => 'returning',
+            $recent !== null => 'returning',
             default => 'live',
         };
         $date = $this->businessDate();
@@ -159,6 +177,13 @@ class QueueService
             'bot_summary' => ['topic' => $ctx->topic, 'category' => $ctx->category, 'reason' => $ctx->reason, 'order_number' => $ctx->orderNumber, 'lines' => $ctx->summaryLines],
             'waiting_messages' => [], 'open_case_id' => $case?->id, 'reserved_user_id' => $owner,
         ]);
+
+        if ($priority === 'returning' && $recent !== null) {
+            // Her case owner (above) comes first; else, as on a direct return, her last moderator
+            // (nobody when she left the lounge unserved).
+            $entry->forceFill(['reopened_from_entry_id' => $recent->id, 'reserved_user_id' => $owner ?? $recent->assigned_user_id])->save();
+        }
+
         $c->forceFill(['queue_entry_id' => $entry->id, 'assignee_id' => null, 'assigned_at' => null])->save();
         $this->logger->log(ActorType::System, null, ActivityLogger::QUEUE_ENQUEUE, null, $c, ['ticket' => $entry->ticket_no, 'priority' => $priority]);
 
@@ -179,7 +204,10 @@ class QueueService
                 SendQueueMessage::dispatch($entry->id, 'queue_enqueued_no_eta', ['ticket' => $entry->ticket_no, 'ahead' => QueueWording::ahead($ahead), 'position' => $entry->position_at_enqueue]);
             } else {
                 // Counts go out worded («قدامك عميلتين», «حوالي دقيقتين»): the scripts read them as whole phrases.
-                SendQueueMessage::dispatch($entry->id, $priority === 'returning' ? 'queue_returning' : 'queue_enqueued', [
+                // «بنرجّعك لنفس الموظفة» only to a customer a moderator served: one who left the lounge
+                // unserved keeps her returning priority but gets the plain ticket message.
+                $sameModerator = $priority === 'returning' && ($recent === null || $recent->assigned_user_id !== null);
+                SendQueueMessage::dispatch($entry->id, $sameModerator ? 'queue_returning' : 'queue_enqueued', [
                     'ticket' => $entry->ticket_no, 'ahead' => QueueWording::ahead($ahead), 'eta_minutes' => QueueWording::minutes((int) ceil($eta / 60)), 'position' => $entry->position_at_enqueue,
                 ]);
             }
@@ -195,11 +223,19 @@ class QueueService
     /**
      * She wrote while queued / in a window: the silence clock restarts. In an open window whose
      * assignee had answered everything, the moderator-reply clock starts now (flow revision §4.1).
-     * A customer waiting in the lounge (not overnight) gets her ticket and who is ahead (§3). The
-     * board and the moderator's strip are told once the inbound message is committed (a
+     * A customer waiting in the lounge (not overnight) gets her ticket and who is ahead (§3).
+     *
+     * An acknowledgement (spec 2026-09-30 §1: thanks, emoji only, a sticker), while the queue is
+     * on, asks for nothing:
+     *  - no reply clock, so no apology and no hand-off;
+     *  - no position reply in the lounge;
+     *  - in an open window it only stamps `last_ack_at`, so the customer-silence clock keeps
+     *    running from the moderator's last reply (`WindowLifecycle::silentSince()`).
+     *
+     * The board and the moderator's strip are told once the inbound message is committed (a
      * rolled-back ingest pushes nothing), for a waiting entry and for an open window alike.
      */
-    public function customerMessage(Conversation $c): void
+    public function customerMessage(Conversation $c, bool $acknowledgement = false): void
     {
         $e = $this->activeEntry($c);
 
@@ -207,17 +243,21 @@ class QueueService
             return;
         }
 
-        $e->forceFill(['last_customer_message_at' => now(), 'silence_warned_at' => null])->save();
+        if ($acknowledgement && $this->settings()->enabled) {
+            QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)->update(['last_ack_at' => now()]);
+        } else {
+            $e->forceFill(['last_customer_message_at' => now(), 'silence_warned_at' => null])->save();
 
-        // The reply clock, by a conditional update: it reads the row as committed (not the
-        // ingest's snapshot), so a reply of the assignee that committed a moment ago is never
-        // missed, and a clock already running keeps its first moment. Waiting / closed: no clock.
-        QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)->whereNull('awaiting_reply_since')
-            ->update(['awaiting_reply_since' => now()]);
+            // The reply clock, by a conditional update: it reads the row as committed (not the
+            // ingest's snapshot), so a reply of the assignee that committed a moment ago is never
+            // missed, and a clock already running keeps its first moment. Waiting / closed: no clock.
+            QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)->whereNull('awaiting_reply_since')
+                ->update(['awaiting_reply_since' => now()]);
 
-        if ($e->status === 'waiting' && $e->priority !== 'overnight' && $this->settings()->enabled) {
-            $e->setRelation('conversation', $c);
-            $this->sendPosition($e);
+            if ($e->status === 'waiting' && $e->priority !== 'overnight' && $this->settings()->enabled) {
+                $e->setRelation('conversation', $c);
+                $this->sendPosition($e);
+            }
         }
 
         $id = $e->id;
@@ -227,6 +267,101 @@ class QueueService
                 SafeBroadcast::send(new QueueEntryUpdated($fresh));
             }
         });
+    }
+
+    /**
+     * Spec 2026-09-30 §1: the queue's one hook for an inbound customer message (non-spam), called
+     * once by the ingest inside its transaction. Returns true when the message asks for nothing
+     * (it is "settled"):
+     *  - an answer to a rating question, or a stale rating tap (`RatingService::capture()`,
+     *    checked first, whoever handles the chat);
+     *  - an acknowledgement (`$acknowledgement`, computed once by the ingest with
+     *    `Acknowledgement::matches()`) after her latest queue entry ended (any close: manual,
+     *    automatic, a hand-off), while the queue is on.
+     *
+     * The ingest then keeps it in the thread, but:
+     *  - it is not counted unread;
+     *  - no queue hook runs: no ticket;
+     *  - no bot turn (decided here, before the bot hand-off, also on a bot-handled conversation).
+     *
+     * On a conversation a person handles (an automatic close) this holds with no time limit; on
+     * one the bot handles (a manual close hands it back, or «رجوع للبوت») only for
+     * `ACK_QUIET_HOURS` after the close, after which the bot answers a thanks like any message.
+     *
+     * Otherwise it runs the queue hook as before: `customerReturned()` (she came back inside the
+     * return window of an auto-close, or after it on a human-handled chat), else `customerMessage()`.
+     *
+     * The decision is taken under the CONVERSATION lock with a locking read of her latest entry,
+     * so a close («خلصت» or the tick's auto-close) that commits while the message is being
+     * ingested is seen: an acknowledgement is then settled, never re-queued, never a reversal.
+     * Queue off: no lock, nothing settled (but the answer to a rating question asked while it was
+     * on, which no queue-off chat ever has), the hook runs as it always did.
+     */
+    public function settles(Conversation $c, Message $m, bool $acknowledgement = false): bool
+    {
+        // Spec 2026-09-30 §3: an answer to a rating question (or a stale rating tap) is settled
+        // first, whoever handles the chat — after «خلصت» that is the bot, which must never see it.
+        // It takes the conversation lock, then writes the entry (the queue's lock order).
+        if (app(RatingService::class)->capture($c, $m)) {
+            return true;
+        }
+
+        // A bot-handled chat's real message: nothing for the queue (no query, the common case).
+        if ($c->handler !== Handler::Human && ! $acknowledgement) {
+            return false;
+        }
+
+        if (! $this->settings()->enabled) {
+            if ($c->handler === Handler::Human && ! $this->customerReturned($c)) {
+                $this->customerMessage($c);
+            }
+
+            return false;
+        }
+
+        return DB::transaction(function () use ($c, $acknowledgement) {
+            $row = Conversation::query()->whereKey($c->id)->lockForUpdate()->first(['id', 'handler', 'needs_human']);
+            $handler = $row?->handler;
+
+            // The caller read `$c` without a lock: a «خلصت» that committed since then handed the chat
+            // to the bot. The ingest follows the committed state (its bot gate reads `$c->handler`),
+            // so her real message is not left unanswered on a stale «human».
+            if ($row !== null) {
+                $c->forceFill(['handler' => $row->handler, 'needs_human' => $row->needs_human])->syncOriginalAttributes(['handler', 'needs_human']);
+            }
+            $last = QueueEntry::query()->where('conversation_id', $c->id)->latest('id')->lockForUpdate()->first(['id', 'status', 'closed_at']);
+            $ended = $last !== null && in_array($last->status, QueueEntry::TERMINAL_STATUSES, true);
+
+            if ($acknowledgement && $ended && $this->quietAfter($last, $handler)) {
+                return true;
+            }
+
+            if ($handler === Handler::Human && ! $this->customerReturned($c)) {
+                $this->customerMessage($c, $acknowledgement);
+            }
+
+            return false;
+        }, attempts: 3);
+    }
+
+    /**
+     * After her latest entry ended, an acknowledgement stays quiet: with no time limit while a
+     * person handles the chat, for `ACK_QUIET_HOURS` after the close once the bot does.
+     */
+    private function quietAfter(QueueEntry $last, ?Handler $handler): bool
+    {
+        return $handler === Handler::Human
+            || ($last->closed_at !== null && $last->closed_at->greaterThan(now()->subHours(self::ACK_QUIET_HOURS)));
+    }
+
+    /** Her latest queue entry when it has ended and closed within `return_priority_minutes`. */
+    private function recentlyEnded(Conversation $c, QueueSetting $s): ?QueueEntry
+    {
+        $last = QueueEntry::query()->where('conversation_id', $c->id)->latest('id')->first(['id', 'status', 'closed_at', 'assigned_user_id']);
+
+        return $last !== null && in_array($last->status, QueueEntry::TERMINAL_STATUSES, true)
+            && $last->closed_at !== null && $last->closed_at->copy()->addMinutes($s->return_priority_minutes)->isFuture()
+            ? $last : null;
     }
 
     /**
@@ -259,9 +394,11 @@ class QueueService
     /**
      * A customer wrote on a conversation whose queue entry already ended (no waiting / open
      * entry). Judged on the LATEST terminal entry of any status (closed, cancelled, abandoned):
-     *  - inside the return window (after an auto-close) or the confirm window (after an
-     *    inquiry / problem close): back in the lounge as `returning`, preferring the same
-     *    moderator; a close still awaiting confirmation is reversed, at most once;
+     *  - inside the return window (after an auto-close): back in the lounge as `returning`,
+     *    preferring the same moderator. A manual close is final (addendum C2, the R1 override):
+     *    her return never reverses it, the confirm window plays no part here, and `ConfirmClose`
+     *    confirms it on schedule (after «خلصت» the bot has her, so this runs only when a person
+     *    took the chat back by hand);
      *  - otherwise, on a human-handled conversation while the queue takes handovers
      *    (`takesHandover()`): a new entry so somebody is called — `returning` within
      *    `return_priority_minutes` of that last close (whatever its reason, a case included),
@@ -293,10 +430,7 @@ class QueueService
                 return false;
             }
 
-            $returnWindow = $c->return_priority_until !== null && $c->return_priority_until->isFuture();
-            $confirmWindow = WindowLifecycle::awaitsConfirmation($last)
-                && $last->closed_at !== null && $last->closed_at->copy()->addMinutes($s->close_confirm_minutes)->isFuture();
-            $returning = $returnWindow || $confirmWindow;
+            $returning = $c->return_priority_until !== null && $c->return_priority_until->isFuture();
 
             if (! $returning) {
                 // After the windows: only a conversation a human handles, only while the queue takes handovers.
@@ -320,10 +454,6 @@ class QueueService
             if ($returning) {
                 // Her case owner (set by enqueue) comes first; else, as before, her last moderator.
                 $entry->forceFill(['reopened_from_entry_id' => $last->id, 'reserved_user_id' => $entry->reserved_user_id ?? $last->assigned_user_id, 'reopen_count' => $last->reopen_count + 1])->save();
-            }
-
-            if ($confirmWindow) {
-                app(WindowLifecycle::class)->reverseClose($last);
             }
 
             return true;

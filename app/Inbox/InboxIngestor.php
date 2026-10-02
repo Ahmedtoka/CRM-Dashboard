@@ -28,6 +28,7 @@ use App\Models\Customer;
 use App\Models\CustomerIdentity;
 use App\Models\Message;
 use App\Models\WebhookEvent;
+use App\Queue\Acknowledgement;
 use App\Queue\QueueService;
 use App\Support\SafeBroadcast;
 use Carbon\CarbonImmutable;
@@ -70,7 +71,7 @@ class InboxIngestor
             ->first() ?? $this->registry->account($d->platform);
 
         try {
-            [$message, $conversation, $pendingAttachments] = DB::transaction(function () use ($d, $account) {
+            [$message, $conversation, $pendingAttachments, $settled] = DB::transaction(function () use ($d, $account) {
                 $identity = $this->resolver->resolve(
                     $d->platform,
                     $d->customerExternalId,
@@ -100,8 +101,6 @@ class InboxIngestor
                 $verdict = $this->priorityClassifier->classify($message, $identity);
                 $this->priorityClassifier->apply($message, $conversation, $verdict);
 
-                $conversation->increment('unread_count');
-
                 // The platform window counts from when the customer wrote (never in the future,
                 // never moving backwards for out-of-order webhooks).
                 $occurred = $d->occurredAt->isFuture() ? CarbonImmutable::now() : $d->occurredAt;
@@ -115,14 +114,18 @@ class InboxIngestor
 
                 $identity->customer->forceFill(['last_contact_at' => now()])->save();
 
-                // Handover queue: she came back inside the return / confirm window (re-queued with
-                // priority), or she wrote while queued / in a window (the silence clock restarts).
-                if ($conversation->handler === Handler::Human && ! $message->is_spam) {
-                    $queue = app(QueueService::class);
+                // Handover queue: she came back inside an auto-close's return window (re-queued with
+                // priority), or she wrote while queued / in a window (the silence clock restarts; a
+                // thanks starts no reply clock). A rating answer (§3), or a thanks / emoji / sticker
+                // after the close, is "settled" (spec 2026-09-30 §1): it stays in the thread but asks for nothing: not
+                // unread, no queue hook (no ticket), no bot turn. The acknowledgement
+                // is judged once here; the queue decides under the conversation lock, and the unread
+                // count and the bot follow that one decision.
+                $settled = ! $message->is_spam
+                    && app(QueueService::class)->settles($conversation, $message, app(Acknowledgement::class)->matches($message));
 
-                    if (! $queue->customerReturned($conversation)) {
-                        $queue->customerMessage($conversation);
-                    }
+                if (! $settled) {
+                    $conversation->increment('unread_count');
                 }
 
                 $this->logger->log(ActorType::System, null, ActivityLogger::MESSAGE_RECEIVED, $message, $conversation);
@@ -132,7 +135,7 @@ class InboxIngestor
                     app(AdAttribution::class)->apply($conversation, $d->referral, $opened);
                 }
 
-                return [$message, $conversation, $pendingAttachments];
+                return [$message, $conversation, $pendingAttachments, $settled];
             });
         } catch (UniqueConstraintViolationException) {
             return null; // concurrent duplicate of the same external message id
@@ -141,8 +144,11 @@ class InboxIngestor
         $message->setRelation('conversation', $conversation);
         $message->load('mediaAttachments');
 
-        // Queue the bot before broadcasting so a realtime outage can't silence it.
-        $this->maybeRunBot($message, $conversation);
+        // Queue the bot before broadcasting so a realtime outage can't silence it. A settled
+        // message (spec 2026-09-30: a rating answer, a thanks after the close) never reaches the bot.
+        if (! $settled) {
+            $this->maybeRunBot($message, $conversation);
+        }
 
         SafeBroadcast::send(new MessageCreated($message));
         SafeBroadcast::send(new ConversationUpdated($conversation));

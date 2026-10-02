@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useI18n } from '@/composables/useI18n';
 import type { CardState } from '@/lib/integrations';
-import { CircleAlert, CircleCheck, CircleDashed, Clock, LoaderCircle, type LucideIcon } from 'lucide-vue-next';
+import StatusChip from '@/components/crm/StatusChip.vue';
+import { CircleAlert, CircleCheck, CircleSlash, Clock, LoaderCircle, type LucideIcon } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 /**
@@ -40,16 +41,16 @@ const rail = computed(
         })[props.state],
 );
 
-const chip = computed(
-    () =>
-        ({
-            not_connected: { icon: CircleDashed, cls: 'bg-muted text-muted-foreground' },
-            soon: { icon: Clock, cls: 'bg-muted text-muted-foreground' },
-            connecting: { icon: LoaderCircle, cls: 'bg-primary/10 text-primary' },
-            connected: { icon: CircleCheck, cls: 'bg-success/15 text-foreground' },
-            problem: { icon: CircleAlert, cls: 'bg-destructive/10 text-destructive' },
-        })[props.state],
-);
+// «مش متوصل» is a calm grey chip with a slashed circle (the dashed circle read as a spinner);
+// only «جاري الربط…» spins.
+const CHIPS = {
+    not_connected: { icon: CircleSlash, tone: 'neutral' },
+    soon: { icon: Clock, tone: 'neutral' },
+    connecting: { icon: LoaderCircle, tone: 'info' },
+    connected: { icon: CircleCheck, tone: 'positive' },
+    problem: { icon: CircleAlert, tone: 'negative' },
+} as const;
+const chip = computed(() => CHIPS[props.state]);
 
 // Instagram CDN picture URLs expire: fall back to the platform mark when one fails.
 const pictureFailed = ref(false);
@@ -84,10 +85,14 @@ watch(
                 <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <h2 class="text-sm font-semibold text-foreground">{{ title }}</h2>
-                        <span class="inline-flex h-5 items-center gap-1 rounded-full px-2 text-2xs font-medium" :class="chip.cls">
-                            <component :is="chip.icon" class="size-3" :class="state === 'connecting' ? 'animate-spin' : ''" aria-hidden="true" />
+                        <span
+                            v-if="state === 'connecting'"
+                            class="inline-flex h-5 items-center gap-1 rounded-full bg-info/10 px-2 text-2xs font-medium text-blue-800 dark:bg-info/25 dark:text-blue-100"
+                        >
+                            <LoaderCircle class="size-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             {{ t(`settings.integrations.state.${state}`) }}
                         </span>
+                        <StatusChip v-else :label="t(`settings.integrations.state.${state}`)" :tone="chip.tone" :icon="chip.icon" />
                     </div>
                     <p v-if="accountName" class="mt-0.5 truncate text-sm font-medium text-foreground">
                         <bdi>{{ accountName }}</bdi>

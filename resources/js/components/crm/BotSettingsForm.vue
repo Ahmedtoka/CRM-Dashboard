@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import ChipsInput from '@/components/crm/ChipsInput.vue';
+import StickySaveBar from '@/components/crm/StickySaveBar.vue';
 import ToggleSwitch from '@/components/crm/ToggleSwitch.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import type { BotSettings } from '@/types/admin';
 import { router } from '@inertiajs/vue3';
-import { LoaderCircle } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
 
 const props = defineProps<{ settings: BotSettings; canEditAi: boolean }>();
@@ -45,6 +45,7 @@ function fromProps(s: BotSettings) {
 }
 
 const form = reactive(fromProps(props.settings));
+const dirty = computed(() => JSON.stringify(form) !== JSON.stringify(fromProps(props.settings)));
 watch(
     () => props.settings,
     (s) => Object.assign(form, fromProps(s)),
@@ -359,14 +360,6 @@ const hint = 'text-2xs text-muted-foreground';
         </section>
 
         <p v-if="error" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{{ error }}</p>
-        <div class="sticky bottom-0 flex justify-end bg-background/95 py-3 backdrop-blur-sm">
-            <button
-                type="submit"
-                class="inline-flex h-10 items-center gap-1.5 rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-50"
-                :disabled="busy"
-            >
-                <LoaderCircle v-if="busy" class="size-4 animate-spin" aria-hidden="true" />{{ t('common.save') }}
-            </button>
-        </div>
+        <StickySaveBar :busy="busy" :dirty="dirty" submit />
     </form>
 </template>

@@ -7,6 +7,7 @@ use App\Enums\MessageDirection;
 use App\Enums\SenderType;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Queue\RatingService;
 
 /**
  * Resolves an inbound customer message to the payload of a button it answers:
@@ -18,6 +19,15 @@ final class ButtonMatcher
     public function __construct(private readonly ArabicNormalizer $normalizer) {}
 
     public function match(Conversation $c, Message $inbound): ?string
+    {
+        $payload = $this->resolve($c, $inbound);
+
+        // The queue's rating buttons (RatingService) are never a bot payload: a tap the queue did
+        // not take, or a typed digit against a stale question, is read as text like any message.
+        return $payload !== null && str_starts_with($payload, RatingService::PAYLOAD_PREFIX) ? null : $payload;
+    }
+
+    private function resolve(Conversation $c, Message $inbound): ?string
     {
         if (filled($inbound->payload)) {
             return (string) $inbound->payload;

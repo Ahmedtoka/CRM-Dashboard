@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Callout from '@/components/crm/Callout.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
@@ -49,11 +50,16 @@ onMounted(load);
 </script>
 
 <template>
-    <section class="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs shadow-card" :aria-busy="loading">
+    <!-- Amber only when there is something to merge; «مفيش تكرار» is good news, not a warning. -->
+    <section
+        class="rounded-lg p-3 text-xs shadow-card"
+        :class="!loading && suggestions.length ? 'border border-warning/30 bg-warning/10' : 'bg-card'"
+        :aria-busy="loading"
+    >
         <h2 class="flex items-center gap-1.5 font-medium"><Users class="size-3.5" aria-hidden="true" />{{ t('customers.duplicates') }}</h2>
         <p class="mb-2 text-2xs text-muted-foreground">{{ t('customers.duplicates_hint') }}</p>
         <LoaderCircle v-if="loading" class="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
-        <p v-else-if="!suggestions.length" class="text-muted-foreground">{{ t('customers.no_duplicates') }}</p>
+        <Callout v-else-if="!suggestions.length" tone="success">{{ t('customers.no_duplicates') }}</Callout>
         <ul v-else class="space-y-2">
             <li v-for="other in suggestions" :key="other.id" class="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5">
                 <div class="min-w-0 flex-1">

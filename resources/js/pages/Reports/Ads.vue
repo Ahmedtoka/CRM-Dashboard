@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /** «تقرير الإعلانات» (owner, 2026-09-25): campaign → conversations → orders → spend. */
+import Callout from '@/components/crm/Callout.vue';
 import DataTable from '@/components/crm/DataTable.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import ReportFilters from '@/components/crm/ReportFilters.vue';
@@ -77,13 +78,11 @@ const breadcrumbs = computed(() => [{ title: t('reports.ads_title'), href: '/rep
                 <ReportFilters :range="range" :platform="platform" @change="visit" />
             </PageHeader>
 
-            <div class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+            <div class="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
                 <StatCard v-for="card in cards" :key="card.label" :label="card.label" :value="card.value" />
             </div>
 
-            <p v-if="!report.spend_available" class="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
-                {{ t('reports.ads.no_spend') }}
-            </p>
+            <Callout v-if="!report.spend_available" tone="warning">{{ t('reports.ads.no_spend') }}</Callout>
 
             <DataTable :columns="columns" :rows="rows" :empty="t('reports.no_data')" :caption="t('reports.ads_title')">
                 <template #cell-name="{ row }">
