@@ -234,6 +234,23 @@ it('counts real orders net of refunds and excludes cancelled', function () {
     expect($row['real_orders'])->toBe(2); // o1 and o2 (the campaign-only order is not credited to an ad)
 });
 
+it('drops courier-returned orders from real orders, revenue and conversations that ordered', function () {
+    $w = rptWorld();
+    rptSeptember($w['ad1']);
+    $kept = rptOrder(['ad_id' => $w['ad1']->id, 'placed_at' => '2026-09-10 10:00', 'total' => 1000, 'shipment_status' => 'delivered']);
+    Refund::factory()->create(['order_id' => $kept->id, 'amount' => 100]);                                 // refunds still subtracted
+    rptOrder(['ad_id' => $w['ad1']->id, 'placed_at' => '2026-09-11 10:00', 'total' => 400]);                // no shipment yet
+    $returned = rptOrder(['ad_id' => $w['ad1']->id, 'placed_at' => '2026-09-12 10:00', 'total' => 2000, 'shipment_status' => 'returned']);
+
+    $t = app(AdsOverview::class)->build(rptRange())['totals'];
+    expect($t['real_orders'])->toBe(2)->and($t['real_revenue'])->toBe(1300.0); // 900 + 400
+
+    Conversation::factory()->create(['customer_id' => $returned->customer_id, 'ad_id' => '9001', 'ad_attributed_at' => '2026-09-11 09:00']);
+    Conversation::factory()->create(['customer_id' => $kept->customer_id, 'ad_id' => '9001', 'ad_attributed_at' => '2026-09-09 09:00']);
+    $t = app(AdsOverview::class)->build(rptRange())['totals'];
+    expect($t['conversations'])->toBe(2)->and($t['conversations_ordered'])->toBe(1);
+});
+
 it('counts inbox conversations from a buyer\'s ads and those that ordered', function () {
     $w = rptWorld();
     [$a, $b, $c, $d] = Customer::factory()->count(4)->create()->all();

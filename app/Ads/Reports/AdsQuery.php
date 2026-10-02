@@ -5,6 +5,7 @@ namespace App\Ads\Reports;
 use App\Ads\AdsSettings;
 use App\Ads\Buyers\BuyerResolver;
 use App\Enums\OrderStatus;
+use App\Enums\ShipmentStatus;
 use App\Models\AdAccountAssignment;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * The shared building blocks of the Ads reports (spec section 5):
  * - metric rows (ad_daily_metrics m + buyer of the row's day + ads ad + ad_accounts acc), filtered;
- * - real orders (ad- or campaign-attributed, not cancelled/failed, net of refunds), each tagged with
+ * - real orders (ad- or campaign-attributed, not cancelled/failed/courier-returned, net of refunds), each tagged with
  *   the buyer who held the ad's account on the order's Cairo day;
  * - inbox conversations from ads, tagged the same way on the day of the ad touch.
  */
@@ -22,6 +23,9 @@ final class AdsQuery
 {
     /** Orders that never became real Shopify orders. */
     public const DEAD_ORDER_STATUSES = [OrderStatus::Cancelled->value, OrderStatus::Failed->value];
+
+    /** Courier-returned COD orders (spec section 2: real orders are net of returns); usually no Shopify refund. */
+    public const RETURNED_SHIPMENT = ShipmentStatus::Returned->value;
 
     public const SUMS = 'COALESCE(SUM(m.spend), 0) as spend, COALESCE(SUM(m.purchase_value), 0) as purchase_value, '
         .'COALESCE(SUM(m.purchases), 0) as purchases, COALESCE(SUM(m.impressions), 0) as impressions, '
@@ -77,7 +81,7 @@ final class AdsQuery
 
     /**
      * Real orders in range: `ad_id` on an ad of the filtered accounts, or (no ad) `ad_campaign_id` on a
-     * filtered campaign; not cancelled/failed; net = total − refunds. Buyer = holder of the account on
+     * filtered campaign; not cancelled/failed, shipment not returned; net = total − refunds. Buyer = holder of the account on
      * the order's Cairo day; buyer filters apply on that.
      *
      * @return Collection<int, array{id:int, ad_id:?int, account_id:int, platform:string, buyer_id:?int, date:string, net:float}>
@@ -96,6 +100,7 @@ final class AdsQuery
             ->leftJoinSub($refunds, 'rf', 'rf.order_id', '=', 'o.id')
             ->where(fn ($w) => $w->whereNotNull('o.ad_id')->orWhereNotNull('o.ad_campaign_id'))
             ->whereNotIn('o.status', self::DEAD_ORDER_STATUSES)
+            ->where(fn ($w) => $w->whereNull('o.shipment_status')->orWhere('o.shipment_status', '!=', self::RETURNED_SHIPMENT))
             ->whereBetween('o.placed_at', [$f->startUtc(), $f->endUtc()])
             ->select(['o.id', 'o.ad_id', 'o.placed_at', 'o.total', 'acc.id as account_id', 'acc.platform'])
             ->selectRaw('COALESCE(rf.refunded, 0) as refunded');
@@ -121,7 +126,7 @@ final class AdsQuery
 
     /**
      * Conversations whose first ad (conversations.ad_id = ads.external_id) is on a filtered account,
-     * ad touch in range. `ordered` = the customer placed a real (not cancelled/failed) order after the
+     * ad touch in range. `ordered` = the customer placed a real (not cancelled/failed/returned) order after the
      * touch and by the end of the range.
      *
      * @return Collection<int, array{id:int, customer_id:?int, account_id:int, buyer_id:?int, date:string, ordered:bool}>
@@ -141,8 +146,9 @@ final class AdsQuery
             ->select(['c.id', 'c.customer_id', 'c.ad_attributed_at', 'acc.id as account_id'])
             ->selectRaw('CASE WHEN EXISTS ('
                 .'SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id AND o.status NOT IN (?, ?) '
+                .'AND (o.shipment_status IS NULL OR o.shipment_status <> ?) '
                 .'AND o.placed_at > c.ad_attributed_at AND o.placed_at <= ?) THEN 1 ELSE 0 END as ordered',
-                [...self::DEAD_ORDER_STATUSES, $end->format('Y-m-d H:i:s')])
+                [...self::DEAD_ORDER_STATUSES, self::RETURNED_SHIPMENT, $end->format('Y-m-d H:i:s')])
             ->orderBy('c.id')->orderBy('ad.id');
         $this->accountFilters($q, $f);
 
