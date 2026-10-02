@@ -3,6 +3,7 @@
 namespace App\Ads\Materials;
 
 use App\Ads\Access\AdsScope;
+use App\Ads\Materials\Jobs\CheckProductStock;
 use App\Enums\UserRole;
 use App\Models\Ad;
 use App\Models\AdMaterial;
@@ -121,7 +122,7 @@ final class MaterialService
             ."COALESCE(SUM(CASE WHEN status = 'activated' THEN 1 ELSE 0 END), 0) as activated, "
             ."COALESCE(SUM(CASE WHEN status = 'not_started' THEN 1 ELSE 0 END), 0) as not_started, "
             ."COALESCE(SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0) as done, "
-            .'COALESCE(SUM(CASE WHEN need_stop_at IS NOT NULL THEN 1 ELSE 0 END), 0) as need_stop, '
+            ."COALESCE(SUM(CASE WHEN need_stop_at IS NOT NULL AND status = 'activated' THEN 1 ELSE 0 END), 0) as need_stop, "
             ."COALESCE(SUM(CASE WHEN ({$stock}) = 'in' THEN 1 ELSE 0 END), 0) as in_stock, "
             ."COALESCE(SUM(CASE WHEN ({$stock}) = 'out' THEN 1 ELSE 0 END), 0) as out_of_stock"
         )->first();
@@ -202,7 +203,7 @@ final class MaterialService
                 'buyer' => $m->buyer === null ? null : ['id' => $m->buyer->id, 'name' => $m->buyer->name],
                 'creator' => $m->creator === null ? null : ['id' => $m->creator->id, 'name' => $m->creator->name],
                 'stock' => self::stockOf($m),
-                'need_stop' => $m->need_stop_at !== null,
+                'need_stop' => $m->need_stop_at !== null && $m->status === 'activated',
                 'activated_at' => $m->activated_at?->toIso8601String(),
                 'done_at' => $m->done_at?->toIso8601String(),
                 'ads' => $m->ads->map(fn (Ad $a) => [
@@ -307,21 +308,33 @@ final class MaterialService
         });
     }
 
-    /** Sets the status and its timestamps; the first buyer to activate an unclaimed material takes it. */
+    /**
+     * Sets the status and its timestamps; the first buyer to activate an unclaimed material takes it.
+     * Leaving 'activated' ends any out-of-stock episode (need_stop_at cleared), so a later re-activation
+     * while still out of stock is a new episode and notifies again (spec section 6).
+     */
     public function setStatus(AdMaterial $m, string $status, ?User $by = null): AdMaterial
     {
         $now = now();
+        $wasActivated = $m->status === 'activated';
         $attrs = match ($status) {
             'activated' => ['activated_at' => $m->status === 'activated' ? ($m->activated_at ?? $now) : $now, 'done_at' => null],
             'done' => ['done_at' => $m->status === 'done' ? ($m->done_at ?? $now) : $now, 'activated_at' => $m->activated_at ?? $now],
             default => ['activated_at' => null, 'done_at' => null],
         };
+        if ($status !== 'activated') {
+            $attrs['need_stop_at'] = null;
+        }
         $m->forceFill(['status' => $status] + $attrs);
 
         if ($status === 'activated' && $m->media_buyer_id === null && $by !== null && ($buyer = $this->scope->buyerFor($by)) !== null) {
             $m->media_buyer_id = $buyer->id;
         }
         $m->save();
+
+        if ($status === 'activated' && ! $wasActivated && $m->product_id !== null) {
+            CheckProductStock::dispatchFor([$m->product_id]); // queued, never throws
+        }
 
         return $m;
     }

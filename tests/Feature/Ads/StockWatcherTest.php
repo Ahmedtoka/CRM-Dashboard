@@ -1,6 +1,7 @@
 <?php
 
 use App\Ads\Materials\Jobs\CheckProductStock;
+use App\Ads\Materials\MaterialService;
 use App\Ads\Materials\StockWatcher;
 use App\Enums\UserRole;
 use App\Models\AdMaterial;
@@ -181,4 +182,26 @@ it('the queued job runs the watcher for its products', function () {
     (new CheckProductStock([$w['product']->id]))->handle(app(StockWatcher::class));
 
     expect($w['material']->fresh()->need_stop_at)->not->toBeNull();
+});
+
+it('clears need stop when a material leaves activated and notifies again when it is re-activated still out of stock', function () {
+    $w = swWorld();
+    $service = app(MaterialService::class);
+    app(StockWatcher::class)->run();
+    expect($service->stats()['need_stop'])->toBe(1)->and(swNotes())->toHaveCount(3);
+
+    $service->setStatus($w['material']->fresh(), 'done');
+    expect($w['material']->fresh()->need_stop_at)->toBeNull()->and($service->stats()['need_stop'])->toBe(0);
+
+    // a stale flag on a non-activated row (legacy data) is not counted either
+    AdMaterial::whereKey($w['material']->id)->update(['need_stop_at' => now()]);
+    expect($service->stats()['need_stop'])->toBe(0);
+    AdMaterial::whereKey($w['material']->id)->update(['need_stop_at' => null]);
+
+    Queue::fake();
+    $service->setStatus($w['material']->fresh(), 'activated');
+    Queue::assertPushed(CheckProductStock::class, fn (CheckProductStock $j) => $j->productIds === [$w['product']->id]);
+
+    app(StockWatcher::class)->run();
+    expect($w['material']->fresh()->need_stop_at)->not->toBeNull()->and(swNotes())->toHaveCount(6); // a new episode
 });

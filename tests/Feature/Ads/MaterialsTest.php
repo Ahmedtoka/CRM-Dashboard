@@ -162,7 +162,7 @@ it('filters the index by status, collection, stock, type and date, with stats ov
     $this->actingAs($admin)->get('/ads/materials?status=activated&stock=in')->assertInertia(fn (Assert $p) => $p
         ->component('Ads/Materials/Index')
         ->where('filters.status', 'activated')->where('filters.stock', 'in')->where('filters.q', null)->has('filters.page')
-        ->where('stats', ['total' => 4, 'activated' => 1, 'not_started' => 2, 'done' => 1, 'reels' => 2, 'posts' => 1, 'carousels' => 1, 'in_stock' => 2, 'out_of_stock' => 1, 'need_stop' => 1])
+        ->where('stats', ['total' => 4, 'activated' => 1, 'not_started' => 2, 'done' => 1, 'reels' => 2, 'posts' => 1, 'carousels' => 1, 'in_stock' => 2, 'out_of_stock' => 1, 'need_stop' => 0]) // Beta's flag is stale: it is not activated
         ->has('materials.data', 1)->has('materials.total')
         ->where('materials.data.0.title', 'Alpha')->where('materials.data.0.stock', 'in')->where('materials.data.0.product.inventory', 7)
         ->has('collections', 1)->where('canSeeSpend', true));
@@ -178,7 +178,7 @@ it('presents a MaterialRow with files, links and linked ads', function () {
 
     $this->actingAs(matUser(UserRole::Supervisor))->get('/ads/materials')->assertInertia(fn (Assert $p) => $p
         ->has('materials.data.0', fn (Assert $r) => $r
-            ->where('title', 'Row')->where('files_count', 1)->where('need_stop', true)->where('stock', 'out')
+            ->where('title', 'Row')->where('files_count', 1)->where('need_stop', false)->where('stock', 'out')
             ->where('creator.id', $content->id)->where('product.title', $product->title)->where('product.image_url', 'https://x/y.jpg')
             ->where('types', ['reel'])->where('status', 'not_started')->where('buyer', null)
             ->where('ads.0.name', 'Linked')->where('ads.0.platform', $ad->account->platform)
