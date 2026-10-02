@@ -397,6 +397,8 @@ export interface MaterialProduct {
     title: string;
     image_url: string | null;
     inventory: number;
+    /** Index rows only (the product search does not send them). */
+    variants?: { id: number; title: string | null; inventory: number }[];
 }
 
 export interface MaterialLinkedAd {
@@ -512,7 +514,10 @@ export interface AdStockRow {
     price: { min: number | null; max: number | null };
     quantity: number;
     collections: AdsOption[];
+    /** Effective availability (the override when set, else inventory > 0). */
     availability: boolean;
+    /** The manual pin, or null when it follows the inventory. */
+    override: boolean | null;
 }
 
 export interface AdsStockProps {

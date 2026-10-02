@@ -147,7 +147,8 @@ final class MaterialService
     public function withRelations(Builder $q, bool $files = true): Builder
     {
         $with = [
-            'product' => fn ($p) => $p->select(['products.id', 'products.title', 'products.image_url'])->withSum('variants as inventory', 'inventory_quantity'),
+            'product' => fn ($p) => $p->select(['products.id', 'products.title', 'products.image_url'])->withSum('variants as inventory', 'inventory_quantity')
+                ->with('variants:id,product_id,title,inventory_quantity'),
             'collections:ad_material_collections.id,ad_material_collections.name',
             'buyer:id,name', 'creator:id,name',
             'ads:ads.id,ads.name,ads.status,ads.effective_status,ads.ad_account_id', 'ads.account:id,platform',
@@ -187,6 +188,9 @@ final class MaterialService
                 'files_count' => $m->files->count(),
                 'product' => $m->product === null ? null : [
                     'id' => $m->product->id, 'title' => $m->product->title, 'image_url' => $m->product->image_url, 'inventory' => (int) ($m->product->inventory ?? 0),
+                    'variants' => $m->product->relationLoaded('variants')
+                        ? $m->product->variants->map(fn (ProductVariant $v) => ['id' => $v->id, 'title' => $v->title, 'inventory' => (int) $v->inventory_quantity])->values()->all()
+                        : [],
                 ],
                 'collections' => $m->collections->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all(),
                 'types' => array_values((array) $m->types),
@@ -376,12 +380,24 @@ final class MaterialService
      */
     public function stockRows(array $f, int $page): LengthAwarePaginator
     {
+        return $this->stockQuery($f)->orderByDesc('ad_materials.id')
+            ->paginate(self::STOCK_PER_PAGE, ['*'], 'page', $page)
+            ->through(fn (AdMaterial $m) => $this->stockRow($m));
+    }
+
+    /**
+     * Materials with a live product, filtered like the stock page (no order: the page sorts, the export chunks by id).
+     *
+     * @param  array{min_qty:?int, availability:string}  $f
+     * @return Builder<AdMaterial>
+     */
+    public function stockQuery(array $f, bool $files = true): Builder
+    {
         $q = AdMaterial::query()
             ->select('ad_materials.*')
             ->selectRaw(self::inventorySql().' as inventory_total')
             ->whereRaw('('.self::stockSql().") <> 'none'")
-            ->with(['collections:ad_material_collections.id,ad_material_collections.name', 'files', 'product.variants'])
-            ->orderByDesc('ad_materials.id');
+            ->with(array_merge(['collections:ad_material_collections.id,ad_material_collections.name', 'product.variants'], $files ? ['files'] : []));
         if (in_array($f['availability'], ['in', 'out'], true)) {
             $q->whereRaw('('.self::stockSql().') = ?', [$f['availability']]);
         }
@@ -389,23 +405,32 @@ final class MaterialService
             $q->whereRaw(self::inventorySql().' >= ?', [$f['min_qty']]);
         }
 
-        return $q->paginate(self::STOCK_PER_PAGE, ['*'], 'page', $page)->through(function (AdMaterial $m) {
-            $variants = $m->product->variants;
-            $prices = $variants->pluck('price')->map(fn ($p) => (float) $p);
-            $m->product->setAttribute('inventory', (int) $m->inventory_total);
+        return $q;
+    }
 
-            return [
-                'material_id' => $m->id,
-                'title' => $m->title,
-                'thumb_url' => $this->thumbUrl($m->files->first()),
-                'product' => ['id' => $m->product->id, 'title' => $m->product->title],
-                'variants' => $variants->map(fn (ProductVariant $v) => ['id' => $v->id, 'title' => $v->title, 'sku' => $v->sku, 'price' => (float) $v->price, 'quantity' => (int) $v->inventory_quantity])->values()->all(),
-                'price' => ['min' => $prices->min(), 'max' => $prices->max()],
-                'quantity' => (int) $m->inventory_total,
-                'collections' => $m->collections->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all(),
-                'availability' => self::stockOf($m) === 'in',
-            ];
-        });
+    /**
+     * One stock row; `override` is the manual pin (true / false) or null when it follows the inventory.
+     *
+     * @return array<string, mixed>
+     */
+    public function stockRow(AdMaterial $m): array
+    {
+        $variants = $m->product->variants;
+        $prices = $variants->pluck('price')->map(fn ($p) => (float) $p);
+        $m->product->setAttribute('inventory', (int) $m->inventory_total);
+
+        return [
+            'material_id' => $m->id,
+            'title' => $m->title,
+            'thumb_url' => $m->relationLoaded('files') ? $this->thumbUrl($m->files->first()) : null,
+            'product' => ['id' => $m->product->id, 'title' => $m->product->title],
+            'variants' => $variants->map(fn (ProductVariant $v) => ['id' => $v->id, 'title' => $v->title, 'sku' => $v->sku, 'price' => (float) $v->price, 'quantity' => (int) $v->inventory_quantity])->values()->all(),
+            'price' => ['min' => $prices->min(), 'max' => $prices->max()],
+            'quantity' => (int) $m->inventory_total,
+            'collections' => $m->collections->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all(),
+            'availability' => self::stockOf($m) === 'in',
+            'override' => $m->stock_override,
+        ];
     }
 
     // ---- helpers ----------------------------------------------------------------------------------------------

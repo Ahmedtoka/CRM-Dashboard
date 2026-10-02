@@ -438,6 +438,34 @@ const breadcrumbs = computed(() => [
                                             <p>
                                                 {{ t('ads.materials.product.inventory', { n: n(m.product.inventory) }) }}
                                             </p>
+                                            <table v-if="m.product.variants?.length" class="w-full text-2xs">
+                                                <caption class="sr-only">
+                                                    {{
+                                                        t('ads.materials.product.variants')
+                                                    }}
+                                                </caption>
+                                                <thead class="text-muted-foreground">
+                                                    <tr>
+                                                        <th scope="col" class="py-1 text-start font-medium">
+                                                            {{ t('ads.materials.product.variants') }}
+                                                        </th>
+                                                        <th scope="col" class="py-1 text-end font-medium">
+                                                            {{ t('ads.materials.stock_page.quantity') }}
+                                                        </th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr v-for="v in m.product.variants" :key="v.id" class="border-t border-border/60">
+                                                        <td class="py-1" dir="auto">{{ v.title ?? '—' }}</td>
+                                                        <td
+                                                            class="py-1 text-end tabular-nums"
+                                                            :class="v.inventory > 0 ? '' : 'font-semibold text-destructive'"
+                                                        >
+                                                            {{ n(v.inventory) }}
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
                                             <p v-if="m.need_stop" class="font-medium text-destructive">{{ t('ads.materials.need_stop_hint') }}</p>
                                             <a
                                                 v-for="(url, i) in links(m.website_links).map(safeUrl).filter(Boolean)"

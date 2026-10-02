@@ -30,6 +30,16 @@ const emit = defineEmits<{ 'update:modelValue': [files: File[]]; 'update:removed
 const { t, locale } = useI18n();
 
 const dragging = ref(false);
+/** dragenter / dragleave also fire for every child the pointer crosses: count them so the highlight does not flicker. */
+let dragDepth = 0;
+function onDragEnter(): void {
+    dragDepth++;
+    dragging.value = true;
+}
+function onDragLeave(): void {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) dragging.value = false;
+}
 const errors = ref<string[]>([]);
 const input = ref<HTMLInputElement | null>(null);
 
@@ -88,6 +98,7 @@ function add(list: FileList | File[] | null | undefined): void {
 }
 
 function onDrop(e: DragEvent): void {
+    dragDepth = 0;
     dragging.value = false;
     add(e.dataTransfer?.files);
 }
@@ -118,9 +129,9 @@ const size = (bytes: number | null) => formatBytes(bytes, locale.value);
         <div
             class="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors"
             :class="dragging ? 'border-primary bg-primary/5' : 'border-border bg-muted/30'"
-            @dragenter.prevent="dragging = true"
-            @dragover.prevent="dragging = true"
-            @dragleave.prevent="dragging = false"
+            @dragenter.prevent="onDragEnter"
+            @dragover.prevent
+            @dragleave.prevent="onDragLeave"
             @drop.prevent="onDrop"
         >
             <UploadCloud class="size-7 text-muted-foreground" aria-hidden="true" />

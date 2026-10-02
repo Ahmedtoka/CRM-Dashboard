@@ -219,8 +219,15 @@ it('computes performance for a page of materials without a query per material', 
     foreach ($ads as $ad) {
         matDays($ad, 3, 200, 400);
     }
+    // Each material has a product with variants, so the per-variant stock in the row is part of the count.
+    $withProduct = function () {
+        $product = Product::factory()->create();
+        ProductVariant::factory()->count(2)->create(['product_id' => $product->id, 'inventory_quantity' => 3]);
+
+        return AdMaterial::factory()->create(['product_id' => $product->id]);
+    };
     foreach (range(0, 2) as $i) {
-        AdMaterial::factory()->create()->ads()->attach($ads[$i]);
+        $withProduct()->ads()->attach($ads[$i]);
     }
     $queries = function () use ($admin) {
         DB::flushQueryLog();
@@ -233,10 +240,13 @@ it('computes performance for a page of materials without a query per material', 
     $queries(); // warm per-process caches (settings)
     $few = $queries();
     foreach (range(1, 9) as $i) {
-        AdMaterial::factory()->create()->ads()->attach($ads[$i % 3]);
+        $withProduct()->ads()->attach($ads[$i % 3]);
     }
 
     expect($queries())->toBe($few);
+    $this->actingAs($admin)->get('/ads/materials')->assertInertia(fn (Assert $p) => $p
+        ->has('materials.data.0.product.variants', 2)
+        ->has('materials.data.0.product.variants.0', fn (Assert $v) => $v->whereType('id', 'integer')->has('title')->where('inventory', 3)));
 });
 
 it('lets a buyer link ads in their scope and refuses ads outside it', function () {
@@ -460,13 +470,14 @@ it('lists materials by product inventory on the stock page and applies the manua
         ->where('rows.data.1.material_id', $m1->id)->where('rows.data.1.quantity', 10)->where('rows.data.1.availability', true)
         ->where('rows.data.1.product', ['id' => $p1->id, 'title' => 'Abaya'])->where('rows.data.1.price', ['min' => 100, 'max' => 150])
         ->has('rows.data.1.variants', 2)->where('rows.data.1.collections.0.name', 'Eid')
-        ->where('rows.data.0.material_id', $m2->id)->where('rows.data.0.availability', false));
+        ->where('rows.data.0.material_id', $m2->id)->where('rows.data.0.availability', false)->where('rows.data.0.override', null));
 
     $this->actingAs($content)->get('/ads/stock?availability=out')->assertInertia(fn (Assert $p) => $p->has('rows.data', 1)->where('rows.data.0.material_id', $m2->id));
     $this->actingAs($content)->get('/ads/stock?min_qty=5')->assertInertia(fn (Assert $p) => $p->has('rows.data', 1)->where('rows.data.0.material_id', $m1->id)->where('filters.min_qty', 5));
 
     $this->actingAs($content)->post("/ads/stock/{$m2->id}/availability", ['available' => true])->assertRedirect();
     expect($m2->refresh()->stock_override)->toBeTrue();
+    $this->actingAs($content)->get('/ads/stock')->assertInertia(fn (Assert $p) => $p->where('rows.data.0.override', true)->where('rows.data.0.availability', true));
     $this->actingAs($content)->get('/ads/stock?availability=in')->assertInertia(fn (Assert $p) => $p->has('rows.data', 2));
     $this->actingAs($content)->get('/ads/materials?stock=in')->assertInertia(fn (Assert $p) => $p->has('materials.data', 2));
 
@@ -535,4 +546,39 @@ it('keeps links the update request does not send, and cleans the blob when the f
     AdMaterialFile::creating(fn () => throw new RuntimeException('db down'));
     expect(fn () => app(MaterialFileStorage::class)->store($m, UploadedFile::fake()->image('a.jpg')))->toThrow(RuntimeException::class);
     expect($this->disk->allFiles())->toBe([]);
+});
+
+it('exports the stock page as CSV with the same filters', function () {
+    $p1 = Product::factory()->create(['title' => 'Abaya']);
+    ProductVariant::factory()->create(['product_id' => $p1->id, 'title' => 'S', 'price' => 100, 'inventory_quantity' => 4]);
+    ProductVariant::factory()->create(['product_id' => $p1->id, 'title' => 'M', 'price' => 150, 'inventory_quantity' => 6]);
+    $p2 = Product::factory()->create(['title' => 'Scarf']);
+    ProductVariant::factory()->create(['product_id' => $p2->id, 'title' => 'One', 'price' => 50, 'inventory_quantity' => 0]);
+    $col = AdMaterialCollection::factory()->create(['name' => 'Eid']);
+    AdMaterial::factory()->create(['title' => 'Abaya reel', 'product_id' => $p1->id])->collections()->attach($col);
+    AdMaterial::factory()->create(['title' => 'Scarf reel', 'product_id' => $p2->id]);
+    AdMaterial::factory()->create(['title' => 'No product']);
+
+    $content = matUser(UserRole::Content);
+    $bom = "\xEF\xBB\xBF";
+    $lines = fn (string $csv) => array_values(array_filter(explode("\n", substr($csv, strlen($bom)))));
+    $res = $this->actingAs($content)->get('/ads/stock/export');
+    $res->assertOk();
+    $csv = $res->streamedContent();
+    expect(str_starts_with($csv, $bom))->toBeTrue();
+    $all = $lines($csv);
+    expect($all)->toHaveCount(3)
+        ->and(str_getcsv($all[0]))->toBe([
+            __('ads.materials.stock_csv.title'), __('ads.materials.stock_csv.product'), __('ads.materials.stock_csv.variants'), __('ads.materials.stock_csv.price'),
+            __('ads.materials.stock_csv.quantity'), __('ads.materials.stock_csv.collections'), __('ads.materials.stock_csv.availability'),
+        ]);
+    $abaya = collect($all)->map(fn ($l) => str_getcsv($l))->firstWhere(0, 'Abaya reel');
+    expect($abaya)->toBe(['Abaya reel', 'Abaya', 'S: 4 | M: 6', '100 - 150', '10', 'Eid', __('ads.materials.stock_csv.yes')]);
+
+    $out = $lines($this->actingAs($content)->get('/ads/stock/export?availability=out')->streamedContent());
+    expect($out)->toHaveCount(2)->and(str_getcsv($out[1])[0])->toBe('Scarf reel')
+        ->and(str_getcsv($out[1])[6])->toBe(__('ads.materials.stock_csv.no'));
+    expect($lines($this->actingAs($content)->get('/ads/stock/export?min_qty=5')->streamedContent()))->toHaveCount(2);
+
+    $this->actingAs(matUser(UserRole::Moderator))->get('/ads/stock/export')->assertForbidden();
 });

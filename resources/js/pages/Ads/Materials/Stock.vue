@@ -3,16 +3,18 @@
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
+import { buttonVariants } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAdsMoney } from '@/lib/ads';
-import { cleanQuery, pageList, useMaterialPermissions } from '@/lib/adsMaterials';
+import { cleanQuery, pageList, queryString, useMaterialPermissions } from '@/lib/adsMaterials';
 import { formatCount } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import type { AdStockRow, AdsStockProps } from '@/types/ads';
 import { Head, router } from '@inertiajs/vue3';
-import { ChevronLeft, ChevronRight, ImageOff, Package, RotateCcw } from 'lucide-vue-next';
+import { ChevronLeft, ChevronRight, Download, ImageOff, Package, RotateCcw } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
 const props = defineProps<AdsStockProps>();
@@ -57,6 +59,12 @@ watch(minQty, (v) => {
 });
 onBeforeUnmount(() => window.clearTimeout(timer));
 
+/** Plain link to the CSV with the filters as applied by the server. */
+const exportUrl = computed(
+    () =>
+        `/ads/stock/export${queryString({ min_qty: props.filters.min_qty, availability: props.filters.availability === 'all' ? null : props.filters.availability })}`,
+);
+
 const filtered = computed(() => minQty.value.trim() !== '' || availability.value !== 'all');
 function reset(): void {
     minQty.value = '';
@@ -79,6 +87,9 @@ function price(r: AdStockRow): string {
 /* ---- availability override ---- */
 const busyId = ref<number | null>(null);
 const selectsKey = ref(0);
+/** «follow inventory» when nothing is pinned, else the pinned value. */
+const selectValue = (r: AdStockRow) => (r.override === null ? 'auto' : r.override ? 'yes' : 'no');
+const effective = (r: AdStockRow) => (r.availability ? t('ads.materials.stock_page.yes') : t('ads.materials.stock_page.no'));
 function setAvailability(r: AdStockRow, value: string): void {
     const available = value === 'auto' ? null : value === 'yes';
     busyId.value = r.material_id;
@@ -111,7 +122,11 @@ const breadcrumbs = computed(() => [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-6xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('ads.materials.stock_page.title')" :description="t('ads.materials.stock_page.description')" />
+            <PageHeader :title="t('ads.materials.stock_page.title')" :description="t('ads.materials.stock_page.description')">
+                <a :href="exportUrl" :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')">
+                    <Download aria-hidden="true" />{{ t('ads.materials.stock_page.export') }}
+                </a>
+            </PageHeader>
 
             <form class="flex flex-wrap items-end gap-3 rounded-lg bg-card p-3 shadow-card" @submit.prevent="go()">
                 <div class="space-y-1">
@@ -237,19 +252,21 @@ const breadcrumbs = computed(() => [
                                     <select
                                         :id="`avail-${r.material_id}`"
                                         :key="`avail-${r.material_id}-${selectsKey}`"
-                                        :value="r.availability ? 'yes' : 'no'"
+                                        :value="selectValue(r)"
                                         :disabled="busyId === r.material_id"
                                         class="h-8 rounded-md border px-2 text-xs font-medium"
                                         :class="
-                                            r.availability
-                                                ? 'border-success/40 bg-success/10 text-emerald-800 dark:text-emerald-200'
-                                                : 'border-destructive/30 bg-destructive/10 text-destructive'
+                                            r.override === null
+                                                ? 'border-input bg-background text-foreground'
+                                                : r.availability
+                                                  ? 'border-success/40 bg-success/10 text-emerald-800 dark:text-emerald-200'
+                                                  : 'border-destructive/30 bg-destructive/10 text-destructive'
                                         "
                                         @change="setAvailability(r, ($event.target as HTMLSelectElement).value)"
                                     >
                                         <option value="yes">{{ t('ads.materials.stock_page.yes') }}</option>
                                         <option value="no">{{ t('ads.materials.stock_page.no') }}</option>
-                                        <option value="auto">{{ t('ads.materials.stock_page.auto') }}</option>
+                                        <option value="auto">{{ t('ads.materials.stock_page.auto_now', { state: effective(r) }) }}</option>
                                     </select>
                                 </template>
                                 <StatusChip
@@ -258,6 +275,12 @@ const breadcrumbs = computed(() => [
                                     :tone="r.availability ? 'positive' : 'negative'"
                                     dot
                                 />
+                                <span
+                                    v-if="r.override !== null"
+                                    class="ms-1.5 inline-flex h-5 items-center rounded-full bg-violet-500/15 px-2 text-2xs font-medium text-violet-800 dark:bg-violet-500/25 dark:text-violet-100"
+                                    :title="t('ads.materials.stock_page.manual_hint')"
+                                    >{{ t('ads.materials.stock_page.manual') }}</span
+                                >
                             </td>
                         </tr>
                     </tbody>

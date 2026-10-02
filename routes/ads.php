@@ -61,5 +61,6 @@ Route::middleware('ads:materials')->group(function () {
     Route::delete('/ads/collections/{collection}', [MaterialCollectionController::class, 'destroy'])->name('ads.collections.destroy');
 
     Route::get('/ads/stock', [AdStockController::class, 'index'])->name('ads.stock.index');
+    Route::get('/ads/stock/export', [AdStockController::class, 'export'])->name('ads.stock.export');
     Route::post('/ads/stock/{material}/availability', [AdStockController::class, 'availability'])->name('ads.stock.availability');
 });

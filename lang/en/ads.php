@@ -39,5 +39,8 @@ return [
             'title' => 'Title', 'created' => 'Created', 'product' => 'Product', 'collections' => 'Collections', 'types' => 'Types',
             'status' => 'Status', 'stock' => 'Stock', 'drive_links' => 'Drive links', 'ads' => 'Linked ads', 'spend' => 'Spend', 'roas' => 'ROAS',
         ],
+        'stock_csv' => [
+            'title' => 'Material', 'product' => 'Product', 'variants' => 'Variations', 'price' => 'Price', 'quantity' => 'Quantity', 'collections' => 'Collections', 'availability' => 'Available', 'yes' => 'Yes', 'no' => 'No',
+        ],
     ],
 ];
