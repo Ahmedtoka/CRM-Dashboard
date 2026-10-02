@@ -44,6 +44,10 @@ use InvalidArgumentException;
  * while that reply is later than the customer's last message. No reply yet, or she wrote last:
  * no clock, no warning, no auto-close (a slow moderator is an SLA matter).
  *
+ * An acknowledgement (thanks, emoji, a sticker — spec 2026-09-30 §1) starts neither clock again:
+ * the customer-silence clock keeps running from the assignee's last reply (`last_ack_at`), so a
+ * window she forgets to close still warns and auto-closes.
+ *
  * The moderator-reply clock (flow revision §4, `awaiting_reply_since`) runs only while the
  * customer waits for the ASSIGNEE: from delivery, or from the customer's message after the
  * assignee had answered everything; every reply of the assignee stops it. The two clocks never
@@ -310,7 +314,15 @@ class WindowLifecycle
             return null;
         }
 
-        $customer = collect([$e->conversation?->last_customer_message_at, $e->last_customer_message_at])->filter()->max();
+        // An acknowledgement (spec 2026-09-30 §1) is not an answer: while her latest message is one
+        // (the conversation's time is not later than `last_ack_at`), only her last real message counts.
+        $conversation = $e->conversation?->last_customer_message_at;
+
+        if ($conversation !== null && $e->last_ack_at !== null && $conversation->lessThanOrEqualTo($e->last_ack_at)) {
+            $conversation = null;
+        }
+
+        $customer = collect([$conversation, $e->last_customer_message_at])->filter()->max();
 
         return $customer !== null && $customer->greaterThanOrEqualTo($agent) ? null : $agent;
     }

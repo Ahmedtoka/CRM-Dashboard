@@ -9,6 +9,7 @@ use App\Enums\ActorType;
 use App\Enums\Handler;
 use App\Events\ConversationUpdated;
 use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\QueueDay;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
@@ -31,6 +32,12 @@ use Illuminate\Support\Facades\DB;
 class QueueService
 {
     public const TZ = 'Africa/Cairo';
+
+    /**
+     * On a conversation the bot handles, an acknowledgement stays quiet (no bot turn) for this long
+     * after her last queue entry ended; later the bot answers a thanks like any message (spec 2026-09-30 §1).
+     */
+    public const ACK_QUIET_HOURS = 24;
 
     public function __construct(
         private readonly ActivityLogger $logger,
@@ -195,11 +202,19 @@ class QueueService
     /**
      * She wrote while queued / in a window: the silence clock restarts. In an open window whose
      * assignee had answered everything, the moderator-reply clock starts now (flow revision §4.1).
-     * A customer waiting in the lounge (not overnight) gets her ticket and who is ahead (§3). The
-     * board and the moderator's strip are told once the inbound message is committed (a
+     * A customer waiting in the lounge (not overnight) gets her ticket and who is ahead (§3).
+     *
+     * An acknowledgement (spec 2026-09-30 §1: thanks, emoji only, a sticker), while the queue is
+     * on, asks for nothing:
+     *  - no reply clock, so no apology and no hand-off;
+     *  - no position reply in the lounge;
+     *  - in an open window it only stamps `last_ack_at`, so the customer-silence clock keeps
+     *    running from the moderator's last reply (`WindowLifecycle::silentSince()`).
+     *
+     * The board and the moderator's strip are told once the inbound message is committed (a
      * rolled-back ingest pushes nothing), for a waiting entry and for an open window alike.
      */
-    public function customerMessage(Conversation $c): void
+    public function customerMessage(Conversation $c, bool $acknowledgement = false): void
     {
         $e = $this->activeEntry($c);
 
@@ -207,17 +222,21 @@ class QueueService
             return;
         }
 
-        $e->forceFill(['last_customer_message_at' => now(), 'silence_warned_at' => null])->save();
+        if ($acknowledgement && $this->settings()->enabled) {
+            QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)->update(['last_ack_at' => now()]);
+        } else {
+            $e->forceFill(['last_customer_message_at' => now(), 'silence_warned_at' => null])->save();
 
-        // The reply clock, by a conditional update: it reads the row as committed (not the
-        // ingest's snapshot), so a reply of the assignee that committed a moment ago is never
-        // missed, and a clock already running keeps its first moment. Waiting / closed: no clock.
-        QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)->whereNull('awaiting_reply_since')
-            ->update(['awaiting_reply_since' => now()]);
+            // The reply clock, by a conditional update: it reads the row as committed (not the
+            // ingest's snapshot), so a reply of the assignee that committed a moment ago is never
+            // missed, and a clock already running keeps its first moment. Waiting / closed: no clock.
+            QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)->whereNull('awaiting_reply_since')
+                ->update(['awaiting_reply_since' => now()]);
 
-        if ($e->status === 'waiting' && $e->priority !== 'overnight' && $this->settings()->enabled) {
-            $e->setRelation('conversation', $c);
-            $this->sendPosition($e);
+            if ($e->status === 'waiting' && $e->priority !== 'overnight' && $this->settings()->enabled) {
+                $e->setRelation('conversation', $c);
+                $this->sendPosition($e);
+            }
         }
 
         $id = $e->id;
@@ -227,6 +246,50 @@ class QueueService
                 SafeBroadcast::send(new QueueEntryUpdated($fresh));
             }
         });
+    }
+
+    /**
+     * Spec 2026-09-30 §1: the inbound message asks for nothing. It is an acknowledgement after
+     * her queue entry ended (any close: manual, automatic, a hand-off), while the queue is on.
+     * The ingest then keeps it in the thread, but:
+     *  - it is not counted unread;
+     *  - no queue hook runs: no ticket, no reversed close;
+     *  - no bot turn (checked before the bot hand-off, also on a bot-handled conversation).
+     *
+     * On a conversation a person still handles (an automatic close) this holds with no time
+     * limit; on one the bot handles (a manual close hands it back, or «رجوع للبوت») only for
+     * `ACK_QUIET_HOURS` after the close, after which the bot answers a thanks like any message.
+     *
+     * Called inside the ingest transaction; the settings row is read only for a conversation
+     * that has a queue entry.
+     */
+    public function settles(Conversation $c, Message $m): bool
+    {
+        if (! app(Acknowledgement::class)->matches($m)) {
+            return false;
+        }
+
+        $last = $this->ended($c);
+
+        if ($last === null) {
+            return false;
+        }
+
+        $quiet = $c->handler === Handler::Human
+            || ($last->closed_at !== null && $last->closed_at->greaterThan(now()->subHours(self::ACK_QUIET_HOURS)));
+
+        return $quiet && (bool) $this->settings()->enabled;
+    }
+
+    /**
+     * Her latest queue entry when it ended (closed, cancelled, abandoned) and none is waiting or
+     * open, whatever the handler (addendum C2); null otherwise.
+     */
+    private function ended(Conversation $c): ?QueueEntry
+    {
+        $last = QueueEntry::query()->where('conversation_id', $c->id)->latest('id')->first(['id', 'status', 'closed_at']);
+
+        return $last !== null && in_array($last->status, QueueEntry::TERMINAL_STATUSES, true) ? $last : null;
     }
 
     /**
