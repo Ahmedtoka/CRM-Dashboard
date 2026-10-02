@@ -56,7 +56,7 @@ class TikTokAdsDriver implements AdPlatformDriver
             'fields' => json_encode(['ad_id', 'ad_name', 'operation_status', 'secondary_status', 'campaign_id', 'campaign_name', 'adgroup_id', 'adgroup_name', 'ad_format', 'ad_text', 'video_id', 'image_ids', 'create_time', 'landing_page_url']),
         ]);
 
-        return array_values(array_map(fn (array $r) => $this->mapAd($r), $rows));
+        return array_values(array_map(fn (array $r) => $this->mapAd($r), array_filter($rows, fn ($r) => ! empty($r['ad_id']))));
     }
 
     public function dailyMetrics(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
@@ -158,12 +158,16 @@ class TikTokAdsDriver implements AdPlatformDriver
     /** @param  list<string>  $ids */
     private function advertiserInfo(string $token, array $ids): array
     {
-        $data = $this->get($token, 'advertiser/info/', [
-            'advertiser_ids' => json_encode(array_values($ids)),
-            'fields' => json_encode(['advertiser_id', 'name', 'currency', 'timezone', 'status', 'balance']),
-        ]);
+        $rows = [];
+        foreach (array_chunk(array_values($ids), 100) as $chunk) {
+            $data = $this->get($token, 'advertiser/info/', [
+                'advertiser_ids' => json_encode($chunk),
+                'fields' => json_encode(['advertiser_id', 'name', 'currency', 'timezone', 'status', 'balance']),
+            ]);
+            $rows = array_merge($rows, $data['list'] ?? []);
+        }
 
-        return $data['list'] ?? [];
+        return $rows;
     }
 
     /** @return list<string> */
@@ -199,8 +203,8 @@ class TikTokAdsDriver implements AdPlatformDriver
         if ($response->status() === 429) {
             throw new RateLimited('TikTok rate limit reached; retry later.');
         }
-        if (! $response->successful() && $code === null) {
-            throw new AdsApiException('TikTok API error (HTTP '.$response->status().')');
+        if ($code === null) {
+            throw new AdsApiException('TikTok API error: unexpected response (HTTP '.$response->status().')');
         }
         if ((int) $code !== 0) {
             $message = $this->scrub((string) ($response->json('message') ?: 'TikTok API error (code '.$code.')'), $token);

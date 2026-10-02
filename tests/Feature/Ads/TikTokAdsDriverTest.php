@@ -159,3 +159,27 @@ it('wires live tiktok through the factory', function () {
 
     expect(app(DriverFactory::class)->for(AdPlatform::Tiktok))->toBeInstanceOf(TikTokAdsDriver::class);
 });
+
+it('treats a non-envelope 200 response as an error', function (mixed $body) {
+    Http::preventStrayRequests();
+    Http::fake([TT_BASE.'/*' => Http::response($body, 200)]);
+
+    expect(fn () => app(TikTokAdsDriver::class)->ads(ttAccount()))
+        ->toThrow(AdsApiException::class, 'unexpected response (HTTP 200)');
+})->with(['<html>proxy</html>', '', '{"foo":1}']);
+
+it('skips tiktok ad rows without an ad_id', function () {
+    Http::preventStrayRequests();
+    Http::fake([TT_BASE.'/ad/get/*' => Http::response(['code' => 0, 'message' => 'OK', 'data' => ['list' => [['ad_name' => 'ghost'], ['ad_id' => '5', 'ad_name' => 'ok']], 'page_info' => ['page' => 1, 'total_page' => 1]]])]);
+
+    expect(app(TikTokAdsDriver::class)->ads(ttAccount()))->toHaveCount(1);
+});
+
+it('chunks advertiser ids by 100', function () {
+    Http::preventStrayRequests();
+    Http::fake([TT_BASE.'/advertiser/info/*' => Http::response(['code' => 0, 'message' => 'OK', 'data' => ['list' => []]])]);
+
+    app(TikTokAdsDriver::class)->accounts(ttConnection(['advertiser_ids' => array_map('strval', range(1, 150))]));
+
+    Http::assertSentCount(2);
+});

@@ -30,7 +30,13 @@ class GoogleAdsDriver implements AdPlatformDriver
 
         foreach ($list['resourceNames'] ?? [] as $resource) {
             $cid = $this->cid((string) $resource);
-            $rows = $this->search($c, $cid, 'SELECT customer.id, customer.descriptive_name, customer.currency_code, customer.time_zone, customer.status FROM customer');
+            try {
+                $rows = $this->search($c, $cid, 'SELECT customer.id, customer.descriptive_name, customer.currency_code, customer.time_zone, customer.status FROM customer');
+            } catch (RateLimited $e) {
+                throw $e;
+            } catch (AdsApiException) {
+                continue;   // one inaccessible customer must not hide the others
+            }
             foreach ($rows as $r) {
                 $cu = $r['customer'] ?? [];
                 $out[] = new AccountInfo(
@@ -176,6 +182,9 @@ class GoogleAdsDriver implements AdPlatformDriver
         }
 
         if (! $response->successful()) {
+            if ($response->status() === 401) {
+                Cache::forget($this->tokenKey($c));   // next call refreshes
+            }
             throw $this->error($response, $secrets);
         }
 
@@ -187,7 +196,7 @@ class GoogleAdsDriver implements AdPlatformDriver
     {
         $cred = $c->credentials ?? [];
         if (! empty($cred['refresh_token']) && ! empty($cred['client_id']) && ! empty($cred['client_secret'])) {
-            $key = 'ads:google:token:'.$c->id;
+            $key = $this->tokenKey($c);
             $cached = Cache::get($key);
             if (is_string($cached) && $cached !== '') {
                 return $cached;
@@ -220,6 +229,11 @@ class GoogleAdsDriver implements AdPlatformDriver
         }
 
         return (string) $token;
+    }
+
+    private function tokenKey(AdPlatformConnection $c): string
+    {
+        return 'ads:google:token:'.$c->id.':'.sha1((string) ($c->credentials['refresh_token'] ?? ''));
     }
 
     private function developerToken(AdPlatformConnection $c): string
@@ -263,7 +277,7 @@ class GoogleAdsDriver implements AdPlatformDriver
         if ($dev = config('crm.ads.google.developer_token')) {
             $values[] = (string) $dev;
         }
-        if ($cached = Cache::get('ads:google:token:'.$c->id)) {
+        if ($cached = Cache::get($this->tokenKey($c))) {
             $values[] = (string) $cached;
         }
 

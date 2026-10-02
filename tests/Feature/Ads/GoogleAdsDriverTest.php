@@ -191,3 +191,49 @@ it('wires live google through the factory', function () {
 
     expect(app(DriverFactory::class)->for(AdPlatform::Google))->toBeInstanceOf(GoogleAdsDriver::class);
 });
+
+it('skips a customer that errors while listing accounts', function () {
+    Http::preventStrayRequests();
+    Http::fake([
+        G_BASE.'/customers:listAccessibleCustomers' => Http::response(gFixture('google_accessible')),
+        G_BASE.'/customers/1234567890/googleAds:searchStream' => Http::response(gFixture('google_customer_1')),
+        G_BASE.'/customers/2223334445/googleAds:searchStream' => Http::response(gFixture('google_error'), 403),
+    ]);
+
+    $accounts = app(GoogleAdsDriver::class)->accounts(gConnection());
+
+    expect($accounts)->toHaveCount(1)->and($accounts[0]->externalId)->toBe('1234567890');
+});
+
+it('forgets the cached token on 401 so the next call refreshes', function () {
+    Http::preventStrayRequests();
+    Http::fake([
+        'oauth2.googleapis.com/token' => Http::response(gFixture('google_token')),
+        G_BASE.'/customers/1234567890/googleAds:searchStream' => Http::sequence()
+            ->push(gFixture('google_error'), 401)
+            ->push(gFixture('google_ads')),
+    ]);
+    $acc = gAccount(gConnection(['refresh_token' => 'GREFRESH', 'client_id' => 'cid', 'client_secret' => 'GCSECRET']));
+
+    expect(fn () => app(GoogleAdsDriver::class)->ads($acc))->toThrow(AdsApiException::class);
+    app(GoogleAdsDriver::class)->ads($acc);
+
+    Http::assertSentCount(4);   // refresh, search(401), refresh, search
+});
+
+it('keys the token cache on the refresh token', function () {
+    Http::preventStrayRequests();
+    Http::fake([
+        'oauth2.googleapis.com/token' => Http::response(gFixture('google_token')),
+        G_BASE.'/*' => Http::response(gFixture('google_ads')),
+    ]);
+    $c = gConnection(['refresh_token' => 'OLD', 'client_id' => 'cid', 'client_secret' => 'S']);
+    $acc = gAccount($c);
+    app(GoogleAdsDriver::class)->ads($acc);
+
+    $c->credentials = array_merge($c->credentials, ['refresh_token' => 'NEW']);
+    $c->save();
+    app(GoogleAdsDriver::class)->ads($acc->fresh());
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'oauth2') && $r['refresh_token'] === 'NEW');
+});
