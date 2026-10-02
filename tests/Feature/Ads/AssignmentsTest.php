@@ -75,20 +75,46 @@ it('unassigns from a date by closing the open assignment', function () {
     expect($svc->history($acc))->toHaveCount(2);
 });
 
-it('is a no-op for the current holder and corrects a same-day start', function () {
+it('corrects the current holder start date and a same-day buyer', function () {
     $acc = AdAccount::factory()->create();
     $a = MediaBuyer::factory()->create();
     $b = MediaBuyer::factory()->create();
     $svc = app(AssignmentService::class);
     $first = $svc->assign($acc, $a, CarbonImmutable::parse('2026-09-01'));
-    expect($svc->assign($acc, $a, CarbonImmutable::parse('2026-09-12'))->id)->toBe($first->id);
-    expect(AdAccountAssignment::count())->toBe(1)->and($first->fresh()->ends_on)->toBeNull();
+    expect($svc->assign($acc, $a, CarbonImmutable::parse('2026-09-01'))->id)->toBe($first->id); // same date: no-op
+    expect($svc->assign($acc, $a, CarbonImmutable::parse('2026-09-12'))->id)->toBe($first->id); // later start
+    expect(AdAccountAssignment::count())->toBe(1)->and($first->fresh()->ends_on)->toBeNull()
+        ->and($first->fresh()->starts_on->toDateString())->toBe('2026-09-12');
+    $svc->assign($acc, $a, CarbonImmutable::parse('2026-08-20')); // earlier start
+    expect($first->fresh()->starts_on->toDateString())->toBe('2026-08-20');
+    $svc->assign($acc, $a, CarbonImmutable::parse('2026-09-01'));
 
     $svc->assign($acc, $b, CarbonImmutable::parse('2026-09-01'));
     expect(AdAccountAssignment::count())->toBe(1)->and(AdAccountAssignment::first()->media_buyer_id)->toBe($b->id);
 
     $svc->assign($acc, null, CarbonImmutable::parse('2026-09-01'));
     expect(AdAccountAssignment::count())->toBe(0);
+});
+
+it('moves the open start earlier only down to the day after the previous period', function () {
+    $acc = AdAccount::factory()->create();
+    $a = MediaBuyer::factory()->create();
+    $b = MediaBuyer::factory()->create();
+    $svc = app(AssignmentService::class);
+    $svc->assign($acc, $a, CarbonImmutable::parse('2026-09-01'));
+    $open = $svc->assign($acc, $b, CarbonImmutable::parse('2026-09-16')); // a: Sep 1-15
+
+    expect(fn () => $svc->assign($acc, $b, CarbonImmutable::parse('2026-09-15')))->toThrow(ValidationException::class);
+    expect($open->fresh()->starts_on->toDateString())->toBe('2026-09-16');
+
+    $svc->assign($acc, $b, CarbonImmutable::parse('2026-09-20')); // later: leaves Sep 16-19 unassigned
+    expect($open->fresh()->starts_on->toDateString())->toBe('2026-09-20');
+    seedSeptember($acc);
+    $rows = septemberSplit();
+    expect((float) $rows[$a->id])->toBe(1500.0)->and((float) $rows[$b->id])->toBe(1100.0)->and((float) $rows[''])->toBe(400.0);
+
+    // another buyer still cannot start before the open row
+    expect(fn () => $svc->assign($acc, $a, CarbonImmutable::parse('2026-09-18')))->toThrow(ValidationException::class);
 });
 
 it('scopes a buyer user to their accounts and content users to none', function () {

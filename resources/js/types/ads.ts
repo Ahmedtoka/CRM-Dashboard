@@ -339,9 +339,14 @@ export interface AdPlatformDefinition {
     fields: AdPlatformField[];
 }
 
+/** AccountController::index — active buyers plus any archived buyer who still holds an account. */
+export interface AdBuyerOption extends AdsOption {
+    is_active: boolean;
+}
+
 export interface AdsAccountsProps {
     connections: AdConnectionRow[];
-    buyers: AdsOption[];
+    buyers: AdBuyerOption[];
     platforms: AdPlatformDefinition[];
 }
 

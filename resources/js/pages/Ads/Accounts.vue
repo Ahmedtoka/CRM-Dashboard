@@ -147,11 +147,13 @@ const columns = computed<Column[]>(() => [
     { key: 'actions', label: t('ads.accounts.col_actions'), align: 'end' },
 ]);
 
-/* ---- assignment drafts: the select + date of each row; reset when the saved owner changes ---- */
+/* ---- assignment drafts: the select + date of each row; reset when the saved owner or start changes ---- */
 interface Draft {
     buyer: string;
     date: string;
     base: string;
+    /** Start of the open period ('' when unassigned): the same owner with another date corrects it. */
+    baseDate: string;
 }
 const drafts = reactive<Record<number, Draft>>({});
 const today = () => cairoToday();
@@ -162,8 +164,9 @@ watch(
         for (const c of connections) {
             for (const a of c.accounts) {
                 const owner = a.buyer ? String(a.buyer.id) : '';
+                const start = a.buyer ? (a.history.find((p) => p.ends_on === null)?.starts_on ?? '') : '';
                 const d = drafts[a.id];
-                if (!d || d.base !== owner) drafts[a.id] = { buyer: owner, date: today(), base: owner };
+                if (!d || d.base !== owner || d.baseDate !== start) drafts[a.id] = { buyer: owner, date: start || today(), base: owner, baseDate: start };
             }
         }
     },
@@ -188,7 +191,21 @@ function assign(a: AdAccountRow): void {
     });
 }
 
-const canAssign = (a: AdAccountRow) => drafts[a.id] !== undefined && drafts[a.id].buyer !== drafts[a.id].base;
+/** A hand-over defaults to today; going back to the current owner shows their start date again. */
+function onOwnerChange(a: AdAccountRow): void {
+    const d = drafts[a.id];
+    if (!d) return;
+    if (d.buyer === d.base) d.date = d.baseDate || today();
+    else if (d.date === d.baseDate) d.date = today();
+}
+/** Same owner, other date: a correction of the open period's start. */
+const correctingStart = (a: AdAccountRow) => {
+    const d = drafts[a.id];
+    return d !== undefined && d.buyer === d.base && d.base !== '' && d.date !== '' && d.date !== d.baseDate;
+};
+const canAssign = (a: AdAccountRow) => drafts[a.id] !== undefined && (drafts[a.id].buyer !== drafts[a.id].base || correctingStart(a));
+/** Archived buyers are offered only to the account they still hold. */
+const ownerOptions = (a: AdAccountRow) => props.buyers.filter((b) => b.is_active || b.id === a.buyer?.id);
 const assigning = (a: AdAccountRow) => assignForm.processing && assigningId.value === a.id;
 const periodOwner = (name: string | null) => name ?? t('ads.accounts.unassigned');
 const money = (value: number, currency: string) => formatAdsMoney(value, locale.value, currency);
@@ -284,9 +301,14 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                         <template #cell-owner="{ row }">
                             <div v-if="drafts[row.id]" class="min-w-56 space-y-1">
                                 <div class="flex flex-wrap items-center gap-1.5">
-                                    <select v-model="drafts[row.id].buyer" :class="smallSelect" :aria-label="t('ads.accounts.col_owner')">
+                                    <select
+                                        v-model="drafts[row.id].buyer"
+                                        :class="smallSelect"
+                                        :aria-label="t('ads.accounts.col_owner')"
+                                        @change="onOwnerChange(row)"
+                                    >
                                         <option value="">{{ t('ads.accounts.unassigned') }}</option>
-                                        <option v-for="b in buyers" :key="b.id" :value="String(b.id)">{{ b.name }}</option>
+                                        <option v-for="b in ownerOptions(row)" :key="b.id" :value="String(b.id)">{{ b.name }}</option>
                                     </select>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-1.5">
@@ -299,7 +321,7 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                                         @click="assign(row)"
                                     >
                                         <LoaderCircle v-if="assigning(row)" class="animate-spin" aria-hidden="true" />{{
-                                            t('ads.accounts.assign_save')
+                                            correctingStart(row) ? t('ads.accounts.save_start') : t('ads.accounts.assign_save')
                                         }}
                                     </button>
                                     <Popover>

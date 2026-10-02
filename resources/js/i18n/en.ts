@@ -3057,6 +3057,7 @@ const en: Messages = {
             no_accounts: 'No ad accounts yet',
             unassigned: 'Unassigned',
             from_date: 'From date',
+            save_start: 'Fix start date',
             assign_save: 'Assign',
             history: 'History',
             history_title: 'Assignment history',

@@ -14,7 +14,8 @@ final class AssignmentService
 {
     /**
      * Hand the account to $buyer from $startsOn (null buyer = unassigned from that date, which just closes the open row).
-     * Re-assigning the current holder is a no-op; a start equal to the open row's start corrects that row.
+     * Re-assigning the current holder from another date corrects the open row's start (earlier or later), as long as
+     * it stays after the previous closed period; a start equal to the open row's start corrects that row's buyer.
      */
     public function assign(AdAccount $account, ?MediaBuyer $buyer, CarbonImmutable $startsOn): ?AdAccountAssignment
     {
@@ -32,12 +33,22 @@ final class AssignmentService
             }
 
             $openStart = $open->starts_on->toDateString();
-            if ($day < $openStart) {
-                throw ValidationException::withMessages(['starts_on' => __('ads.assignment_before_open')]);
+
+            // Same holder: a start-date correction of the open row (the owner's first-day mapping can be wrong).
+            if ($buyer !== null && $open->media_buyer_id === $buyer->id) {
+                if ($day !== $openStart) {
+                    $previousEnd = AdAccountAssignment::where('ad_account_id', $account->id)->whereKeyNot($open->id)->max('ends_on');
+                    if ($previousEnd !== null && $day <= substr((string) $previousEnd, 0, 10)) {
+                        throw ValidationException::withMessages(['starts_on' => __('ads.assignment_overlaps')]);
+                    }
+                    $open->update(['starts_on' => $day]);
+                }
+
+                return $open;
             }
 
-            if ($buyer !== null && $open->media_buyer_id === $buyer->id) {
-                return $open;
+            if ($day < $openStart) {
+                throw ValidationException::withMessages(['starts_on' => __('ads.assignment_before_open')]);
             }
 
             if ($day === $openStart) {

@@ -82,7 +82,11 @@ class AccountController extends Controller
 
         return Inertia::render('Ads/Accounts', [
             'connections' => $connections,
-            'buyers' => MediaBuyer::orderBy('name')->get(['id', 'name'])->map(fn ($b) => ['id' => $b->id, 'name' => $b->name])->all(),
+            // Archived buyers stay listed only as the current holder of an account (the page shows active ones plus that holder).
+            'buyers' => MediaBuyer::query()
+                ->where(fn ($q) => $q->where('is_active', true)->orWhereIn('id', $open->pluck('media_buyer_id')->filter()->values()))
+                ->orderBy('name')->get(['id', 'name', 'is_active'])
+                ->map(fn ($b) => ['id' => $b->id, 'name' => $b->name, 'is_active' => (bool) $b->is_active])->all(),
             'platforms' => array_map(fn (AdPlatform $p) => [
                 'value' => $p->value,
                 'label' => $p->label(),

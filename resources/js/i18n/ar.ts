@@ -3012,6 +3012,7 @@ const ar = {
             no_accounts: 'مفيش حسابات إعلانية لسه',
             unassigned: 'غير مسند',
             from_date: 'من تاريخ',
+            save_start: 'تعديل البداية',
             assign_save: 'تسكين',
             history: 'السجل',
             history_title: 'تاريخ التسكين',

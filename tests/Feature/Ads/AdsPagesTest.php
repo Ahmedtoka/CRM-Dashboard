@@ -147,6 +147,29 @@ it('assigns an account to a buyer and keeps the history', function () {
         ->assertSessionHasErrors('starts_on');
 });
 
+it('corrects the start date for the same owner and lists only active buyers plus current holders', function () {
+    $admin = adsPgUser(UserRole::Admin);
+    $account = AdAccount::factory()->create();
+    $a = MediaBuyer::factory()->create(['name' => 'A']);
+    $archivedHolder = MediaBuyer::factory()->create(['name' => 'Archived holder']);
+    MediaBuyer::factory()->create(['name' => 'Archived idle', 'is_active' => false]);
+
+    $this->actingAs($admin)->post("/ads/accounts/{$account->id}/assign", ['media_buyer_id' => $a->id, 'starts_on' => '2026-09-10'])->assertRedirect();
+    $this->actingAs($admin)->post("/ads/accounts/{$account->id}/assign", ['media_buyer_id' => $a->id, 'starts_on' => '2026-09-01'])
+        ->assertSessionHasNoErrors();
+    expect(AdAccountAssignment::where('ad_account_id', $account->id)->sole()->starts_on->toDateString())->toBe('2026-09-01');
+
+    $other = AdAccount::factory()->create(['connection_id' => $account->connection_id]);
+    app(AssignmentService::class)->assign($other, $archivedHolder, CarbonImmutable::parse('2026-09-01'));
+    $archivedHolder->update(['is_active' => false]);
+
+    $this->actingAs($admin)->get('/ads/accounts')->assertInertia(fn (Assert $p) => $p
+        ->where('buyers', [
+            ['id' => $a->id, 'name' => 'A', 'is_active' => true],
+            ['id' => $archivedHolder->id, 'name' => 'Archived holder', 'is_active' => false],
+        ]));
+});
+
 it('stores connection credentials encrypted, syncs the accounts and queues a 90 day backfill', function () {
     Queue::fake();
     $admin = adsPgUser(UserRole::Admin);
