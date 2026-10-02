@@ -59,6 +59,10 @@ function itemText(n: AppNotification): string {
         return t('notifications.queue_member_not_arrived_item', { name: String(n.data.name ?? ''), shift: String(n.data.shift ?? '') });
     }
 
+    if (n.type === 'ads.need_stop') {
+        return t('notifications.ads_need_stop_item', { product: String(n.data.product_title ?? ''), material: String(n.data.title ?? '') });
+    }
+
     if (n.type === 'channel.problem') {
         const title = t('notifications.channel_problem_item', { name: String(n.data.name ?? '') });
         // The health check writes the notification from the scheduler, so its `excerpt` is
@@ -76,6 +80,10 @@ function itemText(n: AppNotification): string {
 
 function open(n: AppNotification): void {
     void notifications.markRead([n.id]);
+    if (n.type === 'ads.need_stop') {
+        router.visit(String(n.data.link ?? '/ads/materials?status=activated&stock=out'));
+        return;
+    }
     if (n.type === 'channel.problem') {
         router.visit('/settings/integrations');
         return;

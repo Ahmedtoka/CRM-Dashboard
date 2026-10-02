@@ -2756,6 +2756,7 @@ const en: Messages = {
         queue_reply_overdue_item: '{name} is waiting for your reply · ticket #{ticket}',
         queue_reply_overdue_leader_item: '{agent} has not replied to {name} · ticket #{ticket}',
         queue_member_not_arrived_item: '{name} has not logged in yet · {shift} shift',
+        ads_need_stop_item: 'Product {product} is out of stock: stop the ad "{material}"',
         channel_problem_codes: {
             token_missing: 'No token saved — reconnect the account',
             token_invalid: 'The token is no longer valid — reconnect the account',
@@ -2778,6 +2779,7 @@ const en: Messages = {
             queue_reply_overdue: 'A customer is waiting for your reply',
             queue_reply_overdue_leader: 'A moderator has not replied',
             queue_member_not_arrived: 'A moderator has not logged in',
+            ads_need_stop: 'An ad needs to stop',
         },
     },
     shortcuts: {

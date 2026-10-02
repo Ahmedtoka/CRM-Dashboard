@@ -3,6 +3,7 @@
 namespace App\Ads;
 
 use App\Ads\Attribution\Commands\AttributeOrdersCommand;
+use App\Ads\Materials\Commands\StockWatchCommand;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Sync\Commands\BackfillAdsCommand;
 use App\Ads\Sync\Commands\RefreshCreativesCommand;
@@ -20,7 +21,7 @@ class AdsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
@@ -35,6 +36,9 @@ class AdsServiceProvider extends ServiceProvider
 
             $schedule->command(AttributeOrdersCommand::class, ['--days=35'])
                 ->hourlyAt(40)->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer();
+
+            $schedule->command(StockWatchCommand::class)
+                ->everyThirtyMinutes()->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer();
         });
     }
 }

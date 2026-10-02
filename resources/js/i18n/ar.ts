@@ -2711,6 +2711,7 @@ const ar = {
         queue_reply_overdue_item: '{name} مستنية ردك · دور #{ticket}',
         queue_reply_overdue_leader_item: '{agent} ما ردّتش على {name} · دور #{ticket}',
         queue_member_not_arrived_item: '{name} لسه ما فتحتش السيستم · شيفت {shift}',
+        ads_need_stop_item: 'المنتج {product} خلص من المخزون — وقّف إعلان «{material}»',
         channel_problem_codes: {
             token_missing: 'مفيش توكن محفوظ — اعمل إعادة ربط',
             token_invalid: 'التوكن مبقاش صالح — اعمل إعادة ربط',
@@ -2733,6 +2734,7 @@ const ar = {
             queue_reply_overdue: 'عميلة مستنية ردك',
             queue_reply_overdue_leader: 'موظفة ما ردّتش',
             queue_member_not_arrived: 'موظفة ما فتحتش السيستم',
+            ads_need_stop: 'إعلان محتاج يقف',
         },
     },
     shortcuts: {
