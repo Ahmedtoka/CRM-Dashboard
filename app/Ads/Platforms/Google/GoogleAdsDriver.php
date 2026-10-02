@@ -8,6 +8,7 @@ use App\Ads\Platforms\Data\AccountInfo;
 use App\Ads\Platforms\Data\AdRow;
 use App\Ads\Platforms\Data\DailyAdMetric;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Platforms\SecretScrubber;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
@@ -286,10 +287,6 @@ class GoogleAdsDriver implements AdPlatformDriver
 
     private function scrub(string $text, array $secrets): string
     {
-        foreach ($secrets as $secret) {
-            $text = str_replace($secret, '***', $text);
-        }
-
-        return (string) preg_replace(['/(Bearer\s+)[^\s,;"\']+/i', '/(developer-token:?\s*)[^\s,;"\']+/i'], '$1***', $text);
+        return SecretScrubber::scrub($text, $secrets);
     }
 }

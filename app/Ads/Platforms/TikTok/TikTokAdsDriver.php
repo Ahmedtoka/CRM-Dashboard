@@ -9,6 +9,7 @@ use App\Ads\Platforms\Data\AdRow;
 use App\Ads\Platforms\Data\CreativeMedia;
 use App\Ads\Platforms\Data\DailyAdMetric;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Platforms\SecretScrubber;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
@@ -236,9 +237,7 @@ class TikTokAdsDriver implements AdPlatformDriver
 
     private function scrub(string $text, string $token): string
     {
-        $text = str_replace($token, '***', $text);
-
-        return (string) preg_replace('/(Access-Token:?\s*)[^\s,;"\']+/i', '$1***', $text);
+        return SecretScrubber::scrub($text, [$token]);
     }
 
     private function mapAd(array $r): AdRow

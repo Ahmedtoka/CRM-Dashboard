@@ -3,6 +3,8 @@
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Meta\MetaAdsDriver;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Platforms\SecretScrubber;
+use App\Ads\Sync\AdsSyncService;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
@@ -143,4 +145,29 @@ it('fetches creative media in batches', function () {
         ->and($media[0]->previewUrl)->toBe('https://www.facebook.com/ads/api/preview_iframe.php?d=abc&t=1')
         ->and($media[0]->previewHtml)->toContain('iframe')
         ->and($media[1]->previewUrl)->toBeNull();
+});
+
+it('scrubs json-style, query and header secrets in one shared helper', function () {
+    $text = '{"error":"bad","access_token":"EAAB123","refresh_token": "r-9"} url?access_token=Q1&x=1 '
+        .'Authorization: Bearer B2 developer-token: D3 Access-Token: T4 raw-SECRET';
+
+    $clean = SecretScrubber::scrub($text, ['raw-SECRET']);
+
+    expect($clean)->not->toContain('EAAB123')->not->toContain('r-9')->not->toContain('Q1')
+        ->not->toContain('B2')->not->toContain('D3')->not->toContain('T4')->not->toContain('raw-SECRET')
+        ->toContain('"access_token":"***"')->toContain('access_token=***&x=1')
+        ->and(AdsSyncService::scrub('{"access_token":"EAAB123"}'))->not->toContain('EAAB123');
+});
+
+it('keeps a json token out of a meta error message', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => 'Bad request {"access_token":"LEAKME"}', 'code' => 100]], 400)]);
+    $acc = AdAccount::factory()->meta()->create(['external_id' => 'act_1', 'connection_id' => metaConnection()->id]);
+
+    try {
+        app(MetaAdsDriver::class)->ads($acc);
+        $this->fail('expected an exception');
+    } catch (AdsApiException $e) {
+        expect($e->getMessage())->not->toContain('LEAKME');
+    }
 });

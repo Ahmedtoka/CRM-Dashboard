@@ -11,7 +11,6 @@ use App\Queue\BoardState;
 use App\Queue\ShiftService;
 use Laravel\Sanctum\Sanctum;
 
-
 it('sends a media buyer away from the inbox to the ads area', function () {
     $buyer = User::factory()->create(['role' => UserRole::MediaBuyer]);
     $this->actingAs($buyer)->get('/inbox')->assertRedirect('/ads');

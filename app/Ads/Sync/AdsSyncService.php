@@ -10,6 +10,7 @@ use App\Ads\Platforms\Data\DailyAdMetric;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\PreviewMarkup;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Platforms\SecretScrubber;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdCampaign;
@@ -30,6 +31,7 @@ final class AdsSyncService
     /** Message safe to print: credentials-looking pairs removed, length capped. */
     public static function scrub(string $message): string
     {
+        $message = SecretScrubber::scrub($message);
         $clean = preg_replace('/(access_token|token|secret|key|authorization)([=:\s]+)[^\s&,;"]+/i', '$1$2[hidden]', $message);
 
         return mb_substr($clean ?? $message, 0, 200);

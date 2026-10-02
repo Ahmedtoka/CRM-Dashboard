@@ -4,6 +4,7 @@ namespace App\Ads\Platforms\Meta;
 
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Platforms\SecretScrubber;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -116,7 +117,7 @@ class MetaAdsApi
 
     private function scrub(string $text): string
     {
-        return (string) preg_replace('/access_token=[^&\s"\']+/', 'access_token=***', $text);
+        return SecretScrubber::scrub($text);
     }
 
     /** The bearer header carries the token, so drop it from paging URLs. */
