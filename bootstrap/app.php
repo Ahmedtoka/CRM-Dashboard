@@ -2,6 +2,7 @@
 
 use App\Comments\CommentActionFailedException;
 use App\Comments\PrivateReplyNotAllowedException;
+use App\Http\Middleware\EnsureAdsAccess;
 use App\Http\Middleware\EnsureDevToolsEnabled;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -40,6 +41,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'role' => EnsureRole::class,
+            'ads' => EnsureAdsAccess::class,
             'dev-tools' => EnsureDevToolsEnabled::class,
             'record-list-latency' => RecordListLatency::class,
         ]);

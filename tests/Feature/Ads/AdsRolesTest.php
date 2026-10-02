@@ -22,7 +22,7 @@ it('sends a content user to the materials library', function () {
 
 it('lets ads roles into their own area', function () {
     $buyer = User::factory()->create(['role' => UserRole::MediaBuyer]);
-    $this->actingAs($buyer)->get('/ads')->assertOk();
+    $this->withoutVite()->actingAs($buyer)->get('/ads')->assertOk();
     $this->actingAs($buyer)->get('/ads/materials')->assertOk();
 });
 

@@ -2,8 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Ads\Access\AdsScope;
 use App\Channels\Integrations\ConnectionHealthCheck;
 use App\Enums\Platform;
+use App\Enums\UserRole;
 use App\Models\ChannelAccount;
 use App\Models\User;
 use App\Onboarding\OnboardingProgress;
@@ -92,9 +94,26 @@ class HandleInertiaRequests extends Middleware
             'onboarding' => fn () => $user?->isAdmin() ? collect(app(OnboardingProgress::class)->build())->only(['done', 'total', 'percent', 'complete', 'dismissed'])->all() : null,
             // «اللوحة الحية» in the menu: supervisors, admins and the leader of the open shift.
             'canSeeBoard' => fn () => BoardAccess::allows($user),
+            // Ads Hub pages only: what the viewer may see and do there (cheap, computed lazily).
+            'ads' => fn () => $request->routeIs('ads.*') ? $this->adsAccess($user) : null,
             // Developer-only nav entries (simulator, latency report) show only when this is on.
             'devTools' => (bool) config('crm.dev_tools'),
         ]);
+    }
+
+    /**
+     * @return array{canSeeSpend: bool, canManage: bool, isBuyer: bool, buyerId: ?int}
+     */
+    private function adsAccess(?User $user): array
+    {
+        $scope = app(AdsScope::class);
+
+        return [
+            'canSeeSpend' => $user !== null && $scope->canSeeSpend($user),
+            'canManage' => (bool) $user?->isSupervisorOrAbove(),
+            'isBuyer' => $user?->role === UserRole::MediaBuyer,
+            'buyerId' => $user ? $scope->buyerFor($user)?->id : null,
+        ];
     }
 
     /**
