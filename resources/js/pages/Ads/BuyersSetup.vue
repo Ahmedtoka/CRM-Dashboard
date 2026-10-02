@@ -146,7 +146,8 @@ const monthLabel = (month: string): string =>
         new Date(`${month}-01T00:00:00Z`),
     );
 
-const drafts = reactive<Record<string, { budget: string; roas: string }>>({});
+/** `base*` = the saved values the draft was seeded from, so a reload after one row's save keeps the other rows' edits. */
+const drafts = reactive<Record<string, { budget: string; roas: string; baseBudget: string; baseRoas: string }>>({});
 const draftKey = (month: string) => `${selectedBuyerId.value}:${month}`;
 
 watch(
@@ -156,7 +157,17 @@ watch(
         if (!b) return;
         for (const row of monthRows.value) {
             const saved = b.targets.find((x) => x.month === row.month);
-            drafts[draftKey(row.month)] = { budget: num(saved?.budget), roas: num(saved?.target_roas) };
+            const budget = num(saved?.budget);
+            const roas = num(saved?.target_roas);
+            const d = drafts[draftKey(row.month)];
+            const untouched = d !== undefined && String(d.budget) === d.baseBudget && String(d.roas) === d.baseRoas;
+            const matchesSaved = d !== undefined && String(d.budget) === budget && String(d.roas) === roas;
+            if (!d || untouched || matchesSaved) {
+                drafts[draftKey(row.month)] = { budget, roas, baseBudget: budget, baseRoas: roas };
+            } else {
+                d.baseBudget = budget; // unsaved edit: keep it, only follow the new saved values
+                d.baseRoas = roas;
+            }
         }
     },
     { immediate: true },

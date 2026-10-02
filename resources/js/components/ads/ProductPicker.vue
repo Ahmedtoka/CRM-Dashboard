@@ -75,7 +75,11 @@ onBeforeUnmount(() => {
 
 function onKeydown(e: KeyboardEvent): void {
     if (e.key === 'Escape') {
-        if (open.value) e.preventDefault();
+        // An open list eats the Escape: it must not also close the dialog the picker sits in.
+        if (open.value) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
         close();
 
         return;
