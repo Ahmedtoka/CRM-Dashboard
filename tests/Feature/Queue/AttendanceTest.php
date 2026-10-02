@@ -727,6 +727,60 @@ it('does not reopen the shift when a newer shift of the day already opened after
     expect($morning->fresh()->status)->toBe('closed')->and($evening->fresh()->status)->toBe('open');
 });
 
+it('reopens a shift that already ended on time when its end is extended later the same day and no newer shift opened (ruling N1)', function () {
+    Event::fake([ShiftUpdated::class]);
+    $svc = app(ShiftService::class);
+    $templates = QueueSetting::DEFAULT_SHIFTS;
+    $templates[1]['from'] = '20:00'; // the evening has not opened when the morning is extended
+    attSaveTemplates($templates);
+    $svc->transition(); // 12:00: the morning opens
+    $morning = Shift::query()->where('shift_key', 'morning')->firstOrFail();
+    $openedAt = $morning->opened_at;
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 18:00', 'Africa/Cairo'));
+    $svc->transition();
+    expect($morning->fresh()->status)->toBe('closed');
+
+    // 18:30: a supervisor extends tonight's morning to 19:30, the team stays.
+    Carbon::setTestNow(Carbon::parse('2026-10-05 18:30', 'Africa/Cairo'));
+    $templates[0]['to'] = '19:30';
+    attSaveTemplates($templates);
+
+    $morning->refresh();
+    expect($morning->status)->toBe('open')->and($morning->closed_at)->toBeNull()
+        ->and($morning->opened_at->equalTo($openedAt))->toBeTrue()
+        ->and($morning->ends_at->equalTo(Carbon::parse('2026-10-05 19:30', 'Africa/Cairo')))->toBeTrue();
+    Event::assertDispatched(ShiftUpdated::class, fn (ShiftUpdated $e) => $e->shift->id === $morning->id && $e->shift->status === 'open');
+
+    $svc->transition(); // 18:30 < 19:30: the tick leaves it open...
+    expect($morning->fresh()->status)->toBe('open');
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 19:30', 'Africa/Cairo'));
+    $svc->transition(); // ...and closes it at the new end
+    expect($morning->fresh()->status)->toBe('closed');
+});
+
+it('does not reopen an on-time ended shift when it is extended after the next shift already opened (ruling N1, blocked)', function () {
+    $svc = app(ShiftService::class);
+    $svc->transition(); // 12:00: the morning opens (default hours: morning 10-18, evening 18-24)
+    $morning = Shift::query()->where('shift_key', 'morning')->firstOrFail();
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 18:00', 'Africa/Cairo'));
+    $svc->transition(); // the morning closes, the evening opens
+    $evening = Shift::query()->where('shift_key', 'evening')->firstOrFail();
+    expect($morning->fresh()->status)->toBe('closed')->and($evening->status)->toBe('open');
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 18:30', 'Africa/Cairo'));
+    $templates = QueueSetting::DEFAULT_SHIFTS;
+    $templates[0]['to'] = '19:30';
+    $templates[1]['from'] = '19:30';
+    attSaveTemplates($templates);
+    $svc->transition();
+
+    expect($morning->fresh()->status)->toBe('closed')->and($morning->fresh()->closed_at)->not->toBeNull()
+        ->and($evening->fresh()->status)->toBe('open');
+});
+
 // ───── N2: the tick's back-online step never undoes a check-out ─────
 
 it('leaves a desk checking out when her «خروج» lands between the tick reading her offline and bringing her back online', function () {
