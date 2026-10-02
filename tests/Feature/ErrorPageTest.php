@@ -5,9 +5,11 @@ use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\StartSessionIfCookie;
 use App\Models\User;
+use Illuminate\Contracts\Foundation\MaintenanceMode as MaintenanceModeContract;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia;
 
@@ -174,4 +176,32 @@ it('gives the catch-all route the cookie-gated session before the locale and the
         ->not->toContain(ValidateCsrfToken::class)
         ->and(array_search(StartSessionIfCookie::class, $stack, true))->toBeLessThan(array_search(SetLocale::class, $stack, true))
         ->and(array_search(SetLocale::class, $stack, true))->toBeLessThan(array_search(HandleInertiaRequests::class, $stack, true));
+});
+
+it('returns the framework 503 unchanged in maintenance mode: no Error render, nothing reported', function () {
+    // A fake maintenance driver: `php artisan down` would write storage/framework/down for every parallel worker.
+    $this->app->instance(MaintenanceModeContract::class, new class implements MaintenanceModeContract
+    {
+        public function activate(array $payload): void {}
+
+        public function deactivate(): void {}
+
+        public function active(): bool
+        {
+            return true;
+        }
+
+        public function data(): array
+        {
+            return ['status' => 503, 'retry' => 60];
+        }
+    });
+    Exceptions::fake();
+
+    $response = $this->get('/login');
+
+    $response->assertStatus(503);
+    expect($response->getContent())->not->toContain('Error')->not->toContain('data-page')
+        ->and($response->headers->get('X-Inertia'))->toBeNull();
+    Exceptions::assertNothingReported();
 });

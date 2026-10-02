@@ -94,6 +94,13 @@ return Application::configure(basePath: dirname(__DIR__))
                 return $response;
             }
 
+            // Maintenance mode (a deploy in progress): the framework's 503 as is. The build manifest
+            // may be mid-replace, so rendering the Error page would only fail and report
+            // ViteManifestNotFoundException; a 503 with no matched route is the same situation.
+            if (app()->isDownForMaintenance() || ($status === 503 && $request->route() === null)) {
+                return $response;
+            }
+
             // A failing render (database down, missing build manifest) keeps the original response.
             return rescue(
                 fn () => Inertia::render('Error', ['status' => $status])->toResponse($request)->setStatusCode($status),
