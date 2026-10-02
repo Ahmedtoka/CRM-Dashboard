@@ -56,6 +56,24 @@ it('follows paging.next for ads and detects types', function () {
         ->and($ads[2]->objectStoryId)->toBe('1_2');
 });
 
+it('asks meta for ads paused by their campaign or ad set, in review or with issues, but not archived', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/v23.0/act_1/ads*' => Http::response(['data' => []])]);
+    $acc = AdAccount::factory()->meta()->create(['external_id' => 'act_1', 'connection_id' => metaConnection()->id]);
+
+    app(MetaAdsDriver::class)->ads($acc);
+
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), 'act_1/ads')) {
+            return false;
+        }
+        $statuses = json_decode($request['effective_status'], true);
+
+        return $statuses === ['ACTIVE', 'PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'DISAPPROVED', 'WITH_ISSUES', 'PENDING_REVIEW', 'IN_PROCESS']
+            && ! in_array('ARCHIVED', $statuses, true) && ! in_array('DELETED', $statuses, true);
+    });
+});
+
 it('lists ad accounts with balance in currency units', function () {
     Http::preventStrayRequests();
     Http::fake(['graph.facebook.com/v23.0/me/adaccounts*' => Http::response(adsFixture('meta_accounts'))]);

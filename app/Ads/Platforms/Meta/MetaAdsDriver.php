@@ -41,10 +41,16 @@ class MetaAdsDriver implements AdPlatformDriver
         ), $rows));
     }
 
+    /**
+     * Every ad that can still spend or has just spent: paused by its campaign/ad set, in review or with
+     * issues included, so spend leaders keep their creative. Archived/deleted ads stay out.
+     */
+    public const AD_STATUSES = ['ACTIVE', 'PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'DISAPPROVED', 'WITH_ISSUES', 'PENDING_REVIEW', 'IN_PROCESS'];
+
     public function ads(AdAccount $a): array
     {
         $rows = $this->api->paginate($this->token($a->connection), $this->actId($a).'/ads', [
-            'effective_status' => json_encode(['ACTIVE', 'PAUSED']),
+            'effective_status' => json_encode(self::AD_STATUSES),
             'fields' => 'id,name,status,effective_status,created_time,'
                 .'creative{id,name,thumbnail_url,image_url,video_id,title,body,instagram_permalink_url,url_tags,object_story_id,effective_object_story_id,object_story_spec,asset_feed_spec},'
                 .'campaign{id,name,status,objective},adset{id,name,status,is_dynamic_creative}',
