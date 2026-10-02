@@ -19,7 +19,24 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
 
     public int $tries = 3;
 
-    public function __construct(public int $accountId, public int $days = 3, public string $kind = 'recent') {}
+    /** A 90-day backfill pages ads, insights and media: far beyond the 60-s default worker. */
+    public int $timeout = 3600;
+
+    public bool $failOnTimeout = true;
+
+    /** A crashed worker must not hold the ads-sync lock forever (just above $timeout). */
+    public int $uniqueFor = 3700;
+
+    public function __construct(public int $accountId, public int $days = 3, public string $kind = 'recent')
+    {
+        // Same long lane as ReconcileShopify: `commercelong` queue (Supervisor program
+        // crm-commercelong, --timeout=3600); on Redis it runs on `redislong` (retry_after 3700 s).
+        $this->onQueue('commercelong');
+
+        if (config('queue.default') === 'redis') {
+            $this->onConnection('redislong');
+        }
+    }
 
     public static function uniqueIdFor(int $accountId): string
     {

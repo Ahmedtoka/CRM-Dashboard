@@ -175,6 +175,18 @@ it('dispatches one job per active account from ads:sync', function () {
     Queue::assertPushed(SyncAdAccount::class, 2);
 });
 
+it('runs SyncAdAccount on the long queue, never the 60-s default worker', function () {
+    $job = new SyncAdAccount(1, 90, 'backfill');
+    expect($job->queue)->toBe('commercelong')
+        ->and($job->timeout)->toBe(3600)
+        ->and($job->failOnTimeout)->toBeTrue()
+        ->and($job->uniqueFor)->toBeGreaterThan($job->timeout)
+        ->and($job->connection)->toBeNull();
+
+    config(['queue.default' => 'redis']);
+    expect((new SyncAdAccount(1))->connection)->toBe('redislong');
+});
+
 it('limits ads:sync by platform', function () {
     Queue::fake();
     AdAccount::factory()->meta()->create(['external_id' => 'act_1']);
