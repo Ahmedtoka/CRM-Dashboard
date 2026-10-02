@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Client\ShopifyException;
 use App\Shopify\Client\ShopifyTransport;
+use App\Shopify\Commands\RefreshOpenOrdersCommand;
 use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Jobs\RefreshShopifyOrders;
 use App\Shopify\Sync\Mappers\MapResult;
@@ -517,3 +518,33 @@ it('maps a fake node built from a stored chat order back onto the same row', fun
     'cancelled, partial, lower-case reason' => [['financial_status' => 'paid', 'fulfillment_status' => 'partial', 'cancel_reason' => 'customer', 'cancelled_at' => '2026-09-20 10:00:00']],
     'fulfilled, refunded' => [['financial_status' => 'partially_refunded', 'fulfillment_status' => 'fulfilled', 'cancel_reason' => null, 'cancelled_at' => null]],
 ]);
+
+it('does not re-queue an order the scheduled refresh queued in the last 15 minutes, and moves on to the next ones', function () {
+    refreshConnectShop();
+    Queue::fake();
+    $a = refreshStoreOrder(['last_synced_at' => null]);
+    $b = refreshStoreOrder(['last_synced_at' => now()->subHour()]);
+    $c = refreshStoreOrder(['last_synced_at' => now()->subMinutes(30)]);
+
+    $this->artisan('shopify:refresh-orders', ['--limit' => 2])->expectsOutputToContain('queued=2')->assertSuccessful();
+    // The worker has not run them yet (last_synced_at unchanged): only the third is new.
+    $this->artisan('shopify:refresh-orders', ['--limit' => 2])->expectsOutputToContain('queued=1')->assertSuccessful();
+    $this->artisan('shopify:refresh-orders', ['--limit' => 2])->expectsOutputToContain('queued=0')->assertSuccessful();
+
+    $jobs = collect(Queue::pushed(RefreshShopifyOrders::class))->map(fn ($job) => $job->orderIds)->all();
+    expect($jobs)->toBe([[$a->id, $b->id], [$c->id]]);
+
+    // After 15 minutes the lock is gone: still-stale orders are queued again.
+    $this->travel(RefreshOpenOrdersCommand::QUEUED_LOCK_SECONDS + 1)->seconds();
+    $this->artisan('shopify:refresh-orders', ['--limit' => 5])->expectsOutputToContain('queued=3')->assertSuccessful();
+});
+
+it('shares the refresh lock with refresh-stale: an order the schedule just queued is not queued again from the list', function () {
+    refreshConnectShop();
+    Queue::fake();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $order = refreshStoreOrder(['last_synced_at' => null]);
+
+    $this->artisan('shopify:refresh-orders')->expectsOutputToContain('queued=1')->assertSuccessful();
+    $this->actingAs($admin)->postJson('/orders/refresh-stale', ['ids' => [$order->id]])->assertStatus(202)->assertJson(['queued' => 0]);
+});
