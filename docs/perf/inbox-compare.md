@@ -51,6 +51,27 @@ Notes:
 4. `list.state_*`, `list.queue_waiting`, `list.assignee` and `messages.after` were 422, or answered with the
    parameter ignored, before the overhaul: their before rows are not comparable.
 
+## Search scenarios — final (substring fix, final fix wave)
+
+`list.search_substring` now resolves the `%term%` LIKE on `customers` first (`SELECT id FROM customers WHERE name
+LIKE … OR phone LIKE … ORDER BY last_contact_at DESC, id DESC LIMIT 501`), then lists `conversations` with
+`customer_id IN (…)`; the counts reuse the same ids. More than 500 matching customers sets
+`meta.search_truncated` (the list shows «في نتايج كتير، دققي البحث»). Same data, warm server,
+`--runs=20 --warmup=3`: `inbox-final.json` / `.md` and an immediate repeat `inbox-final-2.json` / `.md`.
+
+| scenario | after (Task 11) p50 / p95 / q | final p50 / p95 / q | final repeat p50 / p95 / q | target | pass |
+|---|---|---|---|---|---|
+| list.search_name | 247.5 / 367 / 6 | 187.7 / 229.2 / 6 | 205.6 / 230.5 / 6 | p95 ≤ 300 ms, ≤ 10 q | yes |
+| list.search_phone | 72.9 / 115.2 / 6 | 64 / 87.8 / 6 | 68.8 / 92 / 6.1 | p95 ≤ 300 ms, ≤ 10 q | yes |
+| list.search_substring | 100863.6 / 100863.6 / 7 (1 run) | 355 / 472.9 / 8 | 328.6 / 364.7 / 8.1 | p95 ≤ 1000 ms (final-wave target), ≤ 10 q | yes |
+
+The other scenarios did not regress: in the repeat run every one is at or below its Task 11 p95 except three within
+a few ms (`list.queue_waiting` 11.6 vs 8.1, `detail.hot` 37.8 vs 33.8, `messages.after` 5.3 vs 4.6), all far inside
+their targets; `list.tag` is 129.2 ms p95, now under 150. The first final
+run had a noisy tail on `list.tag` (236.8), `list.assignee` (90.5), `detail.typical` (45.2), `messages.older` (66.1)
+and `messages.after` (34.2) — code those runs do not touch; the repeat a minute later measured 129.2 / 28 / 14.9 /
+12.3 / 5.3.
+
 ## Browser (headless Chrome 1440x900, Vite build of e9c1161, PHP built-in server on port 8011, same data)
 
 `node tools/perf/browser-bench.mjs http://127.0.0.1:8011 bench@load.test load-password after 300001`;

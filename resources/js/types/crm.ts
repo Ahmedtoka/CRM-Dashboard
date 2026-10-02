@@ -644,7 +644,8 @@ export interface InboxModerator {
 
 export interface CursorPage<T> {
     data: T[];
-    meta?: { next_cursor: string | null; per_page?: number };
+    /** `search_truncated`: the substring search matched more than 500 customers (only the most recent were searched). */
+    meta?: { next_cursor: string | null; per_page?: number; search_truncated?: boolean };
     links?: { next: string | null };
     /** `like` when the list search fell back to a substring match: send `qmode=like` with every later page. */
     search_mode?: 'like' | null;

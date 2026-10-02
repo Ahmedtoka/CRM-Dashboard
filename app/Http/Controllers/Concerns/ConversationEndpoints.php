@@ -62,7 +62,7 @@ trait ConversationEndpoints
         $page = $query->paginate($request->user(), $this->conversationFilters($request));
 
         // search_mode=like tells the client to send qmode=like with every later page of this search.
-        return ConversationResource::collection($page)->additional(['search_mode' => $query->searchMode()]);
+        return ConversationResource::collection($page)->additional(['search_mode' => $query->searchMode(), 'meta' => ['search_truncated' => $query->searchTruncated()]]);
     }
 
     /**

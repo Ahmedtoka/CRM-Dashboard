@@ -219,6 +219,7 @@ const en: Messages = {
         test_badge: 'Test',
         title: 'Inbox',
         search: 'Search by name or phone',
+        search_truncated: 'Too many results, narrow the search',
         list_title: 'Conversations',
         live: 'Live',
         poll_failed: 'Auto-refresh stopped — click to refresh',

@@ -154,7 +154,7 @@ const {
 } = thread;
 // Renamed on the way out: the page's props are called `conversations` and `filters` too (the first page and the
 // filters it was loaded with), and the live list must never be mistaken for them.
-const { conversations: listRows, filters: listFilters, loading, loadingMore, loadMoreFailed, nextCursor, live, pollFailed, counts, activeKeys } = list;
+const { conversations: listRows, filters: listFilters, loading, loadingMore, loadMoreFailed, nextCursor, live, pollFailed, searchTruncated, counts, activeKeys } = list;
 
 // Handover queue (the moderator's side). With the queue off, or for somebody who is not on the
 // shift, this is one request and nothing of it is rendered.
@@ -510,6 +510,7 @@ onBeforeUnmount(() => {
                 :has-more="nextCursor !== null"
                 :live="live"
                 :poll-failed="pollFailed"
+                :search-truncated="searchTruncated"
                 :queue-enabled="queueEnabled"
                 :filtered="activeKeys.length > 0"
                 @update="list.setFilters"
