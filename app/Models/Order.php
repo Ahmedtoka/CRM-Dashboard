@@ -100,13 +100,16 @@ class Order extends Model
     }
 
     /**
-     * @return BelongsTo<Customer, $this>
+     * @return BelongsTo<Ad, $this>
      */
     public function ad(): BelongsTo
     {
         return $this->belongsTo(Ad::class);
     }
 
+    /**
+     * @return BelongsTo<Customer, $this>
+     */
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);

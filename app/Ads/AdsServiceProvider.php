@@ -2,6 +2,7 @@
 
 namespace App\Ads;
 
+use App\Ads\Attribution\Commands\AttributeOrdersCommand;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Sync\Commands\BackfillAdsCommand;
 use App\Ads\Sync\Commands\RefreshCreativesCommand;
@@ -19,7 +20,7 @@ class AdsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
@@ -31,6 +32,9 @@ class AdsServiceProvider extends ServiceProvider
 
             $schedule->command(RefreshCreativesCommand::class, ['--days=14'])
                 ->dailyAt('05:20')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer();
+
+            $schedule->command(AttributeOrdersCommand::class, ['--days=35'])
+                ->hourlyAt(40)->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer();
         });
     }
 }

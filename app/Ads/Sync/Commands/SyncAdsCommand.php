@@ -2,6 +2,7 @@
 
 namespace App\Ads\Sync\Commands;
 
+use App\Ads\Attribution\OrderAttribution;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Sync\AdsSyncService;
 use App\Ads\Sync\SyncAdAccount;
@@ -17,7 +18,7 @@ class SyncAdsCommand extends Command
 
     protected $description = 'Sync ads and daily metrics for the active ad accounts';
 
-    public function handle(AdsSyncService $sync): int
+    public function handle(AdsSyncService $sync, OrderAttribution $attribution): int
     {
         $days = max((int) $this->option('days'), 1);
         $failed = 0;
@@ -51,9 +52,24 @@ class SyncAdsCommand extends Command
                 $failed++;
             }
         }
+        if ($days >= 30) { // nightly deep sync: re-resolve recent orders against the freshly synced ads
+            $this->attributeOrders($attribution);
+        }
+
         $this->info(($this->option('now') ? 'Synced ' : 'Queued ').($accounts->count() - ($this->option('now') ? $failed : 0)).' account(s).');
 
         return $failed > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    /** Best effort: an attribution failure must not fail the sync. */
+    private function attributeOrders(OrderAttribution $attribution): void
+    {
+        try {
+            $to = CarbonImmutable::now();
+            $this->line('Attributed '.$attribution->run($to->subDays(35)->startOfDay(), $to).' order(s).');
+        } catch (Throwable $e) {
+            $this->warn('Order attribution failed: '.AdsSyncService::scrub($e->getMessage()));
+        }
     }
 
     /** Nightly deep sync: pick up newly granted ad accounts. A failure is warned (and recorded on the connection), not fatal. */

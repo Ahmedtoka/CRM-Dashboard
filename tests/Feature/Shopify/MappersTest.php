@@ -366,3 +366,39 @@ it('replaces shipping zones, regions and active rates transactionally', function
         ->and(ShippingRate::where('title', 'شحن الدلتا')->value('max_order_subtotal'))->toBe('5000.00')
         ->and(ShippingRate::where('title', 'شحن الدلتا')->value('price'))->toBe('75.00');
 });
+
+it('captures utm and landing site from a REST order payload', function () {
+    $o = array_replace(fixture('webhook_order_store'), [
+        'landing_site' => '/products/x?utm_source=facebook&utm_medium=paid&utm_campaign=Summer&utm_content=120200000001',
+    ]);
+    app(OrderMapper::class)->upsert($o);
+    $order = Order::where('shopify_order_id', (string) $o['id'])->firstOrFail();
+
+    expect($order->utm_source)->toBe('facebook')->and($order->utm_content)->toBe('120200000001')
+        ->and($order->landing_site)->toStartWith('/products/x?utm_source=facebook');
+
+    // A later delivery without a landing site keeps what was stored.
+    app(OrderMapper::class)->upsert(array_replace($o, ['landing_site' => null, 'updated_at' => '2030-01-01T00:00:00+02:00']));
+    expect($order->fresh()->utm_campaign)->toBe('Summer');
+});
+
+it('captures utm from the GraphQL customer journey, last visit first then first visit', function () {
+    $node = [
+        'id' => 'gid://shopify/Order/910', 'name' => '#910', 'updatedAt' => '2026-09-10T10:00:00Z', 'currencyCode' => 'EGP',
+        'shippingAddress' => null, 'billingAddress' => null,
+        'customerJourneySummary' => [
+            'lastVisit' => ['landingPage' => 'https://levoile.com/', 'utmParameters' => null],
+            'firstVisit' => ['landingPage' => 'https://levoile.com/p?x=1', 'utmParameters' => ['source' => 'ig', 'medium' => 'paid', 'campaign' => 'C1', 'content' => '555', 'term' => null]],
+        ],
+    ];
+    app(OrderMapper::class)->upsert($node);
+    $order = Order::where('shopify_order_id', '910')->firstOrFail();
+    expect($order->utm_source)->toBe('ig')->and($order->utm_content)->toBe('555')->and($order->utm_term)->toBeNull()
+        ->and($order->landing_site)->toBe('https://levoile.com/p?x=1');
+
+    // lastVisit utm wins; utm missing from utmParameters is parsed from the landing url.
+    $node2 = array_replace_recursive($node, ['id' => 'gid://shopify/Order/911', 'name' => '#911', 'customerJourneySummary' => ['lastVisit' => ['landingPage' => 'https://levoile.com/?utm_content=777&utm_source=fb']]]);
+    app(OrderMapper::class)->upsert($node2);
+    $o2 = Order::where('shopify_order_id', '911')->firstOrFail();
+    expect($o2->utm_content)->toBe('777')->and($o2->utm_source)->toBe('fb');
+});
