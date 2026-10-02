@@ -31,6 +31,8 @@ return Application::configure(basePath: dirname(__DIR__))
             // start and write a session for every platform delivery).
             Route::group([], __DIR__.'/../routes/webhooks.php');
             Route::middleware(['web', 'auth'])->group(__DIR__.'/../routes/crm.php');
+            // Unknown addresses: the Error page, with a session only if the cookie is already there.
+            require __DIR__.'/../routes/fallback.php';
         },
     )
     ->withMiddleware(function (Middleware $middleware) {

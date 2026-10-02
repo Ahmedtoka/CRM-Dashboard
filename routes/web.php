@@ -1,19 +1,14 @@
 <?php
 
 use App\Http\Controllers\HealthController;
-use App\Http\Controllers\Web\FallbackController;
 use App\Http\Controllers\Web\LegalController;
 use App\Http\Controllers\Web\LocaleController;
 use App\Http\Controllers\Web\MediaController;
 use App\Http\Controllers\Web\TryController;
 use App\Http\Middleware\SetLocale;
-use App\Http\Middleware\StartSessionIfCookie;
 use App\Onboarding\HomeRoute;
-use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Http\Request;
-use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
-use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 // There is no landing page or dashboard: the inbox is the home screen.
 Route::get('/', fn (Request $request) => $request->user() ? redirect(HomeRoute::for($request->user())) : redirect()->route('login'))->name('home');
@@ -56,19 +51,6 @@ Route::post('/guest/locale/{locale}', [LocaleController::class, 'guest'])
     ->middleware('guest')
     ->whereIn('locale', SetLocale::SUPPORTED)
     ->name('locale.guest');
-
-// Unknown addresses run through the `web` group (locale, shared props), so the 404 page knows
-// who is signed in and renders inside the app (bootstrap/app.php → respond).
-// - Every verb, so a POST to an unknown address stays a 404 (a GET-only fallback answers 405);
-//   a known address with the wrong verb still answers 405 (FallbackController).
-// - No CSRF check, which would turn that 404 into a 419.
-// - The session starts only when the request already has the session cookie: a scanner, bot or
-//   webhook miss writes no `sessions` row and gets no Set-Cookie (stateless guest error page).
-Route::any('{fallbackPlaceholder}', FallbackController::class)
-    ->where('fallbackPlaceholder', '.*')
-    ->fallback()
-    ->withoutMiddleware([StartSession::class, ShareErrorsFromSession::class, ValidateCsrfToken::class])
-    ->middleware(StartSessionIfCookie::class);
 
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';

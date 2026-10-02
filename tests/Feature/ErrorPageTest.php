@@ -1,7 +1,12 @@
 <?php
 
 use App\Enums\UserRole;
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\StartSessionIfCookie;
 use App\Models\User;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia;
@@ -124,4 +129,49 @@ it('renders a 503 as the Error page', function () {
     $this->get('/__test/down')
         ->assertStatus(503)
         ->assertInertia(fn (AssertableInertia $page) => $page->component('Error')->where('status', 503));
+});
+
+it('replays a real login cookie on an unknown address: the Error page renders signed in', function () {
+    config(['session.driver' => 'database']);
+    app('session')->forgetDrivers();
+    $cookie = (string) config('session.cookie');
+    $user = User::factory()->create(['role' => UserRole::Admin, 'password' => 'password']);
+
+    $login = $this->post('/login', ['email' => $user->email, 'password' => 'password']);
+    $login->assertRedirect();
+    $sessionId = $login->getCookie($cookie)->getValue();
+
+    // Nothing in memory may carry the login over: only the replayed cookie (and the sessions row) can.
+    $forgetMemory = function (): void {
+        app('session')->forgetDrivers();
+        app()->forgetInstance('session.store');
+        auth()->forgetGuards();
+    };
+    $forgetMemory();
+
+    $this->withCookie($cookie, $sessionId)->get('/nope')
+        ->assertNotFound()
+        ->assertInertia(fn (AssertableInertia $page) => $page->component('Error')
+            ->where('status', 404)
+            ->where('auth.user.id', $user->id));
+
+    // The same address without the cookie stays a guest page.
+    $forgetMemory();
+    $this->defaultCookies = [];
+
+    $this->get('/nope')
+        ->assertNotFound()
+        ->assertCookieMissing($cookie)
+        ->assertInertia(fn (AssertableInertia $page) => $page->component('Error')->where('auth.user', null));
+});
+
+it('gives the catch-all route the cookie-gated session before the locale and the shared props', function () {
+    $route = collect(app('router')->getRoutes()->getRoutes())->first(fn ($r) => $r->isFallback);
+    $stack = app('router')->gatherRouteMiddleware($route);
+
+    expect($stack)->toContain(StartSessionIfCookie::class)
+        ->not->toContain(StartSession::class)
+        ->not->toContain(ValidateCsrfToken::class)
+        ->and(array_search(StartSessionIfCookie::class, $stack, true))->toBeLessThan(array_search(SetLocale::class, $stack, true))
+        ->and(array_search(SetLocale::class, $stack, true))->toBeLessThan(array_search(HandleInertiaRequests::class, $stack, true));
 });
