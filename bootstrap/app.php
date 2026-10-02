@@ -92,8 +92,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 return $response;
             }
 
-            return Inertia::render('Error', ['status' => $status])
-                ->toResponse($request)
-                ->setStatusCode($status);
+            // A failing render (database down, missing build manifest) keeps the original response.
+            return rescue(
+                fn () => Inertia::render('Error', ['status' => $status])->toResponse($request)->setStatusCode($status),
+                $response,
+            );
         });
     })->create();

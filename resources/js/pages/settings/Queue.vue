@@ -361,7 +361,7 @@ const hint = 'text-2xs text-muted-foreground';
                     </div>
                 </section>
 
-                <StickySaveBar :busy="form.processing" :dirty="form.isDirty" :label="t('settings.queue.save')" @save="submit" />
+                <StickySaveBar :busy="form.processing" :dirty="form.isDirty" :label="t('settings.queue.save')" submit />
             </form>
         </div>
     </AppLayout>

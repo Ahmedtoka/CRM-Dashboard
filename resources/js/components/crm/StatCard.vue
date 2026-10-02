@@ -4,15 +4,15 @@ import { formatStat } from '@/lib/format';
 import { computed } from 'vue';
 
 const props = withDefaults(
-    defineProps<{ label: string; value: string | number | null; hint?: string; tone?: 'default' | 'positive' | 'warning' | 'negative'; zeroAsDash?: boolean }>(),
-    { tone: 'default', hint: undefined, zeroAsDash: false },
+    defineProps<{ label: string; value: string | number | null; hint?: string; tone?: 'default' | 'positive' | 'warning' | 'negative' }>(),
+    { tone: 'default', hint: undefined },
 );
 
 const { locale } = useI18n();
 
 // A caller that has already formatted its value (money, a duration) passes a string; a bare number
 // is formatted here in the page's digits, and `null` (no data) reads «—», never a lone «٠».
-const shown = computed(() => (typeof props.value === 'string' ? props.value : formatStat(props.value, locale.value, { zeroAsDash: props.zeroAsDash })));
+const shown = computed(() => (typeof props.value === 'string' ? props.value : formatStat(props.value, locale.value)));
 </script>
 
 <template>

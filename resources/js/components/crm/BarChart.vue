@@ -45,6 +45,23 @@ const H_WIDTH = computed(() => Math.max(280, Math.round(boxWidth.value) || 480))
 const H_LABEL = computed(() => Math.min(140, Math.max(88, Math.round(H_WIDTH.value * 0.24))));
 const trackWidth = computed(() => H_WIDTH.value - H_LABEL.value - H_VALUE);
 
+/**
+ * The value sits just past the bar's end; when it would not fit before the drawing's edge (a long
+ * money value), it moves inside the bar's end instead, so it is never clipped.
+ */
+function valuePlacement(text: string, barX: number, w: number): { valueX: number; valueAnchor: 'start' | 'end'; valueInside: boolean } {
+    const textWidth = text.length * 6.6 + 4;
+    const fitsInside = w >= textWidth + 12;
+    if (rtl.value) {
+        const outside = barX - 6;
+        if (outside - textWidth >= 0) return { valueX: outside, valueAnchor: 'end', valueInside: false };
+        return fitsInside ? { valueX: barX + 6, valueAnchor: 'start', valueInside: true } : { valueX: textWidth, valueAnchor: 'end', valueInside: false };
+    }
+    const outside = barX + w + 6;
+    if (outside + textWidth <= H_WIDTH.value) return { valueX: outside, valueAnchor: 'start', valueInside: false };
+    return fitsInside ? { valueX: barX + w - 6, valueAnchor: 'end', valueInside: true } : { valueX: H_WIDTH.value - textWidth, valueAnchor: 'start', valueInside: false };
+}
+
 const hBars = computed(() =>
     props.items.map((item, index) => {
         const w = Math.max(item.value > 0 ? 2 : 0, (item.value / max.value) * trackWidth.value);
@@ -57,8 +74,7 @@ const hBars = computed(() =>
             barX,
             labelX: rtl.value ? H_WIDTH.value - 4 : 4,
             labelAnchor: rtl.value ? 'end' : 'start',
-            valueX: rtl.value ? barX - 6 : barX + w + 6,
-            valueAnchor: rtl.value ? 'end' : 'start',
+            ...valuePlacement(fmt(item.value), barX, w),
             fill: item.color ? readable(item.color) : undefined,
         };
     }),
@@ -100,7 +116,13 @@ const vBars = computed(() => {
                 <text :x="bar.labelX" :y="bar.y + 17" :text-anchor="bar.labelAnchor" class="fill-muted-foreground text-[11px]" unicode-bidi="plaintext">{{ bar.label }}</text>
                 <rect :x="rtl ? H_VALUE : H_LABEL" :y="bar.y + 6" :width="trackWidth" height="14" rx="3" class="fill-muted" />
                 <rect :x="bar.barX" :y="bar.y + 6" :width="bar.w" height="14" rx="3" :class="!bar.fill ? 'fill-primary' : ''" :style="bar.fill ? { fill: bar.fill } : undefined" />
-                <text :x="bar.valueX" :y="bar.y + 17" :text-anchor="bar.valueAnchor" class="fill-foreground text-[11px] font-medium tabular-nums">
+                <text
+                    :x="bar.valueX"
+                    :y="bar.y + 17"
+                    :text-anchor="bar.valueAnchor"
+                    class="text-[11px] font-medium tabular-nums"
+                    :class="!bar.valueInside ? 'fill-foreground' : bar.fill === 'hsl(var(--foreground))' ? 'fill-background' : 'fill-white'"
+                >
                     {{ fmt(bar.value) }}
                 </text>
             </g>

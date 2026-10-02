@@ -40,7 +40,7 @@ function goBack(): void {
             <h1 class="text-xl font-semibold text-balance text-foreground">{{ title }}</h1>
             <p class="max-w-sm text-sm text-pretty text-muted-foreground">{{ body }}</p>
             <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
-                <Link href="/inbox" :class="buttonVariants()">{{ t('error_page.home') }}</Link>
+                <Link href="/" :class="buttonVariants()">{{ t('error_page.home') }}</Link>
                 <button type="button" :class="cn(buttonVariants({ variant: 'outline' }), 'gap-1.5')" @click="goBack">
                     <ArrowLeft class="size-4 rtl:-scale-x-100" aria-hidden="true" />
                     {{ t('error_page.back') }}
