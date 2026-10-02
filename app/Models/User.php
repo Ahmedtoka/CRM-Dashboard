@@ -102,6 +102,11 @@ class User extends Authenticatable
 
     public function canAccessPlatform(Platform $platform): bool
     {
+        // Ads Hub roles never see inbox data, whatever platform rows a past role left behind.
+        if ($this->isAdsRole()) {
+            return false;
+        }
+
         if ($this->isSupervisorOrAbove()) {
             return true;
         }

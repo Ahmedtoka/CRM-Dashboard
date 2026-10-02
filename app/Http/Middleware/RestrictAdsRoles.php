@@ -15,7 +15,7 @@ class RestrictAdsRoles
 {
     private const ALLOWED = [
         'ads', 'ads/*', 'settings/profile', 'settings/password', 'settings/appearance',
-        'logout', 'notifications', 'notifications/*', 'media', 'media/*', 'broadcasting', 'broadcasting/*', 'up',
+        'logout', 'notifications', 'notifications/*', 'broadcasting', 'broadcasting/*', 'up',
     ];
 
     public function handle(Request $request, Closure $next): Response

@@ -43,7 +43,7 @@ class UserController extends Controller
                 'color' => $data['color'] ?? null,
                 'is_active' => $data['is_active'] ?? true,
             ]);
-            $this->syncPlatforms($user, $data['platforms'] ?? []);
+            $this->syncPlatforms($user, $user->isAdsRole() ? [] : ($data['platforms'] ?? []));
 
             return $user;
         });
@@ -76,7 +76,10 @@ class UserController extends Controller
             $user->save();
 
             // Omitting `platforms` keeps the current permissions; an empty array clears them.
-            if ($request->has('platforms')) {
+            // Ads Hub roles never keep inbox platform rows (Ads Hub design §7).
+            if ($user->isAdsRole()) {
+                $this->syncPlatforms($user, []);
+            } elseif ($request->has('platforms')) {
                 $this->syncPlatforms($user, $data['platforms'] ?? []);
             }
         });
