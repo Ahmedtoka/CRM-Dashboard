@@ -1,5 +1,6 @@
 <?php
 
+use App\Bot\BotEngine;
 use App\Bot\Flow\Jobs\RunBotTurn;
 use App\Bot\Flows\FlowScripts;
 use App\Channels\Data\InboundMessageData;
@@ -8,12 +9,14 @@ use App\Inbox\InboxIngestor;
 use App\Models\BotKnowledgeEntry;
 use App\Models\BotSetting;
 use App\Models\ChannelAccount;
+use App\Models\Customer;
 use App\Models\Message;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Models\Shift;
 use App\Models\ShiftMember;
 use App\Models\User;
+use App\Queue\Jobs\SendQueueMessage;
 use App\Queue\WindowLifecycle;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
@@ -175,4 +178,65 @@ it('gives her next real message to the bot after «خلصت», and a thanks with
     expect(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1)
         ->and($e->fresh()->reversed_at)->toBeNull()
         ->and($c->fresh()->handler->value)->toBe('bot');
+});
+
+// ───── Review minors (2026-10-02) ─────
+
+it('lets the bot answer a real message whose window is closed by «خلصت» while it is being ingested', function () {
+    Bus::fake([RunBotTurn::class]);
+    ChannelAccount::factory()->create(['platform' => Platform::Facebook, 'external_id' => 'PAGE-CM']);
+    $ingest = fn (string $id, string $text) => app(InboxIngestor::class)->ingestMessage(new InboundMessageData(Platform::Facebook, 'PAGE-CM', 'PSID-CM', 'Mona', $id, $text, CarbonImmutable::now()));
+    BotSetting::current()->update(['enabled' => false]);
+    $c = $ingest('first', 'ألو')->conversation;
+    [$e, $u] = cmWindow();
+    $e->forceFill(['conversation_id' => $c->id, 'customer_id' => $c->customer_id])->save();
+    $c->forceFill(['assignee_id' => $u->id, 'queue_entry_id' => $e->id, 'handler' => 'human', 'needs_human' => true])->save();
+    BotSetting::current()->update(['enabled' => true]);
+    Carbon::setTestNow(now()->addMinutes(2));
+
+    // The close commits after the ingest read her conversation (human) and before the queue hook.
+    Customer::saved(function () use ($e, $u) {
+        if (Message::where('external_id', 'question-race')->exists() && $e->fresh()->status === 'active') {
+            app(WindowLifecycle::class)->close($e->fresh(), 'inquiry', $u);
+        }
+    });
+
+    $ingest('question-race', 'عندكم فساتين سواريه؟');
+
+    expect($e->fresh()->status)->toBe('closed')->and($c->fresh()->handler->value)->toBe('bot')
+        ->and(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1);
+    Bus::assertDispatched(RunBotTurn::class);
+});
+
+/** She asks the bot for a person 5 minutes after her last ticket ended; `$served` = a moderator had her. */
+function cmAskAfter(bool $served, bool $deskOnline): QueueEntry
+{
+    Bus::fake([SendQueueMessage::class]);
+    $shift = Shift::query()->first() ?? Shift::factory()->create();
+    $desk = User::factory()->create(['role' => 'moderator', 'last_seen_at' => $deskOnline ? now() : now()->subDay()]);
+    $desk->userPlatforms()->create(['platform' => 'facebook']);
+    ShiftMember::factory()->for($shift)->create(['user_id' => $desk->id, 'status' => 'available']);
+    $last = QueueEntry::factory()->create([
+        'status' => $served ? 'closed' : 'cancelled', 'close_reason' => $served ? 'inquiry' : 'cancelled',
+        'assigned_user_id' => $served ? $desk->id : null, 'closed_at' => now()->subMinutes(5), 'enqueued_at' => now()->subMinutes(20),
+    ]);
+    $last->conversation->update(['handler' => 'bot', 'needs_human' => false, 'platform' => 'facebook', 'last_customer_message_at' => now()]);
+
+    app(BotEngine::class)->handover($last->conversation->fresh(), 'human_request');
+
+    return QueueEntry::where('conversation_id', $last->conversation_id)->latest('id')->first();
+}
+
+it('promises the same moderator only to a customer one served', function () {
+    $new = cmAskAfter(served: false, deskOnline: false);
+    expect($new->priority)->toBe('returning')->and($new->reserved_user_id)->toBeNull()->and($new->status)->toBe('waiting');
+    Bus::assertNotDispatched(SendQueueMessage::class, fn ($job) => $job->scriptKey === 'queue_returning');
+
+    $new2 = cmAskAfter(served: false, deskOnline: true);
+    expect($new2->priority)->toBe('returning');
+    Bus::assertDispatched(SendQueueMessage::class, fn ($job) => $job->entryId === $new2->id && $job->scriptKey === 'queue_enqueued');
+    Bus::assertNotDispatched(SendQueueMessage::class, fn ($job) => $job->scriptKey === 'queue_returning');
+
+    $served = cmAskAfter(served: true, deskOnline: true);
+    Bus::assertDispatched(SendQueueMessage::class, fn ($job) => $job->entryId === $served->id && $job->scriptKey === 'queue_returning');
 });

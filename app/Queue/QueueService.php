@@ -179,7 +179,8 @@ class QueueService
         ]);
 
         if ($priority === 'returning' && $recent !== null) {
-            // Her case owner (above) comes first; else, as on a direct return, her last moderator.
+            // Her case owner (above) comes first; else, as on a direct return, her last moderator
+            // (nobody when she left the lounge unserved).
             $entry->forceFill(['reopened_from_entry_id' => $recent->id, 'reserved_user_id' => $owner ?? $recent->assigned_user_id])->save();
         }
 
@@ -203,7 +204,10 @@ class QueueService
                 SendQueueMessage::dispatch($entry->id, 'queue_enqueued_no_eta', ['ticket' => $entry->ticket_no, 'ahead' => QueueWording::ahead($ahead), 'position' => $entry->position_at_enqueue]);
             } else {
                 // Counts go out worded («قدامك عميلتين», «حوالي دقيقتين»): the scripts read them as whole phrases.
-                SendQueueMessage::dispatch($entry->id, $priority === 'returning' ? 'queue_returning' : 'queue_enqueued', [
+                // «بنرجّعك لنفس الموظفة» only to a customer a moderator served: one who left the lounge
+                // unserved keeps her returning priority but gets the plain ticket message.
+                $sameModerator = $priority === 'returning' && ($recent === null || $recent->assigned_user_id !== null);
+                SendQueueMessage::dispatch($entry->id, $sameModerator ? 'queue_returning' : 'queue_enqueued', [
                     'ticket' => $entry->ticket_no, 'ahead' => QueueWording::ahead($ahead), 'eta_minutes' => QueueWording::minutes((int) ceil($eta / 60)), 'position' => $entry->position_at_enqueue,
                 ]);
             }
@@ -303,7 +307,15 @@ class QueueService
         }
 
         return DB::transaction(function () use ($c, $acknowledgement) {
-            $handler = Conversation::query()->whereKey($c->id)->lockForUpdate()->first(['id', 'handler'])?->handler;
+            $row = Conversation::query()->whereKey($c->id)->lockForUpdate()->first(['id', 'handler', 'needs_human']);
+            $handler = $row?->handler;
+
+            // The caller read `$c` without a lock: a «خلصت» that committed since then handed the chat
+            // to the bot. The ingest follows the committed state (its bot gate reads `$c->handler`),
+            // so her real message is not left unanswered on a stale «human».
+            if ($row !== null) {
+                $c->forceFill(['handler' => $row->handler, 'needs_human' => $row->needs_human])->syncOriginalAttributes(['handler', 'needs_human']);
+            }
             $last = QueueEntry::query()->where('conversation_id', $c->id)->latest('id')->lockForUpdate()->first(['id', 'status', 'closed_at']);
             $ended = $last !== null && in_array($last->status, QueueEntry::TERMINAL_STATUSES, true);
 
