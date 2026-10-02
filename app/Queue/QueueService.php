@@ -272,9 +272,14 @@ class QueueService
     /**
      * Spec 2026-09-30 §1: the queue's one hook for an inbound customer message (non-spam), called
      * once by the ingest inside its transaction. Returns true when the message asks for nothing
-     * (it is "settled"): an acknowledgement (`$acknowledgement`, computed once by the ingest with
-     * `Acknowledgement::matches()`) after her latest queue entry ended (any close: manual,
-     * automatic, a hand-off), while the queue is on. The ingest then keeps it in the thread, but:
+     * (it is "settled"):
+     *  - an answer to a rating question, or a stale rating tap (`RatingService::capture()`,
+     *    checked first, whoever handles the chat);
+     *  - an acknowledgement (`$acknowledgement`, computed once by the ingest with
+     *    `Acknowledgement::matches()`) after her latest queue entry ended (any close: manual,
+     *    automatic, a hand-off), while the queue is on.
+     *
+     * The ingest then keeps it in the thread, but:
      *  - it is not counted unread;
      *  - no queue hook runs: no ticket;
      *  - no bot turn (decided here, before the bot hand-off, also on a bot-handled conversation).
@@ -289,10 +294,18 @@ class QueueService
      * The decision is taken under the CONVERSATION lock with a locking read of her latest entry,
      * so a close («خلصت» or the tick's auto-close) that commits while the message is being
      * ingested is seen: an acknowledgement is then settled, never re-queued, never a reversal.
-     * Queue off: no lock, nothing settled, the hook runs as it always did.
+     * Queue off: no lock, nothing settled (but the answer to a rating question asked while it was
+     * on, which no queue-off chat ever has), the hook runs as it always did.
      */
     public function settles(Conversation $c, Message $m, bool $acknowledgement = false): bool
     {
+        // Spec 2026-09-30 §3: an answer to a rating question (or a stale rating tap) is settled
+        // first, whoever handles the chat — after «خلصت» that is the bot, which must never see it.
+        // It takes the conversation lock, then writes the entry (the queue's lock order).
+        if (app(RatingService::class)->capture($c, $m)) {
+            return true;
+        }
+
         // A bot-handled chat's real message: nothing for the queue (no query, the common case).
         if ($c->handler !== Handler::Human && ! $acknowledgement) {
             return false;

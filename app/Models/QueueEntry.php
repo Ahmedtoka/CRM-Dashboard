@@ -34,6 +34,9 @@ class QueueEntry extends Model
      */
     public const FINAL_CLOSE_REASONS = ['inquiry', 'problem', 'case'];
 
+    /** Spec 2026-09-30 §3: the final closes that get the rating request (a case is rated when it is resolved, Part 2). */
+    public const RATED_CLOSE_REASONS = ['inquiry', 'problem'];
+
     protected $guarded = ['id'];
 
     protected function casts(): array
@@ -42,7 +45,7 @@ class QueueEntry extends Model
             'business_date' => 'date', 'enqueued_at' => 'datetime', 'called_at' => 'datetime', 'delivered_at' => 'datetime', 'first_reply_at' => 'datetime',
             'closed_at' => 'datetime', 'last_customer_message_at' => 'datetime', 'silence_warned_at' => 'datetime', 'confirmed_at' => 'datetime', 'last_agent_message_at' => 'datetime', 'reversed_at' => 'datetime',
             'position_update_sent_at' => 'datetime', 'awaiting_reply_since' => 'datetime', 'apology_sent_at' => 'datetime', 'overdue_alerted_at' => 'datetime',
-            'last_ack_at' => 'datetime',
+            'last_ack_at' => 'datetime', 'review_requested_at' => 'datetime', 'reviewed_at' => 'datetime', 'review_stars' => 'integer', 'review_message_id' => 'integer',
             'return_priority_until' => 'datetime', 'waiting_messages' => 'array', 'bot_summary' => 'array', 'sla_met' => 'boolean', 'is_test' => 'boolean',
         ];
     }

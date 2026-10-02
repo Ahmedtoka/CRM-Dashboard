@@ -82,8 +82,8 @@ final class FlowScripts
             'queue_auto_closed' => ['title' => 'الطابور: قفل تلقائي بعد سكوت', 'body' => 'اتقفلت المحادثة مؤقتاً، أول ما ترجعي ابعتي أي رسالة وهنرجّعك لنفس الموظفة بأولوية.'],
             'queue_returning' => ['title' => 'الطابور: رجعت بأولوية', 'body' => 'أهلاً بيكي تاني، بنرجّعك لنفس الموظفة بأولوية، رقم تذكرتك #{ticket} وهنكون معاكي خلال حوالي {eta_minutes}.'],
             'queue_reassigned' => ['title' => 'الطابور: تحويل لموظفة تانية', 'body' => 'هنكمّل معاكي مع موظفة تانية بأولوية، ثواني.'],
-            'queue_review_ask' => ['title' => 'الطابور: طلب تقييم', 'body' => 'قيّمي خدمة {name} من 1 لـ5'],
-            'queue_review_thanks' => ['title' => 'الطابور: شكر على التقييم', 'body' => 'شكراً لتقييمك'],
+            'queue_review_ask' => ['title' => 'الطابور: طلب تقييم', 'body' => 'ممكن تقيّمي خدمتنا من 1 لـ 5؟ (5 = ممتازة)'],
+            'queue_review_thanks' => ['title' => 'الطابور: شكر على التقييم', 'body' => 'شكراً على تقييمك، رأيك بيفرق معانا.'],
             'queue_case_opened' => ['title' => 'الطابور: كيس اتفتح', 'body' => 'فتحنالك طلب رقم {case_id}، وهيتم التواصل معاكي خلال يوم عمل.'],
             'queue_case_resolved' => ['title' => 'الطابور: كيس اتحل', 'body' => 'تم حل طلبك رقم {case_id}، شكراً لصبرك'],
             // Flow revision (2026-09-29): nobody who may take her is logged in yet — her ticket, no minutes.

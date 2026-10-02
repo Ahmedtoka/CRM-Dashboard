@@ -21,6 +21,7 @@ use App\Queue\Events\QueueEntryUpdated;
 use App\Queue\Events\QueueMemberUpdated;
 use App\Queue\Events\WindowClosed;
 use App\Queue\Jobs\ConfirmClose;
+use App\Queue\Jobs\RequestRating;
 use App\Queue\Jobs\SendQueueMessage;
 use App\Support\SafeBroadcast;
 use Carbon\CarbonInterface;
@@ -747,6 +748,13 @@ class WindowLifecycle
                 : [];
             $messages[] = new SendQueueMessage($e->id, 'queue_closed_thanks', []);
             Bus::chain($messages)->onQueue('outbound')->dispatch();
+
+            // §3: an inquiry / problem close is rated `review_delay_seconds` after the closing
+            // message (not a case: Part 2 rates it when it is resolved). RatingService decides then;
+            // the job is afterCommit and carries the close's token.
+            if (in_array($reason, QueueEntry::RATED_CLOSE_REASONS, true)) {
+                RequestRating::dispatch($e->id, $e->closed_at->toIso8601String())->delay(now()->addSeconds((int) $s->review_delay_seconds));
+            }
 
             app(BotEngine::class)->resetToBot($c);
         }

@@ -116,8 +116,8 @@ class InboxIngestor
 
                 // Handover queue: she came back inside an auto-close's return window (re-queued with
                 // priority), or she wrote while queued / in a window (the silence clock restarts; a
-                // thanks starts no reply clock). A thanks / emoji / sticker after the close is
-                // "settled" (spec 2026-09-30 §1): it stays in the thread but asks for nothing: not
+                // thanks starts no reply clock). A rating answer (§3), or a thanks / emoji / sticker
+                // after the close, is "settled" (spec 2026-09-30 §1): it stays in the thread but asks for nothing: not
                 // unread, no queue hook (no ticket), no bot turn. The acknowledgement
                 // is judged once here; the queue decides under the conversation lock, and the unread
                 // count and the bot follow that one decision.
@@ -145,7 +145,7 @@ class InboxIngestor
         $message->load('mediaAttachments');
 
         // Queue the bot before broadcasting so a realtime outage can't silence it. A settled
-        // message (spec 2026-09-30: a thanks after the close) never reaches the bot.
+        // message (spec 2026-09-30: a rating answer, a thanks after the close) never reaches the bot.
         if (! $settled) {
             $this->maybeRunBot($message, $conversation);
         }
