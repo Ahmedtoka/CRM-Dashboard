@@ -1,5 +1,6 @@
 <?php
 
+use App\Ads\AdsSettings;
 use App\Ads\Buyers\AssignmentService;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Fake\FakeAdsDriver;
@@ -8,6 +9,7 @@ use App\Enums\UserRole;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdAccountAssignment;
+use App\Models\AdDailyMetric;
 use App\Models\AdPlatformConnection;
 use App\Models\BuyerTarget;
 use App\Models\MediaBuyer;
@@ -316,4 +318,83 @@ it('archives a buyer with history instead of deleting it', function () {
     $this->actingAs($admin)->delete("/ads/setup/buyers/{$clean->id}")->assertRedirect();
 
     expect($withHistory->refresh()->is_active)->toBeFalse()->and(MediaBuyer::find($clean->id))->toBeNull();
+});
+
+it('retries the errored empty connection instead of creating a twin', function () {
+    Queue::fake();
+    $admin = adsPgUser(UserRole::Admin);
+    $driver = new class extends FakeAdsDriver
+    {
+        public bool $fail = true;
+
+        public function accounts(AdPlatformConnection $c): array
+        {
+            return $this->fail ? throw new AdsApiException('Token expired') : parent::accounts($c);
+        }
+    };
+    app()->bind(FakeAdsDriver::class, fn () => $driver);
+    $payload = ['platform' => 'meta', 'name' => 'M', 'credentials' => ['access_token' => 'bad']];
+
+    $this->actingAs($admin)->post('/ads/connections', $payload)->assertSessionHasErrors('credentials');
+    $driver->fail = false;
+    $this->actingAs($admin)->post('/ads/connections', ['name' => 'M2', 'credentials' => ['access_token' => 'good']] + $payload)->assertSessionHasNoErrors();
+
+    $c = AdPlatformConnection::firstOrFail();
+    expect(AdPlatformConnection::count())->toBe(1)
+        ->and($c->name)->toBe('M2')->and($c->credentials['access_token'])->toBe('good')
+        ->and($c->status)->toBe('connected')->and($c->last_error)->toBeNull()
+        ->and($c->accounts()->count())->toBe(3);
+});
+
+it('clears a stale error when credentials change and saves thresholds without a tax rate', function () {
+    $admin = adsPgUser(UserRole::Admin);
+    $c = AdPlatformConnection::factory()->create(['status' => 'error', 'last_error' => 'Token expired']);
+
+    $this->actingAs($admin)->put("/ads/connections/{$c->id}", ['name' => 'Same'])->assertRedirect();
+    expect($c->refresh()->status)->toBe('error');
+    $this->actingAs($admin)->put("/ads/connections/{$c->id}", ['credentials' => ['access_token' => 'fresh']])->assertRedirect();
+    expect($c->refresh()->status)->toBe('pending')->and($c->last_error)->toBeNull();
+
+    $this->actingAs($admin)->put('/ads/setup/settings', ['tax_rate_percent' => 20])->assertRedirect();
+    $this->actingAs($admin)->put('/ads/setup/settings', ['winner_thresholds' => ['winner' => 4]])->assertRedirect();
+    $s = app(AdsSettings::class);
+    expect($s->taxRate())->toBe(0.2)->and($s->winnerThresholds()['winner'])->toBe(4);
+});
+
+it('names the credential field with its translated label in validation errors', function () {
+    $r = $this->actingAs(adsPgUser(UserRole::Admin))->post('/ads/connections', ['platform' => 'meta', 'name' => 'M', 'credentials' => ['access_token' => '']]);
+    $r->assertSessionHasErrors('credentials.access_token');
+    expect(session('errors')->first('credentials.access_token'))->toContain(__('ads.credentials.access_token'));
+});
+
+it('never shows a media buyer another buyers numbers, ads or cards', function () {
+    $w = adsPgBuyerWorld();
+    $foreign = AdAccount::factory()->create(['name' => 'FOREIGN ACC']);
+    app(AssignmentService::class)->assign($foreign, $w['other'], CarbonImmutable::now('Africa/Cairo')->subDays(5));
+    $day = CarbonImmutable::now('Africa/Cairo')->subDay()->toDateString();
+    $mine = Ad::factory()->for($w['account'], 'account')->create(['name' => 'MY AD']);
+    $theirs = Ad::factory()->for($foreign, 'account')->create(['name' => 'FOREIGN AD']);
+    foreach ([[$mine, 100], [$theirs, 7777]] as [$ad, $spend]) {
+        AdDailyMetric::factory()->create([
+            'ad_id' => $ad->id, 'ad_account_id' => $ad->ad_account_id, 'date' => $day, 'spend' => $spend,
+            'impressions' => 1000, 'clicks' => 10, 'reach' => 900, 'purchases' => 5, 'purchase_value' => $spend * 3,
+        ]);
+    }
+    $this->actingAs($w['user']);
+
+    $overview = $this->get("/ads?buyer={$w['other']->id}&accounts[]={$foreign->id}")->assertOk();
+    expect($overview->viewData('page')['props']['overview']['totals']['spend'])->toBe(0.0);
+    expect($this->get('/ads')->viewData('page')['props']['overview']['totals']['spend'])->toBe(100.0);
+
+    $creatives = $this->get("/ads/creatives?account={$foreign->id}&buyer={$w['other']->id}")->assertOk()->getContent();
+    expect($creatives)->not->toContain('FOREIGN AD')->not->toContain('FOREIGN ACC');
+    $own = $this->get('/ads/creatives')->getContent();
+    expect($own)->toContain('MY AD')->not->toContain('FOREIGN AD');
+
+    $winners = $this->get("/ads/winners?buyer={$w['other']->id}")->assertOk()->getContent();
+    expect($winners)->not->toContain('FOREIGN AD');
+
+    $this->get('/ads/buyers')->assertInertia(fn (Assert $p) => $p
+        ->has('cards', 1)
+        ->where('cards.0.buyer_id', $w['buyer']->id)->where('cards.0.spend', 100));
 });

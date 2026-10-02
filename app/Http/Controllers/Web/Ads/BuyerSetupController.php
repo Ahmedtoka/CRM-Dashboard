@@ -94,7 +94,7 @@ class BuyerSetupController extends Controller
     public function settings(Request $request, AdsSettings $settings): RedirectResponse
     {
         $data = $request->validate([
-            'tax_rate_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'tax_rate_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
             'winner_thresholds' => ['sometimes', 'array'],
             'winner_thresholds.winner' => ['sometimes', 'numeric', 'gt:0'],
             'winner_thresholds.promising' => ['sometimes', 'numeric', 'gt:0'],
@@ -104,7 +104,9 @@ class BuyerSetupController extends Controller
             'winner_thresholds.min_days' => ['sometimes', 'integer', 'min:1', 'max:30'],
         ]);
 
-        $settings->set('tax_rate', round((float) $data['tax_rate_percent'] / 100, 4));
+        if (isset($data['tax_rate_percent'])) {
+            $settings->set('tax_rate', round((float) $data['tax_rate_percent'] / 100, 4));
+        }
         if (isset($data['winner_thresholds'])) {
             $settings->set('winner_thresholds', array_merge($settings->winnerThresholds(), $data['winner_thresholds']));
         }

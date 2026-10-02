@@ -104,9 +104,15 @@ class AccountController extends Controller
         ]);
         $credentials = $this->credentials($data['platform'], (array) $data['credentials'], []);
 
-        $connection = AdPlatformConnection::create([
-            'platform' => $data['platform'], 'name' => $data['name'], 'credentials' => $credentials, 'status' => 'connected',
-        ]);
+        // A failed first sync leaves an errored, empty row: a resubmit retries that row instead of adding a twin.
+        $connection = AdPlatformConnection::where('platform', $data['platform'])->where('status', 'error')->doesntHave('accounts')->orderBy('id')->first();
+        if ($connection !== null) {
+            $connection->update(['name' => $data['name'], 'credentials' => $credentials, 'status' => 'connected', 'last_error' => null]);
+        } else {
+            $connection = AdPlatformConnection::create([
+                'platform' => $data['platform'], 'name' => $data['name'], 'credentials' => $credentials, 'status' => 'connected',
+            ]);
+        }
 
         $known = AdAccount::pluck('id')->all();
         try {
@@ -133,6 +139,10 @@ class AccountController extends Controller
         }
         if (isset($data['credentials'])) {
             $values['credentials'] = $this->credentials($connection->platform, (array) $data['credentials'], $connection->credentials ?? []);
+        }
+        if (isset($values['credentials']) && $values['credentials'] !== ($connection->credentials ?? [])) {
+            // New credentials are untested: drop the stale error badge until Test or Sync runs.
+            $values += ['status' => 'pending', 'last_error' => null];
         }
         $connection->update($values);
 
@@ -241,7 +251,7 @@ class AccountController extends Controller
 
             if ($value === '' || $value === []) {
                 if ($field['required'] && empty($stored[$key])) {
-                    $errors['credentials.'.$key] = __('validation.required', ['attribute' => $key]);
+                    $errors['credentials.'.$key] = __('validation.required', ['attribute' => __('ads.credentials.'.$key)]);
                 }
 
                 continue;
