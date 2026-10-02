@@ -27,6 +27,30 @@
 A failing step is reported to the log and the next steps still run. With the queue switched off
 in the settings the command does nothing.
 
+## Other scheduled and delayed work (UI overhaul, 2026-10-01)
+
+- **Rating question (`App\Queue\Jobs\RequestRating`).** Dispatched by the final close of an
+  inquiry / problem window (`WindowLifecycle`), delayed by `review_delay_seconds` (default 60 s),
+  on the `outbound` queue like every customer message. It is a delayed job, not a scheduled
+  command: it needs the `outbound` worker, not the cron. A lost job means no rating for that close
+  (no safety net).
+- **`shopify:refresh-orders`** (`ShopifyServiceProvider`): every 10 minutes, `withoutOverlapping`,
+  `onOneServer`. It queues at most 60 open Shopify orders per run (`--limit=60`, those not read for
+  `--older-than=10` minutes, oldest sync first) in jobs of 25 (`RefreshShopifyOrders`) on the
+  `commercelong` queue (`redislong` connection under Redis). It skips when the store is not
+  connected or is the demo store. A one-off first fill after the deploy:
+  `php artisan shopify:refresh-orders --limit=250`.
+- **`media:thumbnails`**: a one-time backfill, not scheduled. Run it once after the deploy that
+  adds `message_attachments.thumb_path`; it queues `MakeThumbnail` for stored images / stickers
+  without a thumbnail (`--sync` runs inline). Safe to re-run: it only picks rows without one.
+- **The cron line** all of the above (and the queue tick) depend on, in the Cloudways cron panel:
+
+  ```
+  * * * * * cd /home/master/applications/ryznnsupxm/public_html && php artisan schedule:run >> /dev/null 2>&1
+  ```
+
+  (`public_html` is the Laravel root deployed from `backend/`; one line only, see below.)
+
 ## Presence and the two clocks (flow revision, 2026-09-29)
 
 - A desk serves only while its moderator is logged in (a heartbeat in the last 2 minutes). The

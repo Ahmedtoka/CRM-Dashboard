@@ -42,6 +42,8 @@ it('measures every scenario, writes json and markdown, and answers 200 for the e
             ->and($byName['list.default']['status'])->toBe(200)
             ->and($byName['list.default']['queries_avg'])->toBeGreaterThan(0)
             ->and($byName['detail.hot']['status'])->toBe(200)
+            ->and($byName['list.search_substring']['status'])->toBe(200)
+            ->and($byName['list.search_substring']['uri'])->toBe('/inbox/conversations?q='.rawurlencode('الله'))
             ->and(collect($json['scenarios'])->every(fn ($s) => array_key_exists('p95_ms', $s) && array_key_exists('queries_avg', $s)))->toBeTrue()
             ->and(file_get_contents("{$dir}/inbox-t.md"))->toContain('| list.default |');
 

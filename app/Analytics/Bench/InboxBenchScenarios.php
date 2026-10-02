@@ -24,6 +24,8 @@ class InboxBenchScenarios
             ['list.mine', "{$l}?filter=mine"],
             ['list.search_name', "{$l}?q=".rawurlencode('Customer 1234')],
             ['list.search_phone', "{$l}?q=0100012"],
+            // An Arabic substring found only inside words («عبدالله»): exercises the LIKE fallback (Task 4b).
+            ['list.search_substring', "{$l}?q=".rawurlencode('الله')],
             // Added by Task 4 (422 before it):
             ['list.state_bot', "{$l}?status=bot"],
             ['list.state_with_moderator', "{$l}?status=with_moderator"],
