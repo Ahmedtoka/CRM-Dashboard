@@ -320,4 +320,8 @@ it('lists top accounts by spend with their current buyer', function () {
     expect(array_column($rows, 'id'))->toBe([$w['acc3']->id, $w['acc1']->id])
         ->and($rows[0])->toMatchArray(['platform' => 'tiktok', 'buyer' => null, 'spend' => 5000.0, 'spend_tax' => 5700.0, 'roas' => 0.02])
         ->and($rows[1])->toMatchArray(['name' => 'Le Voile 1', 'buyer' => 'Mostafa', 'spend' => 3000.0, 'purchases' => 30.0, 'roas' => 3.0]);
+
+    // an admin's buyer filter: Ahmed's half of acc1, labelled Ahmed (not the holder on the last day)
+    $ahmed = app(TopAccounts::class)->build(rptRange(extra: ['buyerId' => $w['ahmed']->id]));
+    expect($ahmed)->toHaveCount(1)->and($ahmed[0])->toMatchArray(['id' => $w['acc1']->id, 'buyer' => 'Ahmed Gamal', 'spend' => 1500.0]);
 });

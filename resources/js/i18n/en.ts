@@ -2938,6 +2938,8 @@ const en: Messages = {
             hint: 'Spend includes tax ({tax}); the small line is pre-tax',
             by_platform: 'Spend by platform',
             daily_table: 'Daily numbers',
+            top_accounts: 'Top ad accounts',
+            top_accounts_hint: 'Accounts that spent in the range, biggest spend first',
         },
         buyers: {
             title: 'Media buyers',

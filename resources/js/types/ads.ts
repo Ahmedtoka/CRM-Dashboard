@@ -85,6 +85,22 @@ export interface AdsOverviewData {
     tax_rate: number;
 }
 
+/** TopAccounts::build — accounts with spend in range, biggest first; spend pre-tax plus spend_tax. */
+export interface AdsTopAccountRow {
+    id: number;
+    name: string;
+    external_id: string;
+    platform: AdPlatformValue;
+    buyer: string | null;
+    spend: number;
+    spend_tax: number;
+    purchase_value: number;
+    purchases: number;
+    roas: number | null;
+    status: string | null;
+    last_synced_at: string | null;
+}
+
 export interface AdsSync {
     last_synced_at: string | null;
     errors: { account: string; error: string }[];
@@ -100,6 +116,7 @@ export interface AdsCommonProps {
 export interface AdsOverviewProps extends AdsCommonProps {
     filters: AdsFilters;
     overview: AdsOverviewData;
+    top_accounts: AdsTopAccountRow[];
     sync: AdsSync;
 }
 

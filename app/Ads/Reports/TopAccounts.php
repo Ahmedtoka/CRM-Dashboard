@@ -10,8 +10,9 @@ final class TopAccounts
     public function __construct(private readonly AdsQuery $q) {}
 
     /**
-     * Accounts with spend in range. `buyer` = the holder on the range's last day (for a buyer user:
-     * themselves, since only their rows are counted).
+     * Accounts with spend in range. `buyer` = the holder on the range's last day; when the rows are
+     * limited to one buyer (a buyer user, or an admin's buyer filter) it is that buyer, since only
+     * their rows are counted.
      *
      * @return list<array{id:int, name:string, external_id:string, platform:string, buyer:?string, spend:float, spend_tax:float, purchase_value:float, purchases:float, roas:?float, status:?string, last_synced_at:?string}>
      */
@@ -27,7 +28,7 @@ final class TopAccounts
         }
 
         $owners = $this->q->owners($rows->pluck('id')->all());
-        $holders = $rows->mapWithKeys(fn ($r) => [(int) $r->id => $f->restrictBuyerId ?? $this->q->ownerOn($owners, (int) $r->id, $f->toDate())]);
+        $holders = $rows->mapWithKeys(fn ($r) => [(int) $r->id => $f->restrictBuyerId ?? $f->buyerId ?? $this->q->ownerOn($owners, (int) $r->id, $f->toDate())]);
         $names = MediaBuyer::query()->whereIn('id', $holders->filter()->unique()->values())->pluck('name', 'id');
 
         return $rows->map(function (object $r) use ($holders, $names) {

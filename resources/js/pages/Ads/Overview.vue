@@ -11,10 +11,10 @@ import StatCard from '@/components/crm/StatCard.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { flowArrow, formatAdsMoney, formatCompact, formatDayLong, formatDayShort, formatPct, formatQty, formatRoas, roasTone } from '@/lib/ads';
+import { adAccountActive, adAccountStatusLabel, flowArrow, formatAdsMoney, formatCompact, formatDayLong, formatDayShort, formatPct, formatQty, formatRoas, roasTone } from '@/lib/ads';
 import { formatCount, formatDateTime } from '@/lib/format';
 import type { SharedData } from '@/types';
-import type { AdsDailyRow, AdsOverviewProps } from '@/types/ads';
+import type { AdsDailyRow, AdsOverviewProps, AdsTopAccountRow } from '@/types/ads';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import { AlertTriangle, Megaphone } from 'lucide-vue-next';
 import { computed } from 'vue';
@@ -124,6 +124,19 @@ const columns = computed(() => [
 ]);
 
 const roasChip = (v: number | null) => roasTone(v);
+
+/* ---- top ad accounts in the range (spec §1.2) ---- */
+const accountColumns = computed(() => [
+    { key: 'name', label: t('ads.table.account'), primary: true },
+    { key: 'buyer', label: t('ads.table.buyer') },
+    { key: 'spend', label: t('ads.kpi.spend_tax'), align: 'end' as const },
+    { key: 'purchase_value', label: t('ads.kpi.purchase_value'), align: 'end' as const },
+    { key: 'purchases', label: t('ads.table.purchases'), align: 'end' as const, hideOnMobile: true },
+    { key: 'roas', label: t('ads.kpi.roas'), align: 'end' as const },
+    { key: 'status', label: t('ads.table.status'), hideOnMobile: true },
+    { key: 'last_synced_at', label: t('ads.accounts.last_sync'), hideOnMobile: true },
+]);
+const acc = (row: unknown) => row as AdsTopAccountRow;
 const canManage = computed(() => page.props.ads?.canManage === true);
 const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
 </script>
@@ -198,6 +211,48 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
                     :left-format="(v) => formatCompact(v, locale)"
                     :right-format="(v) => formatRoas(v, locale)"
                 />
+
+                <section class="space-y-2" aria-labelledby="top-accounts-title">
+                    <div>
+                        <h2 id="top-accounts-title" class="text-sm font-semibold">{{ t('ads.overview.top_accounts') }}</h2>
+                        <p class="text-2xs text-muted-foreground">{{ t('ads.overview.top_accounts_hint') }}</p>
+                    </div>
+                    <DataTable :columns="accountColumns" :rows="top_accounts" :caption="t('ads.overview.top_accounts')" :empty="t('ads.empty.range')">
+                        <template #cell-name="{ row }">
+                            <div class="flex min-w-40 items-center gap-2">
+                                <PlatformChip :platform="acc(row).platform" size="xs" />
+                                <span class="font-medium" dir="auto">{{ acc(row).name }}</span>
+                            </div>
+                        </template>
+                        <template #cell-buyer="{ row }">
+                            <span v-if="acc(row).buyer" dir="auto">{{ acc(row).buyer }}</span>
+                            <span v-else class="text-muted-foreground">{{ t('ads.accounts.unassigned') }}</span>
+                        </template>
+                        <template #cell-spend="{ row }">
+                            <MoneyCell :amount="acc(row).spend" :with-tax="acc(row).spend_tax" :currency="currency" />
+                        </template>
+                        <template #cell-purchase_value="{ row }"
+                            ><span class="tabular-nums">{{ money(acc(row).purchase_value) }}</span></template
+                        >
+                        <template #cell-purchases="{ row }"
+                            ><span class="tabular-nums">{{ formatQty(acc(row).purchases, locale) }}</span></template
+                        >
+                        <template #cell-roas="{ row }">
+                            <StatusChip :label="formatRoas(acc(row).roas, locale)" :tone="roasChip(acc(row).roas)" />
+                        </template>
+                        <template #cell-status="{ row }">
+                            <StatusChip
+                                :label="adAccountStatusLabel(acc(row).status, t)"
+                                :tone="adAccountActive(acc(row).status) ? 'positive' : 'neutral'"
+                            />
+                        </template>
+                        <template #cell-last_synced_at="{ row }">
+                            <span class="whitespace-nowrap text-2xs text-muted-foreground">{{
+                                acc(row).last_synced_at ? formatDateTime(acc(row).last_synced_at as string, locale) : t('ads.accounts.never_synced')
+                            }}</span>
+                        </template>
+                    </DataTable>
+                </section>
 
                 <DataTable :columns="columns" :rows="rows" :caption="t('ads.overview.daily_table')" :empty="t('ads.empty.range')">
                     <template #cell-date="{ row }">

@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatAdsMoney, formatDayLong } from '@/lib/ads';
+import { adAccountActive, adAccountStatusLabel, formatAdsMoney, formatDayLong } from '@/lib/ads';
 import { cairoToday } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AdAccountRow, AdConnectionRow, AdPlatformDefinition, AdsAccountsProps } from '@/types/ads';
@@ -124,14 +124,8 @@ function statusChip(c: AdConnectionRow): { label: string; tone: 'positive' | 'wa
     return { label: t('ads.accounts.connection_disabled'), tone: 'neutral' };
 }
 
-const accountActive = (status: string | null) => (status ? /^(active|enable|enabled|open)$/i.test(status) : false);
-/** Platform status words (active, disabled, ENABLED...) in the UI language; anything unknown stays as the platform sent it. */
-function accountStatusLabel(status: string | null): string {
-    if (!status) return '—';
-    if (accountActive(status)) return t('ads.accounts.status_active');
-    if (/^(disabled|paused|closed|suspended)$/i.test(status)) return t('ads.accounts.status_disabled');
-    return status;
-}
+const accountActive = adAccountActive;
+const accountStatusLabel = (status: string | null) => adAccountStatusLabel(status, t);
 
 /* ---- accounts per platform, one table each ---- */
 interface AccountTableRow extends AdAccountRow {

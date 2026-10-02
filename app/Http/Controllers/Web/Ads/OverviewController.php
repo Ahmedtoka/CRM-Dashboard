@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web\Ads;
 
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\AdsOverview;
+use App\Ads\Reports\TopAccounts;
 use App\Http\Controllers\Concerns\BuildsAdsPages;
 use App\Http\Controllers\Controller;
 use App\Models\AdAccount;
@@ -17,7 +18,7 @@ class OverviewController extends Controller
 {
     use BuildsAdsPages;
 
-    public function __invoke(Request $request, AdsOverview $overview): Response
+    public function __invoke(Request $request, AdsOverview $overview, TopAccounts $topAccounts): Response
     {
         $user = $request->user();
         $filter = AdsFilter::fromRequest($request, $user);
@@ -26,6 +27,7 @@ class OverviewController extends Controller
             'filters' => $this->filterProps($filter),
             ...$this->commonProps($user, $filter),
             'overview' => $overview->build($filter),
+            'top_accounts' => $topAccounts->build($filter),
             'sync' => $this->sync($filter, $user->isSupervisorOrAbove()),
         ]);
     }

@@ -51,7 +51,7 @@ it('renders every report page for an admin with the documented props', function 
         ->has('filters.from')->has('filters.to')->has('filters.platform')->has('filters.buyer')
         ->has('overview.totals.spend')->has('overview.daily')
         ->has('buyers', 1)->has('platforms', 3)
-        ->has('sync.last_synced_at')->has('sync.errors'));
+        ->has('sync.last_synced_at')->has('sync.errors')->has('top_accounts'));
 
     $this->actingAs($admin)->get('/ads/buyers')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->component('Ads/Buyers')->has('filters')->has('cards'));
@@ -384,7 +384,11 @@ it('never shows a media buyer another buyers numbers, ads or cards', function ()
 
     $overview = $this->get("/ads?buyer={$w['other']->id}&accounts[]={$foreign->id}")->assertOk();
     expect($overview->viewData('page')['props']['overview']['totals']['spend'])->toBe(0.0);
-    expect($this->get('/ads')->viewData('page')['props']['overview']['totals']['spend'])->toBe(100.0);
+    $props = $this->get('/ads')->viewData('page')['props'];
+    expect($props['overview']['totals']['spend'])->toBe(100.0)
+        ->and(array_column($props['top_accounts'], 'id'))->toBe([$w['account']->id])
+        ->and($props['top_accounts'][0]['buyer'])->toBe('Own Buyer');
+    expect($overview->viewData('page')['props']['top_accounts'])->toBe([]);
 
     $creatives = $this->get("/ads/creatives?account={$foreign->id}&buyer={$w['other']->id}")->assertOk()->getContent();
     expect($creatives)->not->toContain('FOREIGN AD')->not->toContain('FOREIGN ACC');

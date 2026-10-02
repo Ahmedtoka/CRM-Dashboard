@@ -179,3 +179,14 @@ export function previewSrcFromHtml(html: string | null | undefined): string | nu
 
     return allowedPreviewUrl(doc.querySelector('iframe[src]')?.getAttribute('src'));
 }
+
+/** Ad account status words as the platforms send them (active, ENABLE, open...). */
+export const adAccountActive = (status: string | null | undefined): boolean => (status ? /^(active|enable|enabled|open)$/i.test(status) : false);
+
+/** Platform account status in the UI language; anything unknown stays as the platform sent it. */
+export function adAccountStatusLabel(status: string | null | undefined, t: (key: string) => string): string {
+    if (!status) return '—';
+    if (adAccountActive(status)) return t('ads.accounts.status_active');
+    if (/^(disabled|paused|closed|suspended)$/i.test(status)) return t('ads.accounts.status_disabled');
+    return status;
+}
