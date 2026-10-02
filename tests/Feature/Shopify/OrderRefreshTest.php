@@ -166,6 +166,17 @@ it('keeps the refresh document within the query cost cap for a full batch', func
         ->and(SyncQueries::estimatedWorstCaseCost(SyncQueries::ordersByIds(), OrderRefresher::BATCH + 1))->toBeGreaterThan(SyncQueries::MAX_QUERY_COST);
 });
 
+it('asks for the customer journey in the refresh like the paged sync, still within the cost cap', function () {
+    config(['crm.shopify.capture_journey' => true]);
+
+    expect(SyncQueries::ordersByIds())->toContain('customerJourneySummary')
+        ->and(SyncQueries::estimatedWorstCaseCost(SyncQueries::ordersByIds()))->toBeLessThanOrEqual(SyncQueries::MAX_QUERY_COST);
+
+    config(['crm.shopify.capture_journey' => false]);
+
+    expect(SyncQueries::ordersByIds())->not->toContain('customerJourneySummary');
+});
+
 it('refreshes orders in batches through nodes(ids:), maps every node and logs a refresh run', function () {
     refreshConnectShop();
     $orders = collect(range(1, 30))->map(fn ($i) => refreshStoreOrder(['shopify_order_id' => (string) (7000 + $i)]));

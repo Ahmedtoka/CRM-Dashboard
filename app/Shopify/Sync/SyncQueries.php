@@ -208,7 +208,7 @@ final class SyncQueries
     public static function ordersByIds(): string
     {
         $nested = self::nested('orders');
-        $node = self::sized(self::NODE['orders'], true)
+        $node = self::sized(self::node('orders'), true)
             ." {$nested['select']}(first: {$nested['page']}) { edges { node { {$nested['node']} } } pageInfo { hasNextPage endCursor } }";
 
         return "query refresh(\$ids: [ID!]!) {\n  nodes(ids: \$ids) {\n    ... on Order { {$node} }\n  }\n}";
