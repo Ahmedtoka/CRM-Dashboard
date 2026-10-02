@@ -3008,6 +3008,10 @@ const en: Messages = {
             smoothed_roas: 'Smoothed ROAS',
             empty: 'No winner creatives yet',
             empty_body: 'Ads need the minimum spend in this range to be scored',
+            empty_tier: 'No ads in this tier',
+            tier_filter: 'Tier',
+            tier_top: 'Winners & promising',
+            tier_all: 'All',
         },
         accounts: {
             title: 'Ad accounts',

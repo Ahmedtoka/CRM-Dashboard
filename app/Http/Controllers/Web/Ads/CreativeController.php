@@ -52,18 +52,42 @@ class CreativeController extends Controller
         return response()->json($creatives->detail($ad, $filter));
     }
 
+    /** Tier chips of the Winners page; `top` (winner + promising) is the default, as on the owner's Arena. */
+    public const WINNER_TIERS = ['top', 'all', 'winner', 'promising', 'neutral', 'loser'];
+
+    public const WINNERS_PER_PAGE = 20;
+
     public function winners(Request $request, WinnerScorer $scorer): Response
     {
         $filter = AdsFilter::fromRequest($request, $request->user());
         $status = $this->oneOf($request->query('status'), ['all', 'active', 'inactive'], 'all');
         $sort = $this->oneOf($request->query('sort'), WinnerScorer::SORTS, 'score');
+        $tier = $this->oneOf($request->query('tier'), self::WINNER_TIERS, 'top');
         $window = $scorer->window($filter);
 
+        $all = collect($scorer->build($filter, $status, $sort));
+        $byTier = $all->countBy('tier');
+        $counts = ['top' => ($byTier['winner'] ?? 0) + ($byTier['promising'] ?? 0), 'all' => $all->count()];
+        foreach (['winner', 'promising', 'neutral', 'loser'] as $t) {
+            $counts[$t] = $byTier[$t] ?? 0;
+        }
+
+        $rows = match ($tier) {
+            'all' => $all,
+            'top' => $all->whereIn('tier', ['winner', 'promising']),
+            default => $all->where('tier', $tier),
+        };
+        $total = $rows->count();
+        $lastPage = max(1, (int) ceil($total / self::WINNERS_PER_PAGE));
+        $page = min(max(1, (int) $request->query('page', 1)), $lastPage);
+
         return Inertia::render('Ads/Winners', [
-            'filters' => $this->filterProps($filter) + ['status' => $status, 'sort' => $sort],
+            'filters' => $this->filterProps($filter) + ['status' => $status, 'sort' => $sort, 'tier' => $tier, 'page' => $page],
             ...$this->commonProps($request->user(), $filter),
             'window' => ['from' => $window->fromDate(), 'to' => $window->toDate()],
-            'winners' => $scorer->build($filter, $status, $sort),
+            'winners' => $rows->slice(($page - 1) * self::WINNERS_PER_PAGE, self::WINNERS_PER_PAGE)->values()->all(),
+            'meta' => ['total' => $total, 'per_page' => self::WINNERS_PER_PAGE, 'current_page' => $page, 'last_page' => $lastPage],
+            'tier_counts' => $counts,
         ]);
     }
 

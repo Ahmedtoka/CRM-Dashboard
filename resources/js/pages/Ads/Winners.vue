@@ -9,9 +9,9 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type AdsQueryValue, formatAdsMoney, formatDayLong, formatPct, formatQty, formatRoas, visitAds } from '@/lib/ads';
-import type { AdsWinnersProps, CreativeStatusFilter, WinnerRow, WinnerSort } from '@/types/ads';
+import type { AdsWinnersProps, CreativeStatusFilter, WinnerRow, WinnerSort, WinnerTierFilter } from '@/types/ads';
 import { Head } from '@inertiajs/vue3';
-import { Lightbulb, Trophy } from 'lucide-vue-next';
+import { ChevronLeft, ChevronRight, Lightbulb, Trophy } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<AdsWinnersProps>();
@@ -21,11 +21,18 @@ const money = (v: number | null) => formatAdsMoney(v, locale.value, props.curren
 
 const SORTS: WinnerSort[] = ['score', 'roas', 'spend', 'revenue', 'date'];
 const STATUSES: CreativeStatusFilter[] = ['all', 'active', 'inactive'];
+const TIERS: WinnerTierFilter[] = ['top', 'all', 'winner', 'promising', 'neutral', 'loser'];
+const tierLabel = (tier: WinnerTierFilter) => (tier === 'top' || tier === 'all' ? t(`ads.winners.tier_${tier}`) : t(`ads.tier.${tier}`));
 
 const keep = computed<Record<string, AdsQueryValue>>(() => ({
     status: props.filters.status === 'all' ? null : props.filters.status,
     sort: props.filters.sort === 'score' ? null : props.filters.sort,
+    tier: props.filters.tier === 'top' ? null : props.filters.tier,
 }));
+
+const meta = computed(() => props.meta);
+const rangeFrom = computed(() => (meta.value.total === 0 ? 0 : (meta.value.current_page - 1) * meta.value.per_page + 1));
+const rangeTo = computed(() => Math.min(meta.value.total, meta.value.current_page * meta.value.per_page));
 
 function go(changes: Record<string, AdsQueryValue>): void {
     const f = props.filters;
@@ -94,11 +101,26 @@ const breadcrumbs = computed(() => [
                 </select>
             </div>
 
+            <div class="flex flex-wrap items-center gap-1" role="group" :aria-label="t('ads.winners.tier_filter')">
+                <button
+                    v-for="tier in TIERS"
+                    :key="tier"
+                    type="button"
+                    :aria-pressed="filters.tier === tier"
+                    class="inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
+                    :class="chip(filters.tier === tier)"
+                    @click="go({ tier: tier === 'top' ? null : tier })"
+                >
+                    {{ tierLabel(tier) }}
+                    <span class="tabular-nums opacity-80">{{ formatQty(tier_counts[tier], locale) }}</span>
+                </button>
+            </div>
+
             <EmptyState
                 v-if="!winners.length"
                 :icon="Trophy"
-                :title="t('ads.winners.empty')"
-                :body="t('ads.winners.empty_body')"
+                :title="tier_counts.all > 0 ? t('ads.winners.empty_tier') : t('ads.winners.empty')"
+                :body="tier_counts.all > 0 ? undefined : t('ads.winners.empty_body')"
                 class="rounded-lg bg-card shadow-card"
             />
 
@@ -182,6 +204,33 @@ const breadcrumbs = computed(() => [
                     </button>
                 </li>
             </ul>
+
+            <nav
+                v-if="meta.total > 0"
+                class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
+                :aria-label="t('ui.pagination')"
+            >
+                <span class="tabular-nums">{{ t('ui.page_summary', { from: rangeFrom, to: rangeTo, total: meta.total }) }}</span>
+                <div v-if="meta.last_page > 1" class="flex items-center gap-1.5">
+                    <button
+                        type="button"
+                        class="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2.5 text-xs hover:bg-muted disabled:opacity-50"
+                        :disabled="meta.current_page <= 1"
+                        @click="go({ page: meta.current_page - 1 })"
+                    >
+                        <ChevronLeft class="rtl-flip size-3.5" aria-hidden="true" />{{ t('ui.prev') }}
+                    </button>
+                    <span class="tabular-nums">{{ t('ads.creatives.page_of', { page: meta.current_page, last: meta.last_page }) }}</span>
+                    <button
+                        type="button"
+                        class="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2.5 text-xs hover:bg-muted disabled:opacity-50"
+                        :disabled="meta.current_page >= meta.last_page"
+                        @click="go({ page: meta.current_page + 1 })"
+                    >
+                        {{ t('ui.next') }}<ChevronRight class="rtl-flip size-3.5" aria-hidden="true" />
+                    </button>
+                </div>
+            </nav>
         </div>
 
         <CreativePreviewModal

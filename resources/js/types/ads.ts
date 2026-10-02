@@ -275,15 +275,23 @@ export interface WinnerRow {
     recommendation: string;
 }
 
+/** Tier chips; `top` = winner + promising (the default). */
+export type WinnerTierFilter = 'top' | 'all' | WinnerTier;
+
 export interface WinnersFilters extends AdsFilters {
     status: CreativeStatusFilter;
     sort: WinnerSort;
+    tier: WinnerTierFilter;
+    page: number;
 }
 
 export interface AdsWinnersProps extends AdsCommonProps {
     filters: WinnersFilters;
     window: { from: string; to: string };
+    /** The current page of the selected tier (20 per page). */
     winners: WinnerRow[];
+    meta: { total: number; per_page: number; current_page: number; last_page: number };
+    tier_counts: Record<WinnerTierFilter, number>;
 }
 
 /* ---- Setup pages: AccountController::index and BuyerSetupController::index ---- */
