@@ -61,7 +61,7 @@ const breadcrumbs = computed(() => [{ title: t('customers.title'), href: '/custo
 
             <div>
                 <DataTable :columns="columns" :rows="customers.data" clickable :loading="loading" :empty="t('customers.empty')" :caption="t('customers.title')" @row-click="router.visit(`/customers/${$event.id}`)">
-                    <template #cell-name="{ row }"><span class="font-medium">{{ row.name ?? '—' }}</span></template>
+                    <template #cell-name="{ row }"><span class="font-medium" dir="auto">{{ row.name ?? '—' }}</span></template>
                     <template #cell-phone="{ row }"><span dir="ltr">{{ row.phone ?? '—' }}</span></template>
                     <template #cell-identities="{ row }">
                         <span class="flex gap-1">

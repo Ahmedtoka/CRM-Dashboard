@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import PageHeader from '@/components/crm/PageHeader.vue';
+import StickySaveBar from '@/components/crm/StickySaveBar.vue';
+import ToggleSwitch from '@/components/crm/ToggleSwitch.vue';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useI18n } from '@/composables/useI18n';
@@ -150,17 +151,17 @@ const hint = 'text-2xs text-muted-foreground';
             <form class="space-y-4" @submit.prevent="submit">
                 <!-- Running -->
                 <section :class="card">
-                    <div class="flex items-center gap-2">
-                        <Checkbox id="queue-enabled" v-model:checked="form.enabled" />
+                    <div class="flex items-center justify-between gap-3">
                         <Label for="queue-enabled">{{ t('settings.queue.enabled') }}</Label>
+                        <ToggleSwitch id="queue-enabled" v-model="form.enabled" :label="t('settings.queue.enabled')" />
                     </div>
-                    <div class="flex items-center gap-2">
-                        <Checkbox id="queue-night-message" v-model:checked="form.night_message_enabled" />
+                    <div class="flex items-center justify-between gap-3">
                         <Label for="queue-night-message">{{ t('settings.queue.night_message_enabled') }}</Label>
+                        <ToggleSwitch id="queue-night-message" v-model="form.night_message_enabled" :label="t('settings.queue.night_message_enabled')" />
                     </div>
-                    <div class="flex items-center gap-2">
-                        <Checkbox id="queue-case-follow" v-model:checked="form.case_follow_owner" />
+                    <div class="flex items-center justify-between gap-3">
                         <Label for="queue-case-follow">{{ t('settings.queue.case_follow_owner') }}</Label>
+                        <ToggleSwitch id="queue-case-follow" v-model="form.case_follow_owner" :label="t('settings.queue.case_follow_owner')" />
                     </div>
 
                     <div :class="grid">
@@ -360,9 +361,7 @@ const hint = 'text-2xs text-muted-foreground';
                     </div>
                 </section>
 
-                <div class="sticky bottom-0 flex justify-end bg-background/95 py-3 backdrop-blur-sm">
-                    <Button type="submit" :disabled="form.processing">{{ t('settings.queue.save') }}</Button>
-                </div>
+                <StickySaveBar :busy="form.processing" :dirty="form.isDirty" :label="t('settings.queue.save')" @save="submit" />
             </form>
         </div>
     </AppLayout>

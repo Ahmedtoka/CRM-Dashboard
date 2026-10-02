@@ -19,7 +19,7 @@ const fallback: Record<PlatformValue, { label: string; color: string }> = {
 };
 
 /** A near-black brand colour (TikTok) vanishes on a dark background: follow the theme's foreground instead. */
-function readable(hex: string): string {
+export function readable(hex: string): string {
     const m = /^#?([0-9a-f]{6})$/i.exec(hex);
     if (!m) return hex;
     const n = parseInt(m[1], 16);

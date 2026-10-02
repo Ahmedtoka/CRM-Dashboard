@@ -6,6 +6,7 @@
  * translated again. Numbers, links and emoji show as ⟦0⟧ markers — they are never
  * translated, they are put back exactly as they were.
  */
+import Callout from '@/components/crm/Callout.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
@@ -127,12 +128,10 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                 <span class="text-xs text-muted-foreground">{{ t('settings.bot_translations.usage', { used: usage.used, cap: usage.cap }) }}</span>
             </div>
 
-            <p v-if="!engine" class="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-                {{ t('settings.bot_translations.no_engine') }}
-            </p>
+            <Callout v-if="!engine" tone="warning">{{ t('settings.bot_translations.no_engine') }}</Callout>
 
-            <div class="overflow-hidden rounded-md border border-border">
-                <table class="w-full text-sm">
+            <div class="scrollbar-thin relative overflow-x-auto rounded-md border border-border">
+                <table class="w-full min-w-[36rem] text-sm">
                     <caption class="sr-only">{{ t('settings.bot_translations.title') }}</caption>
                     <thead class="bg-muted/50 text-xs text-muted-foreground">
                         <tr>
@@ -147,12 +146,12 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                             <td colspan="4" class="p-6 text-center text-xs text-muted-foreground">{{ t('settings.bot_translations.empty') }}</td>
                         </tr>
                         <tr v-for="row in filtered" :key="row.source" class="border-t border-border align-top">
-                            <td class="max-w-xs p-2" dir="rtl">
+                            <td class="max-w-xs p-2" dir="auto">
                                 <span class="whitespace-pre-wrap">{{ row.source }}</span>
                                 <span v-if="row.short" class="ms-1 text-[10px] text-muted-foreground">({{ t('settings.bot_translations.button') }})</span>
                             </td>
 
-                            <td class="max-w-xs p-2" dir="ltr">
+                            <td class="max-w-xs p-2" dir="auto">
                                 <div v-if="editing === row.source" class="flex items-start gap-1">
                                     <textarea
                                         v-model="draft"

@@ -446,7 +446,7 @@ export interface Participant {
 /** spec §4: a case a guided bot flow recorded (return/exchange, complaint, cancel/edit, delivery follow-up). */
 export type CaseType = 'return' | 'exchange' | 'return_exchange' | 'complaint' | 'cancel_edit' | 'delivery_followup';
 export type CaseStatus = 'new' | 'in_progress' | 'closed';
-export type CasePriority = 'medium' | 'high';
+export type CasePriority = 'low' | 'normal' | 'medium' | 'high';
 
 export interface CasePhoto {
     id: number;

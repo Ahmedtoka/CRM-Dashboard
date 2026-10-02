@@ -1,6 +1,16 @@
 // Arabic (Egyptian) UI strings. Keys are the source of truth; en.ts must mirror them.
 const ar = {
     app: { name: 'سوشيال CRM', tagline: 'صندوق رسائل موحد لماسنجر وإنستجرام وواتساب وتيك توك' },
+    error_page: {
+        code: 'خطأ {n}',
+        home: 'روحي لصندوق الرسايل',
+        back: 'ارجعي للصفحة اللي فاتت',
+        login: 'تسجيل الدخول',
+        403: { title: 'الصفحة دي مش متاحة ليكي', body: 'صلاحيات حسابك مش بتسمح بفتح الصفحة دي. لو محتاجاها كلمي مدير النظام.' },
+        404: { title: 'الصفحة دي مش موجودة', body: 'ممكن اللينك يكون اتغير أو اتكتب غلط. ارجعي لصندوق الرسايل وكملي من هناك.' },
+        500: { title: 'حصلت مشكلة عندنا', body: 'الصفحة مافتحتش بسبب خطأ في السيستم. جربي تاني بعد شوية، ولو المشكلة فضلت كلمي الدعم الفني.' },
+        503: { title: 'السيستم بيتحدّث دلوقتي', body: 'بنعمل تحديث سريع. جربي تاني بعد دقايق.' },
+    },
     auth: {
         email: 'البريد الإلكتروني',
         email_placeholder: 'name@example.com',
@@ -170,6 +180,7 @@ const ar = {
         retry: 'إعادة المحاولة',
         error: 'حدث خطأ، حاول مرة أخرى',
         currency: 'ج.م',
+        currency_usd: 'دولار',
         all: 'الكل',
         search: 'بحث',
         more: 'المزيد',
@@ -534,6 +545,7 @@ const ar = {
     },
     ui: {
         add: 'إضافة',
+        unsaved_changes: 'فيه تغييرات مش محفوظة',
         edit: 'تعديل',
         delete: 'حذف',
         actions: 'إجراءات',
@@ -570,6 +582,7 @@ const ar = {
         from: 'من',
         to: 'إلى',
         apply: 'تطبيق',
+        date_placeholder: 'يوم/شهر/سنة',
     },
     comments: {
         title: 'التعليقات',
@@ -764,9 +777,11 @@ const ar = {
         title: 'الطلبات',
         search: 'رقم الأوردر أو اسم/موبايل العميل',
         type_all: 'كل الأنواع',
-        date_from: 'من تاريخ',
-        date_to: 'إلى تاريخ',
         empty: 'لا توجد طلبات',
+        empty_body: 'الطلبات اللي البوت بيسجلها (مرتجع، استبدال، شكوى، متابعة شحن) هتظهر هنا أول ما توصل.',
+        empty_filtered: 'مفيش طلبات بالفلاتر دي. جربي تغيري التاريخ أو النوع.',
+        filter_date: 'التاريخ',
+        date_chip: 'من {from} لـ {to}',
         tabs: { all: 'الكل', new: 'جديدة', in_progress: 'قيد المتابعة', closed: 'مغلقة' },
         types: {
             return_exchange: 'مرتجع/استبدال',
@@ -785,7 +800,7 @@ const ar = {
             status: 'الحالة',
             date: 'التاريخ',
         },
-        priority: { medium: 'متوسطة', high: 'عالية' },
+        priority: { low: 'منخفضة', normal: 'عادية', medium: 'متوسطة', high: 'عالية' },
         no_order: 'بدون أوردر',
         no_photos: 'لا توجد صور',
         policy_notes: 'ملاحظات السياسة',
@@ -895,7 +910,7 @@ const ar = {
             cost_per_order: 'تكلفة الأوردر',
             roas: 'العائد على الإعلان',
             unnamed: 'إعلان بدون اسم',
-            no_spend: 'المصاريف مش متاحة: الـ token بتاع صفحة فيسبوك مش شايف الحساب الإعلاني (محتاج ads_read على System User).',
+            no_spend: 'علشان تظهر أرقام الإعلانات محتاجين صلاحية قراءة الإعلانات من فيسبوك — كلم الدعم الفني.',
             attribution_note: 'المحادثة بتتحسب للإعلان اللي جات منه أول مرة، والأوردر بيتحسب لو العميلة عندها محادثة من إعلان قبل ما تطلب.',
             totals: 'الإجمالي',
         },
@@ -1069,6 +1084,7 @@ const ar = {
             all_actions: 'كل الإجراءات',
             empty: 'لا يوجد نشاط في هذه الفترة',
             open_order: 'فتح الطلب',
+            unknown: 'نشاط',
         },
         actors: { bot: 'البوت', system: 'النظام', customer: 'العميل', user: 'موظف' },
         message: {
@@ -1084,6 +1100,7 @@ const ar = {
             return_to_bot: '{actor} أرجع محادثة {platform} للبوت',
             reset: '{actor} صفّر محادثة على {platform}',
             priority_changed: '{actor} غيّر تصنيف محادثة على {platform}',
+            referral: 'محادثة على {platform} جت من إعلان',
         },
         note: { added: '{actor} أضاف ملاحظة داخلية' },
         comment: {
@@ -1115,6 +1132,14 @@ const ar = {
             created: '{actor} عمل فلو جديد',
             updated: '{actor} عدّل إعدادات فلو',
         },
+        queue: {
+            enqueue: 'عميلة على {platform} أخدت دور في الطابور (تذكرة {ticket})',
+            assign: 'تذكرة {ticket} اتحولت لموظفة على {platform}',
+            close: '{actor} قفل شباك تذكرة {ticket}',
+            no_reply: 'تذكرة {ticket} اتحولت لزميلة تانية علشان مفيش رد في الوقت',
+            other: 'نشاط في الطابور',
+        },
+        shift: { open: 'شيفت الطابور اتفتح' },
     },
     activity_filter: {
         message: { received: 'رسالة واردة', sent: 'رسالة مرسلة', failed: 'فشل إرسال' },
@@ -1126,6 +1151,7 @@ const ar = {
             return_to_bot: 'إرجاع للبوت',
             reset: 'تصفير محادثة',
             priority_changed: 'تغيير تصنيف محادثة',
+            referral: 'محادثة من إعلان',
         },
         note: { added: 'ملاحظة داخلية' },
         comment: { replied: 'رد على تعليق', hidden: 'إخفاء تعليق', private_reply: 'رد خاص', flagged: 'تعليق مميز' },
@@ -1142,6 +1168,8 @@ const ar = {
         user: { login: 'تسجيل دخول', logout: 'تسجيل خروج' },
         customer: { merged: 'دمج عميل' },
         bot_flow: { draft_saved: 'حفظ مسودة فلو', published: 'نشر فلو', restored: 'استرجاع نسخة فلو', created: 'فلو جديد', updated: 'تعديل فلو' },
+        queue: { enqueue: 'دخول الطابور', assign: 'تحويل لموظفة', close: 'قفل شباك', no_reply: 'تحويل لعدم الرد', other: 'نشاط في الطابور' },
+        shift: { open: 'فتح شيفت' },
     },
     settings: {
         test_links: {
@@ -1773,7 +1801,7 @@ const ar = {
             search: 'دوري في العربي أو الإنجليزي',
             only_missing: 'اللي لسه من غير ترجمة',
             usage: 'اتترجم النهارده {used} من {cap}',
-            no_engine: 'الترجمة الأوتوماتيك مقفولة (مفيش مفتاح Claude)، فالجمل اللي من غير ترجمة هتخرج بالعربي زي ما هي.',
+            no_engine: 'الترجمة الآلية مش شغالة دلوقتي — الترجمات اليدوية شغالة عادي، والجمل اللي من غير ترجمة هتخرج بالعربي.',
             arabic: 'العربي',
             english: 'الإنجليزي',
             where: 'بتستخدم فين',

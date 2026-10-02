@@ -32,8 +32,10 @@ function step(value: number): string {
     <figure class="rounded-lg bg-card p-3 shadow-card">
         <figcaption :id="`${id}-title`" class="mb-1 text-sm font-bold text-foreground">{{ title }}</figcaption>
         <p class="mb-2 text-2xs text-muted-foreground">{{ t('reports.heatmap_hint') }}</p>
-        <div class="scrollbar-thin overflow-x-auto">
-            <table class="w-full min-w-[640px] border-separate border-spacing-0.5 text-2xs" :aria-labelledby="`${id}-title`">
+        <!-- `relative`: the sr-only spans are absolutely positioned; without a positioned scroller they
+             escape it and widen the whole page on a phone (the layout viewport grew to 657 px). -->
+        <div class="scrollbar-thin relative overflow-x-auto">
+            <table class="w-full min-w-[640px] table-fixed border-separate border-spacing-0.5 text-2xs" :aria-labelledby="`${id}-title`">
                 <thead>
                     <tr>
                         <th scope="col" class="w-12"><span class="sr-only">{{ t('reports.day') }}</span></th>

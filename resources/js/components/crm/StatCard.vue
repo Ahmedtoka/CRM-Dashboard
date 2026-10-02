@@ -1,26 +1,30 @@
 <script setup lang="ts">
 import { useI18n } from '@/composables/useI18n';
-import { formatCount } from '@/lib/format';
+import { formatStat } from '@/lib/format';
 import { computed } from 'vue';
 
-const props = withDefaults(defineProps<{ label: string; value: string | number; hint?: string; tone?: 'default' | 'positive' | 'warning' | 'negative' }>(), {
-    tone: 'default',
-});
+const props = withDefaults(
+    defineProps<{ label: string; value: string | number | null; hint?: string; tone?: 'default' | 'positive' | 'warning' | 'negative'; zeroAsDash?: boolean }>(),
+    { tone: 'default', hint: undefined, zeroAsDash: false },
+);
 
 const { locale } = useI18n();
 
-// A caller that has already formatted its value (money, a duration) passes a string;
-// a bare number is formatted here so no card shows Latin digits in Arabic.
-const shown = computed(() => (typeof props.value === 'number' ? formatCount(props.value, locale.value) : props.value));
+// A caller that has already formatted its value (money, a duration) passes a string; a bare number
+// is formatted here in the page's digits, and `null` (no data) reads «—», never a lone «٠».
+const shown = computed(() => (typeof props.value === 'string' ? props.value : formatStat(props.value, locale.value, { zeroAsDash: props.zeroAsDash })));
 </script>
 
 <template>
     <div
-        class="rounded-lg bg-card px-4 py-3 shadow-card"
+        class="min-w-0 rounded-lg bg-card px-4 py-3 shadow-card"
         :class="{ 'border-s-4 border-success': tone === 'positive', 'border-s-4 border-warning': tone === 'warning' }"
     >
         <p class="text-2xs font-medium text-muted-foreground">{{ label }}</p>
-        <p class="mt-0.5 text-xl font-bold tabular-nums text-foreground" :class="{ 'text-destructive': tone === 'negative' }">
+        <p
+            class="mt-0.5 text-lg font-bold tabular-nums [overflow-wrap:anywhere] text-foreground sm:text-xl"
+            :class="{ 'text-destructive': tone === 'negative', 'text-muted-foreground': shown === '—' }"
+        >
             {{ shown }}
         </p>
         <p v-if="hint" class="text-2xs text-muted-foreground">{{ hint }}</p>

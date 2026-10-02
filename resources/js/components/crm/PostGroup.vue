@@ -4,7 +4,7 @@ import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import type { CommentItem, PostRef } from '@/types/admin';
 import { ExternalLink, Filter, ImageOff } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{ post: PostRef | null; comments: CommentItem[] }>();
 const emit = defineEmits<{ filterPost: [postId: number] }>();
@@ -12,12 +12,28 @@ const emit = defineEmits<{ filterPost: [postId: number] }>();
 const { t } = useI18n();
 
 const newCount = computed(() => props.comments.filter((c) => c.status === 'new').length);
+
+// Post thumbnails are platform CDN links that expire: a failed one shows the neutral placeholder,
+// never the browser's broken-image glyph.
+const thumbFailed = ref(false);
+watch(
+    () => props.post?.thumbnail_url,
+    () => (thumbFailed.value = false),
+);
 </script>
 
 <template>
     <section class="overflow-hidden rounded-lg bg-card shadow-card">
         <header class="flex items-start gap-3 border-b border-border bg-muted/30 p-3">
-            <img v-if="post?.thumbnail_url" :src="post.thumbnail_url" alt="" class="size-12 shrink-0 rounded object-cover" loading="lazy" />
+            <img
+                v-if="post?.thumbnail_url && !thumbFailed"
+                :src="post.thumbnail_url"
+                alt=""
+                class="size-12 shrink-0 rounded object-cover"
+                loading="lazy"
+                referrerpolicy="no-referrer"
+                @error="thumbFailed = true"
+            />
             <div v-else class="flex size-12 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground" aria-hidden="true">
                 <ImageOff class="size-4" />
             </div>

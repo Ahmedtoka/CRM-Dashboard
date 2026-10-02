@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DateInput from '@/components/crm/DateInput.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import StatCard from '@/components/crm/StatCard.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
@@ -127,11 +128,11 @@ const breadcrumbs = computed(() => [
             <section class="flex flex-wrap items-end gap-2 rounded-lg bg-card p-4 text-xs shadow-card">
                 <label class="grid gap-1">
                     <span class="text-muted-foreground">{{ t('settings.shopify.sync.from') }}</span>
-                    <input v-model="from" type="date" dir="ltr" class="h-9 rounded-md border border-input bg-background px-2" :max="to" />
+                    <DateInput v-model="from" class="h-9 rounded-md border border-input bg-background px-2" :max="to" />
                 </label>
                 <label class="grid gap-1">
                     <span class="text-muted-foreground">{{ t('settings.shopify.sync.to') }}</span>
-                    <input v-model="to" type="date" dir="ltr" class="h-9 rounded-md border border-input bg-background px-2" :min="from" />
+                    <DateInput v-model="to" class="h-9 rounded-md border border-input bg-background px-2" :min="from" />
                 </label>
                 <button
                     type="button"

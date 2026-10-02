@@ -1,12 +1,14 @@
 <?php
 
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\Web\FallbackController;
 use App\Http\Controllers\Web\LegalController;
 use App\Http\Controllers\Web\LocaleController;
 use App\Http\Controllers\Web\MediaController;
 use App\Http\Controllers\Web\TryController;
 use App\Http\Middleware\SetLocale;
 use App\Onboarding\HomeRoute;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -51,6 +53,16 @@ Route::post('/guest/locale/{locale}', [LocaleController::class, 'guest'])
     ->middleware('guest')
     ->whereIn('locale', SetLocale::SUPPORTED)
     ->name('locale.guest');
+
+// Unknown addresses run through the `web` group (session, locale, shared props), so the
+// 404 page knows who is signed in and renders inside the app (bootstrap/app.php → respond).
+// Every verb, so a POST to an unknown address stays a 404 (a GET-only fallback answers 405),
+// and without the CSRF check, which would turn that 404 into a 419. A known address with the
+// wrong verb still answers 405 (FallbackController).
+Route::any('{fallbackPlaceholder}', FallbackController::class)
+    ->where('fallbackPlaceholder', '.*')
+    ->fallback()
+    ->withoutMiddleware(ValidateCsrfToken::class);
 
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';

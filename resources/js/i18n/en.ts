@@ -2,6 +2,16 @@ import type { Messages } from './index';
 
 const en: Messages = {
     app: { name: 'Social CRM', tagline: 'One inbox for Messenger, Instagram, WhatsApp and TikTok' },
+    error_page: {
+        code: 'Error {n}',
+        home: 'Go to the inbox',
+        back: 'Go back',
+        login: 'Log in',
+        403: { title: 'This page is not available to you', body: 'Your account does not have access to this page. If you need it, ask an admin.' },
+        404: { title: 'This page does not exist', body: 'The link may have changed or been mistyped. Go back to the inbox and carry on from there.' },
+        500: { title: 'Something went wrong on our side', body: 'The page could not open because of a system error. Try again in a moment; if it keeps happening, contact support.' },
+        503: { title: 'The system is updating', body: 'A quick update is running. Try again in a few minutes.' },
+    },
     auth: {
         email: 'Email address',
         email_placeholder: 'name@example.com',
@@ -186,6 +196,7 @@ const en: Messages = {
         retry: 'Retry',
         error: 'Something went wrong, please try again',
         currency: 'EGP',
+        currency_usd: 'USD',
         all: 'All',
         search: 'Search',
         more: 'More',
@@ -557,6 +568,7 @@ const en: Messages = {
     },
     ui: {
         add: 'Add',
+        unsaved_changes: 'You have unsaved changes',
         edit: 'Edit',
         delete: 'Delete',
         actions: 'Actions',
@@ -593,6 +605,7 @@ const en: Messages = {
         from: 'From',
         to: 'To',
         apply: 'Apply',
+        date_placeholder: 'dd/mm/yyyy',
     },
     comments: {
         title: 'Comments',
@@ -793,9 +806,11 @@ const en: Messages = {
         title: 'Requests',
         search: 'Order number or customer name/phone',
         type_all: 'All types',
-        date_from: 'From',
-        date_to: 'To',
         empty: 'No requests',
+        empty_body: 'Requests the bot records (returns, exchanges, complaints, delivery follow-ups) show up here as they arrive.',
+        empty_filtered: 'No requests match these filters. Try another date or type.',
+        filter_date: 'Date',
+        date_chip: '{from} to {to}',
         tabs: { all: 'All', new: 'New', in_progress: 'In progress', closed: 'Closed' },
         types: {
             return_exchange: 'Return/exchange',
@@ -814,7 +829,7 @@ const en: Messages = {
             status: 'Status',
             date: 'Date',
         },
-        priority: { medium: 'Medium', high: 'High' },
+        priority: { low: 'Low', normal: 'Normal', medium: 'Medium', high: 'High' },
         no_order: 'No order',
         no_photos: 'No photos',
         policy_notes: 'Policy notes',
@@ -917,7 +932,7 @@ const en: Messages = {
             cost_per_order: 'Cost / order',
             roas: 'ROAS',
             unnamed: 'Unnamed ad',
-            no_spend: 'Spend unavailable: the Facebook page token cannot see the ad account (ads_read on the System User is needed).',
+            no_spend: 'To show ad figures we need permission to read your ads from Facebook — contact support.',
             attribution_note:
                 'A conversation counts for the ad it first came from; an order counts when the customer had an ad conversation before placing it.',
             totals: 'Total',
@@ -1092,6 +1107,7 @@ const en: Messages = {
             all_actions: 'All actions',
             empty: 'No activity in this period',
             open_order: 'Open order',
+            unknown: 'Activity',
         },
         actors: { bot: 'Bot', system: 'System', customer: 'Customer', user: 'Staff' },
         message: {
@@ -1107,6 +1123,7 @@ const en: Messages = {
             return_to_bot: '{actor} returned a {platform} conversation to the bot',
             reset: '{actor} reset a conversation on {platform}',
             priority_changed: '{actor} changed the priority of a {platform} conversation',
+            referral: 'A {platform} conversation came from an ad',
         },
         note: { added: '{actor} added an internal note' },
         comment: {
@@ -1138,6 +1155,14 @@ const en: Messages = {
             created: '{actor} created a flow',
             updated: '{actor} updated the settings of a flow',
         },
+        queue: {
+            enqueue: 'A {platform} customer took a place in the queue (ticket {ticket})',
+            assign: 'Ticket {ticket} was handed to a moderator on {platform}',
+            close: '{actor} closed the window of ticket {ticket}',
+            no_reply: 'Ticket {ticket} moved to another colleague because there was no reply in time',
+            other: 'Queue activity',
+        },
+        shift: { open: 'The queue shift opened' },
     },
     activity_filter: {
         message: { received: 'Message received', sent: 'Message sent', failed: 'Send failed' },
@@ -1149,6 +1174,7 @@ const en: Messages = {
             return_to_bot: 'Returned to bot',
             reset: 'Conversation reset',
             priority_changed: 'Priority changed',
+            referral: 'Conversation from an ad',
         },
         note: { added: 'Internal note' },
         comment: { replied: 'Comment reply', hidden: 'Comment hidden', private_reply: 'Private reply', flagged: 'Comment flagged' },
@@ -1171,6 +1197,8 @@ const en: Messages = {
             created: 'Flow created',
             updated: 'Flow updated',
         },
+        queue: { enqueue: 'Joined the queue', assign: 'Handed to a moderator', close: 'Window closed', no_reply: 'Moved for no reply', other: 'Queue activity' },
+        shift: { open: 'Shift opened' },
     },
     settings: {
         test_links: {
@@ -1816,7 +1844,7 @@ const en: Messages = {
             search: 'Search the Arabic or the English',
             only_missing: 'Not translated yet',
             usage: '{used} of {cap} translated today',
-            no_engine: 'Automatic translation is off (no Claude key), so anything without a translation goes out in Arabic.',
+            no_engine: 'Automatic translation is not working right now — manual translations work as usual, and anything without one goes out in Arabic.',
             arabic: 'Arabic',
             english: 'English',
             where: 'Used in',
