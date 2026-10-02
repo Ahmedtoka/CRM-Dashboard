@@ -79,6 +79,9 @@ final class BuyerScorecard
         $revenue = round((float) $orders->sum('net'), 2);
         $budget = $target['budget'] ?? null;
         $targetRoas = $target['target_roas'] ?? null;
+        // From the raw sums, not the rounded ROAS: value / (spend x target).
+        $rawSpend = (float) ($sums->spend ?? 0);
+        $rawValue = (float) ($sums->purchase_value ?? 0);
 
         return [
             'buyer_id' => $id,
@@ -99,7 +102,7 @@ final class BuyerScorecard
             'budget' => $budget,
             'budget_used_pct' => $budget !== null ? AdsQuery::ratio($d['spend'] * 100, $budget, 2) : null,
             'target_roas' => $targetRoas,
-            'roas_vs_target' => $targetRoas !== null && $d['roas'] !== null ? AdsQuery::ratio($d['roas'], $targetRoas, 2) : null,
+            'roas_vs_target' => $targetRoas !== null && $rawSpend > 0 ? AdsQuery::ratio($rawValue, $rawSpend * (float) $targetRoas, 2) : null,
         ];
     }
 

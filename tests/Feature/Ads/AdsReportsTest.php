@@ -159,6 +159,15 @@ it('builds buyer scorecards across an owner change with budgets prorated', funct
         ->and($detail['campaigns'])->toBeArray();
 });
 
+it('computes roas against target from the raw sums, not the rounded roas', function () {
+    $w = rptWorld();
+    rptMetric($w['ad2'], '2026-09-10', ['spend' => 300, 'purchase_value' => 1000]); // roas 3.333 -> shown 3.33
+    BuyerTarget::factory()->create(['media_buyer_id' => $w['mostafa']->id, 'month' => '2026-09-01', 'budget' => 1000, 'target_roas' => 0.5]);
+
+    $card = collect(app(BuyerScorecard::class)->build(rptRange()))->firstWhere('buyer_id', $w['mostafa']->id);
+    expect($card['roas'])->toBe(3.33)->and($card['roas_vs_target'])->toBe(6.67); // 3.33 / 0.5 would read 6.66
+});
+
 it('restricts a buyer user to their own rows', function () {
     $w = rptWorld();
     rptSeptember($w['ad1']);
@@ -175,10 +184,26 @@ it('restricts a buyer user to their own rows', function () {
         ->and(array_column(app(BuyerScorecard::class)->build($f), 'buyer_id'))->toBe([$w['ahmed']->id])
         ->and(app(TopAccounts::class)->build($f)[0]['spend'])->toBe(1500.0);
 
+    // real orders and inbox conversations follow the same isolation (owner on the day)
+    $cust = Customer::factory()->create();
+    rptOrder(['ad_id' => $w['ad1']->id, 'placed_at' => '2026-09-10 10:00', 'total' => 500, 'customer_id' => $cust->id]); // Ahmed
+    rptOrder(['ad_id' => $w['ad1']->id, 'placed_at' => '2026-09-20 10:00', 'total' => 700]);                            // Mostafa (acc1 after Sep 15)
+    rptOrder(['ad_id' => $w['ad2']->id, 'placed_at' => '2026-09-12 10:00', 'total' => 900]);                            // Mostafa
+    rptOrder(['ad_id' => $w['ad3']->id, 'placed_at' => '2026-09-12 10:00', 'total' => 300]);                            // unassigned
+    Conversation::factory()->create(['customer_id' => $cust->id, 'ad_id' => '9001', 'ad_attributed_at' => '2026-09-05 10:00']); // Ahmed, ordered
+    Conversation::factory()->create(['customer_id' => Customer::factory()->create()->id, 'ad_id' => '9001', 'ad_attributed_at' => '2026-09-18 10:00']); // Mostafa
+    Conversation::factory()->create(['customer_id' => Customer::factory()->create()->id, 'ad_id' => '9002', 'ad_attributed_at' => '2026-09-06 10:00']); // Mostafa
+    Conversation::factory()->create(['customer_id' => Customer::factory()->create()->id, 'ad_id' => '9003', 'ad_attributed_at' => '2026-09-06 10:00']); // unassigned
+
+    $mine = app(AdsOverview::class)->build($f)['totals'];
+    expect($mine)->toMatchArray(['real_orders' => 1, 'real_revenue' => 500.0, 'conversations' => 1, 'conversations_ordered' => 1])
+        ->and(app(BuyerScorecard::class)->build($f)[0])->toMatchArray(['real_orders' => 1, 'real_revenue' => 500.0, 'conversations' => 1, 'conversations_ordered' => 1]);
+
     $unlinked = User::factory()->create(['role' => UserRole::MediaBuyer]);
     $content = User::factory()->create(['role' => UserRole::Content]);
     foreach ([$unlinked, $content] as $u) {
         $uf = AdsFilter::fromRequest($req, $u);
+        expect(app(AdsOverview::class)->build($uf)['totals'])->toMatchArray(['real_orders' => 0, 'real_revenue' => 0.0, 'conversations' => 0, 'conversations_ordered' => 0]);
         expect(app(AdsOverview::class)->build($uf)['totals']['spend'])->toBe(0.0)
             ->and(app(BuyerScorecard::class)->build($uf))->toBe([])
             ->and(app(RunningCreatives::class)->build($uf, [])['meta']['total'])->toBe(0)
