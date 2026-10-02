@@ -49,7 +49,8 @@ in the settings the command does nothing.
   * * * * * cd /home/master/applications/ryznnsupxm/public_html && php artisan schedule:run >> /dev/null 2>&1
   ```
 
-  (`public_html` is the Laravel root deployed from `backend/`; one line only, see below.)
+  (`public_html` is the Laravel root: the repo's `backend/` folder is deployed directly into it, there
+  is no `backend/` folder on the server; one line only, see below.)
 
 ## Presence and the two clocks (flow revision, 2026-09-29)
 
@@ -109,8 +110,11 @@ runs the tick again at second 30. So:
   (Application Settings -> Cron Job Management):
 
   ```
-  * * * * * cd <app>/public_html/backend && php artisan schedule:run >> /dev/null 2>&1
+  * * * * * cd <app>/public_html && php artisan schedule:run >> /dev/null 2>&1
   ```
+
+  `<app>` is the application's home directory (production: `/home/master/applications/ryznnsupxm`);
+  the Laravel app sits directly in `public_html`, with no `backend/` folder on the server.
 
 - Do not add a second cron line for `queue:tick`, and do not wrap `schedule:run` in `timeout`
   or anything else that kills it before the minute ends (the second tick would be lost).

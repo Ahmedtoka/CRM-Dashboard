@@ -47,7 +47,7 @@ Scheduled every 30 seconds. Laravel runs a sub-minute task from inside `schedule
 stays alive until the end of the minute and starts the second run itself, so the server's cron
 keeps its one-minute line:
 
-  * * * * * cd <app>/public_html/backend && php artisan schedule:run >> /dev/null 2>&1
+  * * * * * cd <app>/public_html && php artisan schedule:run >> /dev/null 2>&1
 
 On Cloudways (Application Settings -> Cron Job Management) keep exactly that line. Do not wrap it
 in `timeout`, and do not add a second cron line for queue:tick. `deploy.sh` runs
