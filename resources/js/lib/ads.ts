@@ -152,3 +152,30 @@ export function formatIsoDayShort(iso: string | null | undefined, locale: Locale
 export function flowArrow(locale: Locale): string {
     return locale === 'ar' ? '←' : '→';
 }
+
+const PREVIEW_HOSTS = ['facebook.com', 'fb.com'];
+
+/** Preview frames may only load https pages on facebook.com / fb.com (or their subdomains). */
+export function allowedPreviewUrl(url: string | null | undefined): string | null {
+    if (!url) return null;
+    try {
+        const u = new URL(url);
+        const host = u.hostname.toLowerCase();
+        if (u.protocol !== 'https:' || u.username || u.password) return null;
+
+        return PREVIEW_HOSTS.some((h) => host === h || host.endsWith(`.${h}`)) ? u.toString() : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The platform's preview markup is never rendered: only the src of its first iframe is taken, and only
+ * when it passes the host check. The page then loads that URL in a cross-origin iframe.
+ */
+export function previewSrcFromHtml(html: string | null | undefined): string | null {
+    if (!html || typeof DOMParser === 'undefined') return null;
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+
+    return allowedPreviewUrl(doc.querySelector('iframe[src]')?.getAttribute('src'));
+}

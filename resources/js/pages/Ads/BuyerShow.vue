@@ -21,7 +21,7 @@ import { computed, ref } from 'vue';
 const props = defineProps<AdsBuyerShowProps>();
 
 const { t, locale } = useI18n();
-const money = (v: number | null) => formatAdsMoney(v, locale.value);
+const money = (v: number | null) => formatAdsMoney(v, locale.value, props.currency);
 const n = (v: number) => formatCount(v, locale.value);
 const d = computed(() => props.detail);
 
@@ -136,13 +136,13 @@ const breadcrumbs = computed(() => [
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="buyer.name" :description="t('ads.buyers.show_hint')">
-                <AdsRangeBar :filters="filters" :show-buyer="false" />
+                <AdsRangeBar :filters="filters" :platforms="platforms" :show-buyer="false" />
             </PageHeader>
 
             <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
                 <div class="rounded-lg border-t-4 bg-card px-4 py-3 shadow-card" :style="{ borderTopColor: buyer.color ?? 'hsl(var(--primary))' }">
                     <p class="text-2xs font-medium text-muted-foreground">{{ t('ads.kpi.spend_tax') }}</p>
-                    <MoneyCell :amount="d.spend" :with-tax="d.spend_tax" size="lg" align="start" class="mt-0.5" />
+                    <MoneyCell :amount="d.spend" :with-tax="d.spend_tax" size="lg" align="start" class="mt-0.5" :currency="currency" />
                 </div>
                 <StatCard
                     v-for="k in kpis"
@@ -228,7 +228,7 @@ const breadcrumbs = computed(() => [
                             ><span dir="auto">{{ (row as CampaignRow).account ?? '—' }}</span></template
                         >
                         <template #cell-spend="{ row }"
-                            ><MoneyCell :amount="(row as CampaignRow).spend" :with-tax="(row as CampaignRow).spend_tax"
+                            ><MoneyCell :amount="(row as CampaignRow).spend" :with-tax="(row as CampaignRow).spend_tax" :currency="currency"
                         /></template>
                         <template #cell-purchase_value="{ row }"
                             ><span class="tabular-nums">{{ money((row as CampaignRow).purchase_value) }}</span></template
@@ -250,6 +250,6 @@ const breadcrumbs = computed(() => [
             </div>
         </div>
 
-        <CreativePreviewModal v-model:open="modalOpen" :ad="selected" :filters="filters" />
+        <CreativePreviewModal v-model:open="modalOpen" :ad="selected" :filters="{ ...filters, buyer: buyer.id }" :currency="currency" />
     </AppLayout>
 </template>

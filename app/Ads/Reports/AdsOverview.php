@@ -80,7 +80,8 @@ final class AdsOverview
             })->values()->all();
     }
 
-    private function currency(AdsFilter $f): string
+    /** Currency of the accounts in the filter (first account by id), EGP when none. */
+    public function currency(AdsFilter $f): string
     {
         if ($f->isEmpty()) {
             return 'EGP';

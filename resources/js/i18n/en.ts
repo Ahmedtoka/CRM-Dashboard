@@ -109,7 +109,7 @@ const en: Messages = {
         reports_me: 'My performance',
         reports_team: 'Team',
         reports_bot: 'Bot',
-        reports_ads: 'Ads',
+        reports_ads: 'Ad conversations',
         ads: 'Ads',
         ads_materials: 'Materials library',
         ads_overview: 'Overview',

@@ -17,7 +17,7 @@ import { computed, ref } from 'vue';
 const props = defineProps<AdsWinnersProps>();
 
 const { t, locale } = useI18n();
-const money = (v: number | null) => formatAdsMoney(v, locale.value);
+const money = (v: number | null) => formatAdsMoney(v, locale.value, props.currency);
 
 const SORTS: WinnerSort[] = ['score', 'roas', 'spend', 'revenue', 'date'];
 const STATUSES: CreativeStatusFilter[] = ['all', 'active', 'inactive'];
@@ -61,7 +61,7 @@ const breadcrumbs = computed(() => [
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-[1400px] space-y-4 p-3 md:p-6">
             <PageHeader :title="t('ads.winners.title')" :description="windowLabel">
-                <AdsRangeBar :filters="filters" :keep="keep" />
+                <AdsRangeBar :filters="filters" :platforms="platforms" :buyers="buyers" :keep="keep" />
             </PageHeader>
 
             <p class="rounded-md bg-surface-accent px-3 py-2 text-2xs text-muted-foreground">
@@ -124,8 +124,11 @@ const breadcrumbs = computed(() => [
                             <dl class="grid grid-cols-3 gap-x-2 gap-y-1.5 text-2xs">
                                 <div>
                                     <dt class="text-muted-foreground">{{ t('ads.winners.spend') }}</dt>
-                                    <dd class="font-semibold tabular-nums" :title="t('ads.money.pre_tax', { amount: money(w.spend) })">
+                                    <dd class="font-semibold tabular-nums">
                                         {{ money(w.ad.spend_tax) }}
+                                        <span class="block text-[10px] font-normal leading-tight text-muted-foreground">{{
+                                            t('ads.money.pre_tax', { amount: money(w.spend) })
+                                        }}</span>
                                     </dd>
                                 </div>
                                 <div>
@@ -184,6 +187,7 @@ const breadcrumbs = computed(() => [
             :ad="selected?.ad ?? null"
             :filters="{ ...filters, from: window.from, to: window.to }"
             :smoothed-roas="selected?.smoothed_roas ?? null"
+            :currency="currency"
         />
     </AppLayout>
 </template>

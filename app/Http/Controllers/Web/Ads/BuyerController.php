@@ -22,6 +22,7 @@ class BuyerController extends Controller
 
         return Inertia::render('Ads/Buyers', [
             'filters' => $this->filterProps($filter),
+            ...$this->commonProps($request->user(), $filter),
             'cards' => $cards->build($filter),
         ]);
     }
@@ -35,6 +36,7 @@ class BuyerController extends Controller
 
         return Inertia::render('Ads/BuyerShow', [
             'filters' => $this->filterProps($filter),
+            ...$this->commonProps($user, $filter),
             'buyer' => ['id' => $buyer->id, 'name' => $buyer->name, 'color' => $buyer->color],
             'detail' => $cards->detail($buyer, $filter),
         ]);

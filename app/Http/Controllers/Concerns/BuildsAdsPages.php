@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Concerns;
 
-use App\Ads\Access\AdsScope;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Reports\AdsFilter;
+use App\Ads\Reports\AdsOverview;
 use App\Models\MediaBuyer;
 use App\Models\User;
 
@@ -22,13 +22,28 @@ trait BuildsAdsPages
         ];
     }
 
-    /** @return list<array{id:int,name:string}> the buyers a user may filter by (a buyer sees only themselves) */
+    /**
+     * Shared by every report page: buyer filter options, platform values and the display currency.
+     *
+     * @return array{buyers: list<array{id:int,name:string}>, platforms: list<string>, currency: string}
+     */
+    protected function commonProps(User $user, AdsFilter $f): array
+    {
+        return [
+            'buyers' => $this->buyerOptions($user),
+            'platforms' => $this->platformValues(),
+            'currency' => app(AdsOverview::class)->currency($f),
+        ];
+    }
+
+    /** @return list<array{id:int,name:string}> the buyers a supervisor+ may filter by (buyers get no buyer filter) */
     protected function buyerOptions(User $user): array
     {
-        $own = app(AdsScope::class)->buyerFor($user);
+        if (! $user->isSupervisorOrAbove()) {
+            return [];
+        }
 
         return MediaBuyer::query()
-            ->when(! $user->isSupervisorOrAbove(), fn ($q) => $q->whereKey($own?->id ?? 0))
             ->orderBy('name')->get(['id', 'name'])
             ->map(fn (MediaBuyer $b) => ['id' => $b->id, 'name' => $b->name])->all();
     }

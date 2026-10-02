@@ -2,7 +2,8 @@
 /**
  * Creative preview (Arena layout): dark preview pane with tabs at the bottom, details + stats on the side.
  * The row already on the page renders at once; the JSON detail (`/ads/creatives/{id}`, same range) adds the
- * platform preview markup. That markup is platform HTML: it only ever goes into a sandboxed iframe srcdoc.
+ * platform preview markup. That markup is never rendered: only its first iframe src is taken, host-checked
+ * (https, facebook.com / fb.com), and loaded as a cross-origin iframe. No srcdoc, no v-html.
  */
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
@@ -12,12 +13,14 @@ import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import {
     adTypeKey,
+    allowedPreviewUrl,
     fbPostEmbedUrl,
     formatAdsMoney,
     formatPct,
     formatQty,
     formatRoas,
     isAdActive,
+    previewSrcFromHtml,
     rangeQueryString,
     roasTone,
     safeUrl,
@@ -78,8 +81,9 @@ watch(
 /** The fetched detail when it is for this ad, else the row from the page. */
 const row = computed<CreativeRow | CreativeDetail | null>(() => (detail.value && detail.value.id === props.ad?.id ? detail.value : props.ad));
 const previewHtml = computed(() => (detail.value && detail.value.id === props.ad?.id ? detail.value.preview_html : null));
-const previewUrl = computed(() => safeUrl(row.value?.preview_url));
-const postUrl = computed(() => fbPostEmbedUrl(row.value?.object_story_id));
+/** Meta preview frame: the iframe src inside the preview markup, else preview_url — both host-checked. */
+const metaSrc = computed(() => previewSrcFromHtml(previewHtml.value) ?? allowedPreviewUrl(row.value?.preview_url));
+const postUrl = computed(() => allowedPreviewUrl(fbPostEmbedUrl(row.value?.object_story_id)));
 const imageUrl = computed(() => safeUrl(row.value?.image_url) ?? safeUrl(row.value?.thumbnail_url));
 const videoUrl = computed(() => safeUrl(row.value?.video_url));
 const permalink = computed(() => safeUrl(row.value?.permalink_url));
@@ -87,7 +91,7 @@ const igLink = computed(() => safeUrl(row.value?.instagram_permalink_url));
 
 const tabs = computed<Tab[]>(() => {
     const out: Tab[] = [];
-    if (previewHtml.value || previewUrl.value) out.push('meta');
+    if (metaSrc.value) out.push('meta');
     if (postUrl.value) out.push('post');
     if (imageUrl.value) out.push('image');
     if (videoUrl.value) out.push('video');
@@ -130,29 +134,16 @@ const SANDBOX = 'allow-scripts allow-same-origin allow-popups';
                 <!-- Preview pane: dark in both themes, like the platform's own preview. -->
                 <section class="flex min-h-[420px] flex-col bg-zinc-950 text-zinc-100 md:max-h-[92svh]" :aria-label="t('ads.preview.pane')">
                     <div class="relative flex flex-1 items-center justify-center overflow-hidden p-3">
-                        <LoaderCircle
-                            v-if="loading && !previewHtml && current === 'meta'"
-                            class="size-6 animate-spin text-zinc-400"
-                            aria-hidden="true"
+                        <LoaderCircle v-if="loading && !current" class="size-6 animate-spin text-zinc-400" aria-hidden="true" />
+                        <iframe
+                            v-else-if="current === 'meta' && metaSrc"
+                            :key="metaSrc"
+                            :src="metaSrc"
+                            :sandbox="SANDBOX"
+                            referrerpolicy="no-referrer"
+                            :title="t('ads.preview.meta')"
+                            class="h-[560px] max-h-full w-full max-w-[540px] rounded-md bg-white"
                         />
-                        <template v-else-if="current === 'meta'">
-                            <iframe
-                                v-if="previewHtml"
-                                :srcdoc="previewHtml"
-                                :sandbox="SANDBOX"
-                                referrerpolicy="no-referrer"
-                                :title="t('ads.preview.meta')"
-                                class="h-[560px] max-h-full w-full max-w-[540px] rounded-md bg-white"
-                            />
-                            <iframe
-                                v-else-if="previewUrl"
-                                :src="previewUrl"
-                                :sandbox="SANDBOX"
-                                referrerpolicy="no-referrer"
-                                :title="t('ads.preview.meta')"
-                                class="h-[560px] max-h-full w-full max-w-[540px] rounded-md bg-white"
-                            />
-                        </template>
                         <iframe
                             v-else-if="current === 'post' && postUrl"
                             :src="postUrl"

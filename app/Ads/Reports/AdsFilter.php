@@ -50,7 +50,7 @@ final readonly class AdsFilter
         $scope = app(AdsScope::class);
         $allowed = $scope->accountIds($u, $from, $to);
 
-        $requested = collect((array) ($r->query('accounts') ?? $r->query('account') ?? []))
+        $requested = collect((array) ($r->query('accounts') ?? []))
             ->filter(fn ($v) => is_numeric($v))->map(fn ($v) => (int) $v)->unique()->values()->all();
         $accountIds = match (true) {
             $allowed === null => $requested === [] ? null : $requested,

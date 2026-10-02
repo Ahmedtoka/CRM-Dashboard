@@ -8,6 +8,7 @@ use App\Ads\Platforms\Data\AdRow;
 use App\Ads\Platforms\Data\CreativeMedia;
 use App\Ads\Platforms\Data\DailyAdMetric;
 use App\Ads\Platforms\DriverFactory;
+use App\Ads\Platforms\PreviewMarkup;
 use App\Ads\Platforms\RateLimited;
 use App\Models\Ad;
 use App\Models\AdAccount;
@@ -165,8 +166,15 @@ final class AdsSyncService
     {
         $values = array_filter([
             'image_url' => $m->imageUrl, 'video_url' => $m->videoUrl, 'thumbnail_url' => $m->thumbnailUrl,
-            'preview_url' => $m->previewUrl, 'preview_html' => $m->previewHtml, 'permalink_url' => $m->permalinkUrl,
+            'preview_url' => $m->previewUrl, 'permalink_url' => $m->permalinkUrl,
         ], fn ($v) => $v !== null);
+        // Preview markup is untrusted platform HTML: whenever a driver sends some, only a host-checked
+        // iframe src (preview_url) and a rebuilt single iframe (preview_html, else null) are stored.
+        if ($m->previewHtml !== null) {
+            $values['preview_url'] = PreviewMarkup::iframeSrc($m->previewHtml)
+                ?? (PreviewMarkup::allowedUrl($m->previewUrl) ? $m->previewUrl : null);
+            $values['preview_html'] = PreviewMarkup::singleIframe($m->previewHtml);
+        }
         $values['media_fetched_at'] = now();
 
         return Ad::where('ad_account_id', $a->id)->where('external_id', $m->adExternalId)->update($values);

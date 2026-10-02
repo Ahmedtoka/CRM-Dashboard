@@ -83,7 +83,7 @@ const breadcrumbs = computed(() => [
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-[1400px] space-y-4 p-3 md:p-6">
             <PageHeader :title="t('ads.creatives.title')" :description="t('ads.creatives.hint')">
-                <AdsRangeBar :filters="filters" :keep="keep" />
+                <AdsRangeBar :filters="filters" :platforms="platforms" :buyers="buyers" :keep="keep" />
             </PageHeader>
 
             <!-- Filters -->
@@ -234,7 +234,7 @@ const breadcrumbs = computed(() => [
                             <td class="px-2 py-2 text-end tabular-nums">{{ n(ad.clicks) }}</td>
                             <td class="px-2 py-2 text-end tabular-nums">{{ formatPct(ad.ctr, locale) }}</td>
                             <td class="px-2 py-2 text-end tabular-nums">{{ formatQty(ad.purchases, locale) }}</td>
-                            <td class="px-2 py-2 text-end"><MoneyCell :amount="ad.spend" :with-tax="ad.spend_tax" /></td>
+                            <td class="px-2 py-2 text-end"><MoneyCell :amount="ad.spend" :with-tax="ad.spend_tax" :currency="currency" /></td>
                             <td class="px-2 py-2 text-end"><StatusChip :label="formatRoas(ad.roas, locale)" :tone="roasTone(ad.roas)" /></td>
                             <td class="px-2 py-2 text-center">
                                 <StatusChip
@@ -267,7 +267,7 @@ const breadcrumbs = computed(() => [
                             <td class="px-2 py-2 text-end tabular-nums">{{ n(totals.clicks) }}</td>
                             <td class="px-2 py-2 text-end tabular-nums">{{ formatPct(totals.ctr, locale) }}</td>
                             <td class="px-2 py-2 text-end tabular-nums">{{ formatQty(totals.purchases, locale) }}</td>
-                            <td class="px-2 py-2 text-end"><MoneyCell :amount="totals.spend" :with-tax="totals.spend_tax" /></td>
+                            <td class="px-2 py-2 text-end"><MoneyCell :amount="totals.spend" :with-tax="totals.spend_tax" :currency="currency" /></td>
                             <td class="px-2 py-2 text-end"><StatusChip :label="formatRoas(totals.roas, locale)" :tone="roasTone(totals.roas)" /></td>
                             <td colspan="2" />
                         </tr>
@@ -303,6 +303,6 @@ const breadcrumbs = computed(() => [
             </nav>
         </div>
 
-        <CreativePreviewModal v-model:open="modalOpen" :ad="selected" :filters="filters" />
+        <CreativePreviewModal v-model:open="modalOpen" :ad="selected" :filters="filters" :currency="currency" />
     </AppLayout>
 </template>

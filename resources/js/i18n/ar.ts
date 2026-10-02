@@ -93,7 +93,7 @@ const ar = {
         reports_me: 'أدائي',
         reports_team: 'الفريق',
         reports_bot: 'البوت',
-        reports_ads: 'الإعلانات',
+        reports_ads: 'إعلانات المحادثات',
         ads: 'الإعلانات',
         ads_materials: 'مكتبة المواد',
         ads_overview: 'نظرة عامة',

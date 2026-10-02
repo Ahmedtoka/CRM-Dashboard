@@ -90,11 +90,11 @@ it('refuses a media buyer another buyers page', function () {
     $this->actingAs($w['user'])->get('/ads/buyers/'.$w['other']->id)->assertForbidden();
 });
 
-it('limits a buyer to their own buyer option and shares the ads access flags', function () {
+it('gives a buyer no buyer filter and shares the ads access flags', function () {
     $w = adsPgBuyerWorld();
 
     $this->actingAs($w['user'])->get('/ads')->assertInertia(fn (Assert $p) => $p
-        ->has('buyers', 1)->where('buyers.0.id', $w['buyer']->id)
+        ->has('buyers', 0)
         ->where('ads.isBuyer', true)->where('ads.canManage', false)->where('ads.canSeeSpend', true)
         ->where('ads.buyerId', $w['buyer']->id));
 
@@ -397,4 +397,19 @@ it('never shows a media buyer another buyers numbers, ads or cards', function ()
     $this->get('/ads/buyers')->assertInertia(fn (Assert $p) => $p
         ->has('cards', 1)
         ->where('cards.0.buyer_id', $w['buyer']->id)->where('cards.0.spend', 100));
+});
+
+it('keeps every account chip while one account is picked on the creatives page', function () {
+    $admin = adsPgUser(UserRole::Admin);
+    $a = AdAccount::factory()->meta()->create(['name' => 'Chip A']);
+    $b = AdAccount::factory()->meta()->create(['name' => 'Chip B']);
+    foreach ([$a, $b] as $acc) {
+        AdDailyMetric::factory()->create(['ad_id' => Ad::factory()->for($acc, 'account')->create()->id]);
+    }
+
+    $this->actingAs($admin)->get("/ads/creatives?account={$a->id}")->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->where('filters.account', $a->id)
+        ->has('result.data', 1)->where('result.data.0.account_id', $a->id)
+        ->has('result.accounts', 2)
+        ->has('buyers')->has('platforms', 3)->where('currency', 'EGP'));
 });

@@ -20,7 +20,7 @@ const props = defineProps<AdsBuyersProps>();
 
 const { t, locale } = useI18n();
 const page = usePage<SharedData>();
-const money = (v: number | null) => formatAdsMoney(v, locale.value);
+const money = (v: number | null) => formatAdsMoney(v, locale.value, props.currency);
 const n = (v: number) => formatCount(v, locale.value);
 
 const hrefOf = (c: BuyerCardData) => (c.buyer_id === null ? null : `/ads/buyers/${c.buyer_id}${rangeQueryString(props.filters)}`);
@@ -85,7 +85,7 @@ const breadcrumbs = computed(() => [
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('ads.buyers.title')" :description="t('ads.buyers.hint')">
-                <AdsRangeBar :filters="filters" />
+                <AdsRangeBar :filters="filters" :platforms="platforms" :buyers="buyers" />
             </PageHeader>
 
             <EmptyState
@@ -106,7 +106,7 @@ const breadcrumbs = computed(() => [
 
             <template v-else>
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    <BuyerCard v-for="c in cards" :key="c.buyer_id ?? 'unassigned'" :card="c" :href="hrefOf(c)" />
+                    <BuyerCard v-for="c in cards" :key="c.buyer_id ?? 'unassigned'" :card="c" :href="hrefOf(c)" :currency="currency" />
                 </div>
 
                 <section class="space-y-2">
@@ -147,7 +147,9 @@ const breadcrumbs = computed(() => [
                                 {{ (row as Row).name }}
                             </span>
                         </template>
-                        <template #cell-spend="{ row }"><MoneyCell :amount="(row as Row).spend" :with-tax="(row as Row).spend_tax" /></template>
+                        <template #cell-spend="{ row }"
+                            ><MoneyCell :amount="(row as Row).spend" :with-tax="(row as Row).spend_tax" :currency="currency"
+                        /></template>
                         <template #cell-budget_used_pct="{ row }">
                             <span class="tabular-nums" :class="((row as Row).budget_used_pct ?? 0) > 100 ? 'font-semibold text-destructive' : ''">
                                 {{

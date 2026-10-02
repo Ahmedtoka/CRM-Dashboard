@@ -24,9 +24,8 @@ class OverviewController extends Controller
 
         return Inertia::render('Ads/Overview', [
             'filters' => $this->filterProps($filter),
+            ...$this->commonProps($user, $filter),
             'overview' => $overview->build($filter),
-            'buyers' => $this->buyerOptions($user),
-            'platforms' => $this->platformValues(),
             'sync' => $this->sync($filter, $user->isSupervisorOrAbove()),
         ]);
     }

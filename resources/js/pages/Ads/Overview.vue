@@ -24,8 +24,7 @@ type Row = AdsDailyRow & { id: string };
 
 const { t, locale } = useI18n();
 const page = usePage<SharedData>();
-const currency = computed(() => props.overview.currency);
-const money = (v: number | null) => formatAdsMoney(v, locale.value, currency.value);
+const money = (v: number | null) => formatAdsMoney(v, locale.value, props.currency);
 const n = (v: number) => formatCount(v, locale.value);
 const tot = computed(() => props.overview.totals);
 const hasData = computed(() => tot.value.spend > 0 || tot.value.impressions > 0 || tot.value.real_orders > 0);

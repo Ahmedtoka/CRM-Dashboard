@@ -37,6 +37,7 @@ class CreativeController extends Controller
                 'status' => $status, 'account' => $account, 'sort' => $sort, 'per_page' => $perPage, 'q' => $q,
                 'page' => $result['meta']['current_page'],
             ],
+            ...$this->commonProps($request->user(), $filter),
             'result' => $result,
         ]);
     }
@@ -60,6 +61,7 @@ class CreativeController extends Controller
 
         return Inertia::render('Ads/Winners', [
             'filters' => $this->filterProps($filter) + ['status' => $status, 'sort' => $sort],
+            ...$this->commonProps($request->user(), $filter),
             'window' => ['from' => $window->fromDate(), 'to' => $window->toDate()],
             'winners' => $scorer->build($filter, $status, $sort),
         ]);

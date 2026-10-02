@@ -8,6 +8,7 @@ use App\Ads\Platforms\Data\AccountInfo;
 use App\Ads\Platforms\Data\AdRow;
 use App\Ads\Platforms\Data\CreativeMedia;
 use App\Ads\Platforms\Data\DailyAdMetric;
+use App\Ads\Platforms\PreviewMarkup;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
@@ -121,10 +122,9 @@ class MetaAdsDriver implements AdPlatformDriver
         foreach ($adExternalIds as $i => $id) {
             $pv = $previews[$i] ?? null;
             $html = $pv && $pv['code'] === 200 ? ($pv['body']['data'][0]['body'] ?? null) : null;
-            $previewUrl = null;
-            if ($html && preg_match('/src=["\']([^"\']+)["\']/i', $html, $m)) {
-                $previewUrl = html_entity_decode($m[1]);
-            }
+            // Untrusted markup: keep only a host-checked iframe src and a rebuilt single iframe.
+            $previewUrl = PreviewMarkup::iframeSrc($html);
+            $html = PreviewMarkup::singleIframe($html);
 
             $video = isset($videoOf[$id]) ? ($videos[array_search($videoOf[$id], $videoIds, true)] ?? null) : null;
             $videoBody = $video && $video['code'] === 200 ? $video['body'] : [];

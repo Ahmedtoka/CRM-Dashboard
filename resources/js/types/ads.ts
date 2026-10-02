@@ -90,11 +90,16 @@ export interface AdsSync {
     errors: { account: string; error: string }[];
 }
 
-export interface AdsOverviewProps {
-    filters: AdsFilters;
-    overview: AdsOverviewData;
+/** BuildsAdsPages::commonProps — on every report page. `buyers` is empty for media buyers. */
+export interface AdsCommonProps {
     buyers: AdsOption[];
     platforms: AdPlatformValue[];
+    currency: string;
+}
+
+export interface AdsOverviewProps extends AdsCommonProps {
+    filters: AdsFilters;
+    overview: AdsOverviewData;
     sync: AdsSync;
 }
 
@@ -154,12 +159,12 @@ export interface BuyerDetail extends BuyerCardData {
     campaigns: BuyerCampaignRow[];
 }
 
-export interface AdsBuyersProps {
+export interface AdsBuyersProps extends AdsCommonProps {
     filters: AdsFilters;
     cards: BuyerCardData[];
 }
 
-export interface AdsBuyerShowProps {
+export interface AdsBuyerShowProps extends AdsCommonProps {
     filters: AdsFilters;
     buyer: { id: number; name: string; color: string | null };
     detail: BuyerDetail;
@@ -226,7 +231,7 @@ export interface CreativesResult {
     totals: AdsDerived;
 }
 
-export interface AdsCreativesProps {
+export interface AdsCreativesProps extends AdsCommonProps {
     filters: CreativesFilters;
     result: CreativesResult;
 }
@@ -258,7 +263,7 @@ export interface WinnersFilters extends AdsFilters {
     sort: WinnerSort;
 }
 
-export interface AdsWinnersProps {
+export interface AdsWinnersProps extends AdsCommonProps {
     filters: WinnersFilters;
     window: { from: string; to: string };
     winners: WinnerRow[];
