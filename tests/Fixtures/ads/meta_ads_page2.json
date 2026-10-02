@@ -1,0 +1,6 @@
+{"data":[
+{"id":"ad_3","name":"Image ad","status":"ACTIVE","effective_status":"ACTIVE","created_time":"2026-08-03T10:00:00+0000",
+ "creative":{"id":"cr3","thumbnail_url":"https://cdn.test/t3.jpg","image_url":"https://cdn.test/i3.jpg","object_story_id":"1_2","effective_object_story_id":"1_2","url_tags":"utm_source=fb","object_story_spec":{"page_id":"1","link_data":{"name":"Summer drop","message":"New in","picture":"https://cdn.test/i3.jpg"}}},
+ "campaign":{"id":"c2","name":"Retargeting","status":"ACTIVE","objective":"OUTCOME_SALES"},
+ "adset":{"id":"s2","name":"Set 2","status":"ACTIVE","is_dynamic_creative":false}}
+],"paging":{"cursors":{"before":"c","after":"d"}}}
