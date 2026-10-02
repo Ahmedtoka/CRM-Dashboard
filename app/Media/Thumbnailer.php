@@ -19,8 +19,11 @@ final class Thumbnailer
 {
     public const MAX_SIDE = 480;
 
-    /** Refuse to decode anything above this many pixels (a decoded bitmap is ~4 bytes per pixel). */
-    private const MAX_PIXELS = 50_000_000;
+    /**
+     * Refuse to decode anything above this many pixels (a decoded GD bitmap is ~4-5 bytes per pixel,
+     * so 24 MP stays near 120 MB, inside a 256 MB worker's memory_limit with the bytes and the thumb).
+     */
+    public const MAX_PIXELS = 24_000_000;
 
     public static function supports(MessageAttachment $a): bool
     {
@@ -44,8 +47,11 @@ final class Thumbnailer
             }
             $bytes = (string) $disk->get((string) $a->path);
             $info = @getimagesizefromstring($bytes);
-            if ($info === false || $info[0] < 1 || $info[1] < 1 || $info[0] * $info[1] > self::MAX_PIXELS) {
+            if ($info === false || $info[0] < 1 || $info[1] < 1) {
                 throw new \RuntimeException('not a decodable image');
+            }
+            if ($info[0] * $info[1] > self::MAX_PIXELS) {
+                throw new \RuntimeException('image above the pixel cap');
             }
             $source = @imagecreatefromstring($bytes);
             if ($source === false) {
