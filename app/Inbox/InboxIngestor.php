@@ -101,15 +101,6 @@ class InboxIngestor
                 $verdict = $this->priorityClassifier->classify($message, $identity);
                 $this->priorityClassifier->apply($message, $conversation, $verdict);
 
-                // Handover queue (spec 2026-09-30): a thanks / emoji / sticker after the close stays in
-                // the thread but asks for nothing: not unread, no queue hook (no ticket, no reversed
-                // close), no bot turn.
-                $settled = ! $message->is_spam && app(QueueService::class)->settles($conversation, $message);
-
-                if (! $settled) {
-                    $conversation->increment('unread_count');
-                }
-
                 // The platform window counts from when the customer wrote (never in the future,
                 // never moving backwards for out-of-order webhooks).
                 $occurred = $d->occurredAt->isFuture() ? CarbonImmutable::now() : $d->occurredAt;
@@ -124,14 +115,17 @@ class InboxIngestor
                 $identity->customer->forceFill(['last_contact_at' => now()])->save();
 
                 // Handover queue: she came back inside the return / confirm window (re-queued with
-                // priority), or she wrote while queued / in a window (the silence clock restarts).
-                if (! $settled && $conversation->handler === Handler::Human && ! $message->is_spam) {
-                    $queue = app(QueueService::class);
+                // priority), or she wrote while queued / in a window (the silence clock restarts; a
+                // thanks starts no reply clock). A thanks / emoji / sticker after the close is
+                // "settled" (spec 2026-09-30 §1): it stays in the thread but asks for nothing: not
+                // unread, no queue hook (no ticket, no reversed close), no bot turn. The acknowledgement
+                // is judged once here; the queue decides under the conversation lock, and the unread
+                // count and the bot follow that one decision.
+                $settled = ! $message->is_spam
+                    && app(QueueService::class)->settles($conversation, $message, app(Acknowledgement::class)->matches($message));
 
-                    if (! $queue->customerReturned($conversation)) {
-                        // A thanks in her open window starts no reply clock (spec 2026-09-30 §1).
-                        $queue->customerMessage($conversation, app(Acknowledgement::class)->matches($message));
-                    }
+                if (! $settled) {
+                    $conversation->increment('unread_count');
                 }
 
                 $this->logger->log(ActorType::System, null, ActivityLogger::MESSAGE_RECEIVED, $message, $conversation);

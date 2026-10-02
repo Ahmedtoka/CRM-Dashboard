@@ -249,47 +249,67 @@ class QueueService
     }
 
     /**
-     * Spec 2026-09-30 §1: the inbound message asks for nothing. It is an acknowledgement after
-     * her queue entry ended (any close: manual, automatic, a hand-off), while the queue is on.
-     * The ingest then keeps it in the thread, but:
+     * Spec 2026-09-30 §1: the queue's one hook for an inbound customer message (non-spam), called
+     * once by the ingest inside its transaction. Returns true when the message asks for nothing
+     * (it is "settled"): an acknowledgement (`$acknowledgement`, computed once by the ingest with
+     * `Acknowledgement::matches()`) after her latest queue entry ended (any close: manual,
+     * automatic, a hand-off), while the queue is on. The ingest then keeps it in the thread, but:
      *  - it is not counted unread;
      *  - no queue hook runs: no ticket, no reversed close;
-     *  - no bot turn (checked before the bot hand-off, also on a bot-handled conversation).
+     *  - no bot turn (decided here, before the bot hand-off, also on a bot-handled conversation).
      *
-     * On a conversation a person still handles (an automatic close) this holds with no time
-     * limit; on one the bot handles (a manual close hands it back, or «رجوع للبوت») only for
+     * On a conversation a person handles (an automatic close) this holds with no time limit; on
+     * one the bot handles (a manual close hands it back, or «رجوع للبوت») only for
      * `ACK_QUIET_HOURS` after the close, after which the bot answers a thanks like any message.
      *
-     * Called inside the ingest transaction; the settings row is read only for a conversation
-     * that has a queue entry.
+     * Otherwise it runs the queue hook as before: `customerReturned()` (she came back inside the
+     * return / confirm window, or after it on a human-handled chat), else `customerMessage()`.
+     *
+     * The decision is taken under the CONVERSATION lock with a locking read of her latest entry,
+     * so a close («خلصت» or the tick's auto-close) that commits while the message is being
+     * ingested is seen: an acknowledgement is then settled, never re-queued, never a reversal.
+     * Queue off: no lock, nothing settled, the hook runs as it always did.
      */
-    public function settles(Conversation $c, Message $m): bool
+    public function settles(Conversation $c, Message $m, bool $acknowledgement = false): bool
     {
-        if (! app(Acknowledgement::class)->matches($m)) {
+        // A bot-handled chat's real message: nothing for the queue (no query, the common case).
+        if ($c->handler !== Handler::Human && ! $acknowledgement) {
             return false;
         }
 
-        $last = $this->ended($c);
+        if (! $this->settings()->enabled) {
+            if ($c->handler === Handler::Human && ! $this->customerReturned($c)) {
+                $this->customerMessage($c);
+            }
 
-        if ($last === null) {
             return false;
         }
 
-        $quiet = $c->handler === Handler::Human
-            || ($last->closed_at !== null && $last->closed_at->greaterThan(now()->subHours(self::ACK_QUIET_HOURS)));
+        return DB::transaction(function () use ($c, $acknowledgement) {
+            $handler = Conversation::query()->whereKey($c->id)->lockForUpdate()->first(['id', 'handler'])?->handler;
+            $last = QueueEntry::query()->where('conversation_id', $c->id)->latest('id')->lockForUpdate()->first(['id', 'status', 'closed_at']);
+            $ended = $last !== null && in_array($last->status, QueueEntry::TERMINAL_STATUSES, true);
 
-        return $quiet && (bool) $this->settings()->enabled;
+            if ($acknowledgement && $ended && $this->quietAfter($last, $handler)) {
+                return true;
+            }
+
+            if ($handler === Handler::Human && ! $this->customerReturned($c)) {
+                $this->customerMessage($c, $acknowledgement);
+            }
+
+            return false;
+        }, attempts: 3);
     }
 
     /**
-     * Her latest queue entry when it ended (closed, cancelled, abandoned) and none is waiting or
-     * open, whatever the handler (addendum C2); null otherwise.
+     * After her latest entry ended, an acknowledgement stays quiet: with no time limit while a
+     * person handles the chat, for `ACK_QUIET_HOURS` after the close once the bot does.
      */
-    private function ended(Conversation $c): ?QueueEntry
+    private function quietAfter(QueueEntry $last, ?Handler $handler): bool
     {
-        $last = QueueEntry::query()->where('conversation_id', $c->id)->latest('id')->first(['id', 'status', 'closed_at']);
-
-        return $last !== null && in_array($last->status, QueueEntry::TERMINAL_STATUSES, true) ? $last : null;
+        return $handler === Handler::Human
+            || ($last->closed_at !== null && $last->closed_at->greaterThan(now()->subHours(self::ACK_QUIET_HOURS)));
     }
 
     /**

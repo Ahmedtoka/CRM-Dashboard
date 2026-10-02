@@ -5,11 +5,13 @@ use App\Bot\BotEngine;
 use App\Bot\Flow\Jobs\RunBotTurn;
 use App\Channels\Data\InboundMessageData;
 use App\Enums\Platform;
+use App\Events\MessageCreated;
 use App\Inbox\InboxIngestor;
 use App\Inbox\OutboundService;
 use App\Models\ActivityLog;
 use App\Models\BotSetting;
 use App\Models\ChannelAccount;
+use App\Models\Customer;
 use App\Models\Message;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
@@ -17,10 +19,12 @@ use App\Models\Shift;
 use App\Models\ShiftMember;
 use App\Models\User;
 use App\Queue\Acknowledgement;
+use App\Queue\QueueService;
 use App\Queue\WindowLifecycle;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
@@ -94,6 +98,11 @@ it('knows an acknowledgement from a request', function (string $body, array $att
     'thanks with a photo' => ['شكراً', [['type' => 'image', 'url' => 'https://example.test/p.jpg']], false],
     'nothing at all' => ['', [], false],
     'a filler alone' => ['يا فندم', [], false],
+    'ta marbuta written as ha' => ['متشكره', [], true],
+    'tatweel' => ['شكـــرا', [], true],
+    'و joined to تسلمي' => ['وتسلمي', [], true],
+    'تمام and a size' => ['تمام L', [], false],
+    'اوك and a number' => ['اوك 2', [], false],
 ]);
 
 it('never takes a button tap for an acknowledgement', function () {
@@ -234,6 +243,55 @@ it('lets the bot answer a thanks again a day after the close', function () {
     ackIngest('thanks-next-day', 'شكراً', bot: true);
 
     Bus::assertDispatched(RunBotTurn::class);
+});
+
+it('still broadcasts a settled message to the inbox', function () {
+    [$e, $u] = ackWindow();
+    app(WindowLifecycle::class)->close($e, 'inquiry', $u);
+    Event::fake([MessageCreated::class]);
+
+    $msg = ackIngest('thanks-broadcast', 'شكراً');
+
+    Event::assertDispatched(MessageCreated::class, fn (MessageCreated $ev) => $ev->message->id === $msg->id);
+});
+
+// ───── A close that commits while her thanks is being ingested (review fix 1) ─────
+
+it('settles a thanks whose window closes while it is being ingested: no ticket, no reversal, not unread, no bot turn', function (string $reason) {
+    Bus::fake([RunBotTurn::class]);
+    [$e, $u, $c] = ackWindow();
+    ackReply($e, $u);
+    Carbon::setTestNow(now()->addMinutes(2));
+    $unread = $c->fresh()->unread_count;
+
+    // The close commits after the ingest stored her message and before the queue hook runs
+    // (her customer row is saved between the two).
+    Customer::saved(function () use ($e, $u, $reason) {
+        if (Message::where('external_id', 'thanks-race')->exists() && $e->fresh()->status === 'active') {
+            app(WindowLifecycle::class)->close($e->fresh(), $reason, $reason === 'auto' ? null : $u);
+        }
+    });
+
+    ackIngest('thanks-race', 'شكراً ❤️', bot: true);
+
+    expect($e->fresh()->status)->toBe('closed')
+        ->and(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1)
+        ->and($e->fresh()->reversed_at)->toBeNull()
+        ->and($c->fresh()->unread_count)->toBe($unread)
+        ->and(ActivityLog::where('action', ActivityLogger::QUEUE_ENQUEUE)->count())->toBe(0);
+    Bus::assertNotDispatched(RunBotTurn::class);
+})->with(['inquiry', 'auto']);
+
+it('settles under the lock when the caller still holds the open snapshot', function () {
+    [$e, $u, $c] = ackWindow();
+    $stale = $c->fresh();                                   // read while the window was open
+    app(WindowLifecycle::class)->close($e, 'inquiry', $u);
+
+    $settled = app(QueueService::class)->settles($stale, new Message(['body' => 'شكراً']), true);
+
+    expect($settled)->toBeTrue()
+        ->and(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1)
+        ->and($e->fresh()->reversed_at)->toBeNull();
 });
 
 // ───── Queue off ─────
