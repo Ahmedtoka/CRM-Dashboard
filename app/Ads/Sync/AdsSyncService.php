@@ -18,6 +18,7 @@ use App\Models\AdSet;
 use App\Models\AdsSyncRun;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 final class AdsSyncService
 {
@@ -25,13 +26,23 @@ final class AdsSyncService
 
     public function __construct(private DriverFactory $drivers) {}
 
+    /** Message safe to print: credentials-looking pairs removed, length capped. */
+    public static function scrub(string $message): string
+    {
+        $clean = preg_replace('/(access_token|token|secret|key|authorization)([=:\s]+)[^\s&,;"]+/i', '$1$2[hidden]', $message);
+
+        return mb_substr($clean ?? $message, 0, 200);
+    }
+
     /** Pull the connection's accounts and upsert ad_accounts. @return int accounts upserted */
     public function syncAccounts(AdPlatformConnection $c): int
     {
         try {
             $infos = $this->drivers->for(AdPlatform::from($c->platform))->accounts($c);
         } catch (AdsApiException $e) {
-            $c->update(['status' => 'error', 'last_error' => $e->getMessage()]);
+            $c->update($e instanceof RateLimited
+                ? ['last_error' => $e->getMessage()]
+                : ['status' => 'error', 'last_error' => $e->getMessage()]);
             throw $e;
         }
 
@@ -59,27 +70,33 @@ final class AdsSyncService
             $adRows = $driver->ads($a);
             $this->upsertAds($a, $adRows);
             $metrics = $driver->dailyMetrics($a, $from, $to);
-            $rows = $this->replaceMetrics($a, $metrics, $from, $to);
+            [$rows, $guard] = $this->replaceMetrics($a, $metrics, $from, $to);
         } catch (AdsApiException $e) {
             $run->update(['status' => 'error', 'error' => $e->getMessage(), 'finished_at' => now()]);
-            $a->connection?->update(['status' => 'error', 'last_error' => $e->getMessage()]);
             if ($e instanceof RateLimited) {
+                // Quota, not a broken connection: record on the run only and let the caller retry later.
                 throw $e;
             }
+            $a->connection?->update(['status' => 'error', 'last_error' => $e->getMessage()]);
 
             return $run;
+        } catch (Throwable $e) {
+            $run->update(['status' => 'error', 'error' => $e->getMessage(), 'finished_at' => now()]);
+            throw $e;
         }
 
         // Metrics are committed; a media failure must not turn the run into an error.
-        $warning = null;
+        $warnings = $guard === null ? [] : [$guard];
         try {
-            $this->fetchMedia($a, Ad::where('ad_account_id', $a->id)->whereNull('media_fetched_at')->pluck('external_id')->all());
+            $this->fetchMedia($a, Ad::where('ad_account_id', $a->id)->whereNull('media_fetched_at')
+                ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'unknown')) // minimal ads have no creative to fetch
+                ->pluck('external_id')->all());
         } catch (AdsApiException $e) {
-            $warning = 'Creative media: '.$e->getMessage();
+            $warnings[] = 'Creative media: '.$e->getMessage();
         }
 
         $run->update([
-            'status' => 'ok', 'ads_count' => count($adRows), 'rows_count' => $rows, 'error' => $warning, 'finished_at' => now(),
+            'status' => 'ok', 'ads_count' => count($adRows), 'rows_count' => $rows, 'error' => $warnings === [] ? null : implode(' | ', $warnings), 'finished_at' => now(),
         ]);
         $a->update(['last_synced_at' => now()]);
         $a->connection?->update(['status' => 'connected', 'last_error' => null, 'last_synced_at' => now()]);
@@ -92,6 +109,7 @@ final class AdsSyncService
     {
         $since = CarbonImmutable::now('Africa/Cairo')->subDays($days)->toDateString();
         $ids = Ad::where('ad_account_id', $a->id)
+            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'unknown'))
             ->whereIn('id', AdDailyMetric::where('ad_account_id', $a->id)->where('date', '>=', $since)->select('ad_id'))
             ->pluck('external_id')->all();
 
@@ -99,16 +117,20 @@ final class AdsSyncService
     }
 
     /** Sync an account over $days days in 30-day chunks, newest first. */
-    public function backfill(AdAccount $a, int $days): void
+    public function backfill(AdAccount $a, int $days): ?AdsSyncRun
     {
+        $run = null;
         $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
         for ($offset = 0; $offset < $days; $offset += 30) {
             $to = $today->subDays($offset);
             $from = $today->subDays(min($offset + 29, $days - 1));
-            if ($this->syncAccount($a, $from, $to, 'backfill')->status === 'error') {
+            $run = $this->syncAccount($a, $from, $to, 'backfill');
+            if ($run->status === 'error') {
                 break;
             }
         }
+
+        return $run;
     }
 
     /** @param list<string> $externalIds */
@@ -171,8 +193,11 @@ final class AdsSyncService
         }
     }
 
-    /** @param list<DailyAdMetric> $metrics */
-    private function replaceMetrics(AdAccount $a, array $metrics, CarbonImmutable $from, CarbonImmutable $to): int
+    /**
+     * @param  list<DailyAdMetric>  $metrics
+     * @return array{0: int, 1: ?string} rows written and an optional warning
+     */
+    private function replaceMetrics(AdAccount $a, array $metrics, CarbonImmutable $from, CarbonImmutable $to): array
     {
         // Dedupe on (ad, date); the last row wins.
         $byKey = [];
@@ -217,11 +242,18 @@ final class AdsSyncService
 
             // Platform corrections win: drop rows in the window that are no longer reported.
             $stale = [];
-            foreach (AdDailyMetric::where('ad_account_id', $a->id)
-                ->whereBetween('date', [$from->toDateString(), $to->toDateString()])
-                ->select(['id', 'ad_id', 'date'])->cursor() as $row) {
-                if (! isset($keep[$row->ad_id.'|'.$row->date->toDateString()])) {
-                    $stale[] = $row->id;
+            $guard = null;
+            $windowRows = AdDailyMetric::where('ad_account_id', $a->id)->whereBetween('date', [$from->toDateString(), $to->toDateString()]);
+            if ($byKey === [] && (clone $windowRows)->exists()) {
+                // An empty payload over a populated window is more likely an API hiccup than a real wipe-out.
+                $guard = 'Empty metrics payload: kept existing rows in the window';
+            } else {
+                foreach (AdDailyMetric::where('ad_account_id', $a->id)
+                    ->whereBetween('date', [$from->toDateString(), $to->toDateString()])
+                    ->select(['id', 'ad_id', 'date'])->cursor() as $row) {
+                    if (! isset($keep[$row->ad_id.'|'.$row->date->toDateString()])) {
+                        $stale[] = $row->id;
+                    }
                 }
             }
             foreach (array_chunk($stale, self::CHUNK) as $ids) {
@@ -232,7 +264,7 @@ final class AdsSyncService
                 AdDailyMetric::upsert($chunk, ['ad_id', 'date'], ['ad_account_id', 'spend', 'impressions', 'clicks', 'reach', 'purchases', 'purchase_value', 'updated_at']);
             }
 
-            return count($payload);
+            return [count($payload), $guard];
         });
     }
 

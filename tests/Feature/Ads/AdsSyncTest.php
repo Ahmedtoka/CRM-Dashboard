@@ -4,6 +4,7 @@ use App\Ads\Platforms\AdPlatformDriver;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Data\DailyAdMetric;
 use App\Ads\Platforms\Fake\FakeAdsDriver;
+use App\Ads\Platforms\RateLimited;
 use App\Ads\Sync\AdsSyncService;
 use App\Ads\Sync\SyncAdAccount;
 use App\Models\Ad;
@@ -15,6 +16,8 @@ use App\Models\AdSet;
 use App\Models\AdsSyncRun;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Queue\Job;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -30,11 +33,20 @@ function bindDriver(AdPlatformDriver $driver): void
 }
 
 /** A scriptable driver double. */
-function doubleDriver(array $metrics = [], ?Throwable $adsError = null, ?Throwable $mediaError = null): AdPlatformDriver
+function doubleDriver(array $metrics = [], ?Throwable $adsError = null, ?Throwable $mediaError = null, ?Throwable $accountsError = null): AdPlatformDriver
 {
-    return new class($metrics, $adsError, $mediaError) extends FakeAdsDriver
+    return new class($metrics, $adsError, $mediaError, $accountsError) extends FakeAdsDriver
     {
-        public function __construct(private array $m, private ?Throwable $ae, private ?Throwable $me) {}
+        public function __construct(private array $m, private ?Throwable $ae, private ?Throwable $me, private ?Throwable $ace = null) {}
+
+        public function accounts(AdPlatformConnection $c): array
+        {
+            if ($this->ace) {
+                throw $this->ace;
+            }
+
+            return parent::accounts($c);
+        }
 
         public function ads(AdAccount $a): array
         {
@@ -129,6 +141,7 @@ it('removes stale metric rows inside the synced window and keeps the rest', func
 
 it('keeps metrics and an ok run when creative media fails', function () {
     $acc = AdAccount::factory()->meta()->create();
+    Ad::factory()->create(['ad_account_id' => $acc->id, 'external_id' => 'a1', 'status' => 'ACTIVE', 'media_fetched_at' => null]);
     bindDriver(doubleDriver(metrics: [metric('a1', '2026-09-01', 5, 'A', 'c1', 'C')], mediaError: new AdsApiException('media boom')));
 
     $run = app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-02'));
@@ -194,4 +207,142 @@ it('registers the ads schedule in Africa/Cairo', function () {
     $events = collect(app(Schedule::class)->events())->filter(fn ($e) => str_contains($e->command, 'ads:'));
     expect($events->map(fn ($e) => $e->expression)->all())->toContain('10 * * * *', '15 3 * * *', '20 5 * * *')
         ->and($events->every(fn ($e) => $e->timezone === 'Africa/Cairo'))->toBeTrue();
+});
+
+it('throws on rate limit, records an error run and leaves the connection connected', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    bindDriver(doubleDriver(adsError: new RateLimited('quota')));
+
+    expect(fn () => app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-02')))
+        ->toThrow(RateLimited::class);
+
+    $run = AdsSyncRun::latest('id')->first();
+    expect($run->status)->toBe('error')->and($run->error)->toContain('quota')->and($run->finished_at)->not->toBeNull()
+        ->and($acc->connection->fresh()->status)->toBe('connected');
+});
+
+it('marks the run error and rethrows on unexpected exceptions', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    bindDriver(doubleDriver(adsError: new RuntimeException('boom')));
+
+    expect(fn () => app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-02')))
+        ->toThrow(RuntimeException::class);
+
+    $run = AdsSyncRun::latest('id')->first();
+    expect($run->status)->toBe('error')->and($run->error)->toContain('boom');
+});
+
+it('releases the job for 900 seconds on a real queue job when rate limited', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    bindDriver(doubleDriver(adsError: new RateLimited('quota')));
+    $queueJob = Mockery::mock(Job::class);
+    $queueJob->shouldReceive('release')->once()->with(900);
+
+    $job = new SyncAdAccount($acc->id, 3);
+    $job->setJob($queueJob);
+    $job->handle(app(AdsSyncService::class));
+});
+
+it('rethrows rate limits when run inline', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    bindDriver(doubleDriver(adsError: new RateLimited('quota')));
+
+    expect(fn () => SyncAdAccount::dispatchSync($acc->id, 3))->toThrow(RateLimited::class);
+});
+
+it('warns and fails ads:sync --now for a rate limited account without printing success', function () {
+    $limited = AdAccount::factory()->meta()->create(['name' => 'Limited One']);
+    bindDriver(doubleDriver(adsError: new RateLimited('quota access_token=SECRET123')));
+
+    $this->artisan('ads:sync', ['--account' => $limited->id, '--now' => true])
+        ->expectsOutputToContain('Failed Limited One')
+        ->doesntExpectOutputToContain('Synced Limited One')
+        ->doesntExpectOutputToContain('SECRET123')
+        ->assertFailed();
+});
+
+it('continues with other accounts when one fails and exits non-zero', function () {
+    AdAccount::factory()->meta()->create(['name' => 'First']);
+    AdAccount::factory()->meta()->create(['name' => 'Second']);
+    $calls = new ArrayObject(['n' => 0]);
+    app()->bind(FakeAdsDriver::class, fn () => new class(function () use ($calls) {
+        if ($calls['n']++ === 0) {
+            throw new RateLimited('quota');
+        }
+    }) extends FakeAdsDriver
+    {
+        public function __construct(private Closure $hook) {}
+
+        public function ads(AdAccount $a): array
+        {
+            ($this->hook)();
+
+            return parent::ads($a);
+        }
+    });
+
+    $code = Artisan::call('ads:sync', ['--now' => true]);
+    $out = Artisan::output();
+
+    expect($code)->toBe(1)->and($out)->toContain('Failed First')->toContain('Synced Second')->not->toContain('Synced First');
+});
+
+it('fails ads:backfill for an erroring account but keeps going', function () {
+    AdAccount::factory()->meta()->create(['name' => 'Bad']);
+    bindDriver(doubleDriver(adsError: new RateLimited('quota')));
+
+    $this->artisan('ads:backfill', ['--days' => 10])->expectsOutputToContain('Failed Bad')->assertFailed();
+});
+
+it('does not request media for minimal ads built from metrics', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    bindDriver(doubleDriver(metrics: [metric('gone1', '2026-09-01', 5, 'Old', 'c9', 'C')], mediaError: new AdsApiException('media boom')));
+
+    $run = app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-02'));
+
+    expect($run->status)->toBe('ok')->and($run->error)->toBeNull();
+});
+
+it('keeps existing rows when the platform returns an empty metrics payload', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $ad = Ad::factory()->create(['ad_account_id' => $acc->id, 'external_id' => 'a1']);
+    AdDailyMetric::factory()->create(['ad_id' => $ad->id, 'ad_account_id' => $acc->id, 'date' => '2026-09-02']);
+    bindDriver(doubleDriver(metrics: []));
+
+    $run = app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-05'));
+
+    expect(AdDailyMetric::count())->toBe(1)->and($run->status)->toBe('ok')->and($run->error)->toContain('Empty metrics payload');
+});
+
+it('discovers new accounts during the deep sync, skipping disabled connections', function () {
+    AdPlatformConnection::factory()->create(['platform' => 'meta', 'status' => 'connected']);
+    AdPlatformConnection::factory()->create(['platform' => 'tiktok', 'status' => 'disabled']);
+
+    $this->artisan('ads:sync', ['--days' => 30])->assertSuccessful();
+
+    expect(AdAccount::where('platform', 'meta')->count())->toBe(3)->and(AdAccount::where('platform', 'tiktok')->count())->toBe(0);
+});
+
+it('does not run discovery on the light sync', function () {
+    Queue::fake();
+    AdPlatformConnection::factory()->create(['platform' => 'meta']);
+    $this->artisan('ads:sync', ['--days' => 3])->assertSuccessful();
+    expect(AdAccount::count())->toBe(0);
+});
+
+it('warns and records a discovery failure without failing the deep sync', function () {
+    Queue::fake();
+    $c = AdPlatformConnection::factory()->create(['platform' => 'meta', 'name' => 'Conn A']);
+    bindDriver(doubleDriver(accountsError: new AdsApiException('Token expired')));
+
+    $this->artisan('ads:sync', ['--days' => 30])->expectsOutputToContain('Account discovery failed for Conn A')->assertSuccessful();
+
+    expect($c->fresh()->status)->toBe('error')->and($c->fresh()->last_error)->toContain('Token expired');
+});
+
+it('creates many accounts in one test without id collisions', function () {
+    AdAccount::factory()->meta()->count(30)->create();
+    AdAccount::factory()->tiktok()->count(30)->create();
+    AdAccount::factory()->google()->count(30)->create();
+    expect(AdAccount::count())->toBe(90);
 });

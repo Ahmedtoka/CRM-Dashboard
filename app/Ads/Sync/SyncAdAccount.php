@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Jobs\SyncJob;
 
 /** Syncs one ad account; kind 'backfill' walks $days in 30-day chunks. */
 class SyncAdAccount implements ShouldBeUnique, ShouldQueue
@@ -41,7 +42,8 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
             $to = CarbonImmutable::now('Africa/Cairo')->startOfDay();
             $sync->syncAccount($account, $to->subDays(max($this->days, 1) - 1), $to, $this->kind);
         } catch (RateLimited $e) {
-            if ($this->job) {
+            // Only a real async queue job can be released; sync/inline runs must surface the failure.
+            if ($this->job && ! $this->job instanceof SyncJob) {
                 $this->release(900);
 
                 return;
