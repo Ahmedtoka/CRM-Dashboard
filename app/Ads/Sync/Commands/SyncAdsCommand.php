@@ -9,6 +9,7 @@ use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
+use Throwable;
 
 class SyncAdsCommand extends Command
 {
@@ -45,7 +46,7 @@ class SyncAdsCommand extends Command
                 } else {
                     $this->line("Synced {$a->name}");
                 }
-            } catch (AdsApiException $e) { // includes RateLimited
+            } catch (Throwable $e) { // AdsApiException incl. RateLimited, or anything unexpected
                 $this->warn("Failed {$a->name}: ".AdsSyncService::scrub($e->getMessage()));
                 $failed++;
             }

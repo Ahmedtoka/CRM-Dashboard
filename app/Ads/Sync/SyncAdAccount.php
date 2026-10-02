@@ -21,9 +21,20 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
 
     public function __construct(public int $accountId, public int $days = 3, public string $kind = 'recent') {}
 
+    public static function uniqueIdFor(int $accountId): string
+    {
+        return 'ads-sync-'.$accountId;
+    }
+
+    /** Cache key of the ShouldBeUnique lock (Laravel: laravel_unique_job:{class}{uniqueId}). */
+    public static function lockKey(int $accountId): string
+    {
+        return 'laravel_unique_job:'.self::class.self::uniqueIdFor($accountId);
+    }
+
     public function uniqueId(): string
     {
-        return 'ads-sync-'.$this->accountId;
+        return self::uniqueIdFor($this->accountId);
     }
 
     public function handle(AdsSyncService $sync): void

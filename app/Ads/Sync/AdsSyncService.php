@@ -64,6 +64,20 @@ final class AdsSyncService
             'ad_account_id' => $a->id, 'platform' => $a->platform, 'kind' => $kind, 'status' => 'running',
             'from_date' => $from->toDateString(), 'to_date' => $to->toDateString(), 'started_at' => now(),
         ]);
+
+        try {
+            return $this->runSync($a, $run, $from, $to);
+        } catch (Throwable $e) {
+            // Whatever escaped (bad driver config, DB error, media-phase bug) must not leave the run 'running'.
+            if ($run->status === 'running') {
+                $run->update(['status' => 'error', 'error' => $e->getMessage(), 'finished_at' => now()]);
+            }
+            throw $e;
+        }
+    }
+
+    private function runSync(AdAccount $a, AdsSyncRun $run, CarbonImmutable $from, CarbonImmutable $to): AdsSyncRun
+    {
         $driver = $this->drivers->for(AdPlatform::from($a->platform));
 
         try {
@@ -80,9 +94,6 @@ final class AdsSyncService
             $a->connection?->update(['status' => 'error', 'last_error' => $e->getMessage()]);
 
             return $run;
-        } catch (Throwable $e) {
-            $run->update(['status' => 'error', 'error' => $e->getMessage(), 'finished_at' => now()]);
-            throw $e;
         }
 
         // Metrics are committed; a media failure must not turn the run into an error.

@@ -18,6 +18,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -345,4 +346,50 @@ it('creates many accounts in one test without id collisions', function () {
     AdAccount::factory()->tiktok()->count(30)->create();
     AdAccount::factory()->google()->count(30)->create();
     expect(AdAccount::count())->toBe(90);
+});
+
+it('marks the run error when creativeMedia throws a non-api exception', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    Ad::factory()->create(['ad_account_id' => $acc->id, 'external_id' => 'a1', 'status' => 'ACTIVE', 'media_fetched_at' => null]);
+    bindDriver(doubleDriver(metrics: [metric('a1', '2026-09-01', 5, 'A', 'c1', 'C')], mediaError: new RuntimeException('media bug')));
+
+    expect(fn () => app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-02')))
+        ->toThrow(RuntimeException::class);
+
+    $run = AdsSyncRun::latest('id')->first();
+    expect($run->status)->toBe('error')->and($run->error)->toContain('media bug')->and($run->finished_at)->not->toBeNull()
+        ->and(AdDailyMetric::count())->toBe(1);
+});
+
+it('marks the run error when the driver cannot be resolved', function () {
+    $acc = AdAccount::factory()->meta()->create(['platform' => 'bogus']);
+
+    expect(fn () => app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-02')))
+        ->toThrow(ValueError::class);
+
+    expect(AdsSyncRun::latest('id')->first()->status)->toBe('error');
+});
+
+it('warns and continues when a command hits an unexpected exception', function () {
+    AdAccount::factory()->meta()->create(['name' => 'Odd']);
+    bindDriver(doubleDriver(adsError: new RuntimeException('kaboom')));
+
+    $this->artisan('ads:sync', ['--now' => true])->expectsOutputToContain('Failed Odd')->assertFailed();
+    $this->artisan('ads:backfill', ['--days' => 5])->expectsOutputToContain('Failed Odd')->assertFailed();
+});
+
+it('skips a backfill for an account whose sync lock is held', function () {
+    $acc = AdAccount::factory()->meta()->create(['name' => 'Locked']);
+    $lock = Cache::lock(SyncAdAccount::lockKey($acc->id), 60);
+    expect($lock->get())->toBeTrue();
+
+    $this->artisan('ads:backfill', ['--account' => $acc->id, '--days' => 5])->expectsOutputToContain('busy')->assertFailed();
+
+    expect(AdsSyncRun::count())->toBe(0);
+    $lock->release();
+    $this->artisan('ads:backfill', ['--account' => $acc->id, '--days' => 5])->assertSuccessful();
+});
+
+it('uses the same lock key as the unique job', function () {
+    expect(SyncAdAccount::lockKey(7))->toBe('laravel_unique_job:'.SyncAdAccount::class.(new SyncAdAccount(7))->uniqueId());
 });
