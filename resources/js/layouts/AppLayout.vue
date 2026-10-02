@@ -40,7 +40,8 @@ const shortcutsOpen = ref(false);
 const palette = useCommandPalette();
 const notifications = useNotifications();
 notifications.start();
-useHeartbeat().start();
+// Presence is for inbox staff; media buyers and content users are kept to /ads (RestrictAdsRoles answers 403).
+if (!['media_buyer', 'content'].includes(page.props.auth.user?.role ?? '')) useHeartbeat().start();
 useShortcuts([
     { id: 'global.help', keys: ['shift+?'], labelKey: 'shortcuts.help', group: 'global', handler: () => (shortcutsOpen.value = true) },
     { id: 'global.escape', keys: ['escape'], labelKey: 'shortcuts.close', group: 'global', allowInInput: true },

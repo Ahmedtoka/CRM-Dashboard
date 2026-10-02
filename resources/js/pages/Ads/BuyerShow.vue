@@ -189,7 +189,7 @@ const breadcrumbs = computed(() => [
                 </ul>
             </section>
 
-            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+            <div class="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
                 <section class="space-y-2">
                     <h2 class="text-sm font-bold">{{ t('ads.buyers.accounts') }}</h2>
                     <DataTable
@@ -225,7 +225,7 @@ const breadcrumbs = computed(() => [
                             </span>
                         </template>
                         <template #cell-account="{ row }"
-                            ><span dir="auto">{{ (row as CampaignRow).account ?? '—' }}</span></template
+                            ><span class="whitespace-nowrap" dir="auto">{{ (row as CampaignRow).account ?? '—' }}</span></template
                         >
                         <template #cell-spend="{ row }"
                             ><MoneyCell :amount="(row as CampaignRow).spend" :with-tax="(row as CampaignRow).spend_tax" :currency="currency"

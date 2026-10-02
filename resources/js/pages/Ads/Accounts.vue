@@ -125,6 +125,13 @@ function statusChip(c: AdConnectionRow): { label: string; tone: 'positive' | 'wa
 }
 
 const accountActive = (status: string | null) => (status ? /^(active|enable|enabled|open)$/i.test(status) : false);
+/** Platform status words (active, disabled, ENABLED...) in the UI language; anything unknown stays as the platform sent it. */
+function accountStatusLabel(status: string | null): string {
+    if (!status) return '—';
+    if (accountActive(status)) return t('ads.accounts.status_active');
+    if (/^(disabled|paused|closed|suspended)$/i.test(status)) return t('ads.accounts.status_disabled');
+    return status;
+}
 
 /* ---- accounts per platform, one table each ---- */
 interface AccountTableRow extends AdAccountRow {
@@ -267,7 +274,7 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                         </template>
                         <template #cell-status="{ row }">
                             <StatusChip
-                                :label="row.status ?? '—'"
+                                :label="accountStatusLabel(row.status)"
                                 :tone="accountActive(row.status) ? 'positive' : 'neutral'"
                                 :title="!accountActive(row.status) ? t('ads.accounts.account_disabled') : undefined"
                             />
@@ -338,9 +345,17 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                         <template #cell-spend_30d="{ row }">{{ money(row.spend_30d, row.currency) }}</template>
                         <template #cell-last_synced_at="{ row }"><RelativeTime :iso="row.last_synced_at" /></template>
                         <template #cell-actions="{ row }">
-                            <button type="button" :class="outlineSm" :disabled="busy(`sync-acc-${row.id}`)" @click="syncAccount(row)">
+                            <button
+                                type="button"
+                                :class="outlineSm"
+                                :disabled="busy(`sync-acc-${row.id}`)"
+                                :title="t('ads.accounts.sync_account')"
+                                @click="syncAccount(row)"
+                            >
                                 <LoaderCircle v-if="busy(`sync-acc-${row.id}`)" class="animate-spin" aria-hidden="true" />
-                                <RefreshCw v-else aria-hidden="true" />{{ t('ads.accounts.sync_account') }}
+                                <RefreshCw v-else aria-hidden="true" /><span class="sr-only 2xl:not-sr-only">{{
+                                    t('ads.accounts.sync_account')
+                                }}</span>
                             </button>
                         </template>
                     </DataTable>

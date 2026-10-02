@@ -3062,6 +3062,8 @@ const en: Messages = {
             history_open: 'to date',
             active_label: 'Activate account {name}',
             sync_account: 'Sync account',
+            status_active: 'Active',
+            status_disabled: 'Disabled',
             account_disabled: 'The account is disabled on the platform',
         },
         setup: {

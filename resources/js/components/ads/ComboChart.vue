@@ -2,7 +2,8 @@
 /**
  * Bars + lines on one time axis, inline SVG (no chart library). Series on `axis: 'right'` get their own
  * scale on the right edge (ROAS next to money). The time axis always runs left → right (dates read LTR,
- * as in the owner's Arena charts); title, legend and tooltip follow the page direction.
+ * as in the owner's Arena charts); title, legend and tooltip follow the page direction. The svg needs CSS
+ * `direction: ltr` too (the `dir` attribute alone does not reach SVG text), or RTL pages flip every text-anchor.
  */
 import { useI18n } from '@/composables/useI18n';
 import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue';
@@ -195,7 +196,7 @@ const tip = computed(() => {
                     :viewBox="`0 0 ${width} ${height}`"
                     :width="width"
                     :height="height"
-                    class="block max-w-full touch-pan-y select-none"
+                    class="block max-w-full touch-pan-y select-none [direction:ltr]"
                     role="img"
                     :aria-labelledby="`${id}-title`"
                     @pointermove="onMove"

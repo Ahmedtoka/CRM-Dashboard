@@ -174,7 +174,7 @@ const breadcrumbs = computed(() => [
             </div>
 
             <!-- Table -->
-            <div class="scrollbar-thin overflow-x-auto rounded-lg bg-card shadow-card">
+            <div class="scrollbar-thin overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
                 <EmptyState v-if="!result.data.length" :icon="ImageOff" :title="t('ads.creatives.empty')" :body="t('ads.empty.body')" />
                 <table v-else class="w-full min-w-[1100px] text-xs">
                     <caption class="sr-only">

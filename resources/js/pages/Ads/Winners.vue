@@ -155,7 +155,9 @@ const breadcrumbs = computed(() => [
 
                             <div>
                                 <div class="mb-1 flex items-baseline justify-between gap-2 text-2xs">
-                                    <span class="font-bold tabular-nums text-foreground">{{ t('ads.winners.score', { score: w.score }) }}</span>
+                                    <span class="font-bold tabular-nums text-foreground">{{
+                                        t('ads.winners.score', { score: formatQty(w.score, locale) })
+                                    }}</span>
                                     <span class="tabular-nums text-muted-foreground">{{
                                         t('ads.winners.smoothed', { roas: formatRoas(w.smoothed_roas, locale) })
                                     }}</span>

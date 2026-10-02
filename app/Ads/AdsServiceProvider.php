@@ -3,6 +3,7 @@
 namespace App\Ads;
 
 use App\Ads\Attribution\Commands\AttributeOrdersCommand;
+use App\Ads\Commands\ImportArenaTokenCommand;
 use App\Ads\Materials\Commands\StockWatchCommand;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Sync\Commands\BackfillAdsCommand;
@@ -21,7 +22,7 @@ class AdsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {

@@ -72,7 +72,9 @@ class FakeAdsDriver implements AdPlatformDriver
                 $impressions = $rng->getInt(20, 60) * (int) $spend;
                 $clicks = (int) round($impressions * $rng->getInt(100, 800) / 10000); // CTR 1 - 8 %
                 $reach = (int) round($impressions * $rng->getInt(70, 90) / 100);
-                $purchases = max(0, round($spend / 150 + $rng->getInt(-10, 10) / 10, 0));
+                // Each ad has its own quality (ROAS roughly 1 to 4.5), so winners and losers both show in demos.
+                $quality = [0.35, 0.6, 0.85, 1.0, 1.2, 1.5][crc32($ad['id']) % 6];
+                $purchases = max(0, round($spend / 150 * $quality + $rng->getInt(-10, 10) / 10, 0));
                 $out[] = new DailyAdMetric(
                     adExternalId: $ad['id'], date: $day->toDateString(),
                     spend: $spend, impressions: $impressions, clicks: $clicks, reach: $reach,
@@ -122,7 +124,7 @@ class FakeAdsDriver implements AdPlatformDriver
                     $n++;
                     $out[] = [
                         'n' => $n,
-                        'id' => (string) ($seed % 100000 * 1000 + $n) . '0'.$c.$s.$i,
+                        'id' => (string) ($seed % 100000 * 1000 + $n).'0'.$c.$s.$i,
                         'name' => "Ad {$n}",
                         'type' => $types[($n + $seed) % 3],
                         'campaign_id' => (string) ($seed % 100000 * 100 + $c),
