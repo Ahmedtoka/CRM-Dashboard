@@ -2972,7 +2972,7 @@ const ar = {
             secret_kept: 'محفوظ — اتركه فاضي علشان يفضل زي ما هو',
             help_meta: 'توكن System User فيه صلاحية ads_read.',
             help_tiktok: 'Access token + أرقام الـ advertiser.',
-            help_google: 'Developer token + OAuth client + refresh token.',
+            help_google: 'محتاج توكن المطوّر وبيانات OAuth (client id و secret) وتوكن التجديد.',
             no_connections: 'مفيش ربط للمنصة دي',
             no_connections_body: 'اربط حساب علشان الصرف والنتايج تظهر هنا.',
             connection_ok: 'متصل',

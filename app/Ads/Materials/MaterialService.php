@@ -423,7 +423,9 @@ final class MaterialService
             }
         }
         foreach (['website_links', 'drive_links', 'ig_links'] as $k) {
-            $out[$k] = array_values((array) ($out[$k] ?? []));
+            if (array_key_exists($k, $out)) {
+                $out[$k] = array_values((array) $out[$k]);
+            }
         }
 
         return $out;

@@ -25,6 +25,9 @@ class StoreMaterialRequest extends FormRequest
     {
         $merge = [];
         foreach (self::LINK_FIELDS as $field) {
+            if (! $this->has($field)) {
+                continue;
+            }
             $raw = $this->input($field);
             $items = is_array($raw) ? $raw : preg_split('/[\r\n,]+/', (string) $raw);
             $merge[$field] = array_values(array_filter(array_map(fn ($v) => is_string($v) ? trim($v) : $v, (array) $items), fn ($v) => $v !== '' && $v !== null));

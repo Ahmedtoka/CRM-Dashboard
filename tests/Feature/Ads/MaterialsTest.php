@@ -1,6 +1,7 @@
 <?php
 
 use App\Ads\Buyers\AssignmentService;
+use App\Ads\Materials\MaterialFileStorage;
 use App\Enums\UserRole;
 use App\Media\Thumbnailer;
 use App\Models\Ad;
@@ -10,6 +11,7 @@ use App\Models\AdMaterial;
 use App\Models\AdMaterialCollection;
 use App\Models\AdMaterialFile;
 use App\Models\MediaBuyer;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
@@ -189,6 +191,7 @@ it('hides spend from content users and scopes a buyers numbers to their own rows
     $w = matBuyerWorld();
     matDays($w['ad'], 10, 100, 500);       // own: spend 1000, value 5000
     matDays($w['other'], 10, 100, 100);    // someone elses
+    Order::factory()->create(['ad_id' => $w['ad']->id, 'placed_at' => now()->subDays(2), 'total' => 300]);
     $m = AdMaterial::factory()->create();
     $m->ads()->attach([$w['ad']->id, $w['other']->id]);
 
@@ -201,7 +204,7 @@ it('hides spend from content users and scopes a buyers numbers to their own rows
         ->has('materials.data.0.ads', 1)->where('materials.data.0.ads.0.name', 'Mine ad')
         ->where('materials.data.0.performance.spend', 1000)->where('materials.data.0.performance.spend_tax', 1140)
         ->where('materials.data.0.performance.purchase_value', 5000)->where('materials.data.0.performance.roas', 5)
-        ->where('materials.data.0.performance.purchases', 10)->where('materials.data.0.performance.winner_tier', 'winner'));
+        ->where('materials.data.0.performance.purchases', 10)->where('materials.data.0.performance.real_orders', 1)->where('materials.data.0.performance.winner_tier', 'winner'));
 
     $this->actingAs(matUser(UserRole::Admin))->get('/ads/materials')->assertInertia(fn (Assert $p) => $p
         ->has('materials.data.0.ads', 2)
@@ -222,9 +225,6 @@ it('computes performance for a page of materials without a query per material', 
         DB::flushQueryLog();
         DB::enableQueryLog();
         $this->actingAs($admin)->get('/ads/materials')->assertOk();
-
-        file_put_contents(sys_get_temp_dir().'/q'.count(DB::getQueryLog()).'.txt', implode('
-', array_column(DB::getQueryLog(), 'query')));
 
         return count(DB::getQueryLog());
     };
@@ -521,4 +521,16 @@ it('asks ffmpeg for a video poster only when it is configured', function () {
 
     Process::assertRan(fn ($p) => is_array($p->command) && $p->command[0] === 'ffmpeg' && in_array('-ss', $p->command, true));
     expect(AdMaterialFile::firstOrFail()->thumb_path)->toBeNull(); // the fake ffmpeg wrote no frame
+});
+
+it('keeps links the update request does not send, and cleans the blob when the file row fails', function () {
+    $content = matUser(UserRole::Content);
+    $m = AdMaterial::factory()->create(['drive_links' => ['https://d/1'], 'website_links' => ['https://w/1']]);
+
+    $this->actingAs($content)->put("/ads/materials/{$m->id}", ['title' => 'T', 'types' => ['post']])->assertRedirect();
+    expect($m->refresh()->drive_links)->toBe(['https://d/1'])->and($m->website_links)->toBe(['https://w/1']);
+
+    AdMaterialFile::creating(fn () => throw new RuntimeException('db down'));
+    expect(fn () => app(MaterialFileStorage::class)->store($m, UploadedFile::fake()->image('a.jpg')))->toThrow(RuntimeException::class);
+    expect($this->disk->allFiles())->toBe([]);
 });

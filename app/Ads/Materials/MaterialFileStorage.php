@@ -92,12 +92,18 @@ final class MaterialFileStorage
             ? $this->thumbnailer->thumbnailForPath($disk, $path, $mime, self::THUMB_DIR)
             : $this->poster($disk, $path);
 
-        return $m->files()->create([
-            'disk' => $disk, 'path' => $path, 'thumb_path' => $thumb, 'mime' => $mime, 'size' => (int) $f->getSize(),
-            'width' => $w, 'height' => $h,
-            'original_name' => MediaStorage::sanitizeFilename(Str::limit($f->getClientOriginalName(), 250, '')),
-            'sort' => ((int) $m->files()->max('sort')) + 1,
-        ]);
+        try {
+            return $m->files()->create([
+                'disk' => $disk, 'path' => $path, 'thumb_path' => $thumb, 'mime' => $mime, 'size' => (int) $f->getSize(),
+                'width' => $w, 'height' => $h,
+                'original_name' => MediaStorage::sanitizeFilename(Str::limit($f->getClientOriginalName(), 250, '')),
+                'sort' => ((int) $m->files()->max('sort')) + 1,
+            ]);
+        } catch (Throwable $e) {
+            // The row never existed: do not leave the blob and thumbnail behind.
+            $this->deleteFromDisk($disk, $path, $thumb);
+            throw $e;
+        }
     }
 
     /** Removes the file and its thumbnail from disk (the row is the caller's). */
