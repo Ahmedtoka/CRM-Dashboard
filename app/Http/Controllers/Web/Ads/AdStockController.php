@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web\Ads;
 use App\Ads\Materials\MaterialService;
 use App\Http\Controllers\Controller;
 use App\Models\AdMaterial;
+use App\Support\CsvSafe;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -41,12 +42,12 @@ class AdStockController extends Controller
                 foreach ($chunk as $m) {
                     $r = $service->stockRow($m);
                     $price = $r['price']['min'] === null ? '' : ($r['price']['min'] === $r['price']['max'] ? $r['price']['min'] : $r['price']['min'].' - '.$r['price']['max']);
-                    fputcsv($out, [
+                    fputcsv($out, CsvSafe::row([
                         $r['title'], $r['product']['title'],
                         implode(' | ', array_map(fn ($v) => trim(($v['title'] ?? $v['sku'] ?? '').': '.$v['quantity']), $r['variants'])),
                         $price, $r['quantity'], implode(' | ', array_column($r['collections'], 'name')),
                         __($r['availability'] ? 'ads.materials.stock_csv.yes' : 'ads.materials.stock_csv.no'),
-                    ]);
+                    ]));
                 }
             }, 'ad_materials.id', 'id');
             fclose($out);

@@ -13,6 +13,7 @@ use App\Models\AdMaterialCollection;
 use App\Models\AdMaterialFile;
 use App\Models\MediaBuyer;
 use App\Models\Product;
+use App\Support\CsvSafe;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -168,12 +169,12 @@ class MaterialController extends Controller
             $query->chunkById(200, function ($chunk) use ($out, $service, $user, $spend) {
                 foreach ($service->rows($chunk, $user) as $r) {
                     $perf = $r['performance'];
-                    fputcsv($out, array_merge([
+                    fputcsv($out, CsvSafe::row(array_merge([
                         $r['title'], substr((string) $r['created_at'], 0, 10), $r['product']['title'] ?? '',
                         implode(' | ', array_column($r['collections'], 'name')), implode(' | ', $r['types']),
                         __('ads.materials.status.'.$r['status']), __('ads.materials.stock.'.$r['stock']),
                         implode(' | ', $r['drive_links']), implode(' | ', array_column($r['ads'], 'name')),
-                    ], $spend ? [$perf['spend'] ?? '', $perf['roas'] ?? ''] : []));
+                    ], $spend ? [$perf['spend'] ?? '', $perf['roas'] ?? ''] : [])));
                 }
             }, 'ad_materials.id', 'id');
             fclose($out);

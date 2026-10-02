@@ -582,3 +582,24 @@ it('exports the stock page as CSV with the same filters', function () {
 
     $this->actingAs(matUser(UserRole::Moderator))->get('/ads/stock/export')->assertForbidden();
 });
+
+it('neutralises spreadsheet formulas in both CSV exports', function () {
+    $product = Product::factory()->create(['title' => '@SUM(A1)']);
+    ProductVariant::factory()->create(['product_id' => $product->id, 'title' => 'S', 'price' => 100, 'inventory_quantity' => 2]);
+    $col = AdMaterialCollection::factory()->create(['name' => '+cmd']);
+    $m = AdMaterial::factory()->create(['title' => '=HYPERLINK("http://evil")', 'product_id' => $product->id, 'drive_links' => ['-2+3']]);
+    $m->collections()->attach($col);
+    AdMaterial::factory()->create(['title' => "\tTabbed"]);
+
+    $parse = fn (string $csv) => array_map('str_getcsv', array_values(array_filter(preg_split('/\r?\n/', substr($csv, 3)))));
+    $lib = $parse($this->actingAs(matUser(UserRole::Admin))->get('/ads/materials/export')->streamedContent());
+    $row = collect($lib)->first(fn ($r) => str_contains($r[0], 'HYPERLINK'));
+    expect($row[0])->toBe('\'=HYPERLINK("http://evil")')->and($row[2])->toBe("'@SUM(A1)")
+        ->and($row[3])->toBe("'+cmd")->and($row[7])->toBe("'-2+3")
+        ->and(collect($lib)->pluck(0))->toContain("'\tTabbed");
+
+    $stock = $parse($this->actingAs(matUser(UserRole::Content))->get('/ads/stock/export')->streamedContent());
+    $srow = collect($stock)->first(fn ($r) => str_contains($r[0], 'HYPERLINK'));
+    expect($srow[0])->toBe('\'=HYPERLINK("http://evil")')->and($srow[1])->toBe("'@SUM(A1)")->and($srow[5])->toBe("'+cmd")
+        ->and($srow[3])->toBe('100'); // numbers untouched
+});
