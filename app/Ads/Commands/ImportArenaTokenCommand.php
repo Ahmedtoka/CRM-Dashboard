@@ -72,6 +72,11 @@ class ImportArenaTokenCommand extends Command
         }
 
         $token = $this->decrypt((string) $row->token_value, $env['APP_KEY'] ?? null);
+        if ($token === null) {
+            $this->error("The Arena token #{$row->id} is encrypted but could not be decrypted: check APP_KEY in Arena's .env (--arena-path).");
+
+            return self::FAILURE;
+        }
         if ($token === '') {
             $this->error('The Arena token is empty.');
 
@@ -115,17 +120,21 @@ class ImportArenaTokenCommand extends Command
             ->first();
     }
 
-    /** Arena's EncryptedWithFallback: encryptString with its APP_KEY, or legacy plain text. */
-    private function decrypt(string $value, ?string $appKey): string
+    /**
+     * Arena's EncryptedWithFallback: encryptString with its APP_KEY, or legacy plain text. Null when the value is a
+     * Laravel encrypted payload (base64 JSON, "eyJ...") that this key cannot open: never store ciphertext as a token.
+     */
+    private function decrypt(string $value, ?string $appKey): ?string
     {
+        $looksEncrypted = str_starts_with($value, 'eyJ');
         if ($appKey === null || $appKey === '') {
-            return $value;
+            return $looksEncrypted ? null : $value;
         }
         $key = str_starts_with($appKey, 'base64:') ? base64_decode(substr($appKey, 7)) : $appKey;
         try {
             return (new Encrypter($key, 'AES-256-CBC'))->decryptString($value);
         } catch (Throwable) { // not encrypted with this key (legacy plain text), or an unusable key
-            return $value;
+            return $looksEncrypted ? null : $value;
         }
     }
 }

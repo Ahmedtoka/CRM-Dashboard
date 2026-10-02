@@ -89,3 +89,13 @@ it('refuses to run in production', function () {
     $this->artisan('ads:import-arena-token', ['--arena-path' => $this->arenaPath])->assertFailed();
     expect(AdPlatformConnection::count())->toBe(0);
 });
+
+it('refuses to store an encrypted token it cannot decrypt', function () {
+    $other = new Encrypter(Encrypter::generateKey('AES-256-CBC'), 'AES-256-CBC'); // not Arena's key
+    arenaToken(['client_id' => 1, 'provider' => 'facebook', 'token_value' => $other->encryptString('EAAsecret-token-7777')]);
+
+    $this->artisan('ads:import-arena-token', ['--arena-path' => $this->arenaPath])
+        ->expectsOutputToContain('could not be decrypted')
+        ->assertFailed();
+    expect(AdPlatformConnection::count())->toBe(0);
+});
