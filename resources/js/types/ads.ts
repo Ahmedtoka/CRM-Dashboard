@@ -365,3 +365,168 @@ export interface AdsBuyersSetupProps {
     users: { id: number; name: string; role: string }[];
     settings: AdsSetupSettings;
 }
+
+/* ---- Materials library: MaterialController, MaterialCollectionController, AdStockController ---- */
+
+export type MaterialStatus = 'not_started' | 'activated' | 'done';
+export type MaterialStock = 'in' | 'out' | 'none';
+export type MaterialType = 'reel' | 'carousel' | 'post' | 'story' | 'image' | 'video';
+
+/** MaterialService::fileRow — urls are the authenticated file routes, never storage paths. */
+export interface MaterialFile {
+    id: number;
+    url: string;
+    thumb_url: string | null;
+    mime: string | null;
+    original_name: string | null;
+    size: number | null;
+}
+
+export interface MaterialPerformance {
+    spend: number;
+    spend_tax: number;
+    purchase_value: number;
+    roas: number | null;
+    purchases: number;
+    real_orders: number;
+    winner_tier: WinnerTier | null;
+}
+
+export interface MaterialProduct {
+    id: number;
+    title: string;
+    image_url: string | null;
+    inventory: number;
+}
+
+export interface MaterialLinkedAd {
+    id: number;
+    name: string;
+    platform: string;
+    status: string | null;
+}
+
+/** MaterialService::rows. Link arrays may be null for rows written before normalisation: read them through `links()`. */
+export interface MaterialRow {
+    id: number;
+    title: string;
+    created_at: string | null;
+    thumb_url: string | null;
+    files_count: number;
+    files?: MaterialFile[];
+    product: MaterialProduct | null;
+    collections: AdsOption[];
+    types: string[];
+    status: MaterialStatus;
+    drive_links: string[] | null;
+    website_links: string[] | null;
+    ig_links: string[] | null;
+    content_notes: string | null;
+    buyer: AdsOption | null;
+    creator: AdsOption | null;
+    stock: MaterialStock;
+    need_stop: boolean;
+    activated_at: string | null;
+    done_at: string | null;
+    ads: MaterialLinkedAd[];
+    performance: MaterialPerformance | null;
+}
+
+/** A Laravel LengthAwarePaginator as Inertia serialises it. */
+export interface LaravelPage<T> {
+    data: T[];
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    from: number | null;
+    to: number | null;
+}
+
+export interface MaterialFilters {
+    q: string | null;
+    status: MaterialStatus | null;
+    stock: MaterialStock | null;
+    collection: string | null;
+    type: MaterialType | null;
+    from: string | null;
+    to: string | null;
+    page: number;
+}
+
+export interface MaterialStats {
+    total: number;
+    activated: number;
+    not_started: number;
+    done: number;
+    reels: number;
+    posts: number;
+    carousels: number;
+    in_stock: number;
+    out_of_stock: number;
+    need_stop: number;
+}
+
+export interface AdsMaterialsIndexProps {
+    filters: MaterialFilters;
+    stats: MaterialStats;
+    materials: LaravelPage<MaterialRow>;
+    collections: AdsOption[];
+    canSeeSpend: boolean;
+}
+
+export interface MaterialFormRow extends MaterialRow {
+    files: MaterialFile[];
+}
+
+export interface AdsMaterialFormProps {
+    material: MaterialFormRow | null;
+    collections: AdsOption[];
+    types: MaterialType[];
+    buyers: AdsOption[];
+    limits?: { image_mb: number; video_mb: number };
+}
+
+export interface MaterialCollectionRow {
+    id: number;
+    name: string;
+    is_active: boolean;
+    materials: number;
+    activated: number;
+    not_started: number;
+    need_stop: number;
+    done: number;
+}
+
+export interface AdsMaterialCollectionsProps {
+    collections: MaterialCollectionRow[];
+    totals: { collections: number; materials: number; activated: number; not_started: number; need_stop: number; done: number };
+}
+
+export interface AdStockRow {
+    material_id: number;
+    title: string;
+    thumb_url: string | null;
+    product: { id: number; title: string };
+    variants: { id: number; title: string | null; sku: string | null; price: number; quantity: number }[];
+    price: { min: number | null; max: number | null };
+    quantity: number;
+    collections: AdsOption[];
+    availability: boolean;
+}
+
+export interface AdsStockProps {
+    filters: { min_qty: number | null; availability: 'all' | 'in' | 'out' };
+    rows: LaravelPage<AdStockRow>;
+}
+
+/** GET /ads/materials/ad-search */
+export interface MaterialAdSearchRow {
+    id: number;
+    name: string;
+    external_id: string;
+    platform: string;
+    account: string | null;
+    status: string | null;
+    thumbnail_url: string | null;
+}

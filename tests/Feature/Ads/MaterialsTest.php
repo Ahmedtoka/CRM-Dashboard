@@ -184,6 +184,7 @@ it('presents a MaterialRow with files, links and linked ads', function () {
             ->where('ads.0.name', 'Linked')->where('ads.0.platform', $ad->account->platform)
             ->where('performance.spend', 0)->where('performance.roas', null)->where('performance.winner_tier', null)
             ->whereType('thumb_url', 'string')->whereType('created_at', 'string')
+            ->has('files', 1)->where('files.0.mime', 'image/png')->whereType('files.0.url', 'string')
             ->etc()));
 });
 
@@ -399,7 +400,8 @@ it('renders the create and edit forms with their props', function () {
 
     $this->actingAs($content)->get('/ads/materials/create')->assertInertia(fn (Assert $p) => $p
         ->component('Ads/Materials/Form')->where('material', null)->has('collections', 1)
-        ->where('types', ['reel', 'carousel', 'post', 'story', 'image', 'video'])->has('buyers', 1)->where('buyers.0.id', $buyer->id));
+        ->where('types', ['reel', 'carousel', 'post', 'story', 'image', 'video'])->has('buyers', 1)->where('buyers.0.id', $buyer->id)
+        ->where('limits', ['image_mb' => 20, 'video_mb' => 500]));
 
     $this->actingAs($content)->get("/ads/materials/{$m->id}/edit")->assertInertia(fn (Assert $p) => $p
         ->where('material.title', 'Edit me')->has('material.files', 1)->has('material.files.0', fn (Assert $f) => $f

@@ -37,7 +37,8 @@ class MaterialController extends Controller
 
         $page = $service->withRelations($service->query($filters))
             ->paginate(MaterialService::PER_PAGE)->withQueryString();
-        $page->setCollection(collect($service->rows($page->getCollection(), $user)));
+        // Files are already eager loaded (thumbnail); sending them lets the list open its gallery without another request.
+        $page->setCollection(collect($service->rows($page->getCollection(), $user, true)));
 
         return Inertia::render('Ads/Materials/Index', [
             'filters' => $filters + ['page' => $page->currentPage()],
@@ -219,6 +220,11 @@ class MaterialController extends Controller
             'types' => MaterialService::TYPES,
             'buyers' => MediaBuyer::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])
                 ->map(fn ($b) => ['id' => $b->id, 'name' => $b->name])->all(),
+            // Upload limits (MB) for the client-side pre-check; the request validates again.
+            'limits' => [
+                'image_mb' => (int) config('crm.ads.material_max_mb.image', 20),
+                'video_mb' => (int) config('crm.ads.material_max_mb.video', 500),
+            ],
         ]);
     }
 
