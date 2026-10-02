@@ -68,7 +68,7 @@ class AdsDemoSeeder extends Seeder
     private const DAYS = 90;
 
     /** How many orders end up with a utm ad attribution. */
-    private const ATTRIBUTED_ORDERS = 8;
+    private const ATTRIBUTED_ORDERS = 12;
 
     /** [title, types, collections (indexes into COLLECTIONS), status, buyer key|null] */
     private const MATERIALS = [
@@ -319,13 +319,17 @@ class AdsDemoSeeder extends Seeder
         if ($missing > 0) {
             $ads = Ad::whereIn('id', AdDailyMetric::query()->select('ad_id'))->orderBy('id')->pluck('external_id')->all();
             $orders = Order::whereNull('utm_source')->where('status', '!=', OrderStatus::Cancelled->value)
-                ->orderByDesc('placed_at')->orderByDesc('id')->limit($missing)->get(['id']);
+                ->orderByDesc('placed_at')->orderByDesc('id')->limit($missing)->get(['id', 'placed_at']);
+            $now = CarbonImmutable::now();
             foreach ($orders as $k => $order) {
                 if ($ads === []) {
                     break;
                 }
+                $placed = CarbonImmutable::parse((string) $order->placed_at);
                 Order::whereKey($order->id)->toBase()->update([
                     'utm_source' => 'facebook', 'utm_medium' => 'paid', 'utm_content' => $ads[($k * 7) % count($ads)],
+                    // The base demo's orders can be older than the report's default 30-day range: bring these into it.
+                    'placed_at' => $placed->lessThan($now->subDays(28)) ? $now->subDays(2 + ($k * 3) % 26)->setTime(10 + $k % 10, 20) : $placed,
                 ]);
             }
         }

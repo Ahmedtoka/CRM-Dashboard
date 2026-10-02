@@ -94,3 +94,15 @@ it('leaves a real Meta connection alone and creates no fake Meta connection next
         ->and($account->assignments()->count())->toBe(1)
         ->and(AdAccount::count())->toBe(3); // the real one + fake tiktok + google
 });
+
+it('brings old demo orders it attributes into the last 30 days, so the reports show real orders', function () {
+    $old = Order::factory()->create(['placed_at' => now()->subDays(60)]);
+
+    seedAdsDemo();
+    $placed = $old->fresh()->placed_at;
+    seedAdsDemo();
+
+    expect($old->fresh()->ad_attribution)->toBe('utm_ad')
+        ->and($old->fresh()->placed_at->greaterThan(now()->subDays(29)))->toBeTrue()
+        ->and($old->fresh()->placed_at->equalTo($placed))->toBeTrue(); // stable on re-run
+});
