@@ -3130,7 +3130,7 @@ const en: Messages = {
             edit: 'Edit',
             delete: 'Delete',
             delete_title: 'Delete connection',
-            delete_body: 'The connection "{name}" and all its accounts and data will be deleted. This cannot be undone.',
+            delete_body: 'If "{name}" has spend history it is only stopped, and its past numbers stay in the reports. Without any numbers it is deleted with its accounts.',
             delete_confirm: 'Delete',
             test_ok: 'The connection works.',
             sync_queued: 'Sync started.',

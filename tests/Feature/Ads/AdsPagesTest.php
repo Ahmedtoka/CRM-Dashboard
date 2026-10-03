@@ -300,6 +300,23 @@ it('deletes a connection with its accounts', function () {
     expect(AdPlatformConnection::count())->toBe(0)->and(AdAccount::count())->toBe(0);
 });
 
+it('stops a connection with spend history instead of deleting it, and keeps the numbers', function () {
+    Queue::fake();
+    $c = AdPlatformConnection::factory()->create(['status' => 'connected']);
+    $acc = AdAccount::factory()->create(['connection_id' => $c->id, 'is_active' => true]);
+    AdDailyMetric::factory()->create(['ad_id' => Ad::factory()->for($acc, 'account')->create()->id, 'spend' => 1500]);
+
+    $this->actingAs(adsPgUser(UserRole::Admin))->delete("/ads/connections/{$c->id}")
+        ->assertRedirect()->assertSessionHas('status', __('ads.flash.archived'));
+
+    expect($c->refresh()->status)->toBe('disabled')
+        ->and($acc->refresh()->is_active)->toBeFalse()
+        ->and((float) AdDailyMetric::sum('spend'))->toBe(1500.0);
+
+    $this->artisan('ads:sync', ['--days' => 3])->assertSuccessful();
+    Queue::assertNotPushed(SyncAdAccount::class);
+});
+
 it('manages buyers, targets and settings', function () {
     $admin = adsPgUser(UserRole::Admin);
     $u = adsPgUser(UserRole::MediaBuyer);

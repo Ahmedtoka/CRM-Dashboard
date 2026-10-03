@@ -16,6 +16,7 @@ return [
         'test_ok' => 'Connection works.',
         'sync_queued' => 'Sync started.',
         'deleted' => 'Deleted.',
+        'archived' => 'The connection is stopped and will not sync again. Its past numbers stay in the reports.',
         'assigned' => 'Assignment saved.',
         'buyer_archived' => 'The buyer has account history, so it was archived instead of deleted.',
     ],
