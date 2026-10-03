@@ -411,7 +411,7 @@ it('renders the create and edit forms with their props', function () {
     $this->actingAs($content)->get('/ads/materials/create')->assertInertia(fn (Assert $p) => $p
         ->component('Ads/Materials/Form')->where('material', null)->has('collections', 1)
         ->where('types', ['reel', 'carousel', 'post', 'story', 'image', 'video'])->has('buyers', 1)->where('buyers.0.id', $buyer->id)
-        ->where('limits', ['image_mb' => 20, 'video_mb' => 500]));
+        ->where('limits.image_mb', 20)->where('limits.video_mb', 500)->has('limits.post_mb'));
 
     $this->actingAs($content)->get("/ads/materials/{$m->id}/edit")->assertInertia(fn (Assert $p) => $p
         ->where('material.title', 'Edit me')->has('material.files', 1)->has('material.files.0', fn (Assert $f) => $f

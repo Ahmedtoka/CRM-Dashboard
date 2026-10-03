@@ -225,8 +225,22 @@ class MaterialController extends Controller
             'limits' => [
                 'image_mb' => (int) config('crm.ads.material_max_mb.image', 20),
                 'video_mb' => (int) config('crm.ads.material_max_mb.video', 500),
+                // What PHP really accepts for one request: above it the POST is refused (413) before
+                // validation, so the page stops the upload itself and says why.
+                'post_mb' => self::postMaxMb(),
             ],
         ]);
+    }
+
+    /** The smaller of post_max_size and upload_max_filesize, in MB (null when unlimited). */
+    private static function postMaxMb(): ?int
+    {
+        $bytes = fn (string $v): int => (int) $v * match (strtolower(substr(trim($v), -1))) {
+            'g' => 1024 ** 3, 'm' => 1024 ** 2, 'k' => 1024, default => 1,
+        };
+        $limits = array_filter([$bytes((string) ini_get('post_max_size')), $bytes((string) ini_get('upload_max_filesize'))], fn (int $b) => $b > 0);
+
+        return $limits === [] ? null : intdiv(min($limits), 1024 ** 2);
     }
 
     private function serve(string $diskName, string $path, string $mime): SymfonyResponse

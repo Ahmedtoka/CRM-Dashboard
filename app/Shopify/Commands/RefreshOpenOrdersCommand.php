@@ -31,6 +31,14 @@ class RefreshOpenOrdersCommand extends Command
      */
     public const QUEUED_LOCK_SECONDS = 900;
 
+    /**
+     * Only orders placed in the last this-many days are refreshed on the schedule. Couriers rarely
+     * report `delivered` back to Shopify, so without a horizon nearly every fulfilled order stays
+     * "open" and the job keeps cycling the whole history; older ones still refresh when opened
+     * (OrderController::refreshStale) and in the nightly reconcile.
+     */
+    public const HORIZON_DAYS = 60;
+
     /** Candidates read per run, as a multiple of --limit, so orders still locked do not starve the rest. */
     private const CANDIDATE_FACTOR = 5;
 
@@ -55,6 +63,7 @@ class RefreshOpenOrdersCommand extends Command
 
         $ids = Order::openForSync()
             ->whereNotNull('shopify_order_id')
+            ->where(fn ($q) => $q->whereNull('placed_at')->orWhere('placed_at', '>=', now()->subDays(self::HORIZON_DAYS)))
             ->where(fn ($q) => $q->whereNull('last_synced_at')->orWhere('last_synced_at', '<', now()->subMinutes($older)))
             ->orderByRaw('last_synced_at IS NOT NULL, last_synced_at')
             ->orderBy('id')

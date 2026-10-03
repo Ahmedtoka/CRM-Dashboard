@@ -3,6 +3,7 @@
 use App\Analytics\ActivityLogger;
 use App\Bot\BotEngine;
 use App\Bot\Flow\Jobs\RunBotTurn;
+use App\Bot\Flows\FlowState;
 use App\Channels\Data\InboundMessageData;
 use App\Enums\Platform;
 use App\Events\MessageCreated;
@@ -232,6 +233,23 @@ it('gives a thanks no bot turn once the closed chat is back with the bot, and a 
     ackIngest('question-bot', 'عندكم فساتين سواريه؟', bot: true);
     Bus::assertDispatched(RunBotTurn::class);
 });
+
+it('gives «تمام» a bot turn when the bot is waiting for her answer after the close', function (string $waiting) {
+    Bus::fake([RunBotTurn::class]);
+    [$e, $u, $c] = ackWindow();
+    app(WindowLifecycle::class)->close($e, 'inquiry', $u);
+    app(BotEngine::class)->returnToBot($c->fresh(), $u);
+
+    $c = $c->fresh();
+    match ($waiting) {
+        'flow' => FlowState::put($c, ['key' => 'order_status', 'step' => 'order', 'data' => []]),
+        'confirm' => FlowState::setConfirm($c, 'order_status'),
+    };
+
+    ackIngest('answer-bot', 'تمام', bot: true);
+
+    Bus::assertDispatched(RunBotTurn::class);
+})->with(['flow', 'confirm']);
 
 it('lets the bot answer a thanks again a day after the close', function () {
     Bus::fake([RunBotTurn::class]);

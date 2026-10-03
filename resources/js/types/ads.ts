@@ -516,7 +516,7 @@ export interface AdsMaterialFormProps {
     collections: AdsOption[];
     types: MaterialType[];
     buyers: AdsOption[];
-    limits?: { image_mb: number; video_mb: number };
+    limits?: { image_mb: number; video_mb: number; post_mb?: number | null };
 }
 
 export interface MaterialCollectionRow {

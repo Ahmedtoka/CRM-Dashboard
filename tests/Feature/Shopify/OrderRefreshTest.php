@@ -288,6 +288,17 @@ it('lists open orders with a partial fulfilment or no shipment status as open fo
     expect(Order::openForSync()->pluck('id')->sort()->values()->all())->toBe([$partial->id, $plain->id]);
 });
 
+it('leaves orders placed before the horizon to the on-view refresh and the nightly reconcile', function () {
+    refreshConnectShop();
+    Queue::fake();
+    $recent = refreshStoreOrder(['placed_at' => now()->subDays(RefreshOpenOrdersCommand::HORIZON_DAYS - 1)]);
+    refreshStoreOrder(['placed_at' => now()->subDays(RefreshOpenOrdersCommand::HORIZON_DAYS + 1)]);
+
+    $this->artisan('shopify:refresh-orders')->expectsOutputToContain('queued=1')->assertSuccessful();
+
+    Queue::assertPushed(RefreshShopifyOrders::class, fn (RefreshShopifyOrders $job) => $job->orderIds === [$recent->id]);
+});
+
 it('chunks the queued ids into jobs of 25 orders', function () {
     refreshConnectShop();
     Queue::fake();

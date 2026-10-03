@@ -25,6 +25,8 @@ const step = (d: number) => {
 
 function onKey(e: KeyboardEvent): void {
     // Physical arrows follow the reading direction: in RTL the left arrow is "next".
+    // A focused video keeps its own arrows (seek); they do not also change the file.
+    if (e.target instanceof HTMLVideoElement) return;
     const rtl = document.documentElement.dir === 'rtl';
     if (e.key === 'ArrowRight') step(rtl ? -1 : 1);
     if (e.key === 'ArrowLeft') step(rtl ? 1 : -1);

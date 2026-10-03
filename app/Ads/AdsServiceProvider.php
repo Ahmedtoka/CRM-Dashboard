@@ -27,19 +27,19 @@ class AdsServiceProvider extends ServiceProvider
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
             $schedule->command(SyncAdsCommand::class, ['--days=3'])
-                ->hourlyAt(10)->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer();
+                ->hourlyAt(10)->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground();
 
             $schedule->command(SyncAdsCommand::class, ['--days=30'])
-                ->dailyAt('03:15')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer();
+                ->dailyAt('03:15')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground();
 
             $schedule->command(RefreshCreativesCommand::class, ['--days=14'])
-                ->dailyAt('05:20')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer();
+                ->dailyAt('05:20')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground();
 
             $schedule->command(AttributeOrdersCommand::class, ['--days=35'])
-                ->hourlyAt(40)->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer();
+                ->hourlyAt(40)->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground();
 
             $schedule->command(StockWatchCommand::class)
-                ->everyThirtyMinutes()->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer();
+                ->everyThirtyMinutes()->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground();
         });
     }
 }

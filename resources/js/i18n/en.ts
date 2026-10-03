@@ -3314,6 +3314,7 @@ const en: Messages = {
                 pick: 'Choose files',
                 bad_type: 'File type of «{name}» is not allowed',
                 too_big: '«{name}» is larger than {mb} MB',
+                too_big_total: '«{name}» was not added: together the files would pass {mb} MB per upload. Upload it in a second save',
                 too_many: 'At most {n} files',
                 uploading: 'Uploading',
                 new: 'New',

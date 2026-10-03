@@ -16,7 +16,7 @@ const props = withDefaults(
         modelValue: File[];
         existing?: MaterialFile[];
         removed?: number[];
-        limits?: { image_mb: number; video_mb: number };
+        limits?: { image_mb: number; video_mb: number; post_mb?: number | null };
         /** Upload percentage while the form is sending, else null. */
         progress?: number | null;
         disabled?: boolean;
@@ -85,6 +85,11 @@ function add(list: FileList | File[] | null | undefined): void {
         const mb = kind === 'video' ? props.limits.video_mb : props.limits.image_mb;
         if (file.size > mb * 1024 * 1024) {
             problems.push(t('ads.materials.files.too_big', { name: file.name, mb }));
+            continue;
+        }
+        const postMb = props.limits.post_mb;
+        if (postMb && [...next, file].reduce((sum, f) => sum + f.size, 0) > postMb * 1024 * 1024) {
+            problems.push(t('ads.materials.files.too_big_total', { name: file.name, mb: postMb }));
             continue;
         }
         if (next.length + keptExisting.value >= props.maxFiles) {
