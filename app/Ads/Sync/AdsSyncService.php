@@ -61,7 +61,7 @@ final class AdsSyncService
     }
 
     /** ads + campaigns + adsets, then daily metrics for [from,to] (replacing the account's rows of those dates), then media. */
-    public function syncAccount(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to, string $kind = 'recent'): AdsSyncRun
+    public function syncAccount(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to, string $kind = 'recent', bool $withAds = true): AdsSyncRun
     {
         $run = AdsSyncRun::create([
             'ad_account_id' => $a->id, 'platform' => $a->platform, 'kind' => $kind, 'status' => 'running',
@@ -69,7 +69,7 @@ final class AdsSyncService
         ]);
 
         try {
-            return $this->runSync($a, $run, $from, $to);
+            return $this->runSync($a, $run, $from, $to, $withAds);
         } catch (Throwable $e) {
             // Whatever escaped (bad driver config, DB error, media-phase bug) must not leave the run 'running'.
             if ($run->status === 'running') {
@@ -79,12 +79,13 @@ final class AdsSyncService
         }
     }
 
-    private function runSync(AdAccount $a, AdsSyncRun $run, CarbonImmutable $from, CarbonImmutable $to): AdsSyncRun
+    private function runSync(AdAccount $a, AdsSyncRun $run, CarbonImmutable $from, CarbonImmutable $to, bool $withAds = true): AdsSyncRun
     {
         $driver = $this->drivers->for(AdPlatform::from($a->platform));
 
         try {
-            $adRows = $driver->ads($a);
+            // The ad list (full creative specs) is the heaviest Meta call: a backfill reads it once, on its first chunk.
+            $adRows = $withAds ? $driver->ads($a) : [];
             $this->upsertAds($a, $adRows);
             $metrics = $driver->dailyMetrics($a, $from, $to);
             [$rows, $guard] = $this->replaceMetrics($a, $metrics, $from, $to);
@@ -138,7 +139,7 @@ final class AdsSyncService
         for ($offset = 0; $offset < $days; $offset += 30) {
             $to = $today->subDays($offset);
             $from = $today->subDays(min($offset + 29, $days - 1));
-            $run = $this->syncAccount($a, $from, $to, 'backfill');
+            $run = $this->syncAccount($a, $from, $to, 'backfill', withAds: $offset === 0);
             if ($run->status === 'error') {
                 break;
             }

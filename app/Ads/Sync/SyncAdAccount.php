@@ -11,6 +11,8 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Jobs\SyncJob;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 /** Syncs one ad account; kind 'backfill' walks $days in 30-day chunks. */
 class SyncAdAccount implements ShouldBeUnique, ShouldQueue
@@ -36,8 +38,13 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
     /** A crashed worker must not hold the ads-sync lock forever (just above $timeout). */
     public int $uniqueFor = 3700;
 
+    /** Same in every copy of this job: Redis re-queues a job that runs past the connection's retry_after. Null on jobs queued before it existed. */
+    public ?string $runKey = null;
+
     public function __construct(public int $accountId, public int $days = 3, public string $kind = 'recent')
     {
+        $this->runKey = (string) Str::uuid();
+
         // Same long lane as ReconcileShopify: `commercelong` queue (Supervisor program
         // crm-commercelong, --timeout=3600); on Redis it runs on `redislong` (retry_after 3700 s).
         $this->onQueue('commercelong');
@@ -68,27 +75,61 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
         return self::uniqueIdFor($this->accountId).($this->kind === 'recent' && $this->days > 3 ? '-deep' : '');
     }
 
+    /**
+     * Runs once per dispatch. The Cloudways commercelong worker reads the `redis` connection (retry_after
+     * 90 s), so a sync that takes minutes is put back in the queue while it runs and comes round again
+     * once it ends: that copy finds the done mark (or the running lock) and leaves without calling Meta.
+     */
     public function handle(AdsSyncService $sync): void
+    {
+        if ($this->runKey === null) {
+            $this->run($sync);
+
+            return;
+        }
+
+        $done = 'ads-sync-done:'.$this->runKey;
+        if (Cache::has($done)) {
+            return;
+        }
+        $running = Cache::lock('ads-sync-running:'.$this->runKey, $this->timeout + 60);
+        if (! $running->get()) {
+            return;
+        }
+
+        try {
+            if ($this->run($sync)) {
+                Cache::put($done, true, now()->addHours(12));
+            }
+        } finally {
+            $running->release();
+        }
+    }
+
+    /** @return bool false when released for a later try (Meta asked to wait) */
+    private function run(AdsSyncService $sync): bool
     {
         $account = AdAccount::find($this->accountId);
         if (! $account || ! $account->is_active) {
-            return;
+            return true;
         }
 
         try {
             if ($this->kind === 'backfill') {
                 $sync->backfill($account, $this->days);
 
-                return;
+                return true;
             }
             $to = CarbonImmutable::now('Africa/Cairo')->startOfDay();
             $sync->syncAccount($account, $to->subDays(max($this->days, 1) - 1), $to, $this->kind);
+
+            return true;
         } catch (RateLimited $e) {
             // Only a real async queue job can be released; sync/inline runs must surface the failure.
             if ($this->job && ! $this->job instanceof SyncJob) {
                 $this->release(900);
 
-                return;
+                return false;
             }
             throw $e;
         }

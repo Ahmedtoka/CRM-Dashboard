@@ -429,3 +429,78 @@ it('queues a backfill by platform account id for the worker to retry', function 
     Queue::assertPushed(SyncAdAccount::class, fn (SyncAdAccount $j) => $j->accountId === $a->id && $j->kind === 'backfill' && $j->days === 90
         && $j->tries === 30 && $j->maxExceptions === 3);
 });
+
+it('runs a sync once even when redis hands the same job back after it finished', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    bindDriver(doubleDriver());
+    $queueJob = Mockery::mock(Job::class)->shouldIgnoreMissing();
+
+    $job = new SyncAdAccount($acc->id, 3);
+    $copy = unserialize(serialize($job));   // what Redis re-queues: the same payload
+    foreach ([$job, $copy] as $j) {
+        $j->setJob($queueJob);
+        $j->handle(app(AdsSyncService::class));
+    }
+
+    expect(AdsSyncRun::count())->toBe(1);
+
+    (new SyncAdAccount($acc->id, 3))->handle(app(AdsSyncService::class));   // a new dispatch still runs
+    expect(AdsSyncRun::count())->toBe(2);
+});
+
+it('tries again after a rate-limit release instead of taking it for done', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    bindDriver(doubleDriver(adsError: new RateLimited('quota')));
+    $queueJob = Mockery::mock(Job::class)->shouldIgnoreMissing();
+    $job = new SyncAdAccount($acc->id, 3);
+    $payload = serialize($job);
+    $job->setJob($queueJob);
+    $job->handle(app(AdsSyncService::class));
+
+    bindDriver(doubleDriver());
+    $retry = unserialize($payload);
+    $retry->setJob($queueJob);
+    $retry->handle(app(AdsSyncService::class));
+
+    expect(AdsSyncRun::where('status', 'ok')->count())->toBe(1);
+});
+
+it('reads the ad list once per backfill, on its first chunk', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $driver = new class extends FakeAdsDriver
+    {
+        public int $adsCalls = 0;
+
+        public int $metricCalls = 0;
+
+        public function ads(AdAccount $a): array
+        {
+            $this->adsCalls++;
+
+            return [];
+        }
+
+        public function dailyMetrics(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+        {
+            $this->metricCalls++;
+
+            return [];
+        }
+    };
+    bindDriver($driver);
+
+    app(AdsSyncService::class)->backfill($acc, 90);
+
+    expect($driver->adsCalls)->toBe(1)->and($driver->metricCalls)->toBe(3);
+});
+
+it('still runs a job queued before the run key existed', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    bindDriver(doubleDriver());
+    $job = new SyncAdAccount($acc->id, 3);
+    $job->runKey = null;
+
+    $job->handle(app(AdsSyncService::class));
+
+    expect(AdsSyncRun::count())->toBe(1);
+});
