@@ -11,7 +11,8 @@ use Throwable;
 
 class BackfillAdsCommand extends Command
 {
-    protected $signature = 'ads:backfill {--account= : Ad account id} {--days=90}';
+    protected $signature = 'ads:backfill {--account= : Ad account id} {--external= : Ad account id on the platform, e.g. act_123 (comma list)} {--days=90}
+        {--queue : Hand it to the commercelong worker, which retries every 15 minutes while Meta says «retry later»}';
 
     protected $description = 'Backfill ad metrics in 30-day chunks, newest first';
 
@@ -19,8 +20,19 @@ class BackfillAdsCommand extends Command
     {
         $days = max((int) $this->option('days'), 1);
         $accounts = AdAccount::query()->where('is_active', true)
-            ->when($this->option('account'), fn ($q, $id) => $q->whereKey($id))->get();
+            ->when($this->option('account'), fn ($q, $id) => $q->whereKey($id))
+            ->when($this->option('external'), fn ($q, $ids) => $q->whereIn('external_id', array_map('trim', explode(',', $ids))))->get();
         $failed = 0;
+
+        if ($this->option('queue')) {
+            foreach ($accounts as $a) {
+                SyncAdAccount::dispatch($a->id, $days, 'backfill');
+                $this->line("Queued {$a->name} ({$days} days)");
+            }
+            $this->info('The worker keeps retrying while Meta asks to wait; each account shows its sync time on Ads -> Ad accounts when it lands.');
+
+            return self::SUCCESS;
+        }
 
         // Runs inline so the chunks stay in order and the command shows progress.
         foreach ($accounts as $a) {

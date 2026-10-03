@@ -17,7 +17,16 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable;
 
-    public int $tries = 3;
+    /**
+     * Meta's usage quota is shared (Arena syncs the same accounts on the same app), so a backfill can meet
+     * «retry later» for hours. Each RateLimited releases the job for 15 minutes and uses one try: 30 tries
+     * keep it coming back for about 7.5 hours, while a real error still fails it after 3 (maxExceptions).
+     */
+    public int $tries = 30;
+
+    public int $maxExceptions = 3;
+
+    public int $backoff = 60;
 
     /** A 90-day backfill pages ads, insights and media: far beyond the 60-s default worker. */
     public int $timeout = 3600;
