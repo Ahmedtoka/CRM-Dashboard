@@ -18,6 +18,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -192,8 +193,25 @@ class AccountController extends Controller
         return back()->with('status', __('ads.flash.sync_queued'));
     }
 
+    /**
+     * A connection with spend history is stopped, never deleted: the delete would cascade through its
+     * accounts, ads and daily metrics and unlink the orders, wiping past spend and buyer numbers for
+     * good. Its accounts stop syncing and stay in every report; a new token or a new connection to the
+     * same accounts picks them up again. One with no metrics is deleted as before.
+     */
     public function destroy(AdPlatformConnection $connection): RedirectResponse
     {
+        $hasHistory = AdDailyMetric::query()->whereIn('ad_account_id', $connection->accounts()->select('id'))->exists();
+
+        if ($hasHistory) {
+            DB::transaction(function () use ($connection) {
+                $connection->update(['status' => 'disabled', 'last_error' => null]);
+                $connection->accounts()->update(['is_active' => false]);
+            });
+
+            return back()->with('status', __('ads.flash.archived'));
+        }
+
         $connection->delete();
 
         return back()->with('status', __('ads.flash.deleted'));

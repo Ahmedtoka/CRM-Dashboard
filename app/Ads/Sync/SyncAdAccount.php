@@ -49,9 +49,14 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
         return 'laravel_unique_job:'.self::class.self::uniqueIdFor($accountId);
     }
 
+    /**
+     * The nightly 30-day run has its own lock: at 03:15 the 03:10 hourly job of the same account is
+     * often still waiting on the single commercelong worker, and sharing its lock would drop the deep
+     * run silently. One worker runs them one after the other.
+     */
     public function uniqueId(): string
     {
-        return self::uniqueIdFor($this->accountId);
+        return self::uniqueIdFor($this->accountId).($this->kind === 'recent' && $this->days > 3 ? '-deep' : '');
     }
 
     public function handle(AdsSyncService $sync): void

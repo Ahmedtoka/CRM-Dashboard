@@ -3,6 +3,8 @@
 namespace App\Queue;
 
 use App\Analytics\ActivityLogger;
+use App\Bot\Flows\FlowState;
+use App\Bot\Flows\HumanHandover;
 use App\Bot\Flows\Sandbox\SandboxMode;
 use App\Bot\WorkingHours;
 use App\Enums\ActorType;
@@ -306,6 +308,12 @@ class QueueService
             return true;
         }
 
+        // A bot that is waiting for her answer (a flow step, a confirm, the «كلم موظف» topic
+        // question) takes «تمام» / «ok» as that answer, never as a thanks to settle quietly.
+        if ($acknowledgement && $c->handler !== Handler::Human && $this->botAwaitsAnswer($c)) {
+            $acknowledgement = false;
+        }
+
         // A bot-handled chat's real message: nothing for the queue (no query, the common case).
         if ($c->handler !== Handler::Human && ! $acknowledgement) {
             return false;
@@ -352,6 +360,12 @@ class QueueService
     {
         return $handler === Handler::Human
             || ($last->closed_at !== null && $last->closed_at->greaterThan(now()->subHours(self::ACK_QUIET_HOURS)));
+    }
+
+    /** The bot asked her something and waits: an open flow, a pending confirm, or the topic question. */
+    private function botAwaitsAnswer(Conversation $c): bool
+    {
+        return FlowState::flow($c) !== null || FlowState::confirm($c) !== null || HumanHandover::pending($c);
     }
 
     /** Her latest queue entry when it has ended and closed within `return_priority_minutes`. */

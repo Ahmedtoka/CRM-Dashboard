@@ -405,3 +405,15 @@ it('skips a backfill for an account whose sync lock is held', function () {
 it('uses the same lock key as the unique job', function () {
     expect(SyncAdAccount::lockKey(7))->toBe('laravel_unique_job:'.SyncAdAccount::class.(new SyncAdAccount(7))->uniqueId());
 });
+
+it('queues the nightly 30-day sync even while the hourly job of the same account still waits', function () {
+    Queue::fake();
+    $acc = AdAccount::factory()->meta()->create(['name' => 'Busy']);
+
+    SyncAdAccount::dispatch($acc->id, 3);
+    SyncAdAccount::dispatch($acc->id, 3);   // the next hourly run: still dropped
+    SyncAdAccount::dispatch($acc->id, 30);
+
+    Queue::assertPushed(SyncAdAccount::class, 2);
+    Queue::assertPushed(SyncAdAccount::class, fn (SyncAdAccount $job) => $job->days === 30);
+});

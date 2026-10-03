@@ -229,6 +229,8 @@ class OutboundService
         [$body, $buttons, $cards] = app(OutboundTranslation::class)->apply($c, $body, $buttons, $cards);
         // Spec 2026-10-01 §6: nothing the bot says carries an emoji — stored texts, AI output, translations.
         [$body, $buttons, $cards] = [Emoji::strip($body), Emoji::stripDeep($buttons), $cards === null ? null : Emoji::stripDeep($cards)];
+        // A button that was only an emoji has no title left; Meta refuses the whole message for one.
+        $buttons = array_values(array_filter($buttons, fn ($b) => ! is_array($b) || trim((string) ($b['title'] ?? '')) !== ''));
 
         // A text that was nothing but emoji, with no buttons or cards: never queue an empty
         // message. Thrown as a WindowClosedException, which every caller already handles as

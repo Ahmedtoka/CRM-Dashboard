@@ -22,6 +22,8 @@ final readonly class AdsFilter
 
     public CarbonImmutable $to;
 
+    public const MAX_DAYS = 366;
+
     /** @param  list<int>|null  $accountIds */
     public function __construct(
         CarbonImmutable $from,
@@ -44,6 +46,11 @@ final readonly class AdsFilter
         $from = self::date($r->query('from')) ?? $to->subDays(29);
         if ($from->greaterThan($to)) {
             [$from, $to] = [$to, $from];
+        }
+        // At most MAX_DAYS: a hand-typed `from=2000-01-01` would load every attributed order and
+        // conversation into PHP and build a daily series of thousands of days.
+        if ($from->lessThan($to->subDays(self::MAX_DAYS - 1))) {
+            $from = $to->subDays(self::MAX_DAYS - 1);
         }
 
         $platform = AdPlatform::tryFrom((string) $r->query('platform', ''))?->value;

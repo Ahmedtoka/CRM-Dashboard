@@ -139,6 +139,7 @@ it('dispatches the thumbnail job when created stored or newly stored, not on unr
 
     $a = MessageAttachment::factory()->stored()->create(['message_id' => $this->message->id]);
     Queue::assertPushed(MakeThumbnail::class, 1);
+    Queue::assertPushed(MakeThumbnail::class, fn (MakeThumbnail $job) => $job->queue === 'media');
 
     $a->forceFill(['original_name' => 'x.png'])->save();   // unrelated save of a stored row
     $a->forceFill(['error' => null])->save();

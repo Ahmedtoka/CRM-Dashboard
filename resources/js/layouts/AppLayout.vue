@@ -40,18 +40,19 @@ const shortcutsOpen = ref(false);
 const palette = useCommandPalette();
 const notifications = useNotifications();
 notifications.start();
-// Presence is for inbox staff; media buyers and content users are kept to /ads (RestrictAdsRoles answers 403).
-if (!['media_buyer', 'content'].includes(page.props.auth.user?.role ?? '')) useHeartbeat().start();
+// Presence and search are for inbox staff; media buyers and content users are kept to /ads (RestrictAdsRoles answers 403).
+const adsOnly = ['media_buyer', 'content'].includes(page.props.auth.user?.role ?? '');
+if (!adsOnly) useHeartbeat().start();
 useShortcuts([
     { id: 'global.help', keys: ['shift+?'], labelKey: 'shortcuts.help', group: 'global', handler: () => (shortcutsOpen.value = true) },
     { id: 'global.escape', keys: ['escape'], labelKey: 'shortcuts.close', group: 'global', allowInInput: true },
-    { id: 'global.search', keys: ['mod+k'], labelKey: 'shortcuts.search', group: 'global', allowInInput: true, handler: () => palette.show() },
+    { id: 'global.search', keys: ['mod+k'], labelKey: 'shortcuts.search', group: 'global', allowInInput: true, handler: () => !adsOnly && palette.show() },
 ]);
 </script>
 
 <template>
     <AppLayout :breadcrumbs="breadcrumbs" :content-class="fill ? 'h-svh max-h-svh overflow-hidden' : undefined" :workspace="workspace">
-        <template #topbar-search>
+        <template v-if="!adsOnly" #topbar-search>
             <button
                 type="button"
                 class="flex size-9 shrink-0 items-center justify-center gap-2 rounded-full bg-elevated px-0 text-sm text-muted-foreground hover:bg-muted sm:h-9 sm:w-full sm:max-w-md sm:justify-start sm:px-3"
@@ -79,6 +80,6 @@ useShortcuts([
         <slot />
         <ToastStack />
         <ShortcutsDialog v-model:open="shortcutsOpen" />
-        <CommandPalette />
+        <CommandPalette v-if="!adsOnly" />
     </AppLayout>
 </template>

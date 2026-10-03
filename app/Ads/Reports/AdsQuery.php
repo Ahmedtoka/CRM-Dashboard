@@ -31,6 +31,9 @@ final class AdsQuery
         .'COALESCE(SUM(m.purchases), 0) as purchases, COALESCE(SUM(m.impressions), 0) as impressions, '
         .'COALESCE(SUM(m.clicks), 0) as clicks, COALESCE(SUM(m.reach), 0) as reach';
 
+    /** Read once per report: withTax() runs for every row, card and day of a page. */
+    private ?float $taxRate = null;
+
     public function __construct(private readonly BuyerResolver $resolver, private readonly AdsSettings $settings) {}
 
     /** ad_daily_metrics m with buyer_id + joins ads (ad) and ad_accounts (acc), filtered by AdsFilter. */
@@ -213,7 +216,9 @@ final class AdsQuery
 
     public function withTax(float $spend): float
     {
-        return round($spend * (1 + $this->settings->taxRate()), 2);
+        $this->taxRate ??= $this->settings->taxRate();
+
+        return round($spend * (1 + $this->taxRate), 2);
     }
 
     public static function ratio(float|int $num, float|int $den, int $precision): ?float

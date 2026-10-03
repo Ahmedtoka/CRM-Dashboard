@@ -36,6 +36,14 @@ it('never lets the bot send an emoji, even when a stored text or the AI has one'
         ->and($m->fresh()->body)->toBe('أهلاً بيكي');
 });
 
+it('drops a button that was only an emoji, so Meta never gets an empty title', function () {
+    $c = emojiGuardConversation();
+    $m = app(OutboundService::class)->sendBot($c, 'تحبي إيه؟', buttons: [['title' => '👍', 'payload' => 'yes'], ['title' => 'لا', 'payload' => 'no']]);
+
+    expect($m->buttons)->toHaveCount(1)
+        ->and($m->buttons[0]['payload'])->toBe('no');
+});
+
 it('strips the cards too, and leaves their links alone', function () {
     $c = emojiGuardConversation();
     $cards = ['type' => 'generic', 'cards' => [['title' => '✨ فستان', 'subtitle' => '500 جنيه', 'buttons' => [['type' => 'web_url', 'title' => '📍 الخريطة', 'url' => 'https://example.test/a']]]]];

@@ -350,3 +350,11 @@ it('lists top accounts by spend with their current buyer', function () {
     $ahmed = app(TopAccounts::class)->build(rptRange(extra: ['buyerId' => $w['ahmed']->id]));
     expect($ahmed)->toHaveCount(1)->and($ahmed[0])->toMatchArray(['id' => $w['acc1']->id, 'buyer' => 'Ahmed Gamal', 'spend' => 1500.0]);
 });
+
+it('caps a hand-typed date range at a year', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $f = AdsFilter::fromRequest(Request::create('/ads', 'GET', ['from' => '2000-01-01', 'to' => '2026-09-30']), $admin);
+
+    expect($f->to->toDateString())->toBe('2026-09-30')
+        ->and($f->from->toDateString())->toBe('2025-09-30');
+});
