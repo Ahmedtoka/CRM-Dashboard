@@ -14,8 +14,11 @@ class MetaAdsApi
 {
     private const HOST = 'https://graph.facebook.com';
 
-    /** Meta error codes that mean "slow down". */
-    private const RATE_CODES = [4, 17, 32, 613];
+    /** Meta error codes that mean "slow down" (80000-80014: business use case limits, e.g. 80004 ads management). */
+    private const RATE_CODES = [4, 17, 32, 613, 80000, 80001, 80002, 80003, 80004, 80005, 80006, 80008, 80009, 80014];
+
+    /** A page Meta calls too large is asked again with half the `limit`, down to this. */
+    private const MIN_LIMIT = 5;
 
     private const USAGE_LIMIT = 85;
 
@@ -46,7 +49,8 @@ class MetaAdsApi
     public function paginate(string $token, string $path, array $query = [], int $maxPages = 200): array
     {
         $rows = [];
-        $page = $this->get($token, $path, $query);
+        $limit = (int) ($query['limit'] ?? 0);
+        $page = $this->shrinking(fn (int $l) => $this->get($token, $path, $l > 0 ? ['limit' => $l] + $query : $query), $limit);
         $pages = 1;
 
         while (true) {
@@ -59,8 +63,36 @@ class MetaAdsApi
                 throw new AdsApiException('Meta result too large - narrow the date range.');
             }
             $next = $this->stripToken((string) $next);
-            $page = $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)->get($next));
+            $page = $this->shrinking(fn (int $l) => $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)
+                ->get($l > 0 ? $this->withLimit($next, $l) : $next)), $limit);
         }
+    }
+
+    /**
+     * Big accounts (many ads with full creative specs, many ad-days) can make Meta refuse a page as too
+     * large. The same page is asked again with half the limit, which then stays for the next pages.
+     *
+     * @param  callable(int): array<string, mixed>  $fetch
+     */
+    private function shrinking(callable $fetch, int &$limit): array
+    {
+        while (true) {
+            try {
+                return $fetch($limit);
+            } catch (TooMuchData $e) {
+                if ($limit <= self::MIN_LIMIT) {
+                    throw $e;
+                }
+                $limit = max(self::MIN_LIMIT, intdiv($limit, 2));
+            }
+        }
+    }
+
+    private function withLimit(string $url, int $limit): string
+    {
+        return preg_match('/([?&])limit=\d+/', $url)
+            ? (string) preg_replace('/([?&])limit=\d+/', '${1}limit='.$limit, $url)
+            : $url.(str_contains($url, '?') ? '&' : '?').'limit='.$limit;
     }
 
     /**
@@ -106,6 +138,9 @@ class MetaAdsApi
             $code = (int) $response->json('error.code', 0);
             if (in_array($code, self::RATE_CODES, true)) {
                 throw new RateLimited($this->scrub($message));
+            }
+            if (str_contains(strtolower($message), 'reduce the amount of data')) {
+                throw new TooMuchData($this->scrub($message));
             }
             throw new AdsApiException($this->scrub($message));
         }

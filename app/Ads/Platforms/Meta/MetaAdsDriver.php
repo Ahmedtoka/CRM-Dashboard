@@ -54,7 +54,8 @@ class MetaAdsDriver implements AdPlatformDriver
             'fields' => 'id,name,status,effective_status,created_time,'
                 .'creative{id,name,thumbnail_url,image_url,video_id,title,body,instagram_permalink_url,url_tags,object_story_id,effective_object_story_id,object_story_spec,asset_feed_spec},'
                 .'campaign{id,name,status,objective},adset{id,name,status,is_dynamic_creative}',
-            'limit' => 200,
+            // Full creative specs are heavy: 200 per page makes Meta refuse big accounts outright.
+            'limit' => 50,
         ]);
 
         return array_values(array_map(fn (array $r) => $this->mapAd($r), $rows));

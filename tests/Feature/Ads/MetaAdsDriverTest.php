@@ -171,3 +171,36 @@ it('keeps a json token out of a meta error message', function () {
         expect($e->getMessage())->not->toContain('LEAKME');
     }
 });
+
+it('asks again with a smaller page when meta says the page is too large, and keeps it for the next pages', function () {
+    Http::preventStrayRequests();
+    $tooMuch = Http::response(['error' => ['message' => "Please reduce the amount of data you're asking for, then retry your request", 'code' => 1]], 500);
+    Http::fake([
+        'graph.facebook.com/v23.0/act_1/ads*' => Http::sequence()->pushResponse($tooMuch)->pushResponse($tooMuch)
+            ->push(['data' => [['id' => 'ad_1', 'name' => 'A']], 'paging' => ['next' => 'https://graph.facebook.com/v23.0/act_1/ads?limit=50&after=c1']])
+            ->push(['data' => [['id' => 'ad_2', 'name' => 'B']]]),
+    ]);
+    $acc = AdAccount::factory()->meta()->create(['external_id' => 'act_1', 'connection_id' => metaConnection()->id]);
+
+    $ads = app(MetaAdsDriver::class)->ads($acc);
+
+    expect(collect($ads)->pluck('externalId')->all())->toBe(['ad_1', 'ad_2']);
+    $limits = collect(Http::recorded())->map(fn ($pair) => (int) ($pair[0]->data()['limit'] ?? 0) ?: (int) preg_replace('/.*[?&]limit=(\d+).*/', '$1', $pair[0]->url()))->all();
+    expect($limits)->toBe([50, 25, 12, 12]);
+});
+
+it('gives up on a too-large page once the limit is down to five', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => "Please reduce the amount of data you're asking for, then retry your request", 'code' => 1]], 500)]);
+    $acc = AdAccount::factory()->meta()->create(['external_id' => 'act_1', 'connection_id' => metaConnection()->id]);
+
+    expect(fn () => app(MetaAdsDriver::class)->ads($acc))->toThrow(AdsApiException::class, 'reduce the amount of data');
+    Http::assertSentCount(5); // 50, 25, 12, 6, 5
+});
+
+it('treats the ad-account call limit (80004) as a rate limit, so the job comes back later', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => 'There have been too many calls to this ad-account. Wait a bit and try again.', 'code' => 80004]], 400)]);
+
+    expect(fn () => app(MetaAdsDriver::class)->accounts(metaConnection()))->toThrow(RateLimited::class);
+});
