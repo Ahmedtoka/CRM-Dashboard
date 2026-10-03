@@ -244,7 +244,7 @@ it('answers a waiting customer who writes with her ticket, who is ahead and the 
     $writes(10);
     // One window, 590 s left on it; she is second: 590 + 600 = 1190 s ≈ 20 minutes.
     expect($updates())->toHaveCount(1)
-        ->and($updates()->first())->toBe('لسه معاكي 💛 رقم تذكرتك #'.$e->ticket_no.'، وقدامك عميلة واحدة وهنكون معاكي خلال حوالي 20 دقيقة');
+        ->and($updates()->first())->toBe('لسه معاكي، رقم تذكرتك #'.$e->ticket_no.'، وقدامك عميلة واحدة وهنكون معاكي خلال حوالي 20 دقيقة');
 
     $writes(70);   // a minute later: no reply
     expect($updates())->toHaveCount(1);

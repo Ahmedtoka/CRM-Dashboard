@@ -1,0 +1,4 @@
+{"code":0,"message":"OK","request_id":"202609300000000000000000000004","data":{"list":[
+{"metrics":{"spend":"250.40","impressions":"10400","clicks":"310","reach":"8200","complete_payment":"4","total_complete_payment_rate":"1800.00","ad_name":"Video one","campaign_id":"1700000000001","campaign_name":"Sales","adgroup_id":"1710000000001","adgroup_name":"Women 18-34"},"dimensions":{"ad_id":"1800000000001","stat_time_day":"2026-09-01 00:00:00"}},
+{"metrics":{"spend":"0.00","impressions":"0","clicks":"0","reach":"0","complete_payment":"0","total_complete_payment_rate":"0.00","ad_name":"Video one","campaign_id":"1700000000001","campaign_name":"Sales","adgroup_id":"1710000000001","adgroup_name":"Women 18-34"},"dimensions":{"ad_id":"1800000000001","stat_time_day":"2026-09-02 00:00:00"}}
+],"page_info":{"page":1,"page_size":1000,"total_number":2,"total_page":1}}}

@@ -366,7 +366,7 @@ class MetricsService
     {
         [$from, $to] = $this->normalize($from, $to);
 
-        $users = User::query()->where('is_active', true)->orderBy('id')->get(['id', 'name', 'color']);
+        $users = User::query()->where('is_active', true)->inboxStaff()->orderBy('id')->get(['id', 'name', 'color']);
 
         if ($users->isEmpty()) {
             return [];
@@ -1039,7 +1039,7 @@ class MetricsService
             }
 
             if ($r->direction === MessageDirection::In->value) {
-                // A spam/low-value customer message (e.g. "شكرا 👍") never starts a
+                // A spam/low-value customer message (e.g. "شكرا" with a thumbs-up) never starts a
                 // response-time sample (spec §11.1).
                 if (! $r->is_low_value && ! $r->is_spam) {
                     $pending ??= $r->created_at;

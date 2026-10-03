@@ -315,10 +315,10 @@ const priorityDot: Record<(typeof PRIORITIES)[number], string> = { high: 'bg-des
                                     class="truncate text-sm font-semibold"
                                     :class="drafts[row.id].is_active ? 'text-foreground' : 'text-muted-foreground'"
                                     dir="auto"
+                                    :title="row.key"
                                 >
                                     {{ label(row) }}
                                 </h3>
-                                <p class="truncate text-2xs text-muted-foreground" dir="ltr">{{ row.key }}</p>
                             </div>
                             <button
                                 type="button"

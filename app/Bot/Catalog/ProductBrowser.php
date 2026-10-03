@@ -41,8 +41,8 @@ class ProductBrowser
         }
 
         $intro = $type
-            ? str_replace('{type}', $type, $this->text('products_type_intro', 'موديلات {type} المتاحة 👇'))
-            : $this->text('products_intro', 'دي أحدث الموديلات المتاحة عندنا 🌸 اضغطي «التفاصيل والمقاسات» على أي موديل يعجبك');
+            ? str_replace('{type}', $type, $this->text('products_type_intro', 'موديلات {type} المتاحة'))
+            : $this->text('products_intro', 'دي أحدث الموديلات المتاحة عندنا، اضغطي «التفاصيل والمقاسات» على أي موديل يعجبك');
 
         $this->show($c, $intro, $products, $type === null ? $this->typeButtons() : []);
 

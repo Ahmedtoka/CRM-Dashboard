@@ -49,6 +49,9 @@ class PruneMediaOrphans extends Command
                         if ($attachment->path) {
                             Storage::disk($attachment->disk)->delete($attachment->path);
                         }
+                        if ($attachment->thumb_path) {
+                            Storage::disk($attachment->disk)->delete($attachment->thumb_path);
+                        }
                         $count++;
                     }
                 }

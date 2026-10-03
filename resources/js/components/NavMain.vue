@@ -21,10 +21,10 @@ defineProps<{
 
 const page = usePage<SharedData>();
 
-const isActive = (href: string) => {
+const isActive = (href: string, exact = false) => {
     const path = page.url.split('?')[0];
 
-    return path === href || path.startsWith(`${href}/`);
+    return path === href || (!exact && path.startsWith(`${href}/`));
 };
 
 /** Consecutive children sharing a `section` render under one small heading. */
@@ -79,8 +79,8 @@ const sectionsOf = (children: NavItem[]) => {
                                             class="flex flex-col gap-1"
                                         >
                                             <SidebarMenuSubItem v-for="child in section.items" :key="child.href">
-                                                <SidebarMenuSubButton as-child :is-active="isActive(child.href)">
-                                                    <Link :href="child.href" :aria-current="isActive(child.href) ? 'page' : undefined">
+                                                <SidebarMenuSubButton as-child :is-active="isActive(child.href, child.exact)">
+                                                    <Link :href="child.href" :aria-current="isActive(child.href, child.exact) ? 'page' : undefined">
                                                         <span>{{ child.title }}</span>
                                                     </Link>
                                                 </SidebarMenuSubButton>
@@ -89,8 +89,8 @@ const sectionsOf = (children: NavItem[]) => {
                                     </li>
                                     <template v-else>
                                         <SidebarMenuSubItem v-for="child in section.items" :key="child.href">
-                                            <SidebarMenuSubButton as-child :is-active="isActive(child.href)">
-                                                <Link :href="child.href" :aria-current="isActive(child.href) ? 'page' : undefined">
+                                            <SidebarMenuSubButton as-child :is-active="isActive(child.href, child.exact)">
+                                                <Link :href="child.href" :aria-current="isActive(child.href, child.exact) ? 'page' : undefined">
                                                     <span>{{ child.title }}</span>
                                                 </Link>
                                             </SidebarMenuSubButton>

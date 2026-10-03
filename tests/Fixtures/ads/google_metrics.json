@@ -1,0 +1,4 @@
+[{"results":[
+{"campaign":{"resourceName":"customers/1234567890/campaigns/11","id":"11","name":"Search Sales"},"adGroup":{"resourceName":"customers/1234567890/adGroups/22","id":"22","name":"Abayas"},"adGroupAd":{"ad":{"resourceName":"customers/1234567890/ads/33","id":"33"}},"metrics":{"costMicros":"1234560000","impressions":"5400","clicks":"210","conversions":3,"conversionsValue":2100.5},"segments":{"date":"2026-09-01"}},
+{"campaign":{"resourceName":"customers/1234567890/campaigns/11","id":"11","name":"Search Sales"},"adGroup":{"resourceName":"customers/1234567890/adGroups/22","id":"22","name":"Abayas"},"adGroupAd":{"ad":{"resourceName":"customers/1234567890/ads/33","id":"33"}},"metrics":{"costMicros":"0","impressions":"0","clicks":"0"},"segments":{"date":"2026-09-02"}}
+],"fieldMask":"adGroupAd.ad.id,segments.date","requestId":"r5"}]

@@ -183,7 +183,7 @@ it('starts from the main-menu button with the policy and the order question', fu
     orfTurn('المرتجع والاستبدال', 'flow:return_exchange');
 
     expect(orfFlow()['step'])->toBe('order')
-        ->and(orfBot()->body)->toBe('ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟ 🌸')
+        ->and(orfBot()->body)->toBe('ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟')
         ->and(implode("\n", orfBodies()))->toContain('14 يوم');
 });
 
@@ -204,7 +204,7 @@ it('greets her by the order customer first name once she proved the order, and n
     expect(orfFlow()['step'])->toBe('kind')
         ->and(orfFlow()['data']['customer_first_name'])->toBe('سارة')
         ->and(orfFlow()['data']['order_window'])->toBe('open')
-        ->and(orfBot()->body)->toBe('أهلاً يا سارة 🌸 لقيت أوردر #1047 — تحبي ترجعي ولا تبدلي؟')
+        ->and(orfBot()->body)->toBe('أهلاً يا سارة، لقيت أوردر #1047 — تحبي ترجعي ولا تبدلي؟')
         ->and(orfButtons())->toBe(['إرجاع', 'استبدال', 'القائمة الرئيسية']);
 });
 
@@ -219,7 +219,7 @@ it('still hands over after 2 wrong digits, revealing nothing', function () {
     expect(orfFlow())->toBeNull()
         ->and(Conversation::first()->handler)->toBe(Handler::Human)
         // The refusal, then the handover's working-hours reply (flow 7; no hours set here).
-        ->and(array_slice(orfBodies(), -2))->toBe([OrderStep::VERIFY_FAILED_TEXT, 'تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸'])
+        ->and(array_slice(orfBodies(), -2))->toBe([OrderStep::VERIFY_FAILED_TEXT, 'تمام، هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت'])
         ->and(implode("\n", orfBodies()))->not->toContain('سارة')->not->toContain('أهلاً');
 });
 
@@ -247,7 +247,7 @@ it('asks return-or-exchange without the greeting when the order is not found', f
     orfTurn('9999');
 
     expect(orfFlow()['step'])->toBe('kind_unknown')
-        ->and(orfBot()->body)->toBe('تحبي ترجعي ولا تبدلي؟ 🌸');
+        ->and(orfBot()->body)->toBe('تحبي ترجعي ولا تبدلي؟');
 
     orfTurn('عايزة ارجع');
     expect(orfFlow()['step'])->toBe('return_items')
@@ -274,7 +274,7 @@ it('records a return: item, reason, photo — no summary — and answers with th
     orfTap('kind', 'return', 'إرجاع');
     expect(orfFlow()['step'])->toBe('return_items')
         ->and(orfFlow()['data']['request_kind'])->toBe('return')
-        ->and(orfBot()->body)->toBe("1. فستان ليلى — أسود / M × 1 — 850 ج.م\n\nاختاري القطعة اللي عايزة ترجعيها 👇");
+        ->and(orfBot()->body)->toBe("1. فستان ليلى — أسود / M × 1 — 850 ج.م\n\nاختاري القطعة اللي عايزة ترجعيها");
 
     orfTap('return_items', 'item:'.$order->items[0]->id, 'فستان ليلى');
     expect(orfFlow()['step'])->toBe('return_reason')
@@ -283,7 +283,7 @@ it('records a return: item, reason, photo — no summary — and answers with th
 
     orfTap('return_reason', 'defective', 'بايظ / فيه عيب');
     expect(orfFlow()['step'])->toBe('return_photo')
-        ->and(orfBot()->body)->toBe('ابعتيلي صورة للقطعة 📸');
+        ->and(orfBot()->body)->toBe('ابعتيلي صورة للقطعة');
 
     $photo = orfPhoto();
 
@@ -300,14 +300,14 @@ it('records a return: item, reason, photo — no summary — and answers with th
         ->and($case->data['product_photo'])->toBe([$photo->id])
         ->and($case->photo_attachment_ids)->toBe([$photo->id])
         ->and($case->data)->not->toHaveKey('items_pending')
-        ->and(orfBot()->body)->toBe('تمام ✅ تم تقديم طلب المرتجع بنجاح، ورقم طلبك هو نفس رقم الأوردر #1047. هنتواصل معاكي أول ما المندوب يتحرك لاستلام المرتجع 🌸')
+        ->and(orfBot()->body)->toBe('تمام، تم تقديم طلب المرتجع بنجاح، ورقم طلبك هو نفس رقم الأوردر #1047. هنتواصل معاكي أول ما المندوب يتحرك لاستلام المرتجع')
         ->and(implode("\n", orfBodies()))->not->toContain('ملخص')
         ->and(FlowState::flow($c))->toBeNull()
         ->and($c->handler)->toBe(Handler::Bot);
 
     $text = CaseSummary::text($case);
     expect($text)->toContain('مرتجع')->toContain('الطلب: مرتجع')->toContain('السبب: بايظ / فيه عيب')
-        ->toContain('فستان ليلى — أسود / M × ١ — ٨٥٠ ج.م')->toContain('صورة القطعة ✅')
+        ->toContain('فستان ليلى — أسود / M × ١ — ٨٥٠ ج.م')->toContain('صورة القطعة (وصلت)')
         ->and(ConversationNote::where('conversation_id', $c->id)->where('body', $text)->exists())->toBeTrue();
 });
 
@@ -322,7 +322,7 @@ it('asks for the photo once more when she writes instead, then records the retur
     // the same request twice (design 2026-09-21 §3).
     orfTurn('الصورة عند أختي');
     expect(orfFlow()['step'])->toBe('return_photo')
-        ->and(orfBot()->body)->not->toBe('ابعتيلي صورة للقطعة 📸')
+        ->and(orfBot()->body)->not->toBe('ابعتيلي صورة للقطعة')
         ->and(orfBot()->body)->toContain('مش معاكي صورة')
         ->and(SupportCase::count())->toBe(0);
 
@@ -345,7 +345,7 @@ it('refuses a discounted piece for a return and switches the request to an excha
     orfTap('return_items', 'item:'.$order->items[0]->id);
 
     $bodies = orfBodies();
-    expect($bodies[count($bodies) - 2])->toBe('«فستان ليلى» عليها خصم، فمينفعش ترجع بس ممكن تتبدل 🌸')
+    expect($bodies[count($bodies) - 2])->toBe('«فستان ليلى» عليها خصم، فمينفعش ترجع بس ممكن تتبدل')
         ->and(orfBot()->body)->toBe(OrderItemsStep::SWITCH_QUESTION)
         ->and(orfButtons())->toBe([OrderItemsStep::SWITCH_BUTTON, OrderItemsStep::OTHER_BUTTON, OrderItemsStep::DONE_BUTTON])
         ->and(orfFlow()['data']['selected_items'])->toBe([]);
@@ -389,7 +389,7 @@ function orfToLink(): Order
     $order = orfOrder();
     orfToGreeting();
     orfTap('kind', 'exchange', 'استبدال');
-    expect(orfBot()->body)->toContain('اختاري القطعة اللي عايزة تبدليها 👇');
+    expect(orfBot()->body)->toContain('اختاري القطعة اللي عايزة تبدليها');
     orfTap('exchange_items', 'item:'.$order->items[0]->id);
     expect(orfBot()->body)->toBe('إيه سبب الاستبدال؟')
         ->and(orfButtons())->toBe(['المقاس', 'اللون', 'الموديل', 'فيه عيب', 'حاجة تانية', 'القائمة الرئيسية']);
@@ -403,7 +403,7 @@ function orfToLink(): Order
         orfTap('exchange_product', 'send', ProductLinkStep::SEND_BUTTON);
     }
 
-    expect(orfBot()->body)->toBe('ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع 🔗 (من levoilestores.com)');
+    expect(orfBot()->body)->toBe('ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع (من levoilestores.com)');
 
     return $order;
 }
@@ -443,7 +443,7 @@ it('records an exchange with the product found by its link in the synced catalog
             'price' => 1200.0, 'image' => 'https://cdn.example/abaya.jpg', 'variant_title' => null, 'variant_id' => null,
             'product_id' => $product->id, 'source' => 'catalog',
         ])
-        ->and(orfBot()->body)->toBe('تمام ✅ تم تسجيل طلب الاستبدال بـ «عباية كتان». هنتواصل معاكي لتأكيد الاستبدال والإرسال 🌸')
+        ->and(orfBot()->body)->toBe('تمام، تم تسجيل طلب الاستبدال بـ «عباية كتان». هنتواصل معاكي لتأكيد الاستبدال والإرسال')
         ->and(FlowState::flow($c))->toBeNull();
 
     expect(ConversationNote::where('conversation_id', $c->id)->where('body', 'طلب استبدال: فستان ليلى (أسود / M) × 1 ← عباية كتان — ١٬٢٠٠ ج.م — https://levoilestores.com/products/abaya-linen')->exists())->toBeTrue()
@@ -493,7 +493,7 @@ it('asks again once for an unknown link, then keeps what she wrote and records t
     expect($case->type)->toBe('exchange')
         ->and($case->data)->not->toHaveKey('exchange_product')
         ->and($case->data['exchange_product_text'])->toBe("https://levoilestores.com/products/not-a-product\nالعباية البيج اللي في الصفحة الأولى")
-        ->and(orfBot()->body)->toBe('تمام ✅ تم تسجيل طلب الاستبدال بـ «'.FlowPrompter::UNKNOWN_PRODUCT.'». هنتواصل معاكي لتأكيد الاستبدال والإرسال 🌸')
+        ->and(orfBot()->body)->toBe('تمام، تم تسجيل طلب الاستبدال بـ «'.FlowPrompter::UNKNOWN_PRODUCT.'». هنتواصل معاكي لتأكيد الاستبدال والإرسال')
         ->and(CaseSummary::text($case))->toContain('البديل: مش متحدد — العميلة كتبت')
         ->and(ConversationNote::where('body', 'like', 'طلب استبدال:%')->sole()->body)->toStartWith('طلب استبدال: فستان ليلى (أسود / M) × 1 ← المنتج مش متحدد، العميلة كتبت:');
 });
@@ -565,7 +565,7 @@ it('accepts a screenshot instead of the link', function () {
         ->and($case->data['exchange_product_photo'])->toBe([$shot->id])
         ->and($case->photo_attachment_ids)->toBe([$shot->id])
         ->and(orfBot()->body)->toContain('«'.FlowPrompter::UNKNOWN_PRODUCT.'»')
-        ->and(CaseSummary::text($case))->toContain('البديل: العميلة بعتت صورة للمنتج')->toContain('صورة المنتج البديل ✅')
+        ->and(CaseSummary::text($case))->toContain('البديل: العميلة بعتت صورة للمنتج')->toContain('صورة المنتج البديل (وصلت)')
         ->and(ConversationNote::where('body', 'like', 'طلب استبدال:%')->sole()->body)->toContain('بعتت صورة للمنتج البديل');
 });
 
@@ -691,7 +691,7 @@ it('walks both branches in the designer sandbox and saves nothing', function () 
     $r = orfSandbox($start['state'], ['text' => '1047']);
     $r = orfSandbox($r['state'], ['text' => '4567']);
     expect($r['current']['step_id'])->toBe('kind')
-        ->and($texts($r))->toBe('أهلاً يا سارة 🌸 لقيت أوردر #1047 — تحبي ترجعي ولا تبدلي؟');
+        ->and($texts($r))->toBe('أهلاً يا سارة، لقيت أوردر #1047 — تحبي ترجعي ولا تبدلي؟');
     $greeting = $r['state'];
 
     // إرجاع
@@ -718,7 +718,7 @@ it('walks both branches in the designer sandbox and saves nothing', function () 
     $case = collect($r['events'])->firstWhere('type', 'case');
     expect($case['label'])->toBe('هيتسجل حالة: استبدال')
         ->and($case['data']['exchange_product']['variant_title'])->toBe('بيج / S')
-        ->and($texts($r))->toBe('تمام ✅ تم تسجيل طلب الاستبدال بـ «عباية كتان». هنتواصل معاكي لتأكيد الاستبدال والإرسال 🌸');
+        ->and($texts($r))->toBe('تمام، تم تسجيل طلب الاستبدال بـ «عباية كتان». هنتواصل معاكي لتأكيد الاستبدال والإرسال');
 
     expect(SupportCase::count())->toBe(0)->and(Conversation::count())->toBe(0)->and(ConversationNote::count())->toBe(0);
 });

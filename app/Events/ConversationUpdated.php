@@ -5,6 +5,7 @@ namespace App\Events;
 use App\Http\Resources\ConversationResource;
 use App\Models\Conversation;
 use App\Models\User;
+use App\Support\InboxChannels;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -24,14 +25,15 @@ class ConversationUpdated implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('inbox')];
+        return [new PrivateChannel('inbox'), ...InboxChannels::forPlatform($this->conversation->platform)];
     }
 
     public function broadcastWith(): array
     {
         $c = $this->conversation;
         $customer = $c->customer;
-        $preview = $c->messages()->latest('id')->value('body');
+        $last = $c->messages()->latest('id')->first(['body', 'sender_type']);
+        $preview = $last?->body;
 
         $lockedBy = $c->locked_by_id !== null && $c->locked_until?->isFuture()
             ? User::find($c->locked_by_id)
@@ -52,6 +54,7 @@ class ConversationUpdated implements ShouldBroadcastNow
             'unread_count' => (int) $c->unread_count,
             'last_message_at' => $c->last_message_at?->toIso8601String(),
             'last_message_preview' => $preview !== null ? Str::limit($preview, 80) : null,
+            'last_message_sender' => $last?->sender_type?->value,
             'platform' => $c->platform?->value,
             'customer' => $customer ? [
                 'id' => $customer->id,
@@ -62,6 +65,9 @@ class ConversationUpdated implements ShouldBroadcastNow
             'handling' => ConversationResource::handling($c),
             'assignee' => ConversationResource::assignee($c),
             'queue_entry' => ConversationResource::queueEntry($c),
+            // The list row's state badge follows the ticket live (UI overhaul Task 5).
+            'queue_state' => ConversationResource::queueState($c),
+            'last_responder_id' => $c->last_responder_id,
             'open_case_id' => ConversationResource::openCaseId($c),
         ];
     }

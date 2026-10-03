@@ -6,6 +6,7 @@ use App\Enums\Platform;
 use App\Enums\UserRole;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -101,6 +102,11 @@ class User extends Authenticatable
 
     public function canAccessPlatform(Platform $platform): bool
     {
+        // Ads Hub roles never see inbox data, whatever platform rows a past role left behind.
+        if ($this->isAdsRole()) {
+            return false;
+        }
+
         if ($this->isSupervisorOrAbove()) {
             return true;
         }
@@ -108,9 +114,26 @@ class User extends Authenticatable
         return in_array($platform, $this->platforms(), true);
     }
 
+    /** Admins, supervisors and moderators: the people who work the inbox (never the Ads Hub roles). */
+    public function scopeInboxStaff(Builder $query): Builder
+    {
+        return $query->whereIn('role', [UserRole::Admin->value, UserRole::Supervisor->value, UserRole::Moderator->value]);
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === UserRole::Admin;
+    }
+
+    /** The Ads Hub roles: they live in /ads and never in the inbox, the queue or the board. */
+    public function isAdsRole(): bool
+    {
+        return in_array($this->role, [UserRole::MediaBuyer, UserRole::Content], true);
+    }
+
+    public function isInboxStaff(): bool
+    {
+        return ! $this->isAdsRole();
     }
 
     public function isSupervisorOrAbove(): bool

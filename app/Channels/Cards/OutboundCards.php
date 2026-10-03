@@ -105,7 +105,7 @@ final class OutboundCards
         };
     }
 
-    /** The web_url buttons as plain lines under a text ("🛍️ تسوقي من الموقع:\nhttps://…"). */
+    /** The web_url buttons as plain lines under a text ("تسوقي من الموقع:\nhttps://…"). */
     public static function withLinkLines(string $text, array $cards): string
     {
         $lines = [];

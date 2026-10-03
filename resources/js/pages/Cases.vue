@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import CaseDrawer from '@/components/crm/cases/CaseDrawer.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import DateRangePicker from '@/components/crm/DateRangePicker.vue';
+import EmptyState from '@/components/crm/EmptyState.vue';
+import FilterBar from '@/components/crm/FilterBar.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import Pagination from '@/components/crm/Pagination.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
@@ -11,8 +14,8 @@ import { formatCount, formatDateTime } from '@/lib/format';
 import type { Paginated } from '@/types/admin';
 import type { CaseStatus, CaseType, SupportCase } from '@/types/crm';
 import { Head, router } from '@inertiajs/vue3';
-import { Search } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { ClipboardList } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 interface Filters {
     type: CaseType | null;
@@ -45,16 +48,24 @@ function apply(patch: Partial<Filters>): void {
     router.get('/cases', query, { preserveState: true, preserveScroll: true, replace: true, onStart: () => (loading.value = true), onFinish: () => (loading.value = false) });
 }
 
-const search = ref(props.filters.q ?? '');
-let timer: number | undefined;
-watch(search, (value) => {
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => apply({ q: value.trim() || null }), 350);
-});
-onBeforeUnmount(() => window.clearTimeout(timer));
-
 const selectValue = (event: Event) => (event.target as HTMLSelectElement).value || null;
-const inputValue = (event: Event) => (event.target as HTMLInputElement).value || null;
+
+// The type and the date range show as removable chips; the range picker lives in the «فلاتر» popover.
+const range = computed(() => ({ from: props.filters.from ?? '', to: props.filters.to ?? '' }));
+const moreCount = computed(() => (props.filters.from || props.filters.to ? 1 : 0));
+const chips = computed(() => {
+    const f = props.filters;
+    const out: { key: string; label: string }[] = [];
+    if (f.type) out.push({ key: 'type', label: t(`cases.types.${f.type}`) });
+    if (f.from || f.to) out.push({ key: 'date', label: t('cases.date_chip', { from: f.from ?? '…', to: f.to ?? '…' }) });
+    return out;
+});
+const filtered = computed(() => Boolean(props.filters.type || props.filters.from || props.filters.to || props.filters.q || props.filters.status));
+
+function removeChip(key: string): void {
+    if (key === 'date') apply({ from: null, to: null });
+    else apply({ type: null });
+}
 
 const selectedCaseId = ref<number | null>(null);
 const drawerOpen = ref(false);
@@ -69,22 +80,23 @@ function reload(): void {
 }
 
 const columns = computed<Column[]>(() => [
-    { key: 'id', label: t('cases.columns.id') },
-    { key: 'type', label: t('cases.columns.type') },
+    { key: 'id', label: t('cases.columns.id'), hideOnMobile: true },
+    { key: 'type', label: t('cases.columns.type'), primary: true },
     { key: 'customer', label: t('cases.columns.customer') },
-    { key: 'order', label: t('cases.columns.order') },
+    { key: 'order', label: t('cases.columns.order'), hideOnMobile: true },
     { key: 'priority', label: t('cases.columns.priority') },
     { key: 'status', label: t('cases.columns.status') },
     { key: 'date', label: t('cases.columns.date') },
 ]);
 
-/** The first line of the 📝 request section, shown under the case type. */
+/** The first line of the request section, shown under the case type. */
 function requestLine(row: SupportCase): string | null {
     return row.summary_sections.find((s) => s.key === 'request')?.lines[0] ?? null;
 }
 
 const breadcrumbs = computed(() => [{ title: t('cases.title'), href: '/cases' }]);
-const selectClass = 'h-8 rounded-md border border-input bg-background px-2 text-xs';
+const selectClass = 'h-9 w-full rounded-md border border-input bg-background px-2 text-xs sm:w-auto';
+const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
 </script>
 
 <template>
@@ -107,6 +119,7 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2 text-
                 >
                     {{ t(`cases.tabs.${tab}`) }}
                     <span
+                        v-if="(counts[tab] ?? 0) > 0"
                         class="inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-2xs tabular-nums"
                         :class="(filters.status ?? 'all') === tab ? 'bg-primary-foreground/20' : 'bg-muted'"
                     >
@@ -115,27 +128,36 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2 text-
                 </button>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2 rounded-lg bg-card p-3 shadow-card">
-                <div class="relative min-w-[14rem] flex-1 sm:max-w-xs">
-                    <Search class="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                    <input v-model="search" type="search" :placeholder="t('cases.search')" :aria-label="t('cases.search')" class="h-8 w-full rounded-full border border-input bg-elevated pe-2 ps-8 text-sm" />
-                </div>
-                <select :value="filters.type ?? ''" :class="selectClass" :aria-label="t('cases.type_all')" @change="apply({ type: selectValue($event) as CaseType | null })">
-                    <option value="">{{ t('cases.type_all') }}</option>
-                    <option v-for="ty in TYPES" :key="ty" :value="ty">{{ t(`cases.types.${ty}`) }}</option>
-                </select>
-                <label class="flex items-center gap-1 text-xs text-muted-foreground">
-                    {{ t('cases.date_from') }}
-                    <input type="date" :value="filters.from ?? ''" :max="filters.to ?? undefined" :class="selectClass" @change="apply({ from: inputValue($event) })" />
-                </label>
-                <label class="flex items-center gap-1 text-xs text-muted-foreground">
-                    {{ t('cases.date_to') }}
-                    <input type="date" :value="filters.to ?? ''" :min="filters.from ?? undefined" :class="selectClass" @change="apply({ to: inputValue($event) })" />
-                </label>
+            <div class="rounded-lg bg-card p-3 shadow-card">
+                <FilterBar
+                    :search="filters.q ?? ''"
+                    :search-placeholder="t('cases.search')"
+                    :chips="chips"
+                    :more-count="moreCount"
+                    @update:search="apply({ q: $event || null })"
+                    @remove="removeChip"
+                    @clear="apply({ type: null, from: null, to: null, q: null })"
+                >
+                    <template #inline>
+                        <select :value="filters.type ?? ''" :class="selectClass" :aria-label="t('cases.type_all')" @change="apply({ type: selectValue($event) as CaseType | null })">
+                            <option value="">{{ t('cases.type_all') }}</option>
+                            <option v-for="ty in TYPES" :key="ty" :value="ty">{{ t(`cases.types.${ty}`) }}</option>
+                        </select>
+                    </template>
+                    <template #more>
+                        <div>
+                            <span :class="fieldLabel">{{ t('cases.filter_date') }}</span>
+                            <DateRangePicker :model-value="range" @update:model-value="apply({ from: $event.from || null, to: $event.to || null })" />
+                        </div>
+                    </template>
+                </FilterBar>
             </div>
 
             <div>
-                <DataTable :columns="columns" :rows="cases.data" clickable :loading="loading" :empty="t('cases.empty')" :caption="t('cases.title')" @row-click="openCase">
+                <DataTable :columns="columns" :rows="cases.data" clickable :loading="loading" :caption="t('cases.title')" @row-click="openCase">
+                    <template #empty>
+                        <EmptyState :icon="ClipboardList" :title="t('cases.empty')" :body="filtered ? t('cases.empty_filtered') : t('cases.empty_body')" />
+                    </template>
                     <template #cell-id="{ row }"><span class="font-medium tabular-nums" dir="ltr">#{{ row.id }}</span></template>
                     <template #cell-type="{ row }">
                         <span class="block whitespace-nowrap">{{ t(`cases.types.${row.type}`) }}</span>

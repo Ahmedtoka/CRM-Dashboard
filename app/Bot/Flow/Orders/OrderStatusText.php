@@ -39,7 +39,7 @@ final class OrderStatusText
         'returned' => 'رجع لينا (مرتجع)',
     ];
 
-    /** The "📦 الحالة:" line of the tracking flow's status card (2026-09-19); unknown keys read as confirmed. */
+    /** The "الحالة:" line of the tracking flow's status card (2026-09-19); unknown keys read as confirmed. */
     public const CARD_LINES = [
         'confirmed' => 'اتأكد وجاري تجهيزه',
         'prepared' => 'اتجهز وهيتسلم لشركة الشحن قريب',
@@ -73,12 +73,12 @@ final class OrderStatusText
 
         return match ($s->statusKey) {
             'prepared' => "الأوردر رقم {$n} اتجهز وهيتسلم لشركة الشحن قريب",
-            'shipped' => "الأوردر رقم {$n} اتشحن ✨".($s->trackingUrl ? "\nتقدري تتابعيه من هنا: {$s->trackingUrl}" : ''),
-            'on_the_way' => "الأوردر رقم {$n} مع المندوب في الطريق ليكي 🚚",
-            'delivered' => "الأوردر رقم {$n} اتسلم، لو في أي مشكلة بلغيني 🌸",
+            'shipped' => "الأوردر رقم {$n} اتشحن".($s->trackingUrl ? "\nتقدري تتابعيه من هنا: {$s->trackingUrl}" : ''),
+            'on_the_way' => "الأوردر رقم {$n} مع المندوب في الطريق ليكي",
+            'delivered' => "الأوردر رقم {$n} اتسلم، لو في أي مشكلة بلغيني",
             'cancelled' => "الأوردر رقم {$n} اتلغى",
             'hold', 'returned' => "هراجع الأوردر رقم {$n} مع الفريق وهرد على حضرتك",
-            default => "الأوردر رقم {$n} اتأكد وجاري تجهيزه 🌸",
+            default => "الأوردر رقم {$n} اتأكد وجاري تجهيزه",
         };
     }
 

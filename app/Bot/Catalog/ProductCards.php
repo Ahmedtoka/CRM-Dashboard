@@ -20,11 +20,11 @@ class ProductCards
 {
     public const PAYLOAD_PREFIX = 'product';
 
-    public const VIEW_BUTTON = '🛍️ شوفي المنتج';
+    public const VIEW_BUTTON = 'شوفي المنتج';
 
     public const DETAILS_BUTTON = 'التفاصيل والمقاسات';
 
-    public const WHATSAPP_LABEL = 'الموديلات 👇';
+    public const WHATSAPP_LABEL = 'الموديلات';
 
     public function __construct(private readonly CatalogSearch $search) {}
 
@@ -93,7 +93,8 @@ class ProductCards
     public function detail(Product $p): string
     {
         $p->loadMissing('variants');
-        $lines = ['✨ '.$p->title, '💰 '.$this->price($p)];
+        $price = $this->price($p);
+        $lines = [$p->title, $price !== '' ? 'السعر: '.$price : ''];
 
         foreach ($this->stockByColor($p) as $color => $sizes) {
             $lines[] = ($color === '' ? '' : $color.': ').implode('، ', $sizes);
@@ -148,15 +149,15 @@ class ProductCards
     {
         $inStock = $p->variants->contains(fn ($v) => (int) $v->inventory_quantity > 0);
 
-        return implode(' · ', array_filter([$this->price($p), $inStock ? 'متوفر ✅' : 'نفد حالياً']));
+        return implode(' · ', array_filter([$this->price($p), $inStock ? 'متوفر' : 'نفد حالياً']));
     }
 
     private function line(Product $p): string
     {
-        return implode("\n", array_filter(['✨ '.$p->title, $this->subtitle($p), $this->url($p)]));
+        return implode("\n", array_filter([$p->title, $this->subtitle($p), $this->url($p)]));
     }
 
-    /** @return array<string, list<string>> colour → "M ✅" / "L (نفد)" */
+    /** @return array<string, list<string>> colour → "M (متوفر)" / "L (نفد)" */
     private function stockByColor(Product $p): array
     {
         $out = [];
@@ -165,7 +166,7 @@ class ProductCards
             ['color' => $color, 'size' => $size] = VariantOptions::parse($v->title);
             $isDefault = $v->title === null || in_array($v->title, ['', 'Default', 'Default Title'], true);
             $label = $size ?? ($color === null && ! $isDefault ? (string) $v->title : '');
-            $stock = (int) $v->inventory_quantity > 0 ? 'متوفر ✅' : 'نفد';
+            $stock = (int) $v->inventory_quantity > 0 ? 'متوفر' : 'نفد';
             $out[$color ?? ''][] = trim($label.' '.($label === '' ? $stock : "({$stock})"));
         }
 

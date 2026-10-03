@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import { useI18n } from '@/composables/useI18n';
-import { formatCount, formatMinutes, formatMoney, formatSeconds } from '@/lib/format';
+import { formatAvgSeconds, formatCount, formatMinutes, formatMoney } from '@/lib/format';
 import type { LeaderboardRow } from '@/types/admin';
 import { computed } from 'vue';
 
@@ -45,7 +45,7 @@ const COUNT_KEYS = ['messages_sent', 'conversations_handled', 'first_responses',
             <span class="tabular-nums">{{ formatCount(value as number, locale) }}</span>
         </template>
         <template #cell-avg_first_response_sec="{ value }">
-            <span class="tabular-nums">{{ formatSeconds(value as number, locale) }}</span>
+            <span class="tabular-nums">{{ formatAvgSeconds(value as number, locale) }}</span>
         </template>
         <template #cell-orders_total="{ value }">
             <span class="whitespace-nowrap tabular-nums">{{ formatMoney(value as number, locale) }}</span>

@@ -154,19 +154,19 @@ final class BranchFinder
         $blocks = [];
 
         foreach ($branches as $branch) {
-            $lines = ["📍 {$branch->name}", (string) $branch->address];
+            $lines = ["{$branch->name}", (string) $branch->address];
 
             if (filled($branch->hours)) {
-                $lines[] = "🕘 {$branch->hours}";
+                $lines[] = "{$branch->hours}";
             }
 
-            $lines[] = "📞 {$branch->phone}";
-            $lines[] = "🗺️ {$branch->map_url}";
+            $lines[] = "{$branch->phone}";
+            $lines[] = "{$branch->map_url}";
 
             $blocks[] = implode("\n", $lines);
         }
 
-        return "فروعنا في {$branches->first()->area_ar} 🌸\n\n".implode("\n\n", $blocks);
+        return "فروعنا في {$branches->first()->area_ar}\n\n".implode("\n\n", $blocks);
     }
 
     /**
@@ -208,8 +208,8 @@ final class BranchFinder
     }
 
     /**
-     * One card per branch (the owner's flow 5): title = name, subtitle = address + «📞 phone»
-     * (+ «🕘 hours» only once the owner filled them in), buttons «📍 الخريطة» and «📞 اتصل بالفرع».
+     * One card per branch (the owner's flow 5): title = name, subtitle = address + «phone»
+     * (+ «hours» only once the owner filled them in), buttons «الخريطة» and «اتصلي بالفرع».
      * Each card keeps its full text too (WhatsApp, the text fallback).
      *
      * @param  iterable<Branch>  $branches
@@ -222,7 +222,7 @@ final class BranchFinder
         foreach ($branches as $b) {
             $phone = trim((string) $b->phone);
             $hours = trim((string) $b->hours);
-            $tail = array_values(array_filter([$hours !== '' ? "🕘 {$hours}" : null, $phone !== '' ? "📞 {$phone}" : null]));
+            $tail = array_values(array_filter([$hours !== '' ? "{$hours}" : null, $phone !== '' ? "{$phone}" : null]));
             $tailText = implode("\n", $tail);
             // The address gives way first: the phone must survive Messenger's 80-character subtitle.
             $room = OutboundCards::SUBTITLE_MAX - mb_strlen($tailText) - ($tailText !== '' ? 1 : 0);
@@ -232,10 +232,10 @@ final class BranchFinder
             $buttons = [];
 
             if (filled($b->map_url)) {
-                $buttons[] = OutboundCards::webUrl('📍 الخريطة', (string) $b->map_url);
+                $buttons[] = OutboundCards::webUrl('الخريطة', (string) $b->map_url);
             }
 
-            if ($phone !== '' && ($call = OutboundCards::call('📞 اتصل بالفرع', $phone)) !== null) {
+            if ($phone !== '' && ($call = OutboundCards::call('اتصلي بالفرع', $phone)) !== null) {
                 $buttons[] = $call;
             }
 
@@ -252,21 +252,21 @@ final class BranchFinder
         return OutboundCards::generic($cards);
     }
 
-    /** "📍 name / address / 🕘 hours / 📞 phone / 🗺️ map" (the hours line only when set). */
+    /** "name / address / hours / phone / map", one per line — plain values, no labels, so a card reads the same in either language (the hours line only when set). */
     public function branchText(Branch $branch): string
     {
-        $lines = ["📍 {$branch->name}", (string) $branch->address];
+        $lines = ["{$branch->name}", (string) $branch->address];
 
         if (filled($branch->hours)) {
-            $lines[] = "🕘 {$branch->hours}";
+            $lines[] = "{$branch->hours}";
         }
 
         if (filled($branch->phone)) {
-            $lines[] = "📞 {$branch->phone}";
+            $lines[] = "{$branch->phone}";
         }
 
         if (filled($branch->map_url)) {
-            $lines[] = "🗺️ {$branch->map_url}";
+            $lines[] = "{$branch->map_url}";
         }
 
         return implode("\n", array_filter($lines, fn ($l) => trim($l) !== ''));

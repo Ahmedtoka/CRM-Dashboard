@@ -3,6 +3,7 @@ import AudioPlayer from '@/components/crm/media/AudioPlayer.vue';
 import FileChip from '@/components/crm/media/FileChip.vue';
 import MediaLightbox from '@/components/crm/media/MediaLightbox.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
+import { galleryItemsOf } from '@/composables/inbox/useThreadGallery';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import type { Attachment } from '@/types/crm';
@@ -18,14 +19,17 @@ const api = useApi();
 const items = ref<Attachment[]>([]);
 const loading = ref(false);
 const loadError = ref<string | null>(null);
-const lightboxIndex = ref<number | null>(null);
+const lightboxId = ref<number | null>(null);
+const lightboxOpener = ref<HTMLElement | null>(null);
 
 const visualItems = computed(() => items.value.filter((a) => a.type === 'image' || a.type === 'video'));
+const galleryItems = computed(() => galleryItemsOf(visualItems.value));
 const otherItems = computed(() => items.value.filter((a) => a.type === 'audio' || a.type === 'file'));
 
-function openLightbox(attachment: Attachment): void {
-    const index = visualItems.value.findIndex((a) => a.id === attachment.id);
-    if (index !== -1) lightboxIndex.value = index;
+function openLightbox(attachment: Attachment, event: MouseEvent): void {
+    if (!galleryItems.value.some((item) => item.id === attachment.id)) return;
+    lightboxOpener.value = event.currentTarget as HTMLElement;
+    lightboxId.value = attachment.id;
 }
 
 let controller: AbortController | null = null;
@@ -74,9 +78,16 @@ onScopeDispose(() => controller?.abort());
                     :key="attachment.id"
                     type="button"
                     class="relative aspect-square overflow-hidden rounded-md bg-muted"
-                    @click="openLightbox(attachment)"
+                    @click="openLightbox(attachment, $event)"
                 >
-                    <img v-if="attachment.thumb_url" :src="attachment.thumb_url" :alt="attachment.original_name ?? ''" class="size-full object-cover" />
+                    <img
+                        v-if="attachment.thumb_url"
+                        :src="attachment.thumb_url"
+                        :alt="attachment.original_name ?? ''"
+                        loading="lazy"
+                        decoding="async"
+                        class="size-full object-cover"
+                    />
                     <span v-else class="flex size-full items-center justify-center">
                         <Video class="size-6 text-muted-foreground" aria-hidden="true" />
                     </span>
@@ -105,6 +116,6 @@ onScopeDispose(() => controller?.abort());
             </div>
         </template>
 
-        <MediaLightbox v-model:index="lightboxIndex" :items="visualItems" />
+        <MediaLightbox v-model:current-id="lightboxId" :items="galleryItems" :opener="lightboxOpener" />
     </div>
 </template>

@@ -1,16 +1,19 @@
 <script setup lang="ts">
+import DateInput from '@/components/crm/DateInput.vue';
 import { useI18n } from '@/composables/useI18n';
 import { addDays, cairoToday } from '@/lib/format';
 import type { ReportRange } from '@/types/admin';
+import { ArrowRight } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
-const props = defineProps<{ modelValue: ReportRange }>();
+/** `month` adds a «this month» preset (1st of the Cairo month → today). */
+const props = defineProps<{ modelValue: ReportRange; month?: boolean }>();
 const emit = defineEmits<{ 'update:modelValue': [range: ReportRange] }>();
 
 const { t } = useI18n();
 
-type Preset = 'today' | 'yesterday' | 'd7' | 'd30';
-const PRESETS: Preset[] = ['today', 'yesterday', 'd7', 'd30'];
+type Preset = 'today' | 'yesterday' | 'd7' | 'd30' | 'month';
+const PRESETS = computed<Preset[]>(() => (props.month ? ['today', 'yesterday', 'd7', 'd30', 'month'] : ['today', 'yesterday', 'd7', 'd30']));
 
 // Presets are Cairo calendar days; the server converts them to UTC bounds.
 function presetRange(preset: Preset): ReportRange {
@@ -22,13 +25,15 @@ function presetRange(preset: Preset): ReportRange {
             return { from: addDays(today, -6), to: today };
         case 'd30':
             return { from: addDays(today, -29), to: today };
+        case 'month':
+            return { from: `${today.slice(0, 8)}01`, to: today };
         default:
             return { from: today, to: today };
     }
 }
 
 const active = computed<Preset | 'custom'>(() => {
-    const match = PRESETS.find((p) => {
+    const match = PRESETS.value.find((p) => {
         const r = presetRange(p);
         return r.from === props.modelValue.from && r.to === props.modelValue.to;
     });
@@ -84,10 +89,10 @@ function apply(): void {
         </button>
         <form v-if="showCustom" class="flex flex-wrap items-center gap-1.5" @submit.prevent="apply">
             <label class="sr-only" for="range-from">{{ t('range.from') }}</label>
-            <input id="range-from" v-model="from" type="date" dir="ltr" class="h-9 rounded-md border border-input bg-background px-2 text-xs" :max="to" />
-            <span class="text-xs text-muted-foreground" aria-hidden="true">→</span>
+            <DateInput id="range-from" v-model="from" class="h-9 rounded-md border border-input bg-background px-2 text-xs" :max="to" />
+            <ArrowRight class="size-3.5 text-muted-foreground rtl:-scale-x-100" aria-hidden="true" />
             <label class="sr-only" for="range-to">{{ t('range.to') }}</label>
-            <input id="range-to" v-model="to" type="date" dir="ltr" class="h-9 rounded-md border border-input bg-background px-2 text-xs" :min="from" />
+            <DateInput id="range-to" v-model="to" class="h-9 rounded-md border border-input bg-background px-2 text-xs" :min="from" />
             <button type="submit" class="h-9 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50" :disabled="invalid">
                 {{ t('range.apply') }}
             </button>

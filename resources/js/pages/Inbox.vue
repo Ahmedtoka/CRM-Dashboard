@@ -15,7 +15,9 @@ import { useI18n } from '@/composables/useI18n';
 import { useMyQueue } from '@/composables/useMyQueue';
 import { useShortcuts } from '@/composables/useShortcuts';
 import { useToast } from '@/composables/useToast';
+import { syncInertiaUrl } from '@/composables/useUrlFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { stripBidiControls } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type {
     Attachment,
@@ -25,6 +27,7 @@ import type {
     ConversationPriority,
     CursorPage,
     InboxFilters,
+    InboxModerator,
     Order,
     QueueEntry,
     QuickReply,
@@ -36,11 +39,13 @@ import type {
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { useMediaQuery } from '@vueuse/core';
 import { CircleAlert, MessageSquareText } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 
 const props = defineProps<{
     conversations: CursorPage<Conversation>;
     filters: InboxFilters;
+    moderators: InboxModerator[];
+    queueEnabled: boolean;
     quickReplies: QuickReply[];
     quickReplyCategories: QuickReplyCategory[];
     tags: Tag[];
@@ -52,9 +57,43 @@ const me = page.props.auth.user;
 const { t, dir } = useI18n();
 const isXl = useMediaQuery('(min-width: 1280px)');
 
+// The details column (R2): closed by default under 1600 px, her choice remembered. Below xl it is
+// the customer sheet instead (customerOpen). Task 6 puts the toggle in the thread header.
+function initialDetails(): boolean {
+    try {
+        const saved = window.localStorage.getItem('inbox:details');
+        if (saved === '1' || saved === '0') return saved === '1';
+    } catch {
+        // Storage blocked: fall back to the width rule.
+    }
+    return window.matchMedia('(min-width: 1600px)').matches;
+}
+const detailsOpen = ref(initialDetails());
+watch(detailsOpen, (open) => {
+    try {
+        window.localStorage.setItem('inbox:details', open ? '1' : '0');
+    } catch {
+        // Not remembered this time; still toggles.
+    }
+});
+function toggleDetails(): void {
+    if (isXl.value) detailsOpen.value = !detailsOpen.value;
+    else customerOpen.value = !customerOpen.value;
+}
+const showDetails = computed(() => isXl.value && detailsOpen.value);
+/** What the header's details toggle reports as pressed: the column on xl, the sheet below it. */
+const detailsActive = computed(() => (isXl.value ? detailsOpen.value : customerOpen.value));
+provide('inboxDetails', { open: detailsOpen, active: detailsActive, toggle: toggleDetails });
+
 const api = useApi();
 const toast = useToast();
 const selectedId = ref<number | null>(null);
+/**
+ * The composer takes the focus when the chat was opened by a pointer click (row or window card),
+ * never by j/k, the keyboard on a row, a URL or a queue assignment: the next `j` must not type
+ * into it (Task 6 controller addition). `r` / `n` and a click in the box focus it as always.
+ */
+const focusComposer = ref(false);
 const customerOpen = ref(false);
 const orderOpen = ref(false);
 const editingOrder = ref<Order | null>(null);
@@ -62,6 +101,7 @@ const addingNote = ref(false);
 const flash = ref<string | null>(null);
 const drafts = ref<Record<number, string>>({});
 const threadView = ref<InstanceType<typeof ChatThread> | null>(null);
+const listView = ref<InstanceType<typeof ConversationList> | null>(null);
 const tagMenu = ref<{ id: number; x: number; y: number } | null>(null);
 // Blocks a second `mod+enter` from resolving twice (or resolving a conversation
 // whose send is still in flight) while one send-and-resolve is already running.
@@ -69,7 +109,12 @@ const resolvingSend = ref(false);
 let flashTimer: number | undefined;
 let readTimer: number | undefined;
 
-const thread = useConversationThread({ me, onRead: (id) => list.applyConversation({ id, unread_count: 0 }) });
+const thread = useConversationThread({
+    me,
+    onRead: (id) => list.applyConversation({ id, unread_count: 0 }),
+    // Saved with the chat she leaves, so it reopens where she was (Task 6c thread cache).
+    viewState: () => threadView.value?.viewState() ?? null,
+});
 
 const list = useConversationList(props.conversations, props.filters, {
     me,
@@ -91,10 +136,25 @@ const list = useConversationList(props.conversations, props.filters, {
     },
 });
 
-const { detail, messages, hasMore, loading: loadingThread, loadingOlder, viewers, typingNames, lockHolder, mentionable, busyAction, retrying, retryingAttachments, error } = thread;
+const {
+    detail,
+    messages,
+    hasMore,
+    loading: loadingThread,
+    loadingOlder,
+    viewers,
+    typingNames,
+    lockHolder,
+    mentionable,
+    restoredView,
+    busyAction,
+    retrying,
+    retryingAttachments,
+    error,
+} = thread;
 // Renamed on the way out: the page's props are called `conversations` and `filters` too (the first page and the
 // filters it was loaded with), and the live list must never be mistaken for them.
-const { conversations: listRows, filters: listFilters, loading, loadingMore, nextCursor, live } = list;
+const { conversations: listRows, filters: listFilters, loading, loadingMore, loadMoreFailed, nextCursor, live, pollFailed, searchTruncated, counts, activeKeys } = list;
 
 // Handover queue (the moderator's side). With the queue off, or for somebody who is not on the
 // shift, this is one request and nothing of it is rendered.
@@ -174,11 +234,16 @@ function syncSelectionUrl(id: number | null): void {
     const url = new URL(window.location.href);
     if (id === null) url.searchParams.delete('c');
     else url.searchParams.set('c', String(id));
-    window.history.replaceState(window.history.state, '', url);
+    syncInertiaUrl(url);
 }
 
-function select(id: number): void {
-    if (selectedId.value === id) return;
+function select(id: number, pointer = false): void {
+    if (selectedId.value === id) {
+        // Same rule as on open: only where the composer is next to the list (md and up).
+        if (pointer && window.matchMedia('(min-width: 768px)').matches) threadView.value?.composer?.focus();
+        return;
+    }
+    focusComposer.value = pointer;
     selectedId.value = id;
     customerOpen.value = false;
     syncSelectionUrl(id);
@@ -325,7 +390,9 @@ function editOrder(order: Order): void {
 // the user has already typed for this conversation, then confirm it landed in the reply
 // (the button's own clipboard write is a silent best-effort extra, not what this toasts).
 function onCopyStatus(text: string): void {
-    draft.value = draft.value.trim() ? `${draft.value}\n${text}` : text;
+    // Defensive: whatever built `text`, no invisible bidi controls reach the customer.
+    const clean = stripBidiControls(text);
+    draft.value = draft.value.trim() ? `${draft.value}\n${clean}` : clean;
     showFlash(t('order.copy_status_done'));
 }
 
@@ -347,19 +414,28 @@ function onOrderCreated(order: Order): void {
     }
 }
 
-// `j`/`k`/arrow-down/arrow-up: moves the selection by one row and scrolls it into view.
+// `j`/`k`/arrow-down/arrow-up: moves the selection by one row and scrolls it into view. The row
+// after that one is prefetched, so the next press opens from the cache (Task 6c).
 function move(delta: 1 | -1): void {
     const rows = listRows.value;
     if (!rows.length) return;
     const index = rows.findIndex((c) => c.id === selectedId.value);
-    const next = rows[Math.min(rows.length - 1, Math.max(0, index === -1 ? 0 : index + delta))];
+    const nextIndex = Math.min(rows.length - 1, Math.max(0, index === -1 ? 0 : index + delta));
+    const next = rows[nextIndex];
     if (next) {
         select(next.id);
-        document.querySelector(`[data-conversation-id="${next.id}"]`)?.scrollIntoView({ block: 'nearest' });
+        listView.value?.scrollToId(next.id);
+        const ahead = rows[nextIndex + delta];
+        if (ahead) thread.prefetch(ahead.id);
     }
 }
 
 const hasThread = () => detail.value !== null;
+
+/** `[` / `]`: the previous / next note toggle in the thread (spec §1.2); the virtualised thread finds it. */
+function moveNote(step: 1 | -1): void {
+    threadView.value?.moveNote(step);
+}
 
 // `arrowdown`/`arrowup` only move the selection when focus is inside the
 // conversation list (or nowhere in particular, i.e. `document.body`) — anywhere
@@ -382,6 +458,11 @@ useShortcuts([
     { id: 'inbox.bot', keys: ['b'], labelKey: 'shortcuts.return_to_bot', group: 'inbox', handler: () => hasThread() && void runAction('return-to-bot') },
     { id: 'inbox.tags', keys: ['t'], labelKey: 'shortcuts.tags', group: 'inbox', handler: () => hasThread() && threadView.value?.header?.openTags() },
     { id: 'inbox.order', keys: ['o'], labelKey: 'shortcuts.order', group: 'inbox', handler: () => hasThread() && openOrderDrawer() },
+    { id: 'inbox.search', keys: ['/'], labelKey: 'shortcuts.focus_search', group: 'inbox', handler: () => listView.value?.focusSearch() },
+    { id: 'inbox.filters', keys: ['f'], labelKey: 'shortcuts.open_filters', group: 'inbox', handler: () => listView.value?.openFilters() },
+    { id: 'inbox.details', keys: ['i'], labelKey: 'shortcuts.toggle_details', group: 'inbox', handler: () => toggleDetails() },
+    { id: 'inbox.prev_note', keys: ['['], labelKey: 'shortcuts.prev_note', group: 'inbox', handler: () => hasThread() && moveNote(-1) },
+    { id: 'inbox.next_note', keys: [']'], labelKey: 'shortcuts.next_note', group: 'inbox', handler: () => hasThread() && moveNote(1) },
     { id: 'inbox.attach', keys: ['a'], labelKey: 'shortcuts.attach', group: 'inbox', handler: () => hasThread() && threadView.value?.composer?.openFilePicker() },
 ]);
 
@@ -406,24 +487,38 @@ onBeforeUnmount(() => {
 <template>
     <Head :title="t('inbox.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs" fill>
-        <MyWindowsStrip :selected-id="selectedId" :unread="windowUnread" @select="select" />
+    <AppLayout :breadcrumbs="breadcrumbs" fill workspace>
+        <MyWindowsStrip :selected-id="selectedId" :unread="windowUnread" @select="(id, pointer) => select(id, pointer)" />
 
         <!-- Fills the space left under the header and any admin alert strip (no fixed calc). -->
-        <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background md:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+        <div
+            class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background"
+            :class="showDetails ? 'md:grid-cols-[360px_minmax(0,1fr)_340px]' : 'md:grid-cols-[360px_minmax(0,1fr)]'"
+        >
             <ConversationList
+                ref="listView"
                 :class="selectedId !== null ? 'hidden md:flex' : 'flex'"
                 :conversations="listRows"
                 :filters="listFilters"
+                :counts="counts"
                 :selected-id="selectedId"
+                :moderators="moderators"
+                :tags="tags"
                 :loading="loading"
                 :loading-more="loadingMore"
+                :load-more-failed="loadMoreFailed"
                 :has-more="nextCursor !== null"
                 :live="live"
-                :tags="tags"
-                @update:filters="list.setFilters"
-                @select="select"
-                @load-more="list.loadMore"
+                :poll-failed="pollFailed"
+                :search-truncated="searchTruncated"
+                :queue-enabled="queueEnabled"
+                :filtered="activeKeys.length > 0"
+                @update="list.setFilters"
+                @clear="list.clearFilters"
+                @refresh="list.reload().catch(() => undefined)"
+                @select="(id, pointer) => select(id, pointer)"
+                @intent="thread.prefetch"
+                @load-more="(manual: boolean) => list.loadMore({ manual }).catch(() => undefined)"
                 @tag-menu="openTagMenu"
             />
 
@@ -451,8 +546,10 @@ onBeforeUnmount(() => {
                     :flash="flash"
                     :mentionable="mentionable"
                     :adding-note="addingNote"
+                    :autofocus="focusComposer"
+                    :restore-view="restoredView"
                     @back="back"
-                    @open-customer="customerOpen = true"
+                    @open-customer="toggleDetails"
                     @load-older="thread.loadOlder"
                     @send="send"
                     @send-and-resolve="sendAndResolve"
@@ -480,7 +577,7 @@ onBeforeUnmount(() => {
                 <EmptyState v-else :icon="MessageSquareText" :title="t('inbox.select_title')" :body="t('inbox.select_body')" />
             </main>
 
-            <div v-if="isXl" class="hidden min-h-0 flex-col border-s bg-card xl:flex">
+            <div v-if="showDetails" class="hidden min-h-0 flex-col border-s bg-card xl:flex">
                 <CustomerPanel
                     v-if="detail"
                     class="flex-1"

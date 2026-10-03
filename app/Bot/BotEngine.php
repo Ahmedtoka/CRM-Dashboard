@@ -24,6 +24,7 @@ use App\Enums\Handler;
 use App\Enums\Platform;
 use App\Enums\SenderType;
 use App\Events\ConversationUpdated;
+use App\Inbox\EmptyBotMessageException;
 use App\Inbox\OutboundService;
 use App\Inbox\SavedReplies\AttachmentCopier;
 use App\Inbox\UserNotifier;
@@ -275,6 +276,20 @@ class BotEngine
             $c->refresh();
         }
 
+        $this->resetToBot($c);
+
+        $this->logger->log(ActorType::User, $u, ActivityLogger::CONVERSATION_RETURN_TO_BOT, null, $c);
+
+        SafeBroadcast::send(new ConversationUpdated($c));
+    }
+
+    /**
+     * The conversation is the bot's again, with a fresh bot state: `returnToBot()` («رجوع للبوت»)
+     * and a manual queue close («خلصت», addendum C2) both end here. It only writes the row (the
+     * caller holds its lock when there is one); it never runs the bot, logs or broadcasts.
+     */
+    public function resetToBot(Conversation $c): void
+    {
         $c->handler = Handler::Bot;
         $c->needs_human = false;
         $c->priority_level = null;
@@ -284,10 +299,6 @@ class BotEngine
         // Task 5 ruling 6a: the bot starts fresh, keeping only the burst turn marker.
         $c->bot_state = $c->resetBotState();
         $c->save();
-
-        $this->logger->log(ActorType::User, $u, ActivityLogger::CONVERSATION_RETURN_TO_BOT, null, $c);
-
-        SafeBroadcast::send(new ConversationUpdated($c));
     }
 
     /**
@@ -478,6 +489,12 @@ class BotEngine
 
         try {
             $this->outbound->sendBot($c, $reply->text);
+        } catch (EmptyBotMessageException) {
+            // A reply that was nothing but emoji is empty once the send gate strips it: the same
+            // path as an empty AI reply above, not a closed window.
+            $this->handover($c, 'ai_handover', $text, $cl->intent, $ctx);
+
+            return $this->recordRun($c, $m, ...$replyMeta, decision: 'handover');
         } catch (WindowClosedException) {
             $this->handover($c, 'window_closed', $text, $cl->intent, $ctx);
 

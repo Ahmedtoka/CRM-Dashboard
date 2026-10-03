@@ -1,10 +1,26 @@
 <?php
 
 use App\Analytics\ActivityLogger;
-use App\Bot\Ai\{MessageClassifier, MessageClassification};
+use App\Bot\Ai\AiReply;
+use App\Bot\Ai\AiResponder;
+use App\Bot\Ai\FakeAiResponder;
+use App\Bot\Ai\MessageClassification;
+use App\Bot\Ai\MessageClassifier;
 use App\Bot\BotEngine;
-use App\Enums\{BotIntent, Handler, SenderType, Platform};
-use App\Models\{ActivityLog, BotRule, BotSetting, Conversation, Message, Product, ProductVariant, ChannelAccount, Customer, CustomerIdentity};
+use App\Enums\BotIntent;
+use App\Enums\Handler;
+use App\Enums\Platform;
+use App\Enums\SenderType;
+use App\Models\ActivityLog;
+use App\Models\BotRule;
+use App\Models\BotSetting;
+use App\Models\ChannelAccount;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\CustomerIdentity;
+use App\Models\Message;
+use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
@@ -16,14 +32,15 @@ beforeEach(function () {
     $this->conv = Conversation::factory()->for($cust)->for($acc, 'channelAccount')->create(['platform' => Platform::Facebook, 'handler' => Handler::Bot, 'last_customer_message_at' => now()]);
 });
 
-function inbound(Conversation $c, string $text): Message {
+function inbound(Conversation $c, string $text): Message
+{
     return Message::factory()->for($c)->create(['direction' => 'in', 'sender_type' => SenderType::Customer, 'body' => $text, 'platform' => $c->platform]);
 }
 
 it('replies with a matching rule', function () {
     BotRule::factory()->create(['keywords' => ['بكام'], 'private_reply' => 'الأسعار في الكتالوج 👗', 'action' => 'reply', 'scope' => 'both', 'platforms' => [], 'is_active' => true]);
     $run = app(BotEngine::class)->handleInbound(inbound($this->conv, 'بكام؟'));
-    expect($run->engine)->toBe('rule')->and($this->conv->messages()->where('sender_type', 'bot')->first()->body)->toBe('الأسعار في الكتالوج 👗');
+    expect($run->engine)->toBe('rule')->and($this->conv->messages()->where('sender_type', 'bot')->first()->body)->toBe('الأسعار في الكتالوج');
 });
 
 it('hands over on keyword', function () {
@@ -66,7 +83,7 @@ it('writes a bot run and activity log for the outside-hours message', function (
         ->and($run->engine)->toBe('system')
         ->and($run->decision)->toBe('reply')
         ->and($run->reply_text)->toBe('احنا مقفولين دلوقتي، هنرد عليك بدري 🌙')
-        ->and($this->conv->messages()->where('sender_type', 'bot')->first()->body)->toBe('احنا مقفولين دلوقتي، هنرد عليك بدري 🌙')
+        ->and($this->conv->messages()->where('sender_type', 'bot')->first()->body)->toBe('احنا مقفولين دلوقتي، هنرد عليك بدري')
         ->and(ActivityLog::where('action', ActivityLogger::BOT_OUTSIDE_HOURS)->where('conversation_id', $this->conv->id)->exists())->toBeTrue();
 });
 
@@ -88,3 +105,24 @@ it('tracks classifier token cost on a complaint handover', function () {
         ->and($run->output_tokens)->toBe(500)
         ->and((float) $run->cost_usd)->toBeGreaterThan(0.0);
 });
+
+it('treats an AI reply that was nothing but emoji like an empty one, not a closed window', function (string $aiText) {
+    $p = Product::factory()->create(['title' => 'فستان ستان']);
+    ProductVariant::factory()->for($p)->create(['price' => 1250, 'sku' => 'DR-101', 'inventory_quantity' => 7]);
+    app()->instance(AiResponder::class, new class($aiText) extends FakeAiResponder
+    {
+        public function __construct(private string $text) {}
+
+        public function reply(array $history, array $catalogLines, string $systemPrompt): AiReply
+        {
+            return new AiReply('reply', $this->text, 'fake');
+        }
+    });
+
+    $run = app(BotEngine::class)->handleInbound(inbound($this->conv, 'فستان ستان بكام'));
+
+    // An emoji-only reply ('🙏') ends exactly like an empty one (''): the AI produced nothing usable.
+    expect($run->decision)->toBe('handover')
+        ->and($this->conv->fresh()->handover_category)->toBe('ai_handover')
+        ->and($this->conv->messages()->where('sender_type', 'bot')->count())->toBe(0);
+})->with(['emoji only' => ['🙏'], 'empty' => ['']]);

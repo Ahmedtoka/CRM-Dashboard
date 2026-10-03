@@ -63,7 +63,7 @@ class FakeAiResponder implements AiResponder, MessageClassifier
         if (str_starts_with($first, 'الشحن لـ')) {
             $delivery = collect($catalogLines)->first(fn ($l) => str_starts_with($l, '[مدة التوصيل]'));
 
-            return new AiReply('reply', trim('أهلاً بيكي 🌸 '.$first.($delivery ? '. '.trim(Str::after($delivery, ']')) : '')), 'fake');
+            return new AiReply('reply', trim('أهلاً بيكي '.$first.($delivery ? '. '.trim(Str::after($delivery, ']')) : '')), 'fake');
         }
 
         if (str_starts_with($first, '[')) {
@@ -72,7 +72,7 @@ class FakeAiResponder implements AiResponder, MessageClassifier
 
         [$title, $price, $stock] = $this->parseFirstLine($first);
 
-        return new AiReply('reply', 'أهلاً بيكي 🌸 '.$title.' بسعر '.$price.' جنيه.'.($stock !== '' ? ' المتاح: '.$stock : ''), 'fake');
+        return new AiReply('reply', 'أهلاً بيكي '.$title.' بسعر '.$price.' جنيه.'.($stock !== '' ? ' المتاح: '.$stock : ''), 'fake');
     }
 
     /**

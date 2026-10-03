@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Web;
 
 use App\Enums\AttachmentStatus;
+use App\Enums\AttachmentType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AttachmentResource;
 use App\Media\Jobs\DownloadInboundMedia;
 use App\Media\MediaResponder;
 use App\Models\MessageAttachment;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
@@ -22,9 +25,25 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  */
 class MediaController extends Controller
 {
-    public function show(MessageAttachment $attachment): BinaryFileResponse
+    /** `?download=1` serves the same file as `attachment` with its real name (the gallery's download button). */
+    public function show(Request $request, MessageAttachment $attachment): BinaryFileResponse
     {
         Gate::authorize('view', $attachment);
+
+        return $this->file($attachment, $request->boolean('download'));
+    }
+
+    /** The inbox thumbnail; the original when none was made (yet). Same gate as show(). */
+    public function thumb(MessageAttachment $attachment): BinaryFileResponse
+    {
+        Gate::authorize('view', $attachment);
+        abort_unless($attachment->isStored(), 404);
+
+        if ($attachment->thumb_path !== null && Storage::disk($attachment->disk)->exists($attachment->thumb_path)) {
+            $mime = str_ends_with($attachment->thumb_path, '.webp') ? 'image/webp' : 'image/jpeg';
+
+            return MediaResponder::file($attachment->disk, $attachment->thumb_path, AttachmentType::Image, $mime, null);
+        }
 
         return $this->file($attachment);
     }
@@ -48,10 +67,10 @@ class MediaController extends Controller
         return new AttachmentResource($attachment->fresh());
     }
 
-    private function file(MessageAttachment $a): BinaryFileResponse
+    private function file(MessageAttachment $a, bool $download = false): BinaryFileResponse
     {
         abort_unless($a->isStored(), 404);
 
-        return MediaResponder::file($a->disk, (string) $a->path, $a->type, $a->mime, $a->original_name);
+        return MediaResponder::file($a->disk, (string) $a->path, $a->type, $a->mime, $a->original_name, $download);
     }
 }

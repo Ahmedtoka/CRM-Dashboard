@@ -17,7 +17,7 @@ use App\Models\ShippingZoneRegion;
  */
 final class ShippingFeeAnswer
 {
-    public const ASK_GOVERNORATE = 'ممكن أعرف حضرتك من أنهي محافظة عشان أقولك مصاريف الشحن بالظبط؟ 🌸';
+    public const ASK_GOVERNORATE = 'ممكن أعرف حضرتك من أنهي محافظة عشان أقولك مصاريف الشحن بالظبط؟';
 
     public function __construct(
         private readonly GovernorateMatcher $governorates,

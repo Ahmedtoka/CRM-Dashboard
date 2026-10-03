@@ -2,7 +2,7 @@
 
 export type PlatformValue = 'facebook' | 'instagram' | 'whatsapp' | 'tiktok';
 export type AttachmentType = 'image' | 'audio' | 'video' | 'file' | 'sticker';
-export type Role = 'admin' | 'supervisor' | 'moderator';
+export type Role = 'admin' | 'supervisor' | 'moderator' | 'media_buyer' | 'content';
 export type ConversationStatus = 'open' | 'pending' | 'resolved';
 export type ConversationPriority = 'normal' | 'low' | 'spam';
 export type MessageStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
@@ -60,6 +60,8 @@ export interface Conversation {
     last_customer_message_at: string | null;
     waiting_since: string | null;
     last_message_preview: string | null;
+    /** Who wrote the preview (list rows only): a moderator's own reply gets «إنتي: ». */
+    last_message_sender?: 'customer' | 'user' | 'bot' | 'system' | null;
     customer: { id: number; name: string | null; avatar_url: string | null } | null;
     locked_by: UserRef | null;
     first_responder: UserRef | null;
@@ -69,9 +71,22 @@ export interface Conversation {
     assignee: UserRef | null;
     /** Her open handover-queue ticket (called / active window); null otherwise. Not the `queue` agents/senior badge. */
     queue_entry: ConversationQueueEntry | null;
+    /** Any non-terminal ticket (waiting included): the list row's state badge reads it. Null with no ticket. */
+    queue_state?: ConversationQueueState | null;
+    /** The last moderator who replied: «مع [اسم]» when nobody is assigned (R3). */
+    last_responder_id?: number | null;
     /** Her open support case (even before a ticket is called): the thread shows «عندها كيس مفتوح #N». */
     open_case_id: number | null;
     can: { reply: boolean; reset?: boolean };
+}
+
+export interface ConversationQueueState {
+    status: 'waiting' | 'called' | 'active';
+    ticket: number;
+    priority: string;
+    /** QueueEntryResource::reply_overdue: an open window whose customer already got the apology. */
+    overdue: boolean;
+    assigned_user_id: number | null;
 }
 
 export interface ConversationQueueEntry {
@@ -354,6 +369,20 @@ export interface Order {
     refunds?: Refund[];
     timeline?: OrderTimelineEntry[];
     created_at: string | null;
+    /** Shopify's own name for the order ("#1381"); null until it is on Shopify. */
+    shopify_order_name?: string | null;
+    /** When the order was placed in the store. */
+    placed_at?: string | null;
+    /** Shopify's own updated_at: the last change made in Shopify. */
+    shopify_updated_at?: string | null;
+    /** The last time the CRM read the order from Shopify (any read, even one that changed nothing). */
+    last_synced_at?: string | null;
+    /** The last change to the CRM row. */
+    updated_at?: string | null;
+    on_shopify?: boolean;
+    /** Cancelled, refunded/voided or delivered: never refreshed in the background (Order::isFinalForSync). */
+    is_final?: boolean;
+    paid_at?: string | null;
 }
 
 export interface Identity {
@@ -417,7 +446,7 @@ export interface Participant {
 /** spec §4: a case a guided bot flow recorded (return/exchange, complaint, cancel/edit, delivery follow-up). */
 export type CaseType = 'return' | 'exchange' | 'return_exchange' | 'complaint' | 'cancel_edit' | 'delivery_followup';
 export type CaseStatus = 'new' | 'in_progress' | 'closed';
-export type CasePriority = 'medium' | 'high';
+export type CasePriority = 'low' | 'normal' | 'medium' | 'high';
 
 export interface CasePhoto {
     id: number;
@@ -427,7 +456,6 @@ export interface CasePhoto {
 /** One block of the organised case summary (same as the conversation note). */
 export interface CaseSummarySection {
     key: 'customer' | 'order' | 'items' | 'request' | 'attachments' | 'alerts' | 'team_action';
-    icon: string;
     title: string;
     lines: string[];
     /** Set on the alerts section when there is nothing to warn about (its one line is the "none" placeholder). */
@@ -583,18 +611,44 @@ export type InboxQuickFilter =
     | 'has_return'
     | 'stuck_order';
 
+export type InboxStatusFilter = 'open' | 'pending' | 'resolved' | 'waiting' | 'with_moderator' | 'bot' | 'closed';
+export type InboxQueueFilter = 'waiting' | 'window' | 'overdue' | 'returning';
+
+/** The inbox list filters, all kept in the URL (spec §1.2). */
 export interface InboxFilters {
+    status: InboxStatusFilter | null;
+    queue: InboxQueueFilter | null;
+    /** 'me' | 'none' | '<user id>' */
+    assignee: string | null;
+    /** Several at once, joined with AND (R4). */
+    flags: InboxQuickFilter[];
     platform: PlatformValue | null;
-    status: ConversationStatus | null;
-    filter: InboxQuickFilter | null;
-    q: string | null;
     tag: number | null;
+    q: string | null;
+}
+
+/** GET /inbox/conversations/counts: each value over a capped sub-select (> capped_at shows "999+"). */
+export interface InboxCounts {
+    status: Record<'open' | 'waiting' | 'with_moderator' | 'bot' | 'closed', number>;
+    /** Null while the handover queue is off. */
+    queue: Record<InboxQueueFilter, number> | null;
+    capped_at: number;
+}
+
+/** An active moderator or supervisor, for the moderator filter and the row's «مع [اسم]». */
+export interface InboxModerator {
+    id: number;
+    name: string;
+    color: string | null;
 }
 
 export interface CursorPage<T> {
     data: T[];
-    meta?: { next_cursor: string | null; per_page?: number };
+    /** `search_truncated`: the substring search matched more than 500 customers (only the most recent were searched). */
+    meta?: { next_cursor: string | null; per_page?: number; search_truncated?: boolean };
     links?: { next: string | null };
+    /** `like` when the list search fell back to a substring match: send `qmode=like` with every later page. */
+    search_mode?: 'like' | null;
 }
 
 export interface ChannelAlert {
@@ -618,7 +672,8 @@ export interface AppNotification {
         | 'queue.reply_overdue'
         | 'queue.reply_overdue_leader'
         | 'queue.member_not_arrived'
-        | 'queue.break_overrun';
+        | 'queue.break_overrun'
+        | 'ads.need_stop';
     data: Record<string, unknown>;
     read_at: string | null;
     created_at: string | null;

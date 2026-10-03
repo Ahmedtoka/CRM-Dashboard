@@ -17,8 +17,8 @@ it('maps every status to a short arabic line', function (string $key, string $co
 ]);
 
 it('includes the tracking link when shipped', function () {
-    expect((new OrderStatusText)->line(snap('shipped', url: 'https://t.test/1')))->toBe("الأوردر رقم #1234 اتشحن ✨\nتقدري تتابعيه من هنا: https://t.test/1")
-        ->and((new OrderStatusText)->line(snap('shipped')))->toBe('الأوردر رقم #1234 اتشحن ✨');
+    expect((new OrderStatusText)->line(snap('shipped', url: 'https://t.test/1')))->toBe("الأوردر رقم #1234 اتشحن\nتقدري تتابعيه من هنا: https://t.test/1")
+        ->and((new OrderStatusText)->line(snap('shipped')))->toBe('الأوردر رقم #1234 اتشحن');
 });
 
 it('flags delay after 5 working days in cairo giza alex and 7 elsewhere', function () {

@@ -32,6 +32,11 @@ html {
         --success-foreground: 0 0% 100%;
         --warning: 42 92.8% 56.3%; /* #F7B928 */
         --warning-foreground: 0 0% 2%;
+        --info: 214 89.3% 52.2%;
+        --info-foreground: 0 0% 100%;
+        --overdue: 24 94% 50%; /* orange #F97316 */
+        --overdue-foreground: 0 0% 100%;
+        --note: 42 92.8% 56.3%; /* tint base; notes use it at 10-14% alpha */
         --destructive: 350 78.6% 50.6%; /* #E41E3F */
         --destructive-foreground: 0 0% 100%;
         --border: 220 6.5% 82%; /* #CED0D4 */
@@ -86,6 +91,11 @@ html {
         --success-foreground: 0 0% 100%;
         --warning: 42 92.8% 56.3%; /* #F7B928 */
         --warning-foreground: 0 0% 2%;
+        --info: 214 100% 64%;
+        --info-foreground: 0 0% 100%;
+        --overdue: 24 95% 58%;
+        --overdue-foreground: 0 0% 8%;
+        --note: 42 85% 60%;
         --destructive: 350 78.6% 50.6%; /* #E41E3F */
         --destructive-foreground: 0 0% 100%;
         --border: 210 3.1% 25.1%; /* #3E4042 */
@@ -123,6 +133,19 @@ html {
         @apply border-border;
     }
 
+    ::selection {
+        background: hsl(var(--primary) / 0.22);
+    }
+
+    input,
+    textarea {
+        caret-color: hsl(var(--primary));
+    }
+
+    .tabular {
+        font-variant-numeric: tabular-nums;
+    }
+
     body {
         @apply bg-background text-sm text-foreground;
     }
@@ -141,6 +164,14 @@ html {
     .scrollbar-thin {
         scrollbar-width: thin;
         scrollbar-color: hsl(var(--border)) transparent;
+    }
+
+    /* A strip that scrolls sideways inside itself (the inbox status tabs) without a visible bar. */
+    .scrollbar-none {
+        scrollbar-width: none;
+    }
+    .scrollbar-none::-webkit-scrollbar {
+        display: none;
     }
 
     .shadow-card {

@@ -2,6 +2,7 @@
 
 namespace App\Shopify\Sync;
 
+use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
 
 /**
@@ -25,6 +26,13 @@ final class SyncQueries
     public const RESOURCES = ['products', 'customers', 'orders'];
 
     public const MAX_QUERY_COST = 1000;
+
+    /**
+     * Orders per `nodes(ids:)` refresh query (ordersByIds): the largest batch whose
+     * worst-case cost, with the sync's full order selection, stays under
+     * MAX_QUERY_COST (SyncQueriesTest / OrderRefreshTest pin it).
+     */
+    public const ORDERS_BY_IDS_BATCH = 7;
 
     /** Top-level page size of the paged (non-bulk) query per resource. */
     public const PAGE_SIZES = ['products' => 10, 'customers' => 50, 'orders' => 6];
@@ -90,6 +98,12 @@ final class SyncQueries
             GRAPHQL,
         ],
     ];
+
+    /** Opt-in (config crm.shopify.capture_journey): needs access the live token may not have. */
+    public const JOURNEY_FIELD = 'customerJourneySummary { firstVisit { landingPage utmParameters { source medium campaign content term } } lastVisit { landingPage utmParameters { source medium campaign content term } } }';
+
+    /** Cache key set for 24 h after Shopify rejected the journey field. */
+    public const JOURNEY_UNSUPPORTED_CACHE_KEY = 'shopify.journey_unsupported';
 
     public const BULK_OPERATION = <<<'GRAPHQL'
         query bulkOperation($id: ID!) {
@@ -164,7 +178,7 @@ final class SyncQueries
         ]) : [];
         $filter = $conditions !== [] ? '(query: "'.implode(' AND ', $conditions).'")' : '';
 
-        $node = self::sized(self::NODE[$resource], false)
+        $node = self::sized(self::node($resource), false)
             ." {$nested['select']} { edges { node { {$nested['node']} } } }";
         $inner = "{ {$resource}{$filter} { edges { node { {$node} } } } }";
 
@@ -176,7 +190,7 @@ final class SyncQueries
     {
         $nested = self::nested($resource);
         $size = self::PAGE_SIZES[$resource];
-        $node = self::sized(self::NODE[$resource], true)
+        $node = self::sized(self::node($resource), true)
             ." {$nested['select']}(first: {$nested['page']}) { edges { node { {$nested['node']} } } pageInfo { hasNextPage endCursor } }";
 
         return "query sync(\$cursor: String, \$query: String) {\n"
@@ -184,6 +198,20 @@ final class SyncQueries
             ."    edges { node { {$node} } }\n"
             ."    pageInfo { hasNextPage endCursor }\n"
             ."  }\n}";
+    }
+
+    /**
+     * Orders by id (refresh, spec §3.2) with exactly the paged sync's selection;
+     * variables: ids (gids, at most ORDERS_BY_IDS_BATCH). Response: data.nodes,
+     * in the order of `ids`, null for an id Shopify no longer has.
+     */
+    public static function ordersByIds(): string
+    {
+        $nested = self::nested('orders');
+        $node = self::sized(self::node('orders'), true)
+            ." {$nested['select']}(first: {$nested['page']}) { edges { node { {$nested['node']} } } pageInfo { hasNextPage endCursor } }";
+
+        return "query refresh(\$ids: [ID!]!) {\n  nodes(ids: \$ids) {\n    ... on Order { {$node} }\n  }\n}";
     }
 
     /** Follow-up page of a resource's nested connection; variables: id, cursor. Response: data.node.{nestedKey}. */
@@ -214,6 +242,7 @@ final class SyncQueries
             'bulk_operation' => self::BULK_OPERATION,
             'shipping' => self::shipping(),
             'shipping_zones' => self::shippingZones(),
+            'orders_by_ids' => self::ordersByIds(),
         ];
 
         foreach (self::RESOURCES as $resource) {
@@ -230,8 +259,10 @@ final class SyncQueries
      * 2 + first × (1 + cost of one node) + its own non-node fields (pageInfo);
      * `edges`/`nodes` (and an argument-less `node`) are free wrappers and inline
      * fragments add their fields. Nested `first` values therefore multiply.
+     * A list looked up by `ids` (`nodes(ids: $ids)`) has no literal size: it is
+     * costed as $idsListSize objects (default: the refresh batch).
      */
-    public static function estimatedWorstCaseCost(string $document): int
+    public static function estimatedWorstCaseCost(string $document, int $idsListSize = self::ORDERS_BY_IDS_BATCH): int
     {
         preg_match_all('/"""[\s\S]*?"""|"(?:[^"\\\\]|\\\\.)*"|\.\.\.|[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?|[{}():$!=@\[\],]/', $document, $m);
         $tokens = $m[0];
@@ -248,14 +279,14 @@ final class SyncQueries
             return 0;
         }
 
-        return (int) array_sum(array_column(self::selection($tokens, $i), 'cost'));
+        return (int) array_sum(array_column(self::selection($tokens, $i, $idsListSize), 'cost'));
     }
 
     /**
      * @param  list<string>  $t
      * @return list<array{name: string, cost: int}>
      */
-    private static function selection(array $t, int &$i): array
+    private static function selection(array $t, int &$i, int $idsListSize): array
     {
         $i++; // '{'
         $fields = [];
@@ -267,7 +298,7 @@ final class SyncQueries
                     $i += 2;
                 }
                 if (($t[$i] ?? null) === '{') {
-                    array_push($fields, ...self::selection($t, $i));
+                    array_push($fields, ...self::selection($t, $i, $idsListSize));
                 }
 
                 continue;
@@ -280,6 +311,7 @@ final class SyncQueries
             }
 
             $first = null;
+            $byIds = false;
             $hasArgs = ($t[$i] ?? null) === '(';
             if ($hasArgs) {
                 $depth = 0;
@@ -290,6 +322,8 @@ final class SyncQueries
                         $depth--;
                     } elseif (in_array($t[$i], ['first', 'last'], true) && ($t[$i + 1] ?? null) === ':' && is_numeric($t[$i + 2] ?? null)) {
                         $first = (int) $t[$i + 2];
+                    } elseif ($depth === 1 && $t[$i] === 'ids' && ($t[$i + 1] ?? null) === ':') {
+                        $byIds = true;
                     }
                     $i++;
                 } while ($depth > 0 && $i < count($t));
@@ -301,12 +335,14 @@ final class SyncQueries
                 continue;
             }
 
-            $children = self::selection($t, $i);
+            $children = self::selection($t, $i, $idsListSize);
             $sum = (int) array_sum(array_column($children, 'cost'));
 
             if ($first !== null) {
                 $perNode = (int) array_sum(array_column(array_filter($children, fn ($c) => in_array($c['name'], ['edges', 'nodes'], true)), 'cost'));
                 $cost = 2 + $first * (1 + $perNode) + ($sum - $perNode);
+            } elseif ($byIds) {
+                $cost = $idsListSize * (1 + $sum);
             } elseif (in_array($name, ['edges', 'nodes'], true) || ($name === 'node' && ! $hasArgs)) {
                 $cost = $sum;
             } else {
@@ -325,6 +361,42 @@ final class SyncQueries
     private static function nested(string $resource): array
     {
         return self::NESTED[$resource] ?? throw new InvalidArgumentException("Unknown Shopify sync resource [{$resource}].");
+    }
+
+    /** Node selection; orders only carry the journey field when the flag is on and Shopify has not rejected it. */
+    private static function node(string $resource): string
+    {
+        $node = self::NODE[$resource];
+
+        if ($resource === 'orders' && config('crm.shopify.capture_journey', false) && ! Cache::has(self::JOURNEY_UNSUPPORTED_CACHE_KEY)) {
+            $node .= "\n".self::JOURNEY_FIELD;
+        }
+
+        return $node;
+    }
+
+    /** Removes the journey field (a balanced block) from a document. */
+    public static function withoutJourney(string $document): string
+    {
+        $start = strpos($document, 'customerJourneySummary');
+        if ($start === false) {
+            return $document;
+        }
+
+        $open = strpos($document, '{', $start);
+        if ($open === false) {
+            return substr($document, 0, $start).substr($document, $start + strlen('customerJourneySummary'));
+        }
+
+        $depth = 0;
+        for ($i = $open, $n = strlen($document); $i < $n; $i++) {
+            $depth += $document[$i] === '{' ? 1 : ($document[$i] === '}' ? -1 : 0);
+            if ($depth === 0) {
+                return self::withoutJourney(substr($document, 0, $start).substr($document, $i + 1));
+            }
+        }
+
+        return $document;
     }
 
     private static function sized(string $fields, bool $paged): string

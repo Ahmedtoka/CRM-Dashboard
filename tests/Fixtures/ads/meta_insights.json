@@ -1,0 +1,8 @@
+{"data":[
+{"ad_id":"ad_1","ad_name":"Ad One","campaign_id":"c1","campaign_name":"Sales","adset_id":"s1","adset_name":"Set 1","spend":"450.50","impressions":"12000","clicks":"340","reach":"9000","date_start":"2026-09-01","date_stop":"2026-09-01",
+ "actions":[{"action_type":"link_click","value":"340"},{"action_type":"omni_purchase","value":"5"},{"action_type":"purchase","value":"3"}],
+ "action_values":[{"action_type":"omni_purchase","value":"2250"},{"action_type":"purchase","value":"1350"}]},
+{"ad_id":"ad_2","ad_name":"Ad Two","campaign_id":"c1","campaign_name":"Sales","adset_id":"s1","adset_name":"Set 1","spend":"200","impressions":"5000","clicks":"90","reach":"4000","date_start":"2026-09-02","date_stop":"2026-09-02",
+ "actions":[{"action_type":"offsite_conversion.fb_pixel_purchase","value":"2"}],
+ "action_values":[{"action_type":"offsite_conversion.fb_pixel_purchase","value":"900"}]}
+],"paging":{"cursors":{"before":"a","after":"b"}}}

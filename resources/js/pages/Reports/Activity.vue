@@ -4,7 +4,7 @@ import DateRangePicker from '@/components/crm/DateRangePicker.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import Pagination from '@/components/crm/Pagination.vue';
 import { useI18n } from '@/composables/useI18n';
-import { translate } from '@/i18n';
+import { activityActionLabel } from '@/lib/activity';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { SharedData } from '@/types';
 import type { ActivityLogItem, Paginated, ReportRange } from '@/types/admin';
@@ -31,11 +31,7 @@ function visit(patch: Partial<Filters & ReportRange>): void {
 
 // Short human labels for the filter dropdown (timeline sentences keep their full templates).
 const actionOptions = computed(() =>
-    props.actions.map((action) => {
-        const key = `activity_filter.${action}`;
-        const label = translate(locale.value, key);
-        return { value: action, label: label === key ? action : label };
-    }),
+    props.actions.map((action) => ({ value: action, label: activityActionLabel(action, locale.value) })),
 );
 
 const selectValue = (event: Event) => (event.target as HTMLSelectElement).value || null;

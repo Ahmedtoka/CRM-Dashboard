@@ -34,11 +34,12 @@ return [
 
     'priority' => [
         'low' => 'منخفضة',
+        'normal' => 'عادية',
         'medium' => 'متوسطة',
         'high' => 'عالية',
     ],
 
-    'header' => '📋 حالة #:id — :type — أولوية :priority',
+    'header' => 'حالة #:id — :type — أولوية :priority',
 
     'sections' => [
         'customer' => 'العميل',
@@ -100,9 +101,9 @@ return [
     ],
 
     'edit' => [
-        'new_address' => '📍 العنوان الجديد: :address',
-        'new_phone' => '📞 الموبايل الجديد: :phone',
-        'note_header' => '✏️ تعديلات مطلوبة على :order',
+        'new_address' => 'العنوان الجديد: :address',
+        'new_phone' => 'الموبايل الجديد: :phone',
+        'note_header' => 'تعديلات مطلوبة على :order',
         'note_order_numbered' => 'أوردر #:number',
         'note_order_any' => 'الأوردر',
     ],
@@ -110,6 +111,7 @@ return [
     'attachments' => [
         'item_photo' => 'صورة القطعة',
         'no_photo' => '— (مبعتتش صورة)',
+        'received' => '(وصلت)',
         'replacement_photo' => 'صورة المنتج البديل',
         'change_photo' => 'صورة للمنتج البديل',
         'customer_photos' => 'صور من العميلة',

@@ -17,6 +17,9 @@ use InvalidArgumentException;
  */
 final class ResourceRowMapper
 {
+    /** Whether the last order() call applied a fulfillment or refund (each broadcasts OrderUpdated). */
+    private bool $lastOrderChildrenApplied = false;
+
     public function __construct(
         private readonly ProductMapper $products,
         private readonly CustomerMapper $customers,
@@ -69,20 +72,33 @@ final class ResourceRowMapper
      */
     private function order(array $row): MapResult
     {
+        $this->lastOrderChildrenApplied = false;
         $result = $this->orders->upsert($row);
 
         foreach (Payload::list($row['fulfillments'] ?? []) as $fulfillment) {
-            if (is_string($fulfillment['id'] ?? null)) {
-                $this->orders->applyFulfillment($fulfillment + ['orderId' => $row['id']]);
+            if (is_string($fulfillment['id'] ?? null)
+                && $this->orders->applyFulfillment($fulfillment + ['orderId' => $row['id']]) !== MapResult::Skipped) {
+                $this->lastOrderChildrenApplied = true;
             }
         }
 
         foreach (Payload::list($row['refunds'] ?? []) as $refund) {
-            if (is_string($refund['id'] ?? null)) {
-                $this->orders->applyRefund($refund + ['orderId' => $row['id']]);
+            if (is_string($refund['id'] ?? null)
+                && $this->orders->applyRefund($refund + ['orderId' => $row['id']]) !== MapResult::Skipped) {
+                $this->lastOrderChildrenApplied = true;
             }
         }
 
         return $result;
+    }
+
+    /**
+     * True when the last mapped order node applied a fulfillment or refund. Those
+     * already broadcast OrderUpdated, so a caller that broadcasts an unchanged
+     * order (OrderRefresher) must not send a second one.
+     */
+    public function lastOrderChildrenApplied(): bool
+    {
+        return $this->lastOrderChildrenApplied;
     }
 }

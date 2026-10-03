@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  * (the live version and any draft archived and restorable; nothing happens once a flow already is this one).
  *
  * cancel_edit — order (ownership proof) → eligibility (still at the company = `order_editable`):
- *   shipped «للأسف الأوردر #… اتشحن خلاص…» / cancelled «الأوردر #… ملغي أصلاً 🌸» [كلم موظف] [تمام];
+ *   shipped «للأسف الأوردر #… اتشحن خلاص…» / cancelled «الأوردر #… ملغي أصلاً» [كلم موظف] [تمام];
  *   «أهلاً يا … أوردر #… — تحبي تلغيه ولا تعدلي فيه؟» [إلغاء] [تعديل]
  *     إلغاء → the reason in her words (required) → case `cancel_edit` (request=cancel)
  *     تعديل → «عايزة تعدلي إيه؟» [القطع في الأوردر] [العنوان] [رقم الموبايل]
@@ -33,35 +33,35 @@ final class OwnerFlowsUpgrade
         'branches' => 'فلو الفروع الجديد: كروت الفروع بالخريطة والاتصال، وفرع في منطقة تانية',
     ];
 
-    public const ASK_ORDER_TEXT = 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟ 🌸';
+    public const ASK_ORDER_TEXT = 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟';
 
-    public const SHIPPED_TEXT = 'للأسف الأوردر #{order_number} اتشحن خلاص فمينفعش نلغيه أو نعدل فيه 🙏';
+    public const SHIPPED_TEXT = 'للأسف الأوردر #{order_number} اتشحن خلاص فمينفعش نلغيه أو نعدل فيه';
 
-    public const ALREADY_CANCELLED_TEXT = 'الأوردر #{order_number} ملغي أصلاً 🌸';
+    public const ALREADY_CANCELLED_TEXT = 'الأوردر #{order_number} ملغي أصلاً';
 
-    public const GREETING_TEXT = 'أهلاً يا {customer_first_name} 🌸 أوردر #{order_number} — تحبي تلغيه ولا تعدلي فيه؟';
+    public const GREETING_TEXT = 'أهلاً يا {customer_first_name}، أوردر #{order_number} — تحبي تلغيه ولا تعدلي فيه؟';
 
-    public const CANCEL_REASON_TEXT = 'ممكن تكتبيلي سبب الإلغاء؟ 🙏';
+    public const CANCEL_REASON_TEXT = 'ممكن تكتبيلي سبب الإلغاء؟';
 
-    public const CANCEL_DONE_TEXT = 'تمام ✅ سجلت طلب إلغاء أوردر #{order_number}، والفريق هيأكد معاكي الإلغاء في أقرب وقت 🌸';
+    public const CANCEL_DONE_TEXT = 'تمام، سجلت طلب إلغاء أوردر #{order_number}، والفريق هيأكد معاكي الإلغاء في أقرب وقت';
 
     public const EDIT_WHAT_TEXT = 'عايزة تعدلي إيه؟';
 
-    public const EDIT_ITEMS_TEXT = 'اختاري القطعة اللي عايزة تعدلي فيها 👇';
+    public const EDIT_ITEMS_TEXT = 'اختاري القطعة اللي عايزة تعدلي فيها';
 
     public const NEW_ADDRESS_TEXT = 'اكتبي العنوان الجديد بالتفصيل (المحافظة - المنطقة - الشارع)';
 
-    public const NEW_PHONE_TEXT = 'اكتبي رقم الموبايل الجديد 📞';
+    public const NEW_PHONE_TEXT = 'اكتبي رقم الموبايل الجديد';
 
-    public const EDIT_DONE_TEXT = 'تمام ✅ سجلت طلب تعديل أوردر #{order_number}، والفريق هيأكد معاكي التعديل 🌸';
+    public const EDIT_DONE_TEXT = 'تمام، سجلت طلب تعديل أوردر #{order_number}، والفريق هيأكد معاكي التعديل';
 
-    public const COMPLAINT_ASK_TEXT = 'آسفين جدًا لده 🙏 الشكوى بخصوص إيه؟';
+    public const COMPLAINT_ASK_TEXT = 'آسفين جدًا لده، الشكوى بخصوص إيه؟';
 
-    public const COMPLAINT_BRANCH_TEXT = 'اكتبي اسم الفرع، أو اختاري المنطقة من هنا 👇';
+    public const COMPLAINT_BRANCH_TEXT = 'اكتبي اسم الفرع، أو اختاري المنطقة من هنا';
 
     public const VISIT_DATE_TEXT = 'كانت الزيارة إمتى تقريبًا؟';
 
-    public const COMPLAINT_ITEMS_TEXT = 'الشكوى بخصوص أنهي قطعة؟ 👇';
+    public const COMPLAINT_ITEMS_TEXT = 'الشكوى بخصوص أنهي قطعة؟';
 
     public const COMPLAINT_PICK_BUTTON = 'الشكوى عن القطعة دي';
 
@@ -71,11 +71,11 @@ final class OwnerFlowsUpgrade
 
     public const NOTE_2026_09_26 = 'فلو الشكوى: سؤال القطعة أقصر، والاختيار من الصور';
 
-    public const DESCRIPTION_TEXT = 'احكيلي حصل إيه بالتفصيل عشان نقدر نساعد حضرتك 🙏 (ولو فيه صورة ابعتيها)';
+    public const DESCRIPTION_TEXT = 'احكيلي حصل إيه بالتفصيل عشان نقدر نساعد حضرتك (ولو فيه صورة ابعتيها)';
 
-    public const COMPLAINT_DONE_TEXT = 'تمام ✅ سجلت الشكوى رقم #{case_id}، والفريق هيتواصل معاكي في أقرب وقت 🌸';
+    public const COMPLAINT_DONE_TEXT = 'تمام، سجلت الشكوى رقم #{case_id}، والفريق هيتواصل معاكي في أقرب وقت';
 
-    public const BRANCHES_ASK_TEXT = 'حضرتك في أنهي منطقة؟ اختاري أو اكتبي اسم المنطقة أو الفرع 👇';
+    public const BRANCHES_ASK_TEXT = 'حضرتك في أنهي منطقة؟ اختاري أو اكتبي اسم المنطقة أو الفرع';
 
     public const BRANCHES_MORE_TEXT = 'تحبي حاجة تانية؟';
 
@@ -179,7 +179,7 @@ final class OwnerFlowsUpgrade
     {
         return [
             'complaint' => ['start' => 'type', 'steps' => [
-                'type' => ['type' => 'choice', 'field' => 'complaint_type', 'text' => 'آسفين جدًا لده 🙏 الشكوى بخصوص إيه؟', 'options' => [
+                'type' => ['type' => 'choice', 'field' => 'complaint_type', 'text' => 'آسفين جدًا لده، الشكوى بخصوص إيه؟', 'options' => [
                     ['value' => 'branch', 'title' => 'فرع', 'synonyms' => ['فرع', 'الفرع', 'البياعة', 'الموظفة']],
                     ['value' => 'delivery', 'title' => 'شحن وتوصيل', 'synonyms' => ['شحن', 'توصيل', 'المندوب', 'اتأخر']],
                     ['value' => 'product', 'title' => 'منتج', 'synonyms' => ['منتج', 'جودة', 'خامة']],
@@ -193,13 +193,13 @@ final class OwnerFlowsUpgrade
                 'visit_date' => ['type' => 'text', 'field' => 'visit_date', 'text' => 'كانت الزيارة إمتى تقريبًا؟', 'next' => 'name'],
                 'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟', 'next' => 'name'],
                 'name' => ['type' => 'name', 'field' => 'name', 'text' => 'ممكن اسم حضرتك؟', 'next' => 'phone'],
-                'phone' => ['type' => 'phone', 'field' => 'phone', 'text' => 'ورقم موبايل نتواصل مع حضرتك عليه؟ 📞', 'next' => 'description'],
-                'description' => ['type' => 'text', 'field' => 'description', 'text' => 'احكيلي حصل إيه بالتفصيل عشان نقدر نساعد حضرتك 🙏', 'next' => 'summary'],
+                'phone' => ['type' => 'phone', 'field' => 'phone', 'text' => 'ورقم موبايل نتواصل مع حضرتك عليه؟', 'next' => 'description'],
+                'description' => ['type' => 'text', 'field' => 'description', 'text' => 'احكيلي حصل إيه بالتفصيل عشان نقدر نساعد حضرتك', 'next' => 'summary'],
                 'summary' => ['type' => 'summary', 'text' => 'ده ملخص الشكوى:', 'next' => 'record'],
                 'record' => ['type' => 'record_case', 'case_type' => 'complaint', 'script' => 'flow_complaint_recorded', 'next' => 'end'],
             ]],
             'cancel_edit' => ['start' => 'order', 'steps' => [
-                'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟ 🌸', 'next' => 'request'],
+                'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟', 'next' => 'request'],
                 'request' => ['type' => 'choice', 'field' => 'request', 'text' => 'حضرتك عايزة تلغي الأوردر ولا تعدل فيه؟', 'options' => [
                     ['value' => 'cancel', 'title' => 'إلغاء الأوردر', 'synonyms' => ['الغاء', 'الغي', 'cancel']],
                     ['value' => 'edit', 'title' => 'تعديل الأوردر', 'synonyms' => ['تعديل', 'اعدل', 'اغير', 'edit']],
@@ -209,7 +209,7 @@ final class OwnerFlowsUpgrade
                 'record' => ['type' => 'record_case', 'case_type' => 'cancel_edit', 'script' => 'flow_cancel_recorded', 'next' => 'end'],
             ]],
             'branches' => ['start' => 'list', 'steps' => [
-                'list' => ['type' => 'branches_list', 'text' => 'حضرتك في أنهي منطقة؟ اختاري أو اكتبي اسم المنطقة 👇', 'next' => 'end'],
+                'list' => ['type' => 'branches_list', 'text' => 'حضرتك في أنهي منطقة؟ اختاري أو اكتبي اسم المنطقة', 'next' => 'end'],
             ]],
         ];
     }

@@ -1,4 +1,5 @@
 import type { BroadcastingConfig } from '@/echo';
+import type { AdsAccess } from '@/types/ads';
 import type { ChannelAlert, PlatformOption, PlatformValue, Role } from '@/types/crm';
 import type { LucideIcon } from 'lucide-vue-next';
 
@@ -19,6 +20,8 @@ export interface NavItem {
     children?: NavItem[];
     /** Sub-section label: consecutive children sharing one render under a small heading. */
     section?: string;
+    /** Active only on this exact path (a parent-path child such as /ads would light up on every sub-page). */
+    exact?: boolean;
 }
 
 export interface SharedData {
@@ -33,6 +36,8 @@ export interface SharedData {
     /** The live board is in the menu: supervisors, admins and the leader of the open shift. */
     canSeeBoard?: boolean;
     broadcasting: BroadcastingConfig | null;
+    /** Ads Hub access, shared only on ads.* routes (null elsewhere). */
+    ads?: AdsAccess | null;
     ziggy: {
         location: string;
         url: string;

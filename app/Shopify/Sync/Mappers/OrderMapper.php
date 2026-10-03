@@ -2,6 +2,7 @@
 
 namespace App\Shopify\Sync\Mappers;
 
+use App\Ads\Attribution\UtmParser;
 use App\Commerce\Jobs\RefreshOrderStatus;
 use App\Enums\ConversationStatus;
 use App\Enums\OrderSource;
@@ -125,12 +126,15 @@ final class OrderMapper
             $local = $this->findLocal($o, $shopifyId, lock: true);
 
             if ($local !== null && $this->isStale($local->shopify_updated_at, $o['updated_at'] ?? null)) {
+                $this->stampSynced($local);
+
                 return MapResult::Skipped;
             }
 
             if ($local !== null && $local->source === OrderSource::Chat) {
                 $this->syncChatCustomer($local, $o);
                 $this->updateChatOrder($local, $o, $shopifyId);
+                $this->stampSynced($local);
                 $this->afterChange($local);
 
                 return MapResult::Updated;
@@ -147,6 +151,8 @@ final class OrderMapper
                 $this->replaceItems($model, $o['line_items']);
             }
 
+            $this->stampSynced($model);
+
             if ($created && $this->deferredCustomerIds === null) {
                 $this->announce($model);
             }
@@ -162,6 +168,7 @@ final class OrderMapper
         $f = Payload::isGraphql($fulfillment) ? $this->fulfillmentFromGraphql($fulfillment) : $fulfillment;
         $fulfillmentId = Payload::id($f['id'] ?? null) ?? throw new InvalidArgumentException('Shopify fulfillment payload has no id.');
         $order = $this->orderForChild($f['order_id'] ?? null);
+        $this->stampSynced($order);
 
         $existing = Fulfillment::where('shopify_fulfillment_id', $fulfillmentId)->first();
 
@@ -202,6 +209,7 @@ final class OrderMapper
         }
 
         $order = $this->orderForChild($r['order_id'] ?? null);
+        $this->stampSynced($order);
 
         Refund::create([
             'order_id' => $order->id,
@@ -276,8 +284,8 @@ final class OrderMapper
     }
 
     /**
-     * Chat orders were created in the CRM: only Shopify identity, statuses and
-     * cancel bookkeeping fields change here, never attribution (created_by_id,
+     * Chat orders were created in the CRM: only Shopify identity, statuses,
+     * cancel bookkeeping fields and the note (R9) change here, never attribution (created_by_id,
      * source, conversation_id) or the order's customer.
      *
      * Crucially, this never moves `status` to Confirmed/Cancelled or sets
@@ -299,6 +307,8 @@ final class OrderMapper
             'cancelled_at' => Payload::time($o['cancelled_at'] ?? null),
             'cancel_reason' => Payload::string($o['cancel_reason'] ?? null),
             'shopify_updated_at' => Payload::time($o['updated_at'] ?? null),
+            // R9: the note is the Shopify note, also for an order made in the CRM.
+            'note' => array_key_exists('note', $o) ? Payload::string($o['note']) : $order->note,
         ]);
 
         if (array_key_exists('tags', $o)) {
@@ -417,6 +427,8 @@ final class OrderMapper
             $order->tags = $this->tags($o['tags']);
         }
 
+        $this->fillTraffic($order, $o);
+
         // When the customer placed it in the store (orders.created_at is the import time). Never blanked.
         $placedAt = Payload::time($o['created_at'] ?? null) ?? Payload::time($o['processed_at'] ?? null);
 
@@ -427,6 +439,51 @@ final class OrderMapper
         if ($order->paid_at === null && $financial === 'paid') {
             $order->paid_at = Payload::time($o['processed_at'] ?? null) ?? now();
         }
+    }
+
+    /**
+     * Where the visitor came from. GraphQL nodes carry `utm` + `landing_site` (built in fromGraphql from the
+     * customer journey); REST payloads carry `landing_site` (a path with the query string). A payload that
+     * says nothing never blanks what an earlier delivery stored.
+     */
+    private function fillTraffic(Order $order, array $o): void
+    {
+        $landing = Payload::string($o['landing_site'] ?? null);
+        $utm = $o['utm'] ?? UtmParser::fromUrl($landing);
+
+        if ($landing === null && count(array_filter($utm)) === 0) {
+            return;
+        }
+
+        $order->fill(array_merge($utm, ['landing_site' => $landing !== null ? mb_substr($landing, 0, 1000) : null]));
+    }
+
+    /**
+     * The visit that explains the order: the last visit when it carries utm (parameters or in its landing
+     * url), else the first visit; landing_site follows the chosen visit.
+     *
+     * @return array{landing_site:?string, utm:array<string, ?string>}
+     */
+    private function trafficFromJourney(?array $journey): array
+    {
+        $visits = array_values(array_filter([$journey['lastVisit'] ?? null, $journey['firstVisit'] ?? null], 'is_array'));
+
+        foreach ($visits as $visit) {
+            $params = $visit['utmParameters'] ?? null;
+            $utm = UtmParser::fromUrl($visit['landingPage'] ?? null);
+            if (is_array($params)) {
+                foreach (['source', 'medium', 'campaign', 'content', 'term'] as $k) {
+                    if (filled($params[$k] ?? null)) {
+                        $utm["utm_{$k}"] = mb_substr(trim((string) $params[$k]), 0, 255);
+                    }
+                }
+            }
+            if (count(array_filter($utm)) > 0) {
+                return ['landing_site' => Payload::string($visit['landingPage'] ?? null), 'utm' => $utm];
+            }
+        }
+
+        return ['landing_site' => Payload::string($visits[0]['landingPage'] ?? null), 'utm' => UtmParser::fromUrl(null)];
     }
 
     private function replaceItems(Order $order, mixed $lineItems): void
@@ -480,8 +537,20 @@ final class OrderMapper
             $name = $order->shopify_order_name ?? ('#'.$order->order_number);
             $total = $this->formatAmount((float) $order->total);
 
-            rescue(fn () => $this->outbound->sendSystem($conversation, "🛍️ طلب جديد من الموقع {$name} — {$total} ج.م"), null, report: true);
+            rescue(fn () => $this->outbound->sendSystem($conversation, "طلب جديد من الموقع {$name} — {$total} ج.م"), null, report: true);
         });
+    }
+
+    /**
+     * Every read of the order from Shopify (webhook, sync, bulk import, refresh)
+     * stamps `last_synced_at`, also a read that changed nothing (spec §3.2). A
+     * base query update, so `updated_at` keeps meaning "the CRM row changed".
+     */
+    private function stampSynced(Order $order): void
+    {
+        $now = now();
+        Order::whereKey($order->id)->toBase()->update(['last_synced_at' => $now]);
+        $order->forceFill(['last_synced_at' => $now])->syncOriginalAttribute('last_synced_at');
     }
 
     private function afterChange(Order $order): void
@@ -666,6 +735,12 @@ final class OrderMapper
 
         if (array_key_exists('tags', $node)) {
             $o['tags'] = $node['tags'];
+        }
+
+        if (array_key_exists('customerJourneySummary', $node)) {
+            $traffic = $this->trafficFromJourney($node['customerJourneySummary']);
+            $o['landing_site'] = $traffic['landing_site'];
+            $o['utm'] = $traffic['utm'];
         }
 
         if (isset($node['customer']['id'])) {

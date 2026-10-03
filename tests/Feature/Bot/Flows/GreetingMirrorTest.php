@@ -24,11 +24,11 @@ use Illuminate\Support\Facades\Http;
 // above the {time_greeting} line and the menu. "Now" is a Cairo morning, so the
 // time greeting is «صباح الخير».
 
-const GM_SALAM = 'وعليكم السلام ورحمة الله 🌸';
+const GM_SALAM = 'وعليكم السلام ورحمة الله';
 
-const GM_HI = 'أهلاً بيكي 🌸';
+const GM_HI = 'أهلاً بيكي';
 
-const GM_TIME_GREETING = 'صباح الخير يا فندم يومك حلو ان شاء الله 😍 مع حضرتك ميار من Le Voile';
+const GM_TIME_GREETING = 'صباح الخير يا فندم يومك حلو ان شاء الله، مع حضرتك ميار من Le Voile';
 
 beforeEach(function () {
     Event::fake();
@@ -179,7 +179,7 @@ it('lets the owner reword a mirror from the dashboard', function () {
     expect(gmMirror('السلام عليكم'))->toBe('وعليكم السلام يا قمر 💜');
 
     gmSay('السلام عليكم');
-    expect(gmBodies()[0])->toStartWith('وعليكم السلام يا قمر 💜'."\n");
+    expect(gmBodies()[0])->toStartWith('وعليكم السلام يا قمر'."\n");
 });
 
 it('stops mirroring a greeting whose script the owner turned off', function () {
@@ -212,7 +212,7 @@ it('updates the untouched handover scripts and inserts the mirrors only once', f
     $migration->up();
     $migration->up();
 
-    expect(BotKnowledgeEntry::where('key', 'script.handover_in_hours')->value('body'))->toBe('تمام ✅ هيتم تحويلك لموظف خدمة العملاء خلال دقايق 🌸')
+    expect(BotKnowledgeEntry::where('key', 'script.handover_in_hours')->value('body'))->toBe('تمام، هيتم تحويلك لموظف خدمة العملاء خلال دقايق')
         ->and(BotKnowledgeEntry::where('key', 'script.handover_no_hours')->value('body'))->toBe('نص المالك')
         ->and(BotKnowledgeEntry::where('key', 'script.greeting_mirror_salam')->count())->toBe(1)
         ->and(BotKnowledgeEntry::where('key', 'script.greeting_mirror_salam')->value('body'))->toBe(GM_SALAM)

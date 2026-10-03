@@ -18,11 +18,14 @@ interface Props {
     breadcrumbs?: BreadcrumbItemType[];
     /** Full-height pages (inbox): the content area is exactly one viewport tall and the page fills what's left with flex. */
     fill?: boolean;
+    /** Inbox and board: the sidebar starts collapsed to its icon rail. */
+    workspace?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
     breadcrumbs: () => [],
     fill: false,
+    workspace: false,
 });
 
 const page = usePage<SharedData>();
@@ -37,7 +40,8 @@ const shortcutsOpen = ref(false);
 const palette = useCommandPalette();
 const notifications = useNotifications();
 notifications.start();
-useHeartbeat().start();
+// Presence is for inbox staff; media buyers and content users are kept to /ads (RestrictAdsRoles answers 403).
+if (!['media_buyer', 'content'].includes(page.props.auth.user?.role ?? '')) useHeartbeat().start();
 useShortcuts([
     { id: 'global.help', keys: ['shift+?'], labelKey: 'shortcuts.help', group: 'global', handler: () => (shortcutsOpen.value = true) },
     { id: 'global.escape', keys: ['escape'], labelKey: 'shortcuts.close', group: 'global', allowInInput: true },
@@ -46,16 +50,17 @@ useShortcuts([
 </script>
 
 <template>
-    <AppLayout :breadcrumbs="breadcrumbs" :content-class="fill ? 'h-svh max-h-svh overflow-hidden' : undefined">
+    <AppLayout :breadcrumbs="breadcrumbs" :content-class="fill ? 'h-svh max-h-svh overflow-hidden' : undefined" :workspace="workspace">
         <template #topbar-search>
             <button
                 type="button"
-                class="flex h-9 w-full max-w-md items-center gap-2 rounded-full bg-elevated px-3 text-sm text-muted-foreground hover:bg-muted"
+                class="flex size-9 shrink-0 items-center justify-center gap-2 rounded-full bg-elevated px-0 text-sm text-muted-foreground hover:bg-muted sm:h-9 sm:w-full sm:max-w-md sm:justify-start sm:px-3"
+                :aria-label="t('search.placeholder')"
                 @click="palette.show()"
             >
-                <Search class="size-4" aria-hidden="true" />
-                {{ t('search.placeholder') }}
-                <kbd class="ms-auto text-2xs" dir="ltr">{{ formatKeys('mod+k') }}</kbd>
+                <Search class="size-4 shrink-0" aria-hidden="true" />
+                <span class="hidden truncate sm:inline">{{ t('search.placeholder') }}</span>
+                <kbd class="ms-auto hidden text-2xs sm:inline" dir="ltr">{{ formatKeys('mod+k') }}</kbd>
             </button>
         </template>
         <template #topbar-actions>

@@ -2,6 +2,7 @@
 
 namespace App\Shopify\Sync\Mappers;
 
+use App\Ads\Materials\Jobs\CheckProductStock;
 use App\Models\ProductVariant;
 
 final class InventoryMapper
@@ -23,9 +24,14 @@ final class InventoryMapper
             return;
         }
 
-        ProductVariant::where('inventory_item_id', $itemId)->update([
+        $variants = ProductVariant::where('inventory_item_id', $itemId);
+        $productIds = (clone $variants)->pluck('product_id');
+
+        $variants->update([
             'inventory_quantity' => (int) $available,
             'updated_at' => now(),
         ]);
+
+        CheckProductStock::dispatchFor($productIds);
     }
 }

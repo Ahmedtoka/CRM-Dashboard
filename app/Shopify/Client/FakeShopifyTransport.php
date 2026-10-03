@@ -2,6 +2,8 @@
 
 namespace App\Shopify\Client;
 
+use App\Enums\OrderSource;
+use App\Models\Order;
 use Database\Seeders\Demo\ArabicCorpus;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -226,6 +228,17 @@ final class FakeShopifyTransport implements ShopifyTransport
             ]]);
         }
 
+        // Order refresh (OrderRefresher via SyncQueries::ordersByIds): there is no fake
+        // store state for orders, so each id is answered with the order as the CRM
+        // already holds it (same statuses, note and Shopify updatedAt). The refresh
+        // then runs the real mapper path and only `last_synced_at` moves.
+        if (str_contains($query, 'nodes(ids:')) {
+            return $this->ok(['nodes' => array_map(
+                fn ($gid) => $this->storedOrderNode((string) $gid),
+                array_values((array) ($variables['ids'] ?? [])),
+            )]);
+        }
+
         foreach (['orders', 'customers', 'products'] as $resource) {
             if (str_contains($query, "{$resource}(")) {
                 return $this->ok([$resource => ['edges' => [], 'pageInfo' => ['hasNextPage' => false, 'endCursor' => null]]]);
@@ -248,6 +261,45 @@ final class FakeShopifyTransport implements ShopifyTransport
                 'createdAt' => now()->toIso8601String(),
                 'customAttributes' => array_values(array_filter((array) ($input['customAttributes'] ?? []), 'is_array')),
             ],
+        ];
+    }
+
+    /**
+     * The stored order as a GraphQL Order node carrying only what the mapper
+     * compares or a chat order takes (statuses, cancel fields, note), never money,
+     * addresses, line items or customer, so nothing else can change. A store order
+     * with no Shopify updatedAt is answered null (as if deleted): mapping a partial
+     * node onto it would not be stale-guarded.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function storedOrderNode(string $gid): ?array
+    {
+        $shopifyId = str_starts_with($gid, 'gid://') ? substr($gid, strrpos($gid, '/') + 1) : $gid;
+        $order = Order::where('shopify_order_id', $shopifyId)->first();
+
+        if ($order === null || ($order->source !== OrderSource::Chat && $order->shopify_updated_at === null)) {
+            return null;
+        }
+
+        return [
+            'id' => 'gid://shopify/Order/'.$shopifyId,
+            'name' => $order->shopify_order_name,
+            'createdAt' => ($order->placed_at ?? $order->created_at)?->toIso8601String(),
+            'updatedAt' => ($order->shopify_updated_at ?? $order->updated_at)?->toIso8601String(),
+            'cancelledAt' => $order->cancelled_at?->toIso8601String(),
+            // As stored: the mapper lower-cases it again (Payload::lower), so a stored
+            // (lower-case) Shopify reason round-trips unchanged.
+            'cancelReason' => $order->cancel_reason,
+            'displayFinancialStatus' => $order->financial_status !== null ? strtoupper($order->financial_status) : null,
+            // Inverse of OrderMapper::fulfillmentStatusFromGraphql(): NULL <-> UNFULFILLED.
+            'displayFulfillmentStatus' => match ($order->fulfillment_status) {
+                null => 'UNFULFILLED',
+                'partial' => 'PARTIALLY_FULFILLED',
+                default => strtoupper($order->fulfillment_status),
+            },
+            'note' => $order->note,
+            'customAttributes' => [],
         ];
     }
 

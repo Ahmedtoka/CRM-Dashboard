@@ -2,6 +2,7 @@
 
 namespace App\Shopify\Sync\Mappers;
 
+use App\Ads\Materials\Jobs\CheckProductStock;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +15,8 @@ final class ProductMapper
         $p = Payload::isGraphql($product) ? $this->fromGraphql($product) : $product;
         $shopifyId = Payload::id($p['id'] ?? null) ?? throw new InvalidArgumentException('Shopify product payload has no id.');
 
-        return DB::transaction(function () use ($p, $shopifyId) {
+        $productId = null;
+        $result = DB::transaction(function () use ($p, $shopifyId, &$productId) {
             $model = Product::withTrashed()->where('shopify_id', $shopifyId)->lockForUpdate()->first();
 
             if ($model !== null && StaleGuard::isStale($model->shopify_updated_at, $p['updated_at'] ?? null)) {
@@ -38,6 +40,7 @@ final class ProductMapper
             // Re-created or re-published after a products/delete: bring the row back.
             $model->{$model->getDeletedAtColumn()} = null;
             $model->save();
+            $productId = $model->id;
 
             if (array_key_exists('variants', $p)) {
                 $this->syncVariants($model, Payload::list($p['variants']), $p['images'] ?? []);
@@ -45,6 +48,12 @@ final class ProductMapper
 
             return $created ? MapResult::Created : MapResult::Updated;
         });
+
+        if ($result !== MapResult::Skipped && $productId !== null) {
+            CheckProductStock::dispatchFor([$productId]);
+        }
+
+        return $result;
     }
 
     public function delete(string $shopifyProductId): void

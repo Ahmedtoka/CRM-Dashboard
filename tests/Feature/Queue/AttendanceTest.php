@@ -12,6 +12,7 @@ use App\Queue\Attendance;
 use App\Queue\AttendanceRefused;
 use App\Queue\Data\HandoverContext;
 use App\Queue\Events\QueueMemberUpdated;
+use App\Queue\Events\ShiftUpdated;
 use App\Queue\QueueRouter;
 use App\Queue\QueueService;
 use App\Queue\ShiftService;
@@ -643,4 +644,176 @@ it('never marks a desk on a break or a pending break offline', function () {
     $svc->setStatus($b, 'offline');
 
     expect($a->fresh()->status)->toBe('break')->and($b->fresh()->status)->toBe('pending_break');
+});
+
+// ───── N1: a shift closed by an end edited below now reopens when the edit is reverted ─────
+
+/** Saves the shift templates from Settings → Queue, as an admin. */
+function attSaveTemplates(array $templates): void
+{
+    test()->actingAs(User::factory()->create(['role' => 'admin']))->put('/settings/queue', ['shifts' => $templates])
+        ->assertRedirect()->assertSessionHasNoErrors();
+}
+
+it('reopens the shift when its end, edited below now, is put back later on the same day; who was checked out stays out', function () {
+    Event::fake([ShiftUpdated::class]);
+    $svc = app(ShiftService::class);
+    $svc->transition(); // 12:00: the morning opens
+    $morning = Shift::query()->where('shift_key', 'morning')->firstOrFail();
+    $openedAt = $morning->opened_at;
+    $u = attModerator();
+    $m = $svc->checkIn($u);
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 12:05', 'Africa/Cairo'));
+    $templates = QueueSetting::DEFAULT_SHIFTS;
+    $templates[0]['to'] = '11:30';
+    attSaveTemplates($templates);
+    $svc->transition();
+    expect($morning->fresh()->status)->toBe('closed')->and($m->fresh()->status)->toBe('left');
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 12:10', 'Africa/Cairo'));
+    attSaveTemplates(QueueSetting::DEFAULT_SHIFTS); // the edit reverted: 18:00 again
+
+    $morning->refresh();
+    expect($morning->status)->toBe('open')->and($morning->closed_at)->toBeNull()
+        ->and($morning->opened_at->equalTo($openedAt))->toBeTrue()
+        ->and($morning->ends_at->equalTo(Carbon::parse('2026-10-05 18:00', 'Africa/Cairo')))->toBeTrue()
+        ->and($m->fresh()->status)->toBe('left')->and(attLog($u))->toBe(['in', 'auto_out']);
+    Event::assertDispatched(ShiftUpdated::class, fn (ShiftUpdated $e) => $e->shift->id === $morning->id && $e->shift->status === 'open');
+
+    $svc->transition(); // the tick leaves it open
+    expect($morning->fresh()->status)->toBe('open');
+    $this->actingAs($u)->postJson('/queue/me/check-in')->assertOk()->assertJsonPath('data.member.status', 'available');
+});
+
+it('never reopens a shift that ended on time', function () {
+    $svc = app(ShiftService::class);
+    $templates = QueueSetting::DEFAULT_SHIFTS;
+    $templates[1]['from'] = '20:00'; // nothing opens after the morning: only the timing protects it
+    attSaveTemplates($templates);
+    $svc->transition();
+    $morning = Shift::query()->where('shift_key', 'morning')->firstOrFail();
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 18:00', 'Africa/Cairo'));
+    $svc->transition();
+    expect($morning->fresh()->status)->toBe('closed');
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 18:30', 'Africa/Cairo'));
+    $templates[0]['name'] = 'صباحي جديد';
+    attSaveTemplates($templates);
+    $svc->transition();
+
+    expect($morning->fresh()->status)->toBe('closed')->and($morning->fresh()->closed_at)->not->toBeNull();
+});
+
+it('does not reopen the shift when a newer shift of the day already opened after it', function () {
+    $svc = app(ShiftService::class);
+    $svc->transition(); // 12:00: the morning opens
+    $morning = Shift::query()->where('shift_key', 'morning')->firstOrFail();
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 12:05', 'Africa/Cairo'));
+    $templates = QueueSetting::DEFAULT_SHIFTS;
+    $templates[0]['to'] = '11:30';
+    $templates[1]['from'] = '12:00';
+    attSaveTemplates($templates);
+    $svc->transition();
+    $evening = Shift::query()->where('shift_key', 'evening')->firstOrFail();
+    expect($morning->fresh()->status)->toBe('closed')->and($evening->status)->toBe('open');
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 12:10', 'Africa/Cairo'));
+    $templates[0]['to'] = '18:00';
+    attSaveTemplates($templates);
+
+    expect($morning->fresh()->status)->toBe('closed')->and($evening->fresh()->status)->toBe('open');
+});
+
+it('reopens a shift that already ended on time when its end is extended later the same day and no newer shift opened (ruling N1)', function () {
+    Event::fake([ShiftUpdated::class]);
+    $svc = app(ShiftService::class);
+    $templates = QueueSetting::DEFAULT_SHIFTS;
+    $templates[1]['from'] = '20:00'; // the evening has not opened when the morning is extended
+    attSaveTemplates($templates);
+    $svc->transition(); // 12:00: the morning opens
+    $morning = Shift::query()->where('shift_key', 'morning')->firstOrFail();
+    $openedAt = $morning->opened_at;
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 18:00', 'Africa/Cairo'));
+    $svc->transition();
+    expect($morning->fresh()->status)->toBe('closed');
+
+    // 18:30: a supervisor extends tonight's morning to 19:30, the team stays.
+    Carbon::setTestNow(Carbon::parse('2026-10-05 18:30', 'Africa/Cairo'));
+    $templates[0]['to'] = '19:30';
+    attSaveTemplates($templates);
+
+    $morning->refresh();
+    expect($morning->status)->toBe('open')->and($morning->closed_at)->toBeNull()
+        ->and($morning->opened_at->equalTo($openedAt))->toBeTrue()
+        ->and($morning->ends_at->equalTo(Carbon::parse('2026-10-05 19:30', 'Africa/Cairo')))->toBeTrue();
+    Event::assertDispatched(ShiftUpdated::class, fn (ShiftUpdated $e) => $e->shift->id === $morning->id && $e->shift->status === 'open');
+
+    $svc->transition(); // 18:30 < 19:30: the tick leaves it open...
+    expect($morning->fresh()->status)->toBe('open');
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 19:30', 'Africa/Cairo'));
+    $svc->transition(); // ...and closes it at the new end
+    expect($morning->fresh()->status)->toBe('closed');
+});
+
+it('does not reopen an on-time ended shift when it is extended after the next shift already opened (ruling N1, blocked)', function () {
+    $svc = app(ShiftService::class);
+    $svc->transition(); // 12:00: the morning opens (default hours: morning 10-18, evening 18-24)
+    $morning = Shift::query()->where('shift_key', 'morning')->firstOrFail();
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 18:00', 'Africa/Cairo'));
+    $svc->transition(); // the morning closes, the evening opens
+    $evening = Shift::query()->where('shift_key', 'evening')->firstOrFail();
+    expect($morning->fresh()->status)->toBe('closed')->and($evening->status)->toBe('open');
+
+    Carbon::setTestNow(Carbon::parse('2026-10-05 18:30', 'Africa/Cairo'));
+    $templates = QueueSetting::DEFAULT_SHIFTS;
+    $templates[0]['to'] = '19:30';
+    $templates[1]['from'] = '19:30';
+    attSaveTemplates($templates);
+    $svc->transition();
+
+    expect($morning->fresh()->status)->toBe('closed')->and($morning->fresh()->closed_at)->not->toBeNull()
+        ->and($evening->fresh()->status)->toBe('open');
+});
+
+// ───── N2: the tick's back-online step never undoes a check-out ─────
+
+it('leaves a desk checking out when her «خروج» lands between the tick reading her offline and bringing her back online', function () {
+    Shift::factory()->create();
+    $svc = app(ShiftService::class);
+    $u = attModerator();
+    $m = $svc->checkIn($u);
+    attWindow($m);
+    $m->update(['status' => 'offline']); // her heartbeat had stopped; it is back now (last_seen_at = now)
+
+    // The tick loads her as offline; her «خروج» commits before the tick reaches her.
+    $pressed = false;
+    ShiftMember::retrieved(function (ShiftMember $loaded) use ($m, &$pressed) {
+        if (! $pressed && $loaded->id === $m->id) {
+            $pressed = true;
+            ShiftMember::query()->whereKey($m->id)->update(['status' => 'checking_out']);
+        }
+    });
+
+    $svc->tickMembers();
+
+    expect($pressed)->toBeTrue()->and($m->fresh()->status)->toBe('checking_out');
+});
+
+it('still brings an offline desk back when her heartbeat returns', function () {
+    Shift::factory()->create();
+    $svc = app(ShiftService::class);
+    $u = attModerator();
+    $m = $svc->checkIn($u);
+    attWindow($m);
+    $m->update(['status' => 'offline']);
+
+    $svc->tickMembers();
+
+    expect($m->fresh()->status)->toBe('busy');
 });

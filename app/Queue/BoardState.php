@@ -306,7 +306,7 @@ class BoardState
     /** Everybody who can sit at a desk: the active users, with the platforms each may serve. */
     private function users(): array
     {
-        return User::query()->with('userPlatforms')->where('is_active', true)->orderBy('name')->get()
+        return User::query()->with('userPlatforms')->where('is_active', true)->inboxStaff()->orderBy('name')->get()
             ->map(fn (User $u) => [
                 'id' => $u->id,
                 'name' => $u->name,

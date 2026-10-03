@@ -35,11 +35,16 @@ export function formatDateTime(iso: string | null | undefined, locale: Locale): 
         : '';
 }
 
+// One formatter for every day key: building an Intl.DateTimeFormat costs far more than formatting
+// with it, and a 5,000-message thread asks for thousands of day keys (Task 6c).
+let dayKeyFormat: Intl.DateTimeFormat | null = null;
+
 /** Cairo calendar day ("2026-09-12") used to group thread messages. */
 export function cairoDayKey(iso: string | null | undefined): string {
     const d = toDate(iso) ?? new Date();
+    dayKeyFormat ??= new Intl.DateTimeFormat('en-CA', { timeZone: DISPLAY_TIMEZONE });
 
-    return new Intl.DateTimeFormat('en-CA', { timeZone: DISPLAY_TIMEZONE }).format(d);
+    return dayKeyFormat.format(d);
 }
 
 /** Day divider label: "السبت ١٢ سبتمبر". */
@@ -185,4 +190,29 @@ export function addDays(ymd: string, days: number): string {
     const date = new Date(Date.UTC(y, m - 1, d + days));
 
     return date.toISOString().slice(0, 10);
+}
+
+/** A KPI or table figure: a dash when there is no value (a lone zero reads as a dot in Arabic digits). */
+export function formatStat(value: number | null | undefined, locale: Locale, opts: { zeroAsDash?: boolean; money?: boolean } = {}): string {
+    if (value === null || value === undefined || Number.isNaN(value)) return '—';
+    if (opts.zeroAsDash && Number(value) === 0) return '—';
+
+    return opts.money ? formatMoney(value, locale) : formatCount(value, locale);
+}
+
+/** An average duration where 0 / null means "nothing measured yet": «—», never a lone «٠:٠٠». */
+export function formatAvgSeconds(total: number | null | undefined, locale: Locale): string {
+    return total === null || total === undefined || !Number(total) ? '—' : formatSeconds(total, locale);
+}
+
+/** US dollars (AI cost) the way formatMoney writes pounds: «٠٫٠١٢ دولار» / "0.012 USD", no bidi-flipped «$US». */
+export function formatUsd(amount: number | null | undefined, locale: Locale): string {
+    if (amount === null || amount === undefined) return '—';
+
+    return `${formatNumber(locale, Number(amount), { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ${translate(locale, 'common.currency_usd')}`;
+}
+
+/** A quick-reply shortcut always reads «/apology»: stored with or without its slash, never «//apology». */
+export function slashShortcut(shortcut: string): string {
+    return shortcut.startsWith('/') ? shortcut : `/${shortcut}`;
 }

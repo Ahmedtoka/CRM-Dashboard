@@ -9,7 +9,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useReportFilters } from '@/composables/useReportFilters';
 import { formatNumber, translate } from '@/i18n';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatCount } from '@/lib/format';
+import { formatCount, formatUsd } from '@/lib/format';
 import type { BotMetrics, ReportRange } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
 import { Head } from '@inertiajs/vue3';
@@ -35,7 +35,7 @@ const cards = computed(() => {
         { label: t('reports.bot.ai_runs'), value: n(m.ai_runs) },
         {
             label: t('reports.bot.ai_cost'),
-            value: formatNumber(locale.value, m.ai_cost_usd, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 }),
+            value: formatUsd(m.ai_cost_usd, locale.value),
         },
     ];
 });
@@ -71,7 +71,7 @@ const breadcrumbs = computed(() => [{ title: t('reports.bot_title'), href: '/rep
                 <ReportFilters :range="range" :platform="platform" @change="visit" />
             </PageHeader>
 
-            <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <StatCard v-for="card in cards" :key="card.label" :label="card.label" :value="card.value" />
             </div>
 

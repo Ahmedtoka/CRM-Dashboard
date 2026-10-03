@@ -5,7 +5,7 @@ import { INLINE_EDIT } from '@/lib/flows/inlineEdit';
 import { stepColor, stepIcon } from '@/lib/flows/stepVisuals';
 import type { StepNodeData } from '@/types/flows';
 import { Handle, Position, type NodeProps } from '@vue-flow/core';
-import { CircleAlert, Flag, GitBranch } from 'lucide-vue-next';
+import { CircleAlert, FileText, Flag, GitBranch } from 'lucide-vue-next';
 import { computed, inject, nextTick, onBeforeUnmount, ref } from 'vue';
 
 const props = defineProps<NodeProps<StepNodeData>>();
@@ -27,7 +27,7 @@ const typeLabel = computed(() => {
 /** What the body shows when a step has no message text of its own. */
 const bodyText = computed(() => {
     if (step.value.text) return step.value.text;
-    if (step.value.type === 'script' || step.value.type === 'record_case') return step.value.script ? `📄 ${step.value.script}` : '';
+    if (step.value.type === 'script' || step.value.type === 'record_case') return step.value.script ?? '';
     if (step.value.type === 'status') return t('flows.status_hint');
     if (step.value.type === 'end') return t('flows.end_hint');
     return '';
@@ -165,7 +165,16 @@ onBeforeUnmount(() => {
                 <component :is="icon" class="size-4" aria-hidden="true" />
             </span>
             <span class="min-w-0 flex-1">
-                <span class="block truncate text-xs font-semibold">{{ typeLabel }}</span>
+                <!-- The step id (a slug such as «menu») lives in the tooltip; the node reads its type in words.
+                     Double-click still renames it here, and the inspector keeps the full id field. -->
+                <span
+                    v-if="editing?.kind !== 'id'"
+                    class="block truncate text-xs font-semibold"
+                    :class="edit ? 'cursor-text' : ''"
+                    :title="edit ? `${data.stepId} — ${t('flows.inline.dblclick_rename')}` : data.stepId"
+                    @dblclick.stop="startId"
+                    >{{ typeLabel }}</span
+                >
                 <template v-if="editing?.kind === 'id'">
                     <input
                         :ref="setEditor"
@@ -181,14 +190,6 @@ onBeforeUnmount(() => {
                     />
                     <span v-if="renameError" class="mt-0.5 block text-2xs leading-4 text-destructive" role="alert">{{ renameError }}</span>
                 </template>
-                <span
-                    v-else
-                    class="block cursor-text truncate text-2xs text-muted-foreground"
-                    dir="ltr"
-                    :title="edit ? t('flows.inline.dblclick_rename') : undefined"
-                    @dblclick.stop="startId"
-                    >{{ data.stepId }}</span
-                >
             </span>
             <span
                 v-if="errorCount"
@@ -222,7 +223,7 @@ onBeforeUnmount(() => {
                 :title="canEditText ? t('flows.inline.dblclick_edit') : undefined"
                 @dblclick.stop="startText"
             >
-                {{ bodyText }}
+                <FileText v-if="!step.text && (step.type === 'script' || step.type === 'record_case')" class="me-1 inline size-3.5 align-[-2px]" aria-hidden="true" />{{ bodyText }}
             </p>
             <p
                 v-else

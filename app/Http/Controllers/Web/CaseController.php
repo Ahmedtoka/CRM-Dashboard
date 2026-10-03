@@ -36,7 +36,7 @@ class CaseController extends Controller
             'filters' => array_merge(['type' => null, 'status' => null, 'q' => null, 'from' => null, 'to' => null], $filters),
             'counts' => $this->counts($request, $filters),
             // Options for the drawer's "assigned to" select.
-            'team' => User::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'team' => User::query()->where('is_active', true)->inboxStaff()->orderBy('name')->get(['id', 'name']),
         ]);
     }
 

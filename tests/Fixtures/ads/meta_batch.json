@@ -1,0 +1,4 @@
+[
+{"code":200,"body":"{\"data\":[{\"body\":\"<iframe src=\\\"https:\/\/www.facebook.com\/ads\/api\/preview_iframe.php?d=abc&amp;t=1\\\" width=\\\"540\\\" height=\\\"690\\\"><\/iframe>\"}]}"},
+{"code":400,"body":"{\"error\":{\"message\":\"Unsupported get request.\"}}"}
+]

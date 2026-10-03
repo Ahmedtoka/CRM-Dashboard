@@ -35,6 +35,14 @@ class WhatsAppAdapter implements ChannelAdapter
      */
     private const WEBM_AUDIO_MIMES = ['audio/webm', 'video/webm'];
 
+    /**
+     * A message whose buttons carry `style => STYLE_LIST` goes as ONE interactive list (up to ten
+     * rows), whatever `crm.whatsapp_menu_style` says (addendum C3, 2026-10-01: the 1–5 rating
+     * question is one message, not 3 + 2 reply buttons). The key rides on the stored `buttons`
+     * meta; Messenger and Instagram ignore it (quick replies).
+     */
+    public const STYLE_LIST = 'list';
+
     public function __construct(private readonly MetaGraphClient $graph, private readonly VoiceTranscoder $transcoder = new VoiceTranscoder) {}
 
     public function platform(): Platform
@@ -145,14 +153,14 @@ class WhatsAppAdapter implements ChannelAdapter
             $lng = $location['longitude'] ?? null;
             $place = trim(($location['name'] ?? '').' '.($location['address'] ?? ''));
             $body = trim(implode("\n", array_filter([
-                '📍 '.($place !== '' ? $place : 'Location'),
+                $place !== '' ? 'الموقع: '.$place : 'الموقع',
                 $lat !== null && $lng !== null ? "https://maps.google.com/?q={$lat},{$lng}" : null,
             ])));
         } elseif ($type === 'contacts') {
             $body = collect($message['contacts'] ?? [])
                 ->map(fn (array $c) => trim(($c['name']['formatted_name'] ?? '').' '.collect($c['phones'] ?? [])->pluck('phone')->filter()->implode(' ')))
                 ->filter()
-                ->map(fn (string $line) => '👤 '.$line)
+                ->map(fn (string $line) => 'جهة اتصال: '.$line)
                 ->implode("\n");
         }
 
@@ -299,10 +307,11 @@ class WhatsAppAdapter implements ChannelAdapter
 
     /**
      * 4–9 bot buttons as reply-button messages of three (`crm.whatsapp_menu_style` = buttons): the
-     * first carries the text, the rest a short «👇». Null when the list/text path should run
-     * instead (three or fewer, ten or more, a title over 20 characters, or the style is `list`).
+     * first carries the text, the rest a short «اختاري من هنا». Null when the list/text path should run
+     * instead (three or fewer, ten or more, a title over 20 characters, or the style is `list` —
+     * the setting, or the message's own `style: list` on its buttons, see `STYLE_LIST`).
      *
-     * @param  array<int, array{title: string, payload: string}>  $buttons
+     * @param  array<int, array{title: string, payload: string, style?: string}>  $buttons
      * @return list<array<string, mixed>>|null
      */
     private function buttonChunks(string $text, array $buttons): ?array
@@ -310,7 +319,7 @@ class WhatsAppAdapter implements ChannelAdapter
         $buttons = array_values($buttons);
         $count = count($buttons);
 
-        if (config('crm.whatsapp_menu_style', 'buttons') !== 'buttons' || $count < 4 || $count > 9 || mb_strlen($text) > 1024) {
+        if (config('crm.whatsapp_menu_style', 'buttons') !== 'buttons' || self::forcesList($buttons) || $count < 4 || $count > 9 || mb_strlen($text) > 1024) {
             return null;
         }
 
@@ -320,7 +329,7 @@ class WhatsAppAdapter implements ChannelAdapter
             }
         }
 
-        $more = (string) config('crm.whatsapp_more_options_text', '👇');
+        $more = (string) config('crm.whatsapp_more_options_text', 'اختاري من هنا');
 
         return array_map(fn (int $i, array $chunk) => [
             'type' => 'button',
@@ -400,7 +409,7 @@ class WhatsAppAdapter implements ChannelAdapter
         } else {
             $interactive = [
                 'type' => 'carousel',
-                'body' => ['text' => mb_substr((string) ($cards['label'] ?? '🛍️'), 0, 1024)],
+                'body' => ['text' => mb_substr((string) ($cards['label'] ?? 'الموديلات'), 0, 1024)],
                 'action' => ['cards' => array_map(fn (int $i, array $item) => ['card_index' => $i, 'type' => 'cta_url'] + $item, array_keys($items), $items)],
             ];
         }
@@ -412,6 +421,12 @@ class WhatsAppAdapter implements ChannelAdapter
             'type' => 'interactive',
             'interactive' => $interactive,
         ];
+    }
+
+    /** @param  array<int, array<string, mixed>>  $buttons */
+    private static function forcesList(array $buttons): bool
+    {
+        return collect($buttons)->contains(fn ($b) => is_array($b) && ($b['style'] ?? null) === self::STYLE_LIST);
     }
 
     /**
@@ -437,7 +452,7 @@ class WhatsAppAdapter implements ChannelAdapter
             fn (array $b) => mb_strlen((string) $b['title']) <= $max && mb_strlen((string) $b['payload']) <= 200,
         );
 
-        if (count($buttons) <= 3 && $fits(20)) {
+        if (count($buttons) <= 3 && ! self::forcesList($buttons) && $fits(20)) {
             return [
                 'type' => 'button',
                 'body' => ['text' => $body],

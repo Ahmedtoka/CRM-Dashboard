@@ -1,0 +1,4 @@
+{"data":[
+{"id":"act_111","name":"Main","currency":"EGP","timezone_name":"Africa/Cairo","account_status":1,"balance":"12345"},
+{"id":"act_222","name":"Old","currency":"USD","timezone_name":"America/Los_Angeles","account_status":2,"balance":"0"}
+],"paging":{"cursors":{"before":"a","after":"b"}}}

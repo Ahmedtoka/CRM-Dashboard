@@ -20,7 +20,7 @@ final class FlowPrompter
     /** The choice value that means "refund the money": hidden when every picked item is exchange only. */
     public const REFUND_VALUE = 'refund';
 
-    public const EXCHANGE_ONLY_NOTE = 'القطع اللي اخترتيها متاحة للاستبدال بس 🌸';
+    public const EXCHANGE_ONLY_NOTE = 'القطع اللي اخترتيها متاحة للاستبدال بس';
 
     /** `{exchange_product_title}` when she sent a photo or a link that did not match a product. */
     public const UNKNOWN_PRODUCT = 'المنتج اللي بعتيه';
@@ -34,8 +34,8 @@ final class FlowPrompter
         'request' => 'الطلب',
         'request_kind' => 'نوع الطلب',
         'exchange_product' => 'المنتج البديل',
-        'product_photo' => 'صورة المنتج (✅)',
-        'defect_photo' => 'صورة العيب (✅)',
+        'product_photo' => 'صورة المنتج (تم)',
+        'defect_photo' => 'صورة العيب (تم)',
         'complaint_type' => 'نوع الشكوى',
         'branch_name' => 'الفرع',
         'visit_date' => 'تاريخ الزيارة',
@@ -218,8 +218,8 @@ final class FlowPrompter
     }
 
     /**
-     * One line per piece of a cancel/edit request (the `item_changes` step): "🔁 فستان ليلى (أسود / M) × 1
-     * ← عباية كتان — 1,200 ج.م — https://…", "🔁 … ← مقاس/لون جديد: «L»", "❌ شيل: طرحة شيفون × 2".
+     * One line per piece of a cancel/edit request (the `item_changes` step): "تبديل: فستان ليلى (أسود / M) × 1
+     * ← عباية كتان — 1,200 ج.م — https://…", "تبديل: … ← مقاس/لون جديد: «L»", "شيل: طرحة شيفون × 2".
      *
      * @return list<string>
      */
@@ -235,7 +235,7 @@ final class FlowPrompter
             $item = self::itemsText([$change]);
 
             if (($change['action'] ?? null) === 'remove') {
-                $lines[] = '❌ شيل: '.$item;
+                $lines[] = 'شيل: '.$item;
 
                 continue;
             }
@@ -261,7 +261,7 @@ final class FlowPrompter
                 $to = ! empty($change['photo']) ? 'صورة للمنتج البديل' : 'البديل مش متحدد';
             }
 
-            $lines[] = '🔁 تبديل: '.$item.' ← '.$to;
+            $lines[] = 'تبديل: '.$item.' ← '.$to;
         }
 
         return $lines;
@@ -303,7 +303,7 @@ final class FlowPrompter
                 continue;
             }
 
-            if (str_contains($label, '✅')) {
+            if (str_contains($label, '(تم)')) {
                 $lines[] = '• '.$label;
 
                 continue;

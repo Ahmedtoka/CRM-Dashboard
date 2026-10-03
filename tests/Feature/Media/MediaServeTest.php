@@ -1,8 +1,14 @@
 <?php
 
-use App\Enums\{Platform, UserRole};
-use App\Media\{MediaUrls, SampleMedia};
-use App\Models\{ChannelAccount, Conversation, Message, MessageAttachment, User};
+use App\Enums\Platform;
+use App\Enums\UserRole;
+use App\Media\MediaUrls;
+use App\Media\SampleMedia;
+use App\Models\ChannelAccount;
+use App\Models\Conversation;
+use App\Models\Message;
+use App\Models\MessageAttachment;
+use App\Models\User;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -13,9 +19,11 @@ beforeEach(function () {
     $this->message = Message::factory()->create(['conversation_id' => $this->conv->id]);
 });
 
-function storedAttachment(array $attrs, string $kind = 'image'): MessageAttachment {
+function storedAttachment(array $attrs, string $kind = 'image'): MessageAttachment
+{
     $path = 'inbound/2026/09/'.Str::uuid().'.bin';
     Storage::disk('media')->put($path, SampleMedia::bytes($kind));
+
     return MessageAttachment::factory()->stored()->create(array_merge(['path' => $path, 'mime' => SampleMedia::mime($kind),
         'type' => $kind === 'voice' ? 'audio' : ($kind === 'file' ? 'file' : $kind), 'original_name' => SampleMedia::filename($kind)], $attrs));
 }
@@ -142,4 +150,22 @@ it('refuses the public route for an attachment not yet linked to a message', fun
     $a = storedAttachment(['message_id' => null, 'uploaded_by' => $owner->id]);
 
     $this->get(MediaUrls::temporaryPublic($a))->assertNotFound();
+});
+
+it('serves ?download=1 as an attachment with the original filename, still behind the conversation gate', function () {
+    $a = storedAttachment(['message_id' => $this->message->id, 'original_name' => 'فستان أزرق.png']);
+    $mod = User::factory()->create(['role' => UserRole::Moderator]);
+    $mod->userPlatforms()->create(['platform' => Platform::WhatsApp]);
+
+    $response = $this->actingAs($mod)->get(MediaUrls::show($a).'?download=1');
+    $response->assertOk()->assertHeader('Content-Type', 'image/png')->assertHeader('X-Content-Type-Options', 'nosniff');
+    $disposition = (string) $response->headers->get('Content-Disposition');
+    expect($disposition)->toStartWith('attachment')
+        ->toContain("filename*=utf-8''".rawurlencode('فستان أزرق.png'));
+
+    // Without the flag the same image still renders inline in the thread.
+    expect($this->actingAs($mod)->get(MediaUrls::show($a))->headers->get('Content-Disposition'))->toStartWith('inline');
+
+    $other = User::factory()->create(['role' => UserRole::Moderator]);
+    $this->actingAs($other)->get(MediaUrls::show($a).'?download=1')->assertForbidden();
 });

@@ -3,6 +3,8 @@
 namespace App\Events;
 
 use App\Models\Customer;
+use App\Support\InboxChannels;
+use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
@@ -19,11 +21,11 @@ class CustomerUpdated implements ShouldBroadcastNow
     public function __construct(public Customer $customer) {}
 
     /**
-     * @return array<int, \Illuminate\Broadcasting\Channel>
+     * @return array<int, Channel>
      */
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('inbox')];
+        return [new PrivateChannel('inbox'), ...InboxChannels::forPlatforms($this->customer->identities()->pluck('platform')->all())];
     }
 
     public function broadcastWith(): array

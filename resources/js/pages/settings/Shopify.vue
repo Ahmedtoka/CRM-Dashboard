@@ -7,6 +7,7 @@ import ShopifySettingsForm from '@/components/crm/shopify/ShopifySettingsForm.vu
 import StatusCard from '@/components/crm/shopify/StatusCard.vue';
 import SyncLog from '@/components/crm/shopify/SyncLog.vue';
 import WebhookTable from '@/components/crm/shopify/WebhookTable.vue';
+import DateInput from '@/components/crm/DateInput.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useEcho } from '@/composables/useEcho';
@@ -25,7 +26,7 @@ import type {
     ShopifyWebhookRow,
 } from '@/types/admin';
 import { Head } from '@inertiajs/vue3';
-import { LoaderCircle } from 'lucide-vue-next';
+import { ArrowRight, LoaderCircle } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, reactive, ref } from 'vue';
 
 const props = defineProps<{
@@ -46,7 +47,6 @@ const webhooks = ref<ShopifyWebhookRow[]>(props.webhooks);
 const runs = ref<ShopifySyncRunRow[]>(props.runs);
 const lastSync = ref<ShopifyLastSync>(props.lastSync);
 
-const isConnected = computed(() => integration.value?.status === 'connected');
 const needsCredentials = computed(() => integration.value === null || integration.value.status !== 'connected');
 
 async function refreshStatus(): Promise<void> {
@@ -262,10 +262,10 @@ const syncResources: ShopifySyncResource[] = ['shipping', 'products', 'customers
                             <span class="text-muted-foreground">{{ t('settings.shopify.sync.last_sync') }}: {{ formatDateTime(lastSync.orders, locale) || t('settings.shopify.sync.never') }}</span>
                             <div class="flex flex-wrap items-center gap-1.5">
                                 <label class="sr-only" for="orders-from">{{ t('settings.shopify.sync.from') }}</label>
-                                <input id="orders-from" v-model="ordersFrom" type="date" dir="ltr" class="h-8 rounded-md border border-input bg-background px-2" :max="ordersTo || undefined" />
-                                <span class="text-muted-foreground" aria-hidden="true">→</span>
+                                <DateInput id="orders-from" v-model="ordersFrom" class="h-8 rounded-md border border-input bg-background px-2" :max="ordersTo || undefined" />
+                                <ArrowRight class="size-3.5 text-muted-foreground rtl:-scale-x-100" aria-hidden="true" />
                                 <label class="sr-only" for="orders-to">{{ t('settings.shopify.sync.to') }}</label>
-                                <input id="orders-to" v-model="ordersTo" type="date" dir="ltr" class="h-8 rounded-md border border-input bg-background px-2" :min="ordersFrom || undefined" />
+                                <DateInput id="orders-to" v-model="ordersTo" class="h-8 rounded-md border border-input bg-background px-2" :min="ordersFrom || undefined" />
                             </div>
                             <button
                                 type="button"

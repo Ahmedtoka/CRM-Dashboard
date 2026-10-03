@@ -38,6 +38,7 @@ return [
     'inbox' => [
         'window_template_only' => 'The 24-hour reply window has closed; only an approved template can be sent (window mode: template_only).',
         'window_closed' => 'The reply window for this conversation is closed; the message cannot be sent (window mode: closed).',
+        'nothing_to_send' => 'The bot message is empty once its emoji are removed, so it was not sent.',
         'window_other' => 'The message cannot be sent in the current reply window (window mode: :mode).',
         'retry_only_failed' => 'Only failed outbound messages can be retried.',
         'platform_not_allowed' => 'You are not allowed to reply on :platform.',
@@ -127,11 +128,14 @@ return [
         'idempotency_conflict' => 'This order key is already used by another order — open the order form again.',
         'only_awaiting_payment_can_be_paid' => 'Only orders awaiting payment can be paid (status: :status).',
         'shipment_cannot_advance' => 'A :status shipment cannot be advanced.',
+        'refresh_failed' => 'Shopify did not answer right now. Try again in a moment.',
+        'not_on_shopify' => 'This order has not been sent to Shopify yet.',
     ],
 
     'auth' => [
         'reset_link_sent' => 'A reset link will be sent if the account exists.',
         'account_inactive' => 'Your account is inactive.',
+        'ads_role_no_mobile' => 'Ads accounts cannot use the mobile app.',
     ],
 
     'roles' => [
@@ -140,6 +144,8 @@ return [
             'moderator' => 'moderator',
             'supervisor' => 'supervisor',
             'admin' => 'admin',
+            'media_buyer' => 'media buyer',
+            'content' => 'content',
         ],
     ],
 

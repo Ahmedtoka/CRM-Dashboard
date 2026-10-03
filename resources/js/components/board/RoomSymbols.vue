@@ -196,6 +196,23 @@
             <rect x="16" y="45" width="80" height="12" rx="1" fill="#e9c46a" />
         </symbol>
 
+        <!-- The desk lamp: its shade and light take the desk's state colour (currentColor). -->
+        <symbol id="br-lamp" viewBox="0 0 24 36">
+            <ellipse cx="12" cy="34" rx="8" ry="2" fill="#2a3446" />
+            <path d="M12 33V17l5-6" fill="none" stroke="#5c6b88" stroke-width="2" stroke-linecap="round" />
+            <path d="M9 4h12l3 9H6z" fill="currentColor" />
+            <path d="M9 4h12l3 9H6z" fill="url(#br-shade)" />
+            <ellipse cx="15" cy="13.5" rx="7" ry="2.4" fill="currentColor" opacity=".55" />
+        </symbol>
+
+        <!-- «بتقفل»: her bag, packed. -->
+        <symbol id="br-bag" viewBox="0 0 24 24">
+            <path d="M8 8V6a4 4 0 0 1 8 0v2" fill="none" stroke="#3b2a24" stroke-width="2" />
+            <rect x="3" y="8" width="18" height="14" rx="3" fill="#c0703f" />
+            <rect x="3" y="8" width="18" height="14" rx="3" fill="url(#br-shade)" />
+            <rect x="10" y="12" width="4" height="3" rx="1" fill="#ffd166" />
+        </symbol>
+
         <symbol id="br-g-robot" viewBox="0 0 52 64">
             <line x1="26" y1="2" x2="26" y2="10" stroke="#a78bfa" stroke-width="2" />
             <circle cx="26" cy="3" r="3" fill="#a78bfa" />

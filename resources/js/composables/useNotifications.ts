@@ -1,6 +1,7 @@
 import { useApi } from '@/composables/useApi';
 import { useEcho } from '@/composables/useEcho';
 import { useI18n } from '@/composables/useI18n';
+import { listenInbox } from '@/lib/inboxChannels';
 import type { NotificationPreferences, SharedData } from '@/types';
 import type { AppNotification, Message, PlatformValue } from '@/types/crm';
 import { router, usePage } from '@inertiajs/vue3';
@@ -19,6 +20,7 @@ export const TYPE_KEY = {
     'queue.reply_overdue': 'queue_reply_overdue',
     'queue.reply_overdue_leader': 'queue_reply_overdue_leader',
     'queue.member_not_arrived': 'queue_member_not_arrived',
+    'ads.need_stop': 'ads_need_stop',
 } as const;
 
 /** Desktop notification bodies never carry more than this many characters of a message (privacy ruling). */
@@ -212,9 +214,8 @@ export function useNotifications() {
         void refresh().catch(() => undefined);
 
         if (echo) {
-            const inbox = echo.private('inbox').listen('MessageCreated', onInbound).listen('ConversationUpdated', scheduleRefresh);
-            // `inbox` is shared with the inbox page's own listeners: detach only ours.
-            teardownListeners.push(() => inbox.stopListening('MessageCreated', onInbound).stopListening('ConversationUpdated', scheduleRefresh));
+            // The inbox channels are shared with the inbox page's own listeners: detach only ours, never leave().
+            teardownListeners.push(listenInbox(echo, page.props.auth.user, { MessageCreated: onInbound, ConversationUpdated: scheduleRefresh }));
 
             const userChannel = `user.${userId}`;
             echo.private(userChannel).listen('UserNotified', onUserNotified);

@@ -4,19 +4,31 @@ import { onMounted, ref } from 'vue';
 
 interface Props {
     variant?: 'header' | 'sidebar';
+    /** Inbox and board: the sidebar starts collapsed to its icon rail (its own remembered state). */
+    workspace?: boolean;
 }
 
-defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { variant: 'sidebar', workspace: false });
 
-const isOpen = ref(true);
+const storageKey = props.workspace ? 'sidebar:workspace' : 'sidebar';
+const isOpen = ref(!props.workspace);
 
 onMounted(() => {
-    isOpen.value = localStorage.getItem('sidebar') !== 'false';
+    try {
+        const stored = localStorage.getItem(storageKey);
+        isOpen.value = props.workspace ? stored === 'true' : stored !== 'false';
+    } catch {
+        // Storage blocked: keep the default.
+    }
 });
 
 const handleSidebarChange = (open: boolean) => {
     isOpen.value = open;
-    localStorage.setItem('sidebar', String(open));
+    try {
+        localStorage.setItem(storageKey, String(open));
+    } catch {
+        // Storage blocked: the state just won't persist.
+    }
 };
 </script>
 

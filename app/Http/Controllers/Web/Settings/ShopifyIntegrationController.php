@@ -301,9 +301,15 @@ class ShopifyIntegrationController extends Controller
             ])->all();
     }
 
+    /**
+     * The import/sync log. Order refreshes (`refresh`, every 10 minutes and on
+     * every «تحديث من شوبيفاي») are left out: they would push the real syncs off
+     * this list, and each order shows its own last sync time instead.
+     */
     private function runsPayload(): array
     {
         return ShopifySyncRun::query()
+            ->where('type', '!=', 'refresh')
             ->orderByDesc('id')
             ->limit(20)
             ->get()
@@ -335,6 +341,7 @@ class ShopifyIntegrationController extends Controller
         foreach (['shipping', 'products', 'customers', 'orders'] as $resource) {
             $run = ShopifySyncRun::query()
                 ->where('resource', $resource)
+                ->where('type', '!=', 'refresh')
                 ->where('status', 'completed')
                 ->orderByDesc('finished_at')
                 ->first();

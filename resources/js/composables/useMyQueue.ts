@@ -49,6 +49,8 @@ export interface MyQueue {
     elapsed: (entry: Pick<QueueEntry, 'delivered_at'>) => number;
     /** Seconds to the auto-close; null while the silence clock is not running. */
     silenceLeft: (entry: QueueEntry) => number | null;
+    /** The silence auto-close in seconds (the full width of the thread header's countdown bar); null until known. */
+    silenceTotal: ComputedRef<number | null>;
     /** The countdown is in its warning stretch (the customer got the warning, or is about to). */
     silenceWarning: (entry: QueueEntry) => boolean;
     /** Seconds to the hand-off of a window whose customer waits for her reply; null without that clock (flow revision §4). */
@@ -294,6 +296,8 @@ export function useMyQueue(options: Options): MyQueue {
         return Math.max(0, Math.round(entry.silence_left_seconds - Math.max(0, tick.value - since) / 1000));
     }
 
+    const silenceTotal = computed(() => settings.value?.silence_close_seconds ?? null);
+
     function silenceWarning(entry: QueueEntry): boolean {
         const left = silenceLeft(entry);
         if (left === null) return false;
@@ -486,6 +490,7 @@ export function useMyQueue(options: Options): MyQueue {
         elapsed,
         silenceLeft,
         silenceWarning,
+        silenceTotal,
         handoffLeft,
         breakSince,
         breakOver,

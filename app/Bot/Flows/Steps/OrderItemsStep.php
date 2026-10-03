@@ -43,14 +43,14 @@ use Illuminate\Support\Collection;
  */
 final class OrderItemsStep extends BaseStep
 {
-    public const DEFAULT_TEXT = 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها 👇';
+    public const DEFAULT_TEXT = 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها';
 
-    public const FALLBACK_TEXT = 'اكتبي اسم القطعة اللي عايزة ترجعيها أو تبدليها 🌸';
+    public const FALLBACK_TEXT = 'اكتبي اسم القطعة اللي عايزة ترجعيها أو تبدليها';
 
     /** `return_rules: false` (cancel/edit): what is asked instead. */
-    public const PLAIN_TEXT = 'اختاري القطعة اللي عايزة تعدلي فيها 👇';
+    public const PLAIN_TEXT = 'اختاري القطعة اللي عايزة تعدلي فيها';
 
-    public const PLAIN_FALLBACK_TEXT = 'اكتبي اسم القطعة اللي عايزة تعدلي فيها 🌸';
+    public const PLAIN_FALLBACK_TEXT = 'اكتبي اسم القطعة اللي عايزة تعدلي فيها';
 
     public const MULTI_TEXT = 'اكتبي أرقام القطع اللي عايزاها، مثلًا: 1 و 3';
 
@@ -60,9 +60,9 @@ final class OrderItemsStep extends BaseStep
 
     public const QTY_QUESTION = 'كام قطعة؟';
 
-    public const ALREADY_TEXT = '«%s» موجودة في اختياراتك خلاص 🌸';
+    public const ALREADY_TEXT = '«%s» موجودة في اختياراتك خلاص';
 
-    public const NOTHING_TEXT = 'تمام 🌸 لو احتجتي أي حاجة تانية أنا موجودة';
+    public const NOTHING_TEXT = 'تمام، لو احتجتي أي حاجة تانية أنا موجودة';
 
     public const MULTI_BUTTON = 'كذا قطعة';
 
@@ -75,8 +75,8 @@ final class OrderItemsStep extends BaseStep
 
     public const PICK_BUTTON_EDIT = 'عدّل القطعة دي';
 
-    /** Under the pictures (owner, 2026-09-26): «اختاري من الصور 👆 أو اكتبي رقمها». */
-    public const PICTURES_HINT = 'اختاري من الصور 👆 أو اكتبي رقم القطعة';
+    /** Under the pictures (owner, 2026-09-26): «اختاري من الصور اللي فوق أو اكتبي رقمها». */
+    public const PICTURES_HINT = 'اختاري من الصور اللي فوق أو اكتبي رقم القطعة';
 
     /** One tap for the whole order (owner, 2026-09-21): «أرجع كله» / «أبدل كله». */
     public const ALL_BUTTON_RETURN = 'أرجع كله';
@@ -100,7 +100,7 @@ final class OrderItemsStep extends BaseStep
 
     public const SWITCH_QUESTION = 'تحبي تبدليها بدل ما ترجعيها؟';
 
-    public const SWITCHED_TEXT = 'تمام 🌸 هنكمل الطلب استبدال';
+    public const SWITCHED_TEXT = 'تمام، هنكمل الطلب استبدال';
 
     public const EXCHANGE_TITLE = 'استبدال';
 
@@ -374,7 +374,7 @@ final class OrderItemsStep extends BaseStep
             }
 
             if (! $this->plain && $this->items->windowClosed($order)) {
-                $lateText = "«{$title}» عدّى على استلامها أكتر من ".ReturnItems::RETURN_DAYS.' يوم، والمرتجع والاستبدال عندنا خلال '.ReturnItems::RETURN_DAYS.' يوم من الاستلام بس 🙏';
+                $lateText = "«{$title}» عدّى على استلامها أكتر من ".ReturnItems::RETURN_DAYS.' يوم، والمرتجع والاستبدال عندنا خلال '.ReturnItems::RETURN_DAYS.' يوم من الاستلام بس';
                 $late = true;
 
                 continue;
@@ -614,10 +614,10 @@ final class OrderItemsStep extends BaseStep
         $cards['label'] = $question;
         $header = $withHeader ? $this->header($state, $order) : null;
 
-        // Under the pictures (owner, 2026-09-26): the question once more with «اختاري من الصور 👆 أو
+        // Under the pictures (owner, 2026-09-26): the question once more with «اختاري من الصور اللي فوق أو
         // اكتبي رقم القطعة», and only the whole-order button — every piece already has its own
         // button on its card, so the names are not repeated as buttons.
-        $hint = rtrim(preg_replace('/\s*👇\s*$/u', '', $question) ?? $question).' — '.self::PICTURES_HINT;
+        $hint = rtrim(preg_replace('/\s*👇\s*$/u', '', $question) ?? $question).' — '.self::PICTURES_HINT; // emoji-input: an owner-edited question may still end in one
 
         return [
             // The body is the numbered list: what a channel without cards shows instead.
@@ -798,24 +798,24 @@ final class OrderItemsStep extends BaseStep
     {
         $parts = array_map(fn ($r) => $r['title'].($r['variant'] ? " ({$r['variant']})" : '').' × '.$r['qty'], $rows);
 
-        return 'تمام ✅ ضفت: '.implode('، ', $parts);
+        return 'تمام، ضفت: '.implode('، ', $parts);
     }
 
     private function refusalText(string $title, string $keyword): string
     {
         return $this->items->isAccessoryKeyword($keyword)
-            ? "«{$title}» من الإكسسوارات ومش بتترجع ولا بتتبدل 🙏"
-            : "«{$title}» من الأصناف اللي مش بتترجع ولا بتتبدل 🙏";
+            ? "«{$title}» من الإكسسوارات ومش بتترجع ولا بتتبدل"
+            : "«{$title}» من الأصناف اللي مش بتترجع ولا بتتبدل";
     }
 
     private function discountReturnText(string $title): string
     {
-        return "«{$title}» عليها خصم، فمينفعش ترجع بس ممكن تتبدل 🌸";
+        return "«{$title}» عليها خصم، فمينفعش ترجع بس ممكن تتبدل";
     }
 
     private function discountText(string $title): string
     {
-        return "«{$title}» عليها خصم، فمتاحة للاستبدال بس مش استرجاع الفلوس 🌸";
+        return "«{$title}» عليها خصم، فمتاحة للاستبدال بس مش استرجاع الفلوس";
     }
 
     private function money(float $amount): string

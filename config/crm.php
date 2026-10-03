@@ -76,6 +76,9 @@ return [
         'shop' => env('SHOPIFY_SHOP'),
         'token' => env('SHOPIFY_ADMIN_TOKEN'),
         'api_version' => env('SHOPIFY_API_VERSION', '2025-07'),
+
+        // Ask Shopify for the order's customer journey (utm). Off until `php artisan shopify:check-journey` says supported.
+        'capture_journey' => (bool) env('SHOPIFY_CAPTURE_JOURNEY', false),
         'webhook_secret' => env('SHOPIFY_WEBHOOK_SECRET'),
 
         // 'fake' (default) needs no real store — every screen and test works
@@ -190,7 +193,7 @@ return [
     // WhatsApp menus (owner, 2026-09-26): 4–9 bot buttons go out as reply buttons, three per message
     // («زي الماسنجر»), instead of a one-button list. `list` restores the list.
     'whatsapp_menu_style' => env('CRM_WHATSAPP_MENU_STYLE', 'buttons'),
-    'whatsapp_more_options_text' => env('CRM_WHATSAPP_MORE_OPTIONS_TEXT', '👇'),
+    'whatsapp_more_options_text' => env('CRM_WHATSAPP_MORE_OPTIONS_TEXT', 'اختاري من هنا'),
 
     // A queued outbound message waits this long for the ones created before it in the same
     // conversation to go out first (several workers must never reorder greeting and menu).
@@ -239,6 +242,28 @@ return [
             'model' => env('CRM_BOT_AGENT_MODEL', 'claude-sonnet-5'),
             'timeout' => (int) env('CRM_BOT_AGENT_TIMEOUT', 25),
             'budget_seconds' => (int) env('CRM_BOT_AGENT_BUDGET', 40),
+        ],
+    ],
+
+    // Handover queue (spec 2026-09-30 §1): a customer message made only of these phrases, plus the
+    // fillers, emoji and punctuation, is an acknowledgement, not a request: it starts no
+    // moderator-reply clock and never reopens a closed chat. Compared after App\Bot\ArabicNormalizer
+    // (no tashkeel, أ/إ/آ → ا, ة → ه, ى → ي, repeated letters collapsed, lowercase), so write them
+    // the natural way. App\Queue\Acknowledgement is the one place that reads them.
+    'queue' => [
+        'acknowledgements' => [
+            'phrases' => [
+                'شكرا', 'شكرا جزيلا', 'ألف شكر', 'متشكرة', 'متشكرين', 'متشكر', 'مشكورة', 'مشكورين',
+                'تسلمي', 'تسلم', 'تسلموا', 'تسلم إيدك', 'تسلمي إيدك', 'تسلم إيديكي', 'تسلم إيديك', 'الله يسلمك', 'ربنا يخليكي', 'ربنا يخليكم',
+                'جزاكم الله خيرا', 'جزاك الله خيرا', 'ميرسي', 'مرسي',
+                'تمام', 'تمام التمام', 'تمم', 'أوك', 'أوكي', 'أوكيه', 'ماشي', 'اشطا', 'اشطة', 'حلو', 'جميل', 'كويس', 'حاضر', 'خلاص', 'تم',
+                'ok', 'okay', 'okey', 'okk', 'k', 'kk', 'thanks', 'thank you', 'thank u', 'thx', 'thnx', 'thanx', 'ty', 'tysm', 'merci',
+                'great', 'perfect', 'good', 'nice', 'cool', 'fine', 'alright', 'all right', 'noted', 'done', 'got it',
+            ],
+            'fillers' => [
+                'يا', 'جدا', 'خالص', 'أوي', 'قوي', 'كتير', 'ليكي', 'ليكو', 'ليكم', 'لكم', 'ليك', 'فندم', 'حبيبتي', 'حبيبي', 'قمر', 'عسل', 'كده', 'بجد',
+                'so', 'much', 'very', 'a', 'lot', 'you', 'u', 'dear', 'again', 'guys',
+            ],
         ],
     ],
 
@@ -361,6 +386,23 @@ return [
     // Developer-only pages (the /simulator and the /reports/latency report). Off by
     // default: both disappear from the nav and their routes 404 (EnsureDevToolsEnabled).
     'dev_tools' => (bool) env('CRM_DEV_TOOLS', false),
+
+    // Ads Hub (media buyers, ad accounts, creatives, materials library).
+    'ads' => [
+        // live | fake. Default: live on APP_ENV=production (fake spend must never land in the real
+        // tables), fake everywhere else; the env vars still override either way.
+        'drivers' => [
+            'meta' => env('CRM_ADS_META_DRIVER', env('APP_ENV') === 'production' ? 'live' : 'fake'),
+            'tiktok' => env('CRM_ADS_TIKTOK_DRIVER', env('APP_ENV') === 'production' ? 'live' : 'fake'),
+            'google' => env('CRM_ADS_GOOGLE_DRIVER', env('APP_ENV') === 'production' ? 'live' : 'fake'),
+        ],
+        'meta' => ['graph_version' => env('META_ADS_GRAPH_VERSION', 'v23.0')],
+        'tiktok' => ['base_url' => 'https://business-api.tiktok.com/open_api/v1.3'],
+        'google' => ['base_url' => 'https://googleads.googleapis.com/v21', 'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN')],
+        'tax_rate' => (float) env('CRM_ADS_TAX_RATE', 0.14),
+        'backfill_days' => 90,
+        'material_max_mb' => ['video' => 500, 'image' => 20],
+    ],
 
     // Approved WhatsApp templates (spec §5.6), shared with the web
     // TemplatePicker (resources/js/components/crm/TemplatePicker.vue) and the

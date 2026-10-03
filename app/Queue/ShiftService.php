@@ -94,7 +94,7 @@ class ShiftService
     /** «بدأت شغل» is for an active account with at least one platform in Settings → Users (the role alone does not count). */
     public static function mayCheckIn(User $user): bool
     {
-        return (bool) $user->is_active && $user->userPlatforms()->exists();
+        return (bool) $user->is_active && $user->isInboxStaff() && $user->userPlatforms()->exists();
     }
 
     public function __construct(
@@ -459,6 +459,8 @@ class ShiftService
      *   let the shift open — by the tick or by the first «بدأت شغل» — at the new time);
      * - `open`: name, `ends_at` and leader (it already started; the next tick closes it when the
      *   new end has passed).
+     * - `closed` today, because its end was edited below now (N1): open again when the edit is
+     *   put back — see `reopenLocked()`.
      * On an open shift, the waiting escalations that were the old leader's follow the new one, and
      * the board (and, for a new leader, the router) hear about it once committed.
      */
@@ -466,13 +468,27 @@ class ShiftService
     {
         $s = QueueSetting::current();
         $keys = array_map(fn (array $t) => (string) $t['key'], $s->shiftTemplates());
+        // `date` is cast: compare with the exact string Eloquent writes (as todayShifts() does).
+        $today = (new Shift)->fromDateTime(Carbon::parse($this->queue->businessDate()));
 
-        Shift::query()->whereIn('status', ['planned', 'open'])->whereIn('shift_key', $keys)->get()
+        Shift::query()->whereIn('shift_key', $keys)
+            ->where(fn ($q) => $q->whereIn('status', ['planned', 'open'])->orWhere(fn ($q) => $q->where('status', 'closed')->where('date', $today)))
+            ->get()
             ->each(function (Shift $shift) use ($s) {
                 $t = collect($this->templateHours($shift->date->toDateString(), $s))->firstWhere('key', $shift->shift_key);
 
                 if ($t === null) {
                     return;
+                }
+
+                $reopened = false;
+
+                if ($shift->status === 'closed') {
+                    if (! $this->reopenLocked($shift, $t['ends'])) {
+                        return;
+                    }
+
+                    $reopened = true;
                 }
 
                 $old = $shift->leader_user_id !== null ? (int) $shift->leader_user_id : null;
@@ -484,7 +500,7 @@ class ShiftService
                     $shift->starts_at = $t['starts']->copy()->utc();
                 }
 
-                if (! $shift->isDirty()) {
+                if (! $shift->isDirty() && ! $reopened) {
                     return;
                 }
 
@@ -496,6 +512,11 @@ class ShiftService
 
                 DB::afterCommit(fn () => SafeBroadcast::send(new ShiftUpdated($shift->fresh(['members.user', 'leader']))));
 
+                if ($reopened) {
+                    $this->logger->log(ActorType::System, null, ActivityLogger::SHIFT_OPEN, $shift, null, ['shift' => $shift->shift_key, 'reopened' => true]);
+                    app(QueueRouter::class)->runAfterCommit('رجوع شيفت '.$shift->name);
+                }
+
                 if ($old === $new) {
                     return;
                 }
@@ -506,6 +527,37 @@ class ShiftService
 
                 app(QueueRouter::class)->runAfterCommit('ليدر جديد لشيفت '.$shift->name);
             });
+    }
+
+    /**
+     * N1: today's shift was closed because its end was edited below now, and the edit is put back.
+     * It opens again (`closed_at` cleared, `opened_at` kept) only when the template's end is now in
+     * the future, it was closed before that end, and no other shift of the day opened after it
+     * (the next shift took over). Claimed by a conditional update, like `open()` and `close()`.
+     * Whoever `close()` checked out (`auto_out`) stays out: she checks in again with «بدأت شغل».
+     */
+    private function reopenLocked(Shift $shift, Carbon $ends): bool
+    {
+        if ($shift->opened_at === null || $shift->closed_at === null || ! $ends->isFuture() || ! $shift->closed_at->lt($ends)) {
+            return false;
+        }
+
+        $newer = Shift::query()->whereKeyNot($shift->id)->where('date', $shift->getRawOriginal('date'))
+            ->whereNotNull('opened_at')->where('opened_at', '>=', $shift->opened_at)->exists();
+
+        if ($newer) {
+            return false;
+        }
+
+        $claimed = Shift::query()->whereKey($shift->id)->where('status', 'closed')->update(['status' => 'open', 'closed_at' => null]);
+
+        if ($claimed !== 1) {
+            return false;
+        }
+
+        $shift->refresh();
+
+        return true;
     }
 
     /** @param  array<string, mixed>  $template */
@@ -730,13 +782,39 @@ class ShiftService
             }
 
             if ($m->status === 'offline') {
-                $this->setStatus($m, 'available');
+                $this->backOnlineLocked($m);
                 $m->refresh();
             }
 
             if (in_array($m->status, self::WAITING_FOR_WINDOWS, true) && ! $router->openForUser((int) $m->user_id)->exists()) {
                 $this->settle($m);
             }
+        }
+    }
+
+    /**
+     * Her heartbeat is back (N2): `available` again — `busy` while she holds a window — but only
+     * when her row, locked, is still `offline`. The tick read her a moment ago; a «خروج» (or
+     * anything else) that committed since then wins. Not `setStatus('available')`: that one also
+     * cancels a check-out, which «رجعت» needs and the tick must never do.
+     */
+    private function backOnlineLocked(ShiftMember $m): void
+    {
+        $changed = DB::transaction(function () use ($m) {
+            $locked = ShiftMember::query()->lockForUpdate()->find($m->id);
+
+            if ($locked === null || $locked->status !== 'offline') {
+                return false;
+            }
+
+            $open = app(QueueRouter::class)->openForUser((int) $locked->user_id)->exists();
+            $locked->update(['status' => $open ? 'busy' : 'available', 'break_ends_at' => null, 'requested_by_id' => null]);
+
+            return true;
+        }, attempts: 3);
+
+        if ($changed) {
+            $this->changed($m, 'رجوع أونلاين');
         }
     }
 

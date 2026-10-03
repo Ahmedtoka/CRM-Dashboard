@@ -139,7 +139,7 @@ it('greets her by name with the order and asks cancel or edit', function () {
 
     expect(oceFlow()['step'])->toBe('request')
         ->and(oceFlow()['data']['order_editable'])->toBe('yes')
-        ->and(oceBot()->body)->toBe('أهلاً يا سارة 🌸 أوردر #1047 — تحبي تلغيه ولا تعدلي فيه؟')
+        ->and(oceBot()->body)->toBe('أهلاً يا سارة، أوردر #1047 — تحبي تلغيه ولا تعدلي فيه؟')
         ->and(oceButtons())->toBe(['إلغاء', 'تعديل', 'القائمة الرئيسية']);
 });
 
@@ -153,7 +153,7 @@ it('asks for the last 4 digits when only the order number was given', function (
 
     oceTurn('٤٥٦٧');
     expect(oceFlow()['step'])->toBe('request')
-        ->and(oceBot()->body)->toBe('أهلاً يا سارة 🌸 أوردر #1047 — تحبي تلغيه ولا تعدلي فيه؟');
+        ->and(oceBot()->body)->toBe('أهلاً يا سارة، أوردر #1047 — تحبي تلغيه ولا تعدلي فيه؟');
 });
 
 it('refuses a shipped order with a person or «تمام», and records nothing', function (array $attrs, bool $withFulfillment) {
@@ -167,7 +167,7 @@ it('refuses a shipped order with a person or «تمام», and records nothing',
 
     expect(oceFlow()['step'])->toBe('shipped')
         ->and(oceFlow()['data']['order_editable'])->toBe('no')
-        ->and(oceBot()->body)->toBe('للأسف الأوردر #1047 اتشحن خلاص فمينفعش نلغيه أو نعدل فيه 🙏')
+        ->and(oceBot()->body)->toBe('للأسف الأوردر #1047 اتشحن خلاص فمينفعش نلغيه أو نعدل فيه')
         ->and(oceButtons())->toBe(['كلم موظف', 'تمام', 'القائمة الرئيسية']);
 
     oceTap('shipped', 'ok', 'تمام');
@@ -188,7 +188,7 @@ it('hands a shipped order to a person on «كلم موظف»', function () {
     oceTap('shipped', 'agent', 'كلم موظف');
 
     expect(Conversation::first()->handler)->toBe(Handler::Human)
-        ->and(oceBot()->body)->toBe('تمام ✅ هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت 🌸');
+        ->and(oceBot()->body)->toBe('تمام، هيتم تحويلك لموظف خدمة العملاء، هيرد عليكي في أقرب وقت');
 });
 
 it('says an already cancelled order is cancelled', function () {
@@ -196,7 +196,7 @@ it('says an already cancelled order is cancelled', function () {
     oceGreeting();
 
     expect(oceFlow()['step'])->toBe('already_cancelled')
-        ->and(oceBot()->body)->toBe('الأوردر #1047 ملغي أصلاً 🌸')
+        ->and(oceBot()->body)->toBe('الأوردر #1047 ملغي أصلاً')
         ->and(oceButtons())->toBe(['كلم موظف', 'تمام', 'القائمة الرئيسية']);
 });
 
@@ -205,11 +205,11 @@ it('records a cancel request with her own reason, asking again for an empty or e
     oceGreeting();
     oceTap('request', 'cancel', 'إلغاء');
 
-    expect(oceBot()->body)->toBe('ممكن تكتبيلي سبب الإلغاء؟ 🙏')->and(oceButtons())->toBe([]);
+    expect(oceBot()->body)->toBe('ممكن تكتبيلي سبب الإلغاء؟')->and(oceButtons())->toBe([]);
 
     oceTurn('🙏');
     expect(oceFlow()['step'])->toBe('cancel_reason')
-        ->and(oceBot()->body)->toBe("معلش مش واضحة ليا 🙏 اختاري من دول:\nممكن تكتبيلي سبب الإلغاء؟ 🙏")
+        ->and(oceBot()->body)->toBe("معلش مش واضحة ليا، اختاري من دول:\nممكن تكتبيلي سبب الإلغاء؟")
         ->and(SupportCase::count())->toBe(0);
 
     oceTurn('لقيت الموديل أرخص في مكان تاني');
@@ -222,7 +222,7 @@ it('records a cancel request with her own reason, asking again for an empty or e
         ->and($case->summary)->toContain('المطلوب: إلغاء')->toContain('سبب الإلغاء: لقيت الموديل أرخص في مكان تاني')
         ->and($case->policy_notes)->toBe([['code' => 'cancel_window_open', 'params' => []]])
         ->and($case->summary)->toContain('الأوردر لسه متشحنش وقت الطلب — اتأكدوا قبل ما يخرج من الشركة')
-        ->and(oceBot()->body)->toBe('تمام ✅ سجلت طلب إلغاء أوردر #1047، والفريق هيأكد معاكي الإلغاء في أقرب وقت 🌸')
+        ->and(oceBot()->body)->toBe('تمام، سجلت طلب إلغاء أوردر #1047، والفريق هيأكد معاكي الإلغاء في أقرب وقت')
         ->and(oceFlow())->toBeNull()
         ->and(implode("\n", oceBodies()))->not->toContain('#0');
 });
@@ -269,13 +269,13 @@ it('edits the pieces: swap one by a store link, remove another, then records the
         ->and($changes[0]['product']['variant_title'])->toBe('بيج / S')
         ->and($changes[1]['action'])->toBe('remove')
         ->and($changes[1]['title'])->toBe('طرحة شيفون')
-        ->and(oceBot()->body)->toBe('تمام ✅ سجلت طلب تعديل أوردر #1047، والفريق هيأكد معاكي التعديل 🌸');
+        ->and(oceBot()->body)->toBe('تمام، سجلت طلب تعديل أوردر #1047، والفريق هيأكد معاكي التعديل');
 
-    $note = ConversationNote::where('body', 'like', '✏️%')->sole();
-    expect($note->body)->toBe("✏️ تعديلات مطلوبة على أوردر #1047:\n"
-        ."🔁 تبديل: فستان ليلى × 1 ← عباية كتان (بيج / S) — 1,200 ج.م — https://levoilestores.com/products/abaya-linen?variant=4001\n"
-        .'❌ شيل: طرحة شيفون × 1')
-        ->and($case->summary)->toContain('نوع التعديل: القطع في الأوردر')->toContain('❌ شيل: طرحة شيفون × 1');
+    $note = ConversationNote::where('body', 'like', 'تعديلات مطلوبة%')->sole();
+    expect($note->body)->toBe("تعديلات مطلوبة على أوردر #1047:\n"
+        ."تبديل: فستان ليلى × 1 ← عباية كتان (بيج / S) — 1,200 ج.م — https://levoilestores.com/products/abaya-linen?variant=4001\n"
+        .'شيل: طرحة شيفون × 1')
+        ->and($case->summary)->toContain('نوع التعديل: القطع في الأوردر')->toContain('شيل: طرحة شيفون × 1');
 });
 
 it('keeps a typed new size or colour, asks once more for a link that matches nothing, and keeps a photo', function () {
@@ -289,7 +289,7 @@ it('keeps a typed new size or colour, asks once more for a link that matches not
     oceTurn('مقاس L لون أسود');
     oceTap('item_changes', 'swap', 'أبدلها');
     oceTurn('https://levoilestores.com/products/not-a-product');
-    expect(oceBot()->body)->toBe('اللينك ده مش واضح، ابعتيه من صفحة المنتج على الموقع 🙏');
+    expect(oceBot()->body)->toBe('اللينك ده مش واضح، ابعتيه من صفحة المنتج على الموقع');
 
     // A screenshot instead: kept with the case photos.
     $c = Conversation::firstOrFail();
@@ -301,7 +301,7 @@ it('keeps a typed new size or colour, asks once more for a link that matches not
     expect($case->data['item_changes'][0])->toMatchArray(['action' => 'swap', 'new_option' => 'مقاس L لون أسود'])
         ->and($case->data['item_changes'][1]['photo'])->toBe([$photo->id])
         ->and($case->photo_attachment_ids)->toBe([$photo->id])
-        ->and($case->summary)->toContain('🔁 تبديل: فستان ليلى × 1 ← مقاس/لون جديد: «مقاس L لون أسود»');
+        ->and($case->summary)->toContain('تبديل: فستان ليلى × 1 ← مقاس/لون جديد: «مقاس L لون أسود»');
 });
 
 it('records a new address', function () {
@@ -316,8 +316,8 @@ it('records a new address', function () {
 
     $case = SupportCase::sole();
     expect($case->data['new_address'])->toBe('القاهرة - مدينة نصر - 5 شارع مكرم عبيد')
-        ->and(ConversationNote::where('body', "✏️ تعديلات مطلوبة على أوردر #1047:\n📍 العنوان الجديد: القاهرة - مدينة نصر - 5 شارع مكرم عبيد")->exists())->toBeTrue()
-        ->and(oceBot()->body)->toBe('تمام ✅ سجلت طلب تعديل أوردر #1047، والفريق هيأكد معاكي التعديل 🌸');
+        ->and(ConversationNote::where('body', "تعديلات مطلوبة على أوردر #1047:\nالعنوان الجديد: القاهرة - مدينة نصر - 5 شارع مكرم عبيد")->exists())->toBeTrue()
+        ->and(oceBot()->body)->toBe('تمام، سجلت طلب تعديل أوردر #1047، والفريق هيأكد معاكي التعديل');
 });
 
 it('records a new mobile (Arabic digits too)', function () {
@@ -326,12 +326,12 @@ it('records a new mobile (Arabic digits too)', function () {
     oceTap('request', 'edit', 'تعديل');
     oceTurn('رقم الموبايل');
 
-    expect(oceBot()->body)->toBe('اكتبي رقم الموبايل الجديد 📞');
+    expect(oceBot()->body)->toBe('اكتبي رقم الموبايل الجديد');
 
     oceTurn('٠١١٢٢٣٣٤٤٥٥');
 
     expect(SupportCase::sole()->data['new_phone'])->toBe('01122334455')
-        ->and(ConversationNote::where('body', 'like', '%📞 الموبايل الجديد: 01122334455')->exists())->toBeTrue();
+        ->and(ConversationNote::where('body', 'like', '%الموبايل الجديد: 01122334455')->exists())->toBeTrue();
 });
 
 it('offers a person when the order cannot be found', function () {
@@ -360,6 +360,6 @@ it('validates and walks the published flow in the designer sandbox, showing the 
     }
 
     expect(collect($r['events'])->firstWhere('type', 'case'))->not->toBeNull()
-        ->and(end($r['messages'])['text'])->toBe('تمام ✅ سجلت طلب إلغاء أوردر #1047، والفريق هيأكد معاكي الإلغاء في أقرب وقت 🌸')
+        ->and(end($r['messages'])['text'])->toBe('تمام، سجلت طلب إلغاء أوردر #1047، والفريق هيأكد معاكي الإلغاء في أقرب وقت')
         ->and(SupportCase::count())->toBe(0);
 });

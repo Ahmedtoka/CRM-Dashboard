@@ -14,15 +14,15 @@ use Illuminate\Support\Facades\Log;
  * Keeps «which ad she came from» on the conversation (owner, 2026-09-25). The first referral
  * with an ad sets ad_id, the ad's own title and picture (from the webhook, no API needed), marks
  * the source `ad` when the conversation was opened by it, writes a system line in the thread
- * («📣 جات من إعلان: …») and queues the Marketing API lookup for the ad, ad set and campaign
+ * («جات من إعلان: …») and queues the Marketing API lookup for the ad, ad set and campaign
  * names. A later ad on an already-attributed conversation only goes to the activity log, so
  * the first touch is never overwritten.
  */
 class AdAttribution
 {
-    public const SYSTEM_LINE = '📣 العميلة جات من إعلان: %s';
+    public const SYSTEM_LINE = 'العميلة جات من إعلان: %s';
 
-    public const SYSTEM_LINE_REF = '🔗 العميلة جات من لينك: %s';
+    public const SYSTEM_LINE_REF = 'العميلة جات من لينك: %s';
 
     public function __construct(private readonly OutboundService $outbound, private readonly ActivityLogger $logger) {}
 

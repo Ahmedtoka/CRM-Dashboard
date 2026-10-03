@@ -16,7 +16,7 @@ use Illuminate\Support\Collection;
  * the `order_items` step before it (`selected_items`), in order:
  *
  *   «{piece}» تحبي تبدليها ولا تشيليها من الأوردر؟ [أبدلها] [أشيلها]
- *     أبدلها → «ابعتيلي لينك المنتج اللي عايزاه بدلها، أو اكتبي المقاس/اللون الجديد 🌸»
+ *     أبدلها → «ابعتيلي لينك المنتج اللي عايزاه بدلها، أو اكتبي المقاس/اللون الجديد»
  *              a store link goes through the product lookup (the `product_link` rules: a link
  *              that matches nothing is asked for once more, then kept as she wrote it); text is
  *              kept as the new size/colour; a photo is kept with the case photos.
@@ -29,7 +29,7 @@ final class ItemChangesStep extends BaseStep
 {
     public const ACTION_TEXT = "«%s»\nتحبي تبدليها ولا تشيليها من الأوردر؟";
 
-    public const SWAP_TEXT = 'ابعتيلي لينك المنتج اللي عايزاه بدلها، أو اكتبي المقاس/اللون الجديد 🌸';
+    public const SWAP_TEXT = 'ابعتيلي لينك المنتج اللي عايزاه بدلها، أو اكتبي المقاس/اللون الجديد';
 
     public const SWAP_BUTTON = 'أبدلها';
 

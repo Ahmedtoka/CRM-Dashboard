@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DateInput from '@/components/crm/DateInput.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import StatCard from '@/components/crm/StatCard.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
@@ -8,7 +9,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatDate, formatDateTime } from '@/lib/format';
 import type { ShopifyImportState, ShopifyReconcileResult } from '@/types/admin';
 import { Head, Link } from '@inertiajs/vue3';
-import { CheckCircle2, CircleAlert, Download, LoaderCircle, RefreshCw } from 'lucide-vue-next';
+import { Check, CheckCircle2, CircleAlert, Download, LoaderCircle, RefreshCw } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref } from 'vue';
 
 const props = defineProps<{
@@ -87,7 +88,7 @@ const statusGroups = computed(() => {
 });
 
 function diffLabel(diff: number): string {
-    return diff === 0 ? '✓' : `${diff > 0 ? '+' : '−'}${formatCount(Math.abs(diff), locale.value)}`;
+    return diff === 0 ? t('settings.shopify.reconcile.same') : `${diff > 0 ? '+' : '−'}${formatCount(Math.abs(diff), locale.value)}`;
 }
 
 function statusLabel(group: string, key: string): string {
@@ -127,11 +128,11 @@ const breadcrumbs = computed(() => [
             <section class="flex flex-wrap items-end gap-2 rounded-lg bg-card p-4 text-xs shadow-card">
                 <label class="grid gap-1">
                     <span class="text-muted-foreground">{{ t('settings.shopify.sync.from') }}</span>
-                    <input v-model="from" type="date" dir="ltr" class="h-9 rounded-md border border-input bg-background px-2" :max="to" />
+                    <DateInput v-model="from" class="h-9 rounded-md border border-input bg-background px-2" :max="to" />
                 </label>
                 <label class="grid gap-1">
                     <span class="text-muted-foreground">{{ t('settings.shopify.sync.to') }}</span>
-                    <input v-model="to" type="date" dir="ltr" class="h-9 rounded-md border border-input bg-background px-2" :min="from" />
+                    <DateInput v-model="to" class="h-9 rounded-md border border-input bg-background px-2" :min="from" />
                 </label>
                 <button
                     type="button"
@@ -206,7 +207,10 @@ const breadcrumbs = computed(() => [
                                         <td class="py-1.5">{{ formatDate(day.date, locale) }}</td>
                                         <td class="py-1.5 text-end">{{ formatCount(day.shopify, locale) }}</td>
                                         <td class="py-1.5 text-end">{{ formatCount(day.crm, locale) }}</td>
-                                        <td class="py-1.5 text-end font-medium" :class="day.diff === 0 ? 'text-success' : 'text-destructive'">{{ diffLabel(day.diff) }}</td>
+                                        <td class="py-1.5 text-end font-medium" :class="day.diff === 0 ? 'text-success' : 'text-destructive'">
+                                            <template v-if="day.diff === 0"><Check class="inline size-3.5" aria-hidden="true" /><span class="sr-only">{{ t('settings.shopify.reconcile.same') }}</span></template>
+                                            <template v-else>{{ diffLabel(day.diff) }}</template>
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -224,7 +228,10 @@ const breadcrumbs = computed(() => [
                                         <td class="py-1.5">{{ statusLabel(row.group, row.key) }}</td>
                                         <td class="py-1.5 text-end">{{ formatCount(row.shopify, locale) }}</td>
                                         <td class="py-1.5 text-end">{{ formatCount(row.crm, locale) }}</td>
-                                        <td class="py-1.5 text-end font-medium" :class="row.diff === 0 ? 'text-success' : 'text-destructive'">{{ diffLabel(row.diff) }}</td>
+                                        <td class="py-1.5 text-end font-medium" :class="row.diff === 0 ? 'text-success' : 'text-destructive'">
+                                            <template v-if="row.diff === 0"><Check class="inline size-3.5" aria-hidden="true" /><span class="sr-only">{{ t('settings.shopify.reconcile.same') }}</span></template>
+                                            <template v-else>{{ diffLabel(row.diff) }}</template>
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>

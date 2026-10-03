@@ -2,12 +2,15 @@
 import AudioPlayer from '@/components/crm/media/AudioPlayer.vue';
 import FileChip from '@/components/crm/media/FileChip.vue';
 import ImageGrid from '@/components/crm/media/ImageGrid.vue';
+import MediaLightbox from '@/components/crm/media/MediaLightbox.vue';
+import VideoBox from '@/components/crm/media/VideoBox.vue';
 import type { ChatSkin } from '@/composables/inbox/useChatSkin';
+import { galleryItemsOf, injectThreadGallery, type GalleryItem } from '@/composables/inbox/useThreadGallery';
 import { useI18n } from '@/composables/useI18n';
 import { useNow } from '@/composables/useNow';
 import type { Attachment, Message } from '@/types/crm';
 import { RotateCw } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = withDefaults(
     defineProps<{ attachments: Attachment[]; createdAt: string | null; group?: Message[]; retryingIds?: number[]; skin?: ChatSkin }>(),
@@ -41,12 +44,31 @@ const images = computed(() => [...props.attachments, ...(props.group ?? []).flat
 // Everything else, in the message's own order: pending/failed rows (any type) show a
 // spinner or retry; stored non-image rows render by type.
 const rest = computed(() => props.attachments.filter((a) => !isStoredImage(a)));
+
+// The thread gallery (one per ChatThread). Rendered outside a thread, the bubble falls
+// back to a gallery of its own media so a click still opens something.
+const threadGallery = injectThreadGallery();
+const localId = ref<number | null>(null);
+const localOpener = ref<HTMLElement | null>(null);
+const localItems = computed<GalleryItem[]>(() =>
+    threadGallery ? [] : galleryItemsOf([...props.attachments, ...(props.group ?? []).flatMap((m) => m.attachments)]),
+);
+
+function openGallery(attachment: Attachment, opener: HTMLElement): void {
+    if (threadGallery) {
+        threadGallery.openAt(attachment.id, opener);
+        return;
+    }
+    if (!localItems.value.some((item) => item.id === attachment.id)) return;
+    localOpener.value = opener;
+    localId.value = attachment.id;
+}
 </script>
 
 <template>
     <div class="flex flex-col gap-1.5">
         <div v-if="images.length" :class="skin === 'whatsapp' ? 'rounded-md bg-black/5 p-1 dark:bg-white/5' : undefined">
-            <ImageGrid :images="images" :class="skin === 'whatsapp' ? 'overflow-hidden rounded-md' : undefined" />
+            <ImageGrid :images="images" :class="skin === 'whatsapp' ? 'overflow-hidden rounded-md' : undefined" @open="openGallery" />
         </div>
 
         <template v-for="attachment in rest" :key="attachment.id">
@@ -66,17 +88,21 @@ const rest = computed(() => props.attachments.filter((a) => !isStoredImage(a)));
                 </template>
             </div>
 
-            <video
-                v-else-if="attachment.type === 'video'"
-                controls
-                preload="metadata"
-                class="max-w-80 rounded-lg"
-                :src="attachment.url ?? undefined"
-                :poster="attachment.thumb_url ?? undefined"
-            />
+            <VideoBox v-else-if="attachment.type === 'video'" :attachment="attachment" @fullscreen="openGallery(attachment, $event)" />
             <AudioPlayer v-else-if="attachment.type === 'audio'" :src="attachment.url ?? ''" :duration-ms="attachment.duration_ms" :skin="skin" />
-            <img v-else-if="attachment.type === 'sticker'" :src="attachment.url ?? ''" :alt="attachment.original_name ?? ''" class="size-28" />
+            <img
+                v-else-if="attachment.type === 'sticker'"
+                :src="attachment.thumb_url ?? attachment.url ?? ''"
+                :alt="attachment.original_name ?? ''"
+                width="120"
+                height="120"
+                loading="lazy"
+                decoding="async"
+                class="size-[120px] object-contain"
+            />
             <FileChip v-else :name="attachment.original_name ?? ''" :size="attachment.size_bytes" :mime="attachment.mime" :href="attachment.url" />
         </template>
+
+        <MediaLightbox v-if="!threadGallery && localItems.length" v-model:current-id="localId" :items="localItems" :opener="localOpener" />
     </div>
 </template>

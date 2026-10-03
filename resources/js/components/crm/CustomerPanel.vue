@@ -5,13 +5,15 @@ import MentionTextarea from '@/components/crm/MentionTextarea.vue';
 import OrderCard from '@/components/crm/OrderCard.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import StatCard from '@/components/crm/StatCard.vue';
+import NoteLine from '@/components/crm/thread/NoteLine.vue';
 import { buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useI18n } from '@/composables/useI18n';
 import { useInitials } from '@/composables/useInitials';
+import { useStaleOrderRefresh } from '@/composables/useStaleOrderRefresh';
 import { shortcutHint } from '@/composables/useShortcuts';
 import { formatNumber } from '@/i18n';
-import { formatDateTime, formatMoney } from '@/lib/format';
+import { formatMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Customer, Note, Order, Participant, SupportCase, UserRef } from '@/types/crm';
 import { LoaderCircle, Mail, MapPin, Phone, Plus, ShoppingBag } from 'lucide-vue-next';
@@ -46,6 +48,13 @@ const noteBody = ref('');
 const noteMentions = ref<number[]>([]);
 const noteInput = ref<InstanceType<typeof MentionTextarea> | null>(null);
 const name = computed(() => props.customer?.name || '—');
+
+// Orders shown here and not read from Shopify for 30 min get one background refresh; the inbox
+// already reloads this panel on OrderUpdated, so this only asks (no listener of its own).
+useStaleOrderRefresh(
+    computed(() => props.customer?.orders ?? []),
+    { listen: false },
+);
 const place = computed(() => [props.customer?.city, props.customer?.address].filter(Boolean).join(' · '));
 
 // Fix round 1, minor (b): refocus the note box once a note finishes saving (or
@@ -209,12 +218,10 @@ const heading = 'mb-2 text-sm font-bold';
                     </div>
                 </form>
                 <p v-if="!notes.length" class="mt-2 text-xs text-muted-foreground">{{ t('customer.no_notes') }}</p>
-                <ul v-else class="mt-2 space-y-2">
-                    <li v-for="note in notes" :key="note.id" class="rounded-md border-s-4 border-[var(--note-border)] bg-[var(--note-bg)] px-2.5 py-2 text-xs text-foreground">
-                        <p class="whitespace-pre-wrap" dir="auto">{{ note.body }}</p>
-                        <p class="mt-1 text-2xs opacity-70">
-                            {{ note.user?.name }} · <span class="tabular-nums">{{ formatDateTime(note.created_at, locale) }}</span>
-                        </p>
+                <!-- The same compact lines as the thread (R16): one row each, + opens the full text. -->
+                <ul v-else class="mt-2 space-y-1" role="list" data-panel-notes>
+                    <li v-for="note in notes" :key="note.id">
+                        <NoteLine :note="note" :mentionable="mentionable" />
                     </li>
                 </ul>
             </Card>

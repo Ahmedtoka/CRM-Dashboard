@@ -83,3 +83,12 @@ it('keeps every other script as before, whatever the entry status', function () 
     expect(sendQueueJob($e, 'queue_case_opened', ['case_id' => 12]))->toHaveCount(1)
         ->and(sendQueueJob($e, 'queue_auto_closed'))->toHaveCount(1);
 });
+
+it('drops the closing message once she is back in the queue with a newer ticket', function () {
+    $e = staleEntry(['status' => 'closed', 'close_reason' => 'inquiry', 'closed_at' => now()]);
+    expect(sendQueueJob($e, 'queue_closed_thanks'))->toHaveCount(1);
+
+    QueueEntry::factory()->create(['conversation_id' => $e->conversation_id, 'status' => 'waiting', 'priority' => 'returning']);
+
+    expect(sendQueueJob($e, 'queue_closed_thanks'))->toBe([]);
+});

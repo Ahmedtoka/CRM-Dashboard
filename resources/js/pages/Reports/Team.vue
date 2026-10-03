@@ -8,7 +8,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useReportFilters } from '@/composables/useReportFilters';
 import { formatNumber } from '@/i18n';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatCount, formatMoney, formatSeconds } from '@/lib/format';
+import { formatAvgSeconds, formatCount, formatMoney } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { HeatmapGrid, LeaderboardRow, ReportRange, TeamMetrics } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
@@ -35,7 +35,7 @@ const cards = computed(() => {
         { label: t('reports.cards.inbound'), value: n(m.inbound_messages) },
         { label: t('reports.cards.outbound'), value: n(m.outbound_messages) },
         { label: t('reports.cards.bot_messages'), value: n(m.bot_messages) },
-        { label: t('reports.cards.avg_first_response'), value: formatSeconds(m.avg_first_response_sec, locale.value) },
+        { label: t('reports.cards.avg_first_response'), value: formatAvgSeconds(m.avg_first_response_sec, locale.value) },
         { label: t('reports.cards.waiting_now'), value: n(m.waiting_now), tone: m.waiting_now > 0 ? 'warning' : 'default' },
         { label: t('reports.cards.needs_human_now'), value: n(m.needs_human_now), tone: m.needs_human_now > 0 ? 'negative' : 'default' },
         { label: t('reports.cards.orders'), value: n(m.orders_count) },
@@ -71,11 +71,11 @@ const breadcrumbs = computed(() => [{ title: t('reports.team_title'), href: '/re
                 <ReportFilters :range="range" :platform="platform" @change="visit" />
             </PageHeader>
 
-            <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <StatCard v-for="card in cards" :key="card.label" :label="card.label" :value="card.value" :tone="'tone' in card ? card.tone : 'default'" />
             </div>
 
-            <div class="grid gap-4 lg:grid-cols-2">
+            <div class="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
                 <BarChart :title="t('reports.by_platform')" :items="byPlatform" :format="n" />
                 <BarChart :title="t('reports.revenue_by_platform')" :items="revenueByPlatform" :format="(v) => formatMoney(v, locale)" />
             </div>

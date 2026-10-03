@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Web\Settings;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\QueueSetting;
 use App\Models\User;
@@ -9,6 +10,7 @@ use App\Queue\ShiftService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -66,7 +68,7 @@ class QueueSettingController extends Controller
             'shifts.*.from' => ['required', 'date_format:H:i'],
             'shifts.*.to' => ['required', 'date_format:H:i'],
             'shifts.*.location' => ['required', 'in:office,home'],
-            'shifts.*.leader_user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'shifts.*.leader_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->whereIn('role', [UserRole::Admin->value, UserRole::Supervisor->value, UserRole::Moderator->value])],
             'default_roster' => ['sometimes', 'array'],
         ]);
         $s = QueueSetting::current();

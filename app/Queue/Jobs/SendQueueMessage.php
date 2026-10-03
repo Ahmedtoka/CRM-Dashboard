@@ -20,7 +20,9 @@ use Illuminate\Support\Facades\Log;
  * the position update, the 5/3/1 countdown, the lounge apology — only while she is still
  * `waiting`; the moderator-delay apology only while her window is open and she still waits for
  * the reply it apologises for. A job that runs after she was called, or after the moderator
- * answered, says nothing. Every other script goes out as before.
+ * answered, says nothing. The closing message (spec 2026-09-30 §2) only while that close is still
+ * her latest queue story: once a newer entry of the conversation exists («سعدنا بخدمتك» would
+ * read as a goodbye to a customer who is back), it says nothing. Every other script goes out as before.
  */
 class SendQueueMessage implements ShouldQueue
 {
@@ -31,6 +33,9 @@ class SendQueueMessage implements ShouldQueue
 
     /** Scripts that only make sense while her open window waits for the moderator's reply. */
     public const WHILE_AWAITING_REPLY = ['queue_agent_delay_apology'];
+
+    /** Scripts that only make sense while the close they end is her latest queue entry. */
+    public const AFTER_CLOSE = ['queue_closed_thanks'];
 
     public int $tries = 2;
 
@@ -67,6 +72,10 @@ class SendQueueMessage implements ShouldQueue
         if (in_array($this->scriptKey, self::WHILE_AWAITING_REPLY, true)) {
             // A reply clears both; a later message restarts the clock with no apology yet.
             return ! $e->isOpen() || $e->awaiting_reply_since === null || $e->apology_sent_at === null;
+        }
+
+        if (in_array($this->scriptKey, self::AFTER_CLOSE, true)) {
+            return QueueEntry::query()->where('conversation_id', $e->conversation_id)->where('id', '>', $e->id)->exists();
         }
 
         return false;

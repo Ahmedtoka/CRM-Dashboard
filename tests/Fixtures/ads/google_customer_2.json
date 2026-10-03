@@ -1,0 +1,1 @@
+[{"results":[{"customer":{"resourceName":"customers/2223334445","id":"2223334445","descriptiveName":"Old","currencyCode":"USD","timeZone":"America/New_York","status":"CANCELED"}}],"fieldMask":"customer.id,customer.descriptiveName,customer.currencyCode,customer.timeZone,customer.status","requestId":"r2"}]

@@ -15,8 +15,8 @@ use Throwable;
 
 /**
  * The order status card (the owner's tracking flow, 2026-09-19): the order found
- * by the `order` step as "أهلاً يا … أوردر #… (اتطلب يوم … — … قطع) / 📦 الحالة /
- * 🚚 متوقع يوصل / 🔗 تتبع الشحنة", with the step's options as buttons.
+ * by the `order` step as "أهلاً يا … أوردر #… (اتطلب يوم … — … قطع) / الحالة /
+ * متوقع يوصل / تتبع الشحنة", with the step's options as buttons.
  *
  * On entry it keeps the card values in the flow data — `order_date`, `order_items`,
  * `order_status`, `order_eta` (DeliveryEstimate; none for a delivered, cancelled,
@@ -35,12 +35,12 @@ use Throwable;
  */
 final class StatusStep extends BaseStep
 {
-    public const CARD_TEXT = "أهلاً يا {customer_first_name} 🌸 أوردر #{order_number} (اتطلب يوم {order_date} — {order_items})\n📦 الحالة: {order_status}\n🚚 متوقع يوصل: {order_eta}\n🔗 تتبع الشحنة: {order_tracking}";
+    public const CARD_TEXT = "أهلاً يا {customer_first_name}، أوردر #{order_number} (اتطلب يوم {order_date} — {order_items})\nالحالة: {order_status}\nمتوقع يوصل: {order_eta}\nتتبع الشحنة: {order_tracking}";
 
     /** Once the expected window has passed the card says it was expected (2026-09-19). */
-    public const ETA_LABEL = '🚚 متوقع يوصل';
+    public const ETA_LABEL = 'متوقع يوصل';
 
-    public const ETA_PASSED_LABEL = '🚚 كان متوقع يوصل';
+    public const ETA_PASSED_LABEL = 'كان متوقع يوصل';
 
     /** Orders that are no longer on their way. */
     public const FINISHED = ['delivered', 'cancelled'];

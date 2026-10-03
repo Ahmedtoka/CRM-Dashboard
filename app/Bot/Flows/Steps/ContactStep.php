@@ -28,11 +28,11 @@ final class ContactStep extends BaseStep
 {
     public const CONFIRM_TEXT = 'هنتواصل مع حضرتك باسم «%s» على رقم %s — تمام كده؟';
 
-    public const ASK_BOTH_TEXT = 'ممكن اسم حضرتك ورقم الموبايل اللي نتواصل عليه؟ 🌸';
+    public const ASK_BOTH_TEXT = 'ممكن اسم حضرتك ورقم الموبايل اللي نتواصل عليه؟';
 
-    public const ASK_NAME_TEXT = 'تمام 🌸 وممكن اسم حضرتك؟';
+    public const ASK_NAME_TEXT = 'تمام، وممكن اسم حضرتك؟';
 
-    public const ASK_PHONE_TEXT = 'ممكن رقم الموبايل اللي نتواصل مع حضرتك عليه؟ 📞';
+    public const ASK_PHONE_TEXT = 'ممكن رقم الموبايل اللي نتواصل مع حضرتك عليه؟';
 
     public const YES_BUTTON = 'أيوه تمام';
 

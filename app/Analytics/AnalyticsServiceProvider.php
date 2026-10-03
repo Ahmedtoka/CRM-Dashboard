@@ -2,6 +2,7 @@
 
 namespace App\Analytics;
 
+use App\Analytics\Commands\InboxBenchCommand;
 use App\Analytics\Commands\LatencyReportCommand;
 use App\Analytics\Commands\LoadTestCommand;
 use App\Analytics\Commands\PruneLatencyCommand;
@@ -42,6 +43,7 @@ class AnalyticsServiceProvider extends ServiceProvider
                 LoadTestCommand::class,
                 LatencyReportCommand::class,
                 SeedLoadDatasetCommand::class,
+                InboxBenchCommand::class,
                 PruneLatencyCommand::class,
             ]);
         }

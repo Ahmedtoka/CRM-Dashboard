@@ -14,4 +14,5 @@ return [
     App\Simulator\SimulatorServiceProvider::class,
     App\Legal\LegalServiceProvider::class,
     App\Queue\QueueServiceProvider::class,
+    App\Ads\AdsServiceProvider::class,
 ];

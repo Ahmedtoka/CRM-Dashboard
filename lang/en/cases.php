@@ -34,11 +34,12 @@ return [
 
     'priority' => [
         'low' => 'low',
+        'normal' => 'normal',
         'medium' => 'medium',
         'high' => 'high',
     ],
 
-    'header' => '📋 Case #:id — :type — :priority priority',
+    'header' => 'Case #:id — :type — :priority priority',
 
     'sections' => [
         'customer' => 'Customer',
@@ -100,9 +101,9 @@ return [
     ],
 
     'edit' => [
-        'new_address' => '📍 New address: :address',
-        'new_phone' => '📞 New phone number: :phone',
-        'note_header' => '✏️ Changes requested on :order',
+        'new_address' => 'New address: :address',
+        'new_phone' => 'New phone number: :phone',
+        'note_header' => 'Changes requested on :order',
         'note_order_numbered' => 'order #:number',
         'note_order_any' => 'the order',
     ],
@@ -110,6 +111,7 @@ return [
     'attachments' => [
         'item_photo' => 'Photo of the item',
         'no_photo' => '— (no photo sent)',
+        'received' => '(received)',
         'replacement_photo' => 'Photo of the replacement',
         'change_photo' => 'Photo of the replacement',
         'customer_photos' => 'Photos from the customer',

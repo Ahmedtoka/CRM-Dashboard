@@ -16,7 +16,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  */
 final class MediaResponder
 {
-    public static function file(string $disk, string $path, AttachmentType $type, ?string $mime, ?string $originalName): BinaryFileResponse
+    /** `$forceDownload` always answers `attachment` (the gallery's download button), never inline. */
+    public static function file(string $disk, string $path, AttachmentType $type, ?string $mime, ?string $originalName, bool $forceDownload = false): BinaryFileResponse
     {
         abort_unless(Storage::disk($disk)->exists($path), 404);
 
@@ -33,7 +34,7 @@ final class MediaResponder
         // PDF still downloads as application/pdf rather than octet-stream).
         $allowedMimes = (array) config("crm.media.types.{$type->value}.mimes");
         $mimeAllowed = in_array($mime, $allowedMimes, true);
-        $inline = $type->servesInline() && $mimeAllowed;
+        $inline = ! $forceDownload && $type->servesInline() && $mimeAllowed;
         $contentType = $mimeAllowed ? ($mime ?? 'application/octet-stream') : 'application/octet-stream';
 
         $response = response()->file(Storage::disk($disk)->path($path), [

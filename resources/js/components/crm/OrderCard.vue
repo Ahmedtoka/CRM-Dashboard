@@ -1,15 +1,18 @@
 <script setup lang="ts">
+import OrderNote from '@/components/crm/orders/OrderNote.vue';
+import OrderStatusChip from '@/components/crm/orders/OrderStatusChip.vue';
+import OrderSyncLine from '@/components/crm/orders/OrderSyncLine.vue';
 import ShipmentTimeline from '@/components/crm/ShipmentTimeline.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
-import { orderStatusTone } from '@/lib/orderStatus';
+import { notOnShopifyText, orderLabel, orderName, stripBidiControls } from '@/lib/orderStatus';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { Order } from '@/types/crm';
 import { usePage } from '@inertiajs/vue3';
-import { ExternalLink, LoaderCircle, Package, RotateCcw, SquarePen, Truck, XCircle } from 'lucide-vue-next';
+import { ExternalLink, LoaderCircle, MessageCircle, Package, RotateCcw, SquarePen, Store, TriangleAlert, Truck, XCircle } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = withDefaults(defineProps<{ order: Order; showEdit?: boolean }>(), { showEdit: false });
@@ -33,7 +36,8 @@ const confirmingCancel = ref(false);
 const restock = ref(true);
 
 const itemsCount = computed(() => (current.value.items ?? []).reduce((sum, item) => sum + item.qty, 0));
-const number = computed(() => current.value.order_number || `#${current.value.id}`);
+const label = computed(() => orderLabel(current.value, t));
+const number = computed(() => label.value.text);
 const thumbnails = computed(() =>
     Array.from(new Set((current.value.items ?? []).map((i) => i.image_url).filter((u): u is string => !!u))).slice(0, 4),
 );
@@ -87,13 +91,17 @@ function statusLabel(prefix: string, value: string | null | undefined): string {
 }
 
 const paymentLabel = (value: string | null | undefined) => statusLabel('orders.payment_status', value);
-const fulfillmentLabel = (value: string | null | undefined) => statusLabel('orders.fulfillment_status', value);
+
+function onRefreshed(fresh: Order): void {
+    current.value = { ...current.value, ...fresh };
+}
 
 async function copyStatus(): Promise<void> {
     const payment = paymentLabel(current.value.display?.payment);
     const shipment = current.value.display?.shipment_step ? t(`shipment.status.${current.value.display.shipment_step}`) : '';
     const tracking = trackingUrl.value ? ` ${trackingUrl.value}` : '';
-    const text = t('order.status_message', { number: number.value, payment, shipment, tracking });
+    // Customer-facing: the plain name (never «مسودة», no bidi controls), and nothing invisible left in it.
+    const text = stripBidiControls(t('order.status_message', { number: orderName(current.value), payment, shipment, tracking }));
 
     // Clipboard write is a best-effort convenience only (it can be blocked by permissions or
     // an insecure context) and never claims to have reached the reply composer — the parent
@@ -112,10 +120,11 @@ async function copyStatus(): Promise<void> {
 
 <template>
     <article class="rounded-lg bg-card p-3 text-xs shadow-card">
-        <div class="flex items-center gap-2">
-            <span class="font-semibold" dir="ltr">{{ number }}</span>
-            <span :title="t(`orders.source.${current.source ?? 'chat'}`)">{{ current.source === 'store' ? '🛍️' : '🗨️' }}</span>
-            <StatusChip :label="t(`order.status.${current.status}`)" :tone="orderStatusTone[current.status] ?? 'neutral'" />
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span v-if="label.draft" class="font-medium text-muted-foreground" :title="notOnShopifyText(current, t)" dir="auto">{{ number }}</span>
+            <span v-else class="font-semibold" dir="ltr">{{ number }}</span>
+            <span class="inline-flex text-muted-foreground" :title="t(`orders.source.${current.source ?? 'chat'}`)"><component :is="current.source === 'store' ? Store : MessageCircle" class="size-3.5" aria-hidden="true" /><span class="sr-only">{{ t(`orders.source.${current.source ?? 'chat'}`) }}</span></span>
+            <OrderStatusChip :order="current" />
             <span class="ms-auto font-bold tabular-nums">{{ formatMoney(current.total, locale) }}</span>
         </div>
 
@@ -135,18 +144,16 @@ async function copyStatus(): Promise<void> {
             <StatusChip :label="t('order.sending')" tone="warning" />
         </p>
 
-        <div v-if="current.shopify_order_id || current.shopify_draft_order_id" class="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <StatusChip v-if="current.display?.payment" :label="paymentLabel(current.display.payment)" tone="info" />
-            <StatusChip v-if="current.display?.fulfillment" :label="fulfillmentLabel(current.display.fulfillment)" tone="neutral" />
+        <div v-if="current.note" class="mt-1.5 rounded-md bg-elevated px-2 py-1.5">
+            <OrderNote :note="current.note" :lines="2" />
         </div>
 
-        <p v-if="current.mismatch" class="mt-1.5 rounded-md bg-destructive/10 px-2 py-1 text-foreground">
-            ⚠️ {{ current.mismatch_reason ? t(`order.mismatch.reasons.${current.mismatch_reason}`) : t('order.mismatch.title') }}
+        <p v-if="current.mismatch" class="mt-1.5 flex items-start gap-1.5 rounded-md bg-destructive/10 px-2 py-1 text-foreground">
+            <TriangleAlert class="mt-px size-3.5 shrink-0 text-destructive" aria-hidden="true" />
+            <span>{{ current.mismatch_reason ? t(`order.mismatch.reasons.${current.mismatch_reason}`) : t('order.mismatch.title') }}</span>
         </p>
 
-        <p v-if="current.status === 'failed' && current.last_error" class="mt-1.5 rounded-md bg-destructive/10 px-2 py-1 text-foreground" dir="auto">
-            {{ current.last_error }}
-        </p>
+        <OrderSyncLine v-if="!isSubmitting" :order="current" compact class="mt-1.5" @refreshed="onRefreshed" />
 
         <a
             v-if="current.invoice_url && current.status === 'awaiting_payment'"

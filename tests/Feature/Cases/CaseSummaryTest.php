@@ -40,26 +40,26 @@ it('builds the return refund summary with the order, its items, photos and the t
     ]);
 
     expect(CaseSummary::text($case))->toBe(<<<TXT
-📋 حالة #{$case->id} — مرتجع/استبدال — أولوية متوسطة
+حالة #{$case->id} — مرتجع/استبدال — أولوية متوسطة
 
-👤 العميل
+العميل
 منى أحمد · 01012345678
 
-📦 الأوردر #1038
+الأوردر #1038
 بتاريخ ٢٨/٨ · اتأكد وجاري تجهيزه · ١٬٢٥٠ ج.م
 المنتجات: فستان ستان أسود (M) × ١
 
-📝 الطلب
+الطلب
 السبب: المقاس مش مظبوط
 المطلوب: استرجاع المبلغ
 
-📎 المرفقات
-صورة المنتج ✅
+المرفقات
+صورة المنتج (وصلت)
 
-⚠️ تنبيهات
+تنبيهات
 مفيش
 
-➡️ المطلوب من الفريق
+المطلوب من الفريق
 التواصل مع العميلة وترتيب استلام القطعة ورد المبلغ
 TXT);
 });
@@ -74,26 +74,26 @@ it('marks missing photos, lists more than five items and shows policy notes for 
     ]);
 
     expect(CaseSummary::text($case))->toBe(<<<TXT
-📋 حالة #{$case->id} — مرتجع/استبدال — أولوية عالية
+حالة #{$case->id} — مرتجع/استبدال — أولوية عالية
 
-👤 العميل
+العميل
 Mona FB · 01099999999
 
-📦 الأوردر #1038
+الأوردر #1038
 بتاريخ ٢٨/٨ · اتسلم · ١٬٢٥٠ ج.م
 المنتجات: فستان ستان أسود (M) × ١، طرحة × ٢، طرحة × ٢، طرحة × ٢، طرحة × ٢، و ٢ منتجات تانية
 
-📝 الطلب
+الطلب
 السبب: بايظ / فيه عيب
 المطلوب: استبدال
 
-📎 المرفقات
+المرفقات
 صورة المنتج — · صورة العيب —
 
-⚠️ تنبيهات
+تنبيهات
 غالبًا عدى 14 يوم من الاستلام (الأوردر بتاريخ 28/8)
 
-➡️ المطلوب من الفريق
+المطلوب من الفريق
 التواصل مع العميلة وترتيب استبدال القطعة
 TXT);
 });
@@ -106,21 +106,21 @@ it('builds a branch complaint without an order or attachments section', function
     ]);
 
     expect(CaseSummary::text($case))->toBe(<<<TXT
-📋 حالة #{$case->id} — شكوى — أولوية عالية
+حالة #{$case->id} — شكوى — أولوية عالية
 
-👤 العميل
+العميل
 منى · 01012345678
 
-📝 الطلب
+الطلب
 النوع: فرع
 الفرع: فرع عباس العقاد
 تاريخ الزيارة: امبارح
 التفاصيل: البياعة كانت مش لطيفة
 
-⚠️ تنبيهات
+تنبيهات
 مفيش
 
-➡️ المطلوب من الفريق
+المطلوب من الفريق
 التواصل مع العميل ومتابعة الشكوى وحلها
 TXT);
 });
@@ -135,14 +135,14 @@ it('builds a cancel/edit summary with the edit details and the window note', fun
 
     expect(CaseSummary::sections($case))->toHaveCount(5)
         ->and(CaseSummary::text($case))->toContain(<<<'TXT'
-📝 الطلب
+الطلب
 المطلوب: تعديل الأوردر
 التعديل: عايزة المقاس L
 
-⚠️ تنبيهات
+تنبيهات
 باقي على مهلة الإلغاء/التعديل: 90 دقيقة
 
-➡️ المطلوب من الفريق
+المطلوب من الفريق
 مراجعة الأوردر وتنفيذ التعديل المطلوب لو لسه في المهلة
 TXT);
 });
@@ -154,20 +154,20 @@ it('shows only the typed order text when the order was not found', function () {
     ]);
 
     expect(CaseSummary::text($case))->toBe(<<<TXT
-📋 حالة #{$case->id} — إلغاء/تعديل أوردر — أولوية متوسطة
+حالة #{$case->id} — إلغاء/تعديل أوردر — أولوية متوسطة
 
-👤 العميل
+العميل
 Mona FB · 01099999999
 
-📦 الأوردر: مش فاكرة (مش لاقيينه في السيستم)
+الأوردر: مش فاكرة (مش لاقيينه في السيستم)
 
-📝 الطلب
+الطلب
 المطلوب: إلغاء
 
-⚠️ تنبيهات
+تنبيهات
 مفيش
 
-➡️ المطلوب من الفريق
+المطلوب من الفريق
 مراجعة الأوردر وإلغاؤه لو لسه في المهلة
 TXT);
 });
@@ -181,22 +181,22 @@ it('builds a delivery follow-up summary with the shipping status', function () {
     $case->update(['customer_id' => null]);
 
     expect(CaseSummary::text($case->fresh()))->toBe(<<<TXT
-📋 حالة #{$case->id} — متابعة شحن — أولوية عالية
+حالة #{$case->id} — متابعة شحن — أولوية عالية
 
-👤 العميل
+العميل
 غير معروف
 
-📦 الأوردر #1038
+الأوردر #1038
 بتاريخ ٢٨/٨ · رجع لينا (مرتجع) · ١٬٢٥٠ ج.م
 المنتجات: فستان ستان أسود (M) × ١
 
-📝 الطلب
+الطلب
 حالة الشحن: رجع لينا (مرتجع)
 
-⚠️ تنبيهات
+تنبيهات
 مفيش
 
-➡️ المطلوب من الفريق
+المطلوب من الفريق
 متابعة الشحنة مع شركة الشحن والرد على العميل
 TXT);
 });
@@ -206,10 +206,10 @@ it('exposes the header and sections on the resource', function () {
 
     $json = (new SupportCaseResource($case))->resolve(Request::create('/'));
 
-    expect($json['summary_header'])->toBe("📋 حالة #{$case->id} — شكوى — أولوية متوسطة")
+    expect($json['summary_header'])->toBe("حالة #{$case->id} — شكوى — أولوية متوسطة")
         ->and($json)->not->toHaveKey('summary_lines')
         ->and(array_column($json['summary_sections'], 'key'))->toBe(['customer', 'request', 'alerts', 'team_action'])
-        ->and($json['summary_sections'][1])->toBe(['key' => 'request', 'icon' => '📝', 'title' => 'الطلب', 'lines' => ['النوع: خدمة العملاء', 'التفاصيل: محدش بيرد']]);
+        ->and($json['summary_sections'][1])->toBe(['key' => 'request', 'title' => 'الطلب', 'lines' => ['النوع: خدمة العملاء', 'التفاصيل: محدش بيرد']]);
 });
 
 it('flags the empty alerts section structurally instead of leaving the front end to match the word', function () {
@@ -217,9 +217,9 @@ it('flags the empty alerts section structurally instead of leaving the front end
     $noisy = csCase(['type' => 'complaint', 'data' => ['complaint_type' => 'service'], 'policy_notes' => [['code' => 'cancel_window_over', 'params' => []]]]);
 
     expect(collect(CaseSummary::sections($quiet))->firstWhere('key', 'alerts'))
-        ->toBe(['key' => 'alerts', 'icon' => '⚠️', 'title' => 'تنبيهات', 'lines' => ['مفيش'], 'empty' => true])
+        ->toBe(['key' => 'alerts', 'title' => 'تنبيهات', 'lines' => ['مفيش'], 'empty' => true])
         ->and(collect(CaseSummary::sections($noisy))->firstWhere('key', 'alerts'))
-        ->toBe(['key' => 'alerts', 'icon' => '⚠️', 'title' => 'تنبيهات', 'lines' => ['انتهت مهلة الإلغاء/التعديل']]);
+        ->toBe(['key' => 'alerts', 'title' => 'تنبيهات', 'lines' => ['انتهت مهلة الإلغاء/التعديل']]);
 });
 
 it('renders the summary in English for an English-mode viewer but keeps the customer and store data as it is', function () {
@@ -234,14 +234,14 @@ it('renders the summary in English for an English-mode viewer but keeps the cust
     $section = fn (string $key) => collect($json['summary_sections'])->firstWhere('key', $key);
 
     expect($json['type_label'])->toBe('Cancel / edit order')
-        ->and($json['summary_header'])->toBe("📋 Case #{$case->id} — Cancel / edit order — high priority")
+        ->and($json['summary_header'])->toBe("Case #{$case->id} — Cancel / edit order — high priority")
         ->and($json['policy_notes'])->toBe(['45 minutes left to cancel or change the order'])
         ->and($section('order')['title'])->toBe('Order #1038')
         // the flow's own option title and what she typed stay exactly as they were stored
         ->and($section('request')['lines'])->toBe(['Wants: إلغاء', 'Reason for cancelling: لقيت الموديل أرخص'])
         ->and($section('team_action')['lines'][0])->toBe('Review the order and cancel it if it is still within the window.')
         // the bot's own record is history: it keeps the Arabic it was written in
-        ->and(CaseSummary::text($case))->toContain('📝 الطلب')
+        ->and(CaseSummary::text($case))->toContain('الطلب')
         ->and(CaseSummary::text($case))->toContain('باقي على مهلة الإلغاء/التعديل: ٤٥ دقيقة')
         ->and(app()->getLocale())->toBe('en');
 });

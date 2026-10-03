@@ -1,0 +1,3 @@
+{"code":0,"message":"OK","request_id":"202609300000000000000000000002","data":{"list":[
+{"ad_id":"1800000000001","ad_name":"Video one","operation_status":"ENABLE","secondary_status":"AD_STATUS_DELIVERY_OK","campaign_id":"1700000000001","campaign_name":"Sales","adgroup_id":"1710000000001","adgroup_name":"Women 18-34","ad_format":"SINGLE_VIDEO","ad_text":"New abayas are here","video_id":"v10033g50000abc","image_ids":[],"create_time":"2026-09-01 10:15:00","landing_page_url":"https://shop.test/abayas"}
+],"page_info":{"page":1,"page_size":1000,"total_number":2,"total_page":2}}}

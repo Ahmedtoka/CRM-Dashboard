@@ -10,11 +10,18 @@ use App\Enums\MessageDirection;
 use App\Enums\Platform;
 use App\Enums\SenderType;
 use App\Models\Conversation;
+use App\Models\Customer;
 use App\Models\Message;
+use App\Models\QueueSetting;
 use App\Models\SupportCase;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Pagination\Cursor;
+use Illuminate\Pagination\CursorPaginator as CursorPaginatorImpl;
+use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Inbox list query: platform scoping for moderators plus the list filters
@@ -35,8 +42,25 @@ class ConversationQuery
         'test',
     ];
 
-    /** Priority rank used by the queue ordering (spec §2.3: high → medium → low, then oldest first). */
-    private const PRIORITY_ORDER_SQL = "CASE conversations.priority_level WHEN 'high' THEN 0 WHEN 'medium' THEN 1 WHEN 'low' THEN 2 ELSE 3 END";
+    /** `status=` values (spec §1.2). `closed` ≡ resolved; waiting/with_moderator/bot are derived states. */
+    public const STATUSES = ['open', 'pending', 'resolved', 'waiting', 'with_moderator', 'bot', 'closed'];
+
+    /** `queue=` values: the handover-queue ticket state (spec §1.2). */
+    public const QUEUE_STATES = ['waiting', 'window', 'overdue', 'returning'];
+
+    /** Status keys the counts endpoint returns, in display order. */
+    public const COUNT_STATUSES = ['open', 'waiting', 'with_moderator', 'bot', 'closed'];
+
+    /** Counts are taken over a LIMIT of this many rows: a value above COUNT_CAP shows as "999+". */
+    public const COUNT_LIMIT = 1000;
+
+    public const COUNT_CAP = 999;
+
+    /** Flags that switch to the queue ordering (priority_rank, oldest customer message, id). */
+    private const QUEUE_ORDER_FLAGS = ['needs_human', 'queue_all', 'queue_high', 'queue_senior'];
+
+    /** Flags that also hide low-value conversations (spec §11.1). */
+    private const LOW_EXCLUDING_FLAGS = ['waiting', 'needs_human', 'queue_all', 'queue_high', 'queue_senior'];
 
     /**
      * Conversations the user may see: all for supervisor+, own platforms for moderators.
@@ -52,26 +76,273 @@ class ConversationQuery
     }
 
     /**
-     * @param  array{platform?: ?string, status?: ?string, filter?: ?string, q?: ?string, tag?: ?int}  $f
+     * @param  array{platform?: ?string, status?: ?string, queue?: ?string, assignee?: string|int|null, flags?: list<string>|string|null, filter?: ?string, q?: ?string, tag?: ?int}  $f
      */
     public function paginate(User $u, array $f): CursorPaginator
     {
-        return $this->build($u, $f)->cursorPaginate(self::PER_PAGE)->withQueryString();
+        $this->searchMode = null;
+        $this->searchTruncated = false;
+        $forced = ($f['qmode'] ?? null) === 'like' && trim((string) ($f['q'] ?? '')) !== '';
+
+        // Page 2+ of a search whose first page needed the fallback: the client sends qmode=like back,
+        // so every page of that search uses the same LIKE (the indexed path would find nothing).
+        if ($forced) {
+            $this->likeSearch = true;
+            try {
+                $page = $this->pageOf($u, $f);
+            } finally {
+                $this->likeSearch = false;
+            }
+            $this->searchMode = 'like';
+
+            return $page;
+        }
+
+        $page = $this->pageOf($u, $f);
+
+        // The indexed search (name prefix / FULLTEXT word prefix / phone prefix or suffix) cannot see
+        // a substring inside a word ("الله" in "عبدالله") or middle phone digits. When it finds
+        // nothing on the first page, run the old %term% LIKE once for this request. LIMIT still
+        // applies; later pages and counts-less paging never repeat it.
+        if ($page->isEmpty() && trim((string) ($f['q'] ?? '')) !== '' && $this->usesIndexedSearch()
+            && CursorPaginatorImpl::resolveCurrentCursor('cursor') === null) {
+            $this->likeSearch = true;
+            try {
+                $page = $this->pageOf($u, $f);
+            } finally {
+                $this->likeSearch = false;
+            }
+            $this->searchMode = 'like';
+        }
+
+        return $page;
+    }
+
+    /** `like` when the last paginate() call used the substring fallback (the client must send qmode=like on later pages). */
+    public function searchMode(): ?string
+    {
+        return $this->searchMode;
+    }
+
+    private ?string $searchMode = null;
+
+    /** True when the last substring search matched more than LIKE_CUSTOMER_CAP customers (only the most recent were used). */
+    public function searchTruncated(): bool
+    {
+        return $this->searchTruncated;
+    }
+
+    private bool $searchTruncated = false;
+
+    /** The substring search resolves at most this many customer ids before touching conversations. */
+    public const LIKE_CUSTOMER_CAP = 500;
+
+    /** @var array<string, array{ids: list<int>, truncated: bool}> Substring-matched customer ids per term, for this instance (counts reuse them). */
+    private array $likeIds = [];
+
+    /** @var bool Set only while the substring fallback re-runs a search that the indexed path left empty. */
+    private bool $likeSearch = false;
+
+    /** MariaDB/MySQL search through indexes; every other driver (sqlite) has only the substring LIKE. */
+    protected function usesIndexedSearch(): bool
+    {
+        return in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true);
+    }
+
+    private function pageOf(User $u, array $f): CursorPaginator
+    {
+        $assignee = $f['assignee'] ?? null;
+
+        if ($assignee === null || $assignee === '' || $assignee === 'none') {
+            $q = $this->build($u, $f);
+        } else {
+            $q = $this->build($u, array_merge($f, ['assignee' => null]));
+            $this->assigneePage($q, $u, $f, $assignee === 'me' ? $u->id : (int) $assignee);
+        }
+
+        $page = $this->cursorPage($q);
+        static::completeListRows($page->getCollection());
+
+        return $page;
     }
 
     /**
+     * assignee=<id> for one list page (R3: assigned to her, or unassigned and she replied last).
+     * The OR of the two leads MariaDB to an index_merge that fetches and sorts every matching row
+     * (12.5k for one moderator on the load dataset, ~200 ms). Instead each side is its own ordered,
+     * limited branch (all other filters, the page cursor, the list order, one page + 1) served by
+     * conv_assignee_idx / conv_last_responder_idx; the page is then read from at most two pages of
+     * ids. The union of each side's first N rows always holds the first N rows of the OR.
+     */
+    private function assigneePage(Builder $q, User $u, array $f, int $id): void
+    {
+        $orders = array_values(array_filter($q->getQuery()->orders ?? [], fn ($o) => isset($o['column'])));
+        $cursor = CursorPaginatorImpl::resolveCurrentCursor('cursor');
+        if ($cursor?->pointsToPreviousItems()) {
+            $orders = array_map(fn ($o) => ['column' => $o['column'], 'direction' => $o['direction'] === 'asc' ? 'desc' : 'asc'], $orders);
+        }
+
+        $branch = function (callable $side) use ($u, $f, $orders, $cursor) {
+            $b = $this->filtered($u, array_merge($f, ['assignee' => null]))->select('conversations.id');
+            $side($b);
+            if ($cursor !== null) {
+                self::seek($b, $orders, $cursor);
+            }
+            foreach ($orders as $o) {
+                $b->orderBy($o['column'], $o['direction']);
+            }
+
+            return $b->limit(self::PER_PAGE + 1)->toBase();
+        };
+
+        $ids = $branch(fn (Builder $b) => $b->where('conversations.assignee_id', $id))
+            ->unionAll($branch(fn (Builder $b) => $b->whereNull('conversations.assignee_id')->where('conversations.last_responder_id', $id)));
+
+        $q->whereIn('conversations.id', DB::query()->fromSub($ids, 'assignee_page')->select('assignee_page.id'));
+    }
+
+    /** Sort columns that may hold NULL (the cursor must seek past them: SQL `> NULL` is never true). */
+    private const NULLABLE_SORT_COLUMNS = ['conversations.last_customer_message_at'];
+
+    /**
+     * One page of $q. Laravel's cursorPaginate() seeks with `col > ?`, which is never true for a
+     * NULL cursor value and silently drops every row after a NULL last_customer_message_at; so a
+     * list ordered on that column is paged by hand with a NULL-aware seek (NULL sorts first
+     * ascending, last descending, on both MariaDB and sqlite). Other orders use Laravel's own.
+     */
+    private function cursorPage(Builder $q): CursorPaginator
+    {
+        $orders = array_values(array_filter($q->getQuery()->orders ?? [], fn ($o) => isset($o['column'])));
+        if (array_intersect(self::NULLABLE_SORT_COLUMNS, array_column($orders, 'column')) === []) {
+            return $q->cursorPaginate(self::PER_PAGE)->withQueryString();
+        }
+
+        $cursor = CursorPaginatorImpl::resolveCurrentCursor('cursor');
+        if ($cursor?->pointsToPreviousItems()) {
+            $orders = array_map(fn ($o) => ['column' => $o['column'], 'direction' => $o['direction'] === 'asc' ? 'desc' : 'asc'], $orders);
+        }
+        if ($cursor !== null) {
+            self::seek($q, $orders, $cursor);
+        }
+        $q->reorder();
+        foreach ($orders as $o) {
+            $q->orderBy($o['column'], $o['direction']);
+        }
+        $items = $q->limit(self::PER_PAGE + 1)->get();
+
+        return (new CursorPaginatorImpl($items, self::PER_PAGE, $cursor, [
+            'path' => Paginator::resolveCurrentPath(),
+            'cursorName' => 'cursor',
+            'parameters' => array_column($orders, 'column'),
+        ]))->withQueryString();
+    }
+
+    /**
+     * The rows after the cursor row in the given order, for a hand-built page or an assignee branch:
+     * (c1 > v1) OR (c1 = v1 AND ((c2 > v2) OR (c2 = v2 AND ...))), per the order directions, with the
+     * NULL cases of NULLABLE_SORT_COLUMNS spelled out (NULL sorts first ascending, last descending).
+     *
+     * @param  list<array{column: string, direction: string}>  $orders
+     */
+    private static function seek(Builder $b, array $orders, Cursor $cursor, int $i = 0): void
+    {
+        ['column' => $column, 'direction' => $direction] = $orders[$i];
+        $value = $cursor->parameter($column);
+        $asc = $direction === 'asc';
+        $nullable = in_array($column, self::NULLABLE_SORT_COLUMNS, true);
+        $more = $i < count($orders) - 1;
+
+        $b->where(function (Builder $w) use ($orders, $cursor, $i, $column, $value, $asc, $nullable, $more) {
+            $tie = function (Builder $x) use ($orders, $cursor, $i, $column, $value) {
+                $value === null ? $x->whereNull($column) : $x->where($column, '=', $value);
+                self::seek($x, $orders, $cursor, $i + 1);
+            };
+
+            if ($value === null) {
+                // Ascending: every non-NULL row follows. Descending: only the NULL rows are left to tie-break.
+                if ($asc) {
+                    $w->whereNotNull($column);
+                    $more ? $w->orWhere($tie) : null;
+                } else {
+                    $more ? $w->where($tie) : $w->whereRaw('1 = 0');
+                }
+
+                return;
+            }
+
+            $w->where($column, $asc ? '>' : '<', $value);
+            if ($nullable && ! $asc) {
+                $w->orWhereNull($column);
+            }
+            if ($more) {
+                $w->orWhere($tie);
+            }
+        });
+    }
+
+    /**
+     * The list query: filters, eager loads and the ordering the cursor pages on.
+     *
      * @return Builder<Conversation>
      */
     public function build(User $u, array $f): Builder
     {
-        $q = static::withListColumns(static::visibleTo($u));
+        // Plain columns only: paginate() fills the list sub-selects and the user relations for the
+        // page afterwards (completeListRows), so a sorted filter never evaluates them per candidate.
+        $q = $this->filtered($u, $f)->select('conversations.*')->with(['customer', 'tags', 'queueEntry']);
+        $flags = self::flagsOf($f);
+
+        if (($f['status'] ?? null) === 'waiting' || in_array('waiting', $flags, true)) {
+            $q->orderBy('conversations.last_customer_message_at')->orderBy('conversations.id');
+        } elseif (! empty($f['queue']) || array_intersect(self::QUEUE_ORDER_FLAGS, $flags) !== []) {
+            // Priority (high, medium, low), then oldest customer message first (spec §2.3,
+            // owner: "بالتوقيت حسب ميعاد الرساله"). priority_rank is a generated column (Task 4a),
+            // so the cursor can page on it and conv_queue_rank_idx serves the order.
+            // last_customer_message_at can be NULL: cursorPage() seeks past it by hand.
+            $q->orderBy('conversations.priority_rank')
+                ->orderBy('conversations.last_customer_message_at')
+                ->orderBy('conversations.id');
+        } else {
+            $q->orderByDesc('conversations.last_message_at')->orderByDesc('conversations.id');
+        }
+
+        return $q;
+    }
+
+    /**
+     * The visible-to query with every filter applied (AND between params), no columns or order:
+     * shared by the list and the counts.
+     *
+     * @return Builder<Conversation>
+     */
+    public function filtered(User $u, array $f): Builder
+    {
+        $q = static::visibleTo($u);
+        $flags = self::flagsOf($f);
+        $status = (string) ($f['status'] ?? '');
 
         if ($platform = Platform::tryFrom((string) ($f['platform'] ?? ''))) {
             $q->where('conversations.platform', $platform->value);
         }
 
-        if ($status = ConversationStatus::tryFrom((string) ($f['status'] ?? ''))) {
-            $q->where('conversations.status', $status->value);
+        match ($status) {
+            'open', 'pending', 'resolved' => $q->where('conversations.status', $status),
+            'closed' => $q->where('conversations.status', ConversationStatus::Resolved->value),
+            'waiting' => $this->waiting($q),
+            'bot' => $q->where('conversations.handler', Handler::Bot->value)
+                ->where('conversations.status', '!=', ConversationStatus::Resolved->value),
+            'with_moderator' => $q->where('conversations.handler', Handler::Human->value)
+                ->where('conversations.status', '!=', ConversationStatus::Resolved->value)
+                ->where(fn (Builder $w) => $w->whereNotNull('conversations.assignee_id')->orWhereNotNull('conversations.last_responder_id')),
+            default => null,
+        };
+
+        if (! empty($f['queue'])) {
+            $this->queueState($q, (string) $f['queue']);
+        }
+
+        if (($assignee = $f['assignee'] ?? null) !== null && $assignee !== '') {
+            $this->assignee($q, $assignee === 'me' ? $u->id : $assignee);
         }
 
         if (! empty($f['tag'])) {
@@ -79,21 +350,101 @@ class ConversationQuery
         }
 
         if (($term = trim((string) ($f['q'] ?? ''))) !== '') {
-            $q->whereHas('customer', fn (Builder $c) => $c
-                ->where('name', 'like', "%{$term}%")
-                ->orWhere('phone', 'like', "%{$term}%"));
+            $this->search($q, $term);
         }
 
-        $filter = $f['filter'] ?? null;
+        foreach ($flags as $flag) {
+            if ($flag === 'waiting' && $status === 'waiting') {
+                continue;
+            }
+            $this->flag($q, $u, $flag);
+        }
 
-        match ($filter) {
+        // The default inbox (and every filter but "spam") hides spam conversations;
+        // "waiting"/"needs_human" and the queue filters additionally exclude low-value ones (spec §11.1).
+        if (! in_array('spam', $flags, true)) {
+            $q->where('conversations.priority', '!=', ConversationPriority::Spam->value);
+        }
+        if ($status === 'waiting' || array_intersect(self::LOW_EXCLUDING_FLAGS, $flags) !== []) {
+            $q->where('conversations.priority', '!=', ConversationPriority::Low->value);
+        }
+
+        return $q;
+    }
+
+    /**
+     * Per-state counts for the filter bar, each over a LIMIT 1000 sub-select (a value above
+     * COUNT_CAP shows as "999+"). `status` and `queue` in $f are ignored: every state is counted
+     * under the other params. `queue` is null while the handover queue is off.
+     *
+     * @return array{status: array<string, int>, queue: ?array<string, int>, capped_at: int}
+     */
+    public function counts(User $u, array $f): array
+    {
+        unset($f['status'], $f['queue'], $f['qmode']);
+
+        $count = fn (array $extra): int => DB::query()
+            ->fromSub($this->filtered($u, $f + $extra)->select('conversations.id')->limit(self::COUNT_LIMIT), 'capped')
+            ->count();
+
+        $queueOn = QueueSetting::current()->enabled;
+        $run = function () use ($count, $queueOn): array {
+            $status = [];
+            foreach (self::COUNT_STATUSES as $s) {
+                $status[$s] = $count(['status' => $s]);
+            }
+            $queue = null;
+            if ($queueOn) {
+                $queue = [];
+                foreach (self::QUEUE_STATES as $s) {
+                    $queue[$s] = $count(['queue' => $s]);
+                }
+            }
+
+            return [$status, $queue];
+        };
+
+        [$status, $queue] = $run();
+
+        // Same substring fallback as the list: an indexed search that matched nothing in any state.
+        // Status and queue counts are both recomputed inside the same LIKE window so they agree.
+        if (array_sum($status) === 0 && trim((string) ($f['q'] ?? '')) !== '' && $this->usesIndexedSearch()) {
+            $this->likeSearch = true;
+            try {
+                [$status, $queue] = $run();
+            } finally {
+                $this->likeSearch = false;
+            }
+        }
+
+        return ['status' => $status, 'queue' => $queue, 'capped_at' => self::COUNT_CAP];
+    }
+
+    /**
+     * `flags` (list or comma string) plus the legacy single `filter`, de-duplicated, in order.
+     *
+     * @return list<string>
+     */
+    public static function flagsOf(array $f): array
+    {
+        $flags = $f['flags'] ?? [];
+        if (is_string($flags)) {
+            $flags = explode(',', $flags);
+        }
+        if (! empty($f['filter'])) {
+            $flags[] = (string) $f['filter'];
+        }
+
+        return array_values(array_unique(array_filter(array_map(fn ($v) => trim((string) $v), (array) $flags), fn ($v) => $v !== '')));
+    }
+
+    private function flag(Builder $q, User $u, string $flag): void
+    {
+        match ($flag) {
             'waiting' => $this->waiting($q),
             'needs_human' => $q->where('conversations.needs_human', true),
             'bot' => $q->where('conversations.handler', Handler::Bot->value),
-            'mine' => $q->where(fn (Builder $w) => $w
-                ->where('conversations.first_responder_id', $u->id)
-                ->orWhere('conversations.last_responder_id', $u->id)
-                ->orWhereHas('participants', fn (Builder $p) => $p->where('user_id', $u->id))),
+            'mine' => $this->mine($q, $u),
             'comment' => $q->where('conversations.source', ConversationSource::Comment->value),
             'ad' => $q->where('conversations.source', ConversationSource::Ad->value),
             'spam' => $q->where('conversations.priority', ConversationPriority::Spam->value),
@@ -115,29 +466,134 @@ class ConversationQuery
                 : $q->whereRaw('1 = 0'),
             default => null,
         };
+    }
 
-        // The default inbox (and every filter but "spam") hides spam conversations;
-        // "waiting"/"needs_human" and the queue filters additionally exclude low-value ones (spec §11.1).
-        if ($filter !== 'spam') {
-            $q->where('conversations.priority', '!=', ConversationPriority::Spam->value);
-        }
-        if (in_array($filter, ['waiting', 'needs_human', 'queue_all', 'queue_high', 'queue_senior'], true)) {
-            $q->where('conversations.priority', '!=', ConversationPriority::Low->value);
+    /**
+     * "Mine": first or last responder, or a participant. The ids come from one UNION of three
+     * index lookups (first_responder_id, last_responder_id, participants.user_id) read as a
+     * derived table, so MariaDB semi-joins it instead of probing an OR chain on every row.
+     */
+    private function mine(Builder $q, User $u): void
+    {
+        $ids = DB::query()->select('id')->from('conversations')->where('first_responder_id', $u->id)
+            ->union(DB::query()->select('id')->from('conversations')->where('last_responder_id', $u->id))
+            ->union(DB::query()->select('conversation_id')->from('conversation_participants')->where('user_id', $u->id));
+
+        $q->whereIn('conversations.id', DB::query()->fromSub($ids, 'mine_ids')->select('mine_ids.id'));
+    }
+
+    /**
+     * R3: an assigned conversation belongs to its assignee; an unassigned one to its last responder.
+     * `none` = neither.
+     */
+    private function assignee(Builder $q, int|string $id): void
+    {
+        if ($id === 'none') {
+            $q->whereNull('conversations.assignee_id')->whereNull('conversations.last_responder_id');
+
+            return;
         }
 
-        if ($filter === 'waiting') {
-            $q->orderBy('conversations.last_customer_message_at')->orderBy('conversations.id');
-        } elseif (in_array($filter, ['needs_human', 'queue_all', 'queue_high', 'queue_senior'], true)) {
-            // Priority (high → medium → low), then oldest customer message first (spec §2.3,
-            // owner: "بالتوقيت حسب ميعاد الرساله"), sqlite/mysql-portable form of FIELD(...).
-            $q->orderByRaw(self::PRIORITY_ORDER_SQL)
-                ->orderBy('conversations.last_customer_message_at')
-                ->orderBy('conversations.id');
+        $id = (int) $id;
+        $q->where(fn (Builder $w) => $w->where('conversations.assignee_id', $id)
+            ->orWhere(fn (Builder $x) => $x->whereNull('conversations.assignee_id')->where('conversations.last_responder_id', $id)));
+    }
+
+    /**
+     * Her queue ticket state, read off conversations.queue_entry_id. Written as an IN over the
+     * (small) set of matching entries rather than a correlated EXISTS, so the planner can start
+     * from queue_entries instead of probing every conversation.
+     */
+    private function queueState(Builder $q, string $state): void
+    {
+        $open = ['called', 'active'];
+
+        $entries = DB::query()->select('queue_entries.id')->from('queue_entries');
+        match ($state) {
+            'waiting' => $entries->where('queue_entries.status', 'waiting'),
+            'window' => $entries->whereIn('queue_entries.status', $open),
+            // Same rule as QueueEntryResource::reply_overdue.
+            'overdue' => $entries->whereIn('queue_entries.status', $open)
+                ->whereNotNull('queue_entries.awaiting_reply_since')->whereNotNull('queue_entries.apology_sent_at'),
+            'returning' => $entries->where('queue_entries.priority', 'returning')
+                ->whereIn('queue_entries.status', ['waiting', 'called', 'active']),
+            default => $entries->whereRaw('1 = 0'),
+        };
+
+        $q->whereIn('conversations.queue_entry_id', $entries);
+    }
+
+    /**
+     * Customer search. sqlite keeps the substring LIKE (so does the paginate() fallback). MariaDB/MySQL avoid scanning every
+     * conversation's customer with a leading wildcard (spec §1.3 fallback): 4+ digits search the
+     * phone by prefix or suffix; text searches the name by prefix or a FULLTEXT word-prefix match.
+     * The matching customer ids are a derived-table UNION so the planner starts from customers.
+     */
+    private function search(Builder $q, string $term): void
+    {
+        if (! $this->usesIndexedSearch() || $this->likeSearch) {
+            $q->whereIn('conversations.customer_id', $this->likeCustomerIds($term));
+
+            return;
+        }
+
+        $this->searchIndexed($q, $term);
+    }
+
+    /**
+     * The %term% LIKE, resolved on `customers` first (one scan, ~0.5 s on 300k rows) instead of a
+     * per-conversation EXISTS walked in last_message_at order (~100 s on 300k conversations).
+     * A term matching more than LIKE_CUSTOMER_CAP customers is too broad: the most recently
+     * contacted ones are used and searchTruncated() reports it. The moderator platform scope
+     * stays on the conversations query.
+     *
+     * @return list<int>
+     */
+    private function likeCustomerIds(string $term): array
+    {
+        if (! array_key_exists($term, $this->likeIds)) {
+            $ids = Customer::query()
+                ->where(fn (Builder $c) => $c->where('name', 'like', "%{$term}%")->orWhere('phone', 'like', "%{$term}%"))
+                ->orderByDesc('last_contact_at')->orderByDesc('id')
+                ->limit(self::LIKE_CUSTOMER_CAP + 1)
+                ->pluck('id')->map(fn ($id): int => (int) $id)->all();
+            $this->likeIds[$term] = [
+                'ids' => array_slice($ids, 0, self::LIKE_CUSTOMER_CAP),
+                'truncated' => count($ids) > self::LIKE_CUSTOMER_CAP,
+            ];
+        }
+        $this->searchTruncated = $this->searchTruncated || $this->likeIds[$term]['truncated'];
+
+        return $this->likeIds[$term]['ids'];
+    }
+
+    /** The MariaDB/MySQL index lookups behind search(): a seam, so tests can stand in for MariaDB on sqlite. */
+    protected function searchIndexed(Builder $q, string $term): void
+    {
+        $like = fn (string $s): string => str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $s);
+        $digits = (string) preg_replace('/[\s\-+()]/', '', $term);
+
+        if (preg_match('/^\d{4,}$/', $digits) === 1) {
+            // Suffix ("last digits") as a prefix range on the indexed REVERSE(phone) column (Task 4a migration).
+            $ids = DB::query()->select('id')->from('customers')->where('phone', 'like', $like($digits).'%')
+                ->union(DB::query()->select('id')->from('customers')->where('phone_reversed', 'like', $like(strrev($digits)).'%'));
         } else {
-            $q->orderByDesc('conversations.last_message_at')->orderByDesc('conversations.id');
+            $ids = DB::query()->select('id')->from('customers')->where('name', 'like', $like($term).'%');
+            if (($boolean = self::fulltextTerms($term)) !== null) {
+                $ids->union(DB::query()->select('id')->from('customers')->whereFullText('name', $boolean, ['mode' => 'boolean']));
+            }
         }
 
-        return $q;
+        $q->whereIn('conversations.customer_id', DB::query()->fromSub($ids, 'matched_customers')->select('matched_customers.id'));
+    }
+
+    /** "+word* +word*" for a FULLTEXT boolean search, or null when no word is long enough to be indexed. */
+    private static function fulltextTerms(string $term): ?string
+    {
+        $words = preg_split('/[\s+\-<>()~*"@]+/u', $term, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $words = array_filter($words, fn (string $w): bool => mb_strlen($w) >= 3);
+
+        return $words === [] ? null : implode(' ', array_map(fn (string $w): string => '+'.$w.'*', $words));
     }
 
     /**
@@ -150,24 +606,75 @@ class ConversationQuery
     public static function withListColumns(Builder $q): Builder
     {
         return $q->select('conversations.*')
-            ->addSelect([
-                'last_message_body' => Message::query()->select('body')
-                    ->whereColumn('messages.conversation_id', 'conversations.id')
-                    ->orderByDesc('id')->limit(1),
-                'last_message_direction' => Message::query()->select('direction')
-                    ->whereColumn('messages.conversation_id', 'conversations.id')
-                    ->where('sender_type', '!=', SenderType::System->value)
-                    ->orderByDesc('id')->limit(1),
-                // Handling indicator fallback (spec §5.4, Task 15): last human reply,
-                // so ConversationResource::handling() never issues a per-row query.
-                'last_human_reply_at' => Message::query()->select('created_at')
-                    ->whereColumn('messages.conversation_id', 'conversations.id')
-                    ->where('sender_type', SenderType::User->value)
-                    ->orderByDesc('id')->limit(1),
-                // Her open support case, for «عندها كيس مفتوح #N» (flow revision §6), no query per row.
-                'open_case_id' => SupportCase::openIdSubquery(),
-            ])
+            ->addSelect(self::listColumnSelects())
             ->with(['customer', 'lockedBy', 'firstResponder', 'lastResponder', 'tags', 'assignee', 'queueEntry']);
+    }
+
+    /**
+     * Fills a list page after the page query: the preview/direction/handling/open-case values in one
+     * query over the page's ids, and the four user relations (lock holder, responders, assignee) in
+     * one users query. The page query itself carries no sub-selects: when MariaDB has to sort a
+     * filtered set (assignee, search) through a temporary table it would otherwise evaluate every
+     * sub-select for every candidate row, not just for the 30 it returns (Task 4a EXPLAIN notes).
+     *
+     * @param  EloquentCollection<int, Conversation>  $rows
+     */
+    public static function completeListRows(EloquentCollection $rows): void
+    {
+        if ($rows->isEmpty()) {
+            return;
+        }
+
+        $values = Conversation::query()->toBase()
+            ->select('conversations.id')
+            ->addSelect(self::listColumnSelects())
+            ->whereIn('conversations.id', $rows->modelKeys())
+            ->get()->keyBy('id');
+
+        $userKeys = ['lockedBy' => 'locked_by_id', 'firstResponder' => 'first_responder_id', 'lastResponder' => 'last_responder_id', 'assignee' => 'assignee_id'];
+        $userIds = $rows->flatMap(fn (Conversation $c) => array_map(fn (string $col) => $c->getAttribute($col), $userKeys))
+            ->filter()->map(fn ($id) => (int) $id)->unique()->values();
+        $users = $userIds->isEmpty() ? collect() : User::query()->whereIn('id', $userIds)->get()->keyBy('id');
+
+        foreach ($rows as $c) {
+            $extra = (array) ($values->get($c->getKey()) ?? []);
+            unset($extra['id']);
+            foreach (['last_message_body', 'last_message_sender', 'last_message_direction', 'last_human_reply_at', 'open_case_id'] as $key) {
+                $extra[$key] ??= null;
+            }
+            $c->setRawAttributes(array_merge($c->getAttributes(), $extra), true);
+
+            foreach ($userKeys as $relation => $col) {
+                $id = $c->getAttribute($col);
+                $c->setRelation($relation, $id !== null ? $users->get((int) $id) : null);
+            }
+        }
+    }
+
+    /** The list sub-selects ConversationResource reads instead of querying per row. @return array<string, mixed> */
+    private static function listColumnSelects(): array
+    {
+        return [
+            'last_message_body' => Message::query()->select('body')
+                ->whereColumn('messages.conversation_id', 'conversations.id')
+                ->orderByDesc('id')->limit(1),
+            // Who wrote the preview (the row prefixes a moderator's own reply with «إنتي: »).
+            'last_message_sender' => Message::query()->select('sender_type')
+                ->whereColumn('messages.conversation_id', 'conversations.id')
+                ->orderByDesc('id')->limit(1),
+            'last_message_direction' => Message::query()->select('direction')
+                ->whereColumn('messages.conversation_id', 'conversations.id')
+                ->where('sender_type', '!=', SenderType::System->value)
+                ->orderByDesc('id')->limit(1),
+            // Handling indicator fallback (spec §5.4, Task 15): last human reply,
+            // so ConversationResource::handling() never issues a per-row query.
+            'last_human_reply_at' => Message::query()->select('created_at')
+                ->whereColumn('messages.conversation_id', 'conversations.id')
+                ->where('sender_type', SenderType::User->value)
+                ->orderByDesc('id')->limit(1),
+            // Her open support case, for «عندها كيس مفتوح #N» (flow revision §6), no query per row.
+            'open_case_id' => SupportCase::openIdSubquery(),
+        ];
     }
 
     /**

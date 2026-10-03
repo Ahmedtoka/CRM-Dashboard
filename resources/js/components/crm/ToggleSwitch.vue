@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** Accessible on/off switch in the Business Suite primary blue; the knob travels toward the reading end in RTL too. */
-defineProps<{ label: string; disabled?: boolean }>();
+withDefaults(defineProps<{ label: string; disabled?: boolean }>(), { disabled: false });
 
 const model = defineModel<boolean>({ required: true });
 </script>

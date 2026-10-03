@@ -147,7 +147,7 @@ describe('sending', function () {
         expect($sent)->toHaveCount(3)
             ->and($sent[0]['interactive']['body']['text'])->toBe('اختاري')
             ->and(count($sent[0]['interactive']['action']['buttons']))->toBe(3)
-            ->and($sent[1]['interactive']['body']['text'])->toBe('👇')
+            ->and($sent[1]['interactive']['body']['text'])->toBe('اختاري من هنا')
             ->and($sent[2]['interactive']['action']['buttons'][0]['reply'])->toBe(['id' => 'p7', 'title' => 'اختيار 7']);
 
         config(['crm.whatsapp_menu_style' => 'list']);

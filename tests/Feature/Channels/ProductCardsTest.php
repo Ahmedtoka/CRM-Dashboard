@@ -34,7 +34,7 @@ it('builds a picture card per product with a jpeg image, the page link and a det
     expect($cards['type'])->toBe('generic')
         ->and($cards['cards'][0]['image_url'])->toBe('https://cdn.shopify.com/s/files/dress-1.webp?v=1&width=800&format=jpg')
         ->and($cards['cards'][0]['url'])->toEndWith('/products/dress-1')
-        ->and($cards['cards'][0]['subtitle'])->toBe('901 جنيه · متوفر ✅')
+        ->and($cards['cards'][0]['subtitle'])->toBe('901 جنيه · متوفر')
         ->and($cards['cards'][0]['buttons'][1]['type'])->toBe('postback')
         ->and($cards['cards'][0]['buttons'][1]['payload'])->toStartWith('product:');
 });

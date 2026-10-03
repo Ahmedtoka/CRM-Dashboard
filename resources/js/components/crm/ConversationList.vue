@@ -1,51 +1,91 @@
 <script setup lang="ts">
 import ConversationItem from '@/components/crm/ConversationItem.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
+import FilterBar from '@/components/crm/FilterBar.vue';
+import InboxFilterPanel from '@/components/crm/InboxFilterPanel.vue';
 import { useI18n } from '@/composables/useI18n';
-import { useNow } from '@/composables/useNow';
+import { conversationState } from '@/lib/conversationState';
+import { formatCount } from '@/lib/format';
 import type { SharedData } from '@/types';
-import type { Conversation, InboxFilters, InboxQuickFilter, Tag } from '@/types/crm';
+import type { Conversation, InboxCounts, InboxFilters, InboxModerator, InboxQuickFilter, Tag } from '@/types/crm';
 import { usePage } from '@inertiajs/vue3';
-import { Inbox, LoaderCircle, Search, WifiOff } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { useVirtualizer } from '@tanstack/vue-virtual';
+import { Inbox, LoaderCircle, SearchX, Wifi, WifiOff } from 'lucide-vue-next';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
-const props = defineProps<{
-    conversations: Conversation[];
-    filters: InboxFilters;
-    selectedId: number | null;
-    loading: boolean;
-    loadingMore: boolean;
-    hasMore: boolean;
-    live: boolean;
-    tags: Tag[];
+const props = withDefaults(
+    defineProps<{
+        conversations: Conversation[];
+        filters: InboxFilters;
+        counts: InboxCounts | null;
+        selectedId: number | null;
+        moderators: InboxModerator[];
+        tags: Tag[];
+        loading?: boolean;
+        loadingMore?: boolean;
+        /** The last page load failed: the end row offers «حاولي تاني» instead of the spinner. */
+        loadMoreFailed?: boolean;
+        hasMore?: boolean;
+        live?: boolean;
+        pollFailed?: boolean;
+        queueEnabled?: boolean;
+        /** Any filter is active (the empty state then offers «مسح الفلاتر»). */
+        filtered?: boolean;
+        /** The substring search matched too many customers: hint to narrow it. */
+        searchTruncated?: boolean;
+    }>(),
+    {
+        loading: false,
+        loadingMore: false,
+        loadMoreFailed: false,
+        hasMore: false,
+        live: false,
+        pollFailed: false,
+        queueEnabled: false,
+        filtered: false,
+        searchTruncated: false,
+    },
+);
+
+const emit = defineEmits<{
+    update: [patch: Partial<InboxFilters>];
+    clear: [];
+    refresh: [];
+    select: [id: number, pointer: boolean];
+    /** Hover (150 ms) or keyboard focus on a row: worth prefetching that chat (Task 6c). */
+    intent: [id: number];
+    /** `manual`: the person asked (button), so retry at once even after a failure. */
+    loadMore: [manual: boolean];
+    tagMenu: [id: number, x: number, y: number];
 }>();
 
-const emit = defineEmits<{ 'update:filters': [filters: InboxFilters]; select: [id: number]; loadMore: []; tagMenu: [id: number, x: number, y: number] }>();
-
-const { t } = useI18n();
-const now = useNow();
+const { t, locale } = useI18n();
 const page = usePage<SharedData>();
 
-const QUICK_FILTERS = [
-    'waiting', 'needs_human', 'bot', 'mine', 'comment', 'ad', 'low_priority', 'spam',
-    'customer_new', 'customer_repeat', 'open_order', 'has_return', 'stuck_order',
-    // The team's own runs of a public test link (design 2026-09-21 §4).
+const ROW = 72;
+const SKELETON_ROWS = 10;
+type TabValue = 'waiting' | 'with_moderator' | 'bot' | 'closed';
+const TABS: (TabValue | null)[] = [null, 'waiting', 'with_moderator', 'bot', 'closed'];
+
+const isSupervisor = computed(() => ['supervisor', 'admin'].includes(page.props.auth.user?.role ?? ''));
+
+// The «كمان» flags (spec §1.2 More): several at once, joined with AND (R4). The senior queue is supervisor+.
+const flagOptions = computed<InboxQuickFilter[]>(() => [
+    'needs_human',
+    'mine',
+    'comment',
+    'ad',
+    'customer_new',
+    'customer_repeat',
+    'open_order',
+    'has_return',
+    'stuck_order',
+    'queue_high',
+    ...(isSupervisor.value ? (['queue_senior'] as const) : []),
+    'spam',
+    'low_priority',
     'test',
-] as const;
-const STATUSES = ['open', 'pending', 'resolved'] as const;
-const SKELETON_ROWS = 6;
-
-// Handover queues come first: they are where agents work. The senior queue is supervisor/admin only
-// (the server returns no rows for a moderator anyway).
-const queueFilters = computed<InboxQuickFilter[]>(() => {
-    const role = page.props.auth.user?.role;
-    return role === 'supervisor' || role === 'admin' ? ['queue_all', 'queue_high', 'queue_senior'] : ['queue_all', 'queue_high'];
-});
-
-const chipClass = (f: InboxQuickFilter) => [
-    'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors',
-    props.filters.filter === f ? 'bg-surface-accent text-primary' : 'bg-elevated text-muted-foreground hover:text-foreground',
-];
+]);
 
 const platformOptions = computed(() => {
     const user = page.props.auth.user;
@@ -53,138 +93,297 @@ const platformOptions = computed(() => {
     return user.role === 'moderator' ? all.filter((p) => user.platforms?.includes(p.value)) : all;
 });
 
-function update(patch: Partial<InboxFilters>): void {
-    emit('update:filters', { ...props.filters, ...patch });
+const names = computed(() => new Map(props.moderators.map((m) => [m.id, m.name])));
+
+// ---- counts on the status tabs ----
+const countLabel = (n: number | undefined): string => {
+    if (n === undefined || !props.counts) return '';
+    return n > props.counts.capped_at ? `${formatCount(props.counts.capped_at, locale.value)}+` : formatCount(n, locale.value);
+};
+const tabCount = (tab: TabValue | null) => (tab ? countLabel(props.counts?.status[tab]) : '');
+const tabActive = (tab: TabValue | null) => (props.filters.status ?? null) === tab || (tab === 'closed' && props.filters.status === 'resolved');
+
+const tabList = ref<HTMLElement | null>(null);
+function onTabKeydown(event: KeyboardEvent): void {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const tabs = Array.from(tabList.value?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? []);
+    const index = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    const rtl = getComputedStyle(tabList.value!).direction === 'rtl';
+    const forward = event.key === (rtl ? 'ArrowLeft' : 'ArrowRight');
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (forward ? 1 : -1) + tabs.length) % tabs.length;
+    event.preventDefault();
+    tabs[next]?.focus();
 }
 
-const search = ref(props.filters.q ?? '');
-let searchTimer: number | undefined;
-watch(search, (value) => {
-    window.clearTimeout(searchTimer);
-    searchTimer = window.setTimeout(() => update({ q: value.trim() || null }), 300);
+// ---- active filters as chips ----
+const LEGACY_STATUS = ['open', 'pending'] as const;
+const chips = computed(() => {
+    const f = props.filters;
+    const out: { key: string; label: string }[] = [];
+    if (f.status && (LEGACY_STATUS as readonly string[]).includes(f.status)) out.push({ key: 'status', label: t(`inbox.status.${f.status}`) });
+    if (f.queue) out.push({ key: 'queue', label: t(`inbox.queue_state.${f.queue}`) });
+    if (f.assignee) {
+        const label =
+            f.assignee === 'me'
+                ? t('inbox.assignee.me')
+                : f.assignee === 'none'
+                  ? t('inbox.assignee.none')
+                  : (names.value.get(Number(f.assignee)) ?? `#${f.assignee}`);
+        out.push({ key: 'assignee', label });
+    }
+    if (f.platform) out.push({ key: 'platform', label: platformOptions.value.find((p) => p.value === f.platform)?.label ?? f.platform });
+    if (f.tag) out.push({ key: 'tag', label: props.tags.find((tag) => tag.id === f.tag)?.name ?? `#${f.tag}` });
+    for (const flag of f.flags) out.push({ key: `flag:${flag}`, label: t(`inbox.filters.${flag}`) });
+    return out;
 });
-onBeforeUnmount(() => window.clearTimeout(searchTimer));
+const moreCount = computed(
+    () =>
+        [props.filters.queue, props.filters.assignee, props.filters.platform, props.filters.tag].filter(Boolean).length + props.filters.flags.length,
+);
 
-function selectValue(event: Event): string | null {
-    return (event.target as HTMLSelectElement).value || null;
+function removeChip(key: string): void {
+    if (key.startsWith('flag:')) {
+        const flag = key.slice(5);
+        emit('update', { flags: props.filters.flags.filter((f) => f !== flag) });
+        return;
+    }
+    emit('update', { [key]: null } as Partial<InboxFilters>);
 }
 
-const listEl = ref<HTMLElement | null>(null);
+// ---- virtualised rows ----
+const scrollEl = ref<HTMLElement | null>(null);
+// One extra row under the last conversation while more pages exist: the spinner / «تحميل المزيد».
+const rowCount = computed(() => props.conversations.length + (props.hasMore ? 1 : 0));
+const virtualizer = useVirtualizer(
+    computed(() => ({
+        count: rowCount.value,
+        getScrollElement: () => scrollEl.value,
+        estimateSize: () => ROW,
+        overscan: 8,
+        getItemKey: (index: number) => props.conversations[index]?.id ?? 'more',
+    })),
+);
+const rows = computed(() => virtualizer.value.getVirtualItems());
+const totalSize = computed(() => virtualizer.value.getTotalSize());
 
-// Arrow keys move focus between conversations; Enter/Space opens (native button).
+const states = computed(() => {
+    const map = new Map<number, ReturnType<typeof conversationState>>();
+    for (const item of rows.value) {
+        const c = props.conversations[item.index];
+        if (c) map.set(c.id, conversationState(c, t, names.value));
+    }
+    return map;
+});
+
+// Infinite load: the last rendered row is within 10 of the end.
+watch(
+    () => [rows.value.at(-1)?.index ?? -1, props.conversations.length, props.hasMore, props.loadingMore, props.loading] as const,
+    ([last, length, hasMore, loadingMore, loading]) => {
+        // After a failure the composable holds automatic retries back (backoff), so this cannot loop.
+        if (hasMore && !loadingMore && !loading && last >= length - 10) emit('loadMore', false);
+    },
+);
+
+// A new filter set starts at the top.
+watch(
+    () => props.loading,
+    (now) => {
+        if (now && scrollEl.value) scrollEl.value.scrollTop = 0;
+    },
+);
+
+// For tools/perf/browser-bench.mjs: how many rows are loaded (not mounted).
+watch(
+    () => props.conversations.length,
+    (n) => ((window as unknown as { __inboxLoadedRows?: number }).__inboxLoadedRows = n),
+    { immediate: true },
+);
+onBeforeUnmount(() => delete (window as unknown as { __inboxLoadedRows?: number }).__inboxLoadedRows);
+
+function scrollToId(id: number): void {
+    const index = props.conversations.findIndex((c) => c.id === id);
+    if (index !== -1) virtualizer.value.scrollToIndex(index, { align: 'auto' });
+}
+
+function focusRow(id: number): void {
+    scrollToId(id);
+    void nextTick(() => requestAnimationFrame(() => scrollEl.value?.querySelector<HTMLButtonElement>(`[data-conversation-id="${id}"]`)?.focus()));
+}
+
+// Arrow keys move focus between conversations (rows off screen are scrolled in first); Enter/Space opens.
 function onKeydown(event: KeyboardEvent): void {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-    const items = Array.from(listEl.value?.querySelectorAll<HTMLButtonElement>('[data-conversation-id]') ?? []);
-    const index = items.indexOf(document.activeElement as HTMLButtonElement);
-    const next = items[Math.min(items.length - 1, Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1)))];
+    const current = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[data-conversation-id]');
+    if (!current) return;
+    const index = props.conversations.findIndex((c) => c.id === Number(current.dataset.conversationId));
+    const next = props.conversations[Math.min(props.conversations.length - 1, Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1)))];
     if (next) {
         event.preventDefault();
-        next.focus();
+        focusRow(next.id);
     }
 }
 
-function onScroll(event: Event): void {
-    const el = event.target as HTMLElement;
-    if (props.hasMore && !props.loadingMore && el.scrollTop + el.clientHeight >= el.scrollHeight - 120) emit('loadMore');
+// ---- search and the popover, reachable from the page's `/` and `f` shortcuts ----
+const bar = ref<InstanceType<typeof FilterBar> | null>(null);
+const filtersOpen = ref(false);
+
+function onSearch(value: string): void {
+    const q = value || null;
+    if (q !== (props.filters.q ?? null)) emit('update', { q });
 }
 
-const selectClass = 'h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs';
+defineExpose({
+    scrollToId,
+    focusSearch: () => bar.value?.focusSearch(),
+    openFilters: () => (filtersOpen.value = true),
+});
 </script>
 
 <template>
-    <section class="min-h-0 flex-col border-e bg-card" :aria-label="t('inbox.title')">
-        <div class="space-y-2 border-b bg-card p-3">
-            <h2 class="text-lg font-bold">{{ t('inbox.title') }}</h2>
-            <div class="relative">
-                <Search class="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <input
-                    v-model="search"
-                    type="search"
-                    :placeholder="t('inbox.search')"
-                    :aria-label="t('inbox.search')"
-                    class="h-9 w-full rounded-full border-0 bg-elevated pe-2 ps-9 text-sm placeholder:text-muted-foreground"
-                />
-            </div>
-            <div class="flex gap-2">
-                <select :value="filters.platform ?? ''" :class="selectClass" :aria-label="t('inbox.platform_all')" @change="update({ platform: selectValue($event) as InboxFilters['platform'] })">
-                    <option value="">{{ t('inbox.platform_all') }}</option>
-                    <option v-for="p in platformOptions" :key="p.value" :value="p.value">{{ p.label }}</option>
-                </select>
-                <select :value="filters.status ?? ''" :class="selectClass" :aria-label="t('inbox.status.all')" @change="update({ status: selectValue($event) as InboxFilters['status'] })">
-                    <option value="">{{ t('inbox.status.all') }}</option>
-                    <option v-for="s in STATUSES" :key="s" :value="s">{{ t(`inbox.status.${s}`) }}</option>
-                </select>
-                <select :value="filters.tag ?? ''" :class="selectClass" :aria-label="t('inbox.tag_all')" @change="update({ tag: Number(selectValue($event)) || null })">
-                    <option value="">{{ t('inbox.tag_all') }}</option>
-                    <option v-for="tag in tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
-                </select>
-            </div>
-            <div class="scrollbar-thin -mx-3 flex items-center gap-1.5 overflow-x-auto px-3 pb-0.5">
-                <div role="group" :aria-label="t('inbox.queues')" class="flex shrink-0 gap-1.5">
-                    <button
-                        v-for="f in queueFilters"
-                        :key="f"
-                        type="button"
-                        :aria-pressed="filters.filter === f"
-                        :class="chipClass(f)"
-                        @click="update({ filter: filters.filter === f ? null : f })"
-                    >
-                        <span v-if="f === 'queue_high'" class="size-1.5 rounded-full bg-destructive" aria-hidden="true" />
-                        {{ t(`inbox.filters.${f}`) }}
-                    </button>
-                </div>
-                <span class="mx-0.5 h-5 w-px shrink-0 bg-border" aria-hidden="true" />
+    <section class="min-h-0 min-w-0 flex-col border-e bg-card" :aria-label="t('inbox.list_title')">
+        <div class="space-y-2 border-b bg-card px-3 pb-2 pt-3">
+            <div class="flex items-center gap-2">
+                <h2 class="text-base font-bold">{{ t('inbox.list_title') }}</h2>
                 <button
-                    v-for="f in QUICK_FILTERS"
-                    :key="f"
                     type="button"
-                    :aria-pressed="filters.filter === f"
-                    :class="chipClass(f)"
-                    @click="update({ filter: filters.filter === f ? null : f })"
+                    class="ms-auto inline-flex size-7 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    :class="live ? 'text-muted-foreground/70' : pollFailed ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                    :title="live ? t('inbox.live') : pollFailed ? t('inbox.poll_failed') : t('alerts.polling')"
+                    :aria-label="live ? t('inbox.live') : pollFailed ? t('inbox.poll_failed') : t('alerts.polling')"
+                    @click="emit('refresh')"
                 >
-                    {{ t(`inbox.filters.${f}`) }}
+                    <Wifi v-if="live" class="size-4" aria-hidden="true" />
+                    <WifiOff v-else class="size-4" aria-hidden="true" />
                 </button>
             </div>
+
+            <FilterBar
+                ref="bar"
+                v-model:open="filtersOpen"
+                :search="filters.q ?? ''"
+                :search-placeholder="t('inbox.search')"
+                :chips="chips"
+                :more-count="moreCount"
+                @update:search="onSearch"
+                @remove="removeChip"
+                @clear="emit('clear')"
+            >
+                <template #more>
+                    <InboxFilterPanel
+                        :filters="filters"
+                        :counts="counts"
+                        :queue-enabled="queueEnabled"
+                        :moderators="moderators"
+                        :tags="tags"
+                        :platforms="platformOptions"
+                        :flag-options="flagOptions"
+                        @update="emit('update', $event)"
+                    />
+                </template>
+                <template #tabs>
+                    <div
+                        ref="tabList"
+                        role="tablist"
+                        :aria-label="t('inbox.status_label')"
+                        class="scrollbar-none -mx-3 flex gap-0.5 overflow-x-auto px-3"
+                        @keydown="onTabKeydown"
+                    >
+                        <button
+                            v-for="tab in TABS"
+                            :key="tab ?? 'all'"
+                            type="button"
+                            role="tab"
+                            :aria-selected="tabActive(tab)"
+                            :tabindex="tabActive(tab) ? 0 : -1"
+                            class="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            :class="
+                                tabActive(tab)
+                                    ? 'bg-surface-accent font-semibold text-primary'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                            "
+                            @click="emit('update', { status: tab })"
+                        >
+                            {{ t(`inbox.tabs.${tab ?? 'all'}`) }}
+                            <span
+                                v-if="tabCount(tab)"
+                                class="tabular-nums"
+                                :class="tabActive(tab) ? 'text-primary/80' : 'text-muted-foreground/80'"
+                                >{{ tabCount(tab) }}</span
+                            >
+                        </button>
+                    </div>
+                </template>
+            </FilterBar>
+            <p v-if="searchTruncated && (filters.q ?? '') !== ''" data-search-truncated class="text-xs text-muted-foreground" role="status">
+                {{ t('inbox.search_truncated') }}
+            </p>
         </div>
 
-        <p v-if="!live" class="flex items-center gap-1.5 border-b bg-muted/60 px-3 py-1 text-2xs text-muted-foreground">
-            <WifiOff class="size-3" aria-hidden="true" />{{ t('alerts.polling') }}
-        </p>
-
         <div
-            ref="listEl"
+            ref="scrollEl"
             data-conversation-list
-            class="scrollbar-thin relative min-h-0 flex-1 overflow-y-auto"
+            class="scrollbar-thin relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
             @keydown="onKeydown"
-            @scroll.passive="onScroll"
         >
             <div v-if="loading" :aria-busy="true" :aria-label="t('common.loading')">
-                <div v-for="n in SKELETON_ROWS" :key="n" class="mx-1.5 my-0.5 flex gap-3 px-3 py-2.5" aria-hidden="true">
-                    <div class="size-11 shrink-0 animate-pulse rounded-full bg-elevated" />
-                    <div class="min-w-0 flex-1 space-y-2 pt-1">
+                <div v-for="n in SKELETON_ROWS" :key="n" class="flex h-[72px] items-center gap-3 px-3" aria-hidden="true">
+                    <div class="size-10 shrink-0 animate-pulse rounded-full bg-elevated" />
+                    <div class="min-w-0 flex-1 space-y-2.5">
                         <div class="flex items-center gap-2">
                             <div class="h-3 w-2/5 animate-pulse rounded bg-elevated" />
                             <div class="ms-auto h-2.5 w-8 animate-pulse rounded bg-elevated" />
                         </div>
-                        <div class="h-2.5 w-4/5 animate-pulse rounded bg-elevated" />
-                        <div class="h-4 w-16 animate-pulse rounded-full bg-elevated" />
+                        <div class="flex items-center gap-2">
+                            <div class="h-4 w-14 animate-pulse rounded-full bg-elevated" />
+                            <div class="h-2.5 flex-1 animate-pulse rounded bg-elevated" />
+                        </div>
                     </div>
                 </div>
             </div>
+
+            <EmptyState v-else-if="!conversations.length && filtered" :icon="SearchX" :title="t('inbox.empty_filtered')">
+                <template #action>
+                    <button
+                        type="button"
+                        class="inline-flex h-8 items-center rounded-full border border-input px-3 text-xs font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        @click="emit('clear')"
+                    >
+                        {{ t('inbox.clear_filters') }}
+                    </button>
+                </template>
+            </EmptyState>
             <EmptyState v-else-if="!conversations.length" :icon="Inbox" :title="t('inbox.empty_list')" />
-            <ConversationItem
-                v-for="c in loading ? [] : conversations"
-                :key="c.id"
-                :conversation="c"
-                :active="c.id === selectedId"
-                :now="now"
-                @select="emit('select', $event)"
-                @contextmenu="(id, event) => emit('tagMenu', id, event.clientX, event.clientY)"
-            />
-            <div v-if="hasMore && !loading" class="p-3 text-center">
-                <button type="button" class="inline-flex items-center gap-1.5 text-xs text-primary hover:underline" :disabled="loadingMore" @click="emit('loadMore')">
-                    <LoaderCircle v-if="loadingMore" class="size-3 animate-spin" aria-hidden="true" />{{ t('inbox.load_more') }}
-                </button>
+
+            <div v-else role="list" class="relative w-full" :style="{ height: `${totalSize}px` }">
+                <div
+                    v-for="item in rows"
+                    :key="String(item.key)"
+                    role="listitem"
+                    class="absolute start-0 top-0 w-full"
+                    :style="{ height: `${ROW}px`, transform: `translateY(${item.start}px)` }"
+                >
+                    <ConversationItem
+                        v-if="conversations[item.index]"
+                        :conversation="conversations[item.index]"
+                        :state="states.get(conversations[item.index].id) ?? null"
+                        :active="conversations[item.index].id === selectedId"
+                        @select="(id, pointer) => emit('select', id, pointer)"
+                        @intent="(id) => emit('intent', id)"
+                        @contextmenu="(id, event) => emit('tagMenu', id, event.clientX, event.clientY)"
+                    />
+                    <div v-else class="flex h-[72px] items-center justify-center">
+                        <LoaderCircle v-if="loadingMore" class="size-4 animate-spin text-muted-foreground" :aria-label="t('common.loading')" />
+                        <p v-else-if="loadMoreFailed" class="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+                            {{ t('inbox.load_more_failed') }}
+                            <button type="button" class="font-medium text-primary hover:underline" @click="emit('loadMore', true)">
+                                {{ t('inbox.retry') }}
+                            </button>
+                        </p>
+                        <button v-else type="button" class="text-xs text-primary hover:underline" @click="emit('loadMore', true)">
+                            {{ t('inbox.load_more') }}
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </section>

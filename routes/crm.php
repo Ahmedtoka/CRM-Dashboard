@@ -42,15 +42,18 @@ use App\Http\Controllers\Web\Settings\UserController;
 use App\Http\Controllers\Web\ShippingController;
 use App\Http\Controllers\Web\SimulatorController;
 use App\Http\Middleware\EnsureUserIsActive;
+use App\Http\Middleware\RestrictAdsRoles;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\TrackPresence;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::class])->group(function () {
+Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale::class, TrackPresence::class])->group(function () {
     // Inbox
     Route::get('/inbox', [InboxController::class, 'index'])->name('inbox');
     Route::prefix('inbox')->name('inbox.')->group(function () {
         Route::get('conversations', [InboxController::class, 'list'])->middleware('record-list-latency')->name('conversations.index');
+        // Before conversations/{conversation}, or the binding swallows "counts".
+        Route::get('conversations/counts', [InboxController::class, 'counts'])->name('conversations.counts');
         Route::get('conversations/{conversation}', [InboxController::class, 'show'])->name('conversations.show');
         Route::get('conversations/{conversation}/messages', [InboxController::class, 'messages'])->name('conversations.messages.index');
         Route::post('conversations/{conversation}/messages', [InboxController::class, 'sendMessage'])->name('conversations.messages.store');
@@ -110,6 +113,7 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
 
     // Media (Dashboard Experience Task 1): authorised inline/download serving + inbound retry.
     Route::get('/media/{attachment}', [MediaController::class, 'show'])->name('media.show');
+    Route::get('/media/{attachment}/thumb', [MediaController::class, 'thumb'])->name('media.thumb');
     Route::post('/media/{attachment}/retry', [MediaController::class, 'retry'])->name('media.retry');
 
     // Saved replies (Dashboard Experience Task 4): a reply's own attachment thumbnail/download.
@@ -132,9 +136,11 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
 
     // Orders
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
+    Route::post('/orders/refresh-stale', [OrderController::class, 'refreshStale'])->middleware('throttle:30,1')->name('orders.refresh-stale');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
     Route::post('/orders/{order}/retry', [OrderController::class, 'retry'])->name('orders.retry');
+    Route::post('/orders/{order}/refresh', [OrderController::class, 'refresh'])->middleware('throttle:20,1')->name('orders.refresh');
     Route::middleware('role:supervisor')->group(function () {
         Route::post('/orders/{order}/mark-paid', [OrderController::class, 'markPaid'])->name('orders.mark-paid');
         Route::post('/orders/{order}/ship', [OrderController::class, 'ship'])->name('orders.ship');
@@ -337,4 +343,7 @@ Route::middleware([EnsureUserIsActive::class, SetLocale::class, TrackPresence::c
 
     Route::post('/locale/{locale}', [LocaleController::class, 'update'])->whereIn('locale', SetLocale::SUPPORTED)->name('locale.update');
     Route::post('/presence/heartbeat', [PresenceController::class, 'heartbeat'])->name('presence.heartbeat');
+
+    // Ads Hub (media buyers and content): their own area, see RestrictAdsRoles.
+    require __DIR__.'/ads.php';
 });

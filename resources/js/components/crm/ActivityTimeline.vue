@@ -28,7 +28,7 @@ const icon = (log: ActivityLogItem) => (log.actor_type === 'bot' ? Bot : log.use
                 <component :is="icon(log)" class="size-3.5" />
             </span>
             <div class="min-w-0 flex-1">
-                <p class="text-foreground" dir="auto">{{ activitySentence(log, locale, page.props.platforms ?? []) }}</p>
+                <p class="text-foreground">{{ activitySentence(log, locale, page.props.platforms ?? []) }}</p>
                 <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-muted-foreground">
                     <time class="tabular-nums" :datetime="log.created_at ?? undefined">{{ formatDateTime(log.created_at, locale) }}</time>
                     <PlatformBadge v-if="log.platform" :platform="log.platform" size="xs" />

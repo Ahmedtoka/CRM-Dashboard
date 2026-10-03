@@ -28,7 +28,7 @@ final class PhotoStep extends BaseStep
     ];
 
     /** The one nudge, translated for an English chat by the outbound translation layer. */
-    private const NUDGE = 'محتاجين صورة للقطعة عشان الفريق يشوف المشكلة 🙏 لو مش معاكي صورة دلوقتي اكتبي «مش معايا صورة» ونكمل.';
+    private const NUDGE = 'محتاجين صورة للقطعة عشان الفريق يشوف المشكلة، لو مش معاكي صورة دلوقتي اكتبي «مش معايا صورة» ونكمل.';
 
     /** Whether a single message carries an image: a media attachment, or a legacy `attachments` json entry. */
     public static function hasImage(Message $m): bool

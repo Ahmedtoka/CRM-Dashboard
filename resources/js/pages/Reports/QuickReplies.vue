@@ -6,7 +6,7 @@ import ReportFilters from '@/components/crm/ReportFilters.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useReportFilters } from '@/composables/useReportFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatCount, formatDateTime } from '@/lib/format';
+import { formatCount, formatDateTime, slashShortcut } from '@/lib/format';
 import type { QuickReplyAgentRow, QuickReplyTopRow, QuickReplyUnusedRow, ReportRange } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
 import { Head } from '@inertiajs/vue3';
@@ -81,6 +81,8 @@ const breadcrumbs = computed(() => [{ title: t('reports.quick_replies.title'), h
             <section class="space-y-2">
                 <h2 class="text-sm font-medium">{{ t('reports.quick_replies.top') }}</h2>
                 <DataTable :columns="topColumns" :rows="topRows" :empty="t('reports.quick_replies.empty')" :caption="t('reports.quick_replies.top')">
+                    <template #cell-shortcut="{ value }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">{{ slashShortcut(String(value)) }}</code></template>
+                    <template #cell-title="{ value }"><span dir="auto">{{ value }}</span></template>
                     <template #cell-scope="{ value }">{{ scopeLabel(value as QuickReplyTopRow['scope']) }}</template>
                     <template #cell-uses="{ value }"><span class="tabular-nums">{{ n(value as number) }}</span></template>
                     <template #cell-users="{ value }"><span class="tabular-nums">{{ n(value as number) }}</span></template>
@@ -117,6 +119,8 @@ const breadcrumbs = computed(() => [{ title: t('reports.quick_replies.title'), h
                     <h2 class="text-sm font-medium">{{ t('reports.quick_replies.unused') }}</h2>
                 </div>
                 <DataTable :columns="unusedColumns" :rows="unusedRows" :empty="t('reports.quick_replies.empty')" :caption="t('reports.quick_replies.unused')">
+                    <template #cell-shortcut="{ value }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">{{ slashShortcut(String(value)) }}</code></template>
+                    <template #cell-title="{ value }"><span dir="auto">{{ value }}</span></template>
                     <template #cell-scope="{ value }">{{ scopeLabel(value as QuickReplyUnusedRow['scope']) }}</template>
                     <template #cell-last_used_at="{ value }">
                         <span class="whitespace-nowrap tabular-nums text-muted-foreground">{{ formatDateTime(value as string | null, locale) || '—' }}</span>

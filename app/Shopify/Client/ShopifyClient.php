@@ -3,7 +3,10 @@
 namespace App\Shopify\Client;
 
 use App\Shopify\Connection\IntegrationRepository;
+use App\Shopify\Sync\SyncQueries;
 use Closure;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -31,6 +34,9 @@ final class ShopifyClient
 
     private ?string $token = null;
 
+    /** How many times a failed read is resent; null = once per BACKOFF_SECONDS entry. */
+    private ?int $maxRetries = null;
+
     public function __construct(
         private readonly ShopifyTransport $transport,
         private readonly IntegrationRepository $integrations,
@@ -51,6 +57,26 @@ final class ShopifyClient
         $clone->throttleStatus = null;
 
         return $clone;
+    }
+
+    /**
+     * A copy for an interactive web request (e.g. «تحديث من شوبيفاي»): each HTTP
+     * call gives up after $seconds and nothing is resent, so the request fails
+     * fast instead of sleeping through the backoff. Throttle state starts empty.
+     */
+    public function withTimeout(int $seconds): self
+    {
+        $client = new self(
+            $this->transport instanceof HttpShopifyTransport ? $this->transport->withTimeout($seconds) : $this->transport,
+            $this->integrations,
+            $this->sleeper,
+        );
+        $client->useStoredIntegration = $this->useStoredIntegration;
+        $client->domain = $this->domain;
+        $client->token = $this->token;
+        $client->maxRetries = 0;
+
+        return $client;
     }
 
     /**
@@ -84,6 +110,16 @@ final class ShopifyClient
         return $data;
     }
 
+    /**
+     * Read-only probe: no journey fallback and never flags the integration as errored.
+     *
+     * @return array<mixed>
+     */
+    public function probe(string $query, array $variables = []): array
+    {
+        return $this->execute($query, $variables, false, true);
+    }
+
     /** @return array{maximumAvailable: float, currentlyAvailable: float, restoreRate: float}|null */
     public function lastThrottleStatus(): ?array
     {
@@ -91,7 +127,7 @@ final class ShopifyClient
     }
 
     /** @return array<mixed> */
-    private function execute(string $query, array $variables, bool $isMutation = false): array
+    private function execute(string $query, array $variables, bool $isMutation = false, bool $probe = false): array
     {
         [$domain, $token] = $this->resolveCredentials();
 
@@ -113,7 +149,7 @@ final class ShopifyClient
             try {
                 $response = $this->transport->post($url, $headers, $body);
             } catch (Throwable $e) {
-                if ($isMutation || $attempt >= count(self::BACKOFF_SECONDS)) {
+                if ($isMutation || $attempt >= $this->retries()) {
                     throw new ShopifyException('transport', $e->getMessage(), [], $e);
                 }
                 $this->sleep(self::BACKOFF_SECONDS[$attempt]);
@@ -125,8 +161,12 @@ final class ShopifyClient
             $status = (int) ($response['status'] ?? 0);
             $json = $response['json'] ?? [];
 
+            if (! $probe && $this->journeyRejected($query, $status, $json)) {
+                return $this->retryWithoutJourney($query, $variables, $isMutation);
+            }
+
             if ($status === 401 || $status === 403 || $this->hasErrorCode($json, 'ACCESS_DENIED')) {
-                if ($this->useStoredIntegration) {
+                if ($this->useStoredIntegration && ! $probe) {
                     $this->integrations->markError('Shopify authentication failed (HTTP '.$status.')');
                 }
 
@@ -141,7 +181,7 @@ final class ShopifyClient
             }
 
             if ($throttled || $status >= 500) {
-                if ($attempt >= count(self::BACKOFF_SECONDS)) {
+                if ($attempt >= $this->retries()) {
                     throw $throttled
                         ? new ShopifyException('throttled', 'Shopify request throttled after retries')
                         : new ShopifyException('transport', 'Shopify request failed with HTTP '.$status.' after retries');
@@ -162,6 +202,40 @@ final class ShopifyClient
 
             return $json['data'] ?? [];
         }
+    }
+
+    /**
+     * The optional customerJourneySummary field was refused (ACCESS_DENIED or a field error naming it).
+     * That is a capability gap, not a broken integration: the caller retries without the field.
+     */
+    private function journeyRejected(string $query, int $status, array $json): bool
+    {
+        if ($status === 401 || ! str_contains($query, 'customerJourneySummary') || empty($json['errors'])) {
+            return false;
+        }
+
+        if ($this->hasErrorCode($json, 'ACCESS_DENIED')) {
+            return true;
+        }
+
+        return collect($json['errors'])->contains(fn ($e) => str_contains((string) ($e['message'] ?? ''), 'customerJourneySummary'));
+    }
+
+    /** @return array<mixed> */
+    private function retryWithoutJourney(string $query, array $variables, bool $isMutation): array
+    {
+        $data = $this->execute(SyncQueries::withoutJourney($query), $variables, $isMutation);
+
+        // Only a retry that worked proves the field was the problem.
+        Cache::put(SyncQueries::JOURNEY_UNSUPPORTED_CACHE_KEY, true, now()->addDay());
+        Log::warning('Shopify refused customerJourneySummary; skipping it for 24 hours (utm then comes from webhooks only).');
+
+        return $data;
+    }
+
+    private function retries(): int
+    {
+        return $this->maxRetries ?? count(self::BACKOFF_SECONDS);
     }
 
     /** @return array{0: string, 1: string} */

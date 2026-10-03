@@ -17,7 +17,7 @@ function submit(): void {
     if (value) emit('submit', value);
 }
 
-// Ctrl/⌘+Enter sends, Esc cancels.
+// Ctrl/Cmd+Enter sends, Esc cancels.
 function onKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();

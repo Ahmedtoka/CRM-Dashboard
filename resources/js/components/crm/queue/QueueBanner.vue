@@ -2,22 +2,31 @@
 import { useI18n } from '@/composables/useI18n';
 import { useMyQueueContext } from '@/composables/useMyQueue';
 import { formatCount, formatSeconds } from '@/lib/format';
+import { queueReason } from '@/lib/queueReason';
 import type { Conversation, QueuePriority } from '@/types/crm';
 import { ArrowUpCircle, Bot, FolderOpen, Hand, Hourglass, Moon, Star, Ticket, type LucideIcon } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
-const props = defineProps<{ conversation: Conversation; meId: number }>();
+/**
+ * The queue's part of the thread header (spec §1.2): `chips` renders inline in header row 2
+ * (ticket, window, queue priority, open case, the bot's summary, since / with, the countdown
+ * text); `bar` is the 2 px countdown line under row 2. With the queue off neither renders.
+ */
+const props = withDefaults(defineProps<{ conversation: Conversation; meId: number; part?: 'chips' | 'bar' }>(), { part: 'chips' });
 
 const { t, locale } = useI18n();
 const queue = useMyQueueContext();
 
 const LAST_SECONDS = 60;
+/** The first hand-off value seen per ticket: the bar's full width (the payload has no total). */
+const handoffSpan = ref(new Map<number, number>());
 
+const chip = 'inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 text-2xs font-medium';
 const badges: Partial<Record<QueuePriority, { icon: LucideIcon; tone: string }>> = {
-    returning: { icon: Star, tone: 'bg-warning/20 text-foreground' },
-    escalation: { icon: ArrowUpCircle, tone: 'bg-destructive/10 text-destructive' },
-    overnight: { icon: Moon, tone: 'bg-card text-primary' },
-    manual: { icon: Hand, tone: 'bg-card text-muted-foreground' },
+    returning: { icon: Star, tone: 'bg-warning/20 text-amber-900 dark:bg-warning/25 dark:text-amber-100' },
+    escalation: { icon: ArrowUpCircle, tone: 'bg-destructive/10 text-destructive dark:bg-destructive/25 dark:text-red-200' },
+    overnight: { icon: Moon, tone: 'bg-info/10 text-blue-800 dark:bg-info/25 dark:text-blue-100' },
+    manual: { icon: Hand, tone: 'bg-muted text-muted-foreground' },
 };
 
 const entry = computed(() => (queue?.enabled.value ? props.conversation.queue_entry : null));
@@ -30,79 +39,133 @@ const badge = computed(() => (entry.value ? (badges[entry.value.priority] ?? nul
 
 const since = computed(() => (mine.value && entry.value ? formatSeconds(queue!.elapsed(entry.value), locale.value) : null));
 const silenceLeft = computed(() => (myWindow.value ? queue!.silenceLeft(myWindow.value) : null));
+const handoffLeft = computed(() => (myWindow.value?.reply_overdue ? queue!.handoffLeft(myWindow.value) : null));
+// Remember the largest hand-off value seen per ticket (the bar's full width), outside the computed.
+watch(
+    handoffLeft,
+    (left) => {
+        const id = myWindow.value?.id;
+        if (id === undefined || left === null || left <= (handoffSpan.value.get(id) ?? 0)) return;
+        handoffSpan.value.set(id, left);
+    },
+    { immediate: true },
+);
+
+type Tone = 'calm' | 'warning' | 'last' | 'overdue';
+const tone = computed<Tone>(() => {
+    if (myWindow.value?.reply_overdue) return 'overdue';
+    if (!myWindow.value || silenceLeft.value === null || !queue!.silenceWarning(myWindow.value)) return 'calm';
+
+    return silenceLeft.value <= LAST_SECONDS ? 'last' : 'warning';
+});
+
 /**
  * What a screen reader hears: only when the countdown crosses into its warning stretch or its
  * last minute, never the seconds ticking (the countdown itself is outside the live region).
  */
 const announcement = computed(() => {
-    if (!myWindow.value || silenceLeft.value === null || !queue!.silenceWarning(myWindow.value)) return '';
+    if (tone.value === 'warning') return t('queue.announce.warning');
+    if (tone.value === 'last') return t('queue.announce.last');
 
-    return silenceLeft.value <= LAST_SECONDS ? t('queue.announce.last') : t('queue.announce.warning');
+    return '';
 });
-const silenceTone = computed(() => {
-    if (!myWindow.value || silenceLeft.value === null || !queue!.silenceWarning(myWindow.value)) return 'text-muted-foreground';
 
-    return silenceLeft.value <= LAST_SECONDS ? 'font-semibold text-destructive' : 'rounded-full bg-warning/20 px-1.5 font-semibold text-foreground';
+/** The countdown chip: the hand-off while she is late with her reply, else the silence auto-close. */
+const countdown = computed(() => {
+    if (tone.value === 'overdue') {
+        return { label: t('queue.handoff_left'), time: handoffLeft.value === null ? null : formatSeconds(handoffLeft.value, locale.value) };
+    }
+    if (silenceLeft.value === null) return null;
+
+    return { label: t('queue.silence_left'), time: formatSeconds(silenceLeft.value, locale.value) };
 });
+const countdownTone: Record<Tone, string> = {
+    calm: 'bg-muted text-muted-foreground',
+    warning: 'bg-warning/20 text-amber-900 dark:bg-warning/25 dark:text-amber-100',
+    last: 'bg-destructive/10 text-destructive dark:bg-destructive/25 dark:text-red-200',
+    overdue: 'bg-overdue/15 text-orange-800 dark:bg-overdue/25 dark:text-orange-100',
+};
+
+/** The 2 px bar: share of the clock still left (silence: of `silence_close_seconds`; hand-off: of its first value). */
+const barShare = computed<number | null>(() => {
+    const w = myWindow.value;
+    if (!w) return null;
+    if (tone.value === 'overdue') {
+        const left = handoffLeft.value;
+        if (left === null) return 1;
+        return left / Math.max(handoffSpan.value.get(w.id) ?? 0, left, 1);
+    }
+    const left = silenceLeft.value;
+    const total = queue?.silenceTotal.value ?? null;
+    if (left === null || !total) return null;
+
+    return Math.min(1, Math.max(0, left / total));
+});
+const barTone: Record<Tone, string> = { calm: 'bg-primary/60', warning: 'bg-warning', last: 'bg-destructive', overdue: 'bg-overdue' };
 
 const text = (value: unknown): string => (typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '');
 
-/** What the bot already learned: topic, order, reason; its full lines on hover. */
+/** What the bot already learned: topic, order, reason (translated, unknown reasons hidden); its full lines on hover. */
 const summary = computed(() => {
     const s = entry.value?.bot_summary ?? null;
     if (!s) return { chips: [] as string[], lines: '' };
     const order = text(s.order_number);
+    const topic = text(s.topic);
 
     return {
-        chips: [text(s.topic), order ? t('queue.banner.order', { number: order }) : '', text(s.reason)].filter(Boolean),
+        chips: [
+            topic && topic !== text(props.conversation.handover_topic) ? topic : '',
+            order ? t('queue.banner.order_chip', { number: order }) : '',
+            queueReason(s.reason, t) ?? '',
+        ].filter(Boolean),
         lines: Array.isArray(s.lines) ? s.lines.map(text).filter(Boolean).join('\n') : '',
     };
 });
 </script>
 
 <template>
-    <section
-        v-if="entry || caseId"
-        class="scrollbar-thin flex items-center gap-2 overflow-x-auto whitespace-nowrap border-b bg-surface-accent px-4 py-1.5 text-xs"
-        :aria-label="t('queue.banner.label')"
-        data-queue-banner
-    >
+    <template v-if="part === 'chips'">
         <template v-if="entry">
-            <span class="inline-flex shrink-0 items-center gap-1 font-bold text-primary">
-                <Ticket class="size-3.5" aria-hidden="true" />
+            <span :class="[chip, 'bg-primary/10 font-semibold text-primary']" data-queue-ticket>
+                <Ticket class="size-3" aria-hidden="true" />
                 <span class="tabular-nums">{{ t('queue.ticket', { n: formatCount(entry.ticket % 100000, locale) }) }}</span>
             </span>
-            <span v-if="entry.window_no !== null" class="shrink-0 rounded bg-card px-1.5 text-2xs font-medium text-foreground">
+            <span v-if="entry.window_no !== null" :class="[chip, 'bg-muted text-foreground']">
                 {{ t('queue.banner.window', { n: formatCount(entry.window_no, locale) }) }}
             </span>
-            <span v-if="badge" class="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full px-1.5 text-2xs font-medium" :class="badge.tone">
-                <component :is="badge.icon" class="size-2.5" aria-hidden="true" />{{ t(`queue.priority.${entry.priority}`) }}
+            <span v-if="badge" :class="[chip, badge.tone]">
+                <component :is="badge.icon" class="size-3" aria-hidden="true" />{{ t(`queue.priority.${entry.priority}`) }}
             </span>
         </template>
-        <span v-if="caseId" class="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-card px-1.5 text-2xs font-medium text-primary">
-            <FolderOpen class="size-2.5" aria-hidden="true" />{{ t('queue.open_case', { id: caseId }) }}
+        <span v-if="caseId" :class="[chip, 'bg-primary/10 text-primary']" :title="t('queue.open_case', { id: caseId })">
+            <FolderOpen class="size-3" aria-hidden="true" />{{ t('queue.banner.case_chip', { id: caseId }) }}
         </span>
-
-        <span v-if="since !== null" class="shrink-0 tabular-nums text-muted-foreground">{{ t('queue.banner.received_since', { time: since }) }}</span>
-        <span v-else-if="conversation.assignee?.name" class="shrink-0 text-muted-foreground" dir="auto">{{
-            t('queue.banner.with', { name: conversation.assignee.name })
-        }}</span>
-
-        <span v-if="summary.chips.length" class="flex min-w-0 shrink items-center gap-1" :title="summary.lines || undefined">
+        <span v-if="summary.chips.length" class="inline-flex shrink-0 items-center gap-1" :title="summary.lines || undefined" data-bot-summary>
             <Bot class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span class="sr-only">{{ t('queue.banner.bot_summary') }}: </span>
             <span
-                v-for="chip in summary.chips"
-                :key="chip"
-                class="max-w-[14rem] truncate rounded-full border border-border bg-card px-2 text-2xs text-foreground"
+                v-for="item in summary.chips"
+                :key="item"
+                :class="[chip, 'max-w-[14rem] border border-border bg-card font-normal text-foreground']"
                 dir="auto"
-                >{{ chip }}</span
             >
+                <span class="truncate">{{ item }}</span>
+            </span>
         </span>
-
-        <span v-if="silenceLeft !== null" class="ms-auto inline-flex shrink-0 items-center gap-1 tabular-nums" :class="silenceTone">
-            <Hourglass class="size-3.5" aria-hidden="true" />{{ t('queue.silence_left') }} {{ formatSeconds(silenceLeft, locale) }}
+        <span v-if="since !== null" class="shrink-0 text-2xs tabular-nums text-muted-foreground">{{
+            t('queue.banner.received_since', { time: since })
+        }}</span>
+        <span v-if="countdown" :class="[chip, 'tabular-nums', countdownTone[tone]]" data-countdown>
+            <Hourglass class="size-3" :class="tone === 'last' || tone === 'overdue' ? 'motion-safe:animate-pulse' : ''" aria-hidden="true" />
+            {{ countdown.time === null ? t('queue.reply_overdue') : `${countdown.label} ${countdown.time}` }}
         </span>
         <span class="sr-only" role="status">{{ announcement }}</span>
-    </section>
+    </template>
+    <div v-else-if="barShare !== null" class="h-0.5 w-full bg-muted" aria-hidden="true" data-countdown-bar>
+        <div
+            class="h-full transition-[width] duration-1000 ease-linear motion-reduce:transition-none"
+            :class="barTone[tone]"
+            :style="{ width: `${barShare * 100}%` }"
+        />
+    </div>
 </template>

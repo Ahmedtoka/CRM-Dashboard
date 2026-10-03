@@ -1,50 +1,47 @@
 <script setup lang="ts">
-import HandlerAvatar from '@/components/crm/HandlerAvatar.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
+import RelativeTime from '@/components/crm/RelativeTime.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useInitials } from '@/composables/useInitials';
-import { formatCount, formatListStamp, formatSince } from '@/lib/format';
+import type { RowState } from '@/lib/conversationState';
+import { formatCount } from '@/lib/format';
 import type { Conversation } from '@/types/crm';
-import { computed } from 'vue';
+import { computed, onBeforeUnmount } from 'vue';
 
-const props = defineProps<{ conversation: Conversation; active: boolean; now: number }>();
-const emit = defineEmits<{ select: [id: number]; contextmenu: [id: number, event: MouseEvent] }>();
+/**
+ * One inbox row, exactly 72 px (the list virtualises on that height): avatar + platform,
+ * name · tag dots · time, then the one state badge · preview · unread pill (spec §1.2).
+ */
+const props = withDefaults(defineProps<{ conversation: Conversation; state: RowState | null; active?: boolean }>(), { active: false });
+/** `pointer`: opened by a mouse / touch click (the composer takes the focus), not by the keyboard. */
+const emit = defineEmits<{ select: [id: number, pointer: boolean]; contextmenu: [id: number, event: MouseEvent]; intent: [id: number] }>();
+
+// Intent to open (Task 6c): the pointer rests on the row for 150 ms, or the keyboard focuses it.
+// The page prefetches that chat, so the click paints from the cache.
+const INTENT_MS = 150;
+let intentTimer: number | undefined;
+function onPointerEnter(event: PointerEvent): void {
+    if (event.pointerType === 'touch') return; // a tap opens at once; nothing to win
+    window.clearTimeout(intentTimer);
+    intentTimer = window.setTimeout(() => emit('intent', props.conversation.id), INTENT_MS);
+}
+function onPointerLeave(): void {
+    window.clearTimeout(intentTimer);
+}
+onBeforeUnmount(() => window.clearTimeout(intentTimer));
 
 const { t, locale } = useI18n();
 const { getInitials } = useInitials();
 
 const name = computed(() => props.conversation.customer?.name || `#${props.conversation.id}`);
 const unread = computed(() => props.conversation.unread_count > 0);
+// A moderator's reply is the preview: «إنتي: » in front (the bot's and the system's lines carry no prefix).
+const ours = computed(() => !!props.conversation.last_message_preview && props.conversation.last_message_sender === 'user');
 
-const waitMinutes = computed(() =>
-    props.conversation.waiting_since ? (props.now - Date.parse(props.conversation.waiting_since)) / 60000 : null,
-);
-const waitTone = computed<'negative' | 'warning' | 'neutral'>(() => {
-    if (waitMinutes.value === null) return 'neutral';
-    if (waitMinutes.value >= 30) return 'negative';
-    if (waitMinutes.value >= 10) return 'warning';
-    return 'neutral';
-});
-
-const hasMeta = computed(() => {
-    const c = props.conversation;
-    return !!(c.is_test || c.waiting_since || c.needs_human || c.handler === 'bot' || c.handling || c.tags?.length || c.priority !== 'normal' || c.handover_category_label || c.handover_topic);
-});
-
-// Handover priority badge (Task 5 ruling 5): high = urgent, medium = warning, low = no badge.
-const priorityBadge = computed(() => {
-    const level = props.conversation.priority_level;
-    if (level === 'high') return { label: t('inbox.priority_level.high'), tone: 'negative' as const };
-    if (level === 'medium') return { label: t('inbox.priority_level.medium'), tone: 'warning' as const };
-    return null;
-});
-
-// 15% alpha ("26" hex suffix, i.e. 0x26 = 38/255 ≈ 15%) tag background.
-const tagStyle = (color: string | null) => ({
-    backgroundColor: `${color && color.length === 7 ? color : '#64748b'}26`,
-    color: color || '#475569',
-});
+const tags = computed(() => props.conversation.tags ?? []);
+const tagTitle = computed(() => tags.value.map((tag) => tag.name).join('، '));
+const dotColor = (color: string | null) => (color && /^#[0-9a-f]{6}$/i.test(color) ? color : '#64748b');
 </script>
 
 <template>
@@ -52,75 +49,54 @@ const tagStyle = (color: string | null) => ({
         type="button"
         :data-conversation-id="conversation.id"
         :aria-current="active ? 'true' : undefined"
-        class="relative mx-1.5 my-0.5 flex w-[calc(100%-0.75rem)] gap-3 rounded-lg px-3 py-2 text-start transition-colors hover:bg-muted focus-visible:z-10 focus-visible:ring-inset"
-        :class="active ? 'bg-surface-accent hover:bg-surface-accent' : ''"
-        @click="emit('select', conversation.id)"
+        class="flex h-[72px] w-full items-center gap-3 px-3 text-start outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        :class="active ? 'bg-surface-accent' : 'hover:bg-muted'"
+        @click="emit('select', conversation.id, $event.detail > 0)"
+        @pointerenter="onPointerEnter"
+        @pointerleave="onPointerLeave"
+        @focus="emit('intent', conversation.id)"
         @contextmenu.prevent="emit('contextmenu', conversation.id, $event)"
     >
-        <span class="relative mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full bg-elevated text-xs font-semibold text-muted-foreground">
+        <span class="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-elevated text-xs font-semibold text-muted-foreground">
             {{ getInitials(name) }}
             <span class="absolute -bottom-1 -end-1">
                 <PlatformBadge :platform="conversation.platform" size="xs" />
             </span>
         </span>
 
-        <span class="min-w-0 flex-1">
-            <span class="flex items-center gap-1.5">
-                <span class="truncate text-sm" :class="unread ? 'font-bold text-foreground' : 'font-medium text-foreground/90'">{{ name }}</span>
-                <span v-if="unread" class="size-2.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
-                <span class="ms-auto shrink-0 text-2xs tabular-nums" :class="unread ? 'font-semibold text-primary' : 'text-muted-foreground'">
-                    {{ formatListStamp(conversation.last_message_at, locale, now) }}
+        <span class="flex min-w-0 flex-1 flex-col gap-1">
+            <span class="flex min-w-0 items-center gap-1.5">
+                <span class="min-w-0 truncate text-sm" :class="unread ? 'font-bold text-foreground' : 'font-medium text-foreground/90'" dir="auto">{{ name }}</span>
+                <span v-if="tags.length" class="flex shrink-0 items-center gap-0.5" :title="tagTitle" role="img" :aria-label="tagTitle">
+                    <span v-for="tag in tags.slice(0, 2)" :key="tag.id" class="size-2 rounded-full" :style="{ backgroundColor: dotColor(tag.color) }" />
+                    <span v-if="tags.length > 2" class="text-2xs leading-none text-muted-foreground tabular-nums">+{{ formatCount(tags.length - 2, locale) }}</span>
                 </span>
+                <RelativeTime
+                    :iso="conversation.last_message_at"
+                    mode="stamp"
+                    class="ms-auto shrink-0 text-2xs"
+                    :class="unread ? 'font-semibold text-primary' : 'text-muted-foreground'"
+                />
             </span>
 
-            <span class="mt-0.5 flex items-center gap-2">
-                <span class="truncate text-xs" :class="unread ? 'font-bold text-foreground' : 'text-muted-foreground'" dir="auto">
-                    {{ conversation.last_message_preview || '—' }}
+            <span class="flex min-w-0 items-center gap-1.5">
+                <span
+                    v-if="state?.key === 'test'"
+                    class="inline-flex h-5 shrink-0 items-center rounded-full bg-violet-500/12 px-2 text-2xs font-medium text-violet-700 dark:bg-violet-400/20 dark:text-violet-200"
+                >
+                    {{ state.label }}
+                </span>
+                <StatusChip v-else-if="state" :label="state.label" :tone="state.tone" />
+                <span class="min-w-0 flex-1 truncate text-xs" :class="unread ? 'font-semibold text-foreground' : 'text-muted-foreground'">
+                    <span v-if="ours" class="text-muted-foreground">{{ t('inbox.you_prefix') }}</span>
+                    <span dir="auto">{{ conversation.last_message_preview || '—' }}</span>
                 </span>
                 <span
                     v-if="unread"
-                    class="ms-auto flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-2xs font-semibold text-primary-foreground"
+                    class="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-2xs font-semibold text-primary-foreground tabular-nums"
                     :aria-label="t('inbox.unread', { n: conversation.unread_count })"
                 >
                     {{ formatCount(conversation.unread_count, locale) }}
-                </span>
-            </span>
-
-            <span v-if="hasMeta" class="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <!-- A run of a public team test link, never a real customer (design 2026-09-21 §4). -->
-                <span
-                    v-if="conversation.is_test"
-                    class="inline-flex h-5 shrink-0 items-center rounded-full bg-violet-500/12 px-2 text-2xs font-semibold text-violet-600 dark:text-violet-300"
-                >
-                    {{ t('inbox.test_badge') }}
-                </span>
-                <StatusChip v-if="conversation.priority === 'spam'" :label="t('inbox.filters.spam')" tone="negative" />
-                <StatusChip v-else-if="conversation.priority === 'low'" :label="t('inbox.filters.low_priority')" tone="neutral" />
-                <StatusChip v-if="conversation.waiting_since" :label="formatSince(conversation.waiting_since, locale, now)" :tone="waitTone" />
-                <StatusChip v-if="priorityBadge" :label="priorityBadge.label" :tone="priorityBadge.tone" />
-                <StatusChip v-if="conversation.needs_human" :label="t('thread.needs_human')" tone="negative" />
-                <StatusChip v-else-if="conversation.handler === 'bot'" :label="t('thread.handler_bot')" tone="info" />
-                <!-- What she said she needs («موضوع التحويل», flow 7) wins over the category. -->
-                <span
-                    v-if="conversation.handover_topic || conversation.handover_category_label"
-                    class="inline-flex h-5 min-w-0 max-w-[9rem] items-center rounded-full border border-border px-2 text-2xs text-muted-foreground"
-                    :title="
-                        conversation.handover_topic
-                            ? t('inbox.topic', { topic: conversation.handover_topic })
-                            : t('inbox.category', { label: conversation.handover_category_label ?? '' })
-                    "
-                    dir="auto"
-                >
-                    <span class="truncate">{{ conversation.handover_topic || conversation.handover_category_label }}</span>
-                </span>
-                <HandlerAvatar :handling="conversation.handling" size="xs" />
-                <span
-                    v-for="tag in conversation.tags ?? []"
-                    :key="tag.id"
-                    class="rounded-full px-2 py-0.5 text-2xs"
-                    :style="tagStyle(tag.color)"
-                >
-                    {{ tag.name }}
                 </span>
             </span>
         </span>

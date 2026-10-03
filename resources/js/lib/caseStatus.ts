@@ -7,7 +7,10 @@ export const caseStatusTone: Record<CaseStatus, Tone> = {
     closed: 'positive',
 };
 
+// `normal` / `low` exist on rows written outside the case recorder (older rows, demo data).
 export const casePriorityTone: Record<CasePriority, Tone> = {
+    low: 'neutral',
+    normal: 'neutral',
     medium: 'neutral',
     high: 'negative',
 };

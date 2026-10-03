@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Log;
  * returns null and the agent (TurnRunner) takes the turn.
  *
  * A greeting is greeted back the same way first (GreetingMirror, 2026-09-21):
- * «وعليكم السلام ورحمة الله 🌸» / «صباح النور» / «أهلاً بيكي 🌸» goes above the
+ * «وعليكم السلام ورحمة الله» / «صباح النور» / «أهلاً بيكي» goes above the
  * `{time_greeting}` line of `script.greeting` and above the menu.
  */
 class ConversationRouter
@@ -74,7 +74,7 @@ class ConversationRouter
                 $run = app(AgentRunner::class)->run($c, $burst, insideFlow: true) ?? $runner->run($c, $burst, flowContext: true);
 
                 if ($c->refresh()->handler === Handler::Bot && $this->flows->isActive($c)) {
-                    // §6.1: the answer, then «نرجع لطلب المرتجع 🌸» with the step's question
+                    // §6.1: the answer, then «نرجع لطلب المرتجع» with the step's question
                     // and buttons again — or a person once she has been round twice.
                     $this->flows->returnToFlow($c, $runner->followUpDelayMs());
                 } elseif ($c->handler !== Handler::Bot) {

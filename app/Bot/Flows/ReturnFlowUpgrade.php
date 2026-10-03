@@ -27,17 +27,17 @@ final class ReturnFlowUpgrade
 
     public const NOTE = 'فلو المرتجع والاستبدال الجديد: ترجعي ولا تبدلي، صورة للمرتجع، ولينك المنتج للاستبدال';
 
-    public const GREETING_TEXT = 'أهلاً يا {customer_first_name} 🌸 لقيت أوردر #{order_number} — تحبي ترجعي ولا تبدلي؟';
+    public const GREETING_TEXT = 'أهلاً يا {customer_first_name}، لقيت أوردر #{order_number} — تحبي ترجعي ولا تبدلي؟';
 
-    public const RETURN_DONE_TEXT = 'تمام ✅ تم تقديم طلب المرتجع بنجاح، ورقم طلبك هو نفس رقم الأوردر #{order_number}. هنتواصل معاكي أول ما المندوب يتحرك لاستلام المرتجع 🌸';
+    public const RETURN_DONE_TEXT = 'تمام، تم تقديم طلب المرتجع بنجاح، ورقم طلبك هو نفس رقم الأوردر #{order_number}. هنتواصل معاكي أول ما المندوب يتحرك لاستلام المرتجع';
 
-    public const EXCHANGE_PHOTO_TEXT = 'صوّري القطعة وابعتيلي صورتها 📸 عشان الفريق يشوف العيب، ولو مش معاكي دلوقتي اكتبي «مش معايا»';
+    public const EXCHANGE_PHOTO_TEXT = 'صوّري القطعة وابعتيلي صورتها عشان الفريق يشوف العيب، ولو مش معاكي دلوقتي اكتبي «مش معايا»';
 
     public const NOTE_2026_09_22 = 'فلو الاستبدال: صورة القطعة لو فيها عيب، واختيار المنتج البديل بالصور أو لينك أو اسم';
 
-    public const EXCHANGE_DONE_TEXT = 'تمام ✅ تم تسجيل طلب الاستبدال بـ «{exchange_product_title}». هنتواصل معاكي لتأكيد الاستبدال والإرسال 🌸';
+    public const EXCHANGE_DONE_TEXT = 'تمام، تم تسجيل طلب الاستبدال بـ «{exchange_product_title}». هنتواصل معاكي لتأكيد الاستبدال والإرسال';
 
-    public const LATE_TEXT = "الأوردر ده عدّى على استلامه أكتر من 14 يوم 🙏 والمرتجع والاستبدال عندنا خلال 14 يوم من الاستلام بس.\nلو تحبي، أحوّلك لحد من الفريق يساعدك.";
+    public const LATE_TEXT = "الأوردر ده عدّى على استلامه أكتر من 14 يوم، والمرتجع والاستبدال عندنا خلال 14 يوم من الاستلام بس.\nلو تحبي، أحوّلك لحد من الفريق يساعدك.";
 
     /** The owner's flow (the seeded `return_exchange` definition since 2026-09-19). */
     public static function definition(): array
@@ -49,18 +49,18 @@ final class ReturnFlowUpgrade
 
         return ['start' => 'policy', 'steps' => [
             'policy' => ['type' => 'script', 'script' => 'flow_return_policy_short', 'next' => 'order'],
-            'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟ 🌸', 'verify_owner' => true, 'branches' => [
+            'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟', 'verify_owner' => true, 'branches' => [
                 ['field' => 'order_window', 'in' => ['closed'], 'next' => 'late'],
                 ['field' => 'order_window', 'in' => ['open'], 'next' => 'kind'],
             ], 'next' => 'kind_unknown'],
             'kind' => ['type' => 'choice', 'field' => 'request_kind', 'text' => self::GREETING_TEXT, 'options' => $kindOptions],
-            'kind_unknown' => ['type' => 'choice', 'field' => 'request_kind', 'text' => 'تحبي ترجعي ولا تبدلي؟ 🌸', 'options' => $kindOptions],
+            'kind_unknown' => ['type' => 'choice', 'field' => 'request_kind', 'text' => 'تحبي ترجعي ولا تبدلي؟', 'options' => $kindOptions],
             'late' => ['type' => 'choice', 'field' => 'late_choice', 'text' => self::LATE_TEXT, 'options' => [
                 ['value' => 'agent', 'title' => 'كلم موظف', 'synonyms' => ['موظف', 'ايوه', 'اه', 'حوليني'], 'next' => 'agent'],
             ]],
             'agent' => ['type' => 'handover'],
 
-            'return_items' => ['type' => 'order_items', 'text' => 'اختاري القطعة اللي عايزة ترجعيها 👇', 'branches' => [
+            'return_items' => ['type' => 'order_items', 'text' => 'اختاري القطعة اللي عايزة ترجعيها', 'branches' => [
                 // A discounted piece can only be exchanged: "أبدلها بدل كده" turns the request into an exchange.
                 ['field' => 'request_kind', 'in' => ['exchange'], 'next' => 'exchange_reason'],
             ], 'next' => 'return_reason'],
@@ -71,10 +71,10 @@ final class ReturnFlowUpgrade
                 ['value' => 'size', 'title' => 'المقاس مش مظبوط', 'synonyms' => ['مقاس', 'كبير', 'صغير', 'واسع', 'ضيق']],
                 ['value' => 'not_liked', 'title' => 'مش عاجبني', 'synonyms' => ['مش عاجبني', 'معجبنيش', 'مش حلو']],
             ], 'next' => 'return_photo'],
-            'return_photo' => ['type' => 'photo', 'field' => 'product_photo', 'text' => 'ابعتيلي صورة للقطعة 📸', 'next' => 'record_return'],
+            'return_photo' => ['type' => 'photo', 'field' => 'product_photo', 'text' => 'ابعتيلي صورة للقطعة', 'next' => 'record_return'],
             'record_return' => ['type' => 'record_case', 'case_type' => 'return', 'text' => self::RETURN_DONE_TEXT, 'next' => 'end'],
 
-            'exchange_items' => ['type' => 'order_items', 'text' => 'اختاري القطعة اللي عايزة تبدليها 👇', 'next' => 'exchange_reason'],
+            'exchange_items' => ['type' => 'order_items', 'text' => 'اختاري القطعة اللي عايزة تبدليها', 'next' => 'exchange_reason'],
             'exchange_reason' => ['type' => 'choice', 'field' => 'reason', 'text' => 'إيه سبب الاستبدال؟', 'options' => [
                 ['value' => 'size', 'title' => 'المقاس', 'synonyms' => ['مقاس', 'كبير', 'صغير', 'واسع', 'ضيق']],
                 ['value' => 'color', 'title' => 'اللون', 'synonyms' => ['لون', 'اللون']],
@@ -86,7 +86,7 @@ final class ReturnFlowUpgrade
                 ['field' => 'reason', 'in' => ['defective'], 'next' => 'exchange_photo'],
             ], 'next' => 'exchange_product'],
             'exchange_photo' => ['type' => 'photo', 'field' => 'product_photo', 'text' => self::EXCHANGE_PHOTO_TEXT, 'next' => 'exchange_product'],
-            'exchange_product' => ['type' => 'product_link', 'field' => 'exchange_product', 'text' => 'ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع 🔗 (من levoilestores.com)', 'next' => 'record_exchange'],
+            'exchange_product' => ['type' => 'product_link', 'field' => 'exchange_product', 'text' => 'ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع (من levoilestores.com)', 'next' => 'record_exchange'],
             'record_exchange' => ['type' => 'record_case', 'case_type' => 'exchange', 'text' => self::EXCHANGE_DONE_TEXT, 'next' => 'end'],
         ]];
     }
@@ -99,7 +99,7 @@ final class ReturnFlowUpgrade
         $order['verify_owner'] = true;
         $order['next'] = 'order_items';
 
-        $steps = ['policy' => $def['steps']['policy'], 'order' => $order, 'order_items' => ['type' => 'order_items', 'text' => 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها 👇', 'next' => 'reason']];
+        $steps = ['policy' => $def['steps']['policy'], 'order' => $order, 'order_items' => ['type' => 'order_items', 'text' => 'اختاري القطعة اللي عايزة ترجعيها أو تبدليها', 'next' => 'reason']];
 
         return ['start' => 'policy', 'steps' => $steps + array_diff_key($def['steps'], $steps)];
     }
@@ -109,7 +109,7 @@ final class ReturnFlowUpgrade
     {
         return ['start' => 'policy', 'steps' => [
             'policy' => ['type' => 'script', 'script' => 'flow_return_policy_short', 'next' => 'order'],
-            'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟ 🌸', 'next' => 'reason'],
+            'order' => ['type' => 'order', 'field' => 'order', 'text' => 'ممكن رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟', 'next' => 'reason'],
             'reason' => ['type' => 'choice', 'field' => 'reason', 'text' => 'إيه سبب المرتجع؟', 'options' => [
                 ['value' => 'defective', 'title' => 'بايظ / فيه عيب', 'synonyms' => ['بايظ', 'عيب', 'مقطوع', 'ديفوه', 'تالف', 'شايط']],
                 ['value' => 'wrong_item', 'title' => 'غلط في الأوردر', 'synonyms' => ['غلط', 'مش اللي طلبته', 'لون تاني']],
@@ -121,9 +121,9 @@ final class ReturnFlowUpgrade
                 ['value' => 'refund', 'title' => 'استرجاع المبلغ', 'synonyms' => ['استرجاع', 'فلوس', 'مبلغ', 'refund']],
                 ['value' => 'exchange', 'title' => 'استبدال', 'synonyms' => ['استبدال', 'ابدل', 'تبديل', 'exchange']],
             ], 'next' => 'product_photo'],
-            'product_photo' => ['type' => 'photo', 'field' => 'product_photo', 'text' => 'ممكن صورة واضحة للمنتج؟ 📸', 'next' => 'after_photo'],
+            'product_photo' => ['type' => 'photo', 'field' => 'product_photo', 'text' => 'ممكن صورة واضحة للمنتج؟', 'next' => 'after_photo'],
             'after_photo' => ['type' => 'script', 'script' => 'flow_photo_received', 'branches' => [['field' => 'reason', 'in' => ['defective'], 'next' => 'defect_photo']], 'next' => 'summary'],
-            'defect_photo' => ['type' => 'photo', 'field' => 'defect_photo', 'text' => 'وممكن صورة توضح العيب اللي في المنتج؟ 📸', 'next' => 'summary'],
+            'defect_photo' => ['type' => 'photo', 'field' => 'defect_photo', 'text' => 'وممكن صورة توضح العيب اللي في المنتج؟', 'next' => 'summary'],
             'summary' => ['type' => 'summary', 'text' => 'ده ملخص طلب حضرتك:', 'next' => 'record'],
             'record' => ['type' => 'record_case', 'case_type' => 'return_exchange', 'script' => 'flow_return_recorded', 'next' => 'end'],
         ]];

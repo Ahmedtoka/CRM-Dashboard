@@ -86,6 +86,17 @@ export interface Board {
     /** Her break is past `break_minutes`: the desk is red. */
     breakOver: (member: BoardMember) => boolean;
     userName: (id: number | null | undefined) => string | null;
+    /**
+     * The server's clock now, read WITHOUT subscribing to the ticker: for labels that are a
+     * snapshot (aria-labels), so the components that show them never re-render every second.
+     */
+    serverNow: () => number;
+    /**
+     * When an open window's clock runs out, as an ISO instant on the server's clock: `silence`
+     * (the automatic close) or `handoff` (handed to a colleague). Null without that clock. The
+     * ticking text reads it (TickText), so the window itself does not tick.
+     */
+    deadline: (entry: QueueEntry, kind: 'silence' | 'handoff') => string | null;
     windowsOf: (userId: number) => QueueEntry[];
     refresh: () => Promise<void>;
     clearError: () => void;
@@ -167,6 +178,7 @@ export function useBoard(options: { enabled: boolean }): Board {
     /** The lounge and the windows change together, so what moved between them is seen here. */
     function setEntries(nextWaiting: QueueEntry[], nextOpen: QueueEntry[], animate: boolean): void {
         const change = diffEntries(waiting.value, open.value, nextOpen);
+        const waitingBefore = waiting.value.length;
         const at = Date.now();
 
         nextOpen.forEach((e) => stampedAt.set(e.id, at));
@@ -198,6 +210,7 @@ export function useBoard(options: { enabled: boolean }): Board {
                 entryId: entry.id,
                 ticket: entry.ticket,
                 seat,
+                waitingBefore,
                 userId: entry.assigned_user_id,
                 windowNo: entry.window_no,
             };
@@ -212,8 +225,8 @@ export function useBoard(options: { enabled: boolean }): Board {
     }
 
     function apply(snapshot: BoardSnapshot, animate = true): void {
-        const serverNow = Date.parse(snapshot.now);
-        skew = Number.isNaN(serverNow) ? 0 : serverNow - Date.now();
+        const serverClock = Date.parse(snapshot.now);
+        skew = Number.isNaN(serverClock) ? 0 : serverClock - Date.now();
         now.value = Date.now() + skew;
         enabled.value = snapshot.enabled;
         failed.value = false;
@@ -358,6 +371,18 @@ export function useBoard(options: { enabled: boolean }): Board {
         return !Number.isNaN(until) && now.value >= until;
     }
 
+    function serverNow(): number {
+        return Date.now() + skew;
+    }
+
+    function deadline(entry: QueueEntry, kind: 'silence' | 'handoff'): string | null {
+        const left = kind === 'silence' ? entry.silence_left_seconds : entry.handoff_left_seconds;
+        if (left === null || left === undefined) return null;
+        const since = stampedAt.get(entry.id) ?? Date.now();
+
+        return new Date(since + skew + left * 1000).toISOString();
+    }
+
     function windowsOf(userId: number): QueueEntry[] {
         return open.value.filter((e) => e.assigned_user_id === userId);
     }
@@ -446,6 +471,8 @@ export function useBoard(options: { enabled: boolean }): Board {
         breakSince,
         breakOver,
         userName,
+        serverNow,
+        deadline,
         windowsOf,
         refresh,
         clearError: () => (error.value = null),

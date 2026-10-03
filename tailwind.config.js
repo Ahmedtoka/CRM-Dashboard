@@ -58,6 +58,15 @@ export default {
                     DEFAULT: 'hsl(var(--success))',
                     foreground: 'hsl(var(--success-foreground))',
                 },
+                info: {
+                    DEFAULT: 'hsl(var(--info))',
+                    foreground: 'hsl(var(--info-foreground))',
+                },
+                overdue: {
+                    DEFAULT: 'hsl(var(--overdue))',
+                    foreground: 'hsl(var(--overdue-foreground))',
+                },
+                note: 'hsl(var(--note))',
                 warning: {
                     DEFAULT: 'hsl(var(--warning))',
                     foreground: 'hsl(var(--warning-foreground))',

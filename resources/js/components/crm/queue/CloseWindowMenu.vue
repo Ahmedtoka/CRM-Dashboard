@@ -112,7 +112,7 @@ defineExpose({
     <DropdownMenu v-model:open="menuOpen">
         <DropdownMenuTrigger
             :title="`${t('queue.close.menu_label')}${hint ?? ''}`"
-            :class="cn(buttonVariants({ size: 'sm' }), 'h-9 gap-1 rounded-full px-2.5')"
+            :class="cn(buttonVariants({ size: 'sm' }), 'h-9 shrink-0 gap-1.5 rounded-lg px-2.5 font-semibold sm:px-3')"
             :disabled="blocked"
             :aria-label="t('queue.close.menu_label')"
             data-close-window

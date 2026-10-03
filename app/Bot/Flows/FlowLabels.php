@@ -8,7 +8,7 @@ use App\Bot\Language\LanguageDetector;
 use App\Models\BotFlow;
 
 /**
- * How a flow is named inside a sentence (design 2026-09-21 §6): «نرجع لـطلب المرتجع 🌸»,
+ * How a flow is named inside a sentence (design 2026-09-21 §6): «نرجع لـطلب المرتجع»,
  * «تحبي نسيب طلب المرتجع ونتابع متابعة الأوردر؟». The flow's own title is a menu label
  * («المرتجع والاستبدال»), which does not read well after «نرجع لـ», so the built-in flows
  * carry a phrase of their own here; anything the owner adds later falls back to its title.

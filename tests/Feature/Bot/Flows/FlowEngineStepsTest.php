@@ -114,7 +114,7 @@ it('asks again when the order is not found, then keeps what she typed', function
 
     stepsTurn('123456');
     expect(stepsFlow()['step'])->toBe('order')
-        ->and(stepsLastBot()->body)->toBe('مش لاقية أوردر بالبيانات دي 🌸 ممكن تتأكدي من الرقم؟');
+        ->and(stepsLastBot()->body)->toBe('مش لاقية أوردر بالبيانات دي، ممكن تتأكدي من الرقم؟');
 
     stepsTurn('مش فاكرة الرقم');
     $flow = stepsFlow();
@@ -164,7 +164,7 @@ it('stores media attachment ids and asks for the defect photo when defective', f
     $flow = stepsFlow();
     expect($flow['data']['product_photo'])->toBe([$a->id])
         ->and($flow['step'])->toBe('defect_photo')
-        ->and(stepsLastBot()->body)->toBe('وممكن صورة توضح العيب اللي في المنتج؟ 📸');
+        ->and(stepsLastBot()->body)->toBe('وممكن صورة توضح العيب اللي في المنتج؟');
 });
 
 it('nudges once for a photo then continues with the missing flag', function () {
@@ -173,7 +173,7 @@ it('nudges once for a photo then continues with the missing flag', function () {
     // Not a photo and not a refusal: one nudge, worded differently from the request itself.
     stepsTurn('الصورة عند أختي');
     expect(stepsFlow()['step'])->toBe('product_photo')
-        ->and(stepsLastBot()->body)->not->toBe('ممكن صورة واضحة للمنتج؟ 📸');
+        ->and(stepsLastBot()->body)->not->toBe('ممكن صورة واضحة للمنتج؟');
 
     stepsTurn('مش معايا صورة دلوقتي');
     $flow = stepsFlow();
@@ -192,7 +192,7 @@ it('lists the branches of an area typed in the branches flow', function () {
 
     stepsTurn('مدينة نصر');
     $cards = Message::whereNotNull('cards')->latest('id')->firstOrFail();
-    expect(substr_count($cards->body, '📍'))->toBe(5)
+    expect(substr_count($cards->body, "\n\n"))->toBe(5) // one block per branch under the heading
         ->and($cards->cards['cards'])->toHaveCount(5)
         ->and(stepsLastBot()->body)->toBe('تحبي حاجة تانية؟')
         ->and(array_column(stepsLastBot()->buttons, 'title'))->toBe(['فرع في منطقة تانية', 'القائمة الرئيسية'])
@@ -243,7 +243,7 @@ it('offers the branch buttons of a typed area in the complaint and saves the tap
     stepsTurn('التجمع الخامس', 'step:complaint:branch:area:fifth_settlement');
     expect(stepsFlow()['step'])->toBe('visit_date')
         ->and(stepsFlow()['data'])->not->toHaveKey('visit_date')
-        ->and(stepsLastBot()->body)->toBe('إحنا خلصنا الخطوة دي فعلًا 🌸
+        ->and(stepsLastBot()->body)->toBe('إحنا خلصنا الخطوة دي فعلًا
 كانت الزيارة إمتى تقريبًا؟');
 });
 
@@ -251,7 +251,7 @@ it('opens the area buttons on entering the branch step and branch buttons on an 
     $c = stepsSay('اهلا');
     app(FlowEngine::class)->start($c, 'complaint');
     stepsTurn('فرع', 'step:complaint:type:branch');
-    expect(stepsLastBot()->body)->toBe('اكتبي اسم الفرع، أو اختاري المنطقة من هنا 👇')
+    expect(stepsLastBot()->body)->toBe('اكتبي اسم الفرع، أو اختاري المنطقة من هنا')
         ->and(stepsLastBot()->buttons)->toHaveCount(13);
 
     stepsTurn('الإسكندرية', 'step:complaint:branch:area:alexandria');

@@ -32,7 +32,7 @@ const statusTone = { connected: 'positive', error: 'negative', disconnected: 'ne
         <dl class="grid gap-1.5 sm:grid-cols-2">
             <div class="flex justify-between gap-2 sm:block">
                 <dt class="text-muted-foreground">{{ t('settings.shopify.card.store') }}</dt>
-                <dd dir="ltr">{{ integration.shop_domain }}</dd>
+                <dd><bdi dir="ltr">{{ integration.shop_domain }}</bdi></dd>
             </div>
             <div class="flex justify-between gap-2 sm:block">
                 <dt class="text-muted-foreground">{{ t('settings.shopify.card.currency') }}</dt>

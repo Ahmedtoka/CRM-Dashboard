@@ -67,12 +67,12 @@ it('records a branch complaint with high priority, a note, a supervisor notifica
         ->and($case->platform)->toBe('facebook')
         ->and($case->customer_id)->toBe($c->customer_id)
         ->and($case->summary)->toBe(CaseSummary::text($case))
-        ->and($case->summary)->toContain("📝 الطلب\nالنوع: فرع\nالفرع: فرع عباس العقاد\nتاريخ الزيارة: امبارح");
+        ->and($case->summary)->toContain("الطلب\nالنوع: فرع\nالفرع: فرع عباس العقاد\nتاريخ الزيارة: امبارح");
 
     $note = ConversationNote::where('conversation_id', $c->id)->sole();
     expect($note->user_id)->toBeNull()
         ->and($note->body)->toBe($case->summary)
-        ->and($note->body)->toStartWith("📋 حالة #{$case->id} — شكوى — أولوية عالية\n\n👤 العميل\nمنى · 01012345678\n");
+        ->and($note->body)->toStartWith("حالة #{$case->id} — شكوى — أولوية عالية\n\nالعميل\nمنى · 01012345678\n");
 
     $notified = UserNotification::where('type', 'case.created')->pluck('user_id')->all();
     expect($notified)->toEqualCanonicalizing([$supervisor->id, $admin->id])
@@ -83,7 +83,7 @@ it('records a branch complaint with high priority, a note, a supervisor notifica
     expect($data['case_id'])->toBe($case->id)
         ->and($data['conversation_id'])->toBe($c->id)
         ->and($data['type'])->toBe('complaint')
-        ->and($data['excerpt'])->toBe("📋 حالة #{$case->id} — شكوى — أولوية عالية · النوع: فرع");
+        ->and($data['excerpt'])->toBe("حالة #{$case->id} — شكوى — أولوية عالية · النوع: فرع");
 
     Event::assertDispatched(ConversationUpdated::class);
     expect($c->fresh()->handler)->toBe(Handler::Bot);
@@ -118,10 +118,10 @@ it('adds return policy notes, the order and photo ids to a return case', functio
         ->and($case->policy_notes)->toHaveCount(1)
         ->and($case->policy_notes[0])->toContain('عدى 14 يوم')
         ->and($case->data)->not->toHaveKey('case_id')
-        ->and($case->summary)->toContain("📦 الأوردر #7788\n")
-        ->and($case->summary)->toContain("📝 الطلب\nالسبب: بايظ / فيه عيب\nالمطلوب: استبدال")
-        ->and($case->summary)->toContain("📎 المرفقات\nصورة المنتج ✅ · صورة العيب ✅")
-        ->and($case->summary)->toContain("⚠️ تنبيهات\nغالبًا عدى 14 يوم");
+        ->and($case->summary)->toContain("الأوردر #7788\n")
+        ->and($case->summary)->toContain("الطلب\nالسبب: بايظ / فيه عيب\nالمطلوب: استبدال")
+        ->and($case->summary)->toContain("المرفقات\nصورة المنتج (وصلت) · صورة العيب (وصلت)")
+        ->and($case->summary)->toContain("تنبيهات\nغالبًا عدى 14 يوم");
 });
 
 it('notes the cancel/edit window left or over when the order was found', function () {
@@ -271,7 +271,7 @@ it('keeps one open delivery follow-up case per order when she tracks it again', 
     $track = fn (string $number) => crTrackLate($phones[$number]);
 
     $c = crConversation();
-    $recorded = 'سجلت طلب متابعة للأوردر #6601 🌸 الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت';
+    $recorded = 'سجلت طلب متابعة للأوردر #6601، الفريق هيتابع مع شركة الشحن ويرد عليكي في أقرب وقت';
     expect($track('6601'))->toBe($recorded)
         ->and($track('6601'))->toBe($recorded);
 
