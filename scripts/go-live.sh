@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Go-live of the UI overhaul + Ads Hub on Cloudways, in one run (owner, 2026-10-03).
 #
-# From the app root over SSH (production: /home/master/applications/ryznnsupxm/public_html):
+# Deploy the code first (Cloudways -> Deployment via Git -> Pull), then from the app root over SSH
+# (production: /home/master/applications/ryznnsupxm/public_html):
 #   bash scripts/go-live.sh
 #
 # Safe to re-run. It asks for the Meta System User token once (hidden, never printed or logged) and
@@ -16,7 +17,11 @@ php artisan down --retry=30
 trap 'php artisan up >/dev/null 2>&1 || true' EXIT
 
 step "git pull"
-git pull --ff-only
+if [ -d .git ]; then
+    git pull --ff-only
+else
+    echo "   skipped: no .git here (Cloudways 'Deployment via Git' already put the code in place)"
+fi
 
 step "composer install"
 composer install --no-dev --optimize-autoloader --no-interaction
