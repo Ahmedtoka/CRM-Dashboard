@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Web\Ads;
 
+use App\Ads\Sync\AdsSyncService;
 use App\Ads\Sync\QueueInspector;
 use App\Http\Controllers\Controller;
 use App\Models\AdAccount;
@@ -58,7 +59,7 @@ class SyncController extends Controller
             'to' => $r->to_date?->toDateString(),
             'ads_count' => $r->ads_count,
             'rows_count' => $r->rows_count,
-            'error' => $r->error,
+            'error' => $r->error === null ? null : AdsSyncService::scrub($r->error),
             'trigger' => $r->trigger,
             'user' => $r->triggeredBy?->name,
             'started_at' => $r->started_at?->toIso8601String(),

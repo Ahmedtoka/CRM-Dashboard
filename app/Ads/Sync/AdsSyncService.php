@@ -74,7 +74,7 @@ final class AdsSyncService
         } catch (Throwable $e) {
             // Whatever escaped (bad driver config, DB error, media-phase bug) must not leave the run 'running'.
             if ($run->status === 'running') {
-                $run->update(['status' => 'error', 'error' => $e->getMessage(), 'finished_at' => now()]);
+                $run->update(['status' => 'error', 'error' => self::scrub($e->getMessage()), 'finished_at' => now()]);
             }
             throw $e;
         }
@@ -91,7 +91,7 @@ final class AdsSyncService
             $metrics = $driver->dailyMetrics($a, $from, $to);
             [$rows, $guard] = $this->replaceMetrics($a, $metrics, $from, $to);
         } catch (AdsApiException $e) {
-            $run->update(['status' => 'error', 'error' => $e->getMessage(), 'finished_at' => now()]);
+            $run->update(['status' => 'error', 'error' => self::scrub($e->getMessage()), 'finished_at' => now()]);
             if ($e instanceof RateLimited) {
                 // Quota, not a broken connection: record on the run only and let the caller retry later.
                 throw $e;
@@ -108,7 +108,7 @@ final class AdsSyncService
                 ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'unknown')) // minimal ads have no creative to fetch
                 ->pluck('external_id')->all());
         } catch (AdsApiException $e) {
-            $warnings[] = 'Creative media: '.$e->getMessage();
+            $warnings[] = 'Creative media: '.self::scrub($e->getMessage());
         }
 
         $run->update([
