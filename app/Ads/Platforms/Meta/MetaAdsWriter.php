@@ -1,0 +1,214 @@
+<?php
+
+namespace App\Ads\Platforms\Meta;
+
+use App\Ads\Platforms\AdPlatformWriter;
+use App\Ads\Platforms\AdsApiException;
+use App\Ads\Platforms\Data\AdDraft;
+use App\Ads\Platforms\Data\CampaignNode;
+use App\Ads\Platforms\Data\Identity;
+use App\Ads\Platforms\Data\MediaRef;
+use App\Models\AdAccount;
+use App\Models\AdMaterialFile;
+use Illuminate\Support\Facades\Storage;
+
+class MetaAdsWriter implements AdPlatformWriter
+{
+    public function __construct(private readonly MetaAdsApi $api) {}
+
+    public function liveCampaigns(AdAccount $a): array
+    {
+        $rows = $this->api->paginate($this->token($a), $this->actId($a).'/campaigns', [
+            'fields' => 'id,name,status,objective,adsets.limit(100){id,name,status}',
+            'effective_status' => json_encode(['ACTIVE', 'PAUSED']),
+            'limit' => 50,
+        ]);
+
+        return array_values(array_map(fn (array $r) => new CampaignNode(
+            id: (string) $r['id'],
+            name: (string) ($r['name'] ?? $r['id']),
+            status: $r['status'] ?? null,
+            objective: $r['objective'] ?? null,
+            adSets: array_values(array_map(fn (array $s) => [
+                'id' => (string) $s['id'],
+                'name' => (string) ($s['name'] ?? $s['id']),
+                'status' => $s['status'] ?? null,
+            ], $r['adsets']['data'] ?? [])),
+        ), $rows));
+    }
+
+    public function identities(AdAccount $a): array
+    {
+        $rows = $this->api->paginate($this->token($a), $this->actId($a).'/promote_pages', [
+            'fields' => 'id,name,instagram_business_account{id}',
+            'limit' => 50,
+        ]);
+
+        return array_values(array_map(fn (array $r) => new Identity(
+            pageId: (string) $r['id'],
+            pageName: (string) ($r['name'] ?? $r['id']),
+            instagramId: isset($r['instagram_business_account']['id']) ? (string) $r['instagram_business_account']['id'] : null,
+        ), $rows));
+    }
+
+    public function uploadMedia(AdAccount $a, AdMaterialFile $file): MediaRef
+    {
+        return str_starts_with((string) $file->mime, 'video/')
+            ? $this->uploadVideo($a, $file)
+            : $this->uploadImage($a, $file);
+    }
+
+    public function mediaReady(AdAccount $a, MediaRef $ref): bool
+    {
+        if ($ref->kind !== 'video') {
+            return true;
+        }
+        $res = $this->api->get($this->token($a), $ref->id, ['fields' => 'status']);
+
+        return ($res['status']['video_status'] ?? null) === 'ready';
+    }
+
+    public function createPausedAd(AdAccount $a, AdDraft $draft): string
+    {
+        $token = $this->token($a);
+        $act = $this->actId($a);
+        $cta = ['type' => $draft->cta, 'value' => ['link' => $draft->link]];
+        $spec = ['page_id' => $draft->identity->pageId];
+        if ($draft->identity->instagramId) {
+            $spec['instagram_user_id'] = $draft->identity->instagramId;
+        }
+
+        if ($draft->media->kind === 'video') {
+            $video = [
+                'video_id' => $draft->media->id,
+                'message' => $draft->primaryText,
+                'title' => $draft->headline,
+                'call_to_action' => $cta,
+            ];
+            if ($draft->thumbnailUrl) {
+                $video['image_url'] = $draft->thumbnailUrl;
+            }
+            $spec['video_data'] = $video;
+        } else {
+            $spec['link_data'] = [
+                'image_hash' => $draft->media->id,
+                'link' => $draft->link,
+                'message' => $draft->primaryText,
+                'name' => $draft->headline,
+                'call_to_action' => $cta,
+            ];
+        }
+
+        $creative = $this->api->post($token, $act.'/adcreatives', [
+            'name' => $draft->name,
+            'object_story_spec' => json_encode($spec),
+            'url_tags' => $draft->urlTags,
+        ]);
+        if (empty($creative['id'])) {
+            throw new AdsApiException('Meta did not return a creative id.');
+        }
+
+        $ad = $this->api->post($token, $act.'/ads', [
+            'name' => $draft->name,
+            'adset_id' => $draft->adSetId,
+            'creative' => json_encode(['creative_id' => (string) $creative['id']]),
+            'status' => 'PAUSED',
+        ]);
+        if (empty($ad['id'])) {
+            throw new AdsApiException('Meta did not return an ad id.');
+        }
+
+        return (string) $ad['id'];
+    }
+
+    public function setStatus(AdAccount $a, string $level, string $externalId, string $status): void
+    {
+        $this->api->post($this->token($a), $externalId, ['status' => strtolower($status) === 'active' ? 'ACTIVE' : 'PAUSED']);
+    }
+
+    private function uploadVideo(AdAccount $a, AdMaterialFile $file): MediaRef
+    {
+        $token = $this->token($a);
+        $path = $this->actId($a).'/advideos';
+        $disk = Storage::disk($file->disk);
+        $size = (int) ($file->size ?: $disk->size($file->path));
+
+        $start = $this->api->post($token, $path, ['upload_phase' => 'start', 'file_size' => $size]);
+        $session = (string) ($start['upload_session_id'] ?? '');
+        $videoId = (string) ($start['video_id'] ?? '');
+        if ($session === '' || $videoId === '') {
+            throw new AdsApiException('Meta did not start the video upload.');
+        }
+
+        $stream = $disk->readStream($file->path);
+        if (! is_resource($stream)) {
+            throw new AdsApiException('The video file cannot be read.');
+        }
+
+        try {
+            $from = (int) ($start['start_offset'] ?? 0);
+            $to = (int) ($start['end_offset'] ?? 0);
+            while ($from < $to) {
+                // Only the requested byte range is ever in memory.
+                fseek($stream, $from);
+                $chunk = (string) fread($stream, $to - $from);
+                if ($chunk === '') {
+                    throw new AdsApiException('The video file ended before Meta finished receiving it.');
+                }
+                $res = $this->api->postMultipart($token, $path, [
+                    'upload_phase' => 'transfer',
+                    'upload_session_id' => $session,
+                    'start_offset' => $from,
+                ], 'video_file_chunk', $chunk, $file->original_name ?: 'video.mp4');
+
+                $next = (int) ($res['start_offset'] ?? $to);
+                if ($next <= $from) {
+                    throw new AdsApiException('Meta did not advance the video upload.');
+                }
+                $from = $next;
+                $to = (int) ($res['end_offset'] ?? $to);
+            }
+        } finally {
+            fclose($stream);
+        }
+
+        $this->api->post($token, $path, ['upload_phase' => 'finish', 'upload_session_id' => $session]);
+
+        return new MediaRef('video', $videoId, false);
+    }
+
+    private function uploadImage(AdAccount $a, AdMaterialFile $file): MediaRef
+    {
+        $contents = Storage::disk($file->disk)->get($file->path);
+        if ($contents === null) {
+            throw new AdsApiException('The image file cannot be read.');
+        }
+        $name = $file->original_name ?: 'image.jpg';
+        $res = $this->api->postMultipart($this->token($a), $this->actId($a).'/adimages', [], 'filename', $contents, $name);
+        $hash = null;
+        foreach ((array) ($res['images'] ?? []) as $img) {
+            $hash = $img['hash'] ?? null;
+            break;
+        }
+        if (! $hash) {
+            throw new AdsApiException('Meta did not return an image hash.');
+        }
+
+        return new MediaRef('image', (string) $hash, true);
+    }
+
+    private function token(AdAccount $a): string
+    {
+        $token = $a->connection->credentials['access_token'] ?? null;
+        if (! $token) {
+            throw new AdsApiException('Meta access token is missing.');
+        }
+
+        return (string) $token;
+    }
+
+    private function actId(AdAccount $a): string
+    {
+        return str_starts_with($a->external_id, 'act_') ? $a->external_id : 'act_'.$a->external_id;
+    }
+}

@@ -3,6 +3,7 @@
 namespace App\Ads\Platforms\Meta;
 
 use App\Ads\Platforms\AdsApiException;
+use App\Ads\Platforms\MissingPermission;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
 use Illuminate\Http\Client\ConnectionException;
@@ -16,6 +17,9 @@ class MetaAdsApi
 
     /** Meta error codes that mean "slow down" (80000-80014: business use case limits, e.g. 80004 ads management). */
     private const RATE_CODES = [4, 17, 32, 613, 80000, 80001, 80002, 80003, 80004, 80005, 80006, 80008, 80009, 80014];
+
+    /** Meta error codes for a missing permission: 200 (permission), 10 (application permission), 294 (managing ads). */
+    private const PERMISSION_CODES = [200, 10, 294];
 
     /** A page Meta calls too large is asked again with half the `limit`, down to this. */
     private const MIN_LIMIT = 5;
@@ -39,6 +43,24 @@ class MetaAdsApi
     {
         return $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)
             ->get($this->url($path), $query));
+    }
+
+    /** POST form fields. @return array<string, mixed> */
+    public function post(string $token, string $path, array $data = []): array
+    {
+        return $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)
+            ->asForm()->post($this->url($path), $data));
+    }
+
+    /**
+     * POST multipart: plain fields plus one file part (a chunk or a whole small file).
+     *
+     * @return array<string, mixed>
+     */
+    public function postMultipart(string $token, string $path, array $fields, string $fileField, string $contents, string $filename): array
+    {
+        return $this->handle(fn () => Http::withToken($token)->timeout(300)->connectTimeout(15)
+            ->attach($fileField, $contents, $filename)->post($this->url($path), $fields));
     }
 
     /**
@@ -138,6 +160,9 @@ class MetaAdsApi
             $code = (int) $response->json('error.code', 0);
             if (in_array($code, self::RATE_CODES, true)) {
                 throw new RateLimited($this->scrub($message));
+            }
+            if (in_array($code, self::PERMISSION_CODES, true) || str_contains(strtolower($message), 'ads_management')) {
+                throw new MissingPermission($this->scrub('The Meta token needs ads_management: '.$message));
             }
             if (str_contains(strtolower($message), 'reduce the amount of data')) {
                 throw new TooMuchData($this->scrub($message));
