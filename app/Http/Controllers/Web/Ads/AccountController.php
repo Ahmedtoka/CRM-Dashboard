@@ -7,12 +7,14 @@ use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Sync\AdsSyncService;
+use App\Ads\Sync\QueueInspector;
 use App\Ads\Sync\SyncAdAccount;
 use App\Http\Controllers\Controller;
 use App\Models\AdAccount;
 use App\Models\AdAccountAssignment;
 use App\Models\AdDailyMetric;
 use App\Models\AdPlatformConnection;
+use App\Models\AdsSyncRun;
 use App\Models\MediaBuyer;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -47,7 +49,7 @@ class AccountController extends Controller
 
     public function __construct(private readonly AssignmentService $assignments) {}
 
-    public function index(): Response
+    public function index(QueueInspector $queue): Response
     {
         $spend = AdDailyMetric::query()
             ->where('date', '>=', CarbonImmutable::now('Africa/Cairo')->subDays(29)->toDateString())
@@ -83,6 +85,10 @@ class AccountController extends Controller
 
         return Inertia::render('Ads/Accounts', [
             'connections' => $connections,
+            // Accounts with a sync running now or a sync job still waiting in the queue.
+            'syncing' => collect($queue->waiting())->pluck('account_id')
+                ->merge(AdsSyncRun::query()->where('status', 'running')->pluck('ad_account_id'))
+                ->filter()->map(fn ($id) => (int) $id)->unique()->sort()->values()->all(),
             // Archived buyers stay listed only as the current holder of an account (the page shows active ones plus that holder).
             'buyers' => MediaBuyer::query()
                 ->where(fn ($q) => $q->where('is_active', true)->orWhereIn('id', $open->pluck('media_buyer_id')->filter()->values()))

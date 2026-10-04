@@ -91,3 +91,14 @@ it('scrubs token-like text in a run error before it reaches the page', function 
     $this->actingAs($admin)->get('/ads/sync')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->where('runs.0.error', fn ($e) => str_contains($e, 'access_token=') && ! str_contains($e, 'EAAsecret123')));
 });
+
+it('marks an account as syncing on the accounts page', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $busy = AdAccount::factory()->meta()->create();
+    $idle = AdAccount::factory()->meta()->create();
+    AdsSyncRun::create(['ad_account_id' => $busy->id, 'platform' => 'meta', 'kind' => 'recent', 'status' => 'running', 'trigger' => 'manual', 'started_at' => now()]);
+    AdsSyncRun::create(['ad_account_id' => $idle->id, 'platform' => 'meta', 'kind' => 'recent', 'status' => 'ok', 'trigger' => 'manual', 'started_at' => now()]);
+
+    $this->actingAs($admin)->get('/ads/accounts')->assertInertia(fn (Assert $p) => $p->component('Ads/Accounts')
+        ->where('syncing', [$busy->id]));
+});

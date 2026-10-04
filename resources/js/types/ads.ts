@@ -352,8 +352,57 @@ export interface AdBuyerOption extends AdsOption {
     is_active: boolean;
 }
 
+export type AdsSyncStatus = 'running' | 'ok' | 'error';
+export type AdsSyncTrigger = 'schedule' | 'manual' | 'backfill' | 'setup';
+
+/** SyncController::run — one row of ads_sync_runs. */
+export interface AdsSyncRunRow {
+    id: number;
+    account: string | null;
+    platform: string;
+    kind: string;
+    status: AdsSyncStatus;
+    from: string | null;
+    to: string | null;
+    ads_count: number | null;
+    rows_count: number | null;
+    error: string | null;
+    trigger: AdsSyncTrigger | null;
+    user: string | null;
+    started_at: string | null;
+    finished_at: string | null;
+    seconds: number | null;
+}
+
+/** QueueInspector::waiting — a job still in the commercelong queue. */
+export interface AdsSyncWaitingRow {
+    job: string;
+    account_id: number | null;
+    account: string | null;
+    kind: string | null;
+    days: number | null;
+    attempts: number;
+    available_at: string | null;
+    trigger: AdsSyncTrigger | null;
+}
+
+export interface AdsSyncScheduleRow {
+    command: string;
+    next_due: string;
+}
+
+export interface AdsSyncProps {
+    now: { running: AdsSyncRunRow[]; waiting: AdsSyncWaitingRow[]; supported: boolean };
+    runs: AdsSyncRunRow[];
+    filters: { account: number | null; status: AdsSyncStatus | null; trigger: AdsSyncTrigger | null };
+    schedule: AdsSyncScheduleRow[];
+    accounts: { id: number; name: string; platform: string }[];
+}
+
 export interface AdsAccountsProps {
     connections: AdConnectionRow[];
+    /** Ids of accounts with a sync running or waiting in the queue. */
+    syncing: number[];
     buyers: AdBuyerOption[];
     platforms: AdPlatformDefinition[];
 }

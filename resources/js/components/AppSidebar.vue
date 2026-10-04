@@ -39,7 +39,7 @@ const adsGroup = computed<NavItem | null>(() => {
         materials,
     ];
     if (allows('supervisor')) {
-        children.push({ title: t('nav.ads_accounts'), href: '/ads/accounts' }, { title: t('nav.ads_buyers_setup'), href: '/ads/setup/buyers' });
+        children.push({ title: t('nav.ads_accounts'), href: '/ads/accounts' }, { title: t('nav.ads_sync'), href: '/ads/sync' }, { title: t('nav.ads_buyers_setup'), href: '/ads/setup/buyers' });
     }
 
     return { title: t('nav.ads'), href: '/ads', icon: Megaphone, children };

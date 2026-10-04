@@ -359,7 +359,12 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                             </div>
                         </template>
                         <template #cell-spend_30d="{ row }">{{ money(row.spend_30d, row.currency) }}</template>
-                        <template #cell-last_synced_at="{ row }"><RelativeTime :iso="row.last_synced_at" /></template>
+                        <template #cell-last_synced_at="{ row }">
+                            <span v-if="props.syncing.includes(row.id)" class="inline-flex items-center gap-1.5 text-xs font-medium text-primary" role="status">
+                                <LoaderCircle class="size-3.5 animate-spin" aria-hidden="true" />{{ t('ads.accounts.syncing') }}
+                            </span>
+                            <RelativeTime v-else :iso="row.last_synced_at" />
+                        </template>
                         <template #cell-actions="{ row }">
                             <button
                                 type="button"
