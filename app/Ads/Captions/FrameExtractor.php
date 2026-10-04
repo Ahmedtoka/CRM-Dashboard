@@ -90,7 +90,7 @@ class FrameExtractor
         $configured = config('crm.media.ffmpeg_path');
         if (is_string($configured) && $configured !== '') {
             if ($name === 'ffmpeg') {
-                return $configured;
+                return is_file($configured) && is_executable($configured) ? $configured : null;
             }
             $sibling = preg_replace('/ffmpeg(\.exe)?$/i', 'ffprobe$1', $configured);
             if (is_string($sibling) && $sibling !== $configured && is_file($sibling)) {

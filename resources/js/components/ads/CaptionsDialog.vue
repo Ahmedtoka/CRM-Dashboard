@@ -15,7 +15,7 @@ import { LoaderCircle, Rocket, Sparkles } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{ open: boolean; material: MaterialRow; canPublish: boolean }>();
-const emit = defineEmits<{ 'update:open': [open: boolean]; create: [captions: PublishCaption[]] }>();
+const emit = defineEmits<{ 'update:open': [open: boolean]; create: [captions: PublishCaption[], fileId: number] }>();
 
 const api = useApi();
 const toast = useToast();
@@ -102,6 +102,7 @@ async function createAds(): Promise<void> {
     emit(
         'create',
         captions.value.map((c) => ({ headline: c.headline.trim(), primary_text: c.primary_text.trim(), cta: c.cta })),
+        fileId.value as number,
     );
     emit('update:open', false);
 }

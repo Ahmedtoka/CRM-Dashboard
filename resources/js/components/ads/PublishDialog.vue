@@ -14,7 +14,7 @@ import type { MaterialRow, PublishAccount, PublishCampaign, PublishCaption, Publ
 import { LoaderCircle, Plus, X } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
 
-const props = defineProps<{ open: boolean; material: MaterialRow; captions?: PublishCaption[] | null }>();
+const props = defineProps<{ open: boolean; material: MaterialRow; captions?: PublishCaption[] | null; fileIds?: number[] | null }>();
 const emit = defineEmits<{ 'update:open': [open: boolean]; published: [] }>();
 
 const api = useApi();
@@ -117,11 +117,17 @@ watch(
     (open) => {
         if (!open) return;
         error.value = null;
-        form.file_ids = files.value.map((f) => f.id);
+        form.file_ids = props.fileIds?.length ? [...props.fileIds] : files.value.map((f) => f.id);
         captions.value = defaultCaptions();
         if (!accounts.value.length) void loadAccounts();
     },
     { immediate: true },
+);
+watch(
+    () => props.fileIds,
+    () => {
+        if (props.open && props.fileIds?.length) form.file_ids = [...props.fileIds];
+    },
 );
 watch(
     () => props.captions,

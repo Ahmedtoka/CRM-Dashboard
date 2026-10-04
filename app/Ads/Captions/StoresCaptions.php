@@ -23,15 +23,20 @@ trait StoresCaptions
 
             $rows = [];
             foreach (array_values($items) as $i => $item) {
-                $angle = in_array($item['angle'] ?? null, GeneratesCaptions::ANGLES, true) ? $item['angle'] : GeneratesCaptions::ANGLES[$i];
+                $angle = GeneratesCaptions::ANGLES[$i]; // by position, whatever the model labelled it
+                $headline = Str::limit(self::clean($item['headline'] ?? ''), GeneratesCaptions::MAX_HEADLINE, '');
+                $text = Str::limit(self::clean($item['primary_text'] ?? ''), GeneratesCaptions::MAX_TEXT, '');
+                if ($headline === '' || $text === '') {
+                    throw new CaptionException(__('ads.captions.bad_answer'));
+                }
                 $cta = in_array($item['cta'] ?? null, GeneratesCaptions::CTAS, true) ? $item['cta'] : 'SHOP_NOW';
                 $rows[] = AdMaterialCaption::query()->create([
                     'ad_material_id' => $m->id,
                     'ad_material_file_id' => $f->id,
                     'position' => $i + 1,
                     'angle' => $angle,
-                    'headline' => Str::limit(self::clean($item['headline'] ?? ''), GeneratesCaptions::MAX_HEADLINE, ''),
-                    'primary_text' => Str::limit(self::clean($item['primary_text'] ?? ''), GeneratesCaptions::MAX_TEXT, ''),
+                    'headline' => trim($headline),
+                    'primary_text' => trim($text),
                     'cta' => $cta,
                     'model' => $model,
                     // The one call's usage is stored on every row (it is per call, not per caption).

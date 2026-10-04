@@ -1,5 +1,6 @@
 <?php
 
+use App\Ads\Captions\CaptionException;
 use App\Ads\Captions\CaptionGenerator;
 use App\Ads\Captions\FakeCaptionGenerator;
 use App\Ads\Captions\FrameExtractor;
@@ -12,6 +13,9 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
     Http::preventStrayRequests();
@@ -169,6 +173,85 @@ it('binds the fake generator unless the ai driver is claude', function () {
     expect(app(GeneratesCaptions::class))->toBeInstanceOf(FakeCaptionGenerator::class);
     config(['crm.drivers.ai' => 'claude']);
     expect(app(GeneratesCaptions::class))->toBeInstanceOf(CaptionGenerator::class);
+});
+
+it('treats a configured ffmpeg path that does not exist as missing', function () {
+    [, $f] = capSetup();
+    Storage::fake('public');
+    Storage::disk('public')->put($f->path, 'video');
+    Process::fake();
+    config(['crm.media.ffmpeg_path' => '/nonexistent/ffmpeg']);
+
+    expect((new FrameExtractor)->frames($f))->toBe([]);
+    Process::assertNothingRan();
+});
+
+it('runs ffmpeg at 10, 35, 60 and 85 percent of the duration at 768 px', function () {
+    [, $f] = capSetup();
+    Storage::fake('public');
+    Storage::disk('public')->put($f->path, 'video');
+    $bin = sys_get_temp_dir().DIRECTORY_SEPARATOR.'ffmpeg-fake.exe';
+    file_put_contents($bin, 'x');
+    chmod($bin, 0755);
+    config(['crm.media.ffmpeg_path' => $bin]);
+    Process::fake(function ($p) {
+        file_put_contents(end($p->command), 'jpg');
+
+        return Process::result();
+    });
+
+    $frames = (new FrameExtractor)->frames($f);
+
+    expect($frames)->toHaveCount(4)->and($frames[0])->toBe(base64_encode('jpg'));
+    $times = [];
+    Process::assertRan(function ($p) use (&$times, $bin) {
+        $c = $p->command;
+        if ($c[0] === $bin && in_array('scale=768:-2', $c, true)) {
+            $times[] = $c[array_search('-ss', $c, true) + 1];
+        }
+
+        return true;
+    });
+    expect($times)->toBe(['2', '7', '12', '17']);
+    @unlink($bin);
+});
+
+it('assigns angles by position, drops non-array entries and needs three valid ones', function () {
+    [$m, $f] = capSetup();
+    config(['crm.anthropic.key' => 'test-key']);
+    noFrames();
+    $c = fn ($a) => ['angle' => $a, 'headline' => 'h', 'primary_text' => 't', 'cta' => 'SHOP_NOW'];
+    Http::fake(['api.anthropic.com/*' => Http::sequence()
+        ->push(claudeCaptionsResponse([$c('quality'), 'junk', $c('quality'), $c('x'), $c('offer')]))
+        ->push(claudeCaptionsResponse([$c('offer'), 'junk', $c('quality')]))]);
+
+    $rows = app(CaptionGenerator::class)->generate($m, $f);
+    expect(array_column($rows, 'angle'))->toBe(['emotional', 'offer', 'quality']);
+
+    expect(fn () => app(CaptionGenerator::class)->generate($m, $f))->toThrow(CaptionException::class);
+});
+
+it('refuses a caption that is empty after cleaning and keeps the previous ones', function () {
+    [$m, $f] = capSetup();
+    config(['crm.anthropic.key' => 'test-key']);
+    noFrames();
+    app(FakeCaptionGenerator::class)->generate($m, $f);
+    $ok = ['angle' => 'emotional', 'headline' => 'h', 'primary_text' => 't', 'cta' => 'SHOP_NOW'];
+    Http::fake(['api.anthropic.com/*' => Http::response(claudeCaptionsResponse([$ok, $ok, ['headline' => "\u{1F60D}"] + $ok]))]);
+
+    expect(fn () => app(CaptionGenerator::class)->generate($m, $f))->toThrow(CaptionException::class);
+    expect(AdMaterialCaption::query()->where('model', 'fake')->count())->toBe(3);
+});
+
+it('logs only status and model when the API call fails', function () {
+    [$m, $f] = capSetup();
+    config(['crm.anthropic.key' => 'secret-key', 'crm.ads.captions.model' => 'claude-test']);
+    noFrames();
+    Http::fake(['api.anthropic.com/*' => Http::response(['error' => 'boom'], 500)]);
+    Log::spy();
+
+    expect(fn () => app(CaptionGenerator::class)->generate($m, $f))->toThrow(CaptionException::class);
+    Log::shouldHaveReceived('warning')->withArgs(fn ($msg, $ctx) => $ctx === ['status' => 500, 'model' => 'claude-test'])->once();
 });
 
 it('returns no frames when ffmpeg or the local file is missing', function () {

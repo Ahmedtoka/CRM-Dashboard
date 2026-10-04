@@ -8,6 +8,7 @@ use App\Models\AdMaterialFile;
 use App\Models\BotSetting;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Three Egyptian-Arabic ad captions from a video's frames (Claude vision) plus the product data. Uses the same raw
@@ -62,15 +63,17 @@ TXT;
                 [['role' => 'user', 'content' => $content]], $this->schema(),
             );
         } catch (RequestException|ConnectionException $e) {
+            // Status and model only: never the headers (API key) or the body.
+            Log::warning('ads captions: Anthropic call failed', ['status' => $e instanceof RequestException ? $e->response->status() : null, 'model' => $model]);
             throw new CaptionException(__('ads.captions.api_failed'), 0, $e);
         }
 
-        $items = $result['json']['captions'] ?? null;
-        if (! is_array($items) || count($items) < 3) {
+        $items = is_array($result['json']['captions'] ?? null) ? array_values(array_filter($result['json']['captions'], 'is_array')) : [];
+        if (count($items) < 3) {
             throw new CaptionException(__('ads.captions.bad_answer'));
         }
 
-        return $this->store($m, $f, array_slice(array_values(array_filter($items, 'is_array')), 0, 3), $model, $result['input_tokens'], $result['output_tokens']);
+        return $this->store($m, $f, array_slice($items, 0, 3), $model, $result['input_tokens'], $result['output_tokens']);
     }
 
     private function model(): string

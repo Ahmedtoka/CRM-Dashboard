@@ -234,12 +234,14 @@ const linkOpen = computed({ get: () => linking.value !== null, set: (v) => !v &&
 /* ---- publish as paused ads ---- */
 const publishing = ref<MaterialRow | null>(null);
 const publishCaptions = ref<PublishCaption[] | null>(null);
+const publishFileIds = ref<number[] | null>(null);
 const publishOpen = computed({
     get: () => publishing.value !== null,
     set: (v) => {
         if (!v) {
             publishing.value = null;
             publishCaptions.value = null;
+            publishFileIds.value = null;
         }
     },
 });
@@ -247,8 +249,9 @@ const publishOpen = computed({
 /* ---- AI captions ---- */
 const captioning = ref<MaterialRow | null>(null);
 const captionsOpen = computed({ get: () => captioning.value !== null, set: (v) => !v && (captioning.value = null) });
-function createFromCaptions(captions: PublishCaption[]): void {
+function createFromCaptions(captions: PublishCaption[], fileId: number): void {
     publishCaptions.value = captions;
+    publishFileIds.value = [fileId];
     publishing.value = captioning.value;
     captioning.value = null;
 }
@@ -757,7 +760,7 @@ const breadcrumbs = computed(() => [
         </Dialog>
 
         <CaptionsDialog v-if="captioning" v-model:open="captionsOpen" :material="captioning" :can-publish="perms.canOperate.value" @create="createFromCaptions" />
-        <PublishDialog v-if="publishing" v-model:open="publishOpen" :material="publishing" :captions="publishCaptions" @published="publications = publishing" />
+        <PublishDialog v-if="publishing" v-model:open="publishOpen" :material="publishing" :captions="publishCaptions" :file-ids="publishFileIds" @published="publications = publishing" />
 
         <Dialog v-model:open="publicationsOpen">
             <DialogContent class="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
