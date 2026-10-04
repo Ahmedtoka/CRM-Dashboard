@@ -26,7 +26,7 @@ class BackfillAdsCommand extends Command
 
         if ($this->option('queue')) {
             foreach ($accounts as $a) {
-                SyncAdAccount::dispatch($a->id, $days, 'backfill');
+                SyncAdAccount::dispatch($a->id, $days, 'backfill', 'backfill');
                 $this->line("Queued {$a->name} ({$days} days)");
             }
             $this->info('The worker keeps retrying while Meta asks to wait; each account shows its sync time on Ads -> Ad accounts when it lands.');
@@ -45,7 +45,7 @@ class BackfillAdsCommand extends Command
                 continue;
             }
             try {
-                $run = $sync->backfill($a, $days);
+                $run = $sync->backfill($a, $days, 'backfill');
                 if ($run?->status === 'error') {
                     $this->warn("Failed {$a->name}: ".AdsSyncService::scrub((string) $run->error));
                     $failed++;

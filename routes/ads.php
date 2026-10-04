@@ -8,6 +8,7 @@ use App\Http\Controllers\Web\Ads\CreativeController;
 use App\Http\Controllers\Web\Ads\MaterialCollectionController;
 use App\Http\Controllers\Web\Ads\MaterialController;
 use App\Http\Controllers\Web\Ads\OverviewController;
+use App\Http\Controllers\Web\Ads\SyncController;
 use Illuminate\Support\Facades\Route;
 
 // Ads Hub. Required from routes/crm.php inside the authenticated group (see EnsureAdsAccess for the `ads:*` areas).
@@ -21,6 +22,7 @@ Route::middleware('ads:report')->group(function () {
 });
 
 Route::middleware('ads:manage')->group(function () {
+    Route::get('/ads/sync', [SyncController::class, 'index'])->name('ads.sync');
     Route::get('/ads/accounts', [AccountController::class, 'index'])->name('ads.accounts.index');
     Route::post('/ads/connections', [AccountController::class, 'store'])->name('ads.connections.store');
     Route::put('/ads/connections/{connection}', [AccountController::class, 'update'])->name('ads.connections.update');

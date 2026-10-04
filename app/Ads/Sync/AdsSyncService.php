@@ -61,10 +61,11 @@ final class AdsSyncService
     }
 
     /** ads + campaigns + adsets, then daily metrics for [from,to] (replacing the account's rows of those dates), then media. */
-    public function syncAccount(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to, string $kind = 'recent', bool $withAds = true): AdsSyncRun
+    public function syncAccount(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to, string $kind = 'recent', bool $withAds = true, string $trigger = 'schedule', ?int $triggeredById = null): AdsSyncRun
     {
         $run = AdsSyncRun::create([
             'ad_account_id' => $a->id, 'platform' => $a->platform, 'kind' => $kind, 'status' => 'running',
+            'trigger' => $trigger, 'triggered_by_id' => $triggeredById,
             'from_date' => $from->toDateString(), 'to_date' => $to->toDateString(), 'started_at' => now(),
         ]);
 
@@ -132,14 +133,14 @@ final class AdsSyncService
     }
 
     /** Sync an account over $days days in 30-day chunks, newest first. */
-    public function backfill(AdAccount $a, int $days): ?AdsSyncRun
+    public function backfill(AdAccount $a, int $days, string $trigger = 'backfill', ?int $triggeredById = null): ?AdsSyncRun
     {
         $run = null;
         $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
         for ($offset = 0; $offset < $days; $offset += 30) {
             $to = $today->subDays($offset);
             $from = $today->subDays(min($offset + 29, $days - 1));
-            $run = $this->syncAccount($a, $from, $to, 'backfill', withAds: $offset === 0);
+            $run = $this->syncAccount($a, $from, $to, 'backfill', withAds: $offset === 0, trigger: $trigger, triggeredById: $triggeredById);
             if ($run->status === 'error') {
                 break;
             }

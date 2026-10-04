@@ -134,7 +134,7 @@ class SetupTeamCommand extends Command
 
         $days = (int) config('crm.ads.backfill_days', 90);
         $connection->accounts()->where('is_active', true)->whereNotIn('id', $known)->pluck('id')
-            ->each(fn (int $id) => SyncAdAccount::dispatch($id, $days, 'backfill'));
+            ->each(fn (int $id) => SyncAdAccount::dispatch($id, $days, 'backfill', 'setup'));
 
         return true;
     }

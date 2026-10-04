@@ -188,7 +188,7 @@ class AccountController extends Controller
 
         $this->dispatchBackfill($connection, $known);
         $connection->accounts()->where('is_active', true)->whereIn('id', $known)->pluck('id')
-            ->each(fn (int $id) => SyncAdAccount::dispatch($id));
+            ->each(fn (int $id) => SyncAdAccount::dispatch($id, 3, 'recent', 'manual', auth()->id()));
 
         return back()->with('status', __('ads.flash.sync_queued'));
     }
@@ -240,7 +240,7 @@ class AccountController extends Controller
 
     public function syncAccount(AdAccount $account): RedirectResponse
     {
-        SyncAdAccount::dispatch($account->id);
+        SyncAdAccount::dispatch($account->id, 3, 'recent', 'manual', auth()->id());
 
         return back()->with('status', __('ads.flash.sync_queued'));
     }
@@ -251,7 +251,7 @@ class AccountController extends Controller
         $days = (int) config('crm.ads.backfill_days', 90);
 
         $connection->accounts()->where('is_active', true)->whereNotIn('id', $known)->pluck('id')
-            ->each(fn (int $id) => SyncAdAccount::dispatch($id, $days, 'backfill'));
+            ->each(fn (int $id) => SyncAdAccount::dispatch($id, $days, 'backfill', 'manual', auth()->id()));
     }
 
     /**
