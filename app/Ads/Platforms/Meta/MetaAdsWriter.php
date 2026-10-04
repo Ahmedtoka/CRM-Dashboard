@@ -63,7 +63,7 @@ class MetaAdsWriter implements AdPlatformWriter
         if ($ref->kind !== 'video') {
             return true;
         }
-        $res = $this->api->get($this->token($a), $ref->id, ['fields' => 'status']);
+        $res = $this->api->get($this->token($a), $this->numericId($ref->id), ['fields' => 'status']);
 
         return ($res['status']['video_status'] ?? null) === 'ready';
     }
@@ -123,6 +123,10 @@ class MetaAdsWriter implements AdPlatformWriter
 
     public function setStatus(AdAccount $a, string $level, string $externalId, string $status): void
     {
+        if (! in_array($level, ['campaign', 'adset', 'ad'], true)) {
+            throw new AdsApiException('Unknown ad level: '.$level);
+        }
+        $externalId = $this->numericId($externalId);
         $this->api->post($this->token($a), $externalId, ['status' => strtolower($status) === 'active' ? 'ACTIVE' : 'PAUSED']);
     }
 
@@ -150,8 +154,18 @@ class MetaAdsWriter implements AdPlatformWriter
             $to = (int) ($start['end_offset'] ?? 0);
             while ($from < $to) {
                 // Only the requested byte range is ever in memory.
-                fseek($stream, $from);
-                $chunk = (string) fread($stream, $to - $from);
+                if (fseek($stream, $from) !== 0) {
+                    throw new AdsApiException('The video file cannot be read at the requested offset.');
+                }
+                $want = $to - $from;
+                $chunk = '';
+                while (strlen($chunk) < $want && ! feof($stream)) {
+                    $part = fread($stream, $want - strlen($chunk));
+                    if ($part === false || $part === '') {
+                        break;
+                    }
+                    $chunk .= $part;
+                }
                 if ($chunk === '') {
                     throw new AdsApiException('The video file ended before Meta finished receiving it.');
                 }
@@ -172,7 +186,10 @@ class MetaAdsWriter implements AdPlatformWriter
             fclose($stream);
         }
 
-        $this->api->post($token, $path, ['upload_phase' => 'finish', 'upload_session_id' => $session]);
+        $done = $this->api->post($token, $path, ['upload_phase' => 'finish', 'upload_session_id' => $session]);
+        if (empty($done['success'])) {
+            throw new AdsApiException('Meta did not confirm the video upload.');
+        }
 
         return new MediaRef('video', $videoId, false);
     }
@@ -195,6 +212,16 @@ class MetaAdsWriter implements AdPlatformWriter
         }
 
         return new MediaRef('image', (string) $hash, true);
+    }
+
+    /** Ids go into URL paths, so only digits are accepted. */
+    private function numericId(string $id): string
+    {
+        if ($id === '' || ! ctype_digit($id)) {
+            throw new AdsApiException('Invalid Meta id.');
+        }
+
+        return $id;
     }
 
     private function token(AdAccount $a): string

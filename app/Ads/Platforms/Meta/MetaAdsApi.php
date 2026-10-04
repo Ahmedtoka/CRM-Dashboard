@@ -162,7 +162,7 @@ class MetaAdsApi
                 throw new RateLimited($this->scrub($message));
             }
             if (in_array($code, self::PERMISSION_CODES, true) || str_contains(strtolower($message), 'ads_management')) {
-                throw new MissingPermission($this->scrub('The Meta token needs ads_management: '.$message));
+                throw new MissingPermission($this->scrub('Meta permission missing: '.$message));
             }
             if (str_contains(strtolower($message), 'reduce the amount of data')) {
                 throw new TooMuchData($this->scrub($message));

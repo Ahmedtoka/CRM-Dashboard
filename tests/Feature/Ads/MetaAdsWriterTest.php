@@ -59,7 +59,7 @@ it('uploads a video in chunks: start, two transfers, finish', function () {
     $file = new AdMaterialFile(['disk' => 'local', 'path' => 'm/v.mp4', 'mime' => 'video/mp4', 'size' => 10, 'original_name' => 'v.mp4']);
     Http::fake([
         'graph.facebook.com/v23.0/act_9/advideos' => Http::sequence()
-            ->push(['upload_session_id' => 'sess', 'video_id' => 'vid1', 'start_offset' => '0', 'end_offset' => '6'])
+            ->push(['upload_session_id' => 'sess', 'video_id' => '5501', 'start_offset' => '0', 'end_offset' => '6'])
             ->push(['start_offset' => '6', 'end_offset' => '10'])
             ->push(['start_offset' => '10', 'end_offset' => '10'])
             ->push(['success' => true]),
@@ -67,7 +67,7 @@ it('uploads a video in chunks: start, two transfers, finish', function () {
 
     $ref = app(MetaAdsWriter::class)->uploadMedia(writerAccount(), $file);
 
-    expect($ref->kind)->toBe('video')->and($ref->id)->toBe('vid1')->and($ref->ready)->toBeFalse();
+    expect($ref->kind)->toBe('video')->and($ref->id)->toBe('5501')->and($ref->ready)->toBeFalse();
     $sent = Http::recorded()->map(fn ($p) => $p[0])->values();
     expect($sent)->toHaveCount(4);
     expect($sent[0]->body())->toContain('upload_phase=start')->toContain('file_size=10');
@@ -97,12 +97,12 @@ it('uploads an image and returns its hash, which is always ready', function () {
 
 it('checks video readiness from status.video_status', function () {
     Http::preventStrayRequests();
-    Http::fake(['graph.facebook.com/v23.0/vid1*' => Http::sequence()
+    Http::fake(['graph.facebook.com/v23.0/5501*' => Http::sequence()
         ->push(['status' => ['video_status' => 'processing']])
         ->push(['status' => ['video_status' => 'ready']])]);
     $w = app(MetaAdsWriter::class);
     $acc = writerAccount();
-    $ref = new MediaRef('video', 'vid1', false);
+    $ref = new MediaRef('video', '5501', false);
 
     expect($w->mediaReady($acc, $ref))->toBeFalse()->and($w->mediaReady($acc, $ref))->toBeTrue();
 });
@@ -111,12 +111,12 @@ it('creates the creative then a PAUSED ad with url_tags and returns the ad id', 
     Http::preventStrayRequests();
     Http::fake([
         'graph.facebook.com/v23.0/act_9/adcreatives' => Http::response(['id' => 'cr1']),
-        'graph.facebook.com/v23.0/act_9/ads' => Http::response(['id' => 'ad77']),
+        'graph.facebook.com/v23.0/act_9/ads' => Http::response(['id' => '7701']),
     ]);
 
-    $id = app(MetaAdsWriter::class)->createPausedAd(writerAccount(), draft(new MediaRef('video', 'vid1', true)));
+    $id = app(MetaAdsWriter::class)->createPausedAd(writerAccount(), draft(new MediaRef('video', '5501', true)));
 
-    expect($id)->toBe('ad77');
+    expect($id)->toBe('7701');
     $sent = Http::recorded()->map(fn ($p) => $p[0])->values();
     expect($sent[0]->url())->toContain('/adcreatives');
     $creative = $sent[0]->data();
@@ -124,7 +124,7 @@ it('creates the creative then a PAUSED ad with url_tags and returns the ad id', 
     $spec = json_decode($creative['object_story_spec'], true);
     expect($spec['page_id'])->toBe('p1')->and($spec['instagram_user_id'])->toBe('ig1')
         ->and($spec['video_data'])->toMatchArray([
-            'video_id' => 'vid1', 'image_url' => 'https://cdn.test/t.jpg', 'message' => 'primary', 'title' => 'headline',
+            'video_id' => '5501', 'image_url' => 'https://cdn.test/t.jpg', 'message' => 'primary', 'title' => 'headline',
             'call_to_action' => ['type' => 'SHOP_NOW', 'value' => ['link' => 'https://shop.test/p']],
         ]);
     expect($sent[1]->url())->toContain('/ads');
@@ -149,28 +149,77 @@ it('builds link_data for an image creative', function () {
 
 it('sets status with a POST to the object id', function () {
     Http::preventStrayRequests();
-    Http::fake(['graph.facebook.com/v23.0/ad77' => Http::response(['success' => true])]);
+    Http::fake(['graph.facebook.com/v23.0/7701' => Http::response(['success' => true])]);
 
-    app(MetaAdsWriter::class)->setStatus(writerAccount(), 'ad', 'ad77', 'paused');
+    app(MetaAdsWriter::class)->setStatus(writerAccount(), 'ad', '7701', 'paused');
 
-    Http::assertSent(fn (Request $r) => $r->method() === 'POST' && str_ends_with($r->url(), '/v23.0/ad77') && $r->data()['status'] === 'PAUSED');
+    Http::assertSent(fn (Request $r) => $r->method() === 'POST' && str_ends_with($r->url(), '/v23.0/7701') && $r->data()['status'] === 'PAUSED');
 });
 
 it('maps a missing ads_management permission to MissingPermission', function () {
     Http::preventStrayRequests();
     Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => '(#200) Requires ads_management permission to manage the object', 'code' => 200]], 403)]);
 
-    app(MetaAdsWriter::class)->setStatus(writerAccount(), 'ad', 'ad77', 'active');
+    app(MetaAdsWriter::class)->setStatus(writerAccount(), 'ad', '7701', 'active');
 })->throws(MissingPermission::class, 'ads_management');
 
 it('keeps rate-limit codes as RateLimited and other errors as AdsApiException', function () {
     Http::preventStrayRequests();
-    Http::fake(['graph.facebook.com/v23.0/ad1' => Http::response(['error' => ['message' => 'Too many calls', 'code' => 17]], 400)]);
+    Http::fake(['graph.facebook.com/v23.0/7711' => Http::response(['error' => ['message' => 'Too many calls', 'code' => 17]], 400)]);
     $w = app(MetaAdsWriter::class);
     $acc = writerAccount();
 
-    expect(fn () => $w->setStatus($acc, 'ad', 'ad1', 'paused'))->toThrow(RateLimited::class);
+    expect(fn () => $w->setStatus($acc, 'ad', '7711', 'paused'))->toThrow(RateLimited::class);
 
-    Http::fake(['graph.facebook.com/v23.0/ad2' => Http::response(['error' => ['message' => 'Bad thing', 'code' => 100]], 400)]);
-    expect(fn () => $w->setStatus($acc, 'ad', 'ad2', 'paused'))->toThrow(AdsApiException::class, 'Bad thing');
+    Http::fake(['graph.facebook.com/v23.0/7722' => Http::response(['error' => ['message' => 'Bad thing', 'code' => 100]], 400)]);
+    expect(fn () => $w->setStatus($acc, 'ad', '7722', 'paused'))->toThrow(AdsApiException::class, 'Bad thing');
 });
+
+it('lets a rate-limit code win even when the message mentions ads_management', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => 'Ads management call limit reached (ads_management)', 'code' => 80004]], 400)]);
+
+    app(MetaAdsWriter::class)->setStatus(writerAccount(), 'ad', '7711', 'paused');
+})->throws(RateLimited::class);
+
+it('maps codes 10 and 294 to MissingPermission', function (int $code) {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => 'Permission denied', 'code' => $code]], 403)]);
+
+    app(MetaAdsWriter::class)->setStatus(writerAccount(), 'ad', '7711', 'paused');
+})->with([10, 294])->throws(MissingPermission::class);
+
+it('does not claim ads_management for an ads_read permission error', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => '(#200) ads_read required', 'code' => 200]], 403)]);
+
+    try {
+        app(MetaAdsWriter::class)->liveCampaigns(writerAccount());
+        $this->fail('expected MissingPermission');
+    } catch (MissingPermission $e) {
+        expect($e->getMessage())->toContain('ads_read')->not->toContain('ads_management');
+    }
+});
+
+it('rejects an unknown level or a non-numeric id before any request', function () {
+    Http::preventStrayRequests();
+    $w = app(MetaAdsWriter::class);
+    $acc = writerAccount();
+
+    expect(fn () => $w->setStatus($acc, 'account', '7711', 'paused'))->toThrow(AdsApiException::class)
+        ->and(fn () => $w->setStatus($acc, 'ad', '77/../me', 'paused'))->toThrow(AdsApiException::class)
+        ->and(fn () => $w->mediaReady($acc, new MediaRef('video', 'x?y', false)))->toThrow(AdsApiException::class);
+});
+
+it('fails the upload when Meta does not confirm finish', function () {
+    Http::preventStrayRequests();
+    Storage::fake('local');
+    Storage::disk('local')->put('m/v.mp4', '0123');
+    $file = new AdMaterialFile(['disk' => 'local', 'path' => 'm/v.mp4', 'mime' => 'video/mp4', 'size' => 4]);
+    Http::fake(['graph.facebook.com/v23.0/act_9/advideos' => Http::sequence()
+        ->push(['upload_session_id' => 's', 'video_id' => '5501', 'start_offset' => '0', 'end_offset' => '4'])
+        ->push(['start_offset' => '4', 'end_offset' => '4'])
+        ->push(['success' => false])]);
+
+    app(MetaAdsWriter::class)->uploadMedia(writerAccount(), $file);
+})->throws(AdsApiException::class, 'did not confirm');
