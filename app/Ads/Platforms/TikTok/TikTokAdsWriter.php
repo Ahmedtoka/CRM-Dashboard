@@ -147,10 +147,14 @@ class TikTokAdsWriter implements AdPlatformWriter
 
     public function createPausedAd(AdAccount $a, AdDraft $draft): string
     {
+        if ($draft->identity->instagramId === null || $draft->identity->instagramId === '') {
+            throw new AdsApiException('TikTok identity type is missing.');
+        }
         $creative = [
             'ad_name' => $draft->name,
             'identity_id' => $draft->identity->pageId,
             'identity_type' => $draft->identity->instagramId,
+            'operation_status' => 'DISABLE',
             'ad_format' => $draft->media->kind === 'video' ? 'SINGLE_VIDEO' : 'SINGLE_IMAGE',
             'ad_text' => $draft->primaryText,
             'call_to_action' => self::CTA[$draft->cta] ?? $draft->cta,
@@ -172,6 +176,18 @@ class TikTokAdsWriter implements AdPlatformWriter
         $id = $data['ad_ids'][0] ?? null;
         if (! $id) {
             throw new AdsApiException('TikTok did not return an ad id.');
+        }
+
+        // It is not verified that TikTok honours operation_status on ad/create; force DISABLE so the ad can never spend.
+        $ids = array_map('strval', array_values(array_filter((array) $data['ad_ids'])));
+        try {
+            $this->api->post($this->token($a), 'ad/status/update/', [
+                'advertiser_id' => $this->advertiserId($a),
+                'ad_ids' => $ids,
+                'operation_status' => 'DISABLE',
+            ]);
+        } catch (AdsApiException $e) {
+            throw new AdsApiException('TikTok created ad '.implode(',', $ids).' but could not confirm it is paused: '.$e->getMessage(), 0, $e);
         }
 
         return (string) $id;
@@ -199,7 +215,14 @@ class TikTokAdsWriter implements AdPlatformWriter
             return $draft->link;
         }
 
-        return $draft->link.(str_contains($draft->link, '?') ? '&' : '?').$utm;
+        $fragment = '';
+        $link = $draft->link;
+        if (($pos = strpos($link, '#')) !== false) {
+            $fragment = substr($link, $pos);
+            $link = substr($link, 0, $pos);
+        }
+
+        return $link.(str_contains($link, '?') ? '&' : '?').$utm.$fragment;
     }
 
     private function status(?string $operation): ?string

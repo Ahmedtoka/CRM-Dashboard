@@ -105,7 +105,7 @@ it('checks video readiness through file/video/ad/info', function () {
 
 it('creates the ad with operation_status DISABLE and the UTM in the landing page url', function () {
     Http::preventStrayRequests();
-    Http::fake([TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6601']]])]);
+    Http::fake([TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6601']]]), TTW.'ad/status/update/' => Http::response(['code' => 0, 'data' => []])]);
 
     $id = app(TikTokAdsWriter::class)->createPausedAd(ttWriterAccount(), ttDraft(new MediaRef('video', 'v_123', true)));
 
@@ -114,7 +114,7 @@ it('creates the ad with operation_status DISABLE and the UTM in the landing page
         $d = $r->data();
         $c = $d['creatives'][0] ?? [];
 
-        return $r->hasHeader('Access-Token', 'tt-secret') && $d['operation_status'] === 'DISABLE' && $d['advertiser_id'] === '7001' && $d['adgroup_id'] === '9001'
+        return str_contains($r->url(), 'ad/create/') && $r->hasHeader('Access-Token', 'tt-secret') && $d['operation_status'] === 'DISABLE' && $d['advertiser_id'] === '7001' && $d['adgroup_id'] === '9001'
             && $c['ad_name'] === 'M5 | Reel | C1' && $c['identity_id'] === 'id77' && $c['identity_type'] === 'CUSTOMIZED_USER'
             && $c['video_id'] === 'v_123' && $c['ad_text'] === 'primary text' && $c['call_to_action'] === 'SHOP_NOW'
             && $c['landing_page_url'] === 'https://shop.test/p?utm_source=tiktok&utm_medium=paid&utm_campaign=__CAMPAIGN_NAME__&utm_content=__CID__';
@@ -123,7 +123,7 @@ it('creates the ad with operation_status DISABLE and the UTM in the landing page
 
 it('uses image_ids for an image ad and appends utm with & when the link has a query', function () {
     Http::preventStrayRequests();
-    Http::fake([TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6602']]])]);
+    Http::fake([TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6602']]]), TTW.'ad/status/update/' => Http::response(['code' => 0, 'data' => []])]);
     $draft = ttDraft(new MediaRef('image', 'img_9', true));
     $draft->link = 'https://shop.test/p?v=1';
 
@@ -191,4 +191,55 @@ it('returns the TikTok writer from the factory in live mode and the fake otherwi
 
     config(['crm.ads.drivers.tiktok' => 'fake']);
     expect(app(DriverFactory::class)->writer(AdPlatform::Tiktok))->not->toBeInstanceOf(TikTokAdsWriter::class);
+});
+
+it('forces DISABLE after create: create then ad/status/update for the new id, and the creative carries DISABLE too', function () {
+    Http::preventStrayRequests();
+    Http::fake([
+        TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6601']]]),
+        TTW.'ad/status/update/' => Http::response(['code' => 0, 'data' => []]),
+    ]);
+
+    app(TikTokAdsWriter::class)->createPausedAd(ttWriterAccount(), ttDraft(new MediaRef('video', 'v_123', true)));
+
+    $sent = Http::recorded()->map(fn ($p) => $p[0])->values();
+    expect($sent)->toHaveCount(2)
+        ->and($sent[0]->url())->toContain('ad/create/')
+        ->and($sent[0]->data()['creatives'][0]['operation_status'])->toBe('DISABLE')
+        ->and($sent[1]->url())->toContain('ad/status/update/')
+        ->and($sent[1]->data())->toBe(['advertiser_id' => '7001', 'ad_ids' => ['6601'], 'operation_status' => 'DISABLE']);
+});
+
+it('throws with the created ad id when the DISABLE confirmation fails', function () {
+    Http::preventStrayRequests();
+    Http::fake([
+        TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6601']]]),
+        TTW.'ad/status/update/' => Http::response(['code' => 40002, 'message' => 'Boom']),
+    ]);
+
+    app(TikTokAdsWriter::class)->createPausedAd(ttWriterAccount(), ttDraft(new MediaRef('video', 'v_123', true)));
+})->throws(AdsApiException::class, '6601');
+
+it('fails fast without a request when the identity type is missing', function () {
+    Http::preventStrayRequests();
+    $draft = ttDraft(new MediaRef('video', 'v', true));
+    $draft->identity = new Identity('id77', 'Le Voile', null);
+
+    expect(fn () => app(TikTokAdsWriter::class)->createPausedAd(ttWriterAccount(), $draft))->toThrow(AdsApiException::class);
+    Http::assertNothingSent();
+});
+
+it('inserts the utm query before a url fragment', function () {
+    Http::preventStrayRequests();
+    Http::fake([
+        TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6603']]]),
+        TTW.'ad/status/update/' => Http::response(['code' => 0, 'data' => []]),
+    ]);
+    $draft = ttDraft(new MediaRef('image', 'img_9', true));
+    $draft->link = 'https://shop.test/p#reviews';
+
+    app(TikTokAdsWriter::class)->createPausedAd(ttWriterAccount(), $draft);
+
+    expect(Http::recorded()->first()[0]->data()['creatives'][0]['landing_page_url'])
+        ->toBe('https://shop.test/p?utm_source=tiktok&utm_medium=paid&utm_campaign=__CAMPAIGN_NAME__&utm_content=__CID__#reviews');
 });
