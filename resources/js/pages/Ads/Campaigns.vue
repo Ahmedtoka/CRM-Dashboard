@@ -181,7 +181,7 @@ const breadcrumbs = computed(() => [
                 </button>
             </div>
 
-            <div class="scrollbar-thin overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
+            <div class="scrollbar-thin relative overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
                 <EmptyState v-if="!tree.length" :icon="Layers" :title="t('ads.campaigns.empty')" :body="t('ads.empty.body')" />
                 <table v-else class="w-full min-w-[1100px] text-xs">
                     <caption class="sr-only">

@@ -381,7 +381,7 @@ const breadcrumbs = computed(() => [
             </form>
 
             <!-- Table -->
-            <div class="scrollbar-thin overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
+            <div class="scrollbar-thin relative overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
                 <EmptyState
                     v-if="!page.data.length"
                     :icon="ImageOff"

@@ -128,7 +128,7 @@ const breadcrumbs = computed(() => [
                 </li>
             </ul>
 
-            <div class="scrollbar-thin overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
+            <div class="scrollbar-thin relative overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
                 <EmptyState
                     v-if="!collections.length"
                     :icon="FolderOpen"
