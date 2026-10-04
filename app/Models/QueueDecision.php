@@ -19,5 +19,8 @@ class QueueDecision extends Model
         ];
     }
 
-    public function shift(): BelongsTo { return $this->belongsTo(Shift::class); }
+    public function shift(): BelongsTo
+    {
+        return $this->belongsTo(Shift::class);
+    }
 }

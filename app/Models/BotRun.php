@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\BotRunFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BotRun extends Model
 {
-    /** @use HasFactory<\Database\Factories\BotRunFactory> */
+    /** @use HasFactory<BotRunFactory> */
     use HasFactory;
 
     protected $fillable = [

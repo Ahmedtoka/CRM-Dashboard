@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use App\Enums\Platform;
+use Database\Factories\AnalyticsDailyFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AnalyticsDaily extends Model
 {
-    /** @use HasFactory<\Database\Factories\AnalyticsDailyFactory> */
+    /** @use HasFactory<AnalyticsDailyFactory> */
     use HasFactory;
 
     protected $table = 'analytics_daily';

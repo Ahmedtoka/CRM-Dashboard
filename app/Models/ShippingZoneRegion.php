@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\ShippingZoneRegionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ShippingZoneRegion extends Model
 {
-    /** @use HasFactory<\Database\Factories\ShippingZoneRegionFactory> */
+    /** @use HasFactory<ShippingZoneRegionFactory> */
     use HasFactory;
 
     protected $fillable = [
