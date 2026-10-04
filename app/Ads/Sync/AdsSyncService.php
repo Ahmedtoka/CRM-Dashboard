@@ -2,6 +2,7 @@
 
 namespace App\Ads\Sync;
 
+use App\Ads\Control\PublicationLinker;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Data\AdRow;
@@ -61,10 +62,11 @@ final class AdsSyncService
     }
 
     /** ads + campaigns + adsets, then daily metrics for [from,to] (replacing the account's rows of those dates), then media. */
-    public function syncAccount(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to, string $kind = 'recent', bool $withAds = true): AdsSyncRun
+    public function syncAccount(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to, string $kind = 'recent', bool $withAds = true, string $trigger = 'schedule', ?int $triggeredById = null): AdsSyncRun
     {
         $run = AdsSyncRun::create([
             'ad_account_id' => $a->id, 'platform' => $a->platform, 'kind' => $kind, 'status' => 'running',
+            'trigger' => $trigger, 'triggered_by_id' => $triggeredById,
             'from_date' => $from->toDateString(), 'to_date' => $to->toDateString(), 'started_at' => now(),
         ]);
 
@@ -73,7 +75,7 @@ final class AdsSyncService
         } catch (Throwable $e) {
             // Whatever escaped (bad driver config, DB error, media-phase bug) must not leave the run 'running'.
             if ($run->status === 'running') {
-                $run->update(['status' => 'error', 'error' => $e->getMessage(), 'finished_at' => now()]);
+                $run->update(['status' => 'error', 'error' => self::scrub($e->getMessage()), 'finished_at' => now()]);
             }
             throw $e;
         }
@@ -87,10 +89,11 @@ final class AdsSyncService
             // The ad list (full creative specs) is the heaviest Meta call: a backfill reads it once, on its first chunk.
             $adRows = $withAds ? $driver->ads($a) : [];
             $this->upsertAds($a, $adRows);
+            $this->linkPublications($a);
             $metrics = $driver->dailyMetrics($a, $from, $to);
             [$rows, $guard] = $this->replaceMetrics($a, $metrics, $from, $to);
         } catch (AdsApiException $e) {
-            $run->update(['status' => 'error', 'error' => $e->getMessage(), 'finished_at' => now()]);
+            $run->update(['status' => 'error', 'error' => self::scrub($e->getMessage()), 'finished_at' => now()]);
             if ($e instanceof RateLimited) {
                 // Quota, not a broken connection: record on the run only and let the caller retry later.
                 throw $e;
@@ -107,7 +110,7 @@ final class AdsSyncService
                 ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'unknown')) // minimal ads have no creative to fetch
                 ->pluck('external_id')->all());
         } catch (AdsApiException $e) {
-            $warnings[] = 'Creative media: '.$e->getMessage();
+            $warnings[] = 'Creative media: '.self::scrub($e->getMessage());
         }
 
         $run->update([
@@ -132,14 +135,14 @@ final class AdsSyncService
     }
 
     /** Sync an account over $days days in 30-day chunks, newest first. */
-    public function backfill(AdAccount $a, int $days): ?AdsSyncRun
+    public function backfill(AdAccount $a, int $days, string $trigger = 'backfill', ?int $triggeredById = null): ?AdsSyncRun
     {
         $run = null;
         $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
         for ($offset = 0; $offset < $days; $offset += 30) {
             $to = $today->subDays($offset);
             $from = $today->subDays(min($offset + 29, $days - 1));
-            $run = $this->syncAccount($a, $from, $to, 'backfill', withAds: $offset === 0);
+            $run = $this->syncAccount($a, $from, $to, 'backfill', withAds: $offset === 0, trigger: $trigger, triggeredById: $triggeredById);
             if ($run->status === 'error') {
                 break;
             }
@@ -184,6 +187,16 @@ final class AdsSyncService
     }
 
     /** @param list<AdRow> $rows */
+    /** Ads the CRM published are attached to their material once they are known locally; never fails the sync. */
+    private function linkPublications(AdAccount $a): void
+    {
+        try {
+            app(PublicationLinker::class)->link($a);
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
     private function upsertAds(AdAccount $a, array $rows): void
     {
         $campaigns = [];

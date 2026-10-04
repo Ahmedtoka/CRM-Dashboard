@@ -34,13 +34,13 @@ class SyncAdsCommand extends Command
 
         foreach ($accounts as $a) {
             if (! $this->option('now')) {
-                SyncAdAccount::dispatch($a->id, $days);
+                SyncAdAccount::dispatch($a->id, $days, 'recent', 'schedule');
 
                 continue;
             }
             try {
                 $to = CarbonImmutable::now('Africa/Cairo')->startOfDay();
-                $run = $sync->syncAccount($a, $to->subDays($days - 1), $to);
+                $run = $sync->syncAccount($a, $to->subDays($days - 1), $to, 'recent', true, 'manual');
                 if ($run->status === 'error') {
                     $this->warn("Failed {$a->name}: ".AdsSyncService::scrub((string) $run->error));
                     $failed++;

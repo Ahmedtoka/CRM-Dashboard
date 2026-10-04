@@ -11,6 +11,8 @@ return [
         'neutral' => 'Keep watching it',
     ],
     'flash' => [
+        'stopped' => 'Stopped.',
+        'resumed' => 'Running again.',
         'connected' => 'Connected. :count ad accounts found; the last 90 days are loading in the background.',
         'saved' => 'Saved.',
         'test_ok' => 'Connection works.',
@@ -19,6 +21,14 @@ return [
         'archived' => 'The connection is stopped and will not sync again. Its past numbers stay in the reports.',
         'assigned' => 'Assignment saved.',
         'buyer_archived' => 'The buyer has account history, so it was archived instead of deleted.',
+    ],
+    'errors' => [
+        'out_of_scope' => 'You cannot change ads on this account.',
+        'bad_request' => 'This request is not valid.',
+        'not_found' => 'This campaign, ad set or ad is not in the CRM yet. Sync the account and try again.',
+        'rate_limited' => 'The platform is limiting requests right now. Try again in a few minutes.',
+        'already' => 'It is already in that state. Sync the account if this looks wrong.',
+        'failed' => 'The platform did not accept the change.',
     ],
     'credentials' => [
         'access_token' => 'Access token',
@@ -43,5 +53,24 @@ return [
         'stock_csv' => [
             'title' => 'Material', 'product' => 'Product', 'variants' => 'Variations', 'price' => 'Price', 'quantity' => 'Quantity', 'collections' => 'Collections', 'availability' => 'Available', 'yes' => 'Yes', 'no' => 'No',
         ],
+    ],
+    'publish' => [
+        'no_link' => 'This material has no product and no website link, so the ad has nowhere to send people. Add one first.',
+        'bad_file' => 'One of the chosen files does not belong to this material.',
+        'media_not_ready' => 'The platform is still processing the file. Try again later.',
+        'queued' => 'Queued. The ads will be created paused.',
+        'stopped_creating' => 'The last try stopped while creating this ad. Check Ads Manager for ":name" before publishing again.',
+        'create_may_exist' => 'It may already exist on the platform: check Ads Manager first.',
+        'stopped_before_ad' => 'The last try stopped before the ad was sent to the platform, so nothing was created. Publish it again.',
+        'upload_busy' => 'Another upload of this file is still running. Try again in a minute.',
+        'account_inactive' => 'This ad account is turned off or its connection is disabled, so nothing was sent to the platform.',
+        'account_gone' => 'The ad account was removed before the ad was published.',
+        'file_gone' => 'The file was deleted before the ad was published.',
+    ],
+    'captions' => [
+        'no_key' => 'AI captions are not set up: the ANTHROPIC_API_KEY is missing on the server.',
+        'api_failed' => 'The AI service did not answer. Try again in a minute.',
+        'bad_answer' => 'The AI answer could not be read. Try again.',
+        'no_video' => 'Pick a video file of this material to write captions for.',
     ],
 ];

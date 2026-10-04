@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use App\Enums\ParticipantRole;
+use Database\Factories\ConversationParticipantFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ConversationParticipant extends Model
 {
-    /** @use HasFactory<\Database\Factories\ConversationParticipantFactory> */
+    /** @use HasFactory<ConversationParticipantFactory> */
     use HasFactory;
 
     protected $fillable = [

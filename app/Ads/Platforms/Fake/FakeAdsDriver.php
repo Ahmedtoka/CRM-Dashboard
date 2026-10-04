@@ -4,13 +4,20 @@ namespace App\Ads\Platforms\Fake;
 
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdPlatformDriver;
+use App\Ads\Platforms\AdPlatformWriter;
 use App\Ads\Platforms\Data\AccountInfo;
+use App\Ads\Platforms\Data\AdDraft;
 use App\Ads\Platforms\Data\AdRow;
+use App\Ads\Platforms\Data\CampaignNode;
 use App\Ads\Platforms\Data\CreativeMedia;
 use App\Ads\Platforms\Data\DailyAdMetric;
+use App\Ads\Platforms\Data\Identity;
+use App\Ads\Platforms\Data\MediaRef;
 use App\Models\AdAccount;
+use App\Models\AdMaterialFile;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
 use Random\Engine\Mt19937;
 use Random\Randomizer;
 
@@ -19,8 +26,10 @@ use Random\Randomizer;
  * crc32 of the account external id, so repeated calls return identical rows.
  * The picsum URLs are demo thumbnails only; nothing here fetches them.
  */
-class FakeAdsDriver implements AdPlatformDriver
+class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
 {
+    private const WRITER_KEY = 'ads-fake-writer';
+
     public const META_CLOTING = 'act_demo_cloting';
 
     public const META_MAIN = 'act_demo_main';
@@ -106,6 +115,73 @@ class FakeAdsDriver implements AdPlatformDriver
             imageUrl: "https://picsum.photos/seed/{$id}/800/800",
             thumbnailUrl: "https://picsum.photos/seed/{$id}/400/400",
         ), array_values($adExternalIds));
+    }
+
+    public function liveCampaigns(AdAccount $a): array
+    {
+        $nodes = [];
+        foreach ($this->structure($a) as $ad) {
+            $nodes[$ad['campaign_id']] ??= new CampaignNode($ad['campaign_id'], (string) $ad['campaign_name'], 'ACTIVE', 'OUTCOME_SALES', []);
+            $node = $nodes[$ad['campaign_id']];
+            if (! in_array($ad['adset_id'], array_column($node->adSets, 'id'), true)) {
+                $node->adSets[] = ['id' => (string) $ad['adset_id'], 'name' => (string) $ad['adset_name'], 'status' => 'ACTIVE'];
+            }
+        }
+
+        return array_values($nodes);
+    }
+
+    public function identities(AdAccount $a): array
+    {
+        return [new Identity('fake_page_1', 'Le Voile (تجريبي)', 'fake_ig_1')];
+    }
+
+    public function uploadMedia(AdAccount $a, AdMaterialFile $file): MediaRef
+    {
+        $state = $this->writerState();
+        $n = ++$state['media'];
+        $this->saveWriterState($state);
+        $video = str_starts_with((string) $file->mime, 'video/');
+
+        return new MediaRef($video ? 'video' : 'image', ($video ? 'fake_video_' : 'fake_image_').$n, ! $video);
+    }
+
+    public function mediaReady(AdAccount $a, MediaRef $ref): bool
+    {
+        return true;
+    }
+
+    public function createPausedAd(AdAccount $a, AdDraft $draft): string
+    {
+        $draft->adRequestSending();
+        $state = $this->writerState();
+        $id = 'fake_ad_'.++$state['n'];
+        $state['ads'][$id] = [
+            'account' => $a->external_id, 'adset_id' => $draft->adSetId, 'name' => $draft->name, 'status' => 'paused',
+            'media' => $draft->media->id, 'primary_text' => $draft->primaryText, 'headline' => $draft->headline,
+            'cta' => $draft->cta, 'link' => $draft->link, 'url_tags' => $draft->urlTags, 'page_id' => $draft->identity->pageId,
+        ];
+        $this->saveWriterState($state);
+
+        return $id;
+    }
+
+    public function setStatus(AdAccount $a, string $level, string $externalId, string $status): void
+    {
+        $state = $this->writerState();
+        $state['statuses'][] = ['level' => $level, 'id' => $externalId, 'status' => $status];
+        $this->saveWriterState($state);
+    }
+
+    /** @return array{n:int,media:int,ads:array<string,array<string,mixed>>,statuses:list<array<string,string>>} */
+    private function writerState(): array
+    {
+        return (Cache::get(self::WRITER_KEY) ?? []) + ['n' => 0, 'media' => 0, 'ads' => [], 'statuses' => []];
+    }
+
+    private function saveWriterState(array $state): void
+    {
+        Cache::forever(self::WRITER_KEY, $state);
     }
 
     public function test(AdPlatformConnection $c): ?string

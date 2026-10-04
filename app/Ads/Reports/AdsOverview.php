@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 final class AdsOverview
 {
-    public function __construct(private readonly AdsQuery $q, private readonly AdsSettings $settings) {}
+    public function __construct(private readonly AdsQuery $q, private readonly AdsSettings $settings, private readonly WinnerScorer $scorer) {}
 
     /** @return array{totals: array, daily: list<array>, platforms: list<array>, currency: string, tax_rate: float} */
     public function build(AdsFilter $f): array
@@ -16,7 +16,7 @@ final class AdsOverview
         $orders = $this->q->orders($f);
 
         return [
-            'totals' => $this->totals($f, $orders),
+            'totals' => $this->totals($f, $orders) + ['losers_spend_share' => $this->losersSpendShare($f)],
             'daily' => $this->daily($f, $orders),
             'platforms' => $this->platforms($f),
             'currency' => $this->currency($f),
@@ -36,6 +36,25 @@ final class AdsOverview
             'real_revenue' => $revenue,
             'real_roas' => AdsQuery::ratio($revenue, $d['spend'], 2),
         ] + AdsQuery::conversationCounts($this->q->conversations($f));
+    }
+
+    /**
+     * Share (0..1) of the range's spend that went to loser-tier ads (tiers scored over the Winners window); null
+     * when there is no spend.
+     */
+    public function losersSpendShare(AdsFilter $f): ?float
+    {
+        $total = (float) ($this->q->sums($f)->first()->spend ?? 0);
+        if ($total <= 0) {
+            return null;
+        }
+        $ids = array_keys(array_filter($this->scorer->tiers($f), fn (string $tier) => $tier === 'loser'));
+        if ($ids === []) {
+            return 0.0;
+        }
+        $spend = (float) ($this->q->sums($f, [], fn ($b) => $b->whereIn('m.ad_id', $ids))->first()->spend ?? 0);
+
+        return round($spend / $total, 4);
     }
 
     /**

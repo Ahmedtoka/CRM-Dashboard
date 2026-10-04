@@ -3,6 +3,8 @@
 import AdsRangeBar from '@/components/ads/AdsRangeBar.vue';
 import CreativePreviewModal from '@/components/ads/CreativePreviewModal.vue';
 import CreativeThumb from '@/components/ads/CreativeThumb.vue';
+import TrendArrow from '@/components/ads/TrendArrow.vue';
+import WhyList from '@/components/ads/WhyList.vue';
 import WinnerBadge from '@/components/ads/WinnerBadge.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -196,6 +198,23 @@ const breadcrumbs = computed(() => [
                                 </div>
                             </div>
 
+                            <div class="flex flex-wrap items-center gap-2">
+                                <TrendArrow :trend="w.trend" />
+                                <span
+                                    v-if="w.fatigue.flag"
+                                    class="rounded-full bg-destructive/10 px-2 py-0.5 text-2xs font-bold text-destructive"
+                                    :title="
+                                        t('ads.fatigue.tip', {
+                                            ctr_drop: formatPct((w.fatigue.ctr_drop_pct ?? 0) / 100, locale, 0),
+                                            frequency: formatQty(w.fatigue.frequency, locale),
+                                        })
+                                    "
+                                    >{{ t('ads.fatigue.label') }}</span
+                                >
+                            </div>
+
+                            <WhyList :reasons="w.reasons" :currency="currency" />
+
                             <p class="mt-auto flex items-start gap-1.5 text-2xs text-muted-foreground">
                                 <Lightbulb class="mt-px size-3.5 shrink-0 text-warning" aria-hidden="true" />
                                 <span>{{ w.recommendation }}</span>
@@ -238,6 +257,7 @@ const breadcrumbs = computed(() => [
             :ad="selected?.ad ?? null"
             :filters="{ ...filters, from: window.from, to: window.to }"
             :smoothed-roas="selected?.smoothed_roas ?? null"
+            :reasons="selected?.reasons ?? []"
             :currency="currency"
         />
     </AppLayout>

@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use Database\Factories\ShopifySyncRunFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class ShopifySyncRun extends Model
 {
-    /** @use HasFactory<\Database\Factories\ShopifySyncRunFactory> */
+    /** @use HasFactory<ShopifySyncRunFactory> */
     use HasFactory;
 
     protected $fillable = [

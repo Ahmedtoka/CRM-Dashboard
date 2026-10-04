@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Web\Ads;
 
+use App\Ads\Control\AdWriteService;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\RunningCreatives;
 use App\Ads\Reports\WinnerScorer;
 use App\Http\Controllers\Concerns\BuildsAdsPages;
 use App\Http\Controllers\Controller;
 use App\Models\Ad;
+use App\Models\AdAccount;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -17,7 +19,7 @@ class CreativeController extends Controller
 {
     use BuildsAdsPages;
 
-    public function index(Request $request, RunningCreatives $creatives): Response
+    public function index(Request $request, RunningCreatives $creatives, AdWriteService $writes): Response
     {
         $filter = AdsFilter::fromRequest($request, $request->user());
         $status = $this->oneOf($request->query('status'), ['all', 'active', 'inactive'], 'all');
@@ -31,6 +33,10 @@ class CreativeController extends Controller
             'status' => $status, 'account' => $account, 'platform' => $filter->platform, 'buyer' => $filter->buyerId,
             'q' => $q, 'sort' => $sort, 'per_page' => $perPage, 'page' => $page,
         ]);
+        // Stop / Run per row, with the buyer's assignments for today read once for the whole page.
+        $accountIds = array_values(array_unique(array_map(fn (array $r) => (int) $r['account_id'], $result['data'])));
+        $can = $accountIds === [] ? [] : $writes->canWriteMany($request->user(), AdAccount::query()->whereIn('id', $accountIds)->get(['id', 'is_active', 'platform']));
+        $result['data'] = array_map(fn (array $r) => $r + ['can_write' => $can[(int) $r['account_id']] ?? false], $result['data']);
 
         return Inertia::render('Ads/Creatives', [
             'filters' => $this->filterProps($filter) + [
@@ -43,13 +49,13 @@ class CreativeController extends Controller
     }
 
     /** One creative with its range numbers and preview markup, for the modal. */
-    public function show(Request $request, Ad $ad, RunningCreatives $creatives): JsonResponse
+    public function show(Request $request, Ad $ad, RunningCreatives $creatives, WinnerScorer $scorer): JsonResponse
     {
         $filter = AdsFilter::fromRequest($request, $request->user());
         // Out of scope reads as not found: a buyer never learns that other accounts' ads exist.
         abort_if($filter->accountIds !== null && ! in_array($ad->ad_account_id, $filter->accountIds, true), 404);
 
-        return response()->json($creatives->detail($ad, $filter));
+        return response()->json($creatives->detail($ad, $filter) + ['reasons' => $scorer->reasonsFor($ad->id, $filter)]);
     }
 
     /** Tier chips of the Winners page; `top` (winner + promising) is the default, as on the owner's Arena. */

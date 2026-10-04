@@ -6,15 +6,19 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Ads\Sync\SyncAdAccount;
 use App\Enums\UserRole;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdAccountAssignment;
+use App\Models\AdAction;
 use App\Models\AdDailyMetric;
 use App\Models\AdPlatformConnection;
+use App\Models\AdPublication;
 use App\Models\BuyerTarget;
 use App\Models\MediaBuyer;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -300,6 +304,24 @@ it('deletes a connection with its accounts', function () {
     expect(AdPlatformConnection::count())->toBe(0)->and(AdAccount::count())->toBe(0);
 });
 
+it('archives a connection whose accounts have publications or Stop/Run actions instead of deleting it', function (string $kind) {
+    $c = AdPlatformConnection::factory()->create(['status' => 'connected']);
+    $acc = AdAccount::factory()->create(['connection_id' => $c->id, 'is_active' => true]);
+    if ($kind === 'publication') {
+        AdPublication::create([
+            'ad_account_id' => $acc->id, 'platform' => 'meta', 'campaign_external_id' => 'c1', 'adset_external_id' => 's1',
+            'headline' => 'H', 'primary_text' => 'T', 'cta' => 'SHOP_NOW', 'ad_name' => 'M1 | Reel | C1', 'link' => 'https://x.test', 'url_tags' => '', 'status' => 'done',
+        ]);
+    } else {
+        AdAction::create(['ad_account_id' => $acc->id, 'platform' => 'meta', 'level' => 'ad', 'external_id' => '1', 'to_status' => 'PAUSED', 'result' => 'ok']);
+    }
+
+    $this->actingAs(adsPgUser(UserRole::Admin))->delete("/ads/connections/{$c->id}")
+        ->assertRedirect()->assertSessionHas('status', __('ads.flash.archived'));
+
+    expect($c->refresh()->status)->toBe('disabled')->and($acc->refresh()->is_active)->toBeFalse();
+})->with(['publication', 'action']);
+
 it('stops a connection with spend history instead of deleting it, and keeps the numbers', function () {
     Queue::fake();
     $c = AdPlatformConnection::factory()->create(['status' => 'connected']);
@@ -456,4 +478,17 @@ it('keeps every account chip while one account is picked on the creatives page',
         ->has('result.data', 1)->where('result.data.0.account_id', $a->id)
         ->has('result.accounts', 2)
         ->has('buyers')->has('platforms', 3)->where('currency', 'EGP'));
+});
+
+it('looks the media buyer up once when sharing the ads access props', function () {
+    $user = User::factory()->create(['role' => UserRole::MediaBuyer]);
+    $buyer = MediaBuyer::factory()->create(['user_id' => $user->id]);
+    $method = new ReflectionMethod(HandleInertiaRequests::class, 'adsAccess');
+
+    DB::enableQueryLog();
+    $props = $method->invoke(app(HandleInertiaRequests::class), $user);
+    $lookups = collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'media_buyers'))->count();
+    DB::disableQueryLog();
+
+    expect($lookups)->toBe(1)->and($props['buyerId'])->toBe($buyer->id)->and($props['canWrite'])->toBeTrue();
 });

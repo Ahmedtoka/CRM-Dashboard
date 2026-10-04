@@ -6,6 +6,7 @@ import CreativePreviewModal from '@/components/ads/CreativePreviewModal.vue';
 import CreativeThumb from '@/components/ads/CreativeThumb.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
+import RevenueSummaryCard from '@/components/ads/RevenueSummaryCard.vue';
 import DataTable from '@/components/crm/DataTable.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import StatCard from '@/components/crm/StatCard.vue';
@@ -155,6 +156,8 @@ const breadcrumbs = computed(() => [
                     :class="k.border"
                 />
             </div>
+
+            <RevenueSummaryCard :summary="summary" />
 
             <ComboChart
                 :title="t('ads.chart.daily_trend')"

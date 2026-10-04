@@ -35,11 +35,13 @@ const adsGroup = computed<NavItem | null>(() => {
         { title: t('nav.ads_overview'), href: '/ads', exact: true },
         { title: t('nav.ads_buyers'), href: '/ads/buyers' },
         { title: t('nav.ads_creatives'), href: '/ads/creatives' },
+        { title: t('nav.ads_campaigns'), href: '/ads/campaigns' },
         { title: t('nav.ads_winners'), href: '/ads/winners' },
+        { title: t('nav.ads_actions'), href: '/ads/actions' },
         materials,
     ];
     if (allows('supervisor')) {
-        children.push({ title: t('nav.ads_accounts'), href: '/ads/accounts' }, { title: t('nav.ads_buyers_setup'), href: '/ads/setup/buyers' });
+        children.push({ title: t('nav.ads_accounts'), href: '/ads/accounts' }, { title: t('nav.ads_sync'), href: '/ads/sync' }, { title: t('nav.ads_buyers_setup'), href: '/ads/setup/buyers' });
     }
 
     return { title: t('nav.ads'), href: '/ads', icon: Megaphone, children };

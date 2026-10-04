@@ -2,6 +2,7 @@
 
 namespace App\Ads\Reports;
 
+use App\Ads\Control\AdWriteService;
 use App\Models\Ad;
 use App\Models\MediaBuyer;
 use Carbon\CarbonImmutable;
@@ -21,7 +22,7 @@ final class RunningCreatives
         'ad.body', 'ad.created_time', 'ad.ad_account_id',
     ];
 
-    public function __construct(private readonly AdsQuery $q) {}
+    public function __construct(private readonly AdsQuery $q, private readonly AdInsights $insights) {}
 
     /**
      * @param  array{status?:string, account?:int|string|null, platform?:string|null, buyer?:int|string|null, q?:string|null, sort?:string, per_page?:int|string, page?:int|string}  $opts
@@ -48,7 +49,7 @@ final class RunningCreatives
         $lastPage = max(1, (int) ceil($total / $perPage));
         $page = min(max(1, (int) ($opts['page'] ?? 1)), $lastPage);
 
-        $pageRows = $this->sorted($this->base($accountF, $status, $search)->select(self::AD_COLUMNS)->addSelect(['g.*', 'acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name']), $sort)
+        $pageRows = $this->sorted($this->base($accountF, $status, $search)->select(self::AD_COLUMNS)->addSelect(['g.*', 'acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name', 'camp.status as campaign_status', 'st.status as adset_status']), $sort)
             ->forPage($page, $perPage)->get();
 
         $totals = $this->base($accountF, $status, $search)
@@ -73,7 +74,7 @@ final class RunningCreatives
             ->leftJoin('ad_campaigns as camp', 'camp.id', '=', 'ad.ad_campaign_id')
             ->leftJoin('ad_sets as st', 'st.id', '=', 'ad.ad_set_id')
             ->where('ad.id', $ad->id)
-            ->select(self::AD_COLUMNS)->addSelect(['acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name'])
+            ->select(self::AD_COLUMNS)->addSelect(['acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name', 'camp.status as campaign_status', 'st.status as adset_status'])
             ->first();
         foreach (['spend', 'purchase_value', 'purchases', 'impressions', 'clicks', 'reach'] as $k) {
             $row->{$k} = $agg->{$k} ?? 0;
@@ -88,13 +89,14 @@ final class RunningCreatives
      * @param  list<object>  $rows
      * @return list<array>
      */
-    public function rows(array $rows, AdsFilter $f): array
+    public function rows(array $rows, AdsFilter $f, ?array $insights = null): array
     {
         $ids = array_map(fn ($r) => (int) $r->id, $rows);
         $real = $ids === [] ? collect() : $this->q->orders($f)->whereIn('ad_id', $ids)->countBy('ad_id');
         $buyers = $this->buyers($ids, $f);
+        $insights ??= $this->insights->forAds($ids, $f->to);
 
-        return array_map(function (object $r) use ($real, $buyers) {
+        return array_map(function (object $r) use ($real, $buyers, $insights) {
             $d = $this->q->derive($r);
 
             return [
@@ -109,6 +111,7 @@ final class RunningCreatives
                 'type' => $r->type,
                 'status' => $r->status,
                 'effective_status' => $r->effective_status,
+                'parent_paused' => AdWriteService::statusKind($r->campaign_status ?? null) === 'paused' || AdWriteService::statusKind($r->adset_status ?? null) === 'paused',
                 'thumbnail_url' => $r->thumbnail_url,
                 'image_url' => $r->image_url,
                 'video_url' => $r->video_url,
@@ -129,6 +132,8 @@ final class RunningCreatives
                 'roas' => $d['roas'],
                 'real_orders' => (int) ($real[$r->id] ?? 0),
                 'buyer' => $buyers[(int) $r->id] ?? null,
+                'trend' => $insights[(int) $r->id]['trend'],
+                'fatigue' => $insights[(int) $r->id]['fatigue'],
             ];
         }, $rows);
     }

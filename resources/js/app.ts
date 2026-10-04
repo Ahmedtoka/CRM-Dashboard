@@ -52,8 +52,9 @@ createInertiaApp({
 // Page visits drive the same bar as API requests. `finish` fires for completed,
 // cancelled and interrupted visits alike, so every `start` is always balanced.
 const loadingBar = useLoadingBar();
-router.on('start', () => loadingBar.start());
-router.on('finish', () => loadingBar.done());
+// Background visits (`async: true`, e.g. the sync page poll) never show the bar.
+router.on('start', (event) => !event.detail.visit.async && loadingBar.start());
+router.on('finish', (event) => !event.detail.visit.async && loadingBar.done());
 
 // This will set light / dark mode on page load...
 initializeTheme();

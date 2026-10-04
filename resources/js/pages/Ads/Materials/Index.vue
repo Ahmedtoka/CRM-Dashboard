@@ -1,9 +1,12 @@
 <script setup lang="ts">
 /** Ads Hub — مكتبة مواد الإعلانات: what the content team uploaded, its status, stock and (for spend viewers) performance (spec §8.7). */
 import AdLinkPicker from '@/components/ads/AdLinkPicker.vue';
+import CaptionsDialog from '@/components/ads/CaptionsDialog.vue';
 import MaterialLightbox from '@/components/ads/MaterialLightbox.vue';
 import MaterialStatusChip from '@/components/ads/MaterialStatusChip.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
+import PublicationsList from '@/components/ads/PublicationsList.vue';
+import PublishDialog from '@/components/ads/PublishDialog.vue';
 import WinnerBadge from '@/components/ads/WinnerBadge.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
@@ -19,7 +22,7 @@ import { formatRoas, roasTone, safeUrl } from '@/lib/ads';
 import { cleanQuery, links, pageList, queryString, useMaterialPermissions } from '@/lib/adsMaterials';
 import { formatClock, formatCount, formatDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { AdsMaterialsIndexProps, MaterialRow, MaterialStatus } from '@/types/ads';
+import type { AdsMaterialsIndexProps, MaterialRow, MaterialStatus, PublishCaption } from '@/types/ads';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowUp,
@@ -38,12 +41,15 @@ import {
     Layers,
     LayoutGrid,
     Link2,
+    ListChecks,
     Package,
     PackageCheck,
     PackageX,
     Pencil,
     Play,
     Plus,
+    Rocket,
+    Sparkles,
     RotateCcw,
     Search,
     Square,
@@ -225,6 +231,33 @@ const galleryOpen = computed({ get: () => gallery.value !== null, set: (v) => !v
 const linking = ref<MaterialRow | null>(null);
 const linkOpen = computed({ get: () => linking.value !== null, set: (v) => !v && (linking.value = null) });
 
+/* ---- publish as paused ads ---- */
+const publishing = ref<MaterialRow | null>(null);
+const publishCaptions = ref<PublishCaption[] | null>(null);
+const publishFileIds = ref<number[] | null>(null);
+const publishOpen = computed({
+    get: () => publishing.value !== null,
+    set: (v) => {
+        if (!v) {
+            publishing.value = null;
+            publishCaptions.value = null;
+            publishFileIds.value = null;
+        }
+    },
+});
+
+/* ---- AI captions ---- */
+const captioning = ref<MaterialRow | null>(null);
+const captionsOpen = computed({ get: () => captioning.value !== null, set: (v) => !v && (captioning.value = null) });
+function createFromCaptions(captions: PublishCaption[], fileId: number): void {
+    publishCaptions.value = captions;
+    publishFileIds.value = [fileId];
+    publishing.value = captioning.value;
+    captioning.value = null;
+}
+const publications = ref<MaterialRow | null>(null);
+const publicationsOpen = computed({ get: () => publications.value !== null, set: (v) => !v && (publications.value = null) });
+
 /* ---- delete ---- */
 const deleting = ref<MaterialRow | null>(null);
 const deleteOpen = computed({ get: () => deleting.value !== null, set: (v) => !v && (deleting.value = null) });
@@ -348,7 +381,7 @@ const breadcrumbs = computed(() => [
             </form>
 
             <!-- Table -->
-            <div class="scrollbar-thin overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
+            <div class="scrollbar-thin relative overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
                 <EmptyState
                     v-if="!page.data.length"
                     :icon="ImageOff"
@@ -604,6 +637,37 @@ const breadcrumbs = computed(() => [
                                         <RotateCcw class="size-4" aria-hidden="true" />
                                     </button>
                                     <button
+                                        v-if="m.files?.some((f) => f.mime?.startsWith('video/'))"
+                                        type="button"
+                                        :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
+                                        :aria-label="t('ads.captions.button')"
+                                        :title="t('ads.captions.button')"
+                                        @click="captioning = m"
+                                    >
+                                        <Sparkles class="size-4" aria-hidden="true" />
+                                    </button>
+                                    <button
+                                        v-if="perms.canOperate.value"
+                                        type="button"
+                                        :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
+                                        :aria-label="t('ads.publish.button')"
+                                        :title="t('ads.publish.button')"
+                                        :disabled="!m.files?.length"
+                                        @click="publishing = m"
+                                    >
+                                        <Rocket class="size-4" aria-hidden="true" />
+                                    </button>
+                                    <button
+                                        v-if="perms.canOperate.value"
+                                        type="button"
+                                        :class="cn(iconBtn, 'border-border text-muted-foreground hover:bg-muted hover:text-foreground')"
+                                        :aria-label="t('ads.publish.publications')"
+                                        :title="t('ads.publish.publications')"
+                                        @click="publications = m"
+                                    >
+                                        <ListChecks class="size-4" aria-hidden="true" />
+                                    </button>
+                                    <button
                                         v-if="perms.canOperate.value"
                                         type="button"
                                         :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
@@ -692,6 +756,17 @@ const breadcrumbs = computed(() => [
                 <DialogTitle class="text-base">{{ t('ads.materials.link.title') }}</DialogTitle>
                 <DialogDescription class="text-xs" dir="auto">{{ linking?.title }}</DialogDescription>
                 <AdLinkPicker v-if="linking" :material-id="linking.id" :ads="linking.ads" @saved="linking = null" />
+            </DialogContent>
+        </Dialog>
+
+        <CaptionsDialog v-if="captioning" v-model:open="captionsOpen" :material="captioning" :can-publish="perms.canOperate.value" @create="createFromCaptions" />
+        <PublishDialog v-if="publishing" v-model:open="publishOpen" :material="publishing" :captions="publishCaptions" :file-ids="publishFileIds" @published="publications = publishing" />
+
+        <Dialog v-model:open="publicationsOpen">
+            <DialogContent class="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
+                <DialogTitle class="text-base">{{ t('ads.publish.publications') }}</DialogTitle>
+                <DialogDescription class="text-xs" dir="auto">{{ publications?.title }}</DialogDescription>
+                <PublicationsList v-if="publications" :material-id="publications.id" />
             </DialogContent>
         </Dialog>
 

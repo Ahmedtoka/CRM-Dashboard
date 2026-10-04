@@ -5,6 +5,8 @@ import CreativePreviewModal from '@/components/ads/CreativePreviewModal.vue';
 import CreativeThumb from '@/components/ads/CreativeThumb.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
+import StatusToggle from '@/components/ads/StatusToggle.vue';
+import TrendArrow from '@/components/ads/TrendArrow.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
@@ -12,12 +14,13 @@ import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type AdsQueryValue, adTypeKey, formatPct, formatQty, formatRoas, isAdActive, roasTone, safeUrl, visitAds } from '@/lib/ads';
 import { formatCount } from '@/lib/format';
-import type { AdsCreativesProps, CreativePerPage, CreativeRow, CreativeSort, CreativeStatusFilter } from '@/types/ads';
-import { Head } from '@inertiajs/vue3';
+import type { AdsAccess, AdsCreativesProps, CreativePerPage, CreativeRow, CreativeSort, CreativeStatusFilter } from '@/types/ads';
+import { Head, usePage } from '@inertiajs/vue3';
 import { ChevronLeft, ChevronRight, ExternalLink, ImageOff, Search } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<AdsCreativesProps>();
+const canWrite = computed(() => ((usePage().props.ads ?? null) as AdsAccess | null)?.canWrite === true);
 
 const { t, locale } = useI18n();
 const n = (v: number) => formatCount(v, locale.value);
@@ -174,7 +177,7 @@ const breadcrumbs = computed(() => [
             </div>
 
             <!-- Table -->
-            <div class="scrollbar-thin overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
+            <div class="scrollbar-thin relative overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
                 <EmptyState v-if="!result.data.length" :icon="ImageOff" :title="t('ads.creatives.empty')" :body="t('ads.empty.body')" />
                 <table v-else class="w-full min-w-[1100px] text-xs">
                     <caption class="sr-only">
@@ -235,13 +238,33 @@ const breadcrumbs = computed(() => [
                             <td class="px-2 py-2 text-end tabular-nums">{{ formatPct(ad.ctr, locale) }}</td>
                             <td class="px-2 py-2 text-end tabular-nums">{{ formatQty(ad.purchases, locale) }}</td>
                             <td class="px-2 py-2 text-end"><MoneyCell :amount="ad.spend" :with-tax="ad.spend_tax" :currency="currency" /></td>
-                            <td class="px-2 py-2 text-end"><StatusChip :label="formatRoas(ad.roas, locale)" :tone="roasTone(ad.roas)" /></td>
+                            <td class="px-2 py-2 text-end">
+                                <div class="flex flex-col items-end gap-0.5">
+                                    <StatusChip :label="formatRoas(ad.roas, locale)" :tone="roasTone(ad.roas)" />
+                                    <TrendArrow :trend="ad.trend" />
+                                    <StatusChip v-if="ad.fatigue.flag" :label="t('ads.fatigue.label')" tone="negative" />
+                                </div>
+                            </td>
                             <td class="px-2 py-2 text-center">
                                 <StatusChip
                                     :label="isAdActive(ad) ? t('ads.status.active') : t('ads.status.inactive')"
                                     :tone="isAdActive(ad) ? 'positive' : 'neutral'"
                                     dot
                                 />
+                                <div v-if="canWrite" class="mt-1">
+                                    <StatusToggle
+                                        :account-id="ad.account_id"
+                                        :account="ad.account"
+                                        :platform="ad.platform"
+                                        level="ad"
+                                        :external-id="ad.external_id"
+                                        :name="ad.name"
+                                        :status="ad.status"
+                                        :parent-paused="ad.parent_paused"
+                                        :disabled="ad.can_write !== true"
+                                    />
+                                    <p v-if="ad.parent_paused && ad.can_write && ad.platform !== 'google'" class="mt-0.5 text-2xs text-muted-foreground">{{ t('ads.actions.parent_paused') }}</p>
+                                </div>
                             </td>
                             <td class="px-2 py-2 text-center">
                                 <a

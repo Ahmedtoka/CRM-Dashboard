@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\ShippingRateFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ShippingRate extends Model
 {
-    /** @use HasFactory<\Database\Factories\ShippingRateFactory> */
+    /** @use HasFactory<ShippingRateFactory> */
     use HasFactory;
 
     protected $fillable = [

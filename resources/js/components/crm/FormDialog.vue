@@ -6,11 +6,12 @@ import { cn } from '@/lib/utils';
 import { LoaderCircle } from 'lucide-vue-next';
 
 withDefaults(
-    defineProps<{ open: boolean; title: string; description?: string; busy?: boolean; error?: string | null; wide?: boolean; submitLabel?: string; destructive?: boolean }>(),
+    defineProps<{ open: boolean; title: string; description?: string; busy?: boolean; error?: string | null; wide?: boolean; submitLabel?: string; destructive?: boolean; disabled?: boolean }>(),
     {
         busy: false,
         wide: false,
         destructive: false,
+        disabled: false,
     },
 );
 
@@ -32,7 +33,7 @@ const { t } = useI18n();
                 </div>
                 <p v-if="error" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{{ error }}</p>
                 <DialogFooter class="gap-2 sm:justify-start">
-                    <button type="submit" :class="cn(buttonVariants({ variant: destructive ? 'destructive' : 'default' }), 'disabled:opacity-50')" :disabled="busy">
+                    <button type="submit" :class="cn(buttonVariants({ variant: destructive ? 'destructive' : 'default' }), 'disabled:opacity-50')" :disabled="busy || disabled">
                         <LoaderCircle v-if="busy" class="size-4 animate-spin" aria-hidden="true" />{{ submitLabel ?? t('common.save') }}
                     </button>
                     <button type="button" :class="buttonVariants({ variant: 'outline' })" @click="emit('update:open', false)">{{ t('common.cancel') }}</button>

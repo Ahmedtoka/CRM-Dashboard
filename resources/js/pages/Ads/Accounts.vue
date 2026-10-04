@@ -12,12 +12,13 @@ import { buttonVariants } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
+import { useVisiblePoll } from '@/composables/useVisiblePoll';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { adAccountActive, adAccountStatusLabel, formatAdsMoney, formatDayLong } from '@/lib/ads';
 import { cairoToday } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AdAccountRow, AdConnectionRow, AdPlatformDefinition, AdsAccountsProps } from '@/types/ads';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import { History, LoaderCircle, Pencil, Plug, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
 
@@ -25,6 +26,11 @@ const props = defineProps<AdsAccountsProps>();
 
 const { t, locale } = useI18n();
 const toast = useToast();
+
+// While any account is syncing, refresh just that list in the background so the rows clear when it ends.
+useVisiblePoll(() => {
+    if (props.syncing.length) router.reload({ only: ['syncing'], async: true });
+}, 10_000);
 
 const inputClass =
     'flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50';
@@ -359,7 +365,12 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                             </div>
                         </template>
                         <template #cell-spend_30d="{ row }">{{ money(row.spend_30d, row.currency) }}</template>
-                        <template #cell-last_synced_at="{ row }"><RelativeTime :iso="row.last_synced_at" /></template>
+                        <template #cell-last_synced_at="{ row }">
+                            <span v-if="props.syncing.includes(row.id)" class="inline-flex items-center gap-1.5 text-xs font-medium text-primary" role="status">
+                                <LoaderCircle class="size-3.5 animate-spin" aria-hidden="true" />{{ t('ads.accounts.syncing') }}
+                            </span>
+                            <RelativeTime v-else :iso="row.last_synced_at" />
+                        </template>
                         <template #cell-actions="{ row }">
                             <button
                                 type="button"

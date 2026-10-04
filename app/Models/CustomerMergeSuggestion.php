@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\CustomerMergeSuggestionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CustomerMergeSuggestion extends Model
 {
-    /** @use HasFactory<\Database\Factories\CustomerMergeSuggestionFactory> */
+    /** @use HasFactory<CustomerMergeSuggestionFactory> */
     use HasFactory;
 
     protected $fillable = [

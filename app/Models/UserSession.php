@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\UserSessionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UserSession extends Model
 {
-    /** @use HasFactory<\Database\Factories\UserSessionFactory> */
+    /** @use HasFactory<UserSessionFactory> */
     use HasFactory;
 
     protected $fillable = [

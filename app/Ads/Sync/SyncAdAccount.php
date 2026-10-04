@@ -41,8 +41,16 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
     /** Same in every copy of this job: Redis re-queues a job that runs past the connection's retry_after. Null on jobs queued before it existed. */
     public ?string $runKey = null;
 
-    public function __construct(public int $accountId, public int $days = 3, public string $kind = 'recent')
+    /** Why this run exists: schedule | manual | backfill | setup. Declared with defaults so payloads queued before it existed still unserialize. */
+    public string $trigger = 'schedule';
+
+    /** The user who clicked, for a manual run. */
+    public ?int $triggeredById = null;
+
+    public function __construct(public int $accountId, public int $days = 3, public string $kind = 'recent', string $trigger = 'schedule', ?int $triggeredById = null)
     {
+        $this->trigger = $trigger;
+        $this->triggeredById = $triggeredById;
         $this->runKey = (string) Str::uuid();
 
         // Same long lane as ReconcileShopify: `commercelong` queue (Supervisor program
@@ -116,12 +124,12 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
 
         try {
             if ($this->kind === 'backfill') {
-                $sync->backfill($account, $this->days);
+                $sync->backfill($account, $this->days, $this->trigger, $this->triggeredById);
 
                 return true;
             }
             $to = CarbonImmutable::now('Africa/Cairo')->startOfDay();
-            $sync->syncAccount($account, $to->subDays(max($this->days, 1) - 1), $to, $this->kind);
+            $sync->syncAccount($account, $to->subDays(max($this->days, 1) - 1), $to, $this->kind, true, $this->trigger, $this->triggeredById);
 
             return true;
         } catch (RateLimited $e) {

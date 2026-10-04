@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use App\Enums\ShipmentStatus;
+use Database\Factories\ShipmentEventFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ShipmentEvent extends Model
 {
-    /** @use HasFactory<\Database\Factories\ShipmentEventFactory> */
+    /** @use HasFactory<ShipmentEventFactory> */
     use HasFactory;
 
     protected $fillable = [

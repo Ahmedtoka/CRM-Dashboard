@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use App\Enums\Platform;
+use Database\Factories\CustomerIdentityFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CustomerIdentity extends Model
 {
-    /** @use HasFactory<\Database\Factories\CustomerIdentityFactory> */
+    /** @use HasFactory<CustomerIdentityFactory> */
     use HasFactory;
 
     protected $fillable = [

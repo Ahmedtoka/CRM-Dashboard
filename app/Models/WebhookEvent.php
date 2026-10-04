@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use Database\Factories\WebhookEventFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class WebhookEvent extends Model
 {
-    /** @use HasFactory<\Database\Factories\WebhookEventFactory> */
+    /** @use HasFactory<WebhookEventFactory> */
     use HasFactory;
 
     protected $fillable = [

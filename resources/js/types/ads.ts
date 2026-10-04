@@ -10,6 +10,8 @@ export type AdPlatformValue = 'meta' | 'tiktok' | 'google';
 export interface AdsAccess {
     canSeeSpend: boolean;
     canManage: boolean;
+    /** Stop / Run buttons (the account itself is checked on the server). */
+    canWrite: boolean;
     isBuyer: boolean;
     buyerId: number | null;
 }
@@ -44,6 +46,8 @@ export interface AdsDerived {
 }
 
 export interface AdsTotals extends AdsDerived {
+    /** Share (0..1) of the spend that went to loser-tier ads; null without spend. */
+    losers_spend_share: number | null;
     real_orders: number;
     real_revenue: number;
     real_roas: number | null;
@@ -113,9 +117,22 @@ export interface AdsCommonProps {
     currency: string;
 }
 
+/** RevenueSummary::build; `store` is null for media buyers. */
+export interface AdsRevenueSummary {
+    currency: string;
+    spend: number;
+    spend_tax: number;
+    store: { orders: number; revenue: number } | null;
+    crm: { orders: number; revenue: number; chat_orders: number };
+    platform: { purchases: number; revenue: number };
+    roas: { store: number | null; crm: number | null; platform: number | null };
+    gaps: { platform_vs_crm: number | null; crm_vs_store: number | null; platform_vs_crm_pct: number | null; crm_vs_store_pct: number | null };
+}
+
 export interface AdsOverviewProps extends AdsCommonProps {
     filters: AdsFilters;
     overview: AdsOverviewData;
+    summary: AdsRevenueSummary;
     top_accounts: AdsTopAccountRow[];
     sync: AdsSync;
 }
@@ -185,9 +202,29 @@ export interface AdsBuyerShowProps extends AdsCommonProps {
     filters: AdsFilters;
     buyer: { id: number; name: string; color: string | null };
     detail: BuyerDetail;
+    summary: AdsRevenueSummary;
 }
 
 /** RunningCreatives::rows */
+/** AdInsights::forAds — last 7 days vs the 7 before, and creative fatigue. */
+export interface AdTrend {
+    roas_pct: number | null;
+    spend_pct: number | null;
+    dir: 'up' | 'down' | 'flat';
+}
+
+export interface AdFatigue {
+    flag: boolean;
+    ctr_drop_pct: number | null;
+    frequency: number | null;
+}
+
+/** A written reason from WinnerScorer, translated on the client (ads.reasons.{key}). */
+export interface AdReason {
+    key: string;
+    params: Record<string, number | string>;
+}
+
 export interface CreativeRow {
     id: number;
     external_id: string;
@@ -200,6 +237,10 @@ export interface CreativeRow {
     type: string | null;
     status: string | null;
     effective_status: string | null;
+    /** The campaign or ad set above the ad is paused (the ad's own status can still be active). */
+    parent_paused: boolean;
+    /** Stop / Run allowed on this row's account today (list rows only). */
+    can_write?: boolean;
     thumbnail_url: string | null;
     image_url: string | null;
     video_url: string | null;
@@ -220,11 +261,14 @@ export interface CreativeRow {
     roas: number | null;
     real_orders: number;
     buyer: string | null;
+    trend: AdTrend;
+    fatigue: AdFatigue;
 }
 
 /** GET /ads/creatives/{ad} (RunningCreatives::detail) */
 export interface CreativeDetail extends CreativeRow {
     preview_html: string | null;
+    reasons: AdReason[];
 }
 
 export type CreativeStatusFilter = 'all' | 'active' | 'inactive';
@@ -253,6 +297,44 @@ export interface AdsCreativesProps extends AdsCommonProps {
     result: CreativesResult;
 }
 
+/** CampaignTree::build — Metrics = AdsQuery::derive plus the ad-attributed real orders. */
+export interface CampaignMetrics extends AdsDerived {
+    real_orders: number;
+}
+
+/** A node of the campaign tree. id 0 = the placeholder for ads without a campaign / ad set. Ad nodes carry ad_id and trend. */
+export interface CampaignNode {
+    level: 'campaign' | 'adset' | 'ad';
+    /** True for the «no campaign» / «no ad set» stand-ins (id 0): never a target for Stop / Run. */
+    placeholder: boolean;
+    id: number;
+    ad_id?: number;
+    external_id: string;
+    account_id: number;
+    account: string;
+    platform: AdPlatformValue | string;
+    name: string;
+    status: string | null;
+    objective: string | null;
+    naming_ok: boolean;
+    /** Ad nodes: the campaign or ad set above is paused. */
+    parent_paused: boolean;
+    /** Stop / Run allowed on this node's account today. */
+    can_write?: boolean;
+    metrics: CampaignMetrics;
+    trend?: AdTrend | null;
+    children: CampaignNode[];
+}
+
+export type CampaignSort = 'spend' | 'roas';
+
+export interface AdsCampaignsProps extends AdsCommonProps {
+    filters: AdsFilters & { sort: CampaignSort; accounts: number[] };
+    /** Accounts in the user's scope (not narrowed by the picked ones). */
+    account_options: { id: number; name: string; platform: AdPlatformValue }[];
+    tree: CampaignNode[];
+}
+
 export type WinnerTier = 'winner' | 'promising' | 'loser' | 'neutral';
 export type WinnerSort = 'score' | 'roas' | 'spend' | 'revenue' | 'date';
 
@@ -273,6 +355,9 @@ export interface WinnerRow {
     active_days: number;
     days_with_sales: number;
     recommendation: string;
+    reasons: AdReason[];
+    trend: AdTrend;
+    fatigue: AdFatigue;
 }
 
 /** Tier chips; `top` = winner + promising (the default). */
@@ -352,8 +437,57 @@ export interface AdBuyerOption extends AdsOption {
     is_active: boolean;
 }
 
+export type AdsSyncStatus = 'running' | 'ok' | 'error';
+export type AdsSyncTrigger = 'schedule' | 'manual' | 'backfill' | 'setup';
+
+/** SyncController::run — one row of ads_sync_runs. */
+export interface AdsSyncRunRow {
+    id: number;
+    account: string | null;
+    platform: string;
+    kind: string;
+    status: AdsSyncStatus;
+    from: string | null;
+    to: string | null;
+    ads_count: number | null;
+    rows_count: number | null;
+    error: string | null;
+    trigger: AdsSyncTrigger | null;
+    user: string | null;
+    started_at: string | null;
+    finished_at: string | null;
+    seconds: number | null;
+}
+
+/** QueueInspector::waiting — a job still in the commercelong queue. */
+export interface AdsSyncWaitingRow {
+    job: string;
+    account_id: number | null;
+    account: string | null;
+    kind: string | null;
+    days: number | null;
+    attempts: number;
+    available_at: string | null;
+    trigger: AdsSyncTrigger | null;
+}
+
+export interface AdsSyncScheduleRow {
+    command: string;
+    next_due: string;
+}
+
+export interface AdsSyncProps {
+    now: { running: AdsSyncRunRow[]; waiting: AdsSyncWaitingRow[]; supported: boolean };
+    runs: AdsSyncRunRow[];
+    filters: { account: number | null; status: AdsSyncStatus | null; trigger: AdsSyncTrigger | null };
+    schedule: AdsSyncScheduleRow[];
+    accounts: { id: number; name: string; platform: string }[];
+}
+
 export interface AdsAccountsProps {
     connections: AdConnectionRow[];
+    /** Ids of accounts with a sync running or waiting in the queue. */
+    syncing: number[];
     buyers: AdBuyerOption[];
     platforms: AdPlatformDefinition[];
 }
@@ -564,4 +698,99 @@ export interface MaterialAdSearchRow {
     account: string | null;
     status: string | null;
     thumbnail_url: string | null;
+}
+
+/** StopAdvisor::suggest (+ can_write from ActionController) */
+export interface AdSuggestion {
+    ad_id: number;
+    external_id: string;
+    account_id: number;
+    account: string;
+    platform: AdPlatformValue | string;
+    name: string;
+    spend: number;
+    spend_tax: number;
+    roas: number | null;
+    reasons: AdReason[];
+    can_write: boolean;
+}
+
+/** One ad_actions row on the log. */
+export interface AdActionLogRow {
+    id: number;
+    at: string | null;
+    user: string | null;
+    platform: AdPlatformValue | string;
+    account: string;
+    level: 'campaign' | 'adset' | 'ad';
+    name: string;
+    from_status: string | null;
+    to_status: string;
+    reason: string | null;
+    result: 'ok' | 'error';
+    error: string | null;
+}
+
+export interface AdsActionsProps {
+    currency: string;
+    days: number;
+    suggestions: AdSuggestion[];
+    log: AdActionLogRow[];
+}
+
+/* ---- Publish a material as paused ads ---- */
+export interface PublishAccount {
+    id: number;
+    name: string;
+    platform: AdPlatformValue;
+}
+export interface PublishAdSet {
+    id: string;
+    name: string;
+    status: string | null;
+    naming_ok: boolean;
+}
+export interface PublishCampaign {
+    id: string;
+    name: string;
+    status: string | null;
+    objective: string | null;
+    naming_ok: boolean;
+    adsets: PublishAdSet[];
+}
+export interface PublishIdentity {
+    page_id: string;
+    page_name: string;
+    instagram_id: string | null;
+}
+export interface MaterialCaption {
+    id: number;
+    file_id: number | null;
+    position: number;
+    angle: 'emotional' | 'offer' | 'quality';
+    headline: string;
+    primary_text: string;
+    cta: string;
+    edited: boolean;
+    model: string | null;
+}
+export interface PublishCaption {
+    headline: string;
+    primary_text: string;
+    cta: string;
+}
+export type PublicationStatus = 'queued' | 'uploading' | 'processing' | 'creating' | 'done' | 'error';
+export interface AdPublicationRow {
+    id: number;
+    ad_name: string;
+    status: PublicationStatus;
+    error: string | null;
+    platform: AdPlatformValue;
+    account: string | null;
+    campaign: string | null;
+    adset: string | null;
+    headline: string;
+    external_ad_id: string | null;
+    manager_url: string | null;
+    created_at: string | null;
 }

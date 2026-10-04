@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use Database\Factories\ShopifyWebhookSubscriptionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class ShopifyWebhookSubscription extends Model
 {
-    /** @use HasFactory<\Database\Factories\ShopifyWebhookSubscriptionFactory> */
+    /** @use HasFactory<ShopifyWebhookSubscriptionFactory> */
     use HasFactory;
 
     protected $fillable = [

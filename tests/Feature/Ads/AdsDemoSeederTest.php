@@ -117,3 +117,28 @@ it('brings old demo orders it attributes into the last 30 days, so the reports s
         ->and($old->fresh()->placed_at->greaterThan(now()->subDays(29)))->toBeTrue()
         ->and($old->fresh()->placed_at->equalTo($placed))->toBeTrue(); // stable on re-run
 });
+
+it('seeds the fake TikTok account with campaigns, ad groups, ads, metrics and a buyer, through the fake driver only', function () {
+    config(['crm.ads.drivers.tiktok' => 'live']); // the seeder must force fake drivers itself
+
+    seedAdsDemo();
+
+    $tt = AdAccount::where('external_id', AdsDemoSeeder::TIKTOK)->firstOrFail();
+    $ads = $tt->ads()->get();
+    expect($tt->name)->toBe('Le Voile TikTok (تجريبي)')->and($tt->platform)->toBe('tiktok')
+        ->and($ads->pluck('ad_campaign_id')->unique())->toHaveCount(3)
+        ->and($ads->pluck('ad_set_id')->unique())->toHaveCount(6)
+        ->and($ads)->toHaveCount(18)
+        ->and(AdDailyMetric::where('ad_account_id', $tt->id)->distinct()->count('date'))->toBeGreaterThanOrEqual(60)
+        ->and((float) AdDailyMetric::where('ad_account_id', $tt->id)->sum('spend'))->toBeGreaterThan(0.0)
+        ->and($tt->buyerOn(CarbonImmutable::now('Africa/Cairo')->toDateString()))->not->toBeNull();
+    Http::assertNotSent(fn ($r) => str_contains($r->url(), 'tiktok.com'));
+});
+
+it('still refuses to seed in production', function () {
+    app()->detectEnvironment(fn () => 'production');
+
+    app()->call([new AdsDemoSeeder, 'run']);
+
+    expect(AdAccount::count())->toBe(0)->and(MediaBuyer::count())->toBe(0);
+});
