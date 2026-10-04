@@ -90,7 +90,11 @@ class PublishAd implements ShouldQueue
     {
         $row = AdPublication::find($this->publicationId);
         if ($row && ! $row->isFinished()) {
-            $row->update(['status' => AdPublication::ERROR, 'error' => $e instanceof MaxAttemptsExceededException ? __('ads.publish.media_not_ready') : $this->message($e)]);
+            $text = $e instanceof MaxAttemptsExceededException ? __('ads.publish.media_not_ready') : $this->message($e);
+            if ($row->status === AdPublication::CREATING) {
+                $text = mb_substr($text, 0, 800).' '.__('ads.publish.create_may_exist');
+            }
+            $row->update(['status' => AdPublication::ERROR, 'error' => $text]);
         }
     }
 
@@ -149,7 +153,10 @@ class PublishAd implements ShouldQueue
             ));
         } catch (RateLimited) {
             if ($step === 'create') {
-                AdPublication::query()->whereKey($row->id)->update(['status' => AdPublication::PROCESSING]); // refused: nothing was created
+                // Meta checks its usage header after a successful 2xx, so the ad may exist: same as any other create failure.
+                $row->update(['status' => AdPublication::ERROR, 'error' => mb_substr(__('ads.errors.rate_limited'), 0, 800).' '.__('ads.publish.create_may_exist')]);
+
+                return true;
             }
             // Only a real async queue job can be released; sync/inline runs must surface the failure.
             if ($this->job && ! $this->job instanceof SyncJob) {

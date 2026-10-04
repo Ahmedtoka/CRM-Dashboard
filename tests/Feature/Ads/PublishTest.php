@@ -380,3 +380,34 @@ it('shows the media-not-ready message when the job runs out of attempts', functi
 
     expect($row->fresh()->status)->toBe('error')->and($row->fresh()->error)->toBe(__('ads.publish.media_not_ready'));
 });
+
+it('treats a rate limit at the create step as a possible duplicate: error with the warning, no release', function () {
+    [$row] = pubOne();
+    $double = new class extends FakeAdsDriver
+    {
+        public static int $creates = 0;
+
+        public function createPausedAd(AdAccount $a, AdDraft $draft): string
+        {
+            self::$creates++;
+            throw new RateLimited('usage high');
+        }
+    };
+    $double::$creates = 0;
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+
+    $job = (new PublishAd($row->id))->withFakeQueueInteractions();
+    $job->handle(app(DriverFactory::class));
+
+    $job->assertNotReleased();
+    expect($double::$creates)->toBe(1)->and($row->fresh()->status)->toBe('error')->and($row->fresh()->error)->toContain(__('ads.publish.create_may_exist'));
+});
+
+it('adds the may-exist hint when an unexpected error leaves a row in creating', function () {
+    [$row] = pubOne();
+    $row->update(['status' => 'creating']);
+
+    (new PublishAd($row->id))->failed(new RuntimeException('boom'));
+
+    expect($row->fresh()->status)->toBe('error')->and($row->fresh()->error)->toContain('boom')->and($row->fresh()->error)->toContain(__('ads.publish.create_may_exist'));
+});
