@@ -119,8 +119,13 @@ class MetaAdsWriter implements AdPlatformWriter
         }
         $externalId = $this->numericId($externalId);
         $token = $this->token($a);
-        $this->api->backOffIfBusy($token);
-        $this->api->post($token, $externalId, ['status' => strtolower($status) === 'active' ? 'ACTIVE' : 'PAUSED']);
+        $activate = strtolower($status) === 'active';
+        // A pause stops spend, so it never waits on our own usage back-off: if Meta really is
+        // throttling, it answers with a rate code and the action is logged as an error.
+        if ($activate) {
+            $this->api->backOffIfBusy($token);
+        }
+        $this->api->post($token, $externalId, ['status' => $activate ? 'ACTIVE' : 'PAUSED']);
     }
 
     /** @return string the creative id */

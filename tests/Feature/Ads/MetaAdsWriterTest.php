@@ -327,6 +327,21 @@ it('never throws after a successful write with high usage, and backs off the nex
     expect(Http::recorded())->toHaveCount(1);
 });
 
+it('never holds back a pause during the usage back-off: stopping spend always goes to Meta', function () {
+    Http::preventStrayRequests();
+    $usage = json_encode(['123' => [['type' => 'ads_management', 'call_count' => 92, 'total_time' => 10, 'total_cputime' => 5, 'estimated_time_to_regain_access' => 0]]]);
+    Http::fake(['graph.facebook.com/v23.0/*' => Http::response(['success' => true], 200, ['x-business-use-case-usage' => $usage])]);
+    $w = app(MetaAdsWriter::class);
+    $acc = writerAccount();
+
+    $w->setStatus($acc, 'ad', '7701', 'paused');   // leaves the token marked busy
+    $w->setStatus($acc, 'ad', '7702', 'paused');   // still sent
+    $w->setStatus($acc, 'adset', '7703', 'paused');
+
+    expect(Http::recorded())->toHaveCount(3);
+    Http::assertSent(fn ($r) => str_ends_with($r->url(), '/7703') && $r['status'] === 'PAUSED');
+});
+
 it('keeps uploading chunks when a transfer reports high usage, and returns the created ad id', function () {
     Http::preventStrayRequests();
     Storage::fake('local');
