@@ -759,6 +759,17 @@ export interface PublishIdentity {
     page_name: string;
     instagram_id: string | null;
 }
+export interface MaterialCaption {
+    id: number;
+    file_id: number | null;
+    position: number;
+    angle: 'emotional' | 'offer' | 'quality';
+    headline: string;
+    primary_text: string;
+    cta: string;
+    edited: boolean;
+    model: string | null;
+}
 export interface PublishCaption {
     headline: string;
     primary_text: string;

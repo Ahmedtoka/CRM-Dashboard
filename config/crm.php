@@ -402,6 +402,8 @@ return [
         'tax_rate' => (float) env('CRM_ADS_TAX_RATE', 0.14),
         'backfill_days' => 90,
         'material_max_mb' => ['video' => 500, 'image' => 20],
+        // AI captions: model defaults to the bot's reply model (settings, then crm.anthropic.reply_model) when blank.
+        'captions' => ['model' => env('CRM_ADS_CAPTIONS_MODEL'), 'frames' => 4, 'timeout' => 60],
     ],
 
     // Approved WhatsApp templates (spec §5.6), shared with the web

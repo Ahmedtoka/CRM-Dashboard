@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /** Ads Hub — مكتبة مواد الإعلانات: what the content team uploaded, its status, stock and (for spend viewers) performance (spec §8.7). */
 import AdLinkPicker from '@/components/ads/AdLinkPicker.vue';
+import CaptionsDialog from '@/components/ads/CaptionsDialog.vue';
 import MaterialLightbox from '@/components/ads/MaterialLightbox.vue';
 import MaterialStatusChip from '@/components/ads/MaterialStatusChip.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
@@ -21,7 +22,7 @@ import { formatRoas, roasTone, safeUrl } from '@/lib/ads';
 import { cleanQuery, links, pageList, queryString, useMaterialPermissions } from '@/lib/adsMaterials';
 import { formatClock, formatCount, formatDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { AdsMaterialsIndexProps, MaterialRow, MaterialStatus } from '@/types/ads';
+import type { AdsMaterialsIndexProps, MaterialRow, MaterialStatus, PublishCaption } from '@/types/ads';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowUp,
@@ -48,6 +49,7 @@ import {
     Play,
     Plus,
     Rocket,
+    Sparkles,
     RotateCcw,
     Search,
     Square,
@@ -231,7 +233,25 @@ const linkOpen = computed({ get: () => linking.value !== null, set: (v) => !v &&
 
 /* ---- publish as paused ads ---- */
 const publishing = ref<MaterialRow | null>(null);
-const publishOpen = computed({ get: () => publishing.value !== null, set: (v) => !v && (publishing.value = null) });
+const publishCaptions = ref<PublishCaption[] | null>(null);
+const publishOpen = computed({
+    get: () => publishing.value !== null,
+    set: (v) => {
+        if (!v) {
+            publishing.value = null;
+            publishCaptions.value = null;
+        }
+    },
+});
+
+/* ---- AI captions ---- */
+const captioning = ref<MaterialRow | null>(null);
+const captionsOpen = computed({ get: () => captioning.value !== null, set: (v) => !v && (captioning.value = null) });
+function createFromCaptions(captions: PublishCaption[]): void {
+    publishCaptions.value = captions;
+    publishing.value = captioning.value;
+    captioning.value = null;
+}
 const publications = ref<MaterialRow | null>(null);
 const publicationsOpen = computed({ get: () => publications.value !== null, set: (v) => !v && (publications.value = null) });
 
@@ -614,6 +634,16 @@ const breadcrumbs = computed(() => [
                                         <RotateCcw class="size-4" aria-hidden="true" />
                                     </button>
                                     <button
+                                        v-if="m.files?.some((f) => f.mime?.startsWith('video/'))"
+                                        type="button"
+                                        :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
+                                        :aria-label="t('ads.captions.button')"
+                                        :title="t('ads.captions.button')"
+                                        @click="captioning = m"
+                                    >
+                                        <Sparkles class="size-4" aria-hidden="true" />
+                                    </button>
+                                    <button
                                         v-if="perms.canOperate.value"
                                         type="button"
                                         :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
@@ -726,7 +756,8 @@ const breadcrumbs = computed(() => [
             </DialogContent>
         </Dialog>
 
-        <PublishDialog v-if="publishing" v-model:open="publishOpen" :material="publishing" @published="publications = publishing" />
+        <CaptionsDialog v-if="captioning" v-model:open="captionsOpen" :material="captioning" :can-publish="perms.canOperate.value" @create="createFromCaptions" />
+        <PublishDialog v-if="publishing" v-model:open="publishOpen" :material="publishing" :captions="publishCaptions" @published="publications = publishing" />
 
         <Dialog v-model:open="publicationsOpen">
             <DialogContent class="max-h-[90svh] overflow-y-auto sm:max-w-2xl">

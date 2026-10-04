@@ -6,6 +6,7 @@ use App\Http\Controllers\Web\Ads\AdStockController;
 use App\Http\Controllers\Web\Ads\BuyerController;
 use App\Http\Controllers\Web\Ads\BuyerSetupController;
 use App\Http\Controllers\Web\Ads\CampaignController;
+use App\Http\Controllers\Web\Ads\CaptionController;
 use App\Http\Controllers\Web\Ads\CreativeController;
 use App\Http\Controllers\Web\Ads\MaterialCollectionController;
 use App\Http\Controllers\Web\Ads\MaterialController;
@@ -64,6 +65,9 @@ Route::middleware('ads:materials')->group(function () {
     Route::get('/ads/products/search', [MaterialController::class, 'productSearch'])->name('ads.products.search');
     Route::get('/ads/publish/options', [PublishController::class, 'options'])->name('ads.publish.options');
     Route::post('/ads/materials/{material}/publish', [PublishController::class, 'publish'])->name('ads.materials.publish');
+    Route::get('/ads/materials/{material}/captions', [CaptionController::class, 'index'])->name('ads.materials.captions');
+    Route::post('/ads/materials/{material}/captions', [CaptionController::class, 'generate'])->name('ads.materials.captions.generate');
+    Route::put('/ads/captions/{caption}', [CaptionController::class, 'update'])->name('ads.captions.update');
     Route::get('/ads/materials/{material}/publications', [PublishController::class, 'index'])->name('ads.materials.publications');
 
     Route::get('/ads/collections', [MaterialCollectionController::class, 'index'])->name('ads.collections.index');

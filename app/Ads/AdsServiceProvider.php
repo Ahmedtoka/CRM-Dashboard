@@ -3,6 +3,9 @@
 namespace App\Ads;
 
 use App\Ads\Attribution\Commands\AttributeOrdersCommand;
+use App\Ads\Captions\CaptionGenerator;
+use App\Ads\Captions\FakeCaptionGenerator;
+use App\Ads\Captions\GeneratesCaptions;
 use App\Ads\Commands\ImportArenaTokenCommand;
 use App\Ads\Commands\SetupTeamCommand;
 use App\Ads\Materials\Commands\StockWatchCommand;
@@ -18,6 +21,10 @@ class AdsServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(DriverFactory::class);
+        // Same switch as the bot's AI: Claude only when the ai driver is claude, else the offline generator.
+        $this->app->bind(GeneratesCaptions::class, fn ($app) => config('crm.drivers.ai', 'fake') === 'claude'
+            ? $app->make(CaptionGenerator::class)
+            : $app->make(FakeCaptionGenerator::class));
     }
 
     public function boot(): void

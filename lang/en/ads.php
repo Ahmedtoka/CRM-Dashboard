@@ -62,4 +62,10 @@ return [
         'stopped_creating' => 'The last try stopped while creating this ad. Check Ads Manager for ":name" before publishing again.',
         'create_may_exist' => 'It may already exist on the platform: check Ads Manager first.',
     ],
+    'captions' => [
+        'no_key' => 'AI captions are not set up: the ANTHROPIC_API_KEY is missing on the server.',
+        'api_failed' => 'The AI service did not answer. Try again in a minute.',
+        'bad_answer' => 'The AI answer could not be read. Try again.',
+        'no_video' => 'Pick a video file of this material to write captions for.',
+    ],
 ];
