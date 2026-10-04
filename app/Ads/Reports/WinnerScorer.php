@@ -44,10 +44,11 @@ final class WinnerScorer
         private readonly AdsQuery $q,
         private readonly RunningCreatives $creatives,
         private readonly AdsSettings $settings,
+        private readonly AdInsights $insights,
     ) {}
 
-    /** @return list<array{ad: array, score:int, tier:string, smoothed_roas:float, blended_roas:float, roas:?float, spend:float, revenue:float, orders:float, cpa:?float, ctr:?float, cvr:?float, active_days:int, days_with_sales:int, recommendation:string}> */
-    public function build(AdsFilter $f, string $status = 'all', string $sort = 'score'): array
+    /** @return list<array{ad: array, score:int, tier:string, smoothed_roas:float, blended_roas:float, roas:?float, spend:float, revenue:float, orders:float, cpa:?float, ctr:?float, cvr:?float, active_days:int, days_with_sales:int, recommendation:string, reasons: list<array{key:string, params:array}>, trend: array, fatigue: array}> */
+    public function build(AdsFilter $f, string $status = 'all', string $sort = 'score', bool $withReasons = true): array
     {
         $w = $this->window($f);
         $thr = $this->settings->winnerThresholds();
@@ -115,6 +116,22 @@ final class WinnerScorer
             ];
         })->keyBy('ad_id');
 
+        $insights = $withReasons ? $this->insights->forAds($scored->keys()->all(), $w->to) : [];
+        $realOrders = $withReasons ? $this->q->orders($w)->countBy('ad_id') : collect();
+        $days = (int) $w->from->diffInDays($w->to) + 1;
+        $scored = $scored->map(function (array $s, int $id) use ($withReasons, $insights, $realOrders, $thr, $days) {
+            if (! $withReasons) {
+                return $s;
+            }
+            $i = $insights[$id];
+
+            return $s + [
+                'reasons' => $this->reasons($s, $i, (int) ($realOrders[$id] ?? 0), $thr, $days),
+                'trend' => $i['trend'],
+                'fatigue' => $i['fatigue'],
+            ];
+        });
+
         $ads = collect($this->creatives->rows($this->adRows($perAd->whereIn('ad_id', $scored->keys()->all())->all()), $w))->keyBy('id');
         $out = $scored->map(function (array $s) use ($ads) {
             $id = $s['ad_id'];
@@ -133,6 +150,44 @@ final class WinnerScorer
         };
 
         return $out->sortBy($key)->values()->all();
+    }
+
+    /**
+     * Written reasons from the very numbers the tier was decided on (smoothed ROAS against the AdsSettings
+     * thresholds), as {key, params} for the client to translate.
+     *
+     * @param  array<string, mixed>  $s
+     * @param  array{trend: array, fatigue: array}  $i
+     * @param  array<string, mixed>  $thr
+     * @return list<array{key:string, params:array}>
+     */
+    private function reasons(array $s, array $i, int $realOrders, array $thr, int $days): array
+    {
+        $r = [];
+        if ($s['tier'] === 'winner' || $s['tier'] === 'promising') {
+            $r[] = ['key' => 'roas_above', 'params' => ['roas' => $s['smoothed_roas'], 'threshold' => (float) $thr[$s['tier']], 'days' => $days]];
+        } elseif ($s['tier'] === 'loser') {
+            $r[] = ['key' => 'roas_below', 'params' => ['roas' => $s['smoothed_roas'], 'threshold' => (float) $thr['loser']]];
+        }
+        if ($i['trend']['dir'] !== 'flat' && $i['trend']['roas_pct'] !== null) {
+            $r[] = ['key' => $i['trend']['dir'] === 'up' ? 'recent_up' : 'recent_down', 'params' => ['pct' => abs($i['trend']['roas_pct'])]];
+        }
+        $r[] = ['key' => 'consistency', 'params' => ['days_with_sales' => $s['days_with_sales'], 'active_days' => $s['active_days']]];
+        $r[] = ['key' => 'spend', 'params' => ['spend' => $s['spend']]];
+        if ($s['cpa'] !== null) {
+            $r[] = ['key' => 'cpa', 'params' => ['cpa' => $s['cpa']]];
+        }
+        if ($s['ctr'] !== null) {
+            $r[] = ['key' => 'ctr', 'params' => ['ctr' => $s['ctr']]];
+        }
+        if ($realOrders > 0) {
+            $r[] = ['key' => 'real_orders', 'params' => ['orders' => $realOrders]];
+        }
+        if ($i['fatigue']['flag']) {
+            $r[] = ['key' => 'fatigue', 'params' => ['ctr_drop' => $i['fatigue']['ctr_drop_pct'], 'frequency' => $i['fatigue']['frequency']]];
+        }
+
+        return $r;
     }
 
     /** The filter with its range clamped to 7..30 days, anchored at `to` (Arena's window policy). */

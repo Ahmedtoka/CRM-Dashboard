@@ -21,7 +21,7 @@ final class RunningCreatives
         'ad.body', 'ad.created_time', 'ad.ad_account_id',
     ];
 
-    public function __construct(private readonly AdsQuery $q) {}
+    public function __construct(private readonly AdsQuery $q, private readonly AdInsights $insights) {}
 
     /**
      * @param  array{status?:string, account?:int|string|null, platform?:string|null, buyer?:int|string|null, q?:string|null, sort?:string, per_page?:int|string, page?:int|string}  $opts
@@ -93,8 +93,9 @@ final class RunningCreatives
         $ids = array_map(fn ($r) => (int) $r->id, $rows);
         $real = $ids === [] ? collect() : $this->q->orders($f)->whereIn('ad_id', $ids)->countBy('ad_id');
         $buyers = $this->buyers($ids, $f);
+        $insights = $this->insights->forAds($ids, $f->to);
 
-        return array_map(function (object $r) use ($real, $buyers) {
+        return array_map(function (object $r) use ($real, $buyers, $insights) {
             $d = $this->q->derive($r);
 
             return [
@@ -129,6 +130,8 @@ final class RunningCreatives
                 'roas' => $d['roas'],
                 'real_orders' => (int) ($real[$r->id] ?? 0),
                 'buyer' => $buyers[(int) $r->id] ?? null,
+                'trend' => $insights[(int) $r->id]['trend'],
+                'fatigue' => $insights[(int) $r->id]['fatigue'],
             ];
         }, $rows);
     }

@@ -5,6 +5,7 @@ import CreativePreviewModal from '@/components/ads/CreativePreviewModal.vue';
 import CreativeThumb from '@/components/ads/CreativeThumb.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
+import TrendArrow from '@/components/ads/TrendArrow.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
@@ -235,7 +236,13 @@ const breadcrumbs = computed(() => [
                             <td class="px-2 py-2 text-end tabular-nums">{{ formatPct(ad.ctr, locale) }}</td>
                             <td class="px-2 py-2 text-end tabular-nums">{{ formatQty(ad.purchases, locale) }}</td>
                             <td class="px-2 py-2 text-end"><MoneyCell :amount="ad.spend" :with-tax="ad.spend_tax" :currency="currency" /></td>
-                            <td class="px-2 py-2 text-end"><StatusChip :label="formatRoas(ad.roas, locale)" :tone="roasTone(ad.roas)" /></td>
+                            <td class="px-2 py-2 text-end">
+                                <div class="flex flex-col items-end gap-0.5">
+                                    <StatusChip :label="formatRoas(ad.roas, locale)" :tone="roasTone(ad.roas)" />
+                                    <TrendArrow :trend="ad.trend" />
+                                    <StatusChip v-if="ad.fatigue.flag" :label="t('ads.fatigue.label')" tone="negative" />
+                                </div>
+                            </td>
                             <td class="px-2 py-2 text-center">
                                 <StatusChip
                                     :label="isAdActive(ad) ? t('ads.status.active') : t('ads.status.inactive')"

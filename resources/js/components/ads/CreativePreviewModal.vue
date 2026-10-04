@@ -7,6 +7,8 @@
  */
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
+import TrendArrow from '@/components/ads/TrendArrow.vue';
+import WhyList from '@/components/ads/WhyList.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
@@ -26,7 +28,7 @@ import {
     safeUrl,
 } from '@/lib/ads';
 import { formatCount } from '@/lib/format';
-import type { AdsFilters, CreativeDetail, CreativeRow } from '@/types/ads';
+import type { AdReason, AdsFilters, CreativeDetail, CreativeRow } from '@/types/ads';
 import { ExternalLink, Instagram, LoaderCircle } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
@@ -38,8 +40,10 @@ const props = withDefaults(
         currency?: string;
         /** Winners page: the smoothed ROAS tile. */
         smoothedRoas?: number | null;
+        /** Winners page: why the ad has its tier. */
+        reasons?: AdReason[];
     }>(),
-    { currency: 'EGP', smoothedRoas: null },
+    { currency: 'EGP', smoothedRoas: null, reasons: () => [] },
 );
 const emit = defineEmits<{ 'update:open': [open: boolean] }>();
 
@@ -233,6 +237,15 @@ const SANDBOX = 'allow-scripts allow-same-origin allow-popups';
                             <p class="text-2xs text-muted-foreground">{{ tile.label }}</p>
                             <p class="text-sm font-bold tabular-nums" :class="toneText[tile.tone ?? 'neutral']">{{ tile.value }}</p>
                         </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <TrendArrow :trend="row.trend" />
+                        <StatusChip v-if="row.fatigue.flag" :label="t('ads.fatigue.label')" tone="negative" />
+                    </div>
+                    <div v-if="reasons.length">
+                        <p class="mb-1 text-2xs font-semibold text-foreground">{{ t('ads.reasons.title') }}</p>
+                        <WhyList :reasons="reasons" :currency="currency" />
                     </div>
 
                     <p class="text-xs text-muted-foreground">

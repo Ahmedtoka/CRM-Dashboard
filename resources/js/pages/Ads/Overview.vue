@@ -12,7 +12,19 @@ import StatCard from '@/components/crm/StatCard.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { adAccountActive, adAccountStatusLabel, flowArrow, formatAdsMoney, formatCompact, formatDayLong, formatDayShort, formatPct, formatQty, formatRoas, roasTone } from '@/lib/ads';
+import {
+    adAccountActive,
+    adAccountStatusLabel,
+    flowArrow,
+    formatAdsMoney,
+    formatCompact,
+    formatDayLong,
+    formatDayShort,
+    formatPct,
+    formatQty,
+    formatRoas,
+    roasTone,
+} from '@/lib/ads';
 import { formatCount, formatDateTime } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { AdsDailyRow, AdsOverviewProps, AdsTopAccountRow } from '@/types/ads';
@@ -44,6 +56,13 @@ const kpis = computed(() => {
             value: n(x.real_orders),
             hint: t('ads.kpi.real_revenue', { amount: money(x.real_revenue), roas: formatRoas(x.real_roas, locale.value) }),
             border: 'border-t-success',
+        },
+        {
+            key: 'losers_share',
+            label: t('ads.kpi.losers_share'),
+            value: formatPct(x.losers_spend_share, locale.value, 0),
+            border: 'border-t-chart-5',
+            hint: t('ads.kpi.losers_share_hint'),
         },
         { key: 'cpa', label: t('ads.kpi.cpa'), value: money(x.cpa), border: 'border-t-chart-5' },
         { key: 'ctr', label: t('ads.kpi.ctr'), value: formatPct(x.ctr, locale.value), border: 'border-t-chart-3' },

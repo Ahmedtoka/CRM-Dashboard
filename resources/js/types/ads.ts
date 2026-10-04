@@ -44,6 +44,8 @@ export interface AdsDerived {
 }
 
 export interface AdsTotals extends AdsDerived {
+    /** Share (0..1) of the spend that went to loser-tier ads; null without spend. */
+    losers_spend_share: number | null;
     real_orders: number;
     real_revenue: number;
     real_roas: number | null;
@@ -202,6 +204,25 @@ export interface AdsBuyerShowProps extends AdsCommonProps {
 }
 
 /** RunningCreatives::rows */
+/** AdInsights::forAds — last 7 days vs the 7 before, and creative fatigue. */
+export interface AdTrend {
+    roas_pct: number | null;
+    spend_pct: number | null;
+    dir: 'up' | 'down' | 'flat';
+}
+
+export interface AdFatigue {
+    flag: boolean;
+    ctr_drop_pct: number | null;
+    frequency: number | null;
+}
+
+/** A written reason from WinnerScorer, translated on the client (ads.reasons.{key}). */
+export interface AdReason {
+    key: string;
+    params: Record<string, number>;
+}
+
 export interface CreativeRow {
     id: number;
     external_id: string;
@@ -234,6 +255,8 @@ export interface CreativeRow {
     roas: number | null;
     real_orders: number;
     buyer: string | null;
+    trend: AdTrend;
+    fatigue: AdFatigue;
 }
 
 /** GET /ads/creatives/{ad} (RunningCreatives::detail) */
@@ -287,6 +310,9 @@ export interface WinnerRow {
     active_days: number;
     days_with_sales: number;
     recommendation: string;
+    reasons: AdReason[];
+    trend: AdTrend;
+    fatigue: AdFatigue;
 }
 
 /** Tier chips; `top` = winner + promising (the default). */
