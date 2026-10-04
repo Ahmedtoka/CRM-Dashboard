@@ -88,12 +88,12 @@ final class RunningCreatives
      * @param  list<object>  $rows
      * @return list<array>
      */
-    public function rows(array $rows, AdsFilter $f): array
+    public function rows(array $rows, AdsFilter $f, ?array $insights = null): array
     {
         $ids = array_map(fn ($r) => (int) $r->id, $rows);
         $real = $ids === [] ? collect() : $this->q->orders($f)->whereIn('ad_id', $ids)->countBy('ad_id');
         $buyers = $this->buyers($ids, $f);
-        $insights = $this->insights->forAds($ids, $f->to);
+        $insights ??= $this->insights->forAds($ids, $f->to);
 
         return array_map(function (object $r) use ($real, $buyers, $insights) {
             $d = $this->q->derive($r);

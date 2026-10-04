@@ -4,9 +4,11 @@ use App\Ads\Reports\AdInsights;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\AdsOverview;
 use App\Ads\Reports\WinnerScorer;
+use App\Enums\UserRole;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdDailyMetric;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonPeriod;
 
@@ -130,4 +132,52 @@ it('returns the share of spend going to loser ads on the overview', function () 
 
 it('has a null losers share without spend', function () {
     expect(app(AdsOverview::class)->build(rsnFilter())['totals']['losers_spend_share'])->toBeNull();
+});
+
+it('returns the creative detail with the written reasons of the window', function () {
+    $acc = AdAccount::factory()->create();
+    $ad = Ad::factory()->for($acc, 'account')->create();
+    $thin = Ad::factory()->for($acc, 'account')->create();
+    foreach (CarbonPeriod::create('2026-09-17', '2026-09-30') as $d) {
+        rsnDay($ad, $d->toDateString(), ['spend' => 100, 'purchase_value' => 400, 'purchases' => 1]);
+    }
+    rsnDay($thin, '2026-09-30');
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+
+    $res = $this->actingAs($admin)->getJson('/ads/creatives/'.$ad->id.'?from=2026-09-17&to=2026-09-30')->assertOk();
+    $keys = array_column($res->json('reasons'), 'key');
+
+    expect($keys)->toContain('roas_above', 'consistency')
+        ->and($res->json('trend.dir'))->toBe('flat');
+    // an ad below the spend/days gate gets no reasons, not an error
+    $this->getJson('/ads/creatives/'.$thin->id.'?from=2026-09-17&to=2026-09-30')->assertOk()->assertJsonPath('reasons', []);
+});
+
+it('computes tiers without rows and keeps the losers share right', function () {
+    $acc = AdAccount::factory()->create();
+    $good = Ad::factory()->for($acc, 'account')->create();
+    $bad = Ad::factory()->for($acc, 'account')->create();
+    foreach (CarbonPeriod::create('2026-09-17', '2026-09-30') as $d) {
+        rsnDay($good, $d->toDateString(), ['spend' => 300, 'purchase_value' => 600, 'purchases' => 1]);
+        rsnDay($bad, $d->toDateString(), ['spend' => 100, 'purchase_value' => 10]);
+    }
+
+    expect(app(WinnerScorer::class)->tiers(rsnFilter()))->toHaveKey($bad->id, 'loser')
+        ->and(app(AdsOverview::class)->losersSpendShare(rsnFilter()))->toBe(0.25);
+});
+
+it('bounds the fatigue baseline to the first active days', function () {
+    $acc = AdAccount::factory()->create();
+    $ad = Ad::factory()->for($acc, 'account')->create();
+    // active from Jan 1; the first 7 active days have CTR 4 %, much later days 1 % -- late rows must not enter the baseline
+    foreach (CarbonPeriod::create('2026-01-01', '2026-01-07') as $d) {
+        rsnDay($ad, $d->toDateString(), ['impressions' => 1000, 'clicks' => 40, 'reach' => 333]);
+    }
+    foreach (CarbonPeriod::create('2026-09-01', '2026-09-30') as $d) {
+        rsnDay($ad, $d->toDateString(), ['impressions' => 1000, 'clicks' => $d->toDateString() >= '2026-09-28' ? 20 : 10, 'reach' => 333]);
+    }
+
+    $f = app(AdInsights::class)->forAds([$ad->id], CarbonImmutable::parse('2026-09-30'))[$ad->id]['fatigue'];
+
+    expect($f)->toBe(['flag' => true, 'ctr_drop_pct' => 50.0, 'frequency' => 3.0]);
 });

@@ -3,6 +3,7 @@
 namespace App\Ads\Reports;
 
 use App\Ads\AdsSettings;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -48,14 +49,95 @@ final class WinnerScorer
     ) {}
 
     /** @return list<array{ad: array, score:int, tier:string, smoothed_roas:float, blended_roas:float, roas:?float, spend:float, revenue:float, orders:float, cpa:?float, ctr:?float, cvr:?float, active_days:int, days_with_sales:int, recommendation:string, reasons: list<array{key:string, params:array}>, trend: array, fatigue: array}> */
-    public function build(AdsFilter $f, string $status = 'all', string $sort = 'score', bool $withReasons = true): array
+    public function build(AdsFilter $f, string $status = 'all', string $sort = 'score'): array
+    {
+        [$w, $thr, $perAd, $scored] = $this->score($f, $status);
+        if ($scored->isEmpty()) {
+            return [];
+        }
+
+        [$scored, $insights] = $this->explain($scored, $w, $thr);
+        $ads = collect($this->creatives->rows($this->adRows($perAd->whereIn('ad_id', $scored->keys()->all())->all()), $w, $insights))->keyBy('id');
+        $out = $scored->map(function (array $s) use ($ads) {
+            $id = $s['ad_id'];
+            unset($s['ad_id']);
+
+            return ['ad' => $ads[$id]] + $s;
+        });
+
+        $sort = in_array($sort, self::SORTS, true) ? $sort : 'score';
+        $key = match ($sort) {
+            'score' => fn ($x) => [-$x['score'], -$x['spend'], -$x['ad']['id']],
+            'roas' => fn ($x) => [-($x['roas'] ?? 0), -$x['score'], -$x['ad']['id']],
+            'spend' => fn ($x) => [-$x['spend'], -$x['score'], -$x['ad']['id']],
+            'revenue' => fn ($x) => [-$x['revenue'], -$x['score'], -$x['ad']['id']],
+            'date' => fn ($x) => [-(int) strtotime((string) ($x['ad']['created_time'] ?? '1970-01-01')), -$x['score'], -$x['ad']['id']],
+        };
+
+        return $out->sortBy($key)->values()->all();
+    }
+
+    /**
+     * Tier per eligible ad over the Winners window (ad id => tier), without rows, insights or reasons.
+     *
+     * @return array<int, string>
+     */
+    public function tiers(AdsFilter $f): array
+    {
+        return $this->score($f, 'all')[3]->map(fn (array $s) => $s['tier'])->all();
+    }
+
+    /**
+     * The written reasons for one ad over the Winners window of the filter; empty when the ad does not pass
+     * the spend/days gate there.
+     *
+     * @return list<array{key:string, params:array}>
+     */
+    public function reasonsFor(int $adId, AdsFilter $f): array
+    {
+        [$w, $thr, , $scored] = $this->score($f, 'all', $adId);
+
+        return $scored->isEmpty() ? [] : ($this->explain($scored, $w, $thr)[0][$adId]['reasons'] ?? []);
+    }
+
+    /**
+     * Adds reasons, trend and fatigue to the scored rows; also returns the insights so the ad rows reuse them.
+     *
+     * @param  Collection<int, array<string, mixed>>  $scored
+     * @param  array<string, mixed>  $thr
+     * @return array{0: Collection<int, array<string, mixed>>, 1: array}
+     */
+    private function explain(Collection $scored, AdsFilter $w, array $thr): array
+    {
+        $insights = $this->insights->forAds($scored->keys()->all(), $w->to);
+        $realOrders = $this->q->orders($w)->countBy('ad_id');
+        $days = (int) $w->from->diffInDays($w->to) + 1;
+
+        $scored = $scored->map(fn (array $s, int $id) => $s + [
+            'reasons' => $this->reasons($s, $insights[$id], (int) ($realOrders[$id] ?? 0), $thr, $days),
+            'trend' => $insights[$id]['trend'],
+            'fatigue' => $insights[$id]['fatigue'],
+        ]);
+
+        return [$scored, $insights];
+    }
+
+    /**
+     * The window sums per ad, the gate and the scores.
+     *
+     * @return array{0: AdsFilter, 1: array<string, mixed>, 2: Collection<int, object>, 3: Collection<int, array<string, mixed>>}
+     */
+    private function score(AdsFilter $f, string $status, ?int $onlyAd = null): array
     {
         $w = $this->window($f);
         $thr = $this->settings->winnerThresholds();
         $recentCut = $w->to->subDays(self::RECENCY_DAYS - 1)->toDateString();
         $prior = self::SMOOTHING_K * self::SPEND_PRIOR;
 
-        $perAd = $this->q->sums($w, ['ad_id' => 'm.ad_id', 'account_id' => 'm.ad_account_id'], function ($b) use ($status, $recentCut) {
+        $perAd = $this->q->sums($w, ['ad_id' => 'm.ad_id', 'account_id' => 'm.ad_account_id'], function ($b) use ($status, $recentCut, $onlyAd) {
+            if ($onlyAd !== null) {
+                $b->where('m.ad_id', $onlyAd);
+            }
             $b->selectRaw('COALESCE(SUM(CASE WHEN m.spend > 0 THEN 1 ELSE 0 END), 0) as active_days')
                 ->selectRaw('COALESCE(SUM(CASE WHEN m.spend > 0 AND m.purchases > 0 THEN 1 ELSE 0 END), 0) as days_with_sales')
                 ->selectRaw('COALESCE(SUM(CASE WHEN m.date >= ? THEN m.spend ELSE 0 END), 0) as recent_spend', [$recentCut])
@@ -69,7 +151,7 @@ final class WinnerScorer
 
         $eligible = $perAd->filter(fn ($r) => (float) $r->spend >= (float) $thr['min_spend'] && (int) $r->active_days >= (int) $thr['min_days']);
         if ($eligible->isEmpty()) {
-            return [];
+            return [$w, $thr, $perAd, collect()];
         }
 
         $avg = $this->accountAverages($w, $eligible->pluck('account_id')->unique()->values()->all());
@@ -116,40 +198,7 @@ final class WinnerScorer
             ];
         })->keyBy('ad_id');
 
-        $insights = $withReasons ? $this->insights->forAds($scored->keys()->all(), $w->to) : [];
-        $realOrders = $withReasons ? $this->q->orders($w)->countBy('ad_id') : collect();
-        $days = (int) $w->from->diffInDays($w->to) + 1;
-        $scored = $scored->map(function (array $s, int $id) use ($withReasons, $insights, $realOrders, $thr, $days) {
-            if (! $withReasons) {
-                return $s;
-            }
-            $i = $insights[$id];
-
-            return $s + [
-                'reasons' => $this->reasons($s, $i, (int) ($realOrders[$id] ?? 0), $thr, $days),
-                'trend' => $i['trend'],
-                'fatigue' => $i['fatigue'],
-            ];
-        });
-
-        $ads = collect($this->creatives->rows($this->adRows($perAd->whereIn('ad_id', $scored->keys()->all())->all()), $w))->keyBy('id');
-        $out = $scored->map(function (array $s) use ($ads) {
-            $id = $s['ad_id'];
-            unset($s['ad_id']);
-
-            return ['ad' => $ads[$id]] + $s;
-        });
-
-        $sort = in_array($sort, self::SORTS, true) ? $sort : 'score';
-        $key = match ($sort) {
-            'score' => fn ($x) => [-$x['score'], -$x['spend'], -$x['ad']['id']],
-            'roas' => fn ($x) => [-($x['roas'] ?? 0), -$x['score'], -$x['ad']['id']],
-            'spend' => fn ($x) => [-$x['spend'], -$x['score'], -$x['ad']['id']],
-            'revenue' => fn ($x) => [-$x['revenue'], -$x['score'], -$x['ad']['id']],
-            'date' => fn ($x) => [-(int) strtotime((string) ($x['ad']['created_time'] ?? '1970-01-01')), -$x['score'], -$x['ad']['id']],
-        };
-
-        return $out->sortBy($key)->values()->all();
+        return [$w, $thr, $perAd, $scored];
     }
 
     /**

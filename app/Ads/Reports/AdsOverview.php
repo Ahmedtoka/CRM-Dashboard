@@ -48,8 +48,7 @@ final class AdsOverview
         if ($total <= 0) {
             return null;
         }
-        $losers = array_filter($this->scorer->build($f, 'all', 'score', false), fn ($r) => $r['tier'] === 'loser');
-        $ids = array_column(array_column($losers, 'ad'), 'id');
+        $ids = array_keys(array_filter($this->scorer->tiers($f), fn (string $tier) => $tier === 'loser'));
         if ($ids === []) {
             return 0.0;
         }

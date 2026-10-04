@@ -262,6 +262,7 @@ export interface CreativeRow {
 /** GET /ads/creatives/{ad} (RunningCreatives::detail) */
 export interface CreativeDetail extends CreativeRow {
     preview_html: string | null;
+    reasons: AdReason[];
 }
 
 export type CreativeStatusFilter = 'all' | 'active' | 'inactive';

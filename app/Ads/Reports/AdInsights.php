@@ -116,33 +116,45 @@ final class AdInsights
         ];
     }
 
+    /** Calendar days searched after an ad's first active day for its first 7 active days. */
+    private const BASELINE_SPAN_DAYS = 60;
+
     /**
-     * CTR over each ad's first 7 active days (spend > 0, all history up to `to`). Null when those days are not
-     * all before the recent window (an ad younger than 10 active days has no separate baseline).
+     * CTR over each ad's first 7 active days (spend > 0) that fall before the recent window. Null when the ad
+     * has fewer than 7 such days (an ad younger than 10 active days has no separate baseline) or they are
+     * spread over more than 60 days. Bounded in SQL: first active date per ad, then only that ad's rows within
+     * 60 days of it, in chunks.
      *
      * @param  list<int>  $adIds
      * @return array<int, ?float>
      */
     private function baselineCtr(array $adIds, string $recentFrom, string $to): array
     {
-        $byAd = DB::table('ad_daily_metrics')
-            ->whereIn('ad_id', $adIds)
-            ->where('spend', '>', 0)
-            ->where('date', '<=', $to)
-            ->orderBy('ad_id')->orderBy('date')
-            ->get(['ad_id', 'date', 'impressions', 'clicks'])
-            ->groupBy('ad_id');
+        $first = DB::table('ad_daily_metrics')
+            ->whereIn('ad_id', $adIds)->where('spend', '>', 0)->where('date', '<', $recentFrom)
+            ->groupBy('ad_id')->selectRaw('ad_id, MIN(date) as first_day')
+            ->pluck('first_day', 'ad_id');
 
         $out = [];
-        foreach ($byAd as $id => $days) {
-            $first = $days->take(self::FATIGUE_BASE_DAYS);
-            if ($first->count() < self::FATIGUE_BASE_DAYS || substr((string) $first->last()->date, 0, 10) >= $recentFrom) {
-                $out[(int) $id] = null;
+        foreach ($first->chunk(100) as $chunk) {
+            $rows = DB::table('ad_daily_metrics')
+                ->where('spend', '>', 0)
+                ->where(function ($q) use ($chunk, $recentFrom) {
+                    foreach ($chunk as $id => $day) {
+                        $start = CarbonImmutable::parse(substr((string) $day, 0, 10));
+                        $end = min($start->addDays(self::BASELINE_SPAN_DAYS)->toDateString(), CarbonImmutable::parse($recentFrom)->subDay()->toDateString());
+                        $q->orWhere(fn ($w) => $w->where('ad_id', (int) $id)->whereBetween('date', [$start->toDateString(), $end]));
+                    }
+                })
+                ->orderBy('ad_id')->orderBy('date')
+                ->get(['ad_id', 'impressions', 'clicks'])
+                ->groupBy('ad_id');
 
-                continue;
+            foreach ($rows as $id => $days) {
+                $firstDays = $days->take(self::FATIGUE_BASE_DAYS);
+                $impr = (int) $firstDays->sum('impressions');
+                $out[(int) $id] = $firstDays->count() < self::FATIGUE_BASE_DAYS || $impr <= 0 ? null : (float) $firstDays->sum('clicks') / $impr;
             }
-            $impr = (int) $first->sum('impressions');
-            $out[(int) $id] = $impr > 0 ? (float) $first->sum('clicks') / $impr : null;
         }
 
         return $out;

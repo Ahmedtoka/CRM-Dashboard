@@ -85,6 +85,7 @@ watch(
 /** The fetched detail when it is for this ad, else the row from the page. */
 const row = computed<CreativeRow | CreativeDetail | null>(() => (detail.value && detail.value.id === props.ad?.id ? detail.value : props.ad));
 const previewHtml = computed(() => (detail.value && detail.value.id === props.ad?.id ? detail.value.preview_html : null));
+const shownReasons = computed(() => (detail.value && detail.value.id === props.ad?.id ? detail.value.reasons : props.reasons));
 /** Meta preview frame: the iframe src inside the preview markup, else preview_url — both host-checked. */
 const metaSrc = computed(() => previewSrcFromHtml(previewHtml.value) ?? allowedPreviewUrl(row.value?.preview_url));
 const postUrl = computed(() => allowedPreviewUrl(fbPostEmbedUrl(row.value?.object_story_id)));
@@ -243,9 +244,9 @@ const SANDBOX = 'allow-scripts allow-same-origin allow-popups';
                         <TrendArrow :trend="row.trend" />
                         <StatusChip v-if="row.fatigue.flag" :label="t('ads.fatigue.label')" tone="negative" />
                     </div>
-                    <div v-if="reasons.length">
+                    <div v-if="shownReasons.length">
                         <p class="mb-1 text-2xs font-semibold text-foreground">{{ t('ads.reasons.title') }}</p>
-                        <WhyList :reasons="reasons" :currency="currency" />
+                        <WhyList :reasons="shownReasons" :currency="currency" />
                     </div>
 
                     <p class="text-xs text-muted-foreground">
