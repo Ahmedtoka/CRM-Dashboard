@@ -2,7 +2,9 @@
 
 namespace App\Ads\Sync;
 
+use App\Ads\Control\Jobs\PublishAd;
 use App\Models\AdAccount;
+use App\Models\AdPublication;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Redis;
 use Throwable;
@@ -85,6 +87,14 @@ class QueueInspector
                 $row['kind'] = $job->kind;
                 $row['days'] = $job->days;
                 $row['trigger'] = $job->trigger;
+            }
+        }
+
+        if ($name === PublishAd::class && is_string($data['data']['command'] ?? null)) {
+            $job = @unserialize($data['data']['command'], ['allowed_classes' => [PublishAd::class]]);
+            if ($job instanceof PublishAd) {
+                $row['account_id'] = AdPublication::query()->whereKey($job->publicationId)->value('ad_account_id');
+                $row['kind'] = 'publish';
             }
         }
 

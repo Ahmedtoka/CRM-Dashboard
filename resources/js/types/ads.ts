@@ -733,3 +733,49 @@ export interface AdsActionsProps {
     suggestions: AdSuggestion[];
     log: AdActionLogRow[];
 }
+
+/* ---- Publish a material as paused ads ---- */
+export interface PublishAccount {
+    id: number;
+    name: string;
+    platform: AdPlatformValue;
+}
+export interface PublishAdSet {
+    id: string;
+    name: string;
+    status: string | null;
+    naming_ok: boolean;
+}
+export interface PublishCampaign {
+    id: string;
+    name: string;
+    status: string | null;
+    objective: string | null;
+    naming_ok: boolean;
+    adsets: PublishAdSet[];
+}
+export interface PublishIdentity {
+    page_id: string;
+    page_name: string;
+    instagram_id: string | null;
+}
+export interface PublishCaption {
+    headline: string;
+    primary_text: string;
+    cta: string;
+}
+export type PublicationStatus = 'queued' | 'uploading' | 'processing' | 'creating' | 'done' | 'error';
+export interface AdPublicationRow {
+    id: number;
+    ad_name: string;
+    status: PublicationStatus;
+    error: string | null;
+    platform: AdPlatformValue;
+    account: string | null;
+    campaign: string | null;
+    adset: string | null;
+    headline: string;
+    external_ad_id: string | null;
+    manager_url: string | null;
+    created_at: string | null;
+}

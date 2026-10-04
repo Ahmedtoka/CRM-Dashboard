@@ -54,4 +54,10 @@ return [
             'title' => 'Material', 'product' => 'Product', 'variants' => 'Variations', 'price' => 'Price', 'quantity' => 'Quantity', 'collections' => 'Collections', 'availability' => 'Available', 'yes' => 'Yes', 'no' => 'No',
         ],
     ],
+    'publish' => [
+        'no_link' => 'This material has no product and no website link, so the ad has nowhere to send people. Add one first.',
+        'bad_file' => 'One of the chosen files does not belong to this material.',
+        'media_not_ready' => 'The platform is still processing the file. Try again later.',
+        'queued' => 'Queued. The ads will be created paused.',
+    ],
 ];

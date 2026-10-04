@@ -10,6 +10,7 @@ use App\Http\Controllers\Web\Ads\CreativeController;
 use App\Http\Controllers\Web\Ads\MaterialCollectionController;
 use App\Http\Controllers\Web\Ads\MaterialController;
 use App\Http\Controllers\Web\Ads\OverviewController;
+use App\Http\Controllers\Web\Ads\PublishController;
 use App\Http\Controllers\Web\Ads\SyncController;
 use Illuminate\Support\Facades\Route;
 
@@ -61,6 +62,9 @@ Route::middleware('ads:materials')->group(function () {
     Route::post('/ads/materials/{material}/status', [MaterialController::class, 'status'])->name('ads.materials.status');
     Route::post('/ads/materials/{material}/ads', [MaterialController::class, 'syncAds'])->name('ads.materials.ads');
     Route::get('/ads/products/search', [MaterialController::class, 'productSearch'])->name('ads.products.search');
+    Route::get('/ads/publish/options', [PublishController::class, 'options'])->name('ads.publish.options');
+    Route::post('/ads/materials/{material}/publish', [PublishController::class, 'publish'])->name('ads.materials.publish');
+    Route::get('/ads/materials/{material}/publications', [PublishController::class, 'index'])->name('ads.materials.publications');
 
     Route::get('/ads/collections', [MaterialCollectionController::class, 'index'])->name('ads.collections.index');
     Route::post('/ads/collections', [MaterialCollectionController::class, 'store'])->name('ads.collections.store');

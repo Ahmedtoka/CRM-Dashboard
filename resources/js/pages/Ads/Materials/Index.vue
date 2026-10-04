@@ -4,6 +4,8 @@ import AdLinkPicker from '@/components/ads/AdLinkPicker.vue';
 import MaterialLightbox from '@/components/ads/MaterialLightbox.vue';
 import MaterialStatusChip from '@/components/ads/MaterialStatusChip.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
+import PublicationsList from '@/components/ads/PublicationsList.vue';
+import PublishDialog from '@/components/ads/PublishDialog.vue';
 import WinnerBadge from '@/components/ads/WinnerBadge.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
@@ -38,12 +40,14 @@ import {
     Layers,
     LayoutGrid,
     Link2,
+    ListChecks,
     Package,
     PackageCheck,
     PackageX,
     Pencil,
     Play,
     Plus,
+    Rocket,
     RotateCcw,
     Search,
     Square,
@@ -224,6 +228,12 @@ const galleryOpen = computed({ get: () => gallery.value !== null, set: (v) => !v
 /* ---- linking ads ---- */
 const linking = ref<MaterialRow | null>(null);
 const linkOpen = computed({ get: () => linking.value !== null, set: (v) => !v && (linking.value = null) });
+
+/* ---- publish as paused ads ---- */
+const publishing = ref<MaterialRow | null>(null);
+const publishOpen = computed({ get: () => publishing.value !== null, set: (v) => !v && (publishing.value = null) });
+const publications = ref<MaterialRow | null>(null);
+const publicationsOpen = computed({ get: () => publications.value !== null, set: (v) => !v && (publications.value = null) });
 
 /* ---- delete ---- */
 const deleting = ref<MaterialRow | null>(null);
@@ -607,6 +617,27 @@ const breadcrumbs = computed(() => [
                                         v-if="perms.canOperate.value"
                                         type="button"
                                         :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
+                                        :aria-label="t('ads.publish.button')"
+                                        :title="t('ads.publish.button')"
+                                        :disabled="!m.files?.length"
+                                        @click="publishing = m"
+                                    >
+                                        <Rocket class="size-4" aria-hidden="true" />
+                                    </button>
+                                    <button
+                                        v-if="perms.canOperate.value"
+                                        type="button"
+                                        :class="cn(iconBtn, 'border-border text-muted-foreground hover:bg-muted hover:text-foreground')"
+                                        :aria-label="t('ads.publish.publications')"
+                                        :title="t('ads.publish.publications')"
+                                        @click="publications = m"
+                                    >
+                                        <ListChecks class="size-4" aria-hidden="true" />
+                                    </button>
+                                    <button
+                                        v-if="perms.canOperate.value"
+                                        type="button"
+                                        :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
                                         :aria-label="t('ads.materials.actions.link')"
                                         :title="t('ads.materials.actions.link')"
                                         @click="linking = m"
@@ -692,6 +723,16 @@ const breadcrumbs = computed(() => [
                 <DialogTitle class="text-base">{{ t('ads.materials.link.title') }}</DialogTitle>
                 <DialogDescription class="text-xs" dir="auto">{{ linking?.title }}</DialogDescription>
                 <AdLinkPicker v-if="linking" :material-id="linking.id" :ads="linking.ads" @saved="linking = null" />
+            </DialogContent>
+        </Dialog>
+
+        <PublishDialog v-if="publishing" v-model:open="publishOpen" :material="publishing" @published="publications = publishing" />
+
+        <Dialog v-model:open="publicationsOpen">
+            <DialogContent class="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
+                <DialogTitle class="text-base">{{ t('ads.publish.publications') }}</DialogTitle>
+                <DialogDescription class="text-xs" dir="auto">{{ publications?.title }}</DialogDescription>
+                <PublicationsList v-if="publications" :material-id="publications.id" />
             </DialogContent>
         </Dialog>
 

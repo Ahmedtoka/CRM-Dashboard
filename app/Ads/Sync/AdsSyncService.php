@@ -2,6 +2,7 @@
 
 namespace App\Ads\Sync;
 
+use App\Ads\Control\PublicationLinker;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Data\AdRow;
@@ -88,6 +89,7 @@ final class AdsSyncService
             // The ad list (full creative specs) is the heaviest Meta call: a backfill reads it once, on its first chunk.
             $adRows = $withAds ? $driver->ads($a) : [];
             $this->upsertAds($a, $adRows);
+            $this->linkPublications($a);
             $metrics = $driver->dailyMetrics($a, $from, $to);
             [$rows, $guard] = $this->replaceMetrics($a, $metrics, $from, $to);
         } catch (AdsApiException $e) {
@@ -185,6 +187,16 @@ final class AdsSyncService
     }
 
     /** @param list<AdRow> $rows */
+    /** Ads the CRM published are attached to their material once they are known locally; never fails the sync. */
+    private function linkPublications(AdAccount $a): void
+    {
+        try {
+            app(PublicationLinker::class)->link($a);
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
     private function upsertAds(AdAccount $a, array $rows): void
     {
         $campaigns = [];
