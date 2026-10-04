@@ -59,5 +59,7 @@ return [
         'bad_file' => 'One of the chosen files does not belong to this material.',
         'media_not_ready' => 'The platform is still processing the file. Try again later.',
         'queued' => 'Queued. The ads will be created paused.',
+        'stopped_creating' => 'The last try stopped while creating this ad. Check Ads Manager for ":name" before publishing again.',
+        'create_may_exist' => 'It may already exist on the platform: check Ads Manager first.',
     ],
 ];

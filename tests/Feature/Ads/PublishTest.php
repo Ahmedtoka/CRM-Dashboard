@@ -3,6 +3,7 @@
 use App\Ads\Control\Jobs\PublishAd;
 use App\Ads\Control\PublicationLinker;
 use App\Ads\Control\PublishService;
+use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Data\AdDraft;
 use App\Ads\Platforms\Data\MediaRef;
 use App\Ads\Platforms\DriverFactory;
@@ -22,6 +23,7 @@ use App\Models\BotSetting;
 use App\Models\MediaBuyer;
 use App\Models\Product;
 use App\Models\User;
+use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -300,4 +302,81 @@ it('decodes a queued PublishAd in the queue inspector', function () {
     $rows = (new QueueInspector(fn () => [[$payload], []]))->waiting();
 
     expect($rows[0]['job'])->toBe('PublishAd')->and($rows[0]['account_id'])->toBe($acc->id)->and($rows[0]['kind'])->toBe('publish');
+});
+
+it('never creates the ad again when a previous attempt stopped while creating', function () {
+    [$row] = pubOne();
+    $row->update(['status' => 'creating']);
+    $double = new class extends FakeAdsDriver
+    {
+        public static int $creates = 0;
+
+        public function createPausedAd(AdAccount $a, AdDraft $draft): string
+        {
+            self::$creates++;
+
+            return 'dup';
+        }
+    };
+    $double::$creates = 0;
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+
+    pubRun($row);
+
+    $row->refresh();
+    expect($double::$creates)->toBe(0)->and($row->status)->toBe('error')->and($row->error)->toContain($row->ad_name)->and($row->external_ad_id)->toBeNull();
+});
+
+it('warns that the ad may already exist when the create call fails', function () {
+    [$row] = pubOne();
+    $double = new class extends FakeAdsDriver
+    {
+        public function createPausedAd(AdAccount $a, AdDraft $draft): string
+        {
+            throw new AdsApiException('timeout');
+        }
+    };
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+
+    pubRun($row);
+
+    expect($row->fresh()->status)->toBe('error')->and($row->fresh()->error)->toContain('timeout')->and($row->fresh()->error)->toContain(__('ads.publish.create_may_exist'));
+});
+
+it('does not add the warning to an upload failure', function () {
+    [$row] = pubOne();
+    $double = new class extends FakeAdsDriver
+    {
+        public function uploadMedia(AdAccount $a, AdMaterialFile $file): MediaRef
+        {
+            throw new AdsApiException('bad file');
+        }
+    };
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+
+    pubRun($row);
+
+    expect($row->fresh()->error)->toBe('bad file');
+});
+
+it('numbers captions across files so every ad name is unique', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup(['video/mp4', 'video/mp4']);
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+
+    $rows = app(PublishService::class)->publish($admin, $material, $acc, pubInput([$files[0]->id, $files[1]->id], 3));
+
+    $names = $rows->pluck('ad_name')->all();
+    expect($names)->toHaveCount(6)->and(array_unique($names))->toHaveCount(6)
+        ->and($names[0])->toBe('M'.$material->id.' | Reel | C1')->and($names[5])->toBe('M'.$material->id.' | Reel | C6')
+        ->and($rows->pluck('caption_index')->all())->toBe([1, 2, 3, 4, 5, 6]);
+});
+
+it('shows the media-not-ready message when the job runs out of attempts', function () {
+    [$row] = pubOne();
+    $row->update(['status' => 'processing']);
+
+    (new PublishAd($row->id))->failed(new MaxAttemptsExceededException('too many'));
+
+    expect($row->fresh()->status)->toBe('error')->and($row->fresh()->error)->toBe(__('ads.publish.media_not_ready'));
 });

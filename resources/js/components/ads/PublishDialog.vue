@@ -60,7 +60,7 @@ function typeFor(fileId: number): string {
     return files.value.find((f) => f.id === fileId)?.mime?.startsWith('video/') ? 'Reel' : 'Image';
 }
 const previewNames = computed(() =>
-    form.file_ids.flatMap((id) => captions.value.map((_, i) => `M${props.material.id} | ${typeFor(id)} | C${i + 1}`)),
+    form.file_ids.flatMap((id, f) => captions.value.map((_, i) => `M${props.material.id} | ${typeFor(id)} | C${f * captions.value.length + i + 1}`)),
 );
 const urlTags = computed(() => {
     const p = accounts.value.find((a) => a.id === form.account_id)?.platform;

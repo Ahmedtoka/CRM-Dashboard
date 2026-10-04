@@ -61,15 +61,17 @@ final class PublishService
 
         $rows = DB::transaction(function () use ($u, $m, $a, $input, $ordered, $identity, $link, $tags) {
             $made = [];
-            foreach ($ordered as $file) {
+            // Captions are numbered across files so every ad name in a publish is unique: file f, caption k -> C{f*K+k}.
+            $perFile = count($input['captions']);
+            foreach ($ordered as $f => $file) {
                 foreach (array_values($input['captions']) as $i => $caption) {
                     $made[] = AdPublication::create([
                         'ad_material_id' => $m->id, 'ad_material_file_id' => $file->id, 'ad_account_id' => $a->id, 'platform' => $a->platform,
                         'campaign_external_id' => $input['campaign_id'], 'campaign_name' => $input['campaign_name'] ?? null,
                         'adset_external_id' => $input['adset_id'], 'adset_name' => $input['adset_name'] ?? null,
-                        'identity' => $identity, 'caption_index' => $i + 1,
+                        'identity' => $identity, 'caption_index' => $f * $perFile + $i + 1,
                         'headline' => $caption['headline'], 'primary_text' => $caption['primary_text'], 'cta' => $caption['cta'],
-                        'ad_name' => Naming::adName($m->id, self::typeFor($m, $file), $i + 1),
+                        'ad_name' => Naming::adName($m->id, self::typeFor($m, $file), $f * $perFile + $i + 1),
                         'link' => $link, 'url_tags' => $tags, 'status' => AdPublication::QUEUED, 'created_by_id' => $u->id,
                     ]);
                 }
