@@ -196,3 +196,35 @@ it('serves the page to ads report roles and keeps content users out', function (
 
     $this->actingAs(User::factory()->create(['role' => UserRole::Content]))->get('/ads/campaigns')->assertRedirect();
 });
+
+it('keeps one placeholder per account for ads without a campaign', function () {
+    $w = ctWorld();
+    $other = AdAccount::factory()->tiktok()->create(['name' => 'LV Other']);
+    ctAd($w['acc'], null, null, 'orphan a', ['spend' => 10]);
+    ctAd($other, null, null, 'orphan b', ['spend' => 20]);
+
+    $tree = collect(app(CampaignTree::class)->build(ctRange()));
+    $holders = $tree->where('placeholder', true)->values();
+
+    expect($holders)->toHaveCount(2)
+        ->and($holders->pluck('account_id')->sort()->values()->all())->toBe(collect([$w['acc']->id, $other->id])->sort()->values()->all())
+        ->and($holders->every(fn ($n) => $n['id'] === 0 && $n['children'][0]['placeholder'] === true && $n['children'][0]['children'][0]['placeholder'] === false))->toBeTrue()
+        ->and($tree->where('placeholder', false)->every(fn ($n) => $n['id'] > 0))->toBeTrue();
+    expect($holders->firstWhere('account_id', $other->id)['children'][0]['children'][0]['account_id'])->toBe($other->id);
+});
+
+it('filters the page by accounts and exposes the picked ones and the options', function () {
+    $w = ctWorld();
+    $other = AdAccount::factory()->meta()->create(['name' => 'Other acc']);
+    $oc = AdCampaign::factory()->for($other, 'account')->create(['name' => 'Other camp']);
+    ctAd($other, $oc, AdSet::factory()->for($oc, 'campaign')->create(), 'other ad', ['spend' => 5]);
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+
+    $this->actingAs($admin)->get('/ads/campaigns?from=2026-09-01&to=2026-09-30&accounts[]='.$other->id)->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->has('tree', 1)->where('tree.0.id', $oc->id)
+        ->where('filters.accounts', [$other->id])
+        ->has('account_options', 2));
+
+    $this->actingAs($admin)->get('/ads/campaigns?from=2026-09-01&to=2026-09-30')->assertInertia(fn (Assert $p) => $p
+        ->has('tree', 3)->where('filters.accounts', []));
+});

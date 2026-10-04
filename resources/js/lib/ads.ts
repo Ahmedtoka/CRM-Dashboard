@@ -2,7 +2,7 @@ import { formatNumber, translate, type Locale } from '@/i18n';
 import type { AdPlatformValue, AdsFilters, CreativeRow } from '@/types/ads';
 import { router } from '@inertiajs/vue3';
 
-export type AdsQueryValue = string | number | null | undefined;
+export type AdsQueryValue = string | number | string[] | null | undefined;
 
 /** Brand colours of the ad platforms (chips, platform dots). */
 export const AD_PLATFORM_COLORS: Record<AdPlatformValue, string> = {

@@ -28,3 +28,12 @@ it('builds the ad name the system gives its ads', function () {
         ->and(Naming::adName(7, 'image', 1))->toBe('M7 | Image | C1')
         ->and(Naming::adName(7, 'whatever', 3))->toBe('M7 | Post | C3');
 });
+
+it('rejects trailing newlines, four-part campaigns and bad dates', function () {
+    expect(Naming::checkCampaign("LV | Black Abaya | Sales | Ahmed | 261004\n"))->toBeFalse()
+        ->and(Naming::checkCampaign('LV | Black Abaya | Sales | Ahmed | 261004 | extra'))->toBeFalse()
+        ->and(Naming::checkCampaign('LV | Black Abaya | Sales | 261004'))->toBeFalse()
+        ->and(Naming::checkCampaign('LV | Black Abaya | Sales | Ahmed | 2610041'))->toBeFalse()
+        ->and(Naming::checkCampaign('LV | Black Abaya | Sales | Ahmed | 26-10-04'))->toBeFalse()
+        ->and(Naming::checkAdSet("Broad | EG | Advantage+\n"))->toBeFalse();
+});

@@ -23,6 +23,17 @@ const n = (v: number) => formatCount(v, locale.value);
 
 const SORTS: CampaignSort[] = ['spend', 'roas'];
 
+const chip = (on: boolean) =>
+    on ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-muted-foreground hover:text-foreground';
+
+/** Account chips: toggling one adds or removes it from accounts[] (kept in the URL by visitAds). */
+function toggleAccount(id: number | null): void {
+    const cur = props.filters.accounts;
+    const next = id === null ? [] : cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+    const f = props.filters;
+    visitAds({ from: f.from, to: f.to, platform: f.platform, buyer: f.buyer, ...keep.value, accounts: next.map(String) });
+}
+
 const keep = computed<Record<string, AdsQueryValue>>(() => ({ sort: props.filters.sort === 'spend' ? null : props.filters.sort }));
 
 function go(changes: Record<string, AdsQueryValue>): void {
@@ -145,6 +156,29 @@ const breadcrumbs = computed(() => [
                 </select>
             </div>
 
+            <div v-if="account_options.length" class="flex flex-wrap items-center gap-1 rounded-lg bg-card p-3 shadow-card" role="group" :aria-label="t('ads.filters.account')">
+                <button
+                    type="button"
+                    :aria-pressed="filters.accounts.length === 0"
+                    class="inline-flex h-7 items-center rounded-full border px-2.5 text-2xs font-medium transition-colors"
+                    :class="chip(filters.accounts.length === 0)"
+                    @click="toggleAccount(null)"
+                >
+                    {{ t('ads.filters.all_accounts') }}
+                </button>
+                <button
+                    v-for="a in account_options"
+                    :key="a.id"
+                    type="button"
+                    :aria-pressed="filters.accounts.includes(a.id)"
+                    class="inline-flex h-7 max-w-64 items-center rounded-full border px-2.5 text-2xs font-medium transition-colors"
+                    :class="chip(filters.accounts.includes(a.id))"
+                    @click="toggleAccount(a.id)"
+                >
+                    <span class="truncate" dir="auto">{{ a.name }}</span>
+                </button>
+            </div>
+
             <div class="scrollbar-thin overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
                 <EmptyState v-if="!tree.length" :icon="Layers" :title="t('ads.campaigns.empty')" :body="t('ads.empty.body')" />
                 <table v-else class="w-full min-w-[1100px] text-xs">
@@ -193,16 +227,16 @@ const breadcrumbs = computed(() => [
                                             <span>{{ t(`ads.campaigns.level_${r.node.level}`) }}</span>
                                             <span v-if="r.depth === 0" class="truncate" dir="auto">· {{ r.node.account }}</span>
                                             <StatusChip
-                                                v-if="r.node.level !== 'ad' && r.node.id !== 0"
+                                                v-if="r.node.level !== 'ad' && !r.node.placeholder"
                                                 :label="r.node.naming_ok ? t('ads.campaigns.naming_ok') : t('ads.campaigns.naming_bad')"
                                                 :tone="r.node.naming_ok ? 'positive' : 'warning'"
                                             />
-                                            <span v-if="r.node.level !== 'ad' && r.node.id !== 0 && !r.node.naming_ok" class="sr-only">
+                                            <span v-if="r.node.level !== 'ad' && !r.node.placeholder && !r.node.naming_ok" class="sr-only">
                                                 {{ t(`ads.campaigns.naming_${r.node.level}_hint`) }}
                                             </span>
                                         </p>
                                         <p
-                                            v-if="r.node.level !== 'ad' && r.node.id !== 0 && !r.node.naming_ok"
+                                            v-if="r.node.level !== 'ad' && !r.node.placeholder && !r.node.naming_ok"
                                             class="text-2xs font-normal text-muted-foreground"
                                             aria-hidden="true"
                                         >
@@ -213,7 +247,7 @@ const breadcrumbs = computed(() => [
                             </th>
                             <td class="px-2 py-2"><PlatformChip :platform="r.node.platform" size="xs" /></td>
                             <td class="px-2 py-2 text-center">
-                                <StatusChip v-if="r.node.id !== 0" :label="statusLabel(r.node.status)" :tone="statusTone(r.node.status)" dot />
+                                <StatusChip v-if="!r.node.placeholder" :label="statusLabel(r.node.status)" :tone="statusTone(r.node.status)" dot />
                             </td>
                             <td class="px-2 py-2 text-end">
                                 <MoneyCell :amount="r.node.metrics.spend" :with-tax="r.node.metrics.spend_tax" :currency="currency" />

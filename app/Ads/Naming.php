@@ -13,13 +13,13 @@ final class Naming
     /** `LV | Product | Objective | Buyer | YYMMDD` */
     public static function checkCampaign(string $name): bool
     {
-        return preg_match('/^LV \| .+ \| .+ \| .+ \| \d{6}$/u', $name) === 1;
+        return preg_match('/^LV \| .+ \| .+ \| .+ \| \d{6}\z/u', $name) === 1;
     }
 
     /** `Broad | EG | Advantage+` — three parts. */
     public static function checkAdSet(string $name): bool
     {
-        return preg_match('/^.+ \| .+ \| .+$/u', $name) === 1;
+        return preg_match('/^.+ \| .+ \| .+\z/u', $name) === 1;
     }
 
     /** `M{material id} | {Type} | C{caption n}`; an unknown type reads as Post. */

@@ -15,9 +15,9 @@ use App\Models\AdSet;
  * those dates, exactly as every other report), grouped by ad id only (ONLY_FULL_GROUP_BY safe); names, statuses and the
  * hierarchy come from second queries and the tree is assembled in PHP. Parent metrics are derived from the summed raw
  * figures of their ads, never from averaged child ratios. Ads with no campaign or ad set land under a placeholder node
- * with id 0 (the client labels it).
+ * with id 0, one per account / per campaign, flagged `placeholder` (the client labels it; no actions on it).
  *
- * Node = {level, id, external_id, account_id, account, platform, name, status, objective, naming_ok, metrics, children};
+ * Node = {level, placeholder, id, external_id, account_id, account, platform, name, status, objective, naming_ok, metrics, children};
  * ad nodes also carry `ad_id` (= id) and `trend`; metrics = AdsQuery::derive + real_orders.
  */
 final class CampaignTree
@@ -52,12 +52,14 @@ final class CampaignTree
             }
             $adSet = $ad->ad_set_id !== null ? $adSets->get($ad->ad_set_id) : null;
             $campaignId = (int) ($ad->ad_campaign_id ?? $adSet?->ad_campaign_id ?? 0);
-            $grouped[$campaignId][(int) ($adSet?->id ?? 0)][$adId] = $s;
+            // No campaign: one placeholder per account, so account_id is always the right one.
+            $key = $campaignId > 0 ? $campaignId : 'p'.$ad->ad_account_id;
+            $grouped[$key][(int) ($adSet?->id ?? 0)][$adId] = $s;
         }
 
         $nodes = [];
-        foreach ($grouped as $campaignId => $sets) {
-            $campaign = $campaigns->get($campaignId);
+        foreach ($grouped as $campaignKey => $sets) {
+            $campaign = is_int($campaignKey) ? $campaigns->get($campaignKey) : null;
             $firstAdId = array_key_first(reset($sets));
             $accountId = (int) ($campaign?->ad_account_id ?? $ads->get($firstAdId)->ad_account_id);
             $account = $accounts->get($accountId);
@@ -70,7 +72,7 @@ final class CampaignTree
                     $adAccount = $accounts->get($ad->ad_account_id);
                     $count = (int) ($real[$adId] ?? 0);
                     $adNodes[] = [
-                        'level' => 'ad', 'id' => $adId, 'ad_id' => $adId, 'external_id' => (string) $ad->external_id,
+                        'level' => 'ad', 'placeholder' => false, 'id' => $adId, 'ad_id' => $adId, 'external_id' => (string) $ad->external_id,
                         'account_id' => (int) $ad->ad_account_id, 'account' => (string) ($adAccount?->name ?? ''),
                         'platform' => (string) ($adAccount?->platform ?? ''),
                         'name' => (string) $ad->name, 'status' => $ad->effective_status ?? $ad->status, 'objective' => null,
@@ -106,7 +108,7 @@ final class CampaignTree
         }
 
         return [
-            'level' => $level, 'id' => (int) ($model?->id ?? 0), 'external_id' => (string) ($model?->external_id ?? ''),
+            'level' => $level, 'placeholder' => $model === null, 'id' => (int) ($model?->id ?? 0), 'external_id' => (string) ($model?->external_id ?? ''),
             'account_id' => $accountId, 'account' => (string) ($account?->name ?? ''), 'platform' => (string) ($account?->platform ?? ''),
             'name' => (string) ($model?->name ?? ''), 'status' => $model?->status, 'objective' => $objective,
             'naming_ok' => $namingOk,

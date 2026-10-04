@@ -299,6 +299,8 @@ export interface CampaignMetrics extends AdsDerived {
 /** A node of the campaign tree. id 0 = the placeholder for ads without a campaign / ad set. Ad nodes carry ad_id and trend. */
 export interface CampaignNode {
     level: 'campaign' | 'adset' | 'ad';
+    /** True for the «no campaign» / «no ad set» stand-ins (id 0): never a target for Stop / Run. */
+    placeholder: boolean;
     id: number;
     ad_id?: number;
     external_id: string;
@@ -317,7 +319,9 @@ export interface CampaignNode {
 export type CampaignSort = 'spend' | 'roas';
 
 export interface AdsCampaignsProps extends AdsCommonProps {
-    filters: AdsFilters & { sort: CampaignSort };
+    filters: AdsFilters & { sort: CampaignSort; accounts: number[] };
+    /** Accounts in the user's scope (not narrowed by the picked ones). */
+    account_options: { id: number; name: string; platform: AdPlatformValue }[];
     tree: CampaignNode[];
 }
 
