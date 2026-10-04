@@ -3,7 +3,6 @@ import CommandPalette from '@/components/crm/CommandPalette.vue';
 import NotificationBell from '@/components/crm/NotificationBell.vue';
 import ShortcutsDialog from '@/components/crm/ShortcutsDialog.vue';
 import ToastStack from '@/components/crm/ToastStack.vue';
-import TopProgress from '@/components/crm/TopProgress.vue';
 import { useCommandPalette } from '@/composables/useCommandPalette';
 import { useHeartbeat } from '@/composables/useHeartbeat';
 import { useI18n } from '@/composables/useI18n';
@@ -53,7 +52,6 @@ useShortcuts([
 
 <template>
     <AppLayout :breadcrumbs="breadcrumbs" :content-class="fill ? 'h-svh max-h-svh overflow-hidden' : undefined" :workspace="workspace">
-        <TopProgress />
         <template v-if="!adsOnly" #topbar-search>
             <button
                 type="button"

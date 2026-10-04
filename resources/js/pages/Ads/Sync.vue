@@ -22,7 +22,7 @@ const { t, locale } = useI18n();
 const clock = useNow();
 
 // Only the live block is refreshed every 5 s, and only while the tab is visible.
-useVisiblePoll(() => router.reload({ only: ['now'] }), 5000);
+useVisiblePoll(() => router.reload({ only: ['now'], async: true }), 5000);
 
 const KINDS = ['recent', 'backfill', 'accounts'];
 const kindLabel = (kind: string | null) => (kind && KINDS.includes(kind) ? t(`ads.sync.kind.${kind}`) : (kind ?? '—'));
