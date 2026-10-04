@@ -43,7 +43,8 @@ const toast = useToast();
 const page = usePage();
 const canWrite = computed(() => ((page.props.ads ?? null) as AdsAccess | null)?.canWrite === true);
 
-const target = computed(() => toggleTarget(props.status));
+// Google Ads has no writer: never offer Stop / Run there.
+const target = computed(() => (props.platform === 'google' ? null : toggleTarget(props.status)));
 const stopping = computed(() => target.value === 'paused');
 
 const open = ref(false);

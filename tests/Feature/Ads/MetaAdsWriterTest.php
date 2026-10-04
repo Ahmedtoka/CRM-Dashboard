@@ -1,6 +1,7 @@
 <?php
 
 use App\Ads\Platforms\AdsApiException;
+use App\Ads\Platforms\CreativeRejected;
 use App\Ads\Platforms\Data\AdDraft;
 use App\Ads\Platforms\Data\Identity;
 use App\Ads\Platforms\Data\MediaRef;
@@ -223,3 +224,144 @@ it('fails the upload when Meta does not confirm finish', function () {
 
     app(MetaAdsWriter::class)->uploadMedia(writerAccount(), $file);
 })->throws(AdsApiException::class, 'did not confirm');
+
+function videoDraft(array $over = []): AdDraft
+{
+    $d = draft(new MediaRef('video', '5501', true));
+    $d->thumbnailUrl = null;
+    foreach ($over as $k => $v) {
+        $d->{$k} = $v;
+    }
+
+    return $d;
+}
+
+it('uses the preferred thumbnail Meta made for the video when the draft has none', function () {
+    Http::preventStrayRequests();
+    Http::fake([
+        'graph.facebook.com/v23.0/5501*' => Http::response(['picture' => 'https://fb.test/pic.jpg', 'thumbnails' => ['data' => [
+            ['uri' => 'https://fb.test/t1.jpg', 'is_preferred' => false], ['uri' => 'https://fb.test/t2.jpg', 'is_preferred' => true],
+        ]]]),
+        'graph.facebook.com/v23.0/act_9/adcreatives' => Http::response(['id' => 'cr1']),
+        'graph.facebook.com/v23.0/act_9/ads' => Http::response(['id' => '7701']),
+    ]);
+
+    app(MetaAdsWriter::class)->createPausedAd(writerAccount(), videoDraft());
+
+    $creative = Http::recorded()->map(fn ($p) => $p[0])->first(fn (Request $r) => str_contains($r->url(), '/adcreatives'));
+    expect(json_decode($creative->data()['object_story_spec'], true)['video_data']['image_url'])->toBe('https://fb.test/t2.jpg');
+});
+
+it('falls back to the local poster uploaded as an image hash when Meta has no picture', function () {
+    Http::preventStrayRequests();
+    Storage::fake('local');
+    Storage::disk('local')->put('thumbs/p.jpg', 'JPEGDATA');
+    Http::fake([
+        'graph.facebook.com/v23.0/5501*' => Http::response(['id' => '5501']),
+        'graph.facebook.com/v23.0/act_9/adimages' => Http::response(['images' => ['poster.jpg' => ['hash' => 'h_poster']]]),
+        'graph.facebook.com/v23.0/act_9/adcreatives' => Http::response(['id' => 'cr1']),
+        'graph.facebook.com/v23.0/act_9/ads' => Http::response(['id' => '7701']),
+    ]);
+
+    app(MetaAdsWriter::class)->createPausedAd(writerAccount(), videoDraft(['posterDisk' => 'local', 'posterPath' => 'thumbs/p.jpg']));
+
+    $creative = Http::recorded()->map(fn ($p) => $p[0])->first(fn (Request $r) => str_contains($r->url(), '/adcreatives'));
+    $video = json_decode($creative->data()['object_story_spec'], true)['video_data'];
+    expect($video['image_hash'])->toBe('h_poster')->and($video)->not->toHaveKey('image_url');
+});
+
+it('rejects before the ad request when no thumbnail exists: CreativeRejected, no creative or ad call, no stamp', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/v23.0/5501*' => Http::response(['id' => '5501'])]);
+    $stamped = false;
+
+    try {
+        app(MetaAdsWriter::class)->createPausedAd(writerAccount(), videoDraft(['beforeAdRequest' => function () use (&$stamped) {
+            $stamped = true;
+        }]));
+        $this->fail('expected CreativeRejected');
+    } catch (CreativeRejected $e) {
+        expect($e->getMessage())->toContain('thumbnail');
+    }
+    expect($stamped)->toBeFalse();
+    Http::assertNotSent(fn (Request $r) => str_contains($r->url(), '/adcreatives') || str_contains($r->url(), '/ads'));
+});
+
+it('marks a creative failure as CreativeRejected and an ad failure as a plain error after the stamp', function () {
+    Http::preventStrayRequests();
+    Http::fake([
+        'graph.facebook.com/v23.0/act_9/adcreatives' => Http::sequence()
+            ->push(['error' => ['message' => 'Invalid parameter', 'code' => 100]], 400)
+            ->push(['id' => 'cr1']),
+        'graph.facebook.com/v23.0/act_9/ads' => Http::response(['error' => ['message' => 'Server error', 'code' => 2]], 500),
+    ]);
+    $stamps = 0;
+    $d = draft(new MediaRef('image', 'hash9', true));
+    $d->beforeAdRequest = function () use (&$stamps) {
+        $stamps++;
+    };
+    $acc = writerAccount();
+
+    expect(fn () => app(MetaAdsWriter::class)->createPausedAd($acc, $d))->toThrow(CreativeRejected::class, 'Invalid parameter');
+    expect($stamps)->toBe(0);
+
+    try {
+        app(MetaAdsWriter::class)->createPausedAd($acc, $d);
+        $this->fail('expected AdsApiException');
+    } catch (AdsApiException $e) {
+        expect($e)->not->toBeInstanceOf(CreativeRejected::class);
+    }
+    expect($stamps)->toBe(1);
+});
+
+it('never throws after a successful write with high usage, and backs off the next write before sending', function () {
+    Http::preventStrayRequests();
+    $usage = json_encode(['123' => [['type' => 'ads_management', 'call_count' => 92, 'total_time' => 10, 'total_cputime' => 5, 'estimated_time_to_regain_access' => 0]]]);
+    Http::fake(['graph.facebook.com/v23.0/7701' => Http::response(['success' => true], 200, ['x-business-use-case-usage' => $usage])]);
+    $w = app(MetaAdsWriter::class);
+    $acc = writerAccount();
+
+    $w->setStatus($acc, 'ad', '7701', 'paused'); // Meta paused it: no exception
+
+    expect(fn () => $w->setStatus($acc, 'ad', '7701', 'active'))->toThrow(RateLimited::class);
+    expect(Http::recorded())->toHaveCount(1);
+});
+
+it('keeps uploading chunks when a transfer reports high usage, and returns the created ad id', function () {
+    Http::preventStrayRequests();
+    Storage::fake('local');
+    Storage::disk('local')->put('m/v.mp4', '0123456789');
+    $file = new AdMaterialFile(['disk' => 'local', 'path' => 'm/v.mp4', 'mime' => 'video/mp4', 'size' => 10]);
+    $usage = ['x-business-use-case-usage' => json_encode(['1' => [['call_count' => 99]]])];
+    Http::fake(['graph.facebook.com/v23.0/act_9/advideos' => Http::sequence()
+        ->push(['upload_session_id' => 'sess', 'video_id' => '5501', 'start_offset' => '0', 'end_offset' => '6'])
+        ->push(['start_offset' => '6', 'end_offset' => '10'], 200, $usage)
+        ->push(['start_offset' => '10', 'end_offset' => '10'], 200, $usage)
+        ->push(['success' => true], 200, $usage)]);
+
+    $acc = writerAccount();
+    $ref = app(MetaAdsWriter::class)->uploadMedia($acc, $file);
+    expect($ref->id)->toBe('5501');
+
+    // Another token is not backed off; the ad create itself returns its id although usage is high.
+    Http::fake([
+        'graph.facebook.com/v23.0/act_9/adcreatives' => Http::response(['id' => 'cr1']),
+        'graph.facebook.com/v23.0/act_9/ads' => Http::response(['id' => '7701'], 200, $usage),
+    ]);
+    $acc->connection->update(['credentials' => ['access_token' => 'tok2']]);
+    expect(app(MetaAdsWriter::class)->createPausedAd($acc->refresh(), draft(new MediaRef('image', 'h', true))))->toBe('7701');
+});
+
+it('still throws RateLimited on a read answered with high usage', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*' => Http::response(['data' => []], 200, ['x-business-use-case-usage' => json_encode(['1' => [['call_count' => 95]]])])]);
+
+    app(MetaAdsWriter::class)->liveCampaigns(writerAccount());
+})->throws(RateLimited::class);
+
+it('throws a readable error when Meta failed to process the video', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/v23.0/5501*' => Http::response(['status' => ['video_status' => 'error', 'processing_phase' => ['status' => 'error', 'errors' => [['code' => 1363008, 'message' => 'Video format not supported']]]]])]);
+
+    app(MetaAdsWriter::class)->mediaReady(writerAccount(), new MediaRef('video', '5501', false));
+})->throws(AdsApiException::class, 'Video format not supported');

@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Spec 1.3: the same range seen three ways.
- * - store: every Shopify/CRM order placed in range and not cancelled (store-wide, ignores the account/buyer filters);
+ * - store: every Shopify/CRM order placed in range and not cancelled or failed (store-wide, ignores the account/buyer filters);
  * - crm: the ad-attributed real orders (AdsQuery::orders), plus how many of them were chat orders;
  * - platform: what the ad platforms report in ad_daily_metrics.
  * A gap `x_vs_y` is x − y; its percentage is relative to y.

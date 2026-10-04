@@ -4,13 +4,16 @@ namespace App\Ads\Platforms\Meta;
 
 use App\Ads\Platforms\AdPlatformWriter;
 use App\Ads\Platforms\AdsApiException;
+use App\Ads\Platforms\CreativeRejected;
 use App\Ads\Platforms\Data\AdDraft;
 use App\Ads\Platforms\Data\CampaignNode;
 use App\Ads\Platforms\Data\Identity;
 use App\Ads\Platforms\Data\MediaRef;
+use App\Ads\Platforms\RateLimited;
 use App\Models\AdAccount;
 use App\Models\AdMaterialFile;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class MetaAdsWriter implements AdPlatformWriter
 {
@@ -53,25 +56,76 @@ class MetaAdsWriter implements AdPlatformWriter
 
     public function uploadMedia(AdAccount $a, AdMaterialFile $file): MediaRef
     {
+        $this->api->backOffIfBusy($this->token($a));
+
         return str_starts_with((string) $file->mime, 'video/')
             ? $this->uploadVideo($a, $file)
             : $this->uploadImage($a, $file);
     }
 
+    /** @throws AdsApiException when Meta reports the video as failed (readable; the caller re-uploads next time) */
     public function mediaReady(AdAccount $a, MediaRef $ref): bool
     {
         if ($ref->kind !== 'video') {
             return true;
         }
         $res = $this->api->get($this->token($a), $this->numericId($ref->id), ['fields' => 'status']);
+        $status = $res['status']['video_status'] ?? null;
+        if ($status === 'error') {
+            $why = '';
+            foreach (['processing_phase', 'uploading_phase', 'publishing_phase'] as $phase) {
+                $why = trim((string) ($res['status'][$phase]['errors'][0]['message'] ?? ''));
+                if ($why !== '') {
+                    break;
+                }
+            }
 
-        return ($res['status']['video_status'] ?? null) === 'ready';
+            throw new AdsApiException('Meta could not process the video'.($why !== '' ? ': '.$why : '.').' Upload it again or use another file.');
+        }
+
+        return $status === 'ready';
     }
 
     public function createPausedAd(AdAccount $a, AdDraft $draft): string
     {
+        // Everything up to the creative happens BEFORE the ad request: a failure here cannot leave an ad behind.
+        try {
+            $token = $this->token($a);
+            $act = $this->actId($a);
+            $this->api->backOffIfBusy($token);
+            $creativeId = $this->createCreative($a, $token, $act, $draft);
+        } catch (AdsApiException $e) {
+            throw CreativeRejected::from($e);
+        }
+
+        $draft->adRequestSending();
+        $ad = $this->api->post($token, $act.'/ads', [
+            'name' => $draft->name,
+            'adset_id' => $draft->adSetId,
+            'creative' => json_encode(['creative_id' => $creativeId]),
+            'status' => 'PAUSED',
+        ]);
+        if (empty($ad['id'])) {
+            throw new AdsApiException('Meta did not return an ad id.');
+        }
+
+        return (string) $ad['id'];
+    }
+
+    public function setStatus(AdAccount $a, string $level, string $externalId, string $status): void
+    {
+        if (! in_array($level, ['campaign', 'adset', 'ad'], true)) {
+            throw new AdsApiException('Unknown ad level: '.$level);
+        }
+        $externalId = $this->numericId($externalId);
         $token = $this->token($a);
-        $act = $this->actId($a);
+        $this->api->backOffIfBusy($token);
+        $this->api->post($token, $externalId, ['status' => strtolower($status) === 'active' ? 'ACTIVE' : 'PAUSED']);
+    }
+
+    /** @return string the creative id */
+    private function createCreative(AdAccount $a, string $token, string $act, AdDraft $draft): string
+    {
         $cta = ['type' => $draft->cta, 'value' => ['link' => $draft->link]];
         $spec = ['page_id' => $draft->identity->pageId];
         if ($draft->identity->instagramId) {
@@ -79,16 +133,13 @@ class MetaAdsWriter implements AdPlatformWriter
         }
 
         if ($draft->media->kind === 'video') {
-            $video = [
+            // Meta refuses video_data without a thumbnail (image_url or image_hash).
+            $spec['video_data'] = [
                 'video_id' => $draft->media->id,
                 'message' => $draft->primaryText,
                 'title' => $draft->headline,
                 'call_to_action' => $cta,
-            ];
-            if ($draft->thumbnailUrl) {
-                $video['image_url'] = $draft->thumbnailUrl;
-            }
-            $spec['video_data'] = $video;
+            ] + $this->videoThumbnail($token, $act, $draft);
         } else {
             $spec['link_data'] = [
                 'image_hash' => $draft->media->id,
@@ -108,26 +159,49 @@ class MetaAdsWriter implements AdPlatformWriter
             throw new AdsApiException('Meta did not return a creative id.');
         }
 
-        $ad = $this->api->post($token, $act.'/ads', [
-            'name' => $draft->name,
-            'adset_id' => $draft->adSetId,
-            'creative' => json_encode(['creative_id' => (string) $creative['id']]),
-            'status' => 'PAUSED',
-        ]);
-        if (empty($ad['id'])) {
-            throw new AdsApiException('Meta did not return an ad id.');
-        }
-
-        return (string) $ad['id'];
+        return (string) $creative['id'];
     }
 
-    public function setStatus(AdAccount $a, string $level, string $externalId, string $status): void
+    /**
+     * The draft's thumbnail URL, else the picture Meta made for the (ready) video, else the local poster uploaded to
+     * /adimages and passed as image_hash.
+     *
+     * @return array{image_url: string}|array{image_hash: string}
+     */
+    private function videoThumbnail(string $token, string $act, AdDraft $draft): array
     {
-        if (! in_array($level, ['campaign', 'adset', 'ad'], true)) {
-            throw new AdsApiException('Unknown ad level: '.$level);
+        if ($draft->thumbnailUrl) {
+            return ['image_url' => $draft->thumbnailUrl];
         }
-        $externalId = $this->numericId($externalId);
-        $this->api->post($this->token($a), $externalId, ['status' => strtolower($status) === 'active' ? 'ACTIVE' : 'PAUSED']);
+
+        try {
+            $res = $this->api->get($token, $this->numericId($draft->media->id), ['fields' => 'picture,thumbnails{uri,is_preferred}']);
+            $thumbs = array_values(array_filter((array) ($res['thumbnails']['data'] ?? []), fn ($t) => is_array($t) && ! empty($t['uri'])));
+            usort($thumbs, fn ($x, $y) => (int) ! empty($y['is_preferred']) <=> (int) ! empty($x['is_preferred']));
+            if ($thumbs !== []) {
+                return ['image_url' => (string) $thumbs[0]['uri']];
+            }
+            if (! empty($res['picture'])) {
+                return ['image_url' => (string) $res['picture']];
+            }
+        } catch (RateLimited $e) {
+            throw $e;
+        } catch (AdsApiException) {
+            // fall back to the local poster
+        }
+
+        if ($draft->posterDisk && $draft->posterPath) {
+            try {
+                $contents = Storage::disk($draft->posterDisk)->get($draft->posterPath);
+            } catch (Throwable) {
+                $contents = null;
+            }
+            if (is_string($contents) && $contents !== '') {
+                return ['image_hash' => $this->uploadImageBytes($token, $act, $contents, 'poster.jpg')];
+            }
+        }
+
+        throw new AdsApiException('Meta has no thumbnail for this video yet and there is no poster image; try again in a few minutes.');
     }
 
     private function uploadVideo(AdAccount $a, AdMaterialFile $file): MediaRef
@@ -200,8 +274,14 @@ class MetaAdsWriter implements AdPlatformWriter
         if ($contents === null) {
             throw new AdsApiException('The image file cannot be read.');
         }
-        $name = $file->original_name ?: 'image.jpg';
-        $res = $this->api->postMultipart($this->token($a), $this->actId($a).'/adimages', [], 'filename', $contents, $name);
+
+        return new MediaRef('image', $this->uploadImageBytes($this->token($a), $this->actId($a), $contents, $file->original_name ?: 'image.jpg'), true);
+    }
+
+    /** @return string the image hash */
+    private function uploadImageBytes(string $token, string $act, string $contents, string $name): string
+    {
+        $res = $this->api->postMultipart($token, $act.'/adimages', [], 'filename', $contents, $name);
         $hash = null;
         foreach ((array) ($res['images'] ?? []) as $img) {
             $hash = $img['hash'] ?? null;
@@ -211,7 +291,7 @@ class MetaAdsWriter implements AdPlatformWriter
             throw new AdsApiException('Meta did not return an image hash.');
         }
 
-        return new MediaRef('image', (string) $hash, true);
+        return (string) $hash;
     }
 
     /** Ids go into URL paths, so only digits are accepted. */

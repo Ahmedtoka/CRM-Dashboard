@@ -2980,7 +2980,7 @@ const en: Messages = {
             title: 'Ad revenue: store, CRM and platform',
             hint: 'The same range from three angles. Gaps are normal; the real-orders figure is the closest to cash.',
             store: 'Store (Shopify)',
-            store_tip: 'Every store order placed in the range that is not cancelled, from any source, not only ads.',
+            store_tip: 'Every store order placed in the range that is not cancelled or failed, from any source, not only ads.',
             store_hidden: 'Store totals: admins only',
             crm: 'CRM (ad orders)',
             crm_tip: 'Orders attributed to an ad, excluding cancelled, failed and courier-returned, net of refunds.',

@@ -8,9 +8,17 @@ use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
-/** Thin Graph API client: URL building, paging, error mapping, quota guard. Never sleeps. */
+/**
+ * Thin Graph API client: URL building, paging, error mapping, quota guard. Never sleeps.
+ *
+ * Quota guard: a READ answered 2xx with usage above the limit throws RateLimited. A WRITE answered 2xx already changed
+ * the platform (an ad paused, a chunk accepted, an ad created), so it never throws: the high usage is logged and
+ * remembered per token, and the writer's next operation backs off before sending (backOffIfBusy).
+ */
 class MetaAdsApi
 {
     private const HOST = 'https://graph.facebook.com';
@@ -45,11 +53,11 @@ class MetaAdsApi
             ->get($this->url($path), $query));
     }
 
-    /** POST form fields. @return array<string, mixed> */
+    /** POST form fields (a write: never throws after a 2xx). @return array<string, mixed> */
     public function post(string $token, string $path, array $data = []): array
     {
         return $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)
-            ->asForm()->post($this->url($path), $data));
+            ->asForm()->post($this->url($path), $data), $token);
     }
 
     /**
@@ -60,7 +68,19 @@ class MetaAdsApi
     public function postMultipart(string $token, string $path, array $fields, string $fileField, string $contents, string $filename): array
     {
         return $this->handle(fn () => Http::withToken($token)->timeout(300)->connectTimeout(15)
-            ->attach($fileField, $contents, $filename)->post($this->url($path), $fields));
+            ->attach($fileField, $contents, $filename)->post($this->url($path), $fields), $token);
+    }
+
+    /**
+     * Throws RateLimited (nothing sent) while a recent write reported usage above the limit for this token.
+     * Writers call it at the START of an operation, never between the steps of one.
+     */
+    public function backOffIfBusy(string $token): void
+    {
+        $busy = Cache::get($this->busyKey($token));
+        if ($busy !== null) {
+            throw new RateLimited('Meta usage was at '.(int) $busy.'% after the last change; retry later.');
+        }
     }
 
     /**
@@ -146,8 +166,11 @@ class MetaAdsApi
         return $out;
     }
 
-    /** @param  callable(): Response  $send */
-    private function handle(callable $send): array
+    /**
+     * @param  callable(): Response  $send
+     * @param  string|null  $writeToken  set for a write: a 2xx is then never turned into an exception
+     */
+    private function handle(callable $send, ?string $writeToken = null): array
     {
         try {
             $response = $send();
@@ -170,7 +193,11 @@ class MetaAdsApi
             throw new AdsApiException($this->scrub($message));
         }
 
-        $this->guardUsage($response);
+        if ($writeToken === null) {
+            $this->guardUsage($response);
+        } else {
+            $this->noteWriteUsage($response, $writeToken);
+        }
 
         return $response->json() ?? [];
     }
@@ -190,22 +217,49 @@ class MetaAdsApi
 
     private function guardUsage(Response $response): void
     {
+        $high = $this->highUsage($response);
+        if ($high !== null) {
+            throw new RateLimited('Meta usage is at '.$high['pct'].'% ('.$high['metric'].'); retry later.');
+        }
+    }
+
+    /** The write succeeded: log the level and make the next write operation wait, but never fail this one. */
+    private function noteWriteUsage(Response $response, string $token): void
+    {
+        $high = $this->highUsage($response);
+        if ($high === null) {
+            return;
+        }
+        Log::warning('Meta usage high after a successful write', ['metric' => $high['metric'], 'pct' => $high['pct'], 'regain_minutes' => $high['minutes']]);
+        Cache::put($this->busyKey($token), $high['pct'], now()->addMinutes(max(5, min(60, $high['minutes']))));
+    }
+
+    /** @return array{metric: string, pct: int, minutes: int}|null the first metric above the limit */
+    private function highUsage(Response $response): ?array
+    {
         $header = $response->header('x-business-use-case-usage');
         if ($header === '') {
-            return;
+            return null;
         }
         $decoded = json_decode($header, true);
         if (! is_array($decoded)) {
-            return;
+            return null;
         }
         foreach ($decoded as $entries) {
             foreach ((array) $entries as $entry) {
                 foreach (['call_count', 'total_time', 'total_cputime'] as $metric) {
                     if ((float) ($entry[$metric] ?? 0) > self::USAGE_LIMIT) {
-                        throw new RateLimited('Meta usage is at '.(int) $entry[$metric].'% ('.$metric.'); retry later.');
+                        return ['metric' => $metric, 'pct' => (int) $entry[$metric], 'minutes' => (int) ($entry['estimated_time_to_regain_access'] ?? 0)];
                     }
                 }
             }
         }
+
+        return null;
+    }
+
+    private function busyKey(string $token): string
+    {
+        return 'ads-meta-busy:'.hash('sha256', $token);
     }
 }

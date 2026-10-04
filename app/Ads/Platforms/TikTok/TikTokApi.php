@@ -3,6 +3,7 @@
 namespace App\Ads\Platforms\TikTok;
 
 use App\Ads\Platforms\AdsApiException;
+use App\Ads\Platforms\MissingPermission;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
 use Illuminate\Http\Client\ConnectionException;
@@ -22,6 +23,9 @@ class TikTokApi
 
     /** TikTok codes that mean "slow down". */
     private const RATE_CODES = [40100];
+
+    /** TikTok codes for a missing permission or authorization scope (40001 no permission, 40002 scope not granted). */
+    private const PERMISSION_CODES = [40001, 40002];
 
     /** GET one call, envelope checked. @return array<string, mixed> the envelope data */
     public function get(string $token, string $path, array $query = []): array
@@ -92,7 +96,11 @@ class TikTokApi
         }
         if ((int) $code !== 0) {
             $message = SecretScrubber::scrub((string) ($response->json('message') ?: 'TikTok API error (code '.$code.')'), [$token]);
-            throw in_array((int) $code, self::RATE_CODES, true) ? new RateLimited($message) : new AdsApiException($message);
+            if (in_array((int) $code, self::RATE_CODES, true)) {
+                throw new RateLimited($message);
+            }
+            // The platform's own text, no claim about which permission: TikTok reuses these codes for scope problems.
+            throw in_array((int) $code, self::PERMISSION_CODES, true) ? new MissingPermission($message) : new AdsApiException($message);
         }
 
         return $response->json('data') ?? [];

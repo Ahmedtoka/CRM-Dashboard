@@ -4,6 +4,7 @@ use App\Ads\Control\Jobs\PublishAd;
 use App\Ads\Control\PublicationLinker;
 use App\Ads\Control\PublishService;
 use App\Ads\Platforms\AdsApiException;
+use App\Ads\Platforms\CreativeRejected;
 use App\Ads\Platforms\Data\AdDraft;
 use App\Ads\Platforms\Data\MediaRef;
 use App\Ads\Platforms\DriverFactory;
@@ -18,6 +19,7 @@ use App\Models\AdAccount;
 use App\Models\AdAccountAssignment;
 use App\Models\AdMaterial;
 use App\Models\AdMaterialFile;
+use App\Models\AdPlatformConnection;
 use App\Models\AdPublication;
 use App\Models\BotSetting;
 use App\Models\MediaBuyer;
@@ -306,7 +308,7 @@ it('decodes a queued PublishAd in the queue inspector', function () {
 
 it('never creates the ad again when a previous attempt stopped while creating', function () {
     [$row] = pubOne();
-    $row->update(['status' => 'creating']);
+    $row->update(['status' => 'creating', 'ad_requested_at' => now()]);
     $double = new class extends FakeAdsDriver
     {
         public static int $creates = 0;
@@ -333,6 +335,7 @@ it('warns that the ad may already exist when the create call fails', function ()
     {
         public function createPausedAd(AdAccount $a, AdDraft $draft): string
         {
+            $draft->adRequestSending();
             throw new AdsApiException('timeout');
         }
     };
@@ -390,6 +393,7 @@ it('treats a rate limit at the create step as a possible duplicate: error with t
         public function createPausedAd(AdAccount $a, AdDraft $draft): string
         {
             self::$creates++;
+            $draft->adRequestSending();
             throw new RateLimited('usage high');
         }
     };
@@ -405,9 +409,181 @@ it('treats a rate limit at the create step as a possible duplicate: error with t
 
 it('adds the may-exist hint when an unexpected error leaves a row in creating', function () {
     [$row] = pubOne();
-    $row->update(['status' => 'creating']);
+    $row->update(['status' => 'creating', 'ad_requested_at' => now()]);
 
     (new PublishAd($row->id))->failed(new RuntimeException('boom'));
 
     expect($row->fresh()->status)->toBe('error')->and($row->fresh()->error)->toContain('boom')->and($row->fresh()->error)->toContain(__('ads.publish.create_may_exist'));
+});
+
+it('ends a row stopped in creating without the warning when the ad request was never sent', function () {
+    [$row] = pubOne();
+    $row->update(['status' => 'creating', 'ad_requested_at' => null]);
+
+    pubRun($row);
+
+    expect($row->fresh()->status)->toBe('error')->and($row->fresh()->error)->toBe(__('ads.publish.stopped_before_ad'))
+        ->and(Cache::get('ads-fake-writer')['n'] ?? 0)->toBe(0);
+});
+
+it('does not add the may-exist hint on a crash in creating before the ad request', function () {
+    [$row] = pubOne();
+    $row->update(['status' => 'creating', 'ad_requested_at' => null]);
+
+    (new PublishAd($row->id))->failed(new RuntimeException('boom'));
+
+    expect($row->fresh()->error)->toBe('boom');
+});
+
+it('records a creative-step failure without the may-exist warning and stamps no ad request', function () {
+    [$row] = pubOne();
+    $double = new class extends FakeAdsDriver
+    {
+        public function createPausedAd(AdAccount $a, AdDraft $draft): string
+        {
+            throw CreativeRejected::from(new AdsApiException('Invalid thumbnail'));
+        }
+    };
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+
+    pubRun($row);
+
+    $row->refresh();
+    expect($row->status)->toBe('error')->and($row->error)->toBe('Invalid thumbnail')->and($row->ad_requested_at)->toBeNull();
+});
+
+it('stamps ad_requested_at right before the ad request and keeps the warning on a failure after it', function () {
+    [$row] = pubOne();
+    $double = new class extends FakeAdsDriver
+    {
+        public function createPausedAd(AdAccount $a, AdDraft $draft): string
+        {
+            $draft->adRequestSending();
+            throw new AdsApiException('Meta is unreachable');
+        }
+    };
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+
+    pubRun($row);
+
+    $row->refresh();
+    expect($row->ad_requested_at)->not->toBeNull()->and($row->error)->toContain(__('ads.publish.create_may_exist'));
+});
+
+it('retries a rate limit before the ad request: back to processing, released for 15 minutes, then created once', function () {
+    [$row] = pubOne();
+    $double = new class extends FakeAdsDriver
+    {
+        public static int $calls = 0;
+
+        public function createPausedAd(AdAccount $a, AdDraft $draft): string
+        {
+            if (self::$calls++ === 0) {
+                throw CreativeRejected::from(new RateLimited('usage high'));
+            }
+
+            return parent::createPausedAd($a, $draft);
+        }
+    };
+    $double::$calls = 0;
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+
+    $job = (new PublishAd($row->id))->withFakeQueueInteractions();
+    $job->handle(app(DriverFactory::class));
+
+    $job->assertReleased(900);
+    expect($row->fresh()->status)->toBe('processing')->and($row->fresh()->error)->toBeNull();
+
+    $retry = (new PublishAd($row->id))->withFakeQueueInteractions();
+    $retry->handle(app(DriverFactory::class));
+
+    expect($row->fresh()->status)->toBe('done')->and(Cache::get('ads-fake-writer')['n'])->toBe(1);
+});
+
+it('passes the local poster of a video to the writer', function () {
+    [$row, , , $files] = pubOne();
+    $files[0]->update(['thumb_path' => 'ad-materials/thumbs/p.jpg', 'disk' => 'local']);
+    $double = new class extends FakeAdsDriver
+    {
+        public static ?AdDraft $draft = null;
+
+        public function createPausedAd(AdAccount $a, AdDraft $draft): string
+        {
+            self::$draft = $draft;
+
+            return parent::createPausedAd($a, $draft);
+        }
+    };
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+
+    pubRun($row);
+
+    expect($double::$draft->posterDisk)->toBe('local')->and($double::$draft->posterPath)->toBe('ad-materials/thumbs/p.jpg');
+});
+
+it('releases for a minute while another worker holds the upload lock, keeping the row uploading', function () {
+    config(['crm.ads.publish_upload_wait' => 1]);
+    [$row, $acc] = pubOne();
+    $held = Cache::lock("ads-media:{$row->ad_material_file_id}:{$acc->id}", 900);
+    expect($held->get())->toBeTrue();
+
+    $job = (new PublishAd($row->id))->withFakeQueueInteractions();
+    $job->handle(app(DriverFactory::class));
+
+    $job->assertReleased(60);
+    expect($row->fresh()->status)->toBe('uploading')->and($row->fresh()->error)->toBeNull();
+    $held->release();
+});
+
+it('drops a cached media ref the platform reports as failed so the next publish re-uploads', function () {
+    [$row, $acc, , $files] = pubOne();
+    $other = (string) ($acc->id + 1000);
+    $files[0]->update(['platform_media' => [(string) $acc->id => ['kind' => 'video', 'id' => 'v_old'], $other => ['kind' => 'video', 'id' => 'v_x']]]);
+    $double = new class extends FakeAdsDriver
+    {
+        public function mediaReady(AdAccount $a, MediaRef $ref): bool
+        {
+            throw new AdsApiException('Meta could not process the video.');
+        }
+    };
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+
+    pubRun($row);
+
+    expect($row->fresh()->status)->toBe('error')->and($row->fresh()->error)->toContain('could not process')
+        ->and($files[0]->fresh()->platform_media)->toBe([$other => ['kind' => 'video', 'id' => 'v_x']]);
+});
+
+it('refuses at run time when the account was switched off or its connection disabled, without a platform call', function () {
+    [$row, $acc] = pubOne();
+    $acc->update(['is_active' => false]);
+    pubRun($row);
+    expect($row->fresh()->status)->toBe('error')->and($row->fresh()->error)->toBe(__('ads.publish.account_inactive'));
+
+    [$row2, $acc2] = pubOne();
+    AdPlatformConnection::whereKey($acc2->connection_id)->update(['status' => 'disabled']);
+    pubRun($row2);
+    expect($row2->fresh()->error)->toBe(__('ads.publish.account_inactive'))
+        ->and(Cache::get('ads-fake-writer')['media'] ?? 0)->toBe(0)->and(Cache::get('ads-fake-writer')['n'] ?? 0)->toBe(0);
+});
+
+it('keeps the publication when its material, file or account is deleted', function () {
+    [$row, $acc, $material, $files] = pubOne();
+    pubRun($row);
+
+    $files[0]->delete();
+    expect($row->fresh())->not->toBeNull()->and($row->fresh()->ad_material_file_id)->toBeNull();
+    $material->delete();
+    expect($row->fresh()->ad_material_id)->toBeNull();
+    $acc->delete();
+    expect($row->fresh()->ad_account_id)->toBeNull()->and($row->fresh()->ad_name)->not->toBe('')->and($row->fresh()->status)->toBe('done');
+});
+
+it('ends a queued row whose file was deleted with a readable error', function () {
+    [$row, , , $files] = pubOne();
+    $files[0]->delete();
+
+    pubRun($row);
+
+    expect($row->fresh()->status)->toBe('error')->and($row->fresh()->error)->toBe(__('ads.publish.file_gone'));
 });

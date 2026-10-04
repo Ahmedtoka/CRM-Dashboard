@@ -23,12 +23,12 @@ class AdPublication extends Model
     protected $fillable = [
         'ad_material_id', 'ad_material_file_id', 'ad_account_id', 'platform', 'campaign_external_id', 'campaign_name', 'adset_external_id', 'adset_name',
         'identity', 'caption_index', 'headline', 'primary_text', 'cta', 'ad_name', 'link', 'url_tags', 'status', 'external_ad_id', 'error', 'attempts',
-        'linked_at', 'created_by_id',
+        'linked_at', 'ad_requested_at', 'created_by_id',
     ];
 
     protected function casts(): array
     {
-        return ['identity' => 'array', 'caption_index' => 'integer', 'attempts' => 'integer', 'linked_at' => 'datetime'];
+        return ['identity' => 'array', 'caption_index' => 'integer', 'attempts' => 'integer', 'linked_at' => 'datetime', 'ad_requested_at' => 'datetime'];
     }
 
     public function material(): BelongsTo

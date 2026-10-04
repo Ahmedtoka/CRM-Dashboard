@@ -12,9 +12,10 @@ return new class extends Migration
         if (! Schema::hasTable('ad_publications')) {
             Schema::create('ad_publications', function (Blueprint $table) {
                 $table->id();
-                $table->foreignId('ad_material_id')->constrained('ad_materials')->cascadeOnDelete();
-                $table->foreignId('ad_material_file_id')->constrained('ad_material_files')->cascadeOnDelete();
-                $table->foreignId('ad_account_id')->constrained('ad_accounts');
+                // The record outlives its material, file and account (ad_name and link stay for the history).
+                $table->foreignId('ad_material_id')->nullable()->constrained('ad_materials')->nullOnDelete();
+                $table->foreignId('ad_material_file_id')->nullable()->constrained('ad_material_files')->nullOnDelete();
+                $table->foreignId('ad_account_id')->nullable()->constrained('ad_accounts')->nullOnDelete();
                 $table->string('platform', 20);
                 $table->string('campaign_external_id');
                 $table->string('campaign_name', 500)->nullable();
@@ -32,6 +33,8 @@ return new class extends Migration
                 $table->string('external_ad_id')->nullable();
                 $table->text('error')->nullable();
                 $table->unsignedSmallInteger('attempts')->default(0);
+                // Set right before the ad-create request is sent: only then can a failure leave an ad on the platform.
+                $table->timestamp('ad_requested_at')->nullable();
                 $table->timestamp('linked_at')->nullable();
                 $table->foreignId('created_by_id')->nullable()->constrained('users')->nullOnDelete();
                 $table->timestamps();

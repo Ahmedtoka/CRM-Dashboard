@@ -278,8 +278,9 @@ const breadcrumbs = computed(() => [
                                     :name="title(r.node)"
                                     :status="r.node.status"
                                     :parent-paused="r.node.parent_paused"
+                                    :disabled="r.node.can_write !== true"
                                 />
-                                <p v-if="r.node.parent_paused" class="mt-0.5 text-2xs text-muted-foreground">{{ t('ads.actions.parent_paused') }}</p>
+                                <p v-if="r.node.parent_paused && r.node.can_write && r.node.platform !== 'google'" class="mt-0.5 text-2xs text-muted-foreground">{{ t('ads.actions.parent_paused') }}</p>
                             </td>
                         </tr>
                     </tbody>

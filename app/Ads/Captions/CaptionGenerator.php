@@ -19,6 +19,9 @@ class CaptionGenerator implements GeneratesCaptions
     use CallsClaudeJson;
     use StoresCaptions;
 
+    /** Three Arabic captions with up to 400-char primary texts need room; 1500 could cut the JSON off. */
+    public const MAX_TOKENS = 3000;
+
     public const SYSTEM_PROMPT = <<<'TXT'
 You are an Egyptian Arabic copywriter for Le Voile, a brand of modest women's fashion (abayas, dresses, hijab wear).
 Write exactly three Facebook and Instagram ad captions for the video shown in the frames and the product data given.
@@ -59,7 +62,7 @@ TXT;
         $model = $this->model();
         try {
             $result = $this->claudeJson(
-                (string) $key, $model, (int) config('crm.ads.captions.timeout', 60), 1500, self::SYSTEM_PROMPT,
+                (string) $key, $model, (int) config('crm.ads.captions.timeout', 60), self::MAX_TOKENS, self::SYSTEM_PROMPT,
                 [['role' => 'user', 'content' => $content]], $this->schema(),
             );
         } catch (RequestException|ConnectionException $e) {

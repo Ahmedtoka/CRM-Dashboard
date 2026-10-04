@@ -402,6 +402,8 @@ return [
         'tax_rate' => (float) env('CRM_ADS_TAX_RATE', 0.14),
         'backfill_days' => 90,
         'material_max_mb' => ['video' => 500, 'image' => 20],
+        // Seconds a publish waits for another worker's upload of the same file before it is released and retried.
+        'publish_upload_wait' => 60,
         // AI captions: model defaults to the bot's reply model (settings, then crm.anthropic.reply_model) when blank.
         'captions' => ['model' => env('CRM_ADS_CAPTIONS_MODEL'), 'frames' => 4, 'timeout' => 60],
     ],

@@ -139,7 +139,7 @@ it('sends image blocks and product data to Claude and maps the answer', function
         $text = collect($content)->firstWhere('type', 'text')['text'];
 
         return $request->hasHeader('x-api-key', 'test-key')
-            && $body['model'] === 'claude-test'
+            && $body['model'] === 'claude-test' && $body['max_tokens'] === 3000
             && ($image['source']['media_type'] ?? null) === 'image/jpeg' && $image['source']['data'] === 'QUJD'
             && str_contains($text, 'Silk abaya') && str_contains($text, '1200') && str_contains($text, '1500');
     });
@@ -258,4 +258,14 @@ it('returns no frames when ffmpeg or the local file is missing', function () {
     [, $f] = capSetup();
     config(['crm.media.ffmpeg_path' => '/nonexistent/ffmpeg']);
     expect((new FrameExtractor)->frames($f))->toBe([]);
+});
+
+it('limits caption generation to 10 requests a minute per user', function () {
+    [$m, $f] = capSetup();
+    $user = User::factory()->create(['role' => UserRole::Content]);
+
+    foreach (range(1, 10) as $i) {
+        $this->actingAs($user)->postJson("/ads/materials/{$m->id}/captions", ['file_id' => $f->id])->assertOk();
+    }
+    $this->actingAs($user)->postJson("/ads/materials/{$m->id}/captions", ['file_id' => $f->id])->assertStatus(429);
 });

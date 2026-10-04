@@ -340,3 +340,31 @@ it('flags ads whose campaign or ad set is paused on the creatives and campaign p
     $this->actingAs($admin)->get('/ads/campaigns')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->where('tree', fn ($tree) => collect($tree)->flatMap(fn ($c) => $c['children'])->flatMap(fn ($s) => $s['children'])->firstWhere('id', $ad->id)['parent_paused'] === true));
 });
+
+it('marks each campaign node and creative row with can_write for its account', function () {
+    $on = AdAccount::factory()->meta()->create(['name' => 'On']);
+    $off = AdAccount::factory()->meta()->create(['name' => 'Off', 'is_active' => false]);
+    foreach ([$on, $off] as $acc) {
+        $ad = Ad::factory()->for($acc, 'account')->create(['name' => 'Ad '.$acc->name]);
+        actDay($ad, CarbonImmutable::now(AdsFilter::TIMEZONE)->subDay()->toDateString(), ['spend' => 100]);
+    }
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+
+    $page = $this->actingAs($admin)->get('/ads/creatives?status=all')->assertOk();
+    $rows = collect($page->viewData('page')['props']['result']['data'])->keyBy('account');
+    expect($rows['On']['can_write'])->toBeTrue()->and($rows['Off']['can_write'])->toBeFalse();
+
+    $tree = collect($this->actingAs($admin)->get('/ads/campaigns')->assertOk()->viewData('page')['props']['tree']);
+    $flat = [];
+    $walk = function (array $nodes) use (&$walk, &$flat) {
+        foreach ($nodes as $n) {
+            $flat[] = [$n['account'], $n['can_write']];
+            $walk($n['children']);
+        }
+    };
+    $walk($tree->all());
+    expect($flat)->not->toBeEmpty();
+    foreach ($flat as [$account, $can]) {
+        expect($can)->toBe($account === 'On');
+    }
+});

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Http;
 
 it('round-trips on the fake writer: campaigns, upload, paused ad, status', function () {
     Http::preventStrayRequests();
+    config(['crm.ads.drivers.meta' => 'fake']); // explicit: never depend on the environment default
     Cache::forget('ads-fake-writer');
     $acc = AdAccount::factory()->meta()->create(['external_id' => FakeAdsDriver::META_MAIN]);
     $writer = app(DriverFactory::class)->writer(AdPlatform::Meta);

@@ -2,10 +2,12 @@
 
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdsApiException;
+use App\Ads\Platforms\CreativeRejected;
 use App\Ads\Platforms\Data\AdDraft;
 use App\Ads\Platforms\Data\Identity;
 use App\Ads\Platforms\Data\MediaRef;
 use App\Ads\Platforms\DriverFactory;
+use App\Ads\Platforms\MissingPermission;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\TikTok\TikTokAdsWriter;
 use App\Models\AdAccount;
@@ -26,7 +28,7 @@ function ttWriterAccount(): AdAccount
 
 function ttDraft(MediaRef $media): AdDraft
 {
-    return new AdDraft('9001', 'M5 | Reel | C1', new Identity('id77', 'Le Voile', 'CUSTOMIZED_USER'), $media, 'primary text', 'headline', 'SHOP_NOW', 'https://shop.test/p', 'utm_source=tiktok&utm_medium=paid&utm_campaign=__CAMPAIGN_NAME__&utm_content=__CID__');
+    return new AdDraft('9001', 'M5 | Reel | C1', new Identity('id77', 'Le Voile', 'CUSTOMIZED_USER'), $media, 'primary text', 'headline', 'SHOP_NOW', 'https://shop.test/p', 'utm_source=tiktok&utm_medium=paid&utm_campaign=__CAMPAIGN_NAME__&utm_content=__CID__', $media->kind === 'video' ? 'https://cdn.test/cover.jpg' : null);
 }
 
 it('maps campaigns and their ad groups to CampaignNode', function () {
@@ -105,7 +107,7 @@ it('checks video readiness through file/video/ad/info', function () {
 
 it('creates the ad with operation_status DISABLE and the UTM in the landing page url', function () {
     Http::preventStrayRequests();
-    Http::fake([TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6601']]]), TTW.'ad/status/update/' => Http::response(['code' => 0, 'data' => []])]);
+    Http::fake([TTW.'file/image/ad/upload/' => Http::response(['code' => 0, 'data' => ['image_id' => 'cover_1']]), TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6601']]]), TTW.'ad/status/update/' => Http::response(['code' => 0, 'data' => []])]);
 
     $id = app(TikTokAdsWriter::class)->createPausedAd(ttWriterAccount(), ttDraft(new MediaRef('video', 'v_123', true)));
 
@@ -116,7 +118,7 @@ it('creates the ad with operation_status DISABLE and the UTM in the landing page
 
         return str_contains($r->url(), 'ad/create/') && $r->hasHeader('Access-Token', 'tt-secret') && $d['operation_status'] === 'DISABLE' && $d['advertiser_id'] === '7001' && $d['adgroup_id'] === '9001'
             && $c['ad_name'] === 'M5 | Reel | C1' && $c['identity_id'] === 'id77' && $c['identity_type'] === 'CUSTOMIZED_USER'
-            && $c['video_id'] === 'v_123' && $c['ad_text'] === 'primary text' && $c['call_to_action'] === 'SHOP_NOW'
+            && $c['video_id'] === 'v_123' && $c['image_ids'] === ['cover_1'] && $c['ad_format'] === 'SINGLE_VIDEO' && $c['ad_text'] === 'primary text' && $c['call_to_action'] === 'SHOP_NOW'
             && $c['landing_page_url'] === 'https://shop.test/p?utm_source=tiktok&utm_medium=paid&utm_campaign=__CAMPAIGN_NAME__&utm_content=__CID__';
     });
 });
@@ -136,7 +138,7 @@ it('uses image_ids for an image ad and appends utm with & when the link has a qu
 
 it('fails when TikTok returns no ad id', function () {
     Http::preventStrayRequests();
-    Http::fake([TTW.'ad/create/' => Http::response(['code' => 0, 'data' => []])]);
+    Http::fake([TTW.'file/image/ad/upload/' => Http::response(['code' => 0, 'data' => ['image_id' => 'cover_1']]), TTW.'ad/create/' => Http::response(['code' => 0, 'data' => []])]);
 
     app(TikTokAdsWriter::class)->createPausedAd(ttWriterAccount(), ttDraft(new MediaRef('video', 'v', true)));
 })->throws(AdsApiException::class, 'ad id');
@@ -196,6 +198,7 @@ it('returns the TikTok writer from the factory in live mode and the fake otherwi
 it('forces DISABLE after create: create then ad/status/update for the new id, and the creative carries DISABLE too', function () {
     Http::preventStrayRequests();
     Http::fake([
+        TTW.'file/image/ad/upload/' => Http::response(['code' => 0, 'data' => ['image_id' => 'cover_1']]),
         TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6601']]]),
         TTW.'ad/status/update/' => Http::response(['code' => 0, 'data' => []]),
     ]);
@@ -203,16 +206,19 @@ it('forces DISABLE after create: create then ad/status/update for the new id, an
     app(TikTokAdsWriter::class)->createPausedAd(ttWriterAccount(), ttDraft(new MediaRef('video', 'v_123', true)));
 
     $sent = Http::recorded()->map(fn ($p) => $p[0])->values();
-    expect($sent)->toHaveCount(2)
-        ->and($sent[0]->url())->toContain('ad/create/')
-        ->and($sent[0]->data()['creatives'][0]['operation_status'])->toBe('DISABLE')
-        ->and($sent[1]->url())->toContain('ad/status/update/')
-        ->and($sent[1]->data())->toBe(['advertiser_id' => '7001', 'ad_ids' => ['6601'], 'operation_status' => 'DISABLE']);
+    expect($sent)->toHaveCount(3)
+        ->and($sent[0]->url())->toContain('file/image/ad/upload/')
+        ->and($sent[0]->data())->toMatchArray(['advertiser_id' => '7001', 'upload_type' => 'UPLOAD_BY_URL', 'image_url' => 'https://cdn.test/cover.jpg'])
+        ->and($sent[1]->url())->toContain('ad/create/')
+        ->and($sent[1]->data()['creatives'][0]['operation_status'])->toBe('DISABLE')
+        ->and($sent[2]->url())->toContain('ad/status/update/')
+        ->and($sent[2]->data())->toBe(['advertiser_id' => '7001', 'ad_ids' => ['6601'], 'operation_status' => 'DISABLE']);
 });
 
 it('throws with the created ad id when the DISABLE confirmation fails', function () {
     Http::preventStrayRequests();
     Http::fake([
+        TTW.'file/image/ad/upload/' => Http::response(['code' => 0, 'data' => ['image_id' => 'cover_1']]),
         TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6601']]]),
         TTW.'ad/status/update/' => Http::response(['code' => 40002, 'message' => 'Boom']),
     ]);
@@ -243,3 +249,87 @@ it('inserts the utm query before a url fragment', function () {
     expect(Http::recorded()->first()[0]->data()['creatives'][0]['landing_page_url'])
         ->toBe('https://shop.test/p?utm_source=tiktok&utm_medium=paid&utm_campaign=__CAMPAIGN_NAME__&utm_content=__CID__#reviews');
 });
+
+it('uploads the local poster as the cover of a video ad when there is no thumbnail url', function () {
+    Http::preventStrayRequests();
+    Storage::fake('local');
+    Storage::disk('local')->put('thumbs/p.jpg', 'JPEGDATA');
+    Http::fake([
+        TTW.'file/image/ad/upload/' => Http::response(['code' => 0, 'data' => ['image_id' => 'cover_p']]),
+        TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6601']]]),
+        TTW.'ad/status/update/' => Http::response(['code' => 0, 'data' => []]),
+    ]);
+    $draft = ttDraft(new MediaRef('video', 'v_123', true));
+    $draft->thumbnailUrl = null;
+    $draft->posterDisk = 'local';
+    $draft->posterPath = 'thumbs/p.jpg';
+
+    app(TikTokAdsWriter::class)->createPausedAd(ttWriterAccount(), $draft);
+
+    $sent = Http::recorded()->map(fn ($p) => $p[0])->values();
+    expect($sent[0]->url())->toContain('file/image/ad/upload/')
+        ->and($sent[0]->body())->toContain('UPLOAD_BY_FILE')->toContain(md5('JPEGDATA'))->toContain('image_file')
+        ->and($sent[1]->data()['creatives'][0]['image_ids'])->toBe(['cover_p']);
+});
+
+it('uses the cover TikTok made for the video when there is no thumbnail url and no poster', function () {
+    Http::preventStrayRequests();
+    Http::fake([
+        TTW.'file/video/ad/info/*' => Http::response(['code' => 0, 'data' => ['list' => [['video_id' => 'v_123', 'video_cover_url' => 'https://tt.test/cover.jpg']]]]),
+        TTW.'file/image/ad/upload/' => Http::response(['code' => 0, 'data' => ['image_id' => 'cover_tt']]),
+        TTW.'ad/create/' => Http::response(['code' => 0, 'data' => ['ad_ids' => ['6601']]]),
+        TTW.'ad/status/update/' => Http::response(['code' => 0, 'data' => []]),
+    ]);
+    $draft = ttDraft(new MediaRef('video', 'v_123', true));
+    $draft->thumbnailUrl = null;
+
+    app(TikTokAdsWriter::class)->createPausedAd(ttWriterAccount(), $draft);
+
+    Http::assertSent(fn (Request $r) => str_contains($r->url(), 'file/image/ad/upload/') && ($r->data()['image_url'] ?? null) === 'https://tt.test/cover.jpg');
+    Http::assertSent(fn (Request $r) => str_contains($r->url(), 'ad/create/') && $r->data()['creatives'][0]['image_ids'] === ['cover_tt']);
+});
+
+it('rejects a video ad without any cover before ad/create and never stamps the ad request', function () {
+    Http::preventStrayRequests();
+    Http::fake([TTW.'file/video/ad/info/*' => Http::response(['code' => 0, 'data' => ['list' => []]])]);
+    $draft = ttDraft(new MediaRef('video', 'v_123', true));
+    $draft->thumbnailUrl = null;
+    $stamped = false;
+    $draft->beforeAdRequest = function () use (&$stamped) {
+        $stamped = true;
+    };
+
+    expect(fn () => app(TikTokAdsWriter::class)->createPausedAd(ttWriterAccount(), $draft))->toThrow(CreativeRejected::class, 'cover');
+    expect($stamped)->toBeFalse();
+    Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'ad/create/'));
+});
+
+it('stamps the ad request right before ad/create', function () {
+    Http::preventStrayRequests();
+    Http::fake([TTW.'ad/create/' => Http::response(['code' => 50000, 'message' => 'Internal error'])]);
+    $draft = ttDraft(new MediaRef('image', 'img_9', true));
+    $stamped = false;
+    $draft->beforeAdRequest = function () use (&$stamped) {
+        $stamped = true;
+    };
+
+    try {
+        app(TikTokAdsWriter::class)->createPausedAd(ttWriterAccount(), $draft);
+        $this->fail('expected AdsApiException');
+    } catch (AdsApiException $e) {
+        expect($e)->not->toBeInstanceOf(CreativeRejected::class);
+    }
+    expect($stamped)->toBeTrue();
+});
+
+it('maps TikTok permission codes to MissingPermission with the platform text', function (int $code) {
+    Http::preventStrayRequests();
+    Http::fake([TTW.'ad/status/update/' => Http::response(['code' => $code, 'message' => 'No permission to operate this advertiser'])]);
+
+    try {
+        app(TikTokAdsWriter::class)->setStatus(ttWriterAccount(), 'ad', '4401', 'paused');
+        $this->fail('expected MissingPermission');
+    } catch (MissingPermission $e) {
+        expect($e->getMessage())->toBe('No permission to operate this advertiser');
+    }
+})->with([40001, 40002]);

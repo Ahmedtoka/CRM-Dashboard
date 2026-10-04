@@ -61,6 +61,11 @@ return [
         'queued' => 'Queued. The ads will be created paused.',
         'stopped_creating' => 'The last try stopped while creating this ad. Check Ads Manager for ":name" before publishing again.',
         'create_may_exist' => 'It may already exist on the platform: check Ads Manager first.',
+        'stopped_before_ad' => 'The last try stopped before the ad was sent to the platform, so nothing was created. Publish it again.',
+        'upload_busy' => 'Another upload of this file is still running. Try again in a minute.',
+        'account_inactive' => 'This ad account is turned off or its connection is disabled, so nothing was sent to the platform.',
+        'account_gone' => 'The ad account was removed before the ad was published.',
+        'file_gone' => 'The file was deleted before the ad was published.',
     ],
     'captions' => [
         'no_key' => 'AI captions are not set up: the ANTHROPIC_API_KEY is missing on the server.',

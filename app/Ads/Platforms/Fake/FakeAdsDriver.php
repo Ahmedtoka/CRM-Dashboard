@@ -153,6 +153,7 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
 
     public function createPausedAd(AdAccount $a, AdDraft $draft): string
     {
+        $draft->adRequestSending();
         $state = $this->writerState();
         $id = 'fake_ad_'.++$state['n'];
         $state['ads'][$id] = [

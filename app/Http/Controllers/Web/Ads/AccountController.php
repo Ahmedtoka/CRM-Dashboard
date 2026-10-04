@@ -12,8 +12,10 @@ use App\Ads\Sync\SyncAdAccount;
 use App\Http\Controllers\Controller;
 use App\Models\AdAccount;
 use App\Models\AdAccountAssignment;
+use App\Models\AdAction;
 use App\Models\AdDailyMetric;
 use App\Models\AdPlatformConnection;
+use App\Models\AdPublication;
 use App\Models\AdsSyncRun;
 use App\Models\MediaBuyer;
 use Carbon\CarbonImmutable;
@@ -207,7 +209,10 @@ class AccountController extends Controller
      */
     public function destroy(AdPlatformConnection $connection): RedirectResponse
     {
-        $hasHistory = AdDailyMetric::query()->whereIn('ad_account_id', $connection->accounts()->select('id'))->exists();
+        // Spend, published ads and Stop/Run audit rows are history: the connection is archived, never deleted.
+        $hasHistory = AdDailyMetric::query()->whereIn('ad_account_id', $connection->accounts()->select('id'))->exists()
+            || AdPublication::query()->whereIn('ad_account_id', $connection->accounts()->select('id'))->exists()
+            || AdAction::query()->whereIn('ad_account_id', $connection->accounts()->select('id'))->exists();
 
         if ($hasHistory) {
             DB::transaction(function () use ($connection) {

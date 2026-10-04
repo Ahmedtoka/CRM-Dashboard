@@ -66,7 +66,8 @@ Route::middleware('ads:materials')->group(function () {
     Route::get('/ads/publish/options', [PublishController::class, 'options'])->name('ads.publish.options');
     Route::post('/ads/materials/{material}/publish', [PublishController::class, 'publish'])->name('ads.materials.publish');
     Route::get('/ads/materials/{material}/captions', [CaptionController::class, 'index'])->name('ads.materials.captions');
-    Route::post('/ads/materials/{material}/captions', [CaptionController::class, 'generate'])->name('ads.materials.captions.generate');
+    // Each call is a paid AI request: at most 10 a minute per user.
+    Route::post('/ads/materials/{material}/captions', [CaptionController::class, 'generate'])->middleware('throttle:10,1')->name('ads.materials.captions.generate');
     Route::put('/ads/captions/{caption}', [CaptionController::class, 'update'])->name('ads.captions.update');
     Route::get('/ads/materials/{material}/publications', [PublishController::class, 'index'])->name('ads.materials.publications');
 

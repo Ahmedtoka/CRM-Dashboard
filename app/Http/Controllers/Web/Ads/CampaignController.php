@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web\Ads;
 
 use App\Ads\Access\AdsScope;
+use App\Ads\Control\AdWriteService;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\CampaignTree;
 use App\Http\Controllers\Concerns\BuildsAdsPages;
@@ -17,7 +18,7 @@ class CampaignController extends Controller
     use BuildsAdsPages;
 
     /** Campaign → ad set → ad tree with roll-up metrics; scoped like every Ads report (buyers: their accounts and days). */
-    public function __invoke(Request $request, CampaignTree $tree): Response
+    public function __invoke(Request $request, CampaignTree $tree, AdWriteService $writes): Response
     {
         $filter = AdsFilter::fromRequest($request, $request->user());
         $sort = $this->oneOf($request->query('sort'), CampaignTree::SORTS, 'spend');
@@ -26,8 +27,38 @@ class CampaignController extends Controller
             'filters' => $this->filterProps($filter) + ['sort' => $sort, 'accounts' => $this->pickedAccounts($request, $filter)],
             'account_options' => $this->accountOptions($request, $filter),
             ...$this->commonProps($request->user(), $filter),
-            'tree' => $tree->build($filter, $sort),
+            'tree' => $this->withCanWrite($tree->build($filter, $sort), $request, $writes),
         ]);
+    }
+
+    /**
+     * Every node gets can_write (Stop / Run allowed on its account today), computed once for all accounts in the tree.
+     *
+     * @param  list<array<string, mixed>>  $nodes
+     * @return list<array<string, mixed>>
+     */
+    private function withCanWrite(array $nodes, Request $request, AdWriteService $writes): array
+    {
+        $ids = [];
+        $collect = function (array $list) use (&$collect, &$ids): void {
+            foreach ($list as $n) {
+                $ids[(int) $n['account_id']] = true;
+                $collect($n['children'] ?? []);
+            }
+        };
+        $collect($nodes);
+        $can = $ids === [] ? [] : $writes->canWriteMany($request->user(), AdAccount::query()->whereIn('id', array_keys($ids))->get(['id', 'is_active', 'platform']));
+
+        $apply = function (array $list) use (&$apply, $can): array {
+            return array_map(function (array $n) use (&$apply, $can) {
+                $n['can_write'] = $can[(int) $n['account_id']] ?? false;
+                $n['children'] = $apply($n['children'] ?? []);
+
+                return $n;
+            }, $list);
+        };
+
+        return $apply($nodes);
     }
 
     /** @return list<int> the account ids actually applied from `accounts[]` (already intersected with the user's scope) */

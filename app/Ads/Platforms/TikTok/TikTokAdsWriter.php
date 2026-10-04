@@ -4,6 +4,7 @@ namespace App\Ads\Platforms\TikTok;
 
 use App\Ads\Platforms\AdPlatformWriter;
 use App\Ads\Platforms\AdsApiException;
+use App\Ads\Platforms\CreativeRejected;
 use App\Ads\Platforms\Data\AdDraft;
 use App\Ads\Platforms\Data\CampaignNode;
 use App\Ads\Platforms\Data\Identity;
@@ -11,6 +12,7 @@ use App\Ads\Platforms\Data\MediaRef;
 use App\Models\AdAccount;
 use App\Models\AdMaterialFile;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 /**
  * TikTok Business API v1.3 write side. Ads are always created with operation_status=DISABLE (paused);
@@ -110,7 +112,7 @@ class TikTokAdsWriter implements AdPlatformWriter
                 'upload_type' => 'UPLOAD_BY_FILE',
                 $kind.'_signature' => $signature,
             ], $kind.'_file', $stream, $file->original_name ?: ($video ? 'video.mp4' : 'image.jpg'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             if (is_resource($stream)) {
                 fclose($stream);
             }
@@ -147,28 +149,39 @@ class TikTokAdsWriter implements AdPlatformWriter
 
     public function createPausedAd(AdAccount $a, AdDraft $draft): string
     {
-        if ($draft->identity->instagramId === null || $draft->identity->instagramId === '') {
-            throw new AdsApiException('TikTok identity type is missing.');
-        }
-        $creative = [
-            'ad_name' => $draft->name,
-            'identity_id' => $draft->identity->pageId,
-            'identity_type' => $draft->identity->instagramId,
-            'operation_status' => 'DISABLE',
-            'ad_format' => $draft->media->kind === 'video' ? 'SINGLE_VIDEO' : 'SINGLE_IMAGE',
-            'ad_text' => $draft->primaryText,
-            'call_to_action' => self::CTA[$draft->cta] ?? $draft->cta,
-            'landing_page_url' => $this->landingUrl($draft),
-        ];
-        if ($draft->media->kind === 'video') {
-            $creative['video_id'] = $draft->media->id;
-        } else {
-            $creative['image_ids'] = [$draft->media->id];
+        // Everything before ad/create (checks, the video cover) cannot leave an ad behind.
+        try {
+            if ($draft->identity->instagramId === null || $draft->identity->instagramId === '') {
+                throw new AdsApiException('TikTok identity type is missing.');
+            }
+            $token = $this->token($a);
+            $advertiser = $this->advertiserId($a);
+            $adGroup = $this->numericId($draft->adSetId);
+            $creative = [
+                'ad_name' => $draft->name,
+                'identity_id' => $draft->identity->pageId,
+                'identity_type' => $draft->identity->instagramId,
+                'operation_status' => 'DISABLE',
+                'ad_format' => $draft->media->kind === 'video' ? 'SINGLE_VIDEO' : 'SINGLE_IMAGE',
+                'ad_text' => $draft->primaryText,
+                'call_to_action' => self::CTA[$draft->cta] ?? $draft->cta,
+                'landing_page_url' => $this->landingUrl($draft),
+            ];
+            if ($draft->media->kind === 'video') {
+                $creative['video_id'] = $draft->media->id;
+                // A SINGLE_VIDEO ad needs a cover image.
+                $creative['image_ids'] = [$this->videoCover($token, $advertiser, $draft)];
+            } else {
+                $creative['image_ids'] = [$draft->media->id];
+            }
+        } catch (AdsApiException $e) {
+            throw CreativeRejected::from($e);
         }
 
-        $data = $this->api->post($this->token($a), 'ad/create/', [
-            'advertiser_id' => $this->advertiserId($a),
-            'adgroup_id' => $this->numericId($draft->adSetId),
+        $draft->adRequestSending();
+        $data = $this->api->post($token, 'ad/create/', [
+            'advertiser_id' => $advertiser,
+            'adgroup_id' => $adGroup,
             'operation_status' => 'DISABLE',
             'creatives' => [$creative],
         ]);
@@ -205,6 +218,78 @@ class TikTokAdsWriter implements AdPlatformWriter
             $key => [$this->numericId($externalId)],
             'operation_status' => strtolower($status) === 'active' ? 'ENABLE' : 'DISABLE',
         ]);
+    }
+
+    /**
+     * The cover image id for a video ad: the draft's thumbnail URL, else the local poster frame, else the cover TikTok
+     * made for the uploaded video, each uploaded through file/image/ad/upload/.
+     */
+    private function videoCover(string $token, string $advertiser, AdDraft $draft): string
+    {
+        if ($draft->thumbnailUrl) {
+            return $this->imageByUrl($token, $advertiser, $draft->thumbnailUrl);
+        }
+
+        if ($draft->posterDisk && $draft->posterPath) {
+            try {
+                $stream = Storage::disk($draft->posterDisk)->readStream($draft->posterPath);
+            } catch (Throwable) {
+                $stream = null;
+            }
+            if (is_resource($stream)) {
+                return $this->imageFromStream($token, $advertiser, $stream, 'poster.jpg');
+            }
+        }
+
+        $info = $this->api->get($token, 'file/video/ad/info/', ['advertiser_id' => $advertiser, 'video_ids' => json_encode([$draft->media->id])]);
+        foreach ($info['list'] ?? [] as $v) {
+            if ((string) ($v['video_id'] ?? '') === $draft->media->id && ! empty($v['video_cover_url'])) {
+                return $this->imageByUrl($token, $advertiser, (string) $v['video_cover_url']);
+            }
+        }
+
+        throw new AdsApiException('TikTok has no cover image for this video and there is no poster image.');
+    }
+
+    private function imageByUrl(string $token, string $advertiser, string $url): string
+    {
+        $data = $this->api->post($token, 'file/image/ad/upload/', ['advertiser_id' => $advertiser, 'upload_type' => 'UPLOAD_BY_URL', 'image_url' => $url]);
+
+        return $this->imageId($data);
+    }
+
+    /** @param  resource  $stream  closed here (or by the HTTP client once handed over) */
+    private function imageFromStream(string $token, string $advertiser, $stream, string $name): string
+    {
+        try {
+            $hash = hash_init('md5');
+            hash_update_stream($hash, $stream);
+            $signature = hash_final($hash);
+            if (rewind($stream) === false) {
+                throw new AdsApiException('The image file cannot be read.');
+            }
+            $data = $this->api->postMultipart($token, 'file/image/ad/upload/', [
+                'advertiser_id' => $advertiser, 'upload_type' => 'UPLOAD_BY_FILE', 'image_signature' => $signature,
+            ], 'image_file', $stream, $name);
+        } catch (Throwable $e) {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+            throw $e;
+        }
+
+        return $this->imageId($data);
+    }
+
+    private function imageId(array $data): string
+    {
+        $row = isset($data[0]) && is_array($data[0]) ? $data[0] : $data;
+        $id = $row['image_id'] ?? null;
+        if (! $id) {
+            throw new AdsApiException('TikTok did not return an image id.');
+        }
+
+        return (string) $id;
     }
 
     /** The draft's link with the UTM query appended (url_tags does not exist on TikTok). */
