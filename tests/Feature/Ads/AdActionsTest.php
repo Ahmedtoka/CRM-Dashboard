@@ -21,6 +21,7 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonPeriod;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -63,7 +64,7 @@ it('stops an ad: platform call, local status and the action row', function () {
 
     expect(Cache::get('ads-fake-writer')['statuses'])->toBe([['level' => 'ad', 'id' => $ad->external_id, 'status' => 'paused']]);
     $ad->refresh();
-    expect($ad->status)->toBe('PAUSED')->and($ad->effective_status)->toBe('PAUSED');
+    expect($ad->status)->toBe('PAUSED')->and($ad->effective_status)->toBe('ACTIVE'); // effective is left to the next sync
     $row = AdAction::first();
     expect($row->user_id)->toBe($admin->id)->and($row->platform)->toBe('meta')->and($row->ad_account_id)->toBe($acc->id)
         ->and($row->level)->toBe('ad')->and($row->name)->toBe('Tired ad')->and($row->from_status)->toBe('ACTIVE')
@@ -233,4 +234,105 @@ it('keeps google accounts safe: no writer, logged error', function () {
         ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))->assertStatus(422);
 
     expect(AdAction::first()->result)->toBe('error')->and($ad->refresh()->status)->toBe('ACTIVE');
+});
+
+it('keeps an error row when the writer throws something that is not a platform error', function () {
+    $acc = AdAccount::factory()->meta()->create(['name' => 'LV Main']);
+    $ad = Ad::factory()->for($acc, 'account')->create();
+    $double = Mockery::mock(FakeAdsDriver::class);
+    $double->shouldReceive('setStatus')->once()->andThrow(new RuntimeException('boom access_token=SECRET123'));
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+
+    $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))
+        ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))
+        ->assertStatus(422)->assertJsonPath('errors.status.0', __('ads.errors.failed'));
+
+    $row = AdAction::first();
+    expect($row->result)->toBe('error')->and($row->error)->not->toContain('SECRET123')->and($row->error)->toContain('boom')
+        ->and($row->account_name)->toBe('LV Main')->and($ad->refresh()->status)->toBe('ACTIVE');
+});
+
+it('keeps the ok row when the local status save fails after the platform call', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $ad = Ad::factory()->for($acc, 'account')->create();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    Event::listen('eloquent.saving: '.Ad::class, fn () => throw new RuntimeException('db down'));
+
+    try {
+        $this->actingAs($admin)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))->assertOk();
+    } finally {
+        Event::forget('eloquent.saving: '.Ad::class);
+    }
+
+    $row = AdAction::first();
+    expect(Cache::get('ads-fake-writer')['statuses'])->toHaveCount(1)
+        ->and($row->result)->toBe('ok')->and($row->error)->toContain('Local status not updated')
+        ->and($ad->refresh()->status)->toBe('ACTIVE');
+});
+
+it('never lets a moderator write, at the service level and without a platform call', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $ad = Ad::factory()->for($acc, 'account')->create();
+    $mod = User::factory()->create(['role' => UserRole::Moderator]);
+
+    expect(app(AdWriteService::class)->canWrite($mod, $acc))->toBeFalse();
+    expect(fn () => app(AdWriteService::class)->setStatus($mod, $acc, 'ad', $ad->external_id, 'paused', null))->toThrow(AuthorizationException::class);
+    expect(Cache::get('ads-fake-writer'))->toBeNull()->and(AdAction::count())->toBe(0);
+});
+
+it('uses the own status: Run on an ad whose own status is active is refused, effective status is ignored', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    // own ACTIVE, the parent folded it into CAMPAIGN_PAUSED: nothing to run
+    $ad = Ad::factory()->for($acc, 'account')->create(['status' => 'ACTIVE', 'effective_status' => 'CAMPAIGN_PAUSED']);
+
+    $this->actingAs($admin)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'active']))
+        ->assertStatus(422)->assertJsonPath('errors.status.0', __('ads.errors.already'));
+    expect(Cache::get('ads-fake-writer'))->toBeNull()->and(AdAction::count())->toBe(0);
+
+    // own PAUSED: Run works and changes only the own status
+    $paused = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED', 'effective_status' => 'PAUSED']);
+    $this->actingAs($admin)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $paused->external_id, 'status' => 'active']))->assertOk();
+    $paused->refresh();
+    expect($paused->status)->toBe('ACTIVE')->and($paused->effective_status)->toBe('PAUSED');
+});
+
+it('suggests ads by their own status, TikTok ENABLE included, and stops a TikTok ad', function () {
+    $tt = AdAccount::factory()->tiktok()->create(['name' => 'TT']);
+    $tiktok = Ad::factory()->for($tt, 'account')->create(['name' => 'TT loser', 'status' => 'ENABLE', 'effective_status' => null]);
+    $stopped = Ad::factory()->for($tt, 'account')->create(['name' => 'TT stopped', 'status' => 'DISABLE', 'effective_status' => 'ACTIVE']);
+    $folded = Ad::factory()->for($tt, 'account')->create(['name' => 'Own active parent paused', 'status' => 'ENABLE', 'effective_status' => 'CAMPAIGN_PAUSED']);
+    foreach (CarbonPeriod::create('2026-09-17', '2026-09-30') as $d) {
+        foreach ([$tiktok, $stopped, $folded] as $a) {
+            actDay($a, $d->toDateString(), ['spend' => 100, 'purchase_value' => 10, 'purchases' => 1]);
+        }
+    }
+
+    $out = collect(app(StopAdvisor::class)->suggest(new AdsFilter(CarbonImmutable::parse('2026-09-17'), CarbonImmutable::parse('2026-09-30'))));
+
+    expect($out->pluck('name')->sort()->values()->all())->toBe(['Own active parent paused', 'TT loser'])
+        ->and($out->firstWhere('name', 'TT loser')['platform'])->toBe('tiktok');
+
+    $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))
+        ->postJson('/ads/actions/status', actPost(['account_id' => $tt->id, 'external_id' => $tiktok->external_id]))->assertOk();
+    expect($tiktok->refresh()->status)->toBe('PAUSED')->and(AdAction::first()->from_status)->toBe('ENABLE');
+});
+
+it('flags ads whose campaign or ad set is paused on the creatives and campaign pages', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
+    $set = AdSet::factory()->for($camp, 'campaign')->create(['status' => 'ACTIVE']);
+    $ad = Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => $camp->id, 'ad_set_id' => $set->id, 'status' => 'ACTIVE', 'effective_status' => 'CAMPAIGN_PAUSED']);
+    $free = Ad::factory()->for($acc, 'account')->create(['status' => 'ACTIVE', 'effective_status' => 'ACTIVE']);
+    $day = CarbonImmutable::now(AdsFilter::TIMEZONE)->subDay()->toDateString();
+    actDay($ad, $day);
+    actDay($free, $day);
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+
+    $this->actingAs($admin)->get('/ads/creatives')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->where('result.data', fn ($rows) => collect($rows)->firstWhere('id', $ad->id)['parent_paused'] === true
+            && collect($rows)->firstWhere('id', $free->id)['parent_paused'] === false));
+
+    $this->actingAs($admin)->get('/ads/campaigns')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->where('tree', fn ($tree) => collect($tree)->flatMap(fn ($c) => $c['children'])->flatMap(fn ($s) => $s['children'])->firstWhere('id', $ad->id)['parent_paused'] === true));
 });

@@ -192,9 +192,9 @@ export function adAccountStatusLabel(status: string | null | undefined, t: (key:
 }
 
 const RUNNING_STATUSES = ['ACTIVE', 'ENABLE', 'STATUS_ENABLE', 'STATUS_DELIVERY_OK'];
-const PAUSED_STATUSES = ['PAUSED', 'DISABLE', 'STATUS_DISABLE', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED'];
+const PAUSED_STATUSES = ['PAUSED', 'DISABLE', 'STATUS_DISABLE'];
 
-/** What a Stop / Run button should do for a platform status: stop a running one, run a paused one, nothing for the rest. */
+/** What a Stop / Run button should do for an item's OWN status (never effective_status): stop a running one, run a paused one, nothing for the rest. */
 export function toggleTarget(status: string | null | undefined): 'paused' | 'active' | null {
     if (!status) return null;
     if (RUNNING_STATUSES.includes(status)) return 'paused';

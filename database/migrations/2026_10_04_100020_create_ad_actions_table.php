@@ -17,7 +17,8 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('platform', 20);
-            $table->foreignId('ad_account_id')->constrained('ad_accounts')->cascadeOnDelete();
+            $table->foreignId('ad_account_id')->nullable()->constrained('ad_accounts')->nullOnDelete();
+            $table->string('account_name')->nullable();
             $table->string('level', 10);
             $table->string('external_id');
             $table->string('name', 500)->nullable();

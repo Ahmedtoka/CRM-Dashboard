@@ -259,8 +259,10 @@ const breadcrumbs = computed(() => [
                                         level="ad"
                                         :external-id="ad.external_id"
                                         :name="ad.name"
-                                        :status="ad.effective_status"
+                                        :status="ad.status"
+                                        :parent-paused="ad.parent_paused"
                                     />
+                                    <p v-if="ad.parent_paused" class="mt-0.5 text-2xs text-muted-foreground">{{ t('ads.actions.parent_paused') }}</p>
                                 </div>
                             </td>
                             <td class="px-2 py-2 text-center">

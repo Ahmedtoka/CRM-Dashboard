@@ -7,6 +7,7 @@ use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Platforms\SecretScrubber;
 use App\Ads\Reports\AdsFilter;
 use App\Models\Ad;
 use App\Models\AdAccount;
@@ -17,10 +18,15 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * The single door for writes to an ad platform from the CRM (Stop / Run today): checks the user's scope, calls the
- * platform writer, mirrors the new status on the local row and logs every attempt in ad_actions.
+ * platform writer, logs every attempt in ad_actions (the platform call is audited before anything local is touched)
+ * and mirrors the new status on the local row.
+ *
+ * Status rule: an ad's OWN status decides Stop / Run, normalised across platforms (ACTIVE/ENABLE = active,
+ * PAUSED/DISABLE = paused); effective_status (which folds in the parents) is never used.
  */
 final class AdWriteService
 {
@@ -28,24 +34,42 @@ final class AdWriteService
 
     public const STATUSES = ['active', 'paused'];
 
+    /** Platform spellings of a running / paused own status (Meta ACTIVE/PAUSED, TikTok ENABLE/DISABLE). */
+    public const ACTIVE_STATUSES = ['ACTIVE', 'ENABLE'];
+
+    public const PAUSED_STATUSES = ['PAUSED', 'DISABLE'];
+
     public function __construct(private readonly DriverFactory $drivers, private readonly AdsScope $scope) {}
+
+    /** @return 'active'|'paused'|null null for anything else (archived, deleted, in review, unknown) */
+    public static function statusKind(?string $status): ?string
+    {
+        $s = strtoupper((string) $status);
+
+        return in_array($s, self::ACTIVE_STATUSES, true) ? 'active' : (in_array($s, self::PAUSED_STATUSES, true) ? 'paused' : null);
+    }
 
     /** Admin/supervisor: any active account; media buyer: only the accounts assigned to their buyer today; nobody else. */
     public function canWrite(User $u, AdAccount $a): bool
     {
-        if (! $a->is_active) {
-            return false;
-        }
-        if ($u->isSupervisorOrAbove()) {
-            return true;
-        }
-        if ($this->scope->buyerFor($u) === null) {
-            return false;
+        return $this->canWriteMany($u, [$a])[$a->id];
+    }
+
+    /**
+     * canWrite for many accounts with the buyer's assignments for today read once.
+     *
+     * @param  iterable<AdAccount>  $accounts
+     * @return array<int, bool> account id => allowed
+     */
+    public function canWriteMany(User $u, iterable $accounts): array
+    {
+        $today = $this->todayIds($u);
+        $out = [];
+        foreach ($accounts as $a) {
+            $out[$a->id] = (bool) $a->is_active && ($today === null || in_array($a->id, $today, true));
         }
 
-        $today = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay();
-
-        return in_array($a->id, $this->scope->accountIds($u, $today, $today) ?? [], true);
+        return $out;
     }
 
     /**
@@ -53,7 +77,7 @@ final class AdWriteService
      * @param  'active'|'paused'  $status
      *
      * @throws AuthorizationException outside the user's scope
-     * @throws ValidationException unknown target, or the platform refused (the message is readable)
+     * @throws ValidationException unknown target, nothing to change, or the platform refused (the message is readable)
      */
     public function setStatus(User $u, AdAccount $a, string $level, string $externalId, string $status, ?string $reason): AdAction
     {
@@ -68,27 +92,59 @@ final class AdWriteService
         if ($row === null) {
             throw ValidationException::withMessages(['status' => __('ads.errors.not_found')]);
         }
+        if (self::statusKind($row->status) === $status) {
+            throw ValidationException::withMessages(['status' => __('ads.errors.already')]);
+        }
 
         $to = strtoupper($status);
         $log = [
-            'user_id' => $u->id, 'platform' => $a->platform, 'ad_account_id' => $a->id, 'level' => $level, 'external_id' => $externalId,
+            'user_id' => $u->id, 'platform' => $a->platform, 'ad_account_id' => $a->id, 'account_name' => $a->name, 'level' => $level, 'external_id' => $externalId,
             'name' => mb_substr((string) $row->name, 0, 500),
-            'from_status' => $level === 'ad' ? ($row->effective_status ?? $row->status) : $row->status,
+            'from_status' => $row->status,
             'to_status' => $to, 'reason' => $reason !== null && trim($reason) !== '' ? trim($reason) : null,
         ];
 
         try {
             $this->drivers->writer(AdPlatform::from($a->platform))->setStatus($a, $level, $externalId, $status);
-        } catch (AdsApiException $e) {
-            $message = $e instanceof RateLimited ? __('ads.errors.rate_limited') : $e->getMessage();
-            AdAction::create($log + ['result' => AdAction::ERROR, 'error' => $message]);
+        } catch (Throwable $e) {
+            $known = $e instanceof AdsApiException;
+            $raw = SecretScrubber::scrub($e->getMessage());
+            AdAction::create($log + ['result' => AdAction::ERROR, 'error' => $raw !== '' ? $raw : $e::class]);
+            if (! $known) {
+                report($e);
+            }
 
-            throw ValidationException::withMessages(['status' => $message !== '' ? $message : __('ads.errors.failed')]);
+            $message = $e instanceof RateLimited ? __('ads.errors.rate_limited') : ($known && $raw !== '' ? $raw : __('ads.errors.failed'));
+
+            throw ValidationException::withMessages(['status' => $message]);
         }
 
-        $row->forceFill($level === 'ad' ? ['status' => $to, 'effective_status' => $to] : ['status' => $to])->save();
+        // The platform changed: audit first, so a local failure below can never erase it.
+        $action = AdAction::create($log + ['result' => AdAction::OK]);
 
-        return AdAction::create($log + ['result' => AdAction::OK]);
+        try {
+            $row->forceFill(['status' => $to])->save(); // effective_status stays for the next sync
+        } catch (Throwable $e) {
+            report($e);
+            $action->update(['error' => mb_substr('Local status not updated: '.SecretScrubber::scrub($e->getMessage()), 0, 1000)]);
+        }
+
+        return $action;
+    }
+
+    /** @return list<int>|null null = every account */
+    private function todayIds(User $u): ?array
+    {
+        if ($u->isSupervisorOrAbove()) {
+            return null;
+        }
+        if ($this->scope->buyerFor($u) === null) {
+            return [];
+        }
+
+        $today = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay();
+
+        return $this->scope->accountIds($u, $today, $today) ?? [];
     }
 
     private function find(AdAccount $a, string $level, string $externalId): Ad|AdSet|AdCampaign|null

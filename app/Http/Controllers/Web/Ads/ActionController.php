@@ -33,10 +33,10 @@ class ActionController extends Controller
         $filter = AdsFilter::fromRequest($request, $user);
         $filter = $filter->with(['from' => $filter->to->subDays(self::SUGGEST_DAYS - 1)]);
 
-        $accounts = AdAccount::query()->get(['id', 'is_active', 'platform'])->keyBy('id');
-        $suggestions = array_map(fn (array $s) => $s + [
-            'can_write' => ($a = $accounts->get($s['account_id'])) !== null && $writer->canWrite($user, $a),
-        ], $advisor->suggest($filter));
+        $found = $advisor->suggest($filter);
+        $accounts = AdAccount::query()->whereIn('id', array_unique(array_column($found, 'account_id')))->get(['id', 'is_active', 'platform']);
+        $can = $writer->canWriteMany($user, $accounts);
+        $suggestions = array_map(fn (array $s) => $s + ['can_write' => $can[$s['account_id']] ?? false], $found);
 
         $allowed = app(AdsScope::class)->accountIds($user);
         $log = AdAction::query()->with(['user:id,name', 'account:id,name'])
@@ -44,7 +44,7 @@ class ActionController extends Controller
             ->orderByDesc('id')->limit(self::LOG_LIMIT)->get()
             ->map(fn (AdAction $a) => [
                 'id' => $a->id, 'at' => $a->created_at?->toIso8601String(), 'user' => $a->user?->name,
-                'platform' => $a->platform, 'account' => (string) ($a->account?->name ?? ''), 'level' => $a->level,
+                'platform' => $a->platform, 'account' => (string) ($a->account?->name ?? $a->account_name ?? ''), 'level' => $a->level,
                 'name' => (string) $a->name, 'from_status' => $a->from_status, 'to_status' => $a->to_status,
                 'reason' => $a->reason, 'result' => $a->result, 'error' => $a->error,
             ])->all();

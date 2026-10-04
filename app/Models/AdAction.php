@@ -12,7 +12,7 @@ class AdAction extends Model
 
     public const ERROR = 'error';
 
-    protected $fillable = ['user_id', 'platform', 'ad_account_id', 'level', 'external_id', 'name', 'from_status', 'to_status', 'reason', 'result', 'error'];
+    protected $fillable = ['user_id', 'platform', 'ad_account_id', 'account_name', 'level', 'external_id', 'name', 'from_status', 'to_status', 'reason', 'result', 'error'];
 
     public function user(): BelongsTo
     {

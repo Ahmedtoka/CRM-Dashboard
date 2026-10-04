@@ -25,12 +25,14 @@ const props = withDefaults(
         status: string | null;
         /** Written reason to start the dialog with (a stop suggestion's reasons). */
         reason?: string;
+        /** The campaign or ad set above is paused: the dialog says so (the ad's own status is what Stop / Run changes). */
+        parentPaused?: boolean;
         /** Server said the user may not act on this account: the button is not shown. */
         disabled?: boolean;
         /** Skip reloading the page props after a success (the caller handles it). */
         noReload?: boolean;
     }>(),
-    { reason: '', disabled: false, noReload: false },
+    { reason: '', parentPaused: false, disabled: false, noReload: false },
 );
 const emit = defineEmits<{ done: [status: 'paused' | 'active'] }>();
 
@@ -120,6 +122,7 @@ const btn =
                 <dt class="text-muted-foreground">{{ t('ads.actions.name') }}</dt>
                 <dd class="break-words font-medium" dir="auto">{{ name }}</dd>
             </dl>
+            <p v-if="parentPaused" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{{ t('ads.actions.parent_paused') }}</p>
             <label class="block space-y-1 text-xs">
                 <span class="font-medium">{{ t('ads.actions.reason') }}</span>
                 <textarea

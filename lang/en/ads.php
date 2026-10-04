@@ -27,6 +27,7 @@ return [
         'bad_request' => 'This request is not valid.',
         'not_found' => 'This campaign, ad set or ad is not in the CRM yet. Sync the account and try again.',
         'rate_limited' => 'The platform is limiting requests right now. Try again in a few minutes.',
+        'already' => 'It is already in that state. Sync the account if this looks wrong.',
         'failed' => 'The platform did not accept the change.',
     ],
     'credentials' => [

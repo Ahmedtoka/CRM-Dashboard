@@ -2,6 +2,7 @@
 
 namespace App\Ads\Reports;
 
+use App\Ads\Control\AdWriteService;
 use App\Ads\Naming;
 use App\Models\Ad;
 use App\Models\AdAccount;
@@ -75,7 +76,8 @@ final class CampaignTree
                         'level' => 'ad', 'placeholder' => false, 'id' => $adId, 'ad_id' => $adId, 'external_id' => (string) $ad->external_id,
                         'account_id' => (int) $ad->ad_account_id, 'account' => (string) ($adAccount?->name ?? ''),
                         'platform' => (string) ($adAccount?->platform ?? ''),
-                        'name' => (string) $ad->name, 'status' => $ad->effective_status ?? $ad->status, 'objective' => null,
+                        'name' => (string) $ad->name, 'status' => $ad->status, 'objective' => null,
+                        'parent_paused' => AdWriteService::statusKind($adSets->get($setId)?->status) === 'paused' || AdWriteService::statusKind($campaign?->status) === 'paused',
                         'naming_ok' => true,
                         'metrics' => $this->metrics($s, $count),
                         'trend' => $trends[$adId]['trend'] ?? null,
@@ -110,7 +112,7 @@ final class CampaignTree
         return [
             'level' => $level, 'placeholder' => $model === null, 'id' => (int) ($model?->id ?? 0), 'external_id' => (string) ($model?->external_id ?? ''),
             'account_id' => $accountId, 'account' => (string) ($account?->name ?? ''), 'platform' => (string) ($account?->platform ?? ''),
-            'name' => (string) ($model?->name ?? ''), 'status' => $model?->status, 'objective' => $objective,
+            'name' => (string) ($model?->name ?? ''), 'status' => $model?->status, 'objective' => $objective, 'parent_paused' => false,
             'naming_ok' => $namingOk,
             'metrics' => $this->metrics($raw, $real),
             'children' => $children,

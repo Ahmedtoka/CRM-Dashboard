@@ -237,6 +237,8 @@ export interface CreativeRow {
     type: string | null;
     status: string | null;
     effective_status: string | null;
+    /** The campaign or ad set above the ad is paused (the ad's own status can still be active). */
+    parent_paused: boolean;
     thumbnail_url: string | null;
     image_url: string | null;
     video_url: string | null;
@@ -313,6 +315,8 @@ export interface CampaignNode {
     status: string | null;
     objective: string | null;
     naming_ok: boolean;
+    /** Ad nodes: the campaign or ad set above is paused. */
+    parent_paused: boolean;
     metrics: CampaignMetrics;
     trend?: AdTrend | null;
     children: CampaignNode[];

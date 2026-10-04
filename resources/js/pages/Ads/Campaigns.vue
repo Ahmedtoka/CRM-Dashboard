@@ -277,7 +277,9 @@ const breadcrumbs = computed(() => [
                                     :external-id="r.node.external_id"
                                     :name="title(r.node)"
                                     :status="r.node.status"
+                                    :parent-paused="r.node.parent_paused"
                                 />
+                                <p v-if="r.node.parent_paused" class="mt-0.5 text-2xs text-muted-foreground">{{ t('ads.actions.parent_paused') }}</p>
                             </td>
                         </tr>
                     </tbody>

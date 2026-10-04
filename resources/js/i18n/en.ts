@@ -3174,6 +3174,7 @@ const en: Messages = {
             stopped: 'Stopped',
             resumed: 'Running again',
             failed: 'The change did not go through',
+            parent_paused: 'The campaign or ad set is paused',
             no_permission: 'You cannot change ads on this account',
             col_time: 'When',
             col_user: 'Who',

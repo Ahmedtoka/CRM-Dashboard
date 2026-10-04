@@ -2,6 +2,7 @@
 
 namespace App\Ads\Reports;
 
+use App\Ads\Control\AdWriteService;
 use App\Models\Ad;
 use App\Models\MediaBuyer;
 use Carbon\CarbonImmutable;
@@ -48,7 +49,7 @@ final class RunningCreatives
         $lastPage = max(1, (int) ceil($total / $perPage));
         $page = min(max(1, (int) ($opts['page'] ?? 1)), $lastPage);
 
-        $pageRows = $this->sorted($this->base($accountF, $status, $search)->select(self::AD_COLUMNS)->addSelect(['g.*', 'acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name']), $sort)
+        $pageRows = $this->sorted($this->base($accountF, $status, $search)->select(self::AD_COLUMNS)->addSelect(['g.*', 'acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name', 'camp.status as campaign_status', 'st.status as adset_status']), $sort)
             ->forPage($page, $perPage)->get();
 
         $totals = $this->base($accountF, $status, $search)
@@ -73,7 +74,7 @@ final class RunningCreatives
             ->leftJoin('ad_campaigns as camp', 'camp.id', '=', 'ad.ad_campaign_id')
             ->leftJoin('ad_sets as st', 'st.id', '=', 'ad.ad_set_id')
             ->where('ad.id', $ad->id)
-            ->select(self::AD_COLUMNS)->addSelect(['acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name'])
+            ->select(self::AD_COLUMNS)->addSelect(['acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name', 'camp.status as campaign_status', 'st.status as adset_status'])
             ->first();
         foreach (['spend', 'purchase_value', 'purchases', 'impressions', 'clicks', 'reach'] as $k) {
             $row->{$k} = $agg->{$k} ?? 0;
@@ -110,6 +111,7 @@ final class RunningCreatives
                 'type' => $r->type,
                 'status' => $r->status,
                 'effective_status' => $r->effective_status,
+                'parent_paused' => AdWriteService::statusKind($r->campaign_status ?? null) === 'paused' || AdWriteService::statusKind($r->adset_status ?? null) === 'paused',
                 'thumbnail_url' => $r->thumbnail_url,
                 'image_url' => $r->image_url,
                 'video_url' => $r->video_url,

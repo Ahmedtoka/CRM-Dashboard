@@ -3129,6 +3129,7 @@ const ar = {
             stopped: 'اتوقف',
             resumed: 'اشتغل تاني',
             failed: 'التغيير ماتمش',
+            parent_paused: 'الكامبين أو الـ ad set موقوفين',
             no_permission: 'مش مسموح لك تغيّر الإعلانات على الحساب ده',
             col_time: 'امتى',
             col_user: 'مين',

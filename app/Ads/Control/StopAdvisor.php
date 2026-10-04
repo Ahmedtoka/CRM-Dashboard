@@ -10,8 +10,8 @@ use App\Models\Ad;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Running ads worth stopping, each with the written reasons (spec 2.3). Candidates, all limited to ACTIVE ads in the
- * filter's scope:
+ * Running ads worth stopping, each with the written reasons (spec 2.3). Candidates, all limited to ads whose OWN status is active (ACTIVE or ENABLE, never
+ * effective_status) in the filter's scope:
  *   - loser tier or creative fatigue (WinnerScorer, same gate and numbers as the Winners page);
  *   - zero purchases with spend at or above `loser_min_spend`;
  *   - ads linked to an activated material flagged `need_stop` (its product ran out of stock), spend or not.
@@ -35,9 +35,9 @@ final class StopAdvisor
 
         $minSpend = (float) $this->settings->winnerThresholds()['loser_min_spend'];
         $days = (int) $f->from->diffInDays($f->to) + 1;
-        $scored = collect($this->scorer->build($f, 'active'))->keyBy(fn (array $r) => $r['ad']['id']);
+        $scored = collect($this->scorer->build($f, 'all'))->keyBy(fn (array $r) => $r['ad']['id']);
 
-        $sums = $this->q->sums($f, ['ad_id' => 'm.ad_id'], fn ($b) => $b->where('ad.effective_status', 'ACTIVE'))->keyBy(fn ($r) => (int) $r->ad_id);
+        $sums = $this->q->sums($f, ['ad_id' => 'm.ad_id'], fn ($b) => $b->whereIn('ad.status', AdWriteService::ACTIVE_STATUSES))->keyBy(fn ($r) => (int) $r->ad_id);
         $needStop = $this->needStopMaterials($f);
 
         $reasons = [];
@@ -67,7 +67,7 @@ final class StopAdvisor
             return [];
         }
 
-        $ads = Ad::query()->with('account:id,name,platform')->whereIn('id', array_keys($reasons))->where('effective_status', 'ACTIVE')->get()->keyBy('id');
+        $ads = Ad::query()->with('account:id,name,platform')->whereIn('id', array_keys($reasons))->whereIn('status', AdWriteService::ACTIVE_STATUSES)->get()->keyBy('id');
 
         $out = [];
         foreach ($reasons as $adId => $list) {
@@ -104,7 +104,7 @@ final class StopAdvisor
             ->join('ad_accounts as acc', 'acc.id', '=', 'ad.ad_account_id')
             ->where('mat.status', 'activated')
             ->whereNotNull('mat.need_stop_at')
-            ->where('ad.effective_status', 'ACTIVE')
+            ->whereIn('ad.status', AdWriteService::ACTIVE_STATUSES)
             ->select(['l.ad_id', 'mat.title'])->orderBy('mat.id');
         if ($f->accountIds !== null) {
             $q->whereIn('ad.ad_account_id', $f->accountIds);
