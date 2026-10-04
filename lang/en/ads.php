@@ -11,6 +11,8 @@ return [
         'neutral' => 'Keep watching it',
     ],
     'flash' => [
+        'stopped' => 'Stopped.',
+        'resumed' => 'Running again.',
         'connected' => 'Connected. :count ad accounts found; the last 90 days are loading in the background.',
         'saved' => 'Saved.',
         'test_ok' => 'Connection works.',
@@ -19,6 +21,13 @@ return [
         'archived' => 'The connection is stopped and will not sync again. Its past numbers stay in the reports.',
         'assigned' => 'Assignment saved.',
         'buyer_archived' => 'The buyer has account history, so it was archived instead of deleted.',
+    ],
+    'errors' => [
+        'out_of_scope' => 'You cannot change ads on this account.',
+        'bad_request' => 'This request is not valid.',
+        'not_found' => 'This campaign, ad set or ad is not in the CRM yet. Sync the account and try again.',
+        'rate_limited' => 'The platform is limiting requests right now. Try again in a few minutes.',
+        'failed' => 'The platform did not accept the change.',
     ],
     'credentials' => [
         'access_token' => 'Access token',

@@ -102,7 +102,7 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return array{canSeeSpend: bool, canManage: bool, isBuyer: bool, buyerId: ?int}
+     * @return array{canSeeSpend: bool, canManage: bool, canWrite: bool, isBuyer: bool, buyerId: ?int}
      */
     private function adsAccess(?User $user): array
     {
@@ -111,6 +111,8 @@ class HandleInertiaRequests extends Middleware
         return [
             'canSeeSpend' => $user !== null && $scope->canSeeSpend($user),
             'canManage' => (bool) $user?->isSupervisorOrAbove(),
+            // Stop / Run buttons; the account itself is checked by AdWriteService on every call.
+            'canWrite' => $user !== null && ($user->isSupervisorOrAbove() || $scope->buyerFor($user) !== null),
             'isBuyer' => $user?->role === UserRole::MediaBuyer,
             'buyerId' => $user ? $scope->buyerFor($user)?->id : null,
         ];

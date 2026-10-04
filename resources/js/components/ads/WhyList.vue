@@ -1,36 +1,15 @@
 <script setup lang="ts">
-/** The written reasons behind a tier (WinnerScorer reasons), translated here with the numbers formatted for the locale. */
+/** The written reasons behind a tier or a stop suggestion (WinnerScorer / StopAdvisor reasons), numbers formatted for the locale. */
 import { useI18n } from '@/composables/useI18n';
-import { formatAdsMoney, formatPct, formatQty, formatRoas } from '@/lib/ads';
+import { reasonTexts } from '@/lib/ads';
 import type { AdReason } from '@/types/ads';
 import { computed } from 'vue';
 
 const props = withDefaults(defineProps<{ reasons: AdReason[]; currency?: string }>(), { currency: 'EGP' });
 
-const { t, locale } = useI18n();
+const { locale } = useI18n();
 
-const lines = computed(() =>
-    props.reasons.map((r) => {
-        const p = r.params;
-        const v: Record<string, string | number> = {};
-        for (const [k, val] of Object.entries(p)) {
-            v[k] =
-                k === 'roas' || k === 'threshold'
-                    ? formatRoas(val, locale.value)
-                    : k === 'ctr'
-                      ? formatPct(val, locale.value)
-                      : k === 'spend' || k === 'cpa'
-                        ? formatAdsMoney(val, locale.value, props.currency)
-                        : k === 'pct' || k === 'ctr_drop'
-                          ? formatPct(val / 100, locale.value, 0)
-                          : k === 'frequency'
-                            ? formatQty(val, locale.value)
-                            : val;
-        }
-
-        return { key: r.key, text: t(`ads.reasons.${r.key}`, v), bad: ['roas_below', 'recent_down', 'fatigue'].includes(r.key) };
-    }),
-);
+const lines = computed(() => reasonTexts(props.reasons, locale.value, props.currency));
 </script>
 
 <template>

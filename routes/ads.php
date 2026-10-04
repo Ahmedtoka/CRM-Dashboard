@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Web\Ads\AccountController;
+use App\Http\Controllers\Web\Ads\ActionController;
 use App\Http\Controllers\Web\Ads\AdStockController;
 use App\Http\Controllers\Web\Ads\BuyerController;
 use App\Http\Controllers\Web\Ads\BuyerSetupController;
@@ -21,6 +22,8 @@ Route::middleware('ads:report')->group(function () {
     Route::get('/ads/creatives/{ad}', [CreativeController::class, 'show'])->name('ads.creatives.show');
     Route::get('/ads/campaigns', CampaignController::class)->name('ads.campaigns');
     Route::get('/ads/winners', [CreativeController::class, 'winners'])->name('ads.winners');
+    Route::get('/ads/actions', [ActionController::class, 'index'])->name('ads.actions');
+    Route::post('/ads/actions/status', [ActionController::class, 'status'])->name('ads.actions.status');
 });
 
 Route::middleware('ads:manage')->group(function () {

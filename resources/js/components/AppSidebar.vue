@@ -37,6 +37,7 @@ const adsGroup = computed<NavItem | null>(() => {
         { title: t('nav.ads_creatives'), href: '/ads/creatives' },
         { title: t('nav.ads_campaigns'), href: '/ads/campaigns' },
         { title: t('nav.ads_winners'), href: '/ads/winners' },
+        { title: t('nav.ads_actions'), href: '/ads/actions' },
         materials,
     ];
     if (allows('supervisor')) {

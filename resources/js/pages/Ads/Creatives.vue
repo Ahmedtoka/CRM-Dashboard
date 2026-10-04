@@ -5,6 +5,7 @@ import CreativePreviewModal from '@/components/ads/CreativePreviewModal.vue';
 import CreativeThumb from '@/components/ads/CreativeThumb.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
+import StatusToggle from '@/components/ads/StatusToggle.vue';
 import TrendArrow from '@/components/ads/TrendArrow.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -13,12 +14,13 @@ import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type AdsQueryValue, adTypeKey, formatPct, formatQty, formatRoas, isAdActive, roasTone, safeUrl, visitAds } from '@/lib/ads';
 import { formatCount } from '@/lib/format';
-import type { AdsCreativesProps, CreativePerPage, CreativeRow, CreativeSort, CreativeStatusFilter } from '@/types/ads';
-import { Head } from '@inertiajs/vue3';
+import type { AdsAccess, AdsCreativesProps, CreativePerPage, CreativeRow, CreativeSort, CreativeStatusFilter } from '@/types/ads';
+import { Head, usePage } from '@inertiajs/vue3';
 import { ChevronLeft, ChevronRight, ExternalLink, ImageOff, Search } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<AdsCreativesProps>();
+const canWrite = computed(() => ((usePage().props.ads ?? null) as AdsAccess | null)?.canWrite === true);
 
 const { t, locale } = useI18n();
 const n = (v: number) => formatCount(v, locale.value);
@@ -249,6 +251,17 @@ const breadcrumbs = computed(() => [
                                     :tone="isAdActive(ad) ? 'positive' : 'neutral'"
                                     dot
                                 />
+                                <div v-if="canWrite" class="mt-1">
+                                    <StatusToggle
+                                        :account-id="ad.account_id"
+                                        :account="ad.account"
+                                        :platform="ad.platform"
+                                        level="ad"
+                                        :external-id="ad.external_id"
+                                        :name="ad.name"
+                                        :status="ad.effective_status"
+                                    />
+                                </div>
                             </td>
                             <td class="px-2 py-2 text-center">
                                 <a

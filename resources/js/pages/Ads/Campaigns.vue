@@ -3,6 +3,7 @@
 import AdsRangeBar from '@/components/ads/AdsRangeBar.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
+import StatusToggle from '@/components/ads/StatusToggle.vue';
 import TrendArrow from '@/components/ads/TrendArrow.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -11,12 +12,13 @@ import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type AdsQueryValue, formatPct, formatQty, formatRoas, roasTone, visitAds } from '@/lib/ads';
 import { formatCount } from '@/lib/format';
-import type { AdsCampaignsProps, CampaignNode, CampaignSort } from '@/types/ads';
-import { Head } from '@inertiajs/vue3';
+import type { AdsAccess, AdsCampaignsProps, CampaignNode, CampaignSort } from '@/types/ads';
+import { Head, usePage } from '@inertiajs/vue3';
 import { ChevronDown, ChevronRight, Layers } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<AdsCampaignsProps>();
+const canWrite = computed(() => ((usePage().props.ads ?? null) as AdsAccess | null)?.canWrite === true);
 
 const { t, locale } = useI18n();
 const n = (v: number) => formatCount(v, locale.value);
@@ -198,6 +200,9 @@ const breadcrumbs = computed(() => [
                             <th scope="col" class="px-2 py-2 text-end">{{ t('ads.table.conv') }}</th>
                             <th scope="col" class="px-2 py-2 text-end">{{ t('ads.kpi.real_orders') }}</th>
                             <th scope="col" class="px-2 py-2 text-end">{{ t('ads.kpi.ctr') }}</th>
+                            <th v-if="canWrite" scope="col" class="px-2 py-2">
+                                <span class="sr-only">{{ t('ads.actions.title') }}</span>
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -262,6 +267,18 @@ const breadcrumbs = computed(() => [
                             <td class="px-2 py-2 text-end tabular-nums">{{ formatQty(r.node.metrics.purchases, locale) }}</td>
                             <td class="px-2 py-2 text-end tabular-nums">{{ n(r.node.metrics.real_orders) }}</td>
                             <td class="px-2 py-2 text-end tabular-nums">{{ formatPct(r.node.metrics.ctr, locale) }}</td>
+                            <td v-if="canWrite" class="px-2 py-2 text-center">
+                                <StatusToggle
+                                    v-if="!r.node.placeholder"
+                                    :account-id="r.node.account_id"
+                                    :account="r.node.account"
+                                    :platform="r.node.platform"
+                                    :level="r.node.level"
+                                    :external-id="r.node.external_id"
+                                    :name="title(r.node)"
+                                    :status="r.node.status"
+                                />
+                            </td>
                         </tr>
                     </tbody>
                     <tfoot class="border-t-2 border-border bg-muted/40 font-semibold">
@@ -275,7 +292,7 @@ const breadcrumbs = computed(() => [
                             <td class="px-2 py-2 text-end"><StatusChip :label="formatRoas(totals.roas, locale)" :tone="roasTone(totals.roas)" /></td>
                             <td class="px-2 py-2 text-end tabular-nums">{{ formatQty(totals.purchases, locale) }}</td>
                             <td class="px-2 py-2 text-end tabular-nums">{{ n(totals.real_orders) }}</td>
-                            <td />
+                            <td :colspan="canWrite ? 2 : 1" />
                         </tr>
                     </tfoot>
                 </table>

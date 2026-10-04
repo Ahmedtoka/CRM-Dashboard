@@ -10,6 +10,8 @@ export type AdPlatformValue = 'meta' | 'tiktok' | 'google';
 export interface AdsAccess {
     canSeeSpend: boolean;
     canManage: boolean;
+    /** Stop / Run buttons (the account itself is checked on the server). */
+    canWrite: boolean;
     isBuyer: boolean;
     buyerId: number | null;
 }
@@ -220,7 +222,7 @@ export interface AdFatigue {
 /** A written reason from WinnerScorer, translated on the client (ads.reasons.{key}). */
 export interface AdReason {
     key: string;
-    params: Record<string, number>;
+    params: Record<string, number | string>;
 }
 
 export interface CreativeRow {
@@ -688,4 +690,42 @@ export interface MaterialAdSearchRow {
     account: string | null;
     status: string | null;
     thumbnail_url: string | null;
+}
+
+/** StopAdvisor::suggest (+ can_write from ActionController) */
+export interface AdSuggestion {
+    ad_id: number;
+    external_id: string;
+    account_id: number;
+    account: string;
+    platform: AdPlatformValue | string;
+    name: string;
+    spend: number;
+    spend_tax: number;
+    roas: number | null;
+    reasons: AdReason[];
+    can_write: boolean;
+}
+
+/** One ad_actions row on the log. */
+export interface AdActionLogRow {
+    id: number;
+    at: string | null;
+    user: string | null;
+    platform: AdPlatformValue | string;
+    account: string;
+    level: 'campaign' | 'adset' | 'ad';
+    name: string;
+    from_status: string | null;
+    to_status: string;
+    reason: string | null;
+    result: 'ok' | 'error';
+    error: string | null;
+}
+
+export interface AdsActionsProps {
+    currency: string;
+    days: number;
+    suggestions: AdSuggestion[];
+    log: AdActionLogRow[];
 }

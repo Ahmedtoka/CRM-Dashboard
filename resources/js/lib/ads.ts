@@ -1,5 +1,5 @@
 import { formatNumber, translate, type Locale } from '@/i18n';
-import type { AdPlatformValue, AdsFilters, CreativeRow } from '@/types/ads';
+import type { AdPlatformValue, AdReason, AdsFilters, CreativeRow } from '@/types/ads';
 import { router } from '@inertiajs/vue3';
 
 export type AdsQueryValue = string | number | string[] | null | undefined;
@@ -189,4 +189,45 @@ export function adAccountStatusLabel(status: string | null | undefined, t: (key:
     if (adAccountActive(status)) return t('ads.accounts.status_active');
     if (/^(disabled|paused|closed|suspended)$/i.test(status)) return t('ads.accounts.status_disabled');
     return status;
+}
+
+const RUNNING_STATUSES = ['ACTIVE', 'ENABLE', 'STATUS_ENABLE', 'STATUS_DELIVERY_OK'];
+const PAUSED_STATUSES = ['PAUSED', 'DISABLE', 'STATUS_DISABLE', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED'];
+
+/** What a Stop / Run button should do for a platform status: stop a running one, run a paused one, nothing for the rest. */
+export function toggleTarget(status: string | null | undefined): 'paused' | 'active' | null {
+    if (!status) return null;
+    if (RUNNING_STATUSES.includes(status)) return 'paused';
+    if (PAUSED_STATUSES.includes(status)) return 'active';
+
+    return null;
+}
+
+const BAD_REASONS = ['roas_below', 'recent_down', 'fatigue', 'no_purchases', 'need_stop'];
+
+/** The written reasons (WinnerScorer / StopAdvisor) as plain translated lines, numbers formatted for the locale. */
+export function reasonTexts(reasons: AdReason[], locale: Locale, currency = 'EGP'): { key: string; text: string; bad: boolean }[] {
+    return reasons.map((r) => {
+        const v: Record<string, string | number> = {};
+        for (const [k, val] of Object.entries(r.params)) {
+            if (typeof val === 'string') {
+                v[k] = val;
+                continue;
+            }
+            v[k] =
+                k === 'roas' || k === 'threshold'
+                    ? formatRoas(val, locale)
+                    : k === 'ctr'
+                      ? formatPct(val, locale)
+                      : k === 'spend' || k === 'cpa'
+                        ? formatAdsMoney(val, locale, currency)
+                        : k === 'pct' || k === 'ctr_drop'
+                          ? formatPct(val / 100, locale, 0)
+                          : k === 'frequency'
+                            ? formatQty(val, locale)
+                            : val;
+        }
+
+        return { key: r.key, text: translate(locale, `ads.reasons.${r.key}`, v), bad: BAD_REASONS.includes(r.key) };
+    });
 }
