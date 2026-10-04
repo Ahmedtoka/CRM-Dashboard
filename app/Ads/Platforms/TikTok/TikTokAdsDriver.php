@@ -8,24 +8,15 @@ use App\Ads\Platforms\Data\AccountInfo;
 use App\Ads\Platforms\Data\AdRow;
 use App\Ads\Platforms\Data\CreativeMedia;
 use App\Ads\Platforms\Data\DailyAdMetric;
-use App\Ads\Platforms\RateLimited;
-use App\Ads\Platforms\SecretScrubber;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Support\Facades\Http;
 
 /** TikTok Business API v1.3. The token travels in the Access-Token header only. */
 class TikTokAdsDriver implements AdPlatformDriver
 {
-    private const PAGE_SIZE = 1000;
-
-    private const MAX_PAGES = 200;
-
-    /** TikTok codes that mean "slow down". */
-    private const RATE_CODES = [40100];
+    public function __construct(private readonly TikTokApi $api) {}
 
     public function accounts(AdPlatformConnection $c): array
     {
@@ -189,55 +180,16 @@ class TikTokAdsDriver implements AdPlatformDriver
         return (string) $token;
     }
 
-    /** One GET, envelope checked. @return array<string, mixed> the envelope data */
+    /** @return array<string, mixed> the envelope data */
     private function get(string $token, string $path, array $query): array
     {
-        $url = rtrim((string) config('crm.ads.tiktok.base_url'), '/').'/'.ltrim($path, '/');
-
-        try {
-            $response = Http::withHeaders(['Access-Token' => $token])->timeout(90)->connectTimeout(15)->get($url, $query);
-        } catch (ConnectionException $e) {
-            throw new AdsApiException($this->scrub('TikTok is unreachable: '.$e->getMessage(), $token));
-        }
-
-        $code = $response->json('code');
-        if ($response->status() === 429) {
-            throw new RateLimited('TikTok rate limit reached; retry later.');
-        }
-        if ($code === null) {
-            throw new AdsApiException('TikTok API error: unexpected response (HTTP '.$response->status().')');
-        }
-        if ((int) $code !== 0) {
-            $message = $this->scrub((string) ($response->json('message') ?: 'TikTok API error (code '.$code.')'), $token);
-            throw in_array((int) $code, self::RATE_CODES, true) ? new RateLimited($message) : new AdsApiException($message);
-        }
-
-        return $response->json('data') ?? [];
+        return $this->api->get($token, $path, $query);
     }
 
     /** @return list<array<string, mixed>> merged data.list rows across pages */
     private function paginate(string $token, string $path, array $query): array
     {
-        $rows = [];
-        $page = 1;
-
-        while (true) {
-            $data = $this->get($token, $path, $query + ['page' => $page, 'page_size' => self::PAGE_SIZE]);
-            $rows = array_merge($rows, $data['list'] ?? []);
-            $total = (int) ($data['page_info']['total_page'] ?? 1);
-            if ($page >= $total) {
-                return $rows;
-            }
-            if ($page >= self::MAX_PAGES) {
-                throw new AdsApiException('TikTok result too large - narrow the date range.');
-            }
-            $page++;
-        }
-    }
-
-    private function scrub(string $text, string $token): string
-    {
-        return SecretScrubber::scrub($text, [$token]);
+        return $this->api->paginate($token, $path, $query);
     }
 
     private function mapAd(array $r): AdRow

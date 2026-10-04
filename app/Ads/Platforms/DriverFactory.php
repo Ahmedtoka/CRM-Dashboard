@@ -7,6 +7,7 @@ use App\Ads\Platforms\Google\GoogleAdsDriver;
 use App\Ads\Platforms\Meta\MetaAdsDriver;
 use App\Ads\Platforms\Meta\MetaAdsWriter;
 use App\Ads\Platforms\TikTok\TikTokAdsDriver;
+use App\Ads\Platforms\TikTok\TikTokAdsWriter;
 
 final class DriverFactory
 {
@@ -39,8 +40,7 @@ final class DriverFactory
 
         return match ($p) {
             AdPlatform::Meta => app(MetaAdsWriter::class),
-            // The TikTok writer arrives in Task 7.
-            AdPlatform::Tiktok => throw new AdsApiException('TikTok publishing is not supported yet'),
+            AdPlatform::Tiktok => app(TikTokAdsWriter::class),
         };
     }
 }
