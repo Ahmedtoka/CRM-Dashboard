@@ -77,7 +77,7 @@ final class AdWriteService
      * @param  'active'|'paused'  $status
      *
      * @throws AuthorizationException outside the user's scope
-     * @throws ValidationException unknown target, nothing to change, or the platform refused (the message is readable)
+     * @throws ValidationException unknown target or the platform refused (the message is readable)
      */
     public function setStatus(User $u, AdAccount $a, string $level, string $externalId, string $status, ?string $reason): AdAction
     {
@@ -92,9 +92,7 @@ final class AdWriteService
         if ($row === null) {
             throw ValidationException::withMessages(['status' => __('ads.errors.not_found')]);
         }
-        if (self::statusKind($row->status) === $status) {
-            throw ValidationException::withMessages(['status' => __('ads.errors.already')]);
-        }
+        // No refusal on the local status: it can be an hour stale, and a redundant pause or run is harmless.
 
         $to = strtoupper($status);
         $log = [

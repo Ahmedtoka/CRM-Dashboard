@@ -280,15 +280,19 @@ it('never lets a moderator write, at the service level and without a platform ca
     expect(Cache::get('ads-fake-writer'))->toBeNull()->and(AdAction::count())->toBe(0);
 });
 
-it('uses the own status: Run on an ad whose own status is active is refused, effective status is ignored', function () {
+it('never refuses on a stale local status: Stop on a locally paused ad still calls the platform and logs', function () {
     $acc = AdAccount::factory()->meta()->create();
     $admin = User::factory()->create(['role' => UserRole::Admin]);
-    // own ACTIVE, the parent folded it into CAMPAIGN_PAUSED: nothing to run
-    $ad = Ad::factory()->for($acc, 'account')->create(['status' => 'ACTIVE', 'effective_status' => 'CAMPAIGN_PAUSED']);
+    $ad = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED', 'effective_status' => 'PAUSED']);
 
-    $this->actingAs($admin)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'active']))
-        ->assertStatus(422)->assertJsonPath('errors.status.0', __('ads.errors.already'));
-    expect(Cache::get('ads-fake-writer'))->toBeNull()->and(AdAction::count())->toBe(0);
+    $this->actingAs($admin)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'paused']))->assertOk();
+    expect(Cache::get('ads-fake-writer')['statuses'])->toHaveCount(1)
+        ->and(AdAction::first())->result->toBe('ok')->from_status->toBe('PAUSED')->to_status->toBe('PAUSED');
+});
+
+it('uses the own status for the local update, effective status is left alone', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
 
     // own PAUSED: Run works and changes only the own status
     $paused = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED', 'effective_status' => 'PAUSED']);
