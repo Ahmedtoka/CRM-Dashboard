@@ -4,6 +4,7 @@ import AdsRangeBar from '@/components/ads/AdsRangeBar.vue';
 import ComboChart, { type ComboSeries } from '@/components/ads/ComboChart.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
+import RevenueSummaryCard from '@/components/ads/RevenueSummaryCard.vue';
 import DataTable from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -201,6 +202,8 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
                     </div>
                     <StatCard v-for="k in kpis" :key="k.key" :label="k.label" :value="k.value" :hint="k.hint" class="border-t-4" :class="k.border" />
                 </div>
+
+                <RevenueSummaryCard :summary="summary" />
 
                 <ComboChart
                     :title="t('ads.chart.daily_trend')"

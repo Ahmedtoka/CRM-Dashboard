@@ -113,9 +113,22 @@ export interface AdsCommonProps {
     currency: string;
 }
 
+/** RevenueSummary::build; `store` is null for media buyers. */
+export interface AdsRevenueSummary {
+    currency: string;
+    spend: number;
+    spend_tax: number;
+    store: { orders: number; revenue: number } | null;
+    crm: { orders: number; revenue: number; chat_orders: number };
+    platform: { purchases: number; revenue: number };
+    roas: { store: number | null; crm: number | null; platform: number | null };
+    gaps: { platform_vs_crm: number | null; crm_vs_store: number | null; platform_vs_crm_pct: number | null; crm_vs_store_pct: number | null };
+}
+
 export interface AdsOverviewProps extends AdsCommonProps {
     filters: AdsFilters;
     overview: AdsOverviewData;
+    summary: AdsRevenueSummary;
     top_accounts: AdsTopAccountRow[];
     sync: AdsSync;
 }
@@ -185,6 +198,7 @@ export interface AdsBuyerShowProps extends AdsCommonProps {
     filters: AdsFilters;
     buyer: { id: number; name: string; color: string | null };
     detail: BuyerDetail;
+    summary: AdsRevenueSummary;
 }
 
 /** RunningCreatives::rows */
