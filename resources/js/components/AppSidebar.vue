@@ -35,6 +35,7 @@ const adsGroup = computed<NavItem | null>(() => {
         { title: t('nav.ads_overview'), href: '/ads', exact: true },
         { title: t('nav.ads_buyers'), href: '/ads/buyers' },
         { title: t('nav.ads_creatives'), href: '/ads/creatives' },
+        { title: t('nav.ads_campaigns'), href: '/ads/campaigns' },
         { title: t('nav.ads_winners'), href: '/ads/winners' },
         materials,
     ];

@@ -291,6 +291,36 @@ export interface AdsCreativesProps extends AdsCommonProps {
     result: CreativesResult;
 }
 
+/** CampaignTree::build — Metrics = AdsQuery::derive plus the ad-attributed real orders. */
+export interface CampaignMetrics extends AdsDerived {
+    real_orders: number;
+}
+
+/** A node of the campaign tree. id 0 = the placeholder for ads without a campaign / ad set. Ad nodes carry ad_id and trend. */
+export interface CampaignNode {
+    level: 'campaign' | 'adset' | 'ad';
+    id: number;
+    ad_id?: number;
+    external_id: string;
+    account_id: number;
+    account: string;
+    platform: AdPlatformValue | string;
+    name: string;
+    status: string | null;
+    objective: string | null;
+    naming_ok: boolean;
+    metrics: CampaignMetrics;
+    trend?: AdTrend | null;
+    children: CampaignNode[];
+}
+
+export type CampaignSort = 'spend' | 'roas';
+
+export interface AdsCampaignsProps extends AdsCommonProps {
+    filters: AdsFilters & { sort: CampaignSort };
+    tree: CampaignNode[];
+}
+
 export type WinnerTier = 'winner' | 'promising' | 'loser' | 'neutral';
 export type WinnerSort = 'score' | 'roas' | 'spend' | 'revenue' | 'date';
 

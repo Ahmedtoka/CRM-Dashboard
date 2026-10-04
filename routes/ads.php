@@ -4,6 +4,7 @@ use App\Http\Controllers\Web\Ads\AccountController;
 use App\Http\Controllers\Web\Ads\AdStockController;
 use App\Http\Controllers\Web\Ads\BuyerController;
 use App\Http\Controllers\Web\Ads\BuyerSetupController;
+use App\Http\Controllers\Web\Ads\CampaignController;
 use App\Http\Controllers\Web\Ads\CreativeController;
 use App\Http\Controllers\Web\Ads\MaterialCollectionController;
 use App\Http\Controllers\Web\Ads\MaterialController;
@@ -18,6 +19,7 @@ Route::middleware('ads:report')->group(function () {
     Route::get('/ads/buyers/{buyer}', [BuyerController::class, 'show'])->name('ads.buyers.show');
     Route::get('/ads/creatives', [CreativeController::class, 'index'])->name('ads.creatives.index');
     Route::get('/ads/creatives/{ad}', [CreativeController::class, 'show'])->name('ads.creatives.show');
+    Route::get('/ads/campaigns', CampaignController::class)->name('ads.campaigns');
     Route::get('/ads/winners', [CreativeController::class, 'winners'])->name('ads.winners');
 });
 
