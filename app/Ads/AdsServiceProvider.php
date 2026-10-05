@@ -60,7 +60,7 @@ class AdsServiceProvider extends ServiceProvider
                 ->dailyAt('03:15')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
 
             $schedule->command(RefreshCreativesCommand::class, ['--days=14'])
-                ->dailyAt('05:20')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
+                ->dailyAt('05:50')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
 
             $schedule->command(AttributeOrdersCommand::class, ['--days=35'])
                 ->hourlyAt(40)->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
@@ -77,7 +77,7 @@ class AdsServiceProvider extends ServiceProvider
             // One heartbeat job per queue the ads depend on: when it stops landing, a worker is gone (ads:health, queue:*).
             foreach (array_values(array_unique(['default', 'commercelong', SyncAdAccount::queueName()])) as $queue) {
                 $connection = $queue !== 'default' && config('queue.default') === 'redis' ? 'redislong' : null;
-                $schedule->job(new QueueHeartbeat($queue), $queue, $connection)->everyFiveMinutes()->onOneServer();
+                $schedule->job(new QueueHeartbeat($queue), $queue, $connection)->name("ads:queue-heartbeat:{$queue}")->everyFiveMinutes()->onOneServer(); // own mutex per queue: one shared name would let only the first dispatch
             }
 
             $schedule->command(TokenProbeCommand::class)

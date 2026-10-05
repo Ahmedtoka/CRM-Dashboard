@@ -2970,14 +2970,13 @@ const en: Messages = {
         health: {
             title: 'Check these numbers',
             and_more: 'and {n} more',
-            unverified: 'not verified yet: {names}',
+            unverified: 'History not verified yet: {names}',
             reasons: {
                 reconnect: 'A connection needs a new token, so its numbers are not updating',
                 stale: 'The numbers are behind Ads Manager (the last sync is over 3 hours old)',
                 read_only: 'The connection is read-only: Run and Stop are off',
                 incomplete: 'History is incomplete for part of this range',
                 timezone: 'Days for these accounts follow the account timezone, not Cairo time',
-
                 gap: 'Spend per ad does not add up to the account total',
                 history_start: 'The range was cut at the day the CRM started keeping ads data',
                 under_review: 'These numbers are under review and are not final yet',

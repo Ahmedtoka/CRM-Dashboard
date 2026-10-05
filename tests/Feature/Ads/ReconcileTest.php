@@ -219,3 +219,25 @@ it('is scheduled nightly after the deep sync', function () {
 
     expect($events)->toHaveCount(1)->and($events->first()->command)->toContain('--quiet-update')->and($events->first()->command)->toMatch('/--from=[0-9]{4}-[0-9]{2}-[0-9]{2}/');
 });
+
+it('does not count an ok run from before the account-level control existed', function () {
+    $a = AdAccount::factory()->meta()->create(['name' => 'Old runs']);
+    // a master-era run: ok, no error, but the account has no control rows at all
+    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'ok', 'from_date' => '2026-09-01', 'to_date' => '2026-10-04', 'started_at' => '2026-10-04 02:00:00']);
+
+    $r = app(Reconciliation::class)->account($a, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-30'));
+    expect($r['complete_from'])->toBeNull();
+
+    // control starts being fetched on 2026-10-04 12:00: the older run still covers nothing, a later one does
+    AdAccountDaily::create(['ad_account_id' => $a->id, 'date' => '2026-10-04', 'spend' => 1, 'purchase_value' => 0, 'purchases' => 0, 'impressions' => 0, 'fetched_at' => '2026-10-04 12:00:00']);
+    expect(app(Reconciliation::class)->account($a, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-30'))['complete_from'])->toBeNull();
+    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'ok', 'from_date' => '2026-09-01', 'to_date' => '2026-10-04', 'started_at' => '2026-10-04 13:00:00']);
+    expect(app(Reconciliation::class)->account($a, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-30'))['complete_from'])->toBe('2026-09-01');
+});
+
+it('shows the friendly message for a bad --from', function () {
+    rcAccount();
+
+    expect(Artisan::call('ads:reconcile', ['--from' => 'not-a-date']))->toBe(1);
+    expect(Artisan::output())->toContain('Use --from and --to as YYYY-MM-DD.');
+});

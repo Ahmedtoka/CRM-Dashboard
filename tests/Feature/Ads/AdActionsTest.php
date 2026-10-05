@@ -435,3 +435,11 @@ it('gives a buyer can_write only on ad nodes of the campaigns tree', function ()
     $walk($tree);
     expect($levels['campaign'])->each->toBeFalse()->and($levels['adset'])->each->toBeFalse()->and($levels['ad'])->each->toBeTrue();
 });
+
+it('checks the account scope before it audits a level it does not allow', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $content = User::factory()->create(['role' => UserRole::Content]);
+
+    expect(fn () => app(AdWriteService::class)->setStatus($content, $acc, 'campaign', 'c1', 'paused', null))->toThrow(AuthorizationException::class);
+    expect(AdAction::count())->toBe(0);
+});

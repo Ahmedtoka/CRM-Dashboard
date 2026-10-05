@@ -168,11 +168,17 @@ final class Reconciliation
         return $out;
     }
 
-    /** @return array<string, true> days covered by an ok sync run of this account */
+    /** @return array<string, true> days covered by an ok sync run of this account that came with the account-level control */
     private function syncCoverage(int $accountId, string $from, string $to): array
     {
         $out = [];
-        $runs = DB::table('ads_sync_runs')->where('ad_account_id', $accountId)->where('status', 'ok')
+        // Runs from before the account-level control existed (the master code) never asked for it: only runs that started
+        // once this account's first control row was fetched count. No control row at all covers nothing.
+        $since = DB::table('ad_account_daily')->where('ad_account_id', $accountId)->selectRaw('MIN(COALESCE(first_fetched_at, fetched_at)) as at')->value('at');
+        if ($since === null) {
+            return [];
+        }
+        $runs = DB::table('ads_sync_runs')->where('ad_account_id', $accountId)->where('status', 'ok')->where('started_at', '>=', $since)
             ->where(fn ($w) => $w->whereNull('error')->orWhere('error', 'not like', '%Account totals:%'))
             ->whereNotNull('from_date')->whereNotNull('to_date')->where('to_date', '>=', $from)->where('from_date', '<=', $to)
             ->get(['from_date', 'to_date']);

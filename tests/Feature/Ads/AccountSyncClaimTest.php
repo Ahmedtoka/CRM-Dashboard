@@ -247,3 +247,20 @@ it('a backfill whose claim is lost before its first chunk leaves a visible skipp
         ->and($acc->fresh()->sync_claim_key)->toBe('thief');
     Http::assertSentCount(0);
 });
+
+it('stops releasing a busy job after ten tries and leaves quietly with the skipped row', function () {
+    $acc = claimAccount();
+    claimHeldBy($acc, 'stale-claim', now()->addMinutes(60));
+    Http::fake(['graph.facebook.com/*' => Http::response(['data' => []])]);
+    $queueJob = Mockery::mock(Job::class)->shouldIgnoreMissing();
+    $queueJob->shouldReceive('attempts')->andReturn(11);
+    $queueJob->shouldNotReceive('release');
+    $queueJob->shouldNotReceive('fail');
+
+    $job = new SyncAdAccount($acc->id, 3, withAds: false);
+    $job->setJob($queueJob);
+    $job->handle(app(AdsSyncService::class));
+
+    expect(AdsSyncRun::where('status', 'skipped')->count())->toBe(1);
+    Http::assertSentCount(0);
+});

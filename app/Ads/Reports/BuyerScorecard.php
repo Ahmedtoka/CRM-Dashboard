@@ -126,7 +126,7 @@ final class BuyerScorecard
     }
 
     /**
-     * buyer id (0 = unassigned) => the currencies of the accounts whose rows (ad or control, buyer of the day) count here.
+     * buyer id (0 = unassigned) => the currencies of the accounts that have ad rows (ad_daily_metrics, buyer of the day) in range; control rows are not read.
      *
      * @return array<int, list<string>>
      */

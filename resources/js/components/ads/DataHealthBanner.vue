@@ -29,10 +29,11 @@ const lines = computed<Line[]>(() => {
     const out: Line[] = props.dataHealth.reasons.map((r) => {
         const names = r.accounts.join('، ');
         const more = r.more > 0 ? ` ${t('ads.health.and_more', { n: r.more })}` : '';
+        const unverified = r.unverified?.length ? t('ads.health.unverified', { names: r.unverified.join('، ') }) : '';
+        // accounts never judged are named once, in their own part
+        const head = r.accounts.length ? `${t(`ads.health.reasons.${r.reason}`)}: ${names}${more}` : '';
 
-        const unverified = r.unverified?.length ? ` · ${t('ads.health.unverified', { names: r.unverified.join('، ') })}` : '';
-
-        return { key: r.reason, text: `${t(`ads.health.reasons.${r.reason}`)}: ${names}${more}${unverified}` };
+        return { key: r.reason, text: [head, unverified].filter(Boolean).join(' · ') };
     });
     if (props.clampedToHistory) out.push({ key: 'history_start', text: t('ads.health.reasons.history_start') });
     if (props.numbersUnderReview) out.push({ key: 'under_review', text: t('ads.health.reasons.under_review') });

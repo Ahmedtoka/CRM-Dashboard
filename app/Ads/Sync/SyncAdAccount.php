@@ -170,6 +170,8 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
         Log::error('ads sync job failed', ['account' => $this->accountId, 'error' => $message]);
     }
 
+    public const MAX_BUSY_RELEASES = 10;
+
     /** @return bool false when released for a later try (Meta asked to wait) */
     private function run(AdsSyncService $sync): bool
     {
@@ -218,6 +220,11 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
     private function releasedWhileBusy(?AdsSyncRun $run): bool
     {
         if (AdsSyncService::isBusy($run) && $this->job && ! $this->job instanceof SyncJob) {
+            // A claim that stays held (a stale one lasts about an hour) must not use up the tries and land in failed_jobs: after
+            // ten releases the job ends quietly and the 'skipped' run row stays as the trace.
+            if ($this->attempts() > self::MAX_BUSY_RELEASES) {
+                return false;
+            }
             $this->release(120);
             $this->heartbeat();
 

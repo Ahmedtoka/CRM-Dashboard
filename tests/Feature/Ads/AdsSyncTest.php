@@ -377,7 +377,7 @@ it('backfills in 30-day chunks newest first', function () {
 
 it('registers the ads schedule in Africa/Cairo', function () {
     $events = collect(app(Schedule::class)->events())->filter(fn ($e) => str_contains($e->command, 'ads:'));
-    expect($events->map(fn ($e) => $e->expression)->all())->toContain('10 * * * *', '15 3 * * *', '20 5 * * *')
+    expect($events->map(fn ($e) => $e->expression)->all())->toContain('10 * * * *', '15 3 * * *', '50 5 * * *')
         ->and($events->every(fn ($e) => $e->timezone === 'Africa/Cairo'))->toBeTrue();
 });
 

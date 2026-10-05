@@ -18,9 +18,10 @@ fi
 composer install --no-dev --optimize-autoloader --no-interaction
 npm ci --no-audit --no-fund
 npm run build
+# config first: the migrations must read the new .env values, not a stale cached config
+php artisan config:clear
 php artisan migrate --force
 # never clear the application cache on deploy: locks and back-offs live there (F-053)
-php artisan config:clear
 php artisan route:clear
 php artisan view:clear
 php artisan event:clear

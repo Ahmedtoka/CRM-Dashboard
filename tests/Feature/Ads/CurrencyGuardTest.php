@@ -167,7 +167,9 @@ it('hides the ROAS against EGP orders when the one currency in scope is not EGP'
     $s = app(RevenueSummary::class)->build(cgFilter(), true);
 
     expect($o['currency'])->toBe('USD')->and($o['totals']['real_roas'])->toBeNull()->and($o['totals']['spend'])->toBe(50.0)
-        ->and($s['note'])->toBe('foreign_currency')->and($s['roas']['store'])->toBeNull()->and($s['gaps']['crm_vs_store'])->toBeNull()
+        ->and($s['note'])->toBe('foreign_currency')->and($s['roas']['store'])->toBeNull()->and($s['roas']['crm'])->toBeNull()
+        ->and($s['gaps']['platform_vs_crm'])->toBeNull()->and($s['gaps']['platform_vs_crm_pct'])->toBeNull()
+        ->and($s['gaps']['crm_vs_store'])->not->toBeNull()
         ->and($s['roas']['platform'])->toBe(2.0);
 });
 

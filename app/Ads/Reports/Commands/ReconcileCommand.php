@@ -5,6 +5,7 @@ namespace App\Ads\Reports\Commands;
 use App\Ads\Reports\Reconciliation;
 use App\Ads\Sync\HistoryWindow;
 use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -33,7 +34,7 @@ class ReconcileCommand extends Command
         try {
             [$from, $to] = $this->range();
         } catch (Throwable $e) {
-            $this->error($e instanceof \InvalidArgumentException ? $e->getMessage() : 'Use --from and --to as YYYY-MM-DD.');
+            $this->error($e instanceof \InvalidArgumentException && ! $e instanceof InvalidFormatException ? $e->getMessage() : 'Use --from and --to as YYYY-MM-DD.');
 
             return self::FAILURE;
         }
@@ -211,7 +212,7 @@ class ReconcileCommand extends Command
         if (! $ok && $r['uncovered_days'] !== []) {
             $days = $r['uncovered_days'];
             $shown = implode(', ', array_slice($days, 0, 15)).(count($days) > 15 ? ' ... ('.count($days).' days)' : '');
-            $this->line("         days without a control row or an ok sync: {$shown}");
+            $this->line("         days without an ok sync with a working account-totals call: {$shown}");
         }
     }
 

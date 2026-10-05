@@ -103,6 +103,9 @@ final class AdWriteService
      */
     public function setStatus(User $u, AdAccount $a, string $level, string $externalId, string $status, ?string $reason): AdAction
     {
+        if (! $this->inScope($u, $a)) {
+            throw new AuthorizationException(__('ads.errors.out_of_scope'));
+        }
         if (in_array($level, self::LEVELS, true) && ! in_array($level, $this->allowedLevels($u), true)) {
             $row = $this->find($a, $level, $externalId);
             AdAction::create([
@@ -112,9 +115,6 @@ final class AdWriteService
             ]);
 
             throw ValidationException::withMessages(['status' => __('ads.errors.'.$level.'_level_not_allowed')]);
-        }
-        if (! $this->inScope($u, $a)) {
-            throw new AuthorizationException(__('ads.errors.out_of_scope'));
         }
         if (! in_array($level, self::LEVELS, true) || ! in_array($status, self::STATUSES, true)) {
             throw ValidationException::withMessages(['status' => __('ads.errors.bad_request')]);

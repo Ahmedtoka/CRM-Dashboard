@@ -180,6 +180,6 @@ it('flags an account never judged (complete_from null) as not verified yet, but 
     AdAccount::factory()->meta()->create(['connection_id' => $c->id, 'name' => 'Brand New']);
 
     $this->actingAs(dbAdmin())->get('/ads?from=2026-09-05&to=2026-09-28')->assertInertia(fn (AssertableInertia $p) => $p
-        ->where('data_health.reasons.0.reason', 'incomplete')->where('data_health.reasons.0.accounts', ['Fresh Synced'])
+        ->where('data_health.reasons.0.reason', 'incomplete')->where('data_health.reasons.0.accounts', [])
         ->where('data_health.reasons.0.unverified', ['Fresh Synced']));
 });

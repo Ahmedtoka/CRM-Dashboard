@@ -162,7 +162,7 @@ class DataHealth
             $found['incomplete'][$id] = 1;
         }
         foreach ($incomplete['unverified'] as $id) {
-            $found['incomplete'][$id] = 1;
+            $found['unverified'][$id] = 1;
         }
         foreach ($this->gapAccounts($accounts, $f) as $id) {
             $found['gap'][$id] = 1;
@@ -182,9 +182,10 @@ class DataHealth
         }
         $reasons = [];
         foreach (['reconnect', 'stale', 'read_only', 'incomplete', 'gap', 'timezone'] as $reason) {
-            if (empty($found[$reason])) {
+            if (empty($found[$reason]) && ! ($reason === 'incomplete' && ! empty($found['unverified']))) {
                 continue;
             }
+            $found[$reason] ??= [];
             $ids = array_keys($found[$reason]);
             usort($ids, fn ($a, $b) => [$found[$reason][$b], (string) $names[$a]] <=> [$found[$reason][$a], (string) $names[$b]]);
             $entry = [
@@ -193,8 +194,8 @@ class DataHealth
                 'more' => max(0, count($ids) - 3),
             ];
             if ($reason === 'incomplete') {
-                // accounts never judged (complete_from null) read as "not verified yet" next to the ones with a known later start
-                $entry['unverified'] = array_map(fn ($id) => (string) $names[$id], array_slice(array_values(array_intersect($ids, $incomplete['unverified'])), 0, 3));
+                // `accounts` = a known later start; `unverified` = never judged (complete_from null): no account in both lists
+                $entry['unverified'] = array_map(fn ($id) => (string) $names[$id], array_slice($incomplete['unverified'], 0, 3));
             }
             $reasons[] = $entry;
         }

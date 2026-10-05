@@ -18,6 +18,11 @@ return new class extends Migration
 
     public function up(): void
     {
+        foreach (array_keys(self::COLUMNS) as $table) {
+            if (! Schema::hasTable($table)) {
+                return;
+            }
+        }
         Schema::table('ads', function (Blueprint $table) {
             if (! Schema::hasColumn('ads', 'last_seen_at')) {
                 $table->timestamp('last_seen_at')->nullable();

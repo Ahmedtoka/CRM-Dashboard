@@ -8,6 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (! Schema::hasTable('ad_daily_metrics')) {
+            return;
+        }
         Schema::table('ad_daily_metrics', function (Blueprint $table) {
             if (! Schema::hasColumn('ad_daily_metrics', 'link_clicks')) {
                 $table->unsignedBigInteger('link_clicks')->default(0)->after('clicks');

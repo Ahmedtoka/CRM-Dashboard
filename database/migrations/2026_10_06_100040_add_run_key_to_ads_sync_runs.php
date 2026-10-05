@@ -8,6 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (! Schema::hasTable('ads_sync_runs')) {
+            return;
+        }
         foreach (['run_key', 'batch_key'] as $column) {
             if (! Schema::hasColumn('ads_sync_runs', $column)) {
                 Schema::table('ads_sync_runs', fn (Blueprint $t) => $t->string($column, 36)->nullable()->index());
