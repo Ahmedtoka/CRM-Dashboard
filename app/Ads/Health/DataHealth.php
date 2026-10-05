@@ -3,6 +3,7 @@
 namespace App\Ads\Health;
 
 use App\Ads\AdsSettings;
+use App\Ads\Platforms\Meta\MetaAdsApi;
 use App\Ads\Platforms\Meta\UsageRecorder;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Sync\SyncAdAccount;
@@ -98,10 +99,27 @@ class DataHealth
         }
 
         $checks = $this->evaluate();
+        $lines = [];
         foreach ($checks as $check) {
-            $this->apply($check);
+            if ($line = $this->apply($check)) {
+                $lines[] = $line;
+            }
         }
-        AdsHealthState::query()->whereNotIn('key', array_map(fn (HealthCheck $c) => $c->key, $checks))->delete();
+
+        // A check that is gone (account deactivated or deleted) after it was announced bad is announced as resolved.
+        $gone = AdsHealthState::query()->whereNotIn('key', array_map(fn (HealthCheck $c) => $c->key, $checks))->get();
+        foreach ($gone as $state) {
+            if (in_array($state->notified_status, [HealthCheck::WARN, HealthCheck::CRITICAL], true)) {
+                $lines[] = [
+                    'key' => $state->key, 'reason' => explode(':', $state->key, 2)[0], 'status' => HealthCheck::OK,
+                    'account' => $state->detail['account'] ?? null, 'account_id' => $state->detail['account_id'] ?? null,
+                    'subject' => $state->detail['queue'] ?? null, 'recovered' => true, 'resolved' => true,
+                ];
+            }
+        }
+        AdsHealthState::query()->whereIn('id', $gone->pluck('id'))->delete();
+
+        $this->announce($lines);
 
         return $checks;
     }
@@ -222,7 +240,8 @@ class DataHealth
         return ['rate' => $orders === 0 ? null : round($linked / $orders, 4), 'orders' => $orders, 'linked' => $linked, 'days' => 14];
     }
 
-    private function apply(HealthCheck $check): void
+    /** @return array<string, mixed>|null the transition to announce, when this run made one */
+    private function apply(HealthCheck $check): ?array
     {
         $state = AdsHealthState::query()->where('key', $check->key)->first();
         if ($state === null) {
@@ -237,13 +256,17 @@ class DataHealth
 
         // Informational: stored, never announced.
         if ($check->reason() === 'link_rate') {
-            return;
+            return null;
+        }
+        // Meta's own refusal point is 85 %: a reading between 75 and 85 shows on the banner but is not worth a notice.
+        if ($check->reason() === 'usage' && $check->isBad() && (float) ($check->detail['max_pct'] ?? 0) < MetaAdsApi::USAGE_LIMIT) {
+            return null;
         }
 
         $held = $state->since->lte(now()->subMinutes((int) config('crm.ads.health.hold_down_minutes', 30)));
         $told = $state->notified_status ?? HealthCheck::OK;
         if (! $held || $check->status === $told) {
-            return;
+            return null;
         }
 
         // Compare-and-set on notified_status: two overlapping runs announce a transition once.
@@ -253,33 +276,50 @@ class DataHealth
                 : $q->where('notified_status', $told))
             ->update(['notified_status' => $check->status, 'notified_at' => now()]) === 1;
         if (! $claimed) {
-            return;
+            return null;
         }
 
-        $recovered = ! $check->isBad();
-        $this->notifier->notifyAdmins('ads.data_health', [
+        return [
             'key' => $check->key,
             'reason' => $check->reason(),
             'status' => $check->status,
             'account' => $check->detail['account'] ?? null,
             'account_id' => $check->accountId(),
             'subject' => $check->detail['queue'] ?? null,
-            'recovered' => $recovered,
-            'link' => '/ads/sync',
-        ]);
+            'recovered' => ! $check->isBad(),
+        ];
+    }
 
-        if (! $recovered && $this->emails($check)) {
-            $this->email($check);
+    /**
+     * One in-app notice per admin and at most one email for the whole run, listing every transition. The first line (worst
+     * first) is also the notice's top-level fields, so the bell has a headline; `lines` carries all of them.
+     *
+     * @param  list<array<string, mixed>>  $lines
+     */
+    private function announce(array $lines): void
+    {
+        if ($lines === []) {
+            return;
+        }
+        usort($lines, fn (array $a, array $b) => HealthCheck::rank($b['status']) <=> HealthCheck::rank($a['status']));
+
+        $this->notifier->notifyAdmins('ads.data_health', $lines[0] + ['link' => '/ads/sync', 'more' => count($lines) - 1, 'lines' => $lines]);
+
+        $mail = array_values(array_filter($lines, fn (array $l) => ! $l['recovered'] && $this->emails($l)));
+        if ($mail !== []) {
+            $this->email($mail);
         }
     }
 
-    private function emails(HealthCheck $c): bool
+    /** @param  array<string, mixed>  $l */
+    private function emails(array $l): bool
     {
-        return $c->reason() === 'reconnect'
-            || ($c->status === HealthCheck::CRITICAL && in_array($c->reason(), ['stale', 'scheduler'], true));
+        return $l['reason'] === 'reconnect'
+            || ($l['status'] === HealthCheck::CRITICAL && in_array($l['reason'], ['stale', 'scheduler'], true));
     }
 
-    private function email(HealthCheck $check): void
+    /** @param  list<array<string, mixed>>  $lines */
+    private function email(array $lines): void
     {
         try {
             $to = User::query()->where('is_active', true)->get()->filter(fn (User $u) => $u->isAdmin() && (string) $u->email !== '')
@@ -287,7 +327,9 @@ class DataHealth
             if ($to === []) {
                 return;
             }
-            Mail::to($to)->send(new AdsSystemAlert($check->reason(), $check->status, (string) ($check->detail['account'] ?? $check->detail['queue'] ?? '')));
+            Mail::to($to)->send(new AdsSystemAlert(array_map(fn (array $l) => [
+                'reason' => $l['reason'], 'status' => $l['status'], 'subject' => (string) ($l['account'] ?? $l['subject'] ?? ''),
+            ], $lines)));
         } catch (Throwable $e) {
             // Mail may not be configured: the in-app notice already went out, the monitor must keep running.
             Log::warning('ads:health email not sent: '.mb_substr($e->getMessage(), 0, 200));
@@ -379,7 +421,6 @@ class DataHealth
         return new HealthCheck('assignments_overlap', $ids === [] ? HealthCheck::OK : HealthCheck::WARN, ['account_ids' => $ids]);
     }
 
-    /** Share of the chat-origin orders of the last 14 days that carry a conversation (so they can be credited to an ad). */
     /** Share of the chat-origin orders of the last 14 days that carry a conversation (so they can be credited to an ad). */
     private function linkRate(): HealthCheck
     {

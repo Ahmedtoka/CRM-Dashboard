@@ -22,10 +22,9 @@ class TokenInspector
      */
     public function inspect(string $token): array
     {
-        $appId = (string) config('crm.meta.app_id');
-        $secret = (string) config('crm.meta.app_secret');
-
-        if ($appId !== '' && $secret !== '') {
+        if ($this->usesAppToken()) {
+            $appId = (string) config('crm.meta.app_id');
+            $secret = (string) config('crm.meta.app_secret');
             $data = (array) Http::withToken($appId.'|'.$secret)->acceptJson()->timeout(20)->connectTimeout(10)
                 ->get($this->api->url('debug_token'), ['input_token' => $token])->throw()->json('data', []);
             $scopes = array_map('strval', (array) ($data['scopes'] ?? []));
@@ -52,6 +51,12 @@ class TokenInspector
         sort($scopes);
 
         return ['source' => 'permissions', 'valid' => null, 'type' => null, 'scopes' => $scopes, 'expires_at' => null, 'data_access_expires_at' => null];
+    }
+
+    /** True when inspect() authenticates with the app token (debug_token); false when it uses the user token itself. */
+    public function usesAppToken(): bool
+    {
+        return (string) config('crm.meta.app_id') !== '' && (string) config('crm.meta.app_secret') !== '';
     }
 
     /** Meta sends 0 (or nothing) for "never expires". */

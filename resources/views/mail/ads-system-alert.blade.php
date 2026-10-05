@@ -1,11 +1,19 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <body style="font-family: Arial, Tahoma, sans-serif; line-height: 1.7; color: #1f2937;">
-    <p>{{ __('ads.health.mail.'.$reason, [], 'ar') }}@if ($subject_ !== '') ({{ $subject_ }})@endif</p>
+    <ul>
+        @foreach ($lines as $l)
+            <li>{{ __('ads.health.mail.'.$l['reason'], [], 'ar') }}@if ($l['subject'] !== '') ({{ $l['subject'] }})@endif</li>
+        @endforeach
+    </ul>
     <p>{{ __('ads.health.mail.open', [], 'ar') }}: <a href="{{ $link }}">{{ $link }}</a></p>
     <hr>
     <div dir="ltr" style="text-align: left;">
-        <p>{{ __('ads.health.mail.'.$reason, [], 'en') }}@if ($subject_ !== '') ({{ $subject_ }})@endif</p>
+        <ul>
+            @foreach ($lines as $l)
+                <li>{{ __('ads.health.mail.'.$l['reason'], [], 'en') }}@if ($l['subject'] !== '') ({{ $l['subject'] }})@endif</li>
+            @endforeach
+        </ul>
         <p>{{ __('ads.health.mail.open', [], 'en') }}: <a href="{{ $link }}">{{ $link }}</a></p>
     </div>
 </body>

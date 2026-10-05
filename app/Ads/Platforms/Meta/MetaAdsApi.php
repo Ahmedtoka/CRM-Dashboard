@@ -37,7 +37,7 @@ class MetaAdsApi
     /** A page Meta calls too large is asked again with half the `limit`, down to this. */
     private const MIN_LIMIT = 5;
 
-    private const USAGE_LIMIT = 85;
+    public const USAGE_LIMIT = 85;
 
     /** Usage % above the limit reported by the last 2xx read, else null. */
     private ?int $lastReadPct = null;

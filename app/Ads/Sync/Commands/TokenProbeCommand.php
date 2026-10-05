@@ -13,6 +13,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -55,7 +56,11 @@ class TokenProbeCommand extends Command
             try {
                 $info = $inspector->inspect($token);
             } catch (Throwable $e) {
-                if ($e instanceof RequestException && (int) $e->response->json('error.code') === 190) {
+                if ($e instanceof RequestException && (int) $e->response->json('error.code') === 190 && $inspector->usesAppToken()) {
+                    // The bearer was the app token: Meta says META_APP_SECRET is wrong or rotated, not that this user token is dead.
+                    $this->warn('App credentials invalid (META_APP_ID or META_APP_SECRET is wrong or was rotated): no connection was changed.');
+                    Log::warning('ads:token-probe: Meta rejected the app token (190)');
+                } elseif ($e instanceof RequestException && (int) $e->response->json('error.code') === 190) {
                     AdPlatformConnection::whereKey($c->id)->update(['token_valid' => false, 'token_checked_at' => now()]);
                     ConnectionHealth::markNeedsReconnect($c, 'Meta rejected the token (190)');
                     $this->warn("{$label} [".AdsAudit::fingerprint($token).']: rejected by Meta, needs reconnect');
@@ -66,7 +71,7 @@ class TokenProbeCommand extends Command
                 continue;
             }
 
-            $valid = $info['valid'] ?? true;
+            $valid = $info['valid']; // null = scopes read through me/permissions only: the token was not verified
             AdPlatformConnection::whereKey($c->id)->update([
                 'token_valid' => $valid,
                 'token_type' => $info['type'],
@@ -76,9 +81,9 @@ class TokenProbeCommand extends Command
                 'token_checked_at' => now(),
             ]);
             $c->refresh();
-            $this->line("{$label} [".AdsAudit::fingerprint($token).']: '.($valid ? 'valid' : 'INVALID').', scopes '.implode(',', $info['scopes']));
+            $this->line("{$label} [".AdsAudit::fingerprint($token).']: '.($valid === null ? 'unchecked' : ($valid ? 'valid' : 'INVALID')).', scopes '.implode(',', $info['scopes']));
 
-            if (! $valid) {
+            if ($valid === false) {
                 ConnectionHealth::markNeedsReconnect($c, 'Meta reports the token as not valid');
 
                 continue;

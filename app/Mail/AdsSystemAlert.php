@@ -6,23 +6,21 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 
-/** Plain system alert for the admins: which ads check failed. No customer data, no token. */
+/** Plain system alert for the admins: every ads check that went bad in one ads:health run. No customer data, no token. */
 class AdsSystemAlert extends Mailable
 {
-    /** @param  string  $subject_  the account or queue name the check is about, may be empty */
-    public function __construct(public string $reason, public string $status, public string $subject_ = '') {}
+    /** @param  list<array{reason: string, status: string, subject: string}>  $lines  subject = the account or queue name, may be empty */
+    public function __construct(public array $lines) {}
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'تنبيه الإعلانات / Ads alert: '.$this->reason);
+        return new Envelope(subject: 'تنبيه الإعلانات / Ads alert ('.count($this->lines).')');
     }
 
     public function content(): Content
     {
         return new Content(view: 'mail.ads-system-alert', with: [
-            'reason' => $this->reason,
-            'status' => $this->status,
-            'subject_' => $this->subject_,
+            'lines' => $this->lines,
             'link' => rtrim((string) config('app.url'), '/').'/ads/sync',
         ]);
     }

@@ -3328,6 +3328,7 @@ const en: Messages = {
             token_valid: 'Valid',
             token_invalid: 'Not valid',
             token_unchecked: 'Not checked yet',
+            token_unverified: 'Not verified (permissions read only)',
             token_scopes: 'Permissions',
             token_expires: 'Expires',
             token_data_access: 'Data access until',

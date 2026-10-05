@@ -3283,6 +3283,7 @@ const ar = {
             token_valid: 'صالح',
             token_invalid: 'مش صالح',
             token_unchecked: 'لسه ما اتفحصش',
+            token_unverified: 'مش متأكد منه (الصلاحيات بس اتقرت)',
             token_scopes: 'الصلاحيات',
             token_expires: 'بينتهي',
             token_data_access: 'الوصول للبيانات لحد',

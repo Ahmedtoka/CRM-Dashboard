@@ -71,7 +71,10 @@ function itemText(n: AppNotification): string {
         const reason = t('notifications.ads_health_reasons.' + String(n.data.reason ?? 'stale'));
         const account = String(n.data.account ?? n.data.subject ?? '') || t('notifications.ads_health_system');
 
-        return t(n.data.recovered ? 'notifications.ads_data_health_recovered_item' : 'notifications.ads_data_health_item', { account, reason });
+        const text = t(n.data.recovered ? 'notifications.ads_data_health_recovered_item' : 'notifications.ads_data_health_item', { account, reason });
+        const more = Number(n.data.more ?? 0);
+
+        return more > 0 ? `${text} (+${more})` : text;
     }
 
     if (n.type === 'ads.token_scope_missing') {

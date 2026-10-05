@@ -170,3 +170,43 @@ it('keeps the accounts page and the sync alive when stored credentials cannot be
     $this->actingAs($admin)->put("/ads/connections/{$c->id}", ['credentials' => ['access_token' => 'EAABnewtoken777']])->assertRedirect();
     expect(AdPlatformConnection::find($c->id)->credentials['access_token'])->toBe('EAABnewtoken777');
 });
+
+it('does not touch any connection when Meta rejects the app token with 190', function () {
+    $admin = tpAdmin();
+    $c = tpConnection();
+    Http::swap(new HttpFactory);
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*/debug_token*' => Http::response(['error' => ['code' => 190, 'message' => 'Invalid OAuth access token']], 400)]);
+
+    expect(Artisan::call('ads:token-probe'))->toBe(0);
+
+    expect(Artisan::output())->toContain('App credentials invalid')
+        ->and($c->refresh()->status)->toBe('connected')->and($c->token_valid)->toBeNull()
+        ->and(UserNotification::where('user_id', $admin->id)->count())->toBe(0);
+});
+
+it('marks the connection needs_reconnect when the user token itself gets a 190 from me/permissions', function () {
+    config(['crm.meta.app_secret' => '']);
+    $admin = tpAdmin();
+    $c = tpConnection();
+    Http::swap(new HttpFactory);
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*/me/permissions*' => Http::response(['error' => ['code' => 190, 'message' => 'Session has expired']], 400)]);
+
+    Artisan::call('ads:token-probe');
+
+    expect($c->refresh()->status)->toBe('needs_reconnect')
+        ->and(UserNotification::where('type', 'ads.token_invalid')->where('user_id', $admin->id)->count())->toBe(1);
+});
+
+it('stores token_valid as unchecked when only the permissions were read', function () {
+    config(['crm.meta.app_secret' => '']);
+    $c = tpConnection();
+    Http::swap(new HttpFactory);
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/*/me/permissions*' => Http::response(['data' => [['permission' => 'ads_management', 'status' => 'granted']]])]);
+
+    Artisan::call('ads:token-probe');
+
+    expect($c->refresh()->token_valid)->toBeNull()->and($c->token_scopes)->toBe(['ads_management'])->and($c->read_only)->toBeFalse();
+});

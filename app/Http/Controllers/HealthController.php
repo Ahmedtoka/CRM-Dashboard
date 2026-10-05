@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Ads\AdsSettings;
+use App\Ads\Health\DataHealth;
 use App\Ads\Sync\SyncAdAccount;
 use App\Enums\Platform;
 use App\Models\AdAccount;
@@ -233,7 +235,8 @@ class HealthController extends Controller
             $out['failed_sync_jobs_24h'] = DB::table('failed_jobs')->where('failed_at', '>=', now()->subDay())->where('payload', 'like', '%SyncAdAccount%')->count();
             $usage = AdsApiUsage::query()->orderByDesc('recorded_at')->orderByDesc('id')->value('max_pct');
             $out['last_usage_pct'] = $usage === null ? null : (float) $usage;
-            $beat = Cache::get('crm:scheduler_heartbeat');
+            // No beat yet counts from the day the monitor started (same rule as DataHealth), so a dead scheduler is not null forever.
+            $beat = Cache::get('crm:scheduler_heartbeat') ?: app(AdsSettings::class)->get(DataHealth::STARTED_KEY);
             $out['scheduler_age_minutes'] = $beat ? max(0, (int) Carbon::parse((string) $beat)->diffInMinutes(now(), true)) : null;
         } catch (Throwable) {
             // Never throw from health: whatever was gathered stays, the rest is null.

@@ -272,7 +272,7 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                         <p v-if="c.platform === 'meta' && !c.credentials_unreadable" class="text-xs text-muted-foreground">
                             {{ t('ads.accounts.token_health') }}:
                             <template v-if="c.token_health.checked_at">
-                                {{ c.token_health.valid === false ? t('ads.accounts.token_invalid') : t('ads.accounts.token_valid') }}
+                                {{ c.token_health.valid === false ? t('ads.accounts.token_invalid') : c.token_health.valid === true ? t('ads.accounts.token_valid') : t('ads.accounts.token_unverified') }}
                                 · {{ t('ads.accounts.token_scopes') }}: {{ c.token_health.scopes.join(', ') || '-' }}
                                 · {{ t('ads.accounts.token_expires') }}: {{ tokenDate(c.token_health.expires_at) }}
                                 · {{ t('ads.accounts.token_data_access') }}: {{ tokenDate(c.token_health.data_access_expires_at) }}

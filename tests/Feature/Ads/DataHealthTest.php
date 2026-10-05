@@ -6,9 +6,13 @@ use App\Ads\Health\QueueHeartbeat;
 use App\Enums\OrderSource;
 use App\Enums\UserRole;
 use App\Mail\AdsSystemAlert;
+use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdAccountAssignment;
+use App\Models\AdAccountDaily;
+use App\Models\AdDailyMetric;
 use App\Models\AdPlatformConnection;
+use App\Models\AdsApiUsage;
 use App\Models\AdsHealthState;
 use App\Models\AdsSyncRun;
 use App\Models\Conversation;
@@ -16,6 +20,7 @@ use App\Models\MediaBuyer;
 use App\Models\Order;
 use App\Models\User;
 use App\Models\UserNotification;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -180,11 +185,83 @@ it('reports reconnect, read-only and a control gap per account', function () {
     $a->connection->update(['status' => 'needs_reconnect']);
     $b = dhAccount();
     $b->connection->forceFill(['read_only' => true])->save();
+    $g = dhAccount();
+    $day = CarbonImmutable::now('Africa/Cairo')->subDay()->toDateString();
+    AdAccountDaily::create(['ad_account_id' => $g->id, 'date' => $day, 'spend' => 1000, 'fetched_at' => now()]);
+    AdDailyMetric::factory()->create(['ad_id' => Ad::factory()->for($g, 'account')->create()->id, 'ad_account_id' => $g->id, 'date' => $day, 'spend' => 900]);
 
     dhRun();
 
     expect(dhStatus("reconnect:{$a->id}"))->toBe('critical')->and(dhStatus("reconnect:{$b->id}"))->toBe('ok')
-        ->and(dhStatus("read_only:{$b->id}"))->toBe('warn')->and(dhStatus("read_only:{$a->id}"))->toBe('ok');
+        ->and(dhStatus("read_only:{$b->id}"))->toBe('warn')->and(dhStatus("read_only:{$a->id}"))->toBe('ok')
+        ->and(dhStatus("control_gap:{$g->id}"))->toBe('warn')->and(dhStatus("control_gap:{$a->id}"))->toBe('ok')
+        ->and(AdsHealthState::where('key', "control_gap:{$g->id}")->first()->detail['gap_pct'])->toEqual(10);
+});
+
+it('sends one email and one notice per admin for the whole run, listing every account', function () {
+    $admin = dhAdmin();
+    foreach (range(1, 4) as $i) {
+        $a = dhAccount();
+        $a->update(['name' => "Shop {$i}"]);
+        $a->connection->update(['status' => 'needs_reconnect']);
+    }
+
+    dhRun();
+    $this->travel(31)->minutes();
+    dhRun();
+
+    Mail::assertSent(AdsSystemAlert::class, 1);
+    Mail::assertSent(AdsSystemAlert::class, fn ($m) => count($m->lines) === 4 && collect($m->lines)->pluck('subject')->sort()->values()->all() === ['Shop 1', 'Shop 2', 'Shop 3', 'Shop 4']);
+    $notices = UserNotification::where('type', 'ads.data_health')->where('user_id', $admin->id)->get();
+    expect($notices)->toHaveCount(1)->and($notices->first()->data['more'])->toBe(3)->and($notices->first()->data['lines'])->toHaveCount(4);
+});
+
+it('keeps a Meta usage reading under the refusal point off the notices but shows it', function () {
+    dhAdmin();
+    $a = dhAccount();
+    AdsApiUsage::create(['ad_account_id' => $a->id, 'header' => 'x-ad-account-usage', 'max_pct' => 78, 'recorded_at' => now()]);
+
+    dhRun();
+    $this->travel(31)->minutes();
+    AdsApiUsage::create(['ad_account_id' => $a->id, 'header' => 'x-ad-account-usage', 'max_pct' => 78, 'recorded_at' => now()]);
+    dhRun();
+    expect(dhStatus("usage:{$a->id}"))->toBe('warn')->and(UserNotification::where('type', 'ads.data_health')->count())->toBe(0);
+
+    AdsApiUsage::create(['ad_account_id' => $a->id, 'header' => 'x-ad-account-usage', 'max_pct' => 90, 'recorded_at' => now()]);
+    dhRun();
+    expect(UserNotification::where('type', 'ads.data_health')->count())->toBe(1);
+});
+
+it('announces as resolved a bad check whose account is no longer checked', function () {
+    dhAdmin();
+    $a = dhAccount(4 * 60);
+    dhRun();
+    $this->travel(31)->minutes();
+    dhRun();
+    expect(UserNotification::where('type', 'ads.data_health')->count())->toBe(1);
+
+    $a->update(['is_active' => false]);
+    dhRun();
+
+    $n = UserNotification::where('type', 'ads.data_health')->orderBy('id')->get();
+    expect($n)->toHaveCount(2)->and($n->last()->data['recovered'])->toBeTrue()->and($n->last()->data['account'])->toBe($a->name)
+        ->and(dhStatus("stale:{$a->id}"))->toBeNull();
+});
+
+it('keeps ads:health at exit 0 and still sends the in-app notice when the mailer throws', function () {
+    $admin = dhAdmin();
+    $a = dhAccount();
+    $a->connection->update(['status' => 'needs_reconnect']);
+    dhRun();
+    $this->travel(31)->minutes();
+
+    $mailer = Mockery::mock();
+    $mailer->shouldReceive('to')->andThrow(new RuntimeException('smtp down'));
+    Mail::swap($mailer);
+    dhBeats();
+
+    expect(Artisan::call('ads:health'))->toBe(0)
+        ->and(UserNotification::where('type', 'ads.data_health')->where('user_id', $admin->id)->count())->toBe(1);
 });
 
 function dhOrder(OrderSource $source, bool $linked, int $daysAgo): void

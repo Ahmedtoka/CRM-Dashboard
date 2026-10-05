@@ -9,6 +9,7 @@ use App\Ads\Platforms\SecretScrubber;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Throwable;
 
 /** Asks Meta (GET only) what each stored user token can do. A token is only ever shown as an 8-hex fingerprint. */
@@ -35,7 +36,13 @@ class TokenCheck extends DoctorCheck
 
         foreach ($connections as $c) {
             $label = "#{$c->id} {$c->name}";
-            $token = (string) ($c->credentials['access_token'] ?? '');
+            try {
+                $token = (string) ($c->credentials['access_token'] ?? '');
+            } catch (DecryptException) {
+                $rows[] = DoctorRow::fail('Token', "{$label} token", 'credentials unreadable', 'The stored credentials cannot be decrypted (APP_KEY changed or the column is damaged): enter the token again.');
+
+                continue;
+            }
             if ($token === '') {
                 $rows[] = DoctorRow::fail('Token', "{$label} token", 'missing', 'The connection has no access token stored.');
 
