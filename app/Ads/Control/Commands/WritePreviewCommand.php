@@ -45,7 +45,7 @@ class WritePreviewCommand extends Command
         }
 
         try {
-            $type->target($account, $level, $id);
+            $target = $type->target($account, $level, $id);
             $live = $guard->read($account, $level, $id);
         } catch (WriteDenied $e) {
             $this->error($e->errorCode.': '.$e->getMessage());
@@ -61,8 +61,27 @@ class WritePreviewCommand extends Command
             $this->line($line);
         }
         $this->line('ends: '.($live->endsAt?->toIso8601String() ?? '-'));
+        $this->line($this->verdictLine($guard->budgetVerdict(null, $account, $target, $live), $live->currency));
 
         return self::SUCCESS;
+    }
+
+    /** The Run guard's budget verdict for this account (global/account limits; a user override is not applied). */
+    private function verdictLine(array $verdict, string $currency): string
+    {
+        $caps = array_values(array_filter($verdict['rows'], fn ($r) => $r['key'] === 'max_daily_budget'));
+        $cap = $caps[0]['limit'] ?? null;
+        $capText = $cap !== null ? ' cap '.WriteLimits::money((int) $cap, $currency).' a day' : '';
+        $refusal = $verdict['refusal'];
+        if ($refusal !== null) {
+            $d = $refusal->details;
+            $what = isset($d['per_day_minor']) ? " ({$d['object_level']} ".WriteLimits::money((int) $d['per_day_minor'], $currency).' a day >'.$capText.')' : '';
+
+            return 'cap verdict: refused '.$refusal->errorCode.$what;
+        }
+        $largest = $caps === [] ? 0 : max(array_column($caps, 'requested'));
+
+        return 'cap verdict: allowed (largest '.WriteLimits::money((int) $largest, $currency).' a day,'.$capText.')';
     }
 
     /** @return list<string> */

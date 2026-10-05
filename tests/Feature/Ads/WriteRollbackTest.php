@@ -99,6 +99,8 @@ it('a buyer cannot roll back a campaign-level action', function () {
     $admin = User::factory()->adsAuthority()->create(['role' => UserRole::Admin]);
     $buyer = rbBuyer($acc);
     $stop = rbDone($admin, $acc, 'campaign', $camp->external_id, 'paused');
+    // The undo is a Run: the Run guard needs a readable budget (a CBO campaign; the fake campaign has none by default).
+    app(FakeAdsDriver::class)->seedObject('campaign', $camp->external_id, ['dailyBudgetMinor' => 100000]);
 
     rbPost($this, $buyer, $stop)->assertForbidden()->assertJsonPath('code', 'ads_authority_required');
     rbPost($this, $admin, $stop)->assertCreated();

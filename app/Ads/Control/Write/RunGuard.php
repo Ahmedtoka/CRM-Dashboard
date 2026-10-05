@@ -8,7 +8,9 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Data\ObjectState;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\RateLimited;
+use App\Models\Ad;
 use App\Models\AdAccount;
+use App\Models\AdSet;
 use App\Models\AdWriteAction;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -23,6 +25,7 @@ use Throwable;
  *   at confirm a read younger than crm.ads.write.preread_fresh_seconds is reused, else the object is read again. Live
  *   ACTIVE → noop (no platform call); anything but PAUSED, or not the expected status → superseded (409).
  * - A read that fails is a refusal (fail closed): 422 budget_unreadable, or 429 rate_limited when throttled.
+ * - Budget cap (budgetCheck), on the same read, at propose and at confirm.
  */
 class RunGuard
 {
@@ -31,6 +34,8 @@ class RunGuard
 
     public function __construct(
         private readonly DriverFactory $drivers,
+        private readonly WriteLimits $limits,
+        private readonly SetStatusType $type,
     ) {}
 
     /**
@@ -43,8 +48,9 @@ class RunGuard
     public function atPropose(User $u, AdAccount $a, Model $target): array
     {
         $live = $this->read($a, SetStatusType::levelOf($target), (string) $target->external_id);
+        $limits = $this->budgetCheck($u, $a, $target, $live);
 
-        return [$live, [], []];
+        return [$live, $limits, []];
     }
 
     /**
@@ -78,7 +84,116 @@ class RunGuard
             throw WriteDenied::make('precondition_failed', ['expected' => $want, 'actual' => $actual]);
         }
 
-        return ['noop' => false, 'read' => $read, 'limits_checked' => null];
+        $limits = $this->budgetCheck($u, $account, $this->type->target($account, $x->target_level, $x->target_external_id), $live);
+
+        return ['noop' => false, 'read' => $read, 'limits_checked' => $limits];
+    }
+
+    /**
+     * The budget cap (B3, "spend/budget cap" guardrail), for everyone (Ads authority included; the owner raises his own
+     * cap with ads:write-limits --user=). Relevant budgets: an ad: its ad set and its campaign (CBO); an ad set: its
+     * own and its campaign's; a campaign: its own. Per-day exposure: the daily budget, else the lifetime budget spread
+     * over the days until its end (ASSUMPTION: the full lifetime, not what is left, so it errs on the safe side).
+     *
+     * @return list<array<string, mixed>> the evaluated caps (limits_checked)
+     *
+     * @throws WriteDenied 422 budget_over_cap, currency_mismatch, budget_unreadable
+     */
+    public function budgetCheck(?User $u, AdAccount $a, Model $target, ObjectState $live): array
+    {
+        $verdict = $this->budgetVerdict($u, $a, $target, $live);
+        if ($verdict['refusal'] !== null) {
+            throw $verdict['refusal'];
+        }
+
+        return $verdict['rows'];
+    }
+
+    /**
+     * The cap verdict without throwing (ads:write-preview shows it).
+     *
+     * @return array{rows: list<array<string, mixed>>, refusal: ?WriteDenied}
+     */
+    public function budgetVerdict(?User $u, AdAccount $a, Model $target, ObjectState $live): array
+    {
+        $limits = $this->limits->for($u, $a);
+        $cap = $limits['max_daily_budget_minor'];
+        $capCurrency = $limits['cap_currency'];
+        $currency = strtoupper($live->currency !== '' ? $live->currency : (string) $a->currency);
+
+        $rows = [['key' => 'cap_currency', 'limit' => $capCurrency, 'requested' => $currency, 'outcome' => $currency === $capCurrency ? 'ok' : 'over']];
+        if ($currency !== $capCurrency) {
+            return ['rows' => $rows, 'refusal' => WriteDenied::make('currency_mismatch', ['currency' => $currency, 'cap_currency' => $capCurrency])];
+        }
+
+        $refusal = null;
+        $budgeted = 0;
+        foreach ($this->budgetObjects($target, $live) as $o) {
+            if ($o['daily'] === null && $o['lifetime'] === null) {
+                continue;
+            }
+            $budgeted++;
+            if ($o['daily'] !== null) {
+                [$perDay, $basis] = [$o['daily'], 'daily'];
+            } elseif ($o['endsAt'] === null) {
+                $refusal ??= WriteDenied::make('budget_unreadable', ['object_level' => $o['level'], 'object_id' => $o['id'], 'reason' => 'lifetime_without_end']);
+
+                continue;
+            } else {
+                $days = max(1, (int) ceil(($o['endsAt']->getTimestamp() - now()->getTimestamp()) / 86400));
+                [$perDay, $basis] = [(int) ceil($o['lifetime'] / $days), 'lifetime'];
+            }
+            $over = $perDay > $cap;
+            $rows[] = ['key' => 'max_daily_budget', 'level' => $o['level'], 'object_id' => $o['id'], 'basis' => $basis,
+                'limit' => $cap, 'requested' => $perDay, 'currency' => $currency, 'outcome' => $over ? 'over' : 'ok'];
+            if ($over) {
+                $refusal ??= WriteDenied::make('budget_over_cap', [
+                    'object_level' => $o['level'], 'object_id' => $o['id'], 'per_day_minor' => $perDay, 'cap_minor' => $cap, 'currency' => $currency,
+                    'per_day' => WriteLimits::major($perDay), 'cap' => WriteLimits::major($cap),
+                ]);
+            }
+        }
+        if ($budgeted === 0) {
+            $refusal ??= WriteDenied::make('budget_unreadable', ['reason' => 'no_budget']);
+        }
+
+        return ['rows' => $rows, 'refusal' => $refusal];
+    }
+
+    /**
+     * The target and its parents with their budgets (nearest first). Parent ids come from the CRM rows (best effort;
+     * null when the local row does not know its parent).
+     *
+     * @return list<array{level: string, id: ?string, daily: ?int, lifetime: ?int, endsAt: ?CarbonImmutable}>
+     */
+    private function budgetObjects(Model $target, ObjectState $live): array
+    {
+        $level = SetStatusType::levelOf($target);
+        $ids = $this->parentIds($target);
+        $objects = [['level' => $level, 'id' => (string) $target->external_id, 'daily' => $live->dailyBudgetMinor,
+            'lifetime' => $live->lifetimeBudgetMinor, 'endsAt' => $live->endsAt]];
+        foreach ($live->parents as $p) {
+            $objects[] = ['level' => $p['level'], 'id' => $ids[$p['level']] ?? null, 'daily' => $p['dailyBudgetMinor'],
+                'lifetime' => $p['lifetimeBudgetMinor'], 'endsAt' => $p['endsAt']];
+        }
+
+        return $objects;
+    }
+
+    /** @return array<string, string> */
+    private function parentIds(Model $target): array
+    {
+        if ($target instanceof Ad) {
+            $set = $target->adSet;
+            $campaign = $target->campaign ?? $set?->campaign;
+
+            return array_filter(['adset' => $set?->external_id, 'campaign' => $campaign?->external_id]);
+        }
+        if ($target instanceof AdSet) {
+            return array_filter(['campaign' => $target->campaign?->external_id]);
+        }
+
+        return [];
     }
 
     /**
