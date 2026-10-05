@@ -57,7 +57,7 @@ final class AdWriteService
         return $this->canWriteMany($u, [$a])[$a->id];
     }
 
-    /** Scope only: is this account one the user may act on (ignores the writable-accounts setting). */
+    /** Scope only: is this account one the user may act on (ignores the account's write switch). */
     public function inScope(User $u, AdAccount $a): bool
     {
         $today = $this->todayIds($u);
@@ -66,7 +66,8 @@ final class AdWriteService
     }
 
     /**
-     * canWrite for many accounts with the buyer's assignments for today read once.
+     * canWrite for many accounts with the buyer's assignments for today read once. The rows must carry is_active and
+     * write_enabled (no settings query: the write switch is a column since B1).
      *
      * @param  iterable<AdAccount>  $accounts
      * @return array<int, bool> account id => allowed
@@ -74,10 +75,9 @@ final class AdWriteService
     public function canWriteMany(User $u, iterable $accounts): array
     {
         $today = $this->todayIds($u);
-        $list = WritableAccounts::list();
         $out = [];
         foreach ($accounts as $a) {
-            $out[$a->id] = (bool) $a->is_active && ($today === null || in_array($a->id, $today, true)) && WritableAccounts::allowsIn($a, $list);
+            $out[$a->id] = ($today === null || in_array($a->id, $today, true)) && WritableAccounts::allows($a);
         }
 
         return $out;

@@ -47,7 +47,7 @@ class CampaignController extends Controller
             }
         };
         $collect($nodes);
-        $can = $ids === [] ? [] : $writes->canWriteMany($request->user(), AdAccount::query()->whereIn('id', array_keys($ids))->get(['id', 'is_active', 'platform', 'external_id']));
+        $can = $ids === [] ? [] : $writes->canWriteMany($request->user(), AdAccount::query()->whereIn('id', array_keys($ids))->get(['id', 'is_active', 'write_enabled', 'platform', 'external_id']));
 
         $levels = $writes->allowedLevels($request->user());
         $apply = function (array $list) use (&$apply, $can, $levels): array {

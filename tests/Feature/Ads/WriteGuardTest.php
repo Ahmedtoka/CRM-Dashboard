@@ -3,7 +3,6 @@
 use App\Ads\Control\AdWriteService;
 use App\Ads\Control\Jobs\PublishAd;
 use App\Ads\Control\PublishService;
-use App\Ads\Control\WritableAccounts;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\Data\MediaRef;
 use App\Ads\Platforms\DriverFactory;
@@ -110,10 +109,10 @@ it('allows every active account by default and none when inactive', function () 
     $admin = User::factory()->create(['role' => UserRole::Admin]);
     $can = app(AdWriteService::class)->canWriteMany($admin, [$a, $b, $off]);
 
-    expect(WritableAccounts::list())->toBeNull()->and($can)->toBe([$a->id => true, $b->id => true, $off->id => false]);
+    expect($can)->toBe([$a->id => true, $b->id => true, $off->id => false]);
 });
 
-it('narrows the writable accounts with ads:writable and audits each change', function () {
+it('narrows the writable accounts with ads:writable and audits each change (column-based since B1)', function () {
     $a = AdAccount::factory()->meta()->create(['external_id' => 'act_A']);
     $b = AdAccount::factory()->meta()->create(['external_id' => 'act_B']);
     $adA = Ad::factory()->for($a, 'account')->create();
@@ -121,7 +120,7 @@ it('narrows the writable accounts with ads:writable and audits each change', fun
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
     expect(Artisan::call('ads:writable', ['--set' => 'act_A']))->toBe(0);
-    expect(WritableAccounts::list())->toBe(['act_A']);
+    expect($a->fresh()->write_enabled)->toBeTrue()->and($b->fresh()->write_enabled)->toBeFalse();
 
     wgStop($this, $admin, $b, $adB)->assertStatus(422);
     expect($adB->refresh()->status)->toBe('ACTIVE')->and(Cache::get('ads-fake-writer'))->toBeNull();
@@ -129,22 +128,23 @@ it('narrows the writable accounts with ads:writable and audits each change', fun
     expect($adA->refresh()->status)->toBe('PAUSED');
 
     Artisan::call('ads:writable', ['--list' => true]);
-    expect(Artisan::output())->toContain('only act_A');
+    expect(Artisan::output())->toContain('act_A')->toContain('write_enabled');
 
     expect(Artisan::call('ads:writable', ['--all' => true]))->toBe(0);
-    expect(WritableAccounts::list())->toBeNull();
+    expect($b->fresh()->write_enabled)->toBeTrue();
     wgStop($this, $admin, $b, $adB)->assertOk();
 
-    expect(AdsAuditLog::where('action', 'settings.writable_accounts_changed')->count())->toBe(2);
-    $first = AdsAuditLog::where('action', 'settings.writable_accounts_changed')->orderBy('id')->first();
-    expect($first->before)->toBe(['writable' => 'all_active'])->and($first->after)->toBe(['writable' => ['act_A']]);
+    expect(AdsAuditLog::where('action', 'account.write_enabled_changed')->count())->toBe(2);
+    $first = AdsAuditLog::where('action', 'account.write_enabled_changed')->orderBy('id')->first();
+    expect($first->ad_account_id)->toBe($b->id)->and($first->before)->toBe(['write_enabled' => true])->and($first->after)->toBe(['write_enabled' => false]);
 });
 
 it('rejects an unknown account in --set and changes nothing', function () {
-    AdAccount::factory()->meta()->create(['external_id' => 'act_A']);
+    $a = AdAccount::factory()->meta()->create(['external_id' => 'act_A']);
+    $b = AdAccount::factory()->meta()->create(['external_id' => 'act_B']);
 
     expect(Artisan::call('ads:writable', ['--set' => 'act_A,act_nope']))->toBe(1)
-        ->and(WritableAccounts::list())->toBeNull()->and(AdsAuditLog::count())->toBe(0);
+        ->and($a->fresh()->write_enabled)->toBeTrue()->and($b->fresh()->write_enabled)->toBeTrue()->and(AdsAuditLog::count())->toBe(0);
 });
 
 it('fails a queued publish on a non-writable account without a writer call', function () {
@@ -159,7 +159,7 @@ it('fails a queued publish on a non-writable account without a writer call', fun
         'file_ids' => [$file->id], 'captions' => [['headline' => 'H', 'primary_text' => 'T', 'cta' => 'SHOP_NOW']],
     ])->first();
 
-    WritableAccounts::set(['act_other']);
+    $acc->forceFill(['write_enabled' => false])->save();
     $double = new class extends FakeAdsDriver
     {
         public static int $calls = 0;
@@ -208,7 +208,7 @@ it('refuses publish options for a live writer on a non-sandbox account, and a no
     $this->actingAs($admin)->getJson("/ads/publish/options?account={$acc->id}")->assertStatus(422)
         ->assertJsonPath('message', __('ads.errors.sandbox_only'));
 
-    WritableAccounts::set(['act_other']);
+    $acc->forceFill(['write_enabled' => false])->save();
     $this->actingAs($admin)->getJson("/ads/publish/options?account={$acc->id}")->assertStatus(422)->assertJsonValidationErrors('account_id');
     Http::assertNothingSent();
 });
@@ -221,10 +221,10 @@ it('refuses publish synchronously: non-writable account 422, live writer outside
     $admin = User::factory()->create(['role' => UserRole::Admin]);
     $key = ['Idempotency-Key' => (string) Str::uuid()];
 
-    WritableAccounts::set(['act_other']);
+    $acc->forceFill(['write_enabled' => false])->save();
     $this->actingAs($admin)->postJson("/ads/materials/{$material->id}/publish", wgPublishBody($acc, $file), $key)->assertStatus(422)->assertJsonValidationErrors('account_id');
 
-    WritableAccounts::set(null);
+    $acc->forceFill(['write_enabled' => true])->save();
     config(['crm.ads.drivers.meta' => 'live']);
     $this->actingAs($admin)->postJson("/ads/materials/{$material->id}/publish", wgPublishBody($acc, $file), $key)->assertStatus(422)
         ->assertJsonPath('errors.account_id.0', __('ads.errors.sandbox_only'));
@@ -285,7 +285,7 @@ it('shows can_write per account on campaigns, creatives and stop suggestions und
     expect($sug['Ad AccA']['can_write'])->toBeTrue()->and($sug['Ad AccB']['can_write'])->toBeFalse();
 });
 
-it('reads the writable list once for a whole page of accounts', function () {
+it('reads no settings at all for a whole page of accounts (the write switch is a column since B1)', function () {
     $accounts = AdAccount::factory()->meta()->count(5)->create();
     $admin = User::factory()->create(['role' => UserRole::Admin]);
     $queries = 0;
@@ -295,7 +295,7 @@ it('reads the writable list once for a whole page of accounts', function () {
         }
     });
 
-    app(AdWriteService::class)->canWriteMany($admin, $accounts);
+    $can = app(AdWriteService::class)->canWriteMany($admin, $accounts);
 
-    expect($queries)->toBe(1);
+    expect($queries)->toBe(0)->and(array_unique(array_values($can)))->toBe([true]);
 });

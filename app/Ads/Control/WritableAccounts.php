@@ -2,43 +2,32 @@
 
 namespace App\Ads\Control;
 
-use App\Ads\AdsSettings;
 use App\Models\AdAccount;
 
 /**
- * Which ad accounts the CRM may write to. Setting ads_settings.writable_account_ids absent or null = every active account
- * (the default, D3); a list of external ids narrows it to those accounts (still active).
+ * Which ad accounts the CRM may write to: an active account whose ad_accounts.write_enabled is on (B1). The column
+ * defaults to on for every account, existing and newly discovered (owner decision D3); the owner narrows it with
+ * ads:writable. The slice-1 setting ads_settings.writable_account_ids is no longer read (migrated once into the column).
+ *
+ * Callers that load a partial account row must select is_active and write_enabled.
  */
 final class WritableAccounts
 {
-    public const KEY = 'writable_account_ids';
+    /** The slice-1 setting key, kept only as the rollback source for the old code. */
+    public const LEGACY_KEY = 'writable_account_ids';
 
     public static function allows(AdAccount $a): bool
     {
-        if (! $a->is_active) {
-            return false;
-        }
-
-        return self::allowsIn($a, self::list());
+        return (bool) $a->is_active && (bool) $a->write_enabled;
     }
 
-    /** allows() against a list already read, so a page of accounts costs one settings query. */
-    public static function allowsIn(AdAccount $a, ?array $list): bool
+    /**
+     * @deprecated since Phase B: the list argument is ignored; use allows().
+     *
+     * @param  array<mixed>|null  $ignored
+     */
+    public static function allowsIn(AdAccount $a, ?array $ignored = null): bool
     {
-        return (bool) $a->is_active && ($list === null || in_array((string) $a->external_id, $list, true));
-    }
-
-    /** @return list<string>|null null = every active account */
-    public static function list(): ?array
-    {
-        $v = app(AdsSettings::class)->get(self::KEY);
-
-        return is_array($v) ? array_values(array_map('strval', $v)) : null;
-    }
-
-    /** @param  list<string>|null  $ids  null clears the override */
-    public static function set(?array $ids): void
-    {
-        app(AdsSettings::class)->set(self::KEY, $ids === null ? null : array_values(array_unique($ids)));
+        return self::allows($a);
     }
 }
