@@ -194,6 +194,7 @@ final class AdsSyncService
         $sweepWarning = null;
         $campaignWarning = null;
         $swept = false;
+        $adListWarnings = [];
         $driver = $this->drivers->for(AdPlatform::from($a->platform));
         $driver->drainWarnings(); // only this run's warnings below
 
@@ -202,6 +203,12 @@ final class AdsSyncService
             $driver->admit($a);
             // The ad list (full creative specs) is the heaviest Meta call: a backfill reads it once, on its first chunk.
             $adRows = $withAds ? $driver->ads($a) : [];
+            // Any warning raised by ads() means the list is incomplete (cut by the high-usage paging stop): no sweep
+            // this run, so nothing is judged GONE on a partial sighting.
+            $adListWarnings = $driver->drainWarnings();
+            if ($adListWarnings !== []) {
+                $sweep = false;
+            }
             $this->upsertAds($a, $adRows);
             $this->linkPublications($a);
             $metrics = $driver->dailyMetrics($a, $from, $to);
@@ -233,7 +240,7 @@ final class AdsSyncService
         }
 
         // Metrics are committed; a media failure must not turn the run into an error.
-        $warnings = array_values(array_filter([$controlWarning, $guard, $sweepWarning, $campaignWarning, ...$driver->drainWarnings()]));
+        $warnings = array_values(array_filter([...$adListWarnings, $controlWarning, $guard, $sweepWarning, $campaignWarning, ...$driver->drainWarnings()]));
         try {
             $this->fetchMedia($a, Ad::where('ad_account_id', $a->id)->whereNull('media_fetched_at')
                 ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'unknown')) // minimal ads have no creative to fetch
@@ -297,7 +304,17 @@ final class AdsSyncService
                     // The claim expired and another sync took it: stop here, never run two syncs of one account.
                     unset($this->claims[$a->id]);
                     $owned = false;
-                    $run?->update(['error' => trim(($run->error ? $run->error.' | ' : '').self::CLAIM_LOST)]);
+                    if ($run === null) {
+                        // Lost before any chunk ran: leave a visible row.
+                        $run = AdsSyncRun::create([
+                            'ad_account_id' => $a->id, 'platform' => $a->platform, 'kind' => 'backfill', 'status' => 'skipped',
+                            'trigger' => $trigger, 'triggered_by_id' => $triggeredById, 'run_key' => $runKey, 'batch_key' => $batchKey,
+                            'error' => self::CLAIM_LOST, 'from_date' => $from->toDateString(), 'to_date' => $to->toDateString(),
+                            'started_at' => now(), 'finished_at' => now(),
+                        ]);
+                    } else {
+                        $run->update(['error' => trim(($run->error ? $run->error.' | ' : '').self::CLAIM_LOST)]);
+                    }
                     break;
                 }
                 $run = $this->syncAccount($a, $from, $to, 'backfill', withAds: $offset === 0, trigger: $trigger, triggeredById: $triggeredById, runKey: $runKey, batchKey: $batchKey);

@@ -5,6 +5,7 @@ use App\Ads\Platforms\Meta\MetaAdsApi;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Sync\AdsSyncService;
 use App\Ads\Sync\SyncAdAccount;
+use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdAccountDaily;
 use App\Models\AdCampaign;
@@ -261,7 +262,8 @@ it('undoes the pending marker when the dispatch fails', function () {
     $a = AdAccount::factory()->meta()->create(['external_id' => 'act_1', 'name' => 'Lane Down']);
     Bus::shouldReceive('dispatch')->andThrow(new RuntimeException('Connection refused [tcp://127.0.0.1:6379]'));
 
-    $this->artisan('ads:sync', ['--days' => 3])->expectsOutputToContain('Failed to queue Lane Down')->assertFailed();
+    $this->artisan('ads:sync', ['--days' => 3])->expectsOutputToContain('Failed to queue Lane Down')
+        ->expectsOutputToContain('Queued 0 account(s).')->assertFailed();
 
     expect($a->fresh()->sync_pending_since)->toBeNull();
 });
@@ -431,4 +433,30 @@ it('the sweeper clears pending markers older than 2 hours', function () {
     $this->artisan('ads:sweep-stuck-runs')->assertSuccessful();
 
     expect($old->fresh()->sync_pending_since)->toBeNull()->and($fresh->fresh()->sync_pending_since)->not->toBeNull();
+});
+
+it('a deep run whose ad list was cut by high usage does not sweep and marks nothing GONE', function () {
+    $acc = admissionAccount('act_1');
+    $old = Ad::create(['ad_account_id' => $acc->id, 'external_id' => 'a_old', 'name' => 'Old', 'status' => 'ACTIVE', 'effective_status' => 'ACTIVE', 'last_seen_at' => now()->subDays(3)]);
+    AdsSyncRun::create(['ad_account_id' => $acc->id, 'platform' => 'meta', 'kind' => 'recent', 'status' => 'ok', 'started_at' => now()->subDays(2), 'finished_at' => now()->subDays(2), 'swept_at' => now()->subDays(2)]);
+    $usage = ['x-business-use-case-usage' => '{"1":[{"type":"ads_management","call_count":92,"total_cputime":1,"total_time":1}]}'];
+    Http::fake(function (Request $r) use ($usage) {
+        $statuses = (string) ($r->data()['effective_status'] ?? '');
+        if (str_contains($r->url(), 'act_1/ads') && ! str_contains($statuses, 'ARCHIVED')) {
+            return Http::response(['data' => [['id' => 'a_new', 'name' => 'New', 'status' => 'ACTIVE', 'effective_status' => 'ACTIVE']],
+                'paging' => ['next' => 'https://graph.facebook.com/v23.0/act_1/ads?after=X']], 200, $usage);
+        }
+
+        return Http::response(['data' => []]);
+    });
+
+    $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
+    $run = app(AdsSyncService::class)->syncAccount($acc, $today->subDays(29), $today, 'recent');
+
+    expect($run->status)->toBe('ok')
+        ->and($run->swept_at)->toBeNull()
+        ->and($run->error)->toContain('Ad list: stopped paging at 92% usage (1 rows kept)')
+        ->and($old->fresh()->effective_status)->toBe('ACTIVE')
+        ->and(Ad::where('effective_status', 'GONE')->count())->toBe(0);
+    Http::assertNotSent(fn (Request $r) => str_contains((string) ($r->data()['effective_status'] ?? ''), 'ARCHIVED'));
 });

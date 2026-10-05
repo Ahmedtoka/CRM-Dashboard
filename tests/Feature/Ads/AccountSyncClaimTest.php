@@ -225,3 +225,25 @@ it('ads:backfill inline skips an account another sync holds', function () {
 
     Http::assertSentCount(0);
 });
+
+it('a backfill whose claim is lost before its first chunk leaves a visible skipped row', function () {
+    $acc = claimAccount();
+    Http::fake(['graph.facebook.com/*' => Http::response(['data' => []])]);
+    $stolen = false;
+    DB::listen(function ($q) use (&$stolen, $acc) {
+        // Right after the backfill took its claim and looked for done chunks, another sync takes the account.
+        if (! $stolen && str_contains($q->sql, 'ads_sync_runs') && str_contains($q->sql, 'batch_key')) {
+            $stolen = true;
+            claimHeldBy($acc, 'thief', now()->addMinutes(30));
+        }
+    });
+
+    $run = app(AdsSyncService::class)->backfill($acc, 10, batchKey: 'b-2');
+
+    expect($run)->not->toBeNull()
+        ->and($run->status)->toBe('skipped')
+        ->and($run->error)->toBe(AdsSyncService::CLAIM_LOST)
+        ->and(AdsSyncRun::where('batch_key', 'b-2')->count())->toBe(1)
+        ->and($acc->fresh()->sync_claim_key)->toBe('thief');
+    Http::assertSentCount(0);
+});

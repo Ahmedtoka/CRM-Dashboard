@@ -96,7 +96,8 @@ class SyncAdsCommand extends Command
             $this->attributeOrders($attribution);
         }
 
-        $this->info(($this->option('now') ? 'Synced ' : 'Queued ').($accounts->count() - ($this->option('now') ? $failed : 0)).' account(s).');
+        // $failed counts failed syncs (--now) or failed dispatches (queued): neither is in the summary.
+        $this->info(($this->option('now') ? 'Synced ' : 'Queued ').($accounts->count() - $failed).' account(s).');
 
         return $failed > 0 ? self::FAILURE : self::SUCCESS;
     }
