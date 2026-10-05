@@ -6,7 +6,6 @@ use App\Ads\AdsSettings;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\AdsQuery;
 use App\Ads\Reports\WinnerScorer;
-use App\Ads\Sync\AdsSyncService;
 use App\Models\Ad;
 use Illuminate\Support\Facades\DB;
 
@@ -21,6 +20,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class StopAdvisor
 {
+    /** Effective statuses of ads the platform no longer runs (A1c): never a Stop candidate. */
+    public const STALE_STATUSES = ['ARCHIVED', 'DELETED', 'GONE'];
+
     public function __construct(
         private readonly WinnerScorer $scorer,
         private readonly AdsQuery $q,
@@ -103,7 +105,7 @@ final class StopAdvisor
      */
     private function notStale($q, string $column)
     {
-        return $q->where(fn ($w) => $w->whereNull($column)->orWhereNotIn($column, AdsSyncService::KEEP_STATUSES));
+        return $q->where(fn ($w) => $w->whereNull($column)->orWhereNotIn($column, self::STALE_STATUSES));
     }
 
     /**
@@ -122,6 +124,10 @@ final class StopAdvisor
             ->whereIn('ad.status', AdWriteService::ACTIVE_STATUSES)
             ->where(fn ($w) => $this->notStale($w, 'ad.effective_status'))
             ->select(['l.ad_id', 'mat.title'])->orderBy('mat.id');
+        if ($f->activeCampaignsOnly) {
+            $q->join('ad_campaigns as actv', 'actv.id', '=', 'ad.ad_campaign_id')
+                ->whereIn('actv.status', AdWriteService::ACTIVE_STATUSES);
+        }
         if ($f->accountIds !== null) {
             $q->whereIn('ad.ad_account_id', $f->accountIds);
         }

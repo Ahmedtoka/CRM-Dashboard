@@ -13,6 +13,7 @@ use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
@@ -79,13 +80,13 @@ it('asks meta for the archived/deleted ads and every campaign with light fields'
 
     $out = app(MetaAdsDriver::class)->statuses(sweepAccount());
 
-    expect($out)->toBe(['ads' => [], 'campaigns' => []]);
+    expect($out)->toBe(['ads' => [], 'campaigns' => [], 'warnings' => []]);
     $requests = statusRequests();
     expect($requests)->toHaveCount(2);
     $ads = collect($requests)->first(fn ($r) => str_contains($r->url(), 'act_1/ads'));
     $camps = collect($requests)->first(fn ($r) => str_contains($r->url(), 'act_1/campaigns'));
     expect($ads['fields'])->toBe('id,status,effective_status')
-        ->and(json_decode($ads['effective_status'], true))->toBe(['ARCHIVED', 'DELETED'])
+        ->and(json_decode($ads['effective_status'], true))->toBe(['ARCHIVED', 'DELETED', 'PREAPPROVED', 'PENDING_BILLING_INFO'])
         ->and((int) $ads['limit'])->toBe(500)
         ->and($camps['fields'])->toBe('id,name,status,effective_status,objective')
         ->and(json_decode($camps['effective_status'], true))->toBe(MetaAdsDriver::INSIGHTS_STATUSES)
@@ -206,11 +207,36 @@ it('sweeps once in a backfill, on its first chunk', function () {
     expect(collect(statusRequests())->filter(fn ($r) => str_contains($r->url(), 'act_1/campaigns')))->toHaveCount(1);
 });
 
-it('keeps the run ok with a warning when the status lists fail', function () {
+it('covers every insights status between the full ad list and the sweep list', function () {
+    expect(array_values(array_unique([...MetaAdsDriver::AD_STATUSES, ...MetaAdsDriver::SWEEP_AD_STATUSES])))
+        ->toEqualCanonicalizing(MetaAdsDriver::INSIGHTS_STATUSES);
+});
+
+it('never marks a PENDING_BILLING_INFO ad GONE: the sweep list reports it', function () {
     $acc = sweepAccount();
+    $billing = Ad::factory()->for($acc, 'account')->create(['external_id' => 'ad_bill', 'status' => 'ACTIVE', 'effective_status' => 'ACTIVE']);
+    $live = [];
+    $archived = ['ad_bill' => 'PENDING_BILLING_INFO'];
+    $campaigns = [];
+    fakeSweepMeta($live, $archived, $campaigns);
+    $this->travel(1)->minutes();
+
+    deepSync($acc);
+    $this->travel(1)->days();
+    deepSync($acc);
+
+    expect($billing->refresh()->effective_status)->toBe('PENDING_BILLING_INFO');
+});
+
+it('keeps the ads list and a completed sweep when only the campaigns list fails', function () {
+    $acc = sweepAccount();
+    $ad = Ad::factory()->for($acc, 'account')->create(['external_id' => 'ad_x', 'effective_status' => 'ACTIVE']);
     Http::fake(function (Request $r) {
         if (str_contains($r->url(), 'act_1/campaigns')) {
             return Http::response(['error' => ['message' => 'Unsupported get request', 'code' => 100]], 400);
+        }
+        if (str_contains($r->url(), 'act_1/ads') && str_contains((string) ($r->data()['effective_status'] ?? ''), 'ARCHIVED')) {
+            return Http::response(['data' => [['id' => 'ad_x', 'status' => 'ARCHIVED', 'effective_status' => 'ARCHIVED']]]);
         }
 
         return Http::response(['data' => []]);
@@ -218,6 +244,53 @@ it('keeps the run ok with a warning when the status lists fail', function () {
 
     $run = deepSync($acc);
 
-    expect($run->status)->toBe('ok')->and($run->error)->toContain('Status sweep')->toContain('Unsupported get request')
-        ->and($run->swept_at)->toBeNull();
+    expect($run->status)->toBe('ok')->and($run->error)->toContain('Status sweep')->toContain('campaigns list')->toContain('Unsupported get request')
+        ->and($run->swept_at)->not->toBeNull()
+        ->and($ad->refresh()->effective_status)->toBe('ARCHIVED');
+});
+
+it('marks nothing GONE and records no completed sweep when the ads sweep list fails', function () {
+    $acc = sweepAccount();
+    $lost = Ad::factory()->for($acc, 'account')->create(['external_id' => 'ad_lost', 'effective_status' => 'ACTIVE']);
+    $failAds = false;
+    Http::fake(function (Request $r) use (&$failAds) {
+        if ($failAds && str_contains($r->url(), 'act_1/ads') && str_contains((string) ($r->data()['effective_status'] ?? ''), 'ARCHIVED')) {
+            return Http::response(['error' => ['message' => 'Unsupported get request', 'code' => 100]], 400);
+        }
+
+        return Http::response(['data' => []]);
+    });
+    $this->travel(1)->minutes();
+    deepSync($acc); // a completed sweep
+
+    $this->travel(1)->days();
+    $failAds = true;
+    $run = deepSync($acc);
+
+    expect($run->status)->toBe('ok')->and($run->error)->toContain('ads list')
+        ->and($run->swept_at)->toBeNull()
+        ->and($lost->refresh()->effective_status)->toBe('ACTIVE');
+});
+
+it('updates the archived ads with one query per status pair', function () {
+    $acc = sweepAccount();
+    foreach (['a1', 'a2', 'a3', 'd1'] as $id) {
+        Ad::factory()->for($acc, 'account')->create(['external_id' => $id, 'effective_status' => 'ACTIVE']);
+    }
+    $live = [];
+    $archived = ['a1' => 'ARCHIVED', 'a2' => 'ARCHIVED', 'a3' => 'ARCHIVED', 'd1' => 'DELETED'];
+    $campaigns = [];
+    fakeSweepMeta($live, $archived, $campaigns);
+    $updates = 0;
+    DB::listen(function ($q) use (&$updates) {
+        if (str_starts_with(strtolower($q->sql), 'update "ads"') && str_contains($q->sql, '"last_seen_at"') && str_contains($q->sql, '"effective_status"')) {
+            $updates++;
+        }
+    });
+
+    deepSync($acc);
+
+    expect($updates)->toBe(2)
+        ->and(Ad::where('ad_account_id', $acc->id)->where('effective_status', 'ARCHIVED')->count())->toBe(3)
+        ->and(Ad::where('external_id', 'd1')->value('effective_status'))->toBe('DELETED');
 });

@@ -10,6 +10,7 @@ use App\Ads\Platforms\Data\AdRow;
 use App\Ads\Platforms\Data\CreativeMedia;
 use App\Ads\Platforms\Data\DailyAdMetric;
 use App\Ads\Platforms\PreviewMarkup;
+use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\TokenInvalid;
 use App\Models\Ad;
 use App\Models\AdAccount;
@@ -56,6 +57,9 @@ class MetaAdsDriver implements AdPlatformDriver
      * issues included, so spend leaders keep their creative. Archived/deleted ads stay out.
      */
     public const AD_STATUSES = ['ACTIVE', 'PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'DISAPPROVED', 'WITH_ISSUES', 'PENDING_REVIEW', 'IN_PROCESS'];
+
+    /** The statuses AD_STATUSES leaves out: the sweep lists them so both lists together cover INSIGHTS_STATUSES. */
+    public const SWEEP_AD_STATUSES = ['ARCHIVED', 'DELETED', 'PREAPPROVED', 'PENDING_BILLING_INFO'];
 
     public function ads(AdAccount $a): array
     {
@@ -109,7 +113,7 @@ class MetaAdsDriver implements AdPlatformDriver
         return $out;
     }
 
-    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): ?array
     {
         // level=account counts archived and deleted ads too, so no status filter is needed here.
         $rows = $this->api->paginate($this->token($a->connection), $this->actId($a).'/insights', [
@@ -141,30 +145,46 @@ class MetaAdsDriver implements AdPlatformDriver
     public function statuses(AdAccount $a): array
     {
         $token = $this->token($a->connection);
-        $ads = $this->api->paginate($token, $this->actId($a).'/ads', [
-            'fields' => 'id,status,effective_status',
-            'effective_status' => json_encode(['ARCHIVED', 'DELETED']),
-            'limit' => 500,
-        ]);
-        $campaigns = $this->api->paginate($token, $this->actId($a).'/campaigns', [
-            'fields' => 'id,name,status,effective_status,objective',
-            'effective_status' => json_encode(self::INSIGHTS_STATUSES),
-            'limit' => 500,
-        ]);
+        $out = ['ads' => null, 'campaigns' => null, 'warnings' => []];
 
-        $out = ['ads' => [], 'campaigns' => []];
-        foreach ($ads as $r) {
-            if (! empty($r['id'])) {
-                $out['ads'][(string) $r['id']] = ['status' => $r['status'] ?? null, 'effective_status' => $r['effective_status'] ?? null];
+        // Each list fails alone: a refused campaigns call must not throw away the ads list (and the reverse).
+        try {
+            $out['ads'] = [];
+            foreach ($this->api->paginate($token, $this->actId($a).'/ads', [
+                'fields' => 'id,status,effective_status',
+                'effective_status' => json_encode(self::SWEEP_AD_STATUSES),
+                'limit' => 500,
+            ]) as $r) {
+                if (! empty($r['id'])) {
+                    $out['ads'][(string) $r['id']] = ['status' => $r['status'] ?? null, 'effective_status' => $r['effective_status'] ?? null];
+                }
             }
+        } catch (TokenInvalid|RateLimited $e) {
+            throw $e;
+        } catch (AdsApiException $e) {
+            $out['ads'] = null;
+            $out['warnings'][] = 'ads list: '.$e->getMessage();
         }
-        foreach ($campaigns as $r) {
-            if (! empty($r['id'])) {
-                $out['campaigns'][(string) $r['id']] = [
-                    'name' => $r['name'] ?? null, 'status' => $r['status'] ?? null,
-                    'effective_status' => $r['effective_status'] ?? null, 'objective' => $r['objective'] ?? null,
-                ];
+
+        try {
+            $out['campaigns'] = [];
+            foreach ($this->api->paginate($token, $this->actId($a).'/campaigns', [
+                'fields' => 'id,name,status,effective_status,objective',
+                'effective_status' => json_encode(self::INSIGHTS_STATUSES),
+                'limit' => 500,
+            ]) as $r) {
+                if (! empty($r['id'])) {
+                    $out['campaigns'][(string) $r['id']] = [
+                        'name' => $r['name'] ?? null, 'status' => $r['status'] ?? null,
+                        'effective_status' => $r['effective_status'] ?? null, 'objective' => $r['objective'] ?? null,
+                    ];
+                }
             }
+        } catch (TokenInvalid|RateLimited $e) {
+            throw $e;
+        } catch (AdsApiException $e) {
+            $out['campaigns'] = null;
+            $out['warnings'][] = 'campaigns list: '.$e->getMessage();
         }
 
         return $out;

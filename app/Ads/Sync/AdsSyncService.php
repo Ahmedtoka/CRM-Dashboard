@@ -278,7 +278,8 @@ final class AdsSyncService
      *   - campaigns get status, effective status, name, objective and last_seen_at from the campaigns list;
      *   - ads listed neither now nor by the previous completed sweep (seen, or created, before that sweep started)
      *     become GONE.
-     * A failed list is a warning (no GONE marking without both lists); a dead token or a rate limit stops the run.
+     * A failed list is a warning; without the ads list (null) the run is not a completed sweep and nothing becomes
+     * GONE. A dead token or a rate limit stops the run.
      *
      * @return array{0: bool, 1: ?string} swept, warning
      */
@@ -291,13 +292,19 @@ final class AdsSyncService
         } catch (AdsApiException $e) {
             return [false, 'Status sweep: '.self::scrub($e->getMessage())];
         }
+        $warning = ($lists['warnings'] ?? []) === [] ? null : 'Status sweep: '.self::scrub(implode('; ', $lists['warnings']));
 
         $now = now();
-        foreach (array_chunk($lists['ads'] ?? [], self::CHUNK, true) as $chunk) {
-            foreach ($chunk as $externalId => $st) {
-                Ad::where('ad_account_id', $a->id)->where('external_id', (string) $externalId)->update(array_filter([
-                    'status' => $st['status'] ?? null, 'effective_status' => $st['effective_status'] ?? null,
-                ], fn ($v) => $v !== null) + ['last_seen_at' => $now]);
+        // One UPDATE per (status, effective status) pair, ids in chunks.
+        $groups = [];
+        foreach ($lists['ads'] ?? [] as $externalId => $st) {
+            $groups[($st['status'] ?? '')."\0".($st['effective_status'] ?? '')][] = (string) $externalId;
+        }
+        foreach ($groups as $pair => $ids) {
+            [$status, $effective] = explode("\0", $pair);
+            $values = array_filter(['status' => $status, 'effective_status' => $effective], fn ($v) => $v !== '') + ['last_seen_at' => $now];
+            foreach (array_chunk($ids, self::CHUNK) as $chunk) {
+                Ad::where('ad_account_id', $a->id)->whereIn('external_id', $chunk)->update($values);
             }
         }
         foreach ($lists['campaigns'] ?? [] as $externalId => $c) {
@@ -306,6 +313,9 @@ final class AdsSyncService
                 'effective_status' => $c['effective_status'] ?? null, 'objective' => $c['objective'] ?? null,
             ], fn ($v) => $v !== null && $v !== '');
             AdCampaign::where('ad_account_id', $a->id)->where('external_id', (string) $externalId)->update($values + ['last_seen_at' => $now]);
+        }
+        if (! is_array($lists['ads'] ?? null)) {
+            return [false, $warning]; // no ads list: the statuses are not all covered, so no GONE and no completed sweep
         }
 
         // Two consecutive completed sweeps without a sighting: this run and the previous one.
@@ -320,14 +330,14 @@ final class AdsSyncService
                 ->update(['effective_status' => 'GONE']);
         }
 
-        return [true, null];
+        return [true, $warning];
     }
 
     /**
      * Account-level control totals for the run window. A failed control is a run warning only; a dead token or a
      * rate limit stops the run like any other call.
      *
-     * @return array{0: list<AccountDailyTotal>, 1: ?string}
+     * @return array{0: list<AccountDailyTotal>|null, 1: ?string} null = no control (none on this platform, or it failed)
      */
     private function fetchControl(AdPlatformDriver $driver, AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
     {
@@ -336,7 +346,10 @@ final class AdsSyncService
         } catch (TokenInvalid|RateLimited $e) {
             throw $e;
         } catch (AdsApiException $e) {
-            return [[], 'Account totals: '.self::scrub($e->getMessage())];
+            return [null, 'Account totals: '.self::scrub($e->getMessage())];
+        }
+        if ($control === null) {
+            return [null, null];
         }
 
         $from = $from->toDateString();
@@ -353,11 +366,11 @@ final class AdsSyncService
      * Insert keeps first_* = the first values seen; a later fetch moves only the latest columns and fetched_at, so a
      * platform restatement stays measurable.
      *
-     * @param  list<AccountDailyTotal>  $control
+     * @param  list<AccountDailyTotal>|null  $control
      */
-    private function upsertAccountDaily(AdAccount $a, array $control): void
+    private function upsertAccountDaily(AdAccount $a, ?array $control): void
     {
-        if ($control === []) {
+        if ($control === null || $control === []) {
             return;
         }
         $now = now()->toDateTimeString();
@@ -376,18 +389,17 @@ final class AdsSyncService
         }
     }
 
-    /** Ad statuses whose stored rows are history the platform no longer itemises: never deleted by a sync. */
-    public const KEEP_STATUSES = ['ARCHIVED', 'DELETED', 'GONE'];
-
     /**
-     * Upsert the payload, then delete stale rows (stored, not in the payload) of a date only when the payload of that
-     * date agrees with the account-level control total; otherwise keep them and say so (A1, F-050).
+     * Upsert the payload, then delete stale rows (stored, not in the payload, any ad status) of a date only when the
+     * payload of that date agrees with the account-level control total; otherwise keep them and say so (A1, F-050).
+     * The control is the only guard. With a control that answered, a date it does not list totals 0. Without a
+     * control (null: none on this platform, or the call failed) nothing stale is deleted.
      *
      * @param  list<DailyAdMetric>  $metrics
-     * @param  list<AccountDailyTotal>  $control
+     * @param  list<AccountDailyTotal>|null  $control
      * @return array{0: int, 1: ?string} rows written and an optional warning
      */
-    private function replaceMetrics(AdAccount $a, array $metrics, CarbonImmutable $from, CarbonImmutable $to, array $control = []): array
+    private function replaceMetrics(AdAccount $a, array $metrics, CarbonImmutable $from, CarbonImmutable $to, ?array $control = null): array
     {
         // Dedupe on (ad, date); the last row wins.
         $byKey = [];
@@ -398,9 +410,12 @@ final class AdsSyncService
             $byKey[$m->adExternalId.'|'.substr($m->date, 0, 10)] = $m;
         }
 
-        $controlSpend = [];
-        foreach ($control as $t) {
-            $controlSpend[substr($t->date, 0, 10)] = $t->spend;
+        $controlSpend = null;
+        if ($control !== null) {
+            $controlSpend = [];
+            foreach ($control as $t) {
+                $controlSpend[substr($t->date, 0, 10)] = $t->spend;
+            }
         }
 
         return DB::transaction(function () use ($a, $byKey, $from, $to, $controlSpend) {
@@ -451,29 +466,32 @@ final class AdsSyncService
                 $guard = 'Empty metrics payload: kept existing rows in the window';
             } else {
                 $staleByDate = [];
-                foreach ((clone $windowRows)->whereNotIn('ad_id', Ad::where('ad_account_id', $a->id)
-                    ->whereIn('effective_status', self::KEEP_STATUSES)->select('id'))
-                    ->select(['id', 'ad_id', 'date'])->cursor() as $row) {
+                foreach ((clone $windowRows)->select(['id', 'ad_id', 'date'])->cursor() as $row) {
                     $date = $row->date->toDateString();
                     if (! isset($keep[$row->ad_id.'|'.$date])) {
                         $staleByDate[$date][] = $row->id;
                     }
                 }
                 ksort($staleByDate);
-                $kept = [];
+                $keptRows = 0;
+                $keptDates = 0;
+                $first = null;
                 $tolerancePct = (float) config('crm.ads.control_tolerance_pct', 0.5);
                 foreach ($staleByDate as $date => $ids) {
                     $payloadTotal = round($payloadSpend[$date] ?? 0.0, 2);
-                    $accountTotal = $controlSpend[$date] ?? null;
+                    $accountTotal = $controlSpend === null ? null : (float) ($controlSpend[$date] ?? 0.0);
                     if ($accountTotal !== null && abs($payloadTotal - $accountTotal) <= max($tolerancePct / 100 * $accountTotal, 1.00)) {
                         array_push($stale, ...$ids);
 
                         continue;
                     }
-                    $kept[] = sprintf('Kept %d rows on %s: payload %.2f vs account %s', count($ids), $date, $payloadTotal,
+                    $keptRows += count($ids);
+                    $keptDates++;
+                    $first ??= sprintf('%s: payload %.2f vs account %s', $date, $payloadTotal,
                         $accountTotal === null ? 'n/a' : number_format($accountTotal, 2, '.', ''));
                 }
-                $guard = $kept === [] ? null : implode(' | ', $kept);
+                // One summary line, however many dates were kept.
+                $guard = $keptRows === 0 ? null : sprintf('Kept %d rows on %d dates (first: %s)', $keptRows, $keptDates, $first);
             }
             foreach (array_chunk($stale, self::CHUNK) as $ids) {
                 AdDailyMetric::whereIn('id', $ids)->delete();

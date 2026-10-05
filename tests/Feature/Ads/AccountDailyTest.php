@@ -167,7 +167,7 @@ it('asks tiktok for no control and stores no rows', function () {
     $conn = AdPlatformConnection::factory()->tiktok()->create(['credentials' => ['access_token' => 'TT', 'advertiser_ids' => ['7000000000001']]]);
     $acc = AdAccount::factory()->tiktok()->create(['external_id' => '7000000000001', 'connection_id' => $conn->id]);
 
-    expect(app(TikTokAdsDriver::class)->accountDaily($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-03')))->toBe([]);
+    expect(app(TikTokAdsDriver::class)->accountDaily($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-03')))->toBeNull();
     Http::assertNothingSent();
 
     $run = app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-03'));

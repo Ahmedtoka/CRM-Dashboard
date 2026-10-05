@@ -92,16 +92,16 @@ class TikTokAdsDriver implements AdPlatformDriver
         return $out;
     }
 
-    /** No account-level control until this platform is live: an empty list means no control, and no request is made. */
-    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+    /** No account-level control until this platform is live (null = no control); no request is made. */
+    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): ?array
     {
-        return [];
+        return null;
     }
 
-    /** No status sweep until this platform is live. */
+    /** No status sweep until this platform is live: null lists, so nothing is ever marked GONE here. */
     public function statuses(AdAccount $a): array
     {
-        return ['ads' => [], 'campaigns' => []];
+        return ['ads' => null, 'campaigns' => null];
     }
 
     public function creativeMedia(AdAccount $a, array $adExternalIds): array

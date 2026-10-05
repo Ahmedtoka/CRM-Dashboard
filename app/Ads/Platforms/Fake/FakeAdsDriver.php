@@ -114,7 +114,7 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
     }
 
     /** The control is the sum of the fake ad rows, so a fake sync always agrees with itself. */
-    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): ?array
     {
         $days = [];
         foreach ($this->dailyMetrics($a, $from, $to) as $m) {
