@@ -713,5 +713,60 @@ it('stays safe after the cache is flushed: a finished row is never created twice
     Cache::flush();
     (new PublishAd($stuck->id))->handle(app(DriverFactory::class));
     expect($double::$creates)->toBe(1)->and($stuck->fresh()->status)->toBe('error')
-        ->and($stuck->fresh()->error)->toContain($stuck->ad_name);
+        ->and($stuck->fresh()->error)->toBe(__('ads.publish.stopped_creating', ['name' => $stuck->ad_name]));
+});
+
+it('keeps the open key on an error row whose ad request was sent, and clear-open-keys releases it after 24 h', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $body = pubInput([$files[0]->id], 1) + ['account_id' => $acc->id];
+    $id = pubPost($this, $admin, $material, $body, 'key-0000-aaaa')->json('publications.0.id');
+
+    AdPublication::find($id)->update(['status' => AdPublication::ERROR, 'error' => 'timeout', 'ad_requested_at' => now()]);
+    expect(AdPublication::find($id)->open_key)->not->toBeNull();
+    pubPost($this, $admin, $material, $body, 'key-0000-bbbb')->assertStatus(409);
+
+    $this->artisan('ads:clear-open-keys')->assertSuccessful();
+    expect(AdPublication::find($id)->open_key)->not->toBeNull();
+
+    AdPublication::whereKey($id)->update(['updated_at' => now()->subHours(25)]);
+    $this->artisan('ads:clear-open-keys')->assertSuccessful();
+    expect(AdPublication::find($id)->open_key)->toBeNull();
+});
+
+it('clear-open-keys releases queued rows nobody touched for 24 h (queue lost) but not fresh ones', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $a = pubPost($this, $admin, $material, pubInput([$files[0]->id], 1) + ['account_id' => $acc->id], 'key-0000-aaaa')->json('publications.0.id');
+    $b = pubPost($this, $admin, $material, pubInput([$files[0]->id], 1, ['adset_id' => 's2']) + ['account_id' => $acc->id], 'key-0000-bbbb')->json('publications.0.id');
+    AdPublication::whereKey($a)->update(['updated_at' => now()->subHours(25)]);
+
+    $this->artisan('ads:clear-open-keys')->assertSuccessful();
+
+    expect(AdPublication::find($a)->open_key)->toBeNull()->and(AdPublication::find($b)->open_key)->not->toBeNull();
+});
+
+it('rejects two identical captions in one request with a 422', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $body = pubInput([$files[0]->id], 2) + ['account_id' => $acc->id];
+    $body['captions'][1] = ['headline' => ' H1 ', 'primary_text' => 'Text 1 ', 'cta' => 'SHOP_NOW'];
+
+    pubPost($this, $admin, $material, $body)->assertStatus(422)->assertJsonValidationErrors(['captions']);
+    expect(AdPublication::count())->toBe(0);
+});
+
+it('trims captions before computing the open key', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $a = pubInput([$files[0]->id], 1) + ['account_id' => $acc->id];
+    $b = $a;
+    $b['captions'][0]['headline'] = '  H1  ';
+
+    pubPost($this, $admin, $material, $a, 'key-0000-aaaa')->assertOk();
+    pubPost($this, $admin, $material, $b, 'key-0000-bbbb')->assertStatus(409);
 });

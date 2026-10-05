@@ -33,9 +33,10 @@ class AdPublication extends Model
 
     protected static function booted(): void
     {
-        // A failed publication must not block publishing the same thing again (W2): the in-flight key is released on error.
+        // A failure that never reached the ad-create request must not block publishing again (W2). When ad_requested_at is
+        // set the ad may exist on the platform, so the key stays until ads:clear-open-keys releases it after 24 h.
         static::saving(function (self $p) {
-            if ($p->status === self::ERROR && $p->open_key !== null) {
+            if ($p->status === self::ERROR && $p->open_key !== null && $p->ad_requested_at === null) {
                 $p->open_key = null;
             }
         });

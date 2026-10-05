@@ -14,7 +14,9 @@ class ClearOpenKeysCommand extends Command
 
     public function handle(): int
     {
-        $n = AdPublication::query()->whereNotNull('open_key')->where('status', AdPublication::DONE)->where('updated_at', '<', now()->subDay())
+        // done, error (the ad may exist, so it was held), and rows that never finished (queue lost): all untouched for 24 h.
+        $n = AdPublication::query()->whereNotNull('open_key')->where('updated_at', '<', now()->subDay())
+            ->whereIn('status', [AdPublication::DONE, AdPublication::ERROR, AdPublication::QUEUED, AdPublication::UPLOADING, AdPublication::PROCESSING])
             ->update(['open_key' => null]);
         $this->info("Released {$n} open key(s).");
 

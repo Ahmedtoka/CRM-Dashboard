@@ -100,7 +100,7 @@ final class PublishService
     /** sha256(account:adset:file:sha256(headline\nprimary_text\ncta)): one ad per file, caption and ad set while it is in flight. */
     public static function openKey(AdAccount $a, string $adsetId, int $fileId, array $caption): string
     {
-        return hash('sha256', "{$a->id}:{$adsetId}:{$fileId}:".hash('sha256', $caption['headline']."\n".$caption['primary_text']."\n".$caption['cta']));
+        return hash('sha256', "{$a->id}:{$adsetId}:{$fileId}:".hash('sha256', trim($caption['headline'])."\n".trim($caption['primary_text'])."\n".$caption['cta']));
     }
 
     /**

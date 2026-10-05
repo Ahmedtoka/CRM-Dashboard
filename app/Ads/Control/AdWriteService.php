@@ -97,7 +97,7 @@ final class AdWriteService
             AdAction::create([
                 'user_id' => $u->id, 'platform' => $a->platform, 'ad_account_id' => $a->id, 'account_name' => $a->name, 'level' => $level, 'external_id' => $externalId,
                 'name' => mb_substr((string) $row?->name, 0, 500), 'from_status' => $row?->status, 'to_status' => strtoupper($status),
-                'reason' => null, 'result' => AdAction::ERROR, 'error' => 'level_not_allowed',
+                'reason' => $reason !== null && trim($reason) !== '' ? trim($reason) : null, 'result' => AdAction::ERROR, 'error' => 'level_not_allowed',
             ]);
 
             throw ValidationException::withMessages(['status' => __('ads.errors.'.$level.'_level_not_allowed')]);

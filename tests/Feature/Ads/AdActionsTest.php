@@ -378,10 +378,11 @@ it('refuses a buyer Run or Stop above ad level with a readable 422, an error row
     $cases = [['campaign', $camp->external_id, 'active', 'campaign_level_not_allowed'], ['adset', $set->external_id, 'active', 'adset_level_not_allowed'],
         ['campaign', $camp->external_id, 'paused', 'campaign_level_not_allowed'], ['adset', $set->external_id, 'paused', 'adset_level_not_allowed']];
     foreach ($cases as $i => [$level, $id, $status, $key]) {
-        $this->actingAs($buyer)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => $level, 'external_id' => $id, 'status' => $status])
+        $this->actingAs($buyer)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => $level, 'external_id' => $id, 'status' => $status, 'reason' => 'too risky'])
             ->assertStatus(422)->assertJsonValidationErrors(['status'])->assertJsonPath('errors.status.0', __('ads.errors.'.$key));
         expect(AdAction::count())->toBe($i + 1);
     }
+    expect(AdAction::pluck('reason')->unique()->all())->toBe(['too risky']);
     expect(Cache::get('ads-fake-writer'))->toBeNull()
         ->and(AdAction::where('result', 'error')->where('error', 'level_not_allowed')->count())->toBe(4)
         ->and($camp->refresh()->status)->toBe('PAUSED');

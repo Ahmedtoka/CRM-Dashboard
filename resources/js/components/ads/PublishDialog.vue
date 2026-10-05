@@ -35,7 +35,16 @@ const loadingAccount = ref(false);
 const busy = ref(false);
 const error = ref<string | null>(null);
 /** One key per dialog open: a double click or a retry replays the first answer instead of publishing twice. */
-const idempotencyKey = ref(crypto.randomUUID());
+const idempotencyKey = ref('');
+/** crypto.randomUUID needs a secure context; fall back to a getRandomValues v4 id. */
+function newKey(): string {
+    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
 const duplicateWarning = ref(false);
 const allowDuplicate = ref(false);
 
@@ -134,7 +143,7 @@ watch(
     (open) => {
         if (!open) return;
         error.value = null;
-        idempotencyKey.value = crypto.randomUUID();
+        idempotencyKey.value = newKey();
         duplicateWarning.value = false;
         allowDuplicate.value = false;
         form.file_ids = props.fileIds?.length ? [...props.fileIds] : files.value.map((f) => f.id);
@@ -154,6 +163,15 @@ watch(
     () => {
         if (props.open) captions.value = defaultCaptions();
     },
+);
+// The override only applies to the exact request that was refused: any change to what is published clears it.
+watch(
+    [() => form.adset_id, () => form.file_ids, captions],
+    () => {
+        allowDuplicate.value = false;
+        duplicateWarning.value = false;
+    },
+    { deep: true },
 );
 watch(
     () => form.account_id,

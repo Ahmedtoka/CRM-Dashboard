@@ -105,6 +105,14 @@ class PublishController extends Controller
         $account = AdAccount::query()->findOrFail($data['account_id']);
         abort_unless($writes->canWrite($user, $account) && $account->platform !== AdPlatform::Google->value, 403);
 
+        $data['captions'] = array_map(fn (array $c) => ['headline' => trim($c['headline']), 'primary_text' => trim($c['primary_text']), 'cta' => $c['cta']], array_values($data['captions']));
+        $signatures = array_map(fn (array $c) => $c['headline'].'
+'.$c['primary_text'].'
+'.$c['cta'], $data['captions']);
+        if (count(array_unique($signatures)) < count($signatures)) {
+            throw ValidationException::withMessages(['captions' => __('ads.publish.duplicate_captions')]);
+        }
+
         $key = (string) $request->header('Idempotency-Key', '');
         if (! preg_match('/^[A-Za-z0-9-]{8,64}$/', $key)) {
             throw ValidationException::withMessages(['idempotency_key' => __('ads.publish.idempotency_key_required')]);
