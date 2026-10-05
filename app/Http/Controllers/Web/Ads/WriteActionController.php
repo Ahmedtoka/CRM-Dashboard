@@ -53,7 +53,7 @@ class WriteActionController extends Controller
             'diff' => $x->diff,
             'diff_hash' => $x->diff_hash,
             'notes' => $x->notes ?? [],
-            'limits_checked' => (object) ($x->limits_checked ?? []),
+            'limits_checked' => array_values($x->limits_checked ?? []),
             'steps' => $x->steps->map(fn (AdWriteStep $s) => [
                 'seq' => $s->seq, 'op' => $s->op, 'state' => $s->state, 'before' => $s->before, 'after' => $s->after,
                 'request_sent_at' => $s->request_sent_at?->toIso8601String(), 'error_code' => $s->error_code, 'error_message' => $s->error_message,
@@ -104,7 +104,11 @@ class WriteActionController extends Controller
         $present = self::present($x);
 
         return match ($x->state) {
-            AdWriteAction::SUCCEEDED => response()->json(['action' => $present, 'message' => __($x->isStop() ? 'ads.flash.stopped' : 'ads.flash.resumed')]),
+            AdWriteAction::SUCCEEDED => response()->json(['action' => $present, 'message' => __(match (true) {
+                $x->isStop() => 'ads.flash.stopped',
+                (bool) ($x->outcome['noop'] ?? false) => 'ads.write.notes.already_active',
+                default => 'ads.flash.resumed',
+            })]),
             AdWriteAction::UNKNOWN => response()->json(['action' => $present, 'message' => __('ads.errors.unknown_outcome')], 202),
             AdWriteAction::EXECUTING => response()->json(['action' => $present, 'message' => __('ads.errors.stop_retrying')], 202),
             AdWriteAction::SUPERSEDED, AdWriteAction::SUPERSEDED_BY_STOP => self::refusal(WriteDenied::make('precondition_failed', ['state' => $x->state]), $present),
@@ -161,7 +165,7 @@ class WriteActionController extends Controller
             'diff' => $x->diff,
             'diff_hash' => $x->diff_hash,
             'notes' => $x->notes ?? [],
-            'limits_checked' => (object) ($x->limits_checked ?? []),
+            'limits_checked' => array_values($x->limits_checked ?? []),
         ];
 
         return $replayed

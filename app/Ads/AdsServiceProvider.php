@@ -14,6 +14,7 @@ use App\Ads\Control\Commands\AdsAuthorityCommand;
 use App\Ads\Control\Commands\ClearOpenKeysCommand;
 use App\Ads\Control\Commands\WritableAccountsCommand;
 use App\Ads\Control\Commands\WriteLimitsCommand;
+use App\Ads\Control\Commands\WritePreviewCommand;
 use App\Ads\Control\Commands\WriteResolveCommand;
 use App\Ads\Control\Commands\WritesSwitchCommand;
 use App\Ads\Doctor\DoctorCommand;
@@ -53,7 +54,7 @@ class AdsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, AdsAuthorityCommand::class, WritesSwitchCommand::class, WriteResolveCommand::class, WriteLimitsCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class, ReconcileCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, AdsAuthorityCommand::class, WritesSwitchCommand::class, WriteResolveCommand::class, WriteLimitsCommand::class, WritePreviewCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class, ReconcileCommand::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {

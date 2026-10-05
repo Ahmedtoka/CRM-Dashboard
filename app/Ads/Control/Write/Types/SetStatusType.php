@@ -62,9 +62,9 @@ final class SetStatusType
 
     /**
      * @param  'active'|'paused'  $to
-     * @param  array<string, mixed>  $limitsChecked
+     * @param  array<int|string, mixed>  $limitsChecked  rows {key, limit, requested, outcome} (RunGuard)
      * @param  array<int|string, mixed>  $notes
-     * @return array{params: array{to: string}, diff: list<array<string, mixed>>, expected: array{status: ?string, read_at: ?string}, diff_hash: string, target_key: string, from_status: ?string, limits_checked: array<string, mixed>, notes: array<int|string, mixed>}
+     * @return array{params: array{to: string}, diff: list<array<string, mixed>>, expected: array{status: ?string, read_at: ?string, live?: array<string, mixed>}, diff_hash: string, target_key: string, from_status: ?string, limits_checked: array<int|string, mixed>, notes: array<int|string, mixed>}
      */
     public function build(AdAccount $a, Model $target, string $to, ?ObjectState $live, array $limitsChecked, array $notes): array
     {
@@ -82,7 +82,9 @@ final class SetStatusType
         return [
             'params' => $params,
             'diff' => $diff,
-            'expected' => ['status' => $before, 'read_at' => $live !== null ? now()->toIso8601String() : null],
+            // The live read itself is kept so a fresh read can be reused at confirm (RunGuard; not part of diff_hash).
+            'expected' => array_filter(['status' => $before, 'read_at' => $live !== null ? now()->toIso8601String() : null, 'live' => $live?->toArray()],
+                fn ($v, $k) => $v !== null || $k !== 'live', ARRAY_FILTER_USE_BOTH),
             'diff_hash' => Canonical::hash([
                 'type' => self::TYPE, 'account_id' => $a->id, 'level' => $level, 'external_id' => $externalId,
                 'params' => $params, 'diff' => $diff,

@@ -260,6 +260,7 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
     }
 
     /**
+     * Every read is recorded in the writer state (`reads`), so tests can count them.
      * Status: the last fake setStatus for the id, else the local row's status, else PAUSED. Budgets: 50,000 minor on the
      * ad set (the parent of an ad), none on the campaign. seedObject() overrides any field.
      */
@@ -271,6 +272,8 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
         }
 
         $state = $this->writerState();
+        $state['reads'][] = ['level' => $level, 'id' => $externalId];
+        $this->saveWriterState($state);
         $status = null;
         foreach (array_reverse($state['statuses']) as $s) {
             if ($s['level'] === $level && $s['id'] === $externalId) {
@@ -379,10 +382,10 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
         return $row?->status !== null ? strtoupper((string) $row->status) : null;
     }
 
-    /** @return array{n:int,media:int,ads:array<string,array<string,mixed>>,statuses:list<array<string,string>>,objects:array<string,array<string,mixed>>} */
+    /** @return array{n:int,media:int,ads:array<string,array<string,mixed>>,statuses:list<array<string,string>>,objects:array<string,array<string,mixed>>,reads:list<array<string,string>>} */
     private function writerState(): array
     {
-        return (Cache::get(self::WRITER_KEY) ?? []) + ['n' => 0, 'media' => 0, 'ads' => [], 'statuses' => [], 'objects' => []];
+        return (Cache::get(self::WRITER_KEY) ?? []) + ['n' => 0, 'media' => 0, 'ads' => [], 'statuses' => [], 'objects' => [], 'reads' => []];
     }
 
     private function saveWriterState(array $state): void

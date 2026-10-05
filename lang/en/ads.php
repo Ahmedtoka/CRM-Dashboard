@@ -62,6 +62,11 @@ return [
         'stop_retrying' => 'The platform is limiting requests. The Stop will be retried automatically in a few minutes.',
         'stop_failed' => 'The Stop could not be sent after several tries. Open Ads Manager and pause it there.',
     ],
+    'write' => [
+        'notes' => [
+            'already_active' => 'It was already running on the platform, so nothing was sent.',
+        ],
+    ],
     'credentials' => [
         'access_token' => 'Access token',
         'advertiser_ids' => 'Advertiser IDs (comma separated)',

@@ -4,6 +4,7 @@ namespace App\Ads\Control\Write;
 
 use App\Ads\Audit\AdsAudit;
 use App\Ads\Control\Write\Types\SetStatusType;
+use App\Ads\Platforms\Data\ObjectState;
 use App\Models\AdAccount;
 use App\Models\AdWriteAction;
 use App\Models\User;
@@ -144,6 +145,7 @@ class WriteActionService
             throw $e;
         }
 
+        $noop = false;
         if (! $x->isStop()) {
             $stop = AdWriteAction::where('target_key', $x->target_key)->where('to_status', 'paused')
                 ->whereIn('state', AdWriteAction::OPEN)->first(['id', 'public_id']);
@@ -151,18 +153,14 @@ class WriteActionService
                 throw WriteDenied::make('stop_in_progress', ['action_id' => $stop->public_id]);
             }
             try {
-                $this->runGuard->atConfirm($u, $x);
+                $guard = $this->runGuard->atConfirm($u, $x);
             } catch (WriteDenied $e) {
-                $failed = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::PROPOSED)->update([
-                    'state' => AdWriteAction::FAILED, 'error_code' => $e->errorCode, 'finished_at' => now(), 'updated_at' => now(),
-                ]) === 1;
-                if ($failed) {
-                    AdsAudit::record('write.failed', $x, ['state' => AdWriteAction::PROPOSED], ['state' => AdWriteAction::FAILED],
-                        ['public_id' => $x->public_id, 'error_code' => $e->errorCode, 'phase' => 'confirm'], $u);
-                }
+                $this->refuseProposed($u, $x, $e);
 
                 throw $e;
             }
+            $noop = $guard['noop'];
+            $this->recordConfirmRead($x, $guard['read'], $guard['limits_checked']);
         }
 
         $superseded = $this->claim($u, $x);
@@ -174,7 +172,38 @@ class WriteActionService
                 ['public_id' => $other->public_id, 'superseded_by' => $x->public_id], $u);
         }
 
-        return $this->executor->execute($x);
+        return $this->executor->execute($x, $noop);
+    }
+
+    /**
+     * A Run-guard refusal at confirm ends the proposal (CAS on proposed): superseded when the platform no longer holds
+     * the expected state (precondition_failed), failed otherwise.
+     */
+    private function refuseProposed(User $u, AdWriteAction $x, WriteDenied $e): void
+    {
+        $state = $e->errorCode === 'precondition_failed' ? AdWriteAction::SUPERSEDED : AdWriteAction::FAILED;
+        $changed = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::PROPOSED)->update([
+            'state' => $state, 'error_code' => $e->errorCode, 'finished_at' => now(), 'updated_at' => now(),
+        ]) === 1;
+        if ($changed) {
+            AdsAudit::record('write.'.$state, $x, ['state' => AdWriteAction::PROPOSED], ['state' => $state],
+                array_filter(['public_id' => $x->public_id, 'error_code' => $e->errorCode, 'phase' => 'confirm', 'details' => $e->details ?: null]), $u);
+        }
+    }
+
+    /** Keeps what the confirm-time guard saw: the new live read (if one was made) and the re-evaluated limits. */
+    private function recordConfirmRead(AdWriteAction $x, ?ObjectState $read, ?array $limits): void
+    {
+        $update = [];
+        if ($read !== null) {
+            $update['expected'] = array_merge($x->expected ?? [], ['confirm_read' => ['read_at' => now()->toIso8601String(), 'live' => $read->toArray()]]);
+        }
+        if ($limits !== null) {
+            $update['limits_checked'] = $limits;
+        }
+        if ($update !== []) {
+            $x->forceFill($update)->save();
+        }
     }
 
     /**

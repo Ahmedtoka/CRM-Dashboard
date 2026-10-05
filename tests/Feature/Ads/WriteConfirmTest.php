@@ -159,7 +159,8 @@ it('refuses a wrong diff_hash with 409 and calls nothing', function () {
 
 it('maps definite platform refusals to failed actions with codes', function (string $kind, string $code, int $http) {
     $acc = AdAccount::factory()->meta()->create();
-    $ad = Ad::factory()->for($acc, 'account')->create();
+    // PAUSED: the Run guard's live read turns a Run of something already ACTIVE into a noop (no platform call).
+    $ad = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
     $buyer = wcBuyer($acc);
     $x = wcPropose($this, $buyer, $acc, 'ad', $ad->external_id, 'active');
     FakeAdsDriver::failNext('setStatus', $kind);
@@ -168,7 +169,7 @@ it('maps definite platform refusals to failed actions with codes', function (str
 
     $x->refresh();
     expect($x->state)->toBe('failed')->and($x->error_code)->toBe($code)->and($x->open_business_key)->toBeNull()
-        ->and(AdWriteStep::sole()->state)->toBe('failed')->and($ad->fresh()->status)->toBe('ACTIVE')
+        ->and(AdWriteStep::sole()->state)->toBe('failed')->and($ad->fresh()->status)->toBe('PAUSED')
         ->and(AdsAuditLog::where('action', 'write.failed')->count())->toBe(1);
 })->with([
     'rejected' => ['rejected', 'platform_rejected', 422],
@@ -189,7 +190,7 @@ it('keeps the scrubbed platform message of a rejection', function () {
 
 it('sends Retry-After with a throttled Run', function () {
     $acc = AdAccount::factory()->meta()->create();
-    $ad = Ad::factory()->for($acc, 'account')->create();
+    $ad = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
     $buyer = wcBuyer($acc);
     $x = wcPropose($this, $buyer, $acc, 'ad', $ad->external_id, 'active');
     FakeAdsDriver::failNext('setStatus', 'rate');

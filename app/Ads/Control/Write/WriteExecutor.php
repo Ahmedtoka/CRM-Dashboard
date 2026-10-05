@@ -36,9 +36,16 @@ class WriteExecutor
         private readonly SetStatusType $type,
     ) {}
 
-    /** The first attempt of a freshly claimed action (state executing). */
-    public function execute(AdWriteAction $x): AdWriteAction
+    /**
+     * The first attempt of a freshly claimed action (state executing). A noop Run (the Run guard read the target as
+     * already ACTIVE) ends succeeded with outcome.noop and no platform call; it still counts as a confirmed activation.
+     */
+    public function execute(AdWriteAction $x, bool $noop = false): AdWriteAction
     {
+        if ($noop && ! $x->isStop()) {
+            return $this->succeed($x, ['noop' => true]);
+        }
+
         return $this->attempt($x);
     }
 

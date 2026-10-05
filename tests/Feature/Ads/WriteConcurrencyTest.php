@@ -118,6 +118,7 @@ it('rule 3+4: an executing Run never blocks a Stop; the Run ends superseded_by_s
 
 it('rule 3: an unknown Run holding its key never blocks a Stop', function () {
     $buyer = ccBuyer($this->acc);
+    $this->ad->update(['status' => 'PAUSED']); // a Run of something already ACTIVE is a noop (Run guard live read)
     $run = ccPropose($buyer, $this->acc, $this->ad->external_id, 'active');
     FakeAdsDriver::failNext('setStatus', 'unreachable_after');
     FakeAdsDriver::failNext('readObject', 'unreachable_before');
