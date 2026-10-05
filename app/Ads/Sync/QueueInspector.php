@@ -9,7 +9,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Redis;
 use Throwable;
 
-/** Lists the jobs waiting on the commercelong queue (Redis only), decoding sync jobs into account, kind and who asked. */
+/** Lists the jobs waiting on the commercelong queue and the ads sync lane (Redis only), decoding sync jobs into account, kind and who asked. */
 class QueueInspector
 {
     private const LIMIT = 200;
@@ -53,16 +53,24 @@ class QueueInspector
     }
 
     /** @return list<array{job: string, account_id: ?int, account: ?string, kind: ?string, days: ?int, attempts: int, available_at: ?string, trigger: ?string}> */
-    public function waiting(string $queue = 'commercelong'): array
+    public function waiting(?string $queue = null): array
     {
         if (! $this->supported()) {
             return [];
         }
 
-        try {
-            [$ready, $delayed] = ($this->source ?? $this->redisSource(...))($queue);
-        } catch (Throwable) {
-            return [];
+        // Default: commercelong (publish jobs, and the sync until it moves) plus the ads sync lane when it differs.
+        $queues = $queue !== null ? [$queue] : array_values(array_unique(['commercelong', SyncAdAccount::queueName()]));
+        $ready = [];
+        $delayed = [];
+        foreach ($queues as $q) {
+            try {
+                [$r, $d] = ($this->source ?? $this->redisSource(...))($q);
+            } catch (Throwable) {
+                continue;
+            }
+            array_push($ready, ...$r);
+            array_push($delayed, ...$d);
         }
 
         $rows = [];

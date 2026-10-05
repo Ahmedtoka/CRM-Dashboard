@@ -416,6 +416,9 @@ return [
             // last 15 minutes is at or above admission_pct; the job is retried later instead. Writes are never held.
             'admission_enabled' => (bool) env('CRM_ADS_SYNC_ADMISSION', true),
             'admission_pct' => 75,
+            // Queue of SyncAdAccount (on `redislong` when Redis). Set `adssync` only after the crm-adssync Supervisor
+            // program exists (deploy/cloudways/supervisor/crm-workers.conf); rollback = commercelong.
+            'queue' => env('CRM_ADS_SYNC_QUEUE', 'commercelong'),
         ],
         // Inbox attribution (A4): a chat order is credited to the latest ad referral at most this many days before it.
         'inbox_window_days' => (int) env('CRM_ADS_INBOX_WINDOW_DAYS', 7),

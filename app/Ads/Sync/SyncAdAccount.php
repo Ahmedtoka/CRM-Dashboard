@@ -60,13 +60,20 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
         $this->withAds = $withAds;
         $this->runKey = (string) Str::uuid();
 
-        // Same long lane as ReconcileShopify: `commercelong` queue (Supervisor program
-        // crm-commercelong, --timeout=3600); on Redis it runs on `redislong` (retry_after 3700 s).
-        $this->onQueue('commercelong');
+        // crm.ads.sync.queue: `commercelong` (shared with ReconcileShopify, Supervisor crm-commercelong) until the owner
+        // adds the crm-adssync program and sets `adssync`, so hour-long Shopify jobs stop starving the ads sync (R-23).
+        // Either way it runs on `redislong` on Redis (retry_after 3700 s > --timeout 3600, roadmap 2.1 #9).
+        $this->onQueue(self::queueName());
 
         if (config('queue.default') === 'redis') {
             $this->onConnection('redislong');
         }
+    }
+
+    /** The queue the ads sync runs on (crm.ads.sync.queue, blank = commercelong). */
+    public static function queueName(): string
+    {
+        return trim((string) config('crm.ads.sync.queue', 'commercelong')) ?: 'commercelong';
     }
 
     public static function uniqueIdFor(int $accountId): string

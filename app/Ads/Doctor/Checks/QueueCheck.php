@@ -5,6 +5,8 @@ namespace App\Ads\Doctor\Checks;
 use App\Ads\Doctor\DoctorRow;
 use App\Ads\Sync\QueueInspector;
 use App\Ads\Sync\SyncAdAccount;
+use App\Models\AdsSyncRun;
+use Illuminate\Support\Carbon;
 
 class QueueCheck extends DoctorCheck
 {
@@ -33,13 +35,17 @@ class QueueCheck extends DoctorCheck
             ? DoctorRow::skip('Queue', 'retry_after vs SyncAdAccount timeout', "connection {$conn} has no retry_after")
             : DoctorRow::by((int) $retry > $timeout, 'fail', 'Queue', 'retry_after vs SyncAdAccount timeout', "{$conn}: retry_after {$retry}, timeout {$timeout}", 'retry_after must exceed the job timeout, or a second worker re-runs a job that is still running.');
 
-        $queues = array_values(array_unique(['commercelong', (string) config('crm.ads.sync.queue', 'commercelong')]));
+        $syncQueue = SyncAdAccount::queueName();
+        $queues = array_values(array_unique(['commercelong', $syncQueue]));
         $inspector = app(QueueInspector::class);
         foreach ($queues as $q) {
             $len = $inspector->lengths($q);
             $rows[] = $len === null
                 ? DoctorRow::skip('Queue', "length {$q}", 'not a Redis queue or Redis unreachable')
                 : DoctorRow::ok('Queue', "length {$q}", "ready {$len['ready']}, delayed {$len['delayed']}, reserved {$len['reserved']}");
+            if ($q === 'adssync' && $q === $syncQueue && $len !== null) {
+                $rows[] = $this->adssyncWorker($len['ready']);
+            }
         }
 
         $store = (string) config('cache.default');
@@ -54,5 +60,19 @@ class QueueCheck extends DoctorCheck
             : DoctorRow::skip('Queue', 'deploy.sh keeps the cache', 'deploy.sh not found');
 
         return $rows;
+    }
+
+    /**
+     * The adssync lane exists only once the owner adds the crm-adssync Supervisor program. Jobs ready to run while no
+     * sync run finished in 15 minutes means nothing consumes the lane (program missing, FATAL or stuck).
+     */
+    private function adssyncWorker(int $ready): DoctorRow
+    {
+        $last = AdsSyncRun::query()->whereNotNull('finished_at')->max('finished_at');
+        $recent = $last !== null && Carbon::parse($last)->greaterThanOrEqualTo(now()->subMinutes(15));
+        $value = "ready {$ready}, last finished run ".($last === null ? 'never' : Carbon::parse($last)->toDateTimeString().' UTC');
+
+        return DoctorRow::by($ready === 0 || $recent, 'fail', 'Queue', 'adssync worker', $value,
+            'Jobs wait on adssync and no sync finished in 15 min: check the crm-adssync Supervisor program, or set CRM_ADS_SYNC_QUEUE=commercelong.');
     }
 }
