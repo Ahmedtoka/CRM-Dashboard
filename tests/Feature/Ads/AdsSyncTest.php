@@ -577,6 +577,17 @@ it('queues the nightly 30-day sync even while the hourly job of the same account
     Queue::assertPushed(SyncAdAccount::class, fn (SyncAdAccount $job) => $job->days === 30);
 });
 
+it('queues a backfill even while the hourly job of the same account still waits', function () {
+    Queue::fake();
+    $acc = AdAccount::factory()->meta()->create(['name' => 'Waiting']);
+
+    SyncAdAccount::dispatch($acc->id, 3);   // the hourly job, still in the queue (worker down)
+    $this->artisan('ads:backfill', ['--account' => $acc->id, '--from' => '2026-09-01', '--queue' => true])->assertSuccessful();
+
+    Queue::assertPushed(SyncAdAccount::class, 2);
+    Queue::assertPushed(SyncAdAccount::class, fn (SyncAdAccount $job) => $job->kind === 'backfill');
+});
+
 it('queues a backfill by platform account id for the worker to retry', function () {
     Queue::fake();
     $a = AdAccount::factory()->meta()->create(['external_id' => 'act_111']);

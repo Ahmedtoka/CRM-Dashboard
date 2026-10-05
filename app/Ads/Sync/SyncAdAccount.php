@@ -90,11 +90,18 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
     /**
      * The nightly 30-day run has its own lock: at 03:15 the 03:10 hourly job of the same account is
      * often still waiting on the single commercelong worker, and sharing its lock would drop the deep
-     * run silently. One worker runs them one after the other.
+     * run silently. A backfill has its own lock for the same reason: a queued hourly job must never swallow it. One
+     * worker runs them one after the other, and the DB account claim keeps two runs of one account from overlapping.
      */
     public function uniqueId(): string
     {
-        return self::uniqueIdFor($this->accountId).($this->kind === 'recent' && $this->days > 3 ? '-deep' : '');
+        $suffix = match (true) {
+            $this->kind === 'backfill' => '-backfill',
+            $this->kind === 'recent' && $this->days > 3 => '-deep',
+            default => '',
+        };
+
+        return self::uniqueIdFor($this->accountId).$suffix;
     }
 
     /**
