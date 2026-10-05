@@ -95,7 +95,7 @@ it('raises a readable error when meta answers with an error', function () {
 
     expect(fn () => app(MetaAdsDriver::class)->accounts(metaConnection()))
         ->toThrow(AdsApiException::class, 'Invalid OAuth access token.');
-    expect(app(MetaAdsDriver::class)->test(metaConnection()))->toContain('Invalid OAuth access token.');
+    expect(fn () => app(MetaAdsDriver::class)->test(metaConnection()))->toThrow(TokenInvalid::class, 'Invalid OAuth access token.');
 });
 
 it('never leaks the access token in connection errors', function () {

@@ -120,3 +120,35 @@ it('clears needs_reconnect_at when the token is replaced', function () {
     $c->refresh();
     expect($c->needs_reconnect_at)->toBeNull()->and($c->status)->toBe('pending');
 });
+
+it('stores a masked message when the 190 text carries a token', function () {
+    [$c] = tokenSetup();
+    metaFake(['error' => ['code' => 190, 'error_subcode' => 463, 'message' => 'Invalid OAuth access_token=EAAsecret987654321 expired']], 400);
+
+    Artisan::call('ads:sync', ['--days' => 3, '--now' => true]);
+
+    expect((string) $c->fresh()->last_error)->not->toContain('EAAsecret987654321')
+        ->and((string) AdsSyncRun::latest('id')->first()->error)->not->toContain('EAAsecret987654321');
+});
+
+it('keeps needs_reconnect and notifies once even after failed Test clicks', function (int $status, array $body) {
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'is_active' => true]);
+    [$c] = tokenSetup();
+    expiredTokenFake();
+    Artisan::call('ads:sync', ['--days' => 3, '--now' => true]);
+
+    metaFake($body, $status);
+    $this->actingAs($admin)->post("/ads/connections/{$c->id}/test");
+    expect($c->fresh()->status)->toBe('needs_reconnect');
+
+    $this->travel(61)->minutes();
+    expiredTokenFake();
+    Artisan::call('ads:sync', ['--days' => 3, '--now' => true]);
+
+    expect($c->fresh()->status)->toBe('needs_reconnect')
+        ->and(UserNotification::where('type', 'ads.token_invalid')->where('user_id', $admin->id)->count())->toBe(1)
+        ->and(AdsAuditLog::where('action', 'connection.needs_reconnect')->count())->toBe(1);
+})->with([
+    'non-190 failure' => [500, ['error' => ['code' => 1, 'message' => 'Unknown error']]],
+    '190 failure' => [400, ['error' => ['code' => 190, 'error_subcode' => 463, 'message' => 'Session has expired']]],
+]);

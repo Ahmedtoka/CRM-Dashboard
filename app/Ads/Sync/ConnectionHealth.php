@@ -41,6 +41,17 @@ final class ConnectionHealth
     }
 
     /**
+     * A generic failure: status becomes error, except that a connection waiting for a new token keeps
+     * needs_reconnect (only the message is stored), so the next dead-token answer does not notify again.
+     */
+    public static function markError(AdPlatformConnection $c, string $message): void
+    {
+        AdPlatformConnection::whereKey($c->id)->where('status', '<>', 'needs_reconnect')->update(['status' => 'error']);
+        AdPlatformConnection::whereKey($c->id)->update(['last_error' => $message]);
+        $c->refresh();
+    }
+
+    /**
      * May a sync call Meta for this connection now? A healthy connection always may; a needs_reconnect one only
      * once per hour: the caller that wins the claim is the probe.
      */

@@ -9,6 +9,7 @@ use App\Ads\Platforms\Data\AdRow;
 use App\Ads\Platforms\Data\CreativeMedia;
 use App\Ads\Platforms\Data\DailyAdMetric;
 use App\Ads\Platforms\PreviewMarkup;
+use App\Ads\Platforms\TokenInvalid;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
@@ -158,6 +159,8 @@ class MetaAdsDriver implements AdPlatformDriver
             $this->api->get($this->token($c), 'me', ['fields' => 'id,name']);
 
             return null;
+        } catch (TokenInvalid $e) {
+            throw $e; // the caller marks the connection needs_reconnect
         } catch (AdsApiException $e) {
             return $e->getMessage();
         }

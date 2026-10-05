@@ -6,7 +6,9 @@ use App\Ads\Buyers\AssignmentService;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\DriverFactory;
+use App\Ads\Platforms\TokenInvalid;
 use App\Ads\Sync\AdsSyncService;
+use App\Ads\Sync\ConnectionHealth;
 use App\Ads\Sync\QueueInspector;
 use App\Ads\Sync\SyncAdAccount;
 use App\Http\Controllers\Controller;
@@ -168,12 +170,17 @@ class AccountController extends Controller
             $error = $drivers->for(AdPlatform::from($connection->platform))->test($connection);
         } catch (AdsApiException $e) {
             $error = $e->getMessage();
+            $dead = $e instanceof TokenInvalid;
         }
         $error = $error === null ? null : AdsSyncService::scrub($error);
 
-        $connection->update($error === null
-            ? ['status' => 'connected', 'last_error' => null, 'needs_reconnect_at' => null]
-            : ['status' => 'error', 'last_error' => $error]);
+        if ($error === null) {
+            $connection->update(['status' => 'connected', 'last_error' => null, 'needs_reconnect_at' => null]);
+        } elseif ($dead ?? false) {
+            ConnectionHealth::markNeedsReconnect($connection, $error);
+        } else {
+            ConnectionHealth::markError($connection, $error);
+        }
 
         if ($request->expectsJson()) {
             return response()->json(['ok' => $error === null, 'error' => $error]);

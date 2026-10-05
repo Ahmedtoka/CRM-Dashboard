@@ -11,6 +11,9 @@ use Throwable;
 /** Stores the Meta usage headers of every Graph response (2xx and errors). Never throws. */
 class UsageRecorder
 {
+    /** @var array<string, int|null> external id => ad_accounts.id, kept for the life of this (singleton) instance */
+    private array $accountIds = [];
+
     private const HEADERS = ['x-business-use-case-usage', 'x-ad-account-usage'];
 
     public function record(Response $r, string $path): void
@@ -39,7 +42,7 @@ class UsageRecorder
     }
 
     /** @return array{max_pct: float, regain_minutes: int, recorded_at: CarbonImmutable}|null the busiest reading of the last $minutes */
-    public function latest(?int $adAccountId, int $minutes = 15): ?array
+    public function busiest(?int $adAccountId, int $minutes = 15): ?array
     {
         $row = AdsApiUsage::query()
             ->where('recorded_at', '>=', now()->subMinutes($minutes))
@@ -103,9 +106,10 @@ class UsageRecorder
     {
         foreach ([$path, $headerKey] as $source) {
             if (preg_match('/\bact_(\d+)/', $source, $m)) {
-                $id = AdAccount::where('platform', 'meta')->where('external_id', 'act_'.$m[1])->value('id');
-                if ($id !== null) {
-                    return (int) $id;
+                $ext = 'act_'.$m[1];
+                $this->accountIds[$ext] ??= AdAccount::where('platform', 'meta')->where('external_id', $ext)->value('id');
+                if ($this->accountIds[$ext] !== null) {
+                    return (int) $this->accountIds[$ext];
                 }
             }
         }

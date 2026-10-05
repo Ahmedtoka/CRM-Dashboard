@@ -61,14 +61,14 @@ it('records usage on an error response and still throws RateLimited', function (
     expect((float) $row->max_pct)->toBe(99.0)->and($row->regain_minutes)->toBe(12);
 });
 
-it('latest returns the busiest recent row and ignores old ones', function () {
+it('busiest returns the busiest recent row and ignores old ones', function () {
     $acc = AdAccount::factory()->meta()->create();
     AdsApiUsage::create(['ad_account_id' => $acc->id, 'header' => 'x-ad-account-usage', 'call_count' => 0, 'total_time' => 0, 'total_cputime' => 0, 'max_pct' => 30, 'recorded_at' => now()->subMinutes(5)]);
     AdsApiUsage::create(['ad_account_id' => $acc->id, 'header' => 'x-ad-account-usage', 'call_count' => 0, 'total_time' => 0, 'total_cputime' => 0, 'max_pct' => 70, 'regain_minutes' => 3, 'recorded_at' => now()->subMinutes(2)]);
     AdsApiUsage::create(['ad_account_id' => $acc->id, 'header' => 'x-ad-account-usage', 'call_count' => 0, 'total_time' => 0, 'total_cputime' => 0, 'max_pct' => 99, 'recorded_at' => now()->subHour()]);
 
-    $latest = app(UsageRecorder::class)->latest($acc->id);
+    $busiest = app(UsageRecorder::class)->busiest($acc->id);
 
-    expect($latest['max_pct'])->toBe(70.0)->and($latest['regain_minutes'])->toBe(3)
-        ->and(app(UsageRecorder::class)->latest($acc->id + 99))->toBeNull();
+    expect($busiest['max_pct'])->toBe(70.0)->and($busiest['regain_minutes'])->toBe(3)
+        ->and(app(UsageRecorder::class)->busiest($acc->id + 99))->toBeNull();
 });

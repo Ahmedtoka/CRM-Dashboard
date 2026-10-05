@@ -49,9 +49,11 @@ final class AdsSyncService
                 ConnectionHealth::markNeedsReconnect($c, self::scrub($e->getMessage()));
                 throw $e;
             }
-            $c->update($e instanceof RateLimited
-                ? ['last_error' => $e->getMessage()]
-                : ['status' => 'error', 'last_error' => $e->getMessage()]);
+            if ($e instanceof RateLimited) {
+                $c->update(['last_error' => $e->getMessage()]);
+            } else {
+                ConnectionHealth::markError($c, $e->getMessage());
+            }
             throw $e;
         }
 
@@ -118,7 +120,9 @@ final class AdsSyncService
 
                 return $run;
             }
-            $a->connection?->update(['status' => 'error', 'last_error' => $e->getMessage()]);
+            if ($a->connection) {
+                ConnectionHealth::markError($a->connection, $e->getMessage());
+            }
 
             return $run;
         }
