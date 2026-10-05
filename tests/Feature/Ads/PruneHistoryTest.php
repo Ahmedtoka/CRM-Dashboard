@@ -22,6 +22,9 @@ use Illuminate\Support\Facades\Schema;
 
 const PRUNE_HISTORY_PRUNED_TABLES = ['ad_daily_metrics', 'ad_account_daily', 'ads_sync_runs', 'ads_api_usage'];
 
+/** First line written by recent MariaDB mysqldump, before the "-- MariaDB dump" comment. */
+const PRUNE_HISTORY_SANDBOX = '/*M!999999\- enable the sandbox mode */';
+
 beforeEach(function () {
     config(['crm.ads.history_start' => '2026-09-01']);
 });
@@ -264,6 +267,13 @@ it('refuses a backup that is not a recent ads dump', function (string $kind) {
         'stale dump' => pruneHistoryDump(ageSeconds: 25 * 3600),
         'dump missing a table' => pruneHistoryDump(['ad_daily_metrics', 'ads_api_usage']),
         'gzip without header' => pruneHistoryDump(header: '-- not a dump', gzip: true),
+        'future-dated dump' => (function () {
+            $f = pruneHistoryDump();
+            touch($f, time() + 3600);
+
+            return $f;
+        })(),
+        'header after line 5' => pruneHistoryDump(header: PRUNE_HISTORY_SANDBOX.str_repeat("\n", 5).'-- MariaDB dump 10.19'),
     };
 
     [$code, $out] = pruneHistoryRun(['--force' => true, '--backup' => $file]);
@@ -274,7 +284,7 @@ it('refuses a backup that is not a recent ads dump', function (string $kind) {
     if ($kind === 'dump missing a table') {
         expect($out)->toContain('ads_sync_runs');
     }
-})->with(['log file', 'stale dump', 'dump missing a table', 'gzip without header']);
+})->with(['log file', 'stale dump', 'dump missing a table', 'gzip without header', 'future-dated dump', 'header after line 5']);
 
 it('in production deletes with a valid dump and records realpath, size and mtime', function (bool $gzip, string $header) {
     pruneHistorySeed();
@@ -292,6 +302,8 @@ it('in production deletes with a valid dump and records realpath, size and mtime
 })->with([
     'plain mysql' => [false, '-- MySQL dump 10.13  Distrib 8.0.36, for Linux (x86_64)'],
     'gzip mariadb' => [true, '-- MariaDB dump 10.19  Distrib 10.6.16-MariaDB, for Linux (x86_64)'],
+    'mariadb sandbox line first' => [false, PRUNE_HISTORY_SANDBOX."\n".'-- MariaDB dump 10.19-11.4.5-MariaDB, for Linux (x86_64)'],
+    'gzip mariadb sandbox line first' => [true, PRUNE_HISTORY_SANDBOX."\n".'-- MariaDB dump 10.19-11.4.5-MariaDB, for Linux (x86_64)'],
 ]);
 
 it('writes a started audit row before the first delete', function () {

@@ -29,6 +29,12 @@ class PruneHistoryCommand extends Command
 
     public const MAX_BACKUP_AGE_SECONDS = 86400;
 
+    /** Clock skew allowed for a backup's mtime in the future. */
+    public const MAX_BACKUP_FUTURE_SECONDS = 300;
+
+    /** The dump header must appear within this many leading lines. */
+    private const HEADER_LINES = 5;
+
     private bool $stopRequested = false;
 
     public function handle(HistoryPruner $pruner): int
@@ -162,14 +168,16 @@ class PruneHistoryCommand extends Command
         if ($mtime < time() - self::MAX_BACKUP_AGE_SECONDS) {
             return 'backup file is older than 24 h (modified '.date('Y-m-d H:i:s', $mtime).'): take a fresh dump.';
         }
+        if ($mtime > time() + self::MAX_BACKUP_FUTURE_SECONDS) {
+            return 'backup file is dated in the future (modified '.date('Y-m-d H:i:s', $mtime).'): check the file and the server clock.';
+        }
 
         $h = @gzopen($real, 'rb');
         if ($h === false) {
             return "backup file cannot be opened: {$real}";
         }
         try {
-            $first = (string) gzgets($h, 4096);
-            if (! str_starts_with($first, '-- MySQL dump') && ! str_starts_with($first, '-- MariaDB dump')) {
+            if (! self::hasDumpHeader($h)) {
                 return "backup file is not a mysqldump (no \"-- MySQL dump\" / \"-- MariaDB dump\" header): {$real}";
             }
             $missing = array_fill_keys($tables, true);
@@ -191,6 +199,32 @@ class PruneHistoryCommand extends Command
         }
 
         return ['path' => $real, 'bytes' => $bytes, 'mtime' => date(DATE_ATOM, $mtime)];
+    }
+
+    /**
+     * True when the first non-blank line is the dump header, optionally preceded by the MariaDB sandbox-mode line
+     * (`/*M!999999\- enable the sandbox mode *\/`, written first by recent MariaDB mysqldump), within HEADER_LINES lines.
+     *
+     * @param  resource  $h
+     */
+    private static function hasDumpHeader($h): bool
+    {
+        for ($i = 0; $i < self::HEADER_LINES; $i++) {
+            $line = gzgets($h, 4096);
+            if ($line === false) {
+                return false;
+            }
+            if (str_starts_with($line, pack('H*', 'efbbbf'))) { // a UTF-8 BOM
+                $line = substr($line, 3);
+            }
+            if (trim($line) === '' || str_starts_with($line, '/*M!999999')) {
+                continue;
+            }
+
+            return str_starts_with($line, '-- MySQL dump') || str_starts_with($line, '-- MariaDB dump');
+        }
+
+        return false;
     }
 
     /** @param array<string, mixed> $meta */
