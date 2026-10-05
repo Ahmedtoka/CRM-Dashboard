@@ -21,6 +21,7 @@ export const TYPE_KEY = {
     'queue.reply_overdue_leader': 'queue_reply_overdue_leader',
     'queue.member_not_arrived': 'queue_member_not_arrived',
     'ads.need_stop': 'ads_need_stop',
+    'ads.token_invalid': 'ads_token_invalid',
 } as const;
 
 /** Desktop notification bodies never carry more than this many characters of a message (privacy ruling). */

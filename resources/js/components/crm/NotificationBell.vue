@@ -63,6 +63,10 @@ function itemText(n: AppNotification): string {
         return t('notifications.ads_need_stop_item', { product: String(n.data.product_title ?? ''), material: String(n.data.title ?? '') });
     }
 
+    if (n.type === 'ads.token_invalid') {
+        return t('notifications.ads_token_invalid_item', { name: String(n.data.connection ?? '') });
+    }
+
     if (n.type === 'channel.problem') {
         const title = t('notifications.channel_problem_item', { name: String(n.data.name ?? '') });
         // The health check writes the notification from the scheduler, so its `excerpt` is
@@ -82,6 +86,10 @@ function open(n: AppNotification): void {
     void notifications.markRead([n.id]);
     if (n.type === 'ads.need_stop') {
         router.visit(String(n.data.link ?? '/ads/materials?status=activated&stock=out'));
+        return;
+    }
+    if (n.type === 'ads.token_invalid') {
+        router.visit('/ads/accounts');
         return;
     }
     if (n.type === 'channel.problem') {

@@ -2850,6 +2850,7 @@ const en: Messages = {
         queue_reply_overdue_leader_item: '{agent} has not replied to {name} · ticket #{ticket}',
         queue_member_not_arrived_item: '{name} has not logged in yet · {shift} shift',
         ads_need_stop_item: 'Product {product} is out of stock: stop the ad "{material}"',
+        ads_token_invalid_item: 'The ad connection "{name}" needs a new token: reconnect it',
         channel_problem_codes: {
             token_missing: 'No token saved — reconnect the account',
             token_invalid: 'The token is no longer valid — reconnect the account',
@@ -2873,6 +2874,7 @@ const en: Messages = {
             queue_reply_overdue_leader: 'A moderator has not replied',
             queue_member_not_arrived: 'A moderator has not logged in',
             ads_need_stop: 'An ad needs to stop',
+            ads_token_invalid: 'Ad connection needs a new token',
         },
     },
     shortcuts: {
@@ -3269,6 +3271,7 @@ const en: Messages = {
             connection_ok: 'Connected',
             connection_pending: 'Awaiting test',
             connection_error: 'Problem',
+            connection_needs_reconnect: 'Needs a new token',
             connection_disabled: 'Disabled',
             fake: 'Demo data',
             last_sync: 'Last sync',

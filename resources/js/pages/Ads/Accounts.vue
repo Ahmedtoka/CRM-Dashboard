@@ -126,6 +126,7 @@ function statusChip(c: AdConnectionRow): { label: string; tone: 'positive' | 'wa
     if (c.status === 'connected') return { label: t('ads.accounts.connection_ok'), tone: 'positive' };
     if (c.status === 'pending') return { label: t('ads.accounts.connection_pending'), tone: 'warning' };
     if (c.status === 'error') return { label: t('ads.accounts.connection_error'), tone: 'negative' };
+    if (c.status === 'needs_reconnect') return { label: t('ads.accounts.connection_needs_reconnect'), tone: 'negative' };
 
     return { label: t('ads.accounts.connection_disabled'), tone: 'neutral' };
 }

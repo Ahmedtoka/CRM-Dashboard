@@ -381,7 +381,7 @@ export interface AdsWinnersProps extends AdsCommonProps {
 
 /* ---- Setup pages: AccountController::index and BuyerSetupController::index ---- */
 
-export type AdConnectionStatus = 'connected' | 'pending' | 'error' | 'disabled';
+export type AdConnectionStatus = 'connected' | 'pending' | 'error' | 'needs_reconnect' | 'disabled';
 
 /** AssignmentService::history — newest period first; `ends_on` null = the open period. */
 export interface AdAssignmentPeriod {

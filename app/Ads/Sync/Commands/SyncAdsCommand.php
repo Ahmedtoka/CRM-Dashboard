@@ -5,6 +5,7 @@ namespace App\Ads\Sync\Commands;
 use App\Ads\Attribution\OrderAttribution;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Sync\AdsSyncService;
+use App\Ads\Sync\ConnectionHealth;
 use App\Ads\Sync\HistoryWindow;
 use App\Ads\Sync\SyncAdAccount;
 use App\Models\AdAccount;
@@ -34,6 +35,12 @@ class SyncAdsCommand extends Command
             ->get();
 
         foreach ($accounts as $a) {
+            // A dead token is not retried every hour: one probe per connection per hour (the first account is it).
+            if ($a->connection !== null && ! ConnectionHealth::claimProbe($a->connection)) {
+                $this->line("Skipped {$a->name}: the connection needs a new token");
+
+                continue;
+            }
             if (! $this->option('now')) {
                 SyncAdAccount::dispatch($a->id, $days, 'recent', 'schedule');
 
@@ -82,7 +89,7 @@ class SyncAdsCommand extends Command
     /** Nightly deep sync: pick up newly granted ad accounts. A failure is warned (and recorded on the connection), not fatal. */
     private function discoverAccounts(AdsSyncService $sync): void
     {
-        $connections = AdPlatformConnection::query()->where('status', '!=', 'disabled')
+        $connections = AdPlatformConnection::query()->whereNotIn('status', ['disabled', 'needs_reconnect'])
             ->when($this->option('platform'), fn ($q, $p) => $q->where('platform', $p))
             ->when($this->option('account'), fn ($q, $id) => $q->whereIn('id', AdAccount::whereKey($id)->select('connection_id')))
             ->get();

@@ -12,6 +12,7 @@ use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\PreviewMarkup;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
+use App\Ads\Platforms\TokenInvalid;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdCampaign;
@@ -44,6 +45,10 @@ final class AdsSyncService
         try {
             $infos = $this->drivers->for(AdPlatform::from($c->platform))->accounts($c);
         } catch (AdsApiException $e) {
+            if ($e instanceof TokenInvalid) {
+                ConnectionHealth::markNeedsReconnect($c, self::scrub($e->getMessage()));
+                throw $e;
+            }
             $c->update($e instanceof RateLimited
                 ? ['last_error' => $e->getMessage()]
                 : ['status' => 'error', 'last_error' => $e->getMessage()]);
@@ -108,6 +113,11 @@ final class AdsSyncService
                 // Quota, not a broken connection: record on the run only and let the caller retry later.
                 throw $e;
             }
+            if ($e instanceof TokenInvalid && $a->connection) {
+                ConnectionHealth::markNeedsReconnect($a->connection, self::scrub($e->getMessage()));
+
+                return $run;
+            }
             $a->connection?->update(['status' => 'error', 'last_error' => $e->getMessage()]);
 
             return $run;
@@ -127,7 +137,7 @@ final class AdsSyncService
             'status' => 'ok', 'ads_count' => count($adRows), 'rows_count' => $rows, 'error' => $warnings === [] ? null : implode(' | ', $warnings), 'finished_at' => now(),
         ]);
         $a->update(['last_synced_at' => now()]);
-        $a->connection?->update(['status' => 'connected', 'last_error' => null, 'last_synced_at' => now()]);
+        $a->connection?->update(['status' => 'connected', 'last_error' => null, 'last_synced_at' => now(), 'needs_reconnect_at' => null]);
 
         return $run;
     }

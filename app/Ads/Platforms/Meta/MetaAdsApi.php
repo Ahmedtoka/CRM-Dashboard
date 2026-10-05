@@ -6,6 +6,7 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\MissingPermission;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
+use App\Ads\Platforms\TokenInvalid;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
@@ -28,6 +29,9 @@ class MetaAdsApi
 
     /** Meta error codes for a missing permission: 200 (permission), 10 (application permission), 294 (managing ads). */
     private const PERMISSION_CODES = [200, 10, 294];
+
+    /** error_subcode values that mean the token itself is dead (expired 463, password changed 460, ...). */
+    private const TOKEN_SUBCODES = [458, 460, 463, 467];
 
     /** A page Meta calls too large is asked again with half the `limit`, down to this. */
     private const MIN_LIMIT = 5;
@@ -70,6 +74,9 @@ class MetaAdsApi
         return $this->handle(fn () => Http::withToken($token)->timeout(300)->connectTimeout(15)
             ->attach($fileField, $contents, $filename)->post($this->url($path), $fields), $token, $path);
     }
+
+    /** Admission hook before a read: a no-op now, filled in by the quota admission task. */
+    public function admit(?string $actExternalId): void {}
 
     /**
      * Throws RateLimited (nothing sent) while a recent write reported usage above the limit for this token.
@@ -186,6 +193,9 @@ class MetaAdsApi
             $code = (int) $response->json('error.code', 0);
             if (in_array($code, self::RATE_CODES, true)) {
                 throw new RateLimited($this->scrub($message));
+            }
+            if ($code === 190 || in_array((int) $response->json('error.error_subcode', 0), self::TOKEN_SUBCODES, true)) {
+                throw new TokenInvalid($this->scrub($message));
             }
             if (in_array($code, self::PERMISSION_CODES, true) || str_contains(strtolower($message), 'ads_management')) {
                 throw new MissingPermission($this->scrub('Meta permission missing: '.$message));

@@ -2805,6 +2805,7 @@ const ar = {
         queue_reply_overdue_leader_item: '{agent} ما ردّتش على {name} · دور #{ticket}',
         queue_member_not_arrived_item: '{name} لسه ما فتحتش السيستم · شيفت {shift}',
         ads_need_stop_item: 'المنتج {product} خلص من المخزون — وقّف إعلان «{material}»',
+        ads_token_invalid_item: 'ربط الإعلانات «{name}» محتاج توكن جديد — اربطه تاني',
         channel_problem_codes: {
             token_missing: 'مفيش توكن محفوظ — اعمل إعادة ربط',
             token_invalid: 'التوكن مبقاش صالح — اعمل إعادة ربط',
@@ -2828,6 +2829,7 @@ const ar = {
             queue_reply_overdue_leader: 'موظفة ما ردّتش',
             queue_member_not_arrived: 'موظفة ما فتحتش السيستم',
             ads_need_stop: 'إعلان محتاج يقف',
+            ads_token_invalid: 'ربط الإعلانات محتاج توكن جديد',
         },
     },
     shortcuts: {
@@ -3224,6 +3226,7 @@ const ar = {
             connection_ok: 'متصل',
             connection_pending: 'في انتظار الاختبار',
             connection_error: 'فيه مشكلة',
+            connection_needs_reconnect: 'محتاج توكن جديد',
             connection_disabled: 'موقوف',
             fake: 'بيانات تجريبية',
             last_sync: 'آخر مزامنة',

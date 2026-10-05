@@ -12,13 +12,13 @@ class AdPlatformConnection extends Model
     /** @use HasFactory<AdPlatformConnectionFactory> */
     use HasFactory;
 
-    protected $fillable = ['platform', 'name', 'credentials', 'status', 'last_error', 'last_synced_at'];
+    protected $fillable = ['platform', 'name', 'credentials', 'status', 'last_error', 'last_synced_at', 'needs_reconnect_at', 'probed_at'];
 
     protected $hidden = ['credentials'];
 
     protected function casts(): array
     {
-        return ['credentials' => 'encrypted:array', 'last_synced_at' => 'datetime'];
+        return ['credentials' => 'encrypted:array', 'last_synced_at' => 'datetime', 'needs_reconnect_at' => 'datetime', 'probed_at' => 'datetime'];
     }
 
     public function accounts(): HasMany

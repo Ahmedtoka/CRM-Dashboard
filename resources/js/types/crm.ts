@@ -673,7 +673,8 @@ export interface AppNotification {
         | 'queue.reply_overdue_leader'
         | 'queue.member_not_arrived'
         | 'queue.break_overrun'
-        | 'ads.need_stop';
+        | 'ads.need_stop'
+        | 'ads.token_invalid';
     data: Record<string, unknown>;
     read_at: string | null;
     created_at: string | null;

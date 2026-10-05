@@ -155,7 +155,7 @@ class AccountController extends Controller
         }
         if (isset($values['credentials']) && $values['credentials'] !== ($connection->credentials ?? [])) {
             // New credentials are untested: drop the stale error badge until Test or Sync runs.
-            $values += ['status' => 'pending', 'last_error' => null];
+            $values += ['status' => 'pending', 'last_error' => null, 'needs_reconnect_at' => null, 'probed_at' => null];
         }
         $connection->update($values);
 
@@ -172,7 +172,7 @@ class AccountController extends Controller
         $error = $error === null ? null : AdsSyncService::scrub($error);
 
         $connection->update($error === null
-            ? ['status' => 'connected', 'last_error' => null]
+            ? ['status' => 'connected', 'last_error' => null, 'needs_reconnect_at' => null]
             : ['status' => 'error', 'last_error' => $error]);
 
         if ($request->expectsJson()) {
