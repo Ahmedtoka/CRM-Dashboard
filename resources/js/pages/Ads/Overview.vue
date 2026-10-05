@@ -170,7 +170,7 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
                 <AdsRangeBar :filters="filters" :platforms="platforms" :buyers="buyers" />
             </PageHeader>
 
-            <p class="text-2xs text-muted-foreground">{{ t('ads.scope_note') }}</p>
+            <p class="text-2xs text-muted-foreground" :title="t('ads.scope_note_tip')">{{ t('ads.scope_note') }}</p>
 
             <div
                 v-if="sync.errors.length"
@@ -231,11 +231,14 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
                     <div class="rounded-lg border-t-4 border-t-primary bg-card px-4 py-3 shadow-card">
                         <p class="text-2xs font-medium text-muted-foreground">{{ t('ads.kpi.spend_tax') }}</p>
                         <MoneyCell :amount="tot.spend" :with-tax="tot.spend_tax" :currency="currency" size="lg" align="start" class="mt-0.5" />
-                        <p v-if="tot.spend_outside_active > 0" class="mt-1 text-2xs text-muted-foreground">
+                        <p v-if="tot.spend_outside_active" class="mt-1 text-2xs text-muted-foreground">
                             {{ t('ads.kpi.outside_active', { amount: money(tot.spend_outside_active) }) }}
                         </p>
-                        <p v-if="tot.itemised_gap" class="mt-1 text-2xs text-muted-foreground">
+                        <p v-if="tot.gap_state === 'unitemised' && tot.itemised_gap" class="mt-1 text-2xs text-muted-foreground">
                             {{ t('ads.kpi.not_itemised', { amount: money(tot.itemised_gap) }) }}
+                        </p>
+                        <p v-else-if="tot.gap_state === 'updating'" class="mt-1 text-2xs text-muted-foreground">
+                            {{ t('ads.kpi.updating') }}
                         </p>
                         <p class="mt-1 text-2xs text-muted-foreground">{{ t(`ads.kpi.source_${tot.source}`) }}</p>
                     </div>

@@ -6,6 +6,7 @@ use App\Ads\AdsSettings;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\AdsQuery;
 use App\Ads\Reports\WinnerScorer;
+use App\Ads\Sync\AdsSyncService;
 use App\Models\Ad;
 use Illuminate\Support\Facades\DB;
 
@@ -20,9 +21,6 @@ use Illuminate\Support\Facades\DB;
  */
 final class StopAdvisor
 {
-    /** Effective statuses of ads the platform no longer runs (A1c): never a Stop candidate. */
-    public const STALE_STATUSES = ['ARCHIVED', 'DELETED', 'GONE'];
-
     public function __construct(
         private readonly WinnerScorer $scorer,
         private readonly AdsQuery $q,
@@ -105,7 +103,7 @@ final class StopAdvisor
      */
     private function notStale($q, string $column)
     {
-        return $q->where(fn ($w) => $w->whereNull($column)->orWhereNotIn($column, self::STALE_STATUSES));
+        return $q->where(fn ($w) => $w->whereNull($column)->orWhereNotIn($column, AdsSyncService::KEEP_STATUSES));
     }
 
     /**

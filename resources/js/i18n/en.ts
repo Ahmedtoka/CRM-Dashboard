@@ -2949,6 +2949,7 @@ const en: Messages = {
     },
     ads: {
         scope_note: 'Showing active campaigns only. Totals include all spend.',
+        scope_note_tip: 'An active campaign is one whose own status is ACTIVE on Meta or ENABLE on TikTok, meaning its switch is on in Ads Manager. Ads without a campaign are not listed.',
         money: { pre_tax: 'Pre-tax {amount}' },
         status: { active: 'Active', inactive: 'Inactive' },
         type: { image: 'Image', video: 'Video', carousel: 'Carousel', other: 'Other' },
@@ -3007,6 +3008,8 @@ const en: Messages = {
             not_itemised: 'Spend Meta no longer itemises by ad: {amount}',
             source_account: 'Source: account totals',
             source_ads: 'Source: sum of ads',
+            source_mixed: 'Source: account totals, plus ad sums for days without them',
+            updating: 'Meta is still updating the latest numbers',
             purchase_value: 'Purchase value',
             roas: 'ROAS',
             roas_hint: 'Purchase value ÷ pre-tax spend',

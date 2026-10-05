@@ -14,6 +14,7 @@ use App\Ads\Doctor\DoctorCommand;
 use App\Ads\Materials\Commands\StockWatchCommand;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\Meta\UsageRecorder;
+use App\Ads\Reports\AdsQuery;
 use App\Ads\Sync\Commands\BackfillAdsCommand;
 use App\Ads\Sync\Commands\PruneHistoryCommand;
 use App\Ads\Sync\Commands\RefreshCreativesCommand;
@@ -28,6 +29,8 @@ class AdsServiceProvider extends ServiceProvider
     {
         $this->app->bind(DriverFactory::class);
         $this->app->singleton(UsageRecorder::class);
+        // One per request: the account-control read inside AdsQuery is memoised per filter and shared by every report.
+        $this->app->scoped(AdsQuery::class);
         // Same switch as the bot's AI: Claude only when the ai driver is claude, else the offline generator.
         $this->app->bind(GeneratesCaptions::class, fn ($app) => config('crm.drivers.ai', 'fake') === 'claude'
             ? $app->make(CaptionGenerator::class)

@@ -33,10 +33,12 @@ final class AdsOverview
         $orders ??= $this->q->orders($f);
         $d = $this->q->deriveWithControl($f, $this->q->sums($f)->first() ?? []);
         $revenue = round((float) $orders->sum('net'), 2);
+        // Outside-active is ad-level only (all ad rows minus active-campaign rows): it never overlaps the itemisation gap.
+        $adSpend = (float) ($this->q->sums($f)->first()->spend ?? 0);
         $active = (float) ($this->q->sums($f->with(['activeCampaignsOnly' => true]))->first()->spend ?? 0);
 
         return $d + [
-            'spend_outside_active' => round($d['spend'] - $active, 2),
+            'spend_outside_active' => round($adSpend - $active, 2),
             'real_orders' => $orders->count(),
             'real_revenue' => $revenue,
             'real_roas' => AdsQuery::ratio($revenue, $d['spend'], 2),

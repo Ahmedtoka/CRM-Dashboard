@@ -87,18 +87,24 @@ final class AdsQuery
         return $q->get();
     }
 
+    /** @var array<string, array{control: Collection, ads: Collection}> memo per filter, one request */
+    private array $controlMemo = [];
+
     /**
-     * Account-level control totals (ad_account_daily: what the platform reports for the account whatever the ads'
-     * status) over the filter's accounts, platform and buyer-of-the-day. Null unless EVERY (account, day) that has
-     * ad-level rows also has a control row; callers then fall back to the sum of ads.
+     * Control rows (ad_account_daily: what the platform reports for the account whatever the ads' status) and the
+     * ad-level sums per (account, day), over the filter's accounts, platform and buyer-of-the-day. Memoised per filter.
      *
-     * @return object{spend:float, purchases:float, purchase_value:float, impressions:int}|null
+     * @return array{control: Collection<string, object>, ads: Collection<string, object>}
      */
-    public function accountTotals(AdsFilter $f): ?object
+    private function controlAndAds(AdsFilter $f): array
     {
         $f = $f->allSpend();
+        $key = serialize([$f->fromDate(), $f->toDate(), $f->platform, $f->buyerId, $f->accountIds, $f->restrictBuyerId]);
+        if (isset($this->controlMemo[$key])) {
+            return $this->controlMemo[$key];
+        }
         if ($f->isEmpty()) {
-            return null;
+            return $this->controlMemo[$key] = ['control' => collect(), 'ads' => collect()];
         }
 
         $q = DB::table('ad_account_daily as d')
@@ -118,48 +124,116 @@ final class AdsQuery
         foreach (array_filter([$f->buyerId, $f->restrictBuyerId], fn ($b) => $b !== null) as $buyer) {
             $q->where('a.media_buyer_id', $buyer);
         }
-        $control = $q->get(['d.ad_account_id', 'd.date', 'd.spend', 'd.purchases', 'd.purchase_value', 'd.impressions']);
+        $control = $q->get(['d.ad_account_id', 'd.date', 'd.spend', 'd.purchases', 'd.purchase_value', 'd.impressions'])
+            ->keyBy(fn ($r) => $r->ad_account_id.'|'.substr((string) $r->date, 0, 10));
+
+        $ads = $this->metrics($f)->select(['m.ad_account_id', 'm.date'])
+            ->selectRaw('COALESCE(SUM(m.spend), 0) as spend, COALESCE(SUM(m.purchases), 0) as purchases, COALESCE(SUM(m.purchase_value), 0) as purchase_value')
+            ->groupBy('m.ad_account_id', 'm.date')->get()
+            ->keyBy(fn ($r) => $r->ad_account_id.'|'.substr((string) $r->date, 0, 10));
+
+        return $this->controlMemo[$key] = ['control' => $control, 'ads' => $ads];
+    }
+
+    /**
+     * Blend of the control and the ad rows per (account, day): the control row where there is one, the ad-level sum
+     * where it is missing. `source` = 'account' (every day with ad rows has a control row) or 'mixed'; null when no
+     * control row exists at all (source 'ads'). `itemised_gap` = control - sum of ads over the covered days only.
+     *
+     * @param  Collection<string, object>  $control
+     * @param  Collection<string, object>  $ads
+     * @return object{spend:float, purchases:float, purchase_value:float, itemised_gap:float, source:string}|null
+     */
+    private function blend(Collection $control, Collection $ads): ?object
+    {
         if ($control->isEmpty()) {
             return null;
         }
 
-        $have = $control->mapWithKeys(fn ($r) => [$r->ad_account_id.'|'.substr((string) $r->date, 0, 10) => true]);
-        $missing = $this->metrics($f)->select(['m.ad_account_id', 'm.date'])->distinct()->get()
-            ->contains(fn ($r) => ! isset($have[$r->ad_account_id.'|'.substr((string) $r->date, 0, 10)]));
-        if ($missing) {
-            return null;
+        $spend = $purchases = $value = $gap = 0.0;
+        $uncovered = false;
+        foreach ($control as $k => $c) {
+            $spend += (float) $c->spend;
+            $purchases += (float) $c->purchases;
+            $value += (float) $c->purchase_value;
+            $gap += (float) $c->spend - (float) ($ads[$k]->spend ?? 0);
+        }
+        foreach ($ads as $k => $a) {
+            if (! $control->has($k)) {
+                $uncovered = true;
+                $spend += (float) $a->spend;
+                $purchases += (float) $a->purchases;
+                $value += (float) $a->purchase_value;
+            }
         }
 
         return (object) [
-            'spend' => (float) $control->sum('spend'),
-            'purchases' => (float) $control->sum('purchases'),
-            'purchase_value' => (float) $control->sum('purchase_value'),
-            'impressions' => (int) $control->sum('impressions'),
+            'spend' => $spend, 'purchases' => $purchases, 'purchase_value' => $value,
+            'itemised_gap' => round($gap, 2), 'source' => $uncovered ? 'mixed' : 'account',
         ];
     }
 
+    /** Blended account-level totals for the whole filter; null when no control row exists in it. */
+    public function accountTotals(AdsFilter $f): ?object
+    {
+        ['control' => $control, 'ads' => $ads] = $this->controlAndAds($f);
+
+        return $this->blend($control, $ads);
+    }
+
     /**
-     * derive() of the ad-level sums, with spend, purchase value, purchases, ROAS and CPA taken from the account
-     * control when it covers the range. CPM, CPC and CTR keep the ad-level sums (the control has no clicks).
-     * `source` is 'account' or 'ads'; `itemised_gap` = control spend − Σ ad spend (null on 'ads').
+     * The same blend per account, from the one memoised read.
+     *
+     * @return array<int, object>
+     */
+    public function accountTotalsByAccount(AdsFilter $f): array
+    {
+        ['control' => $control, 'ads' => $ads] = $this->controlAndAds($f);
+        $out = [];
+        foreach ($control->groupBy('ad_account_id') as $accountId => $rows) {
+            $key = fn ($r) => $r->ad_account_id.'|'.substr((string) $r->date, 0, 10);
+            $blend = $this->blend($rows->keyBy($key), $ads->filter(fn ($a) => (int) $a->ad_account_id === (int) $accountId));
+            if ($blend !== null) {
+                $out[(int) $accountId] = $blend;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * derive() of the ad-level sums, with spend, purchase value, purchases, ROAS and CPA from the blended account
+     * totals when any control row exists. CPM, CPC and CTR keep the ad-level sums (the control has no clicks).
+     * `source` is 'account', 'mixed' or 'ads'; `itemised_gap` = control - sum of ads over the covered days (null on
+     * 'ads'); `gap_state`: 'none' (within crm.ads.control_tolerance_pct of spend), 'unitemised' (control above ads) or
+     * 'updating' (control below ads: the platform is still settling today's numbers).
      *
      * @return array<string, mixed>
      */
     public function deriveWithControl(AdsFilter $f, object|array $adSums): array
     {
-        $d = $this->derive($adSums);
-        $control = $this->accountTotals($f);
-        if ($control === null) {
-            return $d + ['source' => 'ads', 'itemised_gap' => null];
+        return $this->applyBlend($this->derive($adSums), $this->accountTotals($f));
+    }
+
+    /**
+     * @param  array<string, mixed>  $d  derive() output
+     * @return array<string, mixed>
+     */
+    public function applyBlend(array $d, ?object $blend): array
+    {
+        if ($blend === null) {
+            return $d + ['source' => 'ads', 'itemised_gap' => null, 'gap_state' => 'none'];
         }
 
         $c = $this->derive([
-            'spend' => $control->spend, 'purchase_value' => $control->purchase_value, 'purchases' => $control->purchases,
+            'spend' => $blend->spend, 'purchase_value' => $blend->purchase_value, 'purchases' => $blend->purchases,
             'impressions' => $d['impressions'], 'clicks' => $d['clicks'], 'reach' => $d['reach'],
         ]);
+        $tolerance = abs($blend->spend) * (float) config('crm.ads.control_tolerance_pct', 0.5) / 100;
+        $state = abs($blend->itemised_gap) <= $tolerance ? 'none' : ($blend->itemised_gap > 0 ? 'unitemised' : 'updating');
 
         return array_merge($d, array_intersect_key($c, array_flip(['spend', 'spend_tax', 'purchase_value', 'roas', 'purchases', 'cpa'])))
-            + ['source' => 'account', 'itemised_gap' => round($c['spend'] - $d['spend'], 2)];
+            + ['source' => $blend->source, 'itemised_gap' => $blend->itemised_gap, 'gap_state' => $state];
     }
 
     /**

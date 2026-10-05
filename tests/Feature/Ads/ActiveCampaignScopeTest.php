@@ -1,6 +1,7 @@
 <?php
 
 use App\Ads\Buyers\AssignmentService;
+use App\Ads\Control\StopAdvisor;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\AdsOverview;
 use App\Ads\Reports\AdsQuery;
@@ -15,11 +16,13 @@ use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdCampaign;
 use App\Models\AdDailyMetric;
+use App\Models\AdMaterial;
 use App\Models\Customer;
 use App\Models\MediaBuyer;
 use App\Models\Order;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
 
 beforeEach(function () {
@@ -109,4 +112,27 @@ it('counts an order of a paused campaign in overview revenue but not in the acti
     expect($totals['real_orders'])->toBe(1)->and($totals['real_revenue'])->toBe(500.0);
     expect(app(AdsQuery::class)->orders($f)->pluck('id')->all())->toBe([])
         ->and(app(AdsQuery::class)->orders($f->allSpend())->pluck('id')->all())->toBe([$o->id]);
+});
+
+it('never suggests stopping an ad of a campaign that is not active', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $active = AdCampaign::factory()->create(['ad_account_id' => $acc->id, 'status' => 'ACTIVE']);
+    $paused = AdCampaign::factory()->create(['ad_account_id' => $acc->id, 'status' => 'PAUSED']);
+    $in = Ad::factory()->for($acc, 'account')->create(['name' => 'In active', 'ad_campaign_id' => $active->id]);
+    $out = Ad::factory()->for($acc, 'account')->create(['name' => 'In paused', 'ad_campaign_id' => $paused->id]);
+    $material = AdMaterial::factory()->create(['status' => 'activated', 'need_stop_at' => now()]);
+    $material->ads()->attach($out->id);
+    foreach (CarbonPeriod::create('2026-09-17', '2026-09-30') as $d) {
+        foreach ([$in, $out] as $ad) {
+            AdDailyMetric::factory()->create([
+                'ad_id' => $ad->id, 'ad_account_id' => $acc->id, 'date' => $d->toDateString(), 'spend' => 100,
+                'purchase_value' => 10, 'purchases' => 1, 'impressions' => 1000, 'clicks' => 10, 'reach' => 800,
+            ]);
+        }
+    }
+    $f = new AdsFilter(CarbonImmutable::parse('2026-09-17'), CarbonImmutable::parse('2026-09-30'), activeCampaignsOnly: true);
+
+    $names = array_column(app(StopAdvisor::class)->suggest($f), 'name');
+
+    expect($names)->toBe(['In active']);
 });

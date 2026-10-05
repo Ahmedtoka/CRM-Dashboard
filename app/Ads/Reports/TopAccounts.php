@@ -32,8 +32,10 @@ final class TopAccounts
         $holders = $rows->mapWithKeys(fn ($r) => [(int) $r->id => $f->restrictBuyerId ?? $f->buyerId ?? $this->q->ownerOn($owners, (int) $r->id, $f->toDate())]);
         $names = MediaBuyer::query()->whereIn('id', $holders->filter()->unique()->values())->pluck('name', 'id');
 
-        return $rows->map(function (object $r) use ($holders, $names, $f) {
-            $d = $this->q->deriveWithControl($f->with(['accountIds' => [(int) $r->id]]), $r);
+        $blends = $this->q->accountTotalsByAccount($f);
+
+        return $rows->map(function (object $r) use ($holders, $names, $blends) {
+            $d = $this->q->applyBlend($this->q->derive($r), $blends[(int) $r->id] ?? null);
             $holder = $holders[(int) $r->id];
 
             return [

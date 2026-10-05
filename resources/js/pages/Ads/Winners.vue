@@ -73,7 +73,7 @@ const breadcrumbs = computed(() => [
                 <AdsRangeBar :filters="filters" :platforms="platforms" :buyers="buyers" :keep="keep" />
             </PageHeader>
 
-            <p class="rounded-md bg-surface-accent px-3 py-2 text-2xs text-muted-foreground">
+            <p class="rounded-md bg-surface-accent px-3 py-2 text-2xs text-muted-foreground" :title="t('ads.scope_note_tip')">
                 {{ t('ads.winners.note') }}
                 {{ t('ads.scope_note') }}
                 <span v-if="clamped" class="font-medium text-foreground">{{ t('ads.winners.clamped') }}</span>
