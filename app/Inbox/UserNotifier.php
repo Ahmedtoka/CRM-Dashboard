@@ -31,6 +31,14 @@ final class UserNotifier
             ->each(fn (User $u) => $this->notify($u, $type, $data));
     }
 
+    /** The same notification for every active holder of Ads authority (users.ads_authority, D4; not a role, R-30). */
+    public function notifyAdsAuthority(string $type, array $data): void
+    {
+        User::query()->where('is_active', true)->where('ads_authority', true)->get()
+            ->filter(fn (User $u) => $u->hasAdsAuthority())
+            ->each(fn (User $u) => $this->notify($u, $type, $data));
+    }
+
     /** The same notification for every active admin (an escalation left unanswered at the leader's desk). */
     public function notifyAdmins(string $type, array $data): void
     {

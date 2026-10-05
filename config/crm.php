@@ -442,6 +442,13 @@ return [
             'timeout_seconds' => 20,
             // Minutes a UI proposal stays confirmable (write-api 3; 2.1 rule 1: a proposal never locks anything).
             'proposal_ttl_minutes' => 10,
+            // Confirmed-Stop retry (2.1 rule 6): attempts in all, seconds between them (at least; Meta's regain time wins
+            // when longer), and the longest regain time worth waiting for before failing with the Ads Manager link.
+            'stop_retry_attempts' => 3,
+            'stop_retry_seconds' => 60,
+            'stop_retry_max_wait_seconds' => 1800,
+            // Short jobs only (worker --timeout=80). ASSUMPTION: the crm-commerce worker runs in production (ads:doctor shows it).
+            'retry_queue' => env('CRM_ADS_WRITE_RETRY_QUEUE', 'commerce'),
         ],
         // Seconds a publish waits for another worker's upload of the same file before it is released and retried.
         'publish_upload_wait' => 60,

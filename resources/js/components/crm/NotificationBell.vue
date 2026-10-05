@@ -81,6 +81,10 @@ function itemText(n: AppNotification): string {
         return t('notifications.ads_token_scope_missing_item', { name: String(n.data.connection ?? '') });
     }
 
+    if (n.type === 'ads.stop_failed') {
+        return t('notifications.ads_stop_failed_item', { name: String(n.data.name ?? ''), account: String(n.data.account ?? '') });
+    }
+
     if (n.type === 'ads.token_expiring') {
         return t('notifications.ads_token_expiring_item', { name: String(n.data.connection ?? ''), days: Number(n.data.days ?? 0) });
     }
@@ -108,6 +112,10 @@ function open(n: AppNotification): void {
     }
     if (n.type === 'ads.data_health') {
         router.visit('/ads/sync');
+        return;
+    }
+    if (n.type === 'ads.stop_failed') {
+        router.visit('/ads/actions');
         return;
     }
     if (n.type === 'ads.token_invalid' || n.type === 'ads.token_scope_missing' || n.type === 'ads.token_expiring') {

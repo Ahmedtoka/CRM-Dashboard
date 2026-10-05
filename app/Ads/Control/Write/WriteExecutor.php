@@ -4,6 +4,7 @@ namespace App\Ads\Control\Write;
 
 use App\Ads\Audit\AdsAudit;
 use App\Ads\Control\AdWriteService;
+use App\Ads\Control\Write\Jobs\RetryStopWrite;
 use App\Ads\Control\Write\Types\SetStatusType;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdsApiException;
@@ -16,6 +17,7 @@ use App\Ads\Platforms\TokenInvalid;
 use App\Ads\Platforms\WriteGuard;
 use App\Ads\Platforms\WriteRefused;
 use App\Ads\Sync\ConnectionHealth;
+use App\Inbox\UserNotifier;
 use App\Models\AdAccount;
 use App\Models\AdWriteAction;
 use App\Models\AdWriteStep;
@@ -41,7 +43,7 @@ class WriteExecutor
     }
 
     /** One platform attempt of an action in `executing`; returns the action as it ends. */
-    public function attempt(AdWriteAction $x): AdWriteAction
+    public function attempt(AdWriteAction $x, array $stepMeta = []): AdWriteAction
     {
         $account = $x->account;
         $confirmer = $x->confirmer;
@@ -61,7 +63,7 @@ class WriteExecutor
             return $this->finish($x, AdWriteAction::FAILED, 'platform_not_writable', SecretScrubber::scrub($e->getMessage()), []);
         }
 
-        $step = $this->sendStep($x);
+        $step = $this->sendStep($x, $stepMeta);
 
         try {
             $writer->setStatus($account, $x->target_level, $x->target_external_id, (string) $x->to_status);
@@ -94,12 +96,16 @@ class WriteExecutor
         return $this->succeed($x, []);
     }
 
-    /** Throttled: a Run fails with rate_limited (task 10 retries a Stop). */
+    /** Throttled: a Run fails with rate_limited; a confirmed Stop is retried (2.1 rule 6). */
     protected function rateLimited(AdWriteAction $x, AdWriteStep $step, RateLimited $e): AdWriteAction
     {
-        $this->closeStep($step, AdWriteStep::FAILED, 'rate_limited', SecretScrubber::scrub($e->getMessage()));
+        $message = SecretScrubber::scrub($e->getMessage());
+        $this->closeStep($step, AdWriteStep::FAILED, 'rate_limited', $message, array_filter(['retry_after' => $e->retryAfterSeconds], fn ($v) => $v !== null));
+        if ($x->isStop()) {
+            return $this->retryOrFail($x, 'rate_limited', $message, $e->retryAfterSeconds);
+        }
 
-        return $this->finish($x, AdWriteAction::FAILED, 'rate_limited', SecretScrubber::scrub($e->getMessage()),
+        return $this->finish($x, AdWriteAction::FAILED, 'rate_limited', $message,
             array_filter(['retry_after' => $e->retryAfterSeconds], fn ($v) => $v !== null));
     }
 
@@ -125,10 +131,77 @@ class WriteExecutor
         return $this->notApplied($x, $message);
     }
 
-    /** The read-back says the change did not land (task 10 retries a Stop). */
+    /** The read-back says the change did not land: a Run fails, a confirmed Stop is retried (2.1 rule 6). */
     protected function notApplied(AdWriteAction $x, string $message): AdWriteAction
     {
+        if ($x->isStop()) {
+            return $this->retryOrFail($x, 'not_applied', $message, null);
+        }
+
         return $this->finish($x, AdWriteAction::FAILED, 'not_applied', $message, ['read_back' => true]);
+    }
+
+    /**
+     * Bounded retry of a confirmed Stop (2.1 rule 6, R-05): up to stop_retry_attempts attempts in all, at least
+     * stop_retry_seconds apart and never before Meta's regain time. The action stays executing; the claim of the retry
+     * is the attempts counter (CAS in RetryStopWrite), never the cache. Past the bound: failed, the Ads Manager link,
+     * and a notice to the Ads-authority holders. No new decision is taken: it is the same confirmed intent.
+     */
+    protected function retryOrFail(AdWriteAction $x, string $code, string $message, ?int $regainSeconds): AdWriteAction
+    {
+        $x->refresh();
+        $delay = max((int) config('crm.ads.write.stop_retry_seconds', 60), (int) $regainSeconds);
+        $canRetry = $x->attempts < (int) config('crm.ads.write.stop_retry_attempts', 3)
+            && $delay <= (int) config('crm.ads.write.stop_retry_max_wait_seconds', 1800);
+
+        if ($canRetry) {
+            $retryAt = now()->addSeconds($delay);
+            $scheduled = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::EXECUTING)
+                ->update(['retry_at' => $retryAt, 'error_code' => $code, 'error_message' => mb_substr($message, 0, 2000), 'updated_at' => now()]) === 1;
+            $x->refresh();
+            if ($scheduled) {
+                AdsAudit::record('write.retry_scheduled', $x, null, ['retry_at' => $retryAt->toIso8601String()],
+                    ['public_id' => $x->public_id, 'attempts' => $x->attempts, 'delay_seconds' => $delay, 'error_code' => $code]);
+                RetryStopWrite::dispatch($x->id, (int) $x->attempts)
+                    ->onQueue((string) config('crm.ads.write.retry_queue', 'commerce'))
+                    ->delay($retryAt);
+            }
+
+            return $x;
+        }
+
+        $link = self::deepLink($x);
+        $x = $this->finish($x, AdWriteAction::FAILED, $code, $message,
+            array_filter(['deep_link' => $link, 'retry_after' => $regainSeconds], fn ($v) => $v !== null));
+        if ($x->state === AdWriteAction::FAILED && $x->error_code === $code) {
+            app(UserNotifier::class)->notifyAdsAuthority('ads.stop_failed', array_filter([
+                'action_id' => $x->public_id, 'name' => $x->target_name, 'account' => $x->account_name, 'level' => $x->target_level,
+                'deep_link' => $link, 'link' => '/ads/actions',
+            ], fn ($v) => $v !== null));
+        }
+
+        return $x;
+    }
+
+    /**
+     * "Open in Ads Manager to pause" (Meta only). ASSUMPTION: the selected_<level>_ids query of the Ads Manager URL.
+     */
+    public static function deepLink(AdWriteAction $x): ?string
+    {
+        if ($x->platform !== 'meta') {
+            return null;
+        }
+        $act = preg_replace('/^act_/', '', (string) ($x->account?->external_id ?? ''));
+        if ($act === '' || ! ctype_digit($act)) {
+            return null;
+        }
+        [$page, $param] = match ($x->target_level) {
+            'campaign' => ['campaigns', 'selected_campaign_ids'],
+            'adset' => ['adsets', 'selected_adset_ids'],
+            default => ['ads', 'selected_ad_ids'],
+        };
+
+        return 'https://adsmanager.facebook.com/adsmanager/manage/'.$page.'?act='.$act.'&'.$param.'='.rawurlencode($x->target_external_id);
     }
 
     protected function succeed(AdWriteAction $x, array $outcome): AdWriteAction
@@ -136,9 +209,57 @@ class WriteExecutor
         $x = $this->finish($x, AdWriteAction::SUCCEEDED, null, null, $outcome);
         if ($x->state === AdWriteAction::SUCCEEDED) {
             $this->mirrorLocal($x);
+            if ($x->isStop()) {
+                $this->supersedeRunsBy($x);
+            }
+        } elseif (! $x->isStop() && $x->state === AdWriteAction::SUPERSEDED_BY_STOP) {
+            // The Run's call landed after a Stop succeeded: the Stop wins (2.1 rule 4).
+            $this->reapplyStop($x);
         }
 
-        return $x;
+        return $x->refresh();
+    }
+
+    /** Stop beats Run (2.1 rule 4): the Runs on the target still executing or unknown are superseded_by_stop. */
+    protected function supersedeRunsBy(AdWriteAction $stop): void
+    {
+        $ids = AdWriteAction::where('target_key', $stop->target_key)->where('to_status', 'active')
+            ->whereIn('state', AdWriteAction::OPEN)->pluck('id')->all();
+        if ($ids === []) {
+            return;
+        }
+        AdWriteAction::whereIn('id', $ids)->whereIn('state', AdWriteAction::OPEN)->update([
+            'state' => AdWriteAction::SUPERSEDED_BY_STOP, 'open_business_key' => null, 'superseded_by_id' => $stop->id,
+            'finished_at' => now(), 'retry_at' => null, 'updated_at' => now(),
+        ]);
+        foreach (AdWriteAction::whereIn('id', $ids)->where('superseded_by_id', $stop->id)->get() as $run) {
+            AdsAudit::record('write.superseded_by_stop', $run, null, ['state' => AdWriteAction::SUPERSEDED_BY_STOP],
+                ['public_id' => $run->public_id, 'superseded_by' => $stop->public_id]);
+        }
+    }
+
+    /**
+     * The Run landed after the Stop: re-apply the same confirmed Stop (a new step on the Stop, bounded by the same retry
+     * rule; part of the human's confirmed intent, never a new decision). The Stop goes back to executing with a fresh
+     * attempt budget while the platform holds the Run's change; its steps keep the whole history.
+     */
+    protected function reapplyStop(AdWriteAction $run): void
+    {
+        AdWriteAction::whereKey($run->id)->update(['outcome' => json_encode(array_merge($run->outcome ?? [], ['landed_after_stop' => true]))]);
+        $stop = $run->superseded_by_id !== null ? AdWriteAction::find($run->superseded_by_id) : null;
+        if ($stop === null) {
+            return;
+        }
+        $reopened = AdWriteAction::whereKey($stop->id)->where('state', AdWriteAction::SUCCEEDED)->update([
+            'state' => AdWriteAction::EXECUTING, 'finished_at' => null, 'retry_at' => null, 'attempts' => 0, 'updated_at' => now(),
+        ]) === 1;
+        if (! $reopened) {
+            return; // already being re-applied, rolled back, or no longer the Stop that won
+        }
+        $stop->refresh();
+        AdsAudit::record('write.stop_reapplied', $stop, ['state' => AdWriteAction::SUCCEEDED], ['state' => AdWriteAction::EXECUTING],
+            ['public_id' => $stop->public_id, 'reapply_of' => $run->public_id]);
+        $this->attempt($stop, ['reapply_of' => $run->public_id]);
     }
 
     protected function failStep(AdWriteAction $x, AdWriteStep $step, string $code, ?string $message): AdWriteAction

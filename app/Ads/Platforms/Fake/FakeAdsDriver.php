@@ -319,7 +319,7 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
      * Test helper: the next $times calls of $op fail.
      *
      * @param  'setStatus'|'readObject'  $op
-     * @param  'rate'|'unreachable_before'|'unreachable_after'|'rejected'|'permission'|'token'  $kind
+     * @param  string  $kind  rate (regain 120 s) | rate:<seconds> | unreachable_before | unreachable_after | rejected | permission | token
      */
     public static function failNext(string $op, string $kind, int $times = 1): void
     {
@@ -352,6 +352,10 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
 
     private static function throwFault(string $kind): never
     {
+        if (str_starts_with($kind, 'rate:')) {
+            throw new RateLimited('Fake platform: rate limited', (int) substr($kind, 5));
+        }
+
         throw match ($kind) {
             'rate' => new RateLimited('Fake platform: rate limited', 120),
             'unreachable_before', 'unreachable_after' => new PlatformUnreachable('Fake platform is unreachable: timed out'),
