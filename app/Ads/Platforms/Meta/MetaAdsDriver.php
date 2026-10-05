@@ -192,34 +192,39 @@ class MetaAdsDriver implements AdPlatformDriver
         $out = ['ads' => null, 'campaigns' => null, 'warnings' => []];
 
         // Each list fails alone: a refused campaigns call must not throw away the ads list (and the reverse).
-        try {
-            $out['ads'] = [];
-            foreach ($this->api->paginate($token, $this->actId($a).'/ads', [
-                'fields' => 'id,status,effective_status',
-                'effective_status' => json_encode(self::SWEEP_AD_STATUSES),
-                'limit' => 500,
-            ]) as $r) {
-                if (! empty($r['id'])) {
-                    $out['ads'][(string) $r['id']] = ['status' => $r['status'] ?? null, 'effective_status' => $r['effective_status'] ?? null];
+        // One call per status: Meta refuses the whole call ("Invalid parameter") when it rejects one value, so a status
+        // it no longer accepts on /ads costs only that status. Any refused or cut status makes the list incomplete:
+        // its ads still get their status, but nothing may be judged GONE from it (ads_complete false).
+        $out['ads'] = [];
+        $out['ads_complete'] = true;
+        foreach (self::SWEEP_AD_STATUSES as $status) {
+            try {
+                foreach ($this->api->paginate($token, $this->actId($a).'/ads', [
+                    'fields' => 'id,status,effective_status',
+                    'effective_status' => json_encode([$status]),
+                    'limit' => 500,
+                ]) as $r) {
+                    if (! empty($r['id'])) {
+                        $out['ads'][(string) $r['id']] = ['status' => $r['status'] ?? null, 'effective_status' => $r['effective_status'] ?? null];
+                    }
                 }
+                if ($this->api->stoppedAt() !== null) {
+                    $out['ads_complete'] = false;
+                    $out['warnings'][] = "ads list {$status} ".$this->stoppedMessage('incomplete', count($out['ads']));
+                }
+            } catch (TokenInvalid|RateLimited $e) {
+                throw $e;
+            } catch (AdsApiException $e) {
+                $out['ads_complete'] = false;
+                $out['warnings'][] = "ads list {$status}: ".$e->getMessage();
             }
-            if ($this->api->stoppedAt() !== null) {
-                // An incomplete list must never mark ads GONE.
-                $out['warnings'][] = 'ads list '.$this->stoppedMessage('incomplete', count($out['ads']));
-                $out['ads'] = null;
-            }
-        } catch (TokenInvalid|RateLimited $e) {
-            throw $e;
-        } catch (AdsApiException $e) {
-            $out['ads'] = null;
-            $out['warnings'][] = 'ads list: '.$e->getMessage();
         }
 
         try {
             $out['campaigns'] = [];
             foreach ($this->api->paginate($token, $this->actId($a).'/campaigns', [
                 'fields' => 'id,name,status,effective_status,objective',
-                'effective_status' => json_encode(self::INSIGHTS_STATUSES),
+                'effective_status' => json_encode(self::CAMPAIGN_STATUSES),
                 'limit' => 500,
             ]) as $r) {
                 if (! empty($r['id'])) {

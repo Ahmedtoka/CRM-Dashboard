@@ -450,8 +450,8 @@ final class AdsSyncService
             ], fn ($v) => $v !== null && $v !== '');
             AdCampaign::where('ad_account_id', $a->id)->where('external_id', (string) $externalId)->update($values + ['last_seen_at' => $now]);
         }
-        if (! is_array($lists['ads'] ?? null)) {
-            return [false, $warning]; // no ads list: the statuses are not all covered, so no GONE and no completed sweep
+        if (! is_array($lists['ads'] ?? null) || ! ($lists['ads_complete'] ?? true)) {
+            return [false, $warning]; // no or partial ads list: the statuses are not all covered, so no GONE and no completed sweep
         }
 
         // Two consecutive completed sweeps without a sighting: this run and the previous one.

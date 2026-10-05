@@ -39,8 +39,10 @@ function fakeSweepMeta(array &$live, array &$archived, array &$campaigns): void
         $url = $r->url();
         if (str_contains($url, 'act_1/ads')) {
             $statuses = json_decode((string) ($r->data()['effective_status'] ?? '[]'), true);
-            if (in_array('ARCHIVED', $statuses, true)) {
-                return Http::response(['data' => array_map(fn ($id, $st) => ['id' => $id, 'status' => $st, 'effective_status' => $st], array_keys($archived), $archived)]);
+            if (array_intersect($statuses, MetaAdsDriver::SWEEP_AD_STATUSES) !== []) {
+                $hits = array_filter($archived, fn ($st) => in_array($st, $statuses, true));
+
+                return Http::response(['data' => array_map(fn ($id, $st) => ['id' => $id, 'status' => $st, 'effective_status' => $st], array_keys($hits), $hits)]);
             }
 
             return Http::response(['data' => array_map(fn ($id, $st) => ['id' => $id, 'name' => $id, 'status' => $st, 'effective_status' => $st,
@@ -68,11 +70,13 @@ function statusRequests(): array
             return true;
         }
 
-        return str_contains($r->url(), 'act_1/ads') && in_array('ARCHIVED', json_decode((string) ($r->data()['effective_status'] ?? '[]'), true) ?: [], true);
+        $statuses = json_decode((string) ($r->data()['effective_status'] ?? '[]'), true) ?: [];
+
+        return str_contains($r->url(), 'act_1/ads') && array_intersect($statuses, MetaAdsDriver::SWEEP_AD_STATUSES) !== [];
     })->values()->all();
 }
 
-it('asks meta for the archived/deleted ads and every campaign with light fields', function () {
+it('asks meta for the archived/deleted ads (one call per status) and every campaign with light fields', function () {
     $live = [];
     $archived = [];
     $campaigns = [];
@@ -80,17 +84,39 @@ it('asks meta for the archived/deleted ads and every campaign with light fields'
 
     $out = app(MetaAdsDriver::class)->statuses(sweepAccount());
 
-    expect($out)->toBe(['ads' => [], 'campaigns' => [], 'warnings' => []]);
+    expect($out)->toBe(['ads' => [], 'campaigns' => [], 'warnings' => [], 'ads_complete' => true]);
     $requests = statusRequests();
-    expect($requests)->toHaveCount(2);
-    $ads = collect($requests)->first(fn ($r) => str_contains($r->url(), 'act_1/ads'));
+    expect($requests)->toHaveCount(1 + count(MetaAdsDriver::SWEEP_AD_STATUSES));
+    $ads = collect($requests)->filter(fn ($r) => str_contains($r->url(), 'act_1/ads'))->values();
     $camps = collect($requests)->first(fn ($r) => str_contains($r->url(), 'act_1/campaigns'));
-    expect($ads['fields'])->toBe('id,status,effective_status')
-        ->and(json_decode($ads['effective_status'], true))->toBe(['ARCHIVED', 'DELETED', 'PREAPPROVED', 'PENDING_BILLING_INFO'])
-        ->and((int) $ads['limit'])->toBe(500)
+    expect($ads->map(fn ($r) => json_decode($r['effective_status'], true))->all())
+        ->toBe(array_map(fn ($s) => [$s], MetaAdsDriver::SWEEP_AD_STATUSES))
+        ->and($ads[0]['fields'])->toBe('id,status,effective_status')
+        ->and((int) $ads[0]['limit'])->toBe(500)
         ->and($camps['fields'])->toBe('id,name,status,effective_status,objective')
-        ->and(json_decode($camps['effective_status'], true))->toBe(MetaAdsDriver::INSIGHTS_STATUSES)
+        ->and(json_decode($camps['effective_status'], true))->toBe(MetaAdsDriver::CAMPAIGN_STATUSES)
         ->and((int) $camps['limit'])->toBe(500);
+});
+
+it('a status meta refuses on /ads costs only that status and blocks GONE for the run', function () {
+    $acc = sweepAccount();
+    Http::fake(function (Request $r) {
+        if (str_contains($r->url(), 'act_1/ads') && str_contains(urldecode($r->url()), '"DELETED"')) {
+            return Http::response(['error' => ['code' => 100, 'message' => 'Invalid parameter']], 400);
+        }
+        if (str_contains($r->url(), 'act_1/ads') && str_contains(urldecode($r->url()), '"ARCHIVED"')) {
+            return Http::response(['data' => [['id' => 'ad_x', 'status' => 'ARCHIVED', 'effective_status' => 'ARCHIVED']]]);
+        }
+
+        return Http::response(['data' => []]);
+    });
+
+    $out = app(MetaAdsDriver::class)->statuses($acc);
+
+    expect($out['ads'])->toHaveKey('ad_x')
+        ->and($out['ads_complete'])->toBeFalse()
+        ->and(implode(' ', $out['warnings']))->toContain('ads list DELETED: ')
+        ->and($out['campaigns'])->toBe([]);
 });
 
 it('marks an ad archived on meta after the deep sync', function () {
