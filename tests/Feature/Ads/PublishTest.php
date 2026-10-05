@@ -681,3 +681,37 @@ it('refuses a publish without a valid Idempotency-Key header', function () {
     pubPost($this, $admin, $material, $body, 'short')->assertStatus(422);
     expect(AdPublication::count())->toBe(0);
 });
+
+it('stays safe after the cache is flushed: a finished row is never created twice, a half-created row never re-creates', function () {
+    [$row] = pubOne();
+    $double = new class extends FakeAdsDriver
+    {
+        public static int $creates = 0;
+
+        public function createPausedAd(AdAccount $a, AdDraft $draft): string
+        {
+            self::$creates++;
+
+            return parent::createPausedAd($a, $draft);
+        }
+    };
+    $double::$creates = 0;
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+
+    $first = new PublishAd($row->id);
+    $second = clone $first; // a Redis re-delivery: same payload, same runKey
+    $first->handle(app(DriverFactory::class));
+    expect($row->fresh()->status)->toBe('done')->and($double::$creates)->toBe(1);
+
+    Cache::flush(); // a deploy, a Redis restart: the done mark and locks are gone
+    $second->handle(app(DriverFactory::class));
+    expect($double::$creates)->toBe(1)->and($row->fresh()->status)->toBe('done');
+
+    // a row left in creating (request sent) with the cache flushed: error with the warning, no create call
+    [$stuck] = pubOne();
+    $stuck->update(['status' => 'creating', 'ad_requested_at' => now()]);
+    Cache::flush();
+    (new PublishAd($stuck->id))->handle(app(DriverFactory::class));
+    expect($double::$creates)->toBe(1)->and($stuck->fresh()->status)->toBe('error')
+        ->and($stuck->fresh()->error)->toContain($stuck->ad_name);
+});

@@ -19,7 +19,11 @@ composer install --no-dev --optimize-autoloader --no-interaction
 npm ci --no-audit --no-fund
 npm run build
 php artisan migrate --force
-php artisan optimize:clear
+# never clear the application cache on deploy: locks and back-offs live there (F-053)
+php artisan config:clear
+php artisan route:clear
+php artisan view:clear
+php artisan event:clear
 php artisan optimize
 php artisan storage:link 2>/dev/null || true
 # Stops the running schedule:run from repeating sub-minute tasks (queue:tick) with the old code.

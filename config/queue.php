@@ -63,8 +63,10 @@ return [
             'after_commit' => false,
         ],
 
-        // retry_after must stay above the longest job/worker --timeout on the
+        // Worker rule (roadmap 2.1 #9): any queue connection's `retry_after` must exceed the longest `--timeout` of any
+        // worker on it. retry_after must stay above the longest job/worker --timeout on the
         // connection, or a second worker re-runs a job that is still running.
+        // SyncAdAccount and PublishAd always run on `redislong` when the default is redis.
         // Every Supervisor worker on `redis` uses --timeout <= 80.
         'redis' => [
             'driver' => 'redis',

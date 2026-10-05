@@ -35,6 +35,10 @@ use Throwable;
  * error. Only when `ad_requested_at` is set (stamped by the writer right before the ad-create request goes out) can an ad
  * exist on the platform, and only then does the error warn that it "may already exist". A failure before that point
  * (thumbnail, cover, creative, a usage back-off: CreativeRejected) never carries the warning.
+ *
+ * The cache marks (`ads-publish-done:`, `ads-publish-running:`) are hints only: losing the cache (a flush, a deploy, a Redis
+ * restart) can never cause a second ad. The guard is the database: the compare-and-set to `creating` in run() and
+ * isFinished() on the row. Every error write goes through the model, which also releases the row's `open_key` (W2).
  */
 class PublishAd implements ShouldQueue
 {
