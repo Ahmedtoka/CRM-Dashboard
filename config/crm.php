@@ -434,6 +434,11 @@ return [
         // Live writers outside production only touch these accounts (comma list of act_... in CRM_ADS_WRITE_SANDBOX_ACCOUNTS).
         'write_sandbox_accounts' => array_values(array_filter(array_map('trim', explode(',', (string) env('CRM_ADS_WRITE_SANDBOX_ACCOUNTS', ''))))),
         'material_max_mb' => ['video' => 500, 'image' => 20],
+        // Phase B write pipeline. enabled = deploy-level kill switch; the runtime switch is ads_settings.writes_enabled
+        // (ads:writes). Writes need both on; Stop is always exempt.
+        'write' => [
+            'enabled' => (bool) env('CRM_ADS_WRITES_ENABLED', true),
+        ],
         // Seconds a publish waits for another worker's upload of the same file before it is released and retried.
         'publish_upload_wait' => 60,
         // AI captions: model defaults to the bot's reply model (settings, then crm.anthropic.reply_model) when blank.

@@ -3,6 +3,7 @@
 namespace App\Ads\Control;
 
 use App\Ads\Access\AdsScope;
+use App\Ads\Control\Write\WriteSwitch;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\DriverFactory;
@@ -19,6 +20,7 @@ use App\Models\AdSet;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -99,6 +101,7 @@ final class AdWriteService
      * @param  'active'|'paused'  $status
      *
      * @throws AuthorizationException outside the user's scope
+     * @throws HttpResponseException 503 writes_disabled for a Run while the kill switch is off
      * @throws ValidationException unknown target or the platform refused (the message is readable)
      */
     public function setStatus(User $u, AdAccount $a, string $level, string $externalId, string $status, ?string $reason): AdAction
@@ -118,6 +121,17 @@ final class AdWriteService
         }
         if (! in_array($level, self::LEVELS, true) || ! in_array($status, self::STATUSES, true)) {
             throw ValidationException::withMessages(['status' => __('ads.errors.bad_request')]);
+        }
+        if (! WriteSwitch::allows('set_status', $status)) {
+            // The owner's kill switch (ads:writes): a Run is refused with 503, Stop is exempt. Logged like any refused attempt.
+            $row = $this->find($a, $level, $externalId);
+            AdAction::create([
+                'user_id' => $u->id, 'platform' => $a->platform, 'ad_account_id' => $a->id, 'account_name' => $a->name, 'level' => $level, 'external_id' => $externalId,
+                'name' => mb_substr((string) $row?->name, 0, 500), 'from_status' => $row?->status, 'to_status' => strtoupper($status),
+                'reason' => $reason !== null && trim($reason) !== '' ? trim($reason) : null, 'result' => AdAction::ERROR, 'error' => WriteSwitch::CODE,
+            ]);
+
+            throw new HttpResponseException(WriteSwitch::refusal());
         }
         if (! WritableAccounts::allows($a)) {
             // An owner choice (ads:writable), so Stop is not exempt. Logged like any refused attempt.

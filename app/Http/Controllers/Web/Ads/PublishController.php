@@ -8,6 +8,7 @@ use App\Ads\Control\AdWriteService;
 use App\Ads\Control\DuplicatePublication;
 use App\Ads\Control\PublishService;
 use App\Ads\Control\WritableAccounts;
+use App\Ads\Control\Write\WriteSwitch;
 use App\Ads\Materials\MaterialService;
 use App\Ads\Naming;
 use App\Ads\Platforms\AdPlatform;
@@ -41,6 +42,7 @@ class PublishController extends Controller
     {
         $user = $request->user();
         abort_unless(MaterialService::canOperate($user), 403);
+        WriteSwitch::assertAllows('publish'); // 503 writes_disabled: the dialog cannot lead anywhere while writes are off
 
         $material = $request->filled('material') ? AdMaterial::query()->with('product')->findOrFail((int) $request->query('material')) : null;
         $link = $material === null ? null : $publish->link($material);
@@ -97,6 +99,7 @@ class PublishController extends Controller
     {
         $user = $request->user();
         abort_unless(MaterialService::canOperate($user), 403);
+        WriteSwitch::assertAllows('publish'); // the kill switch stops publish too (a write); only Stop is exempt
 
         $data = $request->validate([
             'allow_duplicate' => ['nullable', 'boolean'],

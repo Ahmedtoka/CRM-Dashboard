@@ -25,6 +25,7 @@ return [
     'errors' => [
         'campaign_level_not_allowed' => 'Running or stopping a whole campaign needs Ads authority. Run and Stop the ads instead.',
         'adset_level_not_allowed' => 'Running or stopping a whole ad set needs Ads authority. Run and Stop the ads instead.',
+        'writes_disabled' => 'CRM writes are switched off by the owner. Stop still works; use Ads Manager for anything else.',
         'ads_authority_required' => 'Campaign and ad set changes need Ads authority. Run and Stop the ads instead.',
         'out_of_scope' => 'You cannot change ads on this account.',
         'account_not_writable' => 'This account is not enabled for changes from the CRM. Make the change in Ads Manager, or ask an admin to enable the account (ads:writable).',
