@@ -438,6 +438,8 @@ return [
         // (ads:writes). Writes need both on; Stop is always exempt.
         'write' => [
             'enabled' => (bool) env('CRM_ADS_WRITES_ENABLED', true),
+            // HTTP timeout (seconds) of an inline platform write and of the live pre-read (the old write POST waited 90).
+            'timeout_seconds' => 20,
         ],
         // Seconds a publish waits for another worker's upload of the same file before it is released and retried.
         'publish_upload_wait' => 60,

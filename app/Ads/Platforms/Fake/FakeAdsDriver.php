@@ -5,6 +5,7 @@ namespace App\Ads\Platforms\Fake;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdPlatformDriver;
 use App\Ads\Platforms\AdPlatformWriter;
+use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Data\AccountDailyTotal;
 use App\Ads\Platforms\Data\AccountInfo;
 use App\Ads\Platforms\Data\AdDraft;
@@ -14,10 +15,19 @@ use App\Ads\Platforms\Data\CreativeMedia;
 use App\Ads\Platforms\Data\DailyAdMetric;
 use App\Ads\Platforms\Data\Identity;
 use App\Ads\Platforms\Data\MediaRef;
+use App\Ads\Platforms\Data\ObjectState;
+use App\Ads\Platforms\MissingPermission;
+use App\Ads\Platforms\PlatformUnreachable;
+use App\Ads\Platforms\RateLimited;
+use App\Ads\Platforms\TokenInvalid;
+use App\Models\Ad;
 use App\Models\AdAccount;
+use App\Models\AdCampaign;
 use App\Models\AdMaterialFile;
 use App\Models\AdPlatformConnection;
+use App\Models\AdSet;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Support\Facades\Cache;
 use Random\Engine\Mt19937;
 use Random\Randomizer;
@@ -30,6 +40,11 @@ use Random\Randomizer;
 class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
 {
     private const WRITER_KEY = 'ads-fake-writer';
+
+    /** @var array<string, list<string>> test faults per operation, consumed in order */
+    private static array $faults = [];
+
+    private static ?Closure $beforeSetStatus = null;
 
     public const META_CLOTING = 'act_demo_cloting';
 
@@ -223,15 +238,147 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
 
     public function setStatus(AdAccount $a, string $level, string $externalId, string $status): void
     {
+        // One-shot race hook: taken before it runs, so a nested setStatus inside it does not run it again.
+        if (self::$beforeSetStatus !== null) {
+            $hook = self::$beforeSetStatus;
+            self::$beforeSetStatus = null;
+            $hook($a, $level, $externalId, $status);
+        }
+
+        $fault = self::takeFault('setStatus');
+        if ($fault !== null && $fault !== 'unreachable_after') {
+            self::throwFault($fault);
+        }
+
         $state = $this->writerState();
         $state['statuses'][] = ['level' => $level, 'id' => $externalId, 'status' => $status];
         $this->saveWriterState($state);
+
+        if ($fault === 'unreachable_after') {
+            self::throwFault($fault); // the change landed, the answer was lost
+        }
     }
 
-    /** @return array{n:int,media:int,ads:array<string,array<string,mixed>>,statuses:list<array<string,string>>} */
+    /**
+     * Status: the last fake setStatus for the id, else the local row's status, else PAUSED. Budgets: 50,000 minor on the
+     * ad set (the parent of an ad), none on the campaign. seedObject() overrides any field.
+     */
+    public function readObject(AdAccount $a, string $level, string $externalId): ObjectState
+    {
+        $fault = self::takeFault('readObject');
+        if ($fault !== null) {
+            self::throwFault($fault);
+        }
+
+        $state = $this->writerState();
+        $status = null;
+        foreach (array_reverse($state['statuses']) as $s) {
+            if ($s['level'] === $level && $s['id'] === $externalId) {
+                $status = strtolower($s['status']) === 'active' ? 'ACTIVE' : 'PAUSED';
+                break;
+            }
+        }
+        $status ??= $this->localStatus($a, $level, $externalId) ?? 'PAUSED';
+
+        $adSetBudget = 50000;
+        $parents = match ($level) {
+            'ad' => [
+                ['level' => 'adset', 'status' => 'ACTIVE', 'dailyBudgetMinor' => $adSetBudget, 'lifetimeBudgetMinor' => null, 'endsAt' => null],
+                ['level' => 'campaign', 'status' => 'ACTIVE', 'dailyBudgetMinor' => null, 'lifetimeBudgetMinor' => null, 'endsAt' => null],
+            ],
+            'adset' => [['level' => 'campaign', 'status' => 'ACTIVE', 'dailyBudgetMinor' => null, 'lifetimeBudgetMinor' => null, 'endsAt' => null]],
+            default => [],
+        };
+        $fields = [
+            'status' => $status,
+            'effectiveStatus' => $status,
+            'dailyBudgetMinor' => $level === 'adset' ? $adSetBudget : null,
+            'lifetimeBudgetMinor' => null,
+            'endsAt' => null,
+            'currency' => (string) ($a->currency ?: 'EGP'),
+            'parents' => $parents,
+        ];
+        $fields = array_merge($fields, $state['objects'][$level.':'.$externalId] ?? []);
+
+        return new ObjectState(...$fields);
+    }
+
+    /**
+     * Test helper: overrides fields of the fake live read of one object (named like ObjectState's constructor).
+     *
+     * @param  array<string, mixed>  $fields
+     */
+    public function seedObject(string $level, string $id, array $fields): void
+    {
+        $state = $this->writerState();
+        $state['objects'][$level.':'.$id] = array_merge($state['objects'][$level.':'.$id] ?? [], $fields);
+        $this->saveWriterState($state);
+    }
+
+    /**
+     * Test helper: the next $times calls of $op fail.
+     *
+     * @param  'setStatus'|'readObject'  $op
+     * @param  'rate'|'unreachable_before'|'unreachable_after'|'rejected'|'permission'|'token'  $kind
+     */
+    public static function failNext(string $op, string $kind, int $times = 1): void
+    {
+        for ($i = 0; $i < $times; $i++) {
+            self::$faults[$op][] = $kind;
+        }
+    }
+
+    /** Test helper: called once inside the next setStatus, before it records anything (races). */
+    public static function beforeSetStatus(?callable $fn): void
+    {
+        self::$beforeSetStatus = $fn === null ? null : Closure::fromCallable($fn);
+    }
+
+    /** Clears the fault queue and the hook (TestCase::setUp calls it before every test). */
+    public static function reset(): void
+    {
+        self::$faults = [];
+        self::$beforeSetStatus = null;
+    }
+
+    private static function takeFault(string $op): ?string
+    {
+        if (empty(self::$faults[$op])) {
+            return null;
+        }
+
+        return array_shift(self::$faults[$op]);
+    }
+
+    private static function throwFault(string $kind): never
+    {
+        throw match ($kind) {
+            'rate' => new RateLimited('Fake platform: rate limited', 120),
+            'unreachable_before', 'unreachable_after' => new PlatformUnreachable('Fake platform is unreachable: timed out'),
+            'permission' => new MissingPermission('Fake platform: permission missing'),
+            'token' => new TokenInvalid('Fake platform: token invalid'),
+            default => new AdsApiException('Invalid parameter'),
+        };
+    }
+
+    private function localStatus(AdAccount $a, string $level, string $externalId): ?string
+    {
+        if ($a->id === null) {
+            return null;
+        }
+        $row = match ($level) {
+            'campaign' => AdCampaign::where('ad_account_id', $a->id)->where('external_id', $externalId)->first(['status']),
+            'adset' => AdSet::where('external_id', $externalId)->whereHas('campaign', fn ($q) => $q->where('ad_account_id', $a->id))->first(['status']),
+            default => Ad::where('ad_account_id', $a->id)->where('external_id', $externalId)->first(['status']),
+        };
+
+        return $row?->status !== null ? strtoupper((string) $row->status) : null;
+    }
+
+    /** @return array{n:int,media:int,ads:array<string,array<string,mixed>>,statuses:list<array<string,string>>,objects:array<string,array<string,mixed>>} */
     private function writerState(): array
     {
-        return (Cache::get(self::WRITER_KEY) ?? []) + ['n' => 0, 'media' => 0, 'ads' => [], 'statuses' => []];
+        return (Cache::get(self::WRITER_KEY) ?? []) + ['n' => 0, 'media' => 0, 'ads' => [], 'statuses' => [], 'objects' => []];
     }
 
     private function saveWriterState(array $state): void

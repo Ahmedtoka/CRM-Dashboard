@@ -9,9 +9,11 @@ use App\Ads\Platforms\Data\AdDraft;
 use App\Ads\Platforms\Data\CampaignNode;
 use App\Ads\Platforms\Data\Identity;
 use App\Ads\Platforms\Data\MediaRef;
+use App\Ads\Platforms\Data\ObjectState;
 use App\Ads\Platforms\RateLimited;
 use App\Models\AdAccount;
 use App\Models\AdMaterialFile;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
@@ -126,7 +128,79 @@ class MetaAdsWriter implements AdPlatformWriter
         if ($activate) {
             $this->api->backOffIfBusy($token);
         }
-        $this->api->post($token, $externalId, ['status' => $activate ? 'ACTIVE' : 'PAUSED']);
+        $this->api->post($token, $externalId, ['status' => $activate ? 'ACTIVE' : 'PAUSED'], $this->writeTimeout());
+    }
+
+    /** Fields of one live read per level: the object's own status and budgets plus its parents'. */
+    private const READ_FIELDS = [
+        'ad' => 'status,effective_status,adset{status,daily_budget,lifetime_budget,end_time},campaign{status,daily_budget,lifetime_budget,stop_time}',
+        'adset' => 'status,effective_status,daily_budget,lifetime_budget,end_time,campaign{status,daily_budget,lifetime_budget,stop_time}',
+        'campaign' => 'status,effective_status,daily_budget,lifetime_budget,stop_time',
+    ];
+
+    /**
+     * One GET with the write timeout. ASSUMPTION: Meta returns budgets in the account currency's minor unit (EGP offset
+     * 100); verify with one GET on a real ad set before trusting the budget cap (runbook step 3).
+     */
+    public function readObject(AdAccount $a, string $level, string $externalId): ObjectState
+    {
+        if (! isset(self::READ_FIELDS[$level])) {
+            throw new AdsApiException('Unknown ad level: '.$level);
+        }
+        $res = $this->api->get($this->token($a), $this->numericId($externalId), ['fields' => self::READ_FIELDS[$level]], $this->writeTimeout());
+
+        $parents = [];
+        foreach (['adset' => 'end_time', 'campaign' => 'stop_time'] as $parent => $endField) {
+            if ($parent === $level || ! isset($res[$parent]) || ! is_array($res[$parent])) {
+                continue;
+            }
+            $p = $res[$parent];
+            $parents[] = [
+                'level' => $parent,
+                'status' => isset($p['status']) ? (string) $p['status'] : null,
+                'dailyBudgetMinor' => self::minor($p['daily_budget'] ?? null),
+                'lifetimeBudgetMinor' => self::minor($p['lifetime_budget'] ?? null),
+                'endsAt' => self::time($p[$endField] ?? null),
+            ];
+        }
+
+        return new ObjectState(
+            status: isset($res['status']) ? (string) $res['status'] : null,
+            effectiveStatus: isset($res['effective_status']) ? (string) $res['effective_status'] : null,
+            dailyBudgetMinor: self::minor($res['daily_budget'] ?? null),
+            lifetimeBudgetMinor: self::minor($res['lifetime_budget'] ?? null),
+            endsAt: self::time($res[$level === 'campaign' ? 'stop_time' : 'end_time'] ?? null),
+            currency: (string) ($a->currency ?: 'EGP'),
+            parents: $parents,
+        );
+    }
+
+    /** Meta sends budgets as digit strings; "0" or absent means no such budget. */
+    private static function minor(mixed $v): ?int
+    {
+        if (! is_numeric($v)) {
+            return null;
+        }
+        $n = (int) $v;
+
+        return $n > 0 ? $n : null;
+    }
+
+    private static function time(mixed $v): ?CarbonImmutable
+    {
+        if (! is_string($v) || trim($v) === '') {
+            return null;
+        }
+        try {
+            return CarbonImmutable::parse($v)->utc();
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function writeTimeout(): int
+    {
+        return max(1, (int) config('crm.ads.write.timeout_seconds', 20));
     }
 
     /** @return string the creative id */

@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Bot\Flow\Orders\FakeOmsClient;
 use App\Channels\Adapters\FakeChannelAdapter;
 use App\Commerce\FakeCommerceProvider;
@@ -31,5 +32,8 @@ abstract class TestCase extends BaseTestCase
         // The test-link step recorder's "already recorded" memo is static: SQLite
         // reuses conversation ids after each rollback, so it must not leak either.
         TestSessionSteps::reset();
+
+        // The fake ad writer's fault queue and race hook are static: one write test must not fail the next.
+        FakeAdsDriver::reset();
     }
 }

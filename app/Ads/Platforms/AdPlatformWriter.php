@@ -6,6 +6,7 @@ use App\Ads\Platforms\Data\AdDraft;
 use App\Ads\Platforms\Data\CampaignNode;
 use App\Ads\Platforms\Data\Identity;
 use App\Ads\Platforms\Data\MediaRef;
+use App\Ads\Platforms\Data\ObjectState;
 use App\Models\AdAccount;
 use App\Models\AdMaterialFile;
 
@@ -30,4 +31,14 @@ interface AdPlatformWriter
      * @param  'active'|'paused'  $status
      */
     public function setStatus(AdAccount $a, string $level, string $externalId, string $status): void;
+
+    /**
+     * Live status and budgets of one object and its parents (one read).
+     *
+     * @param  'campaign'|'adset'|'ad'  $level
+     *
+     * @throws ReadUnsupported when the platform has no read yet
+     * @throws PlatformUnreachable on a transport failure
+     */
+    public function readObject(AdAccount $a, string $level, string $externalId): ObjectState;
 }
