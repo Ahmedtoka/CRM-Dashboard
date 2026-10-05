@@ -21,7 +21,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia;
 
@@ -106,9 +105,6 @@ it('reports a read-only connection and a spend gap over the range', function () 
 });
 
 it('reports incomplete history when the range starts before the account complete_from', function () {
-    if (! Schema::hasColumn('ad_accounts', 'complete_from')) {
-        Schema::table('ad_accounts', fn ($t) => $t->date('complete_from')->nullable());
-    }
     $a = dbAccount('Partial Shop');
     DB::table('ad_accounts')->where('id', $a->id)->update(['complete_from' => '2026-09-20']);
 

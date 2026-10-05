@@ -20,12 +20,14 @@ use App\Ads\Materials\Commands\StockWatchCommand;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\Meta\UsageRecorder;
 use App\Ads\Reports\AdsQuery;
+use App\Ads\Reports\Commands\ReconcileCommand;
 use App\Ads\Sync\Commands\BackfillAdsCommand;
 use App\Ads\Sync\Commands\PruneHistoryCommand;
 use App\Ads\Sync\Commands\RefreshCreativesCommand;
 use App\Ads\Sync\Commands\SweepStuckRunsCommand;
 use App\Ads\Sync\Commands\SyncAdsCommand;
 use App\Ads\Sync\Commands\TokenProbeCommand;
+use App\Ads\Sync\HistoryWindow;
 use App\Ads\Sync\SyncAdAccount;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
@@ -47,7 +49,7 @@ class AdsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class, ReconcileCommand::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
@@ -80,6 +82,10 @@ class AdsServiceProvider extends ServiceProvider
 
             $schedule->command(TokenProbeCommand::class)
                 ->dailyAt('06:10')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
+
+            // After the deep sync (03:15) has had time to run: only refreshes each account's complete_from, prints nothing.
+            $schedule->command(ReconcileCommand::class, ['--from='.HistoryWindow::start()->toDateString(), '--quiet-update'])
+                ->dailyAt('06:30')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
 
             $schedule->command(SweepStuckRunsCommand::class)
                 ->everyFiveMinutes()->timezone('Africa/Cairo')->withoutOverlapping(10)->onOneServer()->appendOutputTo(storage_path('logs/ads-schedule.log'));
