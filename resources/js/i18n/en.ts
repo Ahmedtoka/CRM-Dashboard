@@ -3239,6 +3239,8 @@ const en: Messages = {
             change: '{from} to {to}',
             result_ok: 'Done',
             result_error: 'Failed',
+            result_pending: 'In progress',
+            pending: 'The change is in progress. Check the actions log.',
             status_active: 'Running',
             status_paused: 'Paused',
             unknown_user: 'System',

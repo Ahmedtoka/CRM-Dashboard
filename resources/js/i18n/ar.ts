@@ -3194,6 +3194,8 @@ const ar = {
             change: 'من {from} إلى {to}',
             result_ok: 'تم',
             result_error: 'فشل',
+            result_pending: 'قيد التنفيذ',
+            pending: 'التغيير قيد التنفيذ. تابعه في سجل الإجراءات.',
             status_active: 'شغّال',
             status_paused: 'واقف',
             unknown_user: 'السيستم',

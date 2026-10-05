@@ -780,7 +780,7 @@ export interface AdSuggestion {
     can_write: boolean;
 }
 
-/** One ad_actions row on the log. */
+/** One ad_write_actions row on the log (slice-1 rows are copied in as legacy rows). */
 export interface AdActionLogRow {
     id: number;
     at: string | null;
@@ -792,7 +792,7 @@ export interface AdActionLogRow {
     from_status: string | null;
     to_status: string;
     reason: string | null;
-    result: 'ok' | 'error';
+    result: 'ok' | 'error' | 'pending';
     error: string | null;
 }
 

@@ -52,8 +52,10 @@ const busy = ref(false);
 const error = ref<string | null>(null);
 const reason = ref(props.reason);
 
+const idemKey = ref('');
 watch(open, (o) => {
     if (o) {
+        idemKey.value = crypto.randomUUID(); // one key per dialog: a double submit replays, never a second write
         reason.value = props.reason;
         error.value = null;
     }
@@ -67,14 +69,18 @@ async function submit(): Promise<void> {
     busy.value = true;
     error.value = null;
     try {
-        await api.post('/ads/actions/status', {
-            account_id: props.accountId,
-            level: props.level,
-            external_id: props.externalId,
-            status: target.value,
-            reason: reason.value.trim() || null,
-        });
+        const res = await api.post(
+            '/ads/actions/status',
+            { account_id: props.accountId, level: props.level, external_id: props.externalId, status: target.value, reason: reason.value.trim() || null },
+            { headers: { 'Idempotency-Key': idemKey.value } },
+        );
         open.value = false;
+        if (res.data?.ok === false) {
+            // 202: a Stop retry is scheduled or the outcome is not known yet; the log shows it as in progress.
+            toast.push(String(res.data.message ?? t('ads.actions.pending')), 'info');
+            if (!props.noReload) router.reload();
+            return;
+        }
         toast.push(t(stopping.value ? 'ads.actions.stopped' : 'ads.actions.resumed'), 'success');
         emit('done', target.value);
         if (!props.noReload) router.reload();

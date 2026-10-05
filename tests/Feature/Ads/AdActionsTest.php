@@ -227,9 +227,8 @@ it('shows suggestions and the log on the actions page, scoped to the buyer', fun
         actDay($foreign, $day, ['spend' => 200, 'purchase_value' => 10, 'purchases' => 1]);
     }
     $admin = User::factory()->create(['role' => UserRole::Admin]);
-    // ad_actions is frozen (history only): rows are seeded raw, as the slice-1 endpoint left them.
-    DB::table('ad_actions')->insert(['user_id' => $admin->id, 'platform' => 'meta', 'ad_account_id' => $mine->id, 'level' => 'ad', 'external_id' => 'x1', 'name' => 'Mine stopped', 'to_status' => 'PAUSED', 'result' => 'ok', 'created_at' => now(), 'updated_at' => now()]);
-    DB::table('ad_actions')->insert(['user_id' => $admin->id, 'platform' => 'meta', 'ad_account_id' => $other->id, 'level' => 'ad', 'external_id' => 'x2', 'name' => 'Theirs stopped', 'to_status' => 'PAUSED', 'result' => 'ok', 'created_at' => now(), 'updated_at' => now()]);
+    AdWriteAction::factory()->stop()->succeeded()->create(['proposed_by_id' => $admin->id, 'confirmed_by_id' => $admin->id, 'ad_account_id' => $mine->id, 'target_name' => 'Mine stopped']);
+    AdWriteAction::factory()->stop()->succeeded()->create(['proposed_by_id' => $admin->id, 'confirmed_by_id' => $admin->id, 'ad_account_id' => $other->id, 'target_name' => 'Theirs stopped']);
 
     $this->actingAs(actBuyer($mine))->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->component('Ads/Actions')
@@ -461,4 +460,31 @@ it('checks the account scope before the level it does not allow', function () {
     expect(fn () => app(WriteActionService::class)->propose($content, $acc, 'campaign', 'c1', 'paused', null, 'svc-key-0003'))
         ->toThrow(fn (WriteDenied $e) => expect($e->errorCode)->toBe('out_of_scope'));
     expect(AdWriteAction::count())->toBe(0);
+});
+
+it('lists legacy-copied and pipeline actions in one log, newest first, scoped, with results mapped and proposals hidden', function () {
+    $mine = AdAccount::factory()->meta()->create(['name' => 'Mine']);
+    $other = AdAccount::factory()->meta()->create(['name' => 'Other']);
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'name' => 'Boss']);
+    $buyer = actBuyer($mine);
+    // A slice-1 row, copied by the B1 migration (run here after seeding it).
+    DB::table('ad_actions')->insert(['user_id' => $admin->id, 'platform' => 'meta', 'ad_account_id' => $mine->id, 'account_name' => 'Mine', 'level' => 'ad',
+        'external_id' => 'x1', 'name' => 'Legacy stop', 'from_status' => 'ACTIVE', 'to_status' => 'PAUSED', 'result' => 'ok', 'created_at' => now()->subDays(2), 'updated_at' => now()->subDays(2)]);
+    (require database_path('migrations/2026_10_07_100050_copy_ad_actions_to_ad_write_actions.php'))->up();
+    $base = ['proposed_by_id' => $buyer->id, 'confirmed_by_id' => $buyer->id, 'ad_account_id' => $mine->id];
+    AdWriteAction::factory()->run()->succeeded()->create($base + ['target_name' => 'New run', 'confirmed_at' => now()->subHour(), 'reason' => 'back in stock']);
+    AdWriteAction::factory()->stop()->unknown()->create($base + ['target_name' => 'Unknown stop', 'confirmed_at' => now()->subMinutes(30)]);
+    AdWriteAction::factory()->stop()->create($base + ['target_name' => 'Failed stop', 'state' => 'failed', 'error_code' => 'permission_missing', 'error_message' => 'raw', 'confirmed_at' => now()->subMinutes(10)]);
+    AdWriteAction::factory()->stop()->create($base + ['target_name' => 'Just proposed']);
+    AdWriteAction::factory()->stop()->create($base + ['target_name' => 'Gone', 'state' => 'expired']);
+    AdWriteAction::factory()->stop()->succeeded()->create(['proposed_by_id' => $admin->id, 'confirmed_by_id' => $admin->id, 'ad_account_id' => $other->id, 'target_name' => 'Not mine']);
+
+    $this->actingAs($buyer)->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->has('log', 4)
+        ->where('log.0.name', 'Failed stop')->where('log.0.result', 'error')->where('log.0.error', __('ads.errors.permission_missing'))
+        ->where('log.0.to_status', 'PAUSED')
+        ->where('log.1.name', 'Unknown stop')->where('log.1.result', 'pending')
+        ->where('log.2.name', 'New run')->where('log.2.result', 'ok')->where('log.2.to_status', 'ACTIVE')->where('log.2.reason', 'back in stock')
+        ->where('log.3.name', 'Legacy stop')->where('log.3.result', 'ok')->where('log.3.user', 'Boss')->where('log.3.account', 'Mine')
+        ->where('log.3.from_status', 'ACTIVE')->where('log.3.level', 'ad')->where('log.3.platform', 'meta'));
 });
