@@ -76,7 +76,7 @@ it('runs a campaign and an ad set again and updates their local status', functio
     $acc = AdAccount::factory()->meta()->create();
     $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
     $set = AdSet::factory()->for($camp, 'campaign')->create(['status' => 'PAUSED']);
-    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $admin = User::factory()->adsAuthority()->create(['role' => UserRole::Admin]);
 
     $this->actingAs($admin)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'campaign', 'external_id' => $camp->external_id, 'status' => 'active'])->assertOk();
     $this->actingAs($admin)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'adset', 'external_id' => $set->external_id, 'status' => 'active'])->assertOk();
@@ -352,7 +352,7 @@ it('marks each campaign node and creative row with can_write for its account', f
         $ad = Ad::factory()->for($acc, 'account')->create(['name' => 'Ad '.$acc->name, 'ad_campaign_id' => activeCampaignId($acc)]);
         actDay($ad, CarbonImmutable::now(AdsFilter::TIMEZONE)->subDay()->toDateString(), ['spend' => 100]);
     }
-    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $admin = User::factory()->adsAuthority()->create(['role' => UserRole::Admin]);
 
     $page = $this->actingAs($admin)->get('/ads/creatives?status=all')->assertOk();
     $rows = collect($page->viewData('page')['props']['result']['data'])->keyBy('account');
@@ -392,13 +392,13 @@ it('refuses a buyer Run or Stop above ad level with a readable 422, an error row
         ->and($camp->refresh()->status)->toBe('PAUSED');
 });
 
-it('lets a buyer Run and Stop at ad level; a supervisor too, but not Run on a campaign; admin Runs a campaign', function () {
+it('lets a buyer Run and Stop at ad level; a supervisor too, but not Run on a campaign; an Ads-authority admin Runs a campaign', function () {
     $acc = AdAccount::factory()->meta()->create();
     $ad = Ad::factory()->for($acc, 'account')->create();
     $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
     $buyer = actBuyer($acc);
     $sup = User::factory()->create(['role' => UserRole::Supervisor]);
-    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $admin = User::factory()->adsAuthority()->create(['role' => UserRole::Admin]);
 
     $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'active']))->assertOk();
     $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'paused']))->assertOk();
@@ -409,9 +409,10 @@ it('lets a buyer Run and Stop at ad level; a supervisor too, but not Run on a ca
     expect($camp->refresh()->status)->toBe('ACTIVE');
 });
 
-it('allowedLevels: admin all three, everyone else ad only', function () {
+it('allowedLevels: an Ads-authority holder all three, everyone else (an admin without the flag too) ad only', function () {
     $svc = app(AdWriteService::class);
-    expect($svc->allowedLevels(User::factory()->create(['role' => UserRole::Admin])))->toBe(['campaign', 'adset', 'ad'])
+    expect($svc->allowedLevels(User::factory()->adsAuthority()->create(['role' => UserRole::Admin])))->toBe(['campaign', 'adset', 'ad'])
+        ->and($svc->allowedLevels(User::factory()->create(['role' => UserRole::Admin])))->toBe(['ad'])
         ->and($svc->allowedLevels(User::factory()->create(['role' => UserRole::Supervisor])))->toBe(['ad'])
         ->and($svc->allowedLevels(User::factory()->create(['role' => UserRole::MediaBuyer])))->toBe(['ad']);
 });

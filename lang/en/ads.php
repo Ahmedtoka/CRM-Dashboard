@@ -23,8 +23,9 @@ return [
         'buyer_archived' => 'The buyer has account history, so it was archived instead of deleted.',
     ],
     'errors' => [
-        'campaign_level_not_allowed' => 'The campaign level is admin-only. Run and Stop the ads instead.',
-        'adset_level_not_allowed' => 'The ad set level is admin-only. Run and Stop the ads instead.',
+        'campaign_level_not_allowed' => 'Running or stopping a whole campaign needs Ads authority. Run and Stop the ads instead.',
+        'adset_level_not_allowed' => 'Running or stopping a whole ad set needs Ads authority. Run and Stop the ads instead.',
+        'ads_authority_required' => 'Campaign and ad set changes need Ads authority. Run and Stop the ads instead.',
         'out_of_scope' => 'You cannot change ads on this account.',
         'account_not_writable' => 'This account is not enabled for changes from the CRM. Make the change in Ads Manager, or ask an admin to enable the account (ads:writable).',
         'fake_writer_in_production' => 'A fake ad writer cannot run in production: nothing would reach the platform. Check the ads driver setting.',

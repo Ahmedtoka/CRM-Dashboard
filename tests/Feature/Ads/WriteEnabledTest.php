@@ -158,7 +158,7 @@ it('selects write_enabled on the campaigns page so can_write stays true for an a
     $camp = AdCampaign::factory()->for($acc, 'account')->create();
     $ad = Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => $camp->id]);
     AdDailyMetric::factory()->create(['ad_id' => $ad->id, 'ad_account_id' => $acc->id, 'date' => now('Africa/Cairo')->subDay()->toDateString(), 'spend' => 200]);
-    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $admin = User::factory()->adsAuthority()->create(['role' => UserRole::Admin]);
 
     $tree = $this->actingAs($admin)->get('/ads/campaigns')->assertOk()->viewData('page')['props']['tree'];
     expect($tree)->not->toBeEmpty()->and($tree[0]['can_write'])->toBeTrue();

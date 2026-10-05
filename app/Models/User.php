@@ -65,6 +65,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'role' => UserRole::class,
             'is_active' => 'boolean',
+            'ads_authority' => 'boolean',
             'last_seen_at' => 'datetime',
             'preferences' => 'array',
         ];
@@ -134,6 +135,15 @@ class User extends Authenticatable
     public function isInboxStaff(): bool
     {
         return ! $this->isAdsRole();
+    }
+
+    /**
+     * Ads authority (B2, D4): Run and Stop at campaign and ad-set level. Not the inbox supervisor role (R-30). Set only by
+     * ads:authority (not mass assignable); a deactivated user holds nothing.
+     */
+    public function hasAdsAuthority(): bool
+    {
+        return (bool) $this->ads_authority && (bool) $this->is_active;
     }
 
     public function isSupervisorOrAbove(): bool

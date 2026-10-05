@@ -84,14 +84,14 @@ final class AdWriteService
     }
 
     /**
-     * Levels the user may Run / Stop at. Interim rule until B2's users.ads_authority: Ads authority = admin only, so an
-     * admin acts at every level and everyone else (buyers, supervisors) at ad level only (W1, D4).
+     * Levels the user may Run / Stop at (B2, D4): a holder of Ads authority (users.ads_authority, active) acts at every
+     * level; everyone else (buyers, supervisors and admins without the flag) at ad level only.
      *
      * @return list<'campaign'|'adset'|'ad'>
      */
     public function allowedLevels(User $u): array
     {
-        return $u->isAdmin() ? self::LEVELS : ['ad'];
+        return $u->hasAdsAuthority() ? self::LEVELS : ['ad'];
     }
 
     /**

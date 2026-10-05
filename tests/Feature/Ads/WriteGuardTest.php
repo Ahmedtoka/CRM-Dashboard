@@ -265,7 +265,7 @@ it('shows can_write per account on campaigns, creatives and stop suggestions und
                 'spend' => 200, 'purchase_value' => 10, 'purchases' => 1, 'impressions' => 1000, 'clicks' => 20, 'reach' => 800]);
         }
     }
-    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $admin = User::factory()->adsAuthority()->create(['role' => UserRole::Admin]);
     Artisan::call('ads:writable', ['--set' => 'act_A']);
 
     $rows = collect($this->actingAs($admin)->get('/ads/creatives?status=all')->assertOk()->viewData('page')['props']['result']['data'])->keyBy('account');
