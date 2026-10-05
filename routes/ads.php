@@ -13,6 +13,7 @@ use App\Http\Controllers\Web\Ads\MaterialController;
 use App\Http\Controllers\Web\Ads\OverviewController;
 use App\Http\Controllers\Web\Ads\PublishController;
 use App\Http\Controllers\Web\Ads\SyncController;
+use App\Http\Controllers\Web\Ads\WriteActionController;
 use Illuminate\Support\Facades\Route;
 
 // Ads Hub. Required from routes/crm.php inside the authenticated group (see EnsureAdsAccess for the `ads:*` areas).
@@ -26,6 +27,10 @@ Route::middleware('ads:report')->group(function () {
     Route::get('/ads/winners', [CreativeController::class, 'winners'])->name('ads.winners');
     Route::get('/ads/actions', [ActionController::class, 'index'])->name('ads.actions');
     Route::post('/ads/actions/status', [ActionController::class, 'status'])->name('ads.actions.status');
+
+    // Phase B write pipeline (B2): propose, then confirm. Refusals use the stable code shape (WriteDenied).
+    Route::post('/ads/write-actions', [WriteActionController::class, 'store'])->middleware('throttle:30,1')->name('ads.write-actions.store');
+    Route::get('/ads/write-actions/{action}', [WriteActionController::class, 'show'])->name('ads.write-actions.show');
 });
 
 Route::middleware('ads:manage')->group(function () {

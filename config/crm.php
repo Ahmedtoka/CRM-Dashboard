@@ -440,6 +440,8 @@ return [
             'enabled' => (bool) env('CRM_ADS_WRITES_ENABLED', true),
             // HTTP timeout (seconds) of an inline platform write and of the live pre-read (the old write POST waited 90).
             'timeout_seconds' => 20,
+            // Minutes a UI proposal stays confirmable (write-api 3; 2.1 rule 1: a proposal never locks anything).
+            'proposal_ttl_minutes' => 10,
         ],
         // Seconds a publish waits for another worker's upload of the same file before it is released and retried.
         'publish_upload_wait' => 60,
