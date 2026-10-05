@@ -1,6 +1,7 @@
 <?php
 
 use App\Ads\Platforms\Fake\FakeAdsDriver;
+use App\Ads\Platforms\Meta\MetaAdsDriver;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Sync\AccountSyncClaim;
 use App\Ads\Sync\AdsSyncService;
@@ -194,7 +195,7 @@ it('resumes a rate-limited backfill without asking Meta for the chunks already d
         return str_contains($r->url(), '/insights') && ($range['until'] ?? null) === $today->toDateString();
     });
     $adLists = collect(Http::recorded())->map(fn ($p) => $p[0])->filter(fn (Request $r) => str_contains($r->url(), 'act_31/ads')
-        && ! str_contains((string) ($r->data()['effective_status'] ?? ''), 'ARCHIVED'));
+        && array_intersect(json_decode((string) ($r->data()['effective_status'] ?? '[]'), true) ?: [], MetaAdsDriver::SWEEP_AD_STATUSES) === []); // the main ad list, not the sweep calls
 
     expect($run->status)->toBe('ok')
         ->and($chunk1Insights)->toHaveCount(2) // ad level + account level, sent once in the first attempt only
