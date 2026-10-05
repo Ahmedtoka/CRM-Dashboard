@@ -190,9 +190,10 @@ final class AdsQuery
     {
         ['control' => $control, 'ads' => $ads] = $this->controlAndAds($f);
         $out = [];
+        $adsByAccount = $ads->groupBy('ad_account_id');
         foreach ($control->groupBy('ad_account_id') as $accountId => $rows) {
             $key = fn ($r) => $r->ad_account_id.'|'.substr((string) $r->date, 0, 10);
-            $blend = $this->blend($rows->keyBy($key), $ads->filter(fn ($a) => (int) $a->ad_account_id === (int) $accountId));
+            $blend = $this->blend($rows->keyBy($key), ($adsByAccount[$accountId] ?? collect())->keyBy($key));
             if ($blend !== null) {
                 $out[(int) $accountId] = $blend;
             }
