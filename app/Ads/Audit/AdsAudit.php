@@ -65,10 +65,20 @@ final class AdsAudit
      */
     private static function scrub(array $data): array
     {
-        return array_map(fn ($v) => match (true) {
-            is_string($v) => SecretScrubber::scrub($v),
-            is_array($v) => self::scrub($v),
-            default => $v,
-        }, $data);
+        $out = [];
+        foreach ($data as $k => $v) {
+            if (is_string($k) && preg_match('/token|secret|password|credential|authorization|api_key/i', $k)) {
+                $out[$k] = '***';
+
+                continue;
+            }
+            $out[$k] = match (true) {
+                is_string($v) => SecretScrubber::scrub($v),
+                is_array($v) => self::scrub($v),
+                default => $v,
+            };
+        }
+
+        return $out;
     }
 }

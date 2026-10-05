@@ -2,6 +2,7 @@
 
 use App\Ads\Sync\AdsSyncService;
 use App\Ads\Sync\HistoryWindow;
+use App\Ads\Sync\SyncAdAccount;
 use App\Enums\UserRole;
 use App\Models\Ad;
 use App\Models\AdAccount;
@@ -77,9 +78,13 @@ it('clamps a window that starts before the history start', function () {
     hwFake();
     $a = hwAccount();
 
+    $ad = Ad::factory()->create(['ad_account_id' => $a->id, 'external_id' => 'ad_old', 'status' => 'unknown']);
+    AdDailyMetric::factory()->create(['ad_id' => $ad->id, 'ad_account_id' => $a->id, 'date' => '2026-08-31', 'spend' => 3]);
+
     app(AdsSyncService::class)->syncAccount($a, CarbonImmutable::parse('2026-08-28'), CarbonImmutable::parse('2026-09-03'));
 
-    expect(hwSinces())->toBe([['since' => '2026-09-01', 'until' => '2026-09-03']]);
+    expect(hwSinces())->toBe([['since' => '2026-09-01', 'until' => '2026-09-03']])
+        ->and(AdDailyMetric::where('ad_account_id', $a->id)->where('date', '2026-08-31')->exists())->toBeTrue();
 });
 
 it('never stores payload rows before the start and never deletes stored rows before it', function () {
@@ -122,4 +127,23 @@ it('reads the start from config, not a constant', function () {
 
     expect(HistoryWindow::start()->toDateString())->toBe('2026-09-15')
         ->and(HistoryWindow::daysFromStart(CarbonImmutable::parse('2026-10-05', 'Africa/Cairo')))->toBe(21);
+});
+
+it('ships 2026-09-01 as the default history start', function () {
+    $src = file_get_contents(config_path('crm.php'));
+
+    expect($src)->toContain("'history_start' => env('CRM_ADS_HISTORY_START', '2026-09-01')");
+});
+
+it('records a skipped run when a queued sync window is before the start', function () {
+    config(['crm.ads.history_start' => '2026-12-01']);
+    hwFake();
+    $a = hwAccount();
+
+    (new SyncAdAccount($a->id, 3))->handle(app(AdsSyncService::class));
+
+    $run = AdsSyncRun::where('ad_account_id', $a->id)->first();
+    expect(collect(Http::recorded()))->toHaveCount(0)
+        ->and($run->status)->toBe('skipped')
+        ->and($run->error)->toBe('Window before history start');
 });

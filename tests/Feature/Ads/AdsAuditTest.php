@@ -63,3 +63,11 @@ it('is append-only', function () {
 it('fingerprints a secret as the first 8 hex of its sha256', function () {
     expect(AdsAudit::fingerprint('abc'))->toBe('ba7816bf');
 });
+
+it('masks values by key name', function () {
+    $row = AdsAudit::record('x', null, null, ['access_token' => 'EAABbare123', 'nested' => ['api_key' => 'k1', 'ok' => 'fine']])->fresh();
+
+    expect($row->after['access_token'])->toBe('***')
+        ->and($row->after['nested']['api_key'])->toBe('***')
+        ->and($row->after['nested']['ok'])->toBe('fine');
+});

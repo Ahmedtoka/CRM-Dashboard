@@ -4,6 +4,7 @@ namespace App\Ads\Sync;
 
 use App\Ads\Platforms\RateLimited;
 use App\Models\AdAccount;
+use App\Models\AdsSyncRun;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -131,7 +132,15 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
             $to = CarbonImmutable::now('Africa/Cairo')->startOfDay();
             $window = HistoryWindow::clamp($to->subDays(max($this->days, 1) - 1), $to);
             if ($window === null) {
-                return true; // the whole window is before crm.ads.history_start
+                // The whole window is before crm.ads.history_start: leave a visible 'skipped' run, call nothing.
+                AdsSyncRun::create([
+                    'ad_account_id' => $account->id, 'platform' => $account->platform, 'kind' => $this->kind, 'status' => 'skipped',
+                    'trigger' => $this->trigger, 'triggered_by_id' => $this->triggeredById, 'error' => 'Window before history start',
+                    'from_date' => $to->subDays(max($this->days, 1) - 1)->toDateString(), 'to_date' => $to->toDateString(),
+                    'started_at' => now(), 'finished_at' => now(),
+                ]);
+
+                return true;
             }
             $sync->syncAccount($account, $window[0], $window[1], $this->kind, true, $this->trigger, $this->triggeredById);
 
