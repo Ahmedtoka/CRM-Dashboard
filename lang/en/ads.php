@@ -23,6 +23,8 @@ return [
         'buyer_archived' => 'The buyer has account history, so it was archived instead of deleted.',
     ],
     'errors' => [
+        'campaign_level_not_allowed' => 'The campaign level is admin-only. Run and Stop the ads instead.',
+        'adset_level_not_allowed' => 'The ad set level is admin-only. Run and Stop the ads instead.',
         'out_of_scope' => 'You cannot change ads on this account.',
         'bad_request' => 'This request is not valid.',
         'not_found' => 'This campaign, ad set or ad is not in the CRM yet. Sync the account and try again.',

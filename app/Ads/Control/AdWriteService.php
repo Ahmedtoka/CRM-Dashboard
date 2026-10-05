@@ -73,6 +73,17 @@ final class AdWriteService
     }
 
     /**
+     * Levels the user may Run / Stop at. Interim rule until B2's users.ads_authority: Ads authority = admin only, so an
+     * admin acts at every level and everyone else (buyers, supervisors) at ad level only (W1, D4).
+     *
+     * @return list<'campaign'|'adset'|'ad'>
+     */
+    public function allowedLevels(User $u): array
+    {
+        return $u->isAdmin() ? self::LEVELS : ['ad'];
+    }
+
+    /**
      * @param  'campaign'|'adset'|'ad'  $level
      * @param  'active'|'paused'  $status
      *
@@ -81,6 +92,16 @@ final class AdWriteService
      */
     public function setStatus(User $u, AdAccount $a, string $level, string $externalId, string $status, ?string $reason): AdAction
     {
+        if (in_array($level, self::LEVELS, true) && ! in_array($level, $this->allowedLevels($u), true)) {
+            $row = $this->find($a, $level, $externalId);
+            AdAction::create([
+                'user_id' => $u->id, 'platform' => $a->platform, 'ad_account_id' => $a->id, 'account_name' => $a->name, 'level' => $level, 'external_id' => $externalId,
+                'name' => mb_substr((string) $row?->name, 0, 500), 'from_status' => $row?->status, 'to_status' => strtoupper($status),
+                'reason' => null, 'result' => AdAction::ERROR, 'error' => 'level_not_allowed',
+            ]);
+
+            throw ValidationException::withMessages(['status' => __('ads.errors.'.$level.'_level_not_allowed')]);
+        }
         if (! $this->canWrite($u, $a)) {
             throw new AuthorizationException(__('ads.errors.out_of_scope'));
         }

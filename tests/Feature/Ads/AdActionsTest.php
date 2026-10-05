@@ -75,7 +75,7 @@ it('runs a campaign and an ad set again and updates their local status', functio
     $acc = AdAccount::factory()->meta()->create();
     $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
     $set = AdSet::factory()->for($camp, 'campaign')->create(['status' => 'PAUSED']);
-    $admin = User::factory()->create(['role' => UserRole::Supervisor]);
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
 
     $this->actingAs($admin)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'campaign', 'external_id' => $camp->external_id, 'status' => 'active'])->assertOk();
     $this->actingAs($admin)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'adset', 'external_id' => $set->external_id, 'status' => 'active'])->assertOk();
@@ -367,4 +367,66 @@ it('marks each campaign node and creative row with can_write for its account', f
     foreach ($flat as [$account, $can]) {
         expect($can)->toBe($account === 'On');
     }
+});
+
+it('refuses a buyer Run or Stop above ad level with a readable 422, an error row and no platform call', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
+    $set = AdSet::factory()->for($camp, 'campaign')->create(['status' => 'PAUSED']);
+    $buyer = actBuyer($acc);
+
+    $cases = [['campaign', $camp->external_id, 'active', 'campaign_level_not_allowed'], ['adset', $set->external_id, 'active', 'adset_level_not_allowed'],
+        ['campaign', $camp->external_id, 'paused', 'campaign_level_not_allowed'], ['adset', $set->external_id, 'paused', 'adset_level_not_allowed']];
+    foreach ($cases as $i => [$level, $id, $status, $key]) {
+        $this->actingAs($buyer)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => $level, 'external_id' => $id, 'status' => $status])
+            ->assertStatus(422)->assertJsonValidationErrors(['status'])->assertJsonPath('errors.status.0', __('ads.errors.'.$key));
+        expect(AdAction::count())->toBe($i + 1);
+    }
+    expect(Cache::get('ads-fake-writer'))->toBeNull()
+        ->and(AdAction::where('result', 'error')->where('error', 'level_not_allowed')->count())->toBe(4)
+        ->and($camp->refresh()->status)->toBe('PAUSED');
+});
+
+it('lets a buyer Run and Stop at ad level; a supervisor too, but not Run on a campaign; admin Runs a campaign', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $ad = Ad::factory()->for($acc, 'account')->create();
+    $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
+    $buyer = actBuyer($acc);
+    $sup = User::factory()->create(['role' => UserRole::Supervisor]);
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+
+    $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'active']))->assertOk();
+    $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'paused']))->assertOk();
+    $this->actingAs($sup)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'paused']))->assertOk();
+    $this->actingAs($sup)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'campaign', 'external_id' => $camp->external_id, 'status' => 'active'])->assertStatus(422);
+    expect($camp->refresh()->status)->toBe('PAUSED');
+    $this->actingAs($admin)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'campaign', 'external_id' => $camp->external_id, 'status' => 'active'])->assertOk();
+    expect($camp->refresh()->status)->toBe('ACTIVE');
+});
+
+it('allowedLevels: admin all three, everyone else ad only', function () {
+    $svc = app(AdWriteService::class);
+    expect($svc->allowedLevels(User::factory()->create(['role' => UserRole::Admin])))->toBe(['campaign', 'adset', 'ad'])
+        ->and($svc->allowedLevels(User::factory()->create(['role' => UserRole::Supervisor])))->toBe(['ad'])
+        ->and($svc->allowedLevels(User::factory()->create(['role' => UserRole::MediaBuyer])))->toBe(['ad']);
+});
+
+it('gives a buyer can_write only on ad nodes of the campaigns tree', function () {
+    $acc = AdAccount::factory()->meta()->create(['name' => 'Mine']);
+    $camp = AdCampaign::factory()->for($acc, 'account')->create();
+    $set = AdSet::factory()->for($camp, 'campaign')->create();
+    $ad = Ad::factory()->for($acc, 'account')->create(['ad_set_id' => $set->id]);
+    actDay($ad, CarbonImmutable::now(AdsFilter::TIMEZONE)->subDay()->toDateString());
+    $buyer = actBuyer($acc);
+
+    $tree = $this->actingAs($buyer)->get('/ads/campaigns')->assertOk()->viewData('page')['props']['tree'];
+    $levels = [];
+    $walk = function (array $nodes) use (&$walk, &$levels) {
+        foreach ($nodes as $n) {
+            $levels[$n['level']][] = $n['can_write'];
+            $walk($n['children']);
+        }
+    };
+    $walk($tree);
+    expect($levels['campaign'])->each->toBeFalse()->and($levels['adset'])->each->toBeFalse()->and($levels['ad'])->each->toBeTrue();
 });
