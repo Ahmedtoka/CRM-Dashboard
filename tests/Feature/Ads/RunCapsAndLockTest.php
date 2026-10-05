@@ -246,3 +246,20 @@ it('a failing restart lock never skips Stop-beats-Run (rule 4)', function () {
         ->and(AdWriteAction::where('to_status', 'paused')->sole()->restart_lock_until)->toBeNull();
     Log::shouldHaveReceived('error')->withArgs(fn ($m, $ctx) => $m === 'ads write: unexpected error' && $ctx['message'] === 'lock write failed');
 });
+
+it('checks the latest holder Stop, not the one whose lock ends last', function () {
+    $ad = clAd($this->acc, 'ACTIVE');
+    $buyer = clBuyer($this->acc);
+    $long = User::factory()->adsAuthority()->create(['role' => UserRole::Admin, 'name' => 'Long']);
+    Artisan::call('ads:write-limits', ['--user' => $long->id, '--set' => ['restart_lock_days=14']]);
+    Artisan::call('ads:write-limits', ['--user' => $this->admin->id, '--set' => ['restart_lock_days=3']]);
+
+    // 14-day lock, lifted by a holder Run; then a 3-day lock by another holder
+    clDo($this, $long, $this->acc, $ad, 'paused')->assertOk();
+    $this->travel(1)->minutes();
+    clDo($this, $long, $this->acc, $ad)->assertOk()->assertJsonPath('action.state', 'succeeded');
+    $this->travel(1)->minutes();
+    clDo($this, $this->admin, $this->acc, $ad, 'paused')->assertOk();
+
+    clPropose($this, $buyer, $this->acc, $ad)->assertStatus(422)->assertJsonPath('code', 'restart_locked')->assertJsonPath('details.by', 'Owner');
+});

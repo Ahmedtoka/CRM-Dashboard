@@ -115,7 +115,7 @@ class RunGuard
         }
         $lock = AdWriteAction::where('target_key', $targetKey)->where('type', SetStatusType::TYPE)->where('to_status', 'paused')
             ->where('state', AdWriteAction::SUCCEEDED)->whereNotNull('finished_at')->where('restart_lock_until', '>', now())
-            ->orderByDesc('restart_lock_until')->orderByDesc('id')->first();
+            ->orderByDesc('finished_at')->orderByDesc('id')->first(); // the latest unexpired holder Stop: a Run after it is after every earlier one
         if ($lock === null) {
             return;
         }
