@@ -51,6 +51,8 @@ return [
         'platform_not_writable' => 'Changes from the CRM are not supported on this platform. Make the change in its ads manager.',
         'budget_over_cap' => 'The budget (:currency :per_day a day) is above the CRM limit for a Run (:currency :cap a day). Make the change in Ads Manager or ask the owner.',
         'budget_unreadable' => 'The current budget could not be read from the platform, so the Run was not sent. Try again in a minute.',
+        'budget_unreadable_no_budget' => 'This item has no budget of its own (its budget is on its ad sets), so the CRM cannot check it against the limit. Run it from Ads Manager.',
+        'budget_unreadable_currency_unknown' => 'The currency of this ad account is not known, so the CRM cannot check the budget limit. Sync the account, or run it from Ads Manager.',
         'currency_mismatch' => 'This account uses :currency but the CRM budget limit is in :cap_currency, so a Run cannot be checked here.',
         'cap_exceeded' => 'The daily limit of Runs was reached (:used of :limit). Try again tomorrow or ask the owner.',
         'restart_locked' => 'This item was stopped by :by (Ads authority) and cannot be run again before :until_local (Cairo time).',

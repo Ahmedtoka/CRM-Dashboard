@@ -204,18 +204,27 @@ class WriteActionService
         }
     }
 
-    /** Keeps what the confirm-time guard saw: the new live read (if one was made) and the re-evaluated limits. */
+    /**
+     * Keeps what the confirm-time guard saw: the new live read (if one was made) and the re-evaluated limits. A query
+     * update guarded by state = proposed, so a losing double-submit never overwrites the winner's values.
+     */
     private function recordConfirmRead(AdWriteAction $x, ?ObjectState $read, ?array $limits): void
     {
-        $update = [];
+        $values = [];
         if ($read !== null) {
-            $update['expected'] = array_merge($x->expected ?? [], ['confirm_read' => ['read_at' => now()->toIso8601String(), 'live' => $read->toArray()]]);
+            $values['expected'] = array_merge($x->expected ?? [], ['confirm_read' => ['read_at' => now()->toIso8601String(), 'live' => $read->toArray()]]);
         }
         if ($limits !== null) {
-            $update['limits_checked'] = $limits;
+            $values['limits_checked'] = $limits;
         }
-        if ($update !== []) {
-            $x->forceFill($update)->save();
+        if ($values === []) {
+            return;
+        }
+        $written = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::PROPOSED)
+            ->update(array_map(fn ($v) => json_encode($v), $values) + ['updated_at' => now()]) === 1;
+        if ($written) {
+            // In memory too, so the claim appends the activation caps to these rows; never saved from the model.
+            $x->forceFill($values)->syncOriginalAttributes(array_keys($values));
         }
     }
 
@@ -343,8 +352,9 @@ class WriteActionService
     }
 
     /**
-     * Activation caps (B3), Run only, inside the claim transaction: the account row is locked first (MariaDB row lock,
-     * so two confirms on one account count one after the other; SQLite ignores it), then the Runs confirmed since the
+     * Activation caps (B3), Run only, inside the claim transaction: the account row and then the confirming user's row
+     * are locked (MariaDB row locks, so two confirms on one account or by one user count one after the other; SQLite
+     * ignores them), then the Runs confirmed since the
      * start of today in Cairo are counted per confirming user and per account.
      *
      * @return list<array{key: string, limit: int, requested: int, outcome: string}> the evaluated caps
@@ -353,7 +363,9 @@ class WriteActionService
      */
     private function activationCaps(User $u, AdWriteAction $x): array
     {
+        // Always the account row first, then the user row (one lock order, so two confirms never deadlock on each other).
         $account = AdAccount::whereKey($x->ad_account_id)->lockForUpdate()->first();
+        User::whereKey($u->id)->lockForUpdate()->first(['id']);
         $limits = $this->limits->for($u, $account);
         $since = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay()->utc();
         $count = fn (string $column, int $value) => AdWriteAction::where('type', SetStatusType::TYPE)->where('to_status', 'active')

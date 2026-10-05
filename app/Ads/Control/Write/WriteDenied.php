@@ -51,6 +51,14 @@ class WriteDenied extends RuntimeException
     public static function messageFor(string $code, array $details = []): string
     {
         $replace = array_filter($details, fn ($v) => is_scalar($v));
+        // A reason with its own message (e.g. budget_unreadable + no_budget) wins over the code's generic one.
+        $reason = isset($details['reason']) && is_string($details['reason']) ? $details['reason'] : null;
+        if ($reason !== null && preg_match('/^[a-z_]+$/', $reason) === 1) {
+            $specific = __('ads.errors.'.$code.'_'.$reason, $replace);
+            if (is_string($specific) && $specific !== 'ads.errors.'.$code.'_'.$reason) {
+                return $specific;
+            }
+        }
         $message = __('ads.errors.'.$code, $replace);
 
         return is_string($message) && $message !== 'ads.errors.'.$code ? $message : (string) __('ads.errors.failed');

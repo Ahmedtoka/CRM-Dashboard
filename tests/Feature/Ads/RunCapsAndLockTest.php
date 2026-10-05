@@ -12,7 +12,9 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 beforeEach(function () {
     Http::preventStrayRequests();
@@ -206,4 +208,41 @@ it('notes that a Run may re-enter learning when the CRM paused it more than 7 da
 
     expect($res->json('notes'))->toBe([['key' => 'learning_reentry', 'days' => 10]])
         ->and(__('ads.write.notes.learning_reentry', ['days' => 10]))->not->toBe('ads.write.notes.learning_reentry');
+});
+
+it('a buyer\'s second Stop does not lift the holder\'s restart lock; only a later Run does', function () {
+    $ad = clAd($this->acc, 'ACTIVE');
+    $buyer = clBuyer($this->acc);
+
+    clDo($this, $this->admin, $this->acc, $ad, 'paused')->assertOk();
+    clDo($this, $buyer, $this->acc, $ad, 'paused')->assertOk()->assertJsonPath('action.state', 'succeeded');
+
+    clPropose($this, $buyer, $this->acc, $ad)->assertStatus(422)->assertJsonPath('code', 'restart_locked')->assertJsonPath('details.by', 'Owner');
+
+    clDo($this, $this->admin, $this->acc, $ad)->assertOk()->assertJsonPath('action.state', 'succeeded');
+    clPropose($this, $buyer, $this->acc, $ad)->assertCreated();
+});
+
+it('a failing restart lock never skips Stop-beats-Run (rule 4)', function () {
+    Log::spy();
+    $ad = clAd($this->acc);
+    $buyer = clBuyer($this->acc);
+    $run = clPropose($this, $buyer, $this->acc, $ad);
+    FakeAdsDriver::failNext('setStatus', 'unreachable_after');
+    FakeAdsDriver::failNext('readObject', 'unreachable_before');
+    clConfirm($this, $buyer, $run)->assertStatus(202);
+    $runRow = AdWriteAction::where('public_id', $run->json('action.id'))->sole();
+    expect($runRow->state)->toBe('unknown');
+
+    DB::beforeExecuting(function (string $sql) {
+        if (str_contains($sql, 'restart_lock_until') && str_starts_with(strtolower(ltrim($sql)), 'update')) {
+            throw new RuntimeException('lock write failed');
+        }
+    });
+
+    clDo($this, $this->admin, $this->acc, $ad, 'paused')->assertOk()->assertJsonPath('action.state', 'succeeded');
+
+    expect($runRow->fresh()->state)->toBe('superseded_by_stop')
+        ->and(AdWriteAction::where('to_status', 'paused')->sole()->restart_lock_until)->toBeNull();
+    Log::shouldHaveReceived('error')->withArgs(fn ($m, $ctx) => $m === 'ads write: unexpected error' && $ctx['message'] === 'lock write failed');
 });

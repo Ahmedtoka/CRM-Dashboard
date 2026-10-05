@@ -219,3 +219,14 @@ it('ads:write-preview refuses an unknown account, level or object', function () 
         ->and(Artisan::call('ads:write-preview', ['--account' => (string) $acc->id, '--level' => 'account', '--id' => '1']))->toBe(1)
         ->and(Artisan::call('ads:write-preview', ['--account' => (string) $acc->id, '--level' => 'ad', '--id' => '404']))->toBe(1);
 });
+
+it('a dead token on the pre-read marks the connection and refuses with the token code', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $ad = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
+    FakeAdsDriver::failNext('readObject', 'token');
+
+    rpPropose($this, rpBuyer($acc), $acc, 'ad', $ad->external_id, 'active')
+        ->assertStatus(422)->assertJsonPath('code', 'connection_needs_reconnect');
+
+    expect($acc->connection->fresh()->status)->toBe('needs_reconnect')->and(AdWriteAction::count())->toBe(0);
+});

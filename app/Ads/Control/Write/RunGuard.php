@@ -8,7 +8,10 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Data\ObjectState;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Platforms\SecretScrubber;
+use App\Ads\Platforms\TokenInvalid;
 use App\Ads\Reports\AdsFilter;
+use App\Ads\Sync\ConnectionHealth;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdSet;
@@ -97,10 +100,11 @@ class RunGuard
     }
 
     /**
-     * Restart lock (B3): a Stop confirmed by an Ads-authority holder sets restart_lock_until on itself; while it is the
-     * latest succeeded set_status action on the exact target and the lock has not passed, a Run by someone without Ads
-     * authority is refused. A later succeeded Run (only a holder can make one meanwhile) becomes the latest and lifts
-     * it. ASSUMPTION: the exact target only (a campaign Stop does not lock its ads; buyers cannot Run campaigns, D4).
+     * Restart lock (B3): a Stop confirmed by an Ads-authority holder sets restart_lock_until on itself. The target is
+     * locked while such a succeeded Stop's lock has not passed AND no Run on the target succeeded after that Stop
+     * finished (only a holder can make one meanwhile; it lifts the lock). Other Stops in between (a buyer's second
+     * Stop) change nothing. A Run by someone without Ads authority is refused. ASSUMPTION: the exact target only (a
+     * campaign Stop does not lock its ads; buyers cannot Run campaigns, D4).
      *
      * @throws WriteDenied 422 restart_locked
      */
@@ -109,16 +113,27 @@ class RunGuard
         if ($u->hasAdsAuthority()) {
             return;
         }
-        $latest = $this->latestSucceeded($targetKey);
-        if ($latest === null || ! $latest->isStop() || $latest->restart_lock_until === null || ! $latest->restart_lock_until->isFuture()) {
+        $lock = AdWriteAction::where('target_key', $targetKey)->where('type', SetStatusType::TYPE)->where('to_status', 'paused')
+            ->where('state', AdWriteAction::SUCCEEDED)->whereNotNull('finished_at')->where('restart_lock_until', '>', now())
+            ->orderByDesc('restart_lock_until')->orderByDesc('id')->first();
+        if ($lock === null) {
             return;
         }
-        $until = $latest->restart_lock_until;
+        $lifted = AdWriteAction::where('target_key', $targetKey)->where('type', SetStatusType::TYPE)->where('to_status', 'active')
+            ->whereIn('state', [AdWriteAction::SUCCEEDED, AdWriteAction::ROLLED_BACK])
+            // finished_at has second precision: a Run finished in the same second counts when it was created later
+            ->where(fn ($q) => $q->where('finished_at', '>', $lock->finished_at)
+                ->orWhere(fn ($q) => $q->where('finished_at', $lock->finished_at)->where('id', '>', $lock->id)))
+            ->exists();
+        if ($lifted) {
+            return;
+        }
+        $until = $lock->restart_lock_until;
 
         throw WriteDenied::make('restart_locked', [
             'until' => $until->toIso8601String(),
             'until_local' => $until->copy()->setTimezone(AdsFilter::TIMEZONE)->format('Y-m-d H:i'),
-            'by' => (string) ($latest->confirmer?->name ?? ''),
+            'by' => (string) ($lock->confirmer?->name ?? ''),
         ]);
     }
 
@@ -178,9 +193,14 @@ class RunGuard
         $limits = $this->limits->for($u, $a);
         $cap = $limits['max_daily_budget_minor'];
         $capCurrency = $limits['cap_currency'];
-        $currency = strtoupper($live->currency !== '' ? $live->currency : (string) $a->currency);
+        // The account's own currency, never a writer default: unknown fails closed (the cap is never assumed EGP).
+        $currency = strtoupper(trim((string) $a->currency));
+        if ($currency === '') {
+            return ['rows' => [['key' => 'cap_currency', 'limit' => $capCurrency, 'requested' => null, 'outcome' => 'unknown']],
+                'refusal' => WriteDenied::make('budget_unreadable', ['reason' => 'currency_unknown'])];
+        }
 
-        $rows = [['key' => 'cap_currency', 'limit' => $capCurrency, 'requested' => $currency, 'outcome' => $currency === $capCurrency ? 'ok' : 'over']];
+        $rows = [['key' => 'cap_currency', 'limit' => $capCurrency, 'requested' => $currency, 'outcome' => $currency === $capCurrency ? 'ok' : 'mismatch']];
         if ($currency !== $capCurrency) {
             return ['rows' => $rows, 'refusal' => WriteDenied::make('currency_mismatch', ['currency' => $currency, 'cap_currency' => $capCurrency])];
         }
@@ -264,6 +284,15 @@ class RunGuard
     {
         try {
             return $this->drivers->writer(AdPlatform::from($a->platform))->readObject($a, $level, $externalId);
+        } catch (WriteDenied $e) {
+            throw $e;
+        } catch (TokenInvalid $e) {
+            // Same handling as the executor: the connection needs a new token; the Run is refused with that code.
+            if ($a->connection !== null) {
+                ConnectionHealth::markNeedsReconnect($a->connection, SecretScrubber::scrub($e->getMessage()));
+            }
+
+            throw WriteDenied::make('connection_needs_reconnect');
         } catch (RateLimited $e) {
             $retry = $e->retryAfterSeconds;
 
@@ -271,7 +300,7 @@ class RunGuard
                 $retry !== null ? ['Retry-After' => (string) $retry] : []);
         } catch (Throwable $e) {
             if (! $e instanceof AdsApiException) {
-                report($e);
+                WriteExecutor::logUnexpected($e);
             }
 
             throw WriteDenied::make('budget_unreadable', ['read_error' => class_basename($e)]);

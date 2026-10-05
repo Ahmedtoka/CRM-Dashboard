@@ -239,8 +239,12 @@ class WriteExecutor
         if ($x->state === AdWriteAction::SUCCEEDED) {
             $this->mirrorLocal($x);
             if ($x->isStop()) {
-                $this->restartLock($x);
-                $this->supersedeRunsBy($x);
+                $this->supersedeRunsBy($x); // rule 4 first: a lock failure must never skip it
+                try {
+                    $this->restartLock($x);
+                } catch (Throwable $e) {
+                    self::logUnexpected($e, $x);
+                }
             }
             if ($x->rollback_of_id !== null) {
                 $this->markRolledBack($x);

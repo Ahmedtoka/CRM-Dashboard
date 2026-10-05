@@ -13,8 +13,9 @@ use Illuminate\Console\Command;
 
 /**
  * Read-only: one live read of a campaign, ad set or ad, printed with its budgets in minor and major units. Used to check
- * ASSUMPTION A1 (Meta budgets are in the account currency's minor unit) before the budget cap is trusted. Writes no row,
- * not even an audit row, and never prints a token.
+ * ASSUMPTION A1 (Meta budgets are in the account currency's minor unit) before the budget cap is trusted. Writes no
+ * action and no audit row, and never prints a token. A live Meta read records its usage headers in ads_api_usage
+ * (telemetry, Meta\UsageRecorder) like every Meta call; nothing else is written.
  */
 class WritePreviewCommand extends Command
 {
@@ -23,7 +24,7 @@ class WritePreviewCommand extends Command
         {--level= : campaign, adset or ad}
         {--id= : The object\'s external id}';
 
-    protected $description = 'Read one ad object live and show what a CRM Run would see (status, budgets); read-only';
+    protected $description = 'Read one ad object live and show what a CRM Run would see (status, budgets, cap verdict); writes nothing except Meta ads_api_usage telemetry';
 
     public function handle(RunGuard $guard, SetStatusType $type): int
     {

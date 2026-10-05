@@ -1,5 +1,8 @@
 <?php
 
+use App\Ads\Control\Write\RunGuard;
+use App\Ads\Control\Write\WriteActionService;
+use App\Ads\Control\Write\WriteDenied;
 use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Enums\UserRole;
 use App\Models\Ad;
@@ -203,4 +206,53 @@ it('ads:write-preview prints the cap verdict and executes no write statement', f
     bcSeed('adset', $this->set->external_id, ['dailyBudgetMinor' => 1000]);
     Artisan::call('ads:write-preview', ['--account' => (string) $this->acc->id, '--level' => 'adset', '--id' => $this->set->external_id]);
     expect(Artisan::output())->toContain('cap verdict: allowed');
+});
+
+it('explains a missing budget (ABO campaign) instead of asking to retry', function () {
+    bcSeed('ad', $this->ad->external_id, bcAdParents(null, null));
+
+    bcPropose($this, bcBuyer($this->acc), $this->acc, 'ad', $this->ad->external_id)->assertStatus(422)
+        ->assertJsonPath('code', 'budget_unreadable')
+        ->assertJsonPath('details.reason', 'no_budget')
+        ->assertJsonPath('message', __('ads.errors.budget_unreadable_no_budget'));
+    expect(__('ads.errors.budget_unreadable_no_budget'))->not->toBe(__('ads.errors.budget_unreadable'));
+    app()->setLocale('ar');
+    expect(__('ads.errors.budget_unreadable_no_budget'))->not->toBe('ads.errors.budget_unreadable_no_budget');
+});
+
+it('fails closed when the account currency is unknown, never assuming EGP', function (?string $currency) {
+    $this->acc->update(['currency' => $currency]);
+
+    bcPropose($this, bcBuyer($this->acc), $this->acc, 'ad', $this->ad->external_id)->assertStatus(422)
+        ->assertJsonPath('code', 'budget_unreadable')
+        ->assertJsonPath('details.reason', 'currency_unknown')
+        ->assertJsonPath('message', __('ads.errors.budget_unreadable_currency_unknown'));
+})->with(['empty' => [''], 'null' => [null]]);
+
+it('marks the currency row as mismatch', function () {
+    $this->acc->update(['currency' => 'USD']);
+    $live = app(FakeAdsDriver::class)->readObject($this->acc, 'ad', $this->ad->external_id);
+
+    $verdict = app(RunGuard::class)->budgetVerdict(null, $this->acc, $this->ad, $live);
+
+    expect($verdict['rows'][0])->toBe(['key' => 'cap_currency', 'limit' => 'EGP', 'requested' => 'USD', 'outcome' => 'mismatch'])
+        ->and($verdict['refusal']->errorCode)->toBe('currency_mismatch');
+});
+
+it('a losing double-submit does not overwrite the winner\'s limits_checked or confirm read', function () {
+    $buyer = bcBuyer($this->acc);
+    $res = bcPropose($this, $buyer, $this->acc, 'ad', $this->ad->external_id)->assertCreated();
+    $stale = AdWriteAction::where('public_id', $res->json('action.id'))->sole();
+    $this->travel(61)->seconds();
+    $this->actingAs($buyer)->postJson("/ads/write-actions/{$stale->public_id}/confirm", ['diff_hash' => $stale->diff_hash])->assertOk();
+    $winner = $stale->fresh();
+    bcSeed('ad', $this->ad->external_id, bcAdParents(1234567));
+    $this->travel(5)->seconds();
+
+    expect(fn () => app(WriteActionService::class)->confirm($buyer, $stale, $stale->diff_hash))->toThrow(WriteDenied::class);
+
+    $after = $stale->fresh();
+    expect($after->limits_checked)->toBe($winner->limits_checked)
+        ->and($after->expected)->toBe($winner->expected)
+        ->and(collect($after->limits_checked)->pluck('key')->all())->toContain('activations_per_user_day');
 });
