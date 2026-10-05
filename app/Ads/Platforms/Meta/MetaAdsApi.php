@@ -50,14 +50,14 @@ class MetaAdsApi
     public function get(string $token, string $path, array $query = []): array
     {
         return $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)
-            ->get($this->url($path), $query));
+            ->get($this->url($path), $query), null, $path);
     }
 
     /** POST form fields (a write: never throws after a 2xx). @return array<string, mixed> */
     public function post(string $token, string $path, array $data = []): array
     {
         return $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)
-            ->asForm()->post($this->url($path), $data), $token);
+            ->asForm()->post($this->url($path), $data), $token, $path);
     }
 
     /**
@@ -68,7 +68,7 @@ class MetaAdsApi
     public function postMultipart(string $token, string $path, array $fields, string $fileField, string $contents, string $filename): array
     {
         return $this->handle(fn () => Http::withToken($token)->timeout(300)->connectTimeout(15)
-            ->attach($fileField, $contents, $filename)->post($this->url($path), $fields), $token);
+            ->attach($fileField, $contents, $filename)->post($this->url($path), $fields), $token, $path);
     }
 
     /**
@@ -106,7 +106,7 @@ class MetaAdsApi
             }
             $next = $this->stripToken((string) $next);
             $page = $this->shrinking(fn (int $l) => $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)
-                ->get($l > 0 ? $this->withLimit($next, $l) : $next)), $limit);
+                ->get($l > 0 ? $this->withLimit($next, $l) : $next), null, $path), $limit);
         }
     }
 
@@ -169,14 +169,17 @@ class MetaAdsApi
     /**
      * @param  callable(): Response  $send
      * @param  string|null  $writeToken  set for a write: a 2xx is then never turned into an exception
+     * @param  string  $path  the request path (resolves the ad account of the usage header)
      */
-    private function handle(callable $send, ?string $writeToken = null): array
+    private function handle(callable $send, ?string $writeToken = null, string $path = ''): array
     {
         try {
             $response = $send();
         } catch (ConnectionException $e) {
             throw new AdsApiException($this->scrub('Meta is unreachable: '.$e->getMessage()));
         }
+
+        app(UsageRecorder::class)->record($response, $path);
 
         if (! $response->successful()) {
             $message = (string) ($response->json('error.message') ?? 'Meta API error (HTTP '.$response->status().')');
