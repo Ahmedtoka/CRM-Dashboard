@@ -22,7 +22,7 @@ final class RevenueSummary
     public function build(AdsFilter $f, bool $withStore): array
     {
         $f = $f->allSpend();
-        $d = $this->q->derive($this->q->sums($f)->first() ?? []);
+        $d = $this->q->deriveWithControl($f, $this->q->sums($f)->first() ?? []);
         $orders = $this->q->orders($f);
         $crmRevenue = round((float) $orders->sum('net'), 2);
 

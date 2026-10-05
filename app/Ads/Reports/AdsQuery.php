@@ -88,6 +88,81 @@ final class AdsQuery
     }
 
     /**
+     * Account-level control totals (ad_account_daily: what the platform reports for the account whatever the ads'
+     * status) over the filter's accounts, platform and buyer-of-the-day. Null unless EVERY (account, day) that has
+     * ad-level rows also has a control row; callers then fall back to the sum of ads.
+     *
+     * @return object{spend:float, purchases:float, purchase_value:float, impressions:int}|null
+     */
+    public function accountTotals(AdsFilter $f): ?object
+    {
+        $f = $f->allSpend();
+        if ($f->isEmpty()) {
+            return null;
+        }
+
+        $q = DB::table('ad_account_daily as d')
+            ->leftJoin('ad_account_assignments as a', function ($j) {
+                $j->on('a.ad_account_id', '=', 'd.ad_account_id')
+                    ->whereColumn('d.date', '>=', 'a.starts_on')
+                    ->where(fn ($w) => $w->whereNull('a.ends_on')->orWhereColumn('d.date', '<=', 'a.ends_on'));
+            })
+            ->join('ad_accounts as acc', 'acc.id', '=', 'd.ad_account_id')
+            ->whereBetween('d.date', [$f->fromDate(), $f->toDate()]);
+        if ($f->platform !== null) {
+            $q->where('acc.platform', $f->platform);
+        }
+        if ($f->accountIds !== null) {
+            $q->whereIn('d.ad_account_id', $f->accountIds);
+        }
+        foreach (array_filter([$f->buyerId, $f->restrictBuyerId], fn ($b) => $b !== null) as $buyer) {
+            $q->where('a.media_buyer_id', $buyer);
+        }
+        $control = $q->get(['d.ad_account_id', 'd.date', 'd.spend', 'd.purchases', 'd.purchase_value', 'd.impressions']);
+        if ($control->isEmpty()) {
+            return null;
+        }
+
+        $have = $control->mapWithKeys(fn ($r) => [$r->ad_account_id.'|'.substr((string) $r->date, 0, 10) => true]);
+        $missing = $this->metrics($f)->select(['m.ad_account_id', 'm.date'])->distinct()->get()
+            ->contains(fn ($r) => ! isset($have[$r->ad_account_id.'|'.substr((string) $r->date, 0, 10)]));
+        if ($missing) {
+            return null;
+        }
+
+        return (object) [
+            'spend' => (float) $control->sum('spend'),
+            'purchases' => (float) $control->sum('purchases'),
+            'purchase_value' => (float) $control->sum('purchase_value'),
+            'impressions' => (int) $control->sum('impressions'),
+        ];
+    }
+
+    /**
+     * derive() of the ad-level sums, with spend, purchase value, purchases, ROAS and CPA taken from the account
+     * control when it covers the range. CPM, CPC and CTR keep the ad-level sums (the control has no clicks).
+     * `source` is 'account' or 'ads'; `itemised_gap` = control spend − Σ ad spend (null on 'ads').
+     *
+     * @return array<string, mixed>
+     */
+    public function deriveWithControl(AdsFilter $f, object|array $adSums): array
+    {
+        $d = $this->derive($adSums);
+        $control = $this->accountTotals($f);
+        if ($control === null) {
+            return $d + ['source' => 'ads', 'itemised_gap' => null];
+        }
+
+        $c = $this->derive([
+            'spend' => $control->spend, 'purchase_value' => $control->purchase_value, 'purchases' => $control->purchases,
+            'impressions' => $d['impressions'], 'clicks' => $d['clicks'], 'reach' => $d['reach'],
+        ]);
+
+        return array_merge($d, array_intersect_key($c, array_flip(['spend', 'spend_tax', 'purchase_value', 'roas', 'purchases', 'cpa'])))
+            + ['source' => 'account', 'itemised_gap' => round($c['spend'] - $d['spend'], 2)];
+    }
+
+    /**
      * Real orders in range: `ad_id` on an ad of the filtered accounts, or (no ad) `ad_campaign_id` on a
      * filtered campaign; not cancelled/failed, shipment not returned; net = total − refunds. Buyer = holder of the account on
      * the order's Cairo day; buyer filters apply on that.

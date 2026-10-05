@@ -234,6 +234,10 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
                         <p v-if="tot.spend_outside_active > 0" class="mt-1 text-2xs text-muted-foreground">
                             {{ t('ads.kpi.outside_active', { amount: money(tot.spend_outside_active) }) }}
                         </p>
+                        <p v-if="tot.itemised_gap" class="mt-1 text-2xs text-muted-foreground">
+                            {{ t('ads.kpi.not_itemised', { amount: money(tot.itemised_gap) }) }}
+                        </p>
+                        <p class="mt-1 text-2xs text-muted-foreground">{{ t(`ads.kpi.source_${tot.source}`) }}</p>
                     </div>
                     <StatCard v-for="k in kpis" :key="k.key" :label="k.label" :value="k.value" :hint="k.hint" class="border-t-4" :class="k.border" />
                 </div>

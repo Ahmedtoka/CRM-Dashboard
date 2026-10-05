@@ -50,6 +50,10 @@ export interface AdsTotals extends AdsDerived {
     losers_spend_share: number | null;
     /** Spend of campaigns that are not active (paused, archived, deleted); already inside `spend`. */
     spend_outside_active: number;
+    /** Where spend, purchase value and ROAS come from: the account-level control or the sum of ads. */
+    source: 'account' | 'ads';
+    /** Control spend minus the sum of ads (Meta no longer itemises it by ad); null when source is 'ads'. */
+    itemised_gap: number | null;
     real_orders: number;
     real_revenue: number;
     real_roas: number | null;

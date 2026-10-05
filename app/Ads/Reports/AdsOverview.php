@@ -31,7 +31,7 @@ final class AdsOverview
     {
         $f = $f->allSpend();
         $orders ??= $this->q->orders($f);
-        $d = $this->q->derive($this->q->sums($f)->first() ?? []);
+        $d = $this->q->deriveWithControl($f, $this->q->sums($f)->first() ?? []);
         $revenue = round((float) $orders->sum('net'), 2);
         $active = (float) ($this->q->sums($f->with(['activeCampaignsOnly' => true]))->first()->spend ?? 0);
 
