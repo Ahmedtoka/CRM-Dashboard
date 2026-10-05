@@ -4,7 +4,7 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Meta\MetaAdsDriver;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
-use AppAdsPlatformsTokenInvalid;
+use App\Ads\Platforms\TokenInvalid;
 use App\Ads\Sync\AdsSyncService;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
