@@ -69,7 +69,7 @@ const kpis = computed(() => {
         { key: 'cpa', label: t('ads.kpi.cpa'), value: money(x.cpa), border: 'border-t-chart-5' },
         { key: 'ctr', label: t('ads.kpi.ctr'), value: formatPct(x.ctr, locale.value), border: 'border-t-chart-3' },
         { key: 'impressions', label: t('ads.kpi.impressions'), value: n(x.impressions), border: 'border-t-chart-1' },
-        { key: 'reach', label: t('ads.kpi.reach'), value: n(x.reach), border: 'border-t-chart-1' },
+        { key: 'reach', label: t('ads.kpi.reach_daily_sum'), value: n(x.reach), border: 'border-t-chart-1' },
         {
             key: 'conversations',
             label: t('ads.kpi.conversations'),
@@ -141,7 +141,7 @@ const columns = computed(() => [
     { key: 'ctr', label: t('ads.kpi.ctr'), align: 'end' as const },
     { key: 'cpm', label: t('ads.table.cpm'), align: 'end' as const, hideOnMobile: true },
     { key: 'cpc', label: t('ads.table.cpc'), align: 'end' as const, hideOnMobile: true },
-    { key: 'reach', label: t('ads.kpi.reach'), align: 'end' as const, hideOnMobile: true },
+    { key: 'reach', label: t('ads.kpi.reach_daily_sum'), align: 'end' as const, hideOnMobile: true },
     { key: 'real_orders', label: t('ads.kpi.real_orders'), align: 'end' as const },
 ]);
 

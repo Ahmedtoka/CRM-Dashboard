@@ -10,8 +10,9 @@ use Illuminate\Support\Facades\DB;
  *
  *   trend     ROAS and spend of the last 7 days (to-6..to) vs the 7 before (to-13..to-7); dir up/down when ROAS moved
  *             by 10 % or more, else flat; the percentages are null when the prior window has no spend
- *   fatigue   CTR of the last 3 days vs the ad's first 7 active days (spend > 0), and frequency (impressions ÷ reach)
- *             of the last 7 days; flagged when CTR fell 30 % or more and frequency is 2.5 or more
+ *   fatigue   CTR of the last 3 days vs the ad's first 7 active days (spend > 0); flagged when CTR fell 30 % or more.
+ *             Frequency is always null: it needs the reach of the whole window (Phase E1), and a sum of daily reach counts
+ *             the same person on every day they were reached
  */
 final class AdInsights
 {
@@ -24,8 +25,6 @@ final class AdInsights
     public const FATIGUE_BASE_DAYS = 7;
 
     public const FATIGUE_CTR_DROP_PCT = 30.0;
-
-    public const FATIGUE_FREQUENCY = 2.5;
 
     /**
      * @param  list<int>  $adIds
@@ -54,7 +53,6 @@ final class AdInsights
             ->selectRaw('COALESCE(SUM(CASE WHEN m.date < ? THEN m.spend ELSE 0 END), 0) as spend_b', [$last7])
             ->selectRaw('COALESCE(SUM(CASE WHEN m.date < ? THEN m.purchase_value ELSE 0 END), 0) as value_b', [$last7])
             ->selectRaw('COALESCE(SUM(CASE WHEN m.date >= ? THEN m.impressions ELSE 0 END), 0) as impr_a', [$last7])
-            ->selectRaw('COALESCE(SUM(CASE WHEN m.date >= ? THEN m.reach ELSE 0 END), 0) as reach_a', [$last7])
             ->selectRaw('COALESCE(SUM(CASE WHEN m.date >= ? THEN m.impressions ELSE 0 END), 0) as impr_3', [$last3])
             ->selectRaw('COALESCE(SUM(CASE WHEN m.date >= ? THEN m.clicks ELSE 0 END), 0) as clicks_3', [$last3])
             ->get()->keyBy(fn ($r) => (int) $r->ad_id);
@@ -105,14 +103,13 @@ final class AdInsights
     /** @return array{flag: bool, ctr_drop_pct: ?float, frequency: ?float} */
     private function fatigue(?object $r, ?float $baseCtr): array
     {
-        $frequency = $r !== null && (int) $r->reach_a > 0 ? round((float) $r->impr_a / (float) $r->reach_a, 2) : null;
         $recentCtr = $r !== null && (int) $r->impr_3 > 0 ? (float) $r->clicks_3 / (float) $r->impr_3 : null;
         $drop = $baseCtr !== null && $baseCtr > 0 && $recentCtr !== null ? round(($baseCtr - $recentCtr) / $baseCtr * 100, 1) : null;
 
         return [
-            'flag' => $drop !== null && $frequency !== null && $drop >= self::FATIGUE_CTR_DROP_PCT && $frequency >= self::FATIGUE_FREQUENCY,
+            'flag' => $drop !== null && $drop >= self::FATIGUE_CTR_DROP_PCT,
             'ctr_drop_pct' => $drop,
-            'frequency' => $frequency,
+            'frequency' => null, // needs window reach (Phase E1); never impressions ÷ summed daily reach
         ];
     }
 

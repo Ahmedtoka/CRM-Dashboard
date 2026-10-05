@@ -223,9 +223,7 @@ export function reasonTexts(reasons: AdReason[], locale: Locale, currency = 'EGP
                         ? formatAdsMoney(val, locale, currency)
                         : k === 'pct' || k === 'ctr_drop'
                           ? formatPct(val / 100, locale, 0)
-                          : k === 'frequency'
-                            ? formatQty(val, locale)
-                            : val;
+                          : val;
         }
 
         return { key: r.key, text: translate(locale, `ads.reasons.${r.key}`, v), bad: BAD_REASONS.includes(r.key) };

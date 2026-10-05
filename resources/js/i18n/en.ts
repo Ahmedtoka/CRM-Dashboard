@@ -937,20 +937,6 @@ const en: Messages = {
         bot_title: 'Bot report',
         ads_title: 'Ads report',
         ads: {
-        health: {
-            title: 'Check these numbers',
-            and_more: 'and {n} more',
-            reasons: {
-                reconnect: 'A connection needs a new token, so its numbers are not updating',
-                stale: 'The numbers are behind Ads Manager (the last sync is over 3 hours old)',
-                read_only: 'The connection is read-only: Run and Stop are off',
-                incomplete: 'History is incomplete for part of this range',
-                timezone: 'Days for these accounts follow the account timezone, not Cairo time',
-                gap: 'Spend per ad does not add up to the account total',
-                history_start: 'The range was cut at the day the CRM started keeping ads data',
-                under_review: 'These numbers are under review and are not final yet',
-            },
-        },
             hint: 'Per campaign: conversations it brought, customers, orders and their value, and the spend from Meta when the ad account is reachable',
             campaign: 'Campaign',
             ads_list: 'Ads',
@@ -2981,6 +2967,20 @@ const en: Messages = {
         shipments: { title: 'Active shipments', empty: 'No active shipments', advance: 'Next step', advanced: 'Shipment {number}: {status}' },
     },
     ads: {
+        health: {
+            title: 'Check these numbers',
+            and_more: 'and {n} more',
+            reasons: {
+                reconnect: 'A connection needs a new token, so its numbers are not updating',
+                stale: 'The numbers are behind Ads Manager (the last sync is over 3 hours old)',
+                read_only: 'The connection is read-only: Run and Stop are off',
+                incomplete: 'History is incomplete for part of this range',
+                timezone: 'Days for these accounts follow the account timezone, not Cairo time',
+                gap: 'Spend per ad does not add up to the account total',
+                history_start: 'The range was cut at the day the CRM started keeping ads data',
+                under_review: 'These numbers are under review and are not final yet',
+            },
+        },
         scope_note: 'Showing active campaigns only. Totals include all spend.',
         scope_note_tip: 'An active campaign is one whose own status is ACTIVE on Meta or ENABLE on TikTok, meaning its switch is on in Ads Manager. Ads without a campaign are not listed.',
         money: { pre_tax: 'Pre-tax {amount}' },
@@ -2998,7 +2998,7 @@ const en: Messages = {
             cpa: 'Cost per order {cpa}',
             ctr: 'CTR {ctr}',
             real_orders: '{orders} real orders attributed to the ad',
-            fatigue: 'The ad is wearing out: CTR fell {ctr_drop} and frequency is {frequency}',
+            fatigue: 'The ad is wearing out: CTR fell {ctr_drop}',
             need_stop: 'The product of "{material}" is out of stock, so the ad should stop',
             no_purchases: 'Spent {spend} in {days} days with no purchases',
         },
@@ -3011,7 +3011,7 @@ const en: Messages = {
         },
         fatigue: {
             label: 'Fatigued',
-            tip: 'CTR fell {ctr_drop} and frequency is {frequency}',
+            tip: 'CTR fell {ctr_drop} against the ad\'s first days',
         },
         summary: {
             title: 'Ad revenue: store, CRM and platform',
@@ -3057,6 +3057,7 @@ const en: Messages = {
             impressions: 'Impressions',
             clicks: 'Clicks',
             reach: 'Reach',
+            reach_daily_sum: 'Sum of daily reach (people can repeat across days)',
             conversations: 'Conversations → ordered',
         },
         filters: {

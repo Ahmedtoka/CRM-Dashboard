@@ -209,7 +209,6 @@ const breadcrumbs = computed(() => [
                                     :title="
                                         t('ads.fatigue.tip', {
                                             ctr_drop: formatPct((w.fatigue.ctr_drop_pct ?? 0) / 100, locale, 0),
-                                            frequency: formatQty(w.fatigue.frequency, locale),
                                         })
                                     "
                                     >{{ t('ads.fatigue.label') }}</span

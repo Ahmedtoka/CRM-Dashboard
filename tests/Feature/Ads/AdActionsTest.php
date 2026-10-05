@@ -5,6 +5,7 @@ use App\Ads\Control\StopAdvisor;
 use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Ads\Platforms\MissingPermission;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Reports\AdInsights;
 use App\Ads\Reports\AdsFilter;
 use App\Enums\UserRole;
 use App\Models\Ad;
@@ -196,6 +197,8 @@ it('suggests losers, fatigued and need-stop ads, not winners or paused ads', fun
     expect($out->keys()->sort()->values()->all())->toBe(['Loser', 'No sales', 'Out of stock', 'Tired'])
         ->and(array_column($out['Loser']['reasons'], 'key'))->toContain('roas_below')
         ->and(array_column($out['Tired']['reasons'], 'key'))->toContain('fatigue')
+        ->and(array_column($out['Tired']['reasons'], 'params', 'key')['fatigue'])->toBe(['ctr_drop' => 50.0])
+        ->and(app(AdInsights::class)->forAds([$tired->id], CarbonImmutable::parse('2026-09-30'))[$tired->id]['fatigue']['frequency'])->toBeNull()
         ->and(array_column($out['No sales']['reasons'], 'key'))->toContain('no_purchases')
         ->and($out['Out of stock']['reasons'])->toBe([['key' => 'need_stop', 'params' => ['material' => 'Black abaya']]])
         ->and($out['Loser'])->toMatchArray(['ad_id' => $loser->id, 'external_id' => $loser->external_id, 'account_id' => $acc->id, 'account' => 'LV Main', 'spend' => 1400.0]);

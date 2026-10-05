@@ -91,7 +91,7 @@ it('reports trend up when the last 7 days beat the 7 before by 10 percent or mor
         ->and($i[$new->id]['trend'])->toBe(['roas_pct' => null, 'spend_pct' => null, 'dir' => 'flat']);
 });
 
-it('flags fatigue when CTR fell 30 percent and frequency is 2.5 or more', function () {
+it('flags fatigue when CTR fell 30 percent, whatever the reach', function () {
     $acc = AdAccount::factory()->create();
     $tired = Ad::factory()->for($acc, 'account')->create();
     $fresh = Ad::factory()->for($acc, 'account')->create();
@@ -107,13 +107,13 @@ it('flags fatigue when CTR fell 30 percent and frequency is 2.5 or more', functi
 
     $i = app(AdInsights::class)->forAds([$tired->id, $fresh->id, $lowFreq->id], CarbonImmutable::parse('2026-09-30'));
 
-    expect($i[$tired->id]['fatigue'])->toBe(['flag' => true, 'ctr_drop_pct' => 50.0, 'frequency' => 3.0])
+    expect($i[$tired->id]['fatigue'])->toBe(['flag' => true, 'ctr_drop_pct' => 50.0, 'frequency' => null])
         ->and($i[$fresh->id]['fatigue']['flag'])->toBeFalse()->and($i[$fresh->id]['fatigue']['ctr_drop_pct'])->toBe(0.0)
-        ->and($i[$lowFreq->id]['fatigue']['flag'])->toBeFalse()->and($i[$lowFreq->id]['fatigue']['frequency'])->toBe(1.25);
+        ->and($i[$lowFreq->id]['fatigue'])->toBe(['flag' => true, 'ctr_drop_pct' => 50.0, 'frequency' => null]);
 
     $row = collect(app(WinnerScorer::class)->build(rsnFilter()))->firstWhere('ad.id', $tired->id);
     expect($row['fatigue']['flag'])->toBeTrue()
-        ->and(rsnReasons($row)['fatigue'])->toBe(['ctr_drop' => 50.0, 'frequency' => 3.0]);
+        ->and(rsnReasons($row)['fatigue'])->toBe(['ctr_drop' => 50.0]);
 });
 
 it('returns the share of spend going to loser ads on the overview', function () {
@@ -179,5 +179,5 @@ it('bounds the fatigue baseline to the first active days', function () {
 
     $f = app(AdInsights::class)->forAds([$ad->id], CarbonImmutable::parse('2026-09-30'))[$ad->id]['fatigue'];
 
-    expect($f)->toBe(['flag' => true, 'ctr_drop_pct' => 50.0, 'frequency' => 3.0]);
+    expect($f)->toBe(['flag' => true, 'ctr_drop_pct' => 50.0, 'frequency' => null]);
 });
