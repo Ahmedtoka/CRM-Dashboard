@@ -449,6 +449,21 @@ return [
             'stop_retry_max_wait_seconds' => 1800,
             // Short jobs only (worker --timeout=80). ASSUMPTION: the crm-commerce worker runs in production (ads:doctor shows it).
             'retry_queue' => env('CRM_ADS_WRITE_RETRY_QUEUE', 'commerce'),
+            // Run guard (B3). ASSUMPTION for the owner: these are sane defaults, not his numbers. Runtime overrides per
+            // user / account / global live in ads_settings.write_limits (ads:write-limits, audited). Money in minor units.
+            'limits' => [
+                // Highest per-day budget a Run may switch on (own, CBO parent, or lifetime spread per day): EGP 20,000.
+                'max_daily_budget_minor' => (int) env('CRM_ADS_MAX_DAILY_BUDGET_MINOR', 2000000),
+                // The cap's currency; an account in another currency is refused (currency_mismatch), never converted.
+                'cap_currency' => 'EGP',
+                // Runs confirmed per Cairo day, per confirming user and per ad account (Stops never count).
+                'activations_per_user_day' => 20,
+                'activations_per_account_day' => 30,
+                // A Stop by an Ads-authority holder blocks other users' Runs on that exact target for this many days.
+                'restart_lock_days' => 7,
+                // A Run of something paused (by a CRM Stop) longer than this carries the "may re-enter learning" note.
+                'learning_note_days' => 7,
+            ],
         ],
         // Seconds a publish waits for another worker's upload of the same file before it is released and retried.
         'publish_upload_wait' => 60,
