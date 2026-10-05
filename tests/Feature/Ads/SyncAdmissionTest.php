@@ -460,3 +460,23 @@ it('a deep run whose ad list was cut by high usage does not sweep and marks noth
         ->and(Ad::where('effective_status', 'GONE')->count())->toBe(0);
     Http::assertNotSent(fn (Request $r) => str_contains((string) ($r->data()['effective_status'] ?? ''), 'ARCHIVED'));
 });
+
+it('asks Meta for campaign statuses with campaign-level values only (no CAMPAIGN_PAUSED / ADSET_PAUSED)', function () {
+    $acc = admissionAccount('act_1');
+    $sent = null;
+    Http::fake(function (Request $r) use (&$sent) {
+        if (str_contains($r->url(), 'act_1/campaigns')) {
+            parse_str((string) parse_url($r->url(), PHP_URL_QUERY), $q);
+            $sent = json_decode($q['effective_status'] ?? '[]', true);
+        }
+
+        return Http::response(['data' => []]);
+    });
+
+    $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
+    $run = app(AdsSyncService::class)->syncAccount($acc, $today->subDays(2), $today, 'recent', false);
+
+    expect($sent)->toBeArray()->not->toBeEmpty()
+        ->not->toContain('CAMPAIGN_PAUSED')->not->toContain('ADSET_PAUSED')
+        ->and($run->error ?? '')->not->toContain('Campaign statuses');
+});

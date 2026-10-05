@@ -30,6 +30,9 @@ class MetaAdsDriver implements AdPlatformDriver
      */
     public const INSIGHTS_STATUSES = ['ACTIVE', 'PAUSED', 'DELETED', 'PENDING_REVIEW', 'DISAPPROVED', 'PREAPPROVED', 'PENDING_BILLING_INFO', 'CAMPAIGN_PAUSED', 'ARCHIVED', 'ADSET_PAUSED', 'IN_PROCESS', 'WITH_ISSUES'];
 
+    /** Campaign-level effective_status values: CAMPAIGN_PAUSED / ADSET_PAUSED exist only for ads and ad sets (Meta answers "Invalid parameter"). */
+    public const CAMPAIGN_STATUSES = ['ACTIVE', 'PAUSED', 'DELETED', 'PENDING_REVIEW', 'DISAPPROVED', 'PREAPPROVED', 'PENDING_BILLING_INFO', 'ARCHIVED', 'IN_PROCESS', 'WITH_ISSUES'];
+
     /** @var list<string> run warnings (a list cut short by high usage), drained by the sync */
     private array $warnings = [];
 
@@ -246,7 +249,7 @@ class MetaAdsDriver implements AdPlatformDriver
         $out = [];
         foreach ($this->pages('Campaign statuses', $this->token($a->connection), $this->actId($a).'/campaigns', [
             'fields' => 'id,status,effective_status',
-            'effective_status' => json_encode(self::INSIGHTS_STATUSES),
+            'effective_status' => json_encode(self::CAMPAIGN_STATUSES),
             'limit' => 500,
         ]) as $r) {
             if (! empty($r['id'])) {
