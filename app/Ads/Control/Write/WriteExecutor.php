@@ -186,17 +186,19 @@ class WriteExecutor
     }
 
     /**
-     * A confirmed Stop that nobody is watching any more (a scheduled retry, a re-apply, the bound reached) ended in a
-     * terminal failure: tell every Ads-authority holder, with the Ads Manager link (2.1 rule 6).
+     * A confirmed Stop that nobody is watching any more (a scheduled retry, a re-apply, the bound reached) ended failed,
+     * or unknown: tell every Ads-authority holder, with the Ads Manager link to pause or check it (2.1 rule 6).
      */
-    protected function noticeStopFailed(AdWriteAction $x): void
+    public function noticeStopFailed(AdWriteAction $x): void
     {
         $link = $x->outcome['deep_link'] ?? self::deepLink($x);
         if ($link !== null && ! isset($x->outcome['deep_link'])) {
             AdWriteAction::whereKey($x->id)->update(['outcome' => json_encode(array_merge($x->outcome ?? [], ['deep_link' => $link]))]);
             $x->refresh();
         }
-        app(UserNotifier::class)->notifyAdsAuthority('ads.stop_failed', array_filter([
+        // unknown: the platform did not answer and the read-back failed: the ad may or may not be paused.
+        $type = $x->state === AdWriteAction::UNKNOWN ? 'ads.stop_unknown' : 'ads.stop_failed';
+        app(UserNotifier::class)->notifyAdsAuthority($type, array_filter([
             'action_id' => $x->public_id, 'name' => $x->target_name, 'account' => $x->account_name, 'level' => $x->target_level,
             'error_code' => $x->error_code, 'deep_link' => $link, 'link' => '/ads/actions',
         ], fn ($v) => $v !== null));
@@ -322,7 +324,7 @@ class WriteExecutor
             return;
         }
         $reopened = AdWriteAction::whereKey($stop->id)->where('state', AdWriteAction::SUCCEEDED)->update([
-            'state' => AdWriteAction::EXECUTING, 'finished_at' => null, 'retry_at' => null, 'attempts' => 0, 'updated_at' => now(),
+            'state' => AdWriteAction::EXECUTING, 'finished_at' => null, 'retry_at' => null, 'attempts' => 0, 'executing_at' => now(), 'updated_at' => now(),
             'outcome' => json_encode(array_merge($stop->outcome ?? [], ['reapply_of' => $run->public_id])),
         ]) === 1;
         if (! $reopened) {
@@ -402,7 +404,8 @@ class WriteExecutor
         if ($changed) {
             AdsAudit::record('write.'.$state, $x, ['state' => AdWriteAction::EXECUTING], ['state' => $state],
                 array_filter(['public_id' => $x->public_id, 'error_code' => $code], fn ($v) => $v !== null));
-            if ($x->isStop() && $state === AdWriteAction::FAILED && array_intersect_key($x->outcome ?? [], array_flip(['retry_scheduled', 'retry_exhausted', 'reapply_of'])) !== []) {
+            $unwatched = array_intersect_key($x->outcome ?? [], array_flip(['retry_scheduled', 'retry_exhausted', 'reapply_of'])) !== [];
+            if ($x->isStop() && $unwatched && in_array($state, [AdWriteAction::FAILED, AdWriteAction::UNKNOWN], true)) {
                 $this->noticeStopFailed($x);
             }
         } elseif (! $x->isStop() && $x->state === AdWriteAction::SUPERSEDED_BY_STOP && self::maybeLanded($state, $code)) {

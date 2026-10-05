@@ -266,14 +266,6 @@ class WriteActionService
         return $x;
     }
 
-    /**
-     * The claim, one transaction: CAS proposed → executing with the Run key, then supersede the proposed Runs on the
-     * target (a proposed Stop is never superseded, 2.1 rule 3).
-     *
-     * @return list<AdWriteAction> the actions superseded by this confirm
-     *
-     * @throws WriteDenied 409 not_confirmable / action_in_progress, 410 proposal_expired
-     */
     /** SQLSTATE 40001 (serialization failure) or MySQL/MariaDB error 1213 (deadlock). */
     public static function isDeadlock(QueryException|DeadlockException $e): bool
     {
@@ -284,6 +276,14 @@ class WriteActionService
         return (string) ($e->errorInfo[0] ?? '') === '40001' || (int) ($e->errorInfo[1] ?? 0) === 1213;
     }
 
+    /**
+     * The claim, one transaction: CAS proposed → executing with the Run key, then supersede the proposed Runs on the
+     * target (a proposed Stop is never superseded, 2.1 rule 3).
+     *
+     * @return list<AdWriteAction> the actions superseded by this confirm
+     *
+     * @throws WriteDenied 409 not_confirmable / action_in_progress, 410 proposal_expired
+     */
     private function claim(User $u, AdWriteAction $x): array
     {
         $key = $x->isStop() ? null : SetStatusType::runKey($x->target_key);

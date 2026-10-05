@@ -33,6 +33,7 @@ class RetryStopWrite implements ShouldQueue
             ->where('state', AdWriteAction::EXECUTING)
             ->where('attempts', $this->attempts)
             ->whereNotNull('retry_at')
+            ->where('retry_at', '<=', now()) // never before its time, even on an early or duplicate delivery
             ->update(['retry_at' => null, 'updated_at' => now()]) === 1;
         if (! $claimed) {
             return; // a duplicate delivery, or already resolved
@@ -51,7 +52,10 @@ class RetryStopWrite implements ShouldQueue
     public function failed(?Throwable $e = null): void
     {
         $x = AdWriteAction::find($this->actionId);
-        if ($x === null || ! $x->isStop() || $x->state !== AdWriteAction::EXECUTING || ! in_array((int) $x->attempts, [$this->attempts, $this->attempts + 1], true)) {
+        // retry_at NULL = this job claimed the attempt (and maybe sent the call) before dying. A retry still pending
+        // (retry_at set) was never claimed: the sweeper re-dispatches it.
+        if ($x === null || ! $x->isStop() || $x->state !== AdWriteAction::EXECUTING || $x->retry_at !== null
+            || ! in_array((int) $x->attempts, [$this->attempts, $this->attempts + 1], true)) {
             return;
         }
         if ($e !== null) {

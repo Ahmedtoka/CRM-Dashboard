@@ -678,7 +678,8 @@ export interface AppNotification {
         | 'ads.token_scope_missing'
         | 'ads.token_expiring'
         | 'ads.data_health'
-        | 'ads.stop_failed';
+        | 'ads.stop_failed'
+        | 'ads.stop_unknown';
     data: Record<string, unknown>;
     read_at: string | null;
     created_at: string | null;

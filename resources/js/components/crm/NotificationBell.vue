@@ -85,6 +85,10 @@ function itemText(n: AppNotification): string {
         return t('notifications.ads_stop_failed_item', { name: String(n.data.name ?? ''), account: String(n.data.account ?? '') });
     }
 
+    if (n.type === 'ads.stop_unknown') {
+        return t('notifications.ads_stop_unknown_item', { name: String(n.data.name ?? ''), account: String(n.data.account ?? '') });
+    }
+
     if (n.type === 'ads.token_expiring') {
         return t('notifications.ads_token_expiring_item', { name: String(n.data.connection ?? ''), days: Number(n.data.days ?? 0) });
     }
@@ -114,7 +118,7 @@ function open(n: AppNotification): void {
         router.visit('/ads/sync');
         return;
     }
-    if (n.type === 'ads.stop_failed') {
+    if (n.type === 'ads.stop_failed' || n.type === 'ads.stop_unknown') {
         router.visit('/ads/actions');
         return;
     }

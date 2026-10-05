@@ -449,6 +449,10 @@ return [
             'stop_retry_attempts' => 3,
             'stop_retry_seconds' => 60,
             'stop_retry_max_wait_seconds' => 1800,
+            // Sweeper give-up (liveness): re-dispatches of one lost retry before failing with a notice, and the margin added
+            // to the whole retry window ((attempts - 1) x max wait) after which an executing Stop is failed whatever its state.
+            'stop_sweep_max_redispatches' => 3,
+            'stop_sweep_margin_seconds' => 600,
             // Short jobs only (worker --timeout=80). ASSUMPTION: the crm-commerce worker runs in production (ads:doctor shows it).
             'retry_queue' => env('CRM_ADS_WRITE_RETRY_QUEUE', 'commerce'),
             // Named limiter of the write routes (throttle:ads-writes), per user: Stop far above Run so Stops are never throttled out.

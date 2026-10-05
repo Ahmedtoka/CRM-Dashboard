@@ -136,6 +136,7 @@ it('tells the holders when a retried Stop ends in a definite platform refusal', 
     expect(lvConfirm($this->admin, $stop)->state)->toBe('executing');
     FakeAdsDriver::failNext('setStatus', 'rejected');
 
+    $this->travel(3)->minutes();
     app()->call([Queue::pushed(RetryStopWrite::class)->first(), 'handle']);
 
     expect($stop->fresh()->state)->toBe('failed')->and($stop->fresh()->error_code)->toBe('platform_rejected')
@@ -287,4 +288,106 @@ it('logs an unexpected executor error with a scrubbed message only', function ()
     WriteExecutor::logUnexpected(new RuntimeException('boom access_token=SECRET999&x=1'));
 
     Log::shouldHaveReceived('error')->withArgs(fn ($msg, $ctx) => $ctx['message'] === 'boom access_token=***&x=1');
+});
+
+// Fix round 2
+
+it('N4: a retry job delivered before its retry_at does nothing', function () {
+    Queue::fake();
+    $this->ad->update(['status' => 'ACTIVE']);
+    $stop = lvPropose($this->admin, $this->acc, $this->ad->external_id, 'paused');
+    FakeAdsDriver::failNext('setStatus', 'rate');
+    lvConfirm($this->admin, $stop);
+    $job = Queue::pushed(RetryStopWrite::class)->first();
+
+    app()->call([$job, 'handle']); // early delivery
+
+    expect($stop->fresh()->attempts)->toBe(1)->and($stop->fresh()->retry_at)->not->toBeNull()->and(lvStatuses())->toBe([]);
+    $this->travel(3)->minutes();
+    app()->call([$job, 'handle']);
+    expect($stop->fresh()->state)->toBe('succeeded');
+});
+
+it('N1: a dead worker ends in failed plus a notice after repeated sweeps (the job never runs)', function () {
+    Queue::fake();
+    $stop = AdWriteAction::factory()->stop()->create(['ad_account_id' => $this->acc->id, 'confirmed_by_id' => $this->admin->id,
+        'state' => 'executing', 'executing_at' => now(), 'retry_at' => now()->subMinutes(6), 'attempts' => 1, 'error_code' => 'rate_limited']);
+    $max = (int) config('crm.ads.write.stop_sweep_max_redispatches');
+
+    for ($i = 1; $i <= $max; $i++) {
+        $this->artisan('ads:write-sweep')->assertSuccessful();
+        expect($stop->fresh()->state)->toBe('executing')->and($stop->fresh()->outcome['redispatches'])->toBe($i);
+        $this->travel(6)->minutes(); // the re-dispatched job never runs
+    }
+    expect(UserNotification::count())->toBe(0);
+
+    $this->artisan('ads:write-sweep')->assertSuccessful();
+
+    $stop->refresh();
+    expect($stop->state)->toBe('failed')->and($stop->error_code)->toBe('rate_limited')->and($stop->outcome['retry_exhausted'])->toBeTrue()
+        ->and(Queue::pushed(RetryStopWrite::class))->toHaveCount($max)
+        ->and(UserNotification::where('type', 'ads.stop_failed')->where('user_id', $this->admin->id)->count())->toBe(1);
+});
+
+it('N1: a Stop executing longer than the whole retry window ends failed even with no retry pending', function () {
+    $window = ((int) config('crm.ads.write.stop_retry_attempts') - 1) * (int) config('crm.ads.write.stop_retry_max_wait_seconds')
+        + (int) config('crm.ads.write.stop_sweep_margin_seconds');
+    $stuck = AdWriteAction::factory()->stop()->create(['ad_account_id' => $this->acc->id, 'state' => 'executing', 'executing_at' => now()->subSeconds($window + 60), 'retry_at' => null, 'attempts' => 1]);
+    $young = AdWriteAction::factory()->stop()->create(['ad_account_id' => $this->acc->id, 'state' => 'executing', 'executing_at' => now()->subSeconds($window - 60), 'retry_at' => null, 'attempts' => 1]);
+
+    $this->artisan('ads:write-sweep')->assertSuccessful();
+
+    expect($stuck->fresh()->state)->toBe('failed')->and($stuck->fresh()->error_code)->toBe('stop_failed')
+        ->and($young->fresh()->state)->toBe('executing')
+        ->and(UserNotification::where('type', 'ads.stop_failed')->count())->toBe(1);
+});
+
+it('N3: a retried Stop that ends unknown notifies with the unknown wording', function () {
+    Queue::fake();
+    $this->ad->update(['status' => 'ACTIVE']);
+    $stop = lvPropose($this->admin, $this->acc, $this->ad->external_id, 'paused');
+    FakeAdsDriver::failNext('setStatus', 'rate');
+    lvConfirm($this->admin, $stop);
+    FakeAdsDriver::failNext('setStatus', 'unreachable_after');
+    FakeAdsDriver::failNext('readObject', 'unreachable_before');
+    $this->travel(3)->minutes();
+
+    app()->call([Queue::pushed(RetryStopWrite::class)->first(), 'handle']);
+
+    expect($stop->fresh()->state)->toBe('unknown');
+    $n = UserNotification::where('type', 'ads.stop_unknown')->where('user_id', $this->admin->id)->sole();
+    expect($n->data['action_id'])->toBe($stop->public_id)->and($n->data['deep_link'])->toContain('act=5550001')
+        ->and(UserNotification::where('type', 'ads.stop_failed')->count())->toBe(0);
+});
+
+it('N3: a re-applied Stop that ends unknown notifies with the unknown wording', function () {
+    $buyer = lvBuyer($this->acc);
+    $run = lvPropose($buyer, $this->acc, $this->ad->external_id, 'active');
+    $stop = null;
+    FakeAdsDriver::beforeSetStatus(function () use (&$stop) {
+        $stop = lvPropose($this->admin, $this->acc, $this->ad->external_id, 'paused');
+        lvConfirm($this->admin, $stop);
+        // Next calls: the Run's own (succeeds, lands after the Stop), then the re-apply (answer lost, read-back fails).
+        FakeAdsDriver::failNext('setStatus', 'unreachable_after', 2);   // the Run's call and the re-apply both lose their answer
+        FakeAdsDriver::failNext('readObject', 'none');                 // the Run's read-back works (ACTIVE: it landed)
+        FakeAdsDriver::failNext('readObject', 'unreachable_before');   // the re-apply's read-back fails
+    });
+
+    lvConfirm($buyer, $run);
+
+    expect($stop->fresh()->state)->toBe('unknown')
+        ->and(UserNotification::where('type', 'ads.stop_unknown')->where('user_id', $this->admin->id)->count())->toBe(1);
+});
+
+it('N2: RetryStopWrite::failed leaves a Stop whose retry is still pending to the sweeper', function () {
+    $pending = AdWriteAction::factory()->stop()->create(['state' => 'executing', 'executing_at' => now(), 'attempts' => 1, 'retry_at' => now()->addMinute()]);
+    $sentThenDied = AdWriteAction::factory()->stop()->create(['ad_account_id' => $this->acc->id, 'state' => 'executing', 'executing_at' => now(), 'attempts' => 2, 'retry_at' => null]);
+    $sentPending = AdWriteAction::factory()->stop()->create(['state' => 'executing', 'executing_at' => now(), 'attempts' => 2, 'retry_at' => now()->addMinute()]);
+
+    (new RetryStopWrite($pending->id, 1))->failed(new RuntimeException('x'));
+    (new RetryStopWrite($sentThenDied->id, 1))->failed(new RuntimeException('x'));
+    (new RetryStopWrite($sentPending->id, 1))->failed(new RuntimeException('x'));
+
+    expect($pending->fresh()->state)->toBe('executing')->and($sentPending->fresh()->state)->toBe('executing')
+        ->and($sentThenDied->fresh()->state)->toBe('failed');
 });

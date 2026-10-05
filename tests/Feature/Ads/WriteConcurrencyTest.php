@@ -256,6 +256,7 @@ it('kill switch off: a Run is 503 at propose and at confirm, a Stop succeeds, a 
     $other = Ad::factory()->for($this->acc, 'account')->create(['status' => 'ACTIVE']);
     expect(ccConfirm($buyer, ccPropose($buyer, $this->acc, $other->external_id, 'paused'))->state)->toBe('succeeded');
 
+    $this->travel(3)->minutes();
     app()->call([Queue::pushed(RetryStopWrite::class)->first(), 'handle']);
     expect($retrying->fresh()->state)->toBe('succeeded')->and(ccCalls())->toBe(2);
 });

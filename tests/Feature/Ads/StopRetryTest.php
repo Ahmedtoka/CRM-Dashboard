@@ -15,6 +15,7 @@ use App\Models\AdWriteStep;
 use App\Models\MediaBuyer;
 use App\Models\User;
 use App\Models\UserNotification;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -47,10 +48,16 @@ function srStatuses(): array
 }
 
 /** Runs every pushed RetryStopWrite by hand (QUEUE_CONNECTION=sync would ignore the delay), in push order. */
+function srDelay(RetryStopWrite $job): int
+{
+    return $job->delay instanceof DateTimeInterface ? max(0, (int) ceil(now()->diffInSeconds($job->delay, false))) : (int) $job->delay;
+}
+
 function srRunJobs(int $from = 0): int
 {
     $jobs = Queue::pushed(RetryStopWrite::class)->values();
     for ($i = $from; $i < $jobs->count(); $i++) {
+        Carbon::setTestNow(now()->addSeconds(srDelay($jobs[$i]) + 1));
         app()->call([$jobs[$i], 'handle']);
         $jobs = Queue::pushed(RetryStopWrite::class)->values();
     }
@@ -94,6 +101,7 @@ it('does nothing when the same retry job is delivered twice', function () {
     app(WriteActionService::class)->confirm($buyer, $x, $x->diff_hash);
 
     $job = Queue::pushed(RetryStopWrite::class)->first();
+    $this->travel(srDelay($job) + 1)->seconds();
     app()->call([$job, 'handle']);
     app()->call([$job, 'handle']);
 

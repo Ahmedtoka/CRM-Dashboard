@@ -246,7 +246,7 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
         }
 
         $fault = self::takeFault('setStatus');
-        if ($fault !== null && $fault !== 'unreachable_after') {
+        if ($fault !== null && $fault !== 'unreachable_after' && $fault !== 'none') {
             self::throwFault($fault);
         }
 
@@ -267,7 +267,7 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
     public function readObject(AdAccount $a, string $level, string $externalId): ObjectState
     {
         $fault = self::takeFault('readObject');
-        if ($fault !== null) {
+        if ($fault !== null && $fault !== 'none') {
             self::throwFault($fault);
         }
 
@@ -322,7 +322,7 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
      * Test helper: the next $times calls of $op fail.
      *
      * @param  'setStatus'|'readObject'  $op
-     * @param  string  $kind  rate (regain 120 s) | rate:<seconds> | unreachable_before | unreachable_after | rejected | permission | token
+     * @param  string  $kind  none (a call that works, to reach a later fault) | rate (regain 120 s) | rate:<seconds> | unreachable_before | unreachable_after | rejected | permission | token
      */
     public static function failNext(string $op, string $kind, int $times = 1): void
     {

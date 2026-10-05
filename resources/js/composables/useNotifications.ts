@@ -26,6 +26,7 @@ export const TYPE_KEY = {
     'ads.token_expiring': 'ads_token_expiring',
     'ads.data_health': 'ads_data_health',
     'ads.stop_failed': 'ads_stop_failed',
+    'ads.stop_unknown': 'ads_stop_unknown',
 } as const;
 
 /** Desktop notification bodies never carry more than this many characters of a message (privacy ruling). */

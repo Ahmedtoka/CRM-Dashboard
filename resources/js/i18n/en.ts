@@ -2868,6 +2868,7 @@ const en: Messages = {
         ads_token_scope_missing_item: 'The ad connection "{name}" is read-only: its token has no ads_management permission',
         ads_token_expiring_item: 'The token of the ad connection "{name}" expires in {days} days: replace it',
         ads_stop_failed_item: 'The Stop of "{name}" ({account}) could not be sent: pause it in Ads Manager',
+        ads_stop_unknown_item: 'The platform did not confirm the Stop of "{name}" ({account}): check in Ads Manager that it is paused',
         channel_problem_codes: {
             token_missing: 'No token saved — reconnect the account',
             token_invalid: 'The token is no longer valid — reconnect the account',
@@ -2896,6 +2897,7 @@ const en: Messages = {
             ads_data_health: 'Ads data health',
             ads_token_expiring: 'Ad token expires soon',
             ads_stop_failed: 'A Stop could not be sent',
+            ads_stop_unknown: 'A Stop is not confirmed',
         },
     },
     shortcuts: {
