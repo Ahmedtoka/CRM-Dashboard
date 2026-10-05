@@ -120,8 +120,30 @@ export interface AdsSync {
     errors: { account: string; error: string }[];
 }
 
+/** One data-health reason for the accounts of the current filter (DataHealth::forFilter). */
+export interface AdsDataHealthReason {
+    reason: 'reconnect' | 'stale' | 'read_only' | 'incomplete' | 'gap';
+    /** At most three account names. */
+    accounts: string[];
+    /** Accounts beyond the three named. */
+    more: number;
+}
+
+export interface AdsDataHealth {
+    reasons: AdsDataHealthReason[];
+}
+
+/** BuildsAdsPages::bannerProps: what the data-health banner shows. */
+export interface AdsBannerProps {
+    data_health: AdsDataHealth;
+    /** True until the owner passes the Phase A gate (ads:gate --pass). */
+    numbers_under_review: boolean;
+    /** The range was cut at the history start. */
+    clamped_to_history: boolean;
+}
+
 /** BuildsAdsPages::commonProps — on every report page. `buyers` is empty for media buyers. */
-export interface AdsCommonProps {
+export interface AdsCommonProps extends AdsBannerProps {
     buyers: AdsOption[];
     platforms: AdPlatformValue[];
     currency: string;
@@ -511,6 +533,8 @@ export interface AdsSyncProps {
 
 export interface AdsAccountsProps {
     connections: AdConnectionRow[];
+    /** Share of the last `days` days' chat orders that carry a conversation; rate is null with no chat orders. */
+    link_rate: { rate: number | null; orders: number; linked: number; days: number };
     /** Ids of accounts with a sync running or waiting in the queue. */
     syncing: number[];
     buyers: AdBuyerOption[];
@@ -756,7 +780,7 @@ export interface AdActionLogRow {
     error: string | null;
 }
 
-export interface AdsActionsProps {
+export interface AdsActionsProps extends AdsBannerProps {
     currency: string;
     days: number;
     suggestions: AdSuggestion[];

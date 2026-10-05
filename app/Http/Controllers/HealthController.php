@@ -2,10 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Ads\Sync\SyncAdAccount;
 use App\Enums\Platform;
+use App\Models\AdAccount;
+use App\Models\AdsApiUsage;
+use App\Models\AdsSyncRun;
 use App\Models\ChannelAccount;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -52,6 +57,7 @@ class HealthController extends Controller
             'scheduler_last_run' => Cache::get('crm:scheduler_heartbeat'),
             'shopify' => $this->shopifyStatus(),
             'channels' => $this->channelStatuses(),
+            'ads' => $this->adsStatus(),
         ]);
     }
 
@@ -206,6 +212,34 @@ class HealthController extends Controller
         } catch (Throwable) {
             return 'error';
         }
+    }
+
+    /**
+     * Ads sync health in numbers only (no account names, no tokens): how late the stalest active account is, stuck runs,
+     * failed sync jobs of the last day, the last Meta usage reading and how old the scheduler beat is.
+     *
+     * @return array<string, int|float|null>
+     */
+    private function adsStatus(): array
+    {
+        $out = ['max_staleness_minutes' => null, 'stuck_runs' => null, 'failed_sync_jobs_24h' => null, 'last_usage_pct' => null, 'scheduler_age_minutes' => null];
+
+        try {
+            $last = AdsSyncRun::query()->where('status', 'ok')->whereIn('ad_account_id', AdAccount::query()->where('is_active', true)->select('id'))
+                ->groupBy('ad_account_id')->selectRaw('MAX(finished_at) as at')->pluck('at');
+            $oldest = $last->filter()->map(fn ($at) => Carbon::parse((string) $at, 'UTC'))->min();
+            $out['max_staleness_minutes'] = $oldest === null ? null : max(0, (int) $oldest->diffInMinutes(now(), true));
+            $out['stuck_runs'] = AdsSyncRun::query()->where('status', 'running')->where('started_at', '<', now()->subSeconds((new SyncAdAccount(0))->timeout + 600))->count();
+            $out['failed_sync_jobs_24h'] = DB::table('failed_jobs')->where('failed_at', '>=', now()->subDay())->where('payload', 'like', '%SyncAdAccount%')->count();
+            $usage = AdsApiUsage::query()->orderByDesc('recorded_at')->orderByDesc('id')->value('max_pct');
+            $out['last_usage_pct'] = $usage === null ? null : (float) $usage;
+            $beat = Cache::get('crm:scheduler_heartbeat');
+            $out['scheduler_age_minutes'] = $beat ? max(0, (int) Carbon::parse((string) $beat)->diffInMinutes(now(), true)) : null;
+        } catch (Throwable) {
+            // Never throw from health: whatever was gathered stays, the rest is null.
+        }
+
+        return $out;
     }
 
     /** @return array<string, string> */

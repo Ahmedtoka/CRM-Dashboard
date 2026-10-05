@@ -8,6 +8,7 @@ import WhyList from '@/components/ads/WhyList.vue';
 import WinnerBadge from '@/components/ads/WinnerBadge.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import DataHealthBanner from '@/components/ads/DataHealthBanner.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type AdsQueryValue, formatAdsMoney, formatDayLong, formatPct, formatQty, formatRoas, visitAds } from '@/lib/ads';
@@ -69,6 +70,7 @@ const breadcrumbs = computed(() => [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-[1400px] space-y-4 p-3 md:p-6">
+            <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
             <PageHeader :title="t('ads.winners.title')" :description="windowLabel">
                 <AdsRangeBar :filters="filters" :platforms="platforms" :buyers="buyers" :keep="keep" />
             </PageHeader>

@@ -133,6 +133,8 @@ function statusChip(c: AdConnectionRow): { label: string; tone: 'positive' | 'wa
 
 const tokenDate = (iso: string | null): string => (iso ? formatDayLong(iso.slice(0, 10), locale.value) : t('ads.accounts.token_never'));
 
+const linkRateLabel = computed(() => (props.link_rate.rate === null ? t('ads.accounts.link_rate_none') : `${Math.round(props.link_rate.rate * 100)}%`));
+
 const accountActive = adAccountActive;
 const accountStatusLabel = (status: string | null) => adAccountStatusLabel(status, t);
 
@@ -230,6 +232,12 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                     <Plus aria-hidden="true" />{{ t('ads.accounts.connect') }}
                 </button>
             </PageHeader>
+
+            <p class="rounded-lg bg-card px-4 py-3 text-xs shadow-card" data-testid="ads-link-rate">
+                <span class="font-medium">{{ t('ads.accounts.link_rate') }}:</span>
+                <span class="ms-1 text-sm font-semibold tabular-nums">{{ linkRateLabel }}</span>
+                <span v-if="link_rate.rate !== null" class="ms-2 text-muted-foreground">{{ t('ads.accounts.link_rate_hint', { linked: link_rate.linked, orders: link_rate.orders, days: link_rate.days }) }}</span>
+            </p>
 
             <section v-for="platform in platforms" :key="platform.value" class="space-y-3" :aria-label="platform.label">
                 <div class="flex items-center gap-2">

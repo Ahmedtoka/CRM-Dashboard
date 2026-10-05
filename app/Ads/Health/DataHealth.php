@@ -4,6 +4,7 @@ namespace App\Ads\Health;
 
 use App\Ads\AdsSettings;
 use App\Ads\Platforms\Meta\UsageRecorder;
+use App\Ads\Reports\AdsFilter;
 use App\Ads\Sync\SyncAdAccount;
 use App\Inbox\UserNotifier;
 use App\Mail\AdsSystemAlert;
@@ -19,6 +20,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
@@ -56,30 +58,33 @@ class DataHealth
      * stale, reconnect, read_only, control_gap and usage for each given account (Meta accounts with a connection).
      *
      * @param  Collection<int, AdAccount>  $accounts
+     * @param  list<string>  $kinds  which of the checks to run (the banner needs only the first three)
      * @return list<HealthCheck>
      */
-    public function accountChecks(Collection $accounts): array
+    public function accountChecks(Collection $accounts, array $kinds = ['stale', 'reconnect', 'read_only', 'control_gap', 'usage']): array
     {
         $ids = $accounts->pluck('id')->all();
-        $lastOk = AdsSyncRun::query()->where('status', 'ok')->whereIn('ad_account_id', $ids)->groupBy('ad_account_id')
-            ->selectRaw('ad_account_id, MAX(finished_at) as at')->pluck('at', 'ad_account_id');
+        $lastOk = in_array('stale', $kinds, true)
+            ? AdsSyncRun::query()->where('status', 'ok')->whereIn('ad_account_id', $ids)->groupBy('ad_account_id')->selectRaw('ad_account_id, MAX(finished_at) as at')->pluck('at', 'ad_account_id')
+            : collect();
 
         // D-1 (the Cairo yesterday): today is still settling at the platform, so the control is compared on the last closed day.
         $day = CarbonImmutable::now('Africa/Cairo')->subDay()->toDateString();
-        $control = AdAccountDaily::query()->whereIn('ad_account_id', $ids)->whereDate('date', $day)->pluck('spend', 'ad_account_id');
-        $itemised = AdDailyMetric::query()->whereIn('ad_account_id', $ids)->whereDate('date', $day)->groupBy('ad_account_id')
-            ->selectRaw('ad_account_id, SUM(spend) as spend')->pluck('spend', 'ad_account_id');
+        $gap = in_array('control_gap', $kinds, true);
+        $control = $gap ? AdAccountDaily::query()->whereIn('ad_account_id', $ids)->whereDate('date', $day)->pluck('spend', 'ad_account_id') : collect();
+        $itemised = $gap ? AdDailyMetric::query()->whereIn('ad_account_id', $ids)->whereDate('date', $day)->groupBy('ad_account_id')
+            ->selectRaw('ad_account_id, SUM(spend) as spend')->pluck('spend', 'ad_account_id') : collect();
 
         $out = [];
         foreach ($accounts as $a) {
             $base = ['account_id' => $a->id, 'account' => $a->name];
             $c = $a->connection;
 
-            $out[] = $this->stale($a, $lastOk[$a->id] ?? null, $base);
-            $out[] = new HealthCheck("reconnect:{$a->id}", $c?->status === 'needs_reconnect' ? HealthCheck::CRITICAL : HealthCheck::OK, $base);
-            $out[] = new HealthCheck("read_only:{$a->id}", $c?->read_only ? HealthCheck::WARN : HealthCheck::OK, $base);
-            $out[] = $this->controlGap($a, (float) ($control[$a->id] ?? 0), (float) ($itemised[$a->id] ?? 0), $day, $base);
-            $out[] = $this->usageCheck($a, $base);
+            in_array('stale', $kinds, true) && $out[] = $this->stale($a, $lastOk[$a->id] ?? null, $base);
+            in_array('reconnect', $kinds, true) && $out[] = new HealthCheck("reconnect:{$a->id}", $c?->status === 'needs_reconnect' ? HealthCheck::CRITICAL : HealthCheck::OK, $base);
+            in_array('read_only', $kinds, true) && $out[] = new HealthCheck("read_only:{$a->id}", $c?->read_only ? HealthCheck::WARN : HealthCheck::OK, $base);
+            $gap && $out[] = $this->controlGap($a, (float) ($control[$a->id] ?? 0), (float) ($itemised[$a->id] ?? 0), $day, $base);
+            in_array('usage', $kinds, true) && $out[] = $this->usageCheck($a, $base);
         }
 
         return $out;
@@ -99,6 +104,116 @@ class DataHealth
         AdsHealthState::query()->whereNotIn('key', array_map(fn (HealthCheck $c) => $c->key, $checks))->delete();
 
         return $checks;
+    }
+
+    /**
+     * Banner reasons for the accounts a report filter covers, worst first: reconnect, stale, read_only, incomplete, gap.
+     * Names are capped at three per reason; `more` counts the rest. Reads the facts (no state writes), cached 60 s per filter.
+     *
+     * @return array{reasons: list<array{reason: string, accounts: list<string>, more: int}>}
+     */
+    public function forFilter(AdsFilter $f): array
+    {
+        if ($f->isEmpty() || ($f->platform !== null && $f->platform !== 'meta')) {
+            return ['reasons' => []];
+        }
+
+        $key = 'ads:health:filter:'.sha1(json_encode([$f->fromDate(), $f->toDate(), $f->accountIds, $f->restrictBuyerId]));
+
+        return Cache::remember($key, 60, fn () => $this->reasonsFor($f));
+    }
+
+    /** @return array{reasons: list<array{reason: string, accounts: list<string>, more: int}>} */
+    private function reasonsFor(AdsFilter $f): array
+    {
+        $accounts = AdAccount::query()->with('connection')->where('platform', 'meta')->where('is_active', true)
+            ->when($f->accountIds !== null, fn ($q) => $q->whereIn('id', $f->accountIds))->orderBy('id')->get();
+        if ($accounts->isEmpty()) {
+            return ['reasons' => []];
+        }
+
+        /** @var array<string, array<int, int>> $found reason => [account id => severity rank] */
+        $found = [];
+        foreach ($this->accountChecks($accounts, ['stale', 'reconnect', 'read_only']) as $c) {
+            if ($c->isBad()) {
+                $found[$c->reason()][$c->accountId()] = HealthCheck::rank($c->status);
+            }
+        }
+        foreach ($this->incompleteAccounts($accounts, $f) as $id) {
+            $found['incomplete'][$id] = 1;
+        }
+        foreach ($this->gapAccounts($accounts, $f) as $id) {
+            $found['gap'][$id] = 1;
+        }
+
+        $names = $accounts->pluck('name', 'id');
+        $reasons = [];
+        foreach (['reconnect', 'stale', 'read_only', 'incomplete', 'gap'] as $reason) {
+            if (empty($found[$reason])) {
+                continue;
+            }
+            $ids = array_keys($found[$reason]);
+            usort($ids, fn ($a, $b) => [$found[$reason][$b], (string) $names[$a]] <=> [$found[$reason][$a], (string) $names[$b]]);
+            $reasons[] = [
+                'reason' => $reason,
+                'accounts' => array_map(fn ($id) => (string) $names[$id], array_slice($ids, 0, 3)),
+                'more' => max(0, count($ids) - 3),
+            ];
+        }
+
+        return ['reasons' => $reasons];
+    }
+
+    /** Accounts whose complete_from (the first day with full control and sync coverage) is after the range start. @return list<int> */
+    private function incompleteAccounts(Collection $accounts, AdsFilter $f): array
+    {
+        if (! Schema::hasColumn('ad_accounts', 'complete_from')) {
+            return [];
+        }
+        $from = $f->fromDate();
+
+        return $accounts->filter(function (AdAccount $a) use ($from) {
+            $c = $a->getAttribute('complete_from');
+
+            return $c !== null && substr((string) $c, 0, 10) > $from;
+        })->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+    }
+
+    /** Accounts whose ad-level spend differs from the control total by more than the tolerance, on the closed days of the range. @return list<int> */
+    private function gapAccounts(Collection $accounts, AdsFilter $f): array
+    {
+        $ids = $accounts->pluck('id')->all();
+        $today = CarbonImmutable::now(AdsFilter::TIMEZONE)->toDateString(); // today is still settling at the platform
+        $control = AdAccountDaily::query()->whereIn('ad_account_id', $ids)->whereBetween('date', [$f->fromDate(), $f->toDate()])->where('date', '<', $today)
+            ->get(['ad_account_id', 'date', 'spend']);
+        if ($control->isEmpty()) {
+            return [];
+        }
+        $ads = AdDailyMetric::query()->whereIn('ad_account_id', $ids)->whereBetween('date', [$f->fromDate(), $f->toDate()])
+            ->groupBy('ad_account_id', 'date')->selectRaw('ad_account_id, date, SUM(spend) as spend')->get()
+            ->mapWithKeys(fn ($r) => [$r->ad_account_id.'|'.substr((string) $r->date, 0, 10) => (float) $r->spend]);
+
+        $tolerance = (float) config('crm.ads.control_tolerance_pct', 0.5);
+        $bad = [];
+        foreach ($control->groupBy('ad_account_id') as $id => $rows) {
+            $c = (float) $rows->sum('spend');
+            $a = (float) $rows->sum(fn ($r) => $ads[$r->ad_account_id.'|'.substr((string) $r->date, 0, 10)] ?? 0);
+            if ($c > 0 && abs($a - $c) / $c * 100 > $tolerance) {
+                $bad[] = (int) $id;
+            }
+        }
+
+        return $bad;
+    }
+
+    /** @return array{rate: ?float, orders: int, linked: int, days: int} */
+    public function linkRateStats(): array
+    {
+        $q = DB::table('orders')->where('source', 'chat')->where('created_at', '>=', now()->subDays(14));
+        $orders = (clone $q)->count();
+        $linked = (clone $q)->whereNotNull('conversation_id')->count();
+
+        return ['rate' => $orders === 0 ? null : round($linked / $orders, 4), 'orders' => $orders, 'linked' => $linked, 'days' => 14];
     }
 
     private function apply(HealthCheck $check): void
@@ -259,14 +374,9 @@ class DataHealth
     }
 
     /** Share of the chat-origin orders of the last 14 days that carry a conversation (so they can be credited to an ad). */
+    /** Share of the chat-origin orders of the last 14 days that carry a conversation (so they can be credited to an ad). */
     private function linkRate(): HealthCheck
     {
-        $q = DB::table('orders')->where('source', 'chat')->where('created_at', '>=', now()->subDays(14));
-        $orders = (clone $q)->count();
-        $linked = (clone $q)->whereNotNull('conversation_id')->count();
-
-        return new HealthCheck('link_rate', HealthCheck::OK, [
-            'rate' => $orders === 0 ? null : round($linked / $orders, 4), 'orders' => $orders, 'linked' => $linked, 'days' => 14,
-        ]);
+        return new HealthCheck('link_rate', HealthCheck::OK, $this->linkRateStats());
     }
 }

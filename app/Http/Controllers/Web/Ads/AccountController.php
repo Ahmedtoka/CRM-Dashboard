@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web\Ads;
 
 use App\Ads\Buyers\AssignmentService;
+use App\Ads\Health\DataHealth;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\DriverFactory;
@@ -92,6 +93,8 @@ class AccountController extends Controller
 
         return Inertia::render('Ads/Accounts', [
             'connections' => $connections,
+            // Share of the last 14 days' chat orders that carry a conversation (so an ad can be credited).
+            'link_rate' => app(DataHealth::class)->linkRateStats(),
             // Accounts with a sync running now or a sync job still waiting in the queue.
             'syncing' => collect($queue->waiting())->pluck('account_id')
                 ->merge(AdsSyncRun::query()->where('status', 'running')->pluck('ad_account_id'))

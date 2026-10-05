@@ -6,6 +6,7 @@ import StatusToggle from '@/components/ads/StatusToggle.vue';
 import WhyList from '@/components/ads/WhyList.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import DataHealthBanner from '@/components/ads/DataHealthBanner.vue';
 import RelativeTime from '@/components/crm/RelativeTime.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
@@ -39,6 +40,7 @@ const breadcrumbs = computed(() => [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-[1400px] space-y-6 p-3 md:p-6">
+            <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
             <PageHeader :title="t('ads.actions.title')" :description="t('ads.actions.hint')" />
 
             <p class="text-2xs text-muted-foreground" :title="t('ads.scope_note_tip')">{{ t('ads.scope_note') }}</p>

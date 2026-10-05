@@ -9,6 +9,7 @@ import PlatformChip from '@/components/ads/PlatformChip.vue';
 import RevenueSummaryCard from '@/components/ads/RevenueSummaryCard.vue';
 import DataTable from '@/components/crm/DataTable.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import DataHealthBanner from '@/components/ads/DataHealthBanner.vue';
 import StatCard from '@/components/crm/StatCard.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
@@ -137,6 +138,7 @@ const breadcrumbs = computed(() => [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
+            <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
             <PageHeader :title="buyer.name" :description="t('ads.buyers.show_hint')">
                 <AdsRangeBar :filters="filters" :platforms="platforms" :show-buyer="false" />
             </PageHeader>

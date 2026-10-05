@@ -13,6 +13,7 @@ use App\Ads\Commands\SetupTeamCommand;
 use App\Ads\Control\Commands\ClearOpenKeysCommand;
 use App\Ads\Control\Commands\WritableAccountsCommand;
 use App\Ads\Doctor\DoctorCommand;
+use App\Ads\Health\Commands\GateCommand;
 use App\Ads\Health\Commands\HealthCommand;
 use App\Ads\Health\QueueHeartbeat;
 use App\Ads\Materials\Commands\StockWatchCommand;
@@ -46,7 +47,7 @@ class AdsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {

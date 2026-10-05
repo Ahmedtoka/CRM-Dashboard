@@ -51,6 +51,7 @@ class ActionController extends Controller
 
         return Inertia::render('Ads/Actions', [
             'currency' => app(AdsOverview::class)->currency($filter),
+            ...$this->bannerProps($filter),
             'days' => self::SUGGEST_DAYS,
             'suggestions' => $suggestions,
             'log' => $log,
