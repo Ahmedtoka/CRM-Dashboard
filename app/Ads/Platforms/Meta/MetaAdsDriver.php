@@ -190,6 +190,23 @@ class MetaAdsDriver implements AdPlatformDriver
         return $out;
     }
 
+    /** One light paged call: id and the two statuses of every campaign, archived and deleted included. */
+    public function campaignStatuses(AdAccount $a): ?array
+    {
+        $out = [];
+        foreach ($this->api->paginate($this->token($a->connection), $this->actId($a).'/campaigns', [
+            'fields' => 'id,status,effective_status',
+            'effective_status' => json_encode(self::INSIGHTS_STATUSES),
+            'limit' => 500,
+        ]) as $r) {
+            if (! empty($r['id'])) {
+                $out[(string) $r['id']] = ['status' => $r['status'] ?? null, 'effective_status' => $r['effective_status'] ?? null];
+            }
+        }
+
+        return $out;
+    }
+
     public function creativeMedia(AdAccount $a, array $adExternalIds): array
     {
         $token = $this->token($a->connection);

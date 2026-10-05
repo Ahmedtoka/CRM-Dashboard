@@ -36,6 +36,14 @@ interface AdPlatformDriver
     public function statuses(AdAccount $a): array;
 
     /**
+     * Light campaign list for the hourly run (id, status, effective status of every campaign), so the active-campaign
+     * scope stays about an hour fresh while the full ad list is read nightly only. null = not available on this platform.
+     *
+     * @return array<string, array{status:?string, effective_status:?string}>|null
+     */
+    public function campaignStatuses(AdAccount $a): ?array;
+
+    /**
      * @param  list<string>  $adExternalIds
      * @return list<Data\CreativeMedia>
      */

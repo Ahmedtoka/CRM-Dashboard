@@ -53,6 +53,8 @@ class MetaAdsApi
     /** GET one page. @return array<string, mixed> */
     public function get(string $token, string $path, array $query = []): array
     {
+        $this->admit($this->actOf($path));
+
         return $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)
             ->get($this->url($path), $query), null, $path);
     }
@@ -75,8 +77,36 @@ class MetaAdsApi
             ->attach($fileField, $contents, $filename)->post($this->url($path), $fields), $token, $path);
     }
 
-    /** Admission hook before a read: a no-op now, filled in by the quota admission task. */
-    public function admit(?string $actExternalId): void {}
+    /**
+     * Quota admission before a READ (A5): while the busiest usage Meta reported for this ad account in the last 15
+     * minutes is at or above crm.ads.sync.admission_pct, nothing is sent and RateLimited carries when to try again
+     * (Meta's regain time, at least 5 minutes). Reads without an ad account in the path, and every write, pass.
+     */
+    public function admit(?string $actExternalId): void
+    {
+        if ($actExternalId === null || ! config('crm.ads.sync.admission_enabled', true)) {
+            return;
+        }
+        $recorder = app(UsageRecorder::class);
+        $accountId = $recorder->accountIdFor($actExternalId);
+        if ($accountId === null) {
+            return;
+        }
+        $busiest = $recorder->busiest($accountId, 15);
+        $limit = (float) config('crm.ads.sync.admission_pct', 75);
+        if ($busiest === null || $busiest['max_pct'] < $limit) {
+            return;
+        }
+        $wait = max(300, $busiest['regain_minutes'] * 60);
+        throw new RateLimited(sprintf('Sync deferred by Meta quota: usage was %d%% in the last 15 minutes; retry in %d min.',
+            (int) $busiest['max_pct'], intdiv($wait, 60)), $wait);
+    }
+
+    /** The act_<id> an API path is about, or null. */
+    private function actOf(string $path): ?string
+    {
+        return preg_match('/\bact_(\d+)/', $path, $m) ? 'act_'.$m[1] : null;
+    }
 
     /**
      * Throws RateLimited (nothing sent) while a recent write reported usage above the limit for this token.
@@ -97,6 +127,7 @@ class MetaAdsApi
      */
     public function paginate(string $token, string $path, array $query = [], int $maxPages = 200): array
     {
+        $this->admit($this->actOf($path)); // once, before the first page; later pages are guarded by their own headers
         $rows = [];
         $limit = (int) ($query['limit'] ?? 0);
         $page = $this->shrinking(fn (int $l) => $this->get($token, $path, $l > 0 ? ['limit' => $l] + $query : $query), $limit);
@@ -192,7 +223,7 @@ class MetaAdsApi
             $message = (string) ($response->json('error.message') ?? 'Meta API error (HTTP '.$response->status().')');
             $code = (int) $response->json('error.code', 0);
             if (in_array($code, self::RATE_CODES, true)) {
-                throw new RateLimited($this->scrub($message));
+                throw new RateLimited($this->scrub($message), $this->regainSeconds($response));
             }
             if ($code === 190 || in_array((int) $response->json('error.error_subcode', 0), self::TOKEN_SUBCODES, true)) {
                 throw new TokenInvalid($this->scrub($message));
@@ -232,7 +263,7 @@ class MetaAdsApi
     {
         $high = $this->highUsage($response);
         if ($high !== null) {
-            throw new RateLimited('Meta usage is at '.$high['pct'].'% ('.$high['metric'].'); retry later.');
+            throw new RateLimited('Meta usage is at '.$high['pct'].'% ('.$high['metric'].'); retry later.', $high['minutes'] > 0 ? $high['minutes'] * 60 : null);
         }
     }
 
@@ -269,6 +300,20 @@ class MetaAdsApi
         }
 
         return null;
+    }
+
+    /** Meta's longest estimated_time_to_regain_access in the usage header, in seconds; null when it gave none. */
+    private function regainSeconds(Response $response): ?int
+    {
+        $decoded = json_decode($response->header('x-business-use-case-usage'), true);
+        $minutes = 0;
+        foreach (is_array($decoded) ? $decoded : [] as $entries) {
+            foreach ((array) $entries as $entry) {
+                $minutes = max($minutes, (int) (is_array($entry) ? ($entry['estimated_time_to_regain_access'] ?? 0) : 0));
+            }
+        }
+
+        return $minutes > 0 ? $minutes * 60 : null;
     }
 
     private function busyKey(string $token): string

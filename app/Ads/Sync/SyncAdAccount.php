@@ -24,8 +24,8 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
 
     /**
      * Meta's usage quota is shared (Arena syncs the same accounts on the same app), so a backfill can meet
-     * «retry later» for hours. Each RateLimited releases the job for 15 minutes and uses one try: 30 tries
-     * keep it coming back for about 7.5 hours, while a real error still fails it after 3 (maxExceptions).
+     * «retry later» for hours. Each RateLimited releases the job for Meta's regain time (quota admission: at least
+     * 5 minutes; 15 minutes when Meta gave none) and uses one try, while a real error still fails it after 3 (maxExceptions).
      */
     public int $tries = 30;
 
@@ -50,10 +50,14 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
     /** The user who clicked, for a manual run. */
     public ?int $triggeredById = null;
 
-    public function __construct(public int $accountId, public int $days = 3, public string $kind = 'recent', string $trigger = 'schedule', ?int $triggeredById = null)
+    /** false = the hourly run: metrics, control totals and campaign statuses, no ad list (that is read nightly). */
+    public bool $withAds = true;
+
+    public function __construct(public int $accountId, public int $days = 3, public string $kind = 'recent', string $trigger = 'schedule', ?int $triggeredById = null, bool $withAds = true)
     {
         $this->trigger = $trigger;
         $this->triggeredById = $triggeredById;
+        $this->withAds = $withAds;
         $this->runKey = (string) Str::uuid();
 
         // Same long lane as ReconcileShopify: `commercelong` queue (Supervisor program
@@ -94,7 +98,9 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
     public function handle(AdsSyncService $sync): void
     {
         if ($this->runKey === null) {
-            $this->run($sync);
+            if ($this->run($sync)) {
+                $this->clearPending();
+            }
 
             return;
         }
@@ -111,10 +117,21 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
         try {
             if ($this->run($sync)) {
                 Cache::put($done, true, now()->addHours(12));
+                $this->clearPending();
             }
         } finally {
             $running->release();
         }
+    }
+
+    /**
+     * The hourly dispatch marks the account pending (ads:sync, CAS on ad_accounts.sync_pending_since). Any sync job of
+     * the account that ends clears it: the hourly job itself, or the manual/backfill job holding the same unique lock
+     * that made the hourly dispatch a no-op. A released job keeps it, so no second hourly job piles up meanwhile.
+     */
+    private function clearPending(): void
+    {
+        AdAccount::whereKey($this->accountId)->whereNotNull('sync_pending_since')->update(['sync_pending_since' => null]);
     }
 
     /** The queue gave up (timeout, exhausted tries, a crash): close this job's run, and only this one. */
@@ -125,6 +142,7 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
             AdsSyncRun::where('run_key', $this->runKey)->where('status', 'running')
                 ->update(['status' => 'error', 'error' => $message, 'finished_at' => now()]);
         }
+        $this->clearPending();
         Log::error('ads sync job failed', ['account' => $this->accountId, 'error' => $message]);
     }
 
@@ -155,13 +173,14 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
 
                 return true;
             }
-            $sync->syncAccount($account, $window[0], $window[1], $this->kind, true, $this->trigger, $this->triggeredById, $this->runKey);
+            $sync->syncAccount($account, $window[0], $window[1], $this->kind, $this->withAds, $this->trigger, $this->triggeredById, $this->runKey);
 
             return true;
         } catch (RateLimited $e) {
             // Only a real async queue job can be released; sync/inline runs must surface the failure.
+            // Meta's regain time (or the admission delay) when known, else 15 minutes.
             if ($this->job && ! $this->job instanceof SyncJob) {
-                $this->release(900);
+                $this->release($e->retryAfterSeconds ?? 900);
 
                 return false;
             }

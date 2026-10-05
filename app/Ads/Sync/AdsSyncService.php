@@ -109,6 +109,7 @@ final class AdsSyncService
     private function runSync(AdAccount $a, AdsSyncRun $run, CarbonImmutable $from, CarbonImmutable $to, bool $withAds = true, bool $sweep = false): AdsSyncRun
     {
         $sweepWarning = null;
+        $campaignWarning = null;
         $swept = false;
         $driver = $this->drivers->for(AdPlatform::from($a->platform));
 
@@ -123,6 +124,9 @@ final class AdsSyncService
             $this->upsertAccountDaily($a, $control);
             if ($sweep && $withAds) {
                 [$swept, $sweepWarning] = $this->sweepStatuses($a, $run, $driver);
+            }
+            if (! $withAds && $run->kind === 'recent') {
+                $campaignWarning = $this->refreshCampaignStatuses($a, $driver);
             }
         } catch (AdsApiException $e) {
             $run->update(['status' => 'error', 'error' => self::scrub($e->getMessage()), 'finished_at' => now()]);
@@ -143,7 +147,7 @@ final class AdsSyncService
         }
 
         // Metrics are committed; a media failure must not turn the run into an error.
-        $warnings = array_values(array_filter([$controlWarning, $guard, $sweepWarning]));
+        $warnings = array_values(array_filter([$controlWarning, $guard, $sweepWarning, $campaignWarning]));
         try {
             $this->fetchMedia($a, Ad::where('ad_account_id', $a->id)->whereNull('media_fetched_at')
                 ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'unknown')) // minimal ads have no creative to fetch
@@ -331,6 +335,37 @@ final class AdsSyncService
         }
 
         return [true, $warning];
+    }
+
+    /**
+     * Hourly run without the ad list: the campaigns' own and effective statuses from one light call, so the
+     * active-campaign scope of the screens is never more than about an hour stale. Only campaigns already stored are
+     * updated (new ones arrive with the nightly ad list). A failed call is a warning; a dead token or a rate limit
+     * stops the run.
+     */
+    private function refreshCampaignStatuses(AdAccount $a, AdPlatformDriver $driver): ?string
+    {
+        try {
+            $list = $driver->campaignStatuses($a);
+        } catch (TokenInvalid|RateLimited $e) {
+            throw $e;
+        } catch (AdsApiException $e) {
+            return 'Campaign statuses: '.self::scrub($e->getMessage());
+        }
+        $now = now();
+        $groups = []; // one UPDATE per (status, effective status) pair
+        foreach ($list ?? [] as $externalId => $st) {
+            $groups[($st['status'] ?? '')."\0".($st['effective_status'] ?? '')][] = (string) $externalId;
+        }
+        foreach ($groups as $pair => $ids) {
+            [$status, $effective] = explode("\0", $pair);
+            $values = array_filter(['status' => $status, 'effective_status' => $effective], fn ($v) => $v !== '') + ['last_seen_at' => $now];
+            foreach (array_chunk($ids, self::CHUNK) as $chunk) {
+                AdCampaign::where('ad_account_id', $a->id)->whereIn('external_id', $chunk)->update($values);
+            }
+        }
+
+        return null;
     }
 
     /**

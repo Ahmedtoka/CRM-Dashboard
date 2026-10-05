@@ -145,6 +145,17 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
         return ['ads' => [], 'campaigns' => $campaigns];
     }
 
+    /** Every fake campaign is active. */
+    public function campaignStatuses(AdAccount $a): ?array
+    {
+        $out = [];
+        foreach ($this->structure($a) as $ad) {
+            $out[(string) $ad['campaign_id']] = ['status' => 'ACTIVE', 'effective_status' => 'ACTIVE'];
+        }
+
+        return $out;
+    }
+
     public function creativeMedia(AdAccount $a, array $adExternalIds): array
     {
         return array_map(fn ($id) => new CreativeMedia(

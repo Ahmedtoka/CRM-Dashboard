@@ -411,6 +411,12 @@ return [
         'control_tolerance_pct' => 0.5,
         // First day ads history is kept for (Cairo day). Sync, backfill, discovery and reports never go before it.
         'history_start' => env('CRM_ADS_HISTORY_START', '2026-09-01'),
+        'sync' => [
+            // Quota admission (A5): a Meta read for an account is not sent while its busiest recorded usage of the
+            // last 15 minutes is at or above admission_pct; the job is retried later instead. Writes are never held.
+            'admission_enabled' => (bool) env('CRM_ADS_SYNC_ADMISSION', true),
+            'admission_pct' => 75,
+        ],
         // Inbox attribution (A4): a chat order is credited to the latest ad referral at most this many days before it.
         'inbox_window_days' => (int) env('CRM_ADS_INBOX_WINDOW_DAYS', 7),
         // The ad referral was first stored on this day; inbox history is complete from max(this, history_start).

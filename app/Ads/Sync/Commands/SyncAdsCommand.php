@@ -12,6 +12,7 @@ use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class SyncAdsCommand extends Command
@@ -19,6 +20,9 @@ class SyncAdsCommand extends Command
     protected $signature = 'ads:sync {--account= : Ad account id} {--platform= : meta|tiktok|google} {--days=3} {--now : Run synchronously, no queue}';
 
     protected $description = 'Sync ads and daily metrics for the active ad accounts';
+
+    /** A pending hourly sync older than this is taken over (its job was lost). */
+    public const PENDING_HOURS = 8;
 
     public function handle(AdsSyncService $sync, OrderAttribution $attribution): int
     {
@@ -42,7 +46,19 @@ class SyncAdsCommand extends Command
                 continue;
             }
             if (! $this->option('now')) {
-                SyncAdAccount::dispatch($a->id, $days, 'recent', 'schedule');
+                if ($days >= AdsSyncService::DEEP_DAYS) {
+                    // Nightly deep sync: the full ad list, the status sweep; its own unique lock.
+                    SyncAdAccount::dispatch($a->id, $days, 'recent', 'schedule');
+
+                    continue;
+                }
+                // Hourly: no ad list (nightly only), and at most one pending job per account (A5).
+                if (! $this->claimPending($a)) {
+                    $this->line("Skipped {$a->name}: a sync is already pending");
+
+                    continue;
+                }
+                SyncAdAccount::dispatch($a->id, $days, 'recent', 'schedule', null, false);
 
                 continue;
             }
@@ -73,6 +89,19 @@ class SyncAdsCommand extends Command
         $this->info(($this->option('now') ? 'Synced ' : 'Queued ').($accounts->count() - ($this->option('now') ? $failed : 0)).' account(s).');
 
         return $failed > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * CAS on ad_accounts.sync_pending_since: true for the one caller that marks the account pending. A marker older
+     * than PENDING_HOURS is taken over (its job was lost); ads:sweep-stuck-runs also clears those.
+     */
+    private function claimPending(AdAccount $a): bool
+    {
+        $now = now();
+
+        return DB::table('ad_accounts')->where('id', $a->id)
+            ->where(fn ($q) => $q->whereNull('sync_pending_since')->orWhere('sync_pending_since', '<', $now->copy()->subHours(self::PENDING_HOURS)))
+            ->update(['sync_pending_since' => $now]) === 1;
     }
 
     /** Best effort: an attribution failure must not fail the sync. */

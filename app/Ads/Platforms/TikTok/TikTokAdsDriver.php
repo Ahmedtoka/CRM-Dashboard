@@ -104,6 +104,11 @@ class TikTokAdsDriver implements AdPlatformDriver
         return ['ads' => null, 'campaigns' => null];
     }
 
+    public function campaignStatuses(AdAccount $a): ?array
+    {
+        return null;
+    }
+
     public function creativeMedia(AdAccount $a, array $adExternalIds): array
     {
         $adExternalIds = array_values(array_unique($adExternalIds));

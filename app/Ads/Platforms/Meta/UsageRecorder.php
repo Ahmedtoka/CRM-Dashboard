@@ -102,6 +102,12 @@ class UsageRecorder
         return min(999.99, max(0.0, (float) $v));
     }
 
+    /** ad_accounts.id of a Meta act_<id>, or null when the account is not stored. */
+    public function accountIdFor(string $actExternalId): ?int
+    {
+        return $this->accountId($actExternalId, '');
+    }
+
     private function accountId(string $path, string $headerKey): ?int
     {
         foreach ([$path, $headerKey] as $source) {
