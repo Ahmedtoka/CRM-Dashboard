@@ -14,9 +14,17 @@ class ClearOpenKeysCommand extends Command
 
     public function handle(): int
     {
-        // done, error (the ad may exist, so it was held), and rows that never finished (queue lost): all untouched for 24 h.
-        $n = AdPublication::query()->whereNotNull('open_key')->where('updated_at', '<', now()->subDay())
-            ->whereIn('status', [AdPublication::DONE, AdPublication::ERROR, AdPublication::QUEUED, AdPublication::UPLOADING, AdPublication::PROCESSING])
+        $cutoff = now()->subDay();
+
+        // Rows that never finished (queue lost) are failed in the same update that frees their key, so a delayed PublishAd
+        // job stops at isFinished() instead of creating a second ad after the user published again.
+        $stale = AdPublication::query()->whereNotNull('open_key')->where('updated_at', '<', $cutoff)
+            ->whereIn('status', [AdPublication::QUEUED, AdPublication::UPLOADING, AdPublication::PROCESSING])
+            ->update(['open_key' => null, 'status' => AdPublication::ERROR, 'error' => __('ads.publish.never_sent'), 'updated_at' => now()]);
+
+        // done, and error rows whose ad request was sent (the ad may exist, so the key was held): untouched for 24 h.
+        $n = $stale + AdPublication::query()->whereNotNull('open_key')->where('updated_at', '<', $cutoff)
+            ->whereIn('status', [AdPublication::DONE, AdPublication::ERROR])
             ->update(['open_key' => null]);
         $this->info("Released {$n} open key(s).");
 

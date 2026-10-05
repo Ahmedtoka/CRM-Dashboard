@@ -770,3 +770,32 @@ it('trims captions before computing the open key', function () {
     pubPost($this, $admin, $material, $a, 'key-0000-aaaa')->assertOk();
     pubPost($this, $admin, $material, $b, 'key-0000-bbbb')->assertStatus(409);
 });
+
+it('fails a stale queued row when clearing its key, so a late PublishAd job never creates a second ad', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $id = pubPost($this, $admin, $material, pubInput([$files[0]->id], 1) + ['account_id' => $acc->id], 'key-0000-aaaa')->json('publications.0.id');
+    AdPublication::whereKey($id)->update(['updated_at' => now()->subHours(25)]);
+
+    $this->artisan('ads:clear-open-keys')->assertSuccessful();
+
+    $row = AdPublication::find($id);
+    expect($row->status)->toBe('error')->and($row->open_key)->toBeNull()->and($row->error)->toBe(__('ads.publish.never_sent'));
+
+    $double = new class extends FakeAdsDriver
+    {
+        public static int $creates = 0;
+
+        public function createPausedAd(AdAccount $a, AdDraft $draft): string
+        {
+            self::$creates++;
+
+            return parent::createPausedAd($a, $draft);
+        }
+    };
+    $double::$creates = 0;
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+    (new PublishAd($id))->handle(app(DriverFactory::class));
+    expect($double::$creates)->toBe(0)->and($row->fresh()->status)->toBe('error');
+});
