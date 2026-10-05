@@ -55,7 +55,7 @@ return new class extends Migration
         if (! Schema::hasTable('ad_write_actions')) {
             return;
         }
-        $ids = DB::table('ad_write_actions')->where('source', 'legacy')->pluck('id');
+        $ids = DB::table('ad_write_actions')->where('source', 'legacy')->where('source_ref', 'like', 'ad_actions:%')->pluck('id'); // only the copies: the shim also writes source=legacy rows
         foreach ($ids->chunk(500) as $chunk) {
             DB::table('ad_write_steps')->whereIn('ad_write_action_id', $chunk->all())->delete();
             DB::table('ad_write_actions')->whereIn('id', $chunk->all())->delete();

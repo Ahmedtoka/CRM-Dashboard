@@ -95,3 +95,15 @@ it('archives a connection whose only history is in the new pipeline instead of d
 
     expect(AdPlatformConnection::whereKey($c->id)->exists())->toBeTrue()->and($c->fresh()->status)->toBe('disabled');
 });
+
+it('down() removes only the copied rows, never shim-written legacy actions', function () {
+    $shim = AdWriteAction::factory()->succeeded()->create(['source' => 'legacy', 'source_ref' => null]);
+    $m = require database_path('migrations/2026_10_07_100050_copy_ad_actions_to_ad_write_actions.php');
+    $m->up();
+    expect(AdWriteAction::where('source_ref', 'like', 'ad_actions:%')->count())->toBe(DB::table('ad_actions')->count());
+
+    $m->down();
+
+    expect(AdWriteAction::where('source_ref', 'like', 'ad_actions:%')->count())->toBe(0)
+        ->and(AdWriteAction::whereKey($shim->id)->exists())->toBeTrue();
+});
