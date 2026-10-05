@@ -129,7 +129,11 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
                 return true;
             }
             $to = CarbonImmutable::now('Africa/Cairo')->startOfDay();
-            $sync->syncAccount($account, $to->subDays(max($this->days, 1) - 1), $to, $this->kind, true, $this->trigger, $this->triggeredById);
+            $window = HistoryWindow::clamp($to->subDays(max($this->days, 1) - 1), $to);
+            if ($window === null) {
+                return true; // the whole window is before crm.ads.history_start
+            }
+            $sync->syncAccount($account, $window[0], $window[1], $this->kind, true, $this->trigger, $this->triggeredById);
 
             return true;
         } catch (RateLimited $e) {

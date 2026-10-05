@@ -401,6 +401,8 @@ return [
         'google' => ['base_url' => 'https://googleads.googleapis.com/v21', 'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN')],
         'tax_rate' => (float) env('CRM_ADS_TAX_RATE', 0.14),
         'backfill_days' => 90,
+        // First day ads history is kept for (Cairo day). Sync, backfill, discovery and reports never go before it.
+        'history_start' => env('CRM_ADS_HISTORY_START', '2026-09-01'),
         'material_max_mb' => ['video' => 500, 'image' => 20],
         // Seconds a publish waits for another worker's upload of the same file before it is released and retried.
         'publish_upload_wait' => 60,

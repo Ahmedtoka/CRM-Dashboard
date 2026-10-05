@@ -5,6 +5,7 @@ namespace App\Ads\Sync\Commands;
 use App\Ads\Attribution\OrderAttribution;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Sync\AdsSyncService;
+use App\Ads\Sync\HistoryWindow;
 use App\Ads\Sync\SyncAdAccount;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
@@ -40,7 +41,13 @@ class SyncAdsCommand extends Command
             }
             try {
                 $to = CarbonImmutable::now('Africa/Cairo')->startOfDay();
-                $run = $sync->syncAccount($a, $to->subDays($days - 1), $to, 'recent', true, 'manual');
+                $window = HistoryWindow::clamp($to->subDays($days - 1), $to);
+                if ($window === null) {
+                    $this->warn("Skipped {$a->name}: window is before the history start");
+
+                    continue;
+                }
+                $run = $sync->syncAccount($a, $window[0], $window[1], 'recent', true, 'manual');
                 if ($run->status === 'error') {
                     $this->warn("Failed {$a->name}: ".AdsSyncService::scrub((string) $run->error));
                     $failed++;

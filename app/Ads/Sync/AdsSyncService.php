@@ -64,6 +64,16 @@ final class AdsSyncService
     /** ads + campaigns + adsets, then daily metrics for [from,to] (replacing the account's rows of those dates), then media. */
     public function syncAccount(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to, string $kind = 'recent', bool $withAds = true, string $trigger = 'schedule', ?int $triggeredById = null): AdsSyncRun
     {
+        $window = HistoryWindow::clamp($from, $to);
+        if ($window === null) {
+            return AdsSyncRun::create([
+                'ad_account_id' => $a->id, 'platform' => $a->platform, 'kind' => $kind, 'status' => 'skipped',
+                'trigger' => $trigger, 'triggered_by_id' => $triggeredById, 'error' => 'Window before history start',
+                'from_date' => $from->toDateString(), 'to_date' => $to->toDateString(), 'started_at' => now(), 'finished_at' => now(),
+            ]);
+        }
+        [$from, $to] = $window;
+
         $run = AdsSyncRun::create([
             'ad_account_id' => $a->id, 'platform' => $a->platform, 'kind' => $kind, 'status' => 'running',
             'trigger' => $trigger, 'triggered_by_id' => $triggeredById,
@@ -139,6 +149,10 @@ final class AdsSyncService
     {
         $run = null;
         $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
+        $days = min($days, HistoryWindow::daysFromStart($today)); // nothing older than crm.ads.history_start
+        if ($days <= 0) {
+            return null;
+        }
         for ($offset = 0; $offset < $days; $offset += 30) {
             $to = $today->subDays($offset);
             $from = $today->subDays(min($offset + 29, $days - 1));
@@ -237,6 +251,9 @@ final class AdsSyncService
         // Dedupe on (ad, date); the last row wins.
         $byKey = [];
         foreach ($metrics as $m) {
+            if (HistoryWindow::isBeforeStart($m->date)) {
+                continue; // defence in depth: a platform row before the history start is never stored
+            }
             $byKey[$m->adExternalId.'|'.substr($m->date, 0, 10)] = $m;
         }
 
