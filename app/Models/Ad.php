@@ -14,11 +14,11 @@ class Ad extends Model
     /** @use HasFactory<AdFactory> */
     use HasFactory;
 
-    protected $fillable = ['ad_account_id', 'ad_campaign_id', 'ad_set_id', 'external_id', 'name', 'status', 'effective_status', 'type', 'headline', 'body', 'thumbnail_url', 'image_url', 'video_url', 'preview_url', 'preview_html', 'permalink_url', 'instagram_permalink_url', 'object_story_id', 'carousel', 'url_tags', 'created_time', 'media_fetched_at', 'raw'];
+    protected $fillable = ['ad_account_id', 'ad_campaign_id', 'ad_set_id', 'external_id', 'name', 'status', 'effective_status', 'type', 'headline', 'body', 'thumbnail_url', 'image_url', 'video_url', 'preview_url', 'preview_html', 'permalink_url', 'instagram_permalink_url', 'object_story_id', 'carousel', 'url_tags', 'created_time', 'media_fetched_at', 'last_seen_at', 'raw'];
 
     protected function casts(): array
     {
-        return ['carousel' => 'array', 'raw' => 'array', 'created_time' => 'datetime', 'media_fetched_at' => 'datetime'];
+        return ['carousel' => 'array', 'raw' => 'array', 'created_time' => 'datetime', 'media_fetched_at' => 'datetime', 'last_seen_at' => 'datetime'];
     }
 
     public function account(): BelongsTo

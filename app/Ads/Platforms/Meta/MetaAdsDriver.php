@@ -138,6 +138,38 @@ class MetaAdsDriver implements AdPlatformDriver
         return $out;
     }
 
+    public function statuses(AdAccount $a): array
+    {
+        $token = $this->token($a->connection);
+        $ads = $this->api->paginate($token, $this->actId($a).'/ads', [
+            'fields' => 'id,status,effective_status',
+            'effective_status' => json_encode(['ARCHIVED', 'DELETED']),
+            'limit' => 500,
+        ]);
+        $campaigns = $this->api->paginate($token, $this->actId($a).'/campaigns', [
+            'fields' => 'id,name,status,effective_status,objective',
+            'effective_status' => json_encode(self::INSIGHTS_STATUSES),
+            'limit' => 500,
+        ]);
+
+        $out = ['ads' => [], 'campaigns' => []];
+        foreach ($ads as $r) {
+            if (! empty($r['id'])) {
+                $out['ads'][(string) $r['id']] = ['status' => $r['status'] ?? null, 'effective_status' => $r['effective_status'] ?? null];
+            }
+        }
+        foreach ($campaigns as $r) {
+            if (! empty($r['id'])) {
+                $out['campaigns'][(string) $r['id']] = [
+                    'name' => $r['name'] ?? null, 'status' => $r['status'] ?? null,
+                    'effective_status' => $r['effective_status'] ?? null, 'objective' => $r['objective'] ?? null,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
     public function creativeMedia(AdAccount $a, array $adExternalIds): array
     {
         $token = $this->token($a->connection);

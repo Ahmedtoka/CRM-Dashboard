@@ -26,6 +26,14 @@ interface AdPlatformDriver
     public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array;
 
     /**
+     * Light status lists for the nightly sweep: ads the platform reports as ARCHIVED/DELETED, and every campaign
+     * with its own and effective status. Empty arrays = this platform has no sweep.
+     *
+     * @return array{ads: array<string, array{status:?string, effective_status:?string}>, campaigns: array<string, array{name:?string, status:?string, effective_status:?string, objective:?string}>}
+     */
+    public function statuses(AdAccount $a): array;
+
+    /**
      * @param  list<string>  $adExternalIds
      * @return list<Data\CreativeMedia>
      */

@@ -98,6 +98,12 @@ class TikTokAdsDriver implements AdPlatformDriver
         return [];
     }
 
+    /** No status sweep until this platform is live. */
+    public function statuses(AdAccount $a): array
+    {
+        return ['ads' => [], 'campaigns' => []];
+    }
+
     public function creativeMedia(AdAccount $a, array $adExternalIds): array
     {
         $adExternalIds = array_values(array_unique($adExternalIds));

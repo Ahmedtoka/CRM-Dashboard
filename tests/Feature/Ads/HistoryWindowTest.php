@@ -32,6 +32,7 @@ function hwFake(array $insights = []): void
     Http::fake([
         'graph.facebook.com/*/act_1/ads*' => Http::response(['data' => []]),
         'graph.facebook.com/*/act_1/insights*' => Http::response(['data' => $insights]),
+        'graph.facebook.com/*/act_1/campaigns*' => Http::response(['data' => []]), // status sweep of backfill chunk 0 (A1c)
     ]);
 }
 

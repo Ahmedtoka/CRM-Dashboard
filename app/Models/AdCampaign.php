@@ -13,7 +13,12 @@ class AdCampaign extends Model
     /** @use HasFactory<AdCampaignFactory> */
     use HasFactory;
 
-    protected $fillable = ['ad_account_id', 'external_id', 'name', 'status', 'objective'];
+    protected $fillable = ['ad_account_id', 'external_id', 'name', 'status', 'effective_status', 'objective', 'last_seen_at'];
+
+    protected function casts(): array
+    {
+        return ['last_seen_at' => 'datetime'];
+    }
 
     public function account(): BelongsTo
     {

@@ -135,6 +135,12 @@ class GoogleAdsDriver implements AdPlatformDriver
         return [];
     }
 
+    /** No status sweep until this platform is live. */
+    public function statuses(AdAccount $a): array
+    {
+        return ['ads' => [], 'campaigns' => []];
+    }
+
     public function creativeMedia(AdAccount $a, array $adExternalIds): array
     {
         return [];   // no creative preview for search ads; image assets are out of scope

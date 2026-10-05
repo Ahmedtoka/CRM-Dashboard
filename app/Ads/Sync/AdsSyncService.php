@@ -31,6 +31,9 @@ final class AdsSyncService
 {
     private const CHUNK = 500;
 
+    /** A 'recent' run over at least this many requested days is the deep sync: it also sweeps statuses. */
+    public const DEEP_DAYS = 30;
+
     public function __construct(private DriverFactory $drivers) {}
 
     /** Message safe to print: credentials-looking pairs removed, length capped. */
@@ -74,6 +77,8 @@ final class AdsSyncService
     /** ads + campaigns + adsets, then daily metrics for [from,to] (replacing the account's rows of those dates), then media. */
     public function syncAccount(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to, string $kind = 'recent', bool $withAds = true, string $trigger = 'schedule', ?int $triggeredById = null, ?string $runKey = null): AdsSyncRun
     {
+        // Decided on the requested window, so a deep sync clamped by the history start still sweeps.
+        $sweep = ($kind === 'recent' && (int) $from->diffInDays($to) + 1 >= self::DEEP_DAYS) || ($kind === 'backfill' && $withAds);
         $window = HistoryWindow::clamp($from, $to);
         if ($window === null) {
             return AdsSyncRun::create([
@@ -91,7 +96,7 @@ final class AdsSyncService
         ]);
 
         try {
-            return $this->runSync($a, $run, $from, $to, $withAds);
+            return $this->runSync($a, $run, $from, $to, $withAds, $sweep);
         } catch (Throwable $e) {
             // Whatever escaped (bad driver config, DB error, media-phase bug) must not leave the run 'running'.
             if ($run->status === 'running') {
@@ -101,8 +106,10 @@ final class AdsSyncService
         }
     }
 
-    private function runSync(AdAccount $a, AdsSyncRun $run, CarbonImmutable $from, CarbonImmutable $to, bool $withAds = true): AdsSyncRun
+    private function runSync(AdAccount $a, AdsSyncRun $run, CarbonImmutable $from, CarbonImmutable $to, bool $withAds = true, bool $sweep = false): AdsSyncRun
     {
+        $sweepWarning = null;
+        $swept = false;
         $driver = $this->drivers->for(AdPlatform::from($a->platform));
 
         try {
@@ -114,6 +121,9 @@ final class AdsSyncService
             [$control, $controlWarning] = $this->fetchControl($driver, $a, $from, $to);
             [$rows, $guard] = $this->replaceMetrics($a, $metrics, $from, $to, $control);
             $this->upsertAccountDaily($a, $control);
+            if ($sweep && $withAds) {
+                [$swept, $sweepWarning] = $this->sweepStatuses($a, $run, $driver);
+            }
         } catch (AdsApiException $e) {
             $run->update(['status' => 'error', 'error' => self::scrub($e->getMessage()), 'finished_at' => now()]);
             if ($e instanceof RateLimited) {
@@ -133,7 +143,7 @@ final class AdsSyncService
         }
 
         // Metrics are committed; a media failure must not turn the run into an error.
-        $warnings = array_values(array_filter([$controlWarning, $guard]));
+        $warnings = array_values(array_filter([$controlWarning, $guard, $sweepWarning]));
         try {
             $this->fetchMedia($a, Ad::where('ad_account_id', $a->id)->whereNull('media_fetched_at')
                 ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'unknown')) // minimal ads have no creative to fetch
@@ -144,6 +154,7 @@ final class AdsSyncService
 
         $run->update([
             'status' => 'ok', 'ads_count' => count($adRows), 'rows_count' => $rows, 'error' => $warnings === [] ? null : implode(' | ', $warnings), 'finished_at' => now(),
+            'swept_at' => $swept ? now() : null,
         ]);
         $a->update(['last_synced_at' => now()]);
         $a->connection?->update(['status' => 'connected', 'last_error' => null, 'last_synced_at' => now(), 'needs_reconnect_at' => null]);
@@ -251,14 +262,65 @@ final class AdsSyncService
                 'object_story_id' => $r->objectStoryId, 'instagram_permalink_url' => $r->instagramPermalinkUrl,
                 'url_tags' => $r->urlTags, 'carousel' => $r->carousel === null ? null : json_encode($r->carousel),
                 'created_time' => $r->createdTime ? CarbonImmutable::parse($r->createdTime)->toDateTimeString() : null,
-                'raw' => json_encode($r->raw), 'created_at' => $now, 'updated_at' => $now,
+                'raw' => json_encode($r->raw), 'last_seen_at' => $now, 'created_at' => $now, 'updated_at' => $now,
             ];
         }
         // Media columns (video/preview/permalink, media_fetched_at) stay out of the update list so a sync never wipes fetched media.
-        $update = ['ad_campaign_id', 'ad_set_id', 'name', 'status', 'effective_status', 'type', 'headline', 'body', 'object_story_id', 'instagram_permalink_url', 'url_tags', 'carousel', 'created_time', 'raw', 'updated_at'];
+        $update = ['ad_campaign_id', 'ad_set_id', 'name', 'status', 'effective_status', 'type', 'headline', 'body', 'object_story_id', 'instagram_permalink_url', 'url_tags', 'carousel', 'created_time', 'raw', 'last_seen_at', 'updated_at'];
         foreach (array_chunk($payload, self::CHUNK) as $chunk) {
             Ad::upsert($chunk, ['ad_account_id', 'external_id'], $update);
         }
+    }
+
+    /**
+     * Nightly status sweep (deep sync and backfill chunk 0 only; the full ad list was read in this run):
+     *   - ads Meta lists as ARCHIVED/DELETED get that status and are marked seen;
+     *   - campaigns get status, effective status, name, objective and last_seen_at from the campaigns list;
+     *   - ads listed neither now nor by the previous completed sweep (seen, or created, before that sweep started)
+     *     become GONE.
+     * A failed list is a warning (no GONE marking without both lists); a dead token or a rate limit stops the run.
+     *
+     * @return array{0: bool, 1: ?string} swept, warning
+     */
+    private function sweepStatuses(AdAccount $a, AdsSyncRun $run, AdPlatformDriver $driver): array
+    {
+        try {
+            $lists = $driver->statuses($a);
+        } catch (TokenInvalid|RateLimited $e) {
+            throw $e;
+        } catch (AdsApiException $e) {
+            return [false, 'Status sweep: '.self::scrub($e->getMessage())];
+        }
+
+        $now = now();
+        foreach (array_chunk($lists['ads'] ?? [], self::CHUNK, true) as $chunk) {
+            foreach ($chunk as $externalId => $st) {
+                Ad::where('ad_account_id', $a->id)->where('external_id', (string) $externalId)->update(array_filter([
+                    'status' => $st['status'] ?? null, 'effective_status' => $st['effective_status'] ?? null,
+                ], fn ($v) => $v !== null) + ['last_seen_at' => $now]);
+            }
+        }
+        foreach ($lists['campaigns'] ?? [] as $externalId => $c) {
+            $values = array_filter([
+                'name' => $c['name'] ?? null, 'status' => $c['status'] ?? null,
+                'effective_status' => $c['effective_status'] ?? null, 'objective' => $c['objective'] ?? null,
+            ], fn ($v) => $v !== null && $v !== '');
+            AdCampaign::where('ad_account_id', $a->id)->where('external_id', (string) $externalId)->update($values + ['last_seen_at' => $now]);
+        }
+
+        // Two consecutive completed sweeps without a sighting: this run and the previous one.
+        $previous = AdsSyncRun::where('ad_account_id', $a->id)->where('id', '!=', $run->id)
+            ->where('status', 'ok')->whereNotNull('swept_at')->latest('swept_at')->latest('id')->first();
+        if ($previous?->started_at !== null) {
+            $before = $previous->started_at;
+            Ad::where('ad_account_id', $a->id)
+                ->where(fn ($q) => $q->whereNull('effective_status')->orWhere('effective_status', '!=', 'GONE'))
+                ->where(fn ($q) => $q->where('last_seen_at', '<', $before)
+                    ->orWhere(fn ($n) => $n->whereNull('last_seen_at')->where('created_at', '<', $before)))
+                ->update(['effective_status' => 'GONE']);
+        }
+
+        return [true, null];
     }
 
     /**
