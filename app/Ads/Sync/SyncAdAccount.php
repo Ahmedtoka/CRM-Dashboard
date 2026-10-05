@@ -156,9 +156,10 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
 
         try {
             if ($this->kind === 'backfill') {
-                $sync->backfill($account, $this->days, $this->trigger, $this->triggeredById, $this->runKey);
+                // The run key doubles as the batch key: a released backfill resumes after its last 'ok' chunk.
+                $run = $sync->backfill($account, $this->days, $this->trigger, $this->triggeredById, $this->runKey, $this->runKey);
 
-                return true;
+                return ! $this->releasedWhileBusy($run);
             }
             $to = CarbonImmutable::now('Africa/Cairo')->startOfDay();
             $window = HistoryWindow::clamp($to->subDays(max($this->days, 1) - 1), $to);
@@ -173,9 +174,9 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
 
                 return true;
             }
-            $sync->syncAccount($account, $window[0], $window[1], $this->kind, $this->withAds, $this->trigger, $this->triggeredById, $this->runKey);
+            $run = $sync->syncAccount($account, $window[0], $window[1], $this->kind, $this->withAds, $this->trigger, $this->triggeredById, $this->runKey);
 
-            return true;
+            return ! $this->releasedWhileBusy($run);
         } catch (RateLimited $e) {
             // Only a real async queue job can be released; sync/inline runs must surface the failure.
             // Meta's regain time (or the admission delay) when known, else 15 minutes.
@@ -186,5 +187,17 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
             }
             throw $e;
         }
+    }
+
+    /** Another sync holds the account claim: a queued job comes back in 2 minutes; an inline run just ends. */
+    private function releasedWhileBusy(?AdsSyncRun $run): bool
+    {
+        if (AdsSyncService::isBusy($run) && $this->job && ! $this->job instanceof SyncJob) {
+            $this->release(120);
+
+            return true;
+        }
+
+        return false;
     }
 }

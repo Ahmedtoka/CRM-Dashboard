@@ -34,6 +34,12 @@ final class AdsSyncService
     /** A 'recent' run over at least this many requested days is the deep sync: it also sweeps statuses. */
     public const DEEP_DAYS = 30;
 
+    /** error of the 'skipped' run written when another sync holds the account claim. */
+    public const CLAIM_BUSY = 'Another sync of this account is running';
+
+    /** @var array<int, string> account id => claim key this instance holds (a backfill holds it across its chunks) */
+    private array $claims = [];
+
     public function __construct(private DriverFactory $drivers) {}
 
     /** Message safe to print: credentials-looking pairs removed, length capped. */
@@ -75,7 +81,7 @@ final class AdsSyncService
     }
 
     /** ads + campaigns + adsets, then daily metrics for [from,to] (replacing the account's rows of those dates), then media. */
-    public function syncAccount(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to, string $kind = 'recent', bool $withAds = true, string $trigger = 'schedule', ?int $triggeredById = null, ?string $runKey = null): AdsSyncRun
+    public function syncAccount(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to, string $kind = 'recent', bool $withAds = true, string $trigger = 'schedule', ?int $triggeredById = null, ?string $runKey = null, ?string $batchKey = null): AdsSyncRun
     {
         // Decided on the requested window, so a deep sync clamped by the history start still sweeps.
         $sweep = ($kind === 'recent' && (int) $from->diffInDays($to) + 1 >= self::DEEP_DAYS) || ($kind === 'backfill' && $withAds);
@@ -89,21 +95,85 @@ final class AdsSyncService
         }
         [$from, $to] = $window;
 
-        $run = AdsSyncRun::create([
-            'ad_account_id' => $a->id, 'platform' => $a->platform, 'kind' => $kind, 'status' => 'running',
-            'trigger' => $trigger, 'triggered_by_id' => $triggeredById, 'run_key' => $runKey,
-            'from_date' => $from->toDateString(), 'to_date' => $to->toDateString(), 'started_at' => now(),
-        ]);
+        $owned = $this->claim($a);
+        if ($owned === null) {
+            return $this->busyRun($a, $kind, $from, $to, $trigger, $triggeredById, $runKey, $batchKey);
+        }
 
         try {
-            return $this->runSync($a, $run, $from, $to, $withAds, $sweep);
-        } catch (Throwable $e) {
-            // Whatever escaped (bad driver config, DB error, media-phase bug) must not leave the run 'running'.
-            if ($run->status === 'running') {
-                $run->update(['status' => 'error', 'error' => self::scrub($e->getMessage()), 'finished_at' => now()]);
+            $run = AdsSyncRun::create([
+                'ad_account_id' => $a->id, 'platform' => $a->platform, 'kind' => $kind, 'status' => 'running',
+                'trigger' => $trigger, 'triggered_by_id' => $triggeredById, 'run_key' => $runKey, 'batch_key' => $batchKey,
+                'from_date' => $from->toDateString(), 'to_date' => $to->toDateString(), 'started_at' => now(),
+            ]);
+
+            try {
+                return $this->runSync($a, $run, $from, $to, $withAds, $sweep);
+            } catch (Throwable $e) {
+                // Whatever escaped (bad driver config, DB error, media-phase bug) must not leave the run 'running'.
+                if ($run->status === 'running') {
+                    $run->update(['status' => 'error', 'error' => self::scrub($e->getMessage()), 'finished_at' => now()]);
+                }
+                throw $e;
             }
-            throw $e;
+        } finally {
+            if ($owned) {
+                $this->unclaim($a);
+            }
         }
+    }
+
+    /**
+     * Takes the account claim unless this instance already holds it (a backfill around its chunks).
+     *
+     * @return bool|null true = taken here (release it), false = already held by this instance, null = another sync holds it
+     */
+    private function claim(AdAccount $a): ?bool
+    {
+        if (isset($this->claims[$a->id])) {
+            AccountSyncClaim::extend($a, $this->claims[$a->id], AccountSyncClaim::ttl());
+
+            return false;
+        }
+        $key = AccountSyncClaim::acquire($a, AccountSyncClaim::ttl());
+        if ($key === null) {
+            return null;
+        }
+        $this->claims[$a->id] = $key;
+
+        return true;
+    }
+
+    private function unclaim(AdAccount $a): void
+    {
+        if (isset($this->claims[$a->id])) {
+            AccountSyncClaim::release($a, $this->claims[$a->id]);
+            unset($this->claims[$a->id]);
+        }
+    }
+
+    /** The visible trace of a sync that found the account busy: one 'skipped' row per job (its run key), refreshed on each retry. */
+    private function busyRun(AdAccount $a, string $kind, CarbonImmutable $from, CarbonImmutable $to, string $trigger, ?int $triggeredById, ?string $runKey, ?string $batchKey): AdsSyncRun
+    {
+        $existing = $runKey === null ? null : AdsSyncRun::where('ad_account_id', $a->id)->where('run_key', $runKey)
+            ->where('status', 'skipped')->where('error', self::CLAIM_BUSY)->latest('id')->first();
+        if ($existing !== null) {
+            $existing->update(['started_at' => now(), 'finished_at' => now()]);
+
+            return $existing;
+        }
+
+        return AdsSyncRun::create([
+            'ad_account_id' => $a->id, 'platform' => $a->platform, 'kind' => $kind, 'status' => 'skipped',
+            'trigger' => $trigger, 'triggered_by_id' => $triggeredById, 'run_key' => $runKey, 'batch_key' => $batchKey,
+            'error' => self::CLAIM_BUSY, 'from_date' => $from->toDateString(), 'to_date' => $to->toDateString(),
+            'started_at' => now(), 'finished_at' => now(),
+        ]);
+    }
+
+    public static function isBusy(?AdsSyncRun $run): bool
+    {
+        return $run !== null && $run->status === 'skipped' && $run->error === self::CLAIM_BUSY;
     }
 
     private function runSync(AdAccount $a, AdsSyncRun $run, CarbonImmutable $from, CarbonImmutable $to, bool $withAds = true, bool $sweep = false): AdsSyncRun
@@ -178,8 +248,12 @@ final class AdsSyncService
         return $this->fetchMedia($a, $ids);
     }
 
-    /** Sync an account over $days days in 30-day chunks, newest first. */
-    public function backfill(AdAccount $a, int $days, string $trigger = 'backfill', ?int $triggeredById = null, ?string $runKey = null): ?AdsSyncRun
+    /**
+     * Sync an account over $days days in 30-day chunks, newest first, holding the account claim across the chunks.
+     * With a $batchKey (a queued backfill passes its run key), a chunk that already has an 'ok' run of that batch is not
+     * asked again, so a backfill released by a rate limit resumes where it stopped (A5).
+     */
+    public function backfill(AdAccount $a, int $days, string $trigger = 'backfill', ?int $triggeredById = null, ?string $runKey = null, ?string $batchKey = null): ?AdsSyncRun
     {
         $run = null;
         $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
@@ -187,12 +261,30 @@ final class AdsSyncService
         if ($days <= 0) {
             return null;
         }
-        for ($offset = 0; $offset < $days; $offset += 30) {
-            $to = $today->subDays($offset);
-            $from = $today->subDays(min($offset + 29, $days - 1));
-            $run = $this->syncAccount($a, $from, $to, 'backfill', withAds: $offset === 0, trigger: $trigger, triggeredById: $triggeredById, runKey: $runKey);
-            if ($run->status === 'error') {
-                break;
+        $owned = $this->claim($a);
+        if ($owned === null) {
+            return $this->busyRun($a, 'backfill', $today->subDays($days - 1), $today, $trigger, $triggeredById, $runKey, $batchKey);
+        }
+        try {
+            for ($offset = 0; $offset < $days; $offset += 30) {
+                $to = $today->subDays($offset);
+                $from = $today->subDays(min($offset + 29, $days - 1));
+                $done = $batchKey === null ? null : AdsSyncRun::where('ad_account_id', $a->id)->where('kind', 'backfill')
+                    ->where('batch_key', $batchKey)->where('status', 'ok')
+                    ->whereDate('from_date', $from->toDateString())->whereDate('to_date', $to->toDateString())->latest('id')->first();
+                if ($done !== null) {
+                    $run = $done;
+
+                    continue;
+                }
+                $run = $this->syncAccount($a, $from, $to, 'backfill', withAds: $offset === 0, trigger: $trigger, triggeredById: $triggeredById, runKey: $runKey, batchKey: $batchKey);
+                if ($run->status === 'error') {
+                    break;
+                }
+            }
+        } finally {
+            if ($owned) {
+                $this->unclaim($a);
             }
         }
 

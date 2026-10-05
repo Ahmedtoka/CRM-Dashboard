@@ -8,7 +8,6 @@ use App\Ads\Sync\SyncAdAccount;
 use App\Models\AdAccount;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 class BackfillAdsCommand extends Command
@@ -59,17 +58,13 @@ class BackfillAdsCommand extends Command
 
         // Runs inline so the chunks stay in order and the command shows progress.
         foreach ($accounts as $a) {
-            // Same lock as SyncAdAccount's ShouldBeUnique, so a backfill never overlaps a queued sync of the account.
-            $lock = Cache::lock(SyncAdAccount::lockKey($a->id), 3600);
-            if (! $lock->get()) {
-                $this->warn("Skipped {$a->name}: busy (a sync is already queued or running)");
-                $failed++;
-
-                continue;
-            }
             try {
+                // backfill() holds the account's DB claim (AccountSyncClaim), so it never overlaps any other sync of it.
                 $run = $sync->backfill($a, $days, 'backfill');
-                if ($run?->status === 'error') {
+                if (AdsSyncService::isBusy($run)) {
+                    $this->warn("Skipped {$a->name}: busy (another sync of this account is running)");
+                    $failed++;
+                } elseif ($run?->status === 'error') {
                     $this->warn("Failed {$a->name}: ".AdsSyncService::scrub((string) $run->error));
                     $failed++;
                 } else {
@@ -78,8 +73,6 @@ class BackfillAdsCommand extends Command
             } catch (Throwable $e) { // AdsApiException incl. RateLimited, or anything unexpected
                 $this->warn("Failed {$a->name}: ".AdsSyncService::scrub($e->getMessage()));
                 $failed++;
-            } finally {
-                $lock->release();
             }
         }
 

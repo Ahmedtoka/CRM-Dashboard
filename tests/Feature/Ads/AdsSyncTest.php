@@ -6,6 +6,7 @@ use App\Ads\Platforms\Data\AccountDailyTotal;
 use App\Ads\Platforms\Data\DailyAdMetric;
 use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Sync\AccountSyncClaim;
 use App\Ads\Sync\AdsSyncService;
 use App\Ads\Sync\SyncAdAccount;
 use App\Models\Ad;
@@ -19,7 +20,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -549,15 +549,15 @@ it('warns and continues when a command hits an unexpected exception', function (
     $this->artisan('ads:backfill', ['--days' => 5])->expectsOutputToContain('Failed Odd')->assertFailed();
 });
 
-it('skips a backfill for an account whose sync lock is held', function () {
+it('skips a backfill for an account whose sync claim is held', function () {
     $acc = AdAccount::factory()->meta()->create(['name' => 'Locked']);
-    $lock = Cache::lock(SyncAdAccount::lockKey($acc->id), 60);
-    expect($lock->get())->toBeTrue();
+    $key = AccountSyncClaim::acquire($acc, 60);
+    expect($key)->toBeString();
 
     $this->artisan('ads:backfill', ['--account' => $acc->id, '--days' => 5])->expectsOutputToContain('busy')->assertFailed();
 
-    expect(AdsSyncRun::count())->toBe(0);
-    $lock->release();
+    expect(AdsSyncRun::where('status', '!=', 'skipped')->count())->toBe(0);
+    AccountSyncClaim::release($acc, $key);
     $this->artisan('ads:backfill', ['--account' => $acc->id, '--days' => 5])->assertSuccessful();
 });
 

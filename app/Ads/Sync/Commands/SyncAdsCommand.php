@@ -71,7 +71,10 @@ class SyncAdsCommand extends Command
                     continue;
                 }
                 $run = $sync->syncAccount($a, $window[0], $window[1], 'recent', true, 'manual');
-                if ($run->status === 'error') {
+                if (AdsSyncService::isBusy($run)) {
+                    $this->warn("Skipped {$a->name}: another sync of this account is running");
+                    $failed++;
+                } elseif ($run->status === 'error') {
                     $this->warn("Failed {$a->name}: ".AdsSyncService::scrub((string) $run->error));
                     $failed++;
                 } else {
