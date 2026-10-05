@@ -15,6 +15,7 @@ use App\Ads\Materials\Commands\StockWatchCommand;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\Meta\UsageRecorder;
 use App\Ads\Sync\Commands\BackfillAdsCommand;
+use App\Ads\Sync\Commands\PruneHistoryCommand;
 use App\Ads\Sync\Commands\RefreshCreativesCommand;
 use App\Ads\Sync\Commands\SweepStuckRunsCommand;
 use App\Ads\Sync\Commands\SyncAdsCommand;
@@ -36,7 +37,7 @@ class AdsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, DoctorCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, DoctorCommand::class, PruneHistoryCommand::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
