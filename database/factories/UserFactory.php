@@ -3,12 +3,13 @@
 namespace Database\Factories;
 
 use App\Enums\UserRole;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\User>
+ * @extends Factory<User>
  */
 class UserFactory extends Factory
 {
@@ -32,8 +33,15 @@ class UserFactory extends Factory
             'role' => UserRole::Moderator,
             'locale' => 'ar',
             'is_active' => true,
+            'ads_authority' => false,
             'remember_token' => Str::random(10),
         ];
+    }
+
+    /** Holds Ads authority (campaign / ad-set Run and Stop, D4). */
+    public function adsAuthority(): static
+    {
+        return $this->state(fn (array $attributes) => ['ads_authority' => true]);
     }
 
     /**

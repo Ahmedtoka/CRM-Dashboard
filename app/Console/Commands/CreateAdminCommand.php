@@ -43,7 +43,7 @@ class CreateAdminCommand extends Command
             'password' => $password,
             'role' => UserRole::Admin,
             'is_active' => true,
-        ])->save();
+        ])->forceFill(['ads_authority' => true])->save(); // the bootstrap admin holds Ads authority (D4)
 
         $this->info(($user->wasRecentlyCreated ? 'Created' : 'Updated').' admin '.$email);
 

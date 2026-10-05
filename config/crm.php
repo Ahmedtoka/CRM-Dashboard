@@ -434,6 +434,46 @@ return [
         // Live writers outside production only touch these accounts (comma list of act_... in CRM_ADS_WRITE_SANDBOX_ACCOUNTS).
         'write_sandbox_accounts' => array_values(array_filter(array_map('trim', explode(',', (string) env('CRM_ADS_WRITE_SANDBOX_ACCOUNTS', ''))))),
         'material_max_mb' => ['video' => 500, 'image' => 20],
+        // Phase B write pipeline. enabled = deploy-level kill switch; the runtime switch is ads_settings.writes_enabled
+        // (ads:writes). Writes need both on; Stop is always exempt.
+        'write' => [
+            'enabled' => (bool) env('CRM_ADS_WRITES_ENABLED', true),
+            // HTTP timeout (seconds) of an inline platform write and of the live pre-read (the old write POST waited 90).
+            'timeout_seconds' => 20,
+            // Minutes a UI proposal stays confirmable (write-api 3; 2.1 rule 1: a proposal never locks anything).
+            'proposal_ttl_minutes' => 10,
+            // A Run's propose-time live read younger than this is reused at confirm; older, the object is read again (B3).
+            'preread_fresh_seconds' => 60,
+            // Confirmed-Stop retry (2.1 rule 6): attempts in all, seconds between them (at least; Meta's regain time wins
+            // when longer), and the longest regain time worth waiting for before failing with the Ads Manager link.
+            'stop_retry_attempts' => 3,
+            'stop_retry_seconds' => 60,
+            'stop_retry_max_wait_seconds' => 1800,
+            // Sweeper give-up (liveness): re-dispatches of one lost retry before failing with a notice, and the margin added
+            // to the whole retry window ((attempts - 1) x max wait) after which an executing Stop is failed whatever its state.
+            'stop_sweep_max_redispatches' => 3,
+            'stop_sweep_margin_seconds' => 600,
+            // Short jobs only (worker --timeout=80). ASSUMPTION: the crm-commerce worker runs in production (ads:doctor shows it).
+            'retry_queue' => env('CRM_ADS_WRITE_RETRY_QUEUE', 'commerce'),
+            // Named limiter of the write routes (throttle:ads-writes), per user: Stop far above Run so Stops are never throttled out.
+            'stop_per_minute' => 120,
+            'run_per_minute' => 30,
+            // Run guard (B3). ASSUMPTION for the owner: these are sane defaults, not his numbers. Runtime overrides per
+            // user / account / global live in ads_settings.write_limits (ads:write-limits, audited). Money in minor units.
+            'limits' => [
+                // Highest per-day budget a Run may switch on (own, CBO parent, or lifetime spread per day): EGP 20,000.
+                'max_daily_budget_minor' => (int) env('CRM_ADS_MAX_DAILY_BUDGET_MINOR', 2000000),
+                // The cap's currency; an account in another currency is refused (currency_mismatch), never converted.
+                'cap_currency' => 'EGP',
+                // Runs confirmed per Cairo day, per confirming user and per ad account (Stops never count).
+                'activations_per_user_day' => 20,
+                'activations_per_account_day' => 30,
+                // A Stop by an Ads-authority holder blocks other users' Runs on that exact target for this many days.
+                'restart_lock_days' => 7,
+                // A Run of something paused (by a CRM Stop) longer than this carries the "may re-enter learning" note.
+                'learning_note_days' => 7,
+            ],
+        ],
         // Seconds a publish waits for another worker's upload of the same file before it is released and retried.
         'publish_upload_wait' => 60,
         // AI captions: model defaults to the bot's reply model (settings, then crm.anthropic.reply_model) when blank.

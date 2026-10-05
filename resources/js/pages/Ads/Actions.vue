@@ -132,7 +132,10 @@ const breadcrumbs = computed(() => [
                                 <td class="whitespace-nowrap px-2 py-2">{{ t('ads.actions.change', { from: statusLabel(a.from_status), to: statusLabel(a.to_status) }) }}</td>
                                 <td class="max-w-72 px-2 py-2 text-muted-foreground" dir="auto">{{ a.reason ?? t('ads.actions.reason_none') }}</td>
                                 <td class="px-2 py-2">
-                                    <StatusChip :label="t(a.result === 'ok' ? 'ads.actions.result_ok' : 'ads.actions.result_error')" :tone="a.result === 'ok' ? 'positive' : 'negative'" />
+                                    <StatusChip
+                                        :label="t(a.result === 'ok' ? 'ads.actions.result_ok' : a.result === 'pending' ? 'ads.actions.result_pending' : 'ads.actions.result_error')"
+                                        :tone="a.result === 'ok' ? 'positive' : a.result === 'pending' ? 'neutral' : 'negative'"
+                                    />
                                     <p v-if="a.error" class="mt-0.5 max-w-64 text-2xs text-destructive" dir="auto">{{ a.error }}</p>
                                 </td>
                             </tr>

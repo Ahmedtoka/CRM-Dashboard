@@ -15,11 +15,14 @@ class AdAccount extends Model
     /** @use HasFactory<AdAccountFactory> */
     use HasFactory;
 
-    protected $fillable = ['connection_id', 'platform', 'external_id', 'name', 'currency', 'timezone', 'status', 'balance', 'is_active', 'last_synced_at', 'deactivated_reason'];
+    protected $fillable = ['connection_id', 'platform', 'external_id', 'name', 'currency', 'timezone', 'status', 'balance', 'is_active', 'last_synced_at', 'deactivated_reason', 'write_enabled'];
+
+    /** Mirrors the column default (D3): an account built in PHP is writable before it is saved or reloaded. */
+    protected $attributes = ['write_enabled' => true];
 
     protected function casts(): array
     {
-        return ['balance' => 'decimal:2', 'is_active' => 'boolean', 'last_synced_at' => 'datetime', 'chat_complete_from' => 'date', 'sync_pending_since' => 'datetime'];
+        return ['balance' => 'decimal:2', 'is_active' => 'boolean', 'write_enabled' => 'boolean', 'last_synced_at' => 'datetime', 'chat_complete_from' => 'date', 'sync_pending_since' => 'datetime'];
     }
 
     public function connection(): BelongsTo

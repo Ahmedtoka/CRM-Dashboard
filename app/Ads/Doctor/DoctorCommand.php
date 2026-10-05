@@ -11,6 +11,7 @@ use App\Ads\Doctor\Checks\QuotaCheck;
 use App\Ads\Doctor\Checks\SchedulerCheck;
 use App\Ads\Doctor\Checks\SyncRunsCheck;
 use App\Ads\Doctor\Checks\TokenCheck;
+use App\Ads\Doctor\Checks\WritesCheck;
 use Illuminate\Console\Command;
 
 /**
@@ -24,7 +25,7 @@ class DoctorCommand extends Command
     protected $description = 'Read-only diagnostics of the ads pipeline on this server (queue, scheduler, sync, tokens, quota, accounts)';
 
     /** @var list<class-string<Checks\DoctorCheck>> */
-    private const CHECKS = [AppCheck::class, QueueCheck::class, SchedulerCheck::class, FailedJobsCheck::class, SyncRunsCheck::class, TokenCheck::class, QuotaCheck::class, AccountsCheck::class, PeopleCheck::class];
+    private const CHECKS = [AppCheck::class, QueueCheck::class, SchedulerCheck::class, FailedJobsCheck::class, SyncRunsCheck::class, TokenCheck::class, QuotaCheck::class, AccountsCheck::class, WritesCheck::class, PeopleCheck::class];
 
     public function handle(): int
     {

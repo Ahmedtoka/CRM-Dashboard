@@ -4,6 +4,7 @@ namespace App\Ads\Control\Jobs;
 
 use App\Ads\Control\PublicationLinker;
 use App\Ads\Control\WritableAccounts;
+use App\Ads\Control\Write\WriteSwitch;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdPlatformWriter;
 use App\Ads\Platforms\AdsApiException;
@@ -142,6 +143,13 @@ class PublishAd implements ShouldQueue
         // Switched off for writes after queueing (ads:writable): nothing is sent to the platform.
         if (! WritableAccounts::allows($account)) {
             $row->update(['status' => AdPublication::ERROR, 'error' => __('ads.errors.account_not_writable')]);
+
+            return true;
+        }
+
+        // The owner switched CRM writes off after queueing (ads:writes): nothing is sent to the platform.
+        if (! WriteSwitch::allows('publish')) {
+            $row->update(['status' => AdPublication::ERROR, 'error' => __('ads.errors.'.WriteSwitch::CODE)]);
 
             return true;
         }

@@ -2,30 +2,13 @@
 
 namespace App\Ads\Control;
 
-use App\Ads\Access\AdsScope;
-use App\Ads\Platforms\AdPlatform;
-use App\Ads\Platforms\AdsApiException;
-use App\Ads\Platforms\DriverFactory;
-use App\Ads\Platforms\RateLimited;
-use App\Ads\Platforms\SecretScrubber;
-use App\Ads\Platforms\WriteGuard;
-use App\Ads\Platforms\WriteRefused;
-use App\Ads\Reports\AdsFilter;
-use App\Models\Ad;
+use App\Ads\Control\Write\WritePolicy;
 use App\Models\AdAccount;
-use App\Models\AdAction;
-use App\Models\AdCampaign;
-use App\Models\AdSet;
 use App\Models\User;
-use Carbon\CarbonImmutable;
-use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Validation\ValidationException;
-use Throwable;
 
 /**
- * The single door for writes to an ad platform from the CRM (Stop / Run today): checks the user's scope, calls the
- * platform writer, logs every attempt in ad_actions (the platform call is audited before anything local is touched)
- * and mirrors the new status on the local row.
+ * Facade over WritePolicy for the pages (can_write flags, levels) and the own-status rule. Every platform write goes
+ * through the Phase B pipeline (WriteActionService); the slice-1 setStatus path was removed with the B5 shim.
  *
  * Status rule: an ad's OWN status decides Stop / Run, normalised across platforms (ACTIVE/ENABLE = active,
  * PAUSED/DISABLE = paused); effective_status (which folds in the parents) is never used.
@@ -41,7 +24,7 @@ final class AdWriteService
 
     public const PAUSED_STATUSES = ['PAUSED', 'DISABLE'];
 
-    public function __construct(private readonly DriverFactory $drivers, private readonly AdsScope $scope) {}
+    public function __construct(private readonly WritePolicy $policy) {}
 
     /** @return 'active'|'paused'|null null for anything else (archived, deleted, in review, unknown) */
     public static function statusKind(?string $status): ?string
@@ -57,149 +40,32 @@ final class AdWriteService
         return $this->canWriteMany($u, [$a])[$a->id];
     }
 
-    /** Scope only: is this account one the user may act on (ignores the writable-accounts setting). */
+    /** Scope only: is this account one the user may act on (ignores the account's write switch). Delegates to WritePolicy. */
     public function inScope(User $u, AdAccount $a): bool
     {
-        $today = $this->todayIds($u);
-
-        return (bool) $a->is_active && ($today === null || in_array($a->id, $today, true));
+        return $this->policy->inScope($u, $a);
     }
 
     /**
-     * canWrite for many accounts with the buyer's assignments for today read once.
+     * canWrite for many accounts with the buyer's assignments for today read once (WritePolicy). The rows must carry
+     * is_active and write_enabled.
      *
      * @param  iterable<AdAccount>  $accounts
      * @return array<int, bool> account id => allowed
      */
     public function canWriteMany(User $u, iterable $accounts): array
     {
-        $today = $this->todayIds($u);
-        $list = WritableAccounts::list();
-        $out = [];
-        foreach ($accounts as $a) {
-            $out[$a->id] = (bool) $a->is_active && ($today === null || in_array($a->id, $today, true)) && WritableAccounts::allowsIn($a, $list);
-        }
-
-        return $out;
+        return $this->policy->canWriteMany($u, $accounts);
     }
 
     /**
-     * Levels the user may Run / Stop at. Interim rule until B2's users.ads_authority: Ads authority = admin only, so an
-     * admin acts at every level and everyone else (buyers, supervisors) at ad level only (W1, D4).
+     * Levels the user may Run / Stop at (B2, D4), from WritePolicy: Ads authority holders every level, everyone else ad
+     * level only.
      *
      * @return list<'campaign'|'adset'|'ad'>
      */
     public function allowedLevels(User $u): array
     {
-        return $u->isAdmin() ? self::LEVELS : ['ad'];
-    }
-
-    /**
-     * @param  'campaign'|'adset'|'ad'  $level
-     * @param  'active'|'paused'  $status
-     *
-     * @throws AuthorizationException outside the user's scope
-     * @throws ValidationException unknown target or the platform refused (the message is readable)
-     */
-    public function setStatus(User $u, AdAccount $a, string $level, string $externalId, string $status, ?string $reason): AdAction
-    {
-        if (! $this->inScope($u, $a)) {
-            throw new AuthorizationException(__('ads.errors.out_of_scope'));
-        }
-        if (in_array($level, self::LEVELS, true) && ! in_array($level, $this->allowedLevels($u), true)) {
-            $row = $this->find($a, $level, $externalId);
-            AdAction::create([
-                'user_id' => $u->id, 'platform' => $a->platform, 'ad_account_id' => $a->id, 'account_name' => $a->name, 'level' => $level, 'external_id' => $externalId,
-                'name' => mb_substr((string) $row?->name, 0, 500), 'from_status' => $row?->status, 'to_status' => strtoupper($status),
-                'reason' => $reason !== null && trim($reason) !== '' ? trim($reason) : null, 'result' => AdAction::ERROR, 'error' => 'level_not_allowed',
-            ]);
-
-            throw ValidationException::withMessages(['status' => __('ads.errors.'.$level.'_level_not_allowed')]);
-        }
-        if (! in_array($level, self::LEVELS, true) || ! in_array($status, self::STATUSES, true)) {
-            throw ValidationException::withMessages(['status' => __('ads.errors.bad_request')]);
-        }
-        if (! WritableAccounts::allows($a)) {
-            // An owner choice (ads:writable), so Stop is not exempt. Logged like any refused attempt.
-            $row = $this->find($a, $level, $externalId);
-            AdAction::create([
-                'user_id' => $u->id, 'platform' => $a->platform, 'ad_account_id' => $a->id, 'account_name' => $a->name, 'level' => $level, 'external_id' => $externalId,
-                'name' => mb_substr((string) $row?->name, 0, 500), 'from_status' => $row?->status, 'to_status' => strtoupper($status),
-                'reason' => $reason !== null && trim($reason) !== '' ? trim($reason) : null, 'result' => AdAction::ERROR, 'error' => 'account_not_writable',
-            ]);
-
-            throw ValidationException::withMessages(['status' => __('ads.errors.account_not_writable')]);
-        }
-
-        $row = $this->find($a, $level, $externalId);
-        if ($row === null) {
-            throw ValidationException::withMessages(['status' => __('ads.errors.not_found')]);
-        }
-        // No refusal on the local status: it can be an hour stale, and a redundant pause or run is harmless.
-
-        $to = strtoupper($status);
-        $log = [
-            'user_id' => $u->id, 'platform' => $a->platform, 'ad_account_id' => $a->id, 'account_name' => $a->name, 'level' => $level, 'external_id' => $externalId,
-            'name' => mb_substr((string) $row->name, 0, 500),
-            'from_status' => $row->status,
-            'to_status' => $to, 'reason' => $reason !== null && trim($reason) !== '' ? trim($reason) : null,
-        ];
-
-        try {
-            $writer = $this->drivers->writer(AdPlatform::from($a->platform));
-            WriteGuard::check($a, $writer);
-            $writer->setStatus($a, $level, $externalId, $status);
-        } catch (WriteRefused $e) {
-            AdAction::create($log + ['result' => AdAction::ERROR, 'error' => $e->reason]);
-
-            throw ValidationException::withMessages(['status' => __('ads.errors.'.$e->reason)]);
-        } catch (Throwable $e) {
-            $known = $e instanceof AdsApiException;
-            $raw = SecretScrubber::scrub($e->getMessage());
-            AdAction::create($log + ['result' => AdAction::ERROR, 'error' => $raw !== '' ? $raw : $e::class]);
-            if (! $known) {
-                report($e);
-            }
-
-            $message = $e instanceof RateLimited ? __('ads.errors.rate_limited') : ($known && $raw !== '' ? $raw : __('ads.errors.failed'));
-
-            throw ValidationException::withMessages(['status' => $message]);
-        }
-
-        // The platform changed: audit first, so a local failure below can never erase it.
-        $action = AdAction::create($log + ['result' => AdAction::OK]);
-
-        try {
-            $row->forceFill(['status' => $to])->save(); // effective_status stays for the next sync
-        } catch (Throwable $e) {
-            report($e);
-            $action->update(['error' => mb_substr('Local status not updated: '.SecretScrubber::scrub($e->getMessage()), 0, 1000)]);
-        }
-
-        return $action;
-    }
-
-    /** @return list<int>|null null = every account */
-    private function todayIds(User $u): ?array
-    {
-        if ($u->isSupervisorOrAbove()) {
-            return null;
-        }
-        if ($this->scope->buyerFor($u) === null) {
-            return [];
-        }
-
-        $today = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay();
-
-        return $this->scope->accountIds($u, $today, $today) ?? [];
-    }
-
-    private function find(AdAccount $a, string $level, string $externalId): Ad|AdSet|AdCampaign|null
-    {
-        return match ($level) {
-            'campaign' => AdCampaign::where('ad_account_id', $a->id)->where('external_id', $externalId)->first(),
-            'adset' => AdSet::where('external_id', $externalId)->whereHas('campaign', fn ($q) => $q->where('ad_account_id', $a->id))->first(),
-            'ad' => Ad::where('ad_account_id', $a->id)->where('external_id', $externalId)->first(),
-        };
+        return $this->policy->allowedLevels($u);
     }
 }

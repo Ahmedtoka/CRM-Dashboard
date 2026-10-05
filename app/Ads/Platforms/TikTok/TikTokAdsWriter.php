@@ -9,6 +9,8 @@ use App\Ads\Platforms\Data\AdDraft;
 use App\Ads\Platforms\Data\CampaignNode;
 use App\Ads\Platforms\Data\Identity;
 use App\Ads\Platforms\Data\MediaRef;
+use App\Ads\Platforms\Data\ObjectState;
+use App\Ads\Platforms\ReadUnsupported;
 use App\Models\AdAccount;
 use App\Models\AdMaterialFile;
 use Illuminate\Support\Facades\Storage;
@@ -218,6 +220,12 @@ class TikTokAdsWriter implements AdPlatformWriter
             $key => [$this->numericId($externalId)],
             'operation_status' => strtolower($status) === 'active' ? 'ENABLE' : 'DISABLE',
         ]);
+    }
+
+    /** Not built yet: the Run guard refuses a TikTok Run with budget_unreadable, a Stop reads nothing. */
+    public function readObject(AdAccount $a, string $level, string $externalId): ObjectState
+    {
+        throw new ReadUnsupported('TikTok live reads are not supported yet.');
     }
 
     /**

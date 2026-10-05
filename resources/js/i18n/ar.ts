@@ -2822,6 +2822,8 @@ const ar = {
         },
         ads_token_scope_missing_item: 'ربط الإعلانات «{name}» بقى للقراءة بس: التوكن مفيهوش صلاحية ads_management',
         ads_token_expiring_item: 'توكن ربط الإعلانات «{name}» هيخلص كمان {days} يوم — غيّره',
+        ads_stop_failed_item: 'إيقاف «{name}» ({account}) متبعتش — وقّفه من Ads Manager',
+        ads_stop_unknown_item: 'المنصة مأكدتش إيقاف «{name}» ({account}) — اتأكد من Ads Manager إنه واقف',
         channel_problem_codes: {
             token_missing: 'مفيش توكن محفوظ — اعمل إعادة ربط',
             token_invalid: 'التوكن مبقاش صالح — اعمل إعادة ربط',
@@ -2849,6 +2851,8 @@ const ar = {
             ads_token_scope_missing: 'ربط الإعلانات للقراءة بس',
             ads_data_health: 'صحة بيانات الإعلانات',
             ads_token_expiring: 'توكن الإعلانات قرّب يخلص',
+            ads_stop_failed: 'إيقاف متبعتش',
+            ads_stop_unknown: 'إيقاف مش متأكد',
         },
     },
     shortcuts: {
@@ -3190,6 +3194,8 @@ const ar = {
             change: 'من {from} إلى {to}',
             result_ok: 'تم',
             result_error: 'فشل',
+            result_pending: 'قيد التنفيذ',
+            pending: 'التغيير قيد التنفيذ. تابعه في سجل الإجراءات.',
             status_active: 'شغّال',
             status_paused: 'واقف',
             unknown_user: 'السيستم',

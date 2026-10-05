@@ -10,8 +10,15 @@ use App\Ads\Captions\FakeCaptionGenerator;
 use App\Ads\Captions\GeneratesCaptions;
 use App\Ads\Commands\ImportArenaTokenCommand;
 use App\Ads\Commands\SetupTeamCommand;
+use App\Ads\Control\Commands\AdsAuthorityCommand;
 use App\Ads\Control\Commands\ClearOpenKeysCommand;
 use App\Ads\Control\Commands\WritableAccountsCommand;
+use App\Ads\Control\Commands\WriteLimitsCommand;
+use App\Ads\Control\Commands\WritePreviewCommand;
+use App\Ads\Control\Commands\WriteResolveCommand;
+use App\Ads\Control\Commands\WritesSwitchCommand;
+use App\Ads\Control\Commands\WriteSweepCommand;
+use App\Ads\Control\Write\WriteRateLimits;
 use App\Ads\Doctor\DoctorCommand;
 use App\Ads\Health\Commands\GateCommand;
 use App\Ads\Health\Commands\HealthCommand;
@@ -49,8 +56,10 @@ class AdsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class, ReconcileCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, AdsAuthorityCommand::class, WritesSwitchCommand::class, WriteResolveCommand::class, WriteSweepCommand::class, WriteLimitsCommand::class, WritePreviewCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class, ReconcileCommand::class]);
         }
+
+        WriteRateLimits::register();
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
             $schedule->command(SyncAdsCommand::class, ['--days=3'])
@@ -86,6 +95,11 @@ class AdsServiceProvider extends ServiceProvider
             // After the deep sync (03:15) has had time to run: only refreshes each account's complete_from, prints nothing.
             $schedule->command(ReconcileCommand::class, ['--from='.HistoryWindow::start()->toDateString(), '--quiet-update'])
                 ->dailyAt('06:30')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
+
+            // Liveness of confirmed Stop retries (2.1 rule 6): re-dispatches a lost retry or ends it failed with a notice.
+            // Never a new platform decision: it only re-sends an already confirmed Stop, within its 3-call bound.
+            $schedule->command(WriteSweepCommand::class)->name('ads:write-sweep-stop-retries')
+                ->everyFiveMinutes()->timezone('Africa/Cairo')->withoutOverlapping(10)->onOneServer()->appendOutputTo(storage_path('logs/ads-schedule.log'));
 
             $schedule->command(SweepStuckRunsCommand::class)
                 ->everyFiveMinutes()->timezone('Africa/Cairo')->withoutOverlapping(10)->onOneServer()->appendOutputTo(storage_path('logs/ads-schedule.log'));

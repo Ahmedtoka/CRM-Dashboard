@@ -5,7 +5,6 @@ use App\Ads\Sync\HistoryPruner;
 use App\Models\ActivityLog;
 use App\Models\Ad;
 use App\Models\AdAccount;
-use App\Models\AdAction;
 use App\Models\AdDailyMetric;
 use App\Models\AdPublication;
 use App\Models\AdsApiUsage;
@@ -70,7 +69,7 @@ function pruneHistorySeed(): array
     $order = Order::factory()->create(['customer_id' => $customer->id, 'ad_id' => $augustAd->id, 'created_at' => '2026-08-15 12:00:00']);
     Conversation::factory()->create(['created_at' => '2026-08-15 12:00:00']);
     ActivityLog::factory()->create(['created_at' => '2026-08-15 12:00:00']);
-    AdAction::create(['ad_account_id' => $account->id, 'platform' => 'meta', 'level' => 'ad', 'external_id' => '1', 'to_status' => 'PAUSED', 'result' => 'ok', 'created_at' => '2026-08-10 09:00:00']);
+    DB::table('ad_actions')->insert(['ad_account_id' => $account->id, 'platform' => 'meta', 'level' => 'ad', 'external_id' => '1', 'to_status' => 'PAUSED', 'result' => 'ok', 'created_at' => '2026-08-10 09:00:00', 'updated_at' => '2026-08-10 09:00:00']); // frozen model
     AdPublication::create([
         'ad_account_id' => $account->id, 'platform' => 'meta', 'campaign_external_id' => 'c1', 'adset_external_id' => 's1',
         'headline' => 'H', 'primary_text' => 'T', 'cta' => 'SHOP_NOW', 'ad_name' => 'A', 'link' => 'https://x.test', 'url_tags' => '',

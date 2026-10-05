@@ -4,6 +4,7 @@ namespace App\Ads\Platforms\Meta;
 
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\MissingPermission;
+use App\Ads\Platforms\PlatformUnreachable;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
 use App\Ads\Platforms\TokenInvalid;
@@ -56,17 +57,27 @@ class MetaAdsApi
         return self::HOST.'/'.$this->version().'/'.ltrim($path, '/');
     }
 
-    /** GET one page. @return array<string, mixed> */
-    public function get(string $token, string $path, array $query = []): array
+    /**
+     * GET one page.
+     *
+     * @param  int|null  $timeout  seconds; null = the default 90
+     * @return array<string, mixed>
+     */
+    public function get(string $token, string $path, array $query = [], ?int $timeout = null): array
     {
-        return $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)
+        return $this->handle(fn () => Http::withToken($token)->timeout($timeout ?? 90)->connectTimeout(min(15, $timeout ?? 15))
             ->get($this->url($path), $query), null, $path);
     }
 
-    /** POST form fields (a write: never throws after a 2xx). @return array<string, mixed> */
-    public function post(string $token, string $path, array $data = []): array
+    /**
+     * POST form fields (a write: never throws after a 2xx).
+     *
+     * @param  int|null  $timeout  seconds; null = the default 90
+     * @return array<string, mixed>
+     */
+    public function post(string $token, string $path, array $data = [], ?int $timeout = null): array
     {
-        return $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)
+        return $this->handle(fn () => Http::withToken($token)->timeout($timeout ?? 90)->connectTimeout(min(15, $timeout ?? 15))
             ->asForm()->post($this->url($path), $data), $token, $path);
     }
 
@@ -226,7 +237,8 @@ class MetaAdsApi
         try {
             $response = $send();
         } catch (ConnectionException $e) {
-            throw new AdsApiException($this->scrub('Meta is unreachable: '.$e->getMessage()));
+            // The request may or may not have reached Meta: callers that wrote must read back before deciding.
+            throw new PlatformUnreachable($this->scrub('Meta is unreachable: '.$e->getMessage()));
         }
 
         app(UsageRecorder::class)->record($response, $path);
