@@ -7,7 +7,9 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Spec 1.3: the same range seen three ways.
- * - store: every Shopify/CRM order placed in range and not cancelled or failed (store-wide, ignores the account/buyer filters);
+ * - store: every Shopify/CRM order placed in range that is real by the CRM side's definition (AdsQuery::realOrders and
+ *   netRevenueSql: not awaiting payment/cancelled/failed/courier-returned, refunds counted once); store-wide, it ignores
+ *   the account/buyer filters;
  * - crm: the ad-attributed real orders (AdsQuery::orders), plus how many of them were chat orders;
  * - platform: what the ad platforms report in ad_daily_metrics.
  * A gap `x_vs_y` is x − y; its percentage is relative to y.
@@ -58,11 +60,10 @@ final class RevenueSummary
     /** @return array{orders:int, revenue:float} */
     private function store(AdsFilter $f): array
     {
-        $row = DB::table('orders')
-            ->whereNull('cancelled_at')
-            ->whereNotIn('status', AdsQuery::DEAD_ORDER_STATUSES)
-            ->whereBetween('placed_at', [$f->startUtc(), $f->endUtc()])
-            ->selectRaw('COUNT(*) as orders, COALESCE(SUM(total), 0) as revenue')
+        $row = AdsQuery::realOrders(DB::table('orders as o'))
+            ->whereNull('o.cancelled_at')
+            ->whereBetween('o.placed_at', [$f->startUtc(), $f->endUtc()])
+            ->selectRaw('COUNT(*) as orders, COALESCE(SUM('.AdsQuery::netRevenueSql().'), 0) as revenue')
             ->first();
 
         return ['orders' => (int) $row->orders, 'revenue' => round((float) $row->revenue, 2)];

@@ -5,6 +5,7 @@ namespace App\Ads\Reports;
 use App\Ads\AdsSettings;
 use App\Ads\Buyers\BuyerResolver;
 use App\Ads\Control\AdWriteService;
+use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\ShipmentStatus;
 use App\Models\AdAccountAssignment;
@@ -16,14 +17,20 @@ use Illuminate\Support\Facades\DB;
 /**
  * The shared building blocks of the Ads reports (spec section 5):
  * - metric rows (ad_daily_metrics m + buyer of the row's day + ads ad + ad_accounts acc), filtered;
- * - real orders (ad- or campaign-attributed, not cancelled/failed/courier-returned, net of refunds), each tagged with
- *   the buyer who held the ad's account on the order's Cairo day;
+ * - real orders (ad- or campaign-attributed, not awaiting payment/cancelled/failed/courier-returned; net revenue =
+ *   netRevenueSql(), refunds counted once), each tagged with the buyer who held the ad's account on the order's Cairo day;
  * - inbox conversations from ads, tagged the same way on the day of the ad touch.
  */
 final class AdsQuery
 {
-    /** Orders that never became real Shopify orders. */
-    public const DEAD_ORDER_STATUSES = [OrderStatus::Cancelled->value, OrderStatus::Failed->value];
+    /**
+     * A3 (F-043): statuses that are not real revenue: unpaid (awaiting payment) or never a real Shopify order.
+     * Used by orders(), the conversations() `ordered` subquery and the store side of RevenueSummary.
+     */
+    public const NOT_REAL_STATUSES = [OrderStatus::AwaitingPayment->value, OrderStatus::Cancelled->value, OrderStatus::Failed->value];
+
+    /** Alias of NOT_REAL_STATUSES, kept for callers. */
+    public const DEAD_ORDER_STATUSES = self::NOT_REAL_STATUSES;
 
     /** Courier-returned COD orders (spec section 2: real orders are net of returns); usually no Shopify refund. */
     public const RETURNED_SHIPMENT = ShipmentStatus::Returned->value;
@@ -239,7 +246,7 @@ final class AdsQuery
 
     /**
      * Real orders in range: `ad_id` on an ad of the filtered accounts, or (no ad) `ad_campaign_id` on a
-     * filtered campaign; not cancelled/failed, shipment not returned; net = total − refunds. Buyer = holder of the account on
+     * filtered campaign; realOrders() (not awaiting payment/cancelled/failed, shipment not returned); net = netRevenueSql(). Buyer = holder of the account on
      * the order's Cairo day; buyer filters apply on that.
      *
      * @return Collection<int, array{id:int, ad_id:?int, account_id:int, platform:string, buyer_id:?int, date:string, net:float}>
@@ -250,18 +257,14 @@ final class AdsQuery
             return collect();
         }
 
-        $refunds = DB::table('refunds')->selectRaw('order_id, SUM(amount) as refunded')->groupBy('order_id');
-        $q = DB::table('orders as o')
+        $q = self::realOrders(DB::table('orders as o'))
             ->leftJoin('ads as ad', 'ad.id', '=', 'o.ad_id')
             ->leftJoin('ad_campaigns as camp', 'camp.id', '=', 'o.ad_campaign_id')
             ->join('ad_accounts as acc', 'acc.id', '=', DB::raw('COALESCE(ad.ad_account_id, camp.ad_account_id)'))
-            ->leftJoinSub($refunds, 'rf', 'rf.order_id', '=', 'o.id')
             ->where(fn ($w) => $w->whereNotNull('o.ad_id')->orWhereNotNull('o.ad_campaign_id'))
-            ->whereNotIn('o.status', self::DEAD_ORDER_STATUSES)
-            ->where(fn ($w) => $w->whereNull('o.shipment_status')->orWhere('o.shipment_status', '!=', self::RETURNED_SHIPMENT))
             ->whereBetween('o.placed_at', [$f->startUtc(), $f->endUtc()])
-            ->select(['o.id', 'o.ad_id', 'o.placed_at', 'o.total', 'acc.id as account_id', 'acc.platform'])
-            ->selectRaw('COALESCE(rf.refunded, 0) as refunded');
+            ->select(['o.id', 'o.ad_id', 'o.placed_at', 'acc.id as account_id', 'acc.platform'])
+            ->selectRaw(self::netRevenueSql().' as net');
         if ($f->activeCampaignsOnly) {
             $q->join('ad_campaigns as actv', 'actv.id', '=', DB::raw('COALESCE(ad.ad_campaign_id, o.ad_campaign_id)'))
                 ->whereIn('actv.status', AdWriteService::ACTIVE_STATUSES);
@@ -281,14 +284,14 @@ final class AdsQuery
                 'platform' => (string) $r->platform,
                 'buyer_id' => $this->ownerOn($owners, (int) $r->account_id, $date),
                 'date' => $date,
-                'net' => (float) $r->total - (float) $r->refunded,
+                'net' => max(0.0, round((float) $r->net, 2)),
             ];
         })->filter(fn (array $o) => $this->buyerMatches($f, $o['buyer_id']))->values();
     }
 
     /**
      * Conversations whose first ad (conversations.ad_id = ads.external_id) is on a filtered account,
-     * ad touch in range. `ordered` = the customer placed a real (not cancelled/failed/returned) order after the
+     * ad touch in range. `ordered` = the customer placed a real (NOT_REAL_STATUSES excluded, not returned) order after the
      * touch and by the end of the range.
      *
      * @return Collection<int, array{id:int, customer_id:?int, account_id:int, buyer_id:?int, date:string, ordered:bool}>
@@ -307,10 +310,10 @@ final class AdsQuery
             ->whereBetween('c.ad_attributed_at', [$f->startUtc(), $end])
             ->select(['c.id', 'c.customer_id', 'c.ad_attributed_at', 'acc.id as account_id'])
             ->selectRaw('CASE WHEN EXISTS ('
-                .'SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id AND o.status NOT IN (?, ?) '
+                .'SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id AND o.status NOT IN (?, ?, ?) '
                 .'AND (o.shipment_status IS NULL OR o.shipment_status <> ?) '
                 .'AND o.placed_at > c.ad_attributed_at AND o.placed_at <= ?) THEN 1 ELSE 0 END as ordered',
-                [...self::DEAD_ORDER_STATUSES, self::RETURNED_SHIPMENT, $end->format('Y-m-d H:i:s')])
+                [...self::NOT_REAL_STATUSES, self::RETURNED_SHIPMENT, $end->format('Y-m-d H:i:s')])
             ->orderBy('c.id')->orderBy('ad.id');
         $this->accountFilters($q, $f);
 
@@ -329,6 +332,31 @@ final class AdsQuery
                 'ordered' => (bool) $r->ordered,
             ];
         })->filter(fn (array $c) => $this->buyerMatches($f, $c['buyer_id']))->values();
+    }
+
+    /**
+     * The real-order predicate on `orders as o` (A3): status not in NOT_REAL_STATUSES and the shipment not
+     * courier-returned. Shared by the CRM side (orders()) and the store side (RevenueSummary).
+     */
+    public static function realOrders(Builder $q): Builder
+    {
+        return $q->whereNotIn('o.status', self::NOT_REAL_STATUSES)
+            ->where(fn ($w) => $w->whereNull('o.shipment_status')->orWhere('o.shipment_status', '!=', self::RETURNED_SHIPMENT));
+    }
+
+    /**
+     * Net revenue of one order `o`, refunds counted once (A3, F-005), never below 0:
+     * - a store order's `total` is Shopify current_total_price (OrderMapper.php:410), already after refunds: used as is;
+     * - a chat order's `total` is set by the CRM and never refreshed from Shopify (OrderMapper::updateChatOrder), so its
+     *   Shopify refunds (refunds table) are subtracted here.
+     */
+    public static function netRevenueSql(): string
+    {
+        $chat = OrderSource::Chat->value;
+        $chatNet = 'o.total - COALESCE((SELECT SUM(r.amount) FROM refunds r WHERE r.order_id = o.id), 0)';
+
+        return "(CASE WHEN o.source = '{$chat}' THEN (CASE WHEN {$chatNet} > 0 THEN {$chatNet} ELSE 0 END) "
+            .'ELSE (CASE WHEN o.total > 0 THEN o.total ELSE 0 END) END)';
     }
 
     /**

@@ -2,6 +2,7 @@
 
 use App\Ads\Buyers\AssignmentService;
 use App\Ads\Materials\MaterialFileStorage;
+use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Media\Thumbnailer;
 use App\Models\Ad;
@@ -193,7 +194,7 @@ it('hides spend from content users and scopes a buyers numbers to their own rows
     $w = matBuyerWorld();
     matDays($w['ad'], 10, 100, 500);       // own: spend 1000, value 5000
     matDays($w['other'], 10, 100, 100);    // someone elses
-    Order::factory()->create(['ad_id' => $w['ad']->id, 'placed_at' => now()->subDays(2), 'total' => 300]);
+    Order::factory()->create(['ad_id' => $w['ad']->id, 'placed_at' => now()->subDays(2), 'total' => 300, 'status' => OrderStatus::Confirmed]); // A3: an unpaid order is not real
     $m = AdMaterial::factory()->create();
     $m->ads()->attach([$w['ad']->id, $w['other']->id]);
 

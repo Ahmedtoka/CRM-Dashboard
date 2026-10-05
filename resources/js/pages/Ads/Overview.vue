@@ -55,6 +55,7 @@ const kpis = computed(() => {
             label: t('ads.kpi.real_orders'),
             value: n(x.real_orders),
             hint: t('ads.kpi.real_revenue', { amount: money(x.real_revenue), roas: formatRoas(x.real_roas, locale.value) }),
+            tip: t('ads.kpi.real_revenue_tip'),
             border: 'border-t-success',
         },
         {
@@ -242,7 +243,7 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
                         </p>
                         <p class="mt-1 text-2xs text-muted-foreground">{{ t(`ads.kpi.source_${tot.source}`) }}</p>
                     </div>
-                    <StatCard v-for="k in kpis" :key="k.key" :label="k.label" :value="k.value" :hint="k.hint" class="border-t-4" :class="k.border" />
+                    <StatCard v-for="k in kpis" :key="k.key" :label="k.label" :value="k.value" :hint="k.hint" :title="k.tip" class="border-t-4" :class="k.border" />
                 </div>
 
                 <RevenueSummaryCard :summary="summary" />

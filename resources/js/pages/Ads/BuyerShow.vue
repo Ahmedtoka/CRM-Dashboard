@@ -45,6 +45,7 @@ const kpis = computed(() => {
             label: t('ads.kpi.real_orders'),
             value: n(x.real_orders),
             hint: t('ads.kpi.real_revenue', { amount: money(x.real_revenue), roas: formatRoas(x.real_roas, locale.value) }),
+            tip: t('ads.kpi.real_revenue_tip'),
             border: 'border-t-success',
         },
         { key: 'cpa', label: t('ads.kpi.cpa'), value: money(x.cpa), border: 'border-t-chart-5' },
@@ -67,7 +68,7 @@ const kpis = computed(() => {
             tone: (x.budget_used_pct ?? 0) > 100 ? 'warning' : 'default',
             border: 'border-t-primary',
         },
-    ] as { key: string; label: string; value: string; hint?: string; tone?: 'default' | 'positive' | 'warning' | 'negative'; border: string }[];
+    ] as { key: string; label: string; value: string; hint?: string; tip?: string; tone?: 'default' | 'positive' | 'warning' | 'negative'; border: string }[];
 });
 
 const series = computed<{ bars: ComboSeries[]; lines: ComboSeries[] }>(() => ({
@@ -151,6 +152,7 @@ const breadcrumbs = computed(() => [
                     :label="k.label"
                     :value="k.value"
                     :hint="k.hint"
+                    :title="k.tip"
                     :tone="k.tone"
                     class="border-t-4"
                     :class="k.border"
