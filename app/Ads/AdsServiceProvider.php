@@ -4,6 +4,7 @@ namespace App\Ads;
 
 use App\Ads\Attribution\Commands\AttributeOrdersCommand;
 use App\Ads\Attribution\Commands\BackfillReferralsCommand;
+use App\Ads\Attribution\Commands\RestoreAttributionCommand;
 use App\Ads\Captions\CaptionGenerator;
 use App\Ads\Captions\FakeCaptionGenerator;
 use App\Ads\Captions\GeneratesCaptions;
@@ -41,7 +42,7 @@ class AdsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {

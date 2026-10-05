@@ -35,16 +35,25 @@ final class OrderAttribution
     /** @var array<string, int> */
     private array $campaignsByName = [];
 
-    /** Returns how many orders got an attribution. */
+    /** Days back a campaign-level utm order is re-checked for its ad without --force (R-18). */
+    public const UTM_REPROCESS_DAYS = 35;
+
+    /**
+     * Returns how many orders got an attribution. Without --force: unattributed and inbox orders, cancelled orders
+     * that still carry one, and utm_campaign orders with a utm_content placed in the last UTM_REPROCESS_DAYS days
+     * (upgraded only when the content now names a stored ad).
+     */
     public function run(CarbonImmutable $from, CarbonImmutable $to, bool $force = false): int
     {
         $this->loadLookups();
         $count = 0;
+        $reprocessFrom = CarbonImmutable::now()->subDays(self::UTM_REPROCESS_DAYS);
 
         Order::query()
             ->whereBetween('placed_at', [$from, $to])
             ->when(! $force, fn ($q) => $q->where(fn ($w) => $w->whereNull('ad_attribution')->orWhere('ad_attribution', 'inbox')
-                ->orWhere(fn ($c) => $c->where('status', OrderStatus::Cancelled->value)->whereNotNull('ad_attribution'))))
+                ->orWhere(fn ($c) => $c->where('status', OrderStatus::Cancelled->value)->whereNotNull('ad_attribution'))
+                ->orWhere(fn ($u) => $u->where('ad_attribution', 'utm_campaign')->whereNotNull('utm_content')->where('placed_at', '>=', $reprocessFrom))))
             ->chunkById(500, function (Collection $orders) use (&$count, $force) {
                 $touches = $this->touches($orders);
                 $spend = $this->spendFor($orders);
@@ -71,8 +80,12 @@ final class OrderAttribution
                         continue;
                     }
 
-                    // Without --force an inbox attribution is only replaced by stronger (utm) evidence.
+                    // Without --force an inbox attribution is only replaced by stronger (utm) evidence, and a
+                    // campaign-level utm one only by an ad match.
                     if (! $force && $order->ad_attribution === 'inbox' && $result['ad_attribution'] === 'inbox') {
+                        continue;
+                    }
+                    if (! $force && $order->ad_attribution === 'utm_campaign' && $result['ad_attribution'] !== 'utm_ad') {
                         continue;
                     }
 
