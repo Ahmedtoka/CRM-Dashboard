@@ -28,6 +28,30 @@ class QueueInspector
         return $this->source !== null || config('queue.default') === 'redis';
     }
 
+    /**
+     * Ready, delayed and reserved job counts of a queue (Redis only). Read-only; null when not Redis or unreachable.
+     *
+     * @return array{ready: int, delayed: int, reserved: int}|null
+     */
+    public function lengths(string $queue): ?array
+    {
+        if (config('queue.default') !== 'redis') {
+            return null;
+        }
+
+        try {
+            $redis = Redis::connection(config('queue.connections.redislong.connection'));
+
+            return [
+                'ready' => (int) $redis->llen("queues:{$queue}"),
+                'delayed' => (int) $redis->zcard("queues:{$queue}:delayed"),
+                'reserved' => (int) $redis->zcard("queues:{$queue}:reserved"),
+            ];
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     /** @return list<array{job: string, account_id: ?int, account: ?string, kind: ?string, days: ?int, attempts: int, available_at: ?string, trigger: ?string}> */
     public function waiting(string $queue = 'commercelong'): array
     {
