@@ -76,6 +76,18 @@ class WriteActionController extends Controller
         return self::outcome($service->confirm($request->user(), $x, $data['diff_hash']));
     }
 
+    /** Propose the inverse of a finished action (a new proposal, confirmed like any other). */
+    public function rollback(Request $request, string $action, WriteActionService $service): JsonResponse
+    {
+        $x = $service->find($request->user(), $action);
+        $key = $this->idempotencyKey($request);
+        $data = $this->validated($request, ['reason' => ['nullable', 'string', 'max:1000']]);
+
+        $result = $service->rollback($request->user(), $x, $key, $data['reason'] ?? null);
+
+        return $this->proposal($result['action'], $result['replayed']);
+    }
+
     public function cancel(Request $request, string $action, WriteActionService $service): JsonResponse
     {
         $x = $service->cancel($request->user(), $service->find($request->user(), $action));

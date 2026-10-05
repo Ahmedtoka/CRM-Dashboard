@@ -212,12 +212,32 @@ class WriteExecutor
             if ($x->isStop()) {
                 $this->supersedeRunsBy($x);
             }
+            if ($x->rollback_of_id !== null) {
+                $this->markRolledBack($x);
+            }
         } elseif (! $x->isStop() && $x->state === AdWriteAction::SUPERSEDED_BY_STOP) {
             // The Run's call landed after a Stop succeeded: the Stop wins (2.1 rule 4).
             $this->reapplyStop($x);
         }
 
         return $x->refresh();
+    }
+
+    /** A succeeded rollback: the original action becomes rolled_back (CAS on succeeded). */
+    protected function markRolledBack(AdWriteAction $rollback): void
+    {
+        $original = AdWriteAction::find($rollback->rollback_of_id);
+        if ($original === null) {
+            return;
+        }
+        $changed = AdWriteAction::whereKey($original->id)->where('state', AdWriteAction::SUCCEEDED)->update([
+            'state' => AdWriteAction::ROLLED_BACK, 'rolled_back_by_id' => $rollback->id, 'updated_at' => now(),
+        ]) === 1;
+        if ($changed) {
+            $original->refresh();
+            AdsAudit::record('write.rolled_back', $original, ['state' => AdWriteAction::SUCCEEDED], ['state' => AdWriteAction::ROLLED_BACK],
+                ['public_id' => $original->public_id, 'rolled_back_by' => $rollback->public_id]);
+        }
     }
 
     /** Stop beats Run (2.1 rule 4): the Runs on the target still executing or unknown are superseded_by_stop. */

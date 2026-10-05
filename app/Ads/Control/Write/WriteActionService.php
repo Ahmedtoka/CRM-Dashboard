@@ -177,6 +177,26 @@ class WriteActionService
         return $this->executor->execute($x);
     }
 
+    /**
+     * Rollback = propose the inverse (write-api 6). The inverse is a new action with its own rules: undoing a Stop is a
+     * Run (policy, kill switch, Run guard), undoing a Run is a Stop (always allowed in scope).
+     *
+     * @return array{action: AdWriteAction, replayed: bool}
+     *
+     * @throws WriteDenied 422 not_reversible, or any propose refusal
+     */
+    public function rollback(User $u, AdWriteAction $done, string $key, ?string $reason = null): array
+    {
+        $inverse = $this->type->inverse($done);
+        $account = $done->account;
+        if ($inverse === null || $account === null) {
+            throw WriteDenied::make('not_reversible', ['state' => $done->state]);
+        }
+
+        return $this->propose($u, $account, $done->target_level, $done->target_external_id, $inverse['to'], $reason, $key,
+            source: 'rollback', sourceRef: $done->public_id, rollbackOf: $done);
+    }
+
     /** proposed → cancelled by the proposer (CAS). */
     public function cancel(User $u, AdWriteAction $x): AdWriteAction
     {

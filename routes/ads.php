@@ -33,6 +33,7 @@ Route::middleware('ads:report')->group(function () {
     Route::get('/ads/write-actions/{action}', [WriteActionController::class, 'show'])->name('ads.write-actions.show');
     Route::post('/ads/write-actions/{action}/confirm', [WriteActionController::class, 'confirm'])->middleware('throttle:30,1')->name('ads.write-actions.confirm');
     Route::post('/ads/write-actions/{action}/cancel', [WriteActionController::class, 'cancel'])->name('ads.write-actions.cancel');
+    Route::post('/ads/write-actions/{action}/rollback', [WriteActionController::class, 'rollback'])->middleware('throttle:30,1')->name('ads.write-actions.rollback');
 });
 
 Route::middleware('ads:manage')->group(function () {
