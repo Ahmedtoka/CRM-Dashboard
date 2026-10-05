@@ -92,6 +92,12 @@ class TikTokAdsDriver implements AdPlatformDriver
         return $out;
     }
 
+    /** No account-level control until this platform is live: an empty list means no control, and no request is made. */
+    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        return [];
+    }
+
     public function creativeMedia(AdAccount $a, array $adExternalIds): array
     {
         $adExternalIds = array_values(array_unique($adExternalIds));

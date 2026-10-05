@@ -486,6 +486,11 @@ it('reads the ad list once per backfill, on its first chunk', function () {
 
             return [];
         }
+
+        public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+        {
+            return []; // the control fetch is its own call (A2), not an ad-level metrics read
+        }
     };
     bindDriver($driver);
 

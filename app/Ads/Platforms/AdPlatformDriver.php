@@ -18,6 +18,14 @@ interface AdPlatformDriver
     public function dailyMetrics(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array;
 
     /**
+     * Account-level daily totals over [from, to], every ad status included (the control total). [] = no control
+     * for this platform.
+     *
+     * @return list<Data\AccountDailyTotal>
+     */
+    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array;
+
+    /**
      * @param  list<string>  $adExternalIds
      * @return list<Data\CreativeMedia>
      */

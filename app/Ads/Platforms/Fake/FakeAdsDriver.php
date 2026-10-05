@@ -5,6 +5,7 @@ namespace App\Ads\Platforms\Fake;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdPlatformDriver;
 use App\Ads\Platforms\AdPlatformWriter;
+use App\Ads\Platforms\Data\AccountDailyTotal;
 use App\Ads\Platforms\Data\AccountInfo;
 use App\Ads\Platforms\Data\AdDraft;
 use App\Ads\Platforms\Data\AdRow;
@@ -107,6 +108,27 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
                     linkClicks: $linkClicks, msgConversations: $msgConversations,
                 );
             }
+        }
+
+        return $out;
+    }
+
+    /** The control is the sum of the fake ad rows, so a fake sync always agrees with itself. */
+    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $days = [];
+        foreach ($this->dailyMetrics($a, $from, $to) as $m) {
+            $date = substr($m->date, 0, 10);
+            $d = $days[$date] ?? ['spend' => 0.0, 'impressions' => 0, 'purchases' => 0.0, 'value' => 0.0];
+            $days[$date] = [
+                'spend' => $d['spend'] + $m->spend, 'impressions' => $d['impressions'] + $m->impressions,
+                'purchases' => $d['purchases'] + $m->purchases, 'value' => $d['value'] + $m->purchaseValue,
+            ];
+        }
+        ksort($days);
+        $out = [];
+        foreach ($days as $date => $d) {
+            $out[] = new AccountDailyTotal((string) $date, round($d['spend'], 2), $d['impressions'], $d['purchases'], round($d['value'], 2), $a->currency ?: 'EGP');
         }
 
         return $out;

@@ -43,8 +43,10 @@ function hwSinces(): array
         ->map(function ($u) {
             parse_str((string) parse_url($u, PHP_URL_QUERY), $q);
 
-            return json_decode($q['time_range'], true);
-        })->values()->all();
+            return $q;
+        })
+        ->filter(fn ($q) => ($q['level'] ?? null) === 'ad') // the account-level control (A2) repeats the same range
+        ->map(fn ($q) => json_decode($q['time_range'], true))->values()->all();
 }
 
 it('chunks a 90-day backfill only inside the history window', function () {

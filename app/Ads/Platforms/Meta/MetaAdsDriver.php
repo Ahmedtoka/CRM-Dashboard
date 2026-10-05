@@ -4,6 +4,7 @@ namespace App\Ads\Platforms\Meta;
 
 use App\Ads\Platforms\AdPlatformDriver;
 use App\Ads\Platforms\AdsApiException;
+use App\Ads\Platforms\Data\AccountDailyTotal;
 use App\Ads\Platforms\Data\AccountInfo;
 use App\Ads\Platforms\Data\AdRow;
 use App\Ads\Platforms\Data\CreativeMedia;
@@ -102,6 +103,35 @@ class MetaAdsDriver implements AdPlatformDriver
                 adSetName: $r['adset_name'] ?? null,
                 linkClicks: (int) ($r['inline_link_clicks'] ?? 0),
                 msgConversations: (int) $this->actionValue($r['actions'] ?? [], self::MESSAGING_TYPE),
+            );
+        }
+
+        return $out;
+    }
+
+    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        // level=account counts archived and deleted ads too, so no status filter is needed here.
+        $rows = $this->api->paginate($this->token($a->connection), $this->actId($a).'/insights', [
+            'level' => 'account',
+            'time_increment' => 1,
+            'time_range' => json_encode(['since' => $from->toDateString(), 'until' => $to->toDateString()]),
+            'fields' => 'spend,impressions,actions,action_values,account_currency',
+            'limit' => 500,
+        ] + $this->attributionParams());
+
+        $out = [];
+        foreach ($rows as $r) {
+            if (empty($r['date_start'])) {
+                continue;
+            }
+            $out[] = new AccountDailyTotal(
+                date: substr((string) $r['date_start'], 0, 10),
+                spend: (float) ($r['spend'] ?? 0),
+                impressions: (int) ($r['impressions'] ?? 0),
+                purchases: $this->purchaseValue($r['actions'] ?? []),
+                purchaseValue: $this->purchaseValue($r['action_values'] ?? []),
+                currency: isset($r['account_currency']) ? (string) $r['account_currency'] : null,
             );
         }
 

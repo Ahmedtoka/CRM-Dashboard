@@ -4,7 +4,9 @@ namespace App\Ads\Sync;
 
 use App\Ads\Control\PublicationLinker;
 use App\Ads\Platforms\AdPlatform;
+use App\Ads\Platforms\AdPlatformDriver;
 use App\Ads\Platforms\AdsApiException;
+use App\Ads\Platforms\Data\AccountDailyTotal;
 use App\Ads\Platforms\Data\AdRow;
 use App\Ads\Platforms\Data\CreativeMedia;
 use App\Ads\Platforms\Data\DailyAdMetric;
@@ -15,6 +17,7 @@ use App\Ads\Platforms\SecretScrubber;
 use App\Ads\Platforms\TokenInvalid;
 use App\Models\Ad;
 use App\Models\AdAccount;
+use App\Models\AdAccountDaily;
 use App\Models\AdCampaign;
 use App\Models\AdDailyMetric;
 use App\Models\AdPlatformConnection;
@@ -108,7 +111,9 @@ final class AdsSyncService
             $this->upsertAds($a, $adRows);
             $this->linkPublications($a);
             $metrics = $driver->dailyMetrics($a, $from, $to);
+            [$control, $controlWarning] = $this->fetchControl($driver, $a, $from, $to);
             [$rows, $guard] = $this->replaceMetrics($a, $metrics, $from, $to);
+            $this->upsertAccountDaily($a, $control);
         } catch (AdsApiException $e) {
             $run->update(['status' => 'error', 'error' => self::scrub($e->getMessage()), 'finished_at' => now()]);
             if ($e instanceof RateLimited) {
@@ -128,7 +133,7 @@ final class AdsSyncService
         }
 
         // Metrics are committed; a media failure must not turn the run into an error.
-        $warnings = $guard === null ? [] : [$guard];
+        $warnings = array_values(array_filter([$controlWarning, $guard]));
         try {
             $this->fetchMedia($a, Ad::where('ad_account_id', $a->id)->whereNull('media_fetched_at')
                 ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'unknown')) // minimal ads have no creative to fetch
@@ -253,6 +258,59 @@ final class AdsSyncService
         $update = ['ad_campaign_id', 'ad_set_id', 'name', 'status', 'effective_status', 'type', 'headline', 'body', 'object_story_id', 'instagram_permalink_url', 'url_tags', 'carousel', 'created_time', 'raw', 'updated_at'];
         foreach (array_chunk($payload, self::CHUNK) as $chunk) {
             Ad::upsert($chunk, ['ad_account_id', 'external_id'], $update);
+        }
+    }
+
+    /**
+     * Account-level control totals for the run window. A failed control is a run warning only; a dead token or a
+     * rate limit stops the run like any other call.
+     *
+     * @return array{0: list<AccountDailyTotal>, 1: ?string}
+     */
+    private function fetchControl(AdPlatformDriver $driver, AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        try {
+            $control = $driver->accountDaily($a, $from, $to);
+        } catch (TokenInvalid|RateLimited $e) {
+            throw $e;
+        } catch (AdsApiException $e) {
+            return [[], 'Account totals: '.self::scrub($e->getMessage())];
+        }
+
+        $from = $from->toDateString();
+        $to = $to->toDateString();
+
+        return [array_values(array_filter($control, function (AccountDailyTotal $t) use ($from, $to) {
+            $date = substr($t->date, 0, 10);
+
+            return $date >= $from && $date <= $to && ! HistoryWindow::isBeforeStart($date);
+        })), null];
+    }
+
+    /**
+     * Insert keeps first_* = the first values seen; a later fetch moves only the latest columns and fetched_at, so a
+     * platform restatement stays measurable.
+     *
+     * @param  list<AccountDailyTotal>  $control
+     */
+    private function upsertAccountDaily(AdAccount $a, array $control): void
+    {
+        if ($control === []) {
+            return;
+        }
+        $now = now()->toDateTimeString();
+        $rows = [];
+        foreach ($control as $t) {
+            $rows[substr($t->date, 0, 10)] = [
+                'ad_account_id' => $a->id, 'date' => substr($t->date, 0, 10),
+                'spend' => round($t->spend, 2), 'impressions' => $t->impressions, 'purchases' => round($t->purchases, 2),
+                'purchase_value' => round($t->purchaseValue, 2), 'currency' => $t->currency,
+                'first_spend' => round($t->spend, 2), 'first_purchases' => round($t->purchases, 2),
+                'first_purchase_value' => round($t->purchaseValue, 2), 'first_fetched_at' => $now, 'fetched_at' => $now,
+            ];
+        }
+        foreach (array_chunk(array_values($rows), self::CHUNK) as $chunk) {
+            AdAccountDaily::upsert($chunk, ['ad_account_id', 'date'], ['spend', 'impressions', 'purchases', 'purchase_value', 'currency', 'fetched_at']);
         }
     }
 
