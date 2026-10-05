@@ -116,7 +116,7 @@ class WriteActionController extends Controller
         };
     }
 
-    private static function failure(AdWriteAction $x): WriteDenied
+    public static function failure(AdWriteAction $x): WriteDenied
     {
         $code = (string) ($x->error_code ?: 'failed');
         $details = array_filter([

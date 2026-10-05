@@ -2,6 +2,8 @@
 
 use App\Ads\Control\AdWriteService;
 use App\Ads\Control\StopAdvisor;
+use App\Ads\Control\Write\WriteActionService;
+use App\Ads\Control\Write\WriteDenied;
 use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Ads\Platforms\MissingPermission;
 use App\Ads\Platforms\RateLimited;
@@ -11,17 +13,18 @@ use App\Enums\UserRole;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdAccountAssignment;
-use App\Models\AdAction;
 use App\Models\AdCampaign;
 use App\Models\AdDailyMetric;
 use App\Models\AdMaterial;
+use App\Models\AdsAuditLog;
 use App\Models\AdSet;
+use App\Models\AdWriteAction;
 use App\Models\MediaBuyer;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonPeriod;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -29,6 +32,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 beforeEach(function () {
     Http::preventStrayRequests();
     Cache::forget('ads-fake-writer');
+    FakeAdsDriver::reset();
     config(['crm.ads.drivers.meta' => 'fake', 'crm.ads.drivers.tiktok' => 'fake', 'crm.ads.drivers.google' => 'fake']);
     $this->withoutVite();
 });
@@ -60,16 +64,18 @@ it('stops an ad: platform call, local status and the action row', function () {
     $ad = Ad::factory()->for($acc, 'account')->create(['name' => 'Tired ad']);
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
-    $this->actingAs($admin)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))
-        ->assertOk()->assertJsonPath('ok', true);
+    $res = $this->actingAs($admin)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))
+        ->assertOk()->assertJsonPath('ok', true)->assertJsonPath('status', 'PAUSED')->assertJsonPath('message', __('ads.flash.stopped'));
 
     expect(Cache::get('ads-fake-writer')['statuses'])->toBe([['level' => 'ad', 'id' => $ad->external_id, 'status' => 'paused']]);
     $ad->refresh();
     expect($ad->status)->toBe('PAUSED')->and($ad->effective_status)->toBe('ACTIVE'); // effective is left to the next sync
-    $row = AdAction::first();
-    expect($row->user_id)->toBe($admin->id)->and($row->platform)->toBe('meta')->and($row->ad_account_id)->toBe($acc->id)
-        ->and($row->level)->toBe('ad')->and($row->name)->toBe('Tired ad')->and($row->from_status)->toBe('ACTIVE')
-        ->and($row->to_status)->toBe('PAUSED')->and($row->reason)->toBe('ROAS too low')->and($row->result)->toBe('ok')->and($row->error)->toBeNull();
+    $row = AdWriteAction::sole();
+    expect($row->public_id)->toBe($res->json('action_id'))->and($row->source)->toBe('legacy')
+        ->and($row->proposed_by_id)->toBe($admin->id)->and($row->confirmed_by_id)->toBe($admin->id)->and($row->platform)->toBe('meta')
+        ->and($row->ad_account_id)->toBe($acc->id)->and($row->target_level)->toBe('ad')->and($row->target_name)->toBe('Tired ad')
+        ->and($row->from_status)->toBe('ACTIVE')->and($row->to_status)->toBe('paused')->and($row->reason)->toBe('ROAS too low')
+        ->and($row->state)->toBe('succeeded')->and($row->error_code)->toBeNull();
 });
 
 it('runs a campaign and an ad set again and updates their local status', function () {
@@ -77,13 +83,15 @@ it('runs a campaign and an ad set again and updates their local status', functio
     $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
     $set = AdSet::factory()->for($camp, 'campaign')->create(['status' => 'PAUSED']);
     $admin = User::factory()->adsAuthority()->create(['role' => UserRole::Admin]);
+    app(FakeAdsDriver::class)->seedObject('campaign', $camp->external_id, ['dailyBudgetMinor' => 100000]); // the Run guard needs a budget
 
     $this->actingAs($admin)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'campaign', 'external_id' => $camp->external_id, 'status' => 'active'])->assertOk();
     $this->actingAs($admin)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'adset', 'external_id' => $set->external_id, 'status' => 'active'])->assertOk();
 
     expect($camp->refresh()->status)->toBe('ACTIVE')->and($set->refresh()->status)->toBe('ACTIVE')
-        ->and(AdAction::pluck('to_status')->all())->toBe(['ACTIVE', 'ACTIVE'])
-        ->and(AdAction::first()->from_status)->toBe('PAUSED');
+        ->and(AdWriteAction::orderBy('id')->pluck('to_status')->all())->toBe(['active', 'active'])
+        ->and(AdWriteAction::orderBy('id')->pluck('state')->unique()->all())->toBe(['succeeded'])
+        ->and(AdWriteAction::orderBy('id')->first()->from_status)->toBe('PAUSED');
 });
 
 it('lets a media buyer act on their own account only', function () {
@@ -93,8 +101,9 @@ it('lets a media buyer act on their own account only', function () {
     $foreign = Ad::factory()->for($other, 'account')->create();
     $buyer = actBuyer($mine);
 
-    $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $other->id, 'external_id' => $foreign->external_id]))->assertForbidden();
-    expect(Cache::get('ads-fake-writer'))->toBeNull()->and(AdAction::count())->toBe(0)->and($foreign->refresh()->status)->toBe('ACTIVE');
+    $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $other->id, 'external_id' => $foreign->external_id]))
+        ->assertForbidden()->assertJsonPath('code', 'out_of_scope');
+    expect(Cache::get('ads-fake-writer'))->toBeNull()->and(AdWriteAction::count())->toBe(0)->and($foreign->refresh()->status)->toBe('ACTIVE');
 
     $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $mine->id, 'external_id' => $ad->external_id]))->assertOk();
     expect($ad->refresh()->status)->toBe('PAUSED');
@@ -106,7 +115,7 @@ it('refuses a buyer whose assignment ended before today', function () {
     $buyer = actBuyer($acc, '2026-02-01');
 
     $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))->assertForbidden();
-    expect(AdAction::count())->toBe(0);
+    expect(AdWriteAction::count())->toBe(0)->and(Cache::get('ads-fake-writer'))->toBeNull();
 });
 
 it('refuses content users, moderators and inactive accounts', function () {
@@ -121,55 +130,58 @@ it('refuses content users, moderators and inactive accounts', function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))
         ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))->assertForbidden();
 
-    expect(Cache::get('ads-fake-writer'))->toBeNull()->and(AdAction::count())->toBe(0);
+    expect(Cache::get('ads-fake-writer'))->toBeNull()->and(AdWriteAction::count())->toBe(0);
 });
 
-it('answers 422 with the readable message and logs an error row when the platform refuses', function () {
+it('answers 422 with the readable message and records a failed action when the platform refuses', function () {
     $acc = AdAccount::factory()->meta()->create();
     $ad = Ad::factory()->for($acc, 'account')->create();
-    $double = Mockery::mock(FakeAdsDriver::class);
+    $double = Mockery::mock(FakeAdsDriver::class)->makePartial();
     $double->shouldReceive('setStatus')->once()->andThrow(new MissingPermission('Meta permission missing: ads_management'));
     app()->bind(FakeAdsDriver::class, fn () => $double);
 
     $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))
         ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))
-        ->assertStatus(422)->assertJsonValidationErrors('status')
-        ->assertJsonPath('errors.status.0', 'Meta permission missing: ads_management');
+        ->assertStatus(422)->assertJsonValidationErrors('status')->assertJsonPath('code', 'permission_missing')
+        ->assertJsonPath('errors.status.0', __('ads.errors.permission_missing'))
+        ->assertJsonPath('details.platform_message', 'Meta permission missing: ads_management');
 
-    $row = AdAction::first();
-    expect($row->result)->toBe('error')->and($row->error)->toBe('Meta permission missing: ads_management')->and($row->to_status)->toBe('PAUSED')
+    $row = AdWriteAction::sole();
+    expect($row->state)->toBe('failed')->and($row->error_code)->toBe('permission_missing')
+        ->and($row->error_message)->toBe('Meta permission missing: ads_management')->and($row->to_status)->toBe('paused')
         ->and($ad->refresh()->status)->toBe('ACTIVE');
 });
 
-it('maps a rate limit to a readable message', function () {
+it('maps a rate limit on a Run to a readable 429', function () {
     $acc = AdAccount::factory()->meta()->create();
-    $ad = Ad::factory()->for($acc, 'account')->create();
-    $double = Mockery::mock(FakeAdsDriver::class);
-    $double->shouldReceive('setStatus')->once()->andThrow(new RateLimited('(#17) User request limit reached'));
+    $ad = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
+    $double = Mockery::mock(FakeAdsDriver::class)->makePartial();
+    $double->shouldReceive('setStatus')->once()->andThrow(new RateLimited('(#17) User request limit reached', 300));
     app()->bind(FakeAdsDriver::class, fn () => $double);
 
     $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))
-        ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))
-        ->assertStatus(422)->assertJsonPath('errors.status.0', __('ads.errors.rate_limited'));
-    expect(AdAction::first()->result)->toBe('error');
+        ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'active']))
+        ->assertStatus(429)->assertJsonPath('errors.status.0', __('ads.errors.rate_limited'))->assertHeader('Retry-After', '300');
+    expect(AdWriteAction::sole()->state)->toBe('failed');
 });
 
 it('rejects an unknown target without calling the platform', function () {
     $acc = AdAccount::factory()->meta()->create();
     $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))
-        ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => 'nope']))->assertStatus(422);
+        ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => 'nope']))
+        ->assertNotFound()->assertJsonPath('code', 'not_found')->assertJsonPath('errors.status.0', __('ads.errors.not_found'));
 
-    expect(Cache::get('ads-fake-writer'))->toBeNull()->and(AdAction::count())->toBe(0);
+    expect(Cache::get('ads-fake-writer'))->toBeNull()->and(AdWriteAction::count())->toBe(0);
 });
 
-it('throws an authorization exception from the service outside scope', function () {
+it('refuses out of scope at the service level', function () {
     $acc = AdAccount::factory()->meta()->create();
     $ad = Ad::factory()->for($acc, 'account')->create();
     $content = User::factory()->create(['role' => UserRole::Content]);
 
     expect(app(AdWriteService::class)->canWrite($content, $acc))->toBeFalse();
-    expect(fn () => app(AdWriteService::class)->setStatus($content, $acc, 'ad', $ad->external_id, 'paused', null))
-        ->toThrow(AuthorizationException::class);
+    expect(fn () => app(WriteActionService::class)->propose($content, $acc, 'ad', $ad->external_id, 'paused', null, 'svc-key-0001'))
+        ->toThrow(fn (WriteDenied $e) => expect($e->errorCode)->toBe('out_of_scope'));
 });
 
 it('suggests losers, fatigued and need-stop ads, not winners or paused ads', function () {
@@ -215,8 +227,9 @@ it('shows suggestions and the log on the actions page, scoped to the buyer', fun
         actDay($foreign, $day, ['spend' => 200, 'purchase_value' => 10, 'purchases' => 1]);
     }
     $admin = User::factory()->create(['role' => UserRole::Admin]);
-    AdAction::create(['user_id' => $admin->id, 'platform' => 'meta', 'ad_account_id' => $mine->id, 'level' => 'ad', 'external_id' => 'x1', 'name' => 'Mine stopped', 'to_status' => 'PAUSED', 'result' => 'ok']);
-    AdAction::create(['user_id' => $admin->id, 'platform' => 'meta', 'ad_account_id' => $other->id, 'level' => 'ad', 'external_id' => 'x2', 'name' => 'Theirs stopped', 'to_status' => 'PAUSED', 'result' => 'ok']);
+    // ad_actions is frozen (history only): rows are seeded raw, as the slice-1 endpoint left them.
+    DB::table('ad_actions')->insert(['user_id' => $admin->id, 'platform' => 'meta', 'ad_account_id' => $mine->id, 'level' => 'ad', 'external_id' => 'x1', 'name' => 'Mine stopped', 'to_status' => 'PAUSED', 'result' => 'ok', 'created_at' => now(), 'updated_at' => now()]);
+    DB::table('ad_actions')->insert(['user_id' => $admin->id, 'platform' => 'meta', 'ad_account_id' => $other->id, 'level' => 'ad', 'external_id' => 'x2', 'name' => 'Theirs stopped', 'to_status' => 'PAUSED', 'result' => 'ok', 'created_at' => now(), 'updated_at' => now()]);
 
     $this->actingAs(actBuyer($mine))->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->component('Ads/Actions')
@@ -229,33 +242,36 @@ it('shows suggestions and the log on the actions page, scoped to the buyer', fun
     $this->actingAs(User::factory()->create(['role' => UserRole::Content]))->get('/ads/actions')->assertRedirect('/ads/materials');
 });
 
-it('keeps google accounts safe: no writer, logged error', function () {
+it('keeps google accounts safe: no writer, refused and audited', function () {
     $acc = AdAccount::factory()->google()->create();
     $ad = Ad::factory()->for($acc, 'account')->create();
 
     $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))
-        ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))->assertStatus(422);
+        ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))
+        ->assertStatus(422)->assertJsonPath('code', 'platform_not_writable');
 
-    expect(AdAction::first()->result)->toBe('error')->and($ad->refresh()->status)->toBe('ACTIVE');
+    expect(AdWriteAction::count())->toBe(0)->and(AdsAuditLog::where('action', 'write.refused')->sole()->meta['code'])->toBe('platform_not_writable')
+        ->and($ad->refresh()->status)->toBe('ACTIVE');
 });
 
-it('keeps an error row when the writer throws something that is not a platform error', function () {
+it('keeps a failed action when the writer throws something that is not a platform error, without the secret', function () {
     $acc = AdAccount::factory()->meta()->create(['name' => 'LV Main']);
-    $ad = Ad::factory()->for($acc, 'account')->create();
-    $double = Mockery::mock(FakeAdsDriver::class);
+    $ad = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
+    $double = Mockery::mock(FakeAdsDriver::class)->makePartial();
     $double->shouldReceive('setStatus')->once()->andThrow(new RuntimeException('boom access_token=SECRET123'));
     app()->bind(FakeAdsDriver::class, fn () => $double);
 
+    // A Run: the read-back finds it still PAUSED, so the outcome is definite (not applied).
     $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))
-        ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))
-        ->assertStatus(422)->assertJsonPath('errors.status.0', __('ads.errors.failed'));
+        ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'active']))
+        ->assertStatus(422)->assertJsonPath('code', 'not_applied')->assertJsonPath('errors.status.0', __('ads.errors.not_applied'));
 
-    $row = AdAction::first();
-    expect($row->result)->toBe('error')->and($row->error)->not->toContain('SECRET123')->and($row->error)->toContain('boom')
-        ->and($row->account_name)->toBe('LV Main')->and($ad->refresh()->status)->toBe('ACTIVE');
+    $row = AdWriteAction::sole();
+    expect($row->state)->toBe('failed')->and($row->error_message)->not->toContain('SECRET123')->and($row->error_message)->toContain('boom')
+        ->and($row->account_name)->toBe('LV Main')->and($ad->refresh()->status)->toBe('PAUSED');
 });
 
-it('keeps the ok row when the local status save fails after the platform call', function () {
+it('keeps the succeeded action when the local status save fails after the platform call', function () {
     $acc = AdAccount::factory()->meta()->create();
     $ad = Ad::factory()->for($acc, 'account')->create();
     $admin = User::factory()->create(['role' => UserRole::Admin]);
@@ -267,9 +283,9 @@ it('keeps the ok row when the local status save fails after the platform call', 
         Event::forget('eloquent.saving: '.Ad::class);
     }
 
-    $row = AdAction::first();
+    $row = AdWriteAction::sole();
     expect(Cache::get('ads-fake-writer')['statuses'])->toHaveCount(1)
-        ->and($row->result)->toBe('ok')->and($row->error)->toContain('Local status not updated')
+        ->and($row->state)->toBe('succeeded')->and($row->outcome['local_status_error'])->toContain('db down')
         ->and($ad->refresh()->status)->toBe('ACTIVE');
 });
 
@@ -279,8 +295,8 @@ it('never lets a moderator write, at the service level and without a platform ca
     $mod = User::factory()->create(['role' => UserRole::Moderator]);
 
     expect(app(AdWriteService::class)->canWrite($mod, $acc))->toBeFalse();
-    expect(fn () => app(AdWriteService::class)->setStatus($mod, $acc, 'ad', $ad->external_id, 'paused', null))->toThrow(AuthorizationException::class);
-    expect(Cache::get('ads-fake-writer'))->toBeNull()->and(AdAction::count())->toBe(0);
+    expect(fn () => app(WriteActionService::class)->propose($mod, $acc, 'ad', $ad->external_id, 'paused', null, 'svc-key-0002'))->toThrow(WriteDenied::class);
+    expect(Cache::get('ads-fake-writer'))->toBeNull()->and(AdWriteAction::count())->toBe(0);
 });
 
 it('never refuses on a stale local status: Stop on a locally paused ad still calls the platform and logs', function () {
@@ -290,7 +306,7 @@ it('never refuses on a stale local status: Stop on a locally paused ad still cal
 
     $this->actingAs($admin)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'paused']))->assertOk();
     expect(Cache::get('ads-fake-writer')['statuses'])->toHaveCount(1)
-        ->and(AdAction::first())->result->toBe('ok')->from_status->toBe('PAUSED')->to_status->toBe('PAUSED');
+        ->and(AdWriteAction::sole())->state->toBe('succeeded')->from_status->toBe('PAUSED')->to_status->toBe('paused');
 });
 
 it('uses the own status for the local update, effective status is left alone', function () {
@@ -322,7 +338,7 @@ it('suggests ads by their own status, TikTok ENABLE included, and stops a TikTok
 
     $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))
         ->postJson('/ads/actions/status', actPost(['account_id' => $tt->id, 'external_id' => $tiktok->external_id]))->assertOk();
-    expect($tiktok->refresh()->status)->toBe('PAUSED')->and(AdAction::first()->from_status)->toBe('ENABLE');
+    expect($tiktok->refresh()->status)->toBe('PAUSED')->and(AdWriteAction::sole()->from_status)->toBe('ENABLE');
 });
 
 it('flags ads whose campaign or ad set is paused on the creatives and campaign pages', function () {
@@ -373,22 +389,21 @@ it('marks each campaign node and creative row with can_write for its account', f
     }
 });
 
-it('refuses a buyer Run or Stop above ad level with a readable 422, an error row and no platform call', function () {
+it('refuses a buyer Run or Stop above ad level with a readable 403, an audit row and no platform call', function () {
     $acc = AdAccount::factory()->meta()->create();
     $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
     $set = AdSet::factory()->for($camp, 'campaign')->create(['status' => 'PAUSED']);
     $buyer = actBuyer($acc);
 
-    $cases = [['campaign', $camp->external_id, 'active', 'campaign_level_not_allowed'], ['adset', $set->external_id, 'active', 'adset_level_not_allowed'],
-        ['campaign', $camp->external_id, 'paused', 'campaign_level_not_allowed'], ['adset', $set->external_id, 'paused', 'adset_level_not_allowed']];
-    foreach ($cases as $i => [$level, $id, $status, $key]) {
+    $cases = [['campaign', $camp->external_id, 'active'], ['adset', $set->external_id, 'active'], ['campaign', $camp->external_id, 'paused'], ['adset', $set->external_id, 'paused']];
+    foreach ($cases as $i => [$level, $id, $status]) {
         $this->actingAs($buyer)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => $level, 'external_id' => $id, 'status' => $status, 'reason' => 'too risky'])
-            ->assertStatus(422)->assertJsonValidationErrors(['status'])->assertJsonPath('errors.status.0', __('ads.errors.'.$key));
-        expect(AdAction::count())->toBe($i + 1);
+            ->assertForbidden()->assertJsonPath('code', 'ads_authority_required')->assertJsonPath('details.level', $level)
+            ->assertJsonPath('errors.status.0', __('ads.errors.ads_authority_required'));
+        expect(AdsAuditLog::where('action', 'write.refused')->count())->toBe($i + 1);
     }
-    expect(AdAction::pluck('reason')->unique()->all())->toBe(['too risky']);
-    expect(Cache::get('ads-fake-writer'))->toBeNull()
-        ->and(AdAction::where('result', 'error')->where('error', 'level_not_allowed')->count())->toBe(4)
+    expect(AdsAuditLog::where('action', 'write.refused')->get()->every(fn ($r) => $r->meta['code'] === 'ads_authority_required' && $r->meta['source'] === 'legacy'))->toBeTrue()
+        ->and(AdWriteAction::count())->toBe(0)->and(Cache::get('ads-fake-writer'))->toBeNull()
         ->and($camp->refresh()->status)->toBe('PAUSED');
 });
 
@@ -403,8 +418,10 @@ it('lets a buyer Run and Stop at ad level; a supervisor too, but not Run on a ca
     $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'active']))->assertOk();
     $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'paused']))->assertOk();
     $this->actingAs($sup)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'paused']))->assertOk();
-    $this->actingAs($sup)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'campaign', 'external_id' => $camp->external_id, 'status' => 'active'])->assertStatus(422);
+    $this->actingAs($sup)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'campaign', 'external_id' => $camp->external_id, 'status' => 'active'])
+        ->assertForbidden()->assertJsonPath('code', 'ads_authority_required');
     expect($camp->refresh()->status)->toBe('PAUSED');
+    app(FakeAdsDriver::class)->seedObject('campaign', $camp->external_id, ['dailyBudgetMinor' => 100000]);
     $this->actingAs($admin)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'campaign', 'external_id' => $camp->external_id, 'status' => 'active'])->assertOk();
     expect($camp->refresh()->status)->toBe('ACTIVE');
 });
@@ -437,10 +454,11 @@ it('gives a buyer can_write only on ad nodes of the campaigns tree', function ()
     expect($levels['campaign'])->each->toBeFalse()->and($levels['adset'])->each->toBeFalse()->and($levels['ad'])->each->toBeTrue();
 });
 
-it('checks the account scope before it audits a level it does not allow', function () {
+it('checks the account scope before the level it does not allow', function () {
     $acc = AdAccount::factory()->meta()->create();
     $content = User::factory()->create(['role' => UserRole::Content]);
 
-    expect(fn () => app(AdWriteService::class)->setStatus($content, $acc, 'campaign', 'c1', 'paused', null))->toThrow(AuthorizationException::class);
-    expect(AdAction::count())->toBe(0);
+    expect(fn () => app(WriteActionService::class)->propose($content, $acc, 'campaign', 'c1', 'paused', null, 'svc-key-0003'))
+        ->toThrow(fn (WriteDenied $e) => expect($e->errorCode)->toBe('out_of_scope'));
+    expect(AdWriteAction::count())->toBe(0);
 });

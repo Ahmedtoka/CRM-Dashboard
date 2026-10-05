@@ -216,9 +216,9 @@ it('a supervisor without Ads authority is refused at campaign level (Run and Sto
         $this->actingAs($sup)->postJson('/ads/write-actions', ['type' => 'set_status', 'account_id' => $this->acc->id,
             'target' => ['level' => 'campaign', 'external_id' => $camp->external_id], 'params' => ['to' => $to]], ['Idempotency-Key' => 'camp-'.$to.'-01'])
             ->assertForbidden()->assertJsonPath('code', 'ads_authority_required');
-        // The legacy endpoint keeps its slice-1 answer (422) until the batch-4 shim; it is refused all the same.
+        // The legacy endpoint runs on the pipeline since the B5 shim: the same 403.
         $this->actingAs($sup)->postJson('/ads/actions/status', ['account_id' => $this->acc->id, 'level' => 'campaign', 'external_id' => $camp->external_id, 'status' => $to])
-            ->assertStatus(422);
+            ->assertForbidden()->assertJsonPath('code', 'ads_authority_required');
     }
     expect(ccCalls())->toBe(0);
 

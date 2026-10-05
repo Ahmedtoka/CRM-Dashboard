@@ -5,10 +5,10 @@ use App\Ads\Sync\AdsSyncService;
 use App\Enums\UserRole;
 use App\Models\Ad;
 use App\Models\AdAccount;
-use App\Models\AdAction;
 use App\Models\AdDailyMetric;
 use App\Models\AdPlatformConnection;
 use App\Models\AdsAuditLog;
+use App\Models\AdWriteAction;
 use App\Models\User;
 use App\Models\UserNotification;
 use Illuminate\Http\Client\Factory as HttpFactory;
@@ -86,7 +86,8 @@ it('refuses Stop on a read-only connection with no writer call', function () {
 
     $res->assertStatus(422)->assertJsonValidationErrors('status');
     expect($res->json('errors.status.0'))->toBe(__('ads.errors.connection_read_only'))
-        ->and(AdAction::first()->error)->toBe('connection_read_only')
+        ->and(AdWriteAction::count())->toBe(0)
+        ->and(AdsAuditLog::where('action', 'write.refused')->sole()->meta['code'])->toBe('connection_read_only')
         ->and(Cache::get('ads-fake-writer'))->toBeNull()->and($ad->refresh()->status)->toBe('ACTIVE');
 });
 

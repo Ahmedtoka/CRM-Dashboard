@@ -9,11 +9,11 @@ use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Enums\UserRole;
 use App\Models\Ad;
 use App\Models\AdAccount;
-use App\Models\AdAction;
 use App\Models\AdMaterial;
 use App\Models\AdMaterialFile;
 use App\Models\AdPublication;
 use App\Models\AdsAuditLog;
+use App\Models\AdWriteAction;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Support\Facades\Artisan;
@@ -77,7 +77,8 @@ it('refuses a Run with 503 writes_disabled and no writer call, while a Stop stil
         ->assertJsonPath('errors.status.0', __('ads.errors.writes_disabled'));
     expect(Cache::get('ads-fake-writer'))->toBeNull()
         ->and($ad->refresh()->status)->toBe('PAUSED')
-        ->and(AdAction::where('error', 'writes_disabled')->count())->toBe(1);
+        ->and(AdWriteAction::count())->toBe(0)
+        ->and(AdsAuditLog::where('action', 'write.refused')->get()->filter(fn ($r) => $r->meta['code'] === 'writes_disabled')->count())->toBe(1);
 
     wsStatus($this, $admin, $acc, $live, 'paused')->assertOk();
     expect(Cache::get('ads-fake-writer')['statuses'])->toHaveCount(1)

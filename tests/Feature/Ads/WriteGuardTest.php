@@ -3,6 +3,7 @@
 use App\Ads\Control\AdWriteService;
 use App\Ads\Control\Jobs\PublishAd;
 use App\Ads\Control\PublishService;
+use App\Ads\Control\Write\WriteActionService;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\Data\MediaRef;
 use App\Ads\Platforms\DriverFactory;
@@ -13,7 +14,6 @@ use App\Ads\Platforms\WriteRefused;
 use App\Enums\UserRole;
 use App\Models\Ad;
 use App\Models\AdAccount;
-use App\Models\AdAction;
 use App\Models\AdCampaign;
 use App\Models\AdDailyMetric;
 use App\Models\AdMaterial;
@@ -21,6 +21,7 @@ use App\Models\AdMaterialFile;
 use App\Models\AdPlatformConnection;
 use App\Models\AdPublication;
 use App\Models\AdsAuditLog;
+use App\Models\AdWriteAction;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Support\Facades\Artisan;
@@ -29,7 +30,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 beforeEach(function () {
     Http::preventStrayRequests();
@@ -70,10 +70,11 @@ it('refuses the fake writer in production with no platform call', function () {
         expect($e->reason)->toBe('fake_writer_in_production');
     }
 
-    expect(fn () => app(AdWriteService::class)->setStatus($admin, $acc, 'ad', $ad->external_id, 'paused', null))
-        ->toThrow(ValidationException::class, __('ads.errors.fake_writer_in_production'));
+    $svc = app(WriteActionService::class);
+    $x = $svc->propose($admin, $acc, 'ad', $ad->external_id, 'paused', null, 'guard-key-0001')['action'];
+    expect($svc->confirm($admin, $x, $x->diff_hash))->state->toBe('failed')->error_code->toBe('fake_writer_in_production');
     expect(Cache::get('ads-fake-writer'))->toBeNull()->and($ad->refresh()->status)->toBe('ACTIVE')
-        ->and(AdAction::first()->error)->toBe('fake_writer_in_production');
+        ->and(AdWriteAction::sole()->steps()->count())->toBe(0);
     Http::assertNothingSent();
 });
 
@@ -98,6 +99,7 @@ it('keeps a live writer to sandbox accounts outside production', function () {
     config(['crm.ads.write_sandbox_accounts' => ['act_9']]);
     Http::fake(['*' => Http::response(['success' => true])]);
     WriteGuard::check($acc, $writer);
+    $this->travel(11)->seconds(); // outside the legacy double-click window: a new request
     wgStop($this, $admin, $acc, $ad)->assertOk();
     Http::assertSentCount(1);
 });

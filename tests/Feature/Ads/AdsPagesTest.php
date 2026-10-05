@@ -10,7 +10,6 @@ use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdAccountAssignment;
-use App\Models\AdAction;
 use App\Models\AdDailyMetric;
 use App\Models\AdPlatformConnection;
 use App\Models\AdPublication;
@@ -313,7 +312,7 @@ it('archives a connection whose accounts have publications or Stop/Run actions i
             'headline' => 'H', 'primary_text' => 'T', 'cta' => 'SHOP_NOW', 'ad_name' => 'M1 | Reel | C1', 'link' => 'https://x.test', 'url_tags' => '', 'status' => 'done',
         ]);
     } else {
-        AdAction::create(['ad_account_id' => $acc->id, 'platform' => 'meta', 'level' => 'ad', 'external_id' => '1', 'to_status' => 'PAUSED', 'result' => 'ok']);
+        DB::table('ad_actions')->insert(['ad_account_id' => $acc->id, 'platform' => 'meta', 'level' => 'ad', 'external_id' => '1', 'to_status' => 'PAUSED', 'result' => 'ok', 'created_at' => now(), 'updated_at' => now()]); // frozen model
     }
 
     $this->actingAs(adsPgUser(UserRole::Admin))->delete("/ads/connections/{$c->id}")
