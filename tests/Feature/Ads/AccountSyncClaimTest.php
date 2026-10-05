@@ -248,11 +248,13 @@ it('a backfill whose claim is lost before its first chunk leaves a visible skipp
     Http::assertSentCount(0);
 });
 
-it('stops releasing a busy job after ten tries and leaves quietly with the skipped row', function () {
+it('stops releasing a busy job after ten busy releases and leaves quietly with the skipped row', function () {
     $acc = claimAccount();
     claimHeldBy($acc, 'stale-claim', now()->addMinutes(60));
     Http::fake(['graph.facebook.com/*' => Http::response(['data' => []])]);
+    Cache::put('ads:sync-busy-releases:job-uuid-1', SyncAdAccount::MAX_BUSY_RELEASES, now()->addHour());
     $queueJob = Mockery::mock(Job::class)->shouldIgnoreMissing();
+    $queueJob->shouldReceive('uuid')->andReturn('job-uuid-1');
     $queueJob->shouldReceive('attempts')->andReturn(11);
     $queueJob->shouldNotReceive('release');
     $queueJob->shouldNotReceive('fail');
@@ -263,4 +265,21 @@ it('stops releasing a busy job after ten tries and leaves quietly with the skipp
 
     expect(AdsSyncRun::where('status', 'skipped')->count())->toBe(1);
     Http::assertSentCount(0);
+});
+
+it('does not count rate-limit attempts against the busy cap', function () {
+    $acc = claimAccount();
+    claimHeldBy($acc, 'stale-claim', now()->addMinutes(60));
+    Http::fake(['graph.facebook.com/*' => Http::response(['data' => []])]);
+    // eleven attempts so far, all of them rate-limit releases: the first busy release still happens
+    $queueJob = Mockery::mock(Job::class)->shouldIgnoreMissing();
+    $queueJob->shouldReceive('uuid')->andReturn('job-uuid-2');
+    $queueJob->shouldReceive('attempts')->andReturn(11);
+    $queueJob->shouldReceive('release')->once()->with(120);
+
+    $job = new SyncAdAccount($acc->id, 3, withAds: false);
+    $job->setJob($queueJob);
+    $job->handle(app(AdsSyncService::class));
+
+    expect(Cache::get('ads:sync-busy-releases:job-uuid-2'))->toBe(1);
 });

@@ -222,9 +222,16 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
         if (AdsSyncService::isBusy($run) && $this->job && ! $this->job instanceof SyncJob) {
             // A claim that stays held (a stale one lasts about an hour) must not use up the tries and land in failed_jobs: after
             // ten releases the job ends quietly and the 'skipped' run row stays as the trace.
-            if ($this->attempts() > self::MAX_BUSY_RELEASES) {
+            // Only busy releases count (rate-limit releases share the job's tries but not this cap); the job uuid stays the
+            // same across releases.
+            $key = 'ads:sync-busy-releases:'.($this->job->uuid() ?? $this->runKey ?? spl_object_id($this));
+            $busy = (int) Cache::get($key, 0) + 1;
+            if ($busy > self::MAX_BUSY_RELEASES) {
+                Cache::forget($key);
+
                 return false;
             }
+            Cache::put($key, $busy, now()->addHours(3));
             $this->release(120);
             $this->heartbeat();
 

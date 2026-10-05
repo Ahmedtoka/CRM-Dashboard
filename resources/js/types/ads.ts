@@ -131,6 +131,8 @@ export interface AdsDataHealthReason {
     reason: 'reconnect' | 'stale' | 'read_only' | 'incomplete' | 'gap' | 'timezone';
     /** For `incomplete`: the accounts never judged yet (at most three names). */
     unverified?: string[];
+    /** For `incomplete`: never-judged accounts beyond the three named. */
+    unverified_more?: number;
     /** At most three account names. */
     accounts: string[];
     /** Accounts beyond the three named. */

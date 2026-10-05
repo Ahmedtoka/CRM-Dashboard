@@ -29,7 +29,8 @@ const lines = computed<Line[]>(() => {
     const out: Line[] = props.dataHealth.reasons.map((r) => {
         const names = r.accounts.join('، ');
         const more = r.more > 0 ? ` ${t('ads.health.and_more', { n: r.more })}` : '';
-        const unverified = r.unverified?.length ? t('ads.health.unverified', { names: r.unverified.join('، ') }) : '';
+        const unverifiedMore = (r.unverified_more ?? 0) > 0 ? ` ${t('ads.health.and_more', { n: r.unverified_more ?? 0 })}` : '';
+        const unverified = r.unverified?.length ? t('ads.health.unverified', { names: r.unverified.join('، ') }) + unverifiedMore : '';
         // accounts never judged are named once, in their own part
         const head = r.accounts.length ? `${t(`ads.health.reasons.${r.reason}`)}: ${names}${more}` : '';
 

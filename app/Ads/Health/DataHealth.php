@@ -196,6 +196,7 @@ class DataHealth
             if ($reason === 'incomplete') {
                 // `accounts` = a known later start; `unverified` = never judged (complete_from null): no account in both lists
                 $entry['unverified'] = array_map(fn ($id) => (string) $names[$id], array_slice($incomplete['unverified'], 0, 3));
+                $entry['unverified_more'] = max(0, count($incomplete['unverified']) - 3);
             }
             $reasons[] = $entry;
         }

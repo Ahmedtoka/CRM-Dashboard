@@ -223,7 +223,7 @@ it('is scheduled nightly after the deep sync', function () {
 it('does not count an ok run from before the account-level control existed', function () {
     $a = AdAccount::factory()->meta()->create(['name' => 'Old runs']);
     // a master-era run: ok, no error, but the account has no control rows at all
-    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'ok', 'from_date' => '2026-09-01', 'to_date' => '2026-10-04', 'started_at' => '2026-10-04 02:00:00']);
+    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'ok', 'from_date' => '2026-09-01', 'to_date' => '2026-10-04', 'started_at' => '2026-10-04 02:00:00', 'finished_at' => '2026-10-04 02:10:00']);
 
     $r = app(Reconciliation::class)->account($a, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-30'));
     expect($r['complete_from'])->toBeNull();
@@ -231,7 +231,16 @@ it('does not count an ok run from before the account-level control existed', fun
     // control starts being fetched on 2026-10-04 12:00: the older run still covers nothing, a later one does
     AdAccountDaily::create(['ad_account_id' => $a->id, 'date' => '2026-10-04', 'spend' => 1, 'purchase_value' => 0, 'purchases' => 0, 'impressions' => 0, 'fetched_at' => '2026-10-04 12:00:00']);
     expect(app(Reconciliation::class)->account($a, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-30'))['complete_from'])->toBeNull();
-    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'ok', 'from_date' => '2026-09-01', 'to_date' => '2026-10-04', 'started_at' => '2026-10-04 13:00:00']);
+    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'ok', 'from_date' => '2026-09-01', 'to_date' => '2026-10-04', 'started_at' => '2026-10-04 13:00:00', 'finished_at' => '2026-10-04 13:20:00']);
+    expect(app(Reconciliation::class)->account($a, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-30'))['complete_from'])->toBe('2026-09-01');
+});
+
+it('counts the run that fetched the first control rows itself', function () {
+    $a = AdAccount::factory()->meta()->create(['name' => 'First backfill']);
+    // the first backfill chunk starts before it writes the account's first control row and finishes after it
+    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'ok', 'error' => null, 'from_date' => '2026-09-01', 'to_date' => '2026-10-04', 'started_at' => '2026-10-05 01:00:00', 'finished_at' => '2026-10-05 01:30:00']);
+    AdAccountDaily::create(['ad_account_id' => $a->id, 'date' => '2026-10-04', 'spend' => 1, 'purchase_value' => 0, 'purchases' => 0, 'impressions' => 0, 'fetched_at' => '2026-10-05 01:10:00']);
+
     expect(app(Reconciliation::class)->account($a, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-30'))['complete_from'])->toBe('2026-09-01');
 });
 
