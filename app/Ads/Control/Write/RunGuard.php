@@ -8,6 +8,7 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Data\ObjectState;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Reports\AdsFilter;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdSet;
@@ -26,6 +27,8 @@ use Throwable;
  *   ACTIVE → noop (no platform call); anything but PAUSED, or not the expected status → superseded (409).
  * - A read that fails is a refusal (fail closed): 422 budget_unreadable, or 429 rate_limited when throttled.
  * - Budget cap (budgetCheck), on the same read, at propose and at confirm.
+ * - Restart lock (restartLock) at propose and at confirm; the learning note at propose. The activation caps are counted
+ *   inside the claim transaction (WriteActionService::claim), under a row lock on the account.
  */
 class RunGuard
 {
@@ -47,10 +50,13 @@ class RunGuard
      */
     public function atPropose(User $u, AdAccount $a, Model $target): array
     {
-        $live = $this->read($a, SetStatusType::levelOf($target), (string) $target->external_id);
+        $level = SetStatusType::levelOf($target);
+        $targetKey = SetStatusType::targetKey($a->id, $level, (string) $target->external_id);
+        $this->restartLock($u, $targetKey);
+        $live = $this->read($a, $level, (string) $target->external_id);
         $limits = $this->budgetCheck($u, $a, $target, $live);
 
-        return [$live, $limits, []];
+        return [$live, $limits, $this->learningNote($u, $a, $targetKey)];
     }
 
     /**
@@ -70,6 +76,7 @@ class RunGuard
             throw WriteDenied::make('not_found');
         }
 
+        $this->restartLock($u, $x->target_key);
         $expected = is_array($x->expected) ? $x->expected : [];
         $stored = $this->freshSnapshot($expected);
         $read = $stored === null ? $this->read($account, $x->target_level, $x->target_external_id) : null;
@@ -87,6 +94,58 @@ class RunGuard
         $limits = $this->budgetCheck($u, $account, $this->type->target($account, $x->target_level, $x->target_external_id), $live);
 
         return ['noop' => false, 'read' => $read, 'limits_checked' => $limits];
+    }
+
+    /**
+     * Restart lock (B3): a Stop confirmed by an Ads-authority holder sets restart_lock_until on itself; while it is the
+     * latest succeeded set_status action on the exact target and the lock has not passed, a Run by someone without Ads
+     * authority is refused. A later succeeded Run (only a holder can make one meanwhile) becomes the latest and lifts
+     * it. ASSUMPTION: the exact target only (a campaign Stop does not lock its ads; buyers cannot Run campaigns, D4).
+     *
+     * @throws WriteDenied 422 restart_locked
+     */
+    public function restartLock(User $u, string $targetKey): void
+    {
+        if ($u->hasAdsAuthority()) {
+            return;
+        }
+        $latest = $this->latestSucceeded($targetKey);
+        if ($latest === null || ! $latest->isStop() || $latest->restart_lock_until === null || ! $latest->restart_lock_until->isFuture()) {
+            return;
+        }
+        $until = $latest->restart_lock_until;
+
+        throw WriteDenied::make('restart_locked', [
+            'until' => $until->toIso8601String(),
+            'until_local' => $until->copy()->setTimezone(AdsFilter::TIMEZONE)->format('Y-m-d H:i'),
+            'by' => (string) ($latest->confirmer?->name ?? ''),
+        ]);
+    }
+
+    /**
+     * "May re-enter learning": the CRM knows the target was paused by its own Stop (the latest succeeded action on it)
+     * more than learning_note_days ago.
+     *
+     * @return list<array{key: string, days: int}>
+     */
+    public function learningNote(User $u, AdAccount $a, string $targetKey): array
+    {
+        $latest = $this->latestSucceeded($targetKey);
+        if ($latest === null || ! $latest->isStop() || $latest->finished_at === null) {
+            return [];
+        }
+        $threshold = $this->limits->for($u, $a)['learning_note_days'];
+        if (! $latest->finished_at->lt(now()->subDays($threshold))) {
+            return [];
+        }
+
+        return [['key' => 'learning_reentry', 'days' => (int) floor($latest->finished_at->diffInDays(now(), true))]];
+    }
+
+    private function latestSucceeded(string $targetKey): ?AdWriteAction
+    {
+        return AdWriteAction::where('target_key', $targetKey)->where('type', SetStatusType::TYPE)->where('state', AdWriteAction::SUCCEEDED)
+            ->orderByDesc('finished_at')->orderByDesc('id')->first();
     }
 
     /**

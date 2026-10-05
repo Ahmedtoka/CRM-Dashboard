@@ -5,9 +5,11 @@ namespace App\Ads\Control\Write;
 use App\Ads\Audit\AdsAudit;
 use App\Ads\Control\Write\Types\SetStatusType;
 use App\Ads\Platforms\Data\ObjectState;
+use App\Ads\Reports\AdsFilter;
 use App\Models\AdAccount;
 use App\Models\AdWriteAction;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
@@ -23,7 +25,16 @@ class WriteActionService
         private readonly SetStatusType $type,
         private readonly RunGuard $runGuard,
         private readonly WriteExecutor $executor,
+        private readonly WriteLimits $limits,
     ) {}
+
+    /**
+     * Run states that count as an activation: confirmed and sent (or a noop). A refused or failed Run never counts.
+     * Rolled-back and Stop-superseded Runs were executed too, so they keep counting.
+     */
+    private const ACTIVATION_STATES = [
+        AdWriteAction::EXECUTING, AdWriteAction::SUCCEEDED, AdWriteAction::UNKNOWN, AdWriteAction::ROLLED_BACK, AdWriteAction::SUPERSEDED_BY_STOP,
+    ];
 
     /**
      * @param  'campaign'|'adset'|'ad'  $level
@@ -259,7 +270,7 @@ class WriteActionService
         try {
             $ids = DB::transaction(function () use ($u, $x, $key) {
                 $now = now();
-                $claimed = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::PROPOSED)->where('expires_at', '>', $now)->update([
+                $update = [
                     'state' => AdWriteAction::EXECUTING,
                     'confirmed_by_id' => $u->id,
                     'confirmed_at' => $now,
@@ -267,7 +278,11 @@ class WriteActionService
                     'executing_at' => $now,
                     'open_business_key' => $key,
                     'updated_at' => $now,
-                ]) === 1;
+                ];
+                if (! $x->isStop()) {
+                    $update['limits_checked'] = json_encode(array_merge(array_values($x->limits_checked ?? []), $this->activationCaps($u, $x)));
+                }
+                $claimed = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::PROPOSED)->where('expires_at', '>', $now)->update($update) === 1;
                 if (! $claimed) {
                     return null;
                 }
@@ -282,6 +297,11 @@ class WriteActionService
 
                 return $ids;
             });
+        } catch (WriteDenied $e) {
+            // An activation cap is reached: the transaction rolled back; the proposal ends failed (CAS, outside it).
+            $this->refuseProposed($u, $x, $e);
+
+            throw $e;
         } catch (UniqueConstraintViolationException) {
             // Another Run holds the key on this target: the transaction rolled back, this action stays proposed.
             $holder = AdWriteAction::where('open_business_key', $key)->value('public_id');
@@ -300,6 +320,36 @@ class WriteActionService
         $x->refresh();
 
         return AdWriteAction::whereIn('id', $ids)->get()->all();
+    }
+
+    /**
+     * Activation caps (B3), Run only, inside the claim transaction: the account row is locked first (MariaDB row lock,
+     * so two confirms on one account count one after the other; SQLite ignores it), then the Runs confirmed since the
+     * start of today in Cairo are counted per confirming user and per account.
+     *
+     * @return list<array{key: string, limit: int, requested: int, outcome: string}> the evaluated caps
+     *
+     * @throws WriteDenied 422 cap_exceeded {key, limit, used}
+     */
+    private function activationCaps(User $u, AdWriteAction $x): array
+    {
+        $account = AdAccount::whereKey($x->ad_account_id)->lockForUpdate()->first();
+        $limits = $this->limits->for($u, $account);
+        $since = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay()->utc();
+        $count = fn (string $column, int $value) => AdWriteAction::where('type', SetStatusType::TYPE)->where('to_status', 'active')
+            ->whereIn('state', self::ACTIVATION_STATES)->where('confirmed_at', '>=', $since)->where($column, $value)->count();
+
+        $rows = [];
+        foreach (['activations_per_user_day' => ['confirmed_by_id', $u->id], 'activations_per_account_day' => ['ad_account_id', (int) $x->ad_account_id]] as $key => [$column, $value]) {
+            $used = $count($column, $value);
+            $limit = $limits[$key];
+            if ($used >= $limit) {
+                throw WriteDenied::make('cap_exceeded', ['key' => $key, 'limit' => $limit, 'used' => $used]);
+            }
+            $rows[] = ['key' => $key, 'limit' => $limit, 'requested' => $used + 1, 'outcome' => 'ok'];
+        }
+
+        return $rows;
     }
 
     /**

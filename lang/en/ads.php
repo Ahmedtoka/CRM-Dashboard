@@ -52,8 +52,8 @@ return [
         'budget_over_cap' => 'The budget (:currency :per_day a day) is above the CRM limit for a Run (:currency :cap a day). Make the change in Ads Manager or ask the owner.',
         'budget_unreadable' => 'The current budget could not be read from the platform, so the Run was not sent. Try again in a minute.',
         'currency_mismatch' => 'This account uses :currency but the CRM budget limit is in :cap_currency, so a Run cannot be checked here.',
-        'cap_exceeded' => 'The daily limit of Runs was reached. Try again tomorrow or ask the owner.',
-        'restart_locked' => 'This item was stopped by an Ads authority holder and cannot be run again yet.',
+        'cap_exceeded' => 'The daily limit of Runs was reached (:used of :limit). Try again tomorrow or ask the owner.',
+        'restart_locked' => 'This item was stopped by :by (Ads authority) and cannot be run again before :until_local (Cairo time).',
         'not_reversible' => 'This change cannot be undone from the CRM.',
         'platform_rejected' => 'The platform refused the change.',
         'permission_missing' => 'The ad connection lacks the permission to make this change. Reconnect with ads_management.',
@@ -65,6 +65,7 @@ return [
     'write' => [
         'notes' => [
             'already_active' => 'It was already running on the platform, so nothing was sent.',
+            'learning_reentry' => 'It has been paused for :days days. Running it again may send it back into the learning phase.',
         ],
     ],
     'credentials' => [

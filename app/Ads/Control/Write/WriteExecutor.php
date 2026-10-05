@@ -34,6 +34,7 @@ class WriteExecutor
         private readonly WritePolicy $policy,
         private readonly DriverFactory $drivers,
         private readonly SetStatusType $type,
+        private readonly WriteLimits $limits,
     ) {}
 
     /**
@@ -217,6 +218,7 @@ class WriteExecutor
         if ($x->state === AdWriteAction::SUCCEEDED) {
             $this->mirrorLocal($x);
             if ($x->isStop()) {
+                $this->restartLock($x);
                 $this->supersedeRunsBy($x);
             }
             if ($x->rollback_of_id !== null) {
@@ -228,6 +230,25 @@ class WriteExecutor
         }
 
         return $x->refresh();
+    }
+
+    /**
+     * A succeeded Stop confirmed by an Ads-authority holder locks other users' Runs on the target for restart_lock_days
+     * (B3; RunGuard::restartLock enforces it). 0 days = no lock.
+     */
+    protected function restartLock(AdWriteAction $stop): void
+    {
+        $confirmer = $stop->confirmer;
+        if ($confirmer === null || ! $confirmer->hasAdsAuthority()) {
+            return;
+        }
+        $days = $this->limits->for($confirmer, $stop->account)['restart_lock_days'];
+        if ($days <= 0) {
+            return;
+        }
+        $until = now()->addDays($days);
+        AdWriteAction::whereKey($stop->id)->update(['restart_lock_until' => $until]);
+        $stop->restart_lock_until = $until;
     }
 
     /** A succeeded rollback: the original action becomes rolled_back (CAS on succeeded). */
