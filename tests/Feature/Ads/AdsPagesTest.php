@@ -492,3 +492,30 @@ it('looks the media buyer up once when sharing the ads access props', function (
 
     expect($lookups)->toBe(1)->and($props['buyerId'])->toBe($buyer->id)->and($props['canWrite'])->toBeTrue();
 });
+
+it('names the stalest active account on the overview, never-synced first, within the buyer scope', function () {
+    $admin = adsPgUser(UserRole::Admin);
+    AdAccount::factory()->create(['name' => 'Fresh', 'last_synced_at' => now()->subMinutes(10)]);
+    $stale = AdAccount::factory()->create(['name' => 'Stale', 'last_synced_at' => now()->subHours(30)]);
+
+    $this->actingAs($admin)->get('/ads')->assertInertia(fn (Assert $p) => $p
+        ->where('sync.oldest.account', 'Stale')
+        ->where('sync.oldest.last_synced_at', fn ($v) => $v !== null && CarbonImmutable::parse($v)->diffInHours(now()) >= 29)
+        ->where('sync.last_synced_at', fn ($v) => $v !== null && CarbonImmutable::parse($v)->diffInMinutes(now()) < 15));
+
+    $never = AdAccount::factory()->create(['name' => 'Never', 'last_synced_at' => null]);
+    AdAccount::factory()->create(['name' => 'Off', 'is_active' => false, 'last_synced_at' => null]);
+
+    $this->actingAs($admin)->get('/ads')->assertInertia(fn (Assert $p) => $p
+        ->where('sync.oldest.account', 'Never')->where('sync.oldest.last_synced_at', null));
+
+    $world = adsPgBuyerWorld();
+    $world['account']->update(['name' => 'Mine', 'last_synced_at' => now()->subHour()]);
+    $this->actingAs($world['user'])->get('/ads')->assertInertia(fn (Assert $p) => $p
+        ->where('sync.oldest.account', 'Mine'));
+});
+
+it('has no oldest account when there is none in scope', function () {
+    $this->actingAs(adsPgUser(UserRole::Admin))->get('/ads')->assertInertia(fn (Assert $p) => $p
+        ->where('sync.oldest', null)->where('sync.last_synced_at', null));
+});

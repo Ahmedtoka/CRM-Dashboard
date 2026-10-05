@@ -107,6 +107,8 @@ export interface AdsTopAccountRow {
 
 export interface AdsSync {
     last_synced_at: string | null;
+    /** The active in-scope account synced longest ago (never synced sorts first); null when no account is in scope. */
+    oldest: { account: string; last_synced_at: string | null } | null;
     errors: { account: string; error: string }[];
 }
 

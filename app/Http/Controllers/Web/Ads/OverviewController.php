@@ -34,12 +34,15 @@ class OverviewController extends Controller
         ]);
     }
 
-    /** @return array{last_synced_at:?string, errors:list<array{account:string,error:string}>} */
+    /** @return array{last_synced_at:?string, oldest:?array{account:string,last_synced_at:?string}, errors:list<array{account:string,error:string}>} */
     private function sync(AdsFilter $filter, bool $withErrors): array
     {
-        $last = AdAccount::query()->where('is_active', true)
-            ->when($filter->accountIds !== null, fn ($q) => $q->whereIn('id', $filter->accountIds))
-            ->max('last_synced_at');
+        $active = fn () => AdAccount::query()->where('is_active', true)
+            ->when($filter->accountIds !== null, fn ($q) => $q->whereIn('id', $filter->accountIds));
+        $last = $active()->max('last_synced_at');
+
+        // One fresh account must not hide a stale one: name the account that was synced longest ago (never synced first).
+        $oldest = $active()->orderByRaw('last_synced_at IS NOT NULL')->orderBy('last_synced_at')->orderBy('id')->first(['id', 'name', 'last_synced_at']);
 
         // Connection errors carry platform text and are for the people who manage the connections.
         $errors = ! $withErrors ? [] : AdPlatformConnection::query()
@@ -48,6 +51,10 @@ class OverviewController extends Controller
 
         return [
             'last_synced_at' => $last === null ? null : Carbon::parse($last, 'UTC')->toIso8601String(),
+            'oldest' => $oldest === null ? null : [
+                'account' => (string) $oldest->name,
+                'last_synced_at' => $oldest->last_synced_at === null ? null : Carbon::parse($oldest->last_synced_at, 'UTC')->toIso8601String(),
+            ],
             'errors' => $errors,
         ];
     }

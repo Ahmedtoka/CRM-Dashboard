@@ -189,6 +189,17 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
             <p class="text-2xs text-muted-foreground">
                 {{ sync.last_synced_at ? t('ads.sync.last', { time: formatDateTime(sync.last_synced_at, locale) }) : t('ads.sync.never') }}
             </p>
+            <p
+                v-if="sync.oldest && sync.oldest.last_synced_at !== sync.last_synced_at"
+                class="text-2xs text-muted-foreground"
+                :class="sync.oldest.last_synced_at ? '' : 'font-semibold text-destructive'"
+            >
+                {{
+                    sync.oldest.last_synced_at
+                        ? t('ads.sync.oldest', { account: sync.oldest.account, time: formatDateTime(sync.oldest.last_synced_at, locale) })
+                        : t('ads.sync.oldest_never', { account: sync.oldest.account })
+                }}
+            </p>
 
             <EmptyState
                 v-if="!hasData"

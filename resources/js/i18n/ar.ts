@@ -3029,6 +3029,8 @@ const ar = {
         sync: {
             last: 'آخر تحديث {time}',
             never: 'لسه متحدثتش البيانات',
+            oldest: 'الأقدم: {account}، آخر تحديث {time}',
+            oldest_never: 'لسه متحدّثش: {account}',
             errors_title: 'في مشكلة في ربط بعض الحسابات',
             open_accounts: 'افتح الحسابات',
             title: 'مزامنة الإعلانات',

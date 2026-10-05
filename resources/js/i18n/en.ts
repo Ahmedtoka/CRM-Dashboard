@@ -3074,6 +3074,8 @@ const en: Messages = {
         sync: {
             last: 'Last synced {time}',
             never: 'Not synced yet',
+            oldest: 'Oldest: {account}, synced {time}',
+            oldest_never: 'Never synced: {account}',
             errors_title: 'Some ad connections have a problem',
             open_accounts: 'Open accounts',
             title: 'Ad sync',
