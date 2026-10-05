@@ -84,8 +84,7 @@ it('makes a newly discovered account writable by default (D3)', function () {
 it('never allows writes on an inactive account even when write_enabled', function () {
     $off = AdAccount::factory()->meta()->create(['is_active' => false]);
 
-    expect($off->write_enabled)->toBeTrue()->and(WritableAccounts::allows($off))->toBeFalse()
-        ->and(WritableAccounts::allowsIn($off, ['ignored']))->toBeFalse();
+    expect($off->write_enabled)->toBeTrue()->and(WritableAccounts::allows($off))->toBeFalse();
 });
 
 it('disables and enables one account with ads:writable, audited, and the old endpoint follows', function () {

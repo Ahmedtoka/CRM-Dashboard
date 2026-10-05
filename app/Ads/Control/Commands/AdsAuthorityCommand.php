@@ -73,13 +73,13 @@ class AdsAuthorityCommand extends Command
     private function revoke(User $user): bool
     {
         return DB::transaction(function () use ($user) {
-            $holders = User::query()->where('ads_authority', true)->where('is_active', true)->lockForUpdate()->pluck('id')->all();
+            $holders = User::query()->where('ads_authority', true)->where('is_active', true)->lockForUpdate()->pluck('id')->map(fn ($id) => (int) $id)->all();
             if (! $user->ads_authority) {
                 $this->line("{$user->email} does not hold Ads authority.");
 
                 return true;
             }
-            if ($user->is_active && $holders === [$user->id]) {
+            if ($user->is_active && $holders === [(int) $user->id]) {
                 $this->error("{$user->email} is the last active holder; grant someone else first.");
 
                 return false;

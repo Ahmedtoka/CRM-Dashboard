@@ -14,6 +14,7 @@ it('creates an active admin with a prompted password', function () {
     expect($user->role)->toBe(UserRole::Admin)
         ->and($user->is_active)->toBeTrue()
         ->and($user->name)->toBe('Owner')
+        ->and($user->ads_authority)->toBeTrue()
         ->and(Hash::check('secret-123', $user->password))->toBeTrue();
 });
 

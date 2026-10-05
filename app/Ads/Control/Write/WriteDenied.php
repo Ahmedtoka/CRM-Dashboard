@@ -2,6 +2,7 @@
 
 namespace App\Ads\Control\Write;
 
+use App\Ads\Platforms\SecretScrubber;
 use Illuminate\Http\JsonResponse;
 use RuntimeException;
 
@@ -60,8 +61,37 @@ class WriteDenied extends RuntimeException
             }
         }
         $message = __('ads.errors.'.$code, $replace);
+        if (! is_string($message) || $message === 'ads.errors.'.$code) {
+            return (string) __('ads.errors.failed');
+        }
+        // A stored refusal without its details (older rows) must never show a raw :placeholder: use the plain variant.
+        if (self::hasPlaceholder($message)) {
+            $plain = __('ads.errors.'.$code.'_plain');
 
-        return is_string($message) && $message !== 'ads.errors.'.$code ? $message : (string) __('ads.errors.failed');
+            return is_string($plain) && $plain !== 'ads.errors.'.$code.'_plain' ? $plain : (string) __('ads.errors.failed');
+        }
+
+        return $message;
+    }
+
+    /** An unreplaced :placeholder (a word right after a colon that does not follow a letter, so "ads:writable" is not one). */
+    public static function hasPlaceholder(string $message): bool
+    {
+        return preg_match('/(?<![\p{L}\p{N}]):[a-z][a-z_]*/u', $message) === 1;
+    }
+
+    /** "<message> (<platform's own text>)": the platform's reason, scrubbed and shortened, after the translated one. */
+    public static function withPlatformMessage(string $message, mixed $platform): string
+    {
+        $platform = is_string($platform) ? trim(SecretScrubber::scrub($platform)) : '';
+
+        return $platform === '' ? $message : $message.' ('.mb_strimwidth($platform, 0, 300, '…').')';
+    }
+
+    /** A refusal is an answer, not an application error: never reported to the error log. */
+    public function report(): bool
+    {
+        return false;
     }
 
     /** @return array{code: string, message: string, details: array<string, mixed>|object, errors: array{status: list<string>}} */
@@ -71,7 +101,7 @@ class WriteDenied extends RuntimeException
             'code' => $this->errorCode,
             'message' => $this->getMessage(),
             'details' => $this->details === [] ? (object) [] : $this->details,
-            'errors' => ['status' => [$this->getMessage()]],
+            'errors' => ['status' => [self::withPlatformMessage($this->getMessage(), $this->details['platform_message'] ?? null)]],
         ];
     }
 

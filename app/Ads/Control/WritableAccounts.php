@@ -20,14 +20,4 @@ final class WritableAccounts
     {
         return (bool) $a->is_active && (bool) $a->write_enabled;
     }
-
-    /**
-     * @deprecated since Phase B: the list argument is ignored; use allows().
-     *
-     * @param  array<mixed>|null  $ignored
-     */
-    public static function allowsIn(AdAccount $a, ?array $ignored = null): bool
-    {
-        return self::allows($a);
-    }
 }

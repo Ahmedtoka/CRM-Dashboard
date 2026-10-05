@@ -53,9 +53,14 @@ const error = ref<string | null>(null);
 const reason = ref(props.reason);
 
 const idemKey = ref('');
+/** crypto.randomUUID needs a secure context (HTTPS or localhost); elsewhere a time + random key (matches [A-Za-z0-9:_-]{8,100}). */
+function newKey(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
+}
 watch(open, (o) => {
     if (o) {
-        idemKey.value = crypto.randomUUID(); // one key per dialog: a double submit replays, never a second write
+        idemKey.value = newKey(); // one key per dialog: a double submit replays, never a second write
         reason.value = props.reason;
         error.value = null;
     }

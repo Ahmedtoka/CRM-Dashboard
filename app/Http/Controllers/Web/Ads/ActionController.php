@@ -104,10 +104,8 @@ class ActionController extends Controller
                 default => 'ads.flash.resumed',
             })]),
             AdWriteAction::EXECUTING, AdWriteAction::UNKNOWN => response()->json(['ok' => false, 'pending' => true, 'status' => $status, 'action_id' => $x->public_id,
-                'message' => __($x->state === AdWriteAction::UNKNOWN ? 'ads.errors.unknown_outcome' : 'ads.errors.stop_retrying')], 202),
-            default => $this->refused($x->state === AdWriteAction::SUPERSEDED || $x->state === AdWriteAction::SUPERSEDED_BY_STOP
-                ? WriteDenied::make('precondition_failed', ['state' => $x->state])
-                : WriteActionController::failure($x), $x),
+                'message' => WriteActionController::pendingMessage($x)], 202),
+            default => $this->refused(WriteActionController::failure($x), $x),
         };
     }
 
@@ -121,7 +119,11 @@ class ActionController extends Controller
         };
     }
 
-    /** The translated refusal message when the code has one, else the stored (scrubbed) platform text. */
+    /**
+     * The same message the user got: the translated refusal with its stored details (never a raw :placeholder), plus
+     * the platform's own (scrubbed) text for platform_rejected / permission_missing, legacy rows included. A code with
+     * no translation shows the stored platform text.
+     */
     private static function logError(AdWriteAction $a): ?string
     {
         if (in_array($a->state, [AdWriteAction::SUCCEEDED, AdWriteAction::ROLLED_BACK], true)) {
@@ -129,7 +131,9 @@ class ActionController extends Controller
         }
         $code = (string) $a->error_code;
         if ($code !== '' && Lang::has('ads.errors.'.$code)) {
-            return __('ads.errors.'.$code);
+            $details = WriteActionController::storedDetails($a);
+
+            return WriteDenied::withPlatformMessage(WriteDenied::messageFor($code, $details), $details['platform_message'] ?? null);
         }
 
         return $a->error_message !== null ? SecretScrubber::scrub($a->error_message) : null;

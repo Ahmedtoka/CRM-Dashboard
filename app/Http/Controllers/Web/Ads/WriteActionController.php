@@ -6,6 +6,7 @@ use App\Ads\Control\Write\Types\SetStatusType;
 use App\Ads\Control\Write\WriteActionService;
 use App\Ads\Control\Write\WriteDenied;
 use App\Ads\Control\Write\WritePolicy;
+use App\Ads\Platforms\SecretScrubber;
 use App\Http\Controllers\Controller;
 use App\Models\AdAccount;
 use App\Models\AdsAuditLog;
@@ -110,22 +111,56 @@ class WriteActionController extends Controller
                 default => 'ads.flash.resumed',
             })]),
             AdWriteAction::UNKNOWN => response()->json(['action' => $present, 'message' => __('ads.errors.unknown_outcome')], 202),
-            AdWriteAction::EXECUTING => response()->json(['action' => $present, 'message' => __('ads.errors.stop_retrying')], 202),
-            AdWriteAction::SUPERSEDED, AdWriteAction::SUPERSEDED_BY_STOP => self::refusal(WriteDenied::make('precondition_failed', ['state' => $x->state]), $present),
+            AdWriteAction::EXECUTING => response()->json(['action' => $present, 'message' => self::pendingMessage($x)], 202),
             default => self::refusal(self::failure($x), $present),
         };
     }
 
+    /**
+     * The stable refusal for an action that did not succeed, rebuilt from what was stored: a replay or a log row reads
+     * the same as the first answer. Expired / cancelled / superseded map to their own codes, never to a platform refusal.
+     */
     public static function failure(AdWriteAction $x): WriteDenied
     {
-        $code = (string) ($x->error_code ?: 'failed');
-        $details = array_filter([
-            'platform_message' => in_array($code, ['platform_rejected', 'permission_missing'], true) ? $x->error_message : null,
+        return match ($x->state) {
+            AdWriteAction::EXPIRED => WriteDenied::make('proposal_expired'),
+            AdWriteAction::CANCELLED => WriteDenied::make('not_confirmable', ['state' => $x->state]),
+            AdWriteAction::SUPERSEDED, AdWriteAction::SUPERSEDED_BY_STOP => WriteDenied::make('precondition_failed', ['state' => $x->state]),
+            default => self::storedFailure($x),
+        };
+    }
+
+    /**
+     * The stored details (outcome.error_details) as the message's :placeholders; WriteDenied falls back to a
+     * placeholder-free message when an older row has none.
+     *
+     * @return array<string, mixed>
+     */
+    public static function storedDetails(AdWriteAction $x): array
+    {
+        $code = (string) $x->error_code;
+        $stored = $x->outcome['error_details'] ?? [];
+
+        return array_filter((is_array($stored) ? $stored : []) + [
+            'platform_message' => in_array($code, ['platform_rejected', 'permission_missing'], true) && $x->error_message !== null
+                ? SecretScrubber::scrub($x->error_message) : null,
             'deep_link' => $x->outcome['deep_link'] ?? null,
         ], fn ($v) => $v !== null);
+    }
+
+    private static function storedFailure(AdWriteAction $x): WriteDenied
+    {
+        $code = (string) ($x->error_code ?: 'failed');
+        $details = self::storedDetails($x);
         $retry = $x->outcome['retry_after'] ?? null;
 
         return WriteDenied::make($code, $details, $code === 'rate_limited' && $retry !== null ? ['Retry-After' => (string) $retry] : []);
+    }
+
+    /** An executing action: a Stop has a retry scheduled; a Run (a replay of one still in flight) is simply in progress. */
+    public static function pendingMessage(AdWriteAction $x): string
+    {
+        return (string) __($x->state === AdWriteAction::UNKNOWN ? 'ads.errors.unknown_outcome' : ($x->isStop() ? 'ads.errors.stop_retrying' : 'ads.errors.in_progress'));
     }
 
     /** @param  array<string, mixed>  $present */

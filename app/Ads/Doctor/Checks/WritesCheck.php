@@ -72,9 +72,11 @@ class WritesCheck extends DoctorCheck
 
         if (Schema::hasTable('ad_actions')) {
             $old = DB::table('ad_actions')->count();
-            $copied = AdWriteAction::query()->where('source', 'legacy')->count();
+            // Only the copied rows (source_ref ad_actions:{id}); the legacy shim also writes source=legacy rows, with no source_ref.
+            $copied = AdWriteAction::query()->where('source', 'legacy')->where('source_ref', 'like', 'ad_actions:%')->count();
+            // Not migrate:refresh: that migration's down() also deletes the rows the legacy endpoint wrote since B1.
             $rows[] = DoctorRow::by($old === $copied, 'fail', self::S, 'legacy copy', "ad_actions {$old}, legacy {$copied}",
-                'The B1 copy is incomplete: re-run the copy migration (it is idempotent).');
+                "The B1 copy is incomplete. Re-run only its up() (idempotent, copies the missing rows): php artisan tinker --execute=\"(require base_path('database/migrations/2026_10_07_100050_copy_ad_actions_to_ad_write_actions.php'))->up();\"");
         }
 
         $rows[] = DoctorRow::skip(self::S, 'legacy endpoint calls', 'log only',

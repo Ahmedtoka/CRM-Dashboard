@@ -66,6 +66,7 @@ class WriteActionService
             // No action row, but a refused attempt stays visible (slice-1 F-003 C23 intent).
             AdsAudit::record('write.refused', $a, null, null, [
                 'code' => $e->errorCode, 'level' => $level, 'external_id' => $externalId, 'to' => $to, 'source' => $source, 'phase' => 'propose',
+                'reason' => $reason,
             ], $u);
 
             throw $e;
@@ -153,7 +154,7 @@ class WriteActionService
             // Abilities are re-evaluated now, never taken from the proposal.
             $this->policy->authorize($u, $account, $x->target_level, (string) $x->to_status, 'confirm');
         } catch (WriteDenied $e) {
-            AdsAudit::record('write.refused', $x, null, null, ['code' => $e->errorCode, 'public_id' => $x->public_id, 'phase' => 'confirm'], $u);
+            AdsAudit::record('write.refused', $x, null, null, ['code' => $e->errorCode, 'public_id' => $x->public_id, 'phase' => 'confirm', 'reason' => $x->reason], $u);
 
             throw $e;
         }
@@ -195,9 +196,12 @@ class WriteActionService
     private function refuseProposed(User $u, AdWriteAction $x, WriteDenied $e): void
     {
         $state = $e->errorCode === 'precondition_failed' ? AdWriteAction::SUPERSEDED : AdWriteAction::FAILED;
-        $changed = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::PROPOSED)->update([
-            'state' => $state, 'error_code' => $e->errorCode, 'finished_at' => now(), 'updated_at' => now(),
-        ]) === 1;
+        $values = ['state' => $state, 'error_code' => $e->errorCode, 'finished_at' => now(), 'updated_at' => now()];
+        if ($e->details !== []) {
+            // Kept so the log and a same-key replay render the message with its values (cap_exceeded :used of :limit).
+            $values['outcome'] = json_encode(array_merge($x->outcome ?? [], ['error_details' => $e->details]));
+        }
+        $changed = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::PROPOSED)->update($values) === 1;
         if ($changed) {
             AdsAudit::record('write.'.$state, $x, ['state' => AdWriteAction::PROPOSED], ['state' => $state],
                 array_filter(['public_id' => $x->public_id, 'error_code' => $e->errorCode, 'phase' => 'confirm', 'details' => $e->details ?: null]), $u);

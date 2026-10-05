@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Symfony\Component\Console\Output\ConsoleOutput;
 
 return new class extends Migration
 {
@@ -33,14 +34,20 @@ return new class extends Migration
                 if (isset($done[$key])) {
                     continue;
                 }
-                $this->copy($r, $key);
+                // The action and its step land together or not at all, so a re-run never sees a stepless copy.
+                DB::transaction(fn () => $this->copy($r, $key));
             }
         });
 
-        Log::info('ads.legacy_copy', [
+        $counts = [
             'ad_actions' => DB::table('ad_actions')->count(),
-            'copied_legacy' => DB::table('ad_write_actions')->where('source', 'legacy')->count(),
-        ]);
+            'copied_legacy' => DB::table('ad_write_actions')->where('source', 'legacy')->where('source_ref', 'like', 'ad_actions:%')->count(),
+        ];
+        Log::info('ads.legacy_copy', $counts);
+        // A migration has no $this->command (only seeders do): print straight to the console, never inside the test suite.
+        if (app()->runningInConsole() && ! app()->runningUnitTests()) {
+            (new ConsoleOutput)->writeln("  ads.legacy_copy: ad_actions {$counts['ad_actions']}, copied {$counts['copied_legacy']}");
+        }
     }
 
     public function down(): void

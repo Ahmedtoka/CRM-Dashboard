@@ -2,11 +2,13 @@
 
 use App\Ads\Control\AdWriteService;
 use App\Ads\Control\StopAdvisor;
+use App\Ads\Control\Write\RunGuard;
 use App\Ads\Control\Write\WriteActionService;
 use App\Ads\Control\Write\WriteDenied;
 use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Ads\Platforms\MissingPermission;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Platforms\ReadUnsupported;
 use App\Ads\Reports\AdInsights;
 use App\Ads\Reports\AdsFilter;
 use App\Enums\UserRole;
@@ -23,6 +25,7 @@ use App\Models\MediaBuyer;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonPeriod;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -143,13 +146,18 @@ it('answers 422 with the readable message and records a failed action when the p
     $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))
         ->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id]))
         ->assertStatus(422)->assertJsonValidationErrors('status')->assertJsonPath('code', 'permission_missing')
-        ->assertJsonPath('errors.status.0', __('ads.errors.permission_missing'))
+        ->assertJsonPath('message', __('ads.errors.permission_missing'))
+        ->assertJsonPath('errors.status.0', __('ads.errors.permission_missing').' (Meta permission missing: ads_management)')
         ->assertJsonPath('details.platform_message', 'Meta permission missing: ads_management');
 
     $row = AdWriteAction::sole();
     expect($row->state)->toBe('failed')->and($row->error_code)->toBe('permission_missing')
         ->and($row->error_message)->toBe('Meta permission missing: ads_management')->and($row->to_status)->toBe('paused')
         ->and($ad->refresh()->status)->toBe('ACTIVE');
+
+    // The Actions log shows Meta's own reason too.
+    $this->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->where('log.0.error', __('ads.errors.permission_missing').' (Meta permission missing: ads_management)'));
 });
 
 it('maps a rate limit on a Run to a readable 429', function () {
@@ -481,10 +489,92 @@ it('lists legacy-copied and pipeline actions in one log, newest first, scoped, w
 
     $this->actingAs($buyer)->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->has('log', 4)
-        ->where('log.0.name', 'Failed stop')->where('log.0.result', 'error')->where('log.0.error', __('ads.errors.permission_missing'))
+        ->where('log.0.name', 'Failed stop')->where('log.0.result', 'error')->where('log.0.error', __('ads.errors.permission_missing').' (raw)')
         ->where('log.0.to_status', 'PAUSED')
         ->where('log.1.name', 'Unknown stop')->where('log.1.result', 'pending')
         ->where('log.2.name', 'New run')->where('log.2.result', 'ok')->where('log.2.to_status', 'ACTIVE')->where('log.2.reason', 'back in stock')
         ->where('log.3.name', 'Legacy stop')->where('log.3.result', 'ok')->where('log.3.user', 'Boss')->where('log.3.account', 'Mine')
         ->where('log.3.from_status', 'ACTIVE')->where('log.3.level', 'ad')->where('log.3.platform', 'meta'));
+});
+
+it('keeps the values of a confirm-time refusal: no :placeholder in the log or on a same-key replay', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $buyer = actBuyer($acc);
+    Artisan::call('ads:write-limits', ['--user' => (string) $buyer->id, '--set' => ['activations_per_user_day=1']]);
+    $first = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
+    $second = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
+    $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $first->external_id, 'status' => 'active']))->assertOk();
+
+    $post = fn () => $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $second->external_id, 'status' => 'active']),
+        ['Idempotency-Key' => 'cap-replay-0001']);
+    $expected = __('ads.errors.cap_exceeded', ['used' => 1, 'limit' => 1]);
+    $post()->assertStatus(422)->assertJsonPath('code', 'cap_exceeded')->assertJsonPath('errors.status.0', $expected);
+
+    $x = AdWriteAction::where('idempotency_key', 'cap-replay-0001')->sole();
+    expect($x->state)->toBe('failed')->and($x->outcome['error_details'])->toMatchArray(['key' => 'activations_per_user_day', 'limit' => 1, 'used' => 1]);
+
+    $replay = $post()->assertStatus(422)->assertJsonPath('code', 'cap_exceeded')->assertJsonPath('errors.status.0', $expected);
+    expect(WriteDenied::hasPlaceholder((string) $replay->json('errors.status.0')))->toBeFalse();
+
+    $this->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p->where('log.0.error', $expected));
+});
+
+it('never shows a raw :placeholder for an older refusal stored without details, and reads level_not_allowed as Ads authority', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $base = ['proposed_by_id' => $admin->id, 'confirmed_by_id' => $admin->id, 'ad_account_id' => $acc->id, 'state' => 'failed'];
+    AdWriteAction::factory()->run()->create($base + ['target_name' => 'Old cap', 'error_code' => 'cap_exceeded', 'confirmed_at' => now()->subMinutes(2)]);
+    AdWriteAction::factory()->run()->create($base + ['target_name' => 'Old level', 'error_code' => 'level_not_allowed', 'error_message' => 'level_not_allowed', 'confirmed_at' => now()->subMinute()]);
+
+    $this->actingAs($admin)->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->where('log.0.name', 'Old level')->where('log.0.error', __('ads.errors.ads_authority_required'))
+        ->where('log.1.name', 'Old cap')->where('log.1.error', __('ads.errors.cap_exceeded_plain')));
+    expect(WriteDenied::hasPlaceholder(__('ads.errors.cap_exceeded_plain')))->toBeFalse()
+        ->and(WriteDenied::messageFor('cap_exceeded'))->toBe(__('ads.errors.cap_exceeded_plain'));
+});
+
+it('answers a replayed in-flight Run as in progress, and a replayed expired or cancelled action with its own code', function (string $state, int $status, string $expect) {
+    $acc = AdAccount::factory()->meta()->create();
+    $ad = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
+    $admin = User::factory()->adsAuthority()->create(['role' => UserRole::Admin]);
+    $data = actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'active']);
+    $x = app(WriteActionService::class)->propose($admin, $acc, 'ad', $ad->external_id, 'active', $data['reason'], 'replay-state-0001', 'legacy')['action'];
+    $x->forceFill(['state' => $state])->save();
+
+    $res = $this->actingAs($admin)->postJson('/ads/actions/status', $data, ['Idempotency-Key' => 'replay-state-0001'])->assertStatus($status);
+    $state === 'executing'
+        ? $res->assertJsonPath('pending', true)->assertJsonPath('message', __('ads.errors.in_progress'))
+        : $res->assertJsonPath('code', $expect)->assertJsonPath('errors.status.0', __('ads.errors.'.$expect));
+})->with([
+    'executing Run' => ['executing', 202, 'in_progress'],
+    'expired' => ['expired', 410, 'proposal_expired'],
+    'cancelled' => ['cancelled', 409, 'not_confirmable'],
+]);
+
+it('refuses a TikTok Run it cannot read live with its own message', function () {
+    $acc = AdAccount::factory()->create(['platform' => 'tiktok']);
+    $double = Mockery::mock(FakeAdsDriver::class)->makePartial();
+    $double->shouldReceive('readObject')->once()->andThrow(new ReadUnsupported('TikTok live reads are not supported yet.'));
+    app()->bind(FakeAdsDriver::class, fn () => $double);
+
+    try {
+        app(RunGuard::class)->read($acc, 'ad', '123');
+        $this->fail('expected a refusal');
+    } catch (WriteDenied $e) {
+        expect($e->errorCode)->toBe('budget_unreadable')->and($e->getMessage())->toBe(__('ads.errors.budget_unreadable_read_unsupported'));
+    }
+    expect(WriteDenied::messageFor('budget_unreadable', ['read_error' => 'ReadUnsupported', 'reason' => 'read_unsupported']))
+        ->toBe(__('ads.errors.budget_unreadable_read_unsupported'))
+        ->and((new WriteDenied('cap_exceeded', 422))->report())->toBeFalse();
+});
+
+it('keeps the user reason in the write.refused audit row', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $campaign = AdCampaign::factory()->for($acc, 'account')->create();
+    $buyer = actBuyer($acc);
+
+    $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'level' => 'campaign', 'external_id' => $campaign->external_id, 'reason' => 'stock is out']))
+        ->assertForbidden()->assertJsonPath('code', 'ads_authority_required');
+
+    expect(AdsAuditLog::where('action', 'write.refused')->sole()->meta)->toMatchArray(['code' => 'ads_authority_required', 'reason' => 'stock is out']);
 });

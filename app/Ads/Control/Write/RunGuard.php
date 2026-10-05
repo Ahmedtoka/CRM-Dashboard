@@ -8,6 +8,7 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Data\ObjectState;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Platforms\ReadUnsupported;
 use App\Ads\Platforms\SecretScrubber;
 use App\Ads\Platforms\TokenInvalid;
 use App\Ads\Reports\AdsFilter;
@@ -298,6 +299,9 @@ class RunGuard
 
             throw WriteDenied::make('rate_limited', array_filter(['retry_after' => $retry], fn ($v) => $v !== null),
                 $retry !== null ? ['Retry-After' => (string) $retry] : []);
+        } catch (ReadUnsupported) {
+            // No live read on this platform yet (TikTok): the Run cannot be checked, so it is made in the platform's own manager.
+            throw WriteDenied::make('budget_unreadable', ['read_error' => 'ReadUnsupported', 'reason' => 'read_unsupported']);
         } catch (Throwable $e) {
             if (! $e instanceof AdsApiException) {
                 WriteExecutor::logUnexpected($e);

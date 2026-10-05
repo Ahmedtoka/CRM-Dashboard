@@ -184,6 +184,7 @@ class DemoSeeder extends Seeder
             'color' => '#7C3AED',
             'email_verified_at' => now(),
         ]);
+        $this->admin->forceFill(['ads_authority' => true])->save();
 
         $this->supervisor = User::create([
             'name' => 'منى يوسف',
