@@ -31,6 +31,8 @@ Route::middleware('ads:report')->group(function () {
     // Phase B write pipeline (B2): propose, then confirm. Refusals use the stable code shape (WriteDenied).
     Route::post('/ads/write-actions', [WriteActionController::class, 'store'])->middleware('throttle:30,1')->name('ads.write-actions.store');
     Route::get('/ads/write-actions/{action}', [WriteActionController::class, 'show'])->name('ads.write-actions.show');
+    Route::post('/ads/write-actions/{action}/confirm', [WriteActionController::class, 'confirm'])->middleware('throttle:30,1')->name('ads.write-actions.confirm');
+    Route::post('/ads/write-actions/{action}/cancel', [WriteActionController::class, 'cancel'])->name('ads.write-actions.cancel');
 });
 
 Route::middleware('ads:manage')->group(function () {

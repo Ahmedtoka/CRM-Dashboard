@@ -67,6 +67,57 @@ class WriteActionController extends Controller
         ]);
     }
 
+    /** Confirm a proposal: claim, execute inline, answer with the action's end state. */
+    public function confirm(Request $request, string $action, WriteActionService $service): JsonResponse
+    {
+        $x = $service->find($request->user(), $action);
+        $data = $this->validated($request, ['diff_hash' => ['required', 'string', 'size:64']]);
+
+        return self::outcome($service->confirm($request->user(), $x, $data['diff_hash']));
+    }
+
+    public function cancel(Request $request, string $action, WriteActionService $service): JsonResponse
+    {
+        $x = $service->cancel($request->user(), $service->find($request->user(), $action));
+
+        return response()->json(['action' => self::present($x)]);
+    }
+
+    /**
+     * HTTP answer for an action after an attempt: succeeded 200; failed 422 (or the code's own status, 429 for
+     * rate_limited); superseded 409 precondition_failed; unknown or executing (retry scheduled) 202.
+     */
+    public static function outcome(AdWriteAction $x): JsonResponse
+    {
+        $present = self::present($x);
+
+        return match ($x->state) {
+            AdWriteAction::SUCCEEDED => response()->json(['action' => $present, 'message' => __($x->isStop() ? 'ads.flash.stopped' : 'ads.flash.resumed')]),
+            AdWriteAction::UNKNOWN => response()->json(['action' => $present, 'message' => __('ads.errors.unknown_outcome')], 202),
+            AdWriteAction::EXECUTING => response()->json(['action' => $present, 'message' => __('ads.errors.stop_retrying')], 202),
+            AdWriteAction::SUPERSEDED, AdWriteAction::SUPERSEDED_BY_STOP => self::refusal(WriteDenied::make('precondition_failed', ['state' => $x->state]), $present),
+            default => self::refusal(self::failure($x), $present),
+        };
+    }
+
+    private static function failure(AdWriteAction $x): WriteDenied
+    {
+        $code = (string) ($x->error_code ?: 'failed');
+        $details = array_filter([
+            'platform_message' => in_array($code, ['platform_rejected', 'permission_missing'], true) ? $x->error_message : null,
+            'deep_link' => $x->outcome['deep_link'] ?? null,
+        ], fn ($v) => $v !== null);
+        $retry = $x->outcome['retry_after'] ?? null;
+
+        return WriteDenied::make($code, $details, $code === 'rate_limited' && $retry !== null ? ['Retry-After' => (string) $retry] : []);
+    }
+
+    /** @param  array<string, mixed>  $present */
+    private static function refusal(WriteDenied $e, array $present): JsonResponse
+    {
+        return response()->json($e->body() + ['action' => $present], $e->status, $e->headers);
+    }
+
     /** @return array<string, mixed> */
     public static function present(AdWriteAction $x): array
     {

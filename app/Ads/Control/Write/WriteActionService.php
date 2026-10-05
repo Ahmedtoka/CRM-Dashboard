@@ -8,6 +8,7 @@ use App\Models\AdAccount;
 use App\Models\AdWriteAction;
 use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The write pipeline's front door (B2, write-api 5): propose, then confirm. A proposal never takes the business key and
@@ -20,6 +21,7 @@ class WriteActionService
         private readonly WritePolicy $policy,
         private readonly SetStatusType $type,
         private readonly RunGuard $runGuard,
+        private readonly WriteExecutor $executor,
     ) {}
 
     /**
@@ -105,6 +107,150 @@ class WriteActionService
             ['public_id' => $x->public_id, 'diff_hash' => $x->diff_hash, 'source' => $source], $u);
 
         return ['action' => $x, 'replayed' => false];
+    }
+
+    /**
+     * Step 2 of two: claim the proposal (DB compare-and-set), take the Run key (a Stop never takes one), supersede the
+     * other proposed Runs on the target, then execute inline. Exactly one platform call per confirmed intent.
+     *
+     * @throws WriteDenied
+     */
+    public function confirm(User $u, AdWriteAction $x, string $diffHash): AdWriteAction
+    {
+        if ($x->proposed_by_id !== $u->id) {
+            throw WriteDenied::make('not_proposer');
+        }
+        $x = $this->expireIfDue($x);
+        if ($x->state === AdWriteAction::EXPIRED) {
+            throw WriteDenied::make('proposal_expired');
+        }
+        if ($x->state !== AdWriteAction::PROPOSED) {
+            throw WriteDenied::make('not_confirmable', ['state' => $x->state]);
+        }
+        if (! hash_equals((string) $x->diff_hash, $diffHash)) {
+            throw WriteDenied::make('diff_changed');
+        }
+
+        $account = $x->account;
+        try {
+            if ($account === null) {
+                throw WriteDenied::make('not_found');
+            }
+            // Abilities are re-evaluated now, never taken from the proposal.
+            $this->policy->authorize($u, $account, $x->target_level, (string) $x->to_status, 'confirm');
+        } catch (WriteDenied $e) {
+            AdsAudit::record('write.refused', $x, null, null, ['code' => $e->errorCode, 'public_id' => $x->public_id, 'phase' => 'confirm'], $u);
+
+            throw $e;
+        }
+
+        if (! $x->isStop()) {
+            $stop = AdWriteAction::where('target_key', $x->target_key)->where('to_status', 'paused')
+                ->whereIn('state', AdWriteAction::OPEN)->first(['id', 'public_id']);
+            if ($stop !== null) {
+                throw WriteDenied::make('stop_in_progress', ['action_id' => $stop->public_id]);
+            }
+            try {
+                $this->runGuard->atConfirm($u, $x);
+            } catch (WriteDenied $e) {
+                $failed = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::PROPOSED)->update([
+                    'state' => AdWriteAction::FAILED, 'error_code' => $e->errorCode, 'finished_at' => now(), 'updated_at' => now(),
+                ]) === 1;
+                if ($failed) {
+                    AdsAudit::record('write.failed', $x, ['state' => AdWriteAction::PROPOSED], ['state' => AdWriteAction::FAILED],
+                        ['public_id' => $x->public_id, 'error_code' => $e->errorCode, 'phase' => 'confirm'], $u);
+                }
+
+                throw $e;
+            }
+        }
+
+        $superseded = $this->claim($u, $x);
+
+        AdsAudit::record('write.confirmed', $x, ['state' => AdWriteAction::PROPOSED], ['state' => AdWriteAction::EXECUTING],
+            ['public_id' => $x->public_id, 'open_business_key' => $x->open_business_key], $u);
+        foreach ($superseded as $other) {
+            AdsAudit::record('write.superseded', $other, ['state' => AdWriteAction::PROPOSED], ['state' => AdWriteAction::SUPERSEDED],
+                ['public_id' => $other->public_id, 'superseded_by' => $x->public_id], $u);
+        }
+
+        return $this->executor->execute($x);
+    }
+
+    /** proposed → cancelled by the proposer (CAS). */
+    public function cancel(User $u, AdWriteAction $x): AdWriteAction
+    {
+        if ($x->proposed_by_id !== $u->id) {
+            throw WriteDenied::make('not_proposer');
+        }
+        $x = $this->expireIfDue($x);
+        $changed = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::PROPOSED)
+            ->update(['state' => AdWriteAction::CANCELLED, 'finished_at' => now(), 'updated_at' => now()]) === 1;
+        if (! $changed) {
+            throw WriteDenied::make('not_confirmable', ['state' => $x->fresh()->state]);
+        }
+        $x->refresh();
+        AdsAudit::record('write.cancelled', $x, ['state' => AdWriteAction::PROPOSED], ['state' => AdWriteAction::CANCELLED], ['public_id' => $x->public_id], $u);
+
+        return $x;
+    }
+
+    /**
+     * The claim, one transaction: CAS proposed → executing with the Run key, then supersede the proposed Runs on the
+     * target (a proposed Stop is never superseded, 2.1 rule 3).
+     *
+     * @return list<AdWriteAction> the actions superseded by this confirm
+     *
+     * @throws WriteDenied 409 not_confirmable / action_in_progress, 410 proposal_expired
+     */
+    private function claim(User $u, AdWriteAction $x): array
+    {
+        $key = $x->isStop() ? null : SetStatusType::runKey($x->target_key);
+
+        try {
+            $ids = DB::transaction(function () use ($u, $x, $key) {
+                $now = now();
+                $claimed = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::PROPOSED)->where('expires_at', '>', $now)->update([
+                    'state' => AdWriteAction::EXECUTING,
+                    'confirmed_by_id' => $u->id,
+                    'confirmed_at' => $now,
+                    'confirmed_role' => $u->role?->value ?? (string) $u->role,
+                    'executing_at' => $now,
+                    'open_business_key' => $key,
+                    'updated_at' => $now,
+                ]) === 1;
+                if (! $claimed) {
+                    return null;
+                }
+
+                $ids = AdWriteAction::where('target_key', $x->target_key)->where('id', '<>', $x->id)
+                    ->where('state', AdWriteAction::PROPOSED)->where('to_status', 'active')->pluck('id')->all();
+                if ($ids !== []) {
+                    AdWriteAction::whereIn('id', $ids)->where('state', AdWriteAction::PROPOSED)->update([
+                        'state' => AdWriteAction::SUPERSEDED, 'superseded_by_id' => $x->id, 'finished_at' => $now, 'updated_at' => $now,
+                    ]);
+                }
+
+                return $ids;
+            });
+        } catch (UniqueConstraintViolationException) {
+            // Another Run holds the key on this target: the transaction rolled back, this action stays proposed.
+            $holder = AdWriteAction::where('open_business_key', $key)->value('public_id');
+
+            throw WriteDenied::make('action_in_progress', array_filter(['action_id' => $holder]));
+        }
+
+        if ($ids === null) {
+            $x->refresh();
+            $x = $this->expireIfDue($x);
+
+            throw $x->state === AdWriteAction::EXPIRED
+                ? WriteDenied::make('proposal_expired')
+                : WriteDenied::make('not_confirmable', ['state' => $x->state]);
+        }
+        $x->refresh();
+
+        return AdWriteAction::whereIn('id', $ids)->get()->all();
     }
 
     /**
