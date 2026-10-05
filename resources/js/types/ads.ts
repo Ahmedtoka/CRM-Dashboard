@@ -48,6 +48,8 @@ export interface AdsDerived {
 export interface AdsTotals extends AdsDerived {
     /** Share (0..1) of the spend that went to loser-tier ads; null without spend. */
     losers_spend_share: number | null;
+    /** Spend of campaigns that are not active (paused, archived, deleted); already inside `spend`. */
+    spend_outside_active: number;
     real_orders: number;
     real_revenue: number;
     real_roas: number | null;

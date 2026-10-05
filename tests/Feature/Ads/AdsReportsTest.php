@@ -95,7 +95,7 @@ it('computes overview totals with tax and roas on pre-tax spend', function () {
         ->and($t['real_orders'])->toBe(0)->and($t['real_revenue'])->toBe(0.0)->and($t['real_roas'])->toBe(0.0)
         ->and($t['conversations'])->toBe(0)->and($t['conversations_ordered'])->toBe(0);
 
-    expect(array_keys($t))->toEqualCanonicalizing(['spend', 'spend_tax', 'purchase_value', 'roas', 'purchases', 'cpa', 'impressions', 'clicks', 'ctr', 'reach', 'cpm', 'cpc', 'real_orders', 'real_revenue', 'real_roas', 'conversations', 'conversations_ordered', 'losers_spend_share']);
+    expect(array_keys($t))->toEqualCanonicalizing(['spend', 'spend_tax', 'purchase_value', 'roas', 'purchases', 'cpa', 'impressions', 'clicks', 'ctr', 'reach', 'cpm', 'cpc', 'real_orders', 'real_revenue', 'real_roas', 'conversations', 'conversations_ordered', 'losers_spend_share', 'spend_outside_active']);
     expect($o['daily'])->toHaveCount(30)
         ->and($o['daily'][9])->toMatchArray(['date' => '2026-09-10', 'spend' => 1000.0, 'spend_tax' => 1140.0, 'roas' => 5.0, 'ctr' => 0.02])
         ->and($o['daily'][10])->toMatchArray(['date' => '2026-09-11', 'spend' => 0.0, 'roas' => null, 'ctr' => null, 'cpm' => null, 'cpc' => null]);

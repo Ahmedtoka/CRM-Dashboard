@@ -28,6 +28,8 @@ final class BuyerScorecard
             return [];
         }
 
+        // Cards are totals: every campaign's spend counts (D1). Lists below (campaigns, top ads) stay scoped.
+        $f = $f->allSpend();
         $sums = $this->q->sums($f, ['buyer_id' => 'a.media_buyer_id'])->keyBy(fn ($r) => $this->key($r->buyer_id));
         $orders = $this->q->orders($f)->groupBy(fn ($o) => $this->key($o['buyer_id']));
         $convs = $this->q->conversations($f)->groupBy(fn ($c) => $this->key($c['buyer_id']));
@@ -63,7 +65,7 @@ final class BuyerScorecard
         $bf = $f->with(['buyerId' => $b->id]);
         $card = collect($this->build($bf))->firstWhere('buyer_id', $b->id)
             ?? $this->card((int) $b->id, (string) $b->name, $b->color, [], null, collect(), collect(), null);
-        $orders = $this->q->orders($bf);
+        $orders = $this->q->orders($bf->allSpend());
 
         return $card + [
             'daily' => $this->overview->daily($bf, $orders),

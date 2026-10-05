@@ -35,11 +35,12 @@ function winWorld(): array
 {
     $acc = AdAccount::factory()->create();
     $acc2 = AdAccount::factory()->create();
-    $a = Ad::factory()->for($acc, 'account')->create(['name' => 'A', 'created_time' => '2026-09-20 10:00']);
-    $b = Ad::factory()->for($acc, 'account')->create(['name' => 'B']);
-    $c = Ad::factory()->for($acc, 'account')->create(['name' => 'C', 'effective_status' => 'PAUSED', 'created_time' => '2026-08-30 10:00']);
-    $d = Ad::factory()->for($acc, 'account')->create(['name' => 'D', 'created_time' => '2026-09-14 10:00']);
-    $e = Ad::factory()->for($acc2, 'account')->create(['name' => 'E']);
+    $cp = activeCampaignId($acc);
+    $a = Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => $cp, 'name' => 'A', 'created_time' => '2026-09-20 10:00']);
+    $b = Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => $cp, 'name' => 'B']);
+    $c = Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => $cp, 'name' => 'C', 'effective_status' => 'PAUSED', 'created_time' => '2026-08-30 10:00']);
+    $d = Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => $cp, 'name' => 'D', 'created_time' => '2026-09-14 10:00']);
+    $e = Ad::factory()->for($acc2, 'account')->create(['ad_campaign_id' => activeCampaignId($acc2), 'name' => 'E']);
     winDays($a, '2026-09-21', '2026-09-30', 100, 500);
     winDays($b, '2026-09-21', '2026-09-24', 100, 0, 0);
     winDays($c, '2026-09-01', '2026-09-02', 120, 50);
@@ -136,7 +137,7 @@ it('shows winner and promising by default on the winners page, with tier chips a
 it('pages the winners 20 at a time', function () {
     $acc = AdAccount::factory()->create();
     foreach (range(1, 25) as $i) {
-        winDays(Ad::factory()->for($acc, 'account')->create(['name' => 'Ad '.$i]), '2026-09-21', '2026-09-30', 100, 100 * (1 + $i % 5));
+        winDays(Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => activeCampaignId($acc), 'name' => 'Ad '.$i]), '2026-09-21', '2026-09-30', 100, 100 * (1 + $i % 5));
     }
     $this->withoutVite()->actingAs(User::factory()->create(['role' => UserRole::Admin]));
 

@@ -41,6 +41,8 @@ const breadcrumbs = computed(() => [
         <div class="mx-auto w-full max-w-[1400px] space-y-6 p-3 md:p-6">
             <PageHeader :title="t('ads.actions.title')" :description="t('ads.actions.hint')" />
 
+            <p class="text-2xs text-muted-foreground">{{ t('ads.scope_note') }}</p>
+
             <section class="space-y-2" aria-labelledby="suggestions-title">
                 <div>
                     <h2 id="suggestions-title" class="text-sm font-bold">{{ t('ads.actions.suggestions') }}</h2>

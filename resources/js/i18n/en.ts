@@ -2948,6 +2948,7 @@ const en: Messages = {
         shipments: { title: 'Active shipments', empty: 'No active shipments', advance: 'Next step', advanced: 'Shipment {number}: {status}' },
     },
     ads: {
+        scope_note: 'Showing active campaigns only. Totals include all spend.',
         money: { pre_tax: 'Pre-tax {amount}' },
         status: { active: 'Active', inactive: 'Inactive' },
         type: { image: 'Image', video: 'Video', carousel: 'Carousel', other: 'Other' },
@@ -3002,6 +3003,7 @@ const en: Messages = {
         kpi: {
             spend: 'Spend',
             spend_tax: 'Spend incl. tax',
+            outside_active: 'of which outside active campaigns: {amount}',
             purchase_value: 'Purchase value',
             roas: 'ROAS',
             roas_hint: 'Purchase value ÷ pre-tax spend',

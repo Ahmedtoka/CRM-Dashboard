@@ -204,8 +204,8 @@ it('suggests losers, fatigued and need-stop ads, not winners or paused ads', fun
 it('shows suggestions and the log on the actions page, scoped to the buyer', function () {
     $mine = AdAccount::factory()->meta()->create(['name' => 'Mine']);
     $other = AdAccount::factory()->meta()->create(['name' => 'Other']);
-    $bad = Ad::factory()->for($mine, 'account')->create(['name' => 'My loser']);
-    $foreign = Ad::factory()->for($other, 'account')->create(['name' => 'Their loser']);
+    $bad = Ad::factory()->for($mine, 'account')->create(['name' => 'My loser', 'ad_campaign_id' => activeCampaignId($mine)]);
+    $foreign = Ad::factory()->for($other, 'account')->create(['name' => 'Their loser', 'ad_campaign_id' => activeCampaignId($other)]);
     foreach (range(1, 6) as $i) {
         $day = CarbonImmutable::now(AdsFilter::TIMEZONE)->subDays($i)->toDateString();
         actDay($bad, $day, ['spend' => 200, 'purchase_value' => 10, 'purchases' => 1]);
@@ -324,10 +324,11 @@ it('suggests ads by their own status, TikTok ENABLE included, and stops a TikTok
 
 it('flags ads whose campaign or ad set is paused on the creatives and campaign pages', function () {
     $acc = AdAccount::factory()->meta()->create();
-    $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
-    $set = AdSet::factory()->for($camp, 'campaign')->create(['status' => 'ACTIVE']);
-    $ad = Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => $camp->id, 'ad_set_id' => $set->id, 'status' => 'ACTIVE', 'effective_status' => 'CAMPAIGN_PAUSED']);
-    $free = Ad::factory()->for($acc, 'account')->create(['status' => 'ACTIVE', 'effective_status' => 'ACTIVE']);
+    // D1: an ad of a paused campaign is not listed at all, so the paused parent here is the ad set
+    $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'ACTIVE']);
+    $set = AdSet::factory()->for($camp, 'campaign')->create(['status' => 'PAUSED']);
+    $ad = Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => $camp->id, 'ad_set_id' => $set->id, 'status' => 'ACTIVE', 'effective_status' => 'ADSET_PAUSED']);
+    $free = Ad::factory()->for($acc, 'account')->create(['status' => 'ACTIVE', 'effective_status' => 'ACTIVE', 'ad_campaign_id' => activeCampaignId($acc)]);
     $day = CarbonImmutable::now(AdsFilter::TIMEZONE)->subDay()->toDateString();
     actDay($ad, $day);
     actDay($free, $day);
@@ -345,7 +346,7 @@ it('marks each campaign node and creative row with can_write for its account', f
     $on = AdAccount::factory()->meta()->create(['name' => 'On']);
     $off = AdAccount::factory()->meta()->create(['name' => 'Off', 'is_active' => false]);
     foreach ([$on, $off] as $acc) {
-        $ad = Ad::factory()->for($acc, 'account')->create(['name' => 'Ad '.$acc->name]);
+        $ad = Ad::factory()->for($acc, 'account')->create(['name' => 'Ad '.$acc->name, 'ad_campaign_id' => activeCampaignId($acc)]);
         actDay($ad, CarbonImmutable::now(AdsFilter::TIMEZONE)->subDay()->toDateString(), ['spend' => 100]);
     }
     $admin = User::factory()->create(['role' => UserRole::Admin]);
@@ -416,7 +417,7 @@ it('gives a buyer can_write only on ad nodes of the campaigns tree', function ()
     $acc = AdAccount::factory()->meta()->create(['name' => 'Mine']);
     $camp = AdCampaign::factory()->for($acc, 'account')->create();
     $set = AdSet::factory()->for($camp, 'campaign')->create();
-    $ad = Ad::factory()->for($acc, 'account')->create(['ad_set_id' => $set->id]);
+    $ad = Ad::factory()->for($acc, 'account')->create(['ad_set_id' => $set->id, 'ad_campaign_id' => $camp->id]);
     actDay($ad, CarbonImmutable::now(AdsFilter::TIMEZONE)->subDay()->toDateString());
     $buyer = actBuyer($acc);
 

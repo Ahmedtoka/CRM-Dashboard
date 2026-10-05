@@ -2,6 +2,8 @@
 
 use App\Bot\Flows\OwnerFlowsUpgrade;
 use App\Bot\Flows\ReturnFlowUpgrade;
+use App\Models\AdAccount;
+use App\Models\AdCampaign;
 use App\Models\BotFlow;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -99,6 +101,20 @@ function fakeMetaGraph(array $routes): void
 
         return Http::response($route);
     });
+}
+
+/**
+ * An ACTIVE campaign of the account (one per account, reused): ads that must show on the Ads screens
+ * (D1: lists show active campaigns only) take `'ad_campaign_id' => activeCampaignId($account)`.
+ */
+function activeCampaignId(AdAccount|int $account): int
+{
+    $id = $account instanceof AdAccount ? $account->id : $account;
+
+    return AdCampaign::query()->firstOrCreate(
+        ['ad_account_id' => $id, 'name' => 'Active scope'],
+        ['external_id' => 'active-scope-'.$id, 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
+    )->id;
 }
 
 /**

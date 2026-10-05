@@ -2903,6 +2903,7 @@ const ar = {
         shipments: { title: 'شحنات نشطة', empty: 'لا توجد شحنات نشطة', advance: 'المرحلة التالية', advanced: 'الشحنة {number}: {status}' },
     },
     ads: {
+        scope_note: 'بنعرض الحملات الشغالة بس. الإجماليات بتشمل كل المصروف.',
         money: { pre_tax: 'قبل الضريبة {amount}' },
         status: { active: 'شغال', inactive: 'متوقف' },
         type: { image: 'صورة', video: 'فيديو', carousel: 'كاروسيل', other: 'تاني' },
@@ -2957,6 +2958,7 @@ const ar = {
         kpi: {
             spend: 'المصروف',
             spend_tax: 'المصروف شامل الضريبة',
+            outside_active: 'منها خارج الحملات الشغالة: {amount}',
             purchase_value: 'قيمة المبيعات',
             roas: 'العائد ROAS',
             roas_hint: 'المبيعات ÷ المصروف قبل الضريبة',

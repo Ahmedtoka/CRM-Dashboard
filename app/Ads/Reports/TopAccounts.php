@@ -18,6 +18,7 @@ final class TopAccounts
      */
     public function build(AdsFilter $f): array
     {
+        $f = $f->allSpend();
         $rows = $this->q->sums(
             $f,
             ['id' => 'acc.id', 'name' => 'acc.name', 'external_id' => 'acc.external_id', 'platform' => 'acc.platform', 'status' => 'acc.status', 'last_synced_at' => 'acc.last_synced_at'],

@@ -170,6 +170,8 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
                 <AdsRangeBar :filters="filters" :platforms="platforms" :buyers="buyers" />
             </PageHeader>
 
+            <p class="text-2xs text-muted-foreground">{{ t('ads.scope_note') }}</p>
+
             <div
                 v-if="sync.errors.length"
                 role="alert"
@@ -229,6 +231,9 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
                     <div class="rounded-lg border-t-4 border-t-primary bg-card px-4 py-3 shadow-card">
                         <p class="text-2xs font-medium text-muted-foreground">{{ t('ads.kpi.spend_tax') }}</p>
                         <MoneyCell :amount="tot.spend" :with-tax="tot.spend_tax" :currency="currency" size="lg" align="start" class="mt-0.5" />
+                        <p v-if="tot.spend_outside_active > 0" class="mt-1 text-2xs text-muted-foreground">
+                            {{ t('ads.kpi.outside_active', { amount: money(tot.spend_outside_active) }) }}
+                        </p>
                     </div>
                     <StatCard v-for="k in kpis" :key="k.key" :label="k.label" :value="k.value" :hint="k.hint" class="border-t-4" :class="k.border" />
                 </div>

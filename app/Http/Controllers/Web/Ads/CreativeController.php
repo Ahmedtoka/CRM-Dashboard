@@ -51,7 +51,8 @@ class CreativeController extends Controller
     /** One creative with its range numbers and preview markup, for the modal. */
     public function show(Request $request, Ad $ad, RunningCreatives $creatives, WinnerScorer $scorer): JsonResponse
     {
-        $filter = AdsFilter::fromRequest($request, $request->user());
+        // A direct link to one ad shows its numbers and reasons whatever its campaign status (D1).
+        $filter = AdsFilter::fromRequest($request, $request->user())->allSpend();
         // Out of scope reads as not found: a buyer never learns that other accounts' ads exist.
         abort_if($filter->accountIds !== null && ! in_array($ad->ad_account_id, $filter->accountIds, true), 404);
 

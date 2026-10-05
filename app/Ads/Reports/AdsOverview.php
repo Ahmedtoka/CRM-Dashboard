@@ -13,12 +13,14 @@ final class AdsOverview
     /** @return array{totals: array, daily: list<array>, platforms: list<array>, currency: string, tax_rate: float} */
     public function build(AdsFilter $f): array
     {
-        $orders = $this->q->orders($f);
+        // Totals and the daily series count every campaign (D1); only the loser share is scoped to active ones.
+        $all = $f->allSpend();
+        $orders = $this->q->orders($all);
 
         return [
-            'totals' => $this->totals($f, $orders) + ['losers_spend_share' => $this->losersSpendShare($f)],
-            'daily' => $this->daily($f, $orders),
-            'platforms' => $this->platforms($f),
+            'totals' => $this->totals($all, $orders) + ['losers_spend_share' => $this->losersSpendShare($f)],
+            'daily' => $this->daily($all, $orders),
+            'platforms' => $this->platforms($all),
             'currency' => $this->currency($f),
             'tax_rate' => $this->settings->taxRate(),
         ];
@@ -27,11 +29,14 @@ final class AdsOverview
     /** @param  Collection<int, array{net:float}>|null  $orders */
     public function totals(AdsFilter $f, $orders = null): array
     {
+        $f = $f->allSpend();
         $orders ??= $this->q->orders($f);
         $d = $this->q->derive($this->q->sums($f)->first() ?? []);
         $revenue = round((float) $orders->sum('net'), 2);
+        $active = (float) ($this->q->sums($f->with(['activeCampaignsOnly' => true]))->first()->spend ?? 0);
 
         return $d + [
+            'spend_outside_active' => round($d['spend'] - $active, 2),
             'real_orders' => $orders->count(),
             'real_revenue' => $revenue,
             'real_roas' => AdsQuery::ratio($revenue, $d['spend'], 2),
@@ -65,6 +70,7 @@ final class AdsOverview
      */
     public function daily(AdsFilter $f, $orders = null): array
     {
+        $f = $f->allSpend();
         $orders ??= $this->q->orders($f);
         $byDate = $this->q->sums($f, ['day' => 'm.date'])->keyBy(fn ($r) => substr((string) $r->day, 0, 10));
         $ordersByDate = $orders->groupBy('date');
@@ -87,6 +93,8 @@ final class AdsOverview
     /** @return list<array{platform:string, spend:float, spend_tax:float, purchase_value:float, roas:?float, accounts:int}> */
     private function platforms(AdsFilter $f): array
     {
+        $f = $f->allSpend();
+
         return $this->q->sums($f, ['platform' => 'acc.platform'], fn ($b) => $b->selectRaw('COUNT(DISTINCT m.ad_account_id) as accounts')->orderByDesc('spend'))
             ->map(function (object $r) {
                 $d = $this->q->derive($r);

@@ -89,6 +89,8 @@ const breadcrumbs = computed(() => [
                 <AdsRangeBar :filters="filters" :platforms="platforms" :buyers="buyers" :keep="keep" />
             </PageHeader>
 
+            <p class="text-2xs text-muted-foreground">{{ t('ads.scope_note') }}</p>
+
             <!-- Filters -->
             <div class="space-y-2 rounded-lg bg-card p-3 shadow-card">
                 <div class="flex flex-wrap items-center gap-2">

@@ -99,7 +99,7 @@ final class MaterialPerformance
         $from = $to->subDays(self::DAYS - 1);
         $restrict = $user->role === UserRole::MediaBuyer ? ($this->scope->buyerFor($user)?->id ?? 0) : null;
 
-        return new AdsFilter($from, $to, null, null, $this->scope->accountIds($user, $from, $to), $restrict);
+        return new AdsFilter($from, $to, null, null, $this->scope->accountIds($user, $from, $to), $restrict, false, true);
     }
 
     /** @return array<int, string> */

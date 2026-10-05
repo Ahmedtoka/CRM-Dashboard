@@ -4,6 +4,7 @@ namespace App\Ads\Reports;
 
 use App\Ads\AdsSettings;
 use App\Ads\Buyers\BuyerResolver;
+use App\Ads\Control\AdWriteService;
 use App\Enums\OrderStatus;
 use App\Enums\ShipmentStatus;
 use App\Models\AdAccountAssignment;
@@ -45,6 +46,10 @@ final class AdsQuery
 
         if ($f->isEmpty()) {
             return $q->whereRaw('1 = 0');
+        }
+        if ($f->activeCampaignsOnly) {
+            $q->join('ad_campaigns as actv', 'actv.id', '=', 'ad.ad_campaign_id')
+                ->whereIn('actv.status', AdWriteService::ACTIVE_STATUSES);
         }
         if ($f->platform !== null) {
             $q->where('acc.platform', $f->platform);
@@ -107,6 +112,10 @@ final class AdsQuery
             ->whereBetween('o.placed_at', [$f->startUtc(), $f->endUtc()])
             ->select(['o.id', 'o.ad_id', 'o.placed_at', 'o.total', 'acc.id as account_id', 'acc.platform'])
             ->selectRaw('COALESCE(rf.refunded, 0) as refunded');
+        if ($f->activeCampaignsOnly) {
+            $q->join('ad_campaigns as actv', 'actv.id', '=', DB::raw('COALESCE(ad.ad_campaign_id, o.ad_campaign_id)'))
+                ->whereIn('actv.status', AdWriteService::ACTIVE_STATUSES);
+        }
         $this->accountFilters($q, $f);
 
         $rows = $q->get();

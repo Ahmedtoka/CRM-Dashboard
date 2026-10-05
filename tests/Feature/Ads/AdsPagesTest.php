@@ -434,8 +434,8 @@ it('never shows a media buyer another buyers numbers, ads or cards', function ()
     $foreign = AdAccount::factory()->create(['name' => 'FOREIGN ACC']);
     app(AssignmentService::class)->assign($foreign, $w['other'], CarbonImmutable::now('Africa/Cairo')->subDays(5));
     $day = CarbonImmutable::now('Africa/Cairo')->subDay()->toDateString();
-    $mine = Ad::factory()->for($w['account'], 'account')->create(['name' => 'MY AD']);
-    $theirs = Ad::factory()->for($foreign, 'account')->create(['name' => 'FOREIGN AD']);
+    $mine = Ad::factory()->for($w['account'], 'account')->create(['name' => 'MY AD', 'ad_campaign_id' => activeCampaignId($w['account'])]);
+    $theirs = Ad::factory()->for($foreign, 'account')->create(['name' => 'FOREIGN AD', 'ad_campaign_id' => activeCampaignId($foreign)]);
     foreach ([[$mine, 100], [$theirs, 7777]] as [$ad, $spend]) {
         AdDailyMetric::factory()->create([
             'ad_id' => $ad->id, 'ad_account_id' => $ad->ad_account_id, 'date' => $day, 'spend' => $spend,
@@ -470,7 +470,7 @@ it('keeps every account chip while one account is picked on the creatives page',
     $a = AdAccount::factory()->meta()->create(['name' => 'Chip A']);
     $b = AdAccount::factory()->meta()->create(['name' => 'Chip B']);
     foreach ([$a, $b] as $acc) {
-        AdDailyMetric::factory()->create(['ad_id' => Ad::factory()->for($acc, 'account')->create()->id]);
+        AdDailyMetric::factory()->create(['ad_id' => Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => activeCampaignId($acc)])->id]);
     }
 
     $this->actingAs($admin)->get("/ads/creatives?account={$a->id}")->assertOk()->assertInertia(fn (Assert $p) => $p

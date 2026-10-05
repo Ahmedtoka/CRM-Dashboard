@@ -57,8 +57,9 @@ function matBuyerWorld(): array
     $buyer = MediaBuyer::factory()->create(['user_id' => $user->id, 'name' => 'Own Buyer']);
     $account = AdAccount::factory()->create();
     app(AssignmentService::class)->assign($account, $buyer, CarbonImmutable::now('Africa/Cairo')->subDays(40));
-    $ad = Ad::factory()->for($account, 'account')->create(['name' => 'Mine ad']);
-    $other = Ad::factory()->for(AdAccount::factory()->create(), 'account')->create(['name' => 'Foreign ad']);
+    $ad = Ad::factory()->for($account, 'account')->create(['name' => 'Mine ad', 'ad_campaign_id' => activeCampaignId($account)]);
+    $foreignAcc = AdAccount::factory()->create();
+    $other = Ad::factory()->for($foreignAcc, 'account')->create(['name' => 'Foreign ad', 'ad_campaign_id' => activeCampaignId($foreignAcc)]);
 
     return compact('buyer', 'user', 'account', 'ad', 'other');
 }
@@ -323,7 +324,7 @@ it('lets content only send a material back to not started', function () {
 it('exports the library as a streamed CSV with a BOM and one line per material', function () {
     $col = AdMaterialCollection::factory()->create(['name' => 'عيد']);
     $product = Product::factory()->create(['title' => 'عباية']);
-    $ad = Ad::factory()->create(['name' => 'Ad one']);
+    $ad = Ad::factory()->create(['name' => 'Ad one', 'ad_campaign_id' => activeCampaignId(AdAccount::factory()->create())]);
     matDays($ad, 4, 150, 450);
     $a = AdMaterial::factory()->create(['title' => 'فيديو العيد', 'product_id' => $product->id, 'drive_links' => ['https://d/1', 'https://d/2'], 'status' => 'activated']);
     $a->collections()->attach($col);
