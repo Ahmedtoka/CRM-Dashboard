@@ -12,6 +12,7 @@ use App\Models\AdMaterialFile;
 use App\Models\AdPublication;
 use App\Models\BotSetting;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -35,8 +36,9 @@ final class PublishService
      * @return Collection<int, AdPublication>
      *
      * @throws ValidationException no link to send people to, or a file that is not the material's
+     * @throws DuplicatePublication the same file + caption + ad set is already queued, running or done within 24 h
      */
-    public function publish(User $u, AdMaterial $m, AdAccount $a, array $input): Collection
+    public function publish(User $u, AdMaterial $m, AdAccount $a, array $input, ?string $idempotencyKey = null, bool $allowDuplicate = false): Collection
     {
         $link = $this->link($m);
         if ($link === null) {
@@ -59,26 +61,33 @@ final class PublishService
         ];
         $tags = $this->urlTags(AdPlatform::from($a->platform));
 
-        $rows = DB::transaction(function () use ($u, $m, $a, $input, $ordered, $identity, $link, $tags) {
-            $made = [];
-            // Captions are numbered across files so every ad name in a publish is unique: file f, caption k -> C{f*K+k}.
-            $perFile = count($input['captions']);
-            foreach ($ordered as $f => $file) {
-                foreach (array_values($input['captions']) as $i => $caption) {
-                    $made[] = AdPublication::create([
-                        'ad_material_id' => $m->id, 'ad_material_file_id' => $file->id, 'ad_account_id' => $a->id, 'platform' => $a->platform,
-                        'campaign_external_id' => $input['campaign_id'], 'campaign_name' => $input['campaign_name'] ?? null,
-                        'adset_external_id' => $input['adset_id'], 'adset_name' => $input['adset_name'] ?? null,
-                        'identity' => $identity, 'caption_index' => $f * $perFile + $i + 1,
-                        'headline' => $caption['headline'], 'primary_text' => $caption['primary_text'], 'cta' => $caption['cta'],
-                        'ad_name' => Naming::adName($m->id, self::typeFor($m, $file), $f * $perFile + $i + 1),
-                        'link' => $link, 'url_tags' => $tags, 'status' => AdPublication::QUEUED, 'created_by_id' => $u->id,
-                    ]);
+        try {
+            $rows = DB::transaction(function () use ($u, $m, $a, $input, $ordered, $identity, $link, $tags, $idempotencyKey, $allowDuplicate) {
+                $made = [];
+                // Captions are numbered across files so every ad name in a publish is unique: file f, caption k -> C{f*K+k}.
+                $perFile = count($input['captions']);
+                foreach ($ordered as $f => $file) {
+                    foreach (array_values($input['captions']) as $i => $caption) {
+                        $made[] = AdPublication::create([
+                            'ad_material_id' => $m->id, 'ad_material_file_id' => $file->id, 'ad_account_id' => $a->id, 'platform' => $a->platform,
+                            'campaign_external_id' => $input['campaign_id'], 'campaign_name' => $input['campaign_name'] ?? null,
+                            'adset_external_id' => $input['adset_id'], 'adset_name' => $input['adset_name'] ?? null,
+                            'identity' => $identity, 'caption_index' => $f * $perFile + $i + 1,
+                            'headline' => $caption['headline'], 'primary_text' => $caption['primary_text'], 'cta' => $caption['cta'],
+                            'ad_name' => Naming::adName($m->id, self::typeFor($m, $file), $f * $perFile + $i + 1),
+                            'link' => $link, 'url_tags' => $tags, 'status' => AdPublication::QUEUED, 'created_by_id' => $u->id,
+                            'idempotency_key' => $idempotencyKey, 'allow_duplicate' => $allowDuplicate,
+                            'open_key' => $allowDuplicate ? null : self::openKey($a, $input['adset_id'], $file->id, $caption),
+                        ]);
+                    }
                 }
-            }
 
-            return collect($made);
-        });
+                return collect($made);
+            });
+        } catch (UniqueConstraintViolationException) {
+            // The unique open_key (or a racing identical request key) refused the insert: the whole request rolled back.
+            throw new DuplicatePublication($this->existingFor($a, $input, $ordered, $idempotencyKey, $u));
+        }
 
         $this->settings->set(self::identityKey($a), $identity);
         foreach ($rows as $row) {
@@ -86,6 +95,40 @@ final class PublishService
         }
 
         return $rows;
+    }
+
+    /** sha256(account:adset:file:sha256(headline\nprimary_text\ncta)): one ad per file, caption and ad set while it is in flight. */
+    public static function openKey(AdAccount $a, string $adsetId, int $fileId, array $caption): string
+    {
+        return hash('sha256', "{$a->id}:{$adsetId}:{$fileId}:".hash('sha256', trim($caption['headline'])."\n".trim($caption['primary_text'])."\n".$caption['cta']));
+    }
+
+    /**
+     * The rows already holding the keys this request wanted (or this user's rows of the same idempotency key).
+     *
+     * @param  list<AdMaterialFile>  $files
+     * @return Collection<int, AdPublication>
+     */
+    private function existingFor(AdAccount $a, array $input, array $files, ?string $idempotencyKey, User $u): Collection
+    {
+        $keys = [];
+        foreach ($files as $file) {
+            foreach ($input['captions'] as $caption) {
+                $keys[] = self::openKey($a, $input['adset_id'], $file->id, $caption);
+            }
+        }
+
+        return AdPublication::query()->where(fn ($q) => $q->whereIn('open_key', $keys)
+            ->when($idempotencyKey !== null, fn ($q) => $q->orWhere(fn ($q) => $q->where('created_by_id', $u->id)->where('idempotency_key', $idempotencyKey))))
+            ->orderBy('id')->get();
+    }
+
+    /** The rows a request with this key already made (replay), or null. */
+    public function replay(User $u, string $idempotencyKey): ?Collection
+    {
+        $rows = AdPublication::query()->where('created_by_id', $u->id)->where('idempotency_key', $idempotencyKey)->orderBy('id')->get();
+
+        return $rows->isEmpty() ? null : $rows;
     }
 
     public static function identityKey(AdAccount $a): string

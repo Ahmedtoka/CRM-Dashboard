@@ -13,25 +13,51 @@ final class AdsOverview
     /** @return array{totals: array, daily: list<array>, platforms: list<array>, currency: string, tax_rate: float} */
     public function build(AdsFilter $f): array
     {
-        $orders = $this->q->orders($f);
+        // Totals and the daily series count every campaign (D1); only the loser share is scoped to active ones.
+        $all = $f->allSpend();
+        $orders = $this->q->orders($all);
+        $currency = $this->currency($f);
+        $mixed = $currency === self::MIXED;
+
+        $totals = $this->totals($all, $orders) + ['losers_spend_share' => $this->losersSpendShare($f), 'mixed_currencies' => $mixed];
+        if (! $mixed && $currency !== 'EGP') {
+            // Order revenue is EGP: dividing it by foreign spend is not a ROAS.
+            $totals['real_roas'] = null;
+        }
+        if ($mixed) {
+            // EGP and USD are never added together (A9): money figures stay empty, counts stay.
+            $totals = array_merge($totals, array_fill_keys(self::MONEY_KEYS, null));
+        }
 
         return [
-            'totals' => $this->totals($f, $orders) + ['losers_spend_share' => $this->losersSpendShare($f)],
-            'daily' => $this->daily($f, $orders),
-            'platforms' => $this->platforms($f),
-            'currency' => $this->currency($f),
+            'totals' => $totals,
+            // The daily table and chart are money series: with mixed currencies they would add EGP to USD.
+            'daily' => $mixed ? [] : $this->daily($all, $orders),
+            'platforms' => $mixed ? [] : $this->platforms($all),
+            'currency' => $currency,
             'tax_rate' => $this->settings->taxRate(),
         ];
     }
 
+    /** What currency() returns when the filtered accounts do not share one currency. */
+    public const MIXED = 'mixed';
+
+    /** Totals fields that are amounts of money, or ratios built from them. */
+    public const MONEY_KEYS = ['spend', 'spend_tax', 'purchase_value', 'roas', 'cpa', 'cpm', 'cpc', 'spend_outside_active', 'itemised_gap', 'real_revenue', 'real_roas', 'losers_spend_share'];
+
     /** @param  Collection<int, array{net:float}>|null  $orders */
     public function totals(AdsFilter $f, $orders = null): array
     {
+        $f = $f->allSpend();
         $orders ??= $this->q->orders($f);
-        $d = $this->q->derive($this->q->sums($f)->first() ?? []);
+        $d = $this->q->deriveWithControl($f, $this->q->sums($f)->first() ?? []);
         $revenue = round((float) $orders->sum('net'), 2);
+        // Outside-active is ad-level only (all ad rows minus active-campaign rows): it never overlaps the itemisation gap.
+        $adSpend = (float) ($this->q->sums($f)->first()->spend ?? 0);
+        $active = (float) ($this->q->sums($f->with(['activeCampaignsOnly' => true]))->first()->spend ?? 0);
 
         return $d + [
+            'spend_outside_active' => round($adSpend - $active, 2),
             'real_orders' => $orders->count(),
             'real_revenue' => $revenue,
             'real_roas' => AdsQuery::ratio($revenue, $d['spend'], 2),
@@ -65,6 +91,7 @@ final class AdsOverview
      */
     public function daily(AdsFilter $f, $orders = null): array
     {
+        $f = $f->allSpend();
         $orders ??= $this->q->orders($f);
         $byDate = $this->q->sums($f, ['day' => 'm.date'])->keyBy(fn ($r) => substr((string) $r->day, 0, 10));
         $ordersByDate = $orders->groupBy('date');
@@ -87,6 +114,8 @@ final class AdsOverview
     /** @return list<array{platform:string, spend:float, spend_tax:float, purchase_value:float, roas:?float, accounts:int}> */
     private function platforms(AdsFilter $f): array
     {
+        $f = $f->allSpend();
+
         return $this->q->sums($f, ['platform' => 'acc.platform'], fn ($b) => $b->selectRaw('COUNT(DISTINCT m.ad_account_id) as accounts')->orderByDesc('spend'))
             ->map(function (object $r) {
                 $d = $this->q->derive($r);
@@ -99,21 +128,44 @@ final class AdsOverview
             })->values()->all();
     }
 
-    /** Currency of the accounts in the filter (first account by id), EGP when none. */
+    /** Currency of the accounts in the filter: their one currency, 'mixed' when they have several, EGP when none. */
     public function currency(AdsFilter $f): string
     {
+        $all = $this->currencies($f);
+
+        return match (true) {
+            $all === [] => 'EGP',
+            count($all) > 1 => self::MIXED,
+            default => $all[0],
+        };
+    }
+
+    /**
+     * The distinct currencies of the accounts that really feed the filter (ad or control rows in range, same scope as
+     * every report). With no data at all, the currencies of the filtered accounts, so an empty page still has a unit.
+     *
+     * @return list<string>
+     */
+    public function currencies(AdsFilter $f): array
+    {
         if ($f->isEmpty()) {
-            return 'EGP';
+            return [];
         }
 
-        $q = DB::table('ad_accounts as acc')->whereNotNull('acc.currency');
+        $inScope = $this->q->currenciesInScope($f);
+        if ($inScope !== []) {
+            return $inScope;
+        }
+
+        $q = DB::table('ad_accounts as acc')->whereNotNull('acc.currency')->where('acc.currency', '!=', '');
         if ($f->platform !== null) {
             $q->where('acc.platform', $f->platform);
         }
         if ($f->accountIds !== null) {
             $q->whereIn('acc.id', $f->accountIds);
         }
+        $first = $q->orderBy('acc.id')->value('acc.currency');
 
-        return (string) ($q->orderBy('acc.id')->value('acc.currency') ?? 'EGP');
+        return $first === null ? [] : [strtoupper((string) $first)];
     }
 }

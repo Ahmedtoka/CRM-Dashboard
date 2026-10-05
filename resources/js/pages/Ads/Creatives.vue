@@ -9,6 +9,7 @@ import StatusToggle from '@/components/ads/StatusToggle.vue';
 import TrendArrow from '@/components/ads/TrendArrow.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import DataHealthBanner from '@/components/ads/DataHealthBanner.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -85,9 +86,12 @@ const breadcrumbs = computed(() => [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-[1400px] space-y-4 p-3 md:p-6">
+            <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
             <PageHeader :title="t('ads.creatives.title')" :description="t('ads.creatives.hint')">
                 <AdsRangeBar :filters="filters" :platforms="platforms" :buyers="buyers" :keep="keep" />
             </PageHeader>
+
+            <p class="text-2xs text-muted-foreground" :title="t('ads.scope_note_tip')">{{ t('ads.scope_note') }}</p>
 
             <!-- Filters -->
             <div class="space-y-2 rounded-lg bg-card p-3 shadow-card">

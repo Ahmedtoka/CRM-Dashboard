@@ -14,13 +14,14 @@ final class TopAccounts
      * limited to one buyer (a buyer user, or an admin's buyer filter) it is that buyer, since only
      * their rows are counted.
      *
-     * @return list<array{id:int, name:string, external_id:string, platform:string, buyer:?string, spend:float, spend_tax:float, purchase_value:float, purchases:float, roas:?float, status:?string, last_synced_at:?string}>
+     * @return list<array{id:int, name:string, external_id:string, platform:string, currency:string, buyer:?string, spend:float, spend_tax:float, purchase_value:float, purchases:float, roas:?float, status:?string, last_synced_at:?string}>
      */
     public function build(AdsFilter $f): array
     {
+        $f = $f->allSpend();
         $rows = $this->q->sums(
             $f,
-            ['id' => 'acc.id', 'name' => 'acc.name', 'external_id' => 'acc.external_id', 'platform' => 'acc.platform', 'status' => 'acc.status', 'last_synced_at' => 'acc.last_synced_at'],
+            ['id' => 'acc.id', 'name' => 'acc.name', 'external_id' => 'acc.external_id', 'platform' => 'acc.platform', 'currency' => 'acc.currency', 'status' => 'acc.status', 'last_synced_at' => 'acc.last_synced_at'],
             fn ($b) => $b->orderByDesc('spend')->orderBy('acc.id'),
         );
         if ($rows->isEmpty()) {
@@ -31,8 +32,10 @@ final class TopAccounts
         $holders = $rows->mapWithKeys(fn ($r) => [(int) $r->id => $f->restrictBuyerId ?? $f->buyerId ?? $this->q->ownerOn($owners, (int) $r->id, $f->toDate())]);
         $names = MediaBuyer::query()->whereIn('id', $holders->filter()->unique()->values())->pluck('name', 'id');
 
-        return $rows->map(function (object $r) use ($holders, $names) {
-            $d = $this->q->derive($r);
+        $blends = $this->q->accountTotalsByAccount($f);
+
+        return $rows->map(function (object $r) use ($holders, $names, $blends) {
+            $d = $this->q->applyBlend($this->q->derive($r), $blends[(int) $r->id] ?? null);
             $holder = $holders[(int) $r->id];
 
             return [
@@ -40,6 +43,7 @@ final class TopAccounts
                 'name' => (string) $r->name,
                 'external_id' => (string) $r->external_id,
                 'platform' => (string) $r->platform,
+                'currency' => strtoupper((string) ($r->currency ?: 'EGP')),
                 'buyer' => $holder !== null ? ($names[$holder] ?? null) : null,
                 'spend' => $d['spend'],
                 'spend_tax' => $d['spend_tax'],

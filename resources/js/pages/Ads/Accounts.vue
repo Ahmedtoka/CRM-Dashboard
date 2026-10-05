@@ -126,9 +126,14 @@ function statusChip(c: AdConnectionRow): { label: string; tone: 'positive' | 'wa
     if (c.status === 'connected') return { label: t('ads.accounts.connection_ok'), tone: 'positive' };
     if (c.status === 'pending') return { label: t('ads.accounts.connection_pending'), tone: 'warning' };
     if (c.status === 'error') return { label: t('ads.accounts.connection_error'), tone: 'negative' };
+    if (c.status === 'needs_reconnect') return { label: t('ads.accounts.connection_needs_reconnect'), tone: 'negative' };
 
     return { label: t('ads.accounts.connection_disabled'), tone: 'neutral' };
 }
+
+const tokenDate = (iso: string | null): string => (iso ? formatDayLong(iso.slice(0, 10), locale.value) : t('ads.accounts.token_never'));
+
+const linkRateLabel = computed(() => (props.link_rate.rate === null ? t('ads.accounts.link_rate_none') : `${Math.round(props.link_rate.rate * 100)}%`));
 
 const accountActive = adAccountActive;
 const accountStatusLabel = (status: string | null) => adAccountStatusLabel(status, t);
@@ -228,6 +233,12 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                 </button>
             </PageHeader>
 
+            <p class="rounded-lg bg-card px-4 py-3 text-xs shadow-card" data-testid="ads-link-rate">
+                <span class="font-medium">{{ t('ads.accounts.link_rate') }}:</span>
+                <span class="ms-1 text-sm font-semibold tabular-nums">{{ linkRateLabel }}</span>
+                <span v-if="link_rate.rate !== null" class="ms-2 text-muted-foreground">{{ t('ads.accounts.link_rate_hint', { linked: link_rate.linked, orders: link_rate.orders, days: link_rate.days }) }}</span>
+            </p>
+
             <section v-for="platform in platforms" :key="platform.value" class="space-y-3" :aria-label="platform.label">
                 <div class="flex items-center gap-2">
                     <PlatformChip :platform="platform.value" />
@@ -251,6 +262,22 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                             {{ t('ads.accounts.last_sync') }}:
                             <RelativeTime v-if="c.last_synced_at" :iso="c.last_synced_at" />
                             <span v-else>{{ t('ads.accounts.never_synced') }}</span>
+                        </p>
+                        <p v-if="c.credentials_unreadable" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                            {{ t('ads.accounts.credentials_unreadable') }}
+                        </p>
+                        <p v-if="c.read_only" class="rounded-md bg-muted px-3 py-2 text-xs">
+                            <StatusChip :label="t('ads.accounts.read_only')" tone="warning" class="me-1" />{{ t('ads.accounts.read_only_hint') }}
+                        </p>
+                        <p v-if="c.platform === 'meta' && !c.credentials_unreadable" class="text-xs text-muted-foreground">
+                            {{ t('ads.accounts.token_health') }}:
+                            <template v-if="c.token_health.checked_at">
+                                {{ c.token_health.valid === false ? t('ads.accounts.token_invalid') : c.token_health.valid === true ? t('ads.accounts.token_valid') : t('ads.accounts.token_unverified') }}
+                                · {{ t('ads.accounts.token_scopes') }}: {{ c.token_health.scopes.join(', ') || '-' }}
+                                · {{ t('ads.accounts.token_expires') }}: {{ tokenDate(c.token_health.expires_at) }}
+                                · {{ t('ads.accounts.token_data_access') }}: {{ tokenDate(c.token_health.data_access_expires_at) }}
+                            </template>
+                            <template v-else>{{ t('ads.accounts.token_unchecked') }}</template>
                         </p>
                         <p v-if="c.last_error" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
                             {{ c.last_error }}

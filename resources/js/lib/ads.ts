@@ -50,6 +50,8 @@ export function rangeQueryString(filters: AdsFilters): string {
 /** Money: the local currency label for EGP, the ISO code otherwise. */
 export function formatAdsMoney(value: number | null | undefined, locale: Locale, currency = 'EGP', digits = 0): string {
     if (value === null || value === undefined || Number.isNaN(value)) return '—';
+    // Several currencies in scope (AdsOverview::MIXED): no amount is meaningful, never print "1,234 mixed".
+    if (currency === 'mixed') return '—';
     const unit = currency === 'EGP' ? translate(locale, 'common.currency') : currency;
 
     return `${formatNumber(locale, value, { maximumFractionDigits: digits, minimumFractionDigits: 0 })} ${unit}`;
@@ -223,9 +225,7 @@ export function reasonTexts(reasons: AdReason[], locale: Locale, currency = 'EGP
                         ? formatAdsMoney(val, locale, currency)
                         : k === 'pct' || k === 'ctr_drop'
                           ? formatPct(val / 100, locale, 0)
-                          : k === 'frequency'
-                            ? formatQty(val, locale)
-                            : val;
+                          : val;
         }
 
         return { key: r.key, text: translate(locale, `ads.reasons.${r.key}`, v), bad: BAD_REASONS.includes(r.key) };

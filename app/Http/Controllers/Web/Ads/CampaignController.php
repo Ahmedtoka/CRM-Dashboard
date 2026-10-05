@@ -32,7 +32,7 @@ class CampaignController extends Controller
     }
 
     /**
-     * Every node gets can_write (Stop / Run allowed on its account today), computed once for all accounts in the tree.
+     * Every node gets can_write (Stop / Run allowed on its account today and at its level for this user), computed once for all accounts in the tree.
      *
      * @param  list<array<string, mixed>>  $nodes
      * @return list<array<string, mixed>>
@@ -47,11 +47,12 @@ class CampaignController extends Controller
             }
         };
         $collect($nodes);
-        $can = $ids === [] ? [] : $writes->canWriteMany($request->user(), AdAccount::query()->whereIn('id', array_keys($ids))->get(['id', 'is_active', 'platform']));
+        $can = $ids === [] ? [] : $writes->canWriteMany($request->user(), AdAccount::query()->whereIn('id', array_keys($ids))->get(['id', 'is_active', 'platform', 'external_id']));
 
-        $apply = function (array $list) use (&$apply, $can): array {
-            return array_map(function (array $n) use (&$apply, $can) {
-                $n['can_write'] = $can[(int) $n['account_id']] ?? false;
+        $levels = $writes->allowedLevels($request->user());
+        $apply = function (array $list) use (&$apply, $can, $levels): array {
+            return array_map(function (array $n) use (&$apply, $can, $levels) {
+                $n['can_write'] = ($can[(int) $n['account_id']] ?? false) && in_array($n['level'] ?? '', $levels, true);
                 $n['children'] = $apply($n['children'] ?? []);
 
                 return $n;

@@ -2,9 +2,11 @@
 
 use App\Ads\Platforms\AdPlatformDriver;
 use App\Ads\Platforms\AdsApiException;
+use App\Ads\Platforms\Data\AccountDailyTotal;
 use App\Ads\Platforms\Data\DailyAdMetric;
 use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Sync\AccountSyncClaim;
 use App\Ads\Sync\AdsSyncService;
 use App\Ads\Sync\SyncAdAccount;
 use App\Models\Ad;
@@ -18,7 +20,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -126,18 +127,176 @@ it('creates minimal ads for metrics of ads no longer listed', function () {
         ->and(AdDailyMetric::count())->toBe(1);
 });
 
-it('removes stale metric rows inside the synced window and keeps the rest', function () {
+it('deletes a stale row of a date the answered control does not list (total 0), and keeps rows outside the window', function () {
     $acc = AdAccount::factory()->meta()->create();
     $ad = Ad::factory()->create(['ad_account_id' => $acc->id, 'external_id' => 'a1']);
     AdDailyMetric::factory()->create(['ad_id' => $ad->id, 'ad_account_id' => $acc->id, 'date' => '2026-09-02', 'spend' => 99]);
     AdDailyMetric::factory()->create(['ad_id' => $ad->id, 'ad_account_id' => $acc->id, 'date' => '2026-08-01', 'spend' => 7]);
     bindDriver(doubleDriver(metrics: [metric('a1', '2026-09-03', 12)]));
 
-    app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-05'));
+    $run = app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-05'));
 
+    // The fake control answered with 2026-09-03 only, so 2026-09-02 totals 0 = the payload of that date: corrected away.
     expect(AdDailyMetric::where('date', '2026-09-02')->count())->toBe(0)
+        ->and($run->error)->toBeNull()
         ->and(AdDailyMetric::where('date', '2026-08-01')->count())->toBe(1)
         ->and((float) AdDailyMetric::where('date', '2026-09-03')->value('spend'))->toBe(12.0);
+});
+
+/** A double whose control totals are scripted: null = the driver has no control (TikTok, Google). */
+function controlDriver(array $metrics, ?array $control): AdPlatformDriver
+{
+    return new class($metrics, $control) extends FakeAdsDriver
+    {
+        public function __construct(private array $m, private ?array $control) {}
+
+        public function ads(AdAccount $a): array
+        {
+            return [];
+        }
+
+        public function dailyMetrics(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+        {
+            return $this->m;
+        }
+
+        public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): ?array
+        {
+            if ($this->control === null) {
+                return null;
+            }
+
+            return array_map(fn ($date, $spend) => new AccountDailyTotal((string) $date, (float) $spend, 1000, 0.0, 0.0, 'EGP'), array_keys($this->control ?? []), array_values($this->control ?? []));
+        }
+    };
+}
+
+/** Stored rows of ads A and B on 2026-09-10; returns [account, ad B]. */
+function storedAandB(float $a = 10, float $b = 7, string $bStatus = 'ACTIVE'): array
+{
+    $acc = AdAccount::factory()->meta()->create();
+    $adA = Ad::factory()->create(['ad_account_id' => $acc->id, 'external_id' => 'A']);
+    $adB = Ad::factory()->create(['ad_account_id' => $acc->id, 'external_id' => 'B', 'effective_status' => $bStatus]);
+    AdDailyMetric::factory()->create(['ad_id' => $adA->id, 'ad_account_id' => $acc->id, 'date' => '2026-09-10', 'spend' => $a]);
+    AdDailyMetric::factory()->create(['ad_id' => $adB->id, 'ad_account_id' => $acc->id, 'date' => '2026-09-10', 'spend' => $b]);
+
+    return [$acc, $adB];
+}
+
+function syncDay(AdAccount $acc): AdsSyncRun
+{
+    return app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-10'), CarbonImmutable::parse('2026-09-10'));
+}
+
+it('deletes a stale row when the payload equals the account total (platform correction wins)', function () {
+    [$acc, $adB] = storedAandB();
+    bindDriver(controlDriver([metric('A', '2026-09-10', 10)], ['2026-09-10' => 10]));
+
+    $run = syncDay($acc);
+
+    expect($run->status)->toBe('ok')->and($run->error)->toBeNull()
+        ->and(AdDailyMetric::where('ad_id', $adB->id)->exists())->toBeFalse()
+        ->and(AdDailyMetric::where('ad_account_id', $acc->id)->count())->toBe(1);
+});
+
+it('keeps a stale row when the account total still includes it, and says so', function () {
+    [$acc, $adB] = storedAandB();
+    bindDriver(controlDriver([metric('A', '2026-09-10', 10)], ['2026-09-10' => 17]));
+
+    $run = syncDay($acc);
+
+    expect($run->status)->toBe('ok')
+        ->and($run->error)->toContain('Kept 1 rows on 1 dates (first: 2026-09-10: payload 10.00 vs account 17.00)')
+        ->and(AdDailyMetric::where('ad_id', $adB->id)->exists())->toBeTrue();
+});
+
+it('keeps a stale row when the platform has no control (null, e.g. TikTok)', function () {
+    [$acc, $adB] = storedAandB();
+    bindDriver(controlDriver([metric('A', '2026-09-10', 10)], null));
+
+    $run = syncDay($acc);
+
+    expect($run->status)->toBe('ok')
+        ->and($run->error)->toContain('Kept 1 rows on 1 dates (first: 2026-09-10: payload 10.00 vs account n/a)')
+        ->and(AdDailyMetric::where('ad_id', $adB->id)->exists())->toBeTrue();
+});
+
+it('keeps stale rows with a warning when the control call fails', function () {
+    [$acc, $adB] = storedAandB();
+    $driver = new class extends FakeAdsDriver
+    {
+        public function ads(AdAccount $a): array
+        {
+            return [];
+        }
+
+        public function dailyMetrics(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+        {
+            return [metric('A', '2026-09-10', 10)];
+        }
+
+        public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): ?array
+        {
+            throw new AdsApiException('control refused');
+        }
+    };
+    bindDriver($driver);
+
+    $run = syncDay($acc);
+
+    expect($run->status)->toBe('ok')
+        ->and($run->error)->toContain('Account totals: control refused')->toContain('Kept 1 rows on 1 dates')
+        ->and(AdDailyMetric::where('ad_id', $adB->id)->exists())->toBeTrue();
+});
+
+it('collapses the kept warning into one summary line', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $ad = Ad::factory()->create(['ad_account_id' => $acc->id, 'external_id' => 'B']);
+    foreach (['2026-09-10', '2026-09-11', '2026-09-12'] as $d) {
+        AdDailyMetric::factory()->create(['ad_id' => $ad->id, 'ad_account_id' => $acc->id, 'date' => $d, 'spend' => 7]);
+    }
+    bindDriver(controlDriver([metric('A', '2026-09-10', 10)], null));
+
+    $run = app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-10'), CarbonImmutable::parse('2026-09-12'));
+
+    expect($run->error)->toBe('Kept 3 rows on 3 dates (first: 2026-09-10: payload 10.00 vs account n/a)');
+});
+
+it('deletes the stale row of an ad in any status when the account total agrees (the control is the only guard)', function (string $status) {
+    [$acc, $adB] = storedAandB(bStatus: $status);
+    bindDriver(controlDriver([metric('A', '2026-09-10', 10)], ['2026-09-10' => 10]));
+
+    syncDay($acc);
+
+    expect(AdDailyMetric::where('ad_id', $adB->id)->exists())->toBeFalse();
+})->with(['ARCHIVED', 'DELETED', 'GONE']);
+
+it('uses the larger of the tolerance percent and one currency unit', function () {
+    config(['crm.ads.control_tolerance_pct' => 0.5]);
+    [$acc, $adB] = storedAandB(1000, 7);
+    bindDriver(controlDriver([metric('A', '2026-09-10', 1000)], ['2026-09-10' => 1004.9]));
+    syncDay($acc);
+    expect(AdDailyMetric::where('ad_id', $adB->id)->exists())->toBeFalse();
+
+    [$acc2, $adB2] = storedAandB(1000, 7);
+    bindDriver(controlDriver([metric('A', '2026-09-10', 1000)], ['2026-09-10' => 1006]));
+    syncDay($acc2);
+    expect(AdDailyMetric::where('ad_id', $adB2->id)->exists())->toBeTrue();
+
+    [$acc3, $adB3] = storedAandB(10, 7);
+    bindDriver(controlDriver([metric('A', '2026-09-10', 10)], ['2026-09-10' => 10.99]));
+    syncDay($acc3);
+    expect(AdDailyMetric::where('ad_id', $adB3->id)->exists())->toBeFalse();
+});
+
+it('keeps every row on an empty payload, as before', function () {
+    [$acc] = storedAandB();
+    bindDriver(controlDriver([], ['2026-09-10' => 0]));
+
+    $run = syncDay($acc);
+
+    expect($run->error)->toContain('Empty metrics payload')
+        ->and(AdDailyMetric::where('ad_account_id', $acc->id)->count())->toBe(2);
 });
 
 it('keeps metrics and an ok run when creative media fails', function () {
@@ -218,7 +377,7 @@ it('backfills in 30-day chunks newest first', function () {
 
 it('registers the ads schedule in Africa/Cairo', function () {
     $events = collect(app(Schedule::class)->events())->filter(fn ($e) => str_contains($e->command, 'ads:'));
-    expect($events->map(fn ($e) => $e->expression)->all())->toContain('10 * * * *', '15 3 * * *', '20 5 * * *')
+    expect($events->map(fn ($e) => $e->expression)->all())->toContain('10 * * * *', '15 3 * * *', '50 5 * * *')
         ->and($events->every(fn ($e) => $e->timezone === 'Africa/Cairo'))->toBeTrue();
 });
 
@@ -390,15 +549,15 @@ it('warns and continues when a command hits an unexpected exception', function (
     $this->artisan('ads:backfill', ['--days' => 5])->expectsOutputToContain('Failed Odd')->assertFailed();
 });
 
-it('skips a backfill for an account whose sync lock is held', function () {
+it('skips a backfill for an account whose sync claim is held', function () {
     $acc = AdAccount::factory()->meta()->create(['name' => 'Locked']);
-    $lock = Cache::lock(SyncAdAccount::lockKey($acc->id), 60);
-    expect($lock->get())->toBeTrue();
+    $key = AccountSyncClaim::acquire($acc, 60);
+    expect($key)->toBeString();
 
     $this->artisan('ads:backfill', ['--account' => $acc->id, '--days' => 5])->expectsOutputToContain('busy')->assertFailed();
 
-    expect(AdsSyncRun::count())->toBe(0);
-    $lock->release();
+    expect(AdsSyncRun::where('status', '!=', 'skipped')->count())->toBe(0);
+    AccountSyncClaim::release($acc, $key);
     $this->artisan('ads:backfill', ['--account' => $acc->id, '--days' => 5])->assertSuccessful();
 });
 
@@ -485,6 +644,11 @@ it('reads the ad list once per backfill, on its first chunk', function () {
             $this->metricCalls++;
 
             return [];
+        }
+
+        public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): ?array
+        {
+            return null; // the control fetch is its own call (A2), not an ad-level metrics read
         }
     };
     bindDriver($driver);

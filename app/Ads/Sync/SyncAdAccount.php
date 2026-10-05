@@ -4,6 +4,7 @@ namespace App\Ads\Sync;
 
 use App\Ads\Platforms\RateLimited;
 use App\Models\AdAccount;
+use App\Models\AdsSyncRun;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -12,7 +13,9 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Jobs\SyncJob;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Throwable;
 
 /** Syncs one ad account; kind 'backfill' walks $days in 30-day chunks. */
 class SyncAdAccount implements ShouldBeUnique, ShouldQueue
@@ -21,8 +24,8 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
 
     /**
      * Meta's usage quota is shared (Arena syncs the same accounts on the same app), so a backfill can meet
-     * «retry later» for hours. Each RateLimited releases the job for 15 minutes and uses one try: 30 tries
-     * keep it coming back for about 7.5 hours, while a real error still fails it after 3 (maxExceptions).
+     * «retry later» for hours. Each RateLimited releases the job for Meta's regain time (quota admission: at least
+     * 5 minutes; 15 minutes when Meta gave none) and uses one try, while a real error still fails it after 3 (maxExceptions).
      */
     public int $tries = 30;
 
@@ -47,19 +50,30 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
     /** The user who clicked, for a manual run. */
     public ?int $triggeredById = null;
 
-    public function __construct(public int $accountId, public int $days = 3, public string $kind = 'recent', string $trigger = 'schedule', ?int $triggeredById = null)
+    /** false = the hourly run: metrics, control totals and campaign statuses, no ad list (that is read nightly). */
+    public bool $withAds = true;
+
+    public function __construct(public int $accountId, public int $days = 3, public string $kind = 'recent', string $trigger = 'schedule', ?int $triggeredById = null, bool $withAds = true)
     {
         $this->trigger = $trigger;
         $this->triggeredById = $triggeredById;
+        $this->withAds = $withAds;
         $this->runKey = (string) Str::uuid();
 
-        // Same long lane as ReconcileShopify: `commercelong` queue (Supervisor program
-        // crm-commercelong, --timeout=3600); on Redis it runs on `redislong` (retry_after 3700 s).
-        $this->onQueue('commercelong');
+        // crm.ads.sync.queue: `commercelong` (shared with ReconcileShopify, Supervisor crm-commercelong) until the owner
+        // adds the crm-adssync program and sets `adssync`, so hour-long Shopify jobs stop starving the ads sync (R-23).
+        // Either way it runs on `redislong` on Redis (retry_after 3700 s > --timeout 3600, roadmap 2.1 #9).
+        $this->onQueue(self::queueName());
 
         if (config('queue.default') === 'redis') {
             $this->onConnection('redislong');
         }
+    }
+
+    /** The queue the ads sync runs on (crm.ads.sync.queue, blank = commercelong). */
+    public static function queueName(): string
+    {
+        return trim((string) config('crm.ads.sync.queue', 'commercelong')) ?: 'commercelong';
     }
 
     public static function uniqueIdFor(int $accountId): string
@@ -91,7 +105,10 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
     public function handle(AdsSyncService $sync): void
     {
         if ($this->runKey === null) {
-            $this->run($sync);
+            $this->heartbeat();
+            if ($this->run($sync)) {
+                $this->clearPending();
+            }
 
             return;
         }
@@ -106,13 +123,54 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
         }
 
         try {
+            $this->heartbeat();
             if ($this->run($sync)) {
                 Cache::put($done, true, now()->addHours(12));
+                $this->clearPending();
             }
         } finally {
             $running->release();
         }
     }
+
+    /**
+     * The hourly dispatch marks the account pending (ads:sync, CAS on ad_accounts.sync_pending_since). Only jobs holding
+     * the hourly unique lock (the hourly job, or the manual/backfill job whose lock made the hourly dispatch a no-op)
+     * touch it; the nightly '-deep' job never does. Such a job refreshes the marker on every attempt and release
+     * (heartbeat: a live job is never taken over) and clears it when it ends.
+     */
+    private function sharesHourlyLock(): bool
+    {
+        return $this->uniqueId() === self::uniqueIdFor($this->accountId);
+    }
+
+    private function heartbeat(): void
+    {
+        if ($this->sharesHourlyLock()) {
+            AdAccount::whereKey($this->accountId)->update(['sync_pending_since' => now()]);
+        }
+    }
+
+    private function clearPending(): void
+    {
+        if ($this->sharesHourlyLock()) {
+            AdAccount::whereKey($this->accountId)->whereNotNull('sync_pending_since')->update(['sync_pending_since' => null]);
+        }
+    }
+
+    /** The queue gave up (timeout, exhausted tries, a crash): close this job's run, and only this one. */
+    public function failed(Throwable $e): void
+    {
+        $message = AdsSyncService::scrub($e->getMessage());
+        if ($this->runKey !== null) {
+            AdsSyncRun::where('run_key', $this->runKey)->where('status', 'running')
+                ->update(['status' => 'error', 'error' => $message, 'finished_at' => now()]);
+        }
+        $this->clearPending();
+        Log::error('ads sync job failed', ['account' => $this->accountId, 'error' => $message]);
+    }
+
+    public const MAX_BUSY_RELEASES = 10;
 
     /** @return bool false when released for a later try (Meta asked to wait) */
     private function run(AdsSyncService $sync): bool
@@ -124,22 +182,62 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
 
         try {
             if ($this->kind === 'backfill') {
-                $sync->backfill($account, $this->days, $this->trigger, $this->triggeredById);
+                // The run key doubles as the batch key: a released backfill resumes after its last 'ok' chunk.
+                $run = $sync->backfill($account, $this->days, $this->trigger, $this->triggeredById, $this->runKey, $this->runKey);
+
+                return ! $this->releasedWhileBusy($run);
+            }
+            $to = CarbonImmutable::now('Africa/Cairo')->startOfDay();
+            $window = HistoryWindow::clamp($to->subDays(max($this->days, 1) - 1), $to);
+            if ($window === null) {
+                // The whole window is before crm.ads.history_start: leave a visible 'skipped' run, call nothing.
+                AdsSyncRun::create([
+                    'ad_account_id' => $account->id, 'platform' => $account->platform, 'kind' => $this->kind, 'status' => 'skipped',
+                    'trigger' => $this->trigger, 'triggered_by_id' => $this->triggeredById, 'error' => 'Window before history start',
+                    'from_date' => $to->subDays(max($this->days, 1) - 1)->toDateString(), 'to_date' => $to->toDateString(),
+                    'started_at' => now(), 'finished_at' => now(),
+                ]);
 
                 return true;
             }
-            $to = CarbonImmutable::now('Africa/Cairo')->startOfDay();
-            $sync->syncAccount($account, $to->subDays(max($this->days, 1) - 1), $to, $this->kind, true, $this->trigger, $this->triggeredById);
+            $run = $sync->syncAccount($account, $window[0], $window[1], $this->kind, $this->withAds, $this->trigger, $this->triggeredById, $this->runKey);
 
-            return true;
+            return ! $this->releasedWhileBusy($run);
         } catch (RateLimited $e) {
             // Only a real async queue job can be released; sync/inline runs must surface the failure.
+            // Meta's regain time (or the admission delay) when known, else 15 minutes.
             if ($this->job && ! $this->job instanceof SyncJob) {
-                $this->release(900);
+                $this->release($e->retryAfterSeconds ?? 900);
+                $this->heartbeat();
 
                 return false;
             }
             throw $e;
         }
+    }
+
+    /** Another sync holds the account claim: a queued job comes back in 2 minutes; an inline run just ends. */
+    private function releasedWhileBusy(?AdsSyncRun $run): bool
+    {
+        if (AdsSyncService::isBusy($run) && $this->job && ! $this->job instanceof SyncJob) {
+            // A claim that stays held (a stale one lasts about an hour) must not use up the tries and land in failed_jobs: after
+            // ten releases the job ends quietly and the 'skipped' run row stays as the trace.
+            // Only busy releases count (rate-limit releases share the job's tries but not this cap); the job uuid stays the
+            // same across releases.
+            $key = 'ads:sync-busy-releases:'.($this->job->uuid() ?? $this->runKey ?? spl_object_id($this));
+            $busy = (int) Cache::get($key, 0) + 1;
+            if ($busy > self::MAX_BUSY_RELEASES) {
+                Cache::forget($key);
+
+                return false;
+            }
+            Cache::put($key, $busy, now()->addHours(3));
+            $this->release(120);
+            $this->heartbeat();
+
+            return true;
+        }
+
+        return false;
     }
 }

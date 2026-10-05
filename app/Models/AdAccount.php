@@ -15,11 +15,11 @@ class AdAccount extends Model
     /** @use HasFactory<AdAccountFactory> */
     use HasFactory;
 
-    protected $fillable = ['connection_id', 'platform', 'external_id', 'name', 'currency', 'timezone', 'status', 'balance', 'is_active', 'last_synced_at'];
+    protected $fillable = ['connection_id', 'platform', 'external_id', 'name', 'currency', 'timezone', 'status', 'balance', 'is_active', 'last_synced_at', 'deactivated_reason'];
 
     protected function casts(): array
     {
-        return ['balance' => 'decimal:2', 'is_active' => 'boolean', 'last_synced_at' => 'datetime'];
+        return ['balance' => 'decimal:2', 'is_active' => 'boolean', 'last_synced_at' => 'datetime', 'chat_complete_from' => 'date', 'sync_pending_since' => 'datetime'];
     }
 
     public function connection(): BelongsTo

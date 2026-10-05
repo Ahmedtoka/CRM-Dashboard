@@ -5,6 +5,7 @@ use App\Ads\Control\StopAdvisor;
 use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Ads\Platforms\MissingPermission;
 use App\Ads\Platforms\RateLimited;
+use App\Ads\Reports\AdInsights;
 use App\Ads\Reports\AdsFilter;
 use App\Enums\UserRole;
 use App\Models\Ad;
@@ -75,7 +76,7 @@ it('runs a campaign and an ad set again and updates their local status', functio
     $acc = AdAccount::factory()->meta()->create();
     $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
     $set = AdSet::factory()->for($camp, 'campaign')->create(['status' => 'PAUSED']);
-    $admin = User::factory()->create(['role' => UserRole::Supervisor]);
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
 
     $this->actingAs($admin)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'campaign', 'external_id' => $camp->external_id, 'status' => 'active'])->assertOk();
     $this->actingAs($admin)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'adset', 'external_id' => $set->external_id, 'status' => 'active'])->assertOk();
@@ -196,6 +197,8 @@ it('suggests losers, fatigued and need-stop ads, not winners or paused ads', fun
     expect($out->keys()->sort()->values()->all())->toBe(['Loser', 'No sales', 'Out of stock', 'Tired'])
         ->and(array_column($out['Loser']['reasons'], 'key'))->toContain('roas_below')
         ->and(array_column($out['Tired']['reasons'], 'key'))->toContain('fatigue')
+        ->and(array_column($out['Tired']['reasons'], 'params', 'key')['fatigue'])->toBe(['ctr_drop' => 50.0])
+        ->and(app(AdInsights::class)->forAds([$tired->id], CarbonImmutable::parse('2026-09-30'))[$tired->id]['fatigue']['frequency'])->toBeNull()
         ->and(array_column($out['No sales']['reasons'], 'key'))->toContain('no_purchases')
         ->and($out['Out of stock']['reasons'])->toBe([['key' => 'need_stop', 'params' => ['material' => 'Black abaya']]])
         ->and($out['Loser'])->toMatchArray(['ad_id' => $loser->id, 'external_id' => $loser->external_id, 'account_id' => $acc->id, 'account' => 'LV Main', 'spend' => 1400.0]);
@@ -204,8 +207,8 @@ it('suggests losers, fatigued and need-stop ads, not winners or paused ads', fun
 it('shows suggestions and the log on the actions page, scoped to the buyer', function () {
     $mine = AdAccount::factory()->meta()->create(['name' => 'Mine']);
     $other = AdAccount::factory()->meta()->create(['name' => 'Other']);
-    $bad = Ad::factory()->for($mine, 'account')->create(['name' => 'My loser']);
-    $foreign = Ad::factory()->for($other, 'account')->create(['name' => 'Their loser']);
+    $bad = Ad::factory()->for($mine, 'account')->create(['name' => 'My loser', 'ad_campaign_id' => activeCampaignId($mine)]);
+    $foreign = Ad::factory()->for($other, 'account')->create(['name' => 'Their loser', 'ad_campaign_id' => activeCampaignId($other)]);
     foreach (range(1, 6) as $i) {
         $day = CarbonImmutable::now(AdsFilter::TIMEZONE)->subDays($i)->toDateString();
         actDay($bad, $day, ['spend' => 200, 'purchase_value' => 10, 'purchases' => 1]);
@@ -324,10 +327,11 @@ it('suggests ads by their own status, TikTok ENABLE included, and stops a TikTok
 
 it('flags ads whose campaign or ad set is paused on the creatives and campaign pages', function () {
     $acc = AdAccount::factory()->meta()->create();
-    $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
-    $set = AdSet::factory()->for($camp, 'campaign')->create(['status' => 'ACTIVE']);
-    $ad = Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => $camp->id, 'ad_set_id' => $set->id, 'status' => 'ACTIVE', 'effective_status' => 'CAMPAIGN_PAUSED']);
-    $free = Ad::factory()->for($acc, 'account')->create(['status' => 'ACTIVE', 'effective_status' => 'ACTIVE']);
+    // D1: an ad of a paused campaign is not listed at all, so the paused parent here is the ad set
+    $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'ACTIVE']);
+    $set = AdSet::factory()->for($camp, 'campaign')->create(['status' => 'PAUSED']);
+    $ad = Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => $camp->id, 'ad_set_id' => $set->id, 'status' => 'ACTIVE', 'effective_status' => 'ADSET_PAUSED']);
+    $free = Ad::factory()->for($acc, 'account')->create(['status' => 'ACTIVE', 'effective_status' => 'ACTIVE', 'ad_campaign_id' => activeCampaignId($acc)]);
     $day = CarbonImmutable::now(AdsFilter::TIMEZONE)->subDay()->toDateString();
     actDay($ad, $day);
     actDay($free, $day);
@@ -345,7 +349,7 @@ it('marks each campaign node and creative row with can_write for its account', f
     $on = AdAccount::factory()->meta()->create(['name' => 'On']);
     $off = AdAccount::factory()->meta()->create(['name' => 'Off', 'is_active' => false]);
     foreach ([$on, $off] as $acc) {
-        $ad = Ad::factory()->for($acc, 'account')->create(['name' => 'Ad '.$acc->name]);
+        $ad = Ad::factory()->for($acc, 'account')->create(['name' => 'Ad '.$acc->name, 'ad_campaign_id' => activeCampaignId($acc)]);
         actDay($ad, CarbonImmutable::now(AdsFilter::TIMEZONE)->subDay()->toDateString(), ['spend' => 100]);
     }
     $admin = User::factory()->create(['role' => UserRole::Admin]);
@@ -367,4 +371,75 @@ it('marks each campaign node and creative row with can_write for its account', f
     foreach ($flat as [$account, $can]) {
         expect($can)->toBe($account === 'On');
     }
+});
+
+it('refuses a buyer Run or Stop above ad level with a readable 422, an error row and no platform call', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
+    $set = AdSet::factory()->for($camp, 'campaign')->create(['status' => 'PAUSED']);
+    $buyer = actBuyer($acc);
+
+    $cases = [['campaign', $camp->external_id, 'active', 'campaign_level_not_allowed'], ['adset', $set->external_id, 'active', 'adset_level_not_allowed'],
+        ['campaign', $camp->external_id, 'paused', 'campaign_level_not_allowed'], ['adset', $set->external_id, 'paused', 'adset_level_not_allowed']];
+    foreach ($cases as $i => [$level, $id, $status, $key]) {
+        $this->actingAs($buyer)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => $level, 'external_id' => $id, 'status' => $status, 'reason' => 'too risky'])
+            ->assertStatus(422)->assertJsonValidationErrors(['status'])->assertJsonPath('errors.status.0', __('ads.errors.'.$key));
+        expect(AdAction::count())->toBe($i + 1);
+    }
+    expect(AdAction::pluck('reason')->unique()->all())->toBe(['too risky']);
+    expect(Cache::get('ads-fake-writer'))->toBeNull()
+        ->and(AdAction::where('result', 'error')->where('error', 'level_not_allowed')->count())->toBe(4)
+        ->and($camp->refresh()->status)->toBe('PAUSED');
+});
+
+it('lets a buyer Run and Stop at ad level; a supervisor too, but not Run on a campaign; admin Runs a campaign', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $ad = Ad::factory()->for($acc, 'account')->create();
+    $camp = AdCampaign::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
+    $buyer = actBuyer($acc);
+    $sup = User::factory()->create(['role' => UserRole::Supervisor]);
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+
+    $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'active']))->assertOk();
+    $this->actingAs($buyer)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'paused']))->assertOk();
+    $this->actingAs($sup)->postJson('/ads/actions/status', actPost(['account_id' => $acc->id, 'external_id' => $ad->external_id, 'status' => 'paused']))->assertOk();
+    $this->actingAs($sup)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'campaign', 'external_id' => $camp->external_id, 'status' => 'active'])->assertStatus(422);
+    expect($camp->refresh()->status)->toBe('PAUSED');
+    $this->actingAs($admin)->postJson('/ads/actions/status', ['account_id' => $acc->id, 'level' => 'campaign', 'external_id' => $camp->external_id, 'status' => 'active'])->assertOk();
+    expect($camp->refresh()->status)->toBe('ACTIVE');
+});
+
+it('allowedLevels: admin all three, everyone else ad only', function () {
+    $svc = app(AdWriteService::class);
+    expect($svc->allowedLevels(User::factory()->create(['role' => UserRole::Admin])))->toBe(['campaign', 'adset', 'ad'])
+        ->and($svc->allowedLevels(User::factory()->create(['role' => UserRole::Supervisor])))->toBe(['ad'])
+        ->and($svc->allowedLevels(User::factory()->create(['role' => UserRole::MediaBuyer])))->toBe(['ad']);
+});
+
+it('gives a buyer can_write only on ad nodes of the campaigns tree', function () {
+    $acc = AdAccount::factory()->meta()->create(['name' => 'Mine']);
+    $camp = AdCampaign::factory()->for($acc, 'account')->create();
+    $set = AdSet::factory()->for($camp, 'campaign')->create();
+    $ad = Ad::factory()->for($acc, 'account')->create(['ad_set_id' => $set->id, 'ad_campaign_id' => $camp->id]);
+    actDay($ad, CarbonImmutable::now(AdsFilter::TIMEZONE)->subDay()->toDateString());
+    $buyer = actBuyer($acc);
+
+    $tree = $this->actingAs($buyer)->get('/ads/campaigns')->assertOk()->viewData('page')['props']['tree'];
+    $levels = [];
+    $walk = function (array $nodes) use (&$walk, &$levels) {
+        foreach ($nodes as $n) {
+            $levels[$n['level']][] = $n['can_write'];
+            $walk($n['children']);
+        }
+    };
+    $walk($tree);
+    expect($levels['campaign'])->each->toBeFalse()->and($levels['adset'])->each->toBeFalse()->and($levels['ad'])->each->toBeTrue();
+});
+
+it('checks the account scope before it audits a level it does not allow', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $content = User::factory()->create(['role' => UserRole::Content]);
+
+    expect(fn () => app(AdWriteService::class)->setStatus($content, $acc, 'campaign', 'c1', 'paused', null))->toThrow(AuthorizationException::class);
+    expect(AdAction::count())->toBe(0);
 });

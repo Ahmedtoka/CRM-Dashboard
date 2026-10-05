@@ -12,11 +12,11 @@ class AdDailyMetric extends Model
     /** @use HasFactory<AdDailyMetricFactory> */
     use HasFactory;
 
-    protected $fillable = ['ad_id', 'ad_account_id', 'date', 'spend', 'impressions', 'clicks', 'reach', 'purchases', 'purchase_value'];
+    protected $fillable = ['ad_id', 'ad_account_id', 'date', 'spend', 'impressions', 'clicks', 'link_clicks', 'msg_conversations', 'reach', 'purchases', 'purchase_value'];
 
     protected function casts(): array
     {
-        return ['date' => 'date:Y-m-d', 'spend' => 'decimal:2', 'purchases' => 'decimal:2', 'purchase_value' => 'decimal:2', 'impressions' => 'integer', 'clicks' => 'integer', 'reach' => 'integer'];
+        return ['date' => 'date:Y-m-d', 'spend' => 'decimal:2', 'purchases' => 'decimal:2', 'purchase_value' => 'decimal:2', 'impressions' => 'integer', 'clicks' => 'integer', 'link_clicks' => 'integer', 'msg_conversations' => 'integer', 'reach' => 'integer'];
     }
 
     public function ad(): BelongsTo

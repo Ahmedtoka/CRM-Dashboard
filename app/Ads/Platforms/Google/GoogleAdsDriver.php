@@ -129,6 +129,30 @@ class GoogleAdsDriver implements AdPlatformDriver
         return $out;
     }
 
+    /** No account-level control until this platform is live (null = no control); no request is made. */
+    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): ?array
+    {
+        return null;
+    }
+
+    /** No status sweep until this platform is live: null lists, so nothing is ever marked GONE here. */
+    public function statuses(AdAccount $a): array
+    {
+        return ['ads' => null, 'campaigns' => null];
+    }
+
+    public function admit(AdAccount $a): void {}
+
+    public function drainWarnings(): array
+    {
+        return [];
+    }
+
+    public function campaignStatuses(AdAccount $a): ?array
+    {
+        return null;
+    }
+
     public function creativeMedia(AdAccount $a, array $adExternalIds): array
     {
         return [];   // no creative preview for search ads; image assets are out of scope

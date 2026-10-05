@@ -11,6 +11,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import { cn } from '@/lib/utils';
 import type { MaterialRow, PublishAccount, PublishCampaign, PublishCaption, PublishIdentity } from '@/types/ads';
+import { isAxiosError } from 'axios';
 import { LoaderCircle, Plus, X } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
 
@@ -33,6 +34,19 @@ const loading = ref(false);
 const loadingAccount = ref(false);
 const busy = ref(false);
 const error = ref<string | null>(null);
+/** One key per dialog open: a double click or a retry replays the first answer instead of publishing twice. */
+const idempotencyKey = ref('');
+/** crypto.randomUUID needs a secure context; fall back to a getRandomValues v4 id. */
+function newKey(): string {
+    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+const duplicateWarning = ref(false);
+const allowDuplicate = ref(false);
 
 const form = reactive({
     account_id: null as number | null,
@@ -71,13 +85,22 @@ const urlTags = computed(() => {
 
 const captionsValid = computed(() => captions.value.length > 0 && captions.value.every((c) => c.headline.trim() && c.primary_text.trim()));
 const canSubmit = computed(
-    () => !!form.account_id && !!form.campaign_id && !!form.adset_id && !!identity.value && form.file_ids.length > 0 && captionsValid.value && !!link.value,
+    () =>
+        !!form.account_id &&
+        !!form.campaign_id &&
+        !!form.adset_id &&
+        !!identity.value &&
+        form.file_ids.length > 0 &&
+        captionsValid.value &&
+        !!link.value,
 );
 
 async function loadAccounts(): Promise<void> {
     loading.value = true;
     try {
-        const { data } = await api.get<{ accounts: PublishAccount[]; link: string | null }>('/ads/publish/options', { params: { material: props.material.id } });
+        const { data } = await api.get<{ accounts: PublishAccount[]; link: string | null }>('/ads/publish/options', {
+            params: { material: props.material.id },
+        });
         accounts.value = data.accounts;
         link.value = data.link;
         if (data.accounts.length === 1) form.account_id = data.accounts[0].id;
@@ -97,9 +120,12 @@ async function loadAccount(id: number): Promise<void> {
     form.adset_id = '';
     form.page_id = '';
     try {
-        const { data } = await api.get<{ campaigns: PublishCampaign[]; identities: PublishIdentity[]; last_identity: PublishIdentity | null }>('/ads/publish/options', {
-            params: { account: id },
-        });
+        const { data } = await api.get<{ campaigns: PublishCampaign[]; identities: PublishIdentity[]; last_identity: PublishIdentity | null }>(
+            '/ads/publish/options',
+            {
+                params: { account: id },
+            },
+        );
         if (form.account_id !== id) return;
         campaigns.value = data.campaigns;
         identities.value = data.identities;
@@ -117,6 +143,9 @@ watch(
     (open) => {
         if (!open) return;
         error.value = null;
+        idempotencyKey.value = newKey();
+        duplicateWarning.value = false;
+        allowDuplicate.value = false;
         form.file_ids = props.fileIds?.length ? [...props.fileIds] : files.value.map((f) => f.id);
         captions.value = defaultCaptions();
         if (!accounts.value.length) void loadAccounts();
@@ -134,6 +163,15 @@ watch(
     () => {
         if (props.open) captions.value = defaultCaptions();
     },
+);
+// The override only applies to the exact request that was refused: any change to what is published clears it.
+watch(
+    [() => form.adset_id, () => form.file_ids, captions],
+    () => {
+        allowDuplicate.value = false;
+        duplicateWarning.value = false;
+    },
+    { deep: true },
 );
 watch(
     () => form.account_id,
@@ -161,20 +199,27 @@ async function submit(): Promise<void> {
     busy.value = true;
     error.value = null;
     try {
-        const { data } = await api.post<{ message: string }>(`/ads/materials/${props.material.id}/publish`, {
-            account_id: form.account_id,
-            campaign_id: campaign.value.id,
-            campaign_name: campaign.value.name,
-            adset_id: adset.value.id,
-            adset_name: adset.value.name,
-            identity: { page_id: identity.value.page_id, page_name: identity.value.page_name, instagram_id: identity.value.instagram_id },
-            file_ids: form.file_ids,
-            captions: captions.value.map((c) => ({ headline: c.headline.trim(), primary_text: c.primary_text.trim(), cta: c.cta })),
-        });
+        const { data } = await api.post<{ message: string }>(
+            `/ads/materials/${props.material.id}/publish`,
+            {
+                account_id: form.account_id,
+                campaign_id: campaign.value.id,
+                campaign_name: campaign.value.name,
+                adset_id: adset.value.id,
+                adset_name: adset.value.name,
+                identity: { page_id: identity.value.page_id, page_name: identity.value.page_name, instagram_id: identity.value.instagram_id },
+                file_ids: form.file_ids,
+                captions: captions.value.map((c) => ({ headline: c.headline.trim(), primary_text: c.primary_text.trim(), cta: c.cta })),
+                ...(allowDuplicate.value ? { allow_duplicate: true } : {}),
+            },
+            { headers: { 'Idempotency-Key': idempotencyKey.value } },
+        );
         toast.push(data.message || t('ads.publish.queued'));
         emit('published');
         emit('update:open', false);
     } catch (e) {
+        // 409: the same ad is already queued or published; show the server message and let the user publish again on purpose.
+        duplicateWarning.value = isAxiosError(e) && e.response?.status === 409;
         error.value = apiErrorMessage(e, t('common.error'));
     } finally {
         busy.value = false;
@@ -222,7 +267,9 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
                 <select id="pub-identity" v-model="form.page_id" :class="field" :disabled="!identities.length">
                     <option v-for="i in identities" :key="i.page_id" :value="i.page_id">{{ i.page_name }}</option>
                 </select>
-                <p v-if="form.account_id && !loadingAccount && !identities.length" class="text-2xs text-muted-foreground">{{ t('ads.publish.no_identities') }}</p>
+                <p v-if="form.account_id && !loadingAccount && !identities.length" class="text-2xs text-muted-foreground">
+                    {{ t('ads.publish.no_identities') }}
+                </p>
             </div>
             <div class="space-y-1">
                 <label class="text-xs font-medium" for="pub-campaign">{{ t('ads.publish.campaign') }}</label>
@@ -230,8 +277,12 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
                     <option value="">{{ t('ads.publish.pick') }}</option>
                     <option v-for="c in campaigns" :key="c.id" :value="c.id">{{ c.name }}</option>
                 </select>
-                <p v-if="form.account_id && !loadingAccount && !campaigns.length" class="text-2xs text-muted-foreground">{{ t('ads.publish.no_campaigns') }}</p>
-                <p v-else-if="campaign && !campaign.naming_ok" class="text-2xs text-amber-800 dark:text-amber-200">{{ t('ads.publish.naming_off') }}</p>
+                <p v-if="form.account_id && !loadingAccount && !campaigns.length" class="text-2xs text-muted-foreground">
+                    {{ t('ads.publish.no_campaigns') }}
+                </p>
+                <p v-else-if="campaign && !campaign.naming_ok" class="text-2xs text-amber-800 dark:text-amber-200">
+                    {{ t('ads.publish.naming_off') }}
+                </p>
             </div>
             <div class="space-y-1">
                 <label class="text-xs font-medium" for="pub-adset">{{ t('ads.publish.adset') }}</label>
@@ -249,7 +300,11 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
             <ul class="flex flex-wrap gap-2">
                 <li v-for="f in files" :key="f.id">
                     <label class="flex cursor-pointer items-center gap-2 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
-                        <input type="checkbox" :checked="form.file_ids.includes(f.id)" @change="toggleFile(f.id, ($event.target as HTMLInputElement).checked)" />
+                        <input
+                            type="checkbox"
+                            :checked="form.file_ids.includes(f.id)"
+                            @change="toggleFile(f.id, ($event.target as HTMLInputElement).checked)"
+                        />
                         <img v-if="f.thumb_url" :src="f.thumb_url" alt="" class="size-8 rounded object-cover" loading="lazy" />
                         <span class="max-w-40 truncate" dir="auto">{{ f.original_name ?? `#${f.id}` }}</span>
                     </label>
@@ -299,12 +354,21 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
             </button>
         </fieldset>
 
+        <label v-if="duplicateWarning" class="flex items-center gap-2 rounded-md border border-warning/50 bg-warning/10 px-3 py-2 text-xs">
+            <input v-model="allowDuplicate" type="checkbox" />
+            {{ t('ads.publish.allow_duplicate') }}
+        </label>
+
         <section v-if="previewNames.length" class="space-y-1 rounded-md bg-muted/50 p-3 text-xs" aria-live="polite">
-            <p class="font-medium">{{ t('ads.publish.preview') }} <span class="text-muted-foreground">({{ t('ads.publish.count', { n: previewNames.length }) }})</span></p>
+            <p class="font-medium">
+                {{ t('ads.publish.preview') }} <span class="text-muted-foreground">({{ t('ads.publish.count', { n: previewNames.length }) }})</span>
+            </p>
             <ul class="space-y-0.5" dir="ltr">
                 <li v-for="(n, i) in previewNames" :key="i" class="font-mono text-2xs">{{ n }}</li>
             </ul>
-            <p v-if="link" class="break-all" dir="ltr"><span class="text-muted-foreground" dir="auto">{{ t('ads.publish.link') }}:</span> {{ link }}</p>
+            <p v-if="link" class="break-all" dir="ltr">
+                <span class="text-muted-foreground" dir="auto">{{ t('ads.publish.link') }}:</span> {{ link }}
+            </p>
             <p class="break-all text-2xs text-muted-foreground" dir="ltr">{{ t('ads.publish.url_tags') }}: {{ urlTags }}</p>
         </section>
     </FormDialog>

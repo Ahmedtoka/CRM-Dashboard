@@ -68,6 +68,7 @@ final class RunningCreatives
     /** One ad's row (with preview_html) over the filter; zeros when it did not run in range. */
     public function detail(Ad $ad, AdsFilter $f): array
     {
+        $f = $f->allSpend(); // a direct link to one ad shows its numbers whatever its campaign status
         $agg = $this->q->sums($f, ['ad_id' => 'm.ad_id'], fn ($b) => $b->where('m.ad_id', $ad->id))->first();
         $row = DB::table('ads as ad')
             ->join('ad_accounts as acc', 'acc.id', '=', 'ad.ad_account_id')

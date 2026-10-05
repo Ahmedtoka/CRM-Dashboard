@@ -4,25 +4,73 @@ namespace App\Ads\Platforms\Meta;
 
 use App\Ads\Platforms\AdPlatformDriver;
 use App\Ads\Platforms\AdsApiException;
+use App\Ads\Platforms\Data\AccountDailyTotal;
 use App\Ads\Platforms\Data\AccountInfo;
 use App\Ads\Platforms\Data\AdRow;
 use App\Ads\Platforms\Data\CreativeMedia;
 use App\Ads\Platforms\Data\DailyAdMetric;
 use App\Ads\Platforms\PreviewMarkup;
+use App\Ads\Platforms\RateLimited;
+use App\Ads\Platforms\TokenInvalid;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Encryption\DecryptException;
 
 class MetaAdsDriver implements AdPlatformDriver
 {
     private const PURCHASE_TYPES = ['purchase', 'omni_purchase', 'offsite_conversion.fb_pixel_purchase'];
 
+    private const MESSAGING_TYPE = 'onsite_conversion.messaging_conversation_started_7d';
+
+    /**
+     * Every ad status, ARCHIVED and DELETED included: without this filter Meta silently leaves archived and
+     * deleted ads out of a level=ad insights pull, so their spend would be missing (F-001).
+     */
+    public const INSIGHTS_STATUSES = ['ACTIVE', 'PAUSED', 'DELETED', 'PENDING_REVIEW', 'DISAPPROVED', 'PREAPPROVED', 'PENDING_BILLING_INFO', 'CAMPAIGN_PAUSED', 'ARCHIVED', 'ADSET_PAUSED', 'IN_PROCESS', 'WITH_ISSUES'];
+
+    /** @var list<string> run warnings (a list cut short by high usage), drained by the sync */
+    private array $warnings = [];
+
     public function __construct(private readonly MetaAdsApi $api) {}
+
+    public function admit(AdAccount $a): void
+    {
+        $this->api->admit($this->actId($a));
+    }
+
+    public function drainWarnings(): array
+    {
+        $out = $this->warnings;
+        $this->warnings = [];
+
+        return $out;
+    }
+
+    /**
+     * paginate() plus a run warning when Meta's usage header stopped the paging early (the rows read are kept).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function pages(string $label, string $token, string $path, array $query): array
+    {
+        $rows = $this->api->paginate($token, $path, $query);
+        if ($this->api->stoppedAt() !== null) {
+            $this->warnings[] = $this->stoppedMessage($label, count($rows));
+        }
+
+        return $rows;
+    }
+
+    private function stoppedMessage(string $label, int $rows): string
+    {
+        return sprintf('%s: stopped paging at %d%% usage (%d rows kept)', $label, (int) $this->api->stoppedAt(), $rows);
+    }
 
     public function accounts(AdPlatformConnection $c): array
     {
-        $rows = $this->api->paginate($this->token($c), 'me/adaccounts', [
+        $rows = $this->pages('Ad accounts', $this->token($c), 'me/adaccounts', [
             'fields' => 'id,name,currency,timezone_name,account_status,balance',
             'limit' => 200,
         ]);
@@ -47,9 +95,12 @@ class MetaAdsDriver implements AdPlatformDriver
      */
     public const AD_STATUSES = ['ACTIVE', 'PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'DISAPPROVED', 'WITH_ISSUES', 'PENDING_REVIEW', 'IN_PROCESS'];
 
+    /** The statuses AD_STATUSES leaves out: the sweep lists them so both lists together cover INSIGHTS_STATUSES. */
+    public const SWEEP_AD_STATUSES = ['ARCHIVED', 'DELETED', 'PREAPPROVED', 'PENDING_BILLING_INFO'];
+
     public function ads(AdAccount $a): array
     {
-        $rows = $this->api->paginate($this->token($a->connection), $this->actId($a).'/ads', [
+        $rows = $this->pages('Ad list', $this->token($a->connection), $this->actId($a).'/ads', [
             'effective_status' => json_encode(self::AD_STATUSES),
             'fields' => 'id,name,status,effective_status,created_time,'
                 .'creative{id,name,thumbnail_url,image_url,video_id,title,body,instagram_permalink_url,url_tags,object_story_id,effective_object_story_id,object_story_spec,asset_feed_spec},'
@@ -63,13 +114,14 @@ class MetaAdsDriver implements AdPlatformDriver
 
     public function dailyMetrics(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
     {
-        $rows = $this->api->paginate($this->token($a->connection), $this->actId($a).'/insights', [
+        $rows = $this->pages('Ad metrics', $this->token($a->connection), $this->actId($a).'/insights', [
             'level' => 'ad',
             'time_increment' => 1,
             'time_range' => json_encode(['since' => $from->toDateString(), 'until' => $to->toDateString()]),
-            'fields' => 'ad_id,ad_name,campaign_id,campaign_name,adset_id,adset_name,spend,impressions,clicks,reach,actions,action_values',
+            'filtering' => json_encode([['field' => 'ad.effective_status', 'operator' => 'IN', 'value' => self::INSIGHTS_STATUSES]]),
+            'fields' => 'ad_id,ad_name,campaign_id,campaign_name,adset_id,adset_name,spend,impressions,clicks,inline_link_clicks,reach,actions,action_values',
             'limit' => 500,
-        ]);
+        ] + $this->attributionParams());
 
         $out = [];
         foreach ($rows as $r) {
@@ -90,7 +142,116 @@ class MetaAdsDriver implements AdPlatformDriver
                 campaignName: $r['campaign_name'] ?? null,
                 adSetId: $r['adset_id'] ?? null,
                 adSetName: $r['adset_name'] ?? null,
+                linkClicks: (int) ($r['inline_link_clicks'] ?? 0),
+                msgConversations: (int) $this->actionValue($r['actions'] ?? [], self::MESSAGING_TYPE),
             );
+        }
+
+        return $out;
+    }
+
+    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): ?array
+    {
+        // level=account counts archived and deleted ads too, so no status filter is needed here.
+        $rows = $this->api->paginate($this->token($a->connection), $this->actId($a).'/insights', [
+            'level' => 'account',
+            'time_increment' => 1,
+            'time_range' => json_encode(['since' => $from->toDateString(), 'until' => $to->toDateString()]),
+            'fields' => 'spend,impressions,actions,action_values,account_currency',
+            'limit' => 500,
+        ] + $this->attributionParams());
+        if ($this->api->stoppedAt() !== null) {
+            // A cut control would read as zero spend on the missing days and unlock deletes: no control this run.
+            throw new AdsApiException(sprintf('stopped paging at %d%% usage', (int) $this->api->stoppedAt()));
+        }
+
+        $out = [];
+        foreach ($rows as $r) {
+            if (empty($r['date_start'])) {
+                continue;
+            }
+            $out[] = new AccountDailyTotal(
+                date: substr((string) $r['date_start'], 0, 10),
+                spend: (float) ($r['spend'] ?? 0),
+                impressions: (int) ($r['impressions'] ?? 0),
+                purchases: $this->purchaseValue($r['actions'] ?? []),
+                purchaseValue: $this->purchaseValue($r['action_values'] ?? []),
+                currency: isset($r['account_currency']) ? (string) $r['account_currency'] : null,
+            );
+        }
+
+        return $out;
+    }
+
+    public function statuses(AdAccount $a): array
+    {
+        $token = $this->token($a->connection);
+        $out = ['ads' => null, 'campaigns' => null, 'warnings' => []];
+
+        // Each list fails alone: a refused campaigns call must not throw away the ads list (and the reverse).
+        try {
+            $out['ads'] = [];
+            foreach ($this->api->paginate($token, $this->actId($a).'/ads', [
+                'fields' => 'id,status,effective_status',
+                'effective_status' => json_encode(self::SWEEP_AD_STATUSES),
+                'limit' => 500,
+            ]) as $r) {
+                if (! empty($r['id'])) {
+                    $out['ads'][(string) $r['id']] = ['status' => $r['status'] ?? null, 'effective_status' => $r['effective_status'] ?? null];
+                }
+            }
+            if ($this->api->stoppedAt() !== null) {
+                // An incomplete list must never mark ads GONE.
+                $out['warnings'][] = 'ads list '.$this->stoppedMessage('incomplete', count($out['ads']));
+                $out['ads'] = null;
+            }
+        } catch (TokenInvalid|RateLimited $e) {
+            throw $e;
+        } catch (AdsApiException $e) {
+            $out['ads'] = null;
+            $out['warnings'][] = 'ads list: '.$e->getMessage();
+        }
+
+        try {
+            $out['campaigns'] = [];
+            foreach ($this->api->paginate($token, $this->actId($a).'/campaigns', [
+                'fields' => 'id,name,status,effective_status,objective',
+                'effective_status' => json_encode(self::INSIGHTS_STATUSES),
+                'limit' => 500,
+            ]) as $r) {
+                if (! empty($r['id'])) {
+                    $out['campaigns'][(string) $r['id']] = [
+                        'name' => $r['name'] ?? null, 'status' => $r['status'] ?? null,
+                        'effective_status' => $r['effective_status'] ?? null, 'objective' => $r['objective'] ?? null,
+                    ];
+                }
+            }
+            if ($this->api->stoppedAt() !== null) {
+                // Campaigns are updated one by one: the part read is still right.
+                $out['warnings'][] = 'campaigns list '.$this->stoppedMessage('partial', count($out['campaigns']));
+            }
+        } catch (TokenInvalid|RateLimited $e) {
+            throw $e;
+        } catch (AdsApiException $e) {
+            $out['campaigns'] = null;
+            $out['warnings'][] = 'campaigns list: '.$e->getMessage();
+        }
+
+        return $out;
+    }
+
+    /** One light paged call: id and the two statuses of every campaign, archived and deleted included. */
+    public function campaignStatuses(AdAccount $a): ?array
+    {
+        $out = [];
+        foreach ($this->pages('Campaign statuses', $this->token($a->connection), $this->actId($a).'/campaigns', [
+            'fields' => 'id,status,effective_status',
+            'effective_status' => json_encode(self::INSIGHTS_STATUSES),
+            'limit' => 500,
+        ]) as $r) {
+            if (! empty($r['id'])) {
+                $out[(string) $r['id']] = ['status' => $r['status'] ?? null, 'effective_status' => $r['effective_status'] ?? null];
+            }
         }
 
         return $out;
@@ -158,6 +319,8 @@ class MetaAdsDriver implements AdPlatformDriver
             $this->api->get($this->token($c), 'me', ['fields' => 'id,name']);
 
             return null;
+        } catch (TokenInvalid $e) {
+            throw $e; // the caller marks the connection needs_reconnect
         } catch (AdsApiException $e) {
             return $e->getMessage();
         }
@@ -165,7 +328,12 @@ class MetaAdsDriver implements AdPlatformDriver
 
     private function token(AdPlatformConnection $c): string
     {
-        $token = $c->credentials['access_token'] ?? null;
+        try {
+            $token = $c->credentials['access_token'] ?? null;
+        } catch (DecryptException) {
+            // APP_KEY changed or the column was damaged: the page that fixes it must still open (F-034).
+            throw new AdsApiException('credentials unreadable, re-enter the token');
+        }
         if (! $token) {
             throw new AdsApiException('Meta access token is missing.');
         }
@@ -176,6 +344,36 @@ class MetaAdsDriver implements AdPlatformDriver
     private function actId(AdAccount $a): string
     {
         return str_starts_with($a->external_id, 'act_') ? $a->external_id : 'act_'.$a->external_id;
+    }
+
+    /**
+     * crm.ads.meta.attribution as query params, sent on every insights call so the attribution is explicit (R-07).
+     *
+     * @return array<string, string>
+     */
+    private function attributionParams(): array
+    {
+        $out = [];
+        foreach ((array) config('crm.ads.meta.attribution', []) as $key => $value) {
+            $out[(string) $key] = match (true) {
+                is_bool($value) => $value ? 'true' : 'false',
+                is_array($value) => (string) json_encode(array_values($value)),
+                default => (string) $value,
+            };
+        }
+
+        return $out;
+    }
+
+    private function actionValue(array $actions, string $type): float
+    {
+        foreach ($actions as $row) {
+            if (($row['action_type'] ?? null) === $type && isset($row['value'])) {
+                return (float) $row['value'];
+            }
+        }
+
+        return 0.0;
     }
 
     /** First present of the purchase action types (Arena's priority). */

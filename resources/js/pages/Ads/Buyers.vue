@@ -6,6 +6,7 @@ import MoneyCell from '@/components/ads/MoneyCell.vue';
 import DataTable from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import DataHealthBanner from '@/components/ads/DataHealthBanner.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { flowArrow, formatAdsMoney, formatPct, formatQty, formatRoas, rangeQueryString } from '@/lib/ads';
@@ -84,6 +85,7 @@ const breadcrumbs = computed(() => [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
+            <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
             <PageHeader :title="t('ads.buyers.title')" :description="t('ads.buyers.hint')">
                 <AdsRangeBar :filters="filters" :platforms="platforms" :buyers="buyers" />
             </PageHeader>

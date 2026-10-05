@@ -12,6 +12,7 @@ use App\Models\AdMaterial;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Per-material performance over the last 30 days (Cairo): the sum over its linked ads, in batch (no per-material
@@ -38,8 +39,8 @@ final class MaterialPerformance
 
     /**
      * @param  Collection<int, AdMaterial>  $materials  with `ads` loaded
-     * @return array<int, array{spend:float, spend_tax:float, purchase_value:float, roas:?float, purchases:float, real_orders:int, winner_tier:?string}|null>
-     *                                                                                                                                                        material id => performance (null: no linked ads, or the user may not see spend)
+     * @return array<int, array{spend:?float, spend_tax:?float, purchase_value:?float, roas:?float, purchases:float, real_orders:int, winner_tier:?string, mixed_currencies:bool}|null>
+     *                                                                                                                                                                                  material id => performance (null: no linked ads, or the user may not see spend)
      */
     public function forMaterials(Collection $materials, User $user): array
     {
@@ -59,6 +60,9 @@ final class MaterialPerformance
         $tiers = $this->tiers($filter, $user);
 
         $taxRate = $this->settings->taxRate(); // once, not per material
+        // currency of each ad that has rows in the window (a dormant ad does not decide)
+        $currency = DB::table('ads as ad')->join('ad_accounts as acc', 'acc.id', '=', 'ad.ad_account_id')
+            ->whereIn('ad.id', $sums->keys()->all())->pluck('acc.currency', 'ad.id');
 
         foreach ($materials as $m) {
             $ids = $m->ads->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -80,13 +84,20 @@ final class MaterialPerformance
                     $best = $tier;
                 }
             }
+            $currencies = collect($ids)->filter(fn ($id) => isset($sums[$id]))->map(fn ($id) => strtoupper((string) ($currency[$id] ?? 'EGP')))->unique();
+            $mixed = $currencies->count() > 1;
             $out[$m->id] = [
                 'spend' => round($sum['spend'], 2), 'spend_tax' => round($sum['spend'] * (1 + $taxRate), 2),
                 'purchase_value' => round($sum['purchase_value'], 2), 'roas' => AdsQuery::ratio($sum['purchase_value'], $sum['spend'], 2),
                 'purchases' => round($sum['purchases'], 2),
                 'real_orders' => (int) collect($ids)->sum(fn ($id) => $orders[$id] ?? 0),
                 'winner_tier' => $best,
+                'mixed_currencies' => $mixed,
             ];
+            if ($mixed) {
+                // A9: a material whose ads run in several currencies has no single total
+                $out[$m->id] = array_merge($out[$m->id], ['spend' => null, 'spend_tax' => null, 'purchase_value' => null, 'roas' => null]);
+            }
         }
 
         return $out;
@@ -99,7 +110,7 @@ final class MaterialPerformance
         $from = $to->subDays(self::DAYS - 1);
         $restrict = $user->role === UserRole::MediaBuyer ? ($this->scope->buyerFor($user)?->id ?? 0) : null;
 
-        return new AdsFilter($from, $to, null, null, $this->scope->accountIds($user, $from, $to), $restrict);
+        return new AdsFilter($from, $to, null, null, $this->scope->accountIds($user, $from, $to), $restrict, false, true);
     }
 
     /** @return array<int, string> */

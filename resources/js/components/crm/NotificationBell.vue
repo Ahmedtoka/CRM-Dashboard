@@ -63,6 +63,28 @@ function itemText(n: AppNotification): string {
         return t('notifications.ads_need_stop_item', { product: String(n.data.product_title ?? ''), material: String(n.data.title ?? '') });
     }
 
+    if (n.type === 'ads.token_invalid') {
+        return t('notifications.ads_token_invalid_item', { name: String(n.data.connection ?? '') });
+    }
+
+    if (n.type === 'ads.data_health') {
+        const reason = t('notifications.ads_health_reasons.' + String(n.data.reason ?? 'stale'));
+        const account = String(n.data.account ?? n.data.subject ?? '') || t('notifications.ads_health_system');
+
+        const text = t(n.data.recovered ? 'notifications.ads_data_health_recovered_item' : 'notifications.ads_data_health_item', { account, reason });
+        const more = Number(n.data.more ?? 0);
+
+        return more > 0 ? `${text} (+${more})` : text;
+    }
+
+    if (n.type === 'ads.token_scope_missing') {
+        return t('notifications.ads_token_scope_missing_item', { name: String(n.data.connection ?? '') });
+    }
+
+    if (n.type === 'ads.token_expiring') {
+        return t('notifications.ads_token_expiring_item', { name: String(n.data.connection ?? ''), days: Number(n.data.days ?? 0) });
+    }
+
     if (n.type === 'channel.problem') {
         const title = t('notifications.channel_problem_item', { name: String(n.data.name ?? '') });
         // The health check writes the notification from the scheduler, so its `excerpt` is
@@ -82,6 +104,14 @@ function open(n: AppNotification): void {
     void notifications.markRead([n.id]);
     if (n.type === 'ads.need_stop') {
         router.visit(String(n.data.link ?? '/ads/materials?status=activated&stock=out'));
+        return;
+    }
+    if (n.type === 'ads.data_health') {
+        router.visit('/ads/sync');
+        return;
+    }
+    if (n.type === 'ads.token_invalid' || n.type === 'ads.token_scope_missing' || n.type === 'ads.token_expiring') {
+        router.visit('/ads/accounts');
         return;
     }
     if (n.type === 'channel.problem') {

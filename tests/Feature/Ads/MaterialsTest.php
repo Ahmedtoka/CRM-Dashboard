@@ -2,6 +2,7 @@
 
 use App\Ads\Buyers\AssignmentService;
 use App\Ads\Materials\MaterialFileStorage;
+use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Media\Thumbnailer;
 use App\Models\Ad;
@@ -57,8 +58,9 @@ function matBuyerWorld(): array
     $buyer = MediaBuyer::factory()->create(['user_id' => $user->id, 'name' => 'Own Buyer']);
     $account = AdAccount::factory()->create();
     app(AssignmentService::class)->assign($account, $buyer, CarbonImmutable::now('Africa/Cairo')->subDays(40));
-    $ad = Ad::factory()->for($account, 'account')->create(['name' => 'Mine ad']);
-    $other = Ad::factory()->for(AdAccount::factory()->create(), 'account')->create(['name' => 'Foreign ad']);
+    $ad = Ad::factory()->for($account, 'account')->create(['name' => 'Mine ad', 'ad_campaign_id' => activeCampaignId($account)]);
+    $foreignAcc = AdAccount::factory()->create();
+    $other = Ad::factory()->for($foreignAcc, 'account')->create(['name' => 'Foreign ad', 'ad_campaign_id' => activeCampaignId($foreignAcc)]);
 
     return compact('buyer', 'user', 'account', 'ad', 'other');
 }
@@ -192,7 +194,7 @@ it('hides spend from content users and scopes a buyers numbers to their own rows
     $w = matBuyerWorld();
     matDays($w['ad'], 10, 100, 500);       // own: spend 1000, value 5000
     matDays($w['other'], 10, 100, 100);    // someone elses
-    Order::factory()->create(['ad_id' => $w['ad']->id, 'placed_at' => now()->subDays(2), 'total' => 300]);
+    Order::factory()->create(['ad_id' => $w['ad']->id, 'placed_at' => now()->subDays(2), 'total' => 300, 'status' => OrderStatus::Confirmed]); // A3: an unpaid order is not real
     $m = AdMaterial::factory()->create();
     $m->ads()->attach([$w['ad']->id, $w['other']->id]);
 
@@ -323,7 +325,7 @@ it('lets content only send a material back to not started', function () {
 it('exports the library as a streamed CSV with a BOM and one line per material', function () {
     $col = AdMaterialCollection::factory()->create(['name' => 'عيد']);
     $product = Product::factory()->create(['title' => 'عباية']);
-    $ad = Ad::factory()->create(['name' => 'Ad one']);
+    $ad = Ad::factory()->create(['name' => 'Ad one', 'ad_campaign_id' => activeCampaignId(AdAccount::factory()->create())]);
     matDays($ad, 4, 150, 450);
     $a = AdMaterial::factory()->create(['title' => 'فيديو العيد', 'product_id' => $product->id, 'drive_links' => ['https://d/1', 'https://d/2'], 'status' => 'activated']);
     $a->collections()->attach($col);

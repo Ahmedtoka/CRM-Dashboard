@@ -6,6 +6,7 @@ use App\Ads\Reports\AdsOverview;
 use App\Ads\Reports\BuyerScorecard;
 use App\Ads\Reports\RunningCreatives;
 use App\Ads\Reports\TopAccounts;
+use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Models\Ad;
@@ -95,7 +96,7 @@ it('computes overview totals with tax and roas on pre-tax spend', function () {
         ->and($t['real_orders'])->toBe(0)->and($t['real_revenue'])->toBe(0.0)->and($t['real_roas'])->toBe(0.0)
         ->and($t['conversations'])->toBe(0)->and($t['conversations_ordered'])->toBe(0);
 
-    expect(array_keys($t))->toEqualCanonicalizing(['spend', 'spend_tax', 'purchase_value', 'roas', 'purchases', 'cpa', 'impressions', 'clicks', 'ctr', 'reach', 'cpm', 'cpc', 'real_orders', 'real_revenue', 'real_roas', 'conversations', 'conversations_ordered', 'losers_spend_share']);
+    expect(array_keys($t))->toEqualCanonicalizing(['spend', 'spend_tax', 'purchase_value', 'roas', 'purchases', 'cpa', 'impressions', 'clicks', 'ctr', 'reach', 'cpm', 'cpc', 'real_orders', 'real_revenue', 'real_roas', 'conversations', 'conversations_ordered', 'losers_spend_share', 'spend_outside_active', 'source', 'itemised_gap', 'gap_state', 'mixed_currencies']);
     expect($o['daily'])->toHaveCount(30)
         ->and($o['daily'][9])->toMatchArray(['date' => '2026-09-10', 'spend' => 1000.0, 'spend_tax' => 1140.0, 'roas' => 5.0, 'ctr' => 0.02])
         ->and($o['daily'][10])->toMatchArray(['date' => '2026-09-11', 'spend' => 0.0, 'roas' => null, 'ctr' => null, 'cpm' => null, 'cpc' => null]);
@@ -230,9 +231,10 @@ it('counts real orders net of refunds and excludes cancelled', function () {
     rptSeptember($w['ad1']); // 3000 spend: Ahmed 1500, Mostafa 1500
     $camp = AdCampaign::factory()->for($w['acc1'], 'account')->create();
 
-    $o1 = rptOrder(['ad_id' => $w['ad1']->id, 'placed_at' => '2026-09-10 10:00', 'total' => 1000]);       // Ahmed
+    // A Shopify store order: total is current_total_price, already after its refunds (1000 − 150 − 50) → net 800 (A3)
+    $o1 = rptOrder(['ad_id' => $w['ad1']->id, 'placed_at' => '2026-09-10 10:00', 'total' => 800, 'source' => OrderSource::Store]); // Ahmed
     Refund::factory()->create(['order_id' => $o1->id, 'amount' => 150]);
-    Refund::factory()->create(['order_id' => $o1->id, 'amount' => 50]);                                    // net 800
+    Refund::factory()->create(['order_id' => $o1->id, 'amount' => 50]);
     rptOrder(['ad_id' => $w['ad1']->id, 'placed_at' => '2026-09-15 22:30', 'total' => 500]);              // Sep 16 01:30 Cairo → Mostafa
     rptOrder(['ad_id' => $w['ad1']->id, 'placed_at' => '2026-09-12 10:00', 'total' => 900, 'status' => OrderStatus::Cancelled]);
     rptOrder(['ad_id' => null, 'ad_campaign_id' => $camp->id, 'placed_at' => '2026-09-05 09:00', 'total' => 300]); // campaign only → Ahmed

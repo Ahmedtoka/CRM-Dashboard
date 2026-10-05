@@ -20,6 +20,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class StopAdvisor
 {
+    /** Effective statuses of ads the platform no longer runs (A1c): never a Stop candidate. */
+    public const STALE_STATUSES = ['ARCHIVED', 'DELETED', 'GONE'];
+
     public function __construct(
         private readonly WinnerScorer $scorer,
         private readonly AdsQuery $q,
@@ -37,7 +40,7 @@ final class StopAdvisor
         $days = (int) $f->from->diffInDays($f->to) + 1;
         $scored = collect($this->scorer->build($f, 'all'))->keyBy(fn (array $r) => $r['ad']['id']);
 
-        $sums = $this->q->sums($f, ['ad_id' => 'm.ad_id'], fn ($b) => $b->whereIn('ad.status', AdWriteService::ACTIVE_STATUSES))->keyBy(fn ($r) => (int) $r->ad_id);
+        $sums = $this->q->sums($f, ['ad_id' => 'm.ad_id'], fn ($b) => $this->notStale($b->whereIn('ad.status', AdWriteService::ACTIVE_STATUSES), 'ad.effective_status'))->keyBy(fn ($r) => (int) $r->ad_id);
         $needStop = $this->needStopMaterials($f);
 
         $reasons = [];
@@ -67,7 +70,7 @@ final class StopAdvisor
             return [];
         }
 
-        $ads = Ad::query()->with('account:id,name,platform')->whereIn('id', array_keys($reasons))->whereIn('status', AdWriteService::ACTIVE_STATUSES)->get()->keyBy('id');
+        $ads = $this->notStale(Ad::query()->with('account:id,name,platform')->whereIn('id', array_keys($reasons))->whereIn('status', AdWriteService::ACTIVE_STATUSES), 'effective_status')->get()->keyBy('id');
 
         $out = [];
         foreach ($reasons as $adId => $list) {
@@ -92,6 +95,20 @@ final class StopAdvisor
     }
 
     /**
+     * An ad the platform reports as archived, deleted or gone is never a Stop candidate, whatever its stale own status
+     * says (A1c, F-010).
+     *
+     * @template T of \Illuminate\Contracts\Database\Query\Builder
+     *
+     * @param  T  $q
+     * @return T
+     */
+    private function notStale($q, string $column)
+    {
+        return $q->where(fn ($w) => $w->whereNull($column)->orWhereNotIn($column, self::STALE_STATUSES));
+    }
+
+    /**
      * Linked ads of activated materials that are flagged need-stop, inside the filter's accounts.
      *
      * @return array<int, list<string>> ad id => material titles
@@ -105,7 +122,12 @@ final class StopAdvisor
             ->where('mat.status', 'activated')
             ->whereNotNull('mat.need_stop_at')
             ->whereIn('ad.status', AdWriteService::ACTIVE_STATUSES)
+            ->where(fn ($w) => $this->notStale($w, 'ad.effective_status'))
             ->select(['l.ad_id', 'mat.title'])->orderBy('mat.id');
+        if ($f->activeCampaignsOnly) {
+            $q->join('ad_campaigns as actv', 'actv.id', '=', 'ad.ad_campaign_id')
+                ->whereIn('actv.status', AdWriteService::ACTIVE_STATUSES);
+        }
         if ($f->accountIds !== null) {
             $q->whereIn('ad.ad_account_id', $f->accountIds);
         }

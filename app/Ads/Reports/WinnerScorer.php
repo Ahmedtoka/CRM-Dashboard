@@ -233,7 +233,7 @@ final class WinnerScorer
             $r[] = ['key' => 'real_orders', 'params' => ['orders' => $realOrders]];
         }
         if ($i['fatigue']['flag']) {
-            $r[] = ['key' => 'fatigue', 'params' => ['ctr_drop' => $i['fatigue']['ctr_drop_pct'], 'frequency' => $i['fatigue']['frequency']]];
+            $r[] = ['key' => 'fatigue', 'params' => ['ctr_drop' => $i['fatigue']['ctr_drop_pct']]];
         }
 
         return $r;

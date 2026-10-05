@@ -396,11 +396,43 @@ return [
             'tiktok' => env('CRM_ADS_TIKTOK_DRIVER', env('APP_ENV') === 'production' ? 'live' : 'fake'),
             'google' => env('CRM_ADS_GOOGLE_DRIVER', env('APP_ENV') === 'production' ? 'live' : 'fake'),
         ],
-        'meta' => ['graph_version' => env('META_ADS_GRAPH_VERSION', 'v23.0')],
+        'meta' => [
+            'graph_version' => env('META_ADS_GRAPH_VERSION', 'v23.0'),
+            // Sent on every insights call (ad and account level). ASSUMPTION until Phase 0 P10 confirms Ads Manager's setting:
+            // follow each ad set's own attribution setting, actions counted on the impression day.
+            'attribution' => ['use_unified_attribution_setting' => true, 'action_report_time' => 'impression'],
+        ],
         'tiktok' => ['base_url' => 'https://business-api.tiktok.com/open_api/v1.3'],
         'google' => ['base_url' => 'https://googleads.googleapis.com/v21', 'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN')],
         'tax_rate' => (float) env('CRM_ADS_TAX_RATE', 0.14),
         'backfill_days' => 90,
+        // A stale ad-day row is deleted only when the payload spend of that date is within max(this % of the
+        // account-level total, 1.00) of the account-level total (A1, F-050).
+        'control_tolerance_pct' => 0.5,
+        // First day ads history is kept for (Cairo day). Sync, backfill, discovery and reports never go before it.
+        'history_start' => env('CRM_ADS_HISTORY_START', '2026-09-01'),
+        // ads:health (A8): a sync silent for stale_after_hours is a warning, for critical_after_hours critical; a status
+        // is announced to the admins only once it has held for hold_down_minutes.
+        'health' => [
+            'stale_after_hours' => 3,
+            'critical_after_hours' => 6,
+            'hold_down_minutes' => 30,
+        ],
+        'sync' => [
+            // Quota admission (A5): a Meta read for an account is not sent while its busiest recorded usage of the
+            // last 15 minutes is at or above admission_pct; the job is retried later instead. Writes are never held.
+            'admission_enabled' => (bool) env('CRM_ADS_SYNC_ADMISSION', true),
+            'admission_pct' => 75,
+            // Queue of SyncAdAccount (on `redislong` when Redis). Set `adssync` only after the crm-adssync Supervisor
+            // program exists (deploy/cloudways/supervisor/crm-workers.conf); rollback = commercelong.
+            'queue' => env('CRM_ADS_SYNC_QUEUE', 'commercelong'),
+        ],
+        // Inbox attribution (A4): a chat order is credited to the latest ad referral at most this many days before it.
+        'inbox_window_days' => (int) env('CRM_ADS_INBOX_WINDOW_DAYS', 7),
+        // The ad referral was first stored on this day; inbox history is complete from max(this, history_start).
+        'chat_complete_from_floor' => '2026-09-25',
+        // Live writers outside production only touch these accounts (comma list of act_... in CRM_ADS_WRITE_SANDBOX_ACCOUNTS).
+        'write_sandbox_accounts' => array_values(array_filter(array_map('trim', explode(',', (string) env('CRM_ADS_WRITE_SANDBOX_ACCOUNTS', ''))))),
         'material_max_mb' => ['video' => 500, 'image' => 20],
         // Seconds a publish waits for another worker's upload of the same file before it is released and retried.
         'publish_upload_wait' => 60,

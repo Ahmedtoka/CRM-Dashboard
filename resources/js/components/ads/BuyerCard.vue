@@ -15,7 +15,7 @@ const { t, locale } = useI18n();
 const money = (v: number | null) => formatAdsMoney(v, locale.value, props.currency);
 
 const budgetPct = computed(() => props.card.budget_used_pct);
-const remaining = computed(() => (props.card.budget === null ? null : Math.max(0, props.card.budget - props.card.spend)));
+const remaining = computed(() => (props.card.budget === null || props.card.spend === null ? null : Math.max(0, props.card.budget - props.card.spend)));
 const overBudget = computed(() => (budgetPct.value ?? 0) > 100);
 const meetsTarget = computed(() => props.card.target_roas !== null && props.card.roas !== null && props.card.roas >= props.card.target_roas);
 const convRate = computed(() => (props.card.conversations > 0 ? props.card.conversations_ordered / props.card.conversations : null));

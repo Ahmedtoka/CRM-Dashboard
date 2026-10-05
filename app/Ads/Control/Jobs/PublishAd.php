@@ -3,6 +3,7 @@
 namespace App\Ads\Control\Jobs;
 
 use App\Ads\Control\PublicationLinker;
+use App\Ads\Control\WritableAccounts;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdPlatformWriter;
 use App\Ads\Platforms\AdsApiException;
@@ -13,6 +14,8 @@ use App\Ads\Platforms\Data\MediaRef;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
+use App\Ads\Platforms\WriteGuard;
+use App\Ads\Platforms\WriteRefused;
 use App\Ads\Sync\SyncAdAccount;
 use App\Models\AdAccount;
 use App\Models\AdPublication;
@@ -35,6 +38,10 @@ use Throwable;
  * error. Only when `ad_requested_at` is set (stamped by the writer right before the ad-create request goes out) can an ad
  * exist on the platform, and only then does the error warn that it "may already exist". A failure before that point
  * (thumbnail, cover, creative, a usage back-off: CreativeRejected) never carries the warning.
+ *
+ * The cache marks (`ads-publish-done:`, `ads-publish-running:`) are hints only: losing the cache (a flush, a deploy, a Redis
+ * restart) can never cause a second ad. The guard is the database: the compare-and-set to `creating` in run() and
+ * isFinished() on the row. Every error write goes through the model, which also releases the row's `open_key` (W2).
  */
 class PublishAd implements ShouldQueue
 {
@@ -132,11 +139,19 @@ class PublishAd implements ShouldQueue
             return true;
         }
 
+        // Switched off for writes after queueing (ads:writable): nothing is sent to the platform.
+        if (! WritableAccounts::allows($account)) {
+            $row->update(['status' => AdPublication::ERROR, 'error' => __('ads.errors.account_not_writable')]);
+
+            return true;
+        }
+
         $row->increment('attempts');
         $step = 'upload';
 
         try {
             $writer = $drivers->writer(AdPlatform::from($account->platform));
+            WriteGuard::check($account, $writer);
 
             $row->update(['status' => AdPublication::UPLOADING]);
             $cached = ((array) $row->file->platform_media)[(string) $account->id] ?? null;
@@ -173,6 +188,10 @@ class PublishAd implements ShouldQueue
                 posterDisk: $poster !== null ? (string) $row->file->disk : null, posterPath: $poster,
                 beforeAdRequest: fn () => $row->forceFill(['ad_requested_at' => now()])->save(),
             ));
+        } catch (WriteRefused $e) {
+            $row->update(['status' => AdPublication::ERROR, 'error' => __('ads.errors.'.$e->reason)]);
+
+            return true;
         } catch (LockTimeoutException) {
             // Another worker is still uploading this file for this account: wait for it, this is not a failure.
             if ($this->job && ! $this->job instanceof SyncJob) {

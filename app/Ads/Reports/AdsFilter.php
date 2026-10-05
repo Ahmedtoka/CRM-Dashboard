@@ -4,6 +4,7 @@ namespace App\Ads\Reports;
 
 use App\Ads\Access\AdsScope;
 use App\Ads\Platforms\AdPlatform;
+use App\Ads\Sync\HistoryWindow;
 use App\Enums\UserRole;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -32,6 +33,8 @@ final readonly class AdsFilter
         public ?int $buyerId = null,
         public ?array $accountIds = null,
         public ?int $restrictBuyerId = null,
+        public bool $clampedToHistory = false,
+        public bool $activeCampaignsOnly = false,
     ) {
         $f = CarbonImmutable::parse($from->toDateString(), self::TIMEZONE)->startOfDay();
         $t = CarbonImmutable::parse($to->toDateString(), self::TIMEZONE)->startOfDay();
@@ -51,6 +54,15 @@ final readonly class AdsFilter
         // conversation into PHP and build a daily series of thousands of days.
         if ($from->lessThan($to->subDays(self::MAX_DAYS - 1))) {
             $from = $to->subDays(self::MAX_DAYS - 1);
+        }
+        // Nothing before crm.ads.history_start is kept, so a report never starts earlier.
+        $start = HistoryWindow::start();
+        $clamped = $from->lessThan($start);
+        if ($clamped) {
+            $from = $start;
+            if ($to->lessThan($from)) {
+                $to = $from;
+            }
         }
 
         $platform = AdPlatform::tryFrom((string) $r->query('platform', ''))?->value;
@@ -73,7 +85,7 @@ final readonly class AdsFilter
             $buyerId = (int) $r->query('buyer');
         }
 
-        return new self($from, $to, $platform, $buyerId, $accountIds, $restrict);
+        return new self($from, $to, $platform, $buyerId, $accountIds, $restrict, $clamped, true);
     }
 
     /** @param  array<string, mixed>  $changes */
@@ -82,9 +94,16 @@ final readonly class AdsFilter
         $v = array_merge([
             'from' => $this->from, 'to' => $this->to, 'platform' => $this->platform, 'buyerId' => $this->buyerId,
             'accountIds' => $this->accountIds, 'restrictBuyerId' => $this->restrictBuyerId,
+            'clampedToHistory' => $this->clampedToHistory, 'activeCampaignsOnly' => $this->activeCampaignsOnly,
         ], $changes);
 
-        return new self($v['from'], $v['to'], $v['platform'], $v['buyerId'], $v['accountIds'], $v['restrictBuyerId']);
+        return new self($v['from'], $v['to'], $v['platform'], $v['buyerId'], $v['accountIds'], $v['restrictBuyerId'], $v['clampedToHistory'], $v['activeCampaignsOnly']);
+    }
+
+    /** The same filter counting every campaign's spend (paused, archived, deleted): used by totals (D1). */
+    public function allSpend(): self
+    {
+        return $this->activeCampaignsOnly ? $this->with(['activeCampaignsOnly' => false]) : $this;
     }
 
     /** True when the scope can never match anything (content users, unlinked buyers). */

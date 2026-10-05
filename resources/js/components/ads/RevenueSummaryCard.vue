@@ -10,7 +10,9 @@ const props = defineProps<{ summary: AdsRevenueSummary | null }>();
 
 const { t, locale } = useI18n();
 const money = (v: number | null) => formatAdsMoney(v, locale.value, props.summary?.currency ?? 'EGP');
-const signed = (v: number | null) => (v === null ? '—' : `${v > 0 ? '+' : ''}${money(v)}`);
+// Store and CRM order revenue is always EGP; the platform figures and the spend are in the account currency.
+const moneyEgp = (v: number | null) => formatAdsMoney(v, locale.value, 'EGP');
+const signed = (v: number | null, fmt: (x: number | null) => string = money) => (v === null ? '—' : `${v > 0 ? '+' : ''}${fmt(v)}`);
 const signedPct = (v: number | null) => (v === null ? '—' : `${v > 0 ? '+' : ''}${formatPct(v, locale.value, 1)}`);
 
 const columns = computed(() => {
@@ -21,7 +23,7 @@ const columns = computed(() => {
             key: 'store',
             title: t('ads.summary.store'),
             tip: t('ads.summary.store_tip'),
-            value: s.store ? money(s.store.revenue) : t('ads.summary.store_hidden'),
+            value: s.store ? moneyEgp(s.store.revenue) : t('ads.summary.store_hidden'),
             sub: s.store ? t('ads.summary.orders', { n: formatCount(s.store.orders, locale.value) }) : '',
             roas: s.roas.store,
             roasLabel: t('ads.summary.mer'),
@@ -31,7 +33,7 @@ const columns = computed(() => {
             key: 'crm',
             title: t('ads.summary.crm'),
             tip: t('ads.summary.crm_tip'),
-            value: money(s.crm.revenue),
+            value: moneyEgp(s.crm.revenue),
             sub: t('ads.summary.orders_chat', { n: formatQty(s.crm.orders, locale.value), chat: formatCount(s.crm.chat_orders, locale.value) }),
             roas: s.roas.crm,
             roasLabel: t('ads.kpi.roas'),
@@ -63,6 +65,8 @@ const columns = computed(() => {
             </p>
         </div>
 
+        <p v-if="summary.note === 'foreign_currency'" class="text-2xs text-muted-foreground">{{ t('ads.summary.foreign_currency_note') }}</p>
+
         <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div v-for="c in columns" :key="c.key" class="min-w-0 rounded-md border border-border px-3 py-2" :title="c.tip">
                 <p class="text-2xs font-medium text-muted-foreground">{{ c.title }}</p>
@@ -85,7 +89,7 @@ const columns = computed(() => {
                 :title="t('ads.summary.gap_crm_store_tip')"
             >
                 <dt class="text-muted-foreground">{{ t('ads.summary.gap_crm_store') }}</dt>
-                <dd class="font-semibold tabular-nums">{{ signed(summary.gaps.crm_vs_store) }} · {{ signedPct(summary.gaps.crm_vs_store_pct) }}</dd>
+                <dd class="font-semibold tabular-nums">{{ signed(summary.gaps.crm_vs_store, moneyEgp) }} · {{ signedPct(summary.gaps.crm_vs_store_pct) }}</dd>
             </div>
         </dl>
     </section>

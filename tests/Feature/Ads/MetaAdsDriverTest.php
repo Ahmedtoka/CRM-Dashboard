@@ -4,8 +4,11 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Meta\MetaAdsDriver;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
+use App\Ads\Platforms\TokenInvalid;
 use App\Ads\Sync\AdsSyncService;
+use App\Models\Ad;
 use App\Models\AdAccount;
+use App\Models\AdDailyMetric;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
@@ -95,7 +98,7 @@ it('raises a readable error when meta answers with an error', function () {
 
     expect(fn () => app(MetaAdsDriver::class)->accounts(metaConnection()))
         ->toThrow(AdsApiException::class, 'Invalid OAuth access token.');
-    expect(app(MetaAdsDriver::class)->test(metaConnection()))->toContain('Invalid OAuth access token.');
+    expect(fn () => app(MetaAdsDriver::class)->test(metaConnection()))->toThrow(TokenInvalid::class, 'Invalid OAuth access token.');
 });
 
 it('never leaks the access token in connection errors', function () {
@@ -125,13 +128,20 @@ it('fails loudly instead of truncating after too many pages', function () {
     Http::assertNotSent(fn ($r) => str_contains($r->url(), 'SECRET123'));
 });
 
-it('throws RateLimited when usage is above 85 percent', function () {
+it('keeps the rows read when usage is above 85 percent and stops paging with a warning', function () {
     Http::preventStrayRequests();
-    Http::fake(['graph.facebook.com/*' => Http::response(['data' => []], 200, [
+    Http::fake(['graph.facebook.com/*' => Http::response([
+        'data' => [['id' => 'act_1', 'name' => 'One', 'currency' => 'EGP', 'account_status' => 1]],
+        'paging' => ['next' => 'https://graph.facebook.com/v23.0/me/adaccounts?after=X'],
+    ], 200, [
         'x-business-use-case-usage' => json_encode(['123' => [['call_count' => 90, 'total_time' => 10, 'total_cputime' => 5]]]),
     ])]);
+    $driver = app(MetaAdsDriver::class);
 
-    expect(fn () => app(MetaAdsDriver::class)->accounts(metaConnection()))->toThrow(RateLimited::class);
+    expect($driver->accounts(metaConnection()))->toHaveCount(1)
+        ->and($driver->drainWarnings())->toBe(['Ad accounts: stopped paging at 90% usage (1 rows kept)'])
+        ->and($driver->drainWarnings())->toBe([]);
+    Http::assertSentCount(1);
 });
 
 it('fetches creative media in batches', function () {
@@ -203,4 +213,97 @@ it('treats the ad-account call limit (80004) as a rate limit, so the job comes b
     Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => 'There have been too many calls to this ad-account. Wait a bit and try again.', 'code' => 80004]], 400)]);
 
     expect(fn () => app(MetaAdsDriver::class)->accounts(metaConnection()))->toThrow(RateLimited::class);
+});
+
+/** Insights rows with link clicks and a messaging action, as Meta answers them (A1). */
+function insightsWithMessaging(): array
+{
+    return ['data' => [[
+        'ad_id' => 'ad_9', 'ad_name' => 'Archived ad', 'campaign_id' => 'c9', 'campaign_name' => 'Old', 'adset_id' => 's9', 'adset_name' => 'Old set',
+        'spend' => '80', 'impressions' => '1000', 'clicks' => '30', 'inline_link_clicks' => '12', 'reach' => '900',
+        'date_start' => '2026-09-03', 'date_stop' => '2026-09-03',
+        'actions' => [
+            ['action_type' => 'onsite_conversion.messaging_conversation_started_7d', 'value' => '3'],
+            ['action_type' => 'purchase', 'value' => '1'],
+        ],
+        'action_values' => [['action_type' => 'purchase', 'value' => '450']],
+    ]]];
+}
+
+it('asks insights for every status, archived and deleted included, with the explicit attribution setting', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/v23.0/act_1/insights*' => Http::response(['data' => []])]);
+    $acc = AdAccount::factory()->meta()->create(['external_id' => 'act_1', 'connection_id' => metaConnection()->id]);
+
+    app(MetaAdsDriver::class)->dailyMetrics($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-03'));
+
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), 'act_1/insights')) {
+            return false;
+        }
+        $filtering = json_decode($request['filtering'], true);
+
+        return $request['level'] === 'ad'
+            && (string) $request['time_increment'] === '1'
+            && json_decode($request['time_range'], true) === ['since' => '2026-09-01', 'until' => '2026-09-03']
+            && $filtering === [['field' => 'ad.effective_status', 'operator' => 'IN', 'value' => MetaAdsDriver::INSIGHTS_STATUSES]]
+            && in_array('ARCHIVED', $filtering[0]['value'], true) && in_array('DELETED', $filtering[0]['value'], true)
+            && $request['use_unified_attribution_setting'] === 'true'
+            && $request['action_report_time'] === 'impression'
+            && str_contains($request['fields'], 'inline_link_clicks');
+    });
+    Http::assertSentCount(1);
+});
+
+it('lists the twelve insights statuses in the agreed order', function () {
+    expect(MetaAdsDriver::INSIGHTS_STATUSES)->toBe(['ACTIVE', 'PAUSED', 'DELETED', 'PENDING_REVIEW', 'DISAPPROVED', 'PREAPPROVED', 'PENDING_BILLING_INFO', 'CAMPAIGN_PAUSED', 'ARCHIVED', 'ADSET_PAUSED', 'IN_PROCESS', 'WITH_ISSUES']);
+});
+
+it('takes the attribution params from config, not from code', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/v23.0/act_1/insights*' => Http::response(['data' => []])]);
+    config(['crm.ads.meta.attribution' => ['action_attribution_windows' => json_encode(['7d_click', '1d_view']), 'action_report_time' => 'conversion']]);
+    $acc = AdAccount::factory()->meta()->create(['external_id' => 'act_1', 'connection_id' => metaConnection()->id]);
+
+    app(MetaAdsDriver::class)->dailyMetrics($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-01'));
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'act_1/insights')
+        && $r['action_report_time'] === 'conversion'
+        && json_decode($r['action_attribution_windows'], true) === ['7d_click', '1d_view']
+        && ! isset($r->data()['use_unified_attribution_setting']));
+});
+
+it('maps link clicks and messaging conversations started', function () {
+    Http::preventStrayRequests();
+    Http::fake(['graph.facebook.com/v23.0/act_1/insights*' => Http::response(insightsWithMessaging())]);
+    $acc = AdAccount::factory()->meta()->create(['external_id' => 'act_1', 'connection_id' => metaConnection()->id]);
+
+    $rows = app(MetaAdsDriver::class)->dailyMetrics($acc, CarbonImmutable::parse('2026-09-03'), CarbonImmutable::parse('2026-09-03'));
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]->linkClicks)->toBe(12)
+        ->and($rows[0]->msgConversations)->toBe(3)
+        ->and($rows[0]->clicks)->toBe(30)
+        ->and($rows[0]->purchases)->toBe(1.0);
+});
+
+it('stores an archived ad that is not in the ad list as a minimal ad with its link clicks and messaging', function () {
+    Http::preventStrayRequests();
+    Http::fake([
+        'graph.facebook.com/v23.0/act_1/ads*' => Http::response(['data' => []]),
+        'graph.facebook.com/v23.0/act_1/insights*' => Http::response(insightsWithMessaging()),
+        'graph.facebook.com/v23.0*' => Http::response(['data' => []]),
+    ]);
+    config(['crm.ads.drivers.meta' => 'live']);
+    $acc = AdAccount::factory()->meta()->create(['external_id' => 'act_1', 'connection_id' => metaConnection()->id]);
+
+    $run = app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-03'), CarbonImmutable::parse('2026-09-03'));
+
+    $ad = Ad::where('external_id', 'ad_9')->firstOrFail();
+    $row = AdDailyMetric::where('ad_id', $ad->id)->firstOrFail();
+    expect($run->status)->toBe('ok')
+        ->and($ad->status)->toBe('unknown')
+        ->and((int) $row->link_clicks)->toBe(12)
+        ->and((int) $row->msg_conversations)->toBe(3)
+        ->and((float) $row->spend)->toBe(80.0);
 });

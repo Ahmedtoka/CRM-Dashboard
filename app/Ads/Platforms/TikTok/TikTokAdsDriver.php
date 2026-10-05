@@ -84,10 +84,36 @@ class TikTokAdsDriver implements AdPlatformDriver
                 campaignName: $m['campaign_name'] ?? null,
                 adSetId: isset($m['adgroup_id']) ? (string) $m['adgroup_id'] : null,
                 adSetName: $m['adgroup_name'] ?? null,
+                // TikTok's clicks are destination clicks; no extra field is requested for this.
+                linkClicks: isset($m['clicks']) ? (int) $m['clicks'] : 0,
             );
         }
 
         return $out;
+    }
+
+    /** No account-level control until this platform is live (null = no control); no request is made. */
+    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): ?array
+    {
+        return null;
+    }
+
+    /** No status sweep until this platform is live: null lists, so nothing is ever marked GONE here. */
+    public function statuses(AdAccount $a): array
+    {
+        return ['ads' => null, 'campaigns' => null];
+    }
+
+    public function admit(AdAccount $a): void {}
+
+    public function drainWarnings(): array
+    {
+        return [];
+    }
+
+    public function campaignStatuses(AdAccount $a): ?array
+    {
+        return null;
     }
 
     public function creativeMedia(AdAccount $a, array $adExternalIds): array

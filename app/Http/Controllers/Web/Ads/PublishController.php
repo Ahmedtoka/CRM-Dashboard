@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Web\Ads;
 use App\Ads\Access\AdsScope;
 use App\Ads\AdsSettings;
 use App\Ads\Control\AdWriteService;
+use App\Ads\Control\DuplicatePublication;
 use App\Ads\Control\PublishService;
+use App\Ads\Control\WritableAccounts;
 use App\Ads\Materials\MaterialService;
 use App\Ads\Naming;
 use App\Ads\Platforms\AdPlatform;
@@ -13,6 +15,8 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
+use App\Ads\Platforms\WriteGuard;
+use App\Ads\Platforms\WriteRefused;
 use App\Http\Controllers\Controller;
 use App\Models\AdAccount;
 use App\Models\AdMaterial;
@@ -20,6 +24,7 @@ use App\Models\AdPublication;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /** Publish a material as paused ads: the dialog's live options, the publish itself, and a material's publication list. */
 class PublishController extends Controller
@@ -52,12 +57,16 @@ class PublishController extends Controller
         }
 
         $account = AdAccount::query()->findOrFail((int) $request->query('account'));
-        abort_unless($writes->canWrite($user, $account) && $account->platform !== AdPlatform::Google->value, 403);
+        abort_unless($writes->inScope($user, $account) && $account->platform !== AdPlatform::Google->value, 403);
+        $this->assertWritable($account);
 
         try {
             $writer = $drivers->writer(AdPlatform::from($account->platform));
+            WriteGuard::check($account, $writer);
             $campaigns = $writer->liveCampaigns($account);
             $identities = $writer->identities($account);
+        } catch (WriteRefused $e) {
+            return response()->json(['message' => __('ads.errors.'.$e->reason)], 422);
         } catch (AdsApiException $e) {
             $message = $e instanceof RateLimited ? __('ads.errors.rate_limited') : (trim(SecretScrubber::scrub($e->getMessage())) ?: __('ads.errors.failed'));
 
@@ -76,12 +85,21 @@ class PublishController extends Controller
         ]);
     }
 
+    /** An owner choice (ads:writable), not a permission: 422 with a readable reason. */
+    private function assertWritable(AdAccount $account): void
+    {
+        if (! WritableAccounts::allows($account)) {
+            throw ValidationException::withMessages(['account_id' => __('ads.errors.account_not_writable')]);
+        }
+    }
+
     public function publish(Request $request, AdMaterial $material, AdWriteService $writes, PublishService $publish): JsonResponse
     {
         $user = $request->user();
         abort_unless(MaterialService::canOperate($user), 403);
 
         $data = $request->validate([
+            'allow_duplicate' => ['nullable', 'boolean'],
             'account_id' => ['required', 'integer', Rule::exists('ad_accounts', 'id')],
             'campaign_id' => ['required', 'string', 'max:255'],
             'campaign_name' => ['nullable', 'string', 'max:500'],
@@ -100,9 +118,39 @@ class PublishController extends Controller
         ]);
 
         $account = AdAccount::query()->findOrFail($data['account_id']);
-        abort_unless($writes->canWrite($user, $account) && $account->platform !== AdPlatform::Google->value, 403);
+        abort_unless($writes->inScope($user, $account) && $account->platform !== AdPlatform::Google->value, 403);
+        $this->assertWritable($account);
+        try {
+            WriteGuard::check($account, app(DriverFactory::class)->writer(AdPlatform::from($account->platform)));
+        } catch (WriteRefused $e) {
+            throw ValidationException::withMessages(['account_id' => __('ads.errors.'.$e->reason)]);
+        }
 
-        $rows = $publish->publish($user, $material->load('product'), $account, $data);
+        $data['captions'] = array_map(fn (array $c) => ['headline' => trim($c['headline']), 'primary_text' => trim($c['primary_text']), 'cta' => $c['cta']], array_values($data['captions']));
+        $signatures = array_map(fn (array $c) => $c['headline'].'
+'.$c['primary_text'].'
+'.$c['cta'], $data['captions']);
+        if (count(array_unique($signatures)) < count($signatures)) {
+            throw ValidationException::withMessages(['captions' => __('ads.publish.duplicate_captions')]);
+        }
+
+        $key = (string) $request->header('Idempotency-Key', '');
+        if (! preg_match('/^[A-Za-z0-9-]{8,64}$/', $key)) {
+            throw ValidationException::withMessages(['idempotency_key' => __('ads.publish.idempotency_key_required')]);
+        }
+
+        // Same user + same key: a double click or a retry gets the first answer and nothing new is queued.
+        $rows = $publish->replay($user, $key);
+        if ($rows === null) {
+            try {
+                $rows = $publish->publish($user, $material->load('product'), $account, $data, $key, (bool) ($data['allow_duplicate'] ?? false));
+            } catch (DuplicatePublication $e) {
+                return response()->json([
+                    'code' => 'duplicate_in_flight', 'message' => $e->getMessage(),
+                    'publications' => $e->existing->map(fn (AdPublication $p) => self::row($p->setRelation('account', $account)))->values()->all(),
+                ], 409);
+            }
+        }
 
         return response()->json([
             'ok' => true,

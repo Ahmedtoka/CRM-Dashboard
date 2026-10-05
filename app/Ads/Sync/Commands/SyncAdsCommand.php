@@ -5,11 +5,14 @@ namespace App\Ads\Sync\Commands;
 use App\Ads\Attribution\OrderAttribution;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Sync\AdsSyncService;
+use App\Ads\Sync\ConnectionHealth;
+use App\Ads\Sync\HistoryWindow;
 use App\Ads\Sync\SyncAdAccount;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class SyncAdsCommand extends Command
@@ -17,6 +20,9 @@ class SyncAdsCommand extends Command
     protected $signature = 'ads:sync {--account= : Ad account id} {--platform= : meta|tiktok|google} {--days=3} {--now : Run synchronously, no queue}';
 
     protected $description = 'Sync ads and daily metrics for the active ad accounts';
+
+    /** A pending hourly sync older than this is taken over (its job was lost). */
+    public const PENDING_HOURS = 2;
 
     public function handle(AdsSyncService $sync, OrderAttribution $attribution): int
     {
@@ -33,15 +39,49 @@ class SyncAdsCommand extends Command
             ->get();
 
         foreach ($accounts as $a) {
+            // A dead token is not retried every hour: one probe per connection per hour (the first account is it).
+            if ($a->connection !== null && ! ConnectionHealth::claimProbe($a->connection)) {
+                $this->line("Skipped {$a->name}: the connection needs a new token");
+
+                continue;
+            }
             if (! $this->option('now')) {
-                SyncAdAccount::dispatch($a->id, $days, 'recent', 'schedule');
+                if ($days >= AdsSyncService::DEEP_DAYS) {
+                    // Nightly deep sync: the full ad list, the status sweep; its own unique lock.
+                    SyncAdAccount::dispatch($a->id, $days, 'recent', 'schedule');
+
+                    continue;
+                }
+                // Hourly: no ad list (nightly only), and at most one pending job per account (A5).
+                if (! $this->claimPending($a)) {
+                    $this->line("Skipped {$a->name}: a sync is already pending");
+
+                    continue;
+                }
+                try {
+                    SyncAdAccount::dispatch($a->id, $days, 'recent', 'schedule', null, false);
+                } catch (Throwable $e) {
+                    // Nothing was queued: undo the marker so the next hour tries again.
+                    DB::table('ad_accounts')->where('id', $a->id)->update(['sync_pending_since' => null]);
+                    $this->warn("Failed to queue {$a->name}: ".AdsSyncService::scrub($e->getMessage()));
+                    $failed++;
+                }
 
                 continue;
             }
             try {
                 $to = CarbonImmutable::now('Africa/Cairo')->startOfDay();
-                $run = $sync->syncAccount($a, $to->subDays($days - 1), $to, 'recent', true, 'manual');
-                if ($run->status === 'error') {
+                $window = HistoryWindow::clamp($to->subDays($days - 1), $to);
+                if ($window === null) {
+                    $this->warn("Skipped {$a->name}: window is before the history start");
+
+                    continue;
+                }
+                $run = $sync->syncAccount($a, $window[0], $window[1], 'recent', true, 'manual');
+                if (AdsSyncService::isBusy($run)) {
+                    $this->warn("Skipped {$a->name}: another sync of this account is running");
+                    $failed++;
+                } elseif ($run->status === 'error') {
                     $this->warn("Failed {$a->name}: ".AdsSyncService::scrub((string) $run->error));
                     $failed++;
                 } else {
@@ -56,9 +96,24 @@ class SyncAdsCommand extends Command
             $this->attributeOrders($attribution);
         }
 
-        $this->info(($this->option('now') ? 'Synced ' : 'Queued ').($accounts->count() - ($this->option('now') ? $failed : 0)).' account(s).');
+        // $failed counts failed syncs (--now) or failed dispatches (queued): neither is in the summary.
+        $this->info(($this->option('now') ? 'Synced ' : 'Queued ').($accounts->count() - $failed).' account(s).');
 
         return $failed > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * CAS on ad_accounts.sync_pending_since: true for the one caller that marks the account pending. A marker older
+     * than PENDING_HOURS is taken over (its job was lost: a live job refreshes it on every attempt and release);
+     * ads:sweep-stuck-runs also clears those.
+     */
+    private function claimPending(AdAccount $a): bool
+    {
+        $now = now();
+
+        return DB::table('ad_accounts')->where('id', $a->id)
+            ->where(fn ($q) => $q->whereNull('sync_pending_since')->orWhere('sync_pending_since', '<', $now->copy()->subHours(self::PENDING_HOURS)))
+            ->update(['sync_pending_since' => $now]) === 1;
     }
 
     /** Best effort: an attribution failure must not fail the sync. */
@@ -75,7 +130,7 @@ class SyncAdsCommand extends Command
     /** Nightly deep sync: pick up newly granted ad accounts. A failure is warned (and recorded on the connection), not fatal. */
     private function discoverAccounts(AdsSyncService $sync): void
     {
-        $connections = AdPlatformConnection::query()->where('status', '!=', 'disabled')
+        $connections = AdPlatformConnection::query()->whereNotIn('status', ['disabled', 'needs_reconnect'])
             ->when($this->option('platform'), fn ($q, $p) => $q->where('platform', $p))
             ->when($this->option('account'), fn ($q, $id) => $q->whereIn('id', AdAccount::whereKey($id)->select('connection_id')))
             ->get();

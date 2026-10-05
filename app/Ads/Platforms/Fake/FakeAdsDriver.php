@@ -5,6 +5,7 @@ namespace App\Ads\Platforms\Fake;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdPlatformDriver;
 use App\Ads\Platforms\AdPlatformWriter;
+use App\Ads\Platforms\Data\AccountDailyTotal;
 use App\Ads\Platforms\Data\AccountInfo;
 use App\Ads\Platforms\Data\AdDraft;
 use App\Ads\Platforms\Data\AdRow;
@@ -95,14 +96,68 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
                 // Each ad has its own quality (ROAS roughly 1 to 4.5), so winners and losers both show in demos.
                 $quality = [0.35, 0.6, 0.85, 1.0, 1.2, 1.5][crc32($ad['id']) % 6];
                 $purchases = max(0, round($spend / 150 * $quality + $rng->getInt(-10, 10) / 10, 0));
+                // Drawn after the older fields so their seeded values stay the same.
+                $linkClicks = (int) round($clicks * $rng->getInt(60, 90) / 100);
+                $msgConversations = (int) round($linkClicks * $rng->getInt(0, 15) / 100);
                 $out[] = new DailyAdMetric(
                     adExternalId: $ad['id'], date: $day->toDateString(),
                     spend: $spend, impressions: $impressions, clicks: $clicks, reach: $reach,
                     purchases: (float) $purchases, purchaseValue: (float) ($purchases * 450),
                     adName: $ad['name'], campaignId: $ad['campaign_id'], campaignName: $ad['campaign_name'],
                     adSetId: $ad['adset_id'], adSetName: $ad['adset_name'],
+                    linkClicks: $linkClicks, msgConversations: $msgConversations,
                 );
             }
+        }
+
+        return $out;
+    }
+
+    /** The control is the sum of the fake ad rows, so a fake sync always agrees with itself. */
+    public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): ?array
+    {
+        $days = [];
+        foreach ($this->dailyMetrics($a, $from, $to) as $m) {
+            $date = substr($m->date, 0, 10);
+            $d = $days[$date] ?? ['spend' => 0.0, 'impressions' => 0, 'purchases' => 0.0, 'value' => 0.0];
+            $days[$date] = [
+                'spend' => $d['spend'] + $m->spend, 'impressions' => $d['impressions'] + $m->impressions,
+                'purchases' => $d['purchases'] + $m->purchases, 'value' => $d['value'] + $m->purchaseValue,
+            ];
+        }
+        ksort($days);
+        $out = [];
+        foreach ($days as $date => $d) {
+            $out[] = new AccountDailyTotal((string) $date, round($d['spend'], 2), $d['impressions'], $d['purchases'], round($d['value'], 2), $a->currency ?: 'EGP');
+        }
+
+        return $out;
+    }
+
+    /** Fake ads never archive; every fake campaign is listed as active. */
+    public function statuses(AdAccount $a): array
+    {
+        $campaigns = [];
+        foreach ($this->structure($a) as $ad) {
+            $campaigns[(string) $ad['campaign_id']] = ['name' => (string) $ad['campaign_name'], 'status' => 'ACTIVE', 'effective_status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'];
+        }
+
+        return ['ads' => [], 'campaigns' => $campaigns];
+    }
+
+    /** Every fake campaign is active. */
+    public function admit(AdAccount $a): void {}
+
+    public function drainWarnings(): array
+    {
+        return [];
+    }
+
+    public function campaignStatuses(AdAccount $a): ?array
+    {
+        $out = [];
+        foreach ($this->structure($a) as $ad) {
+            $out[(string) $ad['campaign_id']] = ['status' => 'ACTIVE', 'effective_status' => 'ACTIVE'];
         }
 
         return $out;

@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Ads\AdsSettings;
+use App\Ads\Health\Commands\GateCommand;
+use App\Ads\Health\DataHealth;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\AdsOverview;
@@ -33,6 +36,22 @@ trait BuildsAdsPages
             'buyers' => $this->buyerOptions($user),
             'platforms' => $this->platformValues(),
             'currency' => app(AdsOverview::class)->currency($f),
+            ...$this->bannerProps($f),
+        ];
+    }
+
+    /**
+     * What the data-health banner needs: the account reasons for this filter, whether the Phase A gate is still open and
+     * whether the range was cut at the history start.
+     *
+     * @return array{data_health: array{reasons: list<array{reason: string, accounts: list<string>, more: int}>}, numbers_under_review: bool, clamped_to_history: bool}
+     */
+    protected function bannerProps(AdsFilter $f): array
+    {
+        return [
+            'data_health' => app(DataHealth::class)->forFilter($f),
+            'numbers_under_review' => app(AdsSettings::class)->get(GateCommand::KEY) === null,
+            'clamped_to_history' => $f->clampedToHistory,
         ];
     }
 

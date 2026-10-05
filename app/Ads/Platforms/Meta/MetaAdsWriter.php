@@ -12,6 +12,7 @@ use App\Ads\Platforms\Data\MediaRef;
 use App\Ads\Platforms\RateLimited;
 use App\Models\AdAccount;
 use App\Models\AdMaterialFile;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -311,7 +312,11 @@ class MetaAdsWriter implements AdPlatformWriter
 
     private function token(AdAccount $a): string
     {
-        $token = $a->connection->credentials['access_token'] ?? null;
+        try {
+            $token = $a->connection->credentials['access_token'] ?? null;
+        } catch (DecryptException) {
+            throw new AdsApiException('credentials unreadable, re-enter the token');
+        }
         if (! $token) {
             throw new AdsApiException('Meta access token is missing.');
         }

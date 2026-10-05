@@ -8,6 +8,8 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
+use App\Ads\Platforms\WriteGuard;
+use App\Ads\Platforms\WriteRefused;
 use App\Ads\Reports\AdsFilter;
 use App\Models\Ad;
 use App\Models\AdAccount;
@@ -55,6 +57,14 @@ final class AdWriteService
         return $this->canWriteMany($u, [$a])[$a->id];
     }
 
+    /** Scope only: is this account one the user may act on (ignores the writable-accounts setting). */
+    public function inScope(User $u, AdAccount $a): bool
+    {
+        $today = $this->todayIds($u);
+
+        return (bool) $a->is_active && ($today === null || in_array($a->id, $today, true));
+    }
+
     /**
      * canWrite for many accounts with the buyer's assignments for today read once.
      *
@@ -64,12 +74,24 @@ final class AdWriteService
     public function canWriteMany(User $u, iterable $accounts): array
     {
         $today = $this->todayIds($u);
+        $list = WritableAccounts::list();
         $out = [];
         foreach ($accounts as $a) {
-            $out[$a->id] = (bool) $a->is_active && ($today === null || in_array($a->id, $today, true));
+            $out[$a->id] = (bool) $a->is_active && ($today === null || in_array($a->id, $today, true)) && WritableAccounts::allowsIn($a, $list);
         }
 
         return $out;
+    }
+
+    /**
+     * Levels the user may Run / Stop at. Interim rule until B2's users.ads_authority: Ads authority = admin only, so an
+     * admin acts at every level and everyone else (buyers, supervisors) at ad level only (W1, D4).
+     *
+     * @return list<'campaign'|'adset'|'ad'>
+     */
+    public function allowedLevels(User $u): array
+    {
+        return $u->isAdmin() ? self::LEVELS : ['ad'];
     }
 
     /**
@@ -81,11 +103,32 @@ final class AdWriteService
      */
     public function setStatus(User $u, AdAccount $a, string $level, string $externalId, string $status, ?string $reason): AdAction
     {
-        if (! $this->canWrite($u, $a)) {
+        if (! $this->inScope($u, $a)) {
             throw new AuthorizationException(__('ads.errors.out_of_scope'));
+        }
+        if (in_array($level, self::LEVELS, true) && ! in_array($level, $this->allowedLevels($u), true)) {
+            $row = $this->find($a, $level, $externalId);
+            AdAction::create([
+                'user_id' => $u->id, 'platform' => $a->platform, 'ad_account_id' => $a->id, 'account_name' => $a->name, 'level' => $level, 'external_id' => $externalId,
+                'name' => mb_substr((string) $row?->name, 0, 500), 'from_status' => $row?->status, 'to_status' => strtoupper($status),
+                'reason' => $reason !== null && trim($reason) !== '' ? trim($reason) : null, 'result' => AdAction::ERROR, 'error' => 'level_not_allowed',
+            ]);
+
+            throw ValidationException::withMessages(['status' => __('ads.errors.'.$level.'_level_not_allowed')]);
         }
         if (! in_array($level, self::LEVELS, true) || ! in_array($status, self::STATUSES, true)) {
             throw ValidationException::withMessages(['status' => __('ads.errors.bad_request')]);
+        }
+        if (! WritableAccounts::allows($a)) {
+            // An owner choice (ads:writable), so Stop is not exempt. Logged like any refused attempt.
+            $row = $this->find($a, $level, $externalId);
+            AdAction::create([
+                'user_id' => $u->id, 'platform' => $a->platform, 'ad_account_id' => $a->id, 'account_name' => $a->name, 'level' => $level, 'external_id' => $externalId,
+                'name' => mb_substr((string) $row?->name, 0, 500), 'from_status' => $row?->status, 'to_status' => strtoupper($status),
+                'reason' => $reason !== null && trim($reason) !== '' ? trim($reason) : null, 'result' => AdAction::ERROR, 'error' => 'account_not_writable',
+            ]);
+
+            throw ValidationException::withMessages(['status' => __('ads.errors.account_not_writable')]);
         }
 
         $row = $this->find($a, $level, $externalId);
@@ -103,7 +146,13 @@ final class AdWriteService
         ];
 
         try {
-            $this->drivers->writer(AdPlatform::from($a->platform))->setStatus($a, $level, $externalId, $status);
+            $writer = $this->drivers->writer(AdPlatform::from($a->platform));
+            WriteGuard::check($a, $writer);
+            $writer->setStatus($a, $level, $externalId, $status);
+        } catch (WriteRefused $e) {
+            AdAction::create($log + ['result' => AdAction::ERROR, 'error' => $e->reason]);
+
+            throw ValidationException::withMessages(['status' => __('ads.errors.'.$e->reason)]);
         } catch (Throwable $e) {
             $known = $e instanceof AdsApiException;
             $raw = SecretScrubber::scrub($e->getMessage());

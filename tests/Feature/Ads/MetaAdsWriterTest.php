@@ -367,12 +367,12 @@ it('keeps uploading chunks when a transfer reports high usage, and returns the c
     expect(app(MetaAdsWriter::class)->createPausedAd($acc->refresh(), draft(new MediaRef('image', 'h', true))))->toBe('7701');
 });
 
-it('still throws RateLimited on a read answered with high usage', function () {
+it('returns the rows of a read answered with high usage instead of throwing them away', function () {
     Http::preventStrayRequests();
     Http::fake(['graph.facebook.com/*' => Http::response(['data' => []], 200, ['x-business-use-case-usage' => json_encode(['1' => [['call_count' => 95]]])])]);
 
-    app(MetaAdsWriter::class)->liveCampaigns(writerAccount());
-})->throws(RateLimited::class);
+    expect(app(MetaAdsWriter::class)->liveCampaigns(writerAccount()))->toBe([]);
+});
 
 it('throws a readable error when Meta failed to process the video', function () {
     Http::preventStrayRequests();

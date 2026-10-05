@@ -45,11 +45,24 @@ export interface AdsDerived {
     cpc: number | null;
 }
 
-export interface AdsTotals extends AdsDerived {
+/** Money fields are null when the filtered accounts mix currencies (AdsOverview, A9). */
+export interface AdsTotals extends Omit<AdsDerived, 'spend' | 'spend_tax' | 'purchase_value'> {
+    spend: number | null;
+    spend_tax: number | null;
+    purchase_value: number | null;
+    mixed_currencies: boolean;
     /** Share (0..1) of the spend that went to loser-tier ads; null without spend. */
     losers_spend_share: number | null;
+    /** Spend of campaigns that are not active (paused, archived, deleted); already inside `spend`. */
+    spend_outside_active: number | null;
+    /** Where spend, purchase value and ROAS come from: the account-level control or the sum of ads. */
+    source: 'account' | 'mixed' | 'ads';
+    /** Control spend minus the sum of ads (Meta no longer itemises it by ad); null when source is 'ads'. */
+    itemised_gap: number | null;
+    /** none: within tolerance; unitemised: control above ads; updating: control below ads (platform still settling). */
+    gap_state: 'none' | 'unitemised' | 'updating';
     real_orders: number;
-    real_revenue: number;
+    real_revenue: number | null;
     real_roas: number | null;
     conversations: number;
     conversations_ordered: number;
@@ -95,6 +108,7 @@ export interface AdsTopAccountRow {
     name: string;
     external_id: string;
     platform: AdPlatformValue;
+    currency: string;
     buyer: string | null;
     spend: number;
     spend_tax: number;
@@ -107,11 +121,39 @@ export interface AdsTopAccountRow {
 
 export interface AdsSync {
     last_synced_at: string | null;
+    /** The active in-scope account synced longest ago (never synced sorts first); null when no account is in scope. */
+    oldest: { account: string; last_synced_at: string | null } | null;
     errors: { account: string; error: string }[];
 }
 
+/** One data-health reason for the accounts of the current filter (DataHealth::forFilter). */
+export interface AdsDataHealthReason {
+    reason: 'reconnect' | 'stale' | 'read_only' | 'incomplete' | 'gap' | 'timezone';
+    /** For `incomplete`: the accounts never judged yet (at most three names). */
+    unverified?: string[];
+    /** For `incomplete`: never-judged accounts beyond the three named. */
+    unverified_more?: number;
+    /** At most three account names. */
+    accounts: string[];
+    /** Accounts beyond the three named. */
+    more: number;
+}
+
+export interface AdsDataHealth {
+    reasons: AdsDataHealthReason[];
+}
+
+/** BuildsAdsPages::bannerProps: what the data-health banner shows. */
+export interface AdsBannerProps {
+    data_health: AdsDataHealth;
+    /** True until the owner passes the Phase A gate (ads:gate --pass). */
+    numbers_under_review: boolean;
+    /** The range was cut at the history start. */
+    clamped_to_history: boolean;
+}
+
 /** BuildsAdsPages::commonProps — on every report page. `buyers` is empty for media buyers. */
-export interface AdsCommonProps {
+export interface AdsCommonProps extends AdsBannerProps {
     buyers: AdsOption[];
     platforms: AdPlatformValue[];
     currency: string;
@@ -120,11 +162,14 @@ export interface AdsCommonProps {
 /** RevenueSummary::build; `store` is null for media buyers. */
 export interface AdsRevenueSummary {
     currency: string;
-    spend: number;
-    spend_tax: number;
-    store: { orders: number; revenue: number } | null;
-    crm: { orders: number; revenue: number; chat_orders: number };
-    platform: { purchases: number; revenue: number };
+    /** Set when the one currency in scope is not EGP: store and CRM ROAS are not comparable. */
+    note?: 'foreign_currency' | null;
+    mixed_currencies: boolean;
+    spend: number | null;
+    spend_tax: number | null;
+    store: { orders: number; revenue: number | null } | null;
+    crm: { orders: number; revenue: number | null; chat_orders: number };
+    platform: { purchases: number; revenue: number | null };
     roas: { store: number | null; crm: number | null; platform: number | null };
     gaps: { platform_vs_crm: number | null; crm_vs_store: number | null; platform_vs_crm_pct: number | null; crm_vs_store_pct: number | null };
 }
@@ -143,15 +188,17 @@ export interface BuyerCardData {
     name: string;
     color: string | null;
     accounts: { id: number; name: string; platform: AdPlatformValue }[];
-    spend: number;
-    spend_tax: number;
-    purchase_value: number;
+    spend: number | null;
+    spend_tax: number | null;
+    purchase_value: number | null;
     roas: number | null;
     purchases: number;
     cpa: number | null;
     ctr: number | null;
     real_orders: number;
-    real_revenue: number;
+    real_revenue: number | null;
+    /** True when the buyer's accounts have several currencies: every money figure is then null. */
+    mixed_currencies?: boolean;
     real_roas: number | null;
     conversations: number;
     conversations_ordered: number;
@@ -381,7 +428,7 @@ export interface AdsWinnersProps extends AdsCommonProps {
 
 /* ---- Setup pages: AccountController::index and BuyerSetupController::index ---- */
 
-export type AdConnectionStatus = 'connected' | 'pending' | 'error' | 'disabled';
+export type AdConnectionStatus = 'connected' | 'pending' | 'error' | 'needs_reconnect' | 'disabled';
 
 /** AssignmentService::history — newest period first; `ends_on` null = the open period. */
 export interface AdAssignmentPeriod {
@@ -405,6 +452,15 @@ export interface AdAccountRow {
     spend_30d: number;
 }
 
+export interface AdTokenHealth {
+    valid: boolean | null;
+    type: string | null;
+    scopes: string[];
+    expires_at: string | null;
+    data_access_expires_at: string | null;
+    checked_at: string | null;
+}
+
 export interface AdConnectionRow {
     id: number;
     platform: AdPlatformValue;
@@ -414,6 +470,12 @@ export interface AdConnectionRow {
     last_synced_at: string | null;
     driver: 'live' | 'fake';
     has_token: boolean;
+    /** The stored ciphertext cannot be decrypted: the token must be entered again. */
+    credentials_unreadable: boolean;
+    /** The token has no ads_management permission: the CRM refuses changes on this connection. */
+    read_only: boolean;
+    /** What the daily probe learned about the token (never the token). */
+    token_health: AdTokenHealth;
     /** Which credential fields hold a stored value; the values never leave the server. */
     configured: Record<string, boolean>;
     accounts: AdAccountRow[];
@@ -486,6 +548,8 @@ export interface AdsSyncProps {
 
 export interface AdsAccountsProps {
     connections: AdConnectionRow[];
+    /** Share of the last `days` days' chat orders that carry a conversation; rate is null with no chat orders. */
+    link_rate: { rate: number | null; orders: number; linked: number; days: number };
     /** Ids of accounts with a sync running or waiting in the queue. */
     syncing: number[];
     buyers: AdBuyerOption[];
@@ -547,9 +611,10 @@ export interface MaterialFile {
 }
 
 export interface MaterialPerformance {
-    spend: number;
-    spend_tax: number;
-    purchase_value: number;
+    spend: number | null;
+    spend_tax: number | null;
+    purchase_value: number | null;
+    mixed_currencies?: boolean;
     roas: number | null;
     purchases: number;
     real_orders: number;
@@ -731,7 +796,7 @@ export interface AdActionLogRow {
     error: string | null;
 }
 
-export interface AdsActionsProps {
+export interface AdsActionsProps extends AdsBannerProps {
     currency: string;
     days: number;
     suggestions: AdSuggestion[];

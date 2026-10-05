@@ -34,7 +34,7 @@ class ActionController extends Controller
         $filter = $filter->with(['from' => $filter->to->subDays(self::SUGGEST_DAYS - 1)]);
 
         $found = $advisor->suggest($filter);
-        $accounts = AdAccount::query()->whereIn('id', array_unique(array_column($found, 'account_id')))->get(['id', 'is_active', 'platform']);
+        $accounts = AdAccount::query()->whereIn('id', array_unique(array_column($found, 'account_id')))->get(['id', 'is_active', 'platform', 'external_id']);
         $can = $writer->canWriteMany($user, $accounts);
         $suggestions = array_map(fn (array $s) => $s + ['can_write' => $can[$s['account_id']] ?? false], $found);
 
@@ -51,6 +51,7 @@ class ActionController extends Controller
 
         return Inertia::render('Ads/Actions', [
             'currency' => app(AdsOverview::class)->currency($filter),
+            ...$this->bannerProps($filter),
             'days' => self::SUGGEST_DAYS,
             'suggestions' => $suggestions,
             'log' => $log,
