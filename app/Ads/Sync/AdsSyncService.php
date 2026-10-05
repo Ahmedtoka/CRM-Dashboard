@@ -112,7 +112,7 @@ final class AdsSyncService
             $this->linkPublications($a);
             $metrics = $driver->dailyMetrics($a, $from, $to);
             [$control, $controlWarning] = $this->fetchControl($driver, $a, $from, $to);
-            [$rows, $guard] = $this->replaceMetrics($a, $metrics, $from, $to);
+            [$rows, $guard] = $this->replaceMetrics($a, $metrics, $from, $to, $control);
             $this->upsertAccountDaily($a, $control);
         } catch (AdsApiException $e) {
             $run->update(['status' => 'error', 'error' => self::scrub($e->getMessage()), 'finished_at' => now()]);
@@ -314,11 +314,18 @@ final class AdsSyncService
         }
     }
 
+    /** Ad statuses whose stored rows are history the platform no longer itemises: never deleted by a sync. */
+    public const KEEP_STATUSES = ['ARCHIVED', 'DELETED', 'GONE'];
+
     /**
+     * Upsert the payload, then delete stale rows (stored, not in the payload) of a date only when the payload of that
+     * date agrees with the account-level control total; otherwise keep them and say so (A1, F-050).
+     *
      * @param  list<DailyAdMetric>  $metrics
+     * @param  list<AccountDailyTotal>  $control
      * @return array{0: int, 1: ?string} rows written and an optional warning
      */
-    private function replaceMetrics(AdAccount $a, array $metrics, CarbonImmutable $from, CarbonImmutable $to): array
+    private function replaceMetrics(AdAccount $a, array $metrics, CarbonImmutable $from, CarbonImmutable $to, array $control = []): array
     {
         // Dedupe on (ad, date); the last row wins.
         $byKey = [];
@@ -329,7 +336,12 @@ final class AdsSyncService
             $byKey[$m->adExternalId.'|'.substr($m->date, 0, 10)] = $m;
         }
 
-        return DB::transaction(function () use ($a, $byKey, $from, $to) {
+        $controlSpend = [];
+        foreach ($control as $t) {
+            $controlSpend[substr($t->date, 0, 10)] = $t->spend;
+        }
+
+        return DB::transaction(function () use ($a, $byKey, $from, $to, $controlSpend) {
             $adIds = Ad::where('ad_account_id', $a->id)->pluck('id', 'external_id')->all();
             $campaigns = [];
             $sets = [];
@@ -352,10 +364,12 @@ final class AdsSyncService
             $now = now()->toDateTimeString();
             $payload = [];
             $keep = [];
+            $payloadSpend = [];
             foreach ($byKey as $m) {
                 $adId = $adIds[$m->adExternalId];
                 $date = substr($m->date, 0, 10);
                 $keep[$adId.'|'.$date] = true;
+                $payloadSpend[$date] = ($payloadSpend[$date] ?? 0.0) + $m->spend;
                 $payload[] = [
                     'ad_id' => $adId, 'ad_account_id' => $a->id, 'date' => $date, 'spend' => $m->spend,
                     'impressions' => $m->impressions, 'clicks' => $m->clicks, 'link_clicks' => $m->linkClicks,
@@ -365,21 +379,39 @@ final class AdsSyncService
                 ];
             }
 
-            // Platform corrections win: drop rows in the window that are no longer reported.
+            // Platform corrections win, but only when the account total proves the payload of that date is complete.
             $stale = [];
             $guard = null;
-            $windowRows = AdDailyMetric::where('ad_account_id', $a->id)->whereBetween('date', [$from->toDateString(), $to->toDateString()]);
+            $windowFrom = max($from->toDateString(), HistoryWindow::start()->toDateString()); // never touch rows before the history start
+            $windowRows = AdDailyMetric::where('ad_account_id', $a->id)->whereBetween('date', [$windowFrom, $to->toDateString()]);
             if ($byKey === [] && (clone $windowRows)->exists()) {
                 // An empty payload over a populated window is more likely an API hiccup than a real wipe-out.
                 $guard = 'Empty metrics payload: kept existing rows in the window';
             } else {
-                foreach (AdDailyMetric::where('ad_account_id', $a->id)
-                    ->whereBetween('date', [$from->toDateString(), $to->toDateString()])
+                $staleByDate = [];
+                foreach ((clone $windowRows)->whereNotIn('ad_id', Ad::where('ad_account_id', $a->id)
+                    ->whereIn('effective_status', self::KEEP_STATUSES)->select('id'))
                     ->select(['id', 'ad_id', 'date'])->cursor() as $row) {
-                    if (! isset($keep[$row->ad_id.'|'.$row->date->toDateString()])) {
-                        $stale[] = $row->id;
+                    $date = $row->date->toDateString();
+                    if (! isset($keep[$row->ad_id.'|'.$date])) {
+                        $staleByDate[$date][] = $row->id;
                     }
                 }
+                ksort($staleByDate);
+                $kept = [];
+                $tolerancePct = (float) config('crm.ads.control_tolerance_pct', 0.5);
+                foreach ($staleByDate as $date => $ids) {
+                    $payloadTotal = round($payloadSpend[$date] ?? 0.0, 2);
+                    $accountTotal = $controlSpend[$date] ?? null;
+                    if ($accountTotal !== null && abs($payloadTotal - $accountTotal) <= max($tolerancePct / 100 * $accountTotal, 1.00)) {
+                        array_push($stale, ...$ids);
+
+                        continue;
+                    }
+                    $kept[] = sprintf('Kept %d rows on %s: payload %.2f vs account %s', count($ids), $date, $payloadTotal,
+                        $accountTotal === null ? 'n/a' : number_format($accountTotal, 2, '.', ''));
+                }
+                $guard = $kept === [] ? null : implode(' | ', $kept);
             }
             foreach (array_chunk($stale, self::CHUNK) as $ids) {
                 AdDailyMetric::whereIn('id', $ids)->delete();

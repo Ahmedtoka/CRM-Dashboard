@@ -406,6 +406,9 @@ return [
         'google' => ['base_url' => 'https://googleads.googleapis.com/v21', 'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN')],
         'tax_rate' => (float) env('CRM_ADS_TAX_RATE', 0.14),
         'backfill_days' => 90,
+        // A stale ad-day row is deleted only when the payload spend of that date is within max(this % of the
+        // account-level total, 1.00) of the account-level total (A1, F-050).
+        'control_tolerance_pct' => 0.5,
         // First day ads history is kept for (Cairo day). Sync, backfill, discovery and reports never go before it.
         'history_start' => env('CRM_ADS_HISTORY_START', '2026-09-01'),
         // Live writers outside production only touch these accounts (comma list of act_... in CRM_ADS_WRITE_SANDBOX_ACCOUNTS).
