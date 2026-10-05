@@ -58,7 +58,7 @@ final class AdWriteService
     }
 
     /** Scope only: is this account one the user may act on (ignores the writable-accounts setting). */
-    private function inScope(User $u, AdAccount $a): bool
+    public function inScope(User $u, AdAccount $a): bool
     {
         $today = $this->todayIds($u);
 
@@ -74,9 +74,10 @@ final class AdWriteService
     public function canWriteMany(User $u, iterable $accounts): array
     {
         $today = $this->todayIds($u);
+        $list = WritableAccounts::list();
         $out = [];
         foreach ($accounts as $a) {
-            $out[$a->id] = (bool) $a->is_active && ($today === null || in_array($a->id, $today, true)) && WritableAccounts::allows($a);
+            $out[$a->id] = (bool) $a->is_active && ($today === null || in_array($a->id, $today, true)) && WritableAccounts::allowsIn($a, $list);
         }
 
         return $out;

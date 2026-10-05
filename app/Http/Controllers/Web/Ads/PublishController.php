@@ -7,6 +7,7 @@ use App\Ads\AdsSettings;
 use App\Ads\Control\AdWriteService;
 use App\Ads\Control\DuplicatePublication;
 use App\Ads\Control\PublishService;
+use App\Ads\Control\WritableAccounts;
 use App\Ads\Materials\MaterialService;
 use App\Ads\Naming;
 use App\Ads\Platforms\AdPlatform;
@@ -14,6 +15,8 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
+use App\Ads\Platforms\WriteGuard;
+use App\Ads\Platforms\WriteRefused;
 use App\Http\Controllers\Controller;
 use App\Models\AdAccount;
 use App\Models\AdMaterial;
@@ -54,12 +57,16 @@ class PublishController extends Controller
         }
 
         $account = AdAccount::query()->findOrFail((int) $request->query('account'));
-        abort_unless($writes->canWrite($user, $account) && $account->platform !== AdPlatform::Google->value, 403);
+        abort_unless($writes->inScope($user, $account) && $account->platform !== AdPlatform::Google->value, 403);
+        $this->assertWritable($account);
 
         try {
             $writer = $drivers->writer(AdPlatform::from($account->platform));
+            WriteGuard::check($account, $writer);
             $campaigns = $writer->liveCampaigns($account);
             $identities = $writer->identities($account);
+        } catch (WriteRefused $e) {
+            return response()->json(['message' => __('ads.errors.'.$e->reason)], 422);
         } catch (AdsApiException $e) {
             $message = $e instanceof RateLimited ? __('ads.errors.rate_limited') : (trim(SecretScrubber::scrub($e->getMessage())) ?: __('ads.errors.failed'));
 
@@ -76,6 +83,14 @@ class PublishController extends Controller
             'last_identity' => $settings->get(PublishService::identityKey($account)),
             'link' => $link,
         ]);
+    }
+
+    /** An owner choice (ads:writable), not a permission: 422 with a readable reason. */
+    private function assertWritable(AdAccount $account): void
+    {
+        if (! WritableAccounts::allows($account)) {
+            throw ValidationException::withMessages(['account_id' => __('ads.errors.account_not_writable')]);
+        }
     }
 
     public function publish(Request $request, AdMaterial $material, AdWriteService $writes, PublishService $publish): JsonResponse
@@ -103,7 +118,13 @@ class PublishController extends Controller
         ]);
 
         $account = AdAccount::query()->findOrFail($data['account_id']);
-        abort_unless($writes->canWrite($user, $account) && $account->platform !== AdPlatform::Google->value, 403);
+        abort_unless($writes->inScope($user, $account) && $account->platform !== AdPlatform::Google->value, 403);
+        $this->assertWritable($account);
+        try {
+            WriteGuard::check($account, app(DriverFactory::class)->writer(AdPlatform::from($account->platform)));
+        } catch (WriteRefused $e) {
+            throw ValidationException::withMessages(['account_id' => __('ads.errors.'.$e->reason)]);
+        }
 
         $data['captions'] = array_map(fn (array $c) => ['headline' => trim($c['headline']), 'primary_text' => trim($c['primary_text']), 'cta' => $c['cta']], array_values($data['captions']));
         $signatures = array_map(fn (array $c) => $c['headline'].'

@@ -2,6 +2,7 @@
 
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
+use App\Models\AdsApiUsage;
 use App\Models\AdsSyncRun;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -135,4 +136,16 @@ it('fails the Queue section when retry_after is not above the sync timeout', fun
     [$code, $out] = doctor(['--no-network' => true]);
 
     expect(doctorRow($out, 'Queue', 'retry_after vs SyncAdAccount timeout'))->toContain('| fail |')->and($code)->toBe(1);
+});
+
+it('computes the quota p95 from the stored readings', function () {
+    $acc = AdAccount::factory()->meta()->create(['name' => 'LV Main']);
+    foreach (range(1, 20) as $i) {
+        AdsApiUsage::create(['ad_account_id' => $acc->id, 'header' => 'x-ad-account-usage', 'max_pct' => $i * 4, 'recorded_at' => now()->subHours($i)]);
+    }
+
+    [$code, $out] = doctor(['--no-network' => true]);
+
+    // 20 values 4..80: the 19th sorted value (76) is the p95, above the 75 % limit.
+    expect(doctorRow($out, 'Quota', 'LV Main x-ad-account-usage'))->toContain('| fail |')->toContain('p95 76.0')->toContain('max 80.0')->toContain('last 4.0')->and($code)->toBe(1);
 });

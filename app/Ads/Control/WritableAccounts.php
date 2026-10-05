@@ -18,9 +18,14 @@ final class WritableAccounts
         if (! $a->is_active) {
             return false;
         }
-        $list = self::list();
 
-        return $list === null || in_array((string) $a->external_id, $list, true);
+        return self::allowsIn($a, self::list());
+    }
+
+    /** allows() against a list already read, so a page of accounts costs one settings query. */
+    public static function allowsIn(AdAccount $a, ?array $list): bool
+    {
+        return (bool) $a->is_active && ($list === null || in_array((string) $a->external_id, $list, true));
     }
 
     /** @return list<string>|null null = every active account */

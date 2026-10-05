@@ -26,28 +26,25 @@ class QuotaCheck extends DoctorCheck
         $rows = [];
         $since = now()->subDays(7);
 
-        $series = [];
         $accountIds = $this->ctx->accounts === [] ? null : $this->scopeAccounts(AdAccount::query())->pluck('id')->all();
-        $q = AdsApiUsage::query()->where('recorded_at', '>=', $since)->orderBy('recorded_at')
+        $base = fn () => AdsApiUsage::query()->where('recorded_at', '>=', $since)
             ->when($accountIds !== null, fn ($w) => $w->whereIn('ad_account_id', $accountIds));
-        foreach ($q->cursor() as $u) {
-            $series[($u->ad_account_id ?? 0).'|'.$u->header][] = ['pct' => (float) $u->max_pct, 'at' => $u->recorded_at];
-        }
+        $groups = $base()->selectRaw('ad_account_id, header, COUNT(*) as n, MAX(max_pct) as mx')->groupBy('ad_account_id', 'header')
+            ->orderBy('ad_account_id')->orderBy('header')->get();
 
-        if ($series === []) {
+        if ($groups->isEmpty()) {
             $rows[] = DoctorRow::warn('Quota', 'usage rows, 7 days', '0', 'Nothing recorded yet: usage is saved from the first Meta call after this version is deployed.');
         }
         $names = AdAccount::query()->pluck('name', 'id');
-        ksort($series);
-        foreach ($series as $key => $points) {
-            [$accId, $header] = explode('|', $key, 2);
-            $values = array_column($points, 'pct');
-            sort($values);
-            $p95 = $values[(int) max(0, ceil(0.95 * count($values)) - 1)];
-            $last = end($points)['pct'];
-            $label = ($accId === '0' ? 'no account' : ($names[(int) $accId] ?? "account {$accId}")).' '.$header;
+        foreach ($groups as $g) {
+            $scope = fn () => $base()->where('header', $g->header)->when($g->ad_account_id === null, fn ($w) => $w->whereNull('ad_account_id'), fn ($w) => $w->where('ad_account_id', $g->ad_account_id));
+            $n = (int) $g->n;
+            // p95 by position in the sorted values: one row read, never the whole series.
+            $p95 = (float) $scope()->orderBy('max_pct')->offset((int) max(0, ceil(0.95 * $n) - 1))->limit(1)->value('max_pct');
+            $last = (float) $scope()->orderByDesc('recorded_at')->orderByDesc('id')->value('max_pct');
+            $label = ($g->ad_account_id === null ? 'no account' : ($names[(int) $g->ad_account_id] ?? "account {$g->ad_account_id}")).' '.$g->header;
             $rows[] = DoctorRow::by($p95 < self::P95_LIMIT, 'fail', 'Quota', $label,
-                sprintf('last %.1f, max %.1f, p95 %.1f, rows %d', $last, max($values), $p95, count($values)),
+                sprintf('last %.1f, max %.1f, p95 %.1f, rows %d', $last, (float) $g->mx, $p95, $n),
                 'The 7-day p95 is at or above 75 %: less than 25 % headroom (R-17). Move the other app off this quota or slow the sync.');
         }
 

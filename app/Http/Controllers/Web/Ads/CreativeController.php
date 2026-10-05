@@ -35,7 +35,7 @@ class CreativeController extends Controller
         ]);
         // Stop / Run per row, with the buyer's assignments for today read once for the whole page.
         $accountIds = array_values(array_unique(array_map(fn (array $r) => (int) $r['account_id'], $result['data'])));
-        $can = $accountIds === [] ? [] : $writes->canWriteMany($request->user(), AdAccount::query()->whereIn('id', $accountIds)->get(['id', 'is_active', 'platform']));
+        $can = $accountIds === [] ? [] : $writes->canWriteMany($request->user(), AdAccount::query()->whereIn('id', $accountIds)->get(['id', 'is_active', 'platform', 'external_id']));
         $result['data'] = array_map(fn (array $r) => $r + ['can_write' => $can[(int) $r['account_id']] ?? false], $result['data']);
 
         return Inertia::render('Ads/Creatives', [
