@@ -19,7 +19,7 @@ final class RevenueSummary
     public function __construct(private readonly AdsQuery $q, private readonly AdsOverview $overview) {}
 
     /**
-     * @return array{currency:string, spend:float, spend_tax:float, store: ?array{orders:int, revenue:float}, crm: array{orders:float, revenue:float, chat_orders:int}, platform: array{purchases:float, revenue:float}, roas: array{store:?float, crm:?float, platform:?float}, gaps: array{platform_vs_crm: ?float, crm_vs_store: ?float, platform_vs_crm_pct:?float, crm_vs_store_pct:?float}}
+     * @return array{currency:string, mixed_currencies:bool, spend:?float, spend_tax:?float, store: ?array{orders:int, revenue:?float}, crm: array{orders:float, revenue:?float, chat_orders:int}, platform: array{purchases:float, revenue:?float}, roas: array{store:?float, crm:?float, platform:?float}, gaps: array{platform_vs_crm: ?float, crm_vs_store: ?float, platform_vs_crm_pct:?float, crm_vs_store_pct:?float}}
      */
     public function build(AdsFilter $f, bool $withStore): array
     {
@@ -30,12 +30,16 @@ final class RevenueSummary
 
         $store = $withStore ? $this->store($f) : null;
 
+        $currency = $this->overview->currency($f);
+        $mixed = $currency === AdsOverview::MIXED;
+
         $gap = fn (float $x, float $y): array => [round($x - $y, 2), AdsQuery::ratio($x - $y, $y, 4)];
         [$pvc, $pvcPct] = $gap($d['purchase_value'], $crmRevenue);
         [$cvs, $cvsPct] = $store === null ? [null, null] : $gap($crmRevenue, $store['revenue']);
 
-        return [
-            'currency' => $this->overview->currency($f),
+        $out = [
+            'currency' => $currency,
+            'mixed_currencies' => $mixed,
             'spend' => $d['spend'],
             'spend_tax' => $d['spend_tax'],
             'store' => $store,
@@ -55,6 +59,18 @@ final class RevenueSummary
                 'platform_vs_crm_pct' => $pvcPct, 'crm_vs_store_pct' => $cvsPct,
             ],
         ];
+
+        if ($mixed) {
+            // A9: no figure here may add one currency to another (store revenue is EGP, the platforms report in theirs).
+            $out['spend'] = $out['spend_tax'] = null;
+            $out['store'] = $store === null ? null : ['orders' => $store['orders'], 'revenue' => null];
+            $out['crm']['revenue'] = null;
+            $out['platform']['revenue'] = null;
+            $out['roas'] = ['store' => null, 'crm' => null, 'platform' => null];
+            $out['gaps'] = array_fill_keys(array_keys($out['gaps']), null);
+        }
+
+        return $out;
     }
 
     /** @return array{orders:int, revenue:float} */

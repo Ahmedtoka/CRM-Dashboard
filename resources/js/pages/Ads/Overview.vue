@@ -41,7 +41,7 @@ const page = usePage<SharedData>();
 const money = (v: number | null) => formatAdsMoney(v, locale.value, props.currency);
 const n = (v: number) => formatCount(v, locale.value);
 const tot = computed(() => props.overview.totals);
-const hasData = computed(() => tot.value.spend > 0 || tot.value.impressions > 0 || tot.value.real_orders > 0);
+const hasData = computed(() => (tot.value.spend ?? 0) > 0 || tot.value.impressions > 0 || tot.value.real_orders > 0);
 const taxPct = computed(() => formatPct(props.overview.tax_rate, locale.value, 0));
 
 const kpis = computed(() => {
@@ -113,9 +113,9 @@ const rows = computed<Row[]>(() => {
     const total: Row = {
         id: TOTAL,
         date: TOTAL,
-        spend: x.spend,
-        spend_tax: x.spend_tax,
-        purchase_value: x.purchase_value,
+        spend: x.spend ?? 0,
+        spend_tax: x.spend_tax ?? 0,
+        purchase_value: x.purchase_value ?? 0,
         roas: x.roas,
         purchases: x.purchases,
         impressions: x.impressions,
@@ -125,7 +125,7 @@ const rows = computed<Row[]>(() => {
         cpc: x.cpc,
         reach: x.reach,
         real_orders: x.real_orders,
-        real_revenue: x.real_revenue,
+        real_revenue: x.real_revenue ?? 0,
     };
     return [...[...daily.value].reverse().map((d) => ({ ...d, id: d.date })), total];
 });
@@ -230,6 +230,10 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
                     </PlatformChip>
                 </div>
 
+                <p v-if="tot.mixed_currencies" class="rounded-md bg-warning/10 px-3 py-2 text-xs text-foreground" role="status" data-testid="ads-mixed-currencies">
+                    {{ t('ads.overview.mixed_currencies') }}
+                </p>
+
                 <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
                     <div class="rounded-lg border-t-4 border-t-primary bg-card px-4 py-3 shadow-card">
                         <p class="text-2xs font-medium text-muted-foreground">{{ t('ads.kpi.spend_tax') }}</p>
@@ -277,10 +281,10 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
                             <span v-else class="text-muted-foreground">{{ t('ads.accounts.unassigned') }}</span>
                         </template>
                         <template #cell-spend="{ row }">
-                            <MoneyCell :amount="acc(row).spend" :with-tax="acc(row).spend_tax" :currency="currency" />
+                            <MoneyCell :amount="acc(row).spend" :with-tax="acc(row).spend_tax" :currency="acc(row).currency" />
                         </template>
                         <template #cell-purchase_value="{ row }"
-                            ><span class="tabular-nums">{{ money(acc(row).purchase_value) }}</span></template
+                            ><span class="tabular-nums">{{ formatAdsMoney(acc(row).purchase_value, locale, acc(row).currency) }}</span></template
                         >
                         <template #cell-purchases="{ row }"
                             ><span class="tabular-nums">{{ formatQty(acc(row).purchases, locale) }}</span></template

@@ -107,7 +107,7 @@ class DataHealth
     }
 
     /**
-     * Banner reasons for the accounts a report filter covers, worst first: reconnect, stale, read_only, incomplete, gap.
+     * Banner reasons for the accounts a report filter covers, worst first: reconnect, stale, read_only, incomplete, gap, timezone.
      * Names are capped at three per reason; `more` counts the rest. Reads the facts (no state writes), cached 60 s per filter.
      *
      * @return array{reasons: list<array{reason: string, accounts: list<string>, more: int}>}
@@ -145,10 +145,16 @@ class DataHealth
         foreach ($this->gapAccounts($accounts, $f) as $id) {
             $found['gap'][$id] = 1;
         }
+        // Meta's days are the account's own days: an account outside Cairo time does not split days where the CRM does (A9).
+        foreach ($accounts as $a) {
+            if ($a->timezone !== null && $a->timezone !== '' && $a->timezone !== AdsFilter::TIMEZONE) {
+                $found['timezone'][(int) $a->id] = 1;
+            }
+        }
 
         $names = $accounts->pluck('name', 'id');
         $reasons = [];
-        foreach (['reconnect', 'stale', 'read_only', 'incomplete', 'gap'] as $reason) {
+        foreach (['reconnect', 'stale', 'read_only', 'incomplete', 'gap', 'timezone'] as $reason) {
             if (empty($found[$reason])) {
                 continue;
             }

@@ -45,11 +45,16 @@ export interface AdsDerived {
     cpc: number | null;
 }
 
-export interface AdsTotals extends AdsDerived {
+/** Money fields are null when the filtered accounts mix currencies (AdsOverview, A9). */
+export interface AdsTotals extends Omit<AdsDerived, 'spend' | 'spend_tax' | 'purchase_value'> {
+    spend: number | null;
+    spend_tax: number | null;
+    purchase_value: number | null;
+    mixed_currencies: boolean;
     /** Share (0..1) of the spend that went to loser-tier ads; null without spend. */
     losers_spend_share: number | null;
     /** Spend of campaigns that are not active (paused, archived, deleted); already inside `spend`. */
-    spend_outside_active: number;
+    spend_outside_active: number | null;
     /** Where spend, purchase value and ROAS come from: the account-level control or the sum of ads. */
     source: 'account' | 'mixed' | 'ads';
     /** Control spend minus the sum of ads (Meta no longer itemises it by ad); null when source is 'ads'. */
@@ -57,7 +62,7 @@ export interface AdsTotals extends AdsDerived {
     /** none: within tolerance; unitemised: control above ads; updating: control below ads (platform still settling). */
     gap_state: 'none' | 'unitemised' | 'updating';
     real_orders: number;
-    real_revenue: number;
+    real_revenue: number | null;
     real_roas: number | null;
     conversations: number;
     conversations_ordered: number;
@@ -103,6 +108,7 @@ export interface AdsTopAccountRow {
     name: string;
     external_id: string;
     platform: AdPlatformValue;
+    currency: string;
     buyer: string | null;
     spend: number;
     spend_tax: number;
@@ -122,7 +128,7 @@ export interface AdsSync {
 
 /** One data-health reason for the accounts of the current filter (DataHealth::forFilter). */
 export interface AdsDataHealthReason {
-    reason: 'reconnect' | 'stale' | 'read_only' | 'incomplete' | 'gap';
+    reason: 'reconnect' | 'stale' | 'read_only' | 'incomplete' | 'gap' | 'timezone';
     /** At most three account names. */
     accounts: string[];
     /** Accounts beyond the three named. */
@@ -152,11 +158,12 @@ export interface AdsCommonProps extends AdsBannerProps {
 /** RevenueSummary::build; `store` is null for media buyers. */
 export interface AdsRevenueSummary {
     currency: string;
-    spend: number;
-    spend_tax: number;
-    store: { orders: number; revenue: number } | null;
-    crm: { orders: number; revenue: number; chat_orders: number };
-    platform: { purchases: number; revenue: number };
+    mixed_currencies: boolean;
+    spend: number | null;
+    spend_tax: number | null;
+    store: { orders: number; revenue: number | null } | null;
+    crm: { orders: number; revenue: number | null; chat_orders: number };
+    platform: { purchases: number; revenue: number | null };
     roas: { store: number | null; crm: number | null; platform: number | null };
     gaps: { platform_vs_crm: number | null; crm_vs_store: number | null; platform_vs_crm_pct: number | null; crm_vs_store_pct: number | null };
 }

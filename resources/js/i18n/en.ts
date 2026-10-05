@@ -945,6 +945,7 @@ const en: Messages = {
                 stale: 'The numbers are behind Ads Manager (the last sync is over 3 hours old)',
                 read_only: 'The connection is read-only: Run and Stop are off',
                 incomplete: 'History is incomplete for part of this range',
+                timezone: 'Days for these accounts follow the account timezone, not Cairo time',
                 gap: 'Spend per ad does not add up to the account total',
                 history_start: 'The range was cut at the day the CRM started keeping ads data',
                 under_review: 'These numbers are under review and are not final yet',
@@ -3158,6 +3159,7 @@ const en: Messages = {
             daily_table: 'Daily numbers',
             top_accounts: 'Top ad accounts',
             top_accounts_hint: 'Accounts that spent in the range, biggest spend first',
+            mixed_currencies: 'Mixed currencies: choose accounts with one currency to see totals',
         },
         buyers: {
             title: 'Media buyers',
