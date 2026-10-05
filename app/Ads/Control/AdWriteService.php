@@ -8,6 +8,8 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
+use App\Ads\Platforms\WriteGuard;
+use App\Ads\Platforms\WriteRefused;
 use App\Ads\Reports\AdsFilter;
 use App\Models\Ad;
 use App\Models\AdAccount;
@@ -55,6 +57,14 @@ final class AdWriteService
         return $this->canWriteMany($u, [$a])[$a->id];
     }
 
+    /** Scope only: is this account one the user may act on (ignores the writable-accounts setting). */
+    private function inScope(User $u, AdAccount $a): bool
+    {
+        $today = $this->todayIds($u);
+
+        return (bool) $a->is_active && ($today === null || in_array($a->id, $today, true));
+    }
+
     /**
      * canWrite for many accounts with the buyer's assignments for today read once.
      *
@@ -66,7 +76,7 @@ final class AdWriteService
         $today = $this->todayIds($u);
         $out = [];
         foreach ($accounts as $a) {
-            $out[$a->id] = (bool) $a->is_active && ($today === null || in_array($a->id, $today, true));
+            $out[$a->id] = (bool) $a->is_active && ($today === null || in_array($a->id, $today, true)) && WritableAccounts::allows($a);
         }
 
         return $out;
@@ -102,11 +112,22 @@ final class AdWriteService
 
             throw ValidationException::withMessages(['status' => __('ads.errors.'.$level.'_level_not_allowed')]);
         }
-        if (! $this->canWrite($u, $a)) {
+        if (! $this->inScope($u, $a)) {
             throw new AuthorizationException(__('ads.errors.out_of_scope'));
         }
         if (! in_array($level, self::LEVELS, true) || ! in_array($status, self::STATUSES, true)) {
             throw ValidationException::withMessages(['status' => __('ads.errors.bad_request')]);
+        }
+        if (! WritableAccounts::allows($a)) {
+            // An owner choice (ads:writable), so Stop is not exempt. Logged like any refused attempt.
+            $row = $this->find($a, $level, $externalId);
+            AdAction::create([
+                'user_id' => $u->id, 'platform' => $a->platform, 'ad_account_id' => $a->id, 'account_name' => $a->name, 'level' => $level, 'external_id' => $externalId,
+                'name' => mb_substr((string) $row?->name, 0, 500), 'from_status' => $row?->status, 'to_status' => strtoupper($status),
+                'reason' => $reason !== null && trim($reason) !== '' ? trim($reason) : null, 'result' => AdAction::ERROR, 'error' => 'account_not_writable',
+            ]);
+
+            throw ValidationException::withMessages(['status' => __('ads.errors.account_not_writable')]);
         }
 
         $row = $this->find($a, $level, $externalId);
@@ -124,7 +145,13 @@ final class AdWriteService
         ];
 
         try {
-            $this->drivers->writer(AdPlatform::from($a->platform))->setStatus($a, $level, $externalId, $status);
+            $writer = $this->drivers->writer(AdPlatform::from($a->platform));
+            WriteGuard::check($a, $writer);
+            $writer->setStatus($a, $level, $externalId, $status);
+        } catch (WriteRefused $e) {
+            AdAction::create($log + ['result' => AdAction::ERROR, 'error' => $e->reason]);
+
+            throw ValidationException::withMessages(['status' => __('ads.errors.'.$e->reason)]);
         } catch (Throwable $e) {
             $known = $e instanceof AdsApiException;
             $raw = SecretScrubber::scrub($e->getMessage());

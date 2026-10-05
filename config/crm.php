@@ -403,6 +403,8 @@ return [
         'backfill_days' => 90,
         // First day ads history is kept for (Cairo day). Sync, backfill, discovery and reports never go before it.
         'history_start' => env('CRM_ADS_HISTORY_START', '2026-09-01'),
+        // Live writers outside production only touch these accounts (comma list of act_... in CRM_ADS_WRITE_SANDBOX_ACCOUNTS).
+        'write_sandbox_accounts' => array_values(array_filter(array_map('trim', explode(',', (string) env('CRM_ADS_WRITE_SANDBOX_ACCOUNTS', ''))))),
         'material_max_mb' => ['video' => 500, 'image' => 20],
         // Seconds a publish waits for another worker's upload of the same file before it is released and retried.
         'publish_upload_wait' => 60,
