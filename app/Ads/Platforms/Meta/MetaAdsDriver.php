@@ -16,6 +16,7 @@ use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdPlatformConnection;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Encryption\DecryptException;
 
 class MetaAdsDriver implements AdPlatformDriver
 {
@@ -278,7 +279,12 @@ class MetaAdsDriver implements AdPlatformDriver
 
     private function token(AdPlatformConnection $c): string
     {
-        $token = $c->credentials['access_token'] ?? null;
+        try {
+            $token = $c->credentials['access_token'] ?? null;
+        } catch (DecryptException) {
+            // APP_KEY changed or the column was damaged: the page that fixes it must still open (F-034).
+            throw new AdsApiException('credentials unreadable, re-enter the token');
+        }
         if (! $token) {
             throw new AdsApiException('Meta access token is missing.');
         }

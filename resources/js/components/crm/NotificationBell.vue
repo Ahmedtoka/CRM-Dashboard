@@ -67,6 +67,14 @@ function itemText(n: AppNotification): string {
         return t('notifications.ads_token_invalid_item', { name: String(n.data.connection ?? '') });
     }
 
+    if (n.type === 'ads.token_scope_missing') {
+        return t('notifications.ads_token_scope_missing_item', { name: String(n.data.connection ?? '') });
+    }
+
+    if (n.type === 'ads.token_expiring') {
+        return t('notifications.ads_token_expiring_item', { name: String(n.data.connection ?? ''), days: Number(n.data.days ?? 0) });
+    }
+
     if (n.type === 'channel.problem') {
         const title = t('notifications.channel_problem_item', { name: String(n.data.name ?? '') });
         // The health check writes the notification from the scheduler, so its `excerpt` is
@@ -88,7 +96,7 @@ function open(n: AppNotification): void {
         router.visit(String(n.data.link ?? '/ads/materials?status=activated&stock=out'));
         return;
     }
-    if (n.type === 'ads.token_invalid') {
+    if (n.type === 'ads.token_invalid' || n.type === 'ads.token_scope_missing' || n.type === 'ads.token_expiring') {
         router.visit('/ads/accounts');
         return;
     }

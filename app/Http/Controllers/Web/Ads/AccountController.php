@@ -21,9 +21,11 @@ use App\Models\AdPublication;
 use App\Models\AdsSyncRun;
 use App\Models\MediaBuyer;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -71,8 +73,9 @@ class AccountController extends Controller
                 'last_error' => $c->last_error,
                 'last_synced_at' => $c->last_synced_at?->toIso8601String(),
                 'driver' => config('crm.ads.drivers.'.$c->platform, 'fake') === 'live' ? 'live' : 'fake',
-                'has_token' => ! empty($c->credentials['access_token'] ?? $c->credentials['refresh_token'] ?? null),
-                'configured' => $this->configured($c),
+                ...$this->credentialState($c),
+                'read_only' => (bool) $c->read_only,
+                'token_health' => $this->tokenHealth($c),
                 'accounts' => $c->accounts->sortBy('id')->values()->map(fn (AdAccount $a) => [
                     'id' => $a->id,
                     'external_id' => $a->external_id,
@@ -153,13 +156,19 @@ class AccountController extends Controller
             $values['name'] = $data['name'];
         }
         if (isset($data['credentials'])) {
-            $values['credentials'] = $this->credentials($connection->platform, (array) $data['credentials'], $connection->credentials ?? []);
+            $values['credentials'] = $this->credentials($connection->platform, (array) $data['credentials'], $this->storedCredentials($connection) ?? []);
         }
-        if (isset($values['credentials']) && $values['credentials'] !== ($connection->credentials ?? [])) {
+        if (isset($values['credentials']) && $values['credentials'] !== ($this->storedCredentials($connection) ?? [])) {
             // New credentials are untested: drop the stale error badge until Test or Sync runs.
-            $values += ['status' => 'pending', 'last_error' => null, 'needs_reconnect_at' => null, 'probed_at' => null];
+            $values += ['status' => 'pending', 'last_error' => null, 'needs_reconnect_at' => null, 'probed_at' => null, 'token_valid' => null, 'token_scopes' => null, 'token_checked_at' => null, 'read_only' => false];
         }
-        $connection->update($values);
+        if (isset($values['credentials']) && $this->storedCredentials($connection) === null) {
+            // The old ciphertext cannot be read, and an Eloquent save would try to compare against it: replace it first.
+            DB::table('ad_platform_connections')->where('id', $connection->id)->update(['credentials' => Crypt::encryptString(json_encode($values['credentials']))]);
+            unset($values['credentials']);
+            $connection->refresh();
+        }
+        $connection->forceFill($values)->save();
 
         return back()->with('status', __('ads.flash.saved'));
     }
@@ -224,7 +233,8 @@ class AccountController extends Controller
         if ($hasHistory) {
             DB::transaction(function () use ($connection) {
                 $connection->update(['status' => 'disabled', 'last_error' => null]);
-                $connection->accounts()->update(['is_active' => false]);
+                // Only the accounts this archive switches off carry the reason: one stopped by hand stays stopped on rediscovery.
+                $connection->accounts()->where('is_active', true)->update(['is_active' => false, 'deactivated_reason' => 'connection_archived']);
             });
 
             return back()->with('status', __('ads.flash.archived'));
@@ -314,12 +324,50 @@ class AccountController extends Controller
         return array_values(array_unique(array_filter(array_map(fn ($v) => trim((string) $v), $parts ?: []), fn ($v) => $v !== '')));
     }
 
+    /** Stored credentials, or null when the ciphertext cannot be decrypted (APP_KEY changed, damaged column). */
+    private function storedCredentials(AdPlatformConnection $c): ?array
+    {
+        try {
+            return $c->credentials ?? [];
+        } catch (DecryptException) {
+            return null;
+        }
+    }
+
+    /** @return array{has_token: bool, configured: array<string, bool>, credentials_unreadable: bool} */
+    private function credentialState(AdPlatformConnection $c): array
+    {
+        $stored = $this->storedCredentials($c);
+        if ($stored === null) {
+            return ['has_token' => false, 'configured' => array_fill_keys(array_column(self::FIELDS[$c->platform] ?? [], 'key'), false), 'credentials_unreadable' => true];
+        }
+
+        return [
+            'has_token' => ! empty($stored['access_token'] ?? $stored['refresh_token'] ?? null),
+            'configured' => $this->configured($c, $stored),
+            'credentials_unreadable' => false,
+        ];
+    }
+
+    /** @return array<string, mixed> what the last probe learned about the token; no token, no secret */
+    private function tokenHealth(AdPlatformConnection $c): array
+    {
+        return [
+            'valid' => $c->token_valid,
+            'type' => $c->token_type,
+            'scopes' => $c->token_scopes ?? [],
+            'expires_at' => $c->token_expires_at?->toIso8601String(),
+            'data_access_expires_at' => $c->data_access_expires_at?->toIso8601String(),
+            'checked_at' => $c->token_checked_at?->toIso8601String(),
+        ];
+    }
+
     /** @return array<string, bool> which credential fields hold a value; the values themselves never leave the server */
-    private function configured(AdPlatformConnection $c): array
+    private function configured(AdPlatformConnection $c, array $stored): array
     {
         $out = [];
         foreach (self::FIELDS[$c->platform] ?? [] as $f) {
-            $out[$f['key']] = ! empty($c->credentials[$f['key']] ?? null);
+            $out[$f['key']] = ! empty($stored[$f['key']] ?? null);
         }
 
         return $out;

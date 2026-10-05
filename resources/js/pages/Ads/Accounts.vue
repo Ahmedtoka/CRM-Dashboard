@@ -131,6 +131,8 @@ function statusChip(c: AdConnectionRow): { label: string; tone: 'positive' | 'wa
     return { label: t('ads.accounts.connection_disabled'), tone: 'neutral' };
 }
 
+const tokenDate = (iso: string | null): string => (iso ? formatDayLong(iso.slice(0, 10), locale.value) : t('ads.accounts.token_never'));
+
 const accountActive = adAccountActive;
 const accountStatusLabel = (status: string | null) => adAccountStatusLabel(status, t);
 
@@ -252,6 +254,22 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                             {{ t('ads.accounts.last_sync') }}:
                             <RelativeTime v-if="c.last_synced_at" :iso="c.last_synced_at" />
                             <span v-else>{{ t('ads.accounts.never_synced') }}</span>
+                        </p>
+                        <p v-if="c.credentials_unreadable" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                            {{ t('ads.accounts.credentials_unreadable') }}
+                        </p>
+                        <p v-if="c.read_only" class="rounded-md bg-muted px-3 py-2 text-xs">
+                            <StatusChip :label="t('ads.accounts.read_only')" tone="warning" class="me-1" />{{ t('ads.accounts.read_only_hint') }}
+                        </p>
+                        <p v-if="c.platform === 'meta' && !c.credentials_unreadable" class="text-xs text-muted-foreground">
+                            {{ t('ads.accounts.token_health') }}:
+                            <template v-if="c.token_health.checked_at">
+                                {{ c.token_health.valid === false ? t('ads.accounts.token_invalid') : t('ads.accounts.token_valid') }}
+                                · {{ t('ads.accounts.token_scopes') }}: {{ c.token_health.scopes.join(', ') || '-' }}
+                                · {{ t('ads.accounts.token_expires') }}: {{ tokenDate(c.token_health.expires_at) }}
+                                · {{ t('ads.accounts.token_data_access') }}: {{ tokenDate(c.token_health.data_access_expires_at) }}
+                            </template>
+                            <template v-else>{{ t('ads.accounts.token_unchecked') }}</template>
                         </p>
                         <p v-if="c.last_error" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
                             {{ c.last_error }}

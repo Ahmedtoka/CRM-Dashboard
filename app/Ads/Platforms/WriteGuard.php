@@ -16,6 +16,15 @@ final class WriteGuard
     /** @throws WriteRefused */
     public static function check(AdAccount $a, AdPlatformWriter $w): void
     {
+        // The platform would refuse the write anyway (Stop included): say so before any call.
+        $connection = $a->connection;
+        if ($connection?->status === 'needs_reconnect') {
+            throw new WriteRefused('connection_needs_reconnect');
+        }
+        if ($connection?->read_only) {
+            throw new WriteRefused('connection_read_only');
+        }
+
         if (app()->environment('production')) {
             if ($w instanceof FakeAdsDriver) {
                 throw new WriteRefused('fake_writer_in_production');

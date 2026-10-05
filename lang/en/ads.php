@@ -29,6 +29,8 @@ return [
         'account_not_writable' => 'This account is not enabled for changes from the CRM. Make the change in Ads Manager, or ask an admin to enable the account (ads:writable).',
         'fake_writer_in_production' => 'A fake ad writer cannot run in production: nothing would reach the platform. Check the ads driver setting.',
         'sandbox_only' => 'Outside production only sandbox accounts can be changed on the real platform.',
+        'connection_read_only' => 'This ad connection is read-only: its token has no ads_management permission. Make the change in Ads Manager, or reconnect with a token that has ads_read and ads_management.',
+        'connection_needs_reconnect' => 'This ad connection needs a new token before it can change anything. Make the change in Ads Manager, or reconnect the account.',
         'bad_request' => 'This request is not valid.',
         'not_found' => 'This campaign, ad set or ad is not in the CRM yet. Sync the account and try again.',
         'rate_limited' => 'The platform is limiting requests right now. Try again in a few minutes.',

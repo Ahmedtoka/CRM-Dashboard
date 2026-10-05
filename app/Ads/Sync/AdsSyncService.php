@@ -2,6 +2,7 @@
 
 namespace App\Ads\Sync;
 
+use App\Ads\Audit\AdsAudit;
 use App\Ads\Control\PublicationLinker;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdPlatformDriver;
@@ -74,7 +75,18 @@ final class AdsSyncService
             $account->fill([
                 'connection_id' => $c->id, 'name' => $i->name, 'currency' => $i->currency,
                 'timezone' => $i->timezone, 'status' => $i->status, 'balance' => $i->balance,
-            ])->save();
+            // An account stopped only because its connection was archived comes back when a connection finds it again (F-012).
+            // One switched off by hand (no reason) stays off.
+            $reactivate = $account->exists && ! $account->is_active && $account->deactivated_reason === 'connection_archived';
+            ]);
+            if ($reactivate) {
+                $account->is_active = true;
+                $account->deactivated_reason = null;
+            }
+            $account->save();
+            if ($reactivate) {
+                AdsAudit::record('account.reactivated', $account, ['is_active' => false], ['is_active' => true], ['connection_id' => $c->id]);
+            }
         }
 
         return count($infos);

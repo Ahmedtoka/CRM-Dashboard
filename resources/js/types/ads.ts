@@ -415,6 +415,15 @@ export interface AdAccountRow {
     spend_30d: number;
 }
 
+export interface AdTokenHealth {
+    valid: boolean | null;
+    type: string | null;
+    scopes: string[];
+    expires_at: string | null;
+    data_access_expires_at: string | null;
+    checked_at: string | null;
+}
+
 export interface AdConnectionRow {
     id: number;
     platform: AdPlatformValue;
@@ -424,6 +433,12 @@ export interface AdConnectionRow {
     last_synced_at: string | null;
     driver: 'live' | 'fake';
     has_token: boolean;
+    /** The stored ciphertext cannot be decrypted: the token must be entered again. */
+    credentials_unreadable: boolean;
+    /** The token has no ads_management permission: the CRM refuses changes on this connection. */
+    read_only: boolean;
+    /** What the daily probe learned about the token (never the token). */
+    token_health: AdTokenHealth;
     /** Which credential fields hold a stored value; the values never leave the server. */
     configured: Record<string, boolean>;
     accounts: AdAccountRow[];

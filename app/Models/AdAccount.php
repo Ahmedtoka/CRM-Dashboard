@@ -15,7 +15,7 @@ class AdAccount extends Model
     /** @use HasFactory<AdAccountFactory> */
     use HasFactory;
 
-    protected $fillable = ['connection_id', 'platform', 'external_id', 'name', 'currency', 'timezone', 'status', 'balance', 'is_active', 'last_synced_at'];
+    protected $fillable = ['connection_id', 'platform', 'external_id', 'name', 'currency', 'timezone', 'status', 'balance', 'is_active', 'last_synced_at', 'deactivated_reason'];
 
     protected function casts(): array
     {
