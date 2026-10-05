@@ -84,6 +84,8 @@ class TikTokAdsDriver implements AdPlatformDriver
                 campaignName: $m['campaign_name'] ?? null,
                 adSetId: isset($m['adgroup_id']) ? (string) $m['adgroup_id'] : null,
                 adSetName: $m['adgroup_name'] ?? null,
+                // TikTok's clicks are destination clicks; no extra field is requested for this.
+                linkClicks: isset($m['clicks']) ? (int) $m['clicks'] : 0,
             );
         }
 

@@ -19,6 +19,14 @@ class MetaAdsDriver implements AdPlatformDriver
 {
     private const PURCHASE_TYPES = ['purchase', 'omni_purchase', 'offsite_conversion.fb_pixel_purchase'];
 
+    private const MESSAGING_TYPE = 'onsite_conversion.messaging_conversation_started_7d';
+
+    /**
+     * Every ad status, ARCHIVED and DELETED included: without this filter Meta silently leaves archived and
+     * deleted ads out of a level=ad insights pull, so their spend would be missing (F-001).
+     */
+    public const INSIGHTS_STATUSES = ['ACTIVE', 'PAUSED', 'DELETED', 'PENDING_REVIEW', 'DISAPPROVED', 'PREAPPROVED', 'PENDING_BILLING_INFO', 'CAMPAIGN_PAUSED', 'ARCHIVED', 'ADSET_PAUSED', 'IN_PROCESS', 'WITH_ISSUES'];
+
     public function __construct(private readonly MetaAdsApi $api) {}
 
     public function accounts(AdPlatformConnection $c): array
@@ -68,9 +76,10 @@ class MetaAdsDriver implements AdPlatformDriver
             'level' => 'ad',
             'time_increment' => 1,
             'time_range' => json_encode(['since' => $from->toDateString(), 'until' => $to->toDateString()]),
-            'fields' => 'ad_id,ad_name,campaign_id,campaign_name,adset_id,adset_name,spend,impressions,clicks,reach,actions,action_values',
+            'filtering' => json_encode([['field' => 'ad.effective_status', 'operator' => 'IN', 'value' => self::INSIGHTS_STATUSES]]),
+            'fields' => 'ad_id,ad_name,campaign_id,campaign_name,adset_id,adset_name,spend,impressions,clicks,inline_link_clicks,reach,actions,action_values',
             'limit' => 500,
-        ]);
+        ] + $this->attributionParams());
 
         $out = [];
         foreach ($rows as $r) {
@@ -91,6 +100,8 @@ class MetaAdsDriver implements AdPlatformDriver
                 campaignName: $r['campaign_name'] ?? null,
                 adSetId: $r['adset_id'] ?? null,
                 adSetName: $r['adset_name'] ?? null,
+                linkClicks: (int) ($r['inline_link_clicks'] ?? 0),
+                msgConversations: (int) $this->actionValue($r['actions'] ?? [], self::MESSAGING_TYPE),
             );
         }
 
@@ -179,6 +190,36 @@ class MetaAdsDriver implements AdPlatformDriver
     private function actId(AdAccount $a): string
     {
         return str_starts_with($a->external_id, 'act_') ? $a->external_id : 'act_'.$a->external_id;
+    }
+
+    /**
+     * crm.ads.meta.attribution as query params, sent on every insights call so the attribution is explicit (R-07).
+     *
+     * @return array<string, string>
+     */
+    private function attributionParams(): array
+    {
+        $out = [];
+        foreach ((array) config('crm.ads.meta.attribution', []) as $key => $value) {
+            $out[(string) $key] = match (true) {
+                is_bool($value) => $value ? 'true' : 'false',
+                is_array($value) => (string) json_encode(array_values($value)),
+                default => (string) $value,
+            };
+        }
+
+        return $out;
+    }
+
+    private function actionValue(array $actions, string $type): float
+    {
+        foreach ($actions as $row) {
+            if (($row['action_type'] ?? null) === $type && isset($row['value'])) {
+                return (float) $row['value'];
+            }
+        }
+
+        return 0.0;
     }
 
     /** First present of the purchase action types (Arena's priority). */

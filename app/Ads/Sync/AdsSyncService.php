@@ -300,7 +300,8 @@ final class AdsSyncService
                 $keep[$adId.'|'.$date] = true;
                 $payload[] = [
                     'ad_id' => $adId, 'ad_account_id' => $a->id, 'date' => $date, 'spend' => $m->spend,
-                    'impressions' => $m->impressions, 'clicks' => $m->clicks, 'reach' => $m->reach,
+                    'impressions' => $m->impressions, 'clicks' => $m->clicks, 'link_clicks' => $m->linkClicks,
+                    'msg_conversations' => $m->msgConversations, 'reach' => $m->reach,
                     'purchases' => $m->purchases, 'purchase_value' => $m->purchaseValue,
                     'created_at' => $now, 'updated_at' => $now,
                 ];
@@ -327,7 +328,7 @@ final class AdsSyncService
             }
 
             foreach (array_chunk($payload, self::CHUNK) as $chunk) {
-                AdDailyMetric::upsert($chunk, ['ad_id', 'date'], ['ad_account_id', 'spend', 'impressions', 'clicks', 'reach', 'purchases', 'purchase_value', 'updated_at']);
+                AdDailyMetric::upsert($chunk, ['ad_id', 'date'], ['ad_account_id', 'spend', 'impressions', 'clicks', 'link_clicks', 'msg_conversations', 'reach', 'purchases', 'purchase_value', 'updated_at']);
             }
 
             return [count($payload), $guard];

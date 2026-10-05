@@ -396,7 +396,12 @@ return [
             'tiktok' => env('CRM_ADS_TIKTOK_DRIVER', env('APP_ENV') === 'production' ? 'live' : 'fake'),
             'google' => env('CRM_ADS_GOOGLE_DRIVER', env('APP_ENV') === 'production' ? 'live' : 'fake'),
         ],
-        'meta' => ['graph_version' => env('META_ADS_GRAPH_VERSION', 'v23.0')],
+        'meta' => [
+            'graph_version' => env('META_ADS_GRAPH_VERSION', 'v23.0'),
+            // Sent on every insights call (ad and account level). ASSUMPTION until Phase 0 P10 confirms Ads Manager's setting:
+            // follow each ad set's own attribution setting, actions counted on the impression day.
+            'attribution' => ['use_unified_attribution_setting' => true, 'action_report_time' => 'impression'],
+        ],
         'tiktok' => ['base_url' => 'https://business-api.tiktok.com/open_api/v1.3'],
         'google' => ['base_url' => 'https://googleads.googleapis.com/v21', 'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN')],
         'tax_rate' => (float) env('CRM_ADS_TAX_RATE', 0.14),

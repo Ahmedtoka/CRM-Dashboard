@@ -95,12 +95,16 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
                 // Each ad has its own quality (ROAS roughly 1 to 4.5), so winners and losers both show in demos.
                 $quality = [0.35, 0.6, 0.85, 1.0, 1.2, 1.5][crc32($ad['id']) % 6];
                 $purchases = max(0, round($spend / 150 * $quality + $rng->getInt(-10, 10) / 10, 0));
+                // Drawn after the older fields so their seeded values stay the same.
+                $linkClicks = (int) round($clicks * $rng->getInt(60, 90) / 100);
+                $msgConversations = (int) round($linkClicks * $rng->getInt(0, 15) / 100);
                 $out[] = new DailyAdMetric(
                     adExternalId: $ad['id'], date: $day->toDateString(),
                     spend: $spend, impressions: $impressions, clicks: $clicks, reach: $reach,
                     purchases: (float) $purchases, purchaseValue: (float) ($purchases * 450),
                     adName: $ad['name'], campaignId: $ad['campaign_id'], campaignName: $ad['campaign_name'],
                     adSetId: $ad['adset_id'], adSetName: $ad['adset_name'],
+                    linkClicks: $linkClicks, msgConversations: $msgConversations,
                 );
             }
         }
