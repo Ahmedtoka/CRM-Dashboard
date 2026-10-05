@@ -13,7 +13,9 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Jobs\SyncJob;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Throwable;
 
 /** Syncs one ad account; kind 'backfill' walks $days in 30-day chunks. */
 class SyncAdAccount implements ShouldBeUnique, ShouldQueue
@@ -115,6 +117,17 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
         }
     }
 
+    /** The queue gave up (timeout, exhausted tries, a crash): close this job's run, and only this one. */
+    public function failed(Throwable $e): void
+    {
+        $message = AdsSyncService::scrub($e->getMessage());
+        if ($this->runKey !== null) {
+            AdsSyncRun::where('run_key', $this->runKey)->where('status', 'running')
+                ->update(['status' => 'error', 'error' => $message, 'finished_at' => now()]);
+        }
+        Log::error('ads sync job failed', ['account' => $this->accountId, 'error' => $message]);
+    }
+
     /** @return bool false when released for a later try (Meta asked to wait) */
     private function run(AdsSyncService $sync): bool
     {
@@ -125,7 +138,7 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
 
         try {
             if ($this->kind === 'backfill') {
-                $sync->backfill($account, $this->days, $this->trigger, $this->triggeredById);
+                $sync->backfill($account, $this->days, $this->trigger, $this->triggeredById, $this->runKey);
 
                 return true;
             }
@@ -142,7 +155,7 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
 
                 return true;
             }
-            $sync->syncAccount($account, $window[0], $window[1], $this->kind, true, $this->trigger, $this->triggeredById);
+            $sync->syncAccount($account, $window[0], $window[1], $this->kind, true, $this->trigger, $this->triggeredById, $this->runKey);
 
             return true;
         } catch (RateLimited $e) {

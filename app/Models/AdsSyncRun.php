@@ -12,7 +12,7 @@ class AdsSyncRun extends Model
     /** @use HasFactory<AdsSyncRunFactory> */
     use HasFactory;
 
-    protected $fillable = ['ad_account_id', 'platform', 'kind', 'status', 'from_date', 'to_date', 'ads_count', 'rows_count', 'error', 'trigger', 'triggered_by_id', 'started_at', 'finished_at'];
+    protected $fillable = ['ad_account_id', 'platform', 'kind', 'status', 'from_date', 'to_date', 'ads_count', 'rows_count', 'error', 'trigger', 'triggered_by_id', 'run_key', 'batch_key', 'started_at', 'finished_at'];
 
     protected function casts(): array
     {

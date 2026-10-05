@@ -62,7 +62,7 @@ final class AdsSyncService
     }
 
     /** ads + campaigns + adsets, then daily metrics for [from,to] (replacing the account's rows of those dates), then media. */
-    public function syncAccount(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to, string $kind = 'recent', bool $withAds = true, string $trigger = 'schedule', ?int $triggeredById = null): AdsSyncRun
+    public function syncAccount(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to, string $kind = 'recent', bool $withAds = true, string $trigger = 'schedule', ?int $triggeredById = null, ?string $runKey = null): AdsSyncRun
     {
         $window = HistoryWindow::clamp($from, $to);
         if ($window === null) {
@@ -76,7 +76,7 @@ final class AdsSyncService
 
         $run = AdsSyncRun::create([
             'ad_account_id' => $a->id, 'platform' => $a->platform, 'kind' => $kind, 'status' => 'running',
-            'trigger' => $trigger, 'triggered_by_id' => $triggeredById,
+            'trigger' => $trigger, 'triggered_by_id' => $triggeredById, 'run_key' => $runKey,
             'from_date' => $from->toDateString(), 'to_date' => $to->toDateString(), 'started_at' => now(),
         ]);
 
@@ -145,7 +145,7 @@ final class AdsSyncService
     }
 
     /** Sync an account over $days days in 30-day chunks, newest first. */
-    public function backfill(AdAccount $a, int $days, string $trigger = 'backfill', ?int $triggeredById = null): ?AdsSyncRun
+    public function backfill(AdAccount $a, int $days, string $trigger = 'backfill', ?int $triggeredById = null, ?string $runKey = null): ?AdsSyncRun
     {
         $run = null;
         $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
@@ -156,7 +156,7 @@ final class AdsSyncService
         for ($offset = 0; $offset < $days; $offset += 30) {
             $to = $today->subDays($offset);
             $from = $today->subDays(min($offset + 29, $days - 1));
-            $run = $this->syncAccount($a, $from, $to, 'backfill', withAds: $offset === 0, trigger: $trigger, triggeredById: $triggeredById);
+            $run = $this->syncAccount($a, $from, $to, 'backfill', withAds: $offset === 0, trigger: $trigger, triggeredById: $triggeredById, runKey: $runKey);
             if ($run->status === 'error') {
                 break;
             }
