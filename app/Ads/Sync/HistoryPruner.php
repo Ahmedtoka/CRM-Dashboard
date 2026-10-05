@@ -78,9 +78,10 @@ final class HistoryPruner
 
     /**
      * @param  callable(string $table, int $deletedInChunk, int $deletedSoFar): void|null  $progress
+     * @param  callable(): bool|null  $shouldStop  checked before every chunk; true stops cleanly (the finished chunks stay deleted)
      * @return array<string, int> rows deleted per present table
      */
-    public function prune(CarbonImmutable $before, int $chunk, ?callable $progress = null): array
+    public function prune(CarbonImmutable $before, int $chunk, ?callable $progress = null, ?callable $shouldStop = null): array
     {
         $chunk = max(1, $chunk);
         $counts = [];
@@ -93,6 +94,9 @@ final class HistoryPruner
             $lastId = 0;
 
             while (true) {
+                if ($shouldStop !== null && $shouldStop()) {
+                    return $counts;
+                }
                 $ids = $this->query($table, $before)->where('id', '>', $lastId)->orderBy('id')->limit($chunk)->pluck('id')->all();
                 if ($ids === []) {
                     break;
