@@ -451,6 +451,9 @@ return [
             'stop_retry_max_wait_seconds' => 1800,
             // Short jobs only (worker --timeout=80). ASSUMPTION: the crm-commerce worker runs in production (ads:doctor shows it).
             'retry_queue' => env('CRM_ADS_WRITE_RETRY_QUEUE', 'commerce'),
+            // Named limiter of the write routes (throttle:ads-writes), per user: Stop far above Run so Stops are never throttled out.
+            'stop_per_minute' => 120,
+            'run_per_minute' => 30,
             // Run guard (B3). ASSUMPTION for the owner: these are sane defaults, not his numbers. Runtime overrides per
             // user / account / global live in ads_settings.write_limits (ads:write-limits, audited). Money in minor units.
             'limits' => [

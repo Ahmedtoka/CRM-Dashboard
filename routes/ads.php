@@ -29,11 +29,11 @@ Route::middleware('ads:report')->group(function () {
     Route::post('/ads/actions/status', [ActionController::class, 'status'])->name('ads.actions.status');
 
     // Phase B write pipeline (B2): propose, then confirm. Refusals use the stable code shape (WriteDenied).
-    Route::post('/ads/write-actions', [WriteActionController::class, 'store'])->middleware('throttle:30,1')->name('ads.write-actions.store');
+    Route::post('/ads/write-actions', [WriteActionController::class, 'store'])->middleware('throttle:ads-writes')->name('ads.write-actions.store');
     Route::get('/ads/write-actions/{action}', [WriteActionController::class, 'show'])->name('ads.write-actions.show');
-    Route::post('/ads/write-actions/{action}/confirm', [WriteActionController::class, 'confirm'])->middleware('throttle:30,1')->name('ads.write-actions.confirm');
+    Route::post('/ads/write-actions/{action}/confirm', [WriteActionController::class, 'confirm'])->middleware('throttle:ads-writes')->name('ads.write-actions.confirm');
     Route::post('/ads/write-actions/{action}/cancel', [WriteActionController::class, 'cancel'])->name('ads.write-actions.cancel');
-    Route::post('/ads/write-actions/{action}/rollback', [WriteActionController::class, 'rollback'])->middleware('throttle:30,1')->name('ads.write-actions.rollback');
+    Route::post('/ads/write-actions/{action}/rollback', [WriteActionController::class, 'rollback'])->middleware('throttle:ads-writes')->name('ads.write-actions.rollback');
 });
 
 Route::middleware('ads:manage')->group(function () {

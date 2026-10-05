@@ -100,6 +100,12 @@ class AdWriteAction extends Model
         return $this->belongsTo(User::class, 'confirmed_by_id');
     }
 
+    /** The action this one undoes (rollback). Eager-load it when presenting lists. */
+    public function rollbackOf(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'rollback_of_id');
+    }
+
     public function steps(): HasMany
     {
         return $this->hasMany(AdWriteStep::class)->orderBy('seq');

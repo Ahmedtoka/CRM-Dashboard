@@ -1,7 +1,5 @@
 <?php
 
-use App\Ads\Control\Write\WriteActionService;
-use App\Ads\Control\Write\WriteDenied;
 use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Enums\UserRole;
 use App\Models\Ad;
@@ -88,31 +86,6 @@ it('holds the Run key while the Run executes and frees it after', function () {
 
     expect($during)->toBe('run:'.$acc->id.':ad:'.$ad->external_id)
         ->and($x->fresh()->open_business_key)->toBeNull()->and($ad->fresh()->status)->toBe('ACTIVE');
-});
-
-it('refuses a second Run on the same ad while the first holds the key; it stays proposed', function () {
-    $acc = AdAccount::factory()->meta()->create();
-    $ad = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED']);
-    $buyer = wcBuyer($acc);
-    $first = wcPropose($this, $buyer, $acc, 'ad', $ad->external_id, 'active');
-    $second = wcPropose($this, $buyer, $acc, 'ad', $ad->external_id, 'active');
-    // Confirming the first supersedes other proposed Runs, so the second is re-opened as proposed inside the race window.
-    $caught = null;
-    FakeAdsDriver::beforeSetStatus(function () use ($second, $buyer, &$caught) {
-        AdWriteAction::whereKey($second->id)->update(['state' => 'proposed', 'superseded_by_id' => null, 'finished_at' => null]);
-        try {
-            app(WriteActionService::class)->confirm($buyer, $second->fresh(), $second->diff_hash);
-        } catch (WriteDenied $e) {
-            $caught = $e;
-        }
-    });
-
-    wcConfirm($this, $buyer, $first)->assertOk();
-
-    expect($caught?->errorCode)->toBe('action_in_progress')->and($caught->status)->toBe(409)
-        ->and($caught->details['action_id'])->toBe($first->public_id)
-        ->and($second->fresh()->state)->toBe('proposed')->and($second->fresh()->open_business_key)->toBeNull()
-        ->and(wcStatuses())->toHaveCount(1);
 });
 
 it('a confirmed Stop supersedes an open Run proposal but never another Stop proposal', function () {

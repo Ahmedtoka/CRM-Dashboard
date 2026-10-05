@@ -21,6 +21,7 @@ use App\Inbox\UserNotifier;
 use App\Models\AdAccount;
 use App\Models\AdWriteAction;
 use App\Models\AdWriteStep;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -94,7 +95,7 @@ class WriteExecutor
             // ASSUMPTION: a platform error object (4xx) means the change was not applied.
             return $this->failStep($x, $step, 'platform_rejected', SecretScrubber::scrub($e->getMessage()));
         } catch (Throwable $e) {
-            report($e);
+            self::logUnexpected($e, $x);
 
             return $this->readBack($x, $step, $account, $writer, SecretScrubber::scrub($e->getMessage()));
         }
@@ -165,7 +166,8 @@ class WriteExecutor
         if ($canRetry) {
             $retryAt = now()->addSeconds($delay);
             $scheduled = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::EXECUTING)
-                ->update(['retry_at' => $retryAt, 'error_code' => $code, 'error_message' => mb_substr($message, 0, 2000), 'updated_at' => now()]) === 1;
+                ->update(['retry_at' => $retryAt, 'error_code' => $code, 'error_message' => mb_substr($message, 0, 2000), 'updated_at' => now(),
+                    'outcome' => json_encode(array_merge($x->outcome ?? [], ['retry_scheduled' => true]))]) === 1;
             $x->refresh();
             if ($scheduled) {
                 AdsAudit::record('write.retry_scheduled', $x, null, ['retry_at' => $retryAt->toIso8601String()],
@@ -178,17 +180,36 @@ class WriteExecutor
             return $x;
         }
 
-        $link = self::deepLink($x);
-        $x = $this->finish($x, AdWriteAction::FAILED, $code, $message,
-            array_filter(['deep_link' => $link, 'retry_after' => $regainSeconds], fn ($v) => $v !== null));
-        if ($x->state === AdWriteAction::FAILED && $x->error_code === $code) {
-            app(UserNotifier::class)->notifyAdsAuthority('ads.stop_failed', array_filter([
-                'action_id' => $x->public_id, 'name' => $x->target_name, 'account' => $x->account_name, 'level' => $x->target_level,
-                'deep_link' => $link, 'link' => '/ads/actions',
-            ], fn ($v) => $v !== null));
-        }
+        // finish() sends the "open in Ads Manager" notice (retry_exhausted marks the bound).
+        return $this->finish($x, AdWriteAction::FAILED, $code, $message,
+            array_filter(['deep_link' => self::deepLink($x), 'retry_after' => $regainSeconds, 'retry_exhausted' => true], fn ($v) => $v !== null));
+    }
 
-        return $x;
+    /**
+     * A confirmed Stop that nobody is watching any more (a scheduled retry, a re-apply, the bound reached) ended in a
+     * terminal failure: tell every Ads-authority holder, with the Ads Manager link (2.1 rule 6).
+     */
+    protected function noticeStopFailed(AdWriteAction $x): void
+    {
+        $link = $x->outcome['deep_link'] ?? self::deepLink($x);
+        if ($link !== null && ! isset($x->outcome['deep_link'])) {
+            AdWriteAction::whereKey($x->id)->update(['outcome' => json_encode(array_merge($x->outcome ?? [], ['deep_link' => $link]))]);
+            $x->refresh();
+        }
+        app(UserNotifier::class)->notifyAdsAuthority('ads.stop_failed', array_filter([
+            'action_id' => $x->public_id, 'name' => $x->target_name, 'account' => $x->account_name, 'level' => $x->target_level,
+            'error_code' => $x->error_code, 'deep_link' => $link, 'link' => '/ads/actions',
+        ], fn ($v) => $v !== null));
+    }
+
+    /** Unexpected exception: logged with a scrubbed message only (never the raw text, which may carry a token). */
+    public static function logUnexpected(Throwable $e, ?AdWriteAction $x = null): void
+    {
+        Log::error('ads write: unexpected error', array_filter([
+            'class' => $e::class,
+            'message' => SecretScrubber::scrub($e->getMessage()),
+            'action' => $x?->public_id,
+        ], fn ($v) => $v !== null));
     }
 
     /**
@@ -224,9 +245,6 @@ class WriteExecutor
             if ($x->rollback_of_id !== null) {
                 $this->markRolledBack($x);
             }
-        } elseif (! $x->isStop() && $x->state === AdWriteAction::SUPERSEDED_BY_STOP) {
-            // The Run's call landed after a Stop succeeded: the Stop wins (2.1 rule 4).
-            $this->reapplyStop($x);
         }
 
         return $x->refresh();
@@ -291,15 +309,17 @@ class WriteExecutor
      * rule; part of the human's confirmed intent, never a new decision). The Stop goes back to executing with a fresh
      * attempt budget while the platform holds the Run's change; its steps keep the whole history.
      */
-    protected function reapplyStop(AdWriteAction $run): void
+    protected function reapplyStop(AdWriteAction $run, string $runOutcome): void
     {
-        AdWriteAction::whereKey($run->id)->update(['outcome' => json_encode(array_merge($run->outcome ?? [], ['landed_after_stop' => true]))]);
+        $note = $runOutcome === AdWriteAction::SUCCEEDED ? ['landed_after_stop' => true] : ['maybe_landed_after_stop' => $runOutcome];
+        AdWriteAction::whereKey($run->id)->update(['outcome' => json_encode(array_merge($run->outcome ?? [], $note))]);
         $stop = $run->superseded_by_id !== null ? AdWriteAction::find($run->superseded_by_id) : null;
         if ($stop === null) {
             return;
         }
         $reopened = AdWriteAction::whereKey($stop->id)->where('state', AdWriteAction::SUCCEEDED)->update([
             'state' => AdWriteAction::EXECUTING, 'finished_at' => null, 'retry_at' => null, 'attempts' => 0, 'updated_at' => now(),
+            'outcome' => json_encode(array_merge($stop->outcome ?? [], ['reapply_of' => $run->public_id])),
         ]) === 1;
         if (! $reopened) {
             return; // already being re-applied, rolled back, or no longer the Stop that won
@@ -369,7 +389,7 @@ class WriteExecutor
         }
         if ($outcome !== []) {
             $stored = AdWriteAction::whereKey($x->id)->value('outcome');
-            $stored = is_string($stored) ? (json_decode($stored, true) ?: []) : [];
+            $stored = is_array($stored) ? $stored : (is_string($stored) ? (json_decode($stored, true) ?: []) : []);
             $update['outcome'] = json_encode(array_merge($stored, $outcome));
         }
         $changed = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::EXECUTING)->update($update) === 1;
@@ -378,9 +398,22 @@ class WriteExecutor
         if ($changed) {
             AdsAudit::record('write.'.$state, $x, ['state' => AdWriteAction::EXECUTING], ['state' => $state],
                 array_filter(['public_id' => $x->public_id, 'error_code' => $code], fn ($v) => $v !== null));
+            if ($x->isStop() && $state === AdWriteAction::FAILED && array_intersect_key($x->outcome ?? [], array_flip(['retry_scheduled', 'retry_exhausted', 'reapply_of'])) !== []) {
+                $this->noticeStopFailed($x);
+            }
+        } elseif (! $x->isStop() && $x->state === AdWriteAction::SUPERSEDED_BY_STOP && self::maybeLanded($state, $code)) {
+            // A Stop won while this Run's call was in flight (2.1 rule 4). Unless the call is known not to have changed
+            // anything, re-apply the confirmed Stop: pausing twice is harmless, a Run left ACTIVE is not.
+            $this->reapplyStop($x, $state);
         }
 
         return $x;
+    }
+
+    /** Outcomes after which a Run's call may have reached the platform (succeeded, unknown, read back not applied). */
+    public static function maybeLanded(string $state, ?string $code): bool
+    {
+        return $state === AdWriteAction::SUCCEEDED || $state === AdWriteAction::UNKNOWN || $code === 'not_applied';
     }
 
     /** Mirror the new status on the local row like slice 1; a local failure is noted, never undoes the action. */
@@ -395,7 +428,7 @@ class WriteExecutor
                 ->forceFill(['status' => $x->to_status === 'active' ? 'ACTIVE' : 'PAUSED'])->save();
         } catch (Throwable $e) {
             if (! $e instanceof WriteDenied) {
-                report($e);
+                self::logUnexpected($e, $x);
             }
             AdWriteAction::whereKey($x->id)->update(['outcome' => json_encode(array_merge($x->outcome ?? [], [
                 'local_status_error' => mb_substr(SecretScrubber::scrub($e->getMessage()), 0, 500),

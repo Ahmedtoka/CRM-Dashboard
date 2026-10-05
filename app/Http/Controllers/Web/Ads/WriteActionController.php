@@ -154,7 +154,7 @@ class WriteActionController extends Controller
             'error_code' => $x->error_code,
             'error_message' => $x->error_message,
             'outcome' => $x->outcome,
-            'rollback_of' => $x->rollback_of_id !== null ? AdWriteAction::whereKey($x->rollback_of_id)->value('public_id') : null,
+            'rollback_of' => $x->rollback_of_id !== null ? $x->loadMissing('rollbackOf:id,public_id')->rollbackOf?->public_id : null,
         ];
     }
 

@@ -10,6 +10,8 @@ use App\Models\AdAccount;
 use App\Models\AdWriteAction;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\DeadlockException;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
@@ -263,6 +265,16 @@ class WriteActionService
      *
      * @throws WriteDenied 409 not_confirmable / action_in_progress, 410 proposal_expired
      */
+    /** SQLSTATE 40001 (serialization failure) or MySQL/MariaDB error 1213 (deadlock). */
+    public static function isDeadlock(QueryException|DeadlockException $e): bool
+    {
+        if ($e instanceof DeadlockException) {
+            return true; // Laravel's own concurrency-error wrapper inside a nested transaction
+        }
+
+        return (string) ($e->errorInfo[0] ?? '') === '40001' || (int) ($e->errorInfo[1] ?? 0) === 1213;
+    }
+
     private function claim(User $u, AdWriteAction $x): array
     {
         $key = $x->isStop() ? null : SetStatusType::runKey($x->target_key);
@@ -307,6 +319,14 @@ class WriteActionService
             $holder = AdWriteAction::where('open_business_key', $key)->value('public_id');
 
             throw WriteDenied::make('action_in_progress', array_filter(['action_id' => $holder]));
+        } catch (QueryException|DeadlockException $e) {
+            // MariaDB may pick this claim as a deadlock victim when two Runs race on the same target (both lock the
+            // account row and the unique key): the transaction rolled back, the action stays proposed.
+            if (! self::isDeadlock($e)) {
+                throw $e;
+            }
+
+            throw WriteDenied::make('action_in_progress', ['reason' => 'deadlock']);
         }
 
         if ($ids === null) {

@@ -8,8 +8,8 @@ use Illuminate\Console\Command;
 
 /**
  * The manual valve for a write whose outcome is not known (until B7's sweeper/reconciler): after checking Ads Manager,
- * the operator records what really happened. Only `unknown` actions, or `executing` ones older than 10 minutes with no
- * retry pending. Clears the Run key; audited as write.resolved_by_hand.
+ * the operator records what really happened. Only `unknown` actions, `executing` ones older than 10 minutes with no
+ * retry pending, or `executing` ones whose retry is more than 10 minutes overdue (a lost dispatch). Clears the Run key; audited as write.resolved_by_hand.
  */
 class WriteResolveCommand extends Command
 {
@@ -48,24 +48,27 @@ class WriteResolveCommand extends Command
         }
 
         $stale = now()->subMinutes(self::STALE_MINUTES);
-        $resolvable = $x->state === AdWriteAction::UNKNOWN
+        $lostRetry = $x->state === AdWriteAction::EXECUTING && $x->retry_at !== null && $x->retry_at->lte($stale);
+        $resolvable = $x->state === AdWriteAction::UNKNOWN || $lostRetry
             || ($x->state === AdWriteAction::EXECUTING && $x->retry_at === null && $x->executing_at !== null && $x->executing_at->lte($stale));
         if (! $resolvable) {
-            $this->error("This action is {$x->state}: only unknown actions, or executing ones older than ".self::STALE_MINUTES.' minutes with no retry pending, can be resolved by hand.');
+            $this->error("This action is {$x->state}: only unknown actions, executing ones older than ".self::STALE_MINUTES.' minutes with no retry pending, or executing ones whose retry is more than '.self::STALE_MINUTES.' minutes overdue can be resolved by hand.');
 
             return self::FAILURE;
         }
 
         $from = $x->state;
         $to = $succeeded ? AdWriteAction::SUCCEEDED : AdWriteAction::FAILED;
-        $changed = AdWriteAction::whereKey($x->id)->where('state', $from)->whereNull('retry_at')->update([
-            'state' => $to,
-            'finished_at' => now(),
-            'open_business_key' => null,
-            'error_code' => $succeeded ? null : ($x->error_code ?: 'resolved_by_hand'),
-            'outcome' => json_encode(array_merge($x->outcome ?? [], ['resolved_by_hand' => $note])),
-            'updated_at' => now(),
-        ]) === 1;
+        $changed = AdWriteAction::whereKey($x->id)->where('state', $from)
+            ->when($lostRetry, fn ($q) => $q->where('retry_at', '<=', $stale), fn ($q) => $q->whereNull('retry_at'))->update([
+                'state' => $to,
+                'finished_at' => now(),
+                'open_business_key' => null,
+                'retry_at' => null,
+                'error_code' => $succeeded ? null : ($x->error_code ?: 'resolved_by_hand'),
+                'outcome' => json_encode(array_merge($x->outcome ?? [], ['resolved_by_hand' => $note])),
+                'updated_at' => now(),
+            ]) === 1;
         if (! $changed) {
             $this->error('The action changed while resolving it; look again.');
 
