@@ -84,4 +84,12 @@ return [
         'bad_answer' => 'The AI answer could not be read. Try again.',
         'no_video' => 'Pick a video file of this material to write captions for.',
     ],
+    'health' => [
+        'mail' => [
+            'stale' => 'The ads sync has not finished for more than 6 hours, so the numbers in the CRM are behind Ads Manager.',
+            'reconnect' => 'An ad connection needs a new token. Until it is reconnected nothing syncs and no ad can be changed from the CRM.',
+            'scheduler' => 'The scheduler has not run for more than 5 minutes, so no scheduled sync or check is running.',
+            'open' => 'Open the sync page',
+        ],
+    ],
 ];

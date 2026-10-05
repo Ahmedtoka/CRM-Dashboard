@@ -67,6 +67,13 @@ function itemText(n: AppNotification): string {
         return t('notifications.ads_token_invalid_item', { name: String(n.data.connection ?? '') });
     }
 
+    if (n.type === 'ads.data_health') {
+        const reason = t('notifications.ads_health_reasons.' + String(n.data.reason ?? 'stale'));
+        const account = String(n.data.account ?? n.data.subject ?? '') || t('notifications.ads_health_system');
+
+        return t(n.data.recovered ? 'notifications.ads_data_health_recovered_item' : 'notifications.ads_data_health_item', { account, reason });
+    }
+
     if (n.type === 'ads.token_scope_missing') {
         return t('notifications.ads_token_scope_missing_item', { name: String(n.data.connection ?? '') });
     }
@@ -94,6 +101,10 @@ function open(n: AppNotification): void {
     void notifications.markRead([n.id]);
     if (n.type === 'ads.need_stop') {
         router.visit(String(n.data.link ?? '/ads/materials?status=activated&stock=out'));
+        return;
+    }
+    if (n.type === 'ads.data_health') {
+        router.visit('/ads/sync');
         return;
     }
     if (n.type === 'ads.token_invalid' || n.type === 'ads.token_scope_missing' || n.type === 'ads.token_expiring') {

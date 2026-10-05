@@ -411,6 +411,13 @@ return [
         'control_tolerance_pct' => 0.5,
         // First day ads history is kept for (Cairo day). Sync, backfill, discovery and reports never go before it.
         'history_start' => env('CRM_ADS_HISTORY_START', '2026-09-01'),
+        // ads:health (A8): a sync silent for stale_after_hours is a warning, for critical_after_hours critical; a status
+        // is announced to the admins only once it has held for hold_down_minutes.
+        'health' => [
+            'stale_after_hours' => 3,
+            'critical_after_hours' => 6,
+            'hold_down_minutes' => 30,
+        ],
         'sync' => [
             // Quota admission (A5): a Meta read for an account is not sent while its busiest recorded usage of the
             // last 15 minutes is at or above admission_pct; the job is retried later instead. Writes are never held.

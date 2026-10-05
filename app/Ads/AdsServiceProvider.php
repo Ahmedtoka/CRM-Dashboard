@@ -13,6 +13,8 @@ use App\Ads\Commands\SetupTeamCommand;
 use App\Ads\Control\Commands\ClearOpenKeysCommand;
 use App\Ads\Control\Commands\WritableAccountsCommand;
 use App\Ads\Doctor\DoctorCommand;
+use App\Ads\Health\Commands\HealthCommand;
+use App\Ads\Health\QueueHeartbeat;
 use App\Ads\Materials\Commands\StockWatchCommand;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\Meta\UsageRecorder;
@@ -23,6 +25,7 @@ use App\Ads\Sync\Commands\RefreshCreativesCommand;
 use App\Ads\Sync\Commands\SweepStuckRunsCommand;
 use App\Ads\Sync\Commands\SyncAdsCommand;
 use App\Ads\Sync\Commands\TokenProbeCommand;
+use App\Ads\Sync\SyncAdAccount;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
 
@@ -43,7 +46,7 @@ class AdsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
@@ -64,6 +67,15 @@ class AdsServiceProvider extends ServiceProvider
 
             $schedule->command(StockWatchCommand::class)
                 ->everyThirtyMinutes()->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
+
+            $schedule->command(HealthCommand::class)
+                ->everyFiveMinutes()->timezone('Africa/Cairo')->withoutOverlapping(10)->onOneServer()->appendOutputTo(storage_path('logs/ads-schedule.log'));
+
+            // One heartbeat job per queue the ads depend on: when it stops landing, a worker is gone (ads:health, queue:*).
+            foreach (array_values(array_unique(['default', 'commercelong', SyncAdAccount::queueName()])) as $queue) {
+                $connection = $queue !== 'default' && config('queue.default') === 'redis' ? 'redislong' : null;
+                $schedule->job(new QueueHeartbeat($queue), $queue, $connection)->everyFiveMinutes()->onOneServer();
+            }
 
             $schedule->command(TokenProbeCommand::class)
                 ->dailyAt('06:10')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
