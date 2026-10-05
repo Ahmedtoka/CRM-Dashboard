@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web\Ads;
 use App\Ads\Access\AdsScope;
 use App\Ads\AdsSettings;
 use App\Ads\Control\AdWriteService;
+use App\Ads\Control\DuplicatePublication;
 use App\Ads\Control\PublishService;
 use App\Ads\Materials\MaterialService;
 use App\Ads\Naming;
@@ -20,6 +21,7 @@ use App\Models\AdPublication;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /** Publish a material as paused ads: the dialog's live options, the publish itself, and a material's publication list. */
 class PublishController extends Controller
@@ -82,6 +84,7 @@ class PublishController extends Controller
         abort_unless(MaterialService::canOperate($user), 403);
 
         $data = $request->validate([
+            'allow_duplicate' => ['nullable', 'boolean'],
             'account_id' => ['required', 'integer', Rule::exists('ad_accounts', 'id')],
             'campaign_id' => ['required', 'string', 'max:255'],
             'campaign_name' => ['nullable', 'string', 'max:500'],
@@ -102,7 +105,23 @@ class PublishController extends Controller
         $account = AdAccount::query()->findOrFail($data['account_id']);
         abort_unless($writes->canWrite($user, $account) && $account->platform !== AdPlatform::Google->value, 403);
 
-        $rows = $publish->publish($user, $material->load('product'), $account, $data);
+        $key = (string) $request->header('Idempotency-Key', '');
+        if (! preg_match('/^[A-Za-z0-9-]{8,64}$/', $key)) {
+            throw ValidationException::withMessages(['idempotency_key' => __('ads.publish.idempotency_key_required')]);
+        }
+
+        // Same user + same key: a double click or a retry gets the first answer and nothing new is queued.
+        $rows = $publish->replay($user, $key);
+        if ($rows === null) {
+            try {
+                $rows = $publish->publish($user, $material->load('product'), $account, $data, $key, (bool) ($data['allow_duplicate'] ?? false));
+            } catch (DuplicatePublication $e) {
+                return response()->json([
+                    'code' => 'duplicate_in_flight', 'message' => $e->getMessage(),
+                    'publications' => $e->existing->map(fn (AdPublication $p) => self::row($p->setRelation('account', $account)))->values()->all(),
+                ], 409);
+            }
+        }
 
         return response()->json([
             'ok' => true,

@@ -61,6 +61,8 @@ return [
         'bad_file' => 'One of the chosen files does not belong to this material.',
         'media_not_ready' => 'The platform is still processing the file. Try again later.',
         'queued' => 'Queued. The ads will be created paused.',
+        'duplicate_in_flight' => 'The same ad (file, text and ad set) was already published or queued in the last 24 hours.',
+        'idempotency_key_required' => 'The request is missing its publish key. Reload the page and try again.',
         'stopped_creating' => 'The last try stopped while creating this ad. Check Ads Manager for ":name" before publishing again.',
         'create_may_exist' => 'It may already exist on the platform: check Ads Manager first.',
         'stopped_before_ad' => 'The last try stopped before the ad was sent to the platform, so nothing was created. Publish it again.',

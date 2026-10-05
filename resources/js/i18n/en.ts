@@ -3408,6 +3408,7 @@ const en: Messages = {
             no_campaigns: 'No campaigns on this account.',
             no_adsets: 'This campaign has no ad sets.',
             no_identities: 'No pages found for this account.',
+            allow_duplicate: 'Publish again anyway',
             no_link: 'This material has no product and no website link, so the ad has nowhere to send people. Add one first.',
             naming_off: 'Name does not follow the convention',
             submit: 'Create paused ads',

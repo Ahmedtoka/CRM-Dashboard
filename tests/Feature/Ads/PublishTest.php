@@ -29,6 +29,8 @@ use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 use Illuminate\Validation\ValidationException;
 
 beforeEach(function () {
@@ -57,6 +59,11 @@ function pubInput(array $fileIds, int $captions = 3, array $over = []): array
         'file_ids' => $fileIds,
         'captions' => array_map(fn ($i) => ['headline' => "H{$i}", 'primary_text' => "Text {$i}", 'cta' => 'SHOP_NOW'], range(1, $captions)),
     ];
+}
+
+function pubKey(): array
+{
+    return ['Idempotency-Key' => (string) Str::uuid()];
 }
 
 function pubBuyer(AdAccount $acc): User
@@ -243,9 +250,9 @@ it('lets a media buyer publish only into an own account and content never', func
     $content = User::factory()->create(['role' => UserRole::Content]);
     $body = pubInput([$files[0]->id], 1);
 
-    $this->actingAs($buyer)->postJson("/ads/materials/{$material->id}/publish", $body + ['account_id' => $acc->id])->assertOk();
-    $this->actingAs($buyer)->postJson("/ads/materials/{$material->id}/publish", $body + ['account_id' => $other->id])->assertForbidden();
-    $this->actingAs($content)->postJson("/ads/materials/{$material->id}/publish", $body + ['account_id' => $acc->id])->assertForbidden();
+    $this->actingAs($buyer)->postJson("/ads/materials/{$material->id}/publish", $body + ['account_id' => $acc->id], pubKey())->assertOk();
+    $this->actingAs($buyer)->postJson("/ads/materials/{$material->id}/publish", $body + ['account_id' => $other->id], pubKey())->assertForbidden();
+    $this->actingAs($content)->postJson("/ads/materials/{$material->id}/publish", $body + ['account_id' => $acc->id], pubKey())->assertForbidden();
     expect(AdPublication::count())->toBe(1);
 });
 
@@ -255,7 +262,7 @@ it('rejects files that belong to another material', function () {
     [, , $foreign] = pubSetup();
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
-    $this->actingAs($admin)->postJson("/ads/materials/{$material->id}/publish", pubInput([$foreign[0]->id], 1) + ['account_id' => $acc->id])->assertStatus(422);
+    $this->actingAs($admin)->postJson("/ads/materials/{$material->id}/publish", pubInput([$foreign[0]->id], 1) + ['account_id' => $acc->id], pubKey())->assertStatus(422);
 });
 
 it('remembers the identity used per account and preselects it next time', function () {
@@ -263,7 +270,7 @@ it('remembers the identity used per account and preselects it next time', functi
     [$acc, $material, $files] = pubSetup();
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
-    $this->actingAs($admin)->postJson("/ads/materials/{$material->id}/publish", pubInput([$files[0]->id], 1) + ['account_id' => $acc->id])->assertOk()
+    $this->actingAs($admin)->postJson("/ads/materials/{$material->id}/publish", pubInput([$files[0]->id], 1) + ['account_id' => $acc->id], pubKey())->assertOk()
         ->assertJsonPath('publications.0.status', 'queued');
 
     $this->actingAs($admin)->getJson("/ads/publish/options?account={$acc->id}")->assertOk()->assertJsonPath('last_identity.page_id', 'fake_page_1');
@@ -586,4 +593,91 @@ it('ends a queued row whose file was deleted with a readable error', function ()
     pubRun($row);
 
     expect($row->fresh()->status)->toBe('error')->and($row->fresh()->error)->toBe(__('ads.publish.file_gone'));
+});
+
+function pubPost($test, User $user, AdMaterial $material, array $body, ?string $key = 'key-0000-aaaa'): TestResponse
+{
+    return $test->actingAs($user)->postJson("/ads/materials/{$material->id}/publish", $body, $key === null ? [] : ['Idempotency-Key' => $key]);
+}
+
+it('replays the same user + key: one set of rows, same ids, one job per row', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup(['video/mp4', 'video/mp4']);
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $body = pubInput([$files[0]->id, $files[1]->id], 2) + ['account_id' => $acc->id];
+
+    $first = pubPost($this, $admin, $material, $body)->assertOk();
+    $second = pubPost($this, $admin, $material, $body)->assertOk();
+
+    expect(AdPublication::count())->toBe(4)
+        ->and(collect($second->json('publications'))->pluck('id')->all())->toBe(collect($first->json('publications'))->pluck('id')->all());
+    Queue::assertPushed(PublishAd::class, 4);
+});
+
+it('answers 409 duplicate_in_flight for another key with the same file, caption and ad set', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $body = pubInput([$files[0]->id], 1) + ['account_id' => $acc->id];
+
+    $first = pubPost($this, $admin, $material, $body, 'key-0000-aaaa')->assertOk();
+    pubPost($this, $admin, $material, $body, 'key-0000-bbbb')->assertStatus(409)->assertJsonPath('code', 'duplicate_in_flight')
+        ->assertJsonPath('publications.0.id', $first->json('publications.0.id'));
+
+    expect(AdPublication::count())->toBe(1);
+    Queue::assertPushed(PublishAd::class, 1);
+});
+
+it('lets allow_duplicate publish again with open_key null', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $body = pubInput([$files[0]->id], 1) + ['account_id' => $acc->id];
+
+    pubPost($this, $admin, $material, $body, 'key-0000-aaaa')->assertOk();
+    pubPost($this, $admin, $material, $body + ['allow_duplicate' => true], 'key-0000-bbbb')->assertOk();
+
+    $second = AdPublication::orderByDesc('id')->first();
+    expect(AdPublication::count())->toBe(2)->and($second->open_key)->toBeNull()->and($second->allow_duplicate)->toBeTrue();
+});
+
+it('releases the open key when a publication errors, so the same ad can be published again', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $body = pubInput([$files[0]->id], 1) + ['account_id' => $acc->id];
+
+    pubPost($this, $admin, $material, $body, 'key-0000-aaaa')->assertOk();
+    $row = AdPublication::first();
+    expect($row->open_key)->not->toBeNull();
+    $row->update(['status' => AdPublication::ERROR, 'error' => 'x']);
+    expect($row->fresh()->open_key)->toBeNull();
+
+    pubPost($this, $admin, $material, $body, 'key-0000-bbbb')->assertOk();
+    expect(AdPublication::count())->toBe(2);
+});
+
+it('ads:clear-open-keys releases done rows older than 24 h only', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $a = pubPost($this, $admin, $material, pubInput([$files[0]->id], 1) + ['account_id' => $acc->id], 'key-0000-aaaa')->json('publications.0.id');
+    $b = pubPost($this, $admin, $material, pubInput([$files[0]->id], 1, ['adset_id' => 's2']) + ['account_id' => $acc->id], 'key-0000-bbbb')->json('publications.0.id');
+    AdPublication::whereKey($a)->update(['status' => 'done', 'updated_at' => now()->subHours(25)]);
+    AdPublication::whereKey($b)->update(['status' => 'done', 'updated_at' => now()->subHour()]);
+
+    $this->artisan('ads:clear-open-keys')->assertSuccessful();
+
+    expect(AdPublication::find($a)->open_key)->toBeNull()->and(AdPublication::find($b)->open_key)->not->toBeNull();
+});
+
+it('refuses a publish without a valid Idempotency-Key header', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $body = pubInput([$files[0]->id], 1) + ['account_id' => $acc->id];
+
+    pubPost($this, $admin, $material, $body, null)->assertStatus(422)->assertJsonValidationErrors(['idempotency_key']);
+    pubPost($this, $admin, $material, $body, 'short')->assertStatus(422);
+    expect(AdPublication::count())->toBe(0);
 });

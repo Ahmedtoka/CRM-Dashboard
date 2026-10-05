@@ -8,6 +8,7 @@ use App\Ads\Captions\FakeCaptionGenerator;
 use App\Ads\Captions\GeneratesCaptions;
 use App\Ads\Commands\ImportArenaTokenCommand;
 use App\Ads\Commands\SetupTeamCommand;
+use App\Ads\Control\Commands\ClearOpenKeysCommand;
 use App\Ads\Materials\Commands\StockWatchCommand;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Sync\Commands\BackfillAdsCommand;
@@ -30,7 +31,7 @@ class AdsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
@@ -45,6 +46,9 @@ class AdsServiceProvider extends ServiceProvider
 
             $schedule->command(AttributeOrdersCommand::class, ['--days=35'])
                 ->hourlyAt(40)->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground();
+
+            $schedule->command(ClearOpenKeysCommand::class)
+                ->hourlyAt(25)->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground();
 
             $schedule->command(StockWatchCommand::class)
                 ->everyThirtyMinutes()->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground();
