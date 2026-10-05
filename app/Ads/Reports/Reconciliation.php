@@ -68,9 +68,11 @@ final class Reconciliation
         $first = max($from->toDateString(), $start);
         $last = min($to->toDateString(), $yesterday);
 
-        $control = $this->control($a->id, $start, $last);
-        $ads = $this->ads($a->id, $start, $last);
-        $covered = $this->syncCoverage($a->id, $start, $last);
+        // Displayed rows: only the requested window. complete_from below never depends on it.
+        $control = $this->control($a->id, $first, $last);
+        $ads = $this->ads($a->id, $first, $last);
+
+        $complete = $this->completeness($a);
 
         $months = [];
         $total = $this->blank($first, $last);
@@ -100,55 +102,46 @@ final class Reconciliation
             'to' => $last,
             'months' => array_values($months),
             'total' => $total,
-            'complete_from' => $this->completeFrom($start, $last, $control, $covered),
-            'uncovered_days' => $this->uncovered($start, $last, $control, $covered),
+            'complete_from' => $complete['complete_from'],
+            'uncovered_days' => $complete['uncovered_days'],
             'history_start' => $start,
         ];
     }
 
     /**
-     * First day from which every day up to $last has both a control row and an ok sync covering it; null when even the
-     * last day is not covered (or the window is empty).
+     * Whether the history is complete, judged over history_start..yesterday (the account's own timezone) whatever range is
+     * displayed. A day is covered when an ok sync run covers it and that run's account-level control call answered (a run
+     * whose error carries the `Account totals:` warning had no control, so it covers nothing). A missing control row on a
+     * covered day is an idle day (Meta lists no row for zero delivery) and counts as 0, not as a gap.
+     * complete_from = the earliest day from which every day up to yesterday is covered; null when yesterday is not.
      *
-     * @param  array<string, array{spend: float, value: float}>  $control
-     * @param  array<string, true>  $covered
+     * @return array{complete_from: ?string, uncovered_days: list<string>}
      */
-    public function completeFrom(string $start, string $last, array $control, array $covered): ?string
+    public function completeness(AdAccount $a): array
     {
-        if ($last < $start) {
-            return null;
+        $tz = $a->timezone ?: HistoryWindow::TIMEZONE;
+        $start = HistoryWindow::start()->toDateString();
+        $yesterday = CarbonImmutable::now($tz)->subDay()->toDateString();
+        if ($yesterday < $start) {
+            return ['complete_from' => null, 'uncovered_days' => []];
         }
+
+        $covered = $this->syncCoverage($a->id, $start, $yesterday);
+        $uncovered = [];
         $from = null;
-        for ($d = CarbonImmutable::parse($last); $d->toDateString() >= $start; $d = $d->subDay()) {
-            $day = $d->toDateString();
-            if (! isset($control[$day]) || ! isset($covered[$day])) {
-                break;
-            }
-            $from = $day;
-        }
-
-        return $from;
-    }
-
-    /**
-     * @param  array<string, array{spend: float, value: float}>  $control
-     * @param  array<string, true>  $covered
-     * @return list<string> days in the window lacking a control row or an ok sync
-     */
-    private function uncovered(string $start, string $last, array $control, array $covered): array
-    {
-        if ($last < $start) {
-            return [];
-        }
-        $out = [];
-        foreach (CarbonPeriod::create($start, $last) as $day) {
+        foreach (CarbonPeriod::create($start, $yesterday) as $day) {
             $d = $day->toDateString();
-            if (! isset($control[$d]) || ! isset($covered[$d])) {
-                $out[] = $d;
+            if (! isset($covered[$d])) {
+                $uncovered[] = $d;
             }
         }
+        if ($uncovered === []) {
+            $from = $start;
+        } elseif (end($uncovered) !== $yesterday) {
+            $from = CarbonImmutable::parse(end($uncovered))->addDay()->toDateString();
+        }
 
-        return $out;
+        return ['complete_from' => $from, 'uncovered_days' => $uncovered];
     }
 
     /** @return array<string, array{spend: float, value: float}> */
@@ -180,6 +173,7 @@ final class Reconciliation
     {
         $out = [];
         $runs = DB::table('ads_sync_runs')->where('ad_account_id', $accountId)->where('status', 'ok')
+            ->where(fn ($w) => $w->whereNull('error')->orWhere('error', 'not like', '%Account totals:%'))
             ->whereNotNull('from_date')->whereNotNull('to_date')->where('to_date', '>=', $from)->where('from_date', '<=', $to)
             ->get(['from_date', 'to_date']);
         foreach ($runs as $r) {

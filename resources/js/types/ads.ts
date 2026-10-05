@@ -129,6 +129,8 @@ export interface AdsSync {
 /** One data-health reason for the accounts of the current filter (DataHealth::forFilter). */
 export interface AdsDataHealthReason {
     reason: 'reconnect' | 'stale' | 'read_only' | 'incomplete' | 'gap' | 'timezone';
+    /** For `incomplete`: the accounts never judged yet (at most three names). */
+    unverified?: string[];
     /** At most three account names. */
     accounts: string[];
     /** Accounts beyond the three named. */
@@ -158,6 +160,8 @@ export interface AdsCommonProps extends AdsBannerProps {
 /** RevenueSummary::build; `store` is null for media buyers. */
 export interface AdsRevenueSummary {
     currency: string;
+    /** Set when the one currency in scope is not EGP: store and CRM ROAS are not comparable. */
+    note?: 'foreign_currency' | null;
     mixed_currencies: boolean;
     spend: number | null;
     spend_tax: number | null;
@@ -182,15 +186,17 @@ export interface BuyerCardData {
     name: string;
     color: string | null;
     accounts: { id: number; name: string; platform: AdPlatformValue }[];
-    spend: number;
-    spend_tax: number;
-    purchase_value: number;
+    spend: number | null;
+    spend_tax: number | null;
+    purchase_value: number | null;
     roas: number | null;
     purchases: number;
     cpa: number | null;
     ctr: number | null;
     real_orders: number;
-    real_revenue: number;
+    real_revenue: number | null;
+    /** True when the buyer's accounts have several currencies: every money figure is then null. */
+    mixed_currencies?: boolean;
     real_roas: number | null;
     conversations: number;
     conversations_ordered: number;
@@ -603,9 +609,10 @@ export interface MaterialFile {
 }
 
 export interface MaterialPerformance {
-    spend: number;
-    spend_tax: number;
-    purchase_value: number;
+    spend: number | null;
+    spend_tax: number | null;
+    purchase_value: number | null;
+    mixed_currencies?: boolean;
     roas: number | null;
     purchases: number;
     real_orders: number;

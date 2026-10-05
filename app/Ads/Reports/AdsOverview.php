@@ -20,6 +20,10 @@ final class AdsOverview
         $mixed = $currency === self::MIXED;
 
         $totals = $this->totals($all, $orders) + ['losers_spend_share' => $this->losersSpendShare($f), 'mixed_currencies' => $mixed];
+        if (! $mixed && $currency !== 'EGP') {
+            // Order revenue is EGP: dividing it by foreign spend is not a ROAS.
+            $totals['real_roas'] = null;
+        }
         if ($mixed) {
             // EGP and USD are never added together (A9): money figures stay empty, counts stay.
             $totals = array_merge($totals, array_fill_keys(self::MONEY_KEYS, null));
@@ -136,11 +140,21 @@ final class AdsOverview
         };
     }
 
-    /** @return list<string> the distinct currencies of the accounts in the filter, sorted */
+    /**
+     * The distinct currencies of the accounts that really feed the filter (ad or control rows in range, same scope as
+     * every report). With no data at all, the currencies of the filtered accounts, so an empty page still has a unit.
+     *
+     * @return list<string>
+     */
     public function currencies(AdsFilter $f): array
     {
         if ($f->isEmpty()) {
             return [];
+        }
+
+        $inScope = $this->q->currenciesInScope($f);
+        if ($inScope !== []) {
+            return $inScope;
         }
 
         $q = DB::table('ad_accounts as acc')->whereNotNull('acc.currency')->where('acc.currency', '!=', '');
@@ -150,7 +164,8 @@ final class AdsOverview
         if ($f->accountIds !== null) {
             $q->whereIn('acc.id', $f->accountIds);
         }
+        $first = $q->orderBy('acc.id')->value('acc.currency');
 
-        return $q->pluck('acc.currency')->map(fn ($c) => strtoupper((string) $c))->unique()->sort()->values()->all();
+        return $first === null ? [] : [strtoupper((string) $first)];
     }
 }

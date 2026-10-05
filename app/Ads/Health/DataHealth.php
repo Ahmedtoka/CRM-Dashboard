@@ -157,7 +157,11 @@ class DataHealth
                 $found[$c->reason()][$c->accountId()] = HealthCheck::rank($c->status);
             }
         }
-        foreach ($this->incompleteAccounts($accounts, $f) as $id) {
+        $incomplete = $this->incompleteAccounts($accounts, $f);
+        foreach ($incomplete['incomplete'] as $id) {
+            $found['incomplete'][$id] = 1;
+        }
+        foreach ($incomplete['unverified'] as $id) {
             $found['incomplete'][$id] = 1;
         }
         foreach ($this->gapAccounts($accounts, $f) as $id) {
@@ -171,6 +175,11 @@ class DataHealth
         }
 
         $names = $accounts->pluck('name', 'id');
+        $labels = $names->map(fn ($n) => (string) $n)->all();
+        foreach ($accounts as $a) {
+            // the timezone reason names the zone each account's days follow
+            $labels[(int) $a->id.'|timezone'] = $a->name.': '.$a->timezone;
+        }
         $reasons = [];
         foreach (['reconnect', 'stale', 'read_only', 'incomplete', 'gap', 'timezone'] as $reason) {
             if (empty($found[$reason])) {
@@ -178,29 +187,47 @@ class DataHealth
             }
             $ids = array_keys($found[$reason]);
             usort($ids, fn ($a, $b) => [$found[$reason][$b], (string) $names[$a]] <=> [$found[$reason][$a], (string) $names[$b]]);
-            $reasons[] = [
+            $entry = [
                 'reason' => $reason,
-                'accounts' => array_map(fn ($id) => (string) $names[$id], array_slice($ids, 0, 3)),
+                'accounts' => array_map(fn ($id) => (string) ($reason === 'timezone' ? $labels[$id.'|timezone'] : $names[$id]), array_slice($ids, 0, 3)),
                 'more' => max(0, count($ids) - 3),
             ];
+            if ($reason === 'incomplete') {
+                // accounts never judged (complete_from null) read as "not verified yet" next to the ones with a known later start
+                $entry['unverified'] = array_map(fn ($id) => (string) $names[$id], array_slice(array_values(array_intersect($ids, $incomplete['unverified'])), 0, 3));
+            }
+            $reasons[] = $entry;
         }
 
         return ['reasons' => $reasons];
     }
 
-    /** Accounts whose complete_from (the first day with full control and sync coverage) is after the range start. @return list<int> */
+    /**
+     * `incomplete`: accounts whose complete_from (the first day with full sync coverage up to yesterday) is after the range
+     * start. `unverified`: active accounts with at least one sync run whose complete_from is still null (not judged, or
+     * yesterday is not covered); an account that never synced is not flagged.
+     *
+     * @return array{incomplete: list<int>, unverified: list<int>}
+     */
     private function incompleteAccounts(Collection $accounts, AdsFilter $f): array
     {
         if (! Schema::hasColumn('ad_accounts', 'complete_from')) {
-            return [];
+            return ['incomplete' => [], 'unverified' => []];
         }
         $from = $f->fromDate();
+        $synced = AdsSyncRun::query()->whereIn('ad_account_id', $accounts->pluck('id')->all())->distinct()->pluck('ad_account_id')->map(fn ($id) => (int) $id)->all();
 
-        return $accounts->filter(function (AdAccount $a) use ($from) {
+        $incomplete = $unverified = [];
+        foreach ($accounts as $a) {
             $c = $a->getAttribute('complete_from');
+            if ($c === null) {
+                in_array((int) $a->id, $synced, true) && $unverified[] = (int) $a->id;
+            } elseif (substr((string) $c, 0, 10) > $from) {
+                $incomplete[] = (int) $a->id;
+            }
+        }
 
-            return $c !== null && substr((string) $c, 0, 10) > $from;
-        })->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+        return ['incomplete' => $incomplete, 'unverified' => $unverified];
     }
 
     /** Accounts whose ad-level spend differs from the control total by more than the tolerance, on the closed days of the range. @return list<int> */

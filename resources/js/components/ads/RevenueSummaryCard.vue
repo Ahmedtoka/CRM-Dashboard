@@ -63,6 +63,8 @@ const columns = computed(() => {
             </p>
         </div>
 
+        <p v-if="summary.note === 'foreign_currency'" class="text-2xs text-muted-foreground">{{ t('ads.summary.foreign_currency_note') }}</p>
+
         <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div v-for="c in columns" :key="c.key" class="min-w-0 rounded-md border border-border px-3 py-2" :title="c.tip">
                 <p class="text-2xs font-medium text-muted-foreground">{{ c.title }}</p>

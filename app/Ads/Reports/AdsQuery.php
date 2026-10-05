@@ -97,23 +97,9 @@ final class AdsQuery
     /** @var array<string, array{control: Collection, ads: Collection}> memo per filter, one request */
     private array $controlMemo = [];
 
-    /**
-     * Control rows (ad_account_daily: what the platform reports for the account whatever the ads' status) and the
-     * ad-level sums per (account, day), over the filter's accounts, platform and buyer-of-the-day. Memoised per filter.
-     *
-     * @return array{control: Collection<string, object>, ads: Collection<string, object>}
-     */
-    private function controlAndAds(AdsFilter $f): array
+    /** The control rows of the filter's accounts, platform and buyer-of-the-day in range (joined with accounts as `acc`). */
+    private function controlQuery(AdsFilter $f): Builder
     {
-        $f = $f->allSpend();
-        $key = serialize([$f->fromDate(), $f->toDate(), $f->platform, $f->buyerId, $f->accountIds, $f->restrictBuyerId]);
-        if (isset($this->controlMemo[$key])) {
-            return $this->controlMemo[$key];
-        }
-        if ($f->isEmpty()) {
-            return $this->controlMemo[$key] = ['control' => collect(), 'ads' => collect()];
-        }
-
         $q = DB::table('ad_account_daily as d')
             ->leftJoin('ad_account_assignments as a', function ($j) {
                 $j->on('a.ad_account_id', '=', 'd.ad_account_id')
@@ -131,6 +117,46 @@ final class AdsQuery
         foreach (array_filter([$f->buyerId, $f->restrictBuyerId], fn ($b) => $b !== null) as $buyer) {
             $q->where('a.media_buyer_id', $buyer);
         }
+
+        return $q;
+    }
+
+    /**
+     * Distinct currencies of the accounts that really contribute to the filter: those with ad rows or control rows in
+     * the range, under the same account, platform and buyer scope as every report. A dormant account does not count.
+     *
+     * @return list<string>
+     */
+    public function currenciesInScope(AdsFilter $f): array
+    {
+        $f = $f->allSpend();
+        if ($f->isEmpty()) {
+            return [];
+        }
+        $fromAds = $this->metrics($f)->select('acc.currency')->distinct()->pluck('currency');
+        $fromControl = $this->controlQuery($f)->select('acc.currency')->distinct()->pluck('currency');
+
+        return $fromAds->merge($fromControl)->filter(fn ($c) => $c !== null && $c !== '')->map(fn ($c) => strtoupper((string) $c))->unique()->sort()->values()->all();
+    }
+
+    /**
+     * Control rows (ad_account_daily: what the platform reports for the account whatever the ads' status) and the
+     * ad-level sums per (account, day), over the filter's accounts, platform and buyer-of-the-day. Memoised per filter.
+     *
+     * @return array{control: Collection<string, object>, ads: Collection<string, object>}
+     */
+    private function controlAndAds(AdsFilter $f): array
+    {
+        $f = $f->allSpend();
+        $key = serialize([$f->fromDate(), $f->toDate(), $f->platform, $f->buyerId, $f->accountIds, $f->restrictBuyerId]);
+        if (isset($this->controlMemo[$key])) {
+            return $this->controlMemo[$key];
+        }
+        if ($f->isEmpty()) {
+            return $this->controlMemo[$key] = ['control' => collect(), 'ads' => collect()];
+        }
+
+        $q = $this->controlQuery($f);
         $control = $q->get(['d.ad_account_id', 'd.date', 'd.spend', 'd.purchases', 'd.purchase_value', 'd.impressions'])
             ->keyBy(fn ($r) => $r->ad_account_id.'|'.substr((string) $r->date, 0, 10));
 

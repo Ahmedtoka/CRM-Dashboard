@@ -23,7 +23,8 @@ afterEach(function () {
 });
 
 /** One account with a September of 30 control days (1,000 in total), 30 ad days (995) and one ok sync covering it. */
-function rcAccount(string $name = 'LV Main', array $skipControl = []): AdAccount
+/** @param  list<array{0:string,1:string}>  $runs  ok sync windows; default covers the whole history up to yesterday (2026-10-04) */
+function rcAccount(string $name = 'LV Main', array $skipControl = [], ?array $runs = null): AdAccount
 {
     $a = AdAccount::factory()->meta()->create(['name' => $name]);
     $ad = Ad::factory()->for($a, 'account')->create();
@@ -35,7 +36,9 @@ function rcAccount(string $name = 'LV Main', array $skipControl = []): AdAccount
         }
         AdDailyMetric::factory()->create(['ad_id' => $ad->id, 'ad_account_id' => $a->id, 'date' => $day, 'spend' => $last ? 38 : 33, 'purchase_value' => $last ? 138 : 133, 'purchases' => 1]);
     }
-    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'ok', 'kind' => 'backfill', 'from_date' => '2026-09-01', 'to_date' => '2026-09-30']);
+    foreach ($runs ?? [['2026-09-01', '2026-10-04']] as [$from, $to]) {
+        AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'ok', 'kind' => 'backfill', 'from_date' => $from, 'to_date' => $to]);
+    }
 
     return $a;
 }
@@ -69,16 +72,57 @@ it('reports coverage and the residual per account and month and stores complete_
     expect($out)->toContain('LV Main')->and($out)->toContain('1,000.00')->and($out)->toContain('99.5')->and($out)->toContain('Ads Manager');
 });
 
-it('moves complete_from past a day with no control row and lists the day', function () {
-    $a = rcAccount('Gappy', ['2026-09-04']);
+it('moves complete_from past a day no ok sync covers and lists the day', function () {
+    $a = rcAccount('Gappy', [], [['2026-09-01', '2026-09-03'], ['2026-09-05', '2026-10-04']]);
 
     Artisan::call('ads:reconcile', ['--month' => '2026-09']);
 
     $r = app(Reconciliation::class)->account($a, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-30'));
-    expect($r['complete_from'])->toBe('2026-09-05')->and($r['uncovered_days'])->toBe(['2026-09-04'])
-        ->and($r['months'][0]['missing_control_days'])->toBe(['2026-09-04'])->and($r['months'][0]['days_with_control'])->toBe(29);
+    expect($r['complete_from'])->toBe('2026-09-05')->and($r['uncovered_days'])->toBe(['2026-09-04']);
     expect(substr((string) DB::table('ad_accounts')->where('id', $a->id)->value('complete_from'), 0, 10))->toBe('2026-09-05');
     expect(Artisan::output())->toContain('2026-09-04');
+});
+
+it('counts an idle day (no control row, an ok sync covers it) as covered with spend 0', function () {
+    $a = rcAccount('Idle', ['2026-09-04']);
+
+    Artisan::call('ads:reconcile', ['--month' => '2026-09']);
+
+    $r = app(Reconciliation::class)->account($a, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-30'));
+    expect($r['complete_from'])->toBe('2026-09-01')->and($r['uncovered_days'])->toBe([])
+        ->and($r['months'][0]['missing_control_days'])->toBe(['2026-09-04'])->and($r['months'][0]['days_with_control'])->toBe(29);
+    expect(substr((string) DB::table('ad_accounts')->where('id', $a->id)->value('complete_from'), 0, 10))->toBe('2026-09-01');
+});
+
+it('does not count a run whose account-level control call failed', function () {
+    $a = rcAccount('Cut');
+    AdsSyncRun::where('ad_account_id', $a->id)->update(['error' => 'Account totals: Meta said no']);
+
+    expect(app(Reconciliation::class)->account($a, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-30'))['complete_from'])->toBeNull();
+});
+
+it('judges complete_from over history start to yesterday whatever month is shown', function () {
+    $a = rcAccount('October gap', [], [['2026-09-01', '2026-10-01'], ['2026-10-03', '2026-10-04']]);
+
+    Artisan::call('ads:reconcile', ['--month' => '2026-09']);
+    expect(substr((string) DB::table('ad_accounts')->where('id', $a->id)->value('complete_from'), 0, 10))->toBe('2026-10-03');
+
+    // fix the gap, then show a month before the history start: nothing is nulled or judged on that window
+    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'ok', 'from_date' => '2026-10-02', 'to_date' => '2026-10-02']);
+    Artisan::call('ads:reconcile', ['--month' => '2026-10']);
+    expect(substr((string) DB::table('ad_accounts')->where('id', $a->id)->value('complete_from'), 0, 10))->toBe('2026-09-01');
+
+    Artisan::call('ads:reconcile', ['--month' => '2026-08']);
+    expect(substr((string) DB::table('ad_accounts')->where('id', $a->id)->value('complete_from'), 0, 10))->toBe('2026-09-01');
+});
+
+it('rejects a malformed --month', function () {
+    rcAccount();
+
+    foreach (['2026-13', '2026-9', 'september', '2026-09-01'] as $bad) {
+        expect(Artisan::call('ads:reconcile', ['--month' => $bad]))->toBe(1);
+        expect(Artisan::output())->toContain('--month must look like 2026-09');
+    }
 });
 
 it('treats a day no ok sync covers as incomplete', function () {
@@ -138,7 +182,7 @@ it('checks the gate with the Ads Manager figure the owner types', function () {
 });
 
 it('fails the history item when complete_from is later than the history start', function () {
-    rcAccount('Gappy', ['2026-09-04']);
+    rcAccount('Gappy', [], [['2026-09-01', '2026-09-03'], ['2026-09-05', '2026-10-04']]);
 
     Artisan::call('ads:reconcile', ['--month' => '2026-09']);
 
@@ -160,12 +204,12 @@ it('writes nothing except complete_from', function () {
 });
 
 it('updates complete_from silently with --quiet-update over the whole history', function () {
-    $a = rcAccount();
+    $a = rcAccount('Quiet', [], [['2026-09-01', '2026-10-03']]);
 
     expect(Artisan::call('ads:reconcile', ['--from' => '2026-09-01', '--quiet-update' => true]))->toBe(0);
 
     expect(trim(Artisan::output()))->toBe('');
-    // yesterday (2026-10-04) has no control row, so the history is complete only up to the last covered day
+    // yesterday (2026-10-04) is not covered: null, never a date judged on a shorter window
     expect(DB::table('ad_accounts')->where('id', $a->id)->value('complete_from'))->toBeNull();
 });
 

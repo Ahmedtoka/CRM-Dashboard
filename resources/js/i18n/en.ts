@@ -2970,12 +2970,14 @@ const en: Messages = {
         health: {
             title: 'Check these numbers',
             and_more: 'and {n} more',
+            unverified: 'not verified yet: {names}',
             reasons: {
                 reconnect: 'A connection needs a new token, so its numbers are not updating',
                 stale: 'The numbers are behind Ads Manager (the last sync is over 3 hours old)',
                 read_only: 'The connection is read-only: Run and Stop are off',
                 incomplete: 'History is incomplete for part of this range',
                 timezone: 'Days for these accounts follow the account timezone, not Cairo time',
+
                 gap: 'Spend per ad does not add up to the account total',
                 history_start: 'The range was cut at the day the CRM started keeping ads data',
                 under_review: 'These numbers are under review and are not final yet',
@@ -3019,6 +3021,7 @@ const en: Messages = {
             store: 'Store (Shopify)',
             store_tip: 'Every store order placed in the range, from any source, not only ads, by the same rule as the CRM: order total after refunds (Shopify current total); unpaid, cancelled, failed and courier-returned orders excluded.',
             store_hidden: 'Store totals: admins only',
+            foreign_currency_note: 'Spend is not in EGP, so ROAS against store and CRM order revenue is not shown',
             crm: 'CRM (ad orders)',
             crm_tip: 'Orders attributed to an ad. Chat orders are credited to the latest ad the customer came from within 7 days before the order. Order total after refunds (Shopify current total); unpaid, cancelled, failed and courier-returned orders excluded.',
             platform: 'Platform (self-reported)',

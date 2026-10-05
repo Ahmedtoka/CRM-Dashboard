@@ -60,6 +60,14 @@ final class RevenueSummary
             ],
         ];
 
+        $out['note'] = null;
+        if (! $mixed && $currency !== 'EGP') {
+            // Store and CRM order revenue is EGP; the spend is in another currency, so MER and the store gap are not comparable.
+            $out['note'] = 'foreign_currency';
+            $out['roas']['store'] = null;
+            $out['roas']['crm'] = null;
+            $out['gaps']['crm_vs_store'] = $out['gaps']['crm_vs_store_pct'] = null;
+        }
         if ($mixed) {
             // A9: no figure here may add one currency to another (store revenue is EGP, the platforms report in theirs).
             $out['spend'] = $out['spend_tax'] = null;

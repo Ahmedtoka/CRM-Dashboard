@@ -12,7 +12,8 @@ use Throwable;
 /**
  * The Phase A gate report (A11, R-34): per account and month, the CRM's account-level control next to the ad-level sums,
  * a blank Ads Manager column for the owner (or `--ads-manager="<account>=<amount>"` to have it checked), and the gate as
- * a checklist. The only thing it writes is ad_accounts.complete_from.
+ * a checklist. The only thing it writes is ad_accounts.complete_from, which is always judged over history_start..yesterday,
+ * whatever range is displayed.
  */
 class ReconcileCommand extends Command
 {
@@ -31,8 +32,8 @@ class ReconcileCommand extends Command
     {
         try {
             [$from, $to] = $this->range();
-        } catch (Throwable) {
-            $this->error('Use dates as YYYY-MM-DD and --month as YYYY-MM.');
+        } catch (Throwable $e) {
+            $this->error($e instanceof \InvalidArgumentException ? $e->getMessage() : 'Use --from and --to as YYYY-MM-DD.');
 
             return self::FAILURE;
         }
@@ -75,10 +76,10 @@ class ReconcileCommand extends Command
         $tz = HistoryWindow::TIMEZONE;
         $month = trim((string) $this->option('month'));
         if ($month !== '') {
-            $first = CarbonImmutable::createFromFormat('!Y-m', $month, $tz);
-            if ($first === false) {
-                throw new \InvalidArgumentException('month');
+            if (! preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) {
+                throw new \InvalidArgumentException('--month must look like 2026-09 (year, dash, two-digit month).');
             }
+            $first = CarbonImmutable::createFromFormat('!Y-m', $month, $tz);
 
             return [$first->startOfMonth(), $first->endOfMonth()->startOfDay()];
         }

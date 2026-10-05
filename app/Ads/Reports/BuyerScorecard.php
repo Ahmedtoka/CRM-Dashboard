@@ -34,6 +34,7 @@ final class BuyerScorecard
         $orders = $this->q->orders($f)->groupBy(fn ($o) => $this->key($o['buyer_id']));
         $convs = $this->q->conversations($f)->groupBy(fn ($c) => $this->key($c['buyer_id']));
         $accounts = $this->accounts($f);
+        $currencies = $this->currencies($f);
 
         $ids = collect([...$sums->keys(), ...$orders->keys(), ...$convs->keys()])->unique()->filter(fn ($k) => $k !== 0)->all();
         $buyers = MediaBuyer::query()
@@ -45,12 +46,12 @@ final class BuyerScorecard
 
         $cards = $buyers->map(fn (MediaBuyer $b) => $this->card(
             (int) $b->id, (string) $b->name, $b->color, $accounts[$b->id] ?? [],
-            $sums[$b->id] ?? null, $orders[$b->id] ?? collect(), $convs[$b->id] ?? collect(), $targets[$b->id] ?? null,
+            $sums[$b->id] ?? null, $orders[$b->id] ?? collect(), $convs[$b->id] ?? collect(), $targets[$b->id] ?? null, $currencies[$b->id] ?? [],
         ))->sortByDesc('spend')->values();
 
         $hasUnassigned = $sums->has(0) || $orders->has(0) || $convs->has(0);
         if ($hasUnassigned && $f->buyerId === null && $f->restrictBuyerId === null) {
-            $cards->push($this->card(null, __('ads.unassigned'), null, $accounts[0] ?? [], $sums[0] ?? null, $orders[0] ?? collect(), $convs[0] ?? collect(), null));
+            $cards->push($this->card(null, __('ads.unassigned'), null, $accounts[0] ?? [], $sums[0] ?? null, $orders[0] ?? collect(), $convs[0] ?? collect(), null, $currencies[0] ?? []));
         }
 
         return $cards->all();
@@ -64,18 +65,19 @@ final class BuyerScorecard
         }
         $bf = $f->with(['buyerId' => $b->id]);
         $card = collect($this->build($bf))->firstWhere('buyer_id', $b->id)
-            ?? $this->card((int) $b->id, (string) $b->name, $b->color, [], null, collect(), collect(), null);
+            ?? $this->card((int) $b->id, (string) $b->name, $b->color, [], null, collect(), collect(), null, []);
         $orders = $this->q->orders($bf->allSpend());
 
         return $card + [
-            'daily' => $this->overview->daily($bf, $orders),
+            // a money series: with mixed currencies it would add one to another
+            'daily' => ($card['mixed_currencies'] ?? false) ? [] : $this->overview->daily($bf, $orders),
             'assignments' => $this->assignments($b, $bf),
             'top_ads' => $this->creatives->build($bf, ['sort' => 'spend', 'per_page' => 10])['data'],
             'campaigns' => $this->campaigns($bf, $orders),
         ];
     }
 
-    private function card(?int $id, string $name, ?string $color, array $accounts, ?object $sums, Collection $orders, Collection $convs, ?array $target): array
+    private function card(?int $id, string $name, ?string $color, array $accounts, ?object $sums, Collection $orders, Collection $convs, ?array $target, array $currencies = []): array
     {
         $d = $this->q->derive($sums ?? []);
         $revenue = round((float) $orders->sum('net'), 2);
@@ -85,7 +87,10 @@ final class BuyerScorecard
         $rawSpend = (float) ($sums->spend ?? 0);
         $rawValue = (float) ($sums->purchase_value ?? 0);
 
-        return [
+        $mixed = count($currencies) > 1;
+        $foreign = ! $mixed && $currencies !== [] && $currencies[0] !== 'EGP';
+
+        $card = [
             'buyer_id' => $id,
             'name' => $name,
             'color' => $color,
@@ -105,7 +110,36 @@ final class BuyerScorecard
             'budget_used_pct' => $budget !== null ? AdsQuery::ratio($d['spend'] * 100, $budget, 2) : null,
             'target_roas' => $targetRoas,
             'roas_vs_target' => $targetRoas !== null && $rawSpend > 0 ? AdsQuery::ratio($rawValue, $rawSpend * (float) $targetRoas, 2) : null,
+            'mixed_currencies' => $mixed,
         ];
+        if ($foreign) {
+            $card['real_roas'] = null; // order revenue is EGP, the spend is not
+        }
+        if ($mixed) {
+            // A9: one buyer holding accounts in several currencies: no figure may add them
+            foreach (['spend', 'spend_tax', 'purchase_value', 'roas', 'cpa', 'real_revenue', 'real_roas', 'budget_used_pct', 'roas_vs_target'] as $k) {
+                $card[$k] = null;
+            }
+        }
+
+        return $card;
+    }
+
+    /**
+     * buyer id (0 = unassigned) => the currencies of the accounts whose rows (ad or control, buyer of the day) count here.
+     *
+     * @return array<int, list<string>>
+     */
+    private function currencies(AdsFilter $f): array
+    {
+        $out = [];
+        foreach ($this->q->metrics($f)->select(['a.media_buyer_id as buyer_id', 'acc.currency'])->distinct()->get() as $r) {
+            if ($r->currency !== null && $r->currency !== '') {
+                $out[$this->key($r->buyer_id)][strtoupper((string) $r->currency)] = true;
+            }
+        }
+
+        return array_map(fn (array $c) => array_keys($c), $out);
     }
 
     /** buyer id (0 = unassigned) => accounts held in range (assignment periods, else metric rows). */

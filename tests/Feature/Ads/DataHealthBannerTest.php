@@ -32,7 +32,7 @@ beforeEach(function () {
 function dbAccount(string $name, int $okAgoMinutes = 10): AdAccount
 {
     $c = AdPlatformConnection::factory()->meta()->create(['status' => 'connected']);
-    $a = AdAccount::factory()->meta()->create(['connection_id' => $c->id, 'name' => $name]);
+    $a = AdAccount::factory()->meta()->create(['connection_id' => $c->id, 'name' => $name, 'complete_from' => '2026-01-01']);
     AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'ok', 'started_at' => now()->subMinutes($okAgoMinutes + 1), 'finished_at' => now()->subMinutes($okAgoMinutes)]);
 
     return $a;
@@ -171,4 +171,15 @@ it('computes banner reasons without writing health state', function () {
     $out = app(DataHealth::class)->forFilter(AdsFilter::fromRequest(request(), dbAdmin()));
 
     expect($out['reasons'][0]['reason'])->toBe('stale')->and(AdsHealthState::count())->toBe(0);
+});
+
+it('flags an account never judged (complete_from null) as not verified yet, but not one that never synced', function () {
+    $synced = dbAccount('Fresh Synced');
+    DB::table('ad_accounts')->where('id', $synced->id)->update(['complete_from' => null]);
+    $c = AdPlatformConnection::factory()->meta()->create(['status' => 'connected']);
+    AdAccount::factory()->meta()->create(['connection_id' => $c->id, 'name' => 'Brand New']);
+
+    $this->actingAs(dbAdmin())->get('/ads?from=2026-09-05&to=2026-09-28')->assertInertia(fn (AssertableInertia $p) => $p
+        ->where('data_health.reasons.0.reason', 'incomplete')->where('data_health.reasons.0.accounts', ['Fresh Synced'])
+        ->where('data_health.reasons.0.unverified', ['Fresh Synced']));
 });

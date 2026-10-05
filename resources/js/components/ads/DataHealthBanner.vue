@@ -30,7 +30,9 @@ const lines = computed<Line[]>(() => {
         const names = r.accounts.join('، ');
         const more = r.more > 0 ? ` ${t('ads.health.and_more', { n: r.more })}` : '';
 
-        return { key: r.reason, text: `${t(`ads.health.reasons.${r.reason}`)}: ${names}${more}` };
+        const unverified = r.unverified?.length ? ` · ${t('ads.health.unverified', { names: r.unverified.join('، ') })}` : '';
+
+        return { key: r.reason, text: `${t(`ads.health.reasons.${r.reason}`)}: ${names}${more}${unverified}` };
     });
     if (props.clampedToHistory) out.push({ key: 'history_start', text: t('ads.health.reasons.history_start') });
     if (props.numbersUnderReview) out.push({ key: 'under_review', text: t('ads.health.reasons.under_review') });
