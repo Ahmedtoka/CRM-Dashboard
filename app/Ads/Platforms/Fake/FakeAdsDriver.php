@@ -146,6 +146,13 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
     }
 
     /** Every fake campaign is active. */
+    public function admit(AdAccount $a): void {}
+
+    public function drainWarnings(): array
+    {
+        return [];
+    }
+
     public function campaignStatuses(AdAccount $a): ?array
     {
         $out = [];

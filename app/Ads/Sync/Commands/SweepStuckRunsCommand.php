@@ -9,7 +9,7 @@ use App\Models\AdsSyncRun;
 use Illuminate\Console\Command;
 
 /**
- * Ends sync runs whose worker died, clears pending-sync markers older than 8 h, and drops Meta usage telemetry older than 35 days.
+ * Ends sync runs whose worker died, clears pending-sync markers older than 2 h (SyncAdsCommand::PENDING_HOURS), and drops Meta usage telemetry older than 35 days.
  *
  * The cache lock `ads-sync-running:*` lives 3660 s, shorter than the sweep threshold (job timeout + 600 s = 4200 s),
  * so by the time a run is swept its lock has expired on its own: no lock release is needed.

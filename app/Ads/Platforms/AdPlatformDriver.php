@@ -8,6 +8,12 @@ use Carbon\CarbonImmutable;
 
 interface AdPlatformDriver
 {
+    /** Quota admission before a sync run's first read (Meta, A5); throws RateLimited to defer the run. No-op elsewhere. */
+    public function admit(AdAccount $a): void;
+
+    /** @return list<string> run warnings collected since the last call (e.g. a list cut short by high usage) */
+    public function drainWarnings(): array;
+
     /** @return list<Data\AccountInfo> */
     public function accounts(AdPlatformConnection $c): array;
 

@@ -68,7 +68,8 @@ class QueueCheck extends DoctorCheck
      */
     private function adssyncWorker(int $ready): DoctorRow
     {
-        $last = AdsSyncRun::query()->whereNotNull('finished_at')->max('finished_at');
+        // Queued runs only (they carry a run key): an inline ads:sync --now proves nothing about the worker.
+        $last = AdsSyncRun::query()->whereNotNull('run_key')->whereNotNull('finished_at')->max('finished_at');
         $recent = $last !== null && Carbon::parse($last)->greaterThanOrEqualTo(now()->subMinutes(15));
         $value = "ready {$ready}, last finished run ".($last === null ? 'never' : Carbon::parse($last)->toDateTimeString().' UTC');
 

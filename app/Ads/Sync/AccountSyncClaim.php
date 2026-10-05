@@ -26,11 +26,14 @@ final class AccountSyncClaim
         return $won === 1 ? $key : null;
     }
 
-    /** Pushes the expiry of a claim this caller still holds (a long backfill, chunk by chunk). */
-    public static function extend(AdAccount $a, string $key, int $ttlSeconds): void
+    /** Pushes the expiry of a claim this caller still holds (a long backfill, chunk by chunk). false = the claim was taken over. */
+    public static function extend(AdAccount $a, string $key, int $ttlSeconds): bool
     {
-        DB::table('ad_accounts')->where('id', $a->id)->where('sync_claim_key', $key)
-            ->update(['sync_claimed_until' => now()->addSeconds($ttlSeconds)]);
+        $mine = DB::table('ad_accounts')->where('id', $a->id)->where('sync_claim_key', $key);
+        (clone $mine)->update(['sync_claimed_until' => now()->addSeconds($ttlSeconds)]);
+
+        // MariaDB reports 0 affected rows when the value did not change (same second), so ownership is read back.
+        return $mine->exists();
     }
 
     /** Clears the claim only when $key still owns it. */

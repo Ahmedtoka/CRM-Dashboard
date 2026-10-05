@@ -141,6 +141,13 @@ class GoogleAdsDriver implements AdPlatformDriver
         return ['ads' => null, 'campaigns' => null];
     }
 
+    public function admit(AdAccount $a): void {}
+
+    public function drainWarnings(): array
+    {
+        return [];
+    }
+
     public function campaignStatuses(AdAccount $a): ?array
     {
         return null;

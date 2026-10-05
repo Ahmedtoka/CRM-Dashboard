@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\Log;
 /**
  * Thin Graph API client: URL building, paging, error mapping, quota guard. Never sleeps.
  *
- * Quota guard: a READ answered 2xx with usage above the limit throws RateLimited. A WRITE answered 2xx already changed
+ * Quota guard: a READ answered 2xx with usage above the limit keeps its rows and stops paging (stoppedAt); sync runs
+ * are admitted once before their first read (admit). A WRITE answered 2xx already changed
  * the platform (an ad paused, a chunk accepted, an ad created), so it never throws: the high usage is logged and
  * remembered per token, and the writer's next operation backs off before sending (backOffIfBusy).
  */
@@ -38,6 +39,11 @@ class MetaAdsApi
 
     private const USAGE_LIMIT = 85;
 
+    /** Usage % above the limit reported by the last 2xx read, else null. */
+    private ?int $lastReadPct = null;
+
+    private ?int $stoppedAt = null;
+
     public function version(): string
     {
         $v = trim((string) config('crm.ads.meta.graph_version', 'v23.0')) ?: 'v23.0';
@@ -53,8 +59,6 @@ class MetaAdsApi
     /** GET one page. @return array<string, mixed> */
     public function get(string $token, string $path, array $query = []): array
     {
-        $this->admit($this->actOf($path));
-
         return $this->handle(fn () => Http::withToken($token)->timeout(90)->connectTimeout(15)
             ->get($this->url($path), $query), null, $path);
     }
@@ -78,9 +82,10 @@ class MetaAdsApi
     }
 
     /**
-     * Quota admission before a READ (A5): while the busiest usage Meta reported for this ad account in the last 15
-     * minutes is at or above crm.ads.sync.admission_pct, nothing is sent and RateLimited carries when to try again
-     * (Meta's regain time, at least 5 minutes). Reads without an ad account in the path, and every write, pass.
+     * Quota admission (A5), called ONCE per sync run (per backfill chunk) before its first read, never by a write:
+     * while the busiest usage Meta reported for this ad account in the last 15 minutes is at or above
+     * crm.ads.sync.admission_pct, RateLimited says when to try again: the latest of 5 minutes, Meta's regain time, and
+     * the moment that reading leaves the 15-minute window. The later reads of the run rely on the response headers.
      */
     public function admit(?string $actExternalId): void
     {
@@ -97,15 +102,16 @@ class MetaAdsApi
         if ($busiest === null || $busiest['max_pct'] < $limit) {
             return;
         }
-        $wait = max(300, $busiest['regain_minutes'] * 60);
+        $leavesWindow = (int) ceil($busiest['recorded_at']->addMinutes(15)->getTimestamp() - now()->getTimestamp());
+        $wait = max(300, $busiest['regain_minutes'] * 60, $leavesWindow);
         throw new RateLimited(sprintf('Sync deferred by Meta quota: usage was %d%% in the last 15 minutes; retry in %d min.',
-            (int) $busiest['max_pct'], intdiv($wait, 60)), $wait);
+            (int) $busiest['max_pct'], (int) ceil($wait / 60)), $wait);
     }
 
-    /** The act_<id> an API path is about, or null. */
-    private function actOf(string $path): ?string
+    /** Usage % at which the last paginate() stopped early (rows kept), or null when it read every page. */
+    public function stoppedAt(): ?int
     {
-        return preg_match('/\bact_(\d+)/', $path, $m) ? 'act_'.$m[1] : null;
+        return $this->stoppedAt;
     }
 
     /**
@@ -127,7 +133,7 @@ class MetaAdsApi
      */
     public function paginate(string $token, string $path, array $query = [], int $maxPages = 200): array
     {
-        $this->admit($this->actOf($path)); // once, before the first page; later pages are guarded by their own headers
+        $this->stoppedAt = null;
         $rows = [];
         $limit = (int) ($query['limit'] ?? 0);
         $page = $this->shrinking(fn (int $l) => $this->get($token, $path, $l > 0 ? ['limit' => $l] + $query : $query), $limit);
@@ -137,6 +143,12 @@ class MetaAdsApi
             $rows = array_merge($rows, $page['data'] ?? []);
             $next = $page['paging']['next'] ?? null;
             if (! $next) {
+                return $rows;
+            }
+            if ($this->lastReadPct !== null) {
+                // The page Meta just answered says usage is above the limit: keep what was read, ask for no more.
+                $this->stoppedAt = $this->lastReadPct;
+
                 return $rows;
             }
             if ($pages++ >= $maxPages) {
@@ -259,11 +271,16 @@ class MetaAdsApi
         return rtrim($url, '?&');
     }
 
+    /**
+     * A READ answered 2xx above the limit is not thrown away: its rows are returned, the level is remembered so
+     * paginate() stops before the next page (stoppedAt), and the next run's admission waits on the recorded usage.
+     */
     private function guardUsage(Response $response): void
     {
         $high = $this->highUsage($response);
+        $this->lastReadPct = $high['pct'] ?? null;
         if ($high !== null) {
-            throw new RateLimited('Meta usage is at '.$high['pct'].'% ('.$high['metric'].'); retry later.', $high['minutes'] > 0 ? $high['minutes'] * 60 : null);
+            Log::warning('Meta usage high on a read', ['metric' => $high['metric'], 'pct' => $high['pct'], 'regain_minutes' => $high['minutes']]);
         }
     }
 

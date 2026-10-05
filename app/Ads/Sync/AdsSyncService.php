@@ -38,6 +38,9 @@ final class AdsSyncService
     /** error of the 'skipped' run written when another sync holds the account claim. */
     public const CLAIM_BUSY = 'Another sync of this account is running';
 
+    /** Warning on the last backfill run when its claim expired and another sync took the account. */
+    public const CLAIM_LOST = 'Backfill stopped: another sync took over the account';
+
     /** @var array<int, string> account id => claim key this instance holds (a backfill holds it across its chunks) */
     private array $claims = [];
 
@@ -72,12 +75,12 @@ final class AdsSyncService
 
         foreach ($infos as $i) {
             $account = AdAccount::firstOrNew(['platform' => $c->platform, 'external_id' => $i->externalId]);
-            $account->fill([
-                'connection_id' => $c->id, 'name' => $i->name, 'currency' => $i->currency,
-                'timezone' => $i->timezone, 'status' => $i->status, 'balance' => $i->balance,
             // An account stopped only because its connection was archived comes back when a connection finds it again (F-012).
             // One switched off by hand (no reason) stays off.
             $reactivate = $account->exists && ! $account->is_active && $account->deactivated_reason === 'connection_archived';
+            $account->fill([
+                'connection_id' => $c->id, 'name' => $i->name, 'currency' => $i->currency,
+                'timezone' => $i->timezone, 'status' => $i->status, 'balance' => $i->balance,
             ]);
             if ($reactivate) {
                 $account->is_active = true;
@@ -143,8 +146,6 @@ final class AdsSyncService
     private function claim(AdAccount $a): ?bool
     {
         if (isset($this->claims[$a->id])) {
-            AccountSyncClaim::extend($a, $this->claims[$a->id], AccountSyncClaim::ttl());
-
             return false;
         }
         $key = AccountSyncClaim::acquire($a, AccountSyncClaim::ttl());
@@ -194,8 +195,11 @@ final class AdsSyncService
         $campaignWarning = null;
         $swept = false;
         $driver = $this->drivers->for(AdPlatform::from($a->platform));
+        $driver->drainWarnings(); // only this run's warnings below
 
         try {
+            // Quota admission once per run, before its first read; the later reads rely on the usage headers (A5).
+            $driver->admit($a);
             // The ad list (full creative specs) is the heaviest Meta call: a backfill reads it once, on its first chunk.
             $adRows = $withAds ? $driver->ads($a) : [];
             $this->upsertAds($a, $adRows);
@@ -229,7 +233,7 @@ final class AdsSyncService
         }
 
         // Metrics are committed; a media failure must not turn the run into an error.
-        $warnings = array_values(array_filter([$controlWarning, $guard, $sweepWarning, $campaignWarning]));
+        $warnings = array_values(array_filter([$controlWarning, $guard, $sweepWarning, $campaignWarning, ...$driver->drainWarnings()]));
         try {
             $this->fetchMedia($a, Ad::where('ad_account_id', $a->id)->whereNull('media_fetched_at')
                 ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'unknown')) // minimal ads have no creative to fetch
@@ -288,6 +292,13 @@ final class AdsSyncService
                     $run = $done;
 
                     continue;
+                }
+                if (! AccountSyncClaim::extend($a, $this->claims[$a->id], AccountSyncClaim::ttl())) {
+                    // The claim expired and another sync took it: stop here, never run two syncs of one account.
+                    unset($this->claims[$a->id]);
+                    $owned = false;
+                    $run?->update(['error' => trim(($run->error ? $run->error.' | ' : '').self::CLAIM_LOST)]);
+                    break;
                 }
                 $run = $this->syncAccount($a, $from, $to, 'backfill', withAds: $offset === 0, trigger: $trigger, triggeredById: $triggeredById, runKey: $runKey, batchKey: $batchKey);
                 if ($run->status === 'error') {
@@ -444,16 +455,17 @@ final class AdsSyncService
     /**
      * Hourly run without the ad list: the campaigns' own and effective statuses from one light call, so the
      * active-campaign scope of the screens is never more than about an hour stale. Only campaigns already stored are
-     * updated (new ones arrive with the nightly ad list). A failed call is a warning; a dead token or a rate limit
+     * updated (new ones arrive with the nightly ad list). A failed or rate-limited call is a warning; a dead token
      * stops the run.
      */
     private function refreshCampaignStatuses(AdAccount $a, AdPlatformDriver $driver): ?string
     {
         try {
             $list = $driver->campaignStatuses($a);
-        } catch (TokenInvalid|RateLimited $e) {
+        } catch (TokenInvalid $e) {
             throw $e;
         } catch (AdsApiException $e) {
+            // RateLimited included: the metrics are stored, so a refused refresh is a warning, not a retry.
             return 'Campaign statuses: '.self::scrub($e->getMessage());
         }
         $now = now();

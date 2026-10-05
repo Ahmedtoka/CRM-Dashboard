@@ -6,13 +6,16 @@ use App\Ads\Platforms\RateLimited;
 use App\Ads\Sync\AdsSyncService;
 use App\Ads\Sync\SyncAdAccount;
 use App\Models\AdAccount;
+use App\Models\AdAccountDaily;
 use App\Models\AdCampaign;
+use App\Models\AdDailyMetric;
 use App\Models\AdPlatformConnection;
 use App\Models\AdsApiUsage;
 use App\Models\AdsSyncRun;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -72,75 +75,133 @@ it('defers a sync before any Meta request while the recent usage is above the ad
 });
 
 it('uses the regain time of the busiest reading as the retry delay', function () {
-    $acc = admissionAccount();
-    admissionUsage($acc, 92, 3, regain: 20);
-    admissionFakeMeta();
+    admissionUsage(admissionAccount(), 92, 3, regain: 20);
 
     try {
-        app(MetaAdsApi::class)->get('tok', 'act_11/insights');
+        app(MetaAdsApi::class)->admit('act_11');
         $this->fail('expected RateLimited');
     } catch (RateLimited $e) {
-        expect($e->retryAfterSeconds)->toBe(1200)->and($e->getMessage())->toContain('deferred by Meta quota');
+        expect($e->retryAfterSeconds)->toBe(1200)->and($e->getMessage())->toContain('deferred by Meta quota')->toContain('retry in 20 min');
     }
-    Http::assertSentCount(0);
 });
 
-it('sends the request when the busy reading is older than 15 minutes', function () {
-    $acc = admissionAccount();
-    admissionUsage($acc, 80, 20);
-    admissionFakeMeta();
+it('waits at least until the busy reading leaves the 15-minute window', function () {
+    admissionUsage(admissionAccount(), 80, 2); // leaves the window in 13 minutes, Meta gave no regain time
 
-    app(MetaAdsApi::class)->get('tok', 'act_11/insights');
-
-    Http::assertSentCount(1);
+    try {
+        app(MetaAdsApi::class)->admit('act_11');
+        $this->fail('expected RateLimited');
+    } catch (RateLimited $e) {
+        expect($e->retryAfterSeconds)->toBe(780)->and($e->getMessage())->toContain('retry in 13 min');
+    }
 });
 
-it('sends the request when admission is disabled', function () {
+it('admits when the busy reading is older than 15 minutes', function () {
+    admissionUsage(admissionAccount(), 80, 20);
+
+    app(MetaAdsApi::class)->admit('act_11');
+})->throwsNoExceptions();
+
+it('admits when admission is disabled', function () {
     config(['crm.ads.sync.admission_enabled' => false]);
-    $acc = admissionAccount();
-    admissionUsage($acc, 95, 2);
-    admissionFakeMeta();
+    admissionUsage(admissionAccount(), 95, 2);
 
-    app(MetaAdsApi::class)->get('tok', 'act_11/insights');
+    app(MetaAdsApi::class)->admit('act_11');
+})->throwsNoExceptions();
 
-    Http::assertSentCount(1);
-});
+it('only looks at the usage of the account being synced', function () {
+    admissionAccount();
+    admissionUsage(AdAccount::factory()->meta()->create(['external_id' => 'act_22']), 95, 2);
 
-it('only looks at the usage of the account being read', function () {
-    $acc = admissionAccount();
-    $other = AdAccount::factory()->meta()->create(['external_id' => 'act_22']);
-    admissionUsage($other, 95, 2);
-    admissionFakeMeta();
+    app(MetaAdsApi::class)->admit('act_11');
+})->throwsNoExceptions();
 
-    app(MetaAdsApi::class)->get('tok', 'act_11/insights');
-
-    Http::assertSentCount(1);
-});
-
-it('never blocks a write', function () {
+it('never blocks a write, nor a read outside a sync run', function () {
     $acc = admissionAccount();
     admissionUsage($acc, 99, 1);
-    Http::fake(['graph.facebook.com/*' => Http::response(['id' => '1'])]);
+    Http::fake(['graph.facebook.com/*' => Http::response(['id' => '1', 'data' => []])]);
 
     app(MetaAdsApi::class)->post('tok', 'act_11/ads', ['name' => 'x']);
+    app(MetaAdsApi::class)->get('tok', 'act_11/campaigns');
 
-    Http::assertSentCount(1);
+    Http::assertSentCount(2);
 });
 
-it('carries Meta estimated_time_to_regain_access on a 2xx read above the limit', function () {
-    admissionAccount();
-    $header = '{"11":[{"type":"ads_insights","call_count":90,"total_cputime":1,"total_time":1,"estimated_time_to_regain_access":12}]}';
-    Http::fake(['graph.facebook.com/*' => Http::response(['data' => []], 200, ['x-business-use-case-usage' => $header])]);
+it('admits once per run: a high reading during the run does not refuse the later calls', function () {
+    $acc = admissionAccount('act_1');
+    AdCampaign::create(['ad_account_id' => $acc->id, 'external_id' => 'c1', 'name' => 'One', 'status' => 'ACTIVE']);
+    $usage = ['x-business-use-case-usage' => '{"1":[{"type":"ads_insights","call_count":78,"total_cputime":1,"total_time":1,"estimated_time_to_regain_access":0}]}'];
+    Http::fake(function (Request $r) use ($usage) {
+        if (str_contains($r->url(), 'act_1/insights') && ($r->data()['level'] ?? null) === 'ad') {
+            return Http::response(['data' => [['ad_id' => 'a1', 'date_start' => '2026-10-04', 'spend' => '10', 'campaign_id' => 'c1']]], 200, $usage);
+        }
+        if (str_contains($r->url(), 'act_1/insights')) {
+            return Http::response(['data' => [['date_start' => '2026-10-04', 'spend' => '10']]]);
+        }
+        if (str_contains($r->url(), 'act_1/campaigns')) {
+            return Http::response(['data' => [['id' => 'c1', 'status' => 'PAUSED', 'effective_status' => 'PAUSED']]]);
+        }
 
-    try {
-        app(MetaAdsApi::class)->get('tok', 'act_11/insights');
-        $this->fail('expected RateLimited');
-    } catch (RateLimited $e) {
-        expect($e->retryAfterSeconds)->toBe(720);
-    }
+        return Http::response(['data' => []]);
+    });
+
+    $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
+    $run = app(AdsSyncService::class)->syncAccount($acc, $today->subDays(2), $today, 'recent', false);
+
+    $urls = collect(Http::recorded())->map(fn ($p) => $p[0]);
+    expect($run->status)->toBe('ok')
+        ->and(AdsApiUsage::where('max_pct', 78)->exists())->toBeTrue()
+        ->and($urls->filter(fn (Request $r) => str_contains($r->url(), 'act_1/insights'))->count())->toBe(2) // ad level + control
+        ->and($urls->contains(fn (Request $r) => str_contains($r->url(), 'act_1/campaigns')))->toBeTrue()
+        ->and(AdDailyMetric::count())->toBe(1)
+        ->and(AdCampaign::where('external_id', 'c1')->value('status'))->toBe('PAUSED');
 });
 
-it('carries the regain time on a rate-limit error response too', function () {
+it('keeps the rows of a read above 85 percent, stops paging and warns on the run', function () {
+    $acc = admissionAccount('act_1');
+    $usage = ['x-business-use-case-usage' => '{"1":[{"type":"ads_insights","call_count":90,"total_cputime":1,"total_time":1,"estimated_time_to_regain_access":0}]}'];
+    Http::fake(function (Request $r) use ($usage) {
+        if (str_contains($r->url(), 'page2')) {
+            return Http::response(['data' => [['ad_id' => 'a3', 'date_start' => '2026-10-04', 'spend' => '1']]]);
+        }
+        if (str_contains($r->url(), 'act_1/insights') && ($r->data()['level'] ?? null) === 'ad') {
+            return Http::response(['data' => [
+                ['ad_id' => 'a1', 'date_start' => '2026-10-04', 'spend' => '10'],
+                ['ad_id' => 'a2', 'date_start' => '2026-10-04', 'spend' => '5'],
+            ], 'paging' => ['next' => 'https://graph.facebook.com/v23.0/act_1/insights?page2=1']], 200, $usage);
+        }
+
+        return Http::response(['data' => []]);
+    });
+
+    $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
+    $run = app(AdsSyncService::class)->syncAccount($acc, $today->subDays(2), $today, 'recent', false);
+
+    expect($run->status)->toBe('ok')
+        ->and($run->error)->toContain('Ad metrics: stopped paging at 90% usage (2 rows kept)')
+        ->and(AdDailyMetric::count())->toBe(2);
+    Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'page2'));
+});
+
+it('a control cut short by high usage is no control: nothing stale is deleted', function () {
+    $acc = admissionAccount('act_1');
+    $usage = ['x-business-use-case-usage' => '{"1":[{"type":"ads_insights","call_count":95,"total_cputime":1,"total_time":1}]}'];
+    Http::fake(function (Request $r) use ($usage) {
+        if (str_contains($r->url(), 'act_1/insights') && ($r->data()['level'] ?? null) === 'account') {
+            return Http::response(['data' => [['date_start' => '2026-10-05', 'spend' => '0']], 'paging' => ['next' => 'https://graph.facebook.com/v23.0/act_1/insights?page2=1']], 200, $usage);
+        }
+
+        return Http::response(['data' => []]);
+    });
+
+    $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
+    $run = app(AdsSyncService::class)->syncAccount($acc, $today->subDays(2), $today, 'recent', false);
+
+    expect($run->status)->toBe('ok')->and($run->error)->toContain('Account totals: stopped paging at 95% usage')
+        ->and(AdAccountDaily::count())->toBe(0);
+});
+
+it('carries the regain time on a rate-limit error response', function () {
     $header = '{"11":[{"type":"ads_insights","call_count":100,"total_cputime":1,"total_time":1,"estimated_time_to_regain_access":7}]}';
     Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['code' => 80004, 'message' => 'too many calls']], 400, ['x-business-use-case-usage' => $header])]);
 
@@ -154,12 +215,10 @@ it('carries the regain time on a rate-limit error response too', function () {
 
 it('releases a queued job with Meta retry-after, 900 s when Meta gave none', function () {
     $acc = admissionAccount();
-    $header = '{"11":[{"type":"ads_insights","call_count":90,"total_cputime":1,"total_time":1,"estimated_time_to_regain_access":12}]}';
+    $header = '{"11":[{"type":"ads_insights","call_count":100,"total_cputime":1,"total_time":1,"estimated_time_to_regain_access":12}]}';
     $withRegain = true;
     Http::fake(function () use (&$withRegain, $header) {
-        return $withRegain
-            ? Http::response(['data' => []], 200, ['x-business-use-case-usage' => $header])
-            : Http::response(['error' => ['code' => 17, 'message' => 'limit']], 400);
+        return Http::response(['error' => ['code' => 17, 'message' => 'limit']], 400, $withRegain ? ['x-business-use-case-usage' => $header] : []);
     });
     $released = null;
     admissionQueuedJob(new SyncAdAccount($acc->id, 3), $released)->handle(app(AdsSyncService::class));
@@ -185,14 +244,26 @@ it('dispatches one hourly sync per account while one is pending, even after the 
     expect($a->fresh()->sync_pending_since)->not->toBeNull()->and($b->fresh()->sync_pending_since)->not->toBeNull();
 });
 
-it('dispatches again once the pending marker is older than 8 hours', function () {
+it('takes a pending marker over after 2 hours, not before', function () {
     Queue::fake();
-    $a = AdAccount::factory()->meta()->create(['external_id' => 'act_1']);
-    DB::table('ad_accounts')->where('id', $a->id)->update(['sync_pending_since' => now()->subHours(9)]);
+    $old = AdAccount::factory()->meta()->create(['external_id' => 'act_1']);
+    $recent = AdAccount::factory()->meta()->create(['external_id' => 'act_2']);
+    DB::table('ad_accounts')->where('id', $old->id)->update(['sync_pending_since' => now()->subMinutes(121)]);
+    DB::table('ad_accounts')->where('id', $recent->id)->update(['sync_pending_since' => now()->subMinutes(100)]);
 
     $this->artisan('ads:sync', ['--days' => 3])->assertSuccessful();
 
     Queue::assertPushed(SyncAdAccount::class, 1);
+    Queue::assertPushed(SyncAdAccount::class, fn (SyncAdAccount $j) => $j->accountId === $old->id);
+});
+
+it('undoes the pending marker when the dispatch fails', function () {
+    $a = AdAccount::factory()->meta()->create(['external_id' => 'act_1', 'name' => 'Lane Down']);
+    Bus::shouldReceive('dispatch')->andThrow(new RuntimeException('Connection refused [tcp://127.0.0.1:6379]'));
+
+    $this->artisan('ads:sync', ['--days' => 3])->expectsOutputToContain('Failed to queue Lane Down')->assertFailed();
+
+    expect($a->fresh()->sync_pending_since)->toBeNull();
 });
 
 it('queues the hourly sync without the ad list and the nightly deep sync with it', function () {
@@ -267,6 +338,22 @@ it('refreshes campaign statuses hourly with the light campaigns call', function 
         ->and($requests->contains(fn (Request $r) => str_contains($r->url(), 'act_1/ads')))->toBeFalse();
 });
 
+it('keeps the run ok with a warning when the campaign status call is rate limited after metrics are stored', function () {
+    $acc = admissionAccount('act_1');
+    Http::fake(function (Request $r) {
+        if (str_contains($r->url(), 'act_1/campaigns')) {
+            return Http::response(['error' => ['code' => 17, 'message' => 'User request limit reached']], 400);
+        }
+
+        return Http::response(['data' => []]);
+    });
+
+    $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
+    $run = app(AdsSyncService::class)->syncAccount($acc, $today->subDays(2), $today, 'recent', false);
+
+    expect($run->status)->toBe('ok')->and($run->error)->toContain('Campaign statuses: User request limit reached');
+});
+
 it('keeps the run ok with a warning when the campaign status call fails', function () {
     $acc = admissionAccount('act_1');
     Http::fake(function (Request $r) {
@@ -283,14 +370,14 @@ it('keeps the run ok with a warning when the campaign status call fails', functi
     expect($run->status)->toBe('ok')->and($run->error)->toContain('Campaign statuses');
 });
 
-it('clears the pending marker when the job ends, keeps it on a release', function () {
+it('clears the pending marker when the job ends, refreshes it on a release (heartbeat)', function () {
     $acc = admissionAccount();
-    DB::table('ad_accounts')->where('id', $acc->id)->update(['sync_pending_since' => now()]);
+    DB::table('ad_accounts')->where('id', $acc->id)->update(['sync_pending_since' => now()->subMinutes(110)]);
     admissionUsage($acc, 80, 5);
     admissionFakeMeta();
 
     admissionQueuedJob(new SyncAdAccount($acc->id, 3, withAds: false))->handle(app(AdsSyncService::class));
-    expect($acc->fresh()->sync_pending_since)->not->toBeNull();
+    expect($acc->fresh()->sync_pending_since->diffInSeconds(now(), true))->toBeLessThan(5); // a live job is never taken over
 
     AdsApiUsage::query()->delete();
     admissionQueuedJob(new SyncAdAccount($acc->id, 3, withAds: false))->handle(app(AdsSyncService::class));
@@ -301,11 +388,45 @@ it('clears the pending marker when the job ends, keeps it on a release', functio
     expect($acc->fresh()->sync_pending_since)->toBeNull();
 });
 
-it('the sweeper clears pending markers older than 8 hours', function () {
+it('refreshes the pending marker when an attempt starts', function () {
+    config(['crm.ads.drivers.meta' => 'fake']);
+    $acc = AdAccount::factory()->meta()->create();
+    DB::table('ad_accounts')->where('id', $acc->id)->update(['sync_pending_since' => now()->subMinutes(110)]);
+    $probe = new stdClass;
+    app()->bind(FakeAdsDriver::class, fn () => new class($probe) extends FakeAdsDriver
+    {
+        public function __construct(private stdClass $probe) {}
+
+        public function dailyMetrics(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+        {
+            $this->probe->seen = AdAccount::find($a->id)->sync_pending_since;
+
+            return [];
+        }
+    });
+
+    (new SyncAdAccount($acc->id, 3, withAds: false))->handle(app(AdsSyncService::class));
+
+    expect($probe->seen->diffInSeconds(now(), true))->toBeLessThan(5)->and($acc->fresh()->sync_pending_since)->toBeNull();
+});
+
+it('the nightly deep job never touches the hourly pending marker', function () {
+    config(['crm.ads.drivers.meta' => 'fake']);
+    $acc = AdAccount::factory()->meta()->create();
+    $marker = now()->subMinutes(30)->startOfSecond();
+    DB::table('ad_accounts')->where('id', $acc->id)->update(['sync_pending_since' => $marker]);
+
+    (new SyncAdAccount($acc->id, 30))->handle(app(AdsSyncService::class));
+    (new SyncAdAccount($acc->id, 30))->failed(new RuntimeException('gave up'));
+
+    expect($acc->fresh()->sync_pending_since->equalTo($marker))->toBeTrue();
+});
+
+it('the sweeper clears pending markers older than 2 hours', function () {
     $old = AdAccount::factory()->meta()->create(['external_id' => 'act_1']);
     $fresh = AdAccount::factory()->meta()->create(['external_id' => 'act_2']);
-    DB::table('ad_accounts')->where('id', $old->id)->update(['sync_pending_since' => now()->subHours(9)]);
-    DB::table('ad_accounts')->where('id', $fresh->id)->update(['sync_pending_since' => now()->subHour()]);
+    DB::table('ad_accounts')->where('id', $old->id)->update(['sync_pending_since' => now()->subMinutes(121)]);
+    DB::table('ad_accounts')->where('id', $fresh->id)->update(['sync_pending_since' => now()->subMinutes(100)]);
 
     $this->artisan('ads:sweep-stuck-runs')->assertSuccessful();
 

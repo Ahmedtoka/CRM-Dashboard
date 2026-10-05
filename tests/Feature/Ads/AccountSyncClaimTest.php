@@ -1,5 +1,6 @@
 <?php
 
+use App\Ads\Platforms\Fake\FakeAdsDriver;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Sync\AccountSyncClaim;
 use App\Ads\Sync\AdsSyncService;
@@ -56,6 +57,45 @@ it('keeps the claim when the cache is flushed (DB-backed)', function () {
     Cache::flush();
 
     expect(AccountSyncClaim::acquire($acc, 600))->toBeNull();
+});
+
+it('extend says whether the caller still holds the claim', function () {
+    $acc = claimAccount();
+    $key = AccountSyncClaim::acquire($acc, 600);
+
+    expect(AccountSyncClaim::extend($acc, $key, 600))->toBeTrue(); // same second: MariaDB reports 0 changed rows, still ours
+    claimHeldBy($acc, 'thief', now()->addMinutes(30));
+    expect(AccountSyncClaim::extend($acc, $key, 600))->toBeFalse();
+});
+
+it('a backfill stops with a warning when its claim was taken over', function () {
+    config(['crm.ads.drivers.meta' => 'fake']);
+    $acc = AdAccount::factory()->meta()->create();
+    $driver = new class extends FakeAdsDriver
+    {
+        public int $metricCalls = 0;
+
+        public function dailyMetrics(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
+        {
+            if (++$this->metricCalls === 1) {
+                claimHeldBy($a, 'thief', now()->addMinutes(30)); // our claim expired and another sync took it
+            }
+
+            return [];
+        }
+
+        public function accountDaily(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): ?array
+        {
+            return null;
+        }
+    };
+    app()->bind(FakeAdsDriver::class, fn () => $driver);
+
+    $run = app(AdsSyncService::class)->backfill($acc, 35, batchKey: 'b-1');
+
+    expect($driver->metricCalls)->toBe(1)
+        ->and($run->error)->toContain('Backfill stopped: another sync took over the account')
+        ->and($acc->fresh()->sync_claim_key)->toBe('thief'); // the other sync's claim is left alone
 });
 
 it('releases only with the matching key', function () {

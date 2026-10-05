@@ -82,9 +82,18 @@ it('doctor passes the adssync lane while syncs keep finishing', function () {
     config(['crm.ads.sync.queue' => 'adssync']);
     $this->mock(QueueInspector::class, fn ($m) => $m->shouldReceive('lengths')->andReturn(['ready' => 4, 'delayed' => 0, 'reserved' => 0]));
     $acc = AdAccount::factory()->meta()->create();
-    AdsSyncRun::factory()->create(['ad_account_id' => $acc->id, 'status' => 'ok', 'started_at' => now()->subMinutes(6), 'finished_at' => now()->subMinutes(5)]);
+    AdsSyncRun::factory()->create(['ad_account_id' => $acc->id, 'status' => 'ok', 'run_key' => 'queued-1', 'started_at' => now()->subMinutes(6), 'finished_at' => now()->subMinutes(5)]);
 
     expect(queueDoctorRow('adssync worker'))->toContain('| ok |');
+});
+
+it('doctor ignores inline runs when judging the adssync worker', function () {
+    config(['crm.ads.sync.queue' => 'adssync']);
+    $this->mock(QueueInspector::class, fn ($m) => $m->shouldReceive('lengths')->andReturn(['ready' => 4, 'delayed' => 0, 'reserved' => 0]));
+    $acc = AdAccount::factory()->meta()->create();
+    AdsSyncRun::factory()->create(['ad_account_id' => $acc->id, 'status' => 'ok', 'run_key' => null, 'started_at' => now()->subMinutes(6), 'finished_at' => now()->subMinutes(5)]);
+
+    expect(queueDoctorRow('adssync worker'))->toContain('| fail |');
 });
 
 it('doctor has no adssync worker row while the lane is commercelong', function () {

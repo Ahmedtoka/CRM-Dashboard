@@ -30,11 +30,47 @@ class MetaAdsDriver implements AdPlatformDriver
      */
     public const INSIGHTS_STATUSES = ['ACTIVE', 'PAUSED', 'DELETED', 'PENDING_REVIEW', 'DISAPPROVED', 'PREAPPROVED', 'PENDING_BILLING_INFO', 'CAMPAIGN_PAUSED', 'ARCHIVED', 'ADSET_PAUSED', 'IN_PROCESS', 'WITH_ISSUES'];
 
+    /** @var list<string> run warnings (a list cut short by high usage), drained by the sync */
+    private array $warnings = [];
+
     public function __construct(private readonly MetaAdsApi $api) {}
+
+    public function admit(AdAccount $a): void
+    {
+        $this->api->admit($this->actId($a));
+    }
+
+    public function drainWarnings(): array
+    {
+        $out = $this->warnings;
+        $this->warnings = [];
+
+        return $out;
+    }
+
+    /**
+     * paginate() plus a run warning when Meta's usage header stopped the paging early (the rows read are kept).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function pages(string $label, string $token, string $path, array $query): array
+    {
+        $rows = $this->api->paginate($token, $path, $query);
+        if ($this->api->stoppedAt() !== null) {
+            $this->warnings[] = $this->stoppedMessage($label, count($rows));
+        }
+
+        return $rows;
+    }
+
+    private function stoppedMessage(string $label, int $rows): string
+    {
+        return sprintf('%s: stopped paging at %d%% usage (%d rows kept)', $label, (int) $this->api->stoppedAt(), $rows);
+    }
 
     public function accounts(AdPlatformConnection $c): array
     {
-        $rows = $this->api->paginate($this->token($c), 'me/adaccounts', [
+        $rows = $this->pages('Ad accounts', $this->token($c), 'me/adaccounts', [
             'fields' => 'id,name,currency,timezone_name,account_status,balance',
             'limit' => 200,
         ]);
@@ -64,7 +100,7 @@ class MetaAdsDriver implements AdPlatformDriver
 
     public function ads(AdAccount $a): array
     {
-        $rows = $this->api->paginate($this->token($a->connection), $this->actId($a).'/ads', [
+        $rows = $this->pages('Ad list', $this->token($a->connection), $this->actId($a).'/ads', [
             'effective_status' => json_encode(self::AD_STATUSES),
             'fields' => 'id,name,status,effective_status,created_time,'
                 .'creative{id,name,thumbnail_url,image_url,video_id,title,body,instagram_permalink_url,url_tags,object_story_id,effective_object_story_id,object_story_spec,asset_feed_spec},'
@@ -78,7 +114,7 @@ class MetaAdsDriver implements AdPlatformDriver
 
     public function dailyMetrics(AdAccount $a, CarbonImmutable $from, CarbonImmutable $to): array
     {
-        $rows = $this->api->paginate($this->token($a->connection), $this->actId($a).'/insights', [
+        $rows = $this->pages('Ad metrics', $this->token($a->connection), $this->actId($a).'/insights', [
             'level' => 'ad',
             'time_increment' => 1,
             'time_range' => json_encode(['since' => $from->toDateString(), 'until' => $to->toDateString()]),
@@ -124,6 +160,10 @@ class MetaAdsDriver implements AdPlatformDriver
             'fields' => 'spend,impressions,actions,action_values,account_currency',
             'limit' => 500,
         ] + $this->attributionParams());
+        if ($this->api->stoppedAt() !== null) {
+            // A cut control would read as zero spend on the missing days and unlock deletes: no control this run.
+            throw new AdsApiException(sprintf('stopped paging at %d%% usage', (int) $this->api->stoppedAt()));
+        }
 
         $out = [];
         foreach ($rows as $r) {
@@ -160,6 +200,11 @@ class MetaAdsDriver implements AdPlatformDriver
                     $out['ads'][(string) $r['id']] = ['status' => $r['status'] ?? null, 'effective_status' => $r['effective_status'] ?? null];
                 }
             }
+            if ($this->api->stoppedAt() !== null) {
+                // An incomplete list must never mark ads GONE.
+                $out['warnings'][] = 'ads list '.$this->stoppedMessage('incomplete', count($out['ads']));
+                $out['ads'] = null;
+            }
         } catch (TokenInvalid|RateLimited $e) {
             throw $e;
         } catch (AdsApiException $e) {
@@ -181,6 +226,10 @@ class MetaAdsDriver implements AdPlatformDriver
                     ];
                 }
             }
+            if ($this->api->stoppedAt() !== null) {
+                // Campaigns are updated one by one: the part read is still right.
+                $out['warnings'][] = 'campaigns list '.$this->stoppedMessage('partial', count($out['campaigns']));
+            }
         } catch (TokenInvalid|RateLimited $e) {
             throw $e;
         } catch (AdsApiException $e) {
@@ -195,7 +244,7 @@ class MetaAdsDriver implements AdPlatformDriver
     public function campaignStatuses(AdAccount $a): ?array
     {
         $out = [];
-        foreach ($this->api->paginate($this->token($a->connection), $this->actId($a).'/campaigns', [
+        foreach ($this->pages('Campaign statuses', $this->token($a->connection), $this->actId($a).'/campaigns', [
             'fields' => 'id,status,effective_status',
             'effective_status' => json_encode(self::INSIGHTS_STATUSES),
             'limit' => 500,

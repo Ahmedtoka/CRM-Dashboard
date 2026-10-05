@@ -22,7 +22,7 @@ class SyncAdsCommand extends Command
     protected $description = 'Sync ads and daily metrics for the active ad accounts';
 
     /** A pending hourly sync older than this is taken over (its job was lost). */
-    public const PENDING_HOURS = 8;
+    public const PENDING_HOURS = 2;
 
     public function handle(AdsSyncService $sync, OrderAttribution $attribution): int
     {
@@ -58,7 +58,14 @@ class SyncAdsCommand extends Command
 
                     continue;
                 }
-                SyncAdAccount::dispatch($a->id, $days, 'recent', 'schedule', null, false);
+                try {
+                    SyncAdAccount::dispatch($a->id, $days, 'recent', 'schedule', null, false);
+                } catch (Throwable $e) {
+                    // Nothing was queued: undo the marker so the next hour tries again.
+                    DB::table('ad_accounts')->where('id', $a->id)->update(['sync_pending_since' => null]);
+                    $this->warn("Failed to queue {$a->name}: ".AdsSyncService::scrub($e->getMessage()));
+                    $failed++;
+                }
 
                 continue;
             }
@@ -96,7 +103,8 @@ class SyncAdsCommand extends Command
 
     /**
      * CAS on ad_accounts.sync_pending_since: true for the one caller that marks the account pending. A marker older
-     * than PENDING_HOURS is taken over (its job was lost); ads:sweep-stuck-runs also clears those.
+     * than PENDING_HOURS is taken over (its job was lost: a live job refreshes it on every attempt and release);
+     * ads:sweep-stuck-runs also clears those.
      */
     private function claimPending(AdAccount $a): bool
     {

@@ -105,6 +105,7 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
     public function handle(AdsSyncService $sync): void
     {
         if ($this->runKey === null) {
+            $this->heartbeat();
             if ($this->run($sync)) {
                 $this->clearPending();
             }
@@ -122,6 +123,7 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
         }
 
         try {
+            $this->heartbeat();
             if ($this->run($sync)) {
                 Cache::put($done, true, now()->addHours(12));
                 $this->clearPending();
@@ -132,13 +134,28 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * The hourly dispatch marks the account pending (ads:sync, CAS on ad_accounts.sync_pending_since). Any sync job of
-     * the account that ends clears it: the hourly job itself, or the manual/backfill job holding the same unique lock
-     * that made the hourly dispatch a no-op. A released job keeps it, so no second hourly job piles up meanwhile.
+     * The hourly dispatch marks the account pending (ads:sync, CAS on ad_accounts.sync_pending_since). Only jobs holding
+     * the hourly unique lock (the hourly job, or the manual/backfill job whose lock made the hourly dispatch a no-op)
+     * touch it; the nightly '-deep' job never does. Such a job refreshes the marker on every attempt and release
+     * (heartbeat: a live job is never taken over) and clears it when it ends.
      */
+    private function sharesHourlyLock(): bool
+    {
+        return $this->uniqueId() === self::uniqueIdFor($this->accountId);
+    }
+
+    private function heartbeat(): void
+    {
+        if ($this->sharesHourlyLock()) {
+            AdAccount::whereKey($this->accountId)->update(['sync_pending_since' => now()]);
+        }
+    }
+
     private function clearPending(): void
     {
-        AdAccount::whereKey($this->accountId)->whereNotNull('sync_pending_since')->update(['sync_pending_since' => null]);
+        if ($this->sharesHourlyLock()) {
+            AdAccount::whereKey($this->accountId)->whereNotNull('sync_pending_since')->update(['sync_pending_since' => null]);
+        }
     }
 
     /** The queue gave up (timeout, exhausted tries, a crash): close this job's run, and only this one. */
@@ -189,6 +206,7 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
             // Meta's regain time (or the admission delay) when known, else 15 minutes.
             if ($this->job && ! $this->job instanceof SyncJob) {
                 $this->release($e->retryAfterSeconds ?? 900);
+                $this->heartbeat();
 
                 return false;
             }
@@ -201,6 +219,7 @@ class SyncAdAccount implements ShouldBeUnique, ShouldQueue
     {
         if (AdsSyncService::isBusy($run) && $this->job && ! $this->job instanceof SyncJob) {
             $this->release(120);
+            $this->heartbeat();
 
             return true;
         }

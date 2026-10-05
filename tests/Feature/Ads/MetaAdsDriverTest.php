@@ -128,13 +128,20 @@ it('fails loudly instead of truncating after too many pages', function () {
     Http::assertNotSent(fn ($r) => str_contains($r->url(), 'SECRET123'));
 });
 
-it('throws RateLimited when usage is above 85 percent', function () {
+it('keeps the rows read when usage is above 85 percent and stops paging with a warning', function () {
     Http::preventStrayRequests();
-    Http::fake(['graph.facebook.com/*' => Http::response(['data' => []], 200, [
+    Http::fake(['graph.facebook.com/*' => Http::response([
+        'data' => [['id' => 'act_1', 'name' => 'One', 'currency' => 'EGP', 'account_status' => 1]],
+        'paging' => ['next' => 'https://graph.facebook.com/v23.0/me/adaccounts?after=X'],
+    ], 200, [
         'x-business-use-case-usage' => json_encode(['123' => [['call_count' => 90, 'total_time' => 10, 'total_cputime' => 5]]]),
     ])]);
+    $driver = app(MetaAdsDriver::class);
 
-    expect(fn () => app(MetaAdsDriver::class)->accounts(metaConnection()))->toThrow(RateLimited::class);
+    expect($driver->accounts(metaConnection()))->toHaveCount(1)
+        ->and($driver->drainWarnings())->toBe(['Ad accounts: stopped paging at 90% usage (1 rows kept)'])
+        ->and($driver->drainWarnings())->toBe([]);
+    Http::assertSentCount(1);
 });
 
 it('fetches creative media in batches', function () {
