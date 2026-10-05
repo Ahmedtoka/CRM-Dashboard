@@ -411,6 +411,10 @@ return [
         'control_tolerance_pct' => 0.5,
         // First day ads history is kept for (Cairo day). Sync, backfill, discovery and reports never go before it.
         'history_start' => env('CRM_ADS_HISTORY_START', '2026-09-01'),
+        // Inbox attribution (A4): a chat order is credited to the latest ad referral at most this many days before it.
+        'inbox_window_days' => (int) env('CRM_ADS_INBOX_WINDOW_DAYS', 7),
+        // The ad referral was first stored on this day; inbox history is complete from max(this, history_start).
+        'chat_complete_from_floor' => '2026-09-25',
         // Live writers outside production only touch these accounts (comma list of act_... in CRM_ADS_WRITE_SANDBOX_ACCOUNTS).
         'write_sandbox_accounts' => array_values(array_filter(array_map('trim', explode(',', (string) env('CRM_ADS_WRITE_SANDBOX_ACCOUNTS', ''))))),
         'material_max_mb' => ['video' => 500, 'image' => 20],

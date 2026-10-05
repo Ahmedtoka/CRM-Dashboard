@@ -8,9 +8,11 @@ use App\Models\AdAccount;
 use App\Models\AdCampaign;
 use App\Models\AdDailyMetric;
 use App\Models\Conversation;
+use App\Models\ConversationAdReferral;
 use App\Models\Customer;
 use App\Models\Order;
 use Carbon\CarbonImmutable;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\DB;
 
 function attributionRange(): array
@@ -27,7 +29,7 @@ function placedOrder(array $attrs = []): Order
     ], $attrs));
 }
 
-it('attributes orders by utm ad id, then utm campaign, then inbox first touch', function () {
+it('attributes orders by utm ad id, then utm campaign, then the latest inbox touch', function () {
     $acc = AdAccount::factory()->create();
     $camp = AdCampaign::factory()->for($acc, 'account')->create(['external_id' => '9001', 'name' => 'SALES | UP TO 50%']);
     $ad = Ad::factory()->for($acc, 'account')->create(['external_id' => '120200000001', 'ad_campaign_id' => $camp->id]);
@@ -129,7 +131,7 @@ it('runs from the artisan command', function () {
 });
 
 it('schedules attribution hourly at minute 40 Cairo time', function () {
-    $event = collect(app(Illuminate\Console\Scheduling\Schedule::class)->events())
+    $event = collect(app(Schedule::class)->events())
         ->first(fn ($e) => str_contains($e->command, 'ads:attribute-orders'));
 
     expect($event)->not->toBeNull()
@@ -161,4 +163,74 @@ it('clears the attribution of cancelled orders in range', function () {
     app(OrderAttribution::class)->run($from, $to);
 
     expect($o->fresh()->ad_id)->toBeNull()->and($o->fresh()->ad_campaign_id)->toBeNull()->and($o->fresh()->ad_attribution)->toBeNull();
+});
+
+/*
+ * A4 (F-006, R-08): an inbox order is credited to the latest ad referral before the order and within
+ * crm.ads.inbox_window_days (7, inclusive); with no referral rows the conversation's ad_attributed_at is the touch.
+ */
+function windowCase(string $referredAt, string $ad = '700'): Order
+{
+    $c = Customer::factory()->create();
+    $conv = Conversation::factory()->create(['customer_id' => $c->id, 'ad_id' => $ad, 'ad_attributed_at' => $referredAt]);
+    ConversationAdReferral::create(['conversation_id' => $conv->id, 'customer_id' => $c->id, 'ad_external_id' => $ad, 'referred_at' => $referredAt]);
+
+    return placedOrder(['customer_id' => $c->id, 'placed_at' => '2026-09-20 12:00:00']);
+}
+
+it('credits a referral up to exactly 7 days before the order and not a minute more', function () {
+    $ad = Ad::factory()->create(['external_id' => '700']);
+    $inside = windowCase('2026-09-13 13:00:00'); // 6 days 23 h
+    $edge = windowCase('2026-09-13 12:00:00');   // exactly 7 days
+    $outside = windowCase('2026-09-13 11:59:00'); // 7 days 1 min
+
+    [$from, $to] = attributionRange();
+    app(OrderAttribution::class)->run($from, $to);
+
+    expect($inside->fresh()->ad_id)->toBe($ad->id)->and($inside->fresh()->ad_attribution)->toBe('inbox')
+        ->and($edge->fresh()->ad_id)->toBe($ad->id)->and($edge->fresh()->ad_attribution)->toBe('inbox')
+        ->and($outside->fresh()->ad_id)->toBeNull()->and($outside->fresh()->ad_attribution)->toBeNull();
+});
+
+it('credits the latest referral before the order, not the conversation first ad', function () {
+    $a = Ad::factory()->create(['external_id' => 'A1']);
+    $b = Ad::factory()->create(['external_id' => 'B1']);
+    $c = Customer::factory()->create();
+    $conv = Conversation::factory()->create(['customer_id' => $c->id, 'ad_id' => 'A1', 'ad_attributed_at' => '2026-09-15 12:00:00']);
+    ConversationAdReferral::create(['conversation_id' => $conv->id, 'customer_id' => $c->id, 'ad_external_id' => 'A1', 'referred_at' => '2026-09-15 12:00:00']); // 5 days before
+    ConversationAdReferral::create(['conversation_id' => $conv->id, 'customer_id' => $c->id, 'ad_external_id' => 'B1', 'referred_at' => '2026-09-19 12:00:00']); // 1 day before
+    ConversationAdReferral::create(['conversation_id' => $conv->id, 'customer_id' => $c->id, 'ad_external_id' => 'A1', 'referred_at' => '2026-09-21 12:00:00']); // after the order
+    $o = placedOrder(['customer_id' => $c->id, 'placed_at' => '2026-09-20 12:00:00']);
+
+    [$from, $to] = attributionRange();
+    app(OrderAttribution::class)->run($from, $to);
+
+    expect($o->fresh()->ad_id)->toBe($b->id)->and($o->fresh()->ad_attribution)->toBe('inbox');
+});
+
+it('falls back to the conversation touch time, with the same window, when the customer has no referral rows', function () {
+    $ad = Ad::factory()->create(['external_id' => '901']);
+    $c = Customer::factory()->create();
+    Conversation::factory()->create(['customer_id' => $c->id, 'ad_id' => '901', 'ad_attributed_at' => '2026-09-17 12:00:00']); // 3 days before
+    $o = placedOrder(['customer_id' => $c->id, 'placed_at' => '2026-09-20 12:00:00']);
+    $c2 = Customer::factory()->create();
+    Conversation::factory()->create(['customer_id' => $c2->id, 'ad_id' => '901', 'ad_attributed_at' => '2026-09-01 12:00:00']); // 19 days before
+    $old = placedOrder(['customer_id' => $c2->id, 'placed_at' => '2026-09-20 12:00:00']);
+
+    [$from, $to] = attributionRange();
+    app(OrderAttribution::class)->run($from, $to);
+
+    expect($o->fresh()->ad_id)->toBe($ad->id)->and($o->fresh()->ad_attribution)->toBe('inbox')
+        ->and($old->fresh()->ad_attribution)->toBeNull();
+});
+
+it('reads the window from config', function () {
+    config(['crm.ads.inbox_window_days' => 1]);
+    Ad::factory()->create(['external_id' => '700']);
+    $o = windowCase('2026-09-17 12:00:00'); // 3 days
+
+    [$from, $to] = attributionRange();
+    app(OrderAttribution::class)->run($from, $to);
+
+    expect($o->fresh()->ad_attribution)->toBeNull();
 });

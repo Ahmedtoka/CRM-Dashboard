@@ -2987,7 +2987,7 @@ const en: Messages = {
             store_tip: 'Every store order placed in the range, from any source, not only ads, by the same rule as the CRM: order total after refunds (Shopify current total); unpaid, cancelled, failed and courier-returned orders excluded.',
             store_hidden: 'Store totals: admins only',
             crm: 'CRM (ad orders)',
-            crm_tip: 'Orders attributed to an ad, including chat orders credited through the inbox. Order total after refunds (Shopify current total); unpaid, cancelled, failed and courier-returned orders excluded.',
+            crm_tip: 'Orders attributed to an ad. Chat orders are credited to the latest ad the customer came from within 7 days before the order. Order total after refunds (Shopify current total); unpaid, cancelled, failed and courier-returned orders excluded.',
             platform: 'Platform (self-reported)',
             platform_tip: 'Purchase value and count that Meta and TikTok report; they can run above reality.',
             orders: '{n} orders',

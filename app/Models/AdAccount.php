@@ -19,7 +19,7 @@ class AdAccount extends Model
 
     protected function casts(): array
     {
-        return ['balance' => 'decimal:2', 'is_active' => 'boolean', 'last_synced_at' => 'datetime'];
+        return ['balance' => 'decimal:2', 'is_active' => 'boolean', 'last_synced_at' => 'datetime', 'chat_complete_from' => 'date'];
     }
 
     public function connection(): BelongsTo
