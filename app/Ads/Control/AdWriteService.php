@@ -2,7 +2,7 @@
 
 namespace App\Ads\Control;
 
-use App\Ads\Access\AdsScope;
+use App\Ads\Control\Write\WritePolicy;
 use App\Ads\Control\Write\WriteSwitch;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdsApiException;
@@ -11,14 +11,12 @@ use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
 use App\Ads\Platforms\WriteGuard;
 use App\Ads\Platforms\WriteRefused;
-use App\Ads\Reports\AdsFilter;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdAction;
 use App\Models\AdCampaign;
 use App\Models\AdSet;
 use App\Models\User;
-use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Validation\ValidationException;
@@ -43,7 +41,7 @@ final class AdWriteService
 
     public const PAUSED_STATUSES = ['PAUSED', 'DISABLE'];
 
-    public function __construct(private readonly DriverFactory $drivers, private readonly AdsScope $scope) {}
+    public function __construct(private readonly DriverFactory $drivers, private readonly WritePolicy $policy) {}
 
     /** @return 'active'|'paused'|null null for anything else (archived, deleted, in review, unknown) */
     public static function statusKind(?string $status): ?string
@@ -59,41 +57,33 @@ final class AdWriteService
         return $this->canWriteMany($u, [$a])[$a->id];
     }
 
-    /** Scope only: is this account one the user may act on (ignores the account's write switch). */
+    /** Scope only: is this account one the user may act on (ignores the account's write switch). Delegates to WritePolicy. */
     public function inScope(User $u, AdAccount $a): bool
     {
-        $today = $this->todayIds($u);
-
-        return (bool) $a->is_active && ($today === null || in_array($a->id, $today, true));
+        return $this->policy->inScope($u, $a);
     }
 
     /**
-     * canWrite for many accounts with the buyer's assignments for today read once. The rows must carry is_active and
-     * write_enabled (no settings query: the write switch is a column since B1).
+     * canWrite for many accounts with the buyer's assignments for today read once (WritePolicy). The rows must carry
+     * is_active and write_enabled.
      *
      * @param  iterable<AdAccount>  $accounts
      * @return array<int, bool> account id => allowed
      */
     public function canWriteMany(User $u, iterable $accounts): array
     {
-        $today = $this->todayIds($u);
-        $out = [];
-        foreach ($accounts as $a) {
-            $out[$a->id] = ($today === null || in_array($a->id, $today, true)) && WritableAccounts::allows($a);
-        }
-
-        return $out;
+        return $this->policy->canWriteMany($u, $accounts);
     }
 
     /**
-     * Levels the user may Run / Stop at (B2, D4): a holder of Ads authority (users.ads_authority, active) acts at every
-     * level; everyone else (buyers, supervisors and admins without the flag) at ad level only.
+     * Levels the user may Run / Stop at (B2, D4), from WritePolicy: Ads authority holders every level, everyone else ad
+     * level only.
      *
      * @return list<'campaign'|'adset'|'ad'>
      */
     public function allowedLevels(User $u): array
     {
-        return $u->hasAdsAuthority() ? self::LEVELS : ['ad'];
+        return $this->policy->allowedLevels($u);
     }
 
     /**
@@ -191,21 +181,6 @@ final class AdWriteService
         }
 
         return $action;
-    }
-
-    /** @return list<int>|null null = every account */
-    private function todayIds(User $u): ?array
-    {
-        if ($u->isSupervisorOrAbove()) {
-            return null;
-        }
-        if ($this->scope->buyerFor($u) === null) {
-            return [];
-        }
-
-        $today = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay();
-
-        return $this->scope->accountIds($u, $today, $today) ?? [];
     }
 
     private function find(AdAccount $a, string $level, string $externalId): Ad|AdSet|AdCampaign|null
