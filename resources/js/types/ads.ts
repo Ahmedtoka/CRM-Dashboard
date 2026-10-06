@@ -1174,8 +1174,9 @@ export interface AdsDecisionsProps extends AdsPageBase {
     counts: { open: number; snoozed: number; closed: number };
     approvals: { count: number; href: string; items: unknown[] } | null;
     suggestions: AdSuggestion[];
-    /** S5 fills this (ads_alerts); always [] in S2. */
-    alerts: unknown[];
+    /** S5 alert cards of the feed tab that follows the page tab (snoozed = the feed's «later»). */
+    alerts: AlertCardData[];
+    alertsMeta: AlertsMeta;
     log: AdActionLogRow[];
     log_users: AdsOption[];
 }
@@ -1275,4 +1276,127 @@ export interface RulesSetupProps {
     can_edit: boolean;
     default_floor: number;
     accounts: RulesSetupAccount[];
+}
+
+/* S5 decisions feed (spec 7.3-7.5, U 5.2-5.3). */
+export type AlertSeverity = 'critical' | 'high' | 'medium' | 'info';
+export type AlertVerb =
+    | 'stop'
+    | 'run'
+    | 'open_stock'
+    | 'open_campaigns'
+    | 'open_library'
+    | 'open_queue'
+    | 'open_settings'
+    | 'add_replacement'
+    | 'view_orders'
+    | 'why';
+export type AlertParams = Record<string, string | number | boolean | null>;
+
+export interface AlertReason {
+    alert_id: number;
+    rule_id: string;
+    severity: AlertSeverity;
+    action: string;
+    sentence_key: string;
+    params: AlertParams;
+    evidence: Record<string, unknown>;
+    first_fired_at: string | null;
+    seen: boolean;
+    state: 'open' | 'snoozed' | 'dismissed' | 'resolved' | 'acted';
+    snoozed_until: string | null;
+    closed_at: string | null;
+    closed_by: string | null;
+    resolved_reason: string | null;
+    dismiss_reason: string | null;
+    can_dismiss: boolean;
+}
+
+export interface AlertAdRef {
+    id: number;
+    external_id: string;
+    name: string;
+    thumbnail_url: string | null;
+    account_id: number;
+    account: string;
+    buyer: string | null;
+    can_write: boolean;
+}
+
+export interface AlertCardData {
+    key: string;
+    kind: 'ad' | 'product' | 'account';
+    severity: AlertSeverity;
+    money_at_risk_per_day: number;
+    first_fired_at: string | null;
+    ad: AlertAdRef | null;
+    product: { id: number; title: string } | null;
+    account: { id: number; name: string } | null;
+    ads: (AlertAdRef & { alert_id: number; action: string })[];
+    reasons: AlertReason[];
+    primary: { verb: AlertVerb; action: string; alert_id: number; href: string | null };
+    alert_ids: number[];
+}
+
+export type AlertsFeedTab = 'open' | 'later' | 'closed' | 'log';
+
+export interface AlertsMeta {
+    tab: AlertsFeedTab;
+    counts: { open: number; later: number; closed: number };
+    hidden_by_cap: number;
+    buyer_cap: number;
+    shadow: boolean;
+    can_toggle: boolean;
+    can_open_settings: boolean;
+}
+
+export interface DigestItem {
+    alert_id: number;
+    rule_id: string;
+    severity: AlertSeverity;
+    sentence_key: string;
+    params: AlertParams;
+    ad: string | null;
+    account: string | null;
+    buyer: string | null;
+    money: number;
+    age_days: number;
+}
+
+export interface DigestBuyerRow {
+    buyer_id: number;
+    name: string;
+    open: number;
+    acted: number;
+    dismissed: number;
+    dismissed_wrong_numbers: number;
+    silent_spend: number;
+}
+
+export interface DigestData {
+    variant: 'owner' | 'buyer';
+    date: string;
+    shadow: boolean;
+    currency: string;
+    yesterday: {
+        spend: number;
+        spend_tax: number;
+        orders: number;
+        revenue: number;
+        roas: number | null;
+        meta_roas: number | null;
+        usual_spend: number | null;
+        floor: number;
+        floor_default: boolean;
+    };
+    open: { count: number; critical: number; high: number; money: number };
+    top: DigestItem[];
+    winners: DigestItem[];
+    stock: { ads: number; products: string[] };
+    inbox: Record<string, string | number> | null;
+    stale_accounts: number;
+    approvals: number;
+    review_waiting: number;
+    buyers: DigestBuyerRow[];
+    stopped_yesterday: number;
 }

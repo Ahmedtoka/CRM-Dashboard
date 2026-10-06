@@ -119,3 +119,21 @@ it('snoozes «بكرة» to the next 09:00 Cairo at least an hour away', functio
     ['2026-10-06 08:30:00', '2026-10-07T09:00:00+03:00'],
     ['2026-10-06 23:30:00', '2026-10-07T09:00:00+03:00'],
 ]);
+
+it('gives the settings link only to people who may open the rules page', function () {
+    $acc = W::account();
+    $buyer = W::buyer($acc);
+    AdsAlert::factory()->create([
+        'ad_id' => null, 'entity_level' => 'account', 'entity_id' => $acc->id, 'ad_account_id' => $acc->id,
+        'rule_id' => 'sales.below_breakeven', 'action' => 'open_settings', 'sentence_key' => 'breakeven_unprofitable', 'params' => ['account' => 'LV'],
+    ]);
+    $supervisor = User::factory()->create(['role' => UserRole::Supervisor]);
+
+    $forBuyer = app(AlertFeed::class)->forUser($buyer);
+    $forSupervisor = app(AlertFeed::class)->forUser($supervisor);
+
+    expect($forBuyer['items'][0]['primary'])->toMatchArray(['verb' => 'open_settings', 'href' => null])
+        ->and($forBuyer['meta']['can_open_settings'])->toBeFalse()
+        ->and($forSupervisor['items'][0]['primary'])->toMatchArray(['verb' => 'open_settings', 'href' => '/ads/setup/rules'])
+        ->and($forSupervisor['meta']['can_open_settings'])->toBeTrue();
+});

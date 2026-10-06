@@ -49,7 +49,14 @@ final class AlertFeed
         return ['items' => $items, 'meta' => [
             'tab' => $tab, 'counts' => $this->counts($u), 'hidden_by_cap' => $hidden, 'buyer_cap' => self::BUYER_CAP,
             'shadow' => ! $this->settings->notifyEnabled(), 'can_toggle' => $this->scope->canManage($u),
+            'can_open_settings' => self::canOpenSettings($u),
         ]];
+    }
+
+    /** «الإعداد › القواعد» is ads:manage (supervisor+): anyone else gets the sentence without a link (it would 403). */
+    public static function canOpenSettings(User $u): bool
+    {
+        return $u->isSupervisorOrAbove();
     }
 
     /** Open cards before the buyer cap: what the «محتاج قرار» badge counts (one light query, no card building). */
@@ -158,7 +165,7 @@ final class AlertFeed
             'account' => $top->account !== null ? ['id' => (int) $top->account->id, 'name' => (string) $top->account->name] : null,
             'ads' => $kind === 'product' ? $alerts->map(fn (AdsAlert $a) => $this->adRef($a, $canWrite) + ['alert_id' => $a->id, 'action' => $a->action])->values()->all() : [],
             'reasons' => ($kind === 'product' ? $alerts->take(1) : $alerts)->map(fn (AdsAlert $a) => $this->reason($u, $a))->values()->all(),
-            'primary' => ['verb' => self::VERBS[$top->action] ?? 'why', 'action' => $top->action, 'alert_id' => $top->id, 'href' => $this->href($top)],
+            'primary' => ['verb' => self::VERBS[$top->action] ?? 'why', 'action' => $top->action, 'alert_id' => $top->id, 'href' => $this->href($u, $top)],
             'alert_ids' => $alerts->pluck('id')->all(),
         ];
     }
@@ -191,14 +198,14 @@ final class AlertFeed
         ];
     }
 
-    private function href(AdsAlert $a): ?string
+    private function href(User $u, AdsAlert $a): ?string
     {
         return match ($a->action) {
             'check_stock' => '/ads/stock',
             'look' => '/ads/explorer?accounts='.$a->ad_account_id,
             'edit_ad', 'add_replacement' => '/ads/materials',
             'open_queue' => '/board',
-            'open_settings' => '/ads/setup/rules',
+            'open_settings' => self::canOpenSettings($u) ? '/ads/setup/rules' : null,
             default => null,
         };
     }
