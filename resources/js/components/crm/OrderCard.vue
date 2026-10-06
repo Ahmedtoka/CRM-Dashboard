@@ -188,6 +188,7 @@ async function copyStatus(): Promise<void> {
             </button>
             <Button
                 v-if="canRetry"
+                type="button"
                 variant="ghost"
                 size="sm"
                 class="h-7 gap-1 px-2 text-2xs font-medium text-destructive [&_svg]:size-3.5"
@@ -221,7 +222,7 @@ async function copyStatus(): Promise<void> {
                 {{ t('order.restock') }}
             </label>
             <div class="flex gap-1.5">
-                <Button variant="destructive" size="sm" class="h-7 gap-1 px-2 text-2xs font-medium" :loading="cancelling" @click="cancel">
+                <Button type="button" variant="destructive" size="sm" class="h-7 gap-1 px-2 text-2xs font-medium" :loading="cancelling" @click="cancel">
                     {{ t('orders.cancel_confirm') }}
                 </Button>
                 <button type="button" class="inline-flex h-7 items-center rounded-md border border-border bg-card px-2 text-2xs font-medium hover:bg-muted" @click="confirmingCancel = false">

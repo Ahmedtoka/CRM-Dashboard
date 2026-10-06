@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import ConnectForm from '@/components/crm/shopify/ConnectForm.vue';
 import ConnectGuide from '@/components/crm/shopify/ConnectGuide.vue';
 import ImportProgress from '@/components/crm/shopify/ImportProgress.vue';
@@ -26,7 +27,7 @@ import type {
     ShopifyWebhookRow,
 } from '@/types/admin';
 import { Head } from '@inertiajs/vue3';
-import { ArrowRight, LoaderCircle } from 'lucide-vue-next';
+import { ArrowRight } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, reactive, ref } from 'vue';
 
 const props = defineProps<{
@@ -46,6 +47,8 @@ const integration = ref<ShopifyIntegrationRow | null>(props.integration);
 const webhooks = ref<ShopifyWebhookRow[]>(props.webhooks);
 const runs = ref<ShopifySyncRunRow[]>(props.runs);
 const lastSync = ref<ShopifyLastSync>(props.lastSync);
+/** The store's most recent sync of any resource: the page's freshness chip. */
+const freshness = computed(() => (Object.values(lastSync.value).filter(Boolean) as string[]).sort().at(-1) ?? null);
 
 const needsCredentials = computed(() => integration.value === null || integration.value.status !== 'connected');
 
@@ -225,7 +228,7 @@ const syncResources: ShopifySyncResource[] = ['shipping', 'products', 'customers
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto grid w-full max-w-7xl gap-4 p-3 md:p-6">
-            <PageHeader :title="t('settings.shopify.title')" :description="t('settings.shopify.description')" />
+            <PageHeader :title="t('settings.shopify.title')" :description="t('settings.shopify.description')" :freshness="freshness" />
 
             <StatusCard v-if="integration" :integration="integration" :disconnecting="disconnecting" @disconnect="disconnect" />
 
@@ -246,15 +249,15 @@ const syncResources: ShopifySyncResource[] = ['shipping', 'products', 'customers
                         <li v-for="resource in syncResources" :key="resource" class="grid gap-1.5 rounded-md border border-border p-2.5">
                             <span class="font-medium">{{ t(`settings.shopify.import.stage.${resource}`) }}</span>
                             <span class="text-muted-foreground">{{ t('settings.shopify.sync.last_sync') }}: {{ formatDateTime(lastSync[resource], locale) || t('settings.shopify.sync.never') }}</span>
-                            <button
+                            <Button
+                                variant="outline"
+                                class="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-border px-2.5 font-medium hover:bg-muted disabled:opacity-50 text-[length:inherit]"
                                 type="button"
-                                class="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-border px-2.5 font-medium hover:bg-muted disabled:opacity-50"
-                                :disabled="syncing[resource]"
                                 @click="sync(resource)"
+                                :loading="syncing[resource]"
                             >
-                                <LoaderCircle v-if="syncing[resource]" class="size-3.5 animate-spin" aria-hidden="true" />
                                 {{ t('settings.shopify.sync.sync_now') }}
-                            </button>
+                            </Button>
                         </li>
 
                         <li class="grid gap-1.5 rounded-md border border-border p-2.5">
@@ -267,15 +270,15 @@ const syncResources: ShopifySyncResource[] = ['shipping', 'products', 'customers
                                 <label class="sr-only" for="orders-to">{{ t('settings.shopify.sync.to') }}</label>
                                 <DateInput id="orders-to" v-model="ordersTo" class="h-8 rounded-md border border-input bg-background px-2" :min="ordersFrom || undefined" />
                             </div>
-                            <button
+                            <Button
+                                variant="outline"
+                                class="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-border px-2.5 font-medium hover:bg-muted disabled:opacity-50 text-[length:inherit]"
                                 type="button"
-                                class="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-border px-2.5 font-medium hover:bg-muted disabled:opacity-50"
-                                :disabled="syncing.orders"
                                 @click="syncOrders"
+                                :loading="syncing.orders"
                             >
-                                <LoaderCircle v-if="syncing.orders" class="size-3.5 animate-spin" aria-hidden="true" />
                                 {{ t('settings.shopify.sync.sync_now') }}
-                            </button>
+                            </Button>
                         </li>
                     </ul>
                 </section>

@@ -3,13 +3,16 @@
  * «كل ردود البوت» (owner, 2026-09-22): every reply next to the moment it is given, searchable,
  * with knowledge rows edited in place (the same endpoint as Settings → معلومات البوت).
  */
+import EmptyState from '@/components/crm/EmptyState.vue';
+import FilterBar from '@/components/crm/FilterBar.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Bot, ExternalLink, Pencil, Search } from 'lucide-vue-next';
+import { Bot, ExternalLink, Pencil, SearchX } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface ReplyRow {
@@ -129,9 +132,9 @@ async function save(entryId: number | null, original: string, source?: string): 
                         <textarea v-model="draft" dir="auto" rows="5" maxlength="5000" class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
                         <p v-if="error" role="alert" class="text-xs text-destructive">{{ error }}</p>
                         <div class="flex gap-2">
-                            <button type="button" class="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50" :disabled="busy" @click="save(agent.entry.id, agent.entry.body)">
+                            <Button type="button" size="sm" class="px-3 text-xs font-medium" :loading="busy" @click="save(agent.entry.id, agent.entry.body)">
                                 {{ t('settings.bot_replies.save') }}
-                            </button>
+                            </Button>
                             <button type="button" class="h-8 rounded-md border border-input px-3 text-xs" :disabled="busy" @click="editingId = null">{{ t('settings.bot_replies.cancel') }}</button>
                         </div>
                     </template>
@@ -144,13 +147,19 @@ async function save(entryId: number | null, original: string, source?: string): 
                 </div>
             </section>
 
-            <div class="sticky top-0 z-10 flex items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-card">
-                <Search class="ms-1 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <input v-model="query" type="search" dir="auto" :placeholder="t('settings.bot_replies.search')" :aria-label="t('settings.bot_replies.search')" class="h-8 w-full bg-transparent text-sm outline-none" />
-                <span class="shrink-0 pe-1 text-2xs text-muted-foreground">{{ t('settings.bot_replies.count', { n: total }) }}</span>
+            <div class="sticky top-14 z-10 rounded-lg border border-border bg-card p-3 shadow-card">
+                <FilterBar
+                    :search="query"
+                    :search-placeholder="t('settings.bot_replies.search')"
+                    :chips="[]"
+                    :summary="t('settings.bot_replies.count', { n: total })"
+                    @update:search="query = $event"
+                />
             </div>
 
-            <p v-if="visible.length === 0" class="py-8 text-center text-sm text-muted-foreground">{{ t('settings.bot_replies.empty') }}</p>
+            <div v-if="visible.length === 0" class="rounded-lg bg-card shadow-card">
+                <EmptyState :icon="SearchX" :title="t('settings.bot_replies.empty')" />
+            </div>
 
             <section v-for="section in visible" :key="section.key" class="overflow-hidden rounded-lg border border-border bg-card shadow-card">
                 <h2 class="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2 text-sm font-semibold text-foreground">
@@ -172,9 +181,15 @@ async function save(entryId: number | null, original: string, source?: string): 
                             <p v-if="row.source === 'text' && row.key.includes('⟦')" class="text-2xs text-muted-foreground">{{ t('settings.bot_replies.values_hint') }}</p>
                             <p v-if="error" role="alert" class="text-xs text-destructive">{{ error }}</p>
                             <div class="mt-1 flex gap-2">
-                                <button type="button" class="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50" :disabled="busy" @click="save(row.entry_id, row.reply, row.source === 'text' ? row.raw : undefined)">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    class="px-3 text-xs font-medium"
+                                    :loading="busy"
+                                    @click="save(row.entry_id, row.reply, row.source === 'text' ? row.raw : undefined)"
+                                >
                                     {{ t('settings.bot_replies.save') }}
-                                </button>
+                                </Button>
                                 <button type="button" class="h-8 rounded-md border border-input px-3 text-xs" :disabled="busy" @click="editingId = null">{{ t('settings.bot_replies.cancel') }}</button>
                             </div>
                         </template>

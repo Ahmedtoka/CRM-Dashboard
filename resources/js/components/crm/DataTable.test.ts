@@ -107,4 +107,11 @@ describe('DataTable', () => {
         expect(tds[0].classes()).toContain('crm-sticky-first');
         expect(tds[1].classes()).not.toContain('crm-sticky-first');
     });
+
+    it('adds rowClass to the rows it names', () => {
+        const w = mount(Table, { props: { columns, rows, rowClass: (row: { spend: number }) => (row.spend > 15 ? 'bg-destructive/5' : undefined) } });
+        const trs = w.findAll('tbody tr');
+        expect(trs[0].classes()).not.toContain('bg-destructive/5');
+        expect(trs[1].classes()).toContain('bg-destructive/5');
+    });
 });

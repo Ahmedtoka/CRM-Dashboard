@@ -308,7 +308,7 @@ const stepper = 'flex size-7 items-center justify-center hover:bg-muted disabled
                     <span>{{ t('order.total') }}</span><span class="tabular-nums">{{ formatMoney(total, locale) }}</span>
                 </div>
                 <p v-if="error" role="alert" class="rounded bg-destructive/10 px-2 py-1 text-foreground">{{ error }}</p>
-                <Button class="mt-2 w-full" :loading="submitting" :disabled="!lines.length" @click="submit">
+                <Button type="button" class="mt-2 w-full" :loading="submitting" :disabled="!lines.length" @click="submit">
                     {{ submitting ? t('order.sending') : t('order.submit') }}
                 </Button>
             </footer>

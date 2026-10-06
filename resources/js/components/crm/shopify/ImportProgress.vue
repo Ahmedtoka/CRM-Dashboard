@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import ProgressBar from '@/components/crm/ProgressBar.vue';
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import type { ShopifyImportState, ShopifyStage, ShopifyStageState } from '@/types/admin';
-import { AlertTriangle, LoaderCircle } from 'lucide-vue-next';
+import { AlertTriangle } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps<{ importState: ShopifyImportState | null; live: boolean; resuming: boolean }>();
@@ -57,9 +59,10 @@ const barTone: Record<ShopifyStageState['status'], string> = {
                     <span class="text-muted-foreground">
                         <template v-if="state.skipped">{{ t('settings.shopify.import.skipped_with_orders') }}</template>
                         <template v-else>{{ t(`settings.shopify.import.stage_status.${state.status}`) }}</template>
-                        <template v-if="!state.skipped && (state.status === 'running' || state.status === 'completed')">
+                        <!-- A running stage with a known total shows «n من m» on its ProgressBar below. -->
+                        <template v-if="!state.skipped && (state.status === 'completed' || (state.status === 'running' && !state.total))">
                             ·
-                            {{ state.total !== null && state.status === 'running' ? t('settings.shopify.import.processed_of_total', { processed: state.processed, total: state.total }) : t('settings.shopify.import.processed_only', { processed: state.processed }) }}
+                            {{ t('settings.shopify.import.processed_only', { processed: state.processed }) }}
                         </template>
                         <span v-if="state.failed > 0" class="inline-flex items-center gap-1 text-foreground">
                             ·
@@ -67,21 +70,22 @@ const barTone: Record<ShopifyStageState['status'], string> = {
                         </span>
                     </span>
                 </div>
-                <div class="h-1.5 overflow-hidden rounded-full bg-elevated" role="progressbar" :aria-valuenow="percent(state)" aria-valuemin="0" aria-valuemax="100">
+                <ProgressBar v-if="state.status === 'running' && state.total" :value="state.processed" :max="state.total" />
+                <div v-else class="h-1.5 overflow-hidden rounded-full bg-elevated" role="progressbar" :aria-valuenow="percent(state)" aria-valuemin="0" aria-valuemax="100">
                     <div class="h-full rounded-full transition-all" :class="barTone[state.status]" :style="{ width: percent(state) + '%' }" />
                 </div>
             </li>
         </ul>
 
-        <button
+        <Button
             v-if="hasFailure"
+            variant="outline"
+            class="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-border px-2.5 font-medium hover:bg-muted disabled:opacity-50 text-[length:inherit]"
             type="button"
-            class="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-border px-2.5 font-medium hover:bg-muted disabled:opacity-50"
-            :disabled="resuming"
             @click="emit('resume')"
+            :loading="resuming"
         >
-            <LoaderCircle v-if="resuming" class="size-3.5 animate-spin" aria-hidden="true" />
             {{ t('settings.shopify.import.resume') }}
-        </button>
+        </Button>
     </section>
 </template>

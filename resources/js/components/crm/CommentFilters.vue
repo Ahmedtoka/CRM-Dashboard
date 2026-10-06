@@ -44,9 +44,10 @@ function remove(key: string): void {
     else set({ [key]: null } as Partial<CommentFilters>);
 }
 
+// «الإعلانات فقط» goes first: the filters emit starts the visit, which carries `ad` from the URL as it is then.
 function clear(): void {
-    emit('update:filters', { status: null, intent: null, platform: null, post_id: null });
     emit('update:adOnly', false);
+    emit('update:filters', { status: null, intent: null, platform: null, post_id: null });
 }
 
 const selectValue = (event: Event) => (event.target as HTMLSelectElement).value || null;

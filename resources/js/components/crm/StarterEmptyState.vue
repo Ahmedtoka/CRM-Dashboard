@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import { router } from '@inertiajs/vue3';
-import { LoaderCircle, Sparkles } from 'lucide-vue-next';
+import { Sparkles } from 'lucide-vue-next';
 import { ref, type Component } from 'vue';
 
 /**
@@ -59,15 +60,14 @@ async function addExamples(): Promise<void> {
                     item
                 }}</span>
             </div>
-            <button
-                type="button"
+            <Button
                 class="inline-flex h-10 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
-                :disabled="busy"
+                type="button"
                 @click="addExamples"
+                :loading="busy"
             >
-                <LoaderCircle v-if="busy" class="size-4 animate-spin" aria-hidden="true" />
-                <Sparkles v-else class="size-4" aria-hidden="true" />{{ t('settings.starter.add') }}
-            </button>
+                <Sparkles class="size-4" aria-hidden="true" />{{ t('settings.starter.add') }}
+            </Button>
         </template>
         <slot />
     </section>

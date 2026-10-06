@@ -73,6 +73,7 @@ onMounted(load);
                 </div>
                 <Button
                     v-if="canMerge"
+                    type="button"
                     variant="outline"
                     size="sm"
                     class="h-7 shrink-0 px-2 font-medium"

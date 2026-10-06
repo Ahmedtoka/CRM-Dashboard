@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useSimulator } from '@/composables/useSimulator';
 import type { SharedData } from '@/types';
 import type { PlatformValue } from '@/types/crm';
 import { usePage } from '@inertiajs/vue3';
-import { LoaderCircle, MessageCircle } from 'lucide-vue-next';
+import { MessageCircle } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const { t } = useI18n();
@@ -82,8 +83,8 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
         <div class="flex flex-wrap gap-1.5" role="group" :aria-label="t('simulator.message.samples')">
             <button v-for="sample in SAMPLES" :key="sample" type="button" dir="rtl" class="rounded-full bg-elevated px-2.5 py-1 hover:bg-muted" @click="text = sample">{{ sample }}</button>
         </div>
-        <button type="submit" class="mt-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50" :disabled="!valid || sim.busy.value !== null">
-            <LoaderCircle v-if="sim.busy.value === 'message'" class="size-4 animate-spin" aria-hidden="true" />{{ t('simulator.message.send') }}
-        </button>
+        <Button class="mt-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50" type="submit" :disabled="!valid || sim.busy.value !== null" :loading="sim.busy.value === 'message'">
+            {{ t('simulator.message.send') }}
+        </Button>
     </form>
 </template>

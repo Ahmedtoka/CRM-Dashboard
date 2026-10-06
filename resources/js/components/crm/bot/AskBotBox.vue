@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
@@ -69,13 +70,9 @@ async function ask(): Promise<void> {
                         <option v-for="p in platforms" :key="p.value" :value="p.value">{{ p.label }}</option>
                     </select>
                 </label>
-                <button
-                    type="submit"
-                    class="ms-auto inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50"
-                    :disabled="busy || !text.trim()"
-                >
+                <Button type="submit" size="sm" class="ms-auto gap-1.5 font-medium" :loading="busy" :disabled="!text.trim()">
                     <Send class="size-3.5 rtl:-scale-x-100" aria-hidden="true" />{{ t('settings.bot_knowledge.ask') }}
-                </button>
+                </Button>
             </div>
         </form>
 

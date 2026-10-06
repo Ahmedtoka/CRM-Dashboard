@@ -292,14 +292,12 @@ const appCrumbs = computed(() => [
                             {{ c.last_error }}
                         </p>
                         <div class="flex flex-wrap gap-2">
-                            <button type="button" :class="outlineSm" :disabled="busy(`test-${c.id}`)" @click="testConnection(c)">
-                                <LoaderCircle v-if="busy(`test-${c.id}`)" class="animate-spin" aria-hidden="true" />
-                                <ShieldCheck v-else aria-hidden="true" />{{ t('ads.accounts.test') }}
-                            </button>
-                            <button type="button" :class="outlineSm" :disabled="busy(`sync-${c.id}`)" @click="syncConnection(c)">
-                                <LoaderCircle v-if="busy(`sync-${c.id}`)" class="animate-spin" aria-hidden="true" />
-                                <RefreshCw v-else aria-hidden="true" />{{ t('ads.accounts.sync') }}
-                            </button>
+                            <Button type="button" variant="outline" size="sm" class="gap-1.5" @click="testConnection(c)" :loading="busy(`test-${c.id}`)">
+                                <ShieldCheck aria-hidden="true" />{{ t('ads.accounts.test') }}
+                            </Button>
+                            <Button type="button" variant="outline" size="sm" class="gap-1.5" @click="syncConnection(c)" :loading="busy(`sync-${c.id}`)">
+                                <RefreshCw aria-hidden="true" />{{ t('ads.accounts.sync') }}
+                            </Button>
                             <button type="button" :class="outlineSm" @click="openEdit(c)">
                                 <Pencil aria-hidden="true" />{{ t('ads.accounts.edit') }}
                             </button>
@@ -364,9 +362,9 @@ const appCrumbs = computed(() => [
                                 <div class="flex flex-wrap items-center gap-1.5">
                                     <label class="text-2xs text-muted-foreground" :for="`from-${row.id}`">{{ t('ads.accounts.from_date') }}</label>
                                     <input :id="`from-${row.id}`" v-model="drafts[row.id].date" type="date" dir="ltr" :class="smallInput" />
-                                    <button
+                                    <Button
                                         type="button"
-                                        :class="buttonVariants({ variant: 'default', size: 'sm' })"
+                                        size="sm"
                                         :disabled="!canAssign(row) || assigning(row)"
                                         @click="assign(row)"
                                     >
@@ -416,10 +414,11 @@ const appCrumbs = computed(() => [
                             <RelativeTime v-else :iso="row.last_synced_at" />
                         </template>
                         <template #cell-actions="{ row }">
-                            <button
+                            <Button
                                 type="button"
-                                :class="outlineSm"
-                                :disabled="busy(`sync-acc-${row.id}`)"
+                                variant="outline"
+                                size="sm"
+                                class="gap-1.5"
                                 :title="t('ads.accounts.sync_account')"
                                 @click="syncAccount(row)"
                             >

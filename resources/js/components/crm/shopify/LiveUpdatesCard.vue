@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import type { ShopifyWebhookRow } from '@/types/admin';
 import { Link } from '@inertiajs/vue3';
-import { CheckCircle2, CircleAlert, LoaderCircle, Scale } from 'lucide-vue-next';
+import { CheckCircle2, CircleAlert, Scale } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{ hasSecret: boolean; webhooks: ShopifyWebhookRow[]; saving: boolean }>();
@@ -48,14 +49,14 @@ function submit(): void {
                 <span class="text-muted-foreground">{{ hasSecret ? t('settings.shopify.live.replace_secret') : t('settings.shopify.live.secret') }}</span>
                 <input v-model="secret" type="password" autocomplete="off" dir="ltr" class="h-8 rounded-md border border-input bg-background px-2" />
             </label>
-            <button
+            <Button
+                class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 text-[length:inherit]"
                 type="submit"
-                class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                 :disabled="saving || secret.trim().length < 10"
+                :loading="saving"
             >
-                <LoaderCircle v-if="saving" class="size-3.5 animate-spin" aria-hidden="true" />
                 {{ t('settings.shopify.live.save') }}
-            </button>
+            </Button>
             <p class="basis-full text-muted-foreground">{{ t('settings.shopify.live.secret_hint') }}</p>
         </form>
     </section>

@@ -208,6 +208,7 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                         @keydown.enter.prevent="addCollection"
                     />
                     <Button
+                        type="button"
                         variant="outline"
                         size="sm"
                         class="gap-1"

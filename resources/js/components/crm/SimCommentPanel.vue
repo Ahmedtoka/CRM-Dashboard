@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useSimulator } from '@/composables/useSimulator';
 import type { SharedData } from '@/types';
 import type { SimPost } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
 import { usePage } from '@inertiajs/vue3';
-import { LoaderCircle, MessagesSquare } from 'lucide-vue-next';
+import { MessagesSquare } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{ posts: SimPost[] }>();
@@ -78,8 +79,8 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
             <span class="text-sm font-semibold">{{ t('simulator.text') }}</span>
             <textarea v-model="text" rows="3" dir="auto" maxlength="2000" class="rounded-md border border-input bg-background px-3 py-2 text-sm" />
         </label>
-        <button type="submit" class="mt-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50" :disabled="!valid || sim.busy.value !== null">
-            <LoaderCircle v-if="sim.busy.value === 'comment'" class="size-4 animate-spin" aria-hidden="true" />{{ t('simulator.comment.send') }}
-        </button>
+        <Button class="mt-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50" type="submit" :disabled="!valid || sim.busy.value !== null" :loading="sim.busy.value === 'comment'">
+            {{ t('simulator.comment.send') }}
+        </Button>
     </form>
 </template>

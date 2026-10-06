@@ -14,7 +14,6 @@ const SWEPT: string[] = [
     // Task 15
     'Reports/Activity', 'Reports/Bot', 'Reports/Latency', 'Reports/Me', 'Reports/QuickReplies', 'Reports/Team', 'Reports/TeamTest', 'Reports/User',
     // Task 16
-
     'Ads/Materials/Collections', 'Ads/Materials/Form', 'Ads/Materials/Index', 'Ads/Materials/Stock', 'Ads/Sync',
     // Task 17
     'settings/Users', 'settings/Tags', 'settings/Cities', 'settings/Branches', 'settings/QuickReplies', 'settings/Queue',
@@ -23,6 +22,13 @@ const SWEPT: string[] = [
     'Ads/Launches', 'Ads/Approvals',
     // S2 control room
     'Ads/Explorer', 'Ads/Today', 'Ads/Decisions', 'Ads/Numbers', 'Ads/SetupRules',
+    // Task 18
+    'settings/Integrations', 'settings/Channels', 'settings/FacebookPages', 'settings/Shopify', 'settings/ShopifyReconcile',
+    // Task 19
+    'settings/Bot', 'settings/BotFlows', 'settings/BotIntents', 'settings/BotKnowledge', 'settings/BotLearning', 'settings/BotReplies',
+    'settings/BotTestLinks', 'settings/BotTranslations', 'Simulator',
+    // Task 20
+    'auth/ConfirmPassword', 'auth/ForgotPassword', 'auth/Login', 'auth/ResetPassword', 'auth/VerifyEmail', 'Error', 'Onboarding',
 ];
 
 /** Raw tables allowed only on pages S1/S2 replace; they must sit in the shared sticky scroll box. */
@@ -43,6 +49,10 @@ describe('S0 kit adoption', () => {
     it('sees all 62 pages and only real ones are listed', () => {
         expect(Object.keys(pages)).toHaveLength(62);
         for (const name of SWEPT) expect(pages[name], name).toBeDefined();
+    });
+
+    it('every page is swept (Task 20 closes the list)', () => {
+        expect([...SWEPT].sort()).toEqual(Object.keys(pages).sort());
     });
 
     it.each(SWEPT)('%s follows the kit', (name) => {

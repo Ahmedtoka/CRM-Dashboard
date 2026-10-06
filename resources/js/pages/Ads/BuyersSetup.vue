@@ -218,7 +218,13 @@ const appCrumbs = computed(() => [
                         <Plus aria-hidden="true" />{{ t('ads.setup.add_buyer') }}
                     </button>
                 </div>
-                <DataTable :columns="columns" :rows="buyers" :caption="t('ads.setup.buyers_title')" :empty="t('ads.setup.no_buyers')">
+                <DataTable
+                    table-id="ads-buyers-setup"
+                    :columns="columns"
+                    :rows="buyers"
+                    :caption="t('ads.setup.buyers_title')"
+                    :empty="t('ads.setup.no_buyers')"
+                >
                     <template #cell-name="{ row }">
                         <span class="inline-flex items-center gap-2 font-medium">
                             <span
@@ -301,16 +307,13 @@ const appCrumbs = computed(() => [
                                     :class="smallInput"
                                 />
                             </div>
-                            <button
+                            <Button
                                 type="button"
-                                :class="buttonVariants({ variant: 'default', size: 'sm' })"
-                                :disabled="targetForm.processing && savingMonth === row.month"
+                                size="sm"
                                 @click="saveTarget(row.month)"
                             >
-                                <LoaderCircle v-if="targetForm.processing && savingMonth === row.month" class="animate-spin" aria-hidden="true" />{{
-                                    t('ads.setup.save_row')
-                                }}
-                            </button>
+                                {{ t('ads.setup.save_row') }}
+                            </Button>
                         </div>
                         <p v-if="targetError(row.month)" role="alert" class="basis-full text-2xs text-destructive">{{ targetError(row.month) }}</p>
                     </li>

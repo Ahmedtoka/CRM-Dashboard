@@ -97,7 +97,7 @@ const breadcrumbs = computed(() => [{ title: t('comments.title'), href: '/commen
                     </PostGroup>
                     <InlineError v-if="loadError" :message="loadError" :retrying="loadingMore" @retry="loadMore" />
                     <div v-else-if="nextCursor" class="text-center">
-                        <Button variant="ghost" size="sm" class="text-primary" :loading="loadingMore" @click="loadMore">{{ t('ui.load_more') }}</Button>
+                        <Button type="button" variant="ghost" size="sm" class="text-primary" :loading="loadingMore" @click="loadMore">{{ t('ui.load_more') }}</Button>
                     </div>
                 </div>
             </div>

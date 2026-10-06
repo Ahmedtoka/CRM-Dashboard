@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import type { ShopifyTestResult } from '@/types/admin';
-import { Eye, EyeOff, LoaderCircle } from 'lucide-vue-next';
+import { Eye, EyeOff } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -92,24 +93,25 @@ function submitConnect(): void {
         </label>
 
         <div class="flex flex-wrap gap-2">
-            <button
+            <Button
+                variant="outline"
+                class="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 font-medium hover:bg-muted disabled:opacity-50 text-[length:inherit]"
                 type="button"
-                class="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 font-medium hover:bg-muted disabled:opacity-50"
                 :disabled="!canTest"
                 @click="submitTest"
+                :loading="testing"
             >
-                <LoaderCircle v-if="testing" class="size-3.5 animate-spin" aria-hidden="true" />
                 {{ testing ? t('settings.shopify.form.testing') : t('settings.shopify.form.test') }}
-            </button>
-            <button
+            </Button>
+            <Button
+                class="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 font-medium text-primary-foreground disabled:opacity-50 text-[length:inherit]"
                 type="submit"
-                class="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 font-medium text-primary-foreground disabled:opacity-50"
                 :disabled="!canConnect"
                 :title="!testPassed ? t('settings.shopify.form.connect_hint') : undefined"
+                :loading="connecting"
             >
-                <LoaderCircle v-if="connecting" class="size-3.5 animate-spin" aria-hidden="true" />
                 {{ connecting ? t('settings.shopify.form.connecting') : t('settings.shopify.form.connect') }}
-            </button>
+            </Button>
         </div>
 
         <p v-if="testResult?.ok" class="rounded bg-success/10 px-2 py-1.5 text-foreground">

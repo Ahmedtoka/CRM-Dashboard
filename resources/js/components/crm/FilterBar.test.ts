@@ -1,5 +1,5 @@
 import FilterBar from '@/components/crm/FilterBar.vue';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 describe('FilterBar', () => {
@@ -43,5 +43,30 @@ describe('FilterBar', () => {
         const w = mount(FilterBar, { props: { searchPlaceholder: 'بحث', chips: [{ key: 'status', label: 'مدفوع' }] } });
         await w.find('[role="group"] button').trigger('click');
         expect(w.emitted('remove')?.[0]).toEqual(['status']);
+    });
+
+    it('mounts the inline filters once: inside the popover on phones', async () => {
+        const w = mount(FilterBar, {
+            props: { chips: [], open: true },
+            slots: { inline: '<select id="inline-filter"></select>' },
+            attachTo: document.body,
+        });
+        await flushPromises();
+        expect(document.querySelectorAll('#inline-filter')).toHaveLength(1);
+        w.unmount();
+    });
+
+    it('mounts the inline filters once: in the bar from sm up, with no empty «فلاتر» popover', async () => {
+        const original = window.matchMedia;
+        window.matchMedia = ((query: string) => ({ ...original(query), matches: true })) as typeof window.matchMedia;
+        try {
+            const w = mount(FilterBar, { props: { chips: [] }, slots: { inline: '<select id="inline-filter"></select>' }, attachTo: document.body });
+            await flushPromises();
+            expect(document.querySelectorAll('#inline-filter')).toHaveLength(1);
+            expect(w.find('[aria-haspopup="dialog"]').exists()).toBe(false);
+            w.unmount();
+        } finally {
+            window.matchMedia = original;
+        }
     });
 });

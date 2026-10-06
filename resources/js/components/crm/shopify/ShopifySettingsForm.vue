@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import type { ShopifyIntegrationRow } from '@/types/admin';
-import { LoaderCircle } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 
 const props = defineProps<{ settings: ShopifyIntegrationRow['settings']; busy: boolean }>();
@@ -69,9 +69,8 @@ function submit(): void {
             <span class="text-muted-foreground">{{ t('settings.shopify.settings_form.order_creation_enabled_help') }}</span>
         </label>
 
-        <button type="submit" class="inline-flex h-9 w-fit items-center gap-1.5 rounded-md bg-primary px-3 font-medium text-primary-foreground disabled:opacity-50" :disabled="busy">
-            <LoaderCircle v-if="busy" class="size-3.5 animate-spin" aria-hidden="true" />
+        <Button class="inline-flex h-9 w-fit items-center gap-1.5 rounded-md bg-primary px-3 font-medium text-primary-foreground disabled:opacity-50 text-[length:inherit]" type="submit" :loading="busy">
             {{ t('settings.shopify.settings_form.save') }}
-        </button>
+        </Button>
     </form>
 </template>

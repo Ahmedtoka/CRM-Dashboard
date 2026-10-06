@@ -46,6 +46,8 @@ const props = withDefaults(
         tableId?: string;
         skeletonRows?: number;
         selectable?: boolean;
+        /** Extra classes for one row (a mismatched day, an over-budget account). */
+        rowClass?: (row: T) => string | undefined;
     }>(),
     {
         clickable: false,
@@ -60,6 +62,7 @@ const props = withDefaults(
         tableId: undefined,
         skeletonRows: 8,
         selectable: false,
+        rowClass: undefined,
     },
 );
 
@@ -248,7 +251,7 @@ function defaultCell(row: T, key: string): unknown {
                             v-for="row in rows"
                             :key="row.id"
                             class="border-t border-border/60 first:border-t-0 hover:bg-muted/50"
-                            :class="clickable ? 'cursor-pointer hover:bg-muted focus-visible:bg-muted' : ''"
+                            :class="[clickable ? 'cursor-pointer hover:bg-muted focus-visible:bg-muted' : '', rowClass?.(row)]"
                             :tabindex="clickable ? 0 : undefined"
                             @click="clickable && emit('rowClick', row)"
                             @keydown="onKey($event, row)"

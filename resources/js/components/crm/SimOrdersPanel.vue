@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useSimulator } from '@/composables/useSimulator';
@@ -6,7 +7,7 @@ import { formatMoney } from '@/lib/format';
 import { shipmentTone } from '@/lib/orderStatus';
 import type { OrderRow, SimShipment } from '@/types/admin';
 import { Link } from '@inertiajs/vue3';
-import { CreditCard, LoaderCircle, Truck } from 'lucide-vue-next';
+import { CreditCard, Truck } from 'lucide-vue-next';
 
 defineProps<{ orders: OrderRow[]; shipments: SimShipment[] }>();
 
@@ -47,9 +48,9 @@ async function advance(shipment: SimShipment): Promise<void> {
                         <Link :href="`/orders/${order.id}`" class="font-medium hover:underline" dir="ltr">{{ order.order_number ?? `#${order.id}` }}</Link>
                         <span class="block truncate text-2xs text-muted-foreground">{{ order.customer?.name }} · {{ formatMoney(order.total, locale) }}</span>
                     </div>
-                    <button type="button" class="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2.5 font-medium hover:bg-muted disabled:opacity-50" :disabled="sim.busy.value !== null" @click="pay(order)">
-                        <LoaderCircle v-if="sim.busy.value === `pay-${order.id}`" class="size-3 animate-spin" aria-hidden="true" />{{ t('simulator.orders.pay') }}
-                    </button>
+                    <Button variant="outline" class="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2.5 font-medium hover:bg-muted disabled:opacity-50 text-[length:inherit]" type="button" :disabled="sim.busy.value !== null" @click="pay(order)" :loading="sim.busy.value === `pay-${order.id}`">
+                        {{ t('simulator.orders.pay') }}
+                    </Button>
                 </li>
             </ul>
         </section>
@@ -66,9 +67,9 @@ async function advance(shipment: SimShipment): Promise<void> {
                             <span dir="ltr">{{ shipment.tracking_number }}</span>
                         </span>
                     </div>
-                    <button type="button" class="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2.5 font-medium hover:bg-muted disabled:opacity-50" :disabled="sim.busy.value !== null" @click="advance(shipment)">
-                        <LoaderCircle v-if="sim.busy.value === `advance-${shipment.id}`" class="size-3 animate-spin" aria-hidden="true" />{{ t('simulator.shipments.advance') }}
-                    </button>
+                    <Button variant="outline" class="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2.5 font-medium hover:bg-muted disabled:opacity-50 text-[length:inherit]" type="button" :disabled="sim.busy.value !== null" @click="advance(shipment)" :loading="sim.busy.value === `advance-${shipment.id}`">
+                        {{ t('simulator.shipments.advance') }}
+                    </Button>
                 </li>
             </ul>
         </section>

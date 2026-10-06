@@ -4,7 +4,7 @@ import MentionTextarea from '@/components/crm/MentionTextarea.vue';
 import AttachmentTray from '@/components/crm/media/AttachmentTray.vue';
 import VoiceRecorderBar from '@/components/crm/media/VoiceRecorderBar.vue';
 import QuickReplyPicker from '@/components/crm/replies/QuickReplyPicker.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useAttachmentUploads } from '@/composables/inbox/useAttachmentUploads';
 import { useChatSkin } from '@/composables/inbox/useChatSkin';
 import { useComposerShortcuts, type ComposerMode } from '@/composables/inbox/useComposerShortcuts';
@@ -14,7 +14,7 @@ import { shortcutHint } from '@/composables/useShortcuts';
 import { useVoiceRecorder } from '@/composables/useVoiceRecorder';
 import { cn } from '@/lib/utils';
 import type { Attachment, PlatformValue, QuickReply, QuickReplyCategory, RenderedQuickReply, UserRef } from '@/types/crm';
-import { LoaderCircle, MessageSquareText, Mic, NotebookPen, Paperclip, SendHorizontal } from 'lucide-vue-next';
+import { MessageSquareText, Mic, NotebookPen, Paperclip, SendHorizontal } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue';
 
 const props = withDefaults(
@@ -448,16 +448,18 @@ defineExpose({
             >
                 <SendHorizontal class="rtl-flip" />
             </button>
-            <button
+            <Button
                 v-if="mode === 'note'"
+                variant="outline"
+                size="sm"
+                class="shrink-0 self-end gap-1"
                 type="button"
-                :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'shrink-0 self-end gap-1')"
                 :disabled="!canSendNote || addingNote"
                 @click="submit"
+                :loading="addingNote"
             >
-                <LoaderCircle v-if="addingNote" class="size-3.5 animate-spin" aria-hidden="true" />
-                <NotebookPen v-else class="size-3.5" aria-hidden="true" />{{ t('composer.add_note') }}
-            </button>
+                <NotebookPen class="size-3.5" aria-hidden="true" />{{ t('composer.add_note') }}
+            </Button>
         </div>
         <!-- Always laid out on md+ (only made invisible): a hint that appeared / vanished on focus moved the
              bottom-anchored box between mousedown and mouseup, and the click on Send / attach was lost. -->

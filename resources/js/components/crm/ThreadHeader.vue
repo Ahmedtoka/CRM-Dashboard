@@ -7,7 +7,7 @@ import CloseWindowMenu from '@/components/crm/queue/CloseWindowMenu.vue';
 import QueueBanner from '@/components/crm/queue/QueueBanner.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import ResetDialog from '@/components/crm/thread/ResetDialog.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -252,20 +252,22 @@ defineExpose({
                 :hint="hint('inbox.resolve')"
                 @resolve="(payload, done) => emit('resolve', payload, done)"
             />
-            <button
+            <Button
                 v-else
+                variant="outline"
+                size="sm"
+                class="h-9 shrink-0 gap-1.5 rounded-lg px-2.5 sm:px-3"
                 type="button"
                 :title="`${t('thread.header.reopen')}${hint('inbox.reopen')}`"
-                :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-9 shrink-0 gap-1.5 rounded-lg px-2.5 sm:px-3')"
                 :disabled="busy"
                 :aria-label="t('thread.header.reopen')"
                 data-primary-action
                 @click="emit('action', 'reopen')"
+                :loading="busyAction === 'reopen'"
             >
-                <LoaderCircle v-if="busyAction === 'reopen'" class="animate-spin" aria-hidden="true" />
-                <RotateCcw v-else aria-hidden="true" />
+                <RotateCcw aria-hidden="true" />
                 <span class="hidden sm:inline">{{ t('thread.header.reopen') }}</span>
-            </button>
+            </Button>
 
             <button
                 type="button"
