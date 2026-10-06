@@ -11,7 +11,16 @@ import type { AlertCardData, AlertReason } from '@/types/ads';
 beforeAll(() => setCurrentLocale('ar'));
 beforeEach(() => visit.mockClear());
 
-const ad = { id: 11, external_id: '2385', name: 'Eid Abaya V2', thumbnail_url: null, account_id: 3, account: 'LV-Main 2', buyer: 'Bakinam', can_write: true };
+const ad = {
+    id: 11,
+    external_id: '2385',
+    name: 'Eid Abaya V2',
+    thumbnail_url: null,
+    account_id: 3,
+    account: 'LV-Main 2',
+    buyer: 'Bakinam',
+    can_write: true,
+};
 const reason = (over: Partial<AlertReason> = {}): AlertReason => ({
     alert_id: 5,
     rule_id: 'all.spend_no_result',
@@ -57,7 +66,16 @@ describe('AlertCard', () => {
     });
 
     it('stacks two reasons on one card', () => {
-        const reasons = [reason(), reason({ alert_id: 6, rule_id: 'all.price_mismatch', severity: 'medium', sentence_key: 'price_mismatch', params: { caption_price: 950, site_price: 1100 } })];
+        const reasons = [
+            reason(),
+            reason({
+                alert_id: 6,
+                rule_id: 'all.price_mismatch',
+                severity: 'medium',
+                sentence_key: 'price_mismatch',
+                params: { caption_price: 950, site_price: 1100 },
+            }),
+        ];
         const w = mount(AlertCard, { props: { card: card({ reasons, alert_ids: [5, 6] }) } });
         expect(w.findAll('li')).toHaveLength(2);
     });
@@ -79,21 +97,29 @@ describe('AlertCard', () => {
 
     it('hides disagree when a reason may only be dismissed by Ads authority, and visits href verbs', async () => {
         const reasons = [reason({ can_dismiss: false, action: 'check_stock' })];
-        const w = mount(AlertCard, { props: { card: card({ reasons, primary: { verb: 'open_stock', action: 'check_stock', alert_id: 5, href: '/ads/stock' } }) } });
+        const w = mount(AlertCard, {
+            props: { card: card({ reasons, primary: { verb: 'open_stock', action: 'check_stock', alert_id: 5, href: '/ads/stock' } }) },
+        });
         expect(w.find('[data-test="disagree"]').exists()).toBe(false);
         await w.get('[data-test="primary"]').trigger('click');
         expect(visit).toHaveBeenCalledWith('/ads/stock');
     });
 
     it('opens the settings for a manager and asks a buyer to fetch one', async () => {
-        const reasons = [reason({ action: 'open_settings', rule_id: 'sales.below_breakeven', sentence_key: 'breakeven_unprofitable', params: { account: 'LV' } })];
+        const reasons = [
+            reason({ action: 'open_settings', rule_id: 'sales.below_breakeven', sentence_key: 'breakeven_unprofitable', params: { account: 'LV' } }),
+        ];
         const base = { kind: 'account' as const, ad: null, reasons };
-        const manager = mount(AlertCard, { props: { card: card({ ...base, primary: { verb: 'open_settings', action: 'open_settings', alert_id: 5, href: '/ads/setup/rules' } }) } });
+        const manager = mount(AlertCard, {
+            props: { card: card({ ...base, primary: { verb: 'open_settings', action: 'open_settings', alert_id: 5, href: '/ads/setup/rules' } }) },
+        });
         await manager.get('[data-test="primary"]').trigger('click');
         expect(visit).toHaveBeenCalledWith('/ads/setup/rules');
         expect(manager.find('[data-test="ask-manager"]').exists()).toBe(false);
 
-        const buyer = mount(AlertCard, { props: { card: card({ ...base, primary: { verb: 'open_settings', action: 'open_settings', alert_id: 5, href: null } }) } });
+        const buyer = mount(AlertCard, {
+            props: { card: card({ ...base, primary: { verb: 'open_settings', action: 'open_settings', alert_id: 5, href: null } }) },
+        });
         expect(buyer.find('[data-test="primary"]').exists()).toBe(false);
         expect(buyer.get('[data-test="ask-manager"]').text()).toContain('اطلب من المدير يراجع الإعدادات');
         expect(buyer.text()).toContain('راجع الإعدادات');
@@ -106,7 +132,9 @@ describe('AlertCard', () => {
                     kind: 'product',
                     ad: null,
                     product: { id: 9, title: 'Abaya' },
-                    reasons: [reason({ rule_id: 'all.out_of_stock', sentence_key: 'out_of_stock', params: { product: 'Abaya' }, severity: 'critical' })],
+                    reasons: [
+                        reason({ rule_id: 'all.out_of_stock', sentence_key: 'out_of_stock', params: { product: 'Abaya' }, severity: 'critical' }),
+                    ],
                     ads: [
                         { ...ad, alert_id: 5, action: 'stop' },
                         { ...ad, id: 12, name: 'Other', alert_id: 7, action: 'stop' },
@@ -121,7 +149,9 @@ describe('AlertCard', () => {
     });
 
     it('shows how a closed card closed and no actions', () => {
-        const reasons = [reason({ state: 'dismissed', dismiss_reason: 'wrong_numbers', closed_by: 'Bakinam', closed_at: '2026-10-05T10:00:00+03:00' })];
+        const reasons = [
+            reason({ state: 'dismissed', dismiss_reason: 'wrong_numbers', closed_by: 'Bakinam', closed_at: '2026-10-05T10:00:00+03:00' }),
+        ];
         const w = mount(AlertCard, { props: { card: card({ reasons }), mode: 'closed' } });
         expect(w.get('[data-test="state"]').text()).toContain('الأرقام غلط');
         expect(w.find('[data-test="primary"]').exists()).toBe(false);

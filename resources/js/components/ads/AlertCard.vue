@@ -125,7 +125,9 @@ function sendDisagree(): void {
                     </h3>
                     <p class="truncate text-xs text-muted-foreground" dir="auto">{{ subtitle }}</p>
                 </div>
-                <p v-if="money > 0 && mode !== 'closed'" class="shrink-0 text-xs tabular-nums" data-test="money">{{ t('ads.alerts.money_at_risk', { money }) }}</p>
+                <p v-if="money > 0 && mode !== 'closed'" class="shrink-0 text-xs tabular-nums" data-test="money">
+                    {{ t('ads.alerts.money_at_risk', { money }) }}
+                </p>
             </header>
 
             <ul class="mt-2 space-y-1 text-sm leading-relaxed">
@@ -165,12 +167,25 @@ function sendDisagree(): void {
                 >
                     {{ t(`ads.alerts.verbs.${card.primary.verb}`) }}
                 </Button>
-                <Button v-if="card.ad" size="sm" variant="ghost" data-test="why" @click="emit('open-ad', card.ad.id)">{{ t('ads.alerts.verbs.why') }}</Button>
+                <Button v-if="card.ad" size="sm" variant="ghost" data-test="why" @click="emit('open-ad', card.ad.id)">{{
+                    t('ads.alerts.verbs.why')
+                }}</Button>
                 <div v-if="mode === 'open'" class="relative">
-                    <Button size="sm" variant="outline" data-test="later" :aria-expanded="laterOpen" aria-haspopup="menu" @click="laterOpen = !laterOpen">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        data-test="later"
+                        :aria-expanded="laterOpen"
+                        aria-haspopup="menu"
+                        @click="laterOpen = !laterOpen"
+                    >
                         {{ t('ads.alerts.later.label') }} <ChevronDown aria-hidden="true" />
                     </Button>
-                    <div v-if="laterOpen" role="menu" class="absolute start-0 z-10 mt-1 min-w-36 rounded-md border border-border bg-popover p-1 shadow-md">
+                    <div
+                        v-if="laterOpen"
+                        role="menu"
+                        class="absolute start-0 z-10 mt-1 min-w-36 rounded-md border border-border bg-popover p-1 shadow-md"
+                    >
                         <button
                             v-for="o in SNOOZE_OPTIONS"
                             :key="o"
@@ -184,7 +199,14 @@ function sendDisagree(): void {
                         </button>
                     </div>
                 </div>
-                <Button v-if="canDismiss" size="sm" variant="ghost" data-test="disagree" :aria-expanded="disagreeOpen" @click="disagreeOpen = !disagreeOpen">
+                <Button
+                    v-if="canDismiss"
+                    size="sm"
+                    variant="ghost"
+                    data-test="disagree"
+                    :aria-expanded="disagreeOpen"
+                    @click="disagreeOpen = !disagreeOpen"
+                >
                     {{ t('ads.alerts.disagree.label') }}
                 </Button>
             </footer>

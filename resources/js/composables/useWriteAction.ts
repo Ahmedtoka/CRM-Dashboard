@@ -12,6 +12,9 @@ export interface WriteTarget {
     externalId: string;
     to: 'active' | 'paused';
     reason?: string | null;
+    /** `alert` when the write starts from a decisions-feed card (S5); `sourceRef` is the alert id. */
+    source?: 'ui' | 'alert';
+    sourceRef?: string | null;
 }
 
 export interface WriteProposal {
@@ -48,6 +51,7 @@ export function useWriteAction() {
                     target: { level: target.level, external_id: target.externalId },
                     params: { to: target.to },
                     reason: target.reason ?? null,
+                    ...(target.source === 'alert' ? { source: 'alert', source_ref: target.sourceRef ?? null } : {}),
                 },
                 { headers: { 'Idempotency-Key': newIdempotencyKey() } },
             );

@@ -27,8 +27,11 @@ const props = withDefaults(
         currency?: string;
         reason?: string;
         parentPaused?: boolean;
+        /** `alert` from a decisions-feed card (S5): the server checks the alert is about this ad. */
+        source?: 'ui' | 'alert';
+        sourceRef?: string | null;
     }>(),
-    { spendToday: null, dataAt: null, currency: 'EGP', reason: '', parentPaused: false },
+    { spendToday: null, dataAt: null, currency: 'EGP', reason: '', parentPaused: false, source: 'ui', sourceRef: null },
 );
 const open = defineModel<boolean>('open', { required: true });
 const emit = defineEmits<{ done: [status: 'active' | 'paused'] }>();
@@ -38,7 +41,15 @@ const toast = useToast();
 const w = useWriteAction();
 const password = ref('');
 const stopping = computed(() => props.to === 'paused');
-const target = () => ({ accountId: props.accountId, level: props.level, externalId: props.externalId, to: props.to, reason: props.reason || null });
+const target = () => ({
+    accountId: props.accountId,
+    level: props.level,
+    externalId: props.externalId,
+    to: props.to,
+    reason: props.reason || null,
+    source: props.source,
+    sourceRef: props.sourceRef,
+});
 
 watch(open, (o) => {
     if (o) {

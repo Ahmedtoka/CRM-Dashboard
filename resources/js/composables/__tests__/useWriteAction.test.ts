@@ -30,6 +30,16 @@ describe('useWriteAction', () => {
         expect(w.proposal.value?.diff_hash).toBe(proposal.diff_hash);
     });
 
+    it('tags a write from a decisions card with the alert source', async () => {
+        post.mockResolvedValueOnce({ status: 201, data: proposal });
+        const w = useWriteAction();
+        await w.propose({ ...target, source: 'alert', sourceRef: '42' });
+        expect(post.mock.calls[0][1]).toMatchObject({ source: 'alert', source_ref: '42' });
+        post.mockResolvedValueOnce({ status: 201, data: proposal });
+        await useWriteAction().propose(target);
+        expect(post.mock.calls.at(-1)?.[1]).not.toHaveProperty('source');
+    });
+
     it('asks for the password on 423 and confirms again after it', async () => {
         post.mockResolvedValueOnce({ status: 201, data: proposal })
             .mockRejectedValueOnce({ response: { status: 423, data: { code: 'password_confirmation_required', message: 'm' } } })

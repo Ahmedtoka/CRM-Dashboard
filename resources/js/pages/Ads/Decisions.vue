@@ -1,8 +1,9 @@
 <script setup lang="ts">
-/** «محتاج قرار» (spec 4.1, U 5.2): approvals (S1) on top, stop suggestions, S5 alerts slot; tabs open/snoozed/closed/log. */
+/** «محتاج قرار» (spec 4.1, U 5.2): approvals (S1) on top, S5 alert cards, stop suggestions; tabs open/snoozed/closed/log. */
 import AdDrawer from '@/components/ads/AdDrawer.vue';
 import AdStatusButton from '@/components/ads/AdStatusButton.vue';
 import AdsFilterBar from '@/components/ads/AdsFilterBar.vue';
+import AlertsSection from '@/components/ads/AlertsSection.vue';
 import CreativeThumb from '@/components/ads/CreativeThumb.vue';
 import DataHealthBanner from '@/components/ads/DataHealthBanner.vue';
 import WhyList from '@/components/ads/WhyList.vue';
@@ -97,7 +98,7 @@ const selectClass = 'h-9 rounded-md border border-input bg-background px-2 text-
                     </Link>
                 </section>
 
-                <!-- S5 renders its alert cards here from `alerts`; S2 always passes [] -->
+                <AlertsSection v-if="alertsMeta" :alerts="alerts" :meta="alertsMeta" mode="open" :data-at="freshness" :currency="currency" @open-ad="drawer.open" />
 
                 <section v-if="suggestions.length" data-test="suggestions" class="space-y-2">
                     <h2 class="text-sm font-semibold">{{ t('ads.control.decisions.suggestions') }}</h2>
@@ -141,8 +142,18 @@ const selectClass = 'h-9 rounded-md border border-input bg-background px-2 text-
                 <EmptyState v-if="!suggestions.length && !(approvals && approvals.count) && !alerts.length" :icon="CheckCircle2" :title="t('ads.control.decisions.empty_open')" />
             </template>
 
-            <EmptyState v-else-if="filters.tab === 'snoozed'" :icon="CheckCircle2" :title="t('ads.control.decisions.empty_snoozed')" />
-            <EmptyState v-else-if="filters.tab === 'closed'" :icon="CheckCircle2" :title="t('ads.control.decisions.empty_closed')" />
+            <template v-else-if="filters.tab === 'snoozed' || filters.tab === 'closed'">
+                <AlertsSection
+                    v-if="alertsMeta"
+                    :alerts="alerts"
+                    :meta="alertsMeta"
+                    :mode="filters.tab === 'snoozed' ? 'later' : 'closed'"
+                    :data-at="freshness"
+                    :currency="currency"
+                    @open-ad="drawer.open"
+                />
+                <EmptyState v-else :icon="CheckCircle2" :title="t(`ads.control.decisions.empty_${filters.tab}`)" />
+            </template>
 
             <template v-else>
                 <div class="flex flex-wrap gap-2">
@@ -181,7 +192,7 @@ const selectClass = 'h-9 rounded-md border border-input bg-background px-2 text-
             :filters="filters"
             :currency="currency"
             :data-at="freshness"
-            :reload-only="['suggestions', 'counts', 'log']"
+            :reload-only="['suggestions', 'counts', 'log', 'alerts', 'alertsMeta']"
             @close="drawer.close"
         />
     </AppLayout>

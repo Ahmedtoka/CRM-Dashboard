@@ -11,7 +11,10 @@ describe('adsAlerts', () => {
 
     it('adds the default break-even note and the replacement note', () => {
         const text = alertSentence(
-            { sentence_key: 'below_breakeven', params: { roas: 1, roas_meta: 1, roas_crm: 0, floor: 2.5, floor_default: true, no_alternative: true } },
+            {
+                sentence_key: 'below_breakeven',
+                params: { roas: 1, roas_meta: 1, roas_crm: 0, floor: 2.5, floor_default: true, no_alternative: true },
+            },
             'ar',
         );
         expect(text).toContain('نقطة التعادل افتراضية');
@@ -38,9 +41,25 @@ describe('adsAlerts', () => {
 
     it('has a sentence for every rule key in both languages', () => {
         const keys = [
-            'out_of_stock', 'out_of_stock_msg', 'spend_spike_today', 'spend_no_result', 'spend_no_result_learning', 'spend_no_result_cap',
-            'below_breakeven', 'breakeven_unprofitable', 'chats_no_orders', 'price_mismatch', 'sizes_broken', 'product_unavailable',
-            'inbox_slow_for_ads', 'high_refusal', 'scale_winner', 'scale_winner_msg', 'reactivate_restocked', 'chat_size_out', 'chat_price',
+            'out_of_stock',
+            'out_of_stock_msg',
+            'spend_spike_today',
+            'spend_no_result',
+            'spend_no_result_learning',
+            'spend_no_result_cap',
+            'below_breakeven',
+            'breakeven_unprofitable',
+            'chats_no_orders',
+            'price_mismatch',
+            'sizes_broken',
+            'product_unavailable',
+            'inbox_slow_for_ads',
+            'high_refusal',
+            'scale_winner',
+            'scale_winner_msg',
+            'reactivate_restocked',
+            'chat_size_out',
+            'chat_price',
         ];
         for (const key of keys) {
             for (const locale of ['ar', 'en'] as const) {
