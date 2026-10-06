@@ -9,11 +9,12 @@ const open = defineModel<boolean>('open', { required: true });
 const { t } = useI18n();
 const { list } = useShortcutRegistry();
 
-const GROUPS: ShortcutGroup[] = ['global', 'inbox', 'composer'];
+const GROUPS: ShortcutGroup[] = ['global', 'inbox', 'composer', 'decisions'];
 const GROUP_LABEL_KEY: Record<ShortcutGroup, string> = {
     global: 'shortcuts.group_global',
     inbox: 'shortcuts.group_inbox',
     composer: 'shortcuts.group_composer',
+    decisions: 'shortcuts.group_decisions',
 };
 
 const grouped = computed(() =>

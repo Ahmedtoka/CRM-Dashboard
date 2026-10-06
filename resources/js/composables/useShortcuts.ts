@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, onMounted, shallowRef } from 'vue';
 
-export type ShortcutGroup = 'global' | 'inbox' | 'composer';
+export type ShortcutGroup = 'global' | 'inbox' | 'composer' | 'decisions';
 
 export interface ShortcutDef {
     id: string;

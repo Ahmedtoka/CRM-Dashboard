@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@inertiajs/vue3', () => ({
     router: { put: vi.fn(), post: vi.fn() },
+    usePage: () => ({ props: { errors: {} } }),
     useForm: (data: Record<string, unknown>) => ({ ...data, errors: {}, processing: false, put: vi.fn() }),
     Head: { template: '<div />' },
     Link: { props: ['href'], template: '<a :href="href"><slot /></a>' },

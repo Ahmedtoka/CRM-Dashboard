@@ -13,11 +13,15 @@ import { router } from '@inertiajs/vue3';
 import { ChevronDown } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
-const props = withDefaults(defineProps<{ card: AlertCardData; focused?: boolean; actedLine?: string | null; mode?: 'open' | 'later' | 'closed' }>(), {
-    focused: false,
-    actedLine: null,
-    mode: 'open',
-});
+const props = withDefaults(
+    defineProps<{ card: AlertCardData; focused?: boolean; actedLine?: string | null; mode?: 'open' | 'later' | 'closed'; busy?: boolean }>(),
+    {
+        focused: false,
+        busy: false,
+        actedLine: null,
+        mode: 'open',
+    },
+);
 const emit = defineEmits<{
     stop: [alertId: number, ad: AlertAdRef, reason: string];
     run: [alertId: number, ad: AlertAdRef, reason: string];
@@ -89,12 +93,13 @@ function primary(): void {
 }
 
 function later(option: SnoozeOption): void {
+    if (props.busy) return; // a snooze or dismiss of this card is on the way: never post twice
     laterOpen.value = false;
     emit('snooze', props.card.alert_ids, option);
 }
 
 function sendDisagree(): void {
-    if (!chosen.value) return;
+    if (!chosen.value || props.busy) return;
     emit('dismiss', props.card.alert_ids, chosen.value, note.value.trim());
     disagreeOpen.value = false;
     chosen.value = null;
@@ -175,6 +180,7 @@ function sendDisagree(): void {
                         size="sm"
                         variant="outline"
                         data-test="later"
+                        :disabled="busy"
                         :aria-expanded="laterOpen"
                         aria-haspopup="menu"
                         @click="laterOpen = !laterOpen"
@@ -233,7 +239,9 @@ function sendDisagree(): void {
                     :aria-label="t('ads.alerts.disagree.note')"
                     :placeholder="t('ads.alerts.disagree.note')"
                 />
-                <Button size="sm" data-test="disagree-send" :disabled="!chosen" @click="sendDisagree">{{ t('ads.alerts.disagree.send') }}</Button>
+                <Button size="sm" data-test="disagree-send" :disabled="!chosen || busy" :loading="busy" @click="sendDisagree">{{
+                    t('ads.alerts.disagree.send')
+                }}</Button>
             </div>
         </template>
     </article>

@@ -89,18 +89,77 @@ describe('AlertsSection', () => {
         expect(w.find('[data-card="ad:1"]').exists()).toBe(true);
     });
 
-    it('steps through cards with J and K in review mode and marks them seen', async () => {
-        const w = mount(AlertsSection, { props: { alerts: [card(1), card(2)], meta }, global: { stubs }, attachTo: document.body });
+    it('steps through cards with J and K in review mode and marks them seen once the presses settle (final fix 4)', async () => {
+        vi.useFakeTimers();
+        const w = mount(AlertsSection, { props: { alerts: [card(1), card(2), card(3)], meta }, global: { stubs }, attachTo: document.body });
         await w.get('[data-test="review"]').trigger('click');
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' }));
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k' }));
+        vi.advanceTimersByTime(300);
+        expect(w.emitted('open-ad')?.map((e) => e[0])).toEqual([1]);
+        // Arabic layout: event.key is «ت», the physical key is J.
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ت', code: 'KeyJ' }));
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', code: 'KeyJ' }));
         await flushPromises();
-        expect(w.emitted('open-ad')?.map((e) => e[0])).toEqual([1, 2, 1]);
-        expect(post).toHaveBeenCalledWith('/ads/alerts/seen', { ids: [2] }, { silent: true });
+        // The focus moves at once; the drawer and the seen post wait for the presses to settle.
+        expect(document.activeElement?.getAttribute('data-card')).toBe('ad:3');
+        expect(w.emitted('open-ad')).toHaveLength(1);
+        vi.advanceTimersByTime(300);
+        expect(w.emitted('open-ad')?.map((e) => e[0])).toEqual([1, 3]);
+        expect(post).toHaveBeenCalledTimes(2);
+        expect(post).toHaveBeenLastCalledWith('/ads/alerts/seen', { ids: [3] }, { silent: true });
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK' }));
+        await flushPromises();
+        expect(document.activeElement?.getAttribute('data-card')).toBe('ad:2');
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
         await flushPromises();
         expect(w.find('[data-test="review-hint"]').exists()).toBe(false);
         w.unmount();
+        vi.useRealTimers();
+    });
+
+    it('ignores held keys, Ctrl+K and keys outside the review (final fix 4)', async () => {
+        const w = mount(AlertsSection, { props: { alerts: [card(1), card(2)], meta }, global: { stubs }, attachTo: document.body });
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', code: 'KeyJ' }));
+        await w.get('[data-test="review"]').trigger('click');
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', code: 'KeyJ', repeat: true }));
+        const ctrlK = new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true, cancelable: true });
+        window.dispatchEvent(ctrlK);
+        await flushPromises();
+        expect(document.activeElement?.getAttribute('data-card')).toBe('ad:1');
+        expect(w.find('[data-card="ad:1"]').attributes('aria-current')).toBe('true');
+        w.unmount();
+    });
+
+    it('keeps the focus on an existing card when the list shrinks (final fix 4)', async () => {
+        const w = mount(AlertsSection, { props: { alerts: [card(1), card(2)], meta }, global: { stubs }, attachTo: document.body });
+        await w.get('[data-test="review"]').trigger('click');
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', code: 'KeyJ' }));
+        await flushPromises();
+        await w.setProps({ alerts: [card(1)] });
+        await flushPromises();
+        expect(w.find('[data-card="ad:1"]').attributes('aria-current')).toBe('true');
+        w.unmount();
+    });
+
+    it('lists the review keys in the shortcuts registry (final fix 4)', async () => {
+        const { useShortcutRegistry } = await import('@/composables/useShortcuts');
+        const w = mount(AlertsSection, { props: { alerts: [card(1), card(2)], meta }, global: { stubs } });
+        expect(useShortcutRegistry().list.value.filter((d) => d.group === 'decisions').map((d) => d.id)).toEqual(['decisions.next', 'decisions.prev', 'decisions.exit']);
+        w.unmount();
+    });
+
+    it('never posts a snooze twice while the first is on the way (final fix 7)', async () => {
+        let done: (v: { data: { ok: boolean } }) => void = () => undefined;
+        post.mockImplementationOnce(() => new Promise<{ data: { ok: boolean } }>((r) => (done = r)));
+        const w = mount(AlertsSection, { props: { alerts: [card(1)], meta }, global: { stubs } });
+        await w.get('[data-test="later"]').trigger('click');
+        await w.get('[data-test="later-tomorrow"]').trigger('click');
+        expect(w.get('[data-test="later"]').attributes('disabled')).toBeDefined();
+        w.getComponent({ name: 'AlertCard' }).vm.$emit('snooze', [1], 'tomorrow');
+        await flushPromises();
+        expect(post).toHaveBeenCalledTimes(1);
+        done({ data: { ok: true } });
+        await flushPromises();
+        expect(w.get('[data-test="later"]').attributes('disabled')).toBeUndefined();
     });
 
     it('snoozes a card and reloads the section', async () => {

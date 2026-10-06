@@ -14,8 +14,9 @@ use Illuminate\Support\Collection;
 
 /**
  * In-app only (D14). Shadow mode (alerts.notify_enabled=false) sends nothing. When on: new critical alerts of one run →
- * one grouped bell item per user who can see them; out-of-stock alerts → one item per product per day; 09:00 Cairo →
- * one grouped digest item per user with open items.
+ * one grouped bell item per user who can see them (the grouped item counts CRITICAL alerts only, never high ones);
+ * out-of-stock alerts with a product → one item per product per day, at any severity; 09:00 Cairo → one grouped digest
+ * item per user with open items.
  */
 final class AlertNotifier
 {
@@ -35,9 +36,10 @@ final class AlertNotifier
     ) {}
 
     /**
-     * New alerts of one run: critical ones (except stock) → one grouped bell item per user who can see them; an
-     * out-of-stock alert at ANY severity (Messages / multi-product check stock is high, R-06 hands StockWatcher's notice
-     * over to it) → one item per product per user per Cairo day.
+     * New alerts of one run. Grouped bell item (one per user who can see them): CRITICAL alerts only, stock alerts with a
+     * product excluded; a high alert (an out-of-stock one without a product included) never joins it, rings nothing and
+     * stays un-notified. An out-of-stock alert with a product at ANY severity (Messages / multi-product check stock is
+     * high, R-06 hands StockWatcher's notice over to it) → one item per product per user per Cairo day.
      *
      * @param  list<int>  $alertIds
      */

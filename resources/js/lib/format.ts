@@ -221,3 +221,23 @@ export function formatUsd(amount: number | null | undefined, locale: Locale): st
 export function slashShortcut(shortcut: string): string {
     return shortcut.startsWith('/') ? shortcut : `/${shortcut}`;
 }
+
+/**
+ * A typed number as the server reads it: Arabic-Indic (٠-٩) and Persian (۰-۹) digits become ASCII, «٫» is the decimal
+ * point, a single trailing comma group of 1-2 digits («2,5» / «2،5») is a decimal comma, and every other comma («٬» , «،»)
+ * or space is a thousands separator. Empty → null; anything that is still not a number → NaN.
+ */
+export function parseTypedNumber(raw: string | number | null | undefined): number | null {
+    if (raw === null || raw === undefined) return null;
+    let s = String(raw)
+        .trim()
+        .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+        .replace(/٫/g, '.')
+        .replace(/\s/g, '');
+    if (s === '') return null;
+    if (!s.includes('.') && /^[^,،٬]*[,،]\d{1,2}$/.test(s)) s = s.replace(/[,،]/, '.');
+    s = s.replace(/[,،٬]/g, '');
+
+    return /^-?\d*\.?\d+$/.test(s) || /^-?\d+\.$/.test(s) ? Number(s) : NaN;
+}
