@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers\Web\Ads;
 
-use App\Ads\Access\AdsScope;
 use App\Ads\Control\AdWriteService;
 use App\Ads\Control\StopAdvisor;
 use App\Ads\Control\Write\WriteActionService;
 use App\Ads\Control\Write\WriteDenied;
-use App\Ads\Platforms\SecretScrubber;
+use App\Ads\Control\WriteActionLog;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\AdsOverview;
 use App\Http\Controllers\Concerns\BuildsAdsPages;
@@ -16,7 +15,6 @@ use App\Models\AdAccount;
 use App\Models\AdWriteAction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -44,17 +42,7 @@ class ActionController extends Controller
         $suggestions = array_map(fn (array $s) => $s + ['can_write' => $can[$s['account_id']] ?? false], $found);
 
         // One history table since B1: slice-1 rows were copied in (source=legacy). Proposals never shown.
-        $allowed = app(AdsScope::class)->accountIds($user);
-        $log = AdWriteAction::query()->with(['confirmer:id,name', 'proposer:id,name', 'account:id,name'])
-            ->whereNotIn('state', [AdWriteAction::PROPOSED, AdWriteAction::EXPIRED, AdWriteAction::CANCELLED, AdWriteAction::SUPERSEDED])
-            ->when($allowed !== null, fn ($q) => $q->whereIn('ad_account_id', $allowed))
-            ->orderByRaw('COALESCE(confirmed_at, created_at) DESC')->orderByDesc('id')->limit(self::LOG_LIMIT)->get()
-            ->map(fn (AdWriteAction $a) => [
-                'id' => $a->id, 'at' => ($a->confirmed_at ?? $a->created_at)?->toIso8601String(), 'user' => ($a->confirmer ?? $a->proposer)?->name,
-                'platform' => $a->platform, 'account' => (string) ($a->account?->name ?? $a->account_name ?? ''), 'level' => $a->target_level,
-                'name' => (string) $a->target_name, 'from_status' => $a->from_status, 'to_status' => $a->to_status === 'active' ? 'ACTIVE' : 'PAUSED',
-                'reason' => $a->reason, 'result' => self::logResult($a->state), 'error' => self::logError($a),
-            ])->all();
+        $log = app(WriteActionLog::class)->rows($user, [], self::LOG_LIMIT);
 
         return Inertia::render('Ads/Actions', [
             'currency' => app(AdsOverview::class)->currency($filter),
@@ -107,36 +95,6 @@ class ActionController extends Controller
                 'message' => WriteActionController::pendingMessage($x)], 202),
             default => $this->refused(WriteActionController::failure($x), $x),
         };
-    }
-
-    /** @return 'ok'|'error'|'pending' */
-    private static function logResult(string $state): string
-    {
-        return match ($state) {
-            AdWriteAction::SUCCEEDED, AdWriteAction::ROLLED_BACK => 'ok',
-            AdWriteAction::EXECUTING, AdWriteAction::UNKNOWN => 'pending',
-            default => 'error',
-        };
-    }
-
-    /**
-     * The same message the user got: the translated refusal with its stored details (never a raw :placeholder), plus
-     * the platform's own (scrubbed) text for platform_rejected / permission_missing, legacy rows included. A code with
-     * no translation shows the stored platform text.
-     */
-    private static function logError(AdWriteAction $a): ?string
-    {
-        if (in_array($a->state, [AdWriteAction::SUCCEEDED, AdWriteAction::ROLLED_BACK], true)) {
-            return null;
-        }
-        $code = (string) $a->error_code;
-        if ($code !== '' && Lang::has('ads.errors.'.$code)) {
-            $details = WriteActionController::storedDetails($a);
-
-            return WriteDenied::withPlatformMessage(WriteDenied::messageFor($code, $details), $details['platform_message'] ?? null);
-        }
-
-        return $a->error_message !== null ? SecretScrubber::scrub($a->error_message) : null;
     }
 
     private function refused(WriteDenied $e, AdWriteAction $x): JsonResponse
