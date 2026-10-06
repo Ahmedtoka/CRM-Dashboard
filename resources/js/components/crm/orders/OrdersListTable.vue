@@ -27,10 +27,11 @@ const columns = computed<Column[]>(() => [
     { key: 'district', label: t('ordersHub.columns.district'), hideOnMobile: true },
     { key: 'total', label: t('ordersHub.columns.total'), numeric: true, sortable: true },
     { key: 'status', label: t('ordersHub.columns.status') },
-    { key: 'products', label: t('ordersHub.columns.products'), hideOnMobile: true },
+    // Kept on the phone card (thumbs + «+n»): what was ordered is the first thing staff look for.
+    { key: 'products', label: t('ordersHub.columns.products') },
     ...(props.showSource ? [{ key: 'source', label: t('ordersHub.columns.source') }] : []),
     // The order date the filters use: placed in the store, else made in the CRM (server sort key `date`).
-    { key: 'date', label: t('ordersHub.columns.date'), hideOnMobile: true, sortable: true },
+    { key: 'date', label: t('ordersHub.columns.date'), sortable: true },
 ]);
 </script>
 
@@ -84,7 +85,7 @@ const columns = computed<Column[]>(() => [
         >
         <template #cell-status="{ row }"><OrderStatusChip :order="row" /></template>
         <template #cell-products="{ row }">
-            <span class="flex items-center gap-1" data-products>
+            <span class="inline-flex max-w-full items-center gap-1 align-middle" data-products>
                 <template v-for="item in (row.items ?? []).slice(0, MAX_THUMBS)" :key="item.id">
                     <img
                         v-if="item.image_url"
@@ -96,15 +97,18 @@ const columns = computed<Column[]>(() => [
                     />
                     <span
                         v-else
-                        class="inline-flex h-8 max-w-[6rem] items-center truncate rounded bg-muted px-1.5 text-2xs"
+                        class="inline-flex h-8 min-w-0 max-w-[4.5rem] items-center truncate rounded bg-muted px-1.5 text-2xs md:max-w-[6rem]"
                         :title="item.title"
                         dir="auto"
                         >{{ item.title }}</span
                     >
                 </template>
-                <span v-if="(row.items?.length ?? 0) > MAX_THUMBS" class="text-2xs text-muted-foreground">{{
-                    t('ordersHub.more_products', { n: (row.items?.length ?? 0) - MAX_THUMBS })
-                }}</span>
+                <span
+                    v-if="(row.items?.length ?? 0) > MAX_THUMBS"
+                    class="shrink-0 whitespace-nowrap text-2xs text-muted-foreground"
+                    data-more-products
+                    >{{ t('ordersHub.more_products', { n: (row.items?.length ?? 0) - MAX_THUMBS }) }}</span
+                >
             </span>
         </template>
         <template #cell-date="{ row }">

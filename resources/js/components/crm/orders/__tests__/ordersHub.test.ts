@@ -119,3 +119,29 @@ describe('OrdersAnalyticsTab', () => {
         expect(mount(OrdersAnalyticsTab, { props: { data: empty } }).text()).toContain('مفيش أوردرات');
     });
 });
+
+describe('OrdersListTable phone card', () => {
+    it('shows the products (thumbs + «+n») and the date on the card', async () => {
+        const { default: OrdersListTable } = await import('@/components/crm/orders/OrdersListTable.vue');
+        const items = [1, 2, 3, 4, 5].map((id) => ({ id, title: `صنف ${id}`, qty: 1, price: 100, image_url: `https://cdn.test/${id}.jpg` }));
+        const row = {
+            id: 9,
+            order_number: '#1009',
+            status: 'confirmed',
+            total: 500,
+            items,
+            placed_at: '2026-10-05T10:00:00Z',
+            created_at: '2026-10-05T10:00:00Z',
+        };
+        const w = mount(OrdersListTable, { props: { rows: [row] as never, tableId: 'orders-test' } });
+
+        const card = w.find('ul li');
+        expect(card.exists()).toBe(true);
+        const products = card.find('[data-products]');
+        expect(products.exists()).toBe(true);
+        expect(products.findAll('img')).toHaveLength(3);
+        expect(products.find('[data-more-products]').text()).toBe('+٢');
+        expect(card.text()).toContain('المنتجات');
+        expect(card.text()).toContain('التاريخ');
+    });
+});
