@@ -2,15 +2,20 @@
 import CommentCard from '@/components/crm/CommentCard.vue';
 import CommentFilters from '@/components/crm/CommentFilters.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
+import InlineError from '@/components/crm/InlineError.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import PostGroup from '@/components/crm/PostGroup.vue';
+import SkeletonList from '@/components/crm/SkeletonList.vue';
+import { Button } from '@/components/ui/button';
 import { useCommentFeed } from '@/composables/useCommentFeed';
 import { useI18n } from '@/composables/useI18n';
+import { useUrlFilters } from '@/composables/useUrlFilters';
+import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { Capabilities, CommentFilters as Filters, CommentItem, PostRef } from '@/types/admin';
 import type { CursorPage } from '@/types/crm';
 import { Head, router } from '@inertiajs/vue3';
-import { LoaderCircle, MessagesSquare, WifiOff } from 'lucide-vue-next';
+import { MessagesSquare, WifiOff } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{ comments: CursorPage<CommentItem>; filters: Filters; capabilities: Capabilities }>();
@@ -22,15 +27,22 @@ watch(
     (value) => (filters.value = { ...value }),
 );
 
-// The backend has no ad filter; "ads only" narrows the loaded comments client-side.
-const adOnly = ref(false);
+// The backend has no ad filter; "ads only" narrows the loaded comments client-side. It lives in the URL (`ad=1`)
+// so a reload or a shared link keeps it.
+const { filters: urlFilters, set: setUrl } = useUrlFilters({ ad: false as boolean });
+const adOnly = computed({
+    get: () => urlFilters.value.ad,
+    set: (value: boolean) => setUrl({ ad: value }),
+});
 
-const { items, nextCursor, loadingMore, busy, live, loadMore, run } = useCommentFeed(() => props.comments, filters);
+const { items, nextCursor, loadingMore, loadError, busy, live, loadMore, run } = useCommentFeed(() => props.comments, filters);
+const { loading, track } = useVisitLoading();
 
 function applyFilters(next: Filters): void {
     filters.value = next;
-    const query = Object.fromEntries(Object.entries(next).filter(([, v]) => v !== null));
-    router.get('/comments', query, { preserveState: true, preserveScroll: true, replace: true });
+    const query: Record<string, string | number> = Object.fromEntries(Object.entries(next).filter(([, v]) => v !== null)) as Record<string, string | number>;
+    if (adOnly.value) query.ad = 1;
+    router.get('/comments', query, track({ preserveState: true, preserveScroll: true, replace: true }));
 }
 
 interface Group {
@@ -67,16 +79,12 @@ const breadcrumbs = computed(() => [{ title: t('comments.title'), href: '/commen
                 <span v-if="!live" class="inline-flex items-center gap-1 text-2xs text-muted-foreground"><WifiOff class="size-3" aria-hidden="true" />{{ t('alerts.polling') }}</span>
             </PageHeader>
 
-            <div class="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-                <CommentFilters
-                    v-model:ad-only="adOnly"
-                    :filters="filters"
-                    class="rounded-lg bg-card p-3 shadow-card lg:sticky lg:top-4 lg:self-start"
-                    @update:filters="applyFilters"
-                />
+            <div class="space-y-4">
+                <CommentFilters v-model:ad-only="adOnly" :filters="filters" class="rounded-lg bg-card p-3 shadow-card" @update:filters="applyFilters" />
 
-                <div class="space-y-3">
-                    <EmptyState v-if="!groups.length" :icon="MessagesSquare" :title="t('comments.empty')" class="rounded-lg bg-card shadow-card" />
+                <div class="space-y-3" :aria-busy="loading">
+                    <SkeletonList v-if="loading && !groups.length" variant="cards" />
+                    <EmptyState v-else-if="!groups.length" :icon="MessagesSquare" :title="t('comments.empty')" class="rounded-lg bg-card shadow-card" />
                     <PostGroup v-for="group in groups" :key="group.key" :post="group.post" :comments="group.comments" @filter-post="applyFilters({ ...filters, post_id: $event })">
                         <CommentCard
                             v-for="comment in group.comments"
@@ -87,10 +95,9 @@ const breadcrumbs = computed(() => [{ title: t('comments.title'), href: '/commen
                             @action="(action, text, done) => onAction(comment.id, action, text, done)"
                         />
                     </PostGroup>
-                    <div v-if="nextCursor" class="text-center">
-                        <button type="button" class="inline-flex items-center gap-1.5 text-xs text-primary hover:underline" :disabled="loadingMore" @click="loadMore">
-                            <LoaderCircle v-if="loadingMore" class="size-3 animate-spin" aria-hidden="true" />{{ t('ui.load_more') }}
-                        </button>
+                    <InlineError v-if="loadError" :message="loadError" :retrying="loadingMore" @retry="loadMore" />
+                    <div v-else-if="nextCursor" class="text-center">
+                        <Button variant="ghost" size="sm" class="text-primary" :loading="loadingMore" @click="loadMore">{{ t('ui.load_more') }}</Button>
                     </div>
                 </div>
             </div>

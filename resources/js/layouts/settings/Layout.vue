@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Heading from '@/components/Heading.vue';
+import PageHeader from '@/components/crm/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useI18n } from '@/composables/useI18n';
@@ -33,7 +33,7 @@ const currentPath = window.location.pathname;
 
 <template>
     <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-        <Heading :title="t('nav.settings_layout.title')" :description="t('nav.settings_layout.description')" />
+        <PageHeader :title="t('nav.settings_layout.title')" :description="t('nav.settings_layout.description')" />
 
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
             <aside class="w-full shrink-0 lg:w-56">

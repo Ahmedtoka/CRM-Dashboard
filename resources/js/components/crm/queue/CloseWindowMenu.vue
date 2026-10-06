@@ -171,9 +171,8 @@ defineExpose({
                 </fieldset>
                 <DialogFooter class="gap-2">
                     <Button type="button" variant="ghost" :disabled="working" @click="caseOpen = false">{{ t('common.cancel') }}</Button>
-                    <Button type="submit" :disabled="blocked">
-                        <LoaderCircle v-if="working" class="animate-spin" aria-hidden="true" />
-                        <FolderPlus v-else aria-hidden="true" />
+                    <Button type="submit" :loading="working" :disabled="blocked">
+                        <FolderPlus aria-hidden="true" />
                         {{ t('queue.close.case_confirm') }}
                     </Button>
                 </DialogFooter>
@@ -189,9 +188,8 @@ defineExpose({
             </DialogHeader>
             <DialogFooter class="gap-2">
                 <Button type="button" variant="ghost" :disabled="working" @click="escalateOpen = false">{{ t('common.cancel') }}</Button>
-                <Button type="button" variant="destructive" :disabled="blocked" @click="escalate">
-                    <LoaderCircle v-if="working" class="animate-spin" aria-hidden="true" />
-                    <ArrowUpCircle v-else aria-hidden="true" />
+                <Button type="button" variant="destructive" :loading="working" :disabled="blocked" @click="escalate">
+                    <ArrowUpCircle aria-hidden="true" />
                     {{ t('queue.close.escalate_confirm') }}
                 </Button>
             </DialogFooter>

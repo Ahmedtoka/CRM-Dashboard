@@ -8,6 +8,8 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import Pagination from '@/components/crm/Pagination.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
+import { useUrlFilters } from '@/composables/useUrlFilters';
+import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { casePriorityTone, caseStatusTone } from '@/lib/caseStatus';
 import { formatCount, formatDateTime } from '@/lib/format';
@@ -15,24 +17,17 @@ import type { Paginated } from '@/types/admin';
 import type { CaseStatus, CaseType, SupportCase } from '@/types/crm';
 import { Head, router } from '@inertiajs/vue3';
 import { ClipboardList } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
-
-interface Filters {
-    type: CaseType | null;
-    status: CaseStatus | null;
-    q: string | null;
-    /** Cairo calendar dates (Y-m-d); the server converts them to UTC bounds. */
-    from: string | null;
-    to: string | null;
-}
+import { computed, ref, watch } from 'vue';
 
 const TYPES: CaseType[] = ['return', 'exchange', 'return_exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
 const TABS: Array<CaseStatus | 'all'> = ['all', 'new', 'in_progress', 'closed'];
 
+// The server still shares `filters`; the page reads the same values from the URL (useUrlFilters).
+defineOptions({ inheritAttrs: false });
+
 const props = withDefaults(
     defineProps<{
         cases: Paginated<SupportCase>;
-        filters: Filters;
         counts: Record<'all' | CaseStatus, number>;
         team?: { id: number; name: string }[];
     }>(),
@@ -40,27 +35,40 @@ const props = withDefaults(
 );
 
 const { t, locale } = useI18n();
-const loading = ref(false);
+const { loading, track } = useVisitLoading();
 
-function apply(patch: Partial<Filters>): void {
-    const next = { ...props.filters, ...patch };
-    const query = Object.fromEntries(Object.entries(next).filter(([, v]) => v !== null && v !== ''));
-    router.get('/cases', query, { preserveState: true, preserveScroll: true, replace: true, onStart: () => (loading.value = true), onFinish: () => (loading.value = false) });
-}
+// The filters live in the URL (shareable, back/forward); the server reads the same keys and whitelists `sort`.
+const { filters, set, clear, query } = useUrlFilters(
+    {
+        q: '',
+        type: null as CaseType | null,
+        status: null as CaseStatus | null,
+        /** Cairo calendar dates (Y-m-d); the server converts them to UTC bounds. */
+        from: null as string | null,
+        to: null as string | null,
+        sort: '',
+    },
+    { replaceKeys: ['q'] },
+);
+watch(query, (q) => {
+    router.get('/cases', q, track({ only: ['cases', 'counts', 'filters'], preserveState: true, preserveScroll: true, replace: true }));
+});
+const apply = (patch: Partial<typeof filters.value>) => set(patch);
 
 const selectValue = (event: Event) => (event.target as HTMLSelectElement).value || null;
 
 // The type and the date range show as removable chips; the range picker lives in the «فلاتر» popover.
-const range = computed(() => ({ from: props.filters.from ?? '', to: props.filters.to ?? '' }));
-const moreCount = computed(() => (props.filters.from || props.filters.to ? 1 : 0));
+const range = computed(() => ({ from: filters.value.from ?? '', to: filters.value.to ?? '' }));
+const moreCount = computed(() => (filters.value.from || filters.value.to ? 1 : 0));
 const chips = computed(() => {
-    const f = props.filters;
+    const f = filters.value;
     const out: { key: string; label: string }[] = [];
     if (f.type) out.push({ key: 'type', label: t(`cases.types.${f.type}`) });
     if (f.from || f.to) out.push({ key: 'date', label: t('cases.date_chip', { from: f.from ?? '…', to: f.to ?? '…' }) });
     return out;
 });
-const filtered = computed(() => Boolean(props.filters.type || props.filters.from || props.filters.to || props.filters.q || props.filters.status));
+const filtered = computed(() => Boolean(filters.value.type || filters.value.from || filters.value.to || filters.value.q || filters.value.status));
+const summary = computed(() => [t('ui.results', { n: props.cases.meta?.total ?? props.cases.data.length }), ...chips.value.map((c) => c.label)].join(' · '));
 
 function removeChip(key: string): void {
     if (key === 'date') apply({ from: null, to: null });
@@ -80,13 +88,13 @@ function reload(): void {
 }
 
 const columns = computed<Column[]>(() => [
-    { key: 'id', label: t('cases.columns.id'), hideOnMobile: true },
+    { key: 'id', label: t('cases.columns.id'), hideOnMobile: true, sortable: true },
     { key: 'type', label: t('cases.columns.type'), primary: true },
     { key: 'customer', label: t('cases.columns.customer') },
     { key: 'order', label: t('cases.columns.order'), hideOnMobile: true },
     { key: 'priority', label: t('cases.columns.priority') },
     { key: 'status', label: t('cases.columns.status') },
-    { key: 'date', label: t('cases.columns.date') },
+    { key: 'date', label: t('cases.columns.date'), sortable: true },
 ]);
 
 /** The first line of the request section, shown under the case type. */
@@ -130,13 +138,14 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
 
             <div class="rounded-lg bg-card p-3 shadow-card">
                 <FilterBar
-                    :search="filters.q ?? ''"
+                    :search="filters.q"
                     :search-placeholder="t('cases.search')"
                     :chips="chips"
                     :more-count="moreCount"
-                    @update:search="apply({ q: $event || null })"
+                    :summary="summary"
+                    @update:search="set({ q: $event })"
                     @remove="removeChip"
-                    @clear="apply({ type: null, from: null, to: null, q: null })"
+                    @clear="clear(['status', 'sort'])"
                 >
                     <template #inline>
                         <select :value="filters.type ?? ''" :class="selectClass" :aria-label="t('cases.type_all')" @change="apply({ type: selectValue($event) as CaseType | null })">
@@ -154,7 +163,17 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
             </div>
 
             <div>
-                <DataTable :columns="columns" :rows="cases.data" clickable :loading="loading" :caption="t('cases.title')" @row-click="openCase">
+                <DataTable
+                    table-id="cases"
+                    :columns="columns"
+                    :rows="cases.data"
+                    clickable
+                    :loading="loading"
+                    :caption="t('cases.title')"
+                    :sort="filters.sort || null"
+                    @update:sort="set({ sort: $event })"
+                    @row-click="openCase"
+                >
                     <template #empty>
                         <EmptyState :icon="ClipboardList" :title="t('cases.empty')" :body="filtered ? t('cases.empty_filtered') : t('cases.empty_body')" />
                     </template>
