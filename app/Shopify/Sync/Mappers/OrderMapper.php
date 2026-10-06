@@ -18,6 +18,7 @@ use App\Models\ProductVariant;
 use App\Models\Refund;
 use App\Shopify\Customers\CustomerOrderFlags;
 use App\Shopify\Customers\PhoneNormalizer;
+use App\Support\DataFloor;
 use App\Support\SafeBroadcast;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
@@ -94,6 +95,12 @@ final class OrderMapper
         }
     }
 
+    /** True when the payload (REST or GraphQL) says the order was created before crm.data_floor. */
+    public function beforeFloor(array $order): bool
+    {
+        return DataFloor::isBefore($order['created_at'] ?? $order['createdAt'] ?? null);
+    }
+
     /** Webhooks skip any copy not strictly newer; a bulk import only skips older copies (StaleGuard::isOlder). */
     private function isStale(mixed $stored, ?string $incoming): bool
     {
@@ -124,6 +131,11 @@ final class OrderMapper
     {
         return DB::transaction(function () use ($o, $shopifyId) {
             $local = $this->findLocal($o, $shopifyId, lock: true);
+
+            // F3: an order created before the data floor is never imported (one already stored keeps syncing).
+            if ($local === null && $this->beforeFloor($o)) {
+                return MapResult::Skipped;
+            }
 
             if ($local !== null && $this->isStale($local->shopify_updated_at, $o['updated_at'] ?? null)) {
                 $this->stampSynced($local);

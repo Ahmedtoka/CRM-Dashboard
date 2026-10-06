@@ -4,6 +4,7 @@ namespace App\Shopify\Sync;
 
 use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Sync\Mappers\Payload;
+use App\Support\DataFloor;
 use Carbon\CarbonInterface;
 use InvalidArgumentException;
 use Throwable;
@@ -32,6 +33,10 @@ final class IncrementalSync
         $run = $this->recorder->open($type, $resource, $since, $until);
         $summary = SyncRunSummary::empty();
         $filter = "updated_at:>='".$this->iso($since)."'".($until !== null ? " AND updated_at:<='".$this->iso($until)."'" : '');
+        if ($resource === 'orders') {
+            // F3: an order created before the data floor is never imported, however recently it changed.
+            $filter .= " AND created_at:>='".$this->iso(DataFloor::start())."'";
+        }
         $cursor = null;
 
         try {
