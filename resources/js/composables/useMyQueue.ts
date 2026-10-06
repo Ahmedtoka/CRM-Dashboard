@@ -91,12 +91,12 @@ interface Options {
 
 const KEY: InjectionKey<MyQueue> = Symbol('my-queue');
 
-/** The inbox's queue state for the components below it; null outside the inbox. */
 /** The close request body (control room S3 adds the outcome, D13). */
 export function closeBody(reason: QueueCloseReason, caseType: SupportCaseType | null, outcome: OutcomePayload): Record<string, unknown> {
     return { reason, ...(reason === 'case' ? { case_type: caseType } : {}), ...outcome };
 }
 
+/** The inbox's queue state for the components below it; null outside the inbox. */
 export function useMyQueueContext(): MyQueue | null {
     return inject(KEY, null);
 }

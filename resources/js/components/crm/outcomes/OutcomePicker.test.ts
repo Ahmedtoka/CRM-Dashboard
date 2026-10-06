@@ -22,6 +22,13 @@ describe('OutcomePicker', () => {
         expect((w.vm as unknown as Picker).handleKey('1')).toBe(false);
     });
 
+    it('shows a disabled loading row while the outcome state is unknown and ignores keys', () => {
+        const w = mount(OutcomePicker, { props: { modelValue: null, note: '', loading: true } });
+        expect(w.find('[data-outcome-loading]').exists()).toBe(true);
+        expect(w.findAll('[data-outcome]')).toHaveLength(0);
+        expect((w.vm as unknown as Picker).handleKey('1')).toBe(false);
+    });
+
     it('asks for a note when other is picked', async () => {
         const w = mount(OutcomePicker, { props: { modelValue: 'other', note: '' } });
         const input = w.find('input[data-outcome-note]');

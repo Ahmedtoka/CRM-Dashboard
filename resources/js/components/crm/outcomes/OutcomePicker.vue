@@ -3,7 +3,7 @@ import { useI18n } from '@/composables/useI18n';
 import { formatCount } from '@/lib/format';
 import { MORE_OUTCOMES, PRIMARY_OUTCOMES, outcomeForKey } from '@/lib/outcomes';
 import type { AgentOutcome, OutcomeKey } from '@/types/crm';
-import { Lock } from 'lucide-vue-next';
+import { LoaderCircle, Lock } from 'lucide-vue-next';
 import { computed, nextTick, ref } from 'vue';
 
 /**
@@ -11,7 +11,14 @@ import { computed, nextTick, ref } from 'vue';
  * a second row for the rest; locked when an order exists in this chat (automatic `ordered`).
  * Plain buttons (radio semantics), so it works inside a reka dropdown without stealing its items.
  */
-const props = withDefaults(defineProps<{ auto?: OutcomeKey | null }>(), { auto: null });
+const props = withDefaults(
+    defineProps<{
+        auto?: OutcomeKey | null;
+        /** The chat's outcome state is still loading: a disabled row, no pick (an ordered chat may be about to lock). */
+        loading?: boolean;
+    }>(),
+    { auto: null, loading: false },
+);
 const picked = defineModel<AgentOutcome | null>({ required: true });
 const note = defineModel<string>('note', { default: '' });
 
@@ -29,7 +36,7 @@ function choose(value: AgentOutcome): void {
 defineExpose({
     /** A digit key inside the menu: true when it picked something (the caller stops the key there). */
     handleKey: (key: string): boolean => {
-        if (locked.value) return false;
+        if (locked.value || props.loading) return false;
         const value = outcomeForKey(key);
         if (value === null) return false;
         choose(value);
@@ -47,11 +54,16 @@ const chip =
     <div ref="root" class="space-y-1.5 px-2 py-1.5" data-outcome-picker>
         <p class="flex items-center justify-between text-2xs font-medium text-muted-foreground">
             <span>{{ t('outcomes.title') }}</span>
-            <span v-if="!locked">{{ t('outcomes.digits_hint') }}</span>
+            <span v-if="!locked && !loading">{{ t('outcomes.digits_hint') }}</span>
+        </p>
+
+        <p v-if="loading" class="flex items-center gap-1.5 rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground" role="status" data-outcome-loading>
+            <LoaderCircle class="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+            {{ t('ui.loading') }}
         </p>
 
         <p
-            v-if="locked"
+            v-else-if="locked"
             class="flex items-center gap-1.5 rounded-md bg-success/10 px-2 py-1.5 text-xs text-foreground"
             :title="t('outcomes.locked_hint')"
             data-outcome-locked

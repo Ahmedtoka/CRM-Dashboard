@@ -24,6 +24,12 @@ export function useDetailsPanel(opts: { isXl: Ref<boolean>; initialOpen: boolean
         if (opts.isXl.value && !open.value) overlay.value = true;
     }
 
+    /** Opens the details without toggling them shut (the bot-summary chip): her column if open, else the overlay; the sheet below xl. */
+    function show(): void {
+        if (!opts.isXl.value) sheet.value = true;
+        else if (!open.value) overlay.value = true;
+    }
+
     function onSelect(): void {
         overlay.value = false;
         sheet.value = false;
@@ -32,5 +38,5 @@ export function useDetailsPanel(opts: { isXl: Ref<boolean>; initialOpen: boolean
     const showColumn = computed(() => opts.isXl.value && open.value);
     const active = computed(() => (opts.isXl.value ? open.value || overlay.value : sheet.value));
 
-    return { open, overlay, sheet, showColumn, active, toggle, onWindowDelivered, onSelect };
+    return { open, overlay, sheet, showColumn, active, toggle, show, onWindowDelivered, onSelect };
 }

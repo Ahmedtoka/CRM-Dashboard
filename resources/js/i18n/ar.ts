@@ -566,6 +566,9 @@ const ar = {
         prefilled: 'اتملت من ملخص البوت، راجعيها',
         prefill_clear: 'فضّي',
         prefill_missing: 'مالقيناش: {names}',
+        prefill_size_out: 'المقاس {size} مش متاح ({product})',
+        prefill_color_out: 'اللون {color} مش متاح ({product})',
+        prefill_stock_out: '{product} مش متاح في المخزون',
         mismatch: {
             title: 'تعارض في الحالة',
             reasons: {

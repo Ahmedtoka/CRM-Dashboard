@@ -59,12 +59,15 @@ const working = computed(() => queue?.busy.value === `close-${props.entry.id}` |
 const blocked = computed(() => props.disabled || (queue?.busy.value ?? null) !== null);
 
 /* Control room S3 (D13): every close carries the chat outcome unless the server records it alone. */
+// No provider = nothing to wait for; a provider holding null = the chat's outcome state is still loading.
 const outcomeState = inject(INBOX_OUTCOME, null);
+const outcomeLoading = computed(() => outcomeState !== null && outcomeState.value === null);
 const auto = computed(() => outcomeState?.value?.auto ?? null);
 const picked = ref<AgentOutcome | null>(null);
 const note = ref('');
 const picker = ref<InstanceType<typeof OutcomePicker> | null>(null);
-const ready = computed(() => outcomeReady(picked.value, note.value, auto.value));
+/** Never a pick while the state is unknown: an ordered chat may be about to lock. */
+const ready = computed(() => !outcomeLoading.value && outcomeReady(picked.value, note.value, auto.value));
 
 // A new window starts with no pick.
 watch(
@@ -82,6 +85,7 @@ async function close(reason: QueueCloseReason, type: SupportCaseType | null = nu
 
     if (await queue.closeEntry(props.entry.id, reason, type, outcomePayload(picked.value, note.value, auto.value))) {
         caseOpen.value = false;
+        menuOpen.value = false;
         picked.value = null;
         note.value = '';
         if (bot) {
@@ -104,8 +108,16 @@ function pick(reason: QueueCloseReason): void {
     void close(reason);
 }
 
-/** A reason item: refused (menu stays open, picker focused) until the outcome is set. */
+/**
+ * A reason item: refused (menu stays open, picker focused) until the outcome is set. The menu
+ * stays open while the close is sent and closes on success; a refusal (toast) keeps her pick.
+ */
 function onReason(event: Event, reason: QueueCloseReason): void {
+    if (outcomeLoading.value) {
+        event.preventDefault();
+
+        return;
+    }
     if (!ready.value) {
         event.preventDefault();
         toast.push(t('outcomes.pick_first'), 'error');
@@ -113,6 +125,7 @@ function onReason(event: Event, reason: QueueCloseReason): void {
 
         return;
     }
+    if (reason !== 'case') event.preventDefault();
     pick(reason);
 }
 
@@ -168,7 +181,7 @@ defineExpose({
         <DropdownMenuContent align="end" class="w-72" @keydown.capture="onMenuKeydown">
             <DropdownMenuLabel class="text-xs">{{ forBot ? t('queue.close.bot_label') : t('queue.close.menu_label') }}</DropdownMenuLabel>
             <p v-if="ownerName" class="px-2 pb-1 text-2xs text-muted-foreground" dir="auto">{{ t('queue.close.not_mine', { name: ownerName }) }}</p>
-            <OutcomePicker ref="picker" v-model="picked" v-model:note="note" :auto="auto" />
+            <OutcomePicker ref="picker" v-model="picked" v-model:note="note" :auto="auto" :loading="outcomeLoading" />
             <DropdownMenuSeparator />
             <DropdownMenuItem
                 v-for="reason in reasons"

@@ -17,7 +17,7 @@ const props = withDefaults(defineProps<{ conversation: Conversation; meId: numbe
 const { t, locale } = useI18n();
 const queue = useMyQueueContext();
 /** The inbox's details panel: the bot-summary chips open it (the full summary lives there, C 2.1). */
-const details = inject<{ toggle: () => void } | null>('inboxDetails', null);
+const details = inject<{ show?: () => void } | null>('inboxDetails', null);
 
 const LAST_SECONDS = 60;
 /** The first hand-off value seen per ticket: the bar's full width (the payload has no total). */
@@ -147,7 +147,7 @@ const summary = computed(() => {
             class="inline-flex shrink-0 items-center gap-1 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             :aria-label="`${t('inbox.bot_summary.title')}: ${summary.chips.join('، ')}`"
             data-bot-summary
-            @click="details?.toggle()"
+            @click="details?.show?.()"
         >
             <Bot class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span class="sr-only">{{ t('queue.banner.bot_summary') }}: </span>

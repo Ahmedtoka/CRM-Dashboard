@@ -67,7 +67,7 @@ const emit = defineEmits<{
     openCustomer: [];
     action: [name: ConversationAction];
     /** Control room S3: «حل» outside the queue, with the picked outcome. */
-    resolve: [payload: OutcomePayload];
+    resolve: [payload: OutcomePayload, done: (error: string | null) => void];
     priority: [value: ConversationPriority];
     toggleTag: [id: number];
     claim: [];
@@ -250,7 +250,7 @@ defineExpose({
                 :disabled="busy"
                 :busy="busyAction === 'resolve'"
                 :hint="hint('inbox.resolve')"
-                @resolve="emit('resolve', $event)"
+                @resolve="(payload, done) => emit('resolve', payload, done)"
             />
             <button
                 v-else

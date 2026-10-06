@@ -6,14 +6,18 @@ const now = Date.parse('2026-10-08T10:07:00Z');
 
 describe('waitingAge', () => {
     it('is null when nothing waits or the chat is resolved', () => {
-        expect(waitingAge({ waiting_since: null, status: 'open' }, now, 300)).toBeNull();
-        expect(waitingAge({ waiting_since: '2026-10-08T10:00:00Z', status: 'resolved' }, now, 300)).toBeNull();
+        expect(waitingAge({ waiting_since: null, status: 'open', needs_human: true }, now, 300)).toBeNull();
+        expect(waitingAge({ waiting_since: '2026-10-08T10:00:00Z', status: 'resolved', needs_human: true }, now, 300)).toBeNull();
+    });
+
+    it('is null while the bot is handling her', () => {
+        expect(waitingAge({ waiting_since: '2026-10-08T10:00:00Z', status: 'open', needs_human: false }, now, 300)).toBeNull();
     });
 
     it('is late after the first-reply target', () => {
-        expect(waitingAge({ waiting_since: '2026-10-08T10:00:00Z', status: 'open' }, now, 300)).toEqual({ seconds: 420, late: true });
-        expect(waitingAge({ waiting_since: '2026-10-08T10:05:00Z', status: 'open' }, now, 300)).toEqual({ seconds: 120, late: false });
-        expect(waitingAge({ waiting_since: '2026-10-08T10:00:00Z', status: 'open' }, now, null)).toEqual({ seconds: 420, late: false });
+        expect(waitingAge({ waiting_since: '2026-10-08T10:00:00Z', status: 'open', needs_human: true }, now, 300)).toEqual({ seconds: 420, late: true });
+        expect(waitingAge({ waiting_since: '2026-10-08T10:05:00Z', status: 'open', needs_human: true }, now, 300)).toEqual({ seconds: 120, late: false });
+        expect(waitingAge({ waiting_since: '2026-10-08T10:00:00Z', status: 'open', needs_human: true }, now, null)).toEqual({ seconds: 420, late: false });
     });
 
     it('formats the age as whole minutes or hours', () => {

@@ -37,6 +37,17 @@ describe('useConversationContext', () => {
         scope.stop();
     });
 
+    it('falls back to an unknown state when the load fails, so the close is never stuck', async () => {
+        get.mockRejectedValueOnce(new Error('500'));
+        const scope = effectScope();
+        const c = scope.run(() => useConversationContext(ref(9)))!;
+        expect(c.context.value).toBeNull();
+        await flushPromises();
+        expect(c.context.value?.outcome).toEqual({ current: null, source: null, auto: null });
+        expect(c.loading.value).toBe(false);
+        scope.stop();
+    });
+
     it('holds nothing without a chat', async () => {
         const scope = effectScope();
         const c = scope.run(() => useConversationContext(ref(null)))!;

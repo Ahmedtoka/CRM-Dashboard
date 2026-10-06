@@ -4,6 +4,7 @@ import ConversationList from '@/components/crm/ConversationList.vue';
 import ConversationTagMenu from '@/components/crm/ConversationTagMenu.vue';
 import CreateOrderDrawer from '@/components/crm/CreateOrderDrawer.vue';
 import CustomerPanel from '@/components/crm/CustomerPanel.vue';
+import DetailsOverlay from '@/components/crm/DetailsOverlay.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import InlineError from '@/components/crm/InlineError.vue';
 import MyWindowsStrip from '@/components/crm/queue/MyWindowsStrip.vue';
@@ -88,10 +89,14 @@ const showDetails = details.showColumn;
 /** The sheet below xl (her toggle), the customer panel's home on a phone or a tablet. */
 const customerOpen = details.sheet;
 /** What the header's details toggle reports as pressed: the column (or its overlay) on xl, the sheet below it. */
-provide('inboxDetails', { open: details.open, active: details.active, toggle: details.toggle });
+provide('inboxDetails', { open: details.open, active: details.active, toggle: details.toggle, show: details.show });
 // Escape closes the overlay (not while a dialog or a menu has it).
 useEventListener(document, 'keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && details.overlay.value && !document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]')) {
+    if (
+        e.key === 'Escape' &&
+        details.overlay.value &&
+        !document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"]')
+    ) {
         details.overlay.value = false;
     }
 });
@@ -327,6 +332,8 @@ function sendTemplate(template: TemplatePayload): void {
 }
 
 async function runAction(name: ConversationAction): Promise<void> {
+    // `e` on a chat that is already closed: nothing to resolve (no request, no 422).
+    if (name === 'resolve' && detail.value?.conversation.status === 'resolved') return;
     // An open queue window is never ended without a reason: resolve and return-to-bot (and their
     // shortcuts, and send-and-resolve) open the reasons; somebody else's window is not hers to end.
     if (name === 'resolve' || name === 'return-to-bot') {
@@ -346,13 +353,20 @@ async function runAction(name: ConversationAction): Promise<void> {
     if (conversation) list.applyConversation(conversation);
 }
 
-/** «حل» confirmed with its outcome (control room S3). */
-async function resolveWith(payload: OutcomePayload): Promise<void> {
+/** «حل» confirmed with its outcome (control room S3); a refusal goes back to the open menu with its message. */
+async function resolveWith(payload: OutcomePayload, done: (error: string | null) => void): Promise<void> {
     const conversation = await thread.action('resolve', { ...payload });
     if (conversation) {
+        done(null);
         list.applyConversation(conversation);
         void ctx.reload();
+
+        return;
     }
+    // The menu shows the reason itself: no second copy in the thread's error strip.
+    const message = error.value ?? t('common.error');
+    thread.clearError();
+    done(message);
 }
 
 async function setPriority(value: ConversationPriority): Promise<void> {
@@ -448,6 +462,13 @@ function onCaseUpdated(updated: SupportCase): void {
     if (!detail.value) return;
     detail.value.cases = detail.value.cases.map((c) => (c.id === updated.id ? updated : c));
 }
+
+/** Control room S3 (C 5 #4): the order drawer starts from what the bot noted. */
+const orderSuggestion = computed(() => {
+    const h = ctx.context.value?.handover;
+
+    return h ? { products: h.products, sizes: h.sizes, colors: h.colors } : null;
+});
 
 /** One set of props and listeners for the three CustomerPanel homes (column, overlay, sheet), so they never drift. */
 const panelProps = computed(() =>
@@ -562,7 +583,7 @@ onBeforeUnmount(() => {
 
         <!-- Fills the space left under the header and any admin alert strip (no fixed calc). -->
         <div
-            class="relative grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background"
+            class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background"
             :class="showDetails ? 'md:grid-cols-[360px_minmax(0,1fr)_340px]' : 'md:grid-cols-[360px_minmax(0,1fr)]'"
         >
             <ConversationList
@@ -636,7 +657,13 @@ onBeforeUnmount(() => {
                     @claim="claim"
                     @window-expired="thread.silentReload().catch(() => undefined)"
                     @dismiss-error="thread.clearError"
-                />
+                >
+                    <template #overlay>
+                        <DetailsOverlay v-if="details.overlay.value && panelProps" @close="details.overlay.value = false">
+                            <CustomerPanel class="min-h-0 flex-1" v-bind="panelProps" v-on="panelListeners" />
+                        </DetailsOverlay>
+                    </template>
+                </ChatThread>
                 <div v-else-if="selectedId !== null && loadingThread" class="flex flex-1 flex-col gap-4 p-6" aria-busy="true">
                     <Skeleton class="h-10 w-1/2" />
                     <Skeleton class="h-16 w-2/3" />
@@ -652,15 +679,6 @@ onBeforeUnmount(() => {
 
             <div v-if="showDetails" class="hidden min-h-0 flex-col border-s bg-card xl:flex">
                 <CustomerPanel v-if="panelProps" class="flex-1" v-bind="panelProps" v-on="panelListeners" />
-            </div>
-            <div
-                v-else-if="details.overlay.value && panelProps"
-                class="absolute inset-y-0 end-0 z-30 hidden w-[340px] flex-col border-s bg-card shadow-xl xl:flex"
-                role="complementary"
-                :aria-label="t('thread.customer')"
-                data-details-overlay
-            >
-                <CustomerPanel class="min-h-0 flex-1" v-bind="panelProps" v-on="panelListeners" />
             </div>
         </div>
 
@@ -690,6 +708,7 @@ onBeforeUnmount(() => {
             :customer="detail.customer"
             :can-discount="canDiscount"
             :retry-order="editingOrder"
+            :suggestion="orderSuggestion"
             @created="onOrderCreated"
         />
     </AppLayout>

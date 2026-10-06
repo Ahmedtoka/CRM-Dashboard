@@ -8,6 +8,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { formatCount, formatMoney } from '@/lib/format';
+import { prefillLines, type OrderSuggestion, type PrefillMiss } from '@/lib/orderPrefill';
+import { cn } from '@/lib/utils';
 import type { Customer, Order, ProductVariant } from '@/types/crm';
 import { Minus, Plus, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
@@ -18,6 +20,8 @@ const props = defineProps<{
     canDiscount: boolean;
     /** Set to reopen the drawer prefilled from a failed order ("Edit order"). */
     retryOrder?: Order | null;
+    /** Control room S3: the bot's products / sizes / colours; the lines start from them (ignored for a retry). */
+    suggestion?: OrderSuggestion | null;
 }>();
 const open = defineModel<boolean>('open', { required: true });
 const emit = defineEmits<{ created: [order: Order] }>();
@@ -43,6 +47,21 @@ const submitting = ref(false);
 const error = ref<string | null>(null);
 // One key per open drawer, reused on every submit attempt until the drawer closes (spec ruling #1).
 const idempotencyKey = ref('');
+/** What the bot summary filled in (and what it could not find), shown above the lines. */
+const prefill = ref<{ count: number; missing: PrefillMiss[] } | null>(null);
+/** The notice lines: products not found in one line, then each size / colour / stock miss named. */
+const prefillNotes = computed(() => {
+    const missing = prefill.value?.missing ?? [];
+    const notFound = missing.filter((m) => m.reason === 'product').map((m) => m.product);
+    const out = notFound.length ? [t('order.prefill_missing', { names: notFound.join('، ') })] : [];
+    for (const m of missing) {
+        if (m.reason === 'size') out.push(t('order.prefill_size_out', { size: m.value ?? '', product: m.product }));
+        else if (m.reason === 'color') out.push(t('order.prefill_color_out', { color: m.value ?? '', product: m.product }));
+        else if (m.reason === 'stock') out.push(t('order.prefill_stock_out', { product: m.product }));
+    }
+
+    return out;
+});
 
 // The server requires a real UUID; `crypto.randomUUID` needs a secure context (HTTPS or
 // localhost), which a plain-HTTP LAN IP is not, so this falls back to building a v4 UUID
@@ -63,6 +82,7 @@ watch(open, (isOpen) => {
     if (!isOpen) return;
     idempotencyKey.value = newKey();
     error.value = null;
+    prefill.value = null;
 
     const retry = props.retryOrder;
     const c = props.customer;
@@ -110,8 +130,27 @@ watch(open, (isOpen) => {
         discount.type = 'fixed';
         discount.value = 0;
         discount.reason = '';
+
+        const s = props.suggestion;
+        if (s && s.products.length) {
+            const openedFor = idempotencyKey.value;
+            void prefillLines(
+                (q) => api.get<{ data: ProductVariant[] }>('/products/search', { params: { q }, silent: true }).then((r) => r.data.data),
+                s,
+            ).then((r) => {
+                // Still the same drawer, and she has not started picking by hand.
+                if (!open.value || idempotencyKey.value !== openedFor || lines.value.length) return;
+                lines.value = r.variants.map((variant) => ({ variant, qty: 1 }));
+                prefill.value = { count: r.variants.length, missing: r.missing };
+            });
+        }
     }
 });
+
+function clearPrefill(): void {
+    lines.value = [];
+    prefill.value = null;
+}
 
 function add(variant: ProductVariant): void {
     const line = lines.value.find((l) => l.variant.id === variant.id);
@@ -185,6 +224,18 @@ const stepper = 'flex size-7 items-center justify-center hover:bg-muted disabled
             <div class="scrollbar-thin min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
                 <section>
                     <p :class="label">{{ t('order.items') }}</p>
+                    <p
+                        v-if="prefill && (prefill.count || prefill.missing.length)"
+                        class="mb-2 flex flex-wrap items-center gap-2 rounded-md bg-surface-accent px-2 py-1.5 text-2xs"
+                        role="status"
+                        data-order-prefill
+                    >
+                        <span v-if="prefill.count">{{ t('order.prefilled') }}</span>
+                        <span v-for="line in prefillNotes" :key="line" class="text-muted-foreground" dir="auto">{{ line }}</span>
+                        <button v-if="prefill.count" type="button" class="ms-auto font-medium text-primary hover:underline" @click="clearPrefill">
+                            {{ t('order.prefill_clear') }}
+                        </button>
+                    </p>
                     <OrderProductPicker @add="add" />
                     <ul v-if="lines.length" class="mt-3 divide-y divide-border rounded-md border border-border">
                         <li v-for="line in lines" :key="line.variant.id" class="flex items-center gap-2 px-2.5 py-2">
