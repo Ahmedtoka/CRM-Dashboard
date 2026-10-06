@@ -28,7 +28,7 @@ const NO_PAGE_HEADER = new Set([
 
 describe('S0 kit adoption', () => {
     it('sees all 62 pages and only real ones are listed', () => {
-        expect(Object.keys(pages)).toHaveLength(62);
+        expect(Object.keys(pages)).toHaveLength(64); // + Ads/Launches, Ads/Approvals (S1)
         for (const name of SWEPT) expect(pages[name], name).toBeDefined();
     });
 

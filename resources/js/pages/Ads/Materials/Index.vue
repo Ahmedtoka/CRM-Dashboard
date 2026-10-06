@@ -6,6 +6,8 @@ import MaterialLightbox from '@/components/ads/MaterialLightbox.vue';
 import MaterialStatusChip from '@/components/ads/MaterialStatusChip.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PublicationsList from '@/components/ads/PublicationsList.vue';
+import LaunchEditor from '@/components/ads/launch/LaunchEditor.vue';
+import LaunchStateChip from '@/components/ads/launch/LaunchStateChip.vue';
 import PublishDialog from '@/components/ads/PublishDialog.vue';
 import WinnerBadge from '@/components/ads/WinnerBadge.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -49,6 +51,7 @@ import {
     Play,
     Plus,
     Rocket,
+    Send,
     Sparkles,
     Search,
     Square,
@@ -239,6 +242,13 @@ function createFromCaptions(captions: PublishCaption[], fileId: number): void {
 }
 const publications = ref<MaterialRow | null>(null);
 const publicationsOpen = computed({ get: () => publications.value !== null, set: (v) => !v && (publications.value = null) });
+
+/* ---- launches (S1) ---- */
+const preparing = ref<MaterialRow | null>(null);
+const prepareOpen = computed({ get: () => preparing.value !== null, set: (v) => !v && (preparing.value = null) });
+function launchSaved(): void {
+    router.reload({ only: ['materials', 'stats'] });
+}
 
 /* ---- delete ---- */
 const deleting = ref<MaterialRow | null>(null);
@@ -543,7 +553,16 @@ const breadcrumbs = computed(() => [
                                     <StatusChip v-for="ty in m.types" :key="ty" :label="typeLabel(ty)" tone="info" />
                                 </div>
                             </td>
-                            <td class="px-2 py-2.5"><MaterialStatusChip :status="m.status" /></td>
+                            <td class="px-2 py-2.5">
+                                <MaterialStatusChip :status="m.status" />
+                                <ul v-if="m.launches?.length" class="mt-1 space-y-0.5">
+                                    <li v-for="l in m.launches" :key="l.id">
+                                        <Link :href="`/ads/launches?material=${m.id}&box=all&launch=${l.id}`" class="inline-flex items-center gap-1 text-2xs hover:underline">
+                                            <LaunchStateChip :state="l.state" /><span class="truncate text-muted-foreground">{{ l.adset }}</span>
+                                        </Link>
+                                    </li>
+                                </ul>
+                            </td>
                             <td class="px-2 py-2.5">
                                 <div class="flex flex-col items-start gap-1">
                                     <span
@@ -589,7 +608,18 @@ const breadcrumbs = computed(() => [
                                         <Sparkles class="size-4" aria-hidden="true" />
                                     </button>
                                     <button
-                                        v-if="perms.canOperate.value"
+                                        v-if="perms.canPrepare.value"
+                                        type="button"
+                                        :class="cn(iconBtn, 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/20')"
+                                        :aria-label="t('ads.launch.prepare')"
+                                        :title="t('ads.launch.prepare')"
+                                        :disabled="!m.files?.length || !m.product"
+                                        @click="preparing = m"
+                                    >
+                                        <Rocket class="size-4" aria-hidden="true" />
+                                    </button>
+                                    <button
+                                        v-if="perms.canDirectPublish.value"
                                         type="button"
                                         :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
                                         :aria-label="t('ads.publish.button')"
@@ -597,7 +627,7 @@ const breadcrumbs = computed(() => [
                                         :disabled="!m.files?.length"
                                         @click="publishing = m"
                                     >
-                                        <Rocket class="size-4" aria-hidden="true" />
+                                        <Send class="size-4" aria-hidden="true" />
                                     </button>
                                     <button
                                         v-if="perms.canOperate.value"
@@ -701,7 +731,7 @@ const breadcrumbs = computed(() => [
             </DialogContent>
         </Dialog>
 
-        <CaptionsDialog v-if="captioning" v-model:open="captionsOpen" :material="captioning" :can-publish="perms.canOperate.value" @create="createFromCaptions" />
+        <CaptionsDialog v-if="captioning" v-model:open="captionsOpen" :material="captioning" :can-publish="perms.canDirectPublish.value" @create="createFromCaptions" />
         <PublishDialog v-if="publishing" v-model:open="publishOpen" :material="publishing" :captions="publishCaptions" :file-ids="publishFileIds" @published="publications = publishing" />
 
         <Dialog v-model:open="publicationsOpen">
@@ -721,5 +751,6 @@ const breadcrumbs = computed(() => [
             destructive
             @submit="confirmDelete"
         />
+        <LaunchEditor v-if="preparing" v-model:open="prepareOpen" :material="preparing" mode="content" @saved="launchSaved" />
     </AppLayout>
 </template>
