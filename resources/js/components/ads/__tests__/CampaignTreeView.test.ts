@@ -1,9 +1,10 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@inertiajs/vue3', () => ({ router: { reload: vi.fn() }, usePage: () => ({ props: { ads: { canWrite: true } } }) }));
 
 import CampaignTreeView from '@/components/ads/CampaignTreeView.vue';
+import { setCurrentLocale } from '@/composables/useI18n';
 import { adStatusLabel } from '@/lib/ads';
 import type { CampaignNode } from '@/types/ads';
 
@@ -13,6 +14,8 @@ const node = (level: CampaignNode['level'], id: number, children: CampaignNode[]
         level, placeholder: false, id, ad_id: level === 'ad' ? id : undefined, external_id: String(id), account_id: 1, account: 'LV', platform: 'meta', name: `${level} ${id}`,
         status: 'ACTIVE', objective: null, naming_ok: true, parent_paused: false, can_write: true, metrics, children, ...over,
     }) as CampaignNode;
+
+beforeAll(() => setCurrentLocale('en'));
 
 const tree = [node('campaign', 12, [node('adset', 40, [node('ad', 7)])], { naming_ok: false })];
 
@@ -37,6 +40,24 @@ describe('CampaignTreeView', () => {
         const w = mount(CampaignTreeView, { props: { nodes: tree, open: ['c:12'] }, global: { stubs: { AdStatusButton: true } } });
         await w.find('[data-test="toggle-c:12"]').trigger('click');
         expect(w.emitted('update:open')?.[0]).toEqual([[]]);
+    });
+});
+
+describe('CampaignTreeView returns', () => {
+    it('shows real ROAS as the figure with Meta small, and a dash without real revenue (D10)', () => {
+        const nodes = [node('campaign', 1, [], { metrics: { ...metrics, roas: 3, real_roas: 2.5, real_revenue: 285 } }), node('campaign', 2, [], { metrics: { ...metrics, roas: 3, real_roas: null } })];
+        const w = mount(CampaignTreeView, { props: { nodes, open: [] }, global: { stubs: { AdStatusButton: true } } });
+        const real = w.findAll('[data-test="real-roas"]');
+        expect(real[0].text()).toContain('2.50');
+        expect(real[1].text()).toContain('—');
+        expect(w.findAll('[data-test="meta-roas"]')[0].text()).toContain('3.00');
+    });
+
+    it('names the toggle with its verb', () => {
+        const w = mount(CampaignTreeView, { props: { nodes: tree, open: [] }, global: { stubs: { AdStatusButton: true } } });
+        expect(w.find('[data-test="toggle-c:12"]').attributes('aria-label')).toBe('Expand campaign 12');
+        const o = mount(CampaignTreeView, { props: { nodes: tree, open: ['c:12'] }, global: { stubs: { AdStatusButton: true } } });
+        expect(o.find('[data-test="toggle-c:12"]').attributes('aria-label')).toBe('Collapse campaign 12');
     });
 });
 

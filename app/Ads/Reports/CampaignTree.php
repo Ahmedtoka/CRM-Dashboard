@@ -40,8 +40,10 @@ final class CampaignTree
         $adSets = AdSet::query()->whereIn('id', $ads->pluck('ad_set_id')->filter()->unique()->all())->get()->keyBy('id');
         $campaignIds = $ads->pluck('ad_campaign_id')->merge($adSets->pluck('ad_campaign_id'))->filter()->unique()->all();
         $campaigns = AdCampaign::query()->whereIn('id', $campaignIds)->get()->keyBy('id');
-        $accounts = AdAccount::query()->whereIn('id', $ads->pluck('ad_account_id')->unique()->all())->get(['id', 'name', 'platform'])->keyBy('id');
-        $real = $this->q->orders($f)->whereNotNull('ad_id')->countBy('ad_id');
+        $accounts = AdAccount::query()->whereIn('id', $ads->pluck('ad_account_id')->unique()->all())->get(['id', 'name', 'platform', 'currency'])->keyBy('id');
+        $orders = $this->q->orders($f)->whereNotNull('ad_id');
+        $real = $orders->countBy('ad_id');
+        $revenue = $orders->groupBy('ad_id')->map(fn ($o) => (float) $o->sum('net'));
         $trends = $this->insights->forAds($sums->keys()->all(), $f->to);
 
         // campaign id => ad set id => ad id => raw sums (0 = no campaign / no ad set)
@@ -72,6 +74,8 @@ final class CampaignTree
                     $ad = $ads->get($adId);
                     $adAccount = $accounts->get($ad->ad_account_id);
                     $count = (int) ($real[$adId] ?? 0);
+                    $rev = round((float) ($revenue[$adId] ?? 0), 2);
+                    $egp = AdDailySeries::isEgp($adAccount?->currency);
                     $adNodes[] = [
                         'level' => 'ad', 'placeholder' => false, 'id' => $adId, 'ad_id' => $adId, 'external_id' => (string) $ad->external_id,
                         'account_id' => (int) $ad->ad_account_id, 'account' => (string) ($adAccount?->name ?? ''),
@@ -79,10 +83,10 @@ final class CampaignTree
                         'name' => (string) $ad->name, 'status' => $ad->status, 'objective' => null,
                         'parent_paused' => AdWriteService::statusKind($adSets->get($setId)?->status) === 'paused' || AdWriteService::statusKind($campaign?->status) === 'paused',
                         'naming_ok' => true,
-                        'metrics' => $this->metrics($s, $count),
+                        'metrics' => $this->metrics($s, $count, $rev, $egp),
                         'trend' => $trends[$adId]['trend'] ?? null,
                         'children' => [],
-                        '_raw' => $s, '_real' => $count,
+                        '_raw' => $s, '_real' => $count, '_rev' => $rev, '_egp' => $egp,
                     ];
                 }
                 $adSet = $adSets->get($setId);
@@ -102,21 +106,26 @@ final class CampaignTree
     {
         $raw = [];
         $real = 0;
+        $rev = 0.0;
+        $egp = true;
         foreach ($children as $c) {
             foreach ((array) $c['_raw'] as $k => $v) {
                 $raw[$k] = ($raw[$k] ?? 0) + $v;
             }
             $real += $c['_real'];
+            $rev += $c['_rev'];
+            $egp = $egp && $c['_egp'];
         }
+        $rev = round($rev, 2);
 
         return [
             'level' => $level, 'placeholder' => $model === null, 'id' => (int) ($model?->id ?? 0), 'external_id' => (string) ($model?->external_id ?? ''),
             'account_id' => $accountId, 'account' => (string) ($account?->name ?? ''), 'platform' => (string) ($account?->platform ?? ''),
             'name' => (string) ($model?->name ?? ''), 'status' => $model?->status, 'objective' => $objective, 'parent_paused' => false,
             'naming_ok' => $namingOk,
-            'metrics' => $this->metrics($raw, $real),
+            'metrics' => $this->metrics($raw, $real, $rev, $egp),
             'children' => $children,
-            '_raw' => $raw, '_real' => $real,
+            '_raw' => $raw, '_real' => $real, '_rev' => $rev, '_egp' => $egp,
         ];
     }
 
@@ -124,9 +133,12 @@ final class CampaignTree
      * @param  array<string, mixed>|object  $raw
      * @return array<string, mixed>
      */
-    private function metrics(array|object $raw, int $real): array
+    private function metrics(array|object $raw, int $real, float $revenue, bool $egp): array
     {
-        return $this->q->derive($raw) + ['real_orders' => $real];
+        $d = $this->q->derive($raw);
+
+        // Real ROAS = store revenue (EGP) / spend: null on a non-EGP account, like the ad rows (A9).
+        return $d + ['real_orders' => $real, 'real_revenue' => $revenue, 'real_roas' => $egp ? AdsQuery::ratio($revenue, $d['spend'], 2) : null];
     }
 
     /**
@@ -162,7 +174,7 @@ final class CampaignTree
     private function finish(array $nodes): array
     {
         foreach ($nodes as &$n) {
-            unset($n['_raw'], $n['_real']);
+            unset($n['_raw'], $n['_real'], $n['_rev'], $n['_egp']);
             $n['children'] = $this->finish($n['children']);
         }
 

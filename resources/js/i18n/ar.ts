@@ -3743,7 +3743,7 @@ const ar = {
                 spend_days: 'اتصرف {amount} في آخر ١٤ يوم', empty_open: 'مفيش قرارات مفتوحة دلوقتي', empty_snoozed: 'مفيش حاجة مأجّلة', empty_closed: 'مفيش حاجة اتقفلت لسه',
                 empty_log: 'مفيش تغييرات في السجل', log_at: 'الوقت', log_who: 'مين', log_level: 'المستوى', log_result: 'النتيجة', any: 'الكل', result_ok: 'تم', result_error: 'فشل', result_pending: 'لسه',
             },
-            explorer: { title: 'الإعلانات', description: 'كل الإعلانات في مكان واحد: جدول أو كروت أو شجرة الحملات', empty: 'مفيش إعلانات بالفلاتر دي', totals: 'الإجمالي', per_page: 'في الصفحة', page: 'صفحة {n} من {total}', prev: 'السابق', next: 'التالي', naming_bad: 'الاسم مش على النظام', naming_hint: 'اسم الحملة مش ماشي على نظام التسمية المتفق عليه', tiers: 'التصنيف', tier_top: 'الكسبان والواعد', tier_all: 'كل اللي اتقيّموا' },
+            explorer: { title: 'الإعلانات', description: 'كل الإعلانات في مكان واحد: جدول أو كروت أو شجرة الحملات', empty: 'مفيش إعلانات بالفلاتر دي', totals: 'الإجمالي', per_page: 'في الصفحة', page: 'صفحة {n} من {total}', prev: 'السابق', next: 'التالي', naming_bad: 'الاسم مش على النظام', naming_hint: 'اسم الحملة مش ماشي على نظام التسمية المتفق عليه', tiers: 'التصنيف', tier_top: 'الكسبان والواعد', tier_all: 'كل اللي اتقيّموا', expand: 'افتح {name}', collapse: 'اقفل {name}' },
             numbers: {
                 title: 'الأرقام', description: 'تقرير الفترة: الصرف والأوردرات والعائد', hero_spend: 'اتصرف', hero_real_orders: 'أوردرات حقيقية', hero_real_roas: 'عائد حقيقي',
                 hero_meta_roas: 'عائد ميتا', hero_losers: 'على إعلانات خسرانة', more: 'باقي الأرقام', less: 'خبّي باقي الأرقام', daily: 'يوم بيوم', accounts: 'الحسابات',

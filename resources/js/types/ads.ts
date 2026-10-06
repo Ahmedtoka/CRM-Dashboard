@@ -350,6 +350,10 @@ export interface AdsCreativesProps extends AdsCommonProps {
 /** CampaignTree::build — Metrics = AdsQuery::derive plus the ad-attributed real orders. */
 export interface CampaignMetrics extends AdsDerived {
     real_orders: number;
+    /** Store revenue of the orders the node's ads brought (EGP). */
+    real_revenue?: number;
+    /** real_revenue / spend; null off EGP or without spend. */
+    real_roas?: number | null;
 }
 
 /** A node of the campaign tree. id 0 = the placeholder for ads without a campaign / ad set. Ad nodes carry ad_id and trend. */
@@ -962,7 +966,8 @@ export interface AdsExplorerResult {
     data: AdRowData[];
     meta: { total: number; per_page: number; current_page: number; last_page: number };
     counts: { all: number; active: number; inactive: number };
-    totals: AdsDerived;
+    /** Over every matched ad (not just the page); real_roas null when an account is not EGP. */
+    totals: AdsDerived & { real_orders: number; real_revenue: number; real_roas: number | null };
 }
 
 export interface AdsExplorerProps extends AdsPageBase {

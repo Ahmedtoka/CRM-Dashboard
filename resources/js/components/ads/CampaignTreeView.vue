@@ -37,7 +37,7 @@ function toggle(key: string): void {
                 <tr>
                     <th scope="col" class="px-3 py-2 text-start">{{ t('ads.control.col.creative') }}</th>
                     <th scope="col" class="px-3 py-2 text-end">{{ t('ads.control.col.spend') }}</th>
-                    <th scope="col" class="px-3 py-2 text-end">{{ t('ads.control.today.meta_roas') }}</th>
+                    <th scope="col" class="px-3 py-2 text-end">{{ t('ads.control.col.return') }}</th>
                     <th scope="col" class="px-3 py-2 text-end">{{ t('ads.control.col.status') }}</th>
                 </tr>
             </thead>
@@ -51,7 +51,7 @@ function toggle(key: string): void {
                                 :data-test="`toggle-${r.key}`"
                                 class="inline-flex size-7 shrink-0 items-center justify-center rounded hover:bg-muted"
                                 :aria-expanded="open.includes(r.key)"
-                                :aria-label="r.node.name || t(`ads.campaigns.level_${r.node.level}`)"
+                                :aria-label="t(open.includes(r.key) ? 'ads.control.explorer.collapse' : 'ads.control.explorer.expand', { name: r.node.name || t(`ads.campaigns.level_${r.node.level}`) })"
                                 @click="toggle(r.key)"
                             >
                                 <ChevronRight class="rtl-flip size-3.5 transition-transform" :class="open.includes(r.key) ? 'rotate-90 rtl:-rotate-90' : ''" aria-hidden="true" />
@@ -80,7 +80,11 @@ function toggle(key: string): void {
                         </div>
                     </td>
                     <td class="px-3 py-2 text-end tabular-nums">{{ formatAdsMoney(r.node.metrics.spend_tax, locale, currency) }}</td>
-                    <td class="px-3 py-2 text-end tabular-nums">{{ formatRoas(r.node.metrics.roas, locale) }}</td>
+                    <td class="px-3 py-2 text-end tabular-nums">
+                        <!-- D10: real ROAS is the figure; Meta's own ROAS stays small under it. -->
+                        <span data-test="real-roas" class="block text-sm font-semibold"><span class="sr-only">{{ t('ads.control.row.real') }} </span>{{ formatRoas(r.node.metrics.real_roas ?? null, locale) }}</span>
+                        <span data-test="meta-roas" class="block text-2xs text-muted-foreground">{{ t('ads.control.row.meta') }} {{ formatRoas(r.node.metrics.roas, locale) }}</span>
+                    </td>
                     <td class="px-3 py-2">
                         <div class="flex items-center justify-end gap-2">
                             <span class="whitespace-nowrap text-2xs text-muted-foreground">{{ adStatusLabel(r.node.status, t) }}</span>

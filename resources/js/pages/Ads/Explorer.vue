@@ -180,7 +180,10 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2';
                         <td v-for="c in columns" :key="c.key" class="px-3 py-2 text-xs" :class="c.numeric ? 'text-end tabular-nums' : ''">
                             <template v-if="c.key === 'creative'">{{ t('ads.control.explorer.totals') }}</template>
                             <template v-else-if="c.key === 'spend'">{{ money(result.totals.spend_tax) }}</template>
-                            <template v-else-if="c.key === 'return'">{{ t('ads.control.row.meta') }} {{ formatRoas(result.totals.roas, locale) }}</template>
+                            <template v-else-if="c.key === 'return'">
+                                <span data-test="totals-real-roas" class="block text-sm font-semibold">{{ formatRoas(result.totals.real_roas, locale) }}</span>
+                                <span class="block text-2xs font-normal text-muted-foreground">{{ t('ads.control.row.meta') }} {{ formatRoas(result.totals.roas, locale) }}</span>
+                            </template>
                         </td>
                     </tr>
                 </template>
