@@ -237,3 +237,8 @@ export function newIdempotencyKey(): string {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
 }
+
+/** Meta Ads Manager deep link for one ad; null for other platforms. */
+export function adsManagerUrl(ad: { platform: string; external_id: string }): string | null {
+    return ad.platform === 'meta' ? `https://www.facebook.com/adsmanager/manage/ads?selected_ad_ids=${encodeURIComponent(ad.external_id)}` : null;
+}
