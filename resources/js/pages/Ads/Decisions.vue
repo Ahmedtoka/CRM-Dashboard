@@ -125,6 +125,7 @@ const selectClass = 'h-9 rounded-md border border-input bg-background px-2 text-
                                     :status="s.status"
                                     :can-write="s.can_write ?? false"
                                     :reason="reasonLine(s)"
+                                    :spend-today="s.spend_today"
                                     :data-at="freshness"
                                     :currency="currency"
                                     size="md"

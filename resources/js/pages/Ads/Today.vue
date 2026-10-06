@@ -105,6 +105,7 @@ const listHref = (list: (typeof LISTS)[number]) =>
                                 :status="s.status"
                                 :can-write="s.can_write ?? false"
                                 :reason="reasonLine(s)"
+                                :spend-today="s.spend_today"
                                 :data-at="freshness"
                                 :currency="currency"
                             />

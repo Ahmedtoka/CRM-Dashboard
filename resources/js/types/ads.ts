@@ -249,6 +249,8 @@ export interface AdsBuyerShowProps extends AdsCommonProps {
     /** BuildsAdsPages::filterProps without the request: range key and an empty accounts list. */
     filters: AdsFilters & { range: AdsRangeKey | null; accounts: number[] };
     buyer: { id: number; name: string; color: string | null };
+    /** Oldest last sync of the accounts in scope (data age for the Stop dialog). */
+    freshness: string | null;
     detail: BuyerDetail;
     summary: AdsRevenueSummary;
 }
@@ -782,6 +784,8 @@ export interface AdSuggestion {
     thumbnail_url: string | null;
     campaign: string | null;
     status: string | null;
+    /** Pre-tax spend today (Cairo), shown in the Stop dialog. */
+    spend_today: number;
 }
 
 /** One ad_write_actions row on the log (slice-1 rows are copied in as legacy rows). */

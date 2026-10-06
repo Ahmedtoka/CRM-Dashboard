@@ -146,7 +146,7 @@ const crumbs = computed(() => [{ label: t('nav.ads_numbers'), href: '/ads/number
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
-            <PageHeader :title="buyer.name" :description="t('ads.buyers.show_hint')" :breadcrumbs="crumbs" />
+            <PageHeader :title="buyer.name" :description="t('ads.buyers.show_hint')" :breadcrumbs="crumbs" :freshness="freshness" />
             <AdsFilterBar
                 :path="`/ads/buyers/${buyer.id}`"
                 :filters="filters"
@@ -272,6 +272,6 @@ const crumbs = computed(() => [{ label: t('nav.ads_numbers'), href: '/ads/number
             </div>
         </div>
 
-        <AdDrawer :ad-id="drawer.adId.value" :filters="filters" :currency="currency" @close="drawer.close" />
+        <AdDrawer :ad-id="drawer.adId.value" :filters="filters" :currency="currency" :data-at="freshness" @close="drawer.close" />
     </AppLayout>
 </template>
