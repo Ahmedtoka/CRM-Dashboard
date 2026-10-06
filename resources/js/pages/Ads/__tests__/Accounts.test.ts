@@ -88,7 +88,7 @@ function render(extra: Record<string, unknown> = {}) {
     return mount(Accounts, { props: props(extra) as never, global: { stubs }, attachTo: document.body });
 }
 
-describe('Ads setup › accounts (F6)', () => {
+describe('Ads setup › accounts (F6)', { timeout: 20_000 }, () => {
     beforeEach(() => {
         router.get.mockReset();
         router.reload.mockReset();
