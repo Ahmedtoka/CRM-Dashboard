@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button';
 import ChannelCard from '@/components/crm/ChannelCard.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
@@ -207,9 +207,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.channels.title'), href:
                     <template #cell-error="{ row }"><span class="line-clamp-2 max-w-md break-words text-destructive" dir="ltr">{{ row.error ?? '—' }}</span></template>
                     <template #cell-created_at="{ row }"><span class="whitespace-nowrap tabular-nums text-muted-foreground">{{ formatDateTime(row.created_at, locale) }}</span></template>
                     <template #cell-actions="{ row }">
-                        <Button variant="outline" class="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 hover:bg-muted disabled:opacity-50 text-[length:inherit]" type="button" :disabled="busyEvent !== null" @click="reprocess(row)" :loading="busyEvent === row.id">
-                            <RotateCw class="size-3" aria-hidden="true" />{{ t('settings.channels.reprocess') }}
-                        </Button>
+                        <IconAction :icon="RotateCw" size="sm" variant="outline" :label="t('settings.channels.reprocess')" :disabled="busyEvent !== null" :loading="busyEvent === row.id" @click="reprocess(row)" />
                     </template>
                 </DataTable>
             </section>

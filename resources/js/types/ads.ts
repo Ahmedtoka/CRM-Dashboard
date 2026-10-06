@@ -462,7 +462,11 @@ export interface AdAccountRow {
     last_synced_at: string | null;
     buyer: AdsOption | null;
     history: AdAssignmentPeriod[];
-    spend_30d: number;
+    platform: AdPlatformValue;
+    /** Spend in the page's range, in the account currency. */
+    spend: number;
+    /** The latest finished sync (ok or error); null before the first one. */
+    last_run: { status: 'ok' | 'error'; error: string | null; finished_at: string | null } | null;
 }
 
 export interface AdTokenHealth {
@@ -563,10 +567,45 @@ export interface AdsAccountsProps {
     connections: AdConnectionRow[];
     /** Share of the last `days` days' chat orders that carry a conversation; rate is null with no chat orders. */
     link_rate: { rate: number | null; orders: number; linked: number; days: number };
-    /** Ids of accounts with a sync running or waiting in the queue. */
-    syncing: number[];
+    /** Syncs going when the page opened: `accounts` this user started (resumed from the server's `since`), `others` the schedule's or a colleague's. */
+    sync_resume: { since: string; accounts: number[]; others: number };
     buyers: AdBuyerOption[];
     platforms: AdPlatformDefinition[];
+    /** Applied filter: range (default this Cairo month) and picked accounts (empty = all). */
+    filters: { from: string; to: string; accounts: number[] };
+    summary: AdsAccountsSummary;
+    /** Every account, for the filter and the sync picker. */
+    account_options: { id: number; name: string; platform: AdPlatformValue; can_sync: boolean }[];
+}
+
+export interface AdsAccountsSummary {
+    accounts: number;
+    active: number;
+    /** Spend in range per currency. */
+    spend: { currency: string; amount: number }[];
+    last_sync: string | null;
+    errors: number;
+}
+
+/** AccountController::syncStatus — one account of the running «سنك». */
+export type AdSyncState = 'queued' | 'running' | 'retrying' | 'done' | 'error' | 'skipped';
+export interface AdSyncStatusRow {
+    id: number;
+    name: string;
+    platform: AdPlatformValue;
+    state: AdSyncState;
+    error: string | null;
+}
+export interface AdSyncStatusResponse {
+    accounts: AdSyncStatusRow[];
+    done: number;
+    total: number;
+    finished: boolean;
+}
+export interface AdSyncStartResponse {
+    since: string;
+    accounts: number[];
+    errors: { connection: string; message: string }[];
 }
 
 export interface AdBuyerTarget {

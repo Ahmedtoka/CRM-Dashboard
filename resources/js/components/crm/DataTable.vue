@@ -2,12 +2,11 @@
 import EmptyState from '@/components/crm/EmptyState.vue';
 import SkeletonList from '@/components/crm/SkeletonList.vue';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useDensity, type Density } from '@/composables/useDensity';
 import { useI18n } from '@/composables/useI18n';
 import { formatCount } from '@/lib/format';
 import { nextSort, parseSort } from '@/lib/sort';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-vue-next';
-import { computed, ref, type Component } from 'vue';
+import { computed, type Component } from 'vue';
 
 export interface Column {
     key: string;
@@ -42,7 +41,7 @@ const props = withDefaults(
         sort?: string | null;
         stickyHeader?: boolean;
         stickyFirstColumn?: boolean;
-        /** Remembers density per table (localStorage) and shows the مريح / مضغوط toggle. */
+        /** A stable hook on the table box (`data-table-id`) for tests and screenshots. */
         tableId?: string;
         skeletonRows?: number;
         selectable?: boolean;
@@ -67,20 +66,12 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{ rowClick: [row: T]; 'update:sort': [sort: string] }>();
-const densityModel = defineModel<Density>('density');
 const selected = defineModel<RowId[]>('selected', { default: () => [] });
 
 const { t, locale } = useI18n();
 
-const stored = props.tableId ? useDensity(props.tableId) : ref<Density>('comfortable');
-const density = computed<Density>({
-    get: () => densityModel.value ?? stored.value,
-    set: (value) => {
-        stored.value = value;
-        densityModel.value = value;
-    },
-});
-const cellPad = computed(() => (density.value === 'compact' ? 'px-2 py-1' : 'px-3 py-2'));
+/** One comfortable spacing for every table (the مريح / مضغوط toggle is gone, F7). */
+const cellPad = 'px-3 py-2';
 
 const sortState = computed(() => parseSort(props.sort));
 const showSkeleton = computed(() => props.loading && props.rows.length === 0);
@@ -141,22 +132,8 @@ function defaultCell(row: T, key: string): unknown {
 
 <template>
     <div class="min-w-0">
-        <div v-if="tableId || $slots.toolbar" class="mb-2 flex items-center gap-2">
+        <div v-if="$slots.toolbar" class="mb-2 flex items-center gap-2">
             <slot name="toolbar" />
-            <div v-if="tableId" class="ms-auto hidden items-center rounded-full border border-border bg-card p-0.5 text-2xs font-medium md:inline-flex" role="group" :aria-label="t('table.density')">
-                <button
-                    v-for="option in ['comfortable', 'compact'] as const"
-                    :key="option"
-                    type="button"
-                    class="rounded-full px-2.5 py-1"
-                    :class="density === option ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
-                    :aria-pressed="density === option"
-                    :data-density-option="option"
-                    @click="density = option"
-                >
-                    {{ t(`table.density_${option}`) }}
-                </button>
-            </div>
         </div>
 
         <template v-if="mobile === 'cards'">
@@ -191,10 +168,11 @@ function defaultCell(row: T, key: string): unknown {
 
         <div
             data-table-box
+            :data-table-id="tableId"
             class="scrollbar-thin relative rounded-lg bg-card shadow-card"
             :class="[stickyHeader ? 'table-scroll-box' : 'overflow-x-auto', mobile === 'cards' ? 'hidden md:block' : '']"
         >
-            <table class="w-full text-xs" :aria-busy="loading" :data-density="density">
+            <table class="w-full text-xs" :aria-busy="loading">
                 <caption v-if="caption" class="sr-only">{{ caption }}</caption>
                 <thead class="bg-card text-2xs font-semibold text-muted-foreground" :class="stickyHeader ? 'crm-sticky-head' : 'border-b border-border/60'">
                     <tr>

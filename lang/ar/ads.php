@@ -11,6 +11,11 @@ return [
         'loser' => 'وقّفه أو غيّر الكرييتف',
         'neutral' => 'راقبه',
     ],
+    // F6: why the setup page's sync skipped a connection's accounts.
+    'sync_skip' => [
+        'disabled' => 'الربط ده موقوف، حساباته مش بتتسحب.',
+        'needs_reconnect' => 'الربط محتاج توكن جديد، حساباته مش بتتسحب لحد ما يتربط تاني.',
+    ],
     'flash' => [
         'stopped' => 'اتوقف.',
         'resumed' => 'اشتغل تاني.',

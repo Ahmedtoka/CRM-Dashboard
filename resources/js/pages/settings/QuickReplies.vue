@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import StarterEmptyState from '@/components/crm/StarterEmptyState.vue';
@@ -155,18 +156,8 @@ const breadcrumbs = computed(() => [{ title: t('settings.quick_replies.title'), 
                     <template #cell-creator="{ row }">{{ row.creator?.name ?? '—' }}</template>
                     <template v-if="canManageShared" #cell-actions="{ row }">
                         <span class="inline-flex gap-0.5">
-                            <button type="button" class="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" :title="t('ui.edit')" :aria-label="`${t('ui.edit')} ${row.title}`" @click="openEdit('shared', row)">
-                                <Pencil class="size-3.5" />
-                            </button>
-                            <button
-                                type="button"
-                                class="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
-                                :title="t('ui.delete')"
-                                :aria-label="`${t('ui.delete')} ${row.title}`"
-                                @click="remove('shared', row)"
-                            >
-                                <Trash2 class="size-3.5" />
-                            </button>
+                            <IconAction :icon="Pencil" size="sm" :label="`${t('ui.edit')} ${row.title}`" @click="openEdit('shared', row)" />
+                            <IconAction :icon="Trash2" size="sm" variant="destructive" :label="`${t('ui.delete')} ${row.title}`" @click="remove('shared', row)" />
                         </span>
                     </template>
                 </DataTable>
@@ -201,18 +192,8 @@ const breadcrumbs = computed(() => [{ title: t('settings.quick_replies.title'), 
                     <template #cell-creator="{ row }">{{ row.creator?.name ?? '—' }}</template>
                     <template #cell-actions="{ row }">
                         <span class="inline-flex gap-0.5">
-                            <button type="button" class="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" :title="t('ui.edit')" :aria-label="`${t('ui.edit')} ${row.title}`" @click="openEdit('personal', row)">
-                                <Pencil class="size-3.5" />
-                            </button>
-                            <button
-                                type="button"
-                                class="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
-                                :title="t('ui.delete')"
-                                :aria-label="`${t('ui.delete')} ${row.title}`"
-                                @click="remove('personal', row)"
-                            >
-                                <Trash2 class="size-3.5" />
-                            </button>
+                            <IconAction :icon="Pencil" size="sm" :label="`${t('ui.edit')} ${row.title}`" @click="openEdit('personal', row)" />
+                            <IconAction :icon="Trash2" size="sm" variant="destructive" :label="`${t('ui.delete')} ${row.title}`" @click="remove('personal', row)" />
                         </span>
                     </template>
                 </DataTable>

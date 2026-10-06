@@ -263,7 +263,8 @@ it('queues backfill for new accounts only and a recent sync for known ones', fun
     $c = AdPlatformConnection::factory()->create();
     $known = AdAccount::factory()->create(['connection_id' => $c->id, 'external_id' => 'act_demo_cloting']);
 
-    $this->actingAs($admin)->post("/ads/connections/{$c->id}/sync")->assertRedirect()->assertSessionHas('status');
+    // The setup page's one sync with nothing picked re-discovers each connection (the old per-connection sync, F6).
+    $this->actingAs($admin)->postJson('/ads/accounts/sync')->assertOk();
 
     Queue::assertPushed(SyncAdAccount::class, 3);
     Queue::assertPushed(SyncAdAccount::class, fn (SyncAdAccount $j) => $j->accountId === $known->id && $j->kind === 'recent');
@@ -286,8 +287,7 @@ it('reports a platform error on sync as a validation error', function () {
     expect(AdPlatformConnection::first()->status)->toBe('error');
     Queue::assertNothingPushed();
 
-    $c = AdPlatformConnection::first();
-    $this->actingAs($admin)->post("/ads/connections/{$c->id}/sync")->assertSessionHasErrors('connection');
+    $this->actingAs($admin)->postJson('/ads/accounts/sync')->assertOk()->assertJsonPath('errors.0.connection', 'M');
 });
 
 it('syncs one account through the queue and toggles it', function () {
@@ -295,7 +295,7 @@ it('syncs one account through the queue and toggles it', function () {
     $admin = adsPgUser(UserRole::Admin);
     $account = AdAccount::factory()->create();
 
-    $this->actingAs($admin)->post("/ads/accounts/{$account->id}/sync")->assertRedirect();
+    $this->actingAs($admin)->postJson('/ads/accounts/sync', ['accounts' => [$account->id]])->assertOk();
     Queue::assertPushed(SyncAdAccount::class, fn (SyncAdAccount $j) => $j->accountId === $account->id && $j->kind === 'recent');
 
     $this->actingAs($admin)->patch("/ads/accounts/{$account->id}", ['is_active' => false])->assertRedirect();

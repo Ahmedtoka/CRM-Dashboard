@@ -15,9 +15,9 @@ import { Link } from '@inertiajs/vue3';
 import { MoreHorizontal } from 'lucide-vue-next';
 import { computed } from 'vue';
 
-const props = withDefaults(defineProps<{ row: AdRowData; part: AdPart; currency?: string; density?: 'comfortable' | 'compact'; dataAt?: string | null }>(), {
+const props = withDefaults(defineProps<{ row: AdRowData; part: AdPart; currency?: string; thumb?: boolean; dataAt?: string | null }>(), {
     currency: 'EGP',
-    density: 'comfortable',
+    thumb: true,
     dataAt: null,
 });
 const emit = defineEmits<{ open: [id: number]; done: [status: 'active' | 'paused'] }>();
@@ -49,7 +49,7 @@ async function copyId(): Promise<void> {
 
 <template>
     <div v-if="part === 'creative'" class="flex min-w-0 items-center gap-3">
-        <button v-if="density === 'comfortable'" type="button" class="shrink-0" :aria-label="t('ads.control.row.preview')" @click="emit('open', row.id)">
+        <button v-if="thumb" type="button" class="shrink-0" :aria-label="t('ads.control.row.preview')" @click="emit('open', row.id)">
             <CreativeThumb :ad="row" :size="56" :show-pills="false" />
         </button>
         <div class="min-w-0 space-y-0.5">

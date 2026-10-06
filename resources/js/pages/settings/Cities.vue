@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -48,7 +49,6 @@ const columns = computed<Column[]>(() => [
 
 const breadcrumbs = computed(() => [{ title: t('settings.cities.title'), href: '/settings/cities' }]);
 const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';
-const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground';
 </script>
 
 <template>
@@ -82,10 +82,8 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                 <template #cell-shipping_fee="{ row }"><span class="whitespace-nowrap tabular-nums">{{ formatMoney(row.shipping_fee, locale) }}</span></template>
                 <template #cell-actions="{ row }">
                     <span class="inline-flex gap-0.5">
-                        <button type="button" :class="iconBtn" :title="t('ui.edit')" :aria-label="`${t('ui.edit')} ${row.name_ar}`" @click="edit(row)"><Pencil class="size-3.5" /></button>
-                        <button type="button" :class="[iconBtn, 'hover:text-destructive']" :title="t('ui.delete')" :aria-label="`${t('ui.delete')} ${row.name_ar}`" @click="crud.remove(row.id, t('ui.confirm_delete', { name: row.name_ar }))">
-                            <Trash2 class="size-3.5" />
-                        </button>
+                        <IconAction :icon="Pencil" size="sm" :label="`${t('ui.edit')} ${row.name_ar}`" @click="edit(row)" />
+                        <IconAction :icon="Trash2" size="sm" variant="destructive" :label="`${t('ui.delete')} ${row.name_ar}`" @click="crud.remove(row.id, t('ui.confirm_delete', { name: row.name_ar }))" />
                     </span>
                 </template>
             </DataTable>
