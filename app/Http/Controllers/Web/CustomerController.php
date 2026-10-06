@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ConversationResource;
 use App\Http\Resources\CustomerResource;
 use App\Http\Support\ModeratorScope;
+use App\Http\Support\SortParam;
 use App\Inbox\ConversationQuery;
 use App\Inbox\CustomerMerger;
 use App\Models\Customer;
@@ -19,13 +20,16 @@ use Inertia\Response;
 
 class CustomerController extends Controller
 {
+    /** Sortable columns of the web list (DataTable key => column). */
+    private const SORTS = ['name' => 'name', 'orders_count' => 'orders_count', 'total_spent' => 'total_spent', 'last_contact_at' => 'last_contact_at'];
+
     public function index(Request $request): Response
     {
         $filters = $request->validate(['q' => ['nullable', 'string', 'max:100']]);
         $user = $request->user();
         $term = trim((string) ($filters['q'] ?? ''));
 
-        $customers = Customer::query()
+        $query = Customer::query()
             ->with(['identities' => fn ($q) => ModeratorScope::identities($q, $user)])
             ->tap(fn (Builder $q) => ModeratorScope::customers($q, $user))
             ->when($term !== '', fn (Builder $q) => $q->where(fn (Builder $w) => $w
@@ -33,13 +37,15 @@ class CustomerController extends Controller
                 ->orWhere('phone', 'like', "%{$term}%")
                 ->orWhere('email', 'like', "%{$term}%")))
             ->orderByDesc('last_contact_at')
-            ->orderByDesc('id')
-            ->paginate(30)
-            ->withQueryString();
+            ->orderByDesc('id');
+
+        $sort = SortParam::parse($request->query('sort'), self::SORTS);
+        $sort?->apply($query);
+        $customers = $query->paginate(30)->withQueryString();
 
         return Inertia::render('Customers/Index', [
             'customers' => CustomerResource::collection($customers),
-            'filters' => ['q' => $filters['q'] ?? null],
+            'filters' => ['q' => $filters['q'] ?? null, 'sort' => $sort?->value()],
         ]);
     }
 
@@ -47,7 +53,7 @@ class CustomerController extends Controller
     {
         Gate::authorize('view', $customer);
 
-        $customer->load(ModeratorScope::customerRelations($request->user()));
+        $customer->load(ModeratorScope::customerRelations($request->user(), withAds: true));
 
         $conversations = ConversationQuery::withListColumns(ConversationQuery::visibleTo($request->user()))
             ->where('conversations.customer_id', $customer->id)

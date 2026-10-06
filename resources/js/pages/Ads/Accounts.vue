@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /** Ads Hub — الحسابات الإعلانية: platform connections, their ad accounts, and who holds each account (spec §8.5). */
+import AdsSetupTabs from '@/components/ads/AdsSetupTabs.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -9,6 +10,7 @@ import RelativeTime from '@/components/crm/RelativeTime.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import ToggleSwitch from '@/components/crm/ToggleSwitch.vue';
 import { buttonVariants } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
@@ -19,7 +21,7 @@ import { cairoToday } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AdAccountRow, AdConnectionRow, AdPlatformDefinition, AdsAccountsProps } from '@/types/ads';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { History, LoaderCircle, Pencil, Plug, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-vue-next';
+import { History, LoaderCircle, MoreHorizontal, Pencil, Plug, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
 
 const props = defineProps<AdsAccountsProps>();
@@ -220,18 +222,25 @@ const ownerOptions = (a: AdAccountRow) => props.buyers.filter((b) => b.is_active
 const assigning = (a: AdAccountRow) => assignForm.processing && assigningId.value === a.id;
 const periodOwner = (name: string | null) => name ?? t('ads.accounts.unassigned');
 const money = (value: number, currency: string) => formatAdsMoney(value, locale.value, currency);
+
+const crumbs = computed(() => [{ label: t('nav.ads_setup'), href: '/ads/setup' }, { label: t('ads.control.setup.accounts') }]);
+const appCrumbs = computed(() => [
+    { title: t('nav.ads_setup'), href: '/ads/setup' },
+    { title: t('ads.control.setup.accounts'), href: '/ads/accounts' },
+]);
 </script>
 
 <template>
     <Head :title="t('ads.accounts.title')" />
 
-    <AppLayout>
+    <AppLayout :breadcrumbs="appCrumbs">
         <div class="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-6">
-            <PageHeader :title="t('ads.accounts.title')" :description="t('ads.accounts.description')">
+            <PageHeader :title="t('ads.accounts.title')" :description="t('ads.accounts.description')" :breadcrumbs="crumbs">
                 <button type="button" :class="buttonVariants({ variant: 'default', size: 'sm' })" @click="openConnect('meta')">
                     <Plus aria-hidden="true" />{{ t('ads.accounts.connect') }}
                 </button>
             </PageHeader>
+            <AdsSetupTabs />
 
             <p class="rounded-lg bg-card px-4 py-3 text-xs shadow-card" data-testid="ads-link-rate">
                 <span class="font-medium">{{ t('ads.accounts.link_rate') }}:</span>
@@ -283,20 +292,26 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                             {{ c.last_error }}
                         </p>
                         <div class="flex flex-wrap gap-2">
-                            <button type="button" :class="outlineSm" :disabled="busy(`test-${c.id}`)" @click="testConnection(c)">
-                                <LoaderCircle v-if="busy(`test-${c.id}`)" class="animate-spin" aria-hidden="true" />
-                                <ShieldCheck v-else aria-hidden="true" />{{ t('ads.accounts.test') }}
-                            </button>
-                            <button type="button" :class="outlineSm" :disabled="busy(`sync-${c.id}`)" @click="syncConnection(c)">
-                                <LoaderCircle v-if="busy(`sync-${c.id}`)" class="animate-spin" aria-hidden="true" />
-                                <RefreshCw v-else aria-hidden="true" />{{ t('ads.accounts.sync') }}
-                            </button>
+                            <Button type="button" variant="outline" size="sm" class="gap-1.5" @click="testConnection(c)" :loading="busy(`test-${c.id}`)">
+                                <ShieldCheck aria-hidden="true" />{{ t('ads.accounts.test') }}
+                            </Button>
+                            <Button type="button" variant="outline" size="sm" class="gap-1.5" @click="syncConnection(c)" :loading="busy(`sync-${c.id}`)">
+                                <RefreshCw aria-hidden="true" />{{ t('ads.accounts.sync') }}
+                            </Button>
                             <button type="button" :class="outlineSm" @click="openEdit(c)">
                                 <Pencil aria-hidden="true" />{{ t('ads.accounts.edit') }}
                             </button>
-                            <button type="button" :class="cn(outlineSm, 'text-destructive')" @click="deleting = c">
-                                <Trash2 aria-hidden="true" />{{ t('ads.accounts.delete') }}
-                            </button>
+                            <!-- Delete lives in the ⋯ menu, away from edit / test / sync (U 1.1). -->
+                            <DropdownMenu>
+                                <DropdownMenuTrigger :class="cn(outlineSm, 'ms-auto')" :aria-label="t('ads.control.row.more')">
+                                    <MoreHorizontal aria-hidden="true" />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem class="text-destructive" @select="deleting = c">
+                                        <Trash2 class="size-4" aria-hidden="true" />{{ t('ads.accounts.delete') }}
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </li>
                 </ul>
@@ -304,6 +319,7 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                 <template v-if="connectionsOf(platform.value).length">
                     <h3 class="pt-1 text-sm font-semibold">{{ t('ads.accounts.accounts_title', { platform: platform.label }) }}</h3>
                     <DataTable
+                        table-id="ads-accounts"
                         :columns="columns"
                         :rows="accountsOf(platform.value)"
                         mobile="scroll"
@@ -347,9 +363,9 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                                 <div class="flex flex-wrap items-center gap-1.5">
                                     <label class="text-2xs text-muted-foreground" :for="`from-${row.id}`">{{ t('ads.accounts.from_date') }}</label>
                                     <input :id="`from-${row.id}`" v-model="drafts[row.id].date" type="date" dir="ltr" :class="smallInput" />
-                                    <button
+                                    <Button
                                         type="button"
-                                        :class="buttonVariants({ variant: 'default', size: 'sm' })"
+                                        size="sm"
                                         :disabled="!canAssign(row) || assigning(row)"
                                         @click="assign(row)"
                                     >
@@ -399,10 +415,11 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                             <RelativeTime v-else :iso="row.last_synced_at" />
                         </template>
                         <template #cell-actions="{ row }">
-                            <button
+                            <Button
                                 type="button"
-                                :class="outlineSm"
-                                :disabled="busy(`sync-acc-${row.id}`)"
+                                variant="outline"
+                                size="sm"
+                                class="gap-1.5"
                                 :title="t('ads.accounts.sync_account')"
                                 @click="syncAccount(row)"
                             >

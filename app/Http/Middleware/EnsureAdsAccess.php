@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Ads\Control\Write\WriteDenied;
 use App\Enums\UserRole;
 use App\Onboarding\HomeRoute;
 use Closure;
@@ -23,6 +24,8 @@ class EnsureAdsAccess
             'report' => $user?->isSupervisorOrAbove() || $role === UserRole::MediaBuyer,
             'materials' => $user?->isSupervisorOrAbove() || in_array($role, [UserRole::MediaBuyer, UserRole::Content], true),
             'manage' => (bool) $user?->isSupervisorOrAbove(),
+            // Launch approvals: refused before the password re-auth, so a buyer gets 403 and never a 423 prompt.
+            'authority' => $user !== null && $user->hasAdsAuthority() ? true : throw WriteDenied::make('ads_authority_required'),
             default => false,
         };
 

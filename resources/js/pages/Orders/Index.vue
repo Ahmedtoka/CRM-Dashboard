@@ -1,22 +1,26 @@
 <script setup lang="ts">
+import AdSourceChip from '@/components/crm/AdSourceChip.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import DateRangePicker from '@/components/crm/DateRangePicker.vue';
+import EmptyState from '@/components/crm/EmptyState.vue';
 import FilterBar from '@/components/crm/FilterBar.vue';
 import OrderStatusChip from '@/components/crm/orders/OrderStatusChip.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import Pagination from '@/components/crm/Pagination.vue';
 import RelativeTime from '@/components/crm/RelativeTime.vue';
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useNow } from '@/composables/useNow';
 import { useStaleOrderRefresh } from '@/composables/useStaleOrderRefresh';
 import { useUrlFilters } from '@/composables/useUrlFilters';
+import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatDateTime, formatMoney } from '@/lib/format';
+import { formatDateTime, formatMinutes, formatMoney } from '@/lib/format';
 import { isSyncStale, notOnShopifyText, orderLabel } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type { OrderRow, Paginated } from '@/types/admin';
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { AlertTriangle, MessageCircle, StickyNote, Store } from 'lucide-vue-next';
+import { AlertTriangle, MessageCircle, SearchX, StickyNote, Store } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const FINANCIAL_STATUSES = ['paid', 'pending', 'partially_paid', 'refunded', 'partially_refunded', 'voided'];
@@ -35,7 +39,7 @@ const props = withDefaults(defineProps<{ orders: Paginated<OrderRow>; team?: { i
 const { t, locale } = useI18n();
 const page = usePage<SharedData>();
 const now = useNow();
-const loading = ref(false);
+const { loading, track } = useVisitLoading();
 
 // The filters live in the URL (shareable, back/forward), and the server reads the same keys.
 const { filters, set, clear, activeKeys, query } = useUrlFilters(
@@ -54,20 +58,21 @@ const { filters, set, clear, activeKeys, query } = useUrlFilters(
         to: null as string | null,
         mismatch: false,
         stuck: false,
+        /** Minutes since the order was made (the «النهارده» payment link); no control, a chip only. */
+        older_than: null as string | null,
+        /** «النهارده» links: without cancelled and failed (the reports' set), and the day of the shipment step. */
+        real: false,
+        step_from: null as string | null,
+        step_to: null as string | null,
+        /** Whitelisted on the server (OrderController::SORTS): `-total`, `created_at`, ... */
+        sort: '',
     },
     { replaceKeys: ['q'] },
 );
 
 // Any filter change reloads page 1 of the list from the server.
 watch(query, (q) => {
-    router.get('/orders', q, {
-        only: ['orders', 'filters'],
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-        onStart: () => (loading.value = true),
-        onFinish: () => (loading.value = false),
-    });
+    router.get('/orders', q, track({ only: ['orders', 'filters'], preserveState: true, preserveScroll: true, replace: true }));
 });
 
 // Rows the page patches in place when an OrderUpdated broadcast arrives.
@@ -99,11 +104,21 @@ const chips = computed(() => {
     if (f.from || f.to) out.push({ key: 'date', label: t('orders.list.date_chip', { from: f.from ?? '…', to: f.to ?? '…' }) });
     if (f.mismatch) out.push({ key: 'mismatch', label: t('orders.mismatch_only') });
     if (f.stuck) out.push({ key: 'stuck', label: t('orders.stuck_only') });
+    if (f.real) out.push({ key: 'real', label: t('orders.real_chip') });
+    if (f.step_from)
+        out.push({
+            key: 'step_date',
+            label: t('orders.step_date_chip', { from: f.step_from, to: f.step_to ?? f.step_from }),
+        });
+    if (f.older_than)
+        out.push({ key: 'older_than', label: t('orders.older_than_chip', { time: formatMinutes(Number(f.older_than), locale.value) }) });
     return out;
 });
 
 function removeChip(key: string): void {
     if (key === 'date') set({ from: null, to: null });
+    else if (key === 'step_date') set({ step_from: null, step_to: null });
+    else if (key === 'real') set({ real: false });
     else if (key === 'mismatch' || key === 'stuck') set({ [key]: false });
     else set({ [key]: null } as Partial<typeof filters.value>);
 }
@@ -114,12 +129,29 @@ const selectValue = (event: Event) => (event.target as HTMLSelectElement).value 
 const columns = computed<Column[]>(() => [
     { key: 'order', label: t('orders.list.order'), primary: true },
     { key: 'customer', label: t('orders.columns.customer') },
-    { key: 'total', label: t('orders.columns.total'), align: 'end' },
+    { key: 'ad', label: t('orders.columns.ad'), hideOnMobile: true },
+    { key: 'total', label: t('orders.columns.total'), numeric: true, sortable: true },
     { key: 'status', label: t('orders.list.status') },
     { key: 'shopify_updated_at', label: t('orders.list.updated') },
     { key: 'last_synced_at', label: t('orders.list.synced') },
-    { key: 'created_at', label: t('orders.columns.date'), hideOnMobile: true },
+    { key: 'created_at', label: t('orders.columns.date'), hideOnMobile: true, sortable: true },
 ]);
+
+// One-click saved views: each preset is a plain filtered address, so the chip, the URL and the list agree.
+const PRESETS = [
+    { key: 'awaiting_payment', query: 'status=awaiting_payment', active: () => filters.value.status === 'awaiting_payment' },
+    { key: 'mismatch', query: 'mismatch=1', active: () => filters.value.mismatch },
+    { key: 'stuck', query: 'stuck=1', active: () => filters.value.stuck },
+] as const;
+const presets = computed(() =>
+    PRESETS.map((p) => ({ key: p.key, label: t(`orders.presets.${p.key}`), href: `/orders?${p.query}`, active: p.active() })),
+);
+
+// The bar says what the list is showing: the result count, then every active filter.
+const summary = computed(() =>
+    [t('ui.results', { n: props.orders.meta?.total ?? rows.value.length }), ...chips.value.map((c) => c.label)].join(' · '),
+);
+const filtered = computed(() => chips.value.length > 0 || filters.value.q !== '');
 
 const breadcrumbs = computed(() => [{ title: t('orders.title'), href: '/orders' }]);
 const selectClass = 'h-9 w-full rounded-md border border-input bg-background px-2 text-xs sm:w-auto';
@@ -139,6 +171,8 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                     :search-placeholder="t('orders.search')"
                     :chips="chips"
                     :more-count="moreCount"
+                    :presets="presets"
+                    :summary="summary"
                     @update:search="set({ q: $event })"
                     @remove="removeChip"
                     @clear="clear()"
@@ -260,14 +294,24 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
 
             <div>
                 <DataTable
+                    table-id="orders"
                     :columns="columns"
                     :rows="rows"
                     clickable
                     :loading="loading"
                     :empty="t('orders.empty')"
                     :caption="t('orders.title')"
+                    :sort="filters.sort || null"
+                    @update:sort="set({ sort: $event })"
                     @row-click="router.visit(`/orders/${$event.id}`)"
                 >
+                    <template v-if="filtered" #empty>
+                        <EmptyState :icon="SearchX" :title="t('orders.empty')">
+                            <template #action>
+                                <Button variant="outline" size="sm" @click="clear()">{{ t('ui.clear_filters') }}</Button>
+                            </template>
+                        </EmptyState>
+                    </template>
                     <template #cell-order="{ row }">
                         <span class="inline-flex max-w-full items-center gap-1.5 align-middle">
                             <span
@@ -309,6 +353,7 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                         <span class="block max-w-[12rem] truncate">{{ row.customer?.name ?? '—' }}</span>
                         <span v-if="row.customer?.phone" class="block text-2xs text-muted-foreground" dir="ltr">{{ row.customer.phone }}</span>
                     </template>
+                    <template #cell-ad="{ row }"><AdSourceChip :source="row.ad_source ?? null" /></template>
                     <template #cell-total="{ row }"
                         ><span class="whitespace-nowrap font-bold tabular-nums">{{ formatMoney(row.total, locale) }}</span></template
                     >

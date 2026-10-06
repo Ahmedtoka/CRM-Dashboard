@@ -14,6 +14,10 @@ export interface AdsAccess {
     canWrite: boolean;
     isBuyer: boolean;
     buyerId: number | null;
+    /** Approve launches (Ads authority). */
+    canApprove: boolean;
+    /** Admin-only direct publish (O7). */
+    canDirectPublish: boolean;
 }
 
 export interface AdsOption {
@@ -137,6 +141,8 @@ export interface AdsDataHealthReason {
     accounts: string[];
     /** Accounts beyond the three named. */
     more: number;
+    /** For `stale`: the hours after which an account counts as behind (crm.ads.health.stale_after_hours). */
+    hours?: number;
 }
 
 export interface AdsDataHealth {
@@ -246,8 +252,11 @@ export interface AdsBuyersProps extends AdsCommonProps {
 }
 
 export interface AdsBuyerShowProps extends AdsCommonProps {
-    filters: AdsFilters;
+    /** BuildsAdsPages::filterProps without the request: range key and an empty accounts list. */
+    filters: AdsFilters & { range: AdsRangeKey | null; accounts: number[] };
     buyer: { id: number; name: string; color: string | null };
+    /** Oldest last sync of the accounts in scope (data age for the Stop dialog). */
+    freshness: string | null;
     detail: BuyerDetail;
     summary: AdsRevenueSummary;
 }
@@ -347,6 +356,10 @@ export interface AdsCreativesProps extends AdsCommonProps {
 /** CampaignTree::build — Metrics = AdsQuery::derive plus the ad-attributed real orders. */
 export interface CampaignMetrics extends AdsDerived {
     real_orders: number;
+    /** Store revenue of the orders the node's ads brought (EGP). */
+    real_revenue?: number;
+    /** real_revenue / spend; null off EGP or without spend. */
+    real_roas?: number | null;
 }
 
 /** A node of the campaign tree. id 0 = the placeholder for ads without a campaign / ad set. Ad nodes carry ad_id and trend. */
@@ -591,12 +604,11 @@ export interface AdsSetupSettings {
 export interface AdsBuyersSetupProps {
     buyers: AdBuyerSetupRow[];
     users: { id: number; name: string; role: string }[];
-    settings: AdsSetupSettings;
 }
 
 /* ---- Materials library: MaterialController, MaterialCollectionController, AdStockController ---- */
 
-export type MaterialStatus = 'not_started' | 'activated' | 'done';
+export type MaterialStatus = 'new' | 'in_review' | 'live' | 'paused' | 'retired';
 export type MaterialStock = 'in' | 'out' | 'none';
 export type MaterialType = 'reel' | 'carousel' | 'post' | 'story' | 'image' | 'video';
 
@@ -661,6 +673,8 @@ export interface MaterialRow {
     done_at: string | null;
     ads: MaterialLinkedAd[];
     performance: MaterialPerformance | null;
+    /** Open launches of the material (S1), newest first, max 5. */
+    launches: MaterialLaunchSummary[];
 }
 
 /** A Laravel LengthAwarePaginator as Inertia serialises it. */
@@ -690,6 +704,8 @@ export interface MaterialStats {
     activated: number;
     not_started: number;
     done: number;
+    in_review: number;
+    paused: number;
     reels: number;
     posts: number;
     carousels: number;
@@ -778,6 +794,12 @@ export interface AdSuggestion {
     roas: number | null;
     reasons: AdReason[];
     can_write: boolean;
+    objective: AdObjective;
+    thumbnail_url: string | null;
+    campaign: string | null;
+    status: string | null;
+    /** Pre-tax spend today (Cairo), shown in the Stop dialog. */
+    spend_today: number;
 }
 
 /** One ad_write_actions row on the log (slice-1 rows are copied in as legacy rows). */
@@ -794,6 +816,11 @@ export interface AdActionLogRow {
     reason: string | null;
     result: 'ok' | 'error' | 'pending';
     error: string | null;
+    ad_id: number | null;
+    user_id: number | null;
+    account_id: number;
+    external_id: string;
+    source: string;
 }
 
 export interface AdsActionsProps extends AdsBannerProps {
@@ -858,4 +885,521 @@ export interface AdPublicationRow {
     external_ad_id: string | null;
     manager_url: string | null;
     created_at: string | null;
+}
+
+/* ---- Launch approvals (control room S1) ---- */
+
+export type LaunchState =
+    | 'draft'
+    | 'changes_requested'
+    | 'buyer_review'
+    | 'creating_paused'
+    | 'create_failed'
+    | 'awaiting_approval'
+    | 'on_hold'
+    | 'launching'
+    | 'live'
+    | 'stopped'
+    | 'retired'
+    | 'rejected'
+    | 'expired'
+    | 'withdrawn';
+export type CheckLevel = 'pass' | 'warn' | 'block';
+export interface CheckRow {
+    key: string;
+    level: CheckLevel;
+    message_ar: string;
+    message_en: string;
+    details: Record<string, unknown>;
+}
+export interface LaunchCaption {
+    headline: string;
+    primary_text: string;
+    cta: string;
+}
+export interface LaunchFile extends MaterialFile {
+    width: number | null;
+    height: number | null;
+}
+export interface LaunchPublication {
+    id: number;
+    ad_name: string;
+    status: string;
+    error: string | null;
+    external_ad_id: string | null;
+    archived: boolean;
+    ad_status: string | null;
+    effective_status: string | null;
+    preview_url: string | null;
+    manager_url: string | null;
+}
+export interface LaunchEvent {
+    action: string;
+    at: string | null;
+    actor: string | null;
+    code: string | null;
+    reason: string | null;
+}
+export interface LaunchAbilities {
+    edit: boolean;
+    submit: boolean;
+    send_back: boolean;
+    forward: boolean;
+    withdraw: boolean;
+    retry: boolean;
+    approve: boolean;
+    return: boolean;
+    reject: boolean;
+    stop: boolean;
+    retire: boolean;
+}
+export interface LaunchRow {
+    id: string;
+    state: LaunchState;
+    hold_from: LaunchState | null;
+    revision: number;
+    ads_count: number;
+    material: { id: number; title: string; thumb_url: string | null } | null;
+    product: { id: number; title: string; image_url: string | null; prices: number[]; inventory: number } | null;
+    account: { id: number; name: string; platform: string } | null;
+    campaign: { external_id: string | null; name: string | null; status: string | null; objective: string | null };
+    adset: { id: number | null; external_id: string | null; name: string | null; status: string | null };
+    identity: { page_id: string; page_name: string; instagram_id: string | null } | null;
+    link: string | null;
+    url_tags: string | null;
+    file_ids: number[];
+    files: LaunchFile[];
+    captions: LaunchCaption[];
+    original: { ad_set_id: number | null; file_ids: number[]; captions: LaunchCaption[] } | null;
+    people: { preparer: AdsOption | null; buyer: AdsOption | null; forwarder: AdsOption | null; decider: AdsOption | null };
+    dates: {
+        created_at: string | null;
+        submitted_at: string | null;
+        forwarded_at: string | null;
+        awaiting_at: string | null;
+        expires_at: string | null;
+        decided_at: string | null;
+        live_at: string | null;
+        stopped_at: string | null;
+    };
+    decision: { code: string; reason: string | null } | null;
+    last_error: string | null;
+    self_approved: boolean;
+    checks: CheckRow[] | null;
+    checks_hash: string | null;
+    publications: LaunchPublication[] | null;
+    history: LaunchEvent[] | null;
+    money: { cap: number; currency: string; parent_status: string | null; campaign_status: string | null } | null;
+    can: LaunchAbilities;
+}
+export interface OpenSlot {
+    id: number;
+    name: string;
+    external_id: string;
+    campaign: { external_id: string; name: string; objective: string | null };
+    account: { id: number; name: string; platform: string };
+    buyer: AdsOption;
+}
+export interface SlotRow {
+    id: number;
+    name: string;
+    status: string | null;
+    open: boolean;
+    opened_at: string | null;
+    campaign: { name: string; status: string | null };
+    account: AdsOption;
+}
+export interface LaunchOptions {
+    slots: OpenSlot[];
+    files: LaunchFile[];
+    captions: (LaunchCaption & { angle: string | null })[];
+    ctas: string[];
+    max_captions: number;
+}
+export interface MaterialLaunchSummary {
+    id: string;
+    state: LaunchState;
+    account: string | null;
+    adset: string | null;
+    ads_count: number;
+}
+export interface LaunchAnswer {
+    ok: boolean;
+    message: string;
+    launch: LaunchRow;
+}
+export interface AdsLaunchesProps {
+    box: 'mine' | 'review' | 'live' | 'all';
+    filters: { material: number | null; launch: string | null; stop: boolean; tab?: 'slots' | null };
+    launches: LaravelPage<LaunchRow>;
+    counts: { mine: number; review: number; live: number };
+    canReview: boolean;
+    canToggleSlots: boolean;
+    reasons: string[];
+}
+export interface ApprovalFilters {
+    buyer: string | null;
+    account: string | null;
+    age: '1d' | '3d' | '7d' | null;
+    fails: boolean;
+    expiring: boolean;
+    launch: string | null;
+}
+export interface AdsApprovalsProps {
+    filters: ApprovalFilters;
+    launches: LaunchRow[];
+    options: { buyers: AdsOption[]; accounts: AdsOption[] };
+    approvalsLeft: number;
+    writesOn: boolean;
+    canApprove: boolean;
+    isAdmin: boolean;
+    reasons: string[];
+}
+export interface ApproveResult {
+    ok: boolean;
+    message: string;
+    self_approved: boolean;
+    launch: { id: string; state: LaunchState; revision: number };
+    ads: { publication_id: number; ad_name: string; outcome: 'succeeded' | 'unknown' | 'failed'; code: string | null; message: string | null }[];
+}
+export interface BulkPlan {
+    launches: { id: string; title: string | null; account: string | null; ads: number; revision: number; checks_hash: string }[];
+    total_ads: number;
+    approvals_left: number;
+    skipped: { warned: number; first_launch: number; self: number; limit: number };
+}
+/* ---- S2 control room ---- */
+export type AdObjective = 'messages' | 'sales' | 'traffic' | 'other';
+export type AdHealthKey = 'out_of_stock' | 'losing' | 'tired' | 'too_early' | 'parent_paused' | 'winning';
+export type AdsRangeKey = 'today' | 'yesterday' | 'last7' | 'last30' | 'this_month';
+export type AdsStatusFilter = 'running' | 'paused' | 'all';
+/** `top` = winner + promising, `promising` / `neutral` = the old Winners tier chips (kept for redirected links). */
+export type AdsHealthFilter = 'no_result' | 'losing' | 'tired' | 'winning' | 'out_of_stock' | 'top' | 'promising' | 'neutral';
+export type AdsView = 'table' | 'cards' | 'tree';
+export type AdLevel = 'campaign' | 'adset' | 'ad';
+
+export interface AdSeriesPoint {
+    date: string;
+    spend: number;
+    roas: number | null;
+}
+
+/** RunningCreatives::rows + AdRowEnricher::enrich */
+export interface AdRowData extends CreativeRow {
+    objective: AdObjective;
+    conversations: number;
+    real_revenue: number;
+    /** null on non-EGP accounts: store revenue is EGP, so the ratio would mean nothing (render «—»). */
+    real_roas: number | null;
+    /** The ad account currency (upper-case); money on the row is in it. */
+    currency: string;
+    spend_today: number;
+    need_stop: boolean;
+    tier: WinnerTier | null;
+    health: AdHealthKey[];
+    series: AdSeriesPoint[];
+    can_write: boolean;
+}
+
+export interface AdsControlFilters extends AdsFilters {
+    range: AdsRangeKey | null;
+    accounts: number[];
+}
+
+export interface AdsAccountOption {
+    id: number;
+    name: string;
+    platform: AdPlatformValue | string;
+}
+
+export interface AdsPageBase extends AdsCommonProps {
+    account_options: AdsAccountOption[];
+    freshness: string | null;
+}
+
+/** SpendByHour::today */
+export interface AdsSpendByHour {
+    spend_so_far: number;
+    usual_by_now: number | null;
+    ratio: number | null;
+    baseline: 'snapshots' | 'prorated' | 'none';
+    hour: number;
+    hours: { hour: number; today: number; usual: number | null }[];
+}
+
+export interface AdsTodayData {
+    /** total = the one open-decisions count (DecisionCounter): approvals + open alert cards + unfolded suggestions. */
+    decisions: { total: number; approvals: number; suggestions: AdSuggestion[]; suggestions_total: number; alerts: AlertCardData[]; alerts_total: number };
+    money_today: AdsSpendByHour & { conversations: number; orders: number };
+    last7: { from: string; to: string; totals: AdsTotals; daily: AdsDailyRow[] };
+    buyers: (BuyerCardData & { open_decisions: number })[] | null;
+    best: AdRowData[];
+    worst: AdRowData[];
+}
+
+export interface AdsTodayProps extends AdsPageBase {
+    filters: AdsControlFilters;
+    today: AdsTodayData;
+}
+
+export interface AdsExplorerFilters extends AdsControlFilters {
+    view: AdsView;
+    status: AdsStatusFilter;
+    objective: Exclude<AdObjective, 'other'> | null;
+    health: AdsHealthFilter | null;
+    changed: 'today' | null;
+    q: string | null;
+    sort: string;
+    per_page: 25 | 50 | 100;
+    page: number;
+}
+
+export interface AdsExplorerResult {
+    data: AdRowData[];
+    meta: { total: number; per_page: number; current_page: number; last_page: number };
+    counts: { all: number; active: number; inactive: number };
+    /** Over every matched ad (not just the page); real_roas null when an account is not EGP. */
+    totals: AdsDerived & { real_orders: number; real_revenue: number; real_roas: number | null };
+}
+
+export interface AdsExplorerProps extends AdsPageBase {
+    filters: AdsExplorerFilters;
+    result: AdsExplorerResult | null;
+    tree: CampaignNode[] | null;
+    /** view=cards only: scored ads per tier (`top` = winner + promising). */
+    tier_counts: Record<WinnerTierFilter, number> | null;
+}
+
+export type DecisionsTab = 'open' | 'snoozed' | 'closed' | 'log';
+
+export interface AdsDecisionsProps extends AdsPageBase {
+    filters: AdsControlFilters & { tab: DecisionsTab; who: number | null; level: AdLevel | null; result: 'ok' | 'error' | 'pending' | null };
+    counts: { open: number; snoozed: number; closed: number };
+    approvals: { count: number; href: string; items: unknown[] } | null;
+    suggestions: AdSuggestion[];
+    /** S5 alert cards of the feed tab that follows the page tab (snoozed = the feed's «later»). */
+    alerts: AlertCardData[];
+    alertsMeta: AlertsMeta;
+    log: AdActionLogRow[];
+    log_users: AdsOption[];
+}
+
+export interface AdsChatRow {
+    campaign: string;
+    ads: string[];
+    conversations: number;
+    customers: number;
+    orders: number;
+    revenue: number;
+    spend: number | null;
+    cost_per_conversation: number | null;
+    cost_per_order: number | null;
+    roas: number | null;
+}
+
+export interface AdsChatReport {
+    rows: AdsChatRow[];
+    totals: { conversations: number; customers: number; orders: number; revenue: number; spend: number | null; roas: number | null; cost_per_order: number | null };
+    currency: string | null;
+    spend_available: boolean;
+}
+
+/** `buyers` here is the buyer cards (it replaces the common buyer options; the filter bar derives its options from the cards). */
+export interface AdsNumbersProps extends Omit<AdsPageBase, 'buyers'> {
+    filters: AdsControlFilters & { section: 'buyers' | 'chat' | 'accounts' | null };
+    sync_errors: { account: string; error: string }[];
+    sync: AdsSync;
+    overview: AdsOverviewData;
+    summary: AdsRevenueSummary;
+    top_accounts: AdsTopAccountRow[];
+    buyers: BuyerCardData[];
+    chat_campaigns: AdsChatReport | null;
+    /** S3: deferred (group `funnel`), totals over the page filter. */
+    chatFunnel?: ChatFunnel;
+}
+
+/* Control room S3: the per-ad chat funnel (GET /ads/chat-funnel). */
+export type LostReason = 'price' | 'size_out' | 'shipping' | 'no_answer' | 'browsing' | 'other';
+export interface ChatFunnel {
+    chats: number;
+    to_agent: number;
+    orders: number;
+    delivered: number;
+    returned: number;
+    reasons: Partial<Record<LostReason, number>>;
+}
+
+/** GET /ads/ad/{id} */
+export interface AdDrawerData {
+    ad: AdRowData & { preview_html: string | null };
+    reasons: AdReason[];
+    decisions: { kind: 'stop_suggestion'; reasons: AdReason[] }[];
+    history: AdActionLogRow[];
+    funnel: ChatFunnel | null;
+    levels: AdLevel[];
+}
+
+export interface BreakEvenInputs {
+    margin_pct: number | null;
+    shipping_subsidy: number | null;
+    return_cost: number | null;
+    target_cpp: number | null;
+    target_cpo: number | null;
+}
+
+export interface BreakEvenExplain {
+    floor: number;
+    is_default: boolean;
+    unprofitable: boolean;
+    margin_pct: number | null;
+    shipping_subsidy: number;
+    return_cost: number;
+    aov: number | null;
+    aov_source: 'account' | 'store' | 'none';
+    refusal_rate: number;
+    refusal_source: 'account' | 'store' | 'assumed';
+    max_cpa: number | null;
+    tax_rate: number;
+}
+
+export interface RulesSetupAccount {
+    id: number;
+    name: string;
+    currency: string | null;
+    platform: string;
+    inputs: BreakEvenInputs;
+    effective: BreakEvenExplain;
+    targets: { cpp: number | null; cpp_source: 'owner' | 'median' | 'none'; cpo: number | null; cpo_source: 'owner' | 'median' | 'none'; cpc: number | null };
+}
+
+export interface RulesSetupProps {
+    global: BreakEvenInputs;
+    general: { low_stock_units: number; spike_min_amount: number };
+    notify_enabled: boolean;
+    can_edit: boolean;
+    default_floor: number;
+    accounts: RulesSetupAccount[];
+}
+
+/* S5 decisions feed (spec 7.3-7.5, U 5.2-5.3). */
+export type AlertSeverity = 'critical' | 'high' | 'medium' | 'info';
+export type AlertVerb =
+    | 'stop'
+    | 'run'
+    | 'open_stock'
+    | 'open_campaigns'
+    | 'open_library'
+    | 'open_queue'
+    | 'open_settings'
+    | 'add_replacement'
+    | 'view_orders'
+    | 'why';
+export type AlertParams = Record<string, string | number | boolean | null>;
+
+export interface AlertReason {
+    alert_id: number;
+    rule_id: string;
+    severity: AlertSeverity;
+    action: string;
+    sentence_key: string;
+    params: AlertParams;
+    evidence: Record<string, unknown>;
+    first_fired_at: string | null;
+    seen: boolean;
+    state: 'open' | 'snoozed' | 'dismissed' | 'resolved' | 'acted';
+    snoozed_until: string | null;
+    closed_at: string | null;
+    closed_by: string | null;
+    resolved_reason: string | null;
+    dismiss_reason: string | null;
+    can_dismiss: boolean;
+}
+
+export interface AlertAdRef {
+    id: number;
+    external_id: string;
+    name: string;
+    thumbnail_url: string | null;
+    account_id: number;
+    account: string;
+    buyer: string | null;
+    can_write: boolean;
+}
+
+export interface AlertCardData {
+    key: string;
+    kind: 'ad' | 'product' | 'account';
+    severity: AlertSeverity;
+    money_at_risk_per_day: number;
+    first_fired_at: string | null;
+    ad: AlertAdRef | null;
+    product: { id: number; title: string } | null;
+    account: { id: number; name: string } | null;
+    ads: (AlertAdRef & { alert_id: number; action: string })[];
+    reasons: AlertReason[];
+    primary: { verb: AlertVerb; action: string; alert_id: number; href: string | null };
+    alert_ids: number[];
+}
+
+export type AlertsFeedTab = 'open' | 'later' | 'closed' | 'log';
+
+export interface AlertsMeta {
+    tab: AlertsFeedTab;
+    counts: { open: number; later: number; closed: number };
+    hidden_by_cap: number;
+    buyer_cap: number;
+    shadow: boolean;
+    can_toggle: boolean;
+    can_open_settings: boolean;
+}
+
+export interface DigestItem {
+    alert_id: number;
+    rule_id: string;
+    severity: AlertSeverity;
+    sentence_key: string;
+    params: AlertParams;
+    ad: string | null;
+    account: string | null;
+    buyer: string | null;
+    money: number;
+    age_days: number;
+}
+
+export interface DigestBuyerRow {
+    buyer_id: number;
+    name: string;
+    open: number;
+    acted: number;
+    dismissed: number;
+    dismissed_wrong_numbers: number;
+    silent_spend: number;
+}
+
+export interface DigestData {
+    variant: 'owner' | 'buyer';
+    date: string;
+    shadow: boolean;
+    currency: string;
+    yesterday: {
+        spend: number;
+        spend_tax: number;
+        orders: number;
+        revenue: number;
+        roas: number | null;
+        meta_roas: number | null;
+        usual_spend: number | null;
+        floor: number;
+        floor_default: boolean;
+    };
+    open: { count: number; critical: number; high: number; money: number };
+    top: DigestItem[];
+    winners: DigestItem[];
+    stock: { ads: number; products: string[] };
+    inbox: Record<string, string | number> | null;
+    stale_accounts: number;
+    approvals: number;
+    review_waiting: number;
+    buyers: DigestBuyerRow[];
+    stopped_yesterday: number;
 }

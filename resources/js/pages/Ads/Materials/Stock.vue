@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /** Ads Hub — مخزون الإعلانات: materials against their product's inventory, with the manual availability override (spec §8.7). */
+import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
@@ -75,6 +76,18 @@ function reset(): void {
 /* ---- rows ---- */
 const page = computed(() => props.rows);
 const pages = computed(() => pageList(page.value.current_page, page.value.last_page));
+/** DataTable keys rows by `id`; a stock row is one material. */
+const tableRows = computed(() => page.value.data.map((r) => ({ ...r, id: r.material_id })));
+const columns = computed<Column[]>(() => [
+    { key: 'image', label: t('ads.materials.col.image') },
+    { key: 'title', label: t('ads.materials.col.title') },
+    { key: 'product', label: t('ads.materials.col.product') },
+    { key: 'variants', label: t('ads.materials.stock_page.variants') },
+    { key: 'price', label: t('ads.materials.stock_page.price'), numeric: true },
+    { key: 'quantity', label: t('ads.materials.stock_page.quantity'), numeric: true },
+    { key: 'collections', label: t('ads.materials.col.collections') },
+    { key: 'availability', label: t('ads.materials.stock_page.availability') },
+]);
 
 function price(r: AdStockRow): string {
     const { min, max } = r.price;
@@ -155,137 +168,114 @@ const breadcrumbs = computed(() => [
                 </button>
             </form>
 
-            <div class="scrollbar-thin relative overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
-                <EmptyState
-                    v-if="!page.data.length"
-                    :icon="Package"
-                    :title="t('ads.materials.stock_page.empty')"
-                    :body="t('ads.materials.stock_page.empty_body')"
-                />
-                <table v-else class="w-full min-w-[960px] text-xs">
-                    <caption class="sr-only">
-                        {{
-                            t('ads.materials.stock_page.title')
-                        }}
-                    </caption>
-                    <thead class="border-b border-border/60 text-2xs font-semibold text-muted-foreground">
-                        <tr>
-                            <th scope="col" class="px-3 py-2 text-start">{{ t('ads.materials.col.image') }}</th>
-                            <th scope="col" class="px-2 py-2 text-start">{{ t('ads.materials.col.title') }}</th>
-                            <th scope="col" class="px-2 py-2 text-start">{{ t('ads.materials.col.product') }}</th>
-                            <th scope="col" class="px-2 py-2 text-start">{{ t('ads.materials.stock_page.variants') }}</th>
-                            <th scope="col" class="px-2 py-2 text-end">{{ t('ads.materials.stock_page.price') }}</th>
-                            <th scope="col" class="px-2 py-2 text-end">{{ t('ads.materials.stock_page.quantity') }}</th>
-                            <th scope="col" class="px-2 py-2 text-start">{{ t('ads.materials.col.collections') }}</th>
-                            <th scope="col" class="px-3 py-2 text-start">{{ t('ads.materials.stock_page.availability') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="r in page.data" :key="r.material_id" class="border-t border-border/60 first:border-t-0 hover:bg-muted/40">
-                            <td class="px-3 py-2">
-                                <span class="block size-12 overflow-hidden rounded-md bg-muted">
-                                    <img v-if="r.thumb_url" :src="r.thumb_url" alt="" loading="lazy" class="size-full object-cover" />
-                                    <span v-else class="flex size-full items-center justify-center"
-                                        ><ImageOff class="size-4 text-muted-foreground" aria-hidden="true"
-                                    /></span>
-                                </span>
-                            </td>
-                            <td class="max-w-56 px-2 py-2">
-                                <p class="line-clamp-2 font-bold" dir="auto">{{ r.title }}</p>
-                            </td>
-                            <td class="max-w-56 px-2 py-2">
-                                <p class="line-clamp-2 font-medium text-primary" dir="auto">{{ r.product.title }}</p>
-                            </td>
-                            <td class="px-2 py-2">
-                                <Popover v-if="r.variants.length">
-                                    <PopoverTrigger as-child>
-                                        <button type="button" class="text-primary hover:underline">
-                                            {{ t('ads.materials.stock_page.variants_n', { n: n(r.variants.length) }) }}
-                                        </button>
-                                    </PopoverTrigger>
-                                    <PopoverContent class="w-80 p-2">
-                                        <table class="w-full text-2xs">
-                                            <thead class="text-muted-foreground">
-                                                <tr>
-                                                    <th scope="col" class="px-1.5 py-1 text-start">{{ t('ads.materials.stock_page.variant') }}</th>
-                                                    <th scope="col" class="px-1.5 py-1 text-end">{{ t('ads.materials.stock_page.price') }}</th>
-                                                    <th scope="col" class="px-1.5 py-1 text-end">{{ t('ads.materials.stock_page.quantity') }}</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr v-for="v in r.variants" :key="v.id" class="border-t border-border/60">
-                                                    <td class="px-1.5 py-1" dir="auto">{{ v.title ?? v.sku ?? '—' }}</td>
-                                                    <td class="whitespace-nowrap px-1.5 py-1 text-end tabular-nums">
-                                                        {{ formatAdsMoney(v.price, locale) }}
-                                                    </td>
-                                                    <td class="px-1.5 py-1 text-end tabular-nums" :class="v.quantity > 0 ? '' : 'text-destructive'">
-                                                        {{ n(v.quantity) }}
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </PopoverContent>
-                                </Popover>
-                                <span v-else class="text-muted-foreground">—</span>
-                            </td>
-                            <td class="whitespace-nowrap px-2 py-2 text-end tabular-nums">{{ price(r) }}</td>
-                            <td class="px-2 py-2 text-end font-semibold tabular-nums" :class="r.quantity > 0 ? '' : 'text-destructive'">
-                                {{ n(r.quantity) }}
-                            </td>
-                            <td class="max-w-44 px-2 py-2">
-                                <div class="flex flex-wrap gap-1">
-                                    <span
-                                        v-for="c in r.collections"
-                                        :key="c.id"
-                                        class="inline-flex h-5 items-center rounded-full bg-primary/10 px-2 text-2xs font-medium text-primary"
-                                        dir="auto"
-                                        >{{ c.name }}</span
-                                    >
-                                    <span v-if="!r.collections.length" class="text-muted-foreground">—</span>
-                                </div>
-                            </td>
-                            <td class="px-3 py-2">
-                                <template v-if="perms.canAuthor.value">
-                                    <label class="sr-only" :for="`avail-${r.material_id}`">{{
-                                        t('ads.materials.stock_page.availability_for', { title: r.title })
-                                    }}</label>
-                                    <select
-                                        :id="`avail-${r.material_id}`"
-                                        :key="`avail-${r.material_id}-${selectsKey}`"
-                                        :value="selectValue(r)"
-                                        :disabled="busyId === r.material_id"
-                                        class="h-8 rounded-md border px-2 text-xs font-medium"
-                                        :class="
-                                            r.override === null
-                                                ? 'border-input bg-background text-foreground'
-                                                : r.availability
-                                                  ? 'border-success/40 bg-success/10 text-emerald-800 dark:text-emerald-200'
-                                                  : 'border-destructive/30 bg-destructive/10 text-destructive'
-                                        "
-                                        @change="setAvailability(r, ($event.target as HTMLSelectElement).value)"
-                                    >
-                                        <option value="yes">{{ t('ads.materials.stock_page.yes') }}</option>
-                                        <option value="no">{{ t('ads.materials.stock_page.no') }}</option>
-                                        <option value="auto">{{ t('ads.materials.stock_page.auto_now', { state: effective(r) }) }}</option>
-                                    </select>
-                                </template>
-                                <StatusChip
-                                    v-else
-                                    :label="r.availability ? t('ads.materials.stock_page.yes') : t('ads.materials.stock_page.no')"
-                                    :tone="r.availability ? 'positive' : 'negative'"
-                                    dot
-                                />
-                                <span
-                                    v-if="r.override !== null"
-                                    class="ms-1.5 inline-flex h-5 items-center rounded-full bg-violet-500/15 px-2 text-2xs font-medium text-violet-800 dark:bg-violet-500/25 dark:text-violet-100"
-                                    :title="t('ads.materials.stock_page.manual_hint')"
-                                    >{{ t('ads.materials.stock_page.manual') }}</span
-                                >
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <DataTable
+                table-id="ads-stock"
+                :columns="columns"
+                :rows="tableRows"
+                mobile="scroll"
+                sticky-first-column
+                :caption="t('ads.materials.stock_page.title')"
+            >
+                <template #empty>
+                    <EmptyState :icon="Package" :title="t('ads.materials.stock_page.empty')" :body="t('ads.materials.stock_page.empty_body')" />
+                </template>
+                <template #cell-image="{ row: r }">
+                    <span class="block size-12 overflow-hidden rounded-md bg-muted">
+                        <img v-if="r.thumb_url" :src="r.thumb_url" alt="" loading="lazy" class="size-full object-cover" />
+                        <span v-else class="flex size-full items-center justify-center"><ImageOff class="size-4 text-muted-foreground" aria-hidden="true" /></span>
+                    </span>
+                </template>
+                <template #cell-title="{ row: r }">
+                    <p class="line-clamp-2 max-w-56 whitespace-normal font-bold" dir="auto">{{ r.title }}</p>
+                </template>
+                <template #cell-product="{ row: r }">
+                    <p class="line-clamp-2 max-w-56 whitespace-normal font-medium text-primary" dir="auto">{{ r.product.title }}</p>
+                </template>
+                <template #cell-variants="{ row: r }">
+                    <Popover v-if="r.variants.length">
+                        <PopoverTrigger as-child>
+                            <button type="button" class="text-primary hover:underline">
+                                {{ t('ads.materials.stock_page.variants_n', { n: n(r.variants.length) }) }}
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent class="w-80 p-2">
+                            <table class="w-full text-2xs">
+                                <thead class="text-muted-foreground">
+                                    <tr>
+                                        <th scope="col" class="px-1.5 py-1 text-start">{{ t('ads.materials.stock_page.variant') }}</th>
+                                        <th scope="col" class="px-1.5 py-1 text-end">{{ t('ads.materials.stock_page.price') }}</th>
+                                        <th scope="col" class="px-1.5 py-1 text-end">{{ t('ads.materials.stock_page.quantity') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="v in r.variants" :key="v.id" class="border-t border-border/60">
+                                        <td class="px-1.5 py-1" dir="auto">{{ v.title ?? v.sku ?? '—' }}</td>
+                                        <td class="whitespace-nowrap px-1.5 py-1 text-end tabular-nums">
+                                            {{ formatAdsMoney(v.price, locale) }}
+                                        </td>
+                                        <td class="px-1.5 py-1 text-end tabular-nums" :class="v.quantity > 0 ? '' : 'text-destructive'">
+                                            {{ n(v.quantity) }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </PopoverContent>
+                    </Popover>
+                    <span v-else class="text-muted-foreground">—</span>
+                </template>
+                <template #cell-price="{ row: r }"><span class="whitespace-nowrap">{{ price(r) }}</span></template>
+                <template #cell-quantity="{ row: r }">
+                    <span class="font-semibold" :class="r.quantity > 0 ? '' : 'text-destructive'">{{ n(r.quantity) }}</span>
+                </template>
+                <template #cell-collections="{ row: r }">
+                    <div class="flex max-w-44 flex-wrap gap-1">
+                        <span
+                            v-for="c in r.collections"
+                            :key="c.id"
+                            class="inline-flex h-5 items-center rounded-full bg-primary/10 px-2 text-2xs font-medium text-primary"
+                            dir="auto"
+                            >{{ c.name }}</span
+                        >
+                        <span v-if="!r.collections.length" class="text-muted-foreground">—</span>
+                    </div>
+                </template>
+                <template #cell-availability="{ row: r }">
+                    <template v-if="perms.canAuthor.value">
+                        <label class="sr-only" :for="`avail-${r.material_id}`">{{ t('ads.materials.stock_page.availability_for', { title: r.title }) }}</label>
+                        <select
+                            :id="`avail-${r.material_id}`"
+                            :key="`avail-${r.material_id}-${selectsKey}`"
+                            :value="selectValue(r)"
+                            :disabled="busyId === r.material_id"
+                            class="h-8 rounded-md border px-2 text-xs font-medium"
+                            :class="
+                                r.override === null
+                                    ? 'border-input bg-background text-foreground'
+                                    : r.availability
+                                      ? 'border-success/40 bg-success/10 text-emerald-800 dark:text-emerald-200'
+                                      : 'border-destructive/30 bg-destructive/10 text-destructive'
+                            "
+                            @change="setAvailability(r, ($event.target as HTMLSelectElement).value)"
+                        >
+                            <option value="yes">{{ t('ads.materials.stock_page.yes') }}</option>
+                            <option value="no">{{ t('ads.materials.stock_page.no') }}</option>
+                            <option value="auto">{{ t('ads.materials.stock_page.auto_now', { state: effective(r) }) }}</option>
+                        </select>
+                    </template>
+                    <StatusChip
+                        v-else
+                        :label="r.availability ? t('ads.materials.stock_page.yes') : t('ads.materials.stock_page.no')"
+                        :tone="r.availability ? 'positive' : 'negative'"
+                        dot
+                    />
+                    <span
+                        v-if="r.override !== null"
+                        class="ms-1.5 inline-flex h-5 items-center rounded-full bg-violet-500/15 px-2 text-2xs font-medium text-violet-800 dark:bg-violet-500/25 dark:text-violet-100"
+                        :title="t('ads.materials.stock_page.manual_hint')"
+                        >{{ t('ads.materials.stock_page.manual') }}</span
+                    >
+                </template>
+            </DataTable>
 
             <nav
                 v-if="page.total > 0"

@@ -59,6 +59,26 @@ function itemText(n: AppNotification): string {
         return t('notifications.queue_member_not_arrived_item', { name: String(n.data.name ?? ''), shift: String(n.data.shift ?? '') });
     }
 
+    if (n.type.startsWith('ads.launch.')) {
+        const event = n.type.slice('ads.launch.'.length);
+        const reason = String(n.data.code ?? '') ? t(`ads.launch.reason.${String(n.data.code)}`) : '';
+        return t(`notifications.ads_launch.${event}`, {
+            title: String(n.data.title ?? ''),
+            account: String(n.data.account ?? ''),
+            count: Number(n.data.count ?? 0),
+            failed: Number(n.data.failed ?? 0),
+            reason: [reason, String(n.data.reason ?? '')].filter(Boolean).join(': '),
+        });
+    }
+
+    if (n.type === 'ads.alerts_stock') {
+        return t('notifications.ads_alerts_stock_item', { product: String(n.data.product ?? ''), count: Number(n.data.count ?? 0) });
+    }
+
+    if (n.type === 'ads.alerts' || n.type === 'ads.alerts_digest') {
+        return t('notifications.ads_alerts_item', { count: Number(n.data.count ?? 0), money: Number(n.data.money ?? 0) });
+    }
+
     if (n.type === 'ads.need_stop') {
         return t('notifications.ads_need_stop_item', { product: String(n.data.product_title ?? ''), material: String(n.data.title ?? '') });
     }
@@ -110,8 +130,16 @@ function itemText(n: AppNotification): string {
 
 function open(n: AppNotification): void {
     void notifications.markRead([n.id]);
+    if (n.type.startsWith('ads.launch.')) {
+        router.visit(String(n.data.link ?? '/ads/launches'));
+        return;
+    }
+    if (n.type === 'ads.alerts' || n.type === 'ads.alerts_digest' || n.type === 'ads.alerts_stock') {
+        router.visit(String(n.data.link ?? '/ads/decisions'));
+        return;
+    }
     if (n.type === 'ads.need_stop') {
-        router.visit(String(n.data.link ?? '/ads/materials?status=activated&stock=out'));
+        router.visit(String(n.data.link ?? '/ads/materials?status=live&stock=out'));
         return;
     }
     if (n.type === 'ads.data_health') {
@@ -119,7 +147,7 @@ function open(n: AppNotification): void {
         return;
     }
     if (n.type === 'ads.stop_failed' || n.type === 'ads.stop_unknown') {
-        router.visit('/ads/actions');
+        router.visit(String(n.data.link ?? '/ads/decisions?tab=log'));
         return;
     }
     if (n.type === 'ads.token_invalid' || n.type === 'ads.token_scope_missing' || n.type === 'ads.token_expiring') {

@@ -247,7 +247,8 @@ class AdsDemoSeeder extends Seeder
             $material = AdMaterial::updateOrCreate(['title' => $title], [
                 'product_id' => $products === [] ? null : $products[$i % count($products)],
                 'types' => $types,
-                'status' => $status,
+                // Derived statuses since the launch approvals (S1): activated -> live, done -> retired, not_started -> new.
+                'status' => ['activated' => 'live', 'done' => 'retired', 'not_started' => 'new'][$status],
                 'website_links' => $i % 3 === 0 ? ['https://levoile.example/products/'.$slug] : [],
                 'drive_links' => $i % 2 === 0 ? ['https://drive.google.com/drive/folders/demo-'.$slug] : [],
                 'ig_links' => $i % 4 === 1 ? ['https://www.instagram.com/p/demo'.($i + 1).'/'] : [],

@@ -53,7 +53,7 @@ it('builds every ads model through its factory and wires the relations', functio
         ->and($buyer->targets->pluck('id')->all())->toBe([$target->id])
         ->and($buyer->user)->toBeNull()
         ->and($material->types)->toBe(['reel', 'story'])
-        ->and($material->status)->toBe('not_started')
+        ->and($material->status)->toBe('new')
         ->and($material->buyer->is($buyer))->toBeTrue()
         ->and($material->collections->count())->toBe(1)
         ->and($material->files->pluck('id')->all())->toBe([$file->id])

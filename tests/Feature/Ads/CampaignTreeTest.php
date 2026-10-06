@@ -177,7 +177,7 @@ it('shows a media buyer only the metric rows of accounts assigned to them on tho
         ->and($tree['Camp MINE']['metrics']['spend'])->toBe(107.0)
         ->and($tree['Camp SHARED']['metrics']['spend'])->toBe(7.0);
 
-    $page = $this->actingAs($user)->get('/ads/campaigns?from=2026-09-01&to=2026-09-30&buyer='.$other->id)->assertOk();
+    $page = $this->actingAs($user)->get('/ads/explorer?view=tree&from=2026-09-01&to=2026-09-30&buyer='.$other->id)->assertOk();
     expect($page->getContent())->not->toContain('FOREIGN');
 });
 
@@ -185,16 +185,16 @@ it('serves the page to ads report roles and keeps content users out', function (
     $w = ctWorld();
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
-    $this->actingAs($admin)->get('/ads/campaigns?from=2026-09-01&to=2026-09-30&sort=roas')->assertOk()->assertInertia(fn (Assert $p) => $p
-        ->component('Ads/Campaigns')
-        ->where('filters.sort', 'roas')->where('filters.from', '2026-09-01')
+    $this->actingAs($admin)->get('/ads/explorer?view=tree&from=2026-09-01&to=2026-09-30&sort=-roas')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->component('Ads/Explorer', false)
+        ->where('filters.sort', '-roas')->where('filters.from', '2026-09-01')
         ->has('tree', 2)->where('tree.0.id', $w['c1']->id)
         ->has('buyers')->has('platforms', 3)->where('currency', 'EGP'));
 
-    $this->actingAs($admin)->get('/ads/campaigns?from=2026-09-01&to=2026-09-30&sort=bogus')->assertOk()->assertInertia(fn (Assert $p) => $p
-        ->where('filters.sort', 'spend'));
+    $this->actingAs($admin)->get('/ads/explorer?view=tree&from=2026-09-01&to=2026-09-30&sort=bogus')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->where('filters.sort', '-spend'));
 
-    $this->actingAs(User::factory()->create(['role' => UserRole::Content]))->get('/ads/campaigns')->assertRedirect();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Content]))->get('/ads/explorer?view=tree')->assertRedirect();
 });
 
 it('keeps one placeholder per account for ads without a campaign', function () {
@@ -220,11 +220,11 @@ it('filters the page by accounts and exposes the picked ones and the options', f
     ctAd($other, $oc, AdSet::factory()->for($oc, 'campaign')->create(), 'other ad', ['spend' => 5]);
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
-    $this->actingAs($admin)->get('/ads/campaigns?from=2026-09-01&to=2026-09-30&accounts[]='.$other->id)->assertOk()->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/ads/explorer?view=tree&from=2026-09-01&to=2026-09-30&accounts[]='.$other->id)->assertOk()->assertInertia(fn (Assert $p) => $p
         ->has('tree', 1)->where('tree.0.id', $oc->id)
         ->where('filters.accounts', [$other->id])
         ->has('account_options', 2));
 
-    $this->actingAs($admin)->get('/ads/campaigns?from=2026-09-01&to=2026-09-30')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/ads/explorer?view=tree&from=2026-09-01&to=2026-09-30')->assertInertia(fn (Assert $p) => $p
         ->has('tree', 3)->where('filters.accounts', []));
 });

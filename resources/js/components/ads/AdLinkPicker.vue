@@ -5,7 +5,7 @@
  * whole selection to POST /ads/materials/{id}/ads; the server keeps other buyers' links.
  */
 import PlatformChip from '@/components/ads/PlatformChip.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
@@ -159,9 +159,8 @@ function save(): void {
             </li>
         </ul>
 
-        <button type="button" :class="cn(buttonVariants({ variant: 'default', size: 'sm' }), 'gap-1.5')" :disabled="saving" @click="save">
-            <LoaderCircle v-if="saving" class="size-3.5 animate-spin" aria-hidden="true" />
-            <Link2 v-else class="size-3.5" aria-hidden="true" />{{ t('ads.materials.link.save') }}
-        </button>
+        <Button type="button" size="sm" class="gap-1.5" @click="save" :loading="saving">
+            <Link2 class="size-3.5" aria-hidden="true" />{{ t('ads.materials.link.save') }}
+        </Button>
     </div>
 </template>

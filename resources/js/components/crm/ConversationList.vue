@@ -33,6 +33,8 @@ const props = withDefaults(
         filtered?: boolean;
         /** The substring search matched too many customers: hint to narrow it. */
         searchTruncated?: boolean;
+        /** Control room S3: the first-reply target (seconds) for the rows' waiting age. */
+        firstReplyTarget?: number | null;
     }>(),
     {
         loading: false,
@@ -44,6 +46,7 @@ const props = withDefaults(
         queueEnabled: false,
         filtered: false,
         searchTruncated: false,
+        firstReplyTarget: null,
     },
 );
 
@@ -134,6 +137,7 @@ const chips = computed(() => {
     if (f.platform) out.push({ key: 'platform', label: platformOptions.value.find((p) => p.value === f.platform)?.label ?? f.platform });
     if (f.tag) out.push({ key: 'tag', label: props.tags.find((tag) => tag.id === f.tag)?.name ?? `#${f.tag}` });
     for (const flag of f.flags) out.push({ key: `flag:${flag}`, label: t(`inbox.filters.${flag}`) });
+    if (f.from || f.to) out.push({ key: 'date', label: t('inbox.date_chip', { from: f.from ?? '…', to: f.to ?? '…' }) });
     return out;
 });
 const moreCount = computed(
@@ -145,6 +149,10 @@ function removeChip(key: string): void {
     if (key.startsWith('flag:')) {
         const flag = key.slice(5);
         emit('update', { flags: props.filters.flags.filter((f) => f !== flag) });
+        return;
+    }
+    if (key === 'date') {
+        emit('update', { from: null, to: null });
         return;
     }
     emit('update', { [key]: null } as Partial<InboxFilters>);
@@ -281,35 +289,54 @@ defineExpose({
                     />
                 </template>
                 <template #tabs>
-                    <div
-                        ref="tabList"
-                        role="tablist"
-                        :aria-label="t('inbox.status_label')"
-                        class="scrollbar-none -mx-3 flex gap-0.5 overflow-x-auto px-3"
-                        @keydown="onTabKeydown"
-                    >
-                        <button
-                            v-for="tab in TABS"
-                            :key="tab ?? 'all'"
-                            type="button"
-                            role="tab"
-                            :aria-selected="tabActive(tab)"
-                            :tabindex="tabActive(tab) ? 0 : -1"
-                            class="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            :class="
-                                tabActive(tab)
-                                    ? 'bg-surface-accent font-semibold text-primary'
-                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                            "
-                            @click="emit('update', { status: tab })"
+                    <div class="flex min-w-0 items-center gap-1">
+                        <div
+                            ref="tabList"
+                            role="tablist"
+                            :aria-label="t('inbox.status_label')"
+                            class="scrollbar-none fade-inline-end -ms-3 flex min-w-0 flex-1 gap-0.5 overflow-x-auto pe-6 ps-3"
+                            data-chip-row
+                            @keydown="onTabKeydown"
                         >
-                            {{ t(`inbox.tabs.${tab ?? 'all'}`) }}
-                            <span
-                                v-if="tabCount(tab)"
-                                class="tabular-nums"
-                                :class="tabActive(tab) ? 'text-primary/80' : 'text-muted-foreground/80'"
-                                >{{ tabCount(tab) }}</span
+                            <button
+                                v-for="tab in TABS"
+                                :key="tab ?? 'all'"
+                                type="button"
+                                role="tab"
+                                :aria-selected="tabActive(tab)"
+                                :tabindex="tabActive(tab) ? 0 : -1"
+                                class="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                :class="
+                                    tabActive(tab)
+                                        ? 'bg-surface-accent font-semibold text-primary'
+                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                "
+                                @click="emit('update', { status: tab })"
                             >
+                                {{ t(`inbox.tabs.${tab ?? 'all'}`) }}
+                                <span
+                                    v-if="tabCount(tab)"
+                                    class="tabular-nums"
+                                    :class="tabActive(tab) ? 'text-primary/80' : 'text-muted-foreground/80'"
+                                    >{{ tabCount(tab) }}</span
+                                >
+                            </button>
+                        </div>
+                        <!-- Control room S3 (G8): oldest waiting first, waiting chats only. -->
+                        <button
+                            type="button"
+                            class="inline-flex h-8 shrink-0 items-center rounded-full border px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            :class="
+                                filters.sort === 'oldest_waiting'
+                                    ? 'border-primary bg-surface-accent font-semibold text-primary'
+                                    : 'border-border text-muted-foreground hover:bg-elevated'
+                            "
+                            :aria-pressed="filters.sort === 'oldest_waiting'"
+                            :aria-label="`${t('inbox.sort.label')}: ${t('inbox.sort.oldest_waiting')}`"
+                            data-sort-oldest-waiting
+                            @click="emit('update', { sort: filters.sort === 'oldest_waiting' ? null : 'oldest_waiting' })"
+                        >
+                            {{ t('inbox.sort.oldest_waiting') }}
                         </button>
                     </div>
                 </template>
@@ -367,6 +394,7 @@ defineExpose({
                         :conversation="conversations[item.index]"
                         :state="states.get(conversations[item.index].id) ?? null"
                         :active="conversations[item.index].id === selectedId"
+                        :first-reply-target="firstReplyTarget"
                         @select="(id, pointer) => emit('select', id, pointer)"
                         @intent="(id) => emit('intent', id)"
                         @contextmenu="(id, event) => emit('tagMenu', id, event.clientX, event.clientY)"

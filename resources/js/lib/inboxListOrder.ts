@@ -20,11 +20,11 @@ export function priorityRank(level: Conversation['priority_level'] | undefined):
     return level ? (PRIORITY_RANK[level] ?? 3) : 3;
 }
 
-type OrderFilters = Pick<InboxFilters, 'status' | 'queue' | 'flags'>;
+type OrderFilters = Pick<InboxFilters, 'status' | 'queue' | 'flags' | 'sort'>;
 
 /**
  * Sort comparator for the active filters (ConversationQuery::build):
- * - status=waiting or the waiting flag: oldest customer message first
+ * - status=waiting, the waiting flag or sort=oldest_waiting: oldest customer message first
  * - a queue state or a priority-ordered flag: priority high → medium → low → none, oldest customer message first, then id
  * - everything else: newest activity first
  * Null timestamps sort FIRST in ascending orders, like the server (NULL is smallest on MariaDB and sqlite).
@@ -32,7 +32,7 @@ type OrderFilters = Pick<InboxFilters, 'status' | 'queue' | 'flags'>;
 export function compareConversations(f: OrderFilters): (a: Conversation, b: Conversation) => number {
     const flags = f.flags ?? [];
 
-    if (f.status === 'waiting' || flags.includes('waiting')) {
+    if (f.status === 'waiting' || flags.includes('waiting') || f.sort === 'oldest_waiting') {
         return (a, b) => {
             const wa = time(a.last_customer_message_at, Number.MIN_SAFE_INTEGER);
             const wb = time(b.last_customer_message_at, Number.MIN_SAFE_INTEGER);
@@ -105,6 +105,8 @@ export function matchesInboxFilters(c: Conversation, f: InboxFilters): { keep: b
             if (c.status === 'resolved') return no;
             break;
     }
+    // sort=oldest_waiting lists waiting chats only (server side): a resolved row is out for sure.
+    if (f.sort === 'oldest_waiting' && c.status === 'resolved') return no;
 
     if ((flags.includes('needs_human') || flags.includes('queue_all')) && !c.needs_human) return no;
     if (flags.includes('queue_high') && !(c.needs_human && c.priority_level === 'high')) return no;
@@ -115,7 +117,15 @@ export function matchesInboxFilters(c: Conversation, f: InboxFilters): { keep: b
     if (flags.includes('test') && !c.is_test) return no;
 
     const undecided =
-        f.status === 'waiting' || f.status === 'with_moderator' || !!f.queue || !!f.assignee || flags.some((flag) => !LOCAL_FLAGS.includes(flag));
+        f.status === 'waiting' ||
+        f.status === 'with_moderator' ||
+        f.sort === 'oldest_waiting' ||
+        !!f.queue ||
+        !!f.assignee ||
+        // Control room S4: the start-day range is the server's (Cairo days).
+        !!f.from ||
+        !!f.to ||
+        flags.some((flag) => !LOCAL_FLAGS.includes(flag));
 
     return { keep: true, undecided };
 }

@@ -19,6 +19,7 @@ use App\Enums\UserRole;
 use App\Events\OrderUpdated;
 use App\Events\UserNotified;
 use App\Inbox\OutboundService;
+use App\Inbox\Outcomes\OutcomeRecorder;
 use App\Models\City;
 use App\Models\Conversation;
 use App\Models\Customer;
@@ -180,6 +181,9 @@ class OrderService
         }
 
         $this->updateCustomerContact($order);
+
+        // Control room S3 (D13): the episode this order came from is `ordered` (automatic). Never fails the order.
+        rescue(fn () => app(OutcomeRecorder::class)->orderPlaced($order), null, report: true);
 
         SafeBroadcast::send(new OrderUpdated($order));
 

@@ -1,6 +1,15 @@
-import type { AdsAccess, MaterialRow } from '@/types/ads';
+import type { AdsAccess, MaterialRow, MaterialStats, MaterialStatus } from '@/types/ads';
 import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
+
+/**
+ * The buyer's review queue entry on the library header (final review C1): the «المكتبة» badge counts drafts waiting for
+ * the buyer, which live on /ads/launches, so the library shows the way there. Null when nothing waits.
+ */
+export function reviewQueueLink(counters: { buyer_review?: number } | null | undefined): { href: string; count: number } | null {
+    const n = counters?.buyer_review ?? 0;
+    return n > 0 ? { href: '/ads/launches?box=review', count: n } : null;
+}
 
 /** What the backend allows (MaterialService::canAuthor / canOperate, MaterialController::destroy|status). */
 export function useMaterialPermissions() {
@@ -18,7 +27,12 @@ export function useMaterialPermissions() {
     const canDelete = (m: Pick<MaterialRow, 'creator'>) =>
         canManage.value || (isContent.value && m.creator !== null && user.value !== null && m.creator.id === user.value.id);
 
-    return { canManage, canAuthor, canOperate, isContent, canDelete };
+    /** Prepare a launch draft (content, buyers, supervisor+). */
+    const canPrepare = computed(() => canAuthor.value || canOperate.value);
+    /** The old direct publish dialog (admins only, O7). */
+    const canDirectPublish = computed(() => ads.value?.canDirectPublish === true);
+
+    return { canManage, canAuthor, canOperate, isContent, canDelete, canPrepare, canDirectPublish };
 }
 
 /** Link arrays are null when they were never set. */
@@ -72,4 +86,23 @@ export function pageList(current: number, last: number): (number | null)[] {
     out.push(last);
 
     return out;
+}
+
+/** The derived material statuses in the library filter's order (جديدة / في المراجعة / شغالة / واقفة / خلصت). */
+export const MATERIAL_STATUSES: MaterialStatus[] = ['new', 'in_review', 'live', 'paused', 'retired'];
+
+/**
+ * The library stats header per derived status, in the filter's order and under the filter's names (final fix 2):
+ * `new` = not_started − in_review (the server's not_started is new + in review).
+ */
+export function statusCounts(stats: MaterialStats): { status: MaterialStatus; value: number }[] {
+    const value: Record<MaterialStatus, number> = {
+        new: Math.max(0, stats.not_started - stats.in_review),
+        in_review: stats.in_review,
+        live: stats.activated,
+        paused: stats.paused,
+        retired: stats.done,
+    };
+
+    return MATERIAL_STATUSES.map((status) => ({ status, value: value[status] }));
 }

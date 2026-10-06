@@ -69,7 +69,7 @@ it('sends it when a supervisor closes the window on her behalf', function () {
     [$e] = cmWindow();
     $boss = User::factory()->create(['role' => 'supervisor', 'last_seen_at' => now()]);
 
-    $this->actingAs($boss)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'inquiry'])->assertOk();
+    $this->actingAs($boss)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'inquiry', 'outcome' => 'browsing'])->assertOk();
 
     expect($e->fresh()->closed_by_id)->toBe($boss->id)->and(cmBotTexts($e))->toBe([CM_CLOSING_TEXT]);
 });

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AdSourceChip from '@/components/crm/AdSourceChip.vue';
+import EmptyState from '@/components/crm/EmptyState.vue';
 import MergeSuggestions from '@/components/crm/MergeSuggestions.vue';
 import OrderCard from '@/components/crm/OrderCard.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -10,9 +12,23 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatListStamp, formatMoney } from '@/lib/format';
 import type { Conversation, Customer } from '@/types/crm';
 import { Head, Link } from '@inertiajs/vue3';
+import { MessagesSquare } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps<{ customer: Customer; conversations: Conversation[]; canMerge: boolean }>();
+
+/** Control room S3: the ads she came from (her chats' ad referrals), each once. */
+const adSources = computed(() => {
+    const seen = new Map<string, { key: string; name: string | null; thumbnail_url: string | null; campaign: string | null }>();
+    for (const c of props.conversations) {
+        const ad = c.ad;
+        if (!ad) continue;
+        const key = ad.id ?? ad.ref ?? `c${c.id}`;
+        if (!seen.has(key)) seen.set(key, { key, name: ad.title || ad.name, thumbnail_url: ad.photo_url, campaign: ad.campaign });
+    }
+
+    return [...seen.values()];
+});
 
 const { t, locale } = useI18n();
 const now = Date.now();
@@ -33,6 +49,7 @@ const breadcrumbs = computed(() => [
     { title: t('customers.title'), href: '/customers' },
     { title: title.value, href: `/customers/${props.customer.id}` },
 ]);
+const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, href: b.href })));
 </script>
 
 <template>
@@ -40,7 +57,7 @@ const breadcrumbs = computed(() => [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="title" />
+            <PageHeader :title="title" :breadcrumbs="crumbs" />
 
             <div class="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
                 <aside class="space-y-4">
@@ -75,6 +92,12 @@ const breadcrumbs = computed(() => [
                             <span v-for="tag in customer.tags" :key="tag" class="rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground">{{ tag }}</span>
                         </div>
                         <p v-else class="text-muted-foreground">{{ t('customer.no_tags') }}</p>
+                        <template v-if="adSources.length">
+                            <h2 class="mb-1 mt-3 font-medium">{{ t('customer.ads') }}</h2>
+                            <ul class="space-y-1">
+                                <li v-for="ad in adSources" :key="ad.key"><AdSourceChip :source="ad" /></li>
+                            </ul>
+                        </template>
 
                         <h2 class="mb-1 mt-3 font-medium">{{ t('customer.addresses') }}</h2>
                         <ul v-if="customer.addresses?.length" class="space-y-1.5">
@@ -95,7 +118,7 @@ const breadcrumbs = computed(() => [
                 <div class="grid content-start gap-4 xl:grid-cols-2">
                     <section class="rounded-lg bg-card shadow-card">
                         <h2 class="border-b border-border px-3 py-2 text-xs font-medium">{{ t('customers.conversations') }}</h2>
-                        <p v-if="!conversations.length" class="px-3 py-6 text-center text-xs text-muted-foreground">{{ t('customers.no_conversations') }}</p>
+                        <EmptyState v-if="!conversations.length" :icon="MessagesSquare" :title="t('customers.no_conversations')" />
                         <ul class="divide-y divide-border">
                             <li v-for="c in conversations" :key="c.id">
                                 <Link :href="`/inbox?c=${c.id}`" class="flex items-start gap-2 px-3 py-2 text-xs hover:bg-muted/50">

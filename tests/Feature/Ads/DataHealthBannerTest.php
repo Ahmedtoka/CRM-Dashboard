@@ -46,7 +46,7 @@ function dbAdmin(): User
 /** @return list<string> every Ads report page that must carry the banner props */
 function dbPages(MediaBuyer $buyer): array
 {
-    return ['/ads', '/ads/buyers', "/ads/buyers/{$buyer->id}", '/ads/creatives', '/ads/campaigns', '/ads/winners', '/ads/actions'];
+    return ['/ads', '/ads/numbers', "/ads/buyers/{$buyer->id}", '/ads/explorer', '/ads/explorer?view=tree', '/ads/explorer?view=cards', '/ads/decisions', '/ads/decisions?tab=log'];
 }
 
 it('puts the stale reason on every Ads report page and names the account', function () {
@@ -182,4 +182,14 @@ it('flags an account never judged (complete_from null) as not verified yet, but 
     $this->actingAs(dbAdmin())->get('/ads?from=2026-09-05&to=2026-09-28')->assertInertia(fn (AssertableInertia $p) => $p
         ->where('data_health.reasons.0.reason', 'incomplete')->where('data_health.reasons.0.accounts', [])
         ->where('data_health.reasons.0.unverified', ['Fresh Synced']));
+});
+
+it('final review C6: the stale reason carries the configured hours for the banner text', function () {
+    config(['crm.ads.health.stale_after_hours' => 2]);
+    $admin = dbAdmin();
+    dbAccount('Stale Shop', 3 * 60);
+
+    Cache::flush();
+    $this->actingAs($admin)->get('/ads/numbers')->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
+        ->where('data_health.reasons.0.reason', 'stale')->where('data_health.reasons.0.hours', 2));
 });

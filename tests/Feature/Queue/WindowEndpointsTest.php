@@ -118,7 +118,7 @@ it('needs a signed-in user', function () {
 it('lets the assignee close her window with a reason', function (string $reason) {
     [$u, $m, $e] = deskWithWindow();
 
-    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => $reason])->assertOk()
+    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => $reason, 'outcome' => 'browsing'])->assertOk()
         ->assertJsonPath('data.id', $e->id)->assertJsonPath('data.status', 'closed')->assertJsonPath('data.close_reason', $reason);
 
     $e->refresh();
@@ -131,7 +131,7 @@ it('lets the assignee close her window with a reason', function (string $reason)
 it('opens a support case of the chosen type on a case close', function () {
     [$u, , $e] = deskWithWindow(entry: ['bot_summary' => ['topic' => 'مقاس غلط']]);
 
-    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'case', 'case_type' => 'return'])->assertOk()
+    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'case', 'case_type' => 'return', 'outcome' => 'browsing'])->assertOk()
         ->assertJsonPath('data.close_reason', 'case');
 
     $case = SupportCase::query()->where('queue_entry_id', $e->id)->first();
@@ -173,7 +173,7 @@ it('lets a supervisor or an admin close any window', function (string $role) {
     [$u, , $e] = deskWithWindow();
     $boss = User::factory()->create(['role' => $role]);
 
-    $this->actingAs($boss)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'problem'])->assertOk()
+    $this->actingAs($boss)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'problem', 'outcome' => 'browsing'])->assertOk()
         ->assertJsonPath('data.close_reason', 'problem');
 
     expect($e->fresh()->closed_by_id)->toBe($boss->id)->and($e->fresh()->assigned_user_id)->toBe($u->id);
@@ -306,7 +306,7 @@ it('refuses every action while the queue is off', function () {
     QueueSetting::current()->update(['enabled' => false]);
 
     foreach ([
-        ["/queue/entries/{$e->id}/close", ['reason' => 'inquiry']],
+        ["/queue/entries/{$e->id}/close", ['reason' => 'inquiry', 'outcome' => 'browsing']],
         ["/queue/entries/{$e->id}/escalate", []],
         ['/queue/me/status', ['status' => 'break']],
     ] as [$url, $body]) {
@@ -354,7 +354,7 @@ it('lets the assignee resolve her own window through the inbox', function () {
     [$u, , $e] = deskWithWindow();
     $u->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
 
-    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
+    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/resolve", ['outcome' => 'browsing'])->assertOk();
 
     expect($e->fresh()->close_reason)->toBe('resolved_elsewhere')->and($e->conversation->fresh()->status->value)->toBe('resolved');
 });
@@ -362,7 +362,7 @@ it('lets the assignee resolve her own window through the inbox', function () {
 it('lets a supervisor or an admin resolve a moderator\'s window through the inbox', function (string $role) {
     [, , $e] = deskWithWindow();
 
-    $this->actingAs(User::factory()->create(['role' => $role]))->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
+    $this->actingAs(User::factory()->create(['role' => $role]))->postJson("/inbox/conversations/{$e->conversation_id}/resolve", ['outcome' => 'browsing'])->assertOk();
 
     expect($e->fresh()->status)->toBe('closed')->and($e->fresh()->close_reason)->toBe('resolved_elsewhere');
 })->with(['supervisor', 'admin']);
@@ -372,7 +372,7 @@ it('lets any moderator resolve a customer who is still waiting in the lounge', f
     $u = User::factory()->create(['role' => 'moderator']);
     $u->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
 
-    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
+    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/resolve", ['outcome' => 'browsing'])->assertOk();
 
     expect($e->fresh()->status)->toBe('cancelled');
 });
@@ -383,7 +383,7 @@ it('leaves the old resolve as it was while the queue is off', function () {
     $other->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
     QueueSetting::current()->update(['enabled' => false]);
 
-    $this->actingAs($other)->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
+    $this->actingAs($other)->postJson("/inbox/conversations/{$e->conversation_id}/resolve", ['outcome' => 'browsing'])->assertOk();
 
     expect($e->conversation->fresh()->status->value)->toBe('resolved');
 });

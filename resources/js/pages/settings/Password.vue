@@ -115,7 +115,7 @@ const updatePassword = () => {
                         >
                             <p class="text-sm text-muted-foreground">{{ t('nav.settings_layout.saved') }}</p>
                         </TransitionRoot>
-                        <Button :disabled="form.processing">{{ t('nav.settings_layout.save_password') }}</Button>
+                        <Button :loading="form.processing">{{ t('nav.settings_layout.save_password') }}</Button>
                     </div>
                 </form>
             </div>

@@ -6,6 +6,7 @@
  */
 import Callout from '@/components/crm/Callout.vue';
 import { useI18n } from '@/composables/useI18n';
+import { formatNumber } from '@/i18n';
 import type { AdsDataHealth } from '@/types/ads';
 import { computed } from 'vue';
 
@@ -18,7 +19,7 @@ const props = withDefaults(
     { dataHealth: () => ({ reasons: [] }), numbersUnderReview: false, clampedToHistory: false },
 );
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 interface Line {
     key: string;
@@ -32,7 +33,8 @@ const lines = computed<Line[]>(() => {
         const unverifiedMore = (r.unverified_more ?? 0) > 0 ? ` ${t('ads.health.and_more', { n: r.unverified_more ?? 0 })}` : '';
         const unverified = r.unverified?.length ? t('ads.health.unverified', { names: r.unverified.join('، ') }) + unverifiedMore : '';
         // accounts never judged are named once, in their own part
-        const head = r.accounts.length ? `${t(`ads.health.reasons.${r.reason}`)}: ${names}${more}` : '';
+        const params = r.reason === 'stale' ? { hours: formatNumber(locale.value, r.hours ?? 3) } : undefined;
+        const head = r.accounts.length ? `${t(`ads.health.reasons.${r.reason}`, params)}: ${names}${more}` : '';
 
         return { key: r.reason, text: [head, unverified].filter(Boolean).join(' · ') };
     });

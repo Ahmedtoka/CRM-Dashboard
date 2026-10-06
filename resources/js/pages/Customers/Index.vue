@@ -1,47 +1,45 @@
 <script setup lang="ts">
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import EmptyState from '@/components/crm/EmptyState.vue';
+import FilterBar from '@/components/crm/FilterBar.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import Pagination from '@/components/crm/Pagination.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
+import { useUrlFilters } from '@/composables/useUrlFilters';
+import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatDateTime, formatMoney } from '@/lib/format';
 import type { Paginated } from '@/types/admin';
 import type { Customer } from '@/types/crm';
 import { Head, router } from '@inertiajs/vue3';
-import { Search } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { SearchX } from 'lucide-vue-next';
+import { computed, watch } from 'vue';
 
 type CustomerRow = Customer & { last_contact_at?: string | null };
 
-const props = defineProps<{ customers: Paginated<CustomerRow>; filters: { q: string | null } }>();
+// The server still shares `filters`; the page reads the same values from the URL (useUrlFilters).
+defineOptions({ inheritAttrs: false });
+
+defineProps<{ customers: Paginated<CustomerRow> }>();
 
 const { t, locale } = useI18n();
-const loading = ref(false);
+const { loading, track } = useVisitLoading();
 
-const search = ref(props.filters.q ?? '');
-let timer: number | undefined;
-watch(search, (value) => {
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => {
-        const q = value.trim();
-        router.get('/customers', q ? { q } : {}, {
-            preserveState: true,
-            replace: true,
-            onStart: () => (loading.value = true),
-            onFinish: () => (loading.value = false),
-        });
-    }, 350);
+// Search and sort live in the URL; the server whitelists the sort keys (CustomerController::SORTS).
+const { filters, set, clear, query } = useUrlFilters({ q: '', sort: '' }, { replaceKeys: ['q'] });
+watch(query, (q) => {
+    router.get('/customers', q, track({ only: ['customers', 'filters'], preserveState: true, preserveScroll: true, replace: true }));
 });
-onBeforeUnmount(() => window.clearTimeout(timer));
 
 const columns = computed<Column[]>(() => [
-    { key: 'name', label: t('customers.columns.name'), primary: true },
+    { key: 'name', label: t('customers.columns.name'), primary: true, sortable: true },
     { key: 'phone', label: t('customers.columns.phone'), dir: 'ltr' },
     { key: 'identities', label: t('customers.columns.platforms'), hideOnMobile: true },
-    { key: 'orders_count', label: t('customers.columns.orders'), align: 'end' },
-    { key: 'total_spent', label: t('customers.columns.spent'), align: 'end' },
-    { key: 'last_contact_at', label: t('customers.columns.last_contact') },
+    { key: 'orders_count', label: t('customers.columns.orders'), numeric: true, sortable: true },
+    { key: 'total_spent', label: t('customers.columns.spent'), numeric: true, sortable: true },
+    { key: 'last_contact_at', label: t('customers.columns.last_contact'), sortable: true },
 ]);
 
 const breadcrumbs = computed(() => [{ title: t('customers.title'), href: '/customers' }]);
@@ -54,13 +52,30 @@ const breadcrumbs = computed(() => [{ title: t('customers.title'), href: '/custo
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('customers.title')" />
 
-            <div class="relative max-w-sm">
-                <Search class="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <input v-model="search" type="search" :placeholder="t('customers.search')" :aria-label="t('customers.search')" class="h-8 w-full rounded-full border border-input bg-elevated pe-2 ps-8 text-sm" />
+            <div class="rounded-lg bg-card p-3 shadow-card">
+                <FilterBar :search="filters.q" :search-placeholder="t('customers.search')" :chips="[]" @update:search="set({ q: $event })" @clear="clear()" />
             </div>
 
             <div>
-                <DataTable :columns="columns" :rows="customers.data" clickable :loading="loading" :empty="t('customers.empty')" :caption="t('customers.title')" @row-click="router.visit(`/customers/${$event.id}`)">
+                <DataTable
+                    table-id="customers"
+                    :columns="columns"
+                    :rows="customers.data"
+                    clickable
+                    :loading="loading"
+                    :empty="t('customers.empty')"
+                    :caption="t('customers.title')"
+                    :sort="filters.sort || null"
+                    @update:sort="set({ sort: $event })"
+                    @row-click="router.visit(`/customers/${$event.id}`)"
+                >
+                    <template v-if="filters.q" #empty>
+                        <EmptyState :icon="SearchX" :title="t('customers.empty')">
+                            <template #action>
+                                <Button variant="outline" size="sm" @click="set({ q: '' })">{{ t('customers.clear_search') }}</Button>
+                            </template>
+                        </EmptyState>
+                    </template>
                     <template #cell-name="{ row }"><span class="font-medium" dir="auto">{{ row.name ?? '—' }}</span></template>
                     <template #cell-phone="{ row }"><span dir="ltr">{{ row.phone ?? '—' }}</span></template>
                     <template #cell-identities="{ row }">

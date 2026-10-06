@@ -14,7 +14,7 @@ class AdMaterial extends Model
     /** @use HasFactory<AdMaterialFactory> */
     use HasFactory;
 
-    protected $fillable = ['title', 'product_id', 'types', 'status', 'website_links', 'drive_links', 'ig_links', 'content_notes', 'media_buyer_id', 'created_by_id', 'activated_at', 'done_at', 'need_stop_at', 'stock_override'];
+    protected $fillable = ['title', 'product_id', 'types', 'status', 'website_links', 'drive_links', 'ig_links', 'content_notes', 'media_buyer_id', 'created_by_id', 'activated_at', 'done_at', 'need_stop_at', 'stock_override', 'retired_by_id', 'retire_reason'];
 
     protected function casts(): array
     {
@@ -49,5 +49,10 @@ class AdMaterial extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    public function launches(): HasMany
+    {
+        return $this->hasMany(AdLaunch::class, 'ad_material_id');
     }
 }

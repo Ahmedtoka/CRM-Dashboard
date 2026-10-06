@@ -1,17 +1,24 @@
 <script setup lang="ts">
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
+import { useUrlFilters } from '@/composables/useUrlFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { sortRows } from '@/lib/sort';
 import type { BranchRow } from '@/types/admin';
 import { Head, router } from '@inertiajs/vue3';
-import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { Button } from '@/components/ui/button';
+import { Pencil, Plus, Store, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 
 const props = defineProps<{ branches: BranchRow[] }>();
+
+// Each area's list sorts in the browser by the same key, kept in the URL.
+const { filters, set } = useUrlFilters({ sort: '' });
 
 const { t, locale, dir } = useI18n();
 const toast = useToast();
@@ -150,7 +157,7 @@ const groups = computed(() => {
 });
 
 const columns = computed<Column[]>(() => [
-    { key: 'name', label: t('settings.branches.name') },
+    { key: 'name', label: t('settings.branches.name'), sortable: true },
     { key: 'address', label: t('settings.branches.address') },
     { key: 'phone', label: t('settings.branches.phone') },
     { key: 'is_active', label: t('settings.branches.active'), align: 'center' },
@@ -181,9 +188,13 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                 </button>
             </PageHeader>
 
-            <p v-if="!branches.length" class="rounded-lg bg-card p-6 text-center text-sm text-muted-foreground shadow-card">
-                {{ t('settings.branches.empty') }}
-            </p>
+            <div v-if="!branches.length" class="rounded-lg bg-card shadow-card">
+                <EmptyState :icon="Store" :title="t('settings.branches.empty')">
+                    <template #action>
+                        <Button size="sm" @click="edit(null)"><Plus aria-hidden="true" />{{ t('settings.branches.add') }}</Button>
+                    </template>
+                </EmptyState>
+            </div>
 
             <div v-for="group in groups" :key="group.key" class="space-y-2">
                 <h2 class="flex items-center gap-2 text-sm font-semibold" :dir="dir">
@@ -191,7 +202,15 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                     <span class="text-xs font-normal text-muted-foreground">{{ branchCount(group.rows.length) }}</span>
                 </h2>
 
-                <DataTable :columns="columns" :rows="group.rows" :empty="t('settings.branches.empty')" :caption="group.label">
+                <DataTable
+                    table-id="settings-branches"
+                    :columns="columns"
+                    :rows="sortRows(group.rows, filters.sort)"
+                    :empty="t('settings.branches.empty')"
+                    :caption="group.label"
+                    :sort="filters.sort || null"
+                    @update:sort="set({ sort: $event })"
+                >
                     <template #cell-name="{ row }"><span class="font-medium" dir="rtl">{{ row.name }}</span></template>
                     <template #cell-address="{ row }"><span class="text-xs" dir="auto">{{ row.address }}</span></template>
                     <template #cell-phone="{ row }"><span dir="ltr">{{ row.phone ?? '—' }}</span></template>

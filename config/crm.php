@@ -319,6 +319,16 @@ return [
 
     'private_reply_days' => 7,
 
+    // Control room S3 (D13): conversation episode outcomes.
+    'outcomes' => [
+        'idle_hours' => (int) env('CRM_OUTCOMES_IDLE_HOURS', 24),
+        // Episodes whose first customer message is older than this are never ended by the idle sweep
+        // (no backfill of history as no_answer). Set to the deploy date on the server.
+        'tracking_from' => env('CRM_OUTCOMES_FROM', '2026-10-08'),
+        // The idle sweep looks back at most this many days (and never before tracking_from).
+        'lookback_days' => 14,
+    ],
+
     // Learning v2 (spec 2026-09-18 §1-2): the bot learns from real conversations
     // only — a conversation counts when its channel account's driver is listed
     // here (the demo accounts use `fake`). Per-conversation reviews stop at the
@@ -442,6 +452,8 @@ return [
             'timeout_seconds' => 20,
             // Minutes a UI proposal stays confirmable (write-api 3; 2.1 rule 1: a proposal never locks anything).
             'proposal_ttl_minutes' => 10,
+            // Run confirm needs a password confirmation within this many seconds (R-31, B9); 0 turns the check off.
+            'run_reauth_seconds' => (int) env('ADS_RUN_REAUTH_SECONDS', 900),
             // A Run's propose-time live read younger than this is reused at confirm; older, the object is read again (B3).
             'preread_fresh_seconds' => 60,
             // Confirmed-Stop retry (2.1 rule 6): attempts in all, seconds between them (at least; Meta's regain time wins

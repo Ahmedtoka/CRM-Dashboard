@@ -4,11 +4,15 @@ import ConversationList from '@/components/crm/ConversationList.vue';
 import ConversationTagMenu from '@/components/crm/ConversationTagMenu.vue';
 import CreateOrderDrawer from '@/components/crm/CreateOrderDrawer.vue';
 import CustomerPanel from '@/components/crm/CustomerPanel.vue';
+import DetailsOverlay from '@/components/crm/DetailsOverlay.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
+import InlineError from '@/components/crm/InlineError.vue';
 import MyWindowsStrip from '@/components/crm/queue/MyWindowsStrip.vue';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { INBOX_OUTCOME, useConversationContext } from '@/composables/inbox/useConversationContext';
 import { useConversationList } from '@/composables/inbox/useConversationList';
+import { useDetailsPanel } from '@/composables/inbox/useDetailsPanel';
 import { useConversationThread } from '@/composables/inbox/useConversationThread';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
@@ -17,7 +21,7 @@ import { useShortcuts } from '@/composables/useShortcuts';
 import { useToast } from '@/composables/useToast';
 import { syncInertiaUrl } from '@/composables/useUrlFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { stripBidiControls } from '@/lib/orderStatus';
+import { orderStatusText, stripBidiControls } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type {
     Attachment,
@@ -29,6 +33,7 @@ import type {
     InboxFilters,
     InboxModerator,
     Order,
+    OutcomePayload,
     QueueEntry,
     QuickReply,
     QuickReplyCategory,
@@ -37,8 +42,8 @@ import type {
     TemplatePayload,
 } from '@/types/crm';
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { useMediaQuery } from '@vueuse/core';
-import { CircleAlert, MessageSquareText } from 'lucide-vue-next';
+import { useEventListener, useMediaQuery } from '@vueuse/core';
+import { MessageSquareText } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 
 const props = defineProps<{
@@ -50,6 +55,8 @@ const props = defineProps<{
     quickReplyCategories: QuickReplyCategory[];
     tags: Tag[];
     cities: City[];
+    /** Control room S3: the queue's first-reply target, the list's «مستنية ٧ د» threshold. */
+    firstReplyTargetSeconds?: number;
 }>();
 
 const page = usePage<SharedData>();
@@ -68,22 +75,31 @@ function initialDetails(): boolean {
     }
     return window.matchMedia('(min-width: 1600px)').matches;
 }
-const detailsOpen = ref(initialDetails());
-watch(detailsOpen, (open) => {
+// Control room S3 (G16): the column, the sheet below xl, and the overlay a delivered window opens.
+const details = useDetailsPanel({ isXl, initialOpen: initialDetails() });
+watch(details.open, (open) => {
     try {
         window.localStorage.setItem('inbox:details', open ? '1' : '0');
     } catch {
         // Not remembered this time; still toggles.
     }
 });
-function toggleDetails(): void {
-    if (isXl.value) detailsOpen.value = !detailsOpen.value;
-    else customerOpen.value = !customerOpen.value;
-}
-const showDetails = computed(() => isXl.value && detailsOpen.value);
-/** What the header's details toggle reports as pressed: the column on xl, the sheet below it. */
-const detailsActive = computed(() => (isXl.value ? detailsOpen.value : customerOpen.value));
-provide('inboxDetails', { open: detailsOpen, active: detailsActive, toggle: toggleDetails });
+const toggleDetails = details.toggle;
+const showDetails = details.showColumn;
+/** The sheet below xl (her toggle), the customer panel's home on a phone or a tablet. */
+const customerOpen = details.sheet;
+/** What the header's details toggle reports as pressed: the column (or its overlay) on xl, the sheet below it. */
+provide('inboxDetails', { open: details.open, active: details.active, toggle: details.toggle, show: details.show });
+// Escape closes the overlay (not while a dialog or a menu has it).
+useEventListener(document, 'keydown', (e: KeyboardEvent) => {
+    if (
+        e.key === 'Escape' &&
+        details.overlay.value &&
+        !document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"]')
+    ) {
+        details.overlay.value = false;
+    }
+});
 
 const api = useApi();
 const toast = useToast();
@@ -94,7 +110,6 @@ const selectedId = ref<number | null>(null);
  * into it (Task 6 controller addition). `r` / `n` and a click in the box focus it as always.
  */
 const focusComposer = ref(false);
-const customerOpen = ref(false);
 const orderOpen = ref(false);
 const editingOrder = ref<Order | null>(null);
 const addingNote = ref(false);
@@ -132,9 +147,19 @@ const list = useConversationList(props.conversations, props.filters, {
                 readTimer = window.setTimeout(() => thread.markRead(patch.id), 1000);
             }
         },
-        onOrder: (order) => thread.applyOrder(order),
+        onOrder: (order) => {
+            thread.applyOrder(order);
+            if (order.conversation_id === selectedId.value) void ctx.reload();
+        },
     },
 });
+
+// Control room S3: outcome state, bot digest and ad block for the open chat (web-only endpoint).
+const ctx = useConversationContext(selectedId);
+provide(
+    INBOX_OUTCOME,
+    computed(() => ctx.context.value?.outcome ?? null),
+);
 
 const {
     detail,
@@ -199,7 +224,11 @@ function openFromToast(conversationId: number): void {
 // something (isBusy). Then only the toast, whose button opens the chat in place.
 function onWindowAssigned(entry: QueueEntry): void {
     const busy = selectedId.value !== entry.conversation_id && isBusy();
-    if (!busy) select(entry.conversation_id);
+    if (!busy) {
+        select(entry.conversation_id);
+        // C 2.1, G16: the details (bot summary, ad, orders) open by themselves for a delivered customer.
+        details.onWindowDelivered();
+    }
     toast.push(
         t('queue.assigned_toast', { ticket: entry.ticket % 100000 }),
         'info',
@@ -245,7 +274,7 @@ function select(id: number, pointer = false): void {
     }
     focusComposer.value = pointer;
     selectedId.value = id;
-    customerOpen.value = false;
+    details.onSelect();
     syncSelectionUrl(id);
     void thread.open(id);
 }
@@ -303,6 +332,8 @@ function sendTemplate(template: TemplatePayload): void {
 }
 
 async function runAction(name: ConversationAction): Promise<void> {
+    // `e` on a chat that is already closed: nothing to resolve (no request, no 422).
+    if (name === 'resolve' && detail.value?.conversation.status === 'resolved') return;
     // An open queue window is never ended without a reason: resolve and return-to-bot (and their
     // shortcuts, and send-and-resolve) open the reasons; somebody else's window is not hers to end.
     if (name === 'resolve' || name === 'return-to-bot') {
@@ -314,10 +345,28 @@ async function runAction(name: ConversationAction): Promise<void> {
 
             return;
         }
+        // D13: outside the queue «حل» (and `e`, and send-and-resolve) opens the outcome menu.
+        if (name === 'resolve' && header?.openResolve()) return;
     }
 
     const conversation = await thread.action(name);
     if (conversation) list.applyConversation(conversation);
+}
+
+/** «حل» confirmed with its outcome (control room S3); a refusal goes back to the open menu with its message. */
+async function resolveWith(payload: OutcomePayload, done: (error: string | null) => void): Promise<void> {
+    const conversation = await thread.action('resolve', { ...payload });
+    if (conversation) {
+        done(null);
+        list.applyConversation(conversation);
+        void ctx.reload();
+
+        return;
+    }
+    // The menu shows the reason itself: no second copy in the thread's error strip.
+    const message = error.value ?? t('common.error');
+    thread.clearError();
+    done(message);
 }
 
 async function setPriority(value: ConversationPriority): Promise<void> {
@@ -394,6 +443,19 @@ function onCopyStatus(text: string): void {
     const clean = stripBidiControls(text);
     draft.value = draft.value.trim() ? `${draft.value}\n${clean}` : clean;
     showFlash(t('order.copy_status_done'));
+    // S3 (C 5 #3): an insert, never a send; she reads it and sends it herself.
+    threadView.value?.composer?.focus();
+}
+
+/** shift+o: the latest order's status into the reply. */
+function insertLatestStatus(): void {
+    const latest = detail.value?.customer?.orders?.[0];
+    if (!latest) {
+        toast.push(t('order.no_orders_to_insert'), 'info');
+
+        return;
+    }
+    onCopyStatus(orderStatusText(latest, t));
 }
 
 function onCaseUpdated(updated: SupportCase): void {
@@ -401,7 +463,35 @@ function onCaseUpdated(updated: SupportCase): void {
     detail.value.cases = detail.value.cases.map((c) => (c.id === updated.id ? updated : c));
 }
 
+/** Control room S3 (C 5 #4): the order drawer starts from what the bot noted. */
+const orderSuggestion = computed(() => {
+    const h = ctx.context.value?.handover;
+
+    return h ? { products: h.products, sizes: h.sizes, colors: h.colors } : null;
+});
+
+/** One set of props and listeners for the three CustomerPanel homes (column, overlay, sheet), so they never drift. */
+const panelProps = computed(() =>
+    detail.value
+        ? {
+              customer: detail.value.customer,
+              notes: detail.value.notes,
+              participants: detail.value.participants,
+              cases: detail.value.cases,
+              addingNote: addingNote.value,
+              conversationId: detail.value.conversation.id,
+              mentionable: mentionable.value,
+              meId: me.id,
+              handover: ctx.context.value?.handover ?? null,
+              ad: ctx.context.value?.ad ?? null,
+          }
+        : null,
+);
+const panelListeners = { addNote, createOrder: openOrderDrawer, editOrder, copyStatus: onCopyStatus, caseUpdated: onCaseUpdated };
+
 function onOrderCreated(order: Order): void {
+    // A new order (not an edit of an older one) locks the close menu to «اتعمل أوردر» at once.
+    if (editingOrder.value === null && order.conversation_id === selectedId.value) ctx.markOrdered();
     editingOrder.value = null;
     thread.onOrderCreated(order);
     if (order.type === 'payment_link' && order.invoice_url) {
@@ -458,6 +548,7 @@ useShortcuts([
     { id: 'inbox.bot', keys: ['b'], labelKey: 'shortcuts.return_to_bot', group: 'inbox', handler: () => hasThread() && void runAction('return-to-bot') },
     { id: 'inbox.tags', keys: ['t'], labelKey: 'shortcuts.tags', group: 'inbox', handler: () => hasThread() && threadView.value?.header?.openTags() },
     { id: 'inbox.order', keys: ['o'], labelKey: 'shortcuts.order', group: 'inbox', handler: () => hasThread() && openOrderDrawer() },
+    { id: 'inbox.insert_status', keys: ['shift+o'], labelKey: 'shortcuts.insert_status', group: 'inbox', handler: () => hasThread() && insertLatestStatus() },
     { id: 'inbox.search', keys: ['/'], labelKey: 'shortcuts.focus_search', group: 'inbox', handler: () => listView.value?.focusSearch() },
     { id: 'inbox.filters', keys: ['f'], labelKey: 'shortcuts.open_filters', group: 'inbox', handler: () => listView.value?.openFilters() },
     { id: 'inbox.details', keys: ['i'], labelKey: 'shortcuts.toggle_details', group: 'inbox', handler: () => toggleDetails() },
@@ -497,6 +588,7 @@ onBeforeUnmount(() => {
         >
             <ConversationList
                 ref="listView"
+                :first-reply-target="firstReplyTargetSeconds ?? null"
                 :class="selectedId !== null ? 'hidden md:flex' : 'flex'"
                 :conversations="listRows"
                 :filters="listFilters"
@@ -553,6 +645,7 @@ onBeforeUnmount(() => {
                     @load-older="thread.loadOlder"
                     @send="send"
                     @send-and-resolve="sendAndResolve"
+                    @resolve="resolveWith"
                     @note="onNote"
                     @send-template="sendTemplate"
                     @retry="thread.retry"
@@ -564,37 +657,28 @@ onBeforeUnmount(() => {
                     @claim="claim"
                     @window-expired="thread.silentReload().catch(() => undefined)"
                     @dismiss-error="thread.clearError"
-                />
+                >
+                    <template #overlay>
+                        <DetailsOverlay v-if="details.overlay.value && panelProps" @close="details.overlay.value = false">
+                            <CustomerPanel class="min-h-0 flex-1" v-bind="panelProps" v-on="panelListeners" />
+                        </DetailsOverlay>
+                    </template>
+                </ChatThread>
                 <div v-else-if="selectedId !== null && loadingThread" class="flex flex-1 flex-col gap-4 p-6" aria-busy="true">
                     <Skeleton class="h-10 w-1/2" />
                     <Skeleton class="h-16 w-2/3" />
                     <Skeleton class="ms-auto h-16 w-1/2" />
                     <Skeleton class="h-12 w-3/5" />
                 </div>
-                <EmptyState v-else-if="selectedId !== null && error" :icon="CircleAlert" :title="error">
+                <div v-else-if="selectedId !== null && error" class="flex flex-1 flex-col items-center justify-center gap-3 p-6">
+                    <InlineError :message="error" class="w-full max-w-md" @retry="thread.open(selectedId)" />
                     <button type="button" class="text-xs text-primary hover:underline" @click="back">{{ t('inbox.back') }}</button>
-                </EmptyState>
+                </div>
                 <EmptyState v-else :icon="MessageSquareText" :title="t('inbox.select_title')" :body="t('inbox.select_body')" />
             </main>
 
             <div v-if="showDetails" class="hidden min-h-0 flex-col border-s bg-card xl:flex">
-                <CustomerPanel
-                    v-if="detail"
-                    class="flex-1"
-                    :customer="detail.customer"
-                    :notes="detail.notes"
-                    :participants="detail.participants"
-                    :cases="detail.cases"
-                    :adding-note="addingNote"
-                    :conversation-id="detail.conversation.id"
-                    :mentionable="mentionable"
-                    :me-id="me.id"
-                    @add-note="addNote"
-                    @create-order="openOrderDrawer"
-                    @edit-order="editOrder"
-                    @copy-status="onCopyStatus"
-                    @case-updated="onCaseUpdated"
-                />
+                <CustomerPanel v-if="panelProps" class="flex-1" v-bind="panelProps" v-on="panelListeners" />
             </div>
         </div>
 
@@ -613,23 +697,7 @@ onBeforeUnmount(() => {
                 <SheetHeader class="border-b px-4 py-3 text-start">
                     <SheetTitle class="text-sm">{{ t('thread.customer') }}</SheetTitle>
                 </SheetHeader>
-                <CustomerPanel
-                    v-if="detail"
-                    class="min-h-0 flex-1"
-                    :customer="detail.customer"
-                    :notes="detail.notes"
-                    :participants="detail.participants"
-                    :cases="detail.cases"
-                    :adding-note="addingNote"
-                    :conversation-id="detail.conversation.id"
-                    :mentionable="mentionable"
-                    :me-id="me.id"
-                    @add-note="addNote"
-                    @create-order="openOrderDrawer"
-                    @edit-order="editOrder"
-                    @copy-status="onCopyStatus"
-                    @case-updated="onCaseUpdated"
-                />
+                <CustomerPanel v-if="panelProps" class="min-h-0 flex-1" v-bind="panelProps" v-on="panelListeners" />
             </SheetContent>
         </Sheet>
 
@@ -640,6 +708,7 @@ onBeforeUnmount(() => {
             :customer="detail.customer"
             :can-discount="canDiscount"
             :retry-order="editingOrder"
+            :suggestion="orderSuggestion"
             @created="onOrderCreated"
         />
     </AppLayout>

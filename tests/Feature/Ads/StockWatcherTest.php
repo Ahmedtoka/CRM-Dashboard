@@ -4,6 +4,7 @@ use App\Ads\Materials\Jobs\CheckProductStock;
 use App\Ads\Materials\MaterialService;
 use App\Ads\Materials\StockWatcher;
 use App\Enums\UserRole;
+use App\Models\Ad;
 use App\Models\AdMaterial;
 use App\Models\MediaBuyer;
 use App\Models\Product;
@@ -17,7 +18,7 @@ use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Support\Facades\Queue;
 
 /** @return array{buyerUser: User, buyer: MediaBuyer, supervisor: User, admin: User, product: Product, material: AdMaterial} */
-function swWorld(int $stock = 0, array $material = []): array
+function swWorld(int $stock = 0, array $material = [], bool $running = true): array
 {
     $buyerUser = User::factory()->create(['role' => UserRole::MediaBuyer]);
     $buyer = MediaBuyer::factory()->create(['user_id' => $buyerUser->id]);
@@ -25,14 +26,19 @@ function swWorld(int $stock = 0, array $material = []): array
     ProductVariant::factory()->create(['product_id' => $product->id, 'inventory_quantity' => $stock]);
     ProductVariant::factory()->create(['product_id' => $product->id, 'inventory_quantity' => 0]);
 
-    return [
+    $w = [
         'buyerUser' => $buyerUser, 'buyer' => $buyer, 'product' => $product,
         'supervisor' => User::factory()->create(['role' => UserRole::Supervisor]),
         'admin' => User::factory()->create(['role' => UserRole::Admin]),
         'material' => AdMaterial::factory()->create(array_merge([
-            'title' => 'Eid reel', 'status' => 'activated', 'product_id' => $product->id, 'media_buyer_id' => $buyer->id,
+            'title' => 'Eid reel', 'status' => 'live', 'product_id' => $product->id, 'media_buyer_id' => $buyer->id,
         ], $material)),
     ];
+    if ($running) {
+        $w['material']->ads()->attach(Ad::factory()->create(['status' => 'ACTIVE'])->id);
+    }
+
+    return $w;
 }
 
 function swNotes(string $type = 'ads.need_stop')
@@ -51,7 +57,7 @@ it('flags an out-of-stock running material and notifies the buyer and supervisor
 
     $data = swNotes()->first()->data;
     expect($data['material_id'])->toBe($w['material']->id)->and($data['title'])->toBe('Eid reel')
-        ->and($data['product_title'])->toBe('Abaya Noor')->and($data['link'])->toBe('/ads/materials?status=activated&stock=out');
+        ->and($data['product_title'])->toBe('Abaya Noor')->and($data['link'])->toBe('/ads/materials?status=live&stock=out');
 });
 
 it('does not notify again on later runs', function () {
@@ -76,10 +82,10 @@ it('clears the flag when stock returns, silently, and a new episode notifies aga
     expect($watcher->run()['flagged'])->toBe(1)->and(swNotes())->toHaveCount(6);
 });
 
-it('ignores not started and done materials, materials without a product and in-stock ones', function () {
+it('ignores materials with nothing running, without a product and in stock', function () {
     $w = swWorld();
-    $w['material']->update(['status' => 'not_started']);
-    swWorld(0, ['status' => 'done']);
+    $w['material']->ads()->detach();
+    swWorld(0, ['status' => 'retired'], false);
     swWorld(0, ['product_id' => null]);
     swWorld(3);
 
@@ -123,7 +129,7 @@ it('limits a run to the given products', function () {
 
 it('runs from the ads:stock-watch command and is scheduled every 30 minutes without overlapping', function () {
     $w = swWorld();
-    $this->artisan('ads:stock-watch')->expectsOutput('Flagged 1, cleared 0.')->assertSuccessful();
+    $this->artisan('ads:stock-watch')->expectsOutput('Flagged 1, cleared 0.')->expectsOutput('Held 0, released 0.')->assertSuccessful();
     expect($w['material']->fresh()->need_stop_at)->not->toBeNull();
 
     $event = collect(app(Schedule::class)->events())->first(fn ($e) => str_contains($e->command, 'ads:stock-watch'));
@@ -184,24 +190,24 @@ it('the queued job runs the watcher for its products', function () {
     expect($w['material']->fresh()->need_stop_at)->not->toBeNull();
 });
 
-it('clears need stop when a material leaves activated and notifies again when it is re-activated still out of stock', function () {
+it('clears need stop when nothing runs any more and notifies again when an ad runs again still out of stock', function () {
     $w = swWorld();
     $service = app(MaterialService::class);
     app(StockWatcher::class)->run();
     expect($service->stats()['need_stop'])->toBe(1)->and(swNotes())->toHaveCount(3);
 
-    $service->setStatus($w['material']->fresh(), 'done');
-    expect($w['material']->fresh()->need_stop_at)->toBeNull()->and($service->stats()['need_stop'])->toBe(0);
+    $w['material']->ads()->update(['status' => 'PAUSED']);
+    app(StockWatcher::class)->run();
+    expect($w['material']->fresh()->need_stop_at)->toBeNull();
 
-    // a stale flag on a non-activated row (legacy data) is not counted either
-    AdMaterial::whereKey($w['material']->id)->update(['need_stop_at' => now()]);
-    expect($service->stats()['need_stop'])->toBe(0);
-    AdMaterial::whereKey($w['material']->id)->update(['need_stop_at' => null]);
-
-    Queue::fake();
-    $service->setStatus($w['material']->fresh(), 'activated');
-    Queue::assertPushed(CheckProductStock::class, fn (CheckProductStock $j) => $j->productIds === [$w['product']->id]);
-
+    $w['material']->ads()->update(['status' => 'ACTIVE']);
     app(StockWatcher::class)->run();
     expect($w['material']->fresh()->need_stop_at)->not->toBeNull()->and(swNotes())->toHaveCount(6); // a new episode
+});
+
+it('stays silent once decision notifications are on, the feed alert replaces it (R-06)', function () {
+    $w = swWorld();
+    app(\App\Ads\Alerts\RuleSettings::class)->setNotify($w['admin'], true);
+
+    expect(app(StockWatcher::class)->run())->toBe(['flagged' => 1, 'cleared' => 0])->and(swNotes())->toHaveCount(0);
 });

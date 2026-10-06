@@ -6,6 +6,7 @@ import RoomReception from '@/components/board/RoomReception.vue';
 import RoomSymbols from '@/components/board/RoomSymbols.vue';
 import RoomWalker from '@/components/board/RoomWalker.vue';
 import RoomWall from '@/components/board/RoomWall.vue';
+import SkeletonList from '@/components/crm/SkeletonList.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useInView } from '@/composables/useInView';
 import { useBoardContext } from '@/lib/board/context';
@@ -26,8 +27,10 @@ const props = withDefaults(
         canManage: boolean;
         /** The room fills its container (the phone's «عرض الصالة»): «ملء الشاشة» leaves it instead. */
         fill?: boolean;
+        /** The day has not loaded yet: the numbers bar shows skeleton tiles (the room itself is veiled). */
+        loading?: boolean;
     }>(),
-    { fill: false },
+    { fill: false, loading: false },
 );
 const emit = defineEmits<{ select: [selection: BoardSelection]; exit: [] }>();
 
@@ -225,7 +228,9 @@ watch(big, () => void refit());
 
 <template>
     <div ref="shell" class="board-shell" :class="{ 'is-max': max, 'is-big': big, paused: !active }">
+        <SkeletonList v-if="loading" variant="tiles" :count="4" />
         <BoardKpiBar
+            v-else
             :big="big"
             :compact="fill"
             :roster-open="selection?.kind === 'roster'"

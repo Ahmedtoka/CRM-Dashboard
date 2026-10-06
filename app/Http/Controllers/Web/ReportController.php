@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Web;
 
 use App\Analytics\ActivityLogger;
-use App\Analytics\AdsReport;
 use App\Analytics\LatencyRecorder;
 use App\Analytics\MetricsService;
 use App\Analytics\PresenceTracker;
@@ -16,7 +15,9 @@ use App\Http\Support\DateRange;
 use App\Models\ActivityLog;
 use App\Models\BotTestLink;
 use App\Models\BotTestSession;
+use App\Models\QueueEntry;
 use App\Models\User;
+use App\Queue\RatingStats;
 use App\TestLinks\TestLinkReport;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -31,9 +32,39 @@ class ReportController extends Controller
 {
     use ReportEndpoints;
 
-    public function team(Request $request, MetricsService $metrics, PresenceTracker $presence): Response
+    public function team(Request $request, MetricsService $metrics, PresenceTracker $presence, RatingStats $ratings): Response
     {
-        return Inertia::render('Reports/Team', $this->teamReport($request, $metrics, $presence));
+        $request->validate(['stars' => ['nullable', Rule::in(['low', 'all'])]]);
+
+        // Ratings (G11) are a web-only addition: teamReport() is shared with API v1 and stays as it is.
+        return Inertia::render('Reports/Team', $this->teamReport($request, $metrics, $presence) + [
+            'ratings' => $this->teamRatings($ratings, DateRange::fromRequest($request), $request->query('stars') === 'low' ? 'low' : 'all'),
+        ]);
+    }
+
+    /** @return array{stars: string, summary: array, by_agent_day: list<array>, list: list<array>} */
+    private function teamRatings(RatingStats $ratings, DateRange $range, string $stars): array
+    {
+        $byDay = $ratings->byAgentAndDay($range->from, $range->to);
+        $list = $ratings->recent($range->from, $range->to, $stars === 'low');
+        $users = User::query()->whereIn('id', array_unique(array_merge(array_column($byDay, 'user_id'), array_filter(array_column($list, 'user_id')))))
+            ->get(['id', 'name', 'color'])->keyBy('id');
+        $customers = QueueEntry::query()->with('conversation.customer:id,name')->whereIn('id', array_column($list, 'entry_id'))->get()
+            ->mapWithKeys(fn (QueueEntry $e) => [$e->id => $e->conversation?->customer?->name]);
+
+        return [
+            'stars' => $stars,
+            'summary' => $ratings->summary($range->from, $range->to),
+            'by_agent_day' => array_values(array_filter(array_map(fn (array $r) => isset($users[$r['user_id']]) ? [
+                'user' => ['id' => $r['user_id'], 'name' => $users[$r['user_id']]->name, 'color' => $users[$r['user_id']]->color],
+                'date' => $r['date'], 'count' => $r['count'], 'avg' => $r['avg'], 'low' => $r['low'],
+            ] : null, $byDay))),
+            'list' => array_map(fn (array $r) => [
+                'entry_id' => $r['entry_id'], 'conversation_id' => $r['conversation_id'], 'stars' => $r['stars'], 'reviewed_at' => $r['reviewed_at'],
+                'user' => $r['user_id'] !== null && isset($users[$r['user_id']]) ? ['id' => $r['user_id'], 'name' => $users[$r['user_id']]->name] : null,
+                'customer' => $customers[$r['entry_id']] ?? null,
+            ], $list),
+        ];
     }
 
     public function user(Request $request, MetricsService $metrics, User $user): Response
@@ -49,19 +80,6 @@ class ReportController extends Controller
     public function bot(Request $request, MetricsService $metrics): Response
     {
         return Inertia::render('Reports/Bot', $this->botReport($request, $metrics));
-    }
-
-    /** «الإعلانات» (owner, 2026-09-25): campaign → conversations → orders → spend. */
-    public function ads(Request $request, AdsReport $report): Response
-    {
-        $range = DateRange::fromRequest($request);
-        $platform = $this->reportPlatform($request);
-
-        return Inertia::render('Reports/Ads', [
-            'range' => $range->toArray(),
-            'platform' => $platform?->value,
-            'report' => $report->build($range->from, $range->to, $platform),
-        ]);
     }
 
     /**

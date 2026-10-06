@@ -143,7 +143,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.quick_replies.title'), 
                         <Plus class="size-3.5" aria-hidden="true" />{{ t('settings.quick_replies.add') }}
                     </button>
                 </div>
-                <DataTable v-if="shared.length" :columns="sharedColumns" :rows="shared" :empty="t('settings.quick_replies.empty')" :caption="t('replies.tab_shared')">
+                <DataTable table-id="settings-qr-shared" v-if="shared.length" :columns="sharedColumns" :rows="shared" :empty="t('settings.quick_replies.empty')" :caption="t('replies.tab_shared')">
                     <template #cell-shortcut="{ row }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">{{ slashShortcut(row.shortcut) }}</code></template>
                     <template #cell-body="{ row }"><span class="line-clamp-2 max-w-md" dir="auto">{{ row.body }}</span></template>
                     <template #cell-category="{ row }">{{ categoryName(row.category_id) }}</template>
@@ -189,7 +189,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.quick_replies.title'), 
                         <Plus class="size-3.5" aria-hidden="true" />{{ t('settings.quick_replies.add_personal') }}
                     </button>
                 </div>
-                <DataTable v-if="personal.length" :columns="personalColumns" :rows="personal" :empty="t('settings.quick_replies.empty')" :caption="t('replies.tab_mine')">
+                <DataTable table-id="settings-qr-mine" v-if="personal.length" :columns="personalColumns" :rows="personal" :empty="t('settings.quick_replies.empty')" :caption="t('replies.tab_mine')">
                     <template #cell-shortcut="{ row }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">{{ slashShortcut(row.shortcut) }}</code></template>
                     <template #cell-body="{ row }"><span class="line-clamp-2 max-w-md" dir="auto">{{ row.body }}</span></template>
                     <template #cell-category="{ row }">{{ categoryName(row.category_id) }}</template>

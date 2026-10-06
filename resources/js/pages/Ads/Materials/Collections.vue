@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /** Ads Hub — مجموعات المواد: collections with their material counts; content and supervisors manage them (spec §8.7). */
+import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -94,6 +95,12 @@ function confirmDelete(): void {
 }
 
 const iconBtn = 'inline-flex size-8 items-center justify-center rounded-md border transition-colors';
+const columns = computed<Column[]>(() => [
+    { key: 'name', label: t('ads.materials.collections.col.name'), primary: true },
+    { key: 'materials', label: t('ads.materials.collections.col.materials'), align: 'center', numeric: true },
+    ...pills.map((p) => ({ key: p.key, label: t(`ads.materials.collections.col.${p.key}`), align: 'center' as const, numeric: true })),
+    { key: 'actions', label: t('ads.materials.col.actions'), align: 'end' },
+]);
 const breadcrumbs = computed(() => [
     { title: t('nav.ads'), href: '/ads' },
     { title: t('nav.ads_collections'), href: '/ads/collections' },
@@ -128,83 +135,69 @@ const breadcrumbs = computed(() => [
                 </li>
             </ul>
 
-            <div class="scrollbar-thin relative overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
-                <EmptyState
-                    v-if="!collections.length"
-                    :icon="FolderOpen"
-                    :title="t('ads.materials.collections.empty')"
-                    :body="perms.canAuthor.value ? t('ads.materials.collections.empty_body') : undefined"
-                />
-                <table v-else class="w-full min-w-[720px] text-xs">
-                    <caption class="sr-only">
-                        {{
-                            t('ads.materials.collections.title')
-                        }}
-                    </caption>
-                    <thead class="border-b border-border/60 text-2xs font-semibold text-muted-foreground">
-                        <tr>
-                            <th scope="col" class="px-3 py-2 text-start">{{ t('ads.materials.collections.col.name') }}</th>
-                            <th scope="col" class="px-2 py-2 text-center">{{ t('ads.materials.collections.col.materials') }}</th>
-                            <th v-for="p in pills" :key="p.key" scope="col" class="px-2 py-2 text-center">
-                                {{ t(`ads.materials.collections.col.${p.key}`) }}
-                            </th>
-                            <th scope="col" class="px-3 py-2 text-end">{{ t('ads.materials.col.actions') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="c in collections" :key="c.id" class="border-t border-border/60 first:border-t-0 hover:bg-muted/40">
-                            <td class="px-3 py-2.5">
-                                <div class="flex items-center gap-2">
-                                    <span class="font-semibold" dir="auto">{{ c.name }}</span>
-                                    <StatusChip v-if="!c.is_active" :label="t('ads.materials.collections.inactive')" />
-                                </div>
-                            </td>
-                            <td class="px-2 py-2.5 text-center font-semibold tabular-nums">{{ n(c.materials) }}</td>
-                            <td v-for="p in pills" :key="p.key" class="px-2 py-2.5 text-center">
-                                <span
-                                    class="inline-flex h-6 min-w-8 items-center justify-center rounded-full px-2 text-2xs font-semibold tabular-nums"
-                                    :class="c[p.key] > 0 ? p.cls : 'bg-muted text-muted-foreground'"
-                                    >{{ n(c[p.key]) }}</span
-                                >
-                            </td>
-                            <td class="px-3 py-2.5">
-                                <div class="flex justify-end gap-1">
-                                    <Link
-                                        :href="`/ads/materials?collection=${c.id}`"
-                                        :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
-                                        :aria-label="t('ads.materials.collections.view', { name: c.name })"
-                                        :title="t('ads.materials.collections.view', { name: c.name })"
-                                    >
-                                        <Eye class="size-4" aria-hidden="true" />
-                                    </Link>
-                                    <template v-if="perms.canAuthor.value">
-                                        <button
-                                            type="button"
-                                            :class="
-                                                cn(iconBtn, 'border-warning/50 bg-warning/15 text-amber-800 hover:bg-warning/25 dark:text-amber-200')
-                                            "
-                                            :aria-label="t('ads.materials.actions.edit')"
-                                            :title="t('ads.materials.actions.edit')"
-                                            @click="openEdit(c)"
-                                        >
-                                            <Pencil class="size-4" aria-hidden="true" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            :class="cn(iconBtn, 'border-destructive/30 text-destructive hover:bg-destructive/10')"
-                                            :aria-label="t('ads.materials.actions.delete')"
-                                            :title="t('ads.materials.actions.delete')"
-                                            @click="deleting = c"
-                                        >
-                                            <Trash2 class="size-4" aria-hidden="true" />
-                                        </button>
-                                    </template>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <DataTable
+                table-id="ads-collections"
+                :columns="columns"
+                :rows="collections"
+                mobile="scroll"
+                :caption="t('ads.materials.collections.title')"
+            >
+                <template #empty>
+                    <EmptyState
+                        :icon="FolderOpen"
+                        :title="t('ads.materials.collections.empty')"
+                        :body="perms.canAuthor.value ? t('ads.materials.collections.empty_body') : undefined"
+                    />
+                </template>
+                <template #cell-name="{ row }">
+                    <div class="flex items-center gap-2">
+                        <span class="font-semibold" dir="auto">{{ row.name }}</span>
+                        <StatusChip v-if="!row.is_active" :label="t('ads.materials.collections.inactive')" />
+                    </div>
+                </template>
+                <template #cell-materials="{ row }"
+                    ><span class="font-semibold tabular-nums">{{ n(row.materials) }}</span></template
+                >
+                <template v-for="p in pills" :key="p.key" #[`cell-${p.key}`]="{ row }">
+                    <span
+                        class="inline-flex h-6 min-w-8 items-center justify-center rounded-full px-2 text-2xs font-semibold tabular-nums"
+                        :class="row[p.key] > 0 ? p.cls : 'bg-muted text-muted-foreground'"
+                        >{{ n(row[p.key]) }}</span
+                    >
+                </template>
+                <template #cell-actions="{ row: c }">
+                    <div class="flex justify-end gap-1">
+                        <Link
+                            :href="`/ads/materials?collection=${c.id}`"
+                            :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
+                            :aria-label="t('ads.materials.collections.view', { name: c.name })"
+                            :title="t('ads.materials.collections.view', { name: c.name })"
+                        >
+                            <Eye class="size-4" aria-hidden="true" />
+                        </Link>
+                        <template v-if="perms.canAuthor.value">
+                            <button
+                                type="button"
+                                :class="cn(iconBtn, 'border-warning/50 bg-warning/15 text-amber-800 hover:bg-warning/25 dark:text-amber-200')"
+                                :aria-label="t('ads.materials.actions.edit')"
+                                :title="t('ads.materials.actions.edit')"
+                                @click="openEdit(c)"
+                            >
+                                <Pencil class="size-4" aria-hidden="true" />
+                            </button>
+                            <button
+                                type="button"
+                                :class="cn(iconBtn, 'border-destructive/30 text-destructive hover:bg-destructive/10')"
+                                :aria-label="t('ads.materials.actions.delete')"
+                                :title="t('ads.materials.actions.delete')"
+                                @click="deleting = c"
+                            >
+                                <Trash2 class="size-4" aria-hidden="true" />
+                            </button>
+                        </template>
+                    </div>
+                </template>
+            </DataTable>
         </div>
 
         <FormDialog

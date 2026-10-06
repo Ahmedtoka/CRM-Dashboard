@@ -70,7 +70,7 @@ export function mergeMember(members: BoardMember[], payload: BoardMember, openSh
     if (payload.status === 'left') return known ? members.filter((m) => m.id !== payload.id) : members;
     if (!known) return payload.shift_id === openShiftId ? null : members;
 
-    return members.map((m) => (m.id === payload.id ? { ...m, ...payload, is_leader: m.is_leader, platforms: m.platforms, attendance: m.attendance } : m));
+    return members.map((m) => (m.id === payload.id ? { ...m, ...payload, is_leader: m.is_leader, platforms: m.platforms, attendance: m.attendance, rating: m.rating } : m));
 }
 
 /** On the roster and serving, but her moderator is not logged in: «مش فاتحة» (the router skips her). */

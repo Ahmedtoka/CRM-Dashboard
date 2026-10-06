@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /** Ads Hub — المزامنة: what the ad syncs are doing now, what waits in the queue, the recent log and the schedule. */
+import AdsSetupTabs from '@/components/ads/AdsSetupTabs.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -57,9 +58,10 @@ const columns = computed<Column[]>(() => [
 
 const selectClass = 'h-8 min-w-32 rounded-md border border-input bg-card px-2 text-xs';
 const breadcrumbs = computed(() => [
-    { title: t('nav.ads'), href: '/ads' },
-    { title: t('nav.ads_sync'), href: '/ads/sync' },
+    { title: t('nav.ads_setup'), href: '/ads/setup' },
+    { title: t('ads.control.setup.sync'), href: '/ads/sync' },
 ]);
+const crumbs = computed(() => [{ label: t('nav.ads_setup'), href: '/ads/setup' }, { label: t('ads.control.setup.sync') }]);
 const count = (v: number | null) => (v === null ? '—' : formatCount(v, locale.value));
 </script>
 
@@ -67,7 +69,8 @@ const count = (v: number | null) => (v === null ? '—' : formatCount(v, locale.
     <Head :title="t('ads.sync.title')" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-6xl space-y-6 p-4">
-            <PageHeader :title="t('ads.sync.title')" :description="t('ads.sync.hint')" />
+            <PageHeader :title="t('ads.sync.title')" :description="t('ads.sync.hint')" :breadcrumbs="crumbs" />
+            <AdsSetupTabs />
 
             <!-- Now: running + waiting -->
             <section class="space-y-2" aria-labelledby="sync-now">
@@ -120,7 +123,7 @@ const count = (v: number | null) => (v === null ? '—' : formatCount(v, locale.
                         <option v-for="g in TRIGGERS" :key="g" :value="g">{{ triggerLabel(g) }}</option>
                     </select>
                 </div>
-                <DataTable :columns="columns" :rows="runs" :empty="t('ads.sync.log_empty')" :empty-icon="RefreshCw" :caption="t('ads.sync.log')">
+                <DataTable table-id="ads-sync" :columns="columns" :rows="runs" :empty="t('ads.sync.log_empty')" :empty-icon="RefreshCw" :caption="t('ads.sync.log')">
                     <template #cell-started_at="{ row }"><RelativeTime :iso="row.started_at" mode="stamp" /></template>
                     <template #cell-account="{ row }">
                         <span class="inline-flex items-center gap-1.5">{{ row.account ?? '—' }}<PlatformChip :platform="row.platform" size="xs" /></span>

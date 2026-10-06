@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ToggleSwitch from '@/components/crm/ToggleSwitch.vue';
+import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -234,31 +235,32 @@ const iconBtn =
                     </DropdownMenuContent>
                 </DropdownMenu>
 
-                <button
+                <Button
                     v-if="dirty || saving"
-                    type="button"
+                    variant="outline"
                     class="ms-1 inline-flex h-9 items-center gap-1.5 rounded-md border border-input bg-card px-3 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                    type="button"
                     :disabled="saving || stale"
                     @click="emit('save')"
+                    :loading="saving"
                 >
-                    <LoaderCircle v-if="saving" class="size-4 animate-spin" aria-hidden="true" />
-                    <Save v-else class="size-4" aria-hidden="true" />
+                    <Save class="size-4" aria-hidden="true" />
                     <span class="hidden sm:inline">{{ t('flows.save_draft') }}</span>
                     <span class="sr-only sm:hidden">{{ t('flows.save_draft') }}</span>
-                </button>
+                </Button>
 
                 <Tooltip>
                     <TooltipTrigger as-child>
                         <span class="ms-1 inline-flex" :tabindex="canPublish ? undefined : 0">
-                            <button
-                                type="button"
+                            <Button
                                 class="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-card outline-none transition-colors hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:pointer-events-none disabled:opacity-50"
+                                type="button"
                                 :disabled="!canPublish || publishing"
                                 @click="emit('publish')"
+                                :loading="publishing"
                             >
-                                <LoaderCircle v-if="publishing" class="size-4 animate-spin" aria-hidden="true" />
-                                <Send v-else class="size-4 rtl:-scale-x-100" aria-hidden="true" />{{ t('flows.publish') }}
-                            </button>
+                                <Send class="size-4 rtl:-scale-x-100" aria-hidden="true" />{{ t('flows.publish') }}
+                            </Button>
                         </span>
                     </TooltipTrigger>
                     <TooltipContent v-if="!canPublish" side="bottom" align="end" class="max-w-xs text-xs">

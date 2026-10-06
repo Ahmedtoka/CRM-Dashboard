@@ -1,9 +1,13 @@
 <script setup lang="ts">
+import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import SkeletonList from '@/components/crm/SkeletonList.vue';
+import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { formatCount } from '@/lib/format';
 import { useToast } from '@/composables/useToast';
+import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type {
     BotLearningNoteKind,
@@ -15,7 +19,7 @@ import type {
     BotSuggestionRow,
 } from '@/types/admin';
 import { Head, router } from '@inertiajs/vue3';
-import { Check, ExternalLink, Loader2, RefreshCw, X } from 'lucide-vue-next';
+import { Check, ExternalLink, GraduationCap, RefreshCw, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -87,8 +91,11 @@ const kindTone: Record<BotLearningNoteKind, string> = {
 
 const tabs = ['reports', 'notes'] as const;
 
+// Picking another day's report is a visit; its panel shows a skeleton until the report lands.
+const { loading: loadingReport, track } = useVisitLoading();
+
 function select(id: number): void {
-    router.get('/settings/bot-learning', { report: id }, { preserveScroll: true });
+    router.get('/settings/bot-learning', { report: id }, track({ preserveScroll: true }));
 }
 
 async function run(): Promise<void> {
@@ -180,16 +187,10 @@ const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-6 p-3 md:p-6" :dir="dir">
             <PageHeader :title="t('settings.bot_learning.title')" :description="t('settings.bot_learning.description')">
-                <button
-                    type="button"
-                    class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-60"
-                    :disabled="running"
-                    @click="run"
-                >
-                    <Loader2 v-if="running" class="size-3.5 animate-spin" aria-hidden="true" />
-                    <RefreshCw v-else class="size-3.5" aria-hidden="true" />
+                <Button type="button" size="sm" class="gap-1.5 font-medium" :loading="running" @click="run">
+                    <RefreshCw class="size-3.5" aria-hidden="true" />
                     {{ t('settings.bot_learning.run') }}
-                </button>
+                </Button>
             </PageHeader>
 
             <ul class="flex flex-wrap gap-2" :title="t('settings.bot_learning.today_cap', { cap: today.cap })">
@@ -273,9 +274,9 @@ const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
                 </div>
             </section>
 
-            <p v-else-if="!reports.length" :class="[card, 'text-center text-sm text-muted-foreground']">
-                {{ t('settings.bot_learning.empty') }}
-            </p>
+            <div v-else-if="!reports.length" class="rounded-lg bg-card shadow-card">
+                <EmptyState :icon="GraduationCap" :title="t('settings.bot_learning.empty')" />
+            </div>
 
             <div v-else class="grid gap-4 md:grid-cols-[14rem_1fr]">
                 <nav class="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible" :aria-label="t('settings.bot_learning.title')">
@@ -293,7 +294,8 @@ const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
                     </button>
                 </nav>
 
-                <div v-if="report" class="space-y-4">
+                <SkeletonList v-if="loadingReport" variant="cards" />
+                <div v-else-if="report" class="space-y-4">
                     <section :class="card">
                         <h2 class="mb-2 flex flex-wrap items-center gap-2 text-sm font-semibold">
                             {{ t('settings.bot_learning.summary') }}

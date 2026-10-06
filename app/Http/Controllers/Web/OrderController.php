@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Concerns\OrderEndpoints;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
+use App\Http\Support\ModeratorScope;
+use App\Http\Support\SortParam;
 use App\Models\Order;
 use App\Models\User;
 use App\Shopify\Client\ShopifyClient;
@@ -23,6 +25,9 @@ class OrderController extends Controller
 {
     use OrderEndpoints;
 
+    /** Sortable columns of the web list (DataTable key => column). The API list keeps id desc. */
+    private const SORTS = ['created_at' => 'created_at', 'total' => 'total'];
+
     /**
      * The Orders page, or (for a plain `Accept: application/json` request, e.g. the
      * activity/report widgets or a test) the same list as the API returns.
@@ -30,7 +35,13 @@ class OrderController extends Controller
     public function index(Request $request): Response|AnonymousResourceCollection
     {
         $filters = $this->orderFilters($request);
-        $orders = OrderResource::collection($this->orderQuery($request)->paginate(30)->withQueryString());
+        $query = $this->orderQuery($request);
+        $sort = SortParam::parse($request->query('sort'), self::SORTS);
+        $sort?->apply($query);
+        if (! $request->wantsJson()) {
+            $query->with(ModeratorScope::ORDER_AD_RELATIONS); // S3: the «المصدر» column (web page only)
+        }
+        $orders = OrderResource::collection($query->paginate(30)->withQueryString());
 
         if ($request->wantsJson()) {
             return $orders;
@@ -41,7 +52,8 @@ class OrderController extends Controller
             'filters' => array_merge([
                 'status' => null, 'type' => null, 'platform' => null, 'q' => null, 'created_by' => null, 'from' => null, 'to' => null,
                 'source' => null, 'financial_status' => null, 'fulfillment_status' => null, 'shipment_step' => null, 'mismatch' => null, 'stuck' => null,
-            ], $filters),
+                'older_than' => null, 'real' => null, 'step_from' => null, 'step_to' => null,
+            ], $filters, ['sort' => $sort?->value()]),
             // Options for the "created by" filter.
             'team' => User::query()->where('is_active', true)->inboxStaff()->orderBy('name')->get(['id', 'name']),
         ]);

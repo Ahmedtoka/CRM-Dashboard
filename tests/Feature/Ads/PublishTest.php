@@ -242,17 +242,17 @@ it('links the created ad to the material when the sync brings it in, once', func
     expect($material->ads()->count())->toBe(0);
 });
 
-it('lets a media buyer publish only into an own account and content never', function () {
+it('lets only an admin publish directly; buyers and content go through launches (O7)', function () {
     Queue::fake();
     [$acc, $material, $files] = pubSetup();
-    $other = AdAccount::factory()->meta()->create();
     $buyer = pubBuyer($acc);
     $content = User::factory()->create(['role' => UserRole::Content]);
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
     $body = pubInput([$files[0]->id], 1);
 
-    $this->actingAs($buyer)->postJson("/ads/materials/{$material->id}/publish", $body + ['account_id' => $acc->id], pubKey())->assertOk();
-    $this->actingAs($buyer)->postJson("/ads/materials/{$material->id}/publish", $body + ['account_id' => $other->id], pubKey())->assertForbidden();
+    $this->actingAs($buyer)->postJson("/ads/materials/{$material->id}/publish", $body + ['account_id' => $acc->id], pubKey())->assertForbidden();
     $this->actingAs($content)->postJson("/ads/materials/{$material->id}/publish", $body + ['account_id' => $acc->id], pubKey())->assertForbidden();
+    $this->actingAs($admin)->postJson("/ads/materials/{$material->id}/publish", $body + ['account_id' => $acc->id], pubKey())->assertOk();
     expect(AdPublication::count())->toBe(1);
 });
 

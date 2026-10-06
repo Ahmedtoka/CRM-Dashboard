@@ -605,12 +605,12 @@ export function useConversationThread(options: Options) {
         if (id === current.value && detail.value) detail.value.conversation = conversation;
     }
 
-    async function action(name: ConversationAction): Promise<Conversation | null> {
+    async function action(name: ConversationAction, body?: Record<string, unknown>): Promise<Conversation | null> {
         const id = current.value;
         if (id === null || busyAction.value) return null;
         busyAction.value = name;
         try {
-            const { data } = await api.post<{ data: Conversation }>(`/inbox/conversations/${id}/${name}`);
+            const { data } = await api.post<{ data: Conversation }>(`/inbox/conversations/${id}/${name}`, body);
             if (name === 'reset' && id === current.value) {
                 messages.value = [];
                 hasMore.value = false;

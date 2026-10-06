@@ -1,17 +1,25 @@
 <script setup lang="ts">
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import { useCrud } from '@/composables/useCrud';
 import { useI18n } from '@/composables/useI18n';
+import { useUrlFilters } from '@/composables/useUrlFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatMoney } from '@/lib/format';
+import { sortRows } from '@/lib/sort';
 import type { CityRow } from '@/types/admin';
 import { Head } from '@inertiajs/vue3';
-import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { Button } from '@/components/ui/button';
+import { MapPin, Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 
-defineProps<{ cities: CityRow[] }>();
+const props = defineProps<{ cities: CityRow[] }>();
+
+// A full list: it sorts in the browser, and the sort stays in the URL.
+const { filters, set } = useUrlFilters({ sort: '' });
+const shown = computed(() => sortRows(props.cities, filters.value.sort, (row, key) => (key === 'shipping_fee' ? Number(row.shipping_fee) : row[key as keyof CityRow])));
 
 const { t, locale } = useI18n();
 const crud = useCrud('/settings/cities', 'cities');
@@ -32,9 +40,9 @@ async function submit(): Promise<void> {
 }
 
 const columns = computed<Column[]>(() => [
-    { key: 'name_ar', label: t('settings.cities.name_ar') },
-    { key: 'name_en', label: t('settings.cities.name_en') },
-    { key: 'shipping_fee', label: t('settings.cities.fee'), align: 'end' },
+    { key: 'name_ar', label: t('settings.cities.name_ar'), sortable: true },
+    { key: 'name_en', label: t('settings.cities.name_en'), sortable: true },
+    { key: 'shipping_fee', label: t('settings.cities.fee'), numeric: true, sortable: true },
     { key: 'actions', label: t('ui.actions'), align: 'end' },
 ]);
 
@@ -54,7 +62,21 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                 </button>
             </PageHeader>
 
-            <DataTable :columns="columns" :rows="cities" :empty="t('settings.cities.empty')" :caption="t('settings.cities.title')">
+            <DataTable
+                table-id="settings-cities"
+                :columns="columns"
+                :rows="shown"
+                :caption="t('settings.cities.title')"
+                :sort="filters.sort || null"
+                @update:sort="set({ sort: $event })"
+            >
+                <template #empty>
+                    <EmptyState :icon="MapPin" :title="t('settings.cities.empty')">
+                        <template #action>
+                            <Button size="sm" @click="edit(null)"><Plus aria-hidden="true" />{{ t('settings.cities.add') }}</Button>
+                        </template>
+                    </EmptyState>
+                </template>
                 <template #cell-name_ar="{ row }"><span class="font-medium" dir="rtl">{{ row.name_ar }}</span></template>
                 <template #cell-name_en="{ row }"><span dir="ltr">{{ row.name_en ?? '—' }}</span></template>
                 <template #cell-shipping_fee="{ row }"><span class="whitespace-nowrap tabular-nums">{{ formatMoney(row.shipping_fee, locale) }}</span></template>

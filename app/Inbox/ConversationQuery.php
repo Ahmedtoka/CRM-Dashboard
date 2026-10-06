@@ -9,6 +9,7 @@ use App\Enums\Handler;
 use App\Enums\MessageDirection;
 use App\Enums\Platform;
 use App\Enums\SenderType;
+use App\Http\Support\DateRange;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Message;
@@ -44,6 +45,9 @@ class ConversationQuery
 
     /** `status=` values (spec §1.2). `closed` ≡ resolved; waiting/with_moderator/bot are derived states. */
     public const STATUSES = ['open', 'pending', 'resolved', 'waiting', 'with_moderator', 'bot', 'closed'];
+
+    /** Control room S3 (G8): `sort=oldest_waiting` = only chats waiting for us, oldest customer message first. */
+    public const SORTS = ['oldest_waiting'];
 
     /** `queue=` values: the handover-queue ticket state (spec §1.2). */
     public const QUEUE_STATES = ['waiting', 'window', 'overdue', 'returning'];
@@ -292,7 +296,7 @@ class ConversationQuery
         $q = $this->filtered($u, $f)->select('conversations.*')->with(['customer', 'tags', 'queueEntry']);
         $flags = self::flagsOf($f);
 
-        if (($f['status'] ?? null) === 'waiting' || in_array('waiting', $flags, true)) {
+        if (($f['status'] ?? null) === 'waiting' || in_array('waiting', $flags, true) || ($f['sort'] ?? null) === 'oldest_waiting') {
             $q->orderBy('conversations.last_customer_message_at')->orderBy('conversations.id');
         } elseif (! empty($f['queue']) || array_intersect(self::QUEUE_ORDER_FLAGS, $flags) !== []) {
             // Priority (high, medium, low), then oldest customer message first (spec §2.3,
@@ -341,8 +345,21 @@ class ConversationQuery
             $this->queueState($q, (string) $f['queue']);
         }
 
+        // S3: the oldest-waiting order lists waiting chats only (once, when no waiting filter already applies).
+        if (($f['sort'] ?? null) === 'oldest_waiting' && $status !== 'waiting' && ! in_array('waiting', $flags, true)) {
+            $this->waiting($q);
+        }
+
         if (($assignee = $f['assignee'] ?? null) !== null && $assignee !== '') {
             $this->assignee($q, $assignee === 'me' ? $u->id : $assignee);
+        }
+
+        // Control room S4 (optional, additive): chats that started on these Cairo days (the «النهارده» links).
+        if (! empty($f['from'])) {
+            $q->where('conversations.created_at', '>=', DateRange::startOfCairoDay((string) $f['from']));
+        }
+        if (! empty($f['to'])) {
+            $q->where('conversations.created_at', '<=', DateRange::endOfCairoDay((string) $f['to']));
         }
 
         if (! empty($f['tag'])) {

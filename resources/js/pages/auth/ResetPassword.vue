@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { useI18n } from '@/composables/useI18n';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import { LoaderCircle } from 'lucide-vue-next';
 
 interface Props {
     token: string;
@@ -76,8 +75,7 @@ const submit = () => {
                     <InputError :message="form.errors.password_confirmation" />
                 </div>
 
-                <Button type="submit" class="mt-4 w-full" :disabled="form.processing">
-                    <LoaderCircle v-if="form.processing" class="h-4 w-4 animate-spin" />
+                <Button type="submit" class="mt-4 w-full" :loading="form.processing">
                     {{ t('auth.reset_password.submit') }}
                 </Button>
             </div>

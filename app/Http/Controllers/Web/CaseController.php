@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\SupportCaseResource;
 use App\Http\Support\DateRange;
 use App\Http\Support\ModeratorScope;
+use App\Http\Support\SortParam;
 use App\Models\SupportCase;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -23,17 +24,24 @@ use Inertia\Response;
  */
 class CaseController extends Controller
 {
+    /** Sortable columns of the web list (DataTable key => column). */
+    private const SORTS = ['date' => 'created_at', 'id' => 'id'];
+
     public function index(Request $request): Response
     {
         $filters = $this->filters($request);
 
-        $cases = SupportCaseResource::collection(
-            $this->query($request, $filters)->with(['customer', 'assignedTo', 'order.items.variant'])->paginate(25)->withQueryString()
-        );
+        $query = $this->query($request, $filters)->with(['customer', 'assignedTo', 'order.items.variant']);
+        $sort = SortParam::parse($request->query('sort'), self::SORTS);
+        $sort?->apply($query);
+        $cases = SupportCaseResource::collection($query->paginate(25)->withQueryString());
 
         return Inertia::render('Cases', [
             'cases' => $cases,
-            'filters' => array_merge(['type' => null, 'status' => null, 'q' => null, 'from' => null, 'to' => null], $filters),
+            'filters' => array_merge(['type' => null, 'status' => null, 'q' => null, 'from' => null, 'to' => null, 'overdue' => null], $filters, [
+                'overdue' => ! empty($filters['overdue']) ? true : null,
+                'sort' => $sort?->value(),
+            ]),
             'counts' => $this->counts($request, $filters),
             // Options for the drawer's "assigned to" select.
             'team' => User::query()->where('is_active', true)->inboxStaff()->orderBy('name')->get(['id', 'name']),
@@ -84,7 +92,7 @@ class CaseController extends Controller
     }
 
     /**
-     * @return array{type?: ?string, status?: ?string, q?: ?string, from?: ?string, to?: ?string}
+     * @return array{type?: ?string, status?: ?string, q?: ?string, from?: ?string, to?: ?string, overdue?: ?bool}
      */
     private function filters(Request $request): array
     {
@@ -94,11 +102,12 @@ class CaseController extends Controller
             'q' => ['nullable', 'string', 'max:100'],
             'from' => ['nullable', 'date_format:Y-m-d'],
             'to' => ['nullable', 'date_format:Y-m-d'],
+            'overdue' => ['nullable', 'boolean'],
         ]);
     }
 
     /**
-     * @param  array{type?: ?string, status?: ?string, q?: ?string, from?: ?string, to?: ?string}  $filters
+     * @param  array{type?: ?string, status?: ?string, q?: ?string, from?: ?string, to?: ?string, overdue?: ?bool}  $filters
      * @return Builder<SupportCase>
      */
     private function query(Request $request, array $filters, bool $withStatus = true): Builder
@@ -109,6 +118,8 @@ class CaseController extends Controller
             ->when($filters['type'] ?? null, fn ($q, $v) => $q->where('type', $v))
             ->when($filters['from'] ?? null, fn ($q, $v) => $q->where('created_at', '>=', DateRange::startOfCairoDay($v)))
             ->when($filters['to'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', DateRange::endOfCairoDay($v)))
+            // «النهارده» urgent strip (control room S4): open cases whose SLA time passed.
+            ->when(! empty($filters['overdue']), fn ($q) => $q->where('status', '!=', 'closed')->whereNotNull('sla_due_at')->where('sla_due_at', '<', now()))
             ->when(trim((string) ($filters['q'] ?? '')), fn ($q, $term) => $q->where(fn (Builder $w) => $w
                 ->where('order_number', 'like', "%{$term}%")
                 ->orWhereHas('customer', fn (Builder $c) => $c->where('name', 'like', "%{$term}%")->orWhere('phone', 'like', "%{$term}%"))))
@@ -119,7 +130,7 @@ class CaseController extends Controller
      * Status tab counts (spec: "status tabs with counts") — computed with every filter
      * except `status` itself, so switching tabs never changes the other counts.
      *
-     * @param  array{type?: ?string, status?: ?string, q?: ?string, from?: ?string, to?: ?string}  $filters
+     * @param  array{type?: ?string, status?: ?string, q?: ?string, from?: ?string, to?: ?string, overdue?: ?bool}  $filters
      * @return array<string, int>
      */
     private function counts(Request $request, array $filters): array

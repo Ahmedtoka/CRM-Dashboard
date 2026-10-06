@@ -4,6 +4,7 @@ import BoardNotice from '@/components/board/BoardNotice.vue';
 import BoardPhone from '@/components/board/BoardPhone.vue';
 import BoardRoom from '@/components/board/BoardRoom.vue';
 import BoardSidePanel from '@/components/board/BoardSidePanel.vue';
+import SkeletonList from '@/components/crm/SkeletonList.vue';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useBoard } from '@/composables/useBoard';
 import { useI18n } from '@/composables/useI18n';
@@ -126,8 +127,9 @@ const phoneMode = computed(() => narrow.value || phoneRoom.value);
             <!-- Phone: the numbers, then the desks and the lounge as cards. -->
             <template v-if="phoneMode">
                 <!-- Behind the open room nothing of the phone view is drawn, so its clocks stop. -->
+                <SkeletonList v-if="!phoneRoom && veil === 'loading'" variant="tiles" :count="4" />
                 <BoardKpiBar
-                    v-if="!phoneRoom"
+                    v-else-if="!phoneRoom"
                     phone
                     :roster-open="selection?.kind === 'roster'"
                     :can-roster="canManage && board.shift.value !== null"
@@ -179,6 +181,7 @@ const phoneMode = computed(() => narrow.value || phoneRoom.value);
                 <BoardRoom
                     :selection="selection"
                     :veiled="veil !== null"
+                    :loading="veil === 'loading'"
                     :sided="selection !== null && wide"
                     :can-manage="canManage"
                     @select="select"

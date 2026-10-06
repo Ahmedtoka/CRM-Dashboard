@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\QueueEntryResource;
 use App\Http\Resources\ShiftMemberResource;
+use App\Inbox\Outcomes\Outcome;
+use App\Inbox\Outcomes\OutcomeRecorder;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Models\ShiftMember;
@@ -17,6 +19,7 @@ use App\Queue\WindowLifecycle;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The moderator's side of the handover queue inside the inbox: her desk and open windows
@@ -135,25 +138,37 @@ class QueueWindowController extends Controller
         ];
     }
 
-    public function close(Request $request, QueueEntry $entry, WindowLifecycle $windows): JsonResponse
+    public function close(Request $request, QueueEntry $entry, WindowLifecycle $windows, OutcomeRecorder $outcomes): JsonResponse
     {
         $this->guard($request->user(), $entry);
 
         $data = $request->validate([
             'reason' => ['required', 'string', Rule::in(self::MANUAL_REASONS)],
             'case_type' => ['nullable', 'required_if:reason,case', 'string', Rule::in(SupportCase::TYPES)],
+            'outcome' => ['nullable', 'string', Rule::in(Outcome::agentValues())],
+            'outcome_note' => ['nullable', 'required_if:outcome,other', 'string', 'max:120'],
         ], [
             'reason.required' => __('errors.queue.reason_required'),
             'reason.in' => __('errors.queue.reason_required'),
             'case_type.required_if' => __('errors.queue.case_type_required'),
             'case_type.in' => __('errors.queue.case_type_required'),
+            'outcome.in' => __('errors.outcome.required'),
+            'outcome_note.required_if' => __('errors.outcome.note_required'),
         ]);
 
         if (! $entry->isOpen()) {
             return $this->notOpen();
         }
 
-        $closed = $windows->close($entry, $data['reason'], $request->user(), ['case_type' => $data['case_type'] ?? null]);
+        // D13: «خلصت» needs the chat's outcome unless it is automatic (an order in this episode, a service handover).
+        $outcome = isset($data['outcome']) ? Outcome::from($data['outcome']) : null;
+        if ($outcome === null && ($entry->conversation === null || $outcomes->autoOutcome($entry->conversation, $entry) === null)) {
+            throw ValidationException::withMessages(['outcome' => __('errors.outcome.required')]);
+        }
+
+        $closed = $windows->close($entry, $data['reason'], $request->user(), [
+            'case_type' => $data['case_type'] ?? null, 'outcome' => $outcome, 'outcome_note' => $data['outcome_note'] ?? null,
+        ]);
 
         // Somebody (or the silence timer) closed it between our read and the lock: nothing was done here.
         if ($closed->status !== 'closed' || $closed->close_reason !== $data['reason'] || (int) $closed->closed_by_id !== (int) $request->user()->id) {

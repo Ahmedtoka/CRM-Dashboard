@@ -7,11 +7,12 @@
  * people. A run opens its own transcript, with a way through to the inbox.
  */
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import InlineError from '@/components/crm/InlineError.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import SkeletonList from '@/components/crm/SkeletonList.vue';
 import StatCard from '@/components/crm/StatCard.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
-import { useToast } from '@/composables/useToast';
 import { formatCount, formatShortDuration } from '@/lib/format';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { TeamTestFunnel, TeamTestLinkOption, TeamTestSessionRow, TeamTestTotals, TeamTestTranscriptLine } from '@/types/admin';
@@ -29,11 +30,11 @@ const props = defineProps<{
 
 const { t, locale } = useI18n();
 const api = useApi();
-const toast = useToast();
 
 const openSession = ref<TeamTestSessionRow | null>(null);
 const transcript = ref<TeamTestTranscriptLine[]>([]);
 const loading = ref(false);
+const loadError = ref<string | null>(null);
 
 const exportUrl = computed(() => `/reports/team-test/export${props.linkId ? `?link=${props.linkId}` : ''}`);
 
@@ -46,12 +47,13 @@ async function show(row: TeamTestSessionRow): Promise<void> {
     openSession.value = row;
     transcript.value = [];
     loading.value = true;
+    loadError.value = null;
 
     try {
         const { data } = await api.get(`/reports/team-test/sessions/${row.id}`);
         transcript.value = data.data.transcript;
     } catch (e) {
-        toast.push(apiErrorMessage(e, t('common.error')), 'error');
+        loadError.value = apiErrorMessage(e, t('common.error'));
     } finally {
         loading.value = false;
     }
@@ -111,6 +113,7 @@ const select = 'h-8 rounded-md border border-input bg-background px-2 text-xs';
             </div>
 
             <DataTable
+                table-id="team-test"
                 :columns="columns"
                 :rows="props.sessions"
                 :empty="t('reports.team_test.empty')"
@@ -204,7 +207,8 @@ const select = 'h-8 rounded-md border border-input bg-background px-2 text-xs';
             </header>
 
             <div class="flex-1 space-y-3 overflow-y-auto p-4">
-                <p v-if="loading" class="text-xs text-muted-foreground">…</p>
+                <SkeletonList v-if="loading" variant="cards" />
+                <InlineError v-else-if="loadError" :message="loadError" @retry="openSession && show(openSession)" />
                 <div v-for="line in transcript" :key="line.id" class="space-y-0.5">
                     <p class="text-2xs font-semibold text-muted-foreground">{{ who(line) }} · {{ stamp(line.created_at) }}</p>
                     <p v-if="line.body" class="whitespace-pre-line rounded-lg bg-muted/60 px-3 py-2 text-xs" dir="auto">{{ line.body }}</p>

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import HandlerAvatar from '@/components/crm/HandlerAvatar.vue';
+import ResolveMenu from '@/components/crm/outcomes/ResolveMenu.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import PresenceBar from '@/components/crm/PresenceBar.vue';
 import CloseWindowMenu from '@/components/crm/queue/CloseWindowMenu.vue';
 import QueueBanner from '@/components/crm/queue/QueueBanner.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import ResetDialog from '@/components/crm/thread/ResetDialog.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -29,11 +30,10 @@ import { conversationState } from '@/lib/conversationState';
 import { formatCount } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { SharedData } from '@/types';
-import type { Conversation, ConversationAction, ConversationPriority, Customer, Tag, UserRef } from '@/types/crm';
+import type { Conversation, ConversationAction, ConversationPriority, Customer, OutcomePayload, Tag, UserRef } from '@/types/crm';
 import { usePage } from '@inertiajs/vue3';
 import {
     Bot,
-    CheckCircle2,
     ChevronLeft,
     Ellipsis,
     Eraser,
@@ -66,6 +66,8 @@ const emit = defineEmits<{
     back: [];
     openCustomer: [];
     action: [name: ConversationAction];
+    /** Control room S3: «حل» outside the queue, with the picked outcome. */
+    resolve: [payload: OutcomePayload, done: (error: string | null) => void];
     priority: [value: ConversationPriority];
     toggleTag: [id: number];
     claim: [];
@@ -84,7 +86,6 @@ const selectedTags = computed(() => new Set((props.conversation.tags ?? []).map(
 const busy = computed(() => props.busyAction !== null);
 const headerBg = computed(() => skinClasses(props.skin).header);
 const iconButton = cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'size-9 shrink-0 rounded-lg');
-const primaryButton = cn(buttonVariants({ size: 'sm' }), 'h-9 shrink-0 gap-1.5 rounded-lg px-2.5 font-semibold sm:px-3');
 
 const adTooltip = computed(() => {
     const ad = props.conversation.ad;
@@ -106,6 +107,7 @@ const adTooltip = computed(() => {
 const queue = useMyQueueContext();
 const page = usePage<SharedData>();
 const closeMenu = ref<InstanceType<typeof CloseWindowMenu> | null>(null);
+const resolveMenu = ref<InstanceType<typeof ResolveMenu> | null>(null);
 const openWindow = computed(() => (queue?.enabled.value ? props.conversation.queue_entry : null));
 const queueWindow = computed(() => {
     const entry = openWindow.value;
@@ -182,8 +184,15 @@ defineExpose({
     },
     /** Who holds the open window this user may not end ('' when none). */
     holder: (): string => (heldByOther.value ? holderName.value : ''),
-    /** The close menu or one of its dialogs is open. */
-    closeMenuOpen: (): boolean => closeMenu.value?.isOpen() ?? false,
+    /** «حل» outside the queue: opens the outcome menu; false when there is nothing to resolve. */
+    openResolve: (): boolean => {
+        if (!resolveMenu.value) return false;
+        resolveMenu.value.open();
+
+        return true;
+    },
+    /** The close menu (or one of its dialogs) or the resolve menu is open. */
+    closeMenuOpen: (): boolean => closeMenu.value?.isOpen() || resolveMenu.value?.isOpen() || false,
 });
 </script>
 
@@ -235,34 +244,30 @@ defineExpose({
                 <span class="hidden truncate sm:inline" dir="auto">{{ t('queue.held_by', { name: holderName }) }}</span>
                 <span class="sr-only sm:hidden">{{ t('queue.held_by', { name: holderName }) }}</span>
             </span>
-            <button
+            <ResolveMenu
                 v-else-if="conversation.status !== 'resolved'"
-                type="button"
-                :title="`${t('thread.header.resolve')}${hint('inbox.resolve')}`"
-                :class="primaryButton"
+                ref="resolveMenu"
                 :disabled="busy"
-                :aria-label="t('thread.header.resolve')"
-                data-primary-action
-                @click="emit('action', 'resolve')"
-            >
-                <LoaderCircle v-if="busyAction === 'resolve'" class="animate-spin" aria-hidden="true" />
-                <CheckCircle2 v-else aria-hidden="true" />
-                <span class="hidden sm:inline">{{ t('thread.header.resolve') }}</span>
-            </button>
-            <button
+                :busy="busyAction === 'resolve'"
+                :hint="hint('inbox.resolve')"
+                @resolve="(payload, done) => emit('resolve', payload, done)"
+            />
+            <Button
                 v-else
+                variant="outline"
+                size="sm"
+                class="h-9 shrink-0 gap-1.5 rounded-lg px-2.5 sm:px-3"
                 type="button"
                 :title="`${t('thread.header.reopen')}${hint('inbox.reopen')}`"
-                :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-9 shrink-0 gap-1.5 rounded-lg px-2.5 sm:px-3')"
                 :disabled="busy"
                 :aria-label="t('thread.header.reopen')"
                 data-primary-action
                 @click="emit('action', 'reopen')"
+                :loading="busyAction === 'reopen'"
             >
-                <LoaderCircle v-if="busyAction === 'reopen'" class="animate-spin" aria-hidden="true" />
-                <RotateCcw v-else aria-hidden="true" />
+                <RotateCcw aria-hidden="true" />
                 <span class="hidden sm:inline">{{ t('thread.header.reopen') }}</span>
-            </button>
+            </Button>
 
             <button
                 type="button"

@@ -5,14 +5,20 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import StarterEmptyState from '@/components/crm/StarterEmptyState.vue';
 import { useCrud } from '@/composables/useCrud';
 import { useI18n } from '@/composables/useI18n';
+import { useUrlFilters } from '@/composables/useUrlFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount } from '@/lib/format';
+import { sortRows } from '@/lib/sort';
 import type { TagRow } from '@/types/admin';
 import { Head } from '@inertiajs/vue3';
 import { Pencil, Plus, Tag as TagIcon, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 
-defineProps<{ tags: TagRow[]; starterExamples: string[] }>();
+const props = defineProps<{ tags: TagRow[]; starterExamples: string[] }>();
+
+// A full list: it sorts in the browser, and the sort stays in the URL.
+const { filters, set } = useUrlFilters({ sort: '' });
+const shown = computed(() => sortRows(props.tags, filters.value.sort));
 
 const { t, locale } = useI18n();
 const crud = useCrud('/settings/tags', 'tags');
@@ -33,8 +39,8 @@ async function submit(): Promise<void> {
 }
 
 const columns = computed<Column[]>(() => [
-    { key: 'name', label: t('settings.tags.name') },
-    { key: 'conversations_count', label: t('settings.tags.conversations'), align: 'end' },
+    { key: 'name', label: t('settings.tags.name'), sortable: true },
+    { key: 'conversations_count', label: t('settings.tags.conversations'), numeric: true, sortable: true },
     { key: 'actions', label: t('ui.actions'), align: 'end' },
 ]);
 
@@ -65,7 +71,16 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                 <button type="button" class="text-xs font-medium text-primary hover:underline" @click="edit(null)">{{ t('settings.starter.or_create') }}</button>
             </StarterEmptyState>
 
-            <DataTable v-else :columns="columns" :rows="tags" :empty="t('settings.tags.empty')" :caption="t('settings.tags.title')">
+            <DataTable
+                table-id="settings-tags"
+                v-else
+                :columns="columns"
+                :rows="shown"
+                :empty="t('settings.tags.empty')"
+                :caption="t('settings.tags.title')"
+                :sort="filters.sort || null"
+                @update:sort="set({ sort: $event })"
+            >
                 <template #cell-name="{ row }">
                     <span class="inline-flex items-center gap-1.5">
                         <span class="size-2.5 rounded-full" :style="{ backgroundColor: row.color ?? '#94a3b8' }" aria-hidden="true" />

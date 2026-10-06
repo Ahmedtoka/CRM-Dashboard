@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import FormDialog from '@/components/crm/FormDialog.vue';
+import InlineError from '@/components/crm/InlineError.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import SkeletonList from '@/components/crm/SkeletonList.vue';
 import AccountSummary from '@/components/crm/integrations/AccountSummary.vue';
 import HowToSteps from '@/components/crm/integrations/HowToSteps.vue';
 import IntegrationCard from '@/components/crm/integrations/IntegrationCard.vue';
 import MetaSetupHint from '@/components/crm/integrations/MetaSetupHint.vue';
 import SystemUserTokenForm from '@/components/crm/integrations/SystemUserTokenForm.vue';
 import WhatsAppConnectForm from '@/components/crm/integrations/WhatsAppConnectForm.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
@@ -31,7 +33,6 @@ import {
     Facebook,
     Info,
     Instagram,
-    LoaderCircle,
     MessageCircle,
     Music2,
     Settings2,
@@ -421,14 +422,10 @@ const breadcrumbs = computed(() => [{ title: t('settings.integrations.title'), h
                 </p>
 
                 <template v-else>
-                    <p
-                        v-if="instagramDiscovery.status === 'loading' || instagramDiscovery.status === 'idle'"
-                        class="flex items-center gap-2 text-xs text-muted-foreground"
-                        role="status"
-                    >
-                        <LoaderCircle class="size-3.5 animate-spin" aria-hidden="true" />
-                        {{ t('settings.integrations.instagram.looking') }}
-                    </p>
+                    <div v-if="instagramDiscovery.status === 'loading' || instagramDiscovery.status === 'idle'" class="space-y-1.5">
+                        <p class="text-xs text-muted-foreground" role="status">{{ t('settings.integrations.instagram.looking') }}</p>
+                        <SkeletonList variant="cards" :count="1" />
+                    </div>
 
                     <div
                         v-else-if="instagramDiscovery.status === 'found'"
@@ -444,32 +441,27 @@ const breadcrumbs = computed(() => [{ title: t('settings.integrations.title'), h
                         <p class="min-w-0 flex-1 text-xs">
                             {{ t('settings.integrations.instagram.found', { username: instagramHandle, page: instagramDiscovery.page }) }}
                         </p>
-                        <button type="button" :class="buttonVariants({ size: 'sm' })" :disabled="instagramConnecting" @click="connectInstagram">
-                            <LoaderCircle v-if="instagramConnecting" class="animate-spin" aria-hidden="true" />
-                            <Instagram v-else aria-hidden="true" />
+                        <Button size="sm" type="button" @click="connectInstagram" :loading="instagramConnecting">
+                            <Instagram aria-hidden="true" />
                             {{ t('settings.integrations.instagram.connect_found', { username: instagramHandle }) }}
-                        </button>
+                        </Button>
                     </div>
 
+                    <template v-else-if="instagramDiscovery.status === 'error'">
+                        <InlineError :message="instagramDiscovery.error?.message" @retry="discoverInstagram" />
+                        <p v-if="instagramDiscovery.error?.detail" class="break-words text-2xs text-muted-foreground" dir="ltr">
+                            {{ instagramDiscovery.error.detail }}
+                        </p>
+                        <HowToSteps :steps="instagramSteps" open />
+                    </template>
+
                     <template v-else>
-                        <div
-                            role="alert"
-                            class="flex flex-wrap items-start gap-2 rounded-md px-3 py-2 text-xs"
-                            :class="instagramDiscovery.status === 'error' ? 'bg-destructive/10 text-destructive' : 'bg-muted/60'"
-                        >
+                        <!-- Found nothing (the page has no Instagram account linked): a note, not an error. -->
+                        <div role="status" class="flex flex-wrap items-start gap-2 rounded-md bg-muted/60 px-3 py-2 text-xs">
                             <CircleAlert class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                             <div class="min-w-0 flex-1">
                                 <p>
-                                    {{
-                                        instagramDiscovery.status === 'error'
-                                            ? instagramDiscovery.error?.message
-                                            : t('settings.integrations.instagram.not_linked', {
-                                                  page: instagramDiscovery.page || facebook?.name || '',
-                                              })
-                                    }}
-                                </p>
-                                <p v-if="instagramDiscovery.error?.detail" class="break-words text-2xs opacity-80" dir="ltr">
-                                    {{ instagramDiscovery.error.detail }}
+                                    {{ t('settings.integrations.instagram.not_linked', { page: instagramDiscovery.page || facebook?.name || '' }) }}
                                 </p>
                             </div>
                             <button type="button" :class="buttonVariants({ variant: 'outline', size: 'sm' })" @click="discoverInstagram">

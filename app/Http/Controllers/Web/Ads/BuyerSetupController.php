@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web\Ads;
 
 use App\Ads\AdsSettings;
+use App\Ads\Launch\LaunchSettings;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\BuyerTarget;
@@ -15,10 +16,10 @@ use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** Media buyers (who they are, their monthly targets) and the Ads Hub settings. Supervisor and up. */
+/** Media buyers (who they are, their monthly targets) and the Ads Hub settings («الإعداد» tabs). Supervisor and up. */
 class BuyerSetupController extends Controller
 {
-    public function index(AdsSettings $settings): Response
+    public function index(): Response
     {
         $buyers = MediaBuyer::with(['user:id,name', 'targets'])->orderBy('name')->get()
             ->map(fn (MediaBuyer $b) => [
@@ -38,11 +39,20 @@ class BuyerSetupController extends Controller
             'buyers' => $buyers,
             'users' => User::where('role', UserRole::MediaBuyer->value)->orderBy('name')->get(['id', 'name', 'role'])
                 ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'role' => $u->role->value])->all(),
+        ]);
+    }
+
+    /** «الإعداد › القواعد»: tax rate and winner/loser thresholds; `rules` = the S5 break-even and rule settings. */
+    public function rules(Request $request, AdsSettings $settings, RulesSetupController $rules): Response
+    {
+        return Inertia::render('Ads/SetupRules', [
+            'rules' => $rules->props($request->user()),
             'settings' => [
                 'tax_rate' => $settings->taxRate(),
                 'tax_rate_percent' => round($settings->taxRate() * 100, 2),
                 'winner_thresholds' => $settings->winnerThresholds(),
             ],
+            'launchExpiryDays' => app(LaunchSettings::class)->expiryDays(),
         ]);
     }
 
@@ -102,6 +112,7 @@ class BuyerSetupController extends Controller
             'winner_thresholds.loser_min_spend' => ['sometimes', 'numeric', 'gt:0'],
             'winner_thresholds.min_spend' => ['sometimes', 'numeric', 'gt:0'],
             'winner_thresholds.min_days' => ['sometimes', 'integer', 'min:1', 'max:30'],
+            'launch_expiry_days' => ['sometimes', 'integer', 'min:1', 'max:30'],
         ]);
 
         if (isset($data['tax_rate_percent'])) {
@@ -109,6 +120,9 @@ class BuyerSetupController extends Controller
         }
         if (isset($data['winner_thresholds'])) {
             $settings->set('winner_thresholds', array_merge($settings->winnerThresholds(), $data['winner_thresholds']));
+        }
+        if (isset($data['launch_expiry_days'])) {
+            $settings->set(LaunchSettings::EXPIRY_KEY, (int) $data['launch_expiry_days']);
         }
 
         return back()->with('status', __('ads.flash.saved'));

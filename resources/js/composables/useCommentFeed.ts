@@ -22,6 +22,8 @@ export function useCommentFeed(page: () => CursorPage<CommentItem>, filters: Ref
     const items = ref<CommentItem[]>([...page().data]);
     const nextCursor = ref<string | null>(page().meta?.next_cursor ?? null);
     const loadingMore = ref(false);
+    /** The last «تحميل المزيد» failure, shown in place with a retry. */
+    const loadError = ref<string | null>(null);
     const busy = ref<Record<number, Action | undefined>>({});
 
     // A filter change is an Inertia visit; reset from the new server page.
@@ -42,13 +44,14 @@ export function useCommentFeed(page: () => CursorPage<CommentItem>, filters: Ref
     async function loadMore(): Promise<void> {
         if (!nextCursor.value || loadingMore.value) return;
         loadingMore.value = true;
+        loadError.value = null;
         try {
             const { data } = await api.get<CursorPage<CommentItem>>('/comments/feed', { params: params(nextCursor.value) });
             const known = new Set(items.value.map((c) => c.id));
             items.value.push(...data.data.filter((c) => !known.has(c.id)));
             nextCursor.value = data.meta?.next_cursor ?? null;
         } catch (error) {
-            toast.push(apiErrorMessage(error, t('common.error')), 'error');
+            loadError.value = apiErrorMessage(error, t('common.error'));
         } finally {
             loadingMore.value = false;
         }
@@ -110,5 +113,5 @@ export function useCommentFeed(page: () => CursorPage<CommentItem>, filters: Ref
         }
     }
 
-    return { items, nextCursor, loadingMore, busy, live, loadMore, run };
+    return { items, nextCursor, loadingMore, loadError, busy, live, loadMore, run };
 }

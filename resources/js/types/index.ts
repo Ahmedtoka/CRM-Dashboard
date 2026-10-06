@@ -22,6 +22,12 @@ export interface NavItem {
     section?: string;
     /** Active only on this exact path (a parent-path child such as /ads would light up on every sub-page). */
     exact?: boolean;
+    /** Count shown at the end of the item (open decisions, drafts to review). Hidden when 0 or missing. */
+    badge?: number | null;
+    /** Query string appended to the link only (carried filters); `isActive` still compares the path. */
+    query?: string;
+    /** Other path prefixes that light this item up (setup tabs live under /ads/accounts and /ads/sync). */
+    match?: string[];
 }
 
 export interface SharedData {
@@ -35,6 +41,8 @@ export interface SharedData {
     devTools?: boolean;
     /** The live board is in the menu: supervisors, admins and the leader of the open shift. */
     canSeeBoard?: boolean;
+    /** Launch approvals (S1): what waits for this person (ads roles and supervisor+), null otherwise. */
+    adsCounters?: { content_returned: number; buyer_review: number; awaiting_approval: number } | null;
     broadcasting: BroadcastingConfig | null;
     /** Ads Hub access, shared only on ads.* routes (null elsewhere). */
     ads?: AdsAccess | null;
@@ -54,6 +62,8 @@ export interface User {
     avatar?: string;
     email_verified_at: string | null;
     role?: Role | null;
+    /** Ads authority (approve launches); the sidebar needs it on every page. */
+    ads_authority?: boolean;
     color?: string | null;
     locale?: 'ar' | 'en' | null;
     platforms?: PlatformValue[];

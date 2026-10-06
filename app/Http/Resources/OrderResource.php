@@ -142,6 +142,14 @@ class OrderResource extends JsonResource
                 'created_at' => ($r->shopify_created_at ?? $r->created_at)?->toIso8601String(),
             ])->values()->all(),
             'timeline' => $this->timeline(),
+            // Control room S3 (C 2.1, G5), web only: the ad the order is credited to. Only where the caller loaded it.
+            'ad_source' => $this->when(! $request->is('api/*') && $this->relationLoaded('ad'), fn () => $this->ad === null ? null : [
+                'id' => $this->ad->id,
+                'name' => $this->ad->name,
+                'thumbnail_url' => $this->ad->thumbnail_url,
+                'campaign' => $this->ad->relationLoaded('campaign') ? $this->ad->campaign?->name : null,
+                'attribution' => $this->ad_attribution,
+            ]),
         ];
     }
 

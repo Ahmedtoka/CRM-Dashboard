@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import { LoaderCircle } from 'lucide-vue-next';
 
 defineProps<{
     status?: string;
@@ -28,8 +27,7 @@ const submit = () => {
         </div>
 
         <form @submit.prevent="submit" class="space-y-6 text-center">
-            <Button :disabled="form.processing" variant="secondary">
-                <LoaderCircle v-if="form.processing" class="h-4 w-4 animate-spin" />
+            <Button type="submit" variant="secondary" :loading="form.processing">
                 {{ t('auth.verify_email.resend') }}
             </Button>
 

@@ -50,7 +50,8 @@ class MetricsService
     /** Integer keys summed from analytics_daily rows plus the live edges. */
     private const ROLLUP_SUM_KEYS = ['messages_sent', 'conversations_handled', 'first_responses', 'follow_ups', 'resolved', 'comments_handled', 'orders_count', 'online_minutes'];
 
-    private const EXCLUDED_ORDER_STATUSES = [OrderStatus::Cancelled->value, OrderStatus::Failed->value];
+    /** Orders that never count (reports, «النهارده»); `/orders?real=1` lists the rest. */
+    public const EXCLUDED_ORDER_STATUSES = [OrderStatus::Cancelled->value, OrderStatus::Failed->value];
 
     /** Shopify financial statuses whose order value counts as collected (spec §6.3). */
     private const REALIZED_FINANCIAL_STATUSES = ['paid', 'partially_refunded'];

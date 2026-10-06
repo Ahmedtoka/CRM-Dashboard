@@ -115,38 +115,45 @@ it('clamps the window to at least 7 days anchored at the end', function () {
         ->and($rows[0]['spend'])->toBe(700.0)->and($rows[0]['active_days'])->toBe(7);
 });
 
-it('shows winner and promising by default on the winners page, with tier chips and counts', function () {
+it('serves every old winners question from the explorer cards, tier chips and counts included', function () {
     winWorld();
     app(AdsSettings::class)->set('winner_thresholds', ['min_spend' => 300]); // B joins as neutral
     $admin = User::factory()->create(['role' => UserRole::Admin]);
-    $names = fn ($res) => array_column(array_column($res->viewData('page')['props']['winners'], 'ad'), 'name');
+    $names = fn ($res) => collect($res->viewData('page')['props']['result']['data'])->pluck('name')->sort()->values()->all();
+    $follow = fn (string $old) => $this->get($this->get($old)->assertRedirect()->headers->get('Location'))->assertOk();
     $this->withoutVite()->actingAs($admin);
 
-    $res = $this->get('/ads/winners?from=2026-09-01&to=2026-09-30')->assertOk();
+    // The old default (winner + promising) survives the redirect.
+    $this->get('/ads/winners?from=2026-09-01&to=2026-09-30')
+        ->assertRedirect('/ads/explorer?from=2026-09-01&to=2026-09-30&view=cards&status=all&health=top&sort=-roas');
+    $res = $follow('/ads/winners?from=2026-09-01&to=2026-09-30');
     expect($names($res))->toBe(['A', 'D'])
-        ->and($res->viewData('page')['props']['filters']['tier'])->toBe('top')
-        ->and($res->viewData('page')['props']['tier_counts'])->toBe(['top' => 2, 'all' => 4, 'winner' => 1, 'promising' => 1, 'neutral' => 1, 'loser' => 1])
-        ->and($res->viewData('page')['props']['meta'])->toBe(['total' => 2, 'per_page' => 20, 'current_page' => 1, 'last_page' => 1]);
+        ->and($res->viewData('page')['props']['filters']['health'])->toBe('top')
+        ->and($res->viewData('page')['props']['tier_counts'])->toBe(['top' => 2, 'all' => 4, 'winner' => 1, 'promising' => 1, 'neutral' => 1, 'loser' => 1]);
 
-    expect($names($this->get('/ads/winners?from=2026-09-01&to=2026-09-30&tier=loser')))->toBe(['C'])
-        ->and($names($this->get('/ads/winners?from=2026-09-01&to=2026-09-30&tier=neutral')))->toBe(['B'])
-        ->and($names($this->get('/ads/winners?from=2026-09-01&to=2026-09-30&tier=all')))->toHaveCount(4)
-        ->and($names($this->get('/ads/winners?from=2026-09-01&to=2026-09-30&tier=bogus')))->toBe(['A', 'D']);
+    expect($names($follow('/ads/winners?from=2026-09-01&to=2026-09-30&tier=loser')))->toBe(['C'])
+        ->and($names($follow('/ads/winners?from=2026-09-01&to=2026-09-30&tier=neutral')))->toBe(['B'])
+        ->and($names($follow('/ads/winners?from=2026-09-01&to=2026-09-30&tier=winner')))->toBe(['A'])
+        ->and($names($follow('/ads/winners?from=2026-09-01&to=2026-09-30&tier=promising')))->toBe(['D'])
+        ->and($names($follow('/ads/winners?from=2026-09-01&to=2026-09-30&tier=bogus')))->toBe(['A', 'D'])
+        // tier=all: the explorer lists every ad that ran, the below-gate E too (tier_counts.all stays the scored 4).
+        ->and($names($follow('/ads/winners?from=2026-09-01&to=2026-09-30&tier=all')))->toBe(['A', 'B', 'C', 'D', 'E']);
 });
 
-it('pages the winners 20 at a time', function () {
+it('pages the explorer cards by per_page (the old winners paging)', function () {
     $acc = AdAccount::factory()->create();
-    foreach (range(1, 25) as $i) {
+    foreach (range(1, 30) as $i) {
         winDays(Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => activeCampaignId($acc), 'name' => 'Ad '.$i]), '2026-09-21', '2026-09-30', 100, 100 * (1 + $i % 5));
     }
     $this->withoutVite()->actingAs(User::factory()->create(['role' => UserRole::Admin]));
 
-    $p1 = $this->get('/ads/winners?from=2026-09-01&to=2026-09-30&tier=all')->viewData('page')['props'];
-    $p2 = $this->get('/ads/winners?from=2026-09-01&to=2026-09-30&tier=all&page=2')->viewData('page')['props'];
-    $p9 = $this->get('/ads/winners?from=2026-09-01&to=2026-09-30&tier=all&page=9')->viewData('page')['props'];
+    $base = '/ads/explorer?from=2026-09-01&to=2026-09-30&view=cards&status=all&per_page=25';
+    $p1 = $this->get($base)->viewData('page')['props'];
+    $p2 = $this->get($base.'&page=2')->viewData('page')['props'];
+    $p9 = $this->get($base.'&page=9')->viewData('page')['props'];
 
-    expect($p1['winners'])->toHaveCount(20)->and($p1['meta'])->toBe(['total' => 25, 'per_page' => 20, 'current_page' => 1, 'last_page' => 2])
-        ->and($p2['winners'])->toHaveCount(5)->and($p2['filters']['page'])->toBe(2)
-        ->and($p9['meta']['current_page'])->toBe(2)
-        ->and(array_intersect(array_column(array_column($p1['winners'], 'ad'), 'id'), array_column(array_column($p2['winners'], 'ad'), 'id')))->toBe([]);
+    expect($p1['result']['data'])->toHaveCount(25)->and($p1['result']['meta'])->toBe(['total' => 30, 'per_page' => 25, 'current_page' => 1, 'last_page' => 2])
+        ->and($p2['result']['data'])->toHaveCount(5)->and($p2['filters']['page'])->toBe(2)
+        ->and($p9['result']['meta']['current_page'])->toBe(2)
+        ->and(array_intersect(array_column($p1['result']['data'], 'id'), array_column($p2['result']['data'], 'id')))->toBe([]);
 });

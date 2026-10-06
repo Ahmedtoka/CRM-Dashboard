@@ -4,8 +4,12 @@
  * share, how often it was opened, how many runs it produced, and the runs themselves.
  */
 import DateInput from '@/components/crm/DateInput.vue';
+import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
+import InlineError from '@/components/crm/InlineError.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import SkeletonList from '@/components/crm/SkeletonList.vue';
+import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
@@ -13,7 +17,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatShortDuration } from '@/lib/format';
 import type { TestLinkRow, TestLinkSessionRow } from '@/types/admin';
 import { Head, router } from '@inertiajs/vue3';
-import { BarChart3, Check, Copy, ExternalLink, Pencil, Play, Plus, Square, Trash2 } from 'lucide-vue-next';
+import { BarChart3, Check, Copy, ExternalLink, History, Pencil, Play, Plus, Square, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 
 const props = defineProps<{ links: TestLinkRow[] }>();
@@ -30,6 +34,9 @@ const copiedId = ref<number | null>(null);
 const openSessions = ref<number | null>(null);
 const sessions = ref<TestLinkSessionRow[]>([]);
 const loadingSessions = ref(false);
+const sessionsError = ref<string | null>(null);
+/** The row action on its way (`toggle-3`, `delete-3`): that button spins. */
+const rowBusy = ref<string | null>(null);
 
 const form = reactive({ label: '', expires_at: '', max_sessions: '', max_messages_per_session: '60' });
 
@@ -73,17 +80,21 @@ async function submit(): Promise<void> {
 async function toggle(row: TestLinkRow): Promise<void> {
     if (row.is_active && !window.confirm(t('settings.test_links.confirm_stop', { name: row.label }))) return;
 
+    rowBusy.value = `toggle-${row.id}`;
     try {
         await api.patch(`/settings/bot-test-links/${row.id}`, { is_active: !row.is_active });
         reload();
     } catch (e) {
         toast.push(apiErrorMessage(e, t('common.error')), 'error');
+    } finally {
+        rowBusy.value = null;
     }
 }
 
 async function remove(row: TestLinkRow): Promise<void> {
     if (!window.confirm(t('settings.test_links.confirm_delete', { name: row.label }))) return;
 
+    rowBusy.value = `delete-${row.id}`;
     try {
         await api.delete(`/settings/bot-test-links/${row.id}`);
         toast.push(t('settings.test_links.deleted'));
@@ -91,6 +102,8 @@ async function remove(row: TestLinkRow): Promise<void> {
         reload();
     } catch (e) {
         toast.push(apiErrorMessage(e, t('common.error')), 'error');
+    } finally {
+        rowBusy.value = null;
     }
 }
 
@@ -111,14 +124,19 @@ async function showSessions(row: TestLinkRow): Promise<void> {
     }
 
     openSessions.value = row.id;
+    await loadSessions(row);
+}
+
+async function loadSessions(row: TestLinkRow): Promise<void> {
     loadingSessions.value = true;
+    sessionsError.value = null;
     sessions.value = [];
 
     try {
         const { data } = await api.get(`/settings/bot-test-links/${row.id}/sessions`);
         sessions.value = data.data.sessions;
     } catch (e) {
-        toast.push(apiErrorMessage(e, t('common.error')), 'error');
+        sessionsError.value = apiErrorMessage(e, t('common.error'));
     } finally {
         loadingSessions.value = false;
     }
@@ -175,25 +193,33 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                         <button type="button" :class="iconBtn" :title="t('ui.edit')" :aria-label="`${t('ui.edit')} ${row.label}`" @click="edit(row)">
                             <Pencil class="size-3.5" />
                         </button>
-                        <button
+                        <Button
                             type="button"
-                            :class="iconBtn"
+                            variant="ghost"
+                            size="icon"
+                            :class="[iconBtn, 'size-auto']"
+                            :loading="rowBusy === `toggle-${row.id}`"
+                            :disabled="rowBusy !== null"
                             :title="row.is_active ? t('settings.test_links.stop') : t('settings.test_links.activate')"
                             :aria-label="row.is_active ? t('settings.test_links.stop') : t('settings.test_links.activate')"
                             @click="toggle(row)"
                         >
                             <Square v-if="row.is_active" class="size-3.5" />
                             <Play v-else class="size-3.5" />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             type="button"
-                            :class="[iconBtn, 'hover:text-destructive']"
+                            variant="ghost"
+                            size="icon"
+                            :class="[iconBtn, 'size-auto hover:text-destructive']"
+                            :loading="rowBusy === `delete-${row.id}`"
+                            :disabled="rowBusy !== null"
                             :title="t('ui.delete')"
                             :aria-label="`${t('ui.delete')} ${row.label}`"
                             @click="remove(row)"
                         >
                             <Trash2 class="size-3.5" />
-                        </button>
+                        </Button>
                     </div>
                 </header>
 
@@ -230,8 +256,9 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                 </button>
 
                 <div v-if="openSessions === row.id" class="rounded-md border border-border/60">
-                    <p v-if="loadingSessions" class="p-3 text-xs text-muted-foreground">…</p>
-                    <p v-else-if="!sessions.length" class="p-3 text-xs text-muted-foreground">{{ t('settings.test_links.sessions_empty') }}</p>
+                    <SkeletonList v-if="loadingSessions" variant="cards" :count="2" class="p-2" />
+                    <InlineError v-else-if="sessionsError" :message="sessionsError" class="m-2" @retry="loadSessions(row)" />
+                    <EmptyState v-else-if="!sessions.length" :icon="History" :title="t('settings.test_links.sessions_empty')" class="p-4" />
                     <ul v-else class="divide-y divide-border/60">
                         <li v-for="s in sessions" :key="s.id" class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-xs">
                             <span class="font-medium" dir="auto">{{ s.label }}</span>

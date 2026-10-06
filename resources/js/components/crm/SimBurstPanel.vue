@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import PlatformCheckboxes from '@/components/crm/PlatformCheckboxes.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useSimulator } from '@/composables/useSimulator';
 import type { PlatformValue } from '@/types/crm';
-import { LoaderCircle, Zap } from 'lucide-vue-next';
+import { Zap } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const { t } = useI18n();
@@ -44,8 +45,8 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
         </div>
         <PlatformCheckboxes v-model="platforms" :legend="t('ui.platforms')" />
         <p class="text-2xs text-muted-foreground">{{ t('simulator.processing') }}</p>
-        <button type="submit" class="mt-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50" :disabled="!valid || sim.busy.value !== null">
-            <LoaderCircle v-if="sim.busy.value === 'burst'" class="size-4 animate-spin" aria-hidden="true" />{{ t('simulator.burst.send') }}
-        </button>
+        <Button class="mt-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50" type="submit" :disabled="!valid || sim.busy.value !== null" :loading="sim.busy.value === 'burst'">
+            {{ t('simulator.burst.send') }}
+        </Button>
     </form>
 </template>

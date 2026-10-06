@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from '@/composables/useI18n';
-import { LoaderCircle } from 'lucide-vue-next';
+import { Button } from '@/components/ui/button';
 import { onMounted, ref } from 'vue';
 
 defineProps<{ placeholder: string; submitLabel: string; busy: boolean }>();
@@ -42,9 +42,7 @@ function onKeydown(event: KeyboardEvent): void {
             @keydown="onKeydown"
         />
         <div class="flex gap-2">
-            <button type="submit" class="inline-flex h-7 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50" :disabled="busy || !text.trim()">
-                <LoaderCircle v-if="busy" class="size-3 animate-spin" aria-hidden="true" />{{ submitLabel }}
-            </button>
+            <Button type="submit" size="sm" class="h-7 px-3 text-xs font-medium" :loading="busy" :disabled="!text.trim()">{{ submitLabel }}</Button>
             <button type="button" class="h-7 rounded-md border px-3 text-xs hover:bg-muted" @click="emit('cancel')">{{ t('common.cancel') }}</button>
         </div>
     </form>

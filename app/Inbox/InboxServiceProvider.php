@@ -3,6 +3,7 @@
 namespace App\Inbox;
 
 use App\Inbox\Commands\PruneUserNotifications;
+use App\Inbox\Outcomes\Commands\CloseIdleEpisodes;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
 
@@ -20,11 +21,12 @@ class InboxServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([PruneUserNotifications::class]);
+            $this->commands([PruneUserNotifications::class, CloseIdleEpisodes::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
             $schedule->command(PruneUserNotifications::class)->daily()->withoutOverlapping()->onOneServer();
+            $schedule->command(CloseIdleEpisodes::class)->hourly()->withoutOverlapping()->onOneServer();
         });
     }
 }

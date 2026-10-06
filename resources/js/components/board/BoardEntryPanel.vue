@@ -230,8 +230,8 @@ async function cancel(): Promise<void> {
                                 variant="destructive"
                                 class="flex-1"
                                 :disabled="reason.trim().length < 2 || board.busy.value !== null"
+                                :loading="board.busy.value === `cancel-${entryId}`"
                             >
-                                <LoaderCircle v-if="board.busy.value === `cancel-${entryId}`" class="animate-spin" aria-hidden="true" />
                                 {{ t('board.cancel.confirm') }}
                             </Button>
                             <Button type="button" variant="outline" @click="cancelling = false">{{ t('board.cancel.back') }}</Button>

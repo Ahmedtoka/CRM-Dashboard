@@ -10,7 +10,7 @@ use App\Onboarding\HomeRoute;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-// There is no landing page or dashboard: the inbox is the home screen.
+// No landing page: HomeRoute picks each role's home («النهارده», the inbox, or the Ads Hub).
 Route::get('/', fn (Request $request) => $request->user() ? redirect(HomeRoute::for($request->user())) : redirect()->route('login'))->name('home');
 
 // Staging health check (live-test phase-1 task 4). Outside auth; token-gated in the
@@ -44,7 +44,7 @@ Route::prefix('try/{token}')->name('try.')->where(['token' => '[a-z0-9]{8,64}'])
     Route::get('media/{attachment}', [TryController::class, 'media'])->name('media');
 });
 
-Route::get('dashboard', fn () => redirect()->route('inbox'))->middleware('auth')->name('dashboard');
+Route::get('dashboard', fn (Request $request) => redirect(HomeRoute::for($request->user())))->middleware('auth')->name('dashboard');
 
 // Language switch on the login / password pages (signed-in users use POST /locale/{locale}).
 Route::post('/guest/locale/{locale}', [LocaleController::class, 'guest'])

@@ -3,9 +3,12 @@
 namespace App\Ads\Materials;
 
 use App\Ads\Access\AdsScope;
-use App\Ads\Materials\Jobs\CheckProductStock;
+use App\Ads\Launch\LaunchState;
+use App\Ads\Launch\MaterialStatus;
+use App\Ads\Reports\AdsFilter;
 use App\Enums\UserRole;
 use App\Models\Ad;
+use App\Models\AdLaunch;
 use App\Models\AdMaterial;
 use App\Models\AdMaterialFile;
 use App\Models\ProductVariant;
@@ -23,7 +26,7 @@ final class MaterialService
 {
     public const TYPES = ['reel', 'carousel', 'post', 'story', 'image', 'video'];
 
-    public const STATUSES = ['not_started', 'activated', 'done'];
+    public const STATUSES = MaterialStatus::VALUES;
 
     public const PER_PAGE = 15;
 
@@ -113,22 +116,25 @@ final class MaterialService
         return $q;
     }
 
-    /** @return array{total:int, activated:int, not_started:int, done:int, reels:int, posts:int, carousels:int, in_stock:int, out_of_stock:int, need_stop:int} */
+    /** @return array{total:int, activated:int, not_started:int, done:int, in_review:int, paused:int, reels:int, posts:int, carousels:int, in_stock:int, out_of_stock:int, need_stop:int} */
     public function stats(): array
     {
         $stock = self::stockSql();
         $s = DB::table('ad_materials')->selectRaw(
             'COUNT(*) as total, '
-            ."COALESCE(SUM(CASE WHEN status = 'activated' THEN 1 ELSE 0 END), 0) as activated, "
-            ."COALESCE(SUM(CASE WHEN status = 'not_started' THEN 1 ELSE 0 END), 0) as not_started, "
-            ."COALESCE(SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0) as done, "
-            ."COALESCE(SUM(CASE WHEN need_stop_at IS NOT NULL AND status = 'activated' THEN 1 ELSE 0 END), 0) as need_stop, "
+            ."COALESCE(SUM(CASE WHEN status = 'live' THEN 1 ELSE 0 END), 0) as live, "
+            ."COALESCE(SUM(CASE WHEN status IN ('new', 'in_review') THEN 1 ELSE 0 END), 0) as not_started, "
+            ."COALESCE(SUM(CASE WHEN status = 'in_review' THEN 1 ELSE 0 END), 0) as in_review, "
+            ."COALESCE(SUM(CASE WHEN status = 'paused' THEN 1 ELSE 0 END), 0) as paused, "
+            ."COALESCE(SUM(CASE WHEN status = 'retired' THEN 1 ELSE 0 END), 0) as done, "
+            ."COALESCE(SUM(CASE WHEN need_stop_at IS NOT NULL AND status = 'live' THEN 1 ELSE 0 END), 0) as need_stop, "
             ."COALESCE(SUM(CASE WHEN ({$stock}) = 'in' THEN 1 ELSE 0 END), 0) as in_stock, "
             ."COALESCE(SUM(CASE WHEN ({$stock}) = 'out' THEN 1 ELSE 0 END), 0) as out_of_stock"
         )->first();
 
         return [
-            'total' => (int) $s->total, 'activated' => (int) $s->activated, 'not_started' => (int) $s->not_started, 'done' => (int) $s->done,
+            'total' => (int) $s->total, 'activated' => (int) $s->live, 'not_started' => (int) $s->not_started, 'done' => (int) $s->done,
+            'in_review' => (int) $s->in_review, 'paused' => (int) $s->paused,
             'reels' => $this->typeCount('reel'), 'posts' => $this->typeCount('post'), 'carousels' => $this->typeCount('carousel'),
             'in_stock' => (int) $s->in_stock, 'out_of_stock' => (int) $s->out_of_stock, 'need_stop' => (int) $s->need_stop,
         ];
@@ -153,6 +159,7 @@ final class MaterialService
             'collections:ad_material_collections.id,ad_material_collections.name',
             'buyer:id,name', 'creator:id,name',
             'ads:ads.id,ads.name,ads.status,ads.effective_status,ads.ad_account_id', 'ads.account:id,platform',
+            'launches' => fn ($q) => $q->whereIn('state', LaunchState::NON_TERMINAL_VALUES)->orderByDesc('id'),
         ];
         if ($files) {
             $with[] = 'files';
@@ -179,8 +186,10 @@ final class MaterialService
             }
         }
         $perf = $this->performance->forMaterials($materials, $user);
+        $today = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay();
+        $launchAccounts = $user->role === UserRole::MediaBuyer ? ($this->scope->accountIds($user, $today, $today) ?? []) : [];
 
-        return $materials->map(function (AdMaterial $m) use ($perf, $withFiles) {
+        return $materials->map(function (AdMaterial $m) use ($perf, $withFiles, $user, $launchAccounts) {
             $row = [
                 'id' => $m->id,
                 'title' => $m->title,
@@ -203,7 +212,10 @@ final class MaterialService
                 'buyer' => $m->buyer === null ? null : ['id' => $m->buyer->id, 'name' => $m->buyer->name],
                 'creator' => $m->creator === null ? null : ['id' => $m->creator->id, 'name' => $m->creator->name],
                 'stock' => self::stockOf($m),
-                'need_stop' => $m->need_stop_at !== null && $m->status === 'activated',
+                'need_stop' => $m->need_stop_at !== null && $m->status === 'live',
+                'launches' => $m->launches->filter(fn (AdLaunch $l) => $this->launchVisible($l, $user, $m, $launchAccounts))->take(5)
+                    ->map(fn (AdLaunch $l) => ['id' => $l->public_id, 'state' => $l->state->value, 'account' => null, 'adset' => $l->adset_name, 'ads_count' => $l->adsCount()])
+                    ->values()->all(),
                 'activated_at' => $m->activated_at?->toIso8601String(),
                 'done_at' => $m->done_at?->toIso8601String(),
                 'ads' => $m->ads->map(fn (Ad $a) => [
@@ -251,7 +263,7 @@ final class MaterialService
         $stored = [];
         try {
             return DB::transaction(function () use ($data, $uploads, $by, &$stored) {
-                $m = AdMaterial::create($this->fields($data) + ['status' => 'not_started', 'created_by_id' => $by->id]);
+                $m = AdMaterial::create($this->fields($data) + ['status' => 'new', 'created_by_id' => $by->id]);
                 $m->collections()->sync($data['collection_ids'] ?? []);
                 foreach ($uploads as $upload) {
                     $stored[] = $this->files->store($m, $upload);
@@ -308,35 +320,14 @@ final class MaterialService
         });
     }
 
-    /**
-     * Sets the status and its timestamps; the first buyer to activate an unclaimed material takes it.
-     * Leaving 'activated' ends any out-of-stock episode (need_stop_at cleared), so a later re-activation
-     * while still out of stock is a new episode and notifies again (spec section 6).
-     */
-    public function setStatus(AdMaterial $m, string $status, ?User $by = null): AdMaterial
+    /** E14 / C9: a material with an open launch or a running ad cannot be deleted (retire it first). */
+    public function deleteBlockedReason(AdMaterial $m): ?string
     {
-        $now = now();
-        $wasActivated = $m->status === 'activated';
-        $attrs = match ($status) {
-            'activated' => ['activated_at' => $m->status === 'activated' ? ($m->activated_at ?? $now) : $now, 'done_at' => null],
-            'done' => ['done_at' => $m->status === 'done' ? ($m->done_at ?? $now) : $now, 'activated_at' => $m->activated_at ?? $now],
-            default => ['activated_at' => null, 'done_at' => null],
-        };
-        if ($status !== 'activated') {
-            $attrs['need_stop_at'] = null;
-        }
-        $m->forceFill(['status' => $status] + $attrs);
-
-        if ($status === 'activated' && $m->media_buyer_id === null && $by !== null && ($buyer = $this->scope->buyerFor($by)) !== null) {
-            $m->media_buyer_id = $buyer->id;
-        }
-        $m->save();
-
-        if ($status === 'activated' && ! $wasActivated && $m->product_id !== null) {
-            CheckProductStock::dispatchFor([$m->product_id]); // queued, never throws
+        if ($m->launches()->whereIn('state', LaunchState::NON_TERMINAL_VALUES)->exists()) {
+            return 'launches_open';
         }
 
-        return $m;
+        return $m->ads()->whereRaw("UPPER(ads.status) = 'ACTIVE'")->exists() ? 'ads_live' : null;
     }
 
     /**
@@ -493,5 +484,18 @@ final class MaterialService
         } catch (Throwable) {
             return null;
         }
+    }
+
+    /** @param  list<int>  $accounts  the buyer's accounts today (computed once per rows() call) */
+    private function launchVisible(AdLaunch $l, User $user, AdMaterial $m, array $accounts): bool
+    {
+        if ($user->isSupervisorOrAbove()) {
+            return true;
+        }
+        if ($user->role === UserRole::MediaBuyer) {
+            return $l->prepared_by_id === $user->id || in_array($l->ad_account_id, $accounts, true);
+        }
+
+        return $l->prepared_by_id === $user->id || $m->created_by_id === $user->id;
     }
 }

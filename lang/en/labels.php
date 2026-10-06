@@ -80,4 +80,15 @@ return [
             'last_used_at' => 'last_used_at',
         ],
     ],
+    'outcomes' => [
+        'ordered' => 'Ordered',
+        'price' => 'Price too high',
+        'size_out' => 'Size / colour out of stock',
+        'shipping' => 'Shipping (cost or time)',
+        'no_answer' => 'Customer stopped answering',
+        'browsing' => 'Just browsing / will come back',
+        'service' => 'Order question / return',
+        'other' => 'Other reason',
+        'unknown' => 'Not recorded',
+    ],
 ];

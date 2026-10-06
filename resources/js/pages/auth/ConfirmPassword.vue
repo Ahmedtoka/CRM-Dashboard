@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { useI18n } from '@/composables/useI18n';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import { LoaderCircle } from 'lucide-vue-next';
 
 const { t } = useI18n();
 
@@ -46,8 +45,7 @@ const submit = () => {
                 </div>
 
                 <div class="flex items-center">
-                    <Button class="w-full" :disabled="form.processing">
-                        <LoaderCircle v-if="form.processing" class="h-4 w-4 animate-spin" />
+                    <Button type="submit" class="w-full" :loading="form.processing">
                         {{ t('auth.confirm_password.submit') }}
                     </Button>
                 </div>

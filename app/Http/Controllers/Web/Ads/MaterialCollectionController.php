@@ -19,9 +19,9 @@ class MaterialCollectionController extends Controller
         $collections = AdMaterialCollection::query()
             ->withCount([
                 'materials',
-                'materials as activated' => fn ($q) => $q->where('ad_materials.status', 'activated'),
-                'materials as not_started' => fn ($q) => $q->where('ad_materials.status', 'not_started'),
-                'materials as done' => fn ($q) => $q->where('ad_materials.status', 'done'),
+                'materials as activated' => fn ($q) => $q->where('ad_materials.status', 'live'),
+                'materials as not_started' => fn ($q) => $q->whereIn('ad_materials.status', ['new', 'in_review']),
+                'materials as done' => fn ($q) => $q->where('ad_materials.status', 'retired'),
                 'materials as need_stop' => fn ($q) => $q->whereNotNull('ad_materials.need_stop_at'),
             ])
             ->orderBy('sort')->orderBy('name')->get()
@@ -32,9 +32,9 @@ class MaterialCollectionController extends Controller
             ])->all();
 
         $all = AdMaterial::query()->toBase()->selectRaw(
-            "COUNT(*) as materials, COALESCE(SUM(CASE WHEN status = 'activated' THEN 1 ELSE 0 END), 0) as activated, "
-            ."COALESCE(SUM(CASE WHEN status = 'not_started' THEN 1 ELSE 0 END), 0) as not_started, "
-            ."COALESCE(SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0) as done, "
+            "COUNT(*) as materials, COALESCE(SUM(CASE WHEN status = 'live' THEN 1 ELSE 0 END), 0) as activated, "
+            ."COALESCE(SUM(CASE WHEN status IN ('new', 'in_review') THEN 1 ELSE 0 END), 0) as not_started, "
+            ."COALESCE(SUM(CASE WHEN status = 'retired' THEN 1 ELSE 0 END), 0) as done, "
             .'COALESCE(SUM(CASE WHEN need_stop_at IS NOT NULL THEN 1 ELSE 0 END), 0) as need_stop'
         )->first();
 

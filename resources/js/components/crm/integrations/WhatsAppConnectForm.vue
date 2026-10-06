@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { integrationError } from '@/lib/integrations';
 import type { IntegrationAccount, IntegrationAccounts, WhatsAppPhoneOption } from '@/types/admin';
-import { CircleAlert, LoaderCircle } from 'lucide-vue-next';
+import { CircleAlert } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 /**
@@ -109,15 +109,16 @@ async function connect(): Promise<void> {
         <p class="-mt-1 text-2xs text-muted-foreground">{{ t('settings.integrations.whatsapp.token_note') }}</p>
 
         <div>
-            <button
+            <Button
+                variant="outline"
+                size="sm"
                 type="button"
-                :class="buttonVariants({ variant: 'outline', size: 'sm' })"
                 :disabled="listing || !wabaId.trim() || token.trim().length < 20"
                 @click="listNumbers"
+                :loading="listing"
             >
-                <LoaderCircle v-if="listing" class="animate-spin" aria-hidden="true" />
                 {{ t('settings.integrations.whatsapp.list_numbers') }}
-            </button>
+            </Button>
         </div>
 
         <fieldset v-if="numbers && numbers.length" class="grid gap-1.5">
@@ -173,10 +174,9 @@ async function connect(): Promise<void> {
         </div>
 
         <div class="flex flex-wrap gap-2">
-            <button type="submit" :class="buttonVariants({ size: 'sm' })" :disabled="connecting || !phoneNumberId.trim() || token.trim().length < 20">
-                <LoaderCircle v-if="connecting" class="animate-spin" aria-hidden="true" />
+            <Button size="sm" type="submit" :disabled="connecting || !phoneNumberId.trim() || token.trim().length < 20" :loading="connecting">
                 {{ t('settings.integrations.whatsapp.connect') }}
-            </button>
+            </Button>
             <button type="button" :class="buttonVariants({ variant: 'ghost', size: 'sm' })" :disabled="connecting" @click="emit('cancel')">
                 {{ t('settings.integrations.actions.cancel') }}
             </button>

@@ -522,3 +522,23 @@ it('keeps her figures after midnight while the evening shift of the day before i
         ->and($desk['attendance']['worked_seconds'])->toBe((6 * 60 + 25) * 60)
         ->and(Carbon::parse($desk['attendance']['first_in'])->equalTo(Carbon::parse('2026-10-05 18:05', 'Africa/Cairo')))->toBeTrue();
 });
+it('reads today\'s ratings into the numbers and each desk, never a test chat', function () {
+    $leader = boardSupervisor();
+    $shift = Shift::factory()->create(['leader_user_id' => $leader->id]);
+    $a = boardDesk($shift);
+    $b = boardDesk($shift);
+    $rate = fn (ShiftMember $m, int $stars, array $attrs = []) => QueueEntry::factory()->create($attrs + [
+        'shift_member_id' => $m->id, 'assigned_user_id' => $m->user_id, 'status' => 'closed', 'close_reason' => 'inquiry',
+        'closed_at' => now()->subHour(), 'review_stars' => $stars, 'reviewed_at' => now()->subMinutes(30),
+    ]);
+    $rate($a, 5);
+    $rate($a, 2);
+    $rate($a, 1, ['is_test' => true]);
+    $rate($b, 4, ['reviewed_at' => now()->subDay()]); // yesterday's answer
+
+    $data = $this->actingAs($leader)->getJson('/board/state')->assertOk()->json('data');
+
+    expect($data['kpis']['rating'])->toBe(['count' => 2, 'avg' => 3.5, 'low' => 1])
+        ->and(collect($data['members'])->firstWhere('id', $a->id)['rating'])->toBe(['count' => 2, 'avg' => 3.5, 'low' => 1])
+        ->and(collect($data['members'])->firstWhere('id', $b->id)['rating'])->toBe(['count' => 0, 'avg' => null, 'low' => 0]);
+});

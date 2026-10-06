@@ -2,6 +2,7 @@
 
 namespace App\Ads\Control\Write;
 
+use App\Ads\Alerts\AlertStore;
 use App\Ads\Audit\AdsAudit;
 use App\Ads\Control\AdWriteService;
 use App\Ads\Control\Write\Jobs\RetryStopWrite;
@@ -200,7 +201,7 @@ class WriteExecutor
         $type = $x->state === AdWriteAction::UNKNOWN ? 'ads.stop_unknown' : 'ads.stop_failed';
         app(UserNotifier::class)->notifyAdsAuthority($type, array_filter([
             'action_id' => $x->public_id, 'name' => $x->target_name, 'account' => $x->account_name, 'level' => $x->target_level,
-            'error_code' => $x->error_code, 'deep_link' => $link, 'link' => '/ads/actions',
+            'error_code' => $x->error_code, 'deep_link' => $link, 'link' => '/ads/decisions?tab=log',
         ], fn ($v) => $v !== null));
     }
 
@@ -240,6 +241,11 @@ class WriteExecutor
         $x = $this->finish($x, AdWriteAction::SUCCEEDED, null, null, $outcome);
         if ($x->state === AdWriteAction::SUCCEEDED) {
             $this->mirrorLocal($x);
+            try {
+                app(AlertStore::class)->actOnWrite($x); // close the decisions-feed cards of this ad (S5)
+            } catch (Throwable $e) {
+                self::logUnexpected($e, $x);
+            }
             if ($x->isStop()) {
                 $this->supersedeRunsBy($x); // rule 4 first: a lock failure must never skip it
                 try {

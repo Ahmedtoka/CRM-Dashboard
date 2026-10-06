@@ -3,6 +3,7 @@
 namespace App\Ads\Control\Write;
 
 use App\Ads\Control\Write\Types\SetStatusType;
+use App\Ads\Launch\LaunchState;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Data\ObjectState;
@@ -15,6 +16,8 @@ use App\Ads\Reports\AdsFilter;
 use App\Ads\Sync\ConnectionHealth;
 use App\Models\Ad;
 use App\Models\AdAccount;
+use App\Models\AdLaunch;
+use App\Models\AdPublication;
 use App\Models\AdSet;
 use App\Models\AdWriteAction;
 use App\Models\User;
@@ -44,6 +47,37 @@ class RunGuard
         private readonly WriteLimits $limits,
         private readonly SetStatusType $type,
     ) {}
+
+    /**
+     * G1 (no bypass, spec 3.3): an ad the CRM created for a launch may be Run only once that launch was approved
+     * (approved_at). Everyone, Ads authority included (they approve through the card). Ads made outside the CRM have no
+     * launch and pass (E18). Never called for a Stop.
+     *
+     * @throws WriteDenied 403 approval_required
+     */
+    public function approvalGate(AdAccount $a, string $level, string $externalId): void
+    {
+        if ($level !== 'ad') {
+            return;
+        }
+        $pub = AdPublication::query()->where('ad_account_id', $a->id)->where('external_ad_id', $externalId)->whereNotNull('ad_launch_id')
+            ->orderByDesc('id')->first(['id', 'ad_launch_id', 'archived_at']);
+        if ($pub === null) {
+            return;
+        }
+        $launch = AdLaunch::query()->whereKey($pub->ad_launch_id)->first(['id', 'public_id', 'approved_at', 'state']);
+        // An archived ad (returned / rejected / expired round) left the workflow: it may never run, even when a later
+        // round of the same launch was approved.
+        if ($pub->archived_at !== null || ($launch !== null && $launch->approved_at === null)) {
+            throw WriteDenied::make('approval_required', array_filter(['launch_id' => $launch?->public_id]));
+        }
+        // A launch that ended (retired keeps approved_at and does not archive its ads) may never run again: a new
+        // launch goes through approval (final review A1).
+        $state = $launch?->state instanceof LaunchState ? $launch->state->value : $launch?->state;
+        if ($state !== null && in_array($state, LaunchState::TERMINAL_VALUES, true)) {
+            throw WriteDenied::make('approval_required', ['launch_id' => $launch->public_id, 'launch_state' => $state]);
+        }
+    }
 
     /**
      * Called for a Run at propose, after the policy and the target lookup.

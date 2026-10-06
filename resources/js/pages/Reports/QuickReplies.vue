@@ -5,8 +5,10 @@ import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import ReportFilters from '@/components/crm/ReportFilters.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useReportFilters } from '@/composables/useReportFilters';
+import { useUrlFilters } from '@/composables/useUrlFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatDateTime, slashShortcut } from '@/lib/format';
+import { sortRows } from '@/lib/sort';
 import type { QuickReplyAgentRow, QuickReplyTopRow, QuickReplyUnusedRow, ReportRange } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
 import { Head } from '@inertiajs/vue3';
@@ -21,7 +23,9 @@ const props = defineProps<{
 }>();
 
 const { t, locale } = useI18n();
-const { visit } = useReportFilters();
+// Each table sorts client-side (full lists) and keeps its own sort in the URL; a range change keeps them.
+const { filters: sorts, set: setSort, query: sortQuery } = useUrlFilters({ sort_top: '', sort_used: '', sort_unused: '' });
+const { visit } = useReportFilters(() => sortQuery.value as Record<string, string>);
 const n = (v: number) => formatCount(v, locale.value);
 
 const exportHref = computed(() => {
@@ -32,32 +36,32 @@ const exportHref = computed(() => {
 
 const scopeLabel = (scope: QuickReplyTopRow['scope']) => t(scope === 'shared' ? 'reports.quick_replies.scope_shared' : 'reports.quick_replies.scope_personal');
 
-const topRows = computed(() => props.top);
-const agentRows = computed(() => props.perAgent.map((row) => ({ ...row, id: row.user.id })));
-const unusedRows = computed(() => props.unused);
+const topRows = computed(() => sortRows(props.top, sorts.value.sort_top));
+const agentRows = computed(() => sortRows(props.perAgent.map((row) => ({ ...row, id: row.user.id })), sorts.value.sort_used));
+const unusedRows = computed(() => sortRows(props.unused, sorts.value.sort_unused));
 
 const topColumns = computed<Column[]>(() => [
     { key: 'shortcut', label: t('reports.quick_replies.shortcut') },
     { key: 'title', label: t('reports.quick_replies.title_label') },
     { key: 'category', label: t('reports.quick_replies.category') },
     { key: 'scope', label: t('reports.quick_replies.scope') },
-    { key: 'uses', label: t('reports.quick_replies.uses'), align: 'end' },
-    { key: 'users', label: t('reports.quick_replies.users'), align: 'end' },
+    { key: 'uses', label: t('reports.quick_replies.uses'), numeric: true, sortable: true },
+    { key: 'users', label: t('reports.quick_replies.users'), numeric: true, sortable: true },
     { key: 'platforms', label: t('ui.platforms') },
-    { key: 'last_used_at', label: t('reports.quick_replies.last_used') },
+    { key: 'last_used_at', label: t('reports.quick_replies.last_used'), sortable: true },
 ]);
 
 const agentColumns = computed<Column[]>(() => [
     { key: 'user', label: t('reports.quick_replies.agent') },
-    { key: 'uses', label: t('reports.quick_replies.uses'), align: 'end' },
-    { key: 'replies', label: t('reports.quick_replies.replies'), align: 'end' },
+    { key: 'uses', label: t('reports.quick_replies.uses'), numeric: true, sortable: true },
+    { key: 'replies', label: t('reports.quick_replies.replies'), numeric: true, sortable: true },
 ]);
 
 const unusedColumns = computed<Column[]>(() => [
     { key: 'shortcut', label: t('reports.quick_replies.shortcut') },
     { key: 'title', label: t('reports.quick_replies.title_label') },
     { key: 'scope', label: t('reports.quick_replies.scope') },
-    { key: 'last_used_at', label: t('reports.quick_replies.last_used') },
+    { key: 'last_used_at', label: t('reports.quick_replies.last_used'), sortable: true },
 ]);
 
 const breadcrumbs = computed(() => [{ title: t('reports.quick_replies.title'), href: '/reports/quick-replies' }]);
@@ -69,7 +73,6 @@ const breadcrumbs = computed(() => [{ title: t('reports.quick_replies.title'), h
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('reports.quick_replies.title')">
-                <ReportFilters :range="range" :platform="platform" @change="visit" />
                 <a
                     :href="exportHref"
                     class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium hover:bg-muted/50"
@@ -78,9 +81,17 @@ const breadcrumbs = computed(() => [{ title: t('reports.quick_replies.title'), h
                 </a>
             </PageHeader>
 
+            <div class="rounded-lg bg-card p-3 shadow-card">
+                <ReportFilters :range="range" :platform="platform" @change="visit" />
+            </div>
+
             <section class="space-y-2">
                 <h2 class="text-sm font-medium">{{ t('reports.quick_replies.top') }}</h2>
-                <DataTable :columns="topColumns" :rows="topRows" :empty="t('reports.quick_replies.empty')" :caption="t('reports.quick_replies.top')">
+                <DataTable
+                    table-id="report-qr-top"
+                    :sort="sorts.sort_top || null"
+                    @update:sort="setSort({ sort_top: $event })"
+                    :columns="topColumns" :rows="topRows" :empty="t('reports.quick_replies.empty')" :caption="t('reports.quick_replies.top')">
                     <template #cell-shortcut="{ value }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">{{ slashShortcut(String(value)) }}</code></template>
                     <template #cell-title="{ value }"><span dir="auto">{{ value }}</span></template>
                     <template #cell-scope="{ value }">{{ scopeLabel(value as QuickReplyTopRow['scope']) }}</template>
@@ -102,7 +113,11 @@ const breadcrumbs = computed(() => [{ title: t('reports.quick_replies.title'), h
 
             <section class="space-y-2">
                 <h2 class="text-sm font-medium">{{ t('reports.quick_replies.per_agent') }}</h2>
-                <DataTable :columns="agentColumns" :rows="agentRows" :empty="t('reports.quick_replies.empty')" :caption="t('reports.quick_replies.per_agent')">
+                <DataTable
+                    table-id="report-qr-agents"
+                    :sort="sorts.sort_used || null"
+                    @update:sort="setSort({ sort_used: $event })"
+                    :columns="agentColumns" :rows="agentRows" :empty="t('reports.quick_replies.empty')" :caption="t('reports.quick_replies.per_agent')">
                     <template #cell-user="{ row }">
                         <span class="inline-flex items-center gap-2 whitespace-nowrap font-medium">
                             <span class="size-2.5 rounded-full" :style="{ backgroundColor: row.user.color ?? '#94a3b8' }" aria-hidden="true" />
@@ -118,7 +133,11 @@ const breadcrumbs = computed(() => [{ title: t('reports.quick_replies.title'), h
                 <div>
                     <h2 class="text-sm font-medium">{{ t('reports.quick_replies.unused') }}</h2>
                 </div>
-                <DataTable :columns="unusedColumns" :rows="unusedRows" :empty="t('reports.quick_replies.empty')" :caption="t('reports.quick_replies.unused')">
+                <DataTable
+                    table-id="report-qr-unused"
+                    :sort="sorts.sort_unused || null"
+                    @update:sort="setSort({ sort_unused: $event })"
+                    :columns="unusedColumns" :rows="unusedRows" :empty="t('reports.quick_replies.empty')" :caption="t('reports.quick_replies.unused')">
                     <template #cell-shortcut="{ value }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">{{ slashShortcut(String(value)) }}</code></template>
                     <template #cell-title="{ value }"><span dir="auto">{{ value }}</span></template>
                     <template #cell-scope="{ value }">{{ scopeLabel(value as QuickReplyUnusedRow['scope']) }}</template>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /** «ابدأ من هنا» (owner, 2026-09-26): the admin's connect-everything checklist, read from what is really connected. */
 import StatusChip from '@/components/crm/StatusChip.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
+import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { cn } from '@/lib/utils';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
@@ -48,12 +49,14 @@ function detailOf(step: Step): string | null {
     return step.detail;
 }
 
+const { loading: dismissing, track } = useVisitLoading();
+
 function skip(): void {
-    router.post('/onboarding/dismiss');
+    router.post('/onboarding/dismiss', {}, track());
 }
 
 function resume(): void {
-    router.delete('/onboarding/dismiss');
+    router.delete('/onboarding/dismiss', track());
 }
 
 const breadcrumbs = computed(() => [{ title: t('onboarding.title'), href: '/onboarding' }]);
@@ -126,8 +129,8 @@ const breadcrumbs = computed(() => [{ title: t('onboarding.title'), href: '/onbo
                     <template v-if="!progress.dismissed">{{ t('onboarding.skip_hint') }}</template>
                 </div>
                 <div class="flex gap-2">
-                    <button v-if="!progress.dismissed && !allDone" type="button" :class="cn(buttonVariants({ variant: 'ghost', size: 'sm' }))" @click="skip">{{ t('onboarding.skip') }}</button>
-                    <button v-else-if="progress.dismissed && !allDone" type="button" :class="cn(buttonVariants({ variant: 'ghost', size: 'sm' }))" @click="resume">{{ t('onboarding.resume') }}</button>
+                    <Button v-if="!progress.dismissed && !allDone" type="button" variant="ghost" size="sm" :loading="dismissing" @click="skip">{{ t('onboarding.skip') }}</Button>
+                    <Button v-else-if="progress.dismissed && !allDone" type="button" variant="ghost" size="sm" :loading="dismissing" @click="resume">{{ t('onboarding.resume') }}</Button>
                     <Link href="/inbox" :class="cn(buttonVariants({ size: 'sm' }))">{{ t('onboarding.go_inbox') }}</Link>
                 </div>
             </footer>
