@@ -9,6 +9,8 @@ const pages: Record<string, string> = Object.fromEntries(
 const SWEPT: string[] = [
     // Task 13
     'Orders/Index', 'Orders/Show', 'Customers/Index', 'Customers/Show',
+    // Task 14
+    'Inbox', 'Board', 'Comments/Index', 'Cases',
 ];
 
 /** Raw tables allowed only on pages S1/S2 replace; they must sit in the shared sticky scroll box. */

@@ -5,7 +5,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useBoardContext } from '@/lib/board/context';
 import { formatClock } from '@/lib/format';
 import { Link } from '@inertiajs/vue3';
-import { LoaderCircle, RefreshCw, Settings } from 'lucide-vue-next';
+import { RefreshCw, Settings } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 // Instead of the day: the queue is switched off (with the way to switch it on), no shift runs
@@ -62,9 +62,8 @@ async function retry(): Promise<void> {
         </template>
         <template v-else>
             <p class="text-foreground">{{ t('board.failed.body') }}</p>
-            <Button variant="outline" :disabled="retrying" @click="retry">
-                <LoaderCircle v-if="retrying" class="animate-spin" aria-hidden="true" />
-                <RefreshCw v-else aria-hidden="true" />
+            <Button variant="outline" :disabled="retrying" @click="retry" :loading="retrying">
+                <RefreshCw aria-hidden="true" />
                 {{ t('board.failed.retry') }}
             </Button>
         </template>

@@ -627,6 +627,7 @@ const en: Messages = {
         totals: 'Total',
     },
     range: {
+        summary: 'From {from} to {to}',
         label: 'Date range',
         today: 'Today',
         yesterday: 'Yesterday',
@@ -648,6 +649,9 @@ const en: Messages = {
         intent_label: 'Intent',
         ad_only: 'Ads only',
         ad_only_hint: 'Applies to loaded comments',
+        status_all: 'All statuses',
+        intent_all: 'All intents',
+        post_chip: 'Post #{id}',
         status: { new: 'New', replied: 'Replied', hidden: 'Hidden', ignored: 'Ignored' },
         intent: { buy: 'Buy', question: 'Question', complaint: 'Complaint', spam: 'Spam', other: 'Other' },
         ad: 'Ad',

@@ -5,6 +5,7 @@ import ConversationTagMenu from '@/components/crm/ConversationTagMenu.vue';
 import CreateOrderDrawer from '@/components/crm/CreateOrderDrawer.vue';
 import CustomerPanel from '@/components/crm/CustomerPanel.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
+import InlineError from '@/components/crm/InlineError.vue';
 import MyWindowsStrip from '@/components/crm/queue/MyWindowsStrip.vue';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -38,7 +39,7 @@ import type {
 } from '@/types/crm';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { useMediaQuery } from '@vueuse/core';
-import { CircleAlert, MessageSquareText } from 'lucide-vue-next';
+import { MessageSquareText } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 
 const props = defineProps<{
@@ -571,9 +572,10 @@ onBeforeUnmount(() => {
                     <Skeleton class="ms-auto h-16 w-1/2" />
                     <Skeleton class="h-12 w-3/5" />
                 </div>
-                <EmptyState v-else-if="selectedId !== null && error" :icon="CircleAlert" :title="error">
+                <div v-else-if="selectedId !== null && error" class="flex flex-1 flex-col items-center justify-center gap-3 p-6">
+                    <InlineError :message="error" class="w-full max-w-md" @retry="thread.open(selectedId)" />
                     <button type="button" class="text-xs text-primary hover:underline" @click="back">{{ t('inbox.back') }}</button>
-                </EmptyState>
+                </div>
                 <EmptyState v-else :icon="MessageSquareText" :title="t('inbox.select_title')" :body="t('inbox.select_body')" />
             </main>
 

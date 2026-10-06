@@ -604,6 +604,7 @@ const ar = {
         totals: 'الإجمالي',
     },
     range: {
+        summary: 'من {from} لـ {to}',
         label: 'الفترة',
         today: 'اليوم',
         yesterday: 'أمس',
@@ -625,6 +626,9 @@ const ar = {
         intent_label: 'النية',
         ad_only: 'الإعلانات فقط',
         ad_only_hint: 'يطبق على التعليقات المحملة',
+        status_all: 'كل الحالات',
+        intent_all: 'كل النوايا',
+        post_chip: 'منشور #{id}',
         status: { new: 'جديد', replied: 'تم الرد', hidden: 'مخفي', ignored: 'متجاهل' },
         intent: { buy: 'شراء', question: 'سؤال', complaint: 'شكوى', spam: 'سبام', other: 'أخرى' },
         ad: 'إعلان',
