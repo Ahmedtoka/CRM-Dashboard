@@ -7,6 +7,7 @@ use App\Http\Controllers\Web\Ads\BuyerController;
 use App\Http\Controllers\Web\Ads\BuyerSetupController;
 use App\Http\Controllers\Web\Ads\CampaignController;
 use App\Http\Controllers\Web\Ads\CaptionController;
+use App\Http\Controllers\Web\Ads\ChatFunnelController;
 use App\Http\Controllers\Web\Ads\CreativeController;
 use App\Http\Controllers\Web\Ads\MaterialCollectionController;
 use App\Http\Controllers\Web\Ads\MaterialController;
@@ -25,6 +26,8 @@ Route::middleware('ads:report')->group(function () {
     Route::get('/ads/creatives/{ad}', [CreativeController::class, 'show'])->name('ads.creatives.show');
     Route::get('/ads/campaigns', CampaignController::class)->name('ads.campaigns');
     Route::get('/ads/winners', [CreativeController::class, 'winners'])->name('ads.winners');
+    // Control room S3: the chat funnel per ad for the ad drawer (out-of-scope ads are left out).
+    Route::get('/ads/chat-funnel', ChatFunnelController::class)->name('ads.chat-funnel');
     Route::get('/ads/actions', [ActionController::class, 'index'])->name('ads.actions');
     Route::post('/ads/actions/status', [ActionController::class, 'status'])->name('ads.actions.status');
 
