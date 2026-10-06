@@ -51,6 +51,9 @@ class DecisionsController extends Controller
             default => DecisionCounter::cached($user) ?? $counter->refresh($user),
         };
         $logRows = $tab === 'log' ? $log->rows($user, $logFilters) : [];
+        // The «مين» options come from the whole log, so picking one person never empties the list of the others.
+        $filtered = array_filter($logFilters, fn ($v) => $v !== null) !== [];
+        $userRows = $tab === 'log' && $filtered ? $log->rows($user) : $logRows;
 
         return Inertia::render('Ads/Decisions', [
             'filters' => $this->filterProps($filter, $request) + ['tab' => $tab, 'who' => $logFilters['user'], 'level' => $logFilters['level'], 'result' => $logFilters['result']],
@@ -62,7 +65,7 @@ class DecisionsController extends Controller
             'suggestions' => $suggestions,
             'alerts' => [],
             'log' => $logRows,
-            'log_users' => collect($logRows)->filter(fn (array $r) => $r['user_id'] !== null)
+            'log_users' => collect($userRows)->filter(fn (array $r) => $r['user_id'] !== null)
                 ->map(fn (array $r) => ['id' => (int) $r['user_id'], 'name' => (string) $r['user']])->unique('id')->values()->all(),
         ]);
     }

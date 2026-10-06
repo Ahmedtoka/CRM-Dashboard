@@ -55,7 +55,9 @@ final class AdsToday
         $rows = collect($this->creatives->build($week, ['status' => 'active', 'sort' => 'spend', 'per_page' => 100])['data']);
         $best = $rows->filter(fn (array $r) => $r['real_roas'] !== null && $r['real_roas'] >= (float) $thr['winner'])
             ->sortByDesc('real_roas')->take(self::TOP)->values();
-        $worst = $rows->filter(fn (array $r) => $r['spend_today'] > 0 && ($r['real_roas'] ?? 0.0) < (float) $thr['loser'])
+        // Spending today and over the range, on an EGP account (real ROAS is null elsewhere, never a loss).
+        $worst = $rows->filter(fn (array $r) => $r['spend_today'] > 0 && $r['spend'] > 0 && ($r['currency'] ?? 'EGP') === 'EGP'
+            && ($r['real_roas'] ?? 0.0) < (float) $thr['loser'])
             ->sortByDesc('spend_today')->take(self::TOP)->values();
         $enriched = collect($this->enricher->enrich($best->concat($worst)->unique('id')->values()->all(), $week, $u))->keyBy('id');
         $pick = fn ($list) => $list->map(fn (array $r) => $enriched[$r['id']])->values()->all();

@@ -3,6 +3,7 @@
 namespace App\Ads\Sync\Commands;
 
 use App\Ads\Audit\AdsAudit;
+use App\Ads\Reports\SpendSnapshots;
 use App\Ads\Sync\HistoryPruner;
 use App\Ads\Sync\HistoryWindow;
 use Carbon\CarbonImmutable;
@@ -111,11 +112,15 @@ class PruneHistoryCommand extends Command
             throw $e;
         }
 
-        AdsAudit::record('ads.history_pruned', meta: ['before' => $day, 'counts' => $result, 'backup' => $backup] + ($this->stopRequested ? ['interrupted' => true] : []));
+        // Intraday spend snapshots keep a rolling window of their own (not the history start).
+        $snapshots = $this->stopRequested ? 0 : app(SpendSnapshots::class)->prune();
+
+        AdsAudit::record('ads.history_pruned', meta: ['before' => $day, 'counts' => $result, 'backup' => $backup, 'spend_snapshots' => $snapshots] + ($this->stopRequested ? ['interrupted' => true] : []));
 
         foreach ($result as $table => $n) {
             $this->line("{$table}: {$n} rows deleted");
         }
+        $this->line('ad_spend_snapshots: '.$snapshots.' rows older than '.SpendSnapshots::KEEP_DAYS.' days deleted');
         if ($this->stopRequested) {
             $this->warn('Stopped by a signal after the current chunk. '.array_sum($result).' rows deleted; re-run to continue.');
 

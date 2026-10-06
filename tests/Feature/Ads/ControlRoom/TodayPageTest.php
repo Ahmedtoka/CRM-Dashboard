@@ -40,3 +40,13 @@ it('keeps agents out and sends content to the library', function () {
     $this->actingAs(crUser(UserRole::Moderator))->get('/ads')->assertForbidden();
     $this->actingAs(crUser(UserRole::Content))->get('/ads')->assertRedirect();
 });
+
+it('keeps the worst five to EGP ads that spent in the range and today (review M2)', function () {
+    $egp = AdAccount::factory()->meta()->create(['currency' => 'EGP']);
+    $usd = AdAccount::factory()->meta()->create(['currency' => 'USD']);
+    $bad = crAd($egp, ['2026-10-03' => [500, 0, 0, 0], '2026-10-06' => [50, 0, 0, 0]]);
+    crAd($usd, ['2026-10-03' => [500, 0, 0, 0], '2026-10-06' => [50, 0, 0, 0]]);
+    crAd($egp, ['2026-10-03' => [0, 0, 0, 0], '2026-10-06' => [50, 0, 0, 0]]); // nothing spent in the 7 days
+
+    $this->actingAs(crAdmin())->get('/ads')->assertInertia(fn (Assert $p) => $p->has('today.worst', 1)->where('today.worst.0.id', $bad->id));
+});

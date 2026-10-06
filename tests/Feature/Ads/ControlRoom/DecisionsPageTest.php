@@ -97,3 +97,16 @@ it('reads no approvals while the S1 launch classes are absent (merge guard)', fu
     $this->actingAs(crAdmin())->get('/ads/decisions')->assertInertia(fn (Assert $p) => $p
         ->where('approvals.count', 0)->where('approvals.items', []));
 });
+
+it('lists every log user while the log is filtered to one of them (review M4)', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    $a = crUser(UserRole::Supervisor);
+    $b = crUser(UserRole::Supervisor);
+    foreach ([$a, $b] as $u) {
+        AdWriteAction::factory()->create(['ad_account_id' => $acc->id, 'target_level' => 'ad', 'target_external_id' => 'x'.$u->id, 'state' => 'succeeded',
+            'to_status' => 'paused', 'confirmed_at' => now(), 'proposed_by_id' => $u->id, 'confirmed_by_id' => $u->id]);
+    }
+
+    $this->actingAs(crAdmin())->get("/ads/decisions?tab=log&who={$a->id}")->assertInertia(fn (Assert $p) => $p
+        ->has('log', 1)->where('log.0.user_id', $a->id)->has('log_users', 2));
+});

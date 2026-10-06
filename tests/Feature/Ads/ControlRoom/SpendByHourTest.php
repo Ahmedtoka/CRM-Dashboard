@@ -60,3 +60,16 @@ it('says none when there is no spend history at all', function () {
     AdAccount::factory()->meta()->create();
     expect(sbhToday()['baseline'])->toBe('none')->and(sbhToday()['usual_by_now'])->toBeNull();
 });
+
+it('keeps 30 days of snapshots: record and ads:prune-history drop older rows (review M1)', function () {
+    $acc = AdAccount::factory()->meta()->create();
+    AdSpendSnapshot::create(['ad_account_id' => $acc->id, 'date' => '2026-09-05', 'hour' => 10, 'spend' => 1, 'captured_at' => now()]);
+    AdSpendSnapshot::create(['ad_account_id' => $acc->id, 'date' => '2026-09-06', 'hour' => 10, 'spend' => 1, 'captured_at' => now()]);
+
+    app(SpendSnapshots::class)->record($acc, [new AccountDailyTotal('2026-10-06', 10, 1, 0, 0)]);
+    expect(AdSpendSnapshot::orderBy('date')->pluck('date')->map(fn ($d) => $d->toDateString())->all())->toBe(['2026-09-06', '2026-10-06']);
+
+    AdSpendSnapshot::create(['ad_account_id' => $acc->id, 'date' => '2026-08-01', 'hour' => 9, 'spend' => 1, 'captured_at' => now()]);
+    $this->artisan('ads:prune-history', ['--force' => true, '--before' => '2026-09-01'])->assertSuccessful();
+    expect(AdSpendSnapshot::where('date', '<', '2026-09-06')->count())->toBe(0)->and(AdSpendSnapshot::count())->toBe(2);
+});
