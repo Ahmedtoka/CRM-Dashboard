@@ -28,9 +28,12 @@ use App\Queue\Jobs\RequestRating;
 use App\Queue\Jobs\SendQueueMessage;
 use App\Support\SafeBroadcast;
 use Carbon\CarbonInterface;
+use Illuminate\Database\DetectsConcurrencyErrors;
+use Illuminate\Database\DetectsLostConnections;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * A moderator window from delivery to close: first reply (SLA), silence warn / auto close,
@@ -63,6 +66,9 @@ use InvalidArgumentException;
  */
 class WindowLifecycle
 {
+    use DetectsConcurrencyErrors;
+    use DetectsLostConnections;
+
     /**
      * The no-reply hand-off never goes out in the tick that sent the apology: the apology must be
      * at least this old (one tick), so she never reads «زميلتنا X معاكي حالاً» and, seconds later,
@@ -724,11 +730,20 @@ class WindowLifecycle
         // with its outcome, in this transaction. Reroutes (escalation, transfer, no_reply) do not.
         if ($c !== null && in_array($reason, OutcomeRecorder::ENDING_CLOSE_REASONS, true)) {
             // A savepoint: an outcomes failure is reported and rolled back alone, never the close itself.
+            // Except a deadlock or a lost connection: on MariaDB those already rolled back the WHOLE close
+            // transaction, so they propagate and the close retries or fails visibly (never a silent half-close).
             $picked = $opts['outcome'] ?? null;
-            rescue(fn () => DB::transaction(fn () => app(OutcomeRecorder::class)->endEpisode(
-                $c, $e, $picked instanceof Outcome ? $picked : null, $opts['outcome_note'] ?? null, $by,
-                $reason === 'auto' ? EpisodeEnd::AutoClose : EpisodeEnd::Close,
-            )), null, report: true);
+            try {
+                DB::transaction(fn () => app(OutcomeRecorder::class)->endEpisode(
+                    $c, $e, $picked instanceof Outcome ? $picked : null, $opts['outcome_note'] ?? null, $by,
+                    $reason === 'auto' ? EpisodeEnd::AutoClose : EpisodeEnd::Close,
+                ));
+            } catch (Throwable $outcomeError) {
+                if ($this->causedByConcurrencyError($outcomeError) || $this->causedByLostConnection($outcomeError)) {
+                    throw $outcomeError;
+                }
+                report($outcomeError);
+            }
         }
 
         if ($reason === 'auto' && $c) {

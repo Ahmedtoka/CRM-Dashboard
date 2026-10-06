@@ -69,3 +69,27 @@ it('still closes the window when recording the outcome fails', function () {
         ->and(ConversationOutcome::count())->toBe(0);
     Exceptions::assertReported(RuntimeException::class);
 });
+
+// Review round 2: a deadlock or a lost connection while recording the outcome is NOT swallowed (on MariaDB
+// it already rolled back the whole close transaction): it propagates so the close fails visibly.
+it('lets a deadlock or a lost connection from the outcome write propagate', function (string $message) {
+    Exceptions::fake();
+    $shift = Shift::factory()->create();
+    $u = User::factory()->create(['role' => 'moderator', 'last_seen_at' => now()]);
+    $m = ShiftMember::factory()->for($shift)->create(['user_id' => $u->id, 'status' => 'busy']);
+    $e = QueueEntry::factory()->create(['shift_id' => $shift->id, 'shift_member_id' => $m->id, 'assigned_user_id' => $u->id, 'status' => 'active', 'window_no' => 1, 'delivered_at' => now(), 'enqueued_at' => now()->subMinute()]);
+    $e->conversation->update(['assignee_id' => $u->id, 'queue_entry_id' => $e->id, 'handler' => 'human', 'needs_human' => true]);
+    s3SafeIn($e->conversation);
+    ConversationOutcome::saving(fn () => throw new RuntimeException($message));
+
+    expect(fn () => app(WindowLifecycle::class)->close($e, 'inquiry', $u, ['outcome' => Outcome::Price]))
+        ->toThrow(Exception::class, $message);
+
+    // Not swallowed and not reported as handled. (Whether the close's own writes roll back is the database's job: a
+    // real deadlock rolls back the whole transaction; under RefreshDatabase's outer transaction Laravel only unwinds.)
+    expect(ConversationOutcome::count())->toBe(0);
+    Exceptions::assertNothingReported();
+})->with([
+    'deadlock' => ['SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction'],
+    'lost connection' => ['SQLSTATE[HY000]: General error: 2006 MySQL server has gone away'],
+]);
