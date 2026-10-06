@@ -5,7 +5,6 @@
  */
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
-import { LoaderCircle } from 'lucide-vue-next';
 
 withDefaults(
     defineProps<{
@@ -29,9 +28,7 @@ const { t } = useI18n();
         <div class="flex flex-wrap items-center justify-end gap-3">
             <p v-if="dirty" class="me-auto text-xs text-muted-foreground" role="status">{{ t('ui.unsaved_changes') }}</p>
             <slot />
-            <Button :type="submit ? 'submit' : 'button'" :disabled="busy" class="gap-1.5" @click="!submit && emit('save')">
-                <LoaderCircle v-if="busy" class="size-4 animate-spin" aria-hidden="true" />{{ label ?? t('common.save') }}
-            </Button>
+            <Button :type="submit ? 'submit' : 'button'" :loading="busy" class="gap-1.5" @click="!submit && emit('save')">{{ label ?? t('common.save') }}</Button>
         </div>
     </div>
 </template>
