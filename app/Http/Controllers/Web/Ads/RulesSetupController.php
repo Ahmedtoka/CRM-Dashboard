@@ -14,6 +14,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 
 /**
@@ -46,9 +47,23 @@ class RulesSetupController extends Controller
                     'id' => $a->id, 'name' => (string) $a->name, 'currency' => $a->currency, 'platform' => (string) $a->platform,
                     'inputs' => $this->settings->accountInputs($a->id),
                     'effective' => $this->breakEven->explain($a->id),
-                    'targets' => $this->targets->forAccount($a->id, $today),
+                    'targets' => $this->targets($a->id, $today),
                 ])->values()->all(),
         ];
+    }
+
+    /**
+     * The 60-day medians are heavy (every ad of the account): cached for the Cairo day. The key carries the owner
+     * numbers, so saving a target or margin shows the new value at once.
+     *
+     * @return array{cpp: ?float, cpp_source: string, cpo: ?float, cpo_source: string, cpc: ?float}
+     */
+    private function targets(int $accountId, CarbonImmutable $today): array
+    {
+        $inputs = md5((string) json_encode($this->settings->inputsFor($accountId)['values']));
+
+        return Cache::remember("ads:alerts:targets:{$accountId}:{$today->toDateString()}:{$inputs}", $today->endOfDay(),
+            fn () => $this->targets->forAccount($accountId, $today));
     }
 
     public function update(Request $request): RedirectResponse

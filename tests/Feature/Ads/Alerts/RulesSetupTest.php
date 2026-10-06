@@ -57,3 +57,18 @@ it('keeps buyers, content and moderators out', function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Moderator]))->get('/ads/setup/rules')->assertForbidden();
     $this->actingAs(User::factory()->create(['role' => UserRole::Content]))->get('/ads/setup/rules')->assertRedirect();
 });
+
+it('caches the measured targets for the day and recomputes when the owner numbers change', function () {
+    $acc = W::account();
+    $admin = W::authority();
+    $page = fn () => $this->withoutVite()->actingAs($admin)->get('/ads/setup/rules')->assertOk();
+
+    $page()->assertInertia(fn (Assert $p) => $p->where('rules.accounts.0.targets.cpp_source', 'none'));
+    foreach ([300, 600, 900] as $spend) {
+        W::spend(W::ad($acc), W::day(-5), $spend, ['purchases' => 3]);
+    }
+    $page()->assertInertia(fn (Assert $p) => $p->where('rules.accounts.0.targets.cpp_source', 'none'));
+
+    app(RuleSettings::class)->saveInputs($admin, $acc->id, ['target_cpo' => 280]);
+    $page()->assertInertia(fn (Assert $p) => $p->where('rules.accounts.0.targets.cpp_source', 'median')->where('rules.accounts.0.targets.cpo', 280));
+});
