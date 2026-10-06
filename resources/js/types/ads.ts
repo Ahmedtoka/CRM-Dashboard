@@ -859,3 +859,14 @@ export interface AdPublicationRow {
     manager_url: string | null;
     created_at: string | null;
 }
+
+/* Control room S3: the per-ad chat funnel (GET /ads/chat-funnel). */
+export type LostReason = 'price' | 'size_out' | 'shipping' | 'no_answer' | 'browsing' | 'other';
+export interface ChatFunnel {
+    chats: number;
+    to_agent: number;
+    orders: number;
+    delivered: number;
+    returned: number;
+    reasons: Partial<Record<LostReason, number>>;
+}
