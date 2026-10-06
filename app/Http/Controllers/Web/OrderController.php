@@ -91,6 +91,10 @@ class OrderController extends Controller
      */
     public function ad(Request $request, Ad $ad, OrdersAnalytics $analytics): Response
     {
+        $canOpenAds = $request->user()->isSupervisorOrAbove();
+        // Below supervisor the ad exists for the viewer only through an order they can see (any date, any filter).
+        abort_if(! $canOpenAds && ! ModeratorScope::orders(Order::query(), $request->user())->where('orders.ad_id', $ad->id)->exists(), 404);
+
         $range = $this->defaultRange($request);
         $base = $this->orderBaseQuery($request)->where('orders.ad_id', $ad->id);
         $ad->loadMissing(['campaign:id,name', 'adSet:id,name', 'account:id,platform,external_id']);
@@ -104,16 +108,17 @@ class OrderController extends Controller
                 'name' => $ad->name,
                 'thumbnail_url' => $ad->thumbnail_url,
                 'platform' => $platform,
-                'external_id' => $ad->external_id !== null ? (string) $ad->external_id : null,
+                // Platform ids and the Ads Manager link only for viewers who can open ads.
+                'external_id' => $canOpenAds && $ad->external_id !== null ? (string) $ad->external_id : null,
                 'campaign' => $ad->campaign?->name,
                 'ad_set' => $ad->adSet?->name,
-                'manager_url' => AdsManagerLink::for($platform, $ad->external_id !== null ? (string) $ad->external_id : null, $ad->account?->external_id),
+                'manager_url' => $canOpenAds ? AdsManagerLink::for($platform, $ad->external_id !== null ? (string) $ad->external_id : null, $ad->account?->external_id) : null,
             ],
             'summary' => $analytics->totals($base, $range['from']),
             'products' => $analytics->products($base, 20),
             'orders' => OrderResource::collection($query->paginate(30)->withQueryString()),
             'range' => $range,
-            'canOpenAds' => $request->user()->isSupervisorOrAbove(),
+            'canOpenAds' => $canOpenAds,
         ]);
     }
 

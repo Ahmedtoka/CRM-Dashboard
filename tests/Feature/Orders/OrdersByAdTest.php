@@ -60,7 +60,8 @@ it('opens the ad orders page: summary, products and the orders list, role-scoped
     $mod = User::factory()->create(['role' => UserRole::Moderator]);
     $mod->userPlatforms()->create(['platform' => Platform::Facebook]);
     $this->actingAs($mod)->get("/orders/ads/{$this->ad->id}")->assertOk()
-        ->assertInertia(fn (AssertableInertia $p) => $p->where('summary.orders', 3)->where('canOpenAds', false));
+        ->assertInertia(fn (AssertableInertia $p) => $p->where('summary.orders', 3)->where('canOpenAds', false)
+            ->where('ad.name', 'اسدال كتان')->where('ad.external_id', null)->where('ad.manager_url', null));
     $this->actingAs($mod)->get('/orders?tab=ads')->assertOk()
         ->assertInertia(fn (AssertableInertia $p) => $p->where('adsBreakdown.0.orders', 3));
 
@@ -68,4 +69,26 @@ it('opens the ad orders page: summary, products and the orders list, role-scoped
 
     $buyer = User::factory()->create(['role' => UserRole::MediaBuyer]);
     $this->actingAs($buyer)->get("/orders/ads/{$this->ad->id}")->assertRedirect();
+});
+
+it('404s an ad with no orders the non-supervisor can see, whatever the date range', function () {
+    $mod = User::factory()->create(['role' => UserRole::Moderator]);
+    $mod->userPlatforms()->create(['platform' => Platform::WhatsApp]);
+
+    // Only Facebook/Instagram orders carry this ad: invisible to a WhatsApp-only moderator.
+    $this->actingAs($mod)->get("/orders/ads/{$this->ad->id}")->assertNotFound();
+    $noOrders = Ad::factory()->create();
+    $this->actingAs($mod)->get("/orders/ads/{$noOrders->id}")->assertNotFound();
+
+    // A visible order outside the default month range still opens the page.
+    $fb = User::factory()->create(['role' => UserRole::Moderator]);
+    $fb->userPlatforms()->create(['platform' => Platform::Facebook]);
+    Order::factory()->create(['ad_id' => $noOrders->id, 'platform' => Platform::Facebook, 'placed_at' => '2026-09-02 10:00:00']);
+    $this->actingAs($fb)->get("/orders/ads/{$noOrders->id}")->assertOk()
+        ->assertInertia(fn (AssertableInertia $p) => $p->where('summary.orders', 0)->where('ad.manager_url', null));
+
+    // Supervisors open any ad, with its ids and link.
+    $sup = User::factory()->create(['role' => UserRole::Supervisor]);
+    $this->actingAs($sup)->get("/orders/ads/{$noOrders->id}")->assertOk()
+        ->assertInertia(fn (AssertableInertia $p) => $p->where('ad.external_id', (string) $noOrders->external_id));
 });
