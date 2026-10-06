@@ -60,6 +60,9 @@ class WriteActionService
 
         try {
             $this->policy->authorize($u, $a, $level, $to, 'propose');
+            if ($to === 'active') {
+                $this->runGuard->approvalGate($a, $level, $externalId); // G1
+            }
             $target = $this->type->target($a, $level, $externalId);
             [$live, $limits, $notes] = $to === 'active' ? $this->runGuard->atPropose($u, $a, $target) : [null, [], []];
         } catch (WriteDenied $e) {
@@ -167,6 +170,7 @@ class WriteActionService
                 throw WriteDenied::make('stop_in_progress', ['action_id' => $stop->public_id]);
             }
             try {
+                $this->runGuard->approvalGate($account, $x->target_level, $x->target_external_id); // G1, re-checked at confirm
                 $guard = $this->runGuard->atConfirm($u, $x);
             } catch (WriteDenied $e) {
                 $this->refuseProposed($u, $x, $e);

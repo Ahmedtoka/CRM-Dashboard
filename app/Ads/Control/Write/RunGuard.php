@@ -15,6 +15,8 @@ use App\Ads\Reports\AdsFilter;
 use App\Ads\Sync\ConnectionHealth;
 use App\Models\Ad;
 use App\Models\AdAccount;
+use App\Models\AdLaunch;
+use App\Models\AdPublication;
 use App\Models\AdSet;
 use App\Models\AdWriteAction;
 use App\Models\User;
@@ -44,6 +46,26 @@ class RunGuard
         private readonly WriteLimits $limits,
         private readonly SetStatusType $type,
     ) {}
+
+    /**
+     * G1 (no bypass, spec 3.3): an ad the CRM created for a launch may be Run only once that launch was approved
+     * (approved_at). Everyone, Ads authority included (they approve through the card). Ads made outside the CRM have no
+     * launch and pass (E18). Never called for a Stop.
+     *
+     * @throws WriteDenied 403 approval_required
+     */
+    public function approvalGate(AdAccount $a, string $level, string $externalId): void
+    {
+        if ($level !== 'ad') {
+            return;
+        }
+        $launch = AdLaunch::query()->whereIn('id', AdPublication::query()->select('ad_launch_id')
+            ->where('ad_account_id', $a->id)->where('external_ad_id', $externalId)->whereNotNull('ad_launch_id'))
+            ->orderByDesc('id')->first(['id', 'public_id', 'approved_at']);
+        if ($launch !== null && $launch->approved_at === null) {
+            throw WriteDenied::make('approval_required', ['launch_id' => $launch->public_id]);
+        }
+    }
 
     /**
      * Called for a Run at propose, after the policy and the target lookup.
