@@ -24,6 +24,8 @@ const SWEPT: string[] = [
     // Task 19
     'settings/Bot', 'settings/BotFlows', 'settings/BotIntents', 'settings/BotKnowledge', 'settings/BotLearning', 'settings/BotReplies',
     'settings/BotTestLinks', 'settings/BotTranslations', 'Simulator',
+    // Task 20
+    'auth/ConfirmPassword', 'auth/ForgotPassword', 'auth/Login', 'auth/ResetPassword', 'auth/VerifyEmail', 'Error', 'Onboarding',
 ];
 
 /** Raw tables allowed only on pages S1/S2 replace; they must sit in the shared sticky scroll box. */
@@ -45,6 +47,10 @@ describe('S0 kit adoption', () => {
     it('sees all 62 pages and only real ones are listed', () => {
         expect(Object.keys(pages)).toHaveLength(62);
         for (const name of SWEPT) expect(pages[name], name).toBeDefined();
+    });
+
+    it('every page is swept (Task 20 closes the list)', () => {
+        expect([...SWEPT].sort()).toEqual(Object.keys(pages).sort());
     });
 
     it.each(SWEPT)('%s follows the kit', (name) => {
