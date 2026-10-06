@@ -57,6 +57,12 @@ it('renders every report page for an admin with the documented props', function 
         ->has('buyers', 1)->has('platforms', 3)
         ->has('freshness'));
 
+    $this->actingAs($admin)->get('/ads/numbers')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->component('Ads/Numbers', false)
+        ->has('overview.totals.spend')->has('overview.daily')
+        ->has('buyers', 1)->has('platforms', 3)
+        ->has('sync.last_synced_at')->has('sync.errors')->has('top_accounts'));
+
     $this->actingAs($admin)->get('/ads/buyers')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->component('Ads/Buyers')->has('filters')->has('cards'));
 
@@ -444,9 +450,10 @@ it('never shows a media buyer another buyers numbers, ads or cards', function ()
     }
     $this->actingAs($w['user']);
 
-    $overview = $this->get("/ads?buyer={$w['other']->id}&accounts[]={$foreign->id}")->assertOk();
+    // S2: the Overview report (totals, top accounts) is «الأرقام» at /ads/numbers.
+    $overview = $this->get("/ads/numbers?range=last7&buyer={$w['other']->id}&accounts[]={$foreign->id}")->assertOk();
     expect($overview->viewData('page')['props']['overview']['totals']['spend'])->toBe(0.0);
-    $props = $this->get('/ads')->viewData('page')['props'];
+    $props = $this->get('/ads/numbers?range=last7')->viewData('page')['props'];
     expect($props['overview']['totals']['spend'])->toBe(100.0)
         ->and(array_column($props['top_accounts'], 'id'))->toBe([$w['account']->id])
         ->and($props['top_accounts'][0]['buyer'])->toBe('Own Buyer');
@@ -463,7 +470,7 @@ it('never shows a media buyer another buyers numbers, ads or cards', function ()
     $this->get('/ads/buyers')->assertInertia(fn (Assert $p) => $p
         ->has('cards', 1)
         ->where('cards.0.buyer_id', $w['buyer']->id)->where('cards.0.spend', 100));
-})->skip('S2 Task 9: /ads is now Today; the Overview report moves to /ads/numbers in Task 13');
+});
 
 it('keeps every account chip while one account is picked on the creatives page', function () {
     $admin = adsPgUser(UserRole::Admin);
@@ -498,7 +505,7 @@ it('names the stalest active account on the overview, never-synced first, within
     AdAccount::factory()->create(['name' => 'Fresh', 'last_synced_at' => now()->subMinutes(10)]);
     $stale = AdAccount::factory()->create(['name' => 'Stale', 'last_synced_at' => now()->subHours(30)]);
 
-    $this->actingAs($admin)->get('/ads')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/ads/numbers')->assertInertia(fn (Assert $p) => $p
         ->where('sync.oldest.account', 'Stale')
         ->where('sync.oldest.last_synced_at', fn ($v) => $v !== null && CarbonImmutable::parse($v)->diffInHours(now()) >= 29)
         ->where('sync.last_synced_at', fn ($v) => $v !== null && CarbonImmutable::parse($v)->diffInMinutes(now()) < 15));
@@ -506,16 +513,16 @@ it('names the stalest active account on the overview, never-synced first, within
     $never = AdAccount::factory()->create(['name' => 'Never', 'last_synced_at' => null]);
     AdAccount::factory()->create(['name' => 'Off', 'is_active' => false, 'last_synced_at' => null]);
 
-    $this->actingAs($admin)->get('/ads')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/ads/numbers')->assertInertia(fn (Assert $p) => $p
         ->where('sync.oldest.account', 'Never')->where('sync.oldest.last_synced_at', null));
 
     $world = adsPgBuyerWorld();
     $world['account']->update(['name' => 'Mine', 'last_synced_at' => now()->subHour()]);
-    $this->actingAs($world['user'])->get('/ads')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($world['user'])->get('/ads/numbers')->assertInertia(fn (Assert $p) => $p
         ->where('sync.oldest.account', 'Mine'));
-})->skip('S2 Task 9: /ads is now Today; the Overview report moves to /ads/numbers in Task 13');
+});
 
 it('has no oldest account when there is none in scope', function () {
-    $this->actingAs(adsPgUser(UserRole::Admin))->get('/ads')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs(adsPgUser(UserRole::Admin))->get('/ads/numbers')->assertInertia(fn (Assert $p) => $p
         ->where('sync.oldest', null)->where('sync.last_synced_at', null));
-})->skip('S2 Task 9: /ads is now Today; the Overview report moves to /ads/numbers in Task 13');
+});

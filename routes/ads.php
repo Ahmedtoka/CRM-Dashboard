@@ -13,6 +13,7 @@ use App\Http\Controllers\Web\Ads\DecisionsController;
 use App\Http\Controllers\Web\Ads\ExplorerController;
 use App\Http\Controllers\Web\Ads\MaterialCollectionController;
 use App\Http\Controllers\Web\Ads\MaterialController;
+use App\Http\Controllers\Web\Ads\NumbersController;
 use App\Http\Controllers\Web\Ads\PublishController;
 use App\Http\Controllers\Web\Ads\ReauthController;
 use App\Http\Controllers\Web\Ads\SyncController;
@@ -25,6 +26,7 @@ Route::middleware('ads:report')->group(function () {
     Route::get('/ads', TodayController::class)->name('ads.today');
     Route::get('/ads/decisions', DecisionsController::class)->name('ads.decisions');
     Route::get('/ads/explorer', ExplorerController::class)->name('ads.explorer');
+    Route::get('/ads/numbers', NumbersController::class)->name('ads.numbers');
     Route::get('/ads/buyers', [BuyerController::class, 'index'])->name('ads.buyers.index');
     Route::get('/ads/buyers/{buyer}', [BuyerController::class, 'show'])->name('ads.buyers.show');
     Route::get('/ads/creatives', [CreativeController::class, 'index'])->name('ads.creatives.index');

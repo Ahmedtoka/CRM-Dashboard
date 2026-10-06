@@ -26,9 +26,11 @@ class AdsReport
     public function __construct(private readonly AdSpend $spend) {}
 
     /**
+     * @param  array<string, array{campaign_id:string, campaign_name:string, spend:float, currency:?string}>|null  $spendByName
+     *                                                                                                                           synced spend by campaign name; null = read it live from the page token (old /reports/ads behaviour)
      * @return array{rows:list<array<string, mixed>>, totals:array<string, mixed>, currency:?string, spend_available:bool}
      */
-    public function build(CarbonInterface $from, CarbonInterface $to, ?Platform $platform = null): array
+    public function build(CarbonInterface $from, CarbonInterface $to, ?Platform $platform = null, ?array $spendByName = null): array
     {
         $conversations = Conversation::query()
             ->whereNotNull('ad_attributed_at')
@@ -54,7 +56,7 @@ class AdsReport
             ];
         })->values();
 
-        $spend = $this->spendRows($from, $to);
+        $spend = $spendByName ?? $this->spendRows($from, $to);
         $currency = collect($spend)->pluck('currency')->filter()->first();
 
         $rows = $rows->map(function (array $row) use (&$spend) {
