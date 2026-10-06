@@ -132,4 +132,10 @@ return [
             'open' => 'Open the sync page',
         ],
     ],
+    'launch' => [
+        'flash' => [
+            'slot_opened' => 'Ad set opened for new materials',
+            'slot_closed' => 'Ad set closed for new materials',
+        ],
+    ],
 ];
