@@ -94,8 +94,21 @@ final class ChatFunnel
 
         $notReal = AdsQuery::NOT_REAL_STATUSES;
         $in = implode(', ', array_fill(0, count($notReal), '?'));
-        $order = 'SELECT 1 FROM orders o WHERE (o.conversation_id = c.id OR (c.customer_id IS NOT NULL AND o.customer_id = c.customer_id)) '
-            ."AND COALESCE(o.placed_at, o.created_at) > t.touched_at AND COALESCE(o.placed_at, o.created_at) <= ? AND o.status NOT IN ({$in})";
+        $common = "AND COALESCE(o.placed_at, o.created_at) > t.touched_at AND COALESCE(o.placed_at, o.created_at) <= ? AND o.status NOT IN ({$in})";
+        // A real order after the touch, from this conversation or the same customer: two EXISTS ORed so each
+        // uses its own index (orders.conversation_id / orders.customer_id) instead of an OR inside one.
+        $order = function (string $extra = '', array $extraBindings = []) use ($common, $t, $notReal): array {
+            $sql = "(EXISTS (SELECT 1 FROM orders o WHERE o.conversation_id = c.id {$common} {$extra})"
+                ." OR EXISTS (SELECT 1 FROM orders o WHERE c.customer_id IS NOT NULL AND o.customer_id = c.customer_id {$common} {$extra}))";
+            $one = [$t, ...$notReal, ...$extraBindings];
+
+            return [$sql, [...$one, ...$one]];
+        };
+        $returned = AdsQuery::RETURNED_SHIPMENT;
+        [$anySql, $anyBind] = $order();
+        // An order both delivered and later returned counts as returned only.
+        [$deliveredSql, $deliveredBind] = $order('AND (o.delivered_at IS NOT NULL OR o.shipment_status = ?) AND (o.shipment_status IS NULL OR o.shipment_status <> ?)', [ShipmentStatus::Delivered->value, $returned]);
+        [$returnedSql, $returnedBind] = $order('AND o.shipment_status = ?', [$returned]);
 
         $stages = DB::query()->fromSub($touches(), 't')
             ->join('conversations as c', 'c.id', '=', 't.cid')
@@ -103,9 +116,9 @@ final class ChatFunnel
             ->groupBy('t.ext')
             ->selectRaw('t.ext as ext, COUNT(*) as chats')
             ->selectRaw('SUM(CASE WHEN (c.handover_at > t.touched_at AND c.handover_at <= ?) OR EXISTS (SELECT 1 FROM queue_entries qe WHERE qe.conversation_id = c.id AND qe.enqueued_at > t.touched_at AND qe.enqueued_at <= ?) THEN 1 ELSE 0 END) as to_agent', [$t, $t])
-            ->selectRaw("SUM(CASE WHEN EXISTS ({$order}) THEN 1 ELSE 0 END) as orders", [$t, ...$notReal])
-            ->selectRaw("SUM(CASE WHEN EXISTS ({$order} AND (o.delivered_at IS NOT NULL OR o.shipment_status = ?)) THEN 1 ELSE 0 END) as delivered", [$t, ...$notReal, ShipmentStatus::Delivered->value])
-            ->selectRaw("SUM(CASE WHEN EXISTS ({$order} AND o.shipment_status = ?) THEN 1 ELSE 0 END) as returned", [$t, ...$notReal, AdsQuery::RETURNED_SHIPMENT])
+            ->selectRaw("SUM(CASE WHEN {$anySql} THEN 1 ELSE 0 END) as orders", $anyBind)
+            ->selectRaw("SUM(CASE WHEN {$deliveredSql} THEN 1 ELSE 0 END) as delivered", $deliveredBind)
+            ->selectRaw("SUM(CASE WHEN {$returnedSql} THEN 1 ELSE 0 END) as returned", $returnedBind)
             ->get();
 
         $reasons = DB::query()->fromSub($touches(), 't')

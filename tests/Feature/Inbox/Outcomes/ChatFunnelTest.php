@@ -78,3 +78,17 @@ it('sums rows', function () {
 
     expect(ChatFunnel::total([$a, $b]))->toBe(['chats' => 5, 'to_agent' => 3, 'orders' => 1, 'delivered' => 1, 'returned' => 0, 'reasons' => ['price' => 3, 'shipping' => 1]]);
 });
+
+// Review round 1 (minor): an order delivered and then returned counts as returned only; orders found
+// through the conversation and through the customer both count.
+it('counts a delivered-then-returned order as returned only', function () {
+    $ad = Ad::factory()->create();
+    $c = s3Touch($ad);
+    Order::factory()->create(['conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'status' => 'confirmed', 'placed_at' => now()->subDay(), 'delivered_at' => now()->subHours(5), 'shipment_status' => 'returned']);
+    $viaCustomer = s3Touch($ad);
+    Order::factory()->create(['conversation_id' => null, 'customer_id' => $viaCustomer->customer_id, 'status' => 'confirmed', 'placed_at' => now()->subDay(), 'delivered_at' => now()]);
+
+    $row = app(ChatFunnel::class)->forAds([$ad->id], CarbonImmutable::now()->subDays(7), CarbonImmutable::now())[$ad->id];
+
+    expect($row['orders'])->toBe(2)->and($row['delivered'])->toBe(1)->and($row['returned'])->toBe(1);
+});
