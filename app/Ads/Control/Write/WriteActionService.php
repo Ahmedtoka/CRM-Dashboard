@@ -356,6 +356,35 @@ class WriteActionService
     }
 
     /**
+     * Runs this user and this account may still confirm today (B3 caps; the same count the claim makes).
+     *
+     * @return array{user: int, account: int}
+     */
+    public function activationsLeft(User $u, AdAccount $a): array
+    {
+        $limits = $this->limits->for($u, $a);
+
+        return [
+            'user' => max(0, $limits['activations_per_user_day'] - $this->activationsUsed('confirmed_by_id', $u->id)),
+            'account' => max(0, $limits['activations_per_account_day'] - $this->activationsUsed('ad_account_id', (int) $a->id)),
+        ];
+    }
+
+    /** The user's own daily cap left, whatever the account (the bulk approve header, G4). */
+    public function activationsLeftToday(User $u): int
+    {
+        return max(0, $this->limits->for($u, null)['activations_per_user_day'] - $this->activationsUsed('confirmed_by_id', $u->id));
+    }
+
+    private function activationsUsed(string $column, int $value): int
+    {
+        $since = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay()->utc();
+
+        return AdWriteAction::where('type', SetStatusType::TYPE)->where('to_status', 'active')
+            ->whereIn('state', self::ACTIVATION_STATES)->where('confirmed_at', '>=', $since)->where($column, $value)->count();
+    }
+
+    /**
      * Activation caps (B3), Run only, inside the claim transaction: the account row and then the confirming user's row
      * are locked (MariaDB row locks, so two confirms on one account or by one user count one after the other; SQLite
      * ignores them), then the Runs confirmed since the
@@ -371,13 +400,10 @@ class WriteActionService
         $account = AdAccount::whereKey($x->ad_account_id)->lockForUpdate()->first();
         User::whereKey($u->id)->lockForUpdate()->first(['id']);
         $limits = $this->limits->for($u, $account);
-        $since = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay()->utc();
-        $count = fn (string $column, int $value) => AdWriteAction::where('type', SetStatusType::TYPE)->where('to_status', 'active')
-            ->whereIn('state', self::ACTIVATION_STATES)->where('confirmed_at', '>=', $since)->where($column, $value)->count();
 
         $rows = [];
         foreach (['activations_per_user_day' => ['confirmed_by_id', $u->id], 'activations_per_account_day' => ['ad_account_id', (int) $x->ad_account_id]] as $key => [$column, $value]) {
-            $used = $count($column, $value);
+            $used = $this->activationsUsed($column, $value);
             $limit = $limits[$key];
             if ($used >= $limit) {
                 throw WriteDenied::make('cap_exceeded', ['key' => $key, 'limit' => $limit, 'used' => $used]);
