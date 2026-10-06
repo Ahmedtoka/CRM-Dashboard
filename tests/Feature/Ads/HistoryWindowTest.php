@@ -132,10 +132,11 @@ it('reads the start from config, not a constant', function () {
         ->and(HistoryWindow::daysFromStart(CarbonImmutable::parse('2026-10-05', 'Africa/Cairo')))->toBe(21);
 });
 
-it('ships 2026-09-01 as the default history start', function () {
+it('defaults the history start to the data floor (F3)', function () {
     $src = file_get_contents(config_path('crm.php'));
 
-    expect($src)->toContain("'history_start' => env('CRM_ADS_HISTORY_START', '2026-09-01')");
+    expect($src)->toContain("'history_start' => env('CRM_ADS_HISTORY_START')")
+        ->and($src)->toContain("'data_floor' => env('CRM_DATA_FLOOR', '2026-10-01')");
 });
 
 it('records a skipped run when a queued sync window is before the start', function () {
