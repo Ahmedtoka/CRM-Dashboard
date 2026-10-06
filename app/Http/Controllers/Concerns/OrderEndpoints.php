@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Analytics\MetricsService;
 use App\Commerce\OrderService;
 use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
@@ -103,7 +104,13 @@ trait OrderEndpoints
     /**
      * `from`/`to` are Cairo calendar dates (Y-m-d), like the report filters.
      *
-     * @return array{status?: ?string, type?: ?string, platform?: ?string, q?: ?string, created_by?: ?int, from?: ?string, to?: ?string, source?: ?string, financial_status?: ?string, fulfillment_status?: ?string, shipment_step?: ?string, mismatch?: ?bool, stuck?: ?bool}
+     * Additive params (control room S4), all optional, so API v1 callers that omit them see no change:
+     * - `older_than` (minutes, web and API): orders made at least that long ago.
+     * - web only (ignored on /api): `real=1` drops the statuses the reports never count (cancelled, failed);
+     *   `step_from`/`step_to` (Cairo dates, with `shipment_step`) keep orders whose latest event of that
+     *   step falls in the range, the way MetricsService dates deliveries and returns.
+     *
+     * @return array{status?: ?string, type?: ?string, platform?: ?string, q?: ?string, created_by?: ?int, from?: ?string, to?: ?string, source?: ?string, financial_status?: ?string, fulfillment_status?: ?string, shipment_step?: ?string, mismatch?: ?bool, stuck?: ?bool, older_than?: ?int, real?: ?bool, step_from?: ?string, step_to?: ?string}
      */
     protected function orderFilters(Request $request): array
     {
@@ -121,7 +128,13 @@ trait OrderEndpoints
             'shipment_step' => ['nullable', Rule::enum(ShipmentStatus::class)],
             'mismatch' => ['nullable', 'boolean'],
             'stuck' => ['nullable', 'boolean'],
-        ]);
+            // «النهارده» urgent strip (control room S4): orders still waiting this many minutes after they were made.
+            'older_than' => ['nullable', 'integer', 'min:1', 'max:43200'],
+        ] + ($request->is('api/*') ? [] : [
+            'real' => ['nullable', 'boolean'],
+            'step_from' => ['nullable', 'date_format:Y-m-d', 'required_with:step_to'],
+            'step_to' => ['nullable', 'date_format:Y-m-d'],
+        ]));
     }
 
     /**
@@ -147,6 +160,9 @@ trait OrderEndpoints
             ->when($f['created_by'] ?? null, fn ($q, $v) => $q->where('created_by_id', (int) $v))
             ->when($f['from'] ?? null, fn ($q, $v) => $q->where('created_at', '>=', DateRange::startOfCairoDay($v)))
             ->when($f['to'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', DateRange::endOfCairoDay($v)))
+            ->when($f['older_than'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', now()->subMinutes((int) $v)))
+            ->when(! empty($f['real']), fn ($q) => $q->whereNotIn('status', MetricsService::EXCLUDED_ORDER_STATUSES))
+            ->when(($f['shipment_step'] ?? null) && ($f['step_from'] ?? null), fn (Builder $q) => $this->stepBetween($q, (string) $f['shipment_step'], (string) $f['step_from'], (string) ($f['step_to'] ?? $f['step_from'])))
             ->when(array_key_exists('mismatch', $f) && $f['mismatch'] !== null, fn ($q) => $q->where('mismatch', (bool) $f['mismatch']))
             ->when(array_key_exists('stuck', $f) && $f['stuck'], fn (Builder $q) => StuckOrderScope::apply($q, $this->stuckOrderDays()))
             ->when(trim((string) ($f['q'] ?? '')), fn ($q, $term) => $q->where(fn (Builder $w) => $w
@@ -154,6 +170,20 @@ trait OrderEndpoints
                 ->orWhere('shipping_phone', 'like', "%{$term}%")
                 ->orWhereHas('customer', fn (Builder $c) => $c->where('name', 'like', "%{$term}%")->orWhere('phone', 'like', "%{$term}%"))))
             ->orderByDesc('id');
+    }
+
+    /**
+     * Orders whose shipment is at `$step` and whose latest `$step` event falls in the Cairo days given: the
+     * MetricsService rule for deliveries and returns, so the «النهارده» numbers open exactly their rows.
+     */
+    private function stepBetween(Builder $q, string $step, string $from, string $to): void
+    {
+        $start = DateRange::startOfCairoDay($from);
+        $end = DateRange::endOfCairoDay($to);
+
+        $q->whereHas('shipment', fn (Builder $s) => $s->where('status', $step)
+            ->whereHas('events', fn (Builder $e) => $e->where('status', $step)->whereBetween('occurred_at', [$start, $end]))
+            ->whereDoesntHave('events', fn (Builder $e) => $e->where('status', $step)->where('occurred_at', '>', $end)));
     }
 
     /**

@@ -122,6 +122,9 @@ export function matchesInboxFilters(c: Conversation, f: InboxFilters): { keep: b
         f.sort === 'oldest_waiting' ||
         !!f.queue ||
         !!f.assignee ||
+        // Control room S4: the start-day range is the server's (Cairo days).
+        !!f.from ||
+        !!f.to ||
         flags.some((flag) => !LOCAL_FLAGS.includes(flag));
 
     return { keep: true, undecided };

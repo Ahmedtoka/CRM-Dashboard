@@ -137,6 +137,7 @@ const chips = computed(() => {
     if (f.platform) out.push({ key: 'platform', label: platformOptions.value.find((p) => p.value === f.platform)?.label ?? f.platform });
     if (f.tag) out.push({ key: 'tag', label: props.tags.find((tag) => tag.id === f.tag)?.name ?? `#${f.tag}` });
     for (const flag of f.flags) out.push({ key: `flag:${flag}`, label: t(`inbox.filters.${flag}`) });
+    if (f.from || f.to) out.push({ key: 'date', label: t('inbox.date_chip', { from: f.from ?? '…', to: f.to ?? '…' }) });
     return out;
 });
 const moreCount = computed(
@@ -148,6 +149,10 @@ function removeChip(key: string): void {
     if (key.startsWith('flag:')) {
         const flag = key.slice(5);
         emit('update', { flags: props.filters.flags.filter((f) => f !== flag) });
+        return;
+    }
+    if (key === 'date') {
+        emit('update', { from: null, to: null });
         return;
     }
     emit('update', { [key]: null } as Partial<InboxFilters>);

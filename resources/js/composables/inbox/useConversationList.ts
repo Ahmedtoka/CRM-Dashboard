@@ -48,6 +48,8 @@ const URL_DEFAULTS = {
     tag: null as string | null,
     q: null as string | null,
     sort: null as string | null,
+    from: null as string | null,
+    to: null as string | null,
 };
 type UrlFilters = typeof URL_DEFAULTS;
 
@@ -60,6 +62,8 @@ const toUrl = (f: InboxFilters): UrlFilters => ({
     tag: f.tag ? String(f.tag) : null,
     q: f.q ?? null,
     sort: f.sort ?? null,
+    from: f.from ?? null,
+    to: f.to ?? null,
 });
 
 const fromUrl = (u: UrlFilters): InboxFilters => ({
@@ -71,6 +75,8 @@ const fromUrl = (u: UrlFilters): InboxFilters => ({
     tag: u.tag ? Number(u.tag) || null : null,
     q: u.q || null,
     sort: (u.sort || null) as InboxFilters['sort'],
+    from: u.from || null,
+    to: u.to || null,
 });
 
 const sameFilters = (a: UrlFilters, b: UrlFilters) => JSON.stringify(a) === JSON.stringify(b);

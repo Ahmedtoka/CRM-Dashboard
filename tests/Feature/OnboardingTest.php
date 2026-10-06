@@ -42,10 +42,10 @@ it('lands a fresh admin on the page after login, not a moderator, and not once s
     $this->actingAs($admin)->post('/onboarding/dismiss')->assertRedirect(route('inbox'));
     expect(BotSetting::current()->onboarding_dismissed_at)->not->toBeNull();
     auth()->logout();
-    $this->post('/login', ['email' => $admin->email, 'password' => 'password'])->assertRedirect(route('inbox', absolute: false));
+    $this->post('/login', ['email' => $admin->email, 'password' => 'password'])->assertRedirect(route('today', absolute: false));
     auth()->logout();
 
     BotSetting::current()->update(['onboarding_dismissed_at' => null]);
     ChannelAccount::factory()->create(['platform' => Platform::WhatsApp, 'driver' => 'live', 'status' => 'connected']);
-    $this->post('/login', ['email' => $admin->email, 'password' => 'password'])->assertRedirect(route('inbox', absolute: false));
+    $this->post('/login', ['email' => $admin->email, 'password' => 'password'])->assertRedirect(route('today', absolute: false));
 });

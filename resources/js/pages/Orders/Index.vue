@@ -15,7 +15,7 @@ import { useStaleOrderRefresh } from '@/composables/useStaleOrderRefresh';
 import { useUrlFilters } from '@/composables/useUrlFilters';
 import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatDateTime, formatMoney } from '@/lib/format';
+import { formatDateTime, formatMinutes, formatMoney } from '@/lib/format';
 import { isSyncStale, notOnShopifyText, orderLabel } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type { OrderRow, Paginated } from '@/types/admin';
@@ -58,6 +58,12 @@ const { filters, set, clear, activeKeys, query } = useUrlFilters(
         to: null as string | null,
         mismatch: false,
         stuck: false,
+        /** Minutes since the order was made (the «النهارده» payment link); no control, a chip only. */
+        older_than: null as string | null,
+        /** «النهارده» links: without cancelled and failed (the reports' set), and the day of the shipment step. */
+        real: false,
+        step_from: null as string | null,
+        step_to: null as string | null,
         /** Whitelisted on the server (OrderController::SORTS): `-total`, `created_at`, ... */
         sort: '',
     },
@@ -98,11 +104,21 @@ const chips = computed(() => {
     if (f.from || f.to) out.push({ key: 'date', label: t('orders.list.date_chip', { from: f.from ?? '…', to: f.to ?? '…' }) });
     if (f.mismatch) out.push({ key: 'mismatch', label: t('orders.mismatch_only') });
     if (f.stuck) out.push({ key: 'stuck', label: t('orders.stuck_only') });
+    if (f.real) out.push({ key: 'real', label: t('orders.real_chip') });
+    if (f.step_from)
+        out.push({
+            key: 'step_date',
+            label: t('orders.step_date_chip', { from: f.step_from, to: f.step_to ?? f.step_from }),
+        });
+    if (f.older_than)
+        out.push({ key: 'older_than', label: t('orders.older_than_chip', { time: formatMinutes(Number(f.older_than), locale.value) }) });
     return out;
 });
 
 function removeChip(key: string): void {
     if (key === 'date') set({ from: null, to: null });
+    else if (key === 'step_date') set({ step_from: null, step_to: null });
+    else if (key === 'real') set({ real: false });
     else if (key === 'mismatch' || key === 'stuck') set({ [key]: false });
     else set({ [key]: null } as Partial<typeof filters.value>);
 }

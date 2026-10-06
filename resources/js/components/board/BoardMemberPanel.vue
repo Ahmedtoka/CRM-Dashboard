@@ -6,6 +6,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useBoardContext } from '@/lib/board/context';
 import { notOnline } from '@/lib/board/state';
 import { formatClock, formatCount, formatMinutes, formatSeconds } from '@/lib/format';
+import { formatRatio } from '@/lib/today';
 import { Link } from '@inertiajs/vue3';
 import { Coffee, ExternalLink, LogOut, Undo2, UserRoundCheck } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
@@ -19,6 +20,13 @@ const { t, locale } = useI18n();
 const board = useBoardContext();
 
 const member = computed(() => board.members.value.find((m) => m.id === props.memberId) ?? null);
+
+/** Her customers' ratings today (G11), numbers only. */
+const rating = computed(() => {
+    const r = member.value?.rating;
+    if (!r || r.count === 0) return null;
+    return { text: t('board.member.rating_value', { avg: formatRatio(r.avg, locale.value), n: formatCount(r.count, locale.value) }), low: r.low };
+});
 const windows = computed(() => (member.value?.user ? board.windowsOf(member.value.user.id) : []));
 
 const statusText = computed(() => {
@@ -145,6 +153,13 @@ async function handBack(): Promise<void> {
                     <dd class="text-base font-bold tabular-nums text-foreground">{{ c.value }}</dd>
                 </div>
             </dl>
+            <p v-if="rating" class="flex items-center justify-between rounded-md bg-muted px-2 py-1.5 text-xs">
+                <span class="text-muted-foreground">{{ t('board.member.rating') }}</span>
+                <span class="font-semibold tabular-nums text-foreground">
+                    {{ rating.text }}
+                    <b v-if="rating.low > 0" class="ms-1 text-destructive">{{ t('board.member.rating_low', { n: formatCount(rating.low, locale) }) }}</b>
+                </span>
+            </p>
 
             <div v-if="attendance.length > 0">
                 <h3 class="mb-1 text-xs font-semibold text-muted-foreground">{{ t('board.member.attendance.title') }}</h3>

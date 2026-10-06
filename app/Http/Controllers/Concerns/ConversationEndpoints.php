@@ -613,6 +613,10 @@ trait ConversationEndpoints
             'qmode' => ['nullable', Rule::in(['like'])],
             'tag' => ['nullable', 'integer', 'exists:tags,id'],
             'sort' => ['nullable', Rule::in(ConversationQuery::SORTS)],
+            // Control room S4, optional and additive (API v1 callers that omit them see no change): chats
+            // that started on these Cairo days.
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d'],
         ]);
 
         $flags = ConversationQuery::flagsOf(['flags' => $data['flags'] ?? null, 'filter' => $data['filter'] ?? null]);

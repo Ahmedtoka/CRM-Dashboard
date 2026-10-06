@@ -46,6 +46,8 @@ const { filters, set, clear, query } = useUrlFilters(
         /** Cairo calendar dates (Y-m-d); the server converts them to UTC bounds. */
         from: null as string | null,
         to: null as string | null,
+        /** Open cases past their SLA (the «النهارده» link); no control, a chip only. */
+        overdue: false,
         sort: '',
     },
     { replaceKeys: ['q'] },
@@ -65,13 +67,15 @@ const chips = computed(() => {
     const out: { key: string; label: string }[] = [];
     if (f.type) out.push({ key: 'type', label: t(`cases.types.${f.type}`) });
     if (f.from || f.to) out.push({ key: 'date', label: t('cases.date_chip', { from: f.from ?? '…', to: f.to ?? '…' }) });
+    if (f.overdue) out.push({ key: 'overdue', label: t('cases.overdue_chip') });
     return out;
 });
-const filtered = computed(() => Boolean(filters.value.type || filters.value.from || filters.value.to || filters.value.q || filters.value.status));
+const filtered = computed(() => Boolean(filters.value.type || filters.value.from || filters.value.to || filters.value.q || filters.value.status || filters.value.overdue));
 const summary = computed(() => [t('ui.results', { n: props.cases.meta?.total ?? props.cases.data.length }), ...chips.value.map((c) => c.label)].join(' · '));
 
 function removeChip(key: string): void {
     if (key === 'date') apply({ from: null, to: null });
+    else if (key === 'overdue') apply({ overdue: false });
     else apply({ type: null });
 }
 

@@ -30,6 +30,8 @@ const SWEPT: string[] = [
     'settings/BotTestLinks', 'settings/BotTranslations', 'Simulator',
     // Task 20
     'auth/ConfirmPassword', 'auth/ForgotPassword', 'auth/Login', 'auth/ResetPassword', 'auth/VerifyEmail', 'Error', 'Onboarding',
+    // S4 manager today
+    'Today',
 ];
 
 /** Raw tables allowed only on pages S1/S2 replace; they must sit in the shared sticky scroll box. */
@@ -47,8 +49,8 @@ const NO_PAGE_HEADER = new Set([
 ]);
 
 describe('S0 kit adoption', () => {
-    it('sees all 62 pages and only real ones are listed', () => {
-        expect(Object.keys(pages)).toHaveLength(62);
+    it('sees all 63 pages and only real ones are listed', () => {
+        expect(Object.keys(pages)).toHaveLength(63);
         for (const name of SWEPT) expect(pages[name], name).toBeDefined();
     });
 

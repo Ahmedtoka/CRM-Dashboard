@@ -42,6 +42,7 @@ use App\Http\Controllers\Web\Settings\TagController;
 use App\Http\Controllers\Web\Settings\UserController;
 use App\Http\Controllers\Web\ShippingController;
 use App\Http\Controllers\Web\SimulatorController;
+use App\Http\Controllers\Web\TodayController;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\RestrictAdsRoles;
 use App\Http\Middleware\SetLocale;
@@ -49,6 +50,9 @@ use App\Http\Middleware\TrackPresence;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale::class, TrackPresence::class])->group(function () {
+    // «النهارده» (control room S4): the admin/supervisor home; the controller sends anyone else to the inbox.
+    Route::get('/today', TodayController::class)->name('today');
+
     // Inbox
     Route::get('/inbox', [InboxController::class, 'index'])->name('inbox');
     Route::prefix('inbox')->name('inbox.')->group(function () {

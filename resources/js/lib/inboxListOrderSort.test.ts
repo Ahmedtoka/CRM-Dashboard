@@ -16,3 +16,10 @@ describe('oldest waiting order', () => {
         expect(matchesInboxFilters({ ...row(1, '2026-10-08T10:05:00Z'), status: 'resolved' }, f).keep).toBe(false);
     });
 });
+
+describe('start-day range (control room S4)', () => {
+    it('leaves a realtime row to the server when the list is limited to some days', () => {
+        const ranged = { ...f, sort: null, from: '2026-10-06', to: '2026-10-06' } as InboxFilters;
+        expect(matchesInboxFilters(row(1, '2026-10-06T10:05:00Z'), ranged)).toEqual({ keep: true, undecided: true });
+    });
+});

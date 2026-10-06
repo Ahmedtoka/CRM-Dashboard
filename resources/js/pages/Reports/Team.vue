@@ -4,6 +4,7 @@ import Leaderboard from '@/components/crm/Leaderboard.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import ReportFilters from '@/components/crm/ReportFilters.vue';
+import RatingsSection from '@/components/crm/reports/RatingsSection.vue';
 import SkeletonList from '@/components/crm/SkeletonList.vue';
 import StatCard from '@/components/crm/StatCard.vue';
 import { useI18n } from '@/composables/useI18n';
@@ -14,6 +15,7 @@ import { formatAvgSeconds, formatCount, formatMoney } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { HeatmapGrid, LeaderboardRow, ReportRange, TeamMetrics } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
+import type { TeamRatings } from '@/types/today';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { BarChart3 } from 'lucide-vue-next';
 import { computed } from 'vue';
@@ -25,6 +27,7 @@ const props = defineProps<{
     leaderboard: LeaderboardRow[];
     heatmap: HeatmapGrid;
     online_user_ids: number[];
+    ratings: TeamRatings;
 }>();
 
 const { t, locale } = useI18n();
@@ -86,6 +89,8 @@ const breadcrumbs = computed(() => [{ title: t('reports.team_title'), href: '/re
             <div v-else class="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <StatCard v-for="card in cards" :key="card.label" :label="card.label" :value="card.value" :tone="'tone' in card ? card.tone : 'default'" />
             </div>
+
+            <RatingsSection :ratings="ratings" :range="range" />
 
             <EmptyState v-if="empty && !loading" :icon="BarChart3" :title="t('reports.no_data')" class="rounded-lg bg-card shadow-card" />
             <template v-else>

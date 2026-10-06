@@ -629,6 +629,9 @@ export interface InboxFilters {
     q: string | null;
     /** Control room S3: list order; null = newest activity first. */
     sort?: InboxSort | null;
+    /** Control room S4: chats that started on these Cairo days (Y-m-d), from the «النهارده» links. */
+    from?: string | null;
+    to?: string | null;
 }
 
 /** GET /inbox/conversations/counts: each value over a capped sub-select (> capped_at shows "999+"). */

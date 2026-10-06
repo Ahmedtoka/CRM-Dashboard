@@ -4,6 +4,7 @@ import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useBoardContext } from '@/lib/board/context';
 import { formatCount } from '@/lib/format';
+import { formatRatio } from '@/lib/today';
 import { onClickOutside, useEventListener } from '@vueuse/core';
 import { ChevronDown, Maximize2, Minimize2, Presentation, Users } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
@@ -75,6 +76,8 @@ const tiles = computed(() => {
             value: n(k?.closed?.[key]),
         })),
         sla: k?.sla_pct === null || k?.sla_pct === undefined ? null : { value: `${n(k.sla_pct)}%`, good: k.sla_pct >= k.sla_target_pct },
+        rating:
+            k?.rating && k.rating.count > 0 ? t('board.kpi.rating', { avg: formatRatio(k.rating.avg, locale.value), n: n(k.rating.count) }) : null,
     };
 });
 </script>
@@ -136,6 +139,7 @@ const tiles = computed(() => {
                 <dt>{{ t('board.kpi.closed_today') }}</dt>
                 <dd class="val num">{{ tiles.closed }}</dd>
                 <dd v-if="tiles.sla" class="sub num" :class="tiles.sla.good ? 'good' : 'bad'">{{ t('board.kpi.sla') }} {{ tiles.sla.value }}</dd>
+                <dd v-if="tiles.rating" class="sub num">{{ tiles.rating }}</dd>
                 <dd class="sub num">
                     {{ t('board.kpi.issued') }} {{ tiles.issued }}
                     <button
