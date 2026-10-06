@@ -150,7 +150,6 @@ final class GlobalSearch
         if (ctype_digit($q)) {
             $union->unionAll(DB::table('orders')->select('id')->where('id', (int) $q));
         }
-        $union->unionAll(DB::table('shipments')->select('order_id as id')->where('tracking_number', $q));
         $union->unionAll(DB::table('fulfillments')->select('order_id as id')->where('tracking_number', $q));
 
         return $union->pluck('id')->unique()->values();

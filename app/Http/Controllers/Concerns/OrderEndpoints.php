@@ -9,20 +9,16 @@ use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Enums\Platform;
-use App\Enums\ShipmentStatus;
 use App\Http\Resources\OrderResource;
 use App\Http\Support\DateRange;
 use App\Http\Support\ModeratorScope;
 use App\Models\Order;
-use App\Shipping\ShipmentService;
 use App\Shopify\Connection\IntegrationRepository;
 use DomainException;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Order listing and order actions shared by the web Orders screens and API v1.
@@ -72,33 +68,9 @@ trait OrderEndpoints
         return $this->orderResource($orders->markPaid($order));
     }
 
-    /**
-     * Manual shipment creation for `crm.auto_create_shipment = false` (spec §5.8.4).
-     */
-    public function ship(Request $request, Order $order, ShipmentService $shipments): OrderResource
-    {
-        Gate::authorize('ship', $order);
-
-        if ($order->status !== OrderStatus::Confirmed) {
-            throw ValidationException::withMessages(['order' => 'Only confirmed orders can be shipped.']);
-        }
-
-        if ($order->shipment()->exists()) {
-            throw ValidationException::withMessages(['order' => 'This order already has a shipment.']);
-        }
-
-        try {
-            $shipments->createFor($order);
-        } catch (UniqueConstraintViolationException) {
-            abort(response()->json(['message' => 'This order has already been shipped.'], 422));
-        }
-
-        return $this->orderResource($order->fresh());
-    }
-
     protected function orderResource(Order $order): OrderResource
     {
-        return new OrderResource($order->loadMissing(['items', 'shipment.events', 'createdBy', 'customer']));
+        return new OrderResource($order->loadMissing(['items', 'createdBy', 'customer']));
     }
 
     /**
@@ -106,11 +78,10 @@ trait OrderEndpoints
      *
      * Additive params (control room S4), all optional, so API v1 callers that omit them see no change:
      * - `older_than` (minutes, web and API): orders made at least that long ago.
-     * - web only (ignored on /api): `real=1` drops the statuses the reports never count (cancelled, failed);
-     *   `step_from`/`step_to` (Cairo dates, with `shipment_step`) keep orders whose latest event of that
-     *   step falls in the range, the way MetricsService dates deliveries and returns.
+     * - web only (ignored on /api): `real=1` drops the statuses the reports never count (cancelled, failed).
+     * The carrier filters (`shipment_step`, `step_from`, `step_to`) went with the CRM shipments (fresh-orders F4).
      *
-     * @return array{status?: ?string, type?: ?string, platform?: ?string, q?: ?string, created_by?: ?int, from?: ?string, to?: ?string, source?: ?string, financial_status?: ?string, fulfillment_status?: ?string, shipment_step?: ?string, mismatch?: ?bool, stuck?: ?bool, older_than?: ?int, real?: ?bool, step_from?: ?string, step_to?: ?string}
+     * @return array{status?: ?string, type?: ?string, platform?: ?string, q?: ?string, created_by?: ?int, from?: ?string, to?: ?string, source?: ?string, financial_status?: ?string, fulfillment_status?: ?string, mismatch?: ?bool, stuck?: ?bool, older_than?: ?int, real?: ?bool}
      */
     protected function orderFilters(Request $request): array
     {
@@ -125,15 +96,12 @@ trait OrderEndpoints
             'source' => ['nullable', Rule::enum(OrderSource::class)],
             'financial_status' => ['nullable', 'string', 'max:50'],
             'fulfillment_status' => ['nullable', 'string', 'max:50'],
-            'shipment_step' => ['nullable', Rule::enum(ShipmentStatus::class)],
             'mismatch' => ['nullable', 'boolean'],
             'stuck' => ['nullable', 'boolean'],
             // «النهارده» urgent strip (control room S4): orders still waiting this many minutes after they were made.
             'older_than' => ['nullable', 'integer', 'min:1', 'max:43200'],
         ] + ($request->is('api/*') ? [] : [
             'real' => ['nullable', 'boolean'],
-            'step_from' => ['nullable', 'date_format:Y-m-d', 'required_with:step_to'],
-            'step_to' => ['nullable', 'date_format:Y-m-d'],
         ]));
     }
 
@@ -148,7 +116,7 @@ trait OrderEndpoints
         $user = $request->user();
 
         return Order::query()
-            ->with(['customer', 'createdBy', 'items', 'shipment.events'])
+            ->with(['customer', 'createdBy', 'items'])
             ->tap(fn (Builder $q) => ModeratorScope::orders($q, $user))
             ->when($f['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
             ->when($f['type'] ?? null, fn ($q, $v) => $q->where('type', $v))
@@ -156,13 +124,11 @@ trait OrderEndpoints
             ->when($f['source'] ?? null, fn ($q, $v) => $q->where('source', $v))
             ->when($f['financial_status'] ?? null, fn ($q, $v) => $q->where('financial_status', $v))
             ->when($f['fulfillment_status'] ?? null, fn ($q, $v) => $q->where('fulfillment_status', $v))
-            ->when($f['shipment_step'] ?? null, fn ($q, $v) => $q->whereHas('shipment', fn (Builder $s) => $s->where('status', $v)))
             ->when($f['created_by'] ?? null, fn ($q, $v) => $q->where('created_by_id', (int) $v))
             ->when($f['from'] ?? null, fn ($q, $v) => $q->where('created_at', '>=', DateRange::startOfCairoDay($v)))
             ->when($f['to'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', DateRange::endOfCairoDay($v)))
             ->when($f['older_than'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', now()->subMinutes((int) $v)))
             ->when(! empty($f['real']), fn ($q) => $q->whereNotIn('status', MetricsService::EXCLUDED_ORDER_STATUSES))
-            ->when(($f['shipment_step'] ?? null) && ($f['step_from'] ?? null), fn (Builder $q) => $this->stepBetween($q, (string) $f['shipment_step'], (string) $f['step_from'], (string) ($f['step_to'] ?? $f['step_from'])))
             ->when(array_key_exists('mismatch', $f) && $f['mismatch'] !== null, fn ($q) => $q->where('mismatch', (bool) $f['mismatch']))
             ->when(array_key_exists('stuck', $f) && $f['stuck'], fn (Builder $q) => StuckOrderScope::apply($q, $this->stuckOrderDays()))
             ->when(trim((string) ($f['q'] ?? '')), fn ($q, $term) => $q->where(fn (Builder $w) => $w
@@ -173,21 +139,7 @@ trait OrderEndpoints
     }
 
     /**
-     * Orders whose shipment is at `$step` and whose latest `$step` event falls in the Cairo days given: the
-     * MetricsService rule for deliveries and returns, so the «النهارده» numbers open exactly their rows.
-     */
-    private function stepBetween(Builder $q, string $step, string $from, string $to): void
-    {
-        $start = DateRange::startOfCairoDay($from);
-        $end = DateRange::endOfCairoDay($to);
-
-        $q->whereHas('shipment', fn (Builder $s) => $s->where('status', $step)
-            ->whereHas('events', fn (Builder $e) => $e->where('status', $step)->whereBetween('occurred_at', [$start, $end]))
-            ->whereDoesntHave('events', fn (Builder $e) => $e->where('status', $step)->where('occurred_at', '>', $end)));
-    }
-
-    /**
-     * Days of shipment silence before an order counts as "stuck" (`?stuck=1`),
+     * Days without a Shopify change before an order counts as "stuck" (`?stuck=1`),
      * mirroring `CustomerOrderFlags::has_stuck_order`.
      */
     private function stuckOrderDays(): int

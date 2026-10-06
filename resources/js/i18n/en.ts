@@ -4350,10 +4350,31 @@ const en: Messages = {
         },
         cards: { chats: 'Chats', orders: 'Orders', orders_hint: 'Cancelled and failed left out (awaiting payment included)', ads: 'Ads', why: 'Why they did not buy', ads_window_today: 'Yesterday complete + today so far', ads_window_yesterday: 'Yesterday complete', why_hint: 'From chat outcomes', ads_none: 'No ad accounts in your scope', ads_mixed: 'Mixed currencies: money figures hidden', why_empty: 'No chat outcomes recorded that day' },
         chats: { new: 'New', from_ads: 'From ads', bot_alone: 'Closed by the bot alone', to_agent: 'Handed to an agent', first_reply: 'First human reply (avg)', sla: 'Queue SLA', sla_value: '{pct} (target {target})', closed: 'Closed of tickets', avg_wait: 'Average wait', rating: 'Rating', rating_value: '{avg} ({n} answers)' },
-        orders: { count: 'Orders of the day', from_chat: 'From chat', from_store: 'From the store', cancelled: 'Cancelled', failed: 'Failed to send to Shopify', delivered: 'Delivered {day}', returned: 'Returned {day}' },
+        orders: { count: 'Orders of the day', from_chat: 'From chat', from_store: 'From the store', cancelled: 'Cancelled', failed: 'Failed to send to Shopify' },
         ads: { spend: 'Spend', real_roas: 'Real ROAS', meta_roas: 'Meta', real_orders: 'Real orders', cost_per_order: 'Cost per order', best: 'Best ad: {name}', best_value: '{n} orders', loser: 'Losing: {name}' },
         why: { total: '{n} chats did not buy', top_size_out: 'Top ad with the size out: {name}', reasons: { price: 'Price', size_out: 'Size', no_answer: 'No answer', shipping: 'Shipping', browsing: 'Browsing', service: 'Service', other: 'Other' } },
         team: { title: 'Team', room: 'The room', online: 'Working', offline: 'Not open', windows: 'Windows closed', orders: 'Orders', rating: 'Rating', empty: 'Nobody worked that day', columns: { name: 'Agent', state: 'State' }, desk: { available: 'Available', busy: 'Busy', pending_break: 'Going on break', break: 'On break', offline: 'Offline', checking_out: 'Checking out' } },
+    },
+    ordersHub: {
+        tabs: { list: 'Orders', analytics: 'Analytics', ads: 'Ads' },
+        filters: { governorate: 'Governorate', governorate_all: 'All governorates', ad_platform: 'Source', ad_platform_all: 'All sources', direct: 'Direct / no ad', range: 'Period' },
+        columns: { customer: 'Customer', phone: 'Phone', governorate: 'Governorate', district: 'District', total: 'Total', status: 'Status', products: 'Products', source: 'Source' },
+        more_products: '+{n}',
+        open_meta: 'Open in Meta',
+        open_ad: 'Ad details',
+        analytics: {
+            orders: 'Orders', revenue: 'Revenue', aov: 'Average order', customers: 'Customers', new_customers: 'New customers', repeat_customers: 'Returning customers',
+            real_hint: 'Without cancelled and failed',
+            by_governorate: 'By governorate', by_district: 'By district', rest: 'Others ({n})', unknown: 'Not set',
+            frequency: 'Customers by number of orders', one: 'One order', two: 'Two orders', three_plus: '3 or more', repeat_list: 'Ordered more than once', orders_n: '{n} orders',
+            top_products: 'Top products', units: '{n} pcs', by_status: 'By status', by_day: 'Orders by day', empty: 'No orders in this period',
+            status: { cancelled: 'Cancelled', failed: 'Not on Shopify', delivered: 'Delivered', shipped: 'Shipped', awaiting_payment: 'Awaiting payment', confirmed: 'Confirmed' },
+        },
+        ads: {
+            title: 'Orders by ad', ad: 'Ad', orders: 'Orders', revenue: 'Revenue', units: 'Units', direct: 'Direct / no ad',
+            no_campaign: 'No campaign', no_ad_set: 'No ad set', empty: 'No orders in this period', open_orders: 'Open the ad\'s orders ({n})',
+        },
+        ad_page: { title: 'Ad orders', back: 'Orders', summary: 'Summary', products: 'Units sold by product', orders: 'Orders', units: 'Units' },
     },
 };
 

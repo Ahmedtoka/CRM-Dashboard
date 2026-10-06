@@ -10,7 +10,6 @@ const emit = defineEmits<{ submit: [payload: ShopifyIntegrationRow['settings']] 
 const { t } = useI18n();
 
 const defaultShippingFee = ref(props.settings.default_shipping_fee);
-const autoCreateShipment = ref(props.settings.auto_create_shipment);
 const stuckOrderDays = ref(props.settings.stuck_order_days);
 const mismatchAlerts = ref(props.settings.mismatch_alerts);
 const orderCreationEnabled = ref(props.settings.order_creation_enabled);
@@ -19,7 +18,6 @@ watch(
     () => props.settings,
     (s) => {
         defaultShippingFee.value = s.default_shipping_fee;
-        autoCreateShipment.value = s.auto_create_shipment;
         stuckOrderDays.value = s.stuck_order_days;
         mismatchAlerts.value = s.mismatch_alerts;
         orderCreationEnabled.value = s.order_creation_enabled;
@@ -29,7 +27,6 @@ watch(
 function submit(): void {
     emit('submit', {
         default_shipping_fee: Number(defaultShippingFee.value),
-        auto_create_shipment: autoCreateShipment.value,
         stuck_order_days: Number(stuckOrderDays.value),
         mismatch_alerts: mismatchAlerts.value,
         order_creation_enabled: orderCreationEnabled.value,
@@ -49,11 +46,6 @@ function submit(): void {
         <label class="grid gap-1">
             <span class="text-sm font-semibold">{{ t('settings.shopify.settings_form.stuck_order_days') }}</span>
             <input v-model.number="stuckOrderDays" type="number" min="1" max="60" step="1" dir="ltr" class="h-9 w-40 rounded-md border border-input bg-background px-3" />
-        </label>
-
-        <label class="flex items-center gap-2">
-            <input v-model="autoCreateShipment" type="checkbox" class="size-4 rounded border-input" />
-            <span>{{ t('settings.shopify.settings_form.auto_create_shipment') }}</span>
         </label>
 
         <label class="flex items-center gap-2">

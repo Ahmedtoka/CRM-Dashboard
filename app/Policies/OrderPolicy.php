@@ -36,9 +36,4 @@ class OrderPolicy
     {
         return $user->isSupervisorOrAbove();
     }
-
-    public function ship(User $user, Order $order): bool
-    {
-        return $user->isSupervisorOrAbove();
-    }
 }

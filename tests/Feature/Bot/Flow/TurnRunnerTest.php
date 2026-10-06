@@ -16,7 +16,6 @@ use App\Channels\Data\InboundMessageData;
 use App\Enums\Handler;
 use App\Enums\Platform;
 use App\Enums\SenderType;
-use App\Enums\ShipmentStatus;
 use App\Inbox\InboxIngestor;
 use App\Models\ActivityLog;
 use App\Models\BotFlow;
@@ -32,7 +31,6 @@ use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
-use App\Models\Shipment;
 use App\Models\SupportCase;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -269,7 +267,7 @@ function handoverReasons(): string
 
 it('hands an old returned order over as medium order_returned, not delayed', function () {
     $o = Order::factory()->create(['order_number' => '4444', 'shipping_province_code' => 'C', 'created_at' => now()->subDays(20)]);
-    Shipment::factory()->for($o)->create(['status' => ShipmentStatus::Returned]);
+    $o->update(['shipment_status' => 'returned']);
 
     say('m1', 'الاوردر فين؟ 4444');
 

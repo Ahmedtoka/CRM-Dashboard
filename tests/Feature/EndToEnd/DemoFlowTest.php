@@ -87,14 +87,14 @@ it('runs the whole demo flow over HTTP', function () {
         ->and($conversation->first_responder_id)->toBe($whatsappMod->id)
         ->and(ConversationParticipant::where('conversation_id', $conversation->id)->where('user_id', $whatsappMod->id)->sole()->role)->toBe(ParticipantRole::First);
 
-    // 4) COD order: confirmed on Shopify with attribution tags + note, shipment created.
+    // 4) COD order: confirmed on Shopify with attribution tags + note (no CRM shipment, fresh-orders F4).
     $shipping = ['name' => 'Nour', 'phone' => '01001112233', 'city_id' => $city->id, 'address' => '12 شارع النصر'];
     $cod = $this->actingAs($whatsappMod)->postJson("/inbox/conversations/{$conversation->id}/orders", [
         'idempotency_key' => (string) Str::uuid(),
         'type' => 'cod', 'items' => [['variant_id' => $variant->id, 'qty' => 1]], 'shipping' => $shipping, 'note' => 'التسليم بعد العصر',
     ]);
     expect($cod->status())->toBeIn([200, 201]);
-    $cod->assertJsonPath('data.status', 'confirmed')->assertJsonPath('data.shipment.status', 'created')->assertJsonPath('data.total', 1310);
+    $cod->assertJsonPath('data.status', 'confirmed')->assertJsonPath('data.shipment', null)->assertJsonPath('data.total', 1310);
 
     $payload = FakeCommerceProvider::$payloads[0];
     expect($payload->tags)->toContain('social-crm', 'platform:whatsapp', 'mod:heba-adel')
@@ -102,7 +102,7 @@ it('runs the whole demo flow over HTTP', function () {
         ->and($payload->note)->toContain('التسليم بعد العصر')
         ->and($payload->noteAttributes['crm_order_id'])->toBe($cod->json('data.id'));
 
-    // 5) Payment-link order, paid from the simulator: confirmed + shipment.
+    // 5) Payment-link order, paid from the simulator: confirmed.
     $link = $this->actingAs($whatsappMod)->postJson("/inbox/conversations/{$conversation->id}/orders", [
         'idempotency_key' => (string) Str::uuid(),
         'type' => 'payment_link', 'items' => [['variant_id' => $variant->id, 'qty' => 2]], 'shipping' => $shipping,
@@ -113,7 +113,7 @@ it('runs the whole demo flow over HTTP', function () {
     $this->actingAs($admin)->postJson('/simulator/orders/'.$link->json('data.id').'/pay')
         ->assertOk()
         ->assertJsonPath('data.status', 'confirmed')
-        ->assertJsonPath('data.shipment.status', 'created');
+        ->assertJsonPath('data.shipment', null);
 
     // 6) A comment on a Facebook ad: public reply + private reply opening an ad conversation.
     $this->actingAs($admin)->postJson('/simulator/comment', [

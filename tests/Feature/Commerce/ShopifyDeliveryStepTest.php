@@ -23,6 +23,7 @@ it('reads the delivery step from the Shopify shipment status only', function (?s
     'delivered by date' => ['fulfilled', '2026-10-02 10:00:00', ShipmentStatus::Delivered],
     'plain fulfilled' => ['fulfilled', null, null],
     'cancelled' => ['canceled', null, ShipmentStatus::Cancelled],
+    'returned (not sent by Shopify today)' => ['returned', null, ShipmentStatus::Returned],
     'unknown' => ['weird', null, null],
 ]);
 

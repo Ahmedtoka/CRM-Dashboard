@@ -4305,10 +4305,31 @@ const ar = {
         },
         cards: { chats: 'المحادثات', orders: 'الأوردرات', orders_hint: 'بعد استبعاد الملغي والفاشل (شامل المستني دفع)', ads: 'الإعلانات', why: 'ليه ماشترتش', ads_window_today: 'امبارح كامل + النهارده لحد دلوقتي', ads_window_yesterday: 'امبارح كامل', why_hint: 'من نتايج المحادثات', ads_none: 'مفيش حسابات إعلانات في نطاقك', ads_mixed: 'عملات مختلفة: أرقام الفلوس مخفية', why_empty: 'مفيش نتايج محادثات متسجلة في اليوم ده' },
         chats: { new: 'جديدة', from_ads: 'من إعلانات', bot_alone: 'البوت قفل لوحده', to_agent: 'اتحولت لموظفة', first_reply: 'أول رد بشري (متوسط)', sla: 'SLA الطابور', sla_value: '{pct} (الهدف {target})', closed: 'اتقفلت من التذاكر', avg_wait: 'متوسط الانتظار', rating: 'التقييم', rating_value: '{avg} ({n} رد)' },
-        orders: { count: 'أوردرات اليوم', from_chat: 'من الشات', from_store: 'من الموقع', cancelled: 'ملغية', failed: 'فشل إرسال لشوبيفاي', delivered: 'اتسلم {day}', returned: 'مرتجع {day}' },
+        orders: { count: 'أوردرات اليوم', from_chat: 'من الشات', from_store: 'من الموقع', cancelled: 'ملغية', failed: 'فشل إرسال لشوبيفاي' },
         ads: { spend: 'الصرف', real_roas: 'ROAS حقيقي', meta_roas: 'ميتا', real_orders: 'أوردرات حقيقية', cost_per_order: 'تكلفة الأوردر', best: 'أفضل إعلان: {name}', best_value: '{n} أوردر', loser: 'بيخسر: {name}' },
         why: { total: '{n} محادثة ماشترتش', top_size_out: 'أعلى إعلان مقاسه مش موجود: {name}', reasons: { price: 'السعر', size_out: 'المقاس', no_answer: 'مردتش', shipping: 'الشحن', browsing: 'بتتفرج', service: 'خدمة', other: 'تاني' } },
         team: { title: 'الفريق', room: 'الأوضة', online: 'شغالة', offline: 'مش فاتحة', windows: 'شبابيك اتقفلت', orders: 'أوردرات', rating: 'التقييم', empty: 'محدش اشتغل في اليوم ده', columns: { name: 'الموظفة', state: 'الحالة' }, desk: { available: 'متاحة', busy: 'مشغولة', pending_break: 'رايحة بريك', break: 'في بريك', offline: 'مش متصلة', checking_out: 'بتخرج' } },
+    },
+    ordersHub: {
+        tabs: { list: 'الأوردرات', analytics: 'تحليلات', ads: 'الإعلانات' },
+        filters: { governorate: 'المحافظة', governorate_all: 'كل المحافظات', ad_platform: 'المصدر', ad_platform_all: 'كل المصادر', direct: 'مباشر / من غير إعلان', range: 'الفترة' },
+        columns: { customer: 'العميلة', phone: 'الموبايل', governorate: 'المحافظة', district: 'المنطقة', total: 'الإجمالي', status: 'الحالة', products: 'المنتجات', source: 'المصدر' },
+        more_products: '+{n}',
+        open_meta: 'افتح في ميتا',
+        open_ad: 'تفاصيل الإعلان',
+        analytics: {
+            orders: 'الأوردرات', revenue: 'المبيعات', aov: 'متوسط الأوردر', customers: 'العملاء', new_customers: 'عملاء جداد', repeat_customers: 'عملاء راجعين',
+            real_hint: 'من غير الملغي والفاشل',
+            by_governorate: 'حسب المحافظة', by_district: 'حسب المنطقة', rest: 'الباقي ({n})', unknown: 'مش محدد',
+            frequency: 'العملاء حسب عدد الأوردرات', one: 'أوردر واحد', two: 'أوردرين', three_plus: '٣ أو أكتر', repeat_list: 'اللي طلبوا أكتر من مرة', orders_n: '{n} أوردر',
+            top_products: 'أكتر المنتجات مبيعًا', units: '{n} قطعة', by_status: 'حسب الحالة', by_day: 'الأوردرات باليوم', empty: 'مفيش أوردرات في الفترة دي',
+            status: { cancelled: 'ملغي', failed: 'ماوصلش لشوبيفاي', delivered: 'اتسلم', shipped: 'اتشحن', awaiting_payment: 'مستني الدفع', confirmed: 'مؤكد' },
+        },
+        ads: {
+            title: 'الأوردرات حسب الإعلان', ad: 'الإعلان', orders: 'الأوردرات', revenue: 'المبيعات', units: 'القطع', direct: 'مباشر / من غير إعلان',
+            no_campaign: 'من غير حملة', no_ad_set: 'من غير مجموعة', empty: 'مفيش أوردرات في الفترة دي', open_orders: 'افتح أوردرات الإعلان ({n})',
+        },
+        ad_page: { title: 'أوردرات الإعلان', back: 'الأوردرات', summary: 'الملخص', products: 'القطع المباعة حسب المنتج', orders: 'الأوردرات', units: 'القطع' },
     },
 };
 

@@ -83,8 +83,8 @@ final class ModeratorScope
     {
         // Control room S3: web callers also load each order's ad (OrderResource `ad_source`, web only).
         $with = $withAds
-            ? ['items', 'shipment.events', 'createdBy', ...self::ORDER_AD_RELATIONS]
-            : ['items', 'shipment.events', 'createdBy'];
+            ? ['items', 'createdBy', ...self::ORDER_AD_RELATIONS]
+            : ['items', 'createdBy'];
 
         return [
             'identities' => fn ($q) => self::identities($q, $u),

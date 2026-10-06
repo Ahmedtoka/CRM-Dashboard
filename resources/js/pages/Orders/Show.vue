@@ -5,7 +5,6 @@ import OrderSummary from '@/components/crm/OrderSummary.vue';
 import OrderTimeline from '@/components/crm/OrderTimeline.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
-import ShipmentTimeline from '@/components/crm/ShipmentTimeline.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
@@ -67,17 +66,16 @@ const canCancel = computed(
         !isFulfilled.value &&
         order.value.status !== 'cancelled' &&
         order.value.status !== 'failed' &&
-        order.value.shipment?.status !== 'delivered',
+        order.value.display?.shipment_step !== 'delivered',
 );
 const canMarkPaid = computed(() => props.canManage && order.value.status === 'awaiting_payment');
-const canShip = computed(() => props.canManage && order.value.status === 'confirmed' && !order.value.shipment);
 // Mirrors OrderPolicy::retry — supervisors/admins or the order's creator.
 const canRetry = computed(() => order.value.status === 'failed' && (props.canManage || order.value.created_by?.id === page.props.auth.user.id));
 const trackingUrl = computed(() => order.value.fulfillments?.find((f) => f.tracking_url)?.tracking_url ?? null);
 
 const statusLabel = (prefix: string, value: string | null | undefined) => shopifyLabel(t, prefix, value);
 
-async function act(action: 'cancel' | 'mark-paid' | 'ship' | 'retry'): Promise<void> {
+async function act(action: 'cancel' | 'mark-paid' | 'retry'): Promise<void> {
     busy.value = action;
     try {
         const { data } = await api.post<{ data: OrderRow }>(
@@ -90,7 +88,7 @@ async function act(action: 'cancel' | 'mark-paid' | 'ship' | 'retry'): Promise<v
                 data.data.status === 'failed' ? 'error' : 'success',
             );
         } else {
-            toast.push(t({ cancel: 'orders.cancelled_done', 'mark-paid': 'orders.paid_done', ship: 'orders.shipped_done' }[action]));
+            toast.push(t({ cancel: 'orders.cancelled_done', 'mark-paid': 'orders.paid_done' }[action]));
         }
         confirmingCancel.value = false;
         router.reload({ only: ['order'] });
@@ -152,9 +150,6 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
                 </Button>
                 <Button v-if="canMarkPaid" type="button" variant="outline" size="sm" :loading="busy === 'mark-paid'" :disabled="!!busy" @click="act('mark-paid')">
                     {{ t('orders.mark_paid') }}
-                </Button>
-                <Button v-if="canShip" type="button" variant="outline" size="sm" :loading="busy === 'ship'" :disabled="!!busy" @click="act('ship')">
-                    {{ t('orders.ship') }}
                 </Button>
                 <button v-if="canCancel && !confirmingCancel" type="button" :class="[btn, 'text-destructive']" @click="confirmingCancel = true">
                     {{ t('orders.cancel') }}
@@ -218,10 +213,6 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
                         <OrderNote :note="order.note" :lines="6" class="text-sm" />
                     </section>
                     <OrderSummary :order="order" />
-                    <section v-if="order.shipment" class="rounded-lg bg-card p-3 shadow-card">
-                        <h2 class="mb-2 text-xs font-medium">{{ t('shipment.title') }}</h2>
-                        <ShipmentTimeline :shipment="order.shipment" :limit="20" />
-                    </section>
                     <section class="rounded-lg bg-card p-3 shadow-card">
                         <h2 class="mb-2 text-xs font-medium">{{ t('orders.timeline.title') }}</h2>
                         <OrderTimeline :entries="order.timeline ?? []" />

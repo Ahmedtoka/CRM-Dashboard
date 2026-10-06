@@ -41,13 +41,6 @@ return [
         'facebook_disconnected' => 'The Facebook Page that Instagram uses is not connected',
     ],
 
-    // ShipmentEvent.description values the CRM itself writes (carrier text is
-    // passed through untouched). Keyed by the stored sentinel in OrderResource.
-    'shipment_event' => [
-        'created' => 'Shipment created',
-        'order_cancelled' => 'Order cancelled',
-    ],
-
     'csv' => [
         'yes' => 'yes',
         'no' => 'no',

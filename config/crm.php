@@ -4,7 +4,6 @@ return [
     'drivers' => [
         'channels' => env('CRM_CHANNEL_DRIVER', 'fake'),
         'commerce' => env('CRM_COMMERCE_DRIVER', 'fake'),
-        'shipping' => env('CRM_SHIPPING_DRIVER', 'fake'),
         'ai' => env('CRM_AI_DRIVER', 'fake'),
         // Order-management system for the bot's order status lookup: 'live' (needs CRM_OMS_BASE_URL) or 'fake'.
         'oms' => env('CRM_OMS_DRIVER', 'fake'),
@@ -183,12 +182,6 @@ return [
         'SUZ' => 'السويس',
         'WAD' => 'الوادي الجديد',
     ],
-
-    // Shipment is created automatically when an order becomes confirmed/paid, or
-    // (when false) left to a supervisor to trigger manually (spec §5.8.4).
-    'auto_create_shipment' => true,
-
-    'notify_customer_on_shipment' => env('CRM_NOTIFY_CUSTOMER_ON_SHIPMENT', false),
 
     // WhatsApp menus (owner, 2026-09-26): 4–9 bot buttons go out as reply buttons, three per message
     // («زي الماسنجر»), instead of a one-button list. `list` restores the list.

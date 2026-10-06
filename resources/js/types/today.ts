@@ -50,10 +50,7 @@ export interface OrdersCard {
     from_store: number;
     cancelled: number;
     failed: number;
-    outcome_date: string;
-    delivered: number;
-    returned: number;
-    links: Record<'count' | 'from_chat' | 'from_store' | 'cancelled' | 'failed' | 'delivered' | 'returned', string>;
+    links: Record<'count' | 'from_chat' | 'from_store' | 'cancelled' | 'failed', string>;
 }
 
 export interface AdRef {

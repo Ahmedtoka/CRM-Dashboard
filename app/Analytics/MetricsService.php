@@ -24,7 +24,6 @@ use App\Models\Conversation;
 use App\Models\ConversationParticipant;
 use App\Models\Message;
 use App\Models\Order;
-use App\Models\ShipmentEvent;
 use App\Models\SupportCase;
 use App\Models\User;
 use App\Models\UserSession;
@@ -805,9 +804,9 @@ class MetricsService
 
     /**
      * Order outcomes (spec §6.3), all aggregate SQL so any range length is cheap:
-     * COD orders whose shipment is delivered, dated by the latest `delivered` event;
+     * COD orders delivered on Shopify, dated by `delivered_at` (fresh-orders F4);
      * other paid orders (financial_status paid|partially_refunded, or a COD order
-     * with no CRM shipment) dated by paid_at, else created_at (processed_at is not
+     * not delivered yet) dated by paid_at, else created_at (processed_at is not
      * stored; the mapper already sets paid_at from it); minus refunds on those chat
      * orders dated by the refund. Cancelled/failed orders never count.
      *
@@ -841,9 +840,8 @@ class MetricsService
     }
 
     /**
-     * Two grouped queries per (created_by_id, source): shipment outcomes (delivered /
-     * returned by their latest matching event, and cancelled-after-failed-attempt
-     * "failed_final" by last_event_at) and money (paid orders plus negative refunds,
+     * Two grouped queries per (created_by_id, source): deliveries (Shopify delivered_at in
+     * range) and money (paid orders plus negative refunds,
      * as one UNION ALL).
      *
      * @param  array<int, int>|null  $userIds  null = every order (team, store orders included)
@@ -859,36 +857,18 @@ class MetricsService
         $range = [$from->toDateTimeString(), $to->toDateTimeString()];
         $cod = OrderType::Cod->value;
 
-        $lastEvent = ShipmentEvent::query()
-            ->whereIn('status', [ShipmentStatus::Delivered->value, ShipmentStatus::Returned->value])
-            ->selectRaw('shipment_id, status, max(occurred_at) as at')
-            ->groupBy('shipment_id', 'status')
-            ->havingRaw('max(occurred_at) between ? and ?', $range)
-            ->toBase();
-
+        // Deliveries by Shopify's delivery time (fresh-orders F4: no CRM shipments). Shopify reports no
+        // returns or final failures, so those outcome rows stay empty.
         $shipments = $scoped()
-            ->join('shipments', 'shipments.order_id', '=', 'orders.id')
-            ->leftJoinSub($lastEvent, 'last_event', fn ($join) => $join
-                ->on('last_event.shipment_id', '=', 'shipments.id')
-                ->on('last_event.status', '=', 'shipments.status'))
-            ->where(fn ($q) => $q
-                ->whereNotNull('last_event.shipment_id')
-                ->orWhere(fn ($w) => $w
-                    ->where('shipments.status', ShipmentStatus::Cancelled->value)
-                    ->whereBetween('shipments.last_event_at', $range)
-                    ->whereExists(fn ($e) => $e->selectRaw('1')
-                        ->from('shipment_events')
-                        ->whereColumn('shipment_events.shipment_id', 'shipments.id')
-                        ->where('shipment_events.status', ShipmentStatus::FailedAttempt->value))))
-            ->selectRaw('orders.created_by_id as user_id, orders.source as source, shipments.status as outcome, count(*) as n, sum(case when orders.type = ? then orders.total else 0 end) as cod_total', [$cod])
-            ->groupBy('orders.created_by_id', 'orders.source', 'shipments.status')
+            ->whereNotNull('orders.delivered_at')
+            ->whereBetween('orders.delivered_at', $range)
+            ->selectRaw('orders.created_by_id as user_id, orders.source as source, ? as outcome, count(*) as n, sum(case when orders.type = ? then orders.total else 0 end) as cod_total', [ShipmentStatus::Delivered->value, $cod])
+            ->groupBy('orders.created_by_id', 'orders.source')
             ->toBase()
             ->get();
 
-        $hasShipment = fn ($q) => $q->selectRaw('1')->from('shipments')->whereColumn('shipments.order_id', 'orders.id');
         $paidRule = fn ($q) => $q->whereIn('orders.financial_status', self::REALIZED_FINANCIAL_STATUSES)
-            ->where(fn ($w) => $w->where('orders.type', '!=', $cod)->orWhereNotExists($hasShipment));
-
+            ->where(fn ($w) => $w->where('orders.type', '!=', $cod)->orWhereNull('orders.delivered_at'));
         $paid = $scoped()
             ->where($paidRule)
             ->whereRaw('coalesce(orders.paid_at, orders.created_at) between ? and ?', $range)
@@ -903,7 +883,7 @@ class MetricsService
             ->join('refunds', 'refunds.order_id', '=', 'orders.id')
             ->whereRaw('coalesce(refunds.shopify_created_at, refunds.created_at) between ? and ?', $range)
             ->where(fn ($q) => $q
-                ->where(fn ($w) => $w->where('orders.type', $cod)->whereExists(fn ($s) => $hasShipment($s)->where('shipments.status', ShipmentStatus::Delivered->value)))
+                ->where(fn ($w) => $w->where('orders.type', $cod)->whereNotNull('orders.delivered_at'))
                 ->orWhere($paidRule))
             ->selectRaw('orders.created_by_id as user_id, orders.source as source, 0 - sum(refunds.amount) as amount')
             ->groupBy('orders.created_by_id', 'orders.source')

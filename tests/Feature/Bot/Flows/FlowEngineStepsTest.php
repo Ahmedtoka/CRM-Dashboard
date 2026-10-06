@@ -11,7 +11,6 @@ use App\Bot\Flows\FlowState;
 use App\Channels\Data\InboundMessageData;
 use App\Enums\Platform;
 use App\Enums\SenderType;
-use App\Enums\ShipmentStatus;
 use App\Inbox\InboxIngestor;
 use App\Models\BotSetting;
 use App\Models\Branch;
@@ -20,7 +19,6 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\Order;
-use App\Models\Shipment;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -90,7 +88,7 @@ it('extracts order refs, phones and emails', function () {
 // cancel_edit's order step has no ownership check (the return flow's is covered in OrderAwareReturnsTest).
 it('finds the order by number and moves to the next step', function () {
     $o = Order::factory()->create(['order_number' => '5566']);
-    Shipment::factory()->for($o)->create(['status' => ShipmentStatus::InTransit]);
+    $o->update(['shipment_status' => 'in_transit']);
 
     $c = stepsSay('اهلا');
     app(FlowEngine::class)->start($c, 'cancel_edit');
@@ -261,7 +259,7 @@ it('opens the area buttons on entering the branch step and branch buttons on an 
 
 it('stores the failed attempt flag with the order', function () {
     $o = Order::factory()->create(['order_number' => '7801']);
-    Shipment::factory()->for($o)->create(['status' => ShipmentStatus::FailedAttempt]);
+    $o->update(['shipment_status' => 'attempted_delivery']);
     $c = stepsSay('اهلا');
     app(FlowEngine::class)->start($c, 'cancel_edit');
 

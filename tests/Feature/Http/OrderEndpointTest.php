@@ -38,7 +38,7 @@ it('creates a cod order from the inbox', function () {
     $res->assertJsonPath('data.status', 'confirmed')
         ->assertJsonPath('data.created_by.id', $sup->id)
         ->assertJsonPath('data.items.0.qty', 2)
-        ->assertJsonPath('data.shipment.status', 'created');
+        ->assertJsonPath('data.shipment', null);
 });
 
 it('rejects moderator discounts with 403 and empty items with 422', function () {
@@ -67,8 +67,7 @@ it('rejects unknown variants with 422', function () {
         ->assertStatus(422)->assertJsonValidationErrors('items.0.variant_id');
 });
 
-it('lets supervisors mark paid and ship, but not moderators', function () {
-    config(['crm.auto_create_shipment' => false]);
+it('lets supervisors mark paid, but not moderators (no ship action since fresh-orders F4)', function () {
     $sup = User::factory()->create(['role' => UserRole::Supervisor]);
     $order = $this->actingAs($sup)->postJson("/inbox/conversations/{$this->conv->id}/orders", [
         'idempotency_key' => (string) Str::uuid(),
@@ -80,5 +79,5 @@ it('lets supervisors mark paid and ship, but not moderators', function () {
     $this->actingAs($mod)->postJson("/orders/{$order}/mark-paid")->assertForbidden();
 
     $this->actingAs($sup)->postJson("/orders/{$order}/mark-paid")->assertOk()->assertJsonPath('data.status', 'confirmed');
-    $this->actingAs($sup)->postJson("/orders/{$order}/ship")->assertOk()->assertJsonPath('data.shipment.status', 'created');
+    $this->actingAs($sup)->postJson("/orders/{$order}/ship")->assertNotFound();
 });

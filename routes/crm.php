@@ -149,7 +149,6 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
     Route::post('/orders/{order}/refresh', [OrderController::class, 'refresh'])->middleware('throttle:20,1')->name('orders.refresh');
     Route::middleware('role:supervisor')->group(function () {
         Route::post('/orders/{order}/mark-paid', [OrderController::class, 'markPaid'])->name('orders.mark-paid');
-        Route::post('/orders/{order}/ship', [OrderController::class, 'ship'])->name('orders.ship');
     });
 
     // Support cases (spec §4)
@@ -345,7 +344,6 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('comment', [SimulatorController::class, 'comment'])->name('comment');
         Route::post('burst', [SimulatorController::class, 'burst'])->name('burst');
         Route::post('orders/{order}/pay', [SimulatorController::class, 'pay'])->name('orders.pay');
-        Route::post('shipments/{shipment}/advance', [SimulatorController::class, 'advance'])->name('shipments.advance');
     });
 
     Route::post('/locale/{locale}', [LocaleController::class, 'update'])->whereIn('locale', SetLocale::SUPPORTED)->name('locale.update');

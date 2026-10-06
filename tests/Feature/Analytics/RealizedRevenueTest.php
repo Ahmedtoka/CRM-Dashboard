@@ -3,12 +3,10 @@
 use App\Analytics\MetricsService;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
-use App\Enums\ShipmentStatus;
 use App\Enums\UserRole;
 use App\Models\AnalyticsDaily;
 use App\Models\Order;
 use App\Models\Refund;
-use App\Models\Shipment;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 
@@ -16,8 +14,7 @@ it('counts cod on delivery, links on payment, minus refunds, split by source', f
     $u = User::factory()->create(['role' => UserRole::Moderator]);
     $this->travelTo(CarbonImmutable::parse('2026-09-10 12:00:00'));
     $cod = Order::factory()->create(['created_by_id' => $u->id, 'type' => OrderType::Cod, 'status' => OrderStatus::Confirmed, 'total' => 700, 'source' => 'chat']);
-    $s = Shipment::factory()->for($cod)->create(['status' => ShipmentStatus::Delivered]);
-    $s->events()->create(['status' => ShipmentStatus::Delivered, 'occurred_at' => now()]);
+    $cod->update(['delivered_at' => now()]); // Shopify delivery time (fresh-orders F4)
     Order::factory()->create(['created_by_id' => $u->id, 'type' => OrderType::Cod, 'status' => OrderStatus::Confirmed, 'total' => 300, 'source' => 'chat']); // not delivered
     $link = Order::factory()->create(['created_by_id' => $u->id, 'type' => OrderType::PaymentLink, 'status' => OrderStatus::Confirmed, 'financial_status' => 'paid', 'paid_at' => now(), 'total' => 1000, 'source' => 'chat']);
     Refund::factory()->for($link)->create(['amount' => 200, 'shopify_created_at' => now()]);
@@ -33,13 +30,11 @@ it('dates revenue by delivery, payment and refund, and reports rates and store o
 
     // Created before the range, delivered inside it.
     $cod = Order::factory()->create(['created_by_id' => $u->id, 'type' => OrderType::Cod, 'status' => OrderStatus::Confirmed, 'total' => 400, 'created_at' => '2026-09-08 10:00:00']);
-    Shipment::factory()->for($cod)->create(['status' => ShipmentStatus::Delivered])
-        ->events()->create(['status' => ShipmentStatus::Delivered, 'occurred_at' => '2026-09-10 09:00:00']);
+    $cod->update(['delivered_at' => '2026-09-10 09:00:00']);
 
-    // Returned inside the range: no revenue.
+    // Not delivered: no revenue.
     $returned = Order::factory()->create(['created_by_id' => $u->id, 'type' => OrderType::Cod, 'status' => OrderStatus::Confirmed, 'total' => 999, 'created_at' => '2026-09-08 10:00:00']);
-    Shipment::factory()->for($returned)->create(['status' => ShipmentStatus::Returned])
-        ->events()->create(['status' => ShipmentStatus::Returned, 'occurred_at' => '2026-09-10 11:00:00']);
+    // Shopify reports no returns: never counted (fresh-orders F4).
 
     // Paid the day before: only its in-range refund counts.
     $link = Order::factory()->create(['created_by_id' => $u->id, 'type' => OrderType::PaymentLink, 'status' => OrderStatus::Confirmed, 'financial_status' => 'partially_refunded', 'paid_at' => '2026-09-09 10:00:00', 'total' => 500, 'created_at' => '2026-09-09 09:00:00']);
@@ -57,9 +52,9 @@ it('dates revenue by delivery, payment and refund, and reports rates and store o
         ->and($m['orders_created_count'])->toBe(0)
         ->and($m['orders_created_total'])->toBe(0.0)
         ->and($m['orders_delivered'])->toBe(1)
-        ->and($m['orders_returned'])->toBe(1)
-        ->and($m['delivery_rate'])->toBe(0.5)
-        ->and($m['return_rate'])->toBe(0.5)
+        ->and($m['orders_returned'])->toBe(0)
+        ->and($m['delivery_rate'])->toBe(1.0)
+        ->and($m['return_rate'])->toBe(0.0)
         ->and($m['by_source']['store'])->toBe(['created_count' => 0, 'revenue_realized' => 0.0]);
 
     $team = app(MetricsService::class)->teamMetrics(...$day);
@@ -70,7 +65,7 @@ it('dates revenue by delivery, payment and refund, and reports rates and store o
         ->and($team['orders_count'])->toBe(1)
         ->and($team['by_source']['store'])->toBe(['created_count' => 1, 'revenue_realized' => 250.0])
         ->and($team['by_source']['chat'])->toBe(['created_count' => 0, 'revenue_realized' => 320.0])
-        ->and($team['delivery_rate'])->toBe(0.5);
+        ->and($team['delivery_rate'])->toBe(1.0);
 
     // Long ranges return the same keys and figures for the new metrics.
     $long = app(MetricsService::class)->userMetrics($u, CarbonImmutable::parse('2026-08-01 00:00:00'), CarbonImmutable::parse('2026-09-12 23:59:59'));
@@ -115,11 +110,9 @@ it('rolls up delivered, returned and realized revenue on the Cairo day', functio
 
     // 2026-09-09 22:30 UTC is 2026-09-10 01:30 in Cairo.
     $cod = Order::factory()->create(['created_by_id' => $u->id, 'type' => OrderType::Cod, 'status' => OrderStatus::Confirmed, 'total' => 650, 'created_at' => '2026-09-08 10:00:00']);
-    Shipment::factory()->for($cod)->create(['status' => ShipmentStatus::Delivered])
-        ->events()->create(['status' => ShipmentStatus::Delivered, 'occurred_at' => '2026-09-09 22:30:00']);
+    $cod->update(['delivered_at' => '2026-09-09 22:30:00']);
     $ret = Order::factory()->create(['created_by_id' => $u->id, 'type' => OrderType::Cod, 'status' => OrderStatus::Confirmed, 'total' => 100, 'created_at' => '2026-09-08 10:00:00']);
-    Shipment::factory()->for($ret)->create(['status' => ShipmentStatus::Returned])
-        ->events()->create(['status' => ShipmentStatus::Returned, 'occurred_at' => '2026-09-10 10:00:00']);
+    // Shopify reports no returns: never counted (fresh-orders F4).
 
     $this->artisan('crm:rollup', ['date' => '2026-09-10'])->assertSuccessful();
 
@@ -127,7 +120,7 @@ it('rolls up delivered, returned and realized revenue on the Cairo day', functio
 
     expect($row)->not->toBeNull()
         ->and($row->orders_delivered)->toBe(1)
-        ->and($row->orders_returned)->toBe(1)
+        ->and($row->orders_returned)->toBe(0)
         ->and((float) $row->revenue_realized)->toBe(650.0)
         ->and(AnalyticsDaily::whereDate('date', '2026-09-09')->count())->toBe(0);
 });

@@ -1,7 +1,19 @@
 <?php
 
-use App\Enums\{MessageDirection, Platform, SenderType, UserRole};
-use App\Models\{ChannelAccount, Conversation, Customer, CustomerIdentity, Fulfillment, Message, Order, Product, ProductVariant, Shipment, User};
+use App\Enums\MessageDirection;
+use App\Enums\Platform;
+use App\Enums\SenderType;
+use App\Enums\UserRole;
+use App\Models\ChannelAccount;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\CustomerIdentity;
+use App\Models\Fulfillment;
+use App\Models\Message;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -23,7 +35,7 @@ it('finds customers by egyptian phone formats and name', function () {
 
 it('finds orders by crm id, shopify name, tracking number and fulfillment tracking number', function () {
     $order = Order::factory()->create(['shopify_order_name' => '#1001', 'platform' => Platform::WhatsApp]);
-    Shipment::factory()->create(['order_id' => $order->id, 'tracking_number' => 'BST-777']);
+    Fulfillment::factory()->create(['order_id' => $order->id, 'tracking_number' => 'BST-777']);
     Fulfillment::factory()->create(['order_id' => $order->id, 'tracking_number' => 'FLF-999']);
 
     foreach (['#1001', 'BST-777', 'FLF-999', (string) $order->id] as $q) {

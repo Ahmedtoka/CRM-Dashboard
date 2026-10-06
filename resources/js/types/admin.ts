@@ -522,14 +522,6 @@ export interface BotLearningReport extends BotLearningReportRow {
     suggestions: BotSuggestionRow[];
 }
 
-export interface SimShipment {
-    id: number;
-    order_id: number;
-    order_number: string | null;
-    status: string | null;
-    tracking_number: string | null;
-}
-
 export interface SimPost {
     id: number;
     platform: PlatformValue;
@@ -567,7 +559,6 @@ export interface ShopifyIntegrationRow {
     connected_at: string | null;
     settings: {
         default_shipping_fee: number;
-        auto_create_shipment: boolean;
         stuck_order_days: number;
         mismatch_alerts: boolean;
         order_creation_enabled: boolean;

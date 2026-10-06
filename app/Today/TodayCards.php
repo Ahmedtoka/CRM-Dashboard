@@ -90,10 +90,8 @@ final class TodayCards
     public function orders(TodayWindow $w): array
     {
         $team = $this->teamMetrics($w);
-        $out = $this->teamMetrics($w->outcomeDay());
         $dayOrders = fn (OrderStatus $s) => Order::query()->where('status', $s->value)->whereBetween('created_at', [$w->from, $w->to])->count();
         $day = ['from' => $w->date, 'to' => $w->date];
-        $outDay = $w->outcomeDay()->date;
         // The counted orders leave out cancelled and failed (MetricsService): `real=1` lists the same set.
         $real = ['real' => 1];
 
@@ -104,18 +102,12 @@ final class TodayCards
             'from_store' => (int) $team['by_source']['store']['created_count'],
             'cancelled' => $dayOrders(OrderStatus::Cancelled),
             'failed' => $dayOrders(OrderStatus::Failed),
-            'outcome_date' => $w->outcomeDay()->date,
-            'delivered' => (int) $out['orders_delivered'],
-            'returned' => (int) $out['orders_returned'],
             'links' => [
                 'count' => self::link('/orders', $real + $day),
                 'from_chat' => self::link('/orders', $real + ['source' => 'chat'] + $day),
                 'from_store' => self::link('/orders', $real + ['source' => 'store'] + $day),
                 'cancelled' => self::link('/orders', ['status' => 'cancelled'] + $day),
                 'failed' => self::link('/orders', ['status' => 'failed'] + $day),
-                // Dated by the latest delivered / returned event, as MetricsService counts them.
-                'delivered' => self::link('/orders', $real + ['shipment_step' => 'delivered', 'step_from' => $outDay, 'step_to' => $outDay]),
-                'returned' => self::link('/orders', $real + ['shipment_step' => 'returned', 'step_from' => $outDay, 'step_to' => $outDay]),
             ],
         ];
     }

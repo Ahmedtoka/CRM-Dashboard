@@ -2,7 +2,6 @@
 
 use App\Enums\OrderStatus;
 use App\Enums\Platform;
-use App\Enums\ShipmentStatus;
 use App\Enums\UserRole;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
@@ -10,7 +9,6 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
-use App\Models\Shipment;
 use App\Models\ShippingZone;
 use App\Models\User;
 use Illuminate\Support\Str;
@@ -77,53 +75,38 @@ it('requires an idempotency key to create an order', function () {
     ])->assertStatus(201);
 });
 
-it('filters orders by shipment step', function () {
+it('ignores the removed shipment step filter (fresh-orders F4)', function () {
     $admin = User::factory()->create(['role' => UserRole::Admin]);
-    $delivered = Order::factory()->create();
-    Shipment::factory()->for($delivered)->create(['status' => ShipmentStatus::Delivered]);
-    $inTransit = Order::factory()->create();
-    Shipment::factory()->for($inTransit)->create(['status' => ShipmentStatus::InTransit]);
+    $delivered = Order::factory()->create(['shipment_status' => 'delivered']);
+    $inTransit = Order::factory()->create(['shipment_status' => 'in_transit']);
 
     $this->actingAs($admin)->getJson('/orders?shipment_step=delivered')->assertOk()
-        ->assertJsonFragment(['id' => $delivered->id])->assertJsonMissing(['id' => $inTransit->id]);
+        ->assertJsonFragment(['id' => $delivered->id])->assertJsonFragment(['id' => $inTransit->id]);
 });
 
 /**
- * `?stuck=1` must agree with `CustomerOrderFlags::has_stuck_order` (both now go through
- * `App\Shipping\StuckOrderScope`): exclude cancelled/failed orders, honor the configured
- * cutoff window (default 5 days, no integration in this test), and grant a brand-new
- * shipment with no events yet a grace period instead of flagging it immediately.
+ * `?stuck=1` must agree with `CustomerOrderFlags::has_stuck_order` (both go through
+ * `App\Commerce\StuckOrderScope`, Shopify-based since fresh-orders F4): fulfilled and not delivered,
+ * no Shopify change inside the cutoff window (default 5 days), never cancelled/failed.
  */
 it('filters stuck orders consistently with the customer stuck flag', function () {
     $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $old = now()->subDays(6);
 
-    // Genuinely stuck: in-transit shipment whose last event is older than the cutoff.
-    $stuck = Order::factory()->create(['status' => OrderStatus::Confirmed]);
-    $stuckShipment = Shipment::factory()->for($stuck)->create(['status' => ShipmentStatus::InTransit]);
-    $stuckShipment->events()->create(['status' => ShipmentStatus::InTransit, 'occurred_at' => now()->subDays(6)]);
-
-    // A cancelled order must never count as stuck, even with the same stale shipment.
-    $cancelled = Order::factory()->create(['status' => OrderStatus::Cancelled]);
-    $cancelledShipment = Shipment::factory()->for($cancelled)->create(['status' => ShipmentStatus::InTransit]);
-    $cancelledShipment->events()->create(['status' => ShipmentStatus::InTransit, 'occurred_at' => now()->subDays(6)]);
-
-    // Brand-new shipment with no events yet: within the grace period, not stuck.
-    $fresh = Order::factory()->create(['status' => OrderStatus::Confirmed]);
-    Shipment::factory()->for($fresh)->create(['status' => ShipmentStatus::Created]);
-
-    // Recently active shipment: not stuck.
-    $active = Order::factory()->create(['status' => OrderStatus::Confirmed]);
-    $activeShipment = Shipment::factory()->for($active)->create(['status' => ShipmentStatus::InTransit]);
-    $activeShipment->events()->create(['status' => ShipmentStatus::InTransit, 'occurred_at' => now()->subHours(2)]);
+    $stuck = Order::factory()->create(['status' => OrderStatus::Confirmed, 'fulfillment_status' => 'fulfilled', 'shipment_status' => 'in_transit', 'shopify_updated_at' => $old]);
+    $cancelled = Order::factory()->create(['status' => OrderStatus::Cancelled, 'fulfillment_status' => 'fulfilled', 'shopify_updated_at' => $old]);
+    $unfulfilled = Order::factory()->create(['status' => OrderStatus::Confirmed, 'fulfillment_status' => null, 'shopify_updated_at' => $old]);
+    $delivered = Order::factory()->create(['status' => OrderStatus::Confirmed, 'fulfillment_status' => 'fulfilled', 'shipment_status' => 'delivered', 'shopify_updated_at' => $old]);
+    $active = Order::factory()->create(['status' => OrderStatus::Confirmed, 'fulfillment_status' => 'fulfilled', 'shipment_status' => 'in_transit', 'shopify_updated_at' => now()->subHours(2)]);
 
     $ids = collect($this->actingAs($admin)->getJson('/orders?stuck=1')->assertOk()->json('data'))->pluck('id');
 
     expect($ids)->toContain($stuck->id)
         ->not->toContain($cancelled->id)
-        ->not->toContain($fresh->id)
+        ->not->toContain($unfulfilled->id)
+        ->not->toContain($delivered->id)
         ->not->toContain($active->id);
 });
-
 it('excludes archived products and matches on barcode', function () {
     $u = User::factory()->create(['role' => UserRole::Moderator]);
     $active = ProductVariant::factory()->for(Product::factory()->state(['status' => 'active']))->create(['barcode' => '6221234567890']);

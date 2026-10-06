@@ -26,6 +26,8 @@ final class ShopifyDeliveryStep
         'not_delivered' => ShipmentStatus::FailedAttempt,
         'failure' => ShipmentStatus::FailedAttempt,
         'delivered' => ShipmentStatus::Delivered,
+        // Not a Shopify value today; kept so a returned state written by the store (or a later carrier sync) reads right.
+        'returned' => ShipmentStatus::Returned,
         'canceled' => ShipmentStatus::Cancelled,
         'cancelled' => ShipmentStatus::Cancelled,
         'label_voided' => ShipmentStatus::Cancelled,
