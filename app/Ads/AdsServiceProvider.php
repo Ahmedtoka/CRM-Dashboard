@@ -2,6 +2,8 @@
 
 namespace App\Ads;
 
+use App\Ads\Alerts\Commands\AlertsDigestCommand;
+use App\Ads\Alerts\Commands\EvaluateAlertsCommand;
 use App\Ads\Attribution\Commands\AttributeOrdersCommand;
 use App\Ads\Attribution\Commands\BackfillReferralsCommand;
 use App\Ads\Attribution\Commands\RestoreAttributionCommand;
@@ -65,7 +67,7 @@ class AdsServiceProvider extends ServiceProvider
     {
         Event::listen(LaunchMoved::class, [MaterialStatus::class, 'handle']);
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, LaunchSweepCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, AdsAuthorityCommand::class, WritesSwitchCommand::class, WriteResolveCommand::class, WriteSweepCommand::class, WriteLimitsCommand::class, WritePreviewCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class, ReconcileCommand::class, DecisionsCountCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, LaunchSweepCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, AdsAuthorityCommand::class, WritesSwitchCommand::class, WriteResolveCommand::class, WriteSweepCommand::class, WriteLimitsCommand::class, WritePreviewCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class, ReconcileCommand::class, DecisionsCountCommand::class, EvaluateAlertsCommand::class, AlertsDigestCommand::class]);
         }
 
         WriteRateLimits::register();
@@ -91,6 +93,16 @@ class AdsServiceProvider extends ServiceProvider
 
             $schedule->command(StockWatchCommand::class)
                 ->everyThirtyMinutes()->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
+
+            // Decisions feed (S5): hourly facts after the :10 sync, everything at 08:30 after the 03:15 deep sync, digest at 09:00.
+            $schedule->command(EvaluateAlertsCommand::class, ['--scope=hourly'])
+                ->hourlyAt(30)->timezone('Africa/Cairo')
+                ->skip(fn () => now('Africa/Cairo')->hour === 8) // 08:30 = the daily run, which includes every hourly rule
+                ->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
+            $schedule->command(EvaluateAlertsCommand::class, ['--scope=daily'])
+                ->dailyAt('08:30')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
+            $schedule->command(AlertsDigestCommand::class)
+                ->dailyAt('09:00')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
 
             $schedule->command(HealthCommand::class)
                 ->everyFiveMinutes()->timezone('Africa/Cairo')->withoutOverlapping(10)->onOneServer()->appendOutputTo(storage_path('logs/ads-schedule.log'));

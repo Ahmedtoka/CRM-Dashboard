@@ -1,5 +1,6 @@
 <?php
 
+use App\Ads\Alerts\RuleSettings;
 use App\Ads\Launch\LaunchState;
 use App\Ads\Materials\StockWatcher;
 use App\Models\AdWriteAction;
@@ -51,4 +52,14 @@ it('D6: a live launch out of stock is flagged with a one-click Stop link, never 
         ->and($note->data['link'])->toBe('/ads/launches?box=live&material='.$w['material']->id.'&stop=1')
         ->and($live->fresh()->state)->toBe(LaunchState::Live)
         ->and(AdWriteAction::count())->toBe(0);
+});
+
+it('keeps the pre-live on-hold notices when decision notifications are on (R-06 covers live ads only)', function () {
+    $w = LaunchWorld::make();
+    LaunchWorld::launch($w, LaunchState::AwaitingApproval);
+    app(RuleSettings::class)->setNotify($w['admin'], true);
+    ProductVariant::query()->update(['inventory_quantity' => 0]);
+
+    expect(app(StockWatcher::class)->holds())->toBe(['held' => 1, 'released' => 0])
+        ->and(UserNotification::where('type', 'ads.launch.on_hold')->count())->toBeGreaterThan(0);
 });

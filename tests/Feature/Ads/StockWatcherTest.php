@@ -204,3 +204,10 @@ it('clears need stop when nothing runs any more and notifies again when an ad ru
     app(StockWatcher::class)->run();
     expect($w['material']->fresh()->need_stop_at)->not->toBeNull()->and(swNotes())->toHaveCount(6); // a new episode
 });
+
+it('stays silent once decision notifications are on, the feed alert replaces it (R-06)', function () {
+    $w = swWorld();
+    app(\App\Ads\Alerts\RuleSettings::class)->setNotify($w['admin'], true);
+
+    expect(app(StockWatcher::class)->run())->toBe(['flagged' => 1, 'cleared' => 0])->and(swNotes())->toHaveCount(0);
+});

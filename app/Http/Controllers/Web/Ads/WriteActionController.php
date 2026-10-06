@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Web\Ads;
 
+use App\Ads\Alerts\AlertScope;
 use App\Ads\Control\Write\RecentPassword;
 use App\Ads\Control\Write\Types\SetStatusType;
 use App\Ads\Control\Write\WriteActionService;
@@ -14,6 +15,7 @@ use App\Models\AdAccount;
 use App\Models\AdsAuditLog;
 use App\Models\AdWriteAction;
 use App\Models\AdWriteStep;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -39,12 +41,36 @@ class WriteActionController extends Controller
             'params' => ['required', 'array'],
             'params.to' => ['required', Rule::in(['active', 'paused'])],
             'reason' => ['nullable', 'string', 'max:1000'],
+            'source' => ['nullable', Rule::in(['ui', 'alert'])],
+            'source_ref' => ['nullable', 'string', 'max:100'],
         ]);
 
+        [$source, $sourceRef] = $this->alertSource($request->user(), $data);
         $result = $service->propose($request->user(), AdAccount::findOrFail($data['account_id']), $data['target']['level'],
-            (string) $data['target']['external_id'], $data['params']['to'], $data['reason'] ?? null, $key);
+            (string) $data['target']['external_id'], $data['params']['to'], $data['reason'] ?? null, $key, $source, $sourceRef);
 
         return $this->proposal($result['action'], $result['replayed']);
+    }
+
+    /**
+     * source=alert only when the referenced alert is visible to the user and is about this very ad of this account;
+     * anything else proposes as a plain ui action (the alert id is never trusted blindly).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{0: string, 1: ?string}
+     */
+    private function alertSource(User $user, array $data): array
+    {
+        $ref = (string) ($data['source_ref'] ?? '');
+        if (($data['source'] ?? 'ui') !== 'alert' || ! ctype_digit($ref) || $data['target']['level'] !== 'ad') {
+            return ['ui', null];
+        }
+        $alert = app(AlertScope::class)->visible($user)->whereKey((int) $ref)->with('ad:id,external_id,ad_account_id')->first();
+        $match = $alert?->ad !== null
+            && (string) $alert->ad->external_id === (string) $data['target']['external_id']
+            && (int) $alert->ad->ad_account_id === (int) $data['account_id'];
+
+        return $match ? ['alert', (string) $alert->id] : ['ui', null];
     }
 
     public function show(Request $request, string $action, WriteActionService $service): JsonResponse

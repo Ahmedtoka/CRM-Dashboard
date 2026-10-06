@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Web\Ads;
 
+use App\Ads\Alerts\AlertFeed;
 use App\Ads\Control\AdWriteService;
 use App\Ads\Control\StopAdvisor;
 use App\Ads\Control\WriteActionLog;
@@ -15,15 +16,22 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** «محتاج قرار» (U 5.2, spec 4.1): launch approvals on top, stop suggestions, S5 alerts slot, and the old Actions log. */
+/**
+ * «محتاج قرار» (U 5.2, spec 4.1): launch approvals on top, stop suggestions, the S5 alert cards, and the old Actions log.
+ * The feed follows the page tabs (snoozed = the feed's «بعدين»); a stop suggestion for an ad that already has a live
+ * alert is folded into that ad's card.
+ */
 class DecisionsController extends Controller
 {
     use BuildsAdsPages;
 
     public const TABS = ['open', 'snoozed', 'closed', 'log'];
 
+    /** Page tab → AlertFeed tab. */
+    public const FEED_TABS = ['open' => 'open', 'snoozed' => 'later', 'closed' => 'closed', 'log' => 'log'];
+
     public function __invoke(Request $request, StopAdvisor $advisor, AdWriteService $writer, WriteActionLog $log,
-        PendingApprovals $approvals, DecisionCounter $counter): Response
+        PendingApprovals $approvals, DecisionCounter $counter, AlertFeed $feed): Response
     {
         $user = $request->user();
         $tab = in_array($request->query('tab'), self::TABS, true) ? (string) $request->query('tab') : 'open';
@@ -35,9 +43,13 @@ class DecisionsController extends Controller
         ];
 
         $pending = $approvals->count($user);
+        $feedData = $feed->forUser($user, self::FEED_TABS[$tab]);
+        $openCards = $tab === 'open' ? count($feedData['items']) + $feedData['meta']['hidden_by_cap'] : $feed->openCardCount($user);
         $suggestions = [];
         if ($tab === 'open') {
-            $found = $advisor->suggest(DecisionCounter::window($filter));
+            $folded = $feed->adIdsWithLiveAlerts($user);
+            $found = array_values(array_filter($advisor->suggest(DecisionCounter::window($filter)),
+                fn (array $s) => ! in_array((int) $s['ad_id'], $folded, true)));
             $accounts = AdAccount::query()->whereIn('id', array_unique(array_column($found, 'account_id')))->get(['id', 'is_active', 'write_enabled', 'platform', 'external_id']);
             $can = $writer->canWriteMany($user, $accounts);
             $suggestions = array_map(fn (array $s) => $s + ['can_write' => $can[$s['account_id']] ?? false], $found);
@@ -46,8 +58,8 @@ class DecisionsController extends Controller
         // whole scope, so a narrowed filter (accounts, buyer, platform) recounts instead of storing a partial number.
         $narrowed = $request->filled('accounts') || $request->filled('buyer') || $request->filled('platform');
         $open = match (true) {
-            ! DecisionCounter::eligible($user) => count($suggestions) + $pending,
-            $tab === 'open' && ! $narrowed => DecisionCounter::store($user, count($suggestions) + $pending),
+            ! DecisionCounter::eligible($user) => count($suggestions) + $pending + $openCards,
+            $tab === 'open' && ! $narrowed => DecisionCounter::store($user, count($suggestions) + $pending + $openCards),
             default => DecisionCounter::cached($user) ?? $counter->refresh($user),
         };
         $logRows = $tab === 'log' ? $log->rows($user, $logFilters) : [];
@@ -60,10 +72,14 @@ class DecisionsController extends Controller
             ...$this->commonProps($user, $filter),
             'account_options' => $this->accountOptions($request, $filter),
             'freshness' => $this->syncProps($filter, false)['oldest']['last_synced_at'] ?? null,
-            'counts' => ['open' => $tab === 'open' ? count($suggestions) + $pending : $open, 'snoozed' => 0, 'closed' => 0],
+            'counts' => [
+                'open' => $tab === 'open' ? count($suggestions) + $pending + $openCards : $open,
+                'snoozed' => $feedData['meta']['counts']['later'], 'closed' => $feedData['meta']['counts']['closed'],
+            ],
             'approvals' => $approvals->canApprove($user) ? ['count' => $pending, 'href' => '/ads/approvals', 'items' => $approvals->items($user)] : null,
             'suggestions' => $suggestions,
-            'alerts' => [],
+            'alerts' => $feedData['items'],
+            'alertsMeta' => $feedData['meta'],
             'log' => $logRows,
             'log_users' => collect($userRows)->filter(fn (array $r) => $r['user_id'] !== null)
                 ->map(fn (array $r) => ['id' => (int) $r['user_id'], 'name' => (string) $r['user']])->unique('id')->values()->all(),

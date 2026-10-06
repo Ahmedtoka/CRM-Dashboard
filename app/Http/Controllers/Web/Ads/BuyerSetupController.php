@@ -42,10 +42,11 @@ class BuyerSetupController extends Controller
         ]);
     }
 
-    /** «الإعداد › القواعد»: tax rate and winner/loser thresholds (S5 adds break-even and rule settings here). */
-    public function rules(AdsSettings $settings): Response
+    /** «الإعداد › القواعد»: tax rate and winner/loser thresholds; `rules` = the S5 break-even and rule settings. */
+    public function rules(Request $request, AdsSettings $settings, RulesSetupController $rules): Response
     {
         return Inertia::render('Ads/SetupRules', [
+            'rules' => $rules->props($request->user()),
             'settings' => [
                 'tax_rate' => $settings->taxRate(),
                 'tax_rate_percent' => round($settings->taxRate() * 100, 2),

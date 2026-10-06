@@ -4,6 +4,7 @@ use App\Http\Controllers\Web\Ads\AccountController;
 use App\Http\Controllers\Web\Ads\ActionController;
 use App\Http\Controllers\Web\Ads\AdDrawerController;
 use App\Http\Controllers\Web\Ads\AdStockController;
+use App\Http\Controllers\Web\Ads\AlertController;
 use App\Http\Controllers\Web\Ads\ApprovalController;
 use App\Http\Controllers\Web\Ads\BuyerController;
 use App\Http\Controllers\Web\Ads\BuyerSetupController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\Web\Ads\MaterialController;
 use App\Http\Controllers\Web\Ads\NumbersController;
 use App\Http\Controllers\Web\Ads\PublishController;
 use App\Http\Controllers\Web\Ads\ReauthController;
+use App\Http\Controllers\Web\Ads\RulesSetupController;
 use App\Http\Controllers\Web\Ads\SlotController;
 use App\Http\Controllers\Web\Ads\SyncController;
 use App\Http\Controllers\Web\Ads\TodayController;
@@ -30,6 +32,10 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('ads:report')->group(function () {
     Route::get('/ads', TodayController::class)->name('ads.today');
     Route::get('/ads/decisions', DecisionsController::class)->name('ads.decisions');
+    // Decisions feed card actions (S5).
+    Route::post('/ads/alerts/seen', [AlertController::class, 'seen'])->middleware('throttle:60,1')->name('ads.alerts.seen');
+    Route::post('/ads/alerts/snooze', [AlertController::class, 'snooze'])->middleware('throttle:60,1')->name('ads.alerts.snooze');
+    Route::post('/ads/alerts/dismiss', [AlertController::class, 'dismiss'])->middleware('throttle:60,1')->name('ads.alerts.dismiss');
     Route::get('/ads/explorer', ExplorerController::class)->name('ads.explorer');
     Route::get('/ads/numbers', NumbersController::class)->name('ads.numbers');
     Route::get('/ads/buyers/{buyer}', [BuyerController::class, 'show'])->name('ads.buyers.show');
@@ -88,6 +94,8 @@ Route::middleware('ads:manage')->group(function () {
     Route::delete('/ads/setup/buyers/{buyer}', [BuyerSetupController::class, 'destroy'])->name('ads.setup.buyers.destroy');
     Route::put('/ads/setup/buyers/{buyer}/targets', [BuyerSetupController::class, 'targets'])->name('ads.setup.buyers.targets');
     Route::put('/ads/setup/settings', [BuyerSetupController::class, 'settings'])->name('ads.setup.settings');
+    Route::put('/ads/setup/rules', [RulesSetupController::class, 'update'])->name('ads.setup.rules.update');
+    Route::put('/ads/setup/rules/notify', [RulesSetupController::class, 'notify'])->name('ads.setup.rules.notify');
 });
 
 // Materials library: content, media buyers and supervisors (write permissions are checked per action).

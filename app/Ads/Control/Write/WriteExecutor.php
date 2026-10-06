@@ -2,6 +2,7 @@
 
 namespace App\Ads\Control\Write;
 
+use App\Ads\Alerts\AlertStore;
 use App\Ads\Audit\AdsAudit;
 use App\Ads\Control\AdWriteService;
 use App\Ads\Control\Write\Jobs\RetryStopWrite;
@@ -240,6 +241,11 @@ class WriteExecutor
         $x = $this->finish($x, AdWriteAction::SUCCEEDED, null, null, $outcome);
         if ($x->state === AdWriteAction::SUCCEEDED) {
             $this->mirrorLocal($x);
+            try {
+                app(AlertStore::class)->actOnWrite($x); // close the decisions-feed cards of this ad (S5)
+            } catch (Throwable $e) {
+                self::logUnexpected($e, $x);
+            }
             if ($x->isStop()) {
                 $this->supersedeRunsBy($x); // rule 4 first: a lock failure must never skip it
                 try {
