@@ -47,6 +47,7 @@ const URL_DEFAULTS = {
     platform: null as string | null,
     tag: null as string | null,
     q: null as string | null,
+    sort: null as string | null,
 };
 type UrlFilters = typeof URL_DEFAULTS;
 
@@ -58,6 +59,7 @@ const toUrl = (f: InboxFilters): UrlFilters => ({
     platform: f.platform ?? null,
     tag: f.tag ? String(f.tag) : null,
     q: f.q ?? null,
+    sort: f.sort ?? null,
 });
 
 const fromUrl = (u: UrlFilters): InboxFilters => ({
@@ -68,6 +70,7 @@ const fromUrl = (u: UrlFilters): InboxFilters => ({
     platform: (u.platform || null) as PlatformValue | null,
     tag: u.tag ? Number(u.tag) || null : null,
     q: u.q || null,
+    sort: (u.sort || null) as InboxFilters['sort'],
 });
 
 const sameFilters = (a: UrlFilters, b: UrlFilters) => JSON.stringify(a) === JSON.stringify(b);
@@ -253,9 +256,11 @@ export function useConversationList(initial: CursorPage<Conversation>, initialFi
     let countsDirty = false;
 
     function countsParams(): Record<string, string | string[]> {
-        const { status: _s, queue: _q, ...rest } = params();
+        // The server's counts ignore status, queue and the sort.
+        const { status: _s, queue: _q, sort: _o, ...rest } = params();
         void _s;
         void _q;
+        void _o;
         return rest;
     }
 

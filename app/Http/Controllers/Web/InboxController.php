@@ -37,7 +37,7 @@ class InboxController extends Controller
             'conversations' => ConversationResource::collection($query->paginate($user, $filters))->additional(['search_mode' => $query->searchMode(), 'meta' => ['search_truncated' => $query->searchTruncated()]]),
             // An old single `filter=` link arrives here already mapped into `flags` (R4).
             'filters' => array_merge(
-                ['platform' => null, 'status' => null, 'queue' => null, 'assignee' => null, 'flags' => [], 'q' => null, 'tag' => null],
+                ['platform' => null, 'status' => null, 'queue' => null, 'assignee' => null, 'flags' => [], 'q' => null, 'tag' => null, 'sort' => null],
                 $filters,
             ),
             // The moderator filter's options (spec §1.2): active moderators and supervisors, by name.

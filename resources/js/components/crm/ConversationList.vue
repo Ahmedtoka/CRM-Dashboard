@@ -284,35 +284,53 @@ defineExpose({
                     />
                 </template>
                 <template #tabs>
-                    <div
-                        ref="tabList"
-                        role="tablist"
-                        :aria-label="t('inbox.status_label')"
-                        class="scrollbar-none -mx-3 flex gap-0.5 overflow-x-auto px-3"
-                        @keydown="onTabKeydown"
-                    >
-                        <button
-                            v-for="tab in TABS"
-                            :key="tab ?? 'all'"
-                            type="button"
-                            role="tab"
-                            :aria-selected="tabActive(tab)"
-                            :tabindex="tabActive(tab) ? 0 : -1"
-                            class="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            :class="
-                                tabActive(tab)
-                                    ? 'bg-surface-accent font-semibold text-primary'
-                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                            "
-                            @click="emit('update', { status: tab })"
+                    <div class="flex min-w-0 items-center gap-1">
+                        <div
+                            ref="tabList"
+                            role="tablist"
+                            :aria-label="t('inbox.status_label')"
+                            class="scrollbar-none -ms-3 flex min-w-0 flex-1 gap-0.5 overflow-x-auto ps-3"
+                            @keydown="onTabKeydown"
                         >
-                            {{ t(`inbox.tabs.${tab ?? 'all'}`) }}
-                            <span
-                                v-if="tabCount(tab)"
-                                class="tabular-nums"
-                                :class="tabActive(tab) ? 'text-primary/80' : 'text-muted-foreground/80'"
-                                >{{ tabCount(tab) }}</span
+                            <button
+                                v-for="tab in TABS"
+                                :key="tab ?? 'all'"
+                                type="button"
+                                role="tab"
+                                :aria-selected="tabActive(tab)"
+                                :tabindex="tabActive(tab) ? 0 : -1"
+                                class="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                :class="
+                                    tabActive(tab)
+                                        ? 'bg-surface-accent font-semibold text-primary'
+                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                "
+                                @click="emit('update', { status: tab })"
                             >
+                                {{ t(`inbox.tabs.${tab ?? 'all'}`) }}
+                                <span
+                                    v-if="tabCount(tab)"
+                                    class="tabular-nums"
+                                    :class="tabActive(tab) ? 'text-primary/80' : 'text-muted-foreground/80'"
+                                    >{{ tabCount(tab) }}</span
+                                >
+                            </button>
+                        </div>
+                        <!-- Control room S3 (G8): oldest waiting first, waiting chats only. -->
+                        <button
+                            type="button"
+                            class="inline-flex h-8 shrink-0 items-center rounded-full border px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            :class="
+                                filters.sort === 'oldest_waiting'
+                                    ? 'border-primary bg-surface-accent font-semibold text-primary'
+                                    : 'border-border text-muted-foreground hover:bg-elevated'
+                            "
+                            :aria-pressed="filters.sort === 'oldest_waiting'"
+                            :aria-label="`${t('inbox.sort.label')}: ${t('inbox.sort.oldest_waiting')}`"
+                            data-sort-oldest-waiting
+                            @click="emit('update', { sort: filters.sort === 'oldest_waiting' ? null : 'oldest_waiting' })"
+                        >
+                            {{ t('inbox.sort.oldest_waiting') }}
                         </button>
                     </div>
                 </template>

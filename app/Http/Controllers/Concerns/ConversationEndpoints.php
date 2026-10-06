@@ -545,7 +545,7 @@ trait ConversationEndpoints
     {
         $user = $request->user();
         $params = $this->conversationFilters($request);
-        unset($params['status'], $params['queue'], $params['qmode']);
+        unset($params['status'], $params['queue'], $params['qmode'], $params['sort']);
         ksort($params);
 
         $counts = Cache::remember(
@@ -612,6 +612,7 @@ trait ConversationEndpoints
             'q' => ['nullable', 'string', 'max:100'],
             'qmode' => ['nullable', Rule::in(['like'])],
             'tag' => ['nullable', 'integer', 'exists:tags,id'],
+            'sort' => ['nullable', Rule::in(ConversationQuery::SORTS)],
         ]);
 
         $flags = ConversationQuery::flagsOf(['flags' => $data['flags'] ?? null, 'filter' => $data['filter'] ?? null]);
