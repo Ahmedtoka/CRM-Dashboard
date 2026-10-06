@@ -10,6 +10,7 @@ use App\Models\AdsAlert;
 use App\Models\AdWriteAction;
 use App\Models\MediaBuyer;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Tests\Support\AlertWorld as W;
 
 beforeEach(fn () => W::freeze());
@@ -141,9 +142,9 @@ it('reads the account buyer once per evaluation, not once per new alert', functi
     $ads = [W::ad($acc), W::ad($acc), W::ad($acc)];
     $store = app(AlertStore::class);
 
-    \Illuminate\Support\Facades\DB::enableQueryLog();
+    DB::enableQueryLog();
     $store->sync($acc->id, [stRule()], array_map(fn (Ad $ad) => stFinding($ad), $ads), array_map(fn (Ad $ad) => $ad->id, $ads), W::freeze());
-    $reads = collect(\Illuminate\Support\Facades\DB::getQueryLog())->filter(fn (array $q) => str_contains($q['query'], 'from "ad_accounts"'))->count();
+    $reads = collect(DB::getQueryLog())->filter(fn (array $q) => str_contains($q['query'], 'from "ad_accounts"'))->count();
 
     expect(AdsAlert::count())->toBe(3)->and($reads)->toBe(1)
         ->and(AdsAlert::query()->distinct()->pluck('buyer_id')->filter()->count())->toBe(1);

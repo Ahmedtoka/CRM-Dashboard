@@ -1,8 +1,8 @@
 <?php
 
 use App\Ads\Alerts\RuleContext;
-use App\Ads\Alerts\RuleSettings;
 use App\Ads\Alerts\Rules\SalesBelowBreakeven;
+use App\Ads\Alerts\RuleSettings;
 use Tests\Support\AlertWorld as W;
 
 beforeEach(fn () => W::freeze());

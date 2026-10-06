@@ -1,8 +1,8 @@
 <?php
 
 use App\Ads\Alerts\RuleContext;
-use App\Ads\Alerts\RuleSettings;
 use App\Ads\Alerts\Rules\ScaleWinner;
+use App\Ads\Alerts\RuleSettings;
 use App\Models\AdsAlert;
 use Tests\Support\AlertWorld as W;
 

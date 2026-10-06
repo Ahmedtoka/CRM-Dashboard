@@ -9,8 +9,12 @@ use App\Ads\Alerts\Rules\ProductUnavailable;
 use App\Ads\Alerts\Rules\ReactivateRestocked;
 use App\Ads\Alerts\Rules\SpendNoResult;
 use App\Ads\Alerts\Rules\SpendSpikeToday;
+use App\Ads\Alerts\RuleSettings;
+use App\Models\AdAccount;
 use App\Models\AdsAlert;
 use App\Models\AdsSyncRun;
+use App\Models\Message;
+use Carbon\CarbonImmutable;
 use Tests\Support\AlertWorld as W;
 
 beforeEach(fn () => W::freeze());
@@ -99,17 +103,17 @@ it('judges a non-EGP account on facts only, with no money at risk (EGP rules)', 
         ->and(AdsAlert::sole()->evidence['currency'])->toBe('USD');
 });
 
-function engSlowInbox(int $replyAfter): \App\Models\AdAccount
+function engSlowInbox(int $replyAfter): AdAccount
 {
-    app(\App\Ads\Alerts\RuleSettings::class)->saveInputs(W::authority(), null, ['target_cpo' => 300]);
+    app(RuleSettings::class)->saveInputs(W::authority(), null, ['target_cpo' => 300]);
     $acc = W::account();
     $ad = W::ad($acc, 'MESSAGES');
     W::spendDays($ad, 14, 80, -3);
     W::fakeChats([$ad->id => ['chats' => 20, 'orders' => 0]]);
     foreach (range(1, 20) as $i) {
         $r = W::referral($ad, W::day(-10).' 12:00');
-        \App\Models\Message::factory()->create(['conversation_id' => $r->conversation_id, 'direction' => 'out', 'sender_type' => 'user',
-            'created_at' => \Carbon\CarbonImmutable::parse(W::day(-10).' 12:00', 'Africa/Cairo')->addMinutes($replyAfter)->utc()]);
+        Message::factory()->create(['conversation_id' => $r->conversation_id, 'direction' => 'out', 'sender_type' => 'user',
+            'created_at' => CarbonImmutable::parse(W::day(-10).' 12:00', 'Africa/Cairo')->addMinutes($replyAfter)->utc()]);
     }
 
     return $acc;

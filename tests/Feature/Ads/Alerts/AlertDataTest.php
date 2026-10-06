@@ -1,6 +1,7 @@
 <?php
 
 use App\Ads\Alerts\AlertData;
+use App\Ads\Alerts\BreakEven;
 use App\Models\AdAccountDaily;
 use App\Models\AdsSyncRun;
 use App\Models\Message;
@@ -103,6 +104,6 @@ it('treats a failed delivery attempt as still on the way, not refused (courier r
     W::order($ad, W::day(-3).' 12:00', 900, ['shipment_status' => 'failed_attempt']);
     W::order($ad, W::day(-3).' 12:00', 900, ['shipment_status' => 'delivered']);
 
-    expect(\App\Ads\Alerts\BreakEven::REFUSED)->toBe(['returned'])
+    expect(BreakEven::REFUSED)->toBe(['returned'])
         ->and(app(AlertData::class)->shipmentOutcomes([$ad->id], W::day(-30), W::day(-1)))->toBe([$ad->id => ['terminal' => 2, 'refused' => 1]]);
 });
