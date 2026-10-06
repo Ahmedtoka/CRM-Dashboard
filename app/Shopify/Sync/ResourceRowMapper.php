@@ -2,6 +2,7 @@
 
 namespace App\Shopify\Sync;
 
+use App\Models\Order;
 use App\Shopify\Sync\Mappers\CustomerMapper;
 use App\Shopify\Sync\Mappers\MapResult;
 use App\Shopify\Sync\Mappers\OrderMapper;
@@ -74,6 +75,12 @@ final class ResourceRowMapper
     {
         $this->lastOrderChildrenApplied = false;
         $result = $this->orders->upsert($row);
+
+        // F3: an order skipped as older than the data floor has no local row for its fulfillments/refunds.
+        if ($result === MapResult::Skipped && $this->orders->beforeFloor($row)
+            && ! Order::where('shopify_order_id', Payload::id($row['id']))->exists()) {
+            return $result;
+        }
 
         foreach (Payload::list($row['fulfillments'] ?? []) as $fulfillment) {
             if (is_string($fulfillment['id'] ?? null)

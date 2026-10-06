@@ -18,6 +18,7 @@ use App\Models\ProductVariant;
 use App\Models\Refund;
 use App\Shopify\Customers\CustomerOrderFlags;
 use App\Shopify\Customers\PhoneNormalizer;
+use App\Support\DataFloor;
 use App\Support\SafeBroadcast;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
@@ -94,6 +95,12 @@ final class OrderMapper
         }
     }
 
+    /** True when the payload (REST or GraphQL) says the order was created before crm.data_floor. */
+    public function beforeFloor(array $order): bool
+    {
+        return DataFloor::isBefore($order['created_at'] ?? $order['createdAt'] ?? null);
+    }
+
     /** Webhooks skip any copy not strictly newer; a bulk import only skips older copies (StaleGuard::isOlder). */
     private function isStale(mixed $stored, ?string $incoming): bool
     {
@@ -124,6 +131,11 @@ final class OrderMapper
     {
         return DB::transaction(function () use ($o, $shopifyId) {
             $local = $this->findLocal($o, $shopifyId, lock: true);
+
+            // F3: an order created before the data floor is never imported (one already stored keeps syncing).
+            if ($local === null && $this->beforeFloor($o)) {
+                return MapResult::Skipped;
+            }
 
             if ($local !== null && $this->isStale($local->shopify_updated_at, $o['updated_at'] ?? null)) {
                 $this->stampSynced($local);
@@ -168,6 +180,9 @@ final class OrderMapper
         $f = Payload::isGraphql($fulfillment) ? $this->fulfillmentFromGraphql($fulfillment) : $fulfillment;
         $fulfillmentId = Payload::id($f['id'] ?? null) ?? throw new InvalidArgumentException('Shopify fulfillment payload has no id.');
         $order = $this->orderForChild($f['order_id'] ?? null);
+        if ($order === null) {
+            return MapResult::Skipped; // parent never imported (before the data floor, or not here yet)
+        }
         $this->stampSynced($order);
 
         $existing = Fulfillment::where('shopify_fulfillment_id', $fulfillmentId)->first();
@@ -209,6 +224,9 @@ final class OrderMapper
         }
 
         $order = $this->orderForChild($r['order_id'] ?? null);
+        if ($order === null) {
+            return MapResult::Skipped; // parent never imported (before the data floor, or not here yet)
+        }
         $this->stampSynced($order);
 
         Refund::create([
@@ -240,11 +258,19 @@ final class OrderMapper
      * A fulfillment/refund must name its order; `where(col, null)` would otherwise match any
      * local order not yet pushed to Shopify. Unknown orders throw so the job retries later.
      */
-    private function orderForChild(mixed $orderId): Order
+    private function orderForChild(mixed $orderId): ?Order
     {
         $id = Payload::id($orderId) ?? throw new InvalidArgumentException('Shopify payload has no order_id.');
 
-        return Order::where('shopify_order_id', $id)->firstOrFail();
+        return Order::where('shopify_order_id', $id)->first();
+    }
+
+    /** Whether the order a fulfillment/refund payload names is stored here. */
+    public function knowsOrder(mixed $orderId): bool
+    {
+        $id = Payload::id($orderId);
+
+        return $id !== null && Order::where('shopify_order_id', $id)->exists();
     }
 
     /**

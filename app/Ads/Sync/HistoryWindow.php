@@ -2,10 +2,12 @@
 
 namespace App\Ads\Sync;
 
+use App\Support\DataFloor;
 use Carbon\CarbonImmutable;
 
 /**
- * The first day the CRM keeps ads history for (`crm.ads.history_start`, Cairo calendar day).
+ * The first day the CRM keeps ads history for (Cairo calendar day): the later of `crm.data_floor` (F3) and the
+ * optional ads-only `crm.ads.history_start`.
  * No platform request may ask for an earlier date and no ads row older than it is written.
  */
 final class HistoryWindow
@@ -14,9 +16,14 @@ final class HistoryWindow
 
     public static function start(): CarbonImmutable
     {
-        $raw = (string) config('crm.ads.history_start', '2026-09-01');
+        $floor = DataFloor::start();
+        $raw = config('crm.ads.history_start');
+        if (! is_string($raw) || trim($raw) === '') {
+            return $floor;
+        }
+        $own = CarbonImmutable::parse($raw, self::TIMEZONE)->startOfDay();
 
-        return CarbonImmutable::parse($raw, self::TIMEZONE)->startOfDay();
+        return $own->greaterThan($floor) ? $own : $floor;
     }
 
     /** Dates are Y-m-d strings: true when the day is before the history start. */
