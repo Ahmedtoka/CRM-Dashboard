@@ -1010,3 +1010,12 @@ export interface LaunchAnswer {
     message: string;
     launch: LaunchRow;
 }
+export interface AdsLaunchesProps {
+    box: 'mine' | 'review' | 'live' | 'all';
+    filters: { material: number | null; launch: string | null; stop: boolean };
+    launches: LaravelPage<LaunchRow>;
+    counts: { mine: number; review: number; live: number };
+    canReview: boolean;
+    canToggleSlots: boolean;
+    reasons: string[];
+}
