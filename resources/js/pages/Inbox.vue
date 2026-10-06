@@ -9,6 +9,7 @@ import InlineError from '@/components/crm/InlineError.vue';
 import MyWindowsStrip from '@/components/crm/queue/MyWindowsStrip.vue';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { INBOX_OUTCOME, useConversationContext } from '@/composables/inbox/useConversationContext';
 import { useConversationList } from '@/composables/inbox/useConversationList';
 import { useConversationThread } from '@/composables/inbox/useConversationThread';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
@@ -133,9 +134,19 @@ const list = useConversationList(props.conversations, props.filters, {
                 readTimer = window.setTimeout(() => thread.markRead(patch.id), 1000);
             }
         },
-        onOrder: (order) => thread.applyOrder(order),
+        onOrder: (order) => {
+            thread.applyOrder(order);
+            if (order.conversation_id === selectedId.value) void ctx.reload();
+        },
     },
 });
+
+// Control room S3: outcome state, bot digest and ad block for the open chat (web-only endpoint).
+const ctx = useConversationContext(selectedId);
+provide(
+    INBOX_OUTCOME,
+    computed(() => ctx.context.value?.outcome ?? null),
+);
 
 const {
     detail,
@@ -403,6 +414,8 @@ function onCaseUpdated(updated: SupportCase): void {
 }
 
 function onOrderCreated(order: Order): void {
+    // A new order (not an edit of an older one) locks the close menu to «اتعمل أوردر» at once.
+    if (editingOrder.value === null && order.conversation_id === selectedId.value) ctx.markOrdered();
     editingOrder.value = null;
     thread.onOrderCreated(order);
     if (order.type === 'payment_link' && order.invoice_url) {

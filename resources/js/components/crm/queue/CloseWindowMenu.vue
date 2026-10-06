@@ -9,13 +9,16 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import OutcomePicker from '@/components/crm/outcomes/OutcomePicker.vue';
+import { INBOX_OUTCOME } from '@/composables/inbox/useConversationContext';
 import { useI18n } from '@/composables/useI18n';
 import { useMyQueueContext } from '@/composables/useMyQueue';
 import { useToast } from '@/composables/useToast';
+import { outcomePayload, outcomeReady } from '@/lib/outcomes';
 import { cn } from '@/lib/utils';
-import type { ConversationQueueEntry, QueueCloseReason, SupportCaseType } from '@/types/crm';
+import type { AgentOutcome, ConversationQueueEntry, QueueCloseReason, SupportCaseType } from '@/types/crm';
 import { ArrowUpCircle, CheckCircle2, ChevronDown, CircleHelp, FolderPlus, LoaderCircle, Wrench, type LucideIcon } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 
 const props = defineProps<{
     entry: ConversationQueueEntry;
@@ -55,13 +58,32 @@ const canEscalate = computed(() => !forBot.value && (queue?.leaderUserId.value ?
 const working = computed(() => queue?.busy.value === `close-${props.entry.id}` || queue?.busy.value === `escalate-${props.entry.id}`);
 const blocked = computed(() => props.disabled || (queue?.busy.value ?? null) !== null);
 
+/* Control room S3 (D13): every close carries the chat outcome unless the server records it alone. */
+const outcomeState = inject(INBOX_OUTCOME, null);
+const auto = computed(() => outcomeState?.value?.auto ?? null);
+const picked = ref<AgentOutcome | null>(null);
+const note = ref('');
+const picker = ref<InstanceType<typeof OutcomePicker> | null>(null);
+const ready = computed(() => outcomeReady(picked.value, note.value, auto.value));
+
+// A new window starts with no pick.
+watch(
+    () => props.entry.id,
+    () => {
+        picked.value = null;
+        note.value = '';
+    },
+);
+
 async function close(reason: QueueCloseReason, type: SupportCaseType | null = null): Promise<void> {
-    if (!queue || blocked.value) return;
+    if (!queue || blocked.value || !ready.value) return;
 
     const bot = forBot.value;
 
-    if (await queue.closeEntry(props.entry.id, reason, type)) {
+    if (await queue.closeEntry(props.entry.id, reason, type, outcomePayload(picked.value, note.value, auto.value))) {
         caseOpen.value = false;
+        picked.value = null;
+        note.value = '';
         if (bot) {
             toast.push(t('queue.close.bot_done', { ticket: ticket.value }));
             emit('closedForBot');
@@ -80,6 +102,27 @@ function pick(reason: QueueCloseReason): void {
     }
 
     void close(reason);
+}
+
+/** A reason item: refused (menu stays open, picker focused) until the outcome is set. */
+function onReason(event: Event, reason: QueueCloseReason): void {
+    if (!ready.value) {
+        event.preventDefault();
+        toast.push(t('outcomes.pick_first'), 'error');
+        picker.value?.focus();
+
+        return;
+    }
+    pick(reason);
+}
+
+/** Digits 1-4 pick an outcome only while the menu is open (before reka's typeahead sees them). */
+function onMenuKeydown(event: KeyboardEvent): void {
+    if (event.target instanceof HTMLInputElement) return;
+    if (picker.value?.handleKey(event.key)) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
 }
 
 async function escalate(): Promise<void> {
@@ -122,16 +165,17 @@ defineExpose({
             <span class="hidden sm:inline">{{ t('queue.close.button') }}</span>
             <ChevronDown class="size-3.5 opacity-80" aria-hidden="true" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" class="w-64">
+        <DropdownMenuContent align="end" class="w-72" @keydown.capture="onMenuKeydown">
             <DropdownMenuLabel class="text-xs">{{ forBot ? t('queue.close.bot_label') : t('queue.close.menu_label') }}</DropdownMenuLabel>
             <p v-if="ownerName" class="px-2 pb-1 text-2xs text-muted-foreground" dir="auto">{{ t('queue.close.not_mine', { name: ownerName }) }}</p>
+            <OutcomePicker ref="picker" v-model="picked" v-model:note="note" :auto="auto" />
             <DropdownMenuSeparator />
             <DropdownMenuItem
                 v-for="reason in reasons"
                 :key="reason.value"
                 class="items-start"
                 :data-reason="reason.value"
-                @select="pick(reason.value)"
+                @select="onReason($event, reason.value)"
             >
                 <component :is="reason.icon" class="mt-0.5 text-primary" aria-hidden="true" />
                 <span class="flex min-w-0 flex-col">
@@ -171,7 +215,7 @@ defineExpose({
                 </fieldset>
                 <DialogFooter class="gap-2">
                     <Button type="button" variant="ghost" :disabled="working" @click="caseOpen = false">{{ t('common.cancel') }}</Button>
-                    <Button type="submit" :loading="working" :disabled="blocked">
+                    <Button type="submit" :loading="working" :disabled="blocked || !ready">
                         <FolderPlus aria-hidden="true" />
                         {{ t('queue.close.case_confirm') }}
                     </Button>
