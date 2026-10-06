@@ -159,7 +159,7 @@ it('selects write_enabled on the campaigns page so can_write stays true for an a
     AdDailyMetric::factory()->create(['ad_id' => $ad->id, 'ad_account_id' => $acc->id, 'date' => now('Africa/Cairo')->subDay()->toDateString(), 'spend' => 200]);
     $admin = User::factory()->adsAuthority()->create(['role' => UserRole::Admin]);
 
-    $tree = $this->actingAs($admin)->get('/ads/campaigns')->assertOk()->viewData('page')['props']['tree'];
+    $tree = $this->actingAs($admin)->get('/ads/explorer?range=last30&view=tree')->assertOk()->viewData('page')['props']['tree'];
     expect($tree)->not->toBeEmpty()->and($tree[0]['can_write'])->toBeTrue();
 
     expect(app(AdWriteService::class)->canWriteMany($admin, [$acc->fresh()]))->toBe([$acc->id => true]);

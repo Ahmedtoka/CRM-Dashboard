@@ -3,13 +3,8 @@
 namespace App\Http\Controllers\Web\Ads;
 
 use App\Ads\Control\AdWriteService;
-use App\Ads\Control\StopAdvisor;
 use App\Ads\Control\Write\WriteActionService;
 use App\Ads\Control\Write\WriteDenied;
-use App\Ads\Control\WriteActionLog;
-use App\Ads\Reports\AdsFilter;
-use App\Ads\Reports\AdsOverview;
-use App\Http\Controllers\Concerns\BuildsAdsPages;
 use App\Http\Controllers\Controller;
 use App\Models\AdAccount;
 use App\Models\AdWriteAction;
@@ -17,42 +12,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
-use Inertia\Inertia;
-use Inertia\Response;
 
+/** The legacy one-shot Stop / Run endpoint. The old Actions page is «محتاج قرار» › السجل now (/ads/decisions?tab=log). */
 class ActionController extends Controller
 {
-    use BuildsAdsPages;
-
-    public const LOG_LIMIT = 100;
-
-    /** Days the suggestions look back. */
-    public const SUGGEST_DAYS = 14;
-
-    /** Stop suggestions first, then the action log; both scoped like every Ads report (buyers: their accounts). */
-    public function index(Request $request, StopAdvisor $advisor, AdWriteService $writer): Response
-    {
-        $user = $request->user();
-        $filter = AdsFilter::fromRequest($request, $user);
-        $filter = $filter->with(['from' => $filter->to->subDays(self::SUGGEST_DAYS - 1)]);
-
-        $found = $advisor->suggest($filter);
-        $accounts = AdAccount::query()->whereIn('id', array_unique(array_column($found, 'account_id')))->get(['id', 'is_active', 'write_enabled', 'platform', 'external_id']);
-        $can = $writer->canWriteMany($user, $accounts);
-        $suggestions = array_map(fn (array $s) => $s + ['can_write' => $can[$s['account_id']] ?? false], $found);
-
-        // One history table since B1: slice-1 rows were copied in (source=legacy). Proposals never shown.
-        $log = app(WriteActionLog::class)->rows($user, [], self::LOG_LIMIT);
-
-        return Inertia::render('Ads/Actions', [
-            'currency' => app(AdsOverview::class)->currency($filter),
-            ...$this->bannerProps($filter),
-            'days' => self::SUGGEST_DAYS,
-            'suggestions' => $suggestions,
-            'log' => $log,
-        ]);
-    }
-
     /**
      * The legacy Stop / Run endpoint (B5 shim): propose + confirm through the write pipeline in one request
      * (source=legacy), so every policy, Run-guard and Stop exemption applies. Keeps the slice-1 response shape

@@ -156,7 +156,7 @@ it('answers 422 with the readable message and records a failed action when the p
         ->and($ad->refresh()->status)->toBe('ACTIVE');
 
     // The Actions log shows Meta's own reason too.
-    $this->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p
+    $this->get('/ads/decisions?tab=log')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->where('log.0.error', __('ads.errors.permission_missing').' (Meta permission missing: ads_management)'));
 });
 
@@ -238,15 +238,18 @@ it('shows suggestions and the log on the actions page, scoped to the buyer', fun
     AdWriteAction::factory()->stop()->succeeded()->create(['proposed_by_id' => $admin->id, 'confirmed_by_id' => $admin->id, 'ad_account_id' => $mine->id, 'target_name' => 'Mine stopped']);
     AdWriteAction::factory()->stop()->succeeded()->create(['proposed_by_id' => $admin->id, 'confirmed_by_id' => $admin->id, 'ad_account_id' => $other->id, 'target_name' => 'Theirs stopped']);
 
-    $this->actingAs(actBuyer($mine))->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p
-        ->component('Ads/Actions')
-        ->has('suggestions', 1)->where('suggestions.0.name', 'My loser')->where('suggestions.0.can_write', true)
+    // S2: the Actions page is «محتاج قرار»: suggestions on the open tab, the log on the log tab.
+    $buyer = actBuyer($mine);
+    $this->actingAs($buyer)->get('/ads/decisions')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->component('Ads/Decisions', false)
+        ->has('suggestions', 1)->where('suggestions.0.name', 'My loser')->where('suggestions.0.can_write', true));
+    $this->actingAs($buyer)->get('/ads/decisions?tab=log')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->has('log', 1)->where('log.0.name', 'Mine stopped'));
 
-    $this->actingAs($admin)->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p
-        ->has('suggestions', 2)->has('log', 2));
+    $this->actingAs($admin)->get('/ads/decisions')->assertOk()->assertInertia(fn (Assert $p) => $p->has('suggestions', 2));
+    $this->actingAs($admin)->get('/ads/decisions?tab=log')->assertOk()->assertInertia(fn (Assert $p) => $p->has('log', 2));
 
-    $this->actingAs(User::factory()->create(['role' => UserRole::Content]))->get('/ads/actions')->assertRedirect('/ads/materials');
+    $this->actingAs(User::factory()->create(['role' => UserRole::Content]))->get('/ads/decisions?tab=log')->assertRedirect('/ads/materials');
 });
 
 it('keeps google accounts safe: no writer, refused and audited', function () {
@@ -360,11 +363,11 @@ it('flags ads whose campaign or ad set is paused on the creatives and campaign p
     actDay($free, $day);
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
-    $this->actingAs($admin)->get('/ads/creatives')->assertOk()->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/ads/explorer?range=last30&status=all')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->where('result.data', fn ($rows) => collect($rows)->firstWhere('id', $ad->id)['parent_paused'] === true
             && collect($rows)->firstWhere('id', $free->id)['parent_paused'] === false));
 
-    $this->actingAs($admin)->get('/ads/campaigns')->assertOk()->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/ads/explorer?range=last30&view=tree')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->where('tree', fn ($tree) => collect($tree)->flatMap(fn ($c) => $c['children'])->flatMap(fn ($s) => $s['children'])->firstWhere('id', $ad->id)['parent_paused'] === true));
 });
 
@@ -377,11 +380,11 @@ it('marks each campaign node and creative row with can_write for its account', f
     }
     $admin = User::factory()->adsAuthority()->create(['role' => UserRole::Admin]);
 
-    $page = $this->actingAs($admin)->get('/ads/creatives?status=all')->assertOk();
+    $page = $this->actingAs($admin)->get('/ads/explorer?range=last30&status=all')->assertOk();
     $rows = collect($page->viewData('page')['props']['result']['data'])->keyBy('account');
     expect($rows['On']['can_write'])->toBeTrue()->and($rows['Off']['can_write'])->toBeFalse();
 
-    $tree = collect($this->actingAs($admin)->get('/ads/campaigns')->assertOk()->viewData('page')['props']['tree']);
+    $tree = collect($this->actingAs($admin)->get('/ads/explorer?range=last30&view=tree')->assertOk()->viewData('page')['props']['tree']);
     $flat = [];
     $walk = function (array $nodes) use (&$walk, &$flat) {
         foreach ($nodes as $n) {
@@ -449,7 +452,7 @@ it('gives a buyer can_write only on ad nodes of the campaigns tree', function ()
     actDay($ad, CarbonImmutable::now(AdsFilter::TIMEZONE)->subDay()->toDateString());
     $buyer = actBuyer($acc);
 
-    $tree = $this->actingAs($buyer)->get('/ads/campaigns')->assertOk()->viewData('page')['props']['tree'];
+    $tree = $this->actingAs($buyer)->get('/ads/explorer?range=last30&view=tree')->assertOk()->viewData('page')['props']['tree'];
     $levels = [];
     $walk = function (array $nodes) use (&$walk, &$levels) {
         foreach ($nodes as $n) {
@@ -487,7 +490,7 @@ it('lists legacy-copied and pipeline actions in one log, newest first, scoped, w
     AdWriteAction::factory()->stop()->create($base + ['target_name' => 'Gone', 'state' => 'expired']);
     AdWriteAction::factory()->stop()->succeeded()->create(['proposed_by_id' => $admin->id, 'confirmed_by_id' => $admin->id, 'ad_account_id' => $other->id, 'target_name' => 'Not mine']);
 
-    $this->actingAs($buyer)->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($buyer)->get('/ads/decisions?tab=log')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->has('log', 4)
         ->where('log.0.name', 'Failed stop')->where('log.0.result', 'error')->where('log.0.error', __('ads.errors.permission_missing').' (raw)')
         ->where('log.0.to_status', 'PAUSED')
@@ -516,7 +519,7 @@ it('keeps the values of a confirm-time refusal: no :placeholder in the log or on
     $replay = $post()->assertStatus(422)->assertJsonPath('code', 'cap_exceeded')->assertJsonPath('errors.status.0', $expected);
     expect(WriteDenied::hasPlaceholder((string) $replay->json('errors.status.0')))->toBeFalse();
 
-    $this->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p->where('log.0.error', $expected));
+    $this->get('/ads/decisions?tab=log')->assertOk()->assertInertia(fn (Assert $p) => $p->where('log.0.error', $expected));
 });
 
 it('never shows a raw :placeholder for an older refusal stored without details, and reads level_not_allowed as Ads authority', function () {
@@ -526,7 +529,7 @@ it('never shows a raw :placeholder for an older refusal stored without details, 
     AdWriteAction::factory()->run()->create($base + ['target_name' => 'Old cap', 'error_code' => 'cap_exceeded', 'confirmed_at' => now()->subMinutes(2)]);
     AdWriteAction::factory()->run()->create($base + ['target_name' => 'Old level', 'error_code' => 'level_not_allowed', 'error_message' => 'level_not_allowed', 'confirmed_at' => now()->subMinute()]);
 
-    $this->actingAs($admin)->get('/ads/actions')->assertOk()->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/ads/decisions?tab=log')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->where('log.0.name', 'Old level')->where('log.0.error', __('ads.errors.ads_authority_required'))
         ->where('log.1.name', 'Old cap')->where('log.1.error', __('ads.errors.cap_exceeded_plain')));
     expect(WriteDenied::hasPlaceholder(__('ads.errors.cap_exceeded_plain')))->toBeFalse()

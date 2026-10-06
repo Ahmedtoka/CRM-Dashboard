@@ -2,6 +2,7 @@
 
 // CRM application routes (loaded with web + auth middleware in bootstrap/app.php).
 
+use App\Http\Controllers\Web\Ads\LegacyAdsRedirectController;
 use App\Http\Controllers\Web\BoardController;
 use App\Http\Controllers\Web\CaseController;
 use App\Http\Controllers\Web\CommentController;
@@ -170,7 +171,8 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::get('/reports/team', [ReportController::class, 'team'])->name('reports.team');
         Route::get('/reports/users/{user}', [ReportController::class, 'user'])->name('reports.users.show');
         Route::get('/reports/bot', [ReportController::class, 'bot'])->name('reports.bot');
-        Route::get('/reports/ads', [ReportController::class, 'ads'])->name('reports.ads');
+        // D11: merged into «الأرقام» (/ads/numbers?section=chat).
+        Route::get('/reports/ads', [LegacyAdsRedirectController::class, 'reportsAds'])->name('reports.ads');
         Route::get('/reports/activity', [ReportController::class, 'activity'])->name('reports.activity');
         Route::get('/reports/quick-replies', [ReportController::class, 'quickReplies'])->name('reports.quick-replies');
         Route::get('/reports/quick-replies/export', [ReportController::class, 'quickRepliesExport'])->name('reports.quick-replies.export');

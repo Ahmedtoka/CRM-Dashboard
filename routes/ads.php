@@ -6,11 +6,11 @@ use App\Http\Controllers\Web\Ads\AdDrawerController;
 use App\Http\Controllers\Web\Ads\AdStockController;
 use App\Http\Controllers\Web\Ads\BuyerController;
 use App\Http\Controllers\Web\Ads\BuyerSetupController;
-use App\Http\Controllers\Web\Ads\CampaignController;
 use App\Http\Controllers\Web\Ads\CaptionController;
 use App\Http\Controllers\Web\Ads\CreativeController;
 use App\Http\Controllers\Web\Ads\DecisionsController;
 use App\Http\Controllers\Web\Ads\ExplorerController;
+use App\Http\Controllers\Web\Ads\LegacyAdsRedirectController;
 use App\Http\Controllers\Web\Ads\MaterialCollectionController;
 use App\Http\Controllers\Web\Ads\MaterialController;
 use App\Http\Controllers\Web\Ads\NumbersController;
@@ -27,13 +27,14 @@ Route::middleware('ads:report')->group(function () {
     Route::get('/ads/decisions', DecisionsController::class)->name('ads.decisions');
     Route::get('/ads/explorer', ExplorerController::class)->name('ads.explorer');
     Route::get('/ads/numbers', NumbersController::class)->name('ads.numbers');
-    Route::get('/ads/buyers', [BuyerController::class, 'index'])->name('ads.buyers.index');
     Route::get('/ads/buyers/{buyer}', [BuyerController::class, 'show'])->name('ads.buyers.show');
-    Route::get('/ads/creatives', [CreativeController::class, 'index'])->name('ads.creatives.index');
     Route::get('/ads/creatives/{ad}', [CreativeController::class, 'show'])->name('ads.creatives.show');
-    Route::get('/ads/campaigns', CampaignController::class)->name('ads.campaigns');
-    Route::get('/ads/winners', [CreativeController::class, 'winners'])->name('ads.winners');
-    Route::get('/ads/actions', [ActionController::class, 'index'])->name('ads.actions');
+    // Old Ads Hub pages (bookmarks, notifications): redirect to the control-room page that replaced them, names kept.
+    Route::get('/ads/creatives', [LegacyAdsRedirectController::class, 'creatives'])->name('ads.creatives.index');
+    Route::get('/ads/winners', [LegacyAdsRedirectController::class, 'winners'])->name('ads.winners');
+    Route::get('/ads/campaigns', [LegacyAdsRedirectController::class, 'campaigns'])->name('ads.campaigns');
+    Route::get('/ads/actions', [LegacyAdsRedirectController::class, 'actions'])->name('ads.actions');
+    Route::get('/ads/buyers', [LegacyAdsRedirectController::class, 'buyers'])->name('ads.buyers.index');
     Route::get('/ads/ad/{ad}', AdDrawerController::class)->name('ads.ad.show');
     Route::post('/ads/actions/status', [ActionController::class, 'status'])->name('ads.actions.status');
 

@@ -270,7 +270,7 @@ it('shows can_write per account on campaigns, creatives and stop suggestions und
     $admin = User::factory()->adsAuthority()->create(['role' => UserRole::Admin]);
     Artisan::call('ads:writable', ['--set' => 'act_A']);
 
-    $rows = collect($this->actingAs($admin)->get('/ads/creatives?status=all')->assertOk()->viewData('page')['props']['result']['data'])->keyBy('account');
+    $rows = collect($this->actingAs($admin)->get('/ads/explorer?range=last30&status=all')->assertOk()->viewData('page')['props']['result']['data'])->keyBy('account');
     expect($rows['AccA']['can_write'])->toBeTrue()->and($rows['AccB']['can_write'])->toBeFalse();
 
     $flat = [];
@@ -280,10 +280,10 @@ it('shows can_write per account on campaigns, creatives and stop suggestions und
             $walk($n['children']);
         }
     };
-    $walk($this->actingAs($admin)->get('/ads/campaigns')->assertOk()->viewData('page')['props']['tree']);
+    $walk($this->actingAs($admin)->get('/ads/explorer?range=last30&view=tree')->assertOk()->viewData('page')['props']['tree']);
     expect(array_unique($flat['AccA']))->toBe([true])->and(array_unique($flat['AccB']))->toBe([false]);
 
-    $sug = collect($this->actingAs($admin)->get('/ads/actions')->assertOk()->viewData('page')['props']['suggestions'])->keyBy('name');
+    $sug = collect($this->actingAs($admin)->get('/ads/decisions')->assertOk()->viewData('page')['props']['suggestions'])->keyBy('name');
     expect($sug['Ad AccA']['can_write'])->toBeTrue()->and($sug['Ad AccB']['can_write'])->toBeFalse();
 });
 

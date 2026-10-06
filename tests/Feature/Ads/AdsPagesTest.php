@@ -63,29 +63,29 @@ it('renders every report page for an admin with the documented props', function 
         ->has('buyers', 1)->has('platforms', 3)
         ->has('sync.last_synced_at')->has('sync.errors')->has('top_accounts'));
 
-    $this->actingAs($admin)->get('/ads/buyers')->assertOk()->assertInertia(fn (Assert $p) => $p
-        ->component('Ads/Buyers')->has('filters')->has('cards'));
+    $this->actingAs($admin)->get('/ads/buyers')->assertRedirect('/ads/numbers?section=buyers');
 
     $this->actingAs($admin)->get('/ads/buyers/'.$buyer->id)->assertOk()->assertInertia(fn (Assert $p) => $p
         ->component('Ads/BuyerShow')->where('buyer.id', $buyer->id)->has('buyer.color')->has('detail'));
 
-    $this->actingAs($admin)->get('/ads/creatives?status=active&sort=roas&per_page=50&q=x')->assertOk()->assertInertia(fn (Assert $p) => $p
-        ->component('Ads/Creatives')
-        ->where('filters.status', 'active')->where('filters.sort', 'roas')->where('filters.per_page', 50)->where('filters.q', 'x')
-        ->has('filters.account')->has('filters.page')
+    $this->actingAs($admin)->get('/ads/explorer?status=running&sort=-roas&per_page=50&q=x')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->component('Ads/Explorer', false)
+        ->where('filters.status', 'running')->where('filters.sort', '-roas')->where('filters.per_page', 50)->where('filters.q', 'x')
+        ->has('filters.accounts')->has('filters.page')
         ->has('result.data')->has('result.meta.total')->has('result.counts.all'));
 
-    $this->actingAs($admin)->get('/ads/winners?from=2026-09-20&to=2026-09-22')->assertOk()->assertInertia(fn (Assert $p) => $p
-        ->component('Ads/Winners')
-        ->has('winners')->where('filters.status', 'all')->where('filters.sort', 'score')
-        ->where('window.to', '2026-09-22')->where('window.from', '2026-09-16')); // clamped to 7 days
+    $this->actingAs($admin)->get('/ads/explorer?view=cards&health=winning&from=2026-09-20&to=2026-09-22')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->component('Ads/Explorer', false)
+        ->has('result.data')->where('filters.view', 'cards')->where('filters.health', 'winning')->where('filters.sort', '-spend'));
+
+    $this->actingAs($admin)->get('/ads/decisions')->assertOk()->assertInertia(fn (Assert $p) => $p->component('Ads/Decisions', false));
 });
 
 it('lets a media buyer see the report pages but not the setup pages', function () {
     $w = adsPgBuyerWorld();
     $this->actingAs($w['user']);
 
-    foreach (['/ads', '/ads/buyers', '/ads/creatives', '/ads/winners'] as $url) {
+    foreach (['/ads', '/ads/numbers', '/ads/explorer', '/ads/explorer?view=cards', '/ads/explorer?view=tree', '/ads/decisions'] as $url) {
         $this->get($url)->assertOk();
     }
     $this->get('/ads/buyers/'.$w['buyer']->id)->assertOk();
@@ -459,20 +459,20 @@ it('never shows a media buyer another buyers numbers, ads or cards', function ()
         ->and($props['top_accounts'][0]['buyer'])->toBe('Own Buyer');
     expect($overview->viewData('page')['props']['top_accounts'])->toBe([]);
 
-    $creatives = $this->get("/ads/creatives?account={$foreign->id}&buyer={$w['other']->id}")->assertOk()->getContent();
+    $creatives = $this->get("/ads/explorer?range=last7&status=all&accounts={$foreign->id}&buyer={$w['other']->id}")->assertOk()->getContent();
     expect($creatives)->not->toContain('FOREIGN AD')->not->toContain('FOREIGN ACC');
-    $own = $this->get('/ads/creatives')->getContent();
+    $own = $this->get('/ads/explorer?range=last7&status=all')->getContent();
     expect($own)->toContain('MY AD')->not->toContain('FOREIGN AD');
 
-    $winners = $this->get("/ads/winners?buyer={$w['other']->id}")->assertOk()->getContent();
+    $winners = $this->get("/ads/explorer?view=cards&status=all&buyer={$w['other']->id}")->assertOk()->getContent();
     expect($winners)->not->toContain('FOREIGN AD');
 
-    $this->get('/ads/buyers')->assertInertia(fn (Assert $p) => $p
-        ->has('cards', 1)
-        ->where('cards.0.buyer_id', $w['buyer']->id)->where('cards.0.spend', 100));
+    $this->get('/ads/numbers?range=last7')->assertInertia(fn (Assert $p) => $p
+        ->has('buyers', 1)
+        ->where('buyers.0.buyer_id', $w['buyer']->id)->where('buyers.0.spend', 100));
 });
 
-it('keeps every account chip while one account is picked on the creatives page', function () {
+it('keeps every account chip while one account is picked on the explorer', function () {
     $admin = adsPgUser(UserRole::Admin);
     $a = AdAccount::factory()->meta()->create(['name' => 'Chip A']);
     $b = AdAccount::factory()->meta()->create(['name' => 'Chip B']);
@@ -480,10 +480,10 @@ it('keeps every account chip while one account is picked on the creatives page',
         AdDailyMetric::factory()->create(['ad_id' => Ad::factory()->for($acc, 'account')->create(['ad_campaign_id' => activeCampaignId($acc)])->id]);
     }
 
-    $this->actingAs($admin)->get("/ads/creatives?account={$a->id}")->assertOk()->assertInertia(fn (Assert $p) => $p
-        ->where('filters.account', $a->id)
+    $this->actingAs($admin)->get("/ads/explorer?range=last7&status=all&accounts={$a->id}")->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->where('filters.accounts', [$a->id])
         ->has('result.data', 1)->where('result.data.0.account_id', $a->id)
-        ->has('result.accounts', 2)
+        ->has('account_options', 2)
         ->has('buyers')->has('platforms', 3)->where('currency', 'EGP'));
 });
 
