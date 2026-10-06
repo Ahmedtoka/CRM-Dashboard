@@ -2,11 +2,12 @@
 
 namespace App\Ads\Decisions;
 
+use App\Ads\Launch\LaunchPolicy;
 use App\Models\User;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Launches waiting for this user's approval (S1). Only an admin or an Ads-authority holder approves (D3, D5).
+ * Launches waiting for this user's approval (S1). Only an Ads-authority holder approves (D3, D5; LaunchPolicy::canApprove).
  *
  * Adapter over S1, which is built on a parallel branch: until `App\Ads\Launch\LaunchCounters` and `App\Models\AdLaunch`
  * exist (the merge), every answer is 0 / [] so the Decisions approvals section and the badge stay quiet; after the merge
@@ -22,9 +23,10 @@ class PendingApprovals
 
     public const ITEMS = 20;
 
+    /** One definition (final review B-m7): LaunchPolicy::canApprove. */
     public function canApprove(User $u): bool
     {
-        return $u->isAdmin() || $u->hasAdsAuthority();
+        return LaunchPolicy::canApprove($u);
     }
 
     public function available(): bool

@@ -25,6 +25,9 @@ final class MaterialStatus
             $preLive => 'in_review',
             in_array('stopped', $states, true) => 'paused',
             $m->status === 'retired' || in_array('retired', $states, true) => 'retired',
+            // Was live once (final review B1): a remapped or owner-activated material, or one whose linked ads all
+            // stopped, is paused, never back to new.
+            $m->activated_at !== null || in_array($m->status, ['live', 'paused'], true) => 'paused',
             default => 'new',
         };
     }
@@ -41,6 +44,29 @@ final class MaterialStatus
         }
 
         return $status;
+    }
+
+    /**
+     * One pass over every material that may have drifted (final review B1): stored live / paused / new. Catches a
+     * live material with no linked ad left (the per-account sync pass never sees it). Run hourly by ads:launch-sweep;
+     * run once by hand after the status remap migration.
+     *
+     * @return int how many changed
+     */
+    public function refreshAll(): int
+    {
+        $changed = 0;
+        AdMaterial::query()->whereIn('status', ['live', 'paused', 'new'])->orderBy('id')
+            ->chunkById(200, function ($chunk) use (&$changed) {
+                foreach ($chunk as $m) {
+                    $before = $m->status;
+                    if ($this->refresh($m) !== $before) {
+                        $changed++;
+                    }
+                }
+            });
+
+        return $changed;
     }
 
     /** LaunchMoved listener. */

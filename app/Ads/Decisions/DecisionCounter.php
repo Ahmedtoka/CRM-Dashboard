@@ -4,6 +4,9 @@ namespace App\Ads\Decisions;
 
 use App\Ads\Alerts\AlertFeed;
 use App\Ads\Control\StopAdvisor;
+use App\Ads\Launch\LaunchMoved;
+use App\Ads\Launch\LaunchPolicy;
+use App\Ads\Launch\LaunchState;
 use App\Ads\Reports\AdsFilter;
 use App\Enums\UserRole;
 use App\Models\User;
@@ -95,6 +98,21 @@ class DecisionCounter
     public static function forget(User $u): void
     {
         Cache::forget(self::key($u));
+    }
+
+    /**
+     * LaunchMoved listener (final review B-m8): a launch entering or leaving awaiting_approval changes every approver's
+     * count, so their cached number is dropped (the next Decisions / Today visit or the hourly run writes it again).
+     */
+    public static function onLaunchMoved(LaunchMoved $e): void
+    {
+        $awaiting = LaunchState::AwaitingApproval;
+        if ($e->from === $e->to || ($e->to !== $awaiting && $e->from !== $awaiting)) {
+            return;
+        }
+        User::query()->where('ads_authority', true)->where('is_active', true)->get()
+            ->filter(fn (User $u) => LaunchPolicy::canApprove($u))
+            ->each(fn (User $u) => self::forget($u));
     }
 
     private static function key(User $u): string

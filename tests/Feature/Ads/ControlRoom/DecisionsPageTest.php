@@ -110,3 +110,22 @@ it('lists every log user while the log is filtered to one of them (review M4)', 
     $this->actingAs(crAdmin())->get("/ads/decisions?tab=log&who={$a->id}")->assertInertia(fn (Assert $p) => $p
         ->has('log', 1)->where('log.0.user_id', $a->id)->has('log_users', 2));
 });
+
+it('final review B-m7: an admin without Ads authority is not an approver (one definition: LaunchPolicy)', function () {
+    $admin = crUser(UserRole::Admin);
+    expect(app(PendingApprovals::class)->canApprove($admin))->toBe(\App\Ads\Launch\LaunchPolicy::canApprove($admin))->toBeFalse();
+});
+
+it('final review B-m8: a launch entering awaiting_approval drops the cached count of every approver', function () {
+    $holder = crAdmin();
+    $other = crUser(UserRole::Supervisor);
+    \App\Ads\Decisions\DecisionCounter::store($holder, 4);
+    \App\Ads\Decisions\DecisionCounter::store($other, 2);
+    $l = new \App\Models\AdLaunch;
+
+    event(new \App\Ads\Launch\LaunchMoved($l, \App\Ads\Launch\LaunchState::BuyerReview, \App\Ads\Launch\LaunchState::Live));
+    expect(\App\Ads\Decisions\DecisionCounter::cached($holder))->toBe(4);
+
+    event(new \App\Ads\Launch\LaunchMoved($l, \App\Ads\Launch\LaunchState::BuyerReview, \App\Ads\Launch\LaunchState::AwaitingApproval));
+    expect(\App\Ads\Decisions\DecisionCounter::cached($holder))->toBeNull()->and(\App\Ads\Decisions\DecisionCounter::cached($other))->toBe(2);
+});

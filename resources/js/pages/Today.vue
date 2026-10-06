@@ -68,7 +68,7 @@ const freshness = computed(() => oldestStamp([props.generated_at, props.cards_ge
                 </template>
                 <div v-if="c" class="grid gap-3 md:grid-cols-2 [&>*]:min-w-0">
                     <TodayCard :title="t('today.cards.chats')" :rows="chatsRows(c.chats, t, locale)" />
-                    <TodayCard :title="t('today.cards.orders')" :rows="ordersRows(c.orders, t, locale)" />
+                    <TodayCard :title="t('today.cards.orders')" :hint="t('today.cards.orders_hint')" :rows="ordersRows(c.orders, t, locale)" data-today-orders-hint />
                     <TodayCard
                         :title="t('today.cards.ads')"
                         :hint="mode === 'today' ? t('today.cards.ads_window_today') : t('today.cards.ads_window_yesterday')"

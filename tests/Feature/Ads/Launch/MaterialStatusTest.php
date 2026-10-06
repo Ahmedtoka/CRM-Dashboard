@@ -87,3 +87,35 @@ it('has no manual status route any more', function () {
 
     $this->actingAs($w['buyerUser'])->post("/ads/materials/{$w['material']->id}/status", ['status' => 'activated'])->assertNotFound();
 });
+
+it('final review B1: a material that was live once falls back to paused, never new', function () {
+    $w = LaunchWorld::make();
+    $m = $w['material'];
+    $m->forceFill(['status' => 'live', 'activated_at' => null])->save(); // remapped from activated, no linked ad
+    expect(MaterialStatus::derive($m->fresh()))->toBe('paused');
+
+    $m->forceFill(['status' => 'new', 'activated_at' => now()->subDay()])->save(); // owner-activated once
+    expect(MaterialStatus::derive($m->fresh()))->toBe('paused');
+});
+
+it('final review B1: the sweep pass moves a live material with no running ad to paused', function () {
+    $w = LaunchWorld::make();
+    $live = $w['material'];
+    $live->forceFill(['status' => 'live', 'activated_at' => now()->subWeek()])->save();
+    $fresh = AdMaterial::factory()->create(['status' => 'new']);
+
+    $this->artisan('ads:launch-sweep')->assertSuccessful();
+
+    expect($live->fresh()->status)->toBe('paused')->and($fresh->fresh()->status)->toBe('new');
+});
+
+it('final review B-m5: the remap migration sets the status default to new, and down restores it', function () {
+    $migration = require database_path('migrations/2026_10_08_100050_remap_ad_material_statuses.php');
+    $default = fn () => trim((string) collect(\Illuminate\Support\Facades\Schema::getColumns('ad_materials'))->firstWhere('name', 'status')['default'], "'\"");
+
+    $migration->up();
+    expect($default())->toBe('new');
+    $migration->down();
+    expect($default())->toBe('not_started');
+    $migration->up();
+});

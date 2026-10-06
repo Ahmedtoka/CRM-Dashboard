@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -14,11 +15,21 @@ return new class extends Migration
     public function up(): void
     {
         $this->remap(self::UP);
+        $this->defaultTo('new'); // final review B-m5: a new row starts as a derived value
     }
 
     public function down(): void
     {
         $this->remap(self::DOWN);
+        $this->defaultTo('not_started');
+    }
+
+    private function defaultTo(string $value): void
+    {
+        if (! Schema::hasTable('ad_materials') || ! Schema::hasColumn('ad_materials', 'status')) {
+            return;
+        }
+        Schema::table('ad_materials', fn (Blueprint $table) => $table->string('status', 20)->default($value)->change());
     }
 
     /** @param  array<string, string>  $map */

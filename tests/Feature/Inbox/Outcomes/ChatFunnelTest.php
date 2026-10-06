@@ -92,3 +92,24 @@ it('counts a delivered-then-returned order as returned only', function () {
 
     expect($row['orders'])->toBe(2)->and($row['delivered'])->toBe(1)->and($row['returned'])->toBe(1);
 });
+
+it('final review B2: page totals count a multi-touch chat once and a customer-matched order once', function () {
+    $a = Ad::factory()->create();
+    $b = Ad::factory()->for($a->account, 'account')->create();
+    $c = s3Touch($a, ['handover_at' => now()->subDays(2)->addHours(3)]);
+    DB::table('conversation_ad_referrals')->insert(['conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'ad_external_id' => $b->external_id, 'referred_at' => now()->subDays(2)->addHour()]);
+    // a second chat of the same customer, touched by b too
+    $c2 = Conversation::factory()->create(['customer_id' => $c->customer_id]);
+    DB::table('conversation_ad_referrals')->insert(['conversation_id' => $c2->id, 'customer_id' => $c->customer_id, 'ad_external_id' => $b->external_id, 'referred_at' => now()->subDays(2)->addHours(2)]);
+    Order::factory()->create(['conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'status' => 'confirmed', 'placed_at' => now()->subDay(), 'delivered_at' => now()]);
+    s3Outcome($c2, 'price');
+
+    $range = [CarbonImmutable::now()->subDays(7), CarbonImmutable::now()];
+    $perAd = app(ChatFunnel::class)->forAds([$a->id, $b->id], ...$range);
+    expect(ChatFunnel::total($perAd)['orders'])->toBe(3); // per-ad rows still credit each ad
+
+    $filter = new \App\Ads\Reports\AdsFilter(CarbonImmutable::now()->subDays(7), CarbonImmutable::now(), accountIds: [$a->ad_account_id]);
+    expect(app(ChatFunnel::class)->forFilter($filter))->toBe([
+        'chats' => 2, 'to_agent' => 1, 'orders' => 1, 'delivered' => 1, 'returned' => 0, 'reasons' => ['price' => 1],
+    ]);
+});

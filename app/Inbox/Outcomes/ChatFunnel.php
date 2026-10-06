@@ -64,7 +64,63 @@ final class ChatFunnel
                 ->where(fn ($w) => $w->whereNull('a.ends_on')->orWhere('a.ends_on', '>=', $f->fromDate())));
         }
 
-        return self::total($this->byExternal($externals, $f->startUtc(), $f->endUtc()));
+        return $this->distinctTotals($externals, $f->startUtc(), $f->endUtc());
+    }
+
+    /**
+     * Page totals (final review B2): a conversation touched by several ads is one chat (its earliest touch in range),
+     * and an order is credited once however many touched conversations of the customer precede it. The per-ad rows
+     * (forAds) still credit each ad on its own.
+     *
+     * @param  list<string>|Builder  $externals
+     * @return array{chats:int, to_agent:int, orders:int, delivered:int, returned:int, reasons: array<string,int>}
+     */
+    private function distinctTotals(array|Builder $externals, CarbonInterface $from, CarbonInterface $to): array
+    {
+        if (is_array($externals) && $externals === []) {
+            return self::empty();
+        }
+        $f = CarbonImmutable::instance($from)->utc()->format('Y-m-d H:i:s');
+        $t = CarbonImmutable::instance($to)->utc()->format('Y-m-d H:i:s');
+        // One row per real conversation: its earliest touch by any ad of the filter.
+        $conv = fn () => DB::query()->fromSub($this->touches($externals, $f, $t), 'u')
+            ->join('conversations as cc', 'cc.id', '=', 'u.cid')->where('cc.is_test', false)
+            ->groupBy('u.cid')->selectRaw('u.cid as cid, MIN(u.touched_at) as touched_at');
+
+        $chats = DB::query()->fromSub($conv(), 't')->join('conversations as c', 'c.id', '=', 't.cid')
+            ->selectRaw('COUNT(*) as chats')
+            ->selectRaw('SUM(CASE WHEN (c.handover_at > t.touched_at AND c.handover_at <= ?) OR EXISTS (SELECT 1 FROM queue_entries qe WHERE qe.conversation_id = c.id AND qe.enqueued_at > t.touched_at AND qe.enqueued_at <= ?) THEN 1 ELSE 0 END) as to_agent', [$t, $t])
+            ->first();
+
+        // Each real order once: placed after a touch of its own conversation, or of a conversation of the same customer.
+        $at = 'COALESCE(o.placed_at, o.created_at)';
+        $after = fn (string $match) => fn ($q) => $q->selectRaw('1')->fromSub($conv(), 't')->join('conversations as c', 'c.id', '=', 't.cid')
+            ->whereRaw($match)->whereRaw("{$at} > t.touched_at");
+        $returned = AdsQuery::RETURNED_SHIPMENT;
+        $orders = DB::table('orders as o')
+            ->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)
+            ->whereRaw("{$at} <= ?", [$t])
+            ->where(fn ($w) => $w->whereExists($after('o.conversation_id = c.id'))
+                ->orWhereExists($after('c.customer_id IS NOT NULL AND o.customer_id = c.customer_id')))
+            ->selectRaw('COUNT(*) as orders')
+            ->selectRaw('SUM(CASE WHEN (o.delivered_at IS NOT NULL OR o.shipment_status = ?) AND (o.shipment_status IS NULL OR o.shipment_status <> ?) THEN 1 ELSE 0 END) as delivered', [ShipmentStatus::Delivered->value, $returned])
+            ->selectRaw('SUM(CASE WHEN o.shipment_status = ? THEN 1 ELSE 0 END) as returned', [$returned])
+            ->first();
+
+        $reasons = DB::query()->fromSub($conv(), 't')
+            ->join('conversation_outcomes as co', 'co.conversation_id', '=', 't.cid')
+            ->whereColumn('co.ended_at', '>', 't.touched_at')
+            ->where('co.ended_at', '<=', $t)
+            ->whereIn('co.outcome', Outcome::lostValues())
+            ->groupBy('co.outcome')
+            ->selectRaw('co.outcome as outcome, COUNT(DISTINCT t.cid) as n')
+            ->pluck('n', 'outcome')->map(fn ($n) => (int) $n)->all();
+        arsort($reasons);
+
+        return [
+            'chats' => (int) ($chats->chats ?? 0), 'to_agent' => (int) ($chats->to_agent ?? 0), 'orders' => (int) ($orders->orders ?? 0),
+            'delivered' => (int) ($orders->delivered ?? 0), 'returned' => (int) ($orders->returned ?? 0), 'reasons' => $reasons,
+        ];
     }
 
     /** @return array{chats:int, to_agent:int, orders:int, delivered:int, returned:int, reasons: array<string,int>} */

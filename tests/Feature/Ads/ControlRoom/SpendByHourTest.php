@@ -73,3 +73,12 @@ it('keeps 30 days of snapshots: record and ads:prune-history drop older rows (re
     $this->artisan('ads:prune-history', ['--force' => true, '--before' => '2026-09-01'])->assertSuccessful();
     expect(AdSpendSnapshot::where('date', '<', '2026-09-06')->count())->toBe(0)->and(AdSpendSnapshot::count())->toBe(2);
 });
+
+it('final review B-m10: skips an account that reports on another timezone day, keeps a Cairo or unset one', function () {
+    $la = AdAccount::factory()->meta()->create(['timezone' => 'America/Los_Angeles']);
+    $unset = AdAccount::factory()->meta()->create(['timezone' => null]);
+    app(SpendSnapshots::class)->record($la, [new AccountDailyTotal('2026-10-06', 300, 1, 0, 0)]);
+    app(SpendSnapshots::class)->record($unset, [new AccountDailyTotal('2026-10-06', 50, 1, 0, 0)]);
+
+    expect(AdSpendSnapshot::pluck('ad_account_id')->all())->toBe([$unset->id]);
+});

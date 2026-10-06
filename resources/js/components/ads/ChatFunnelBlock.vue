@@ -55,13 +55,14 @@ const reasons = computed(() => {
         <template v-else>
             <ol class="grid grid-cols-2 gap-2 sm:grid-cols-5">
                 <li v-for="s in stages" :key="s.key" class="rounded-md bg-muted/60 px-2 py-1.5" :data-funnel-stage="s.key">
-                    <p class="text-2xs text-muted-foreground">{{ t(`ads.funnel.${s.key}`) }}</p>
+                    <p class="text-2xs text-muted-foreground" :title="s.key === 'orders' ? t('ads.funnel.real_orders') : undefined">{{ t(`ads.funnel.${s.key}`) }}</p>
                     <p class="text-sm font-semibold tabular-nums">
                         {{ formatCount(s.value, locale) }}
                         <span v-if="s.share !== null" class="text-2xs font-normal text-muted-foreground">({{ formatPct(s.share, locale, 0) }})</span>
                     </p>
                 </li>
             </ol>
+            <p class="text-2xs text-muted-foreground" data-funnel-real-note>{{ t('ads.funnel.real_orders') }}</p>
             <div>
                 <p class="mb-1 text-xs font-medium">{{ t('ads.funnel.why') }}</p>
                 <p v-if="!reasons.length" class="text-xs text-muted-foreground">{{ t('ads.funnel.no_reasons') }}</p>
