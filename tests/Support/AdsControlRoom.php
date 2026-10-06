@@ -24,7 +24,7 @@ function crSetup($test): void
         'crm.ads.history_start' => '2026-09-01',
     ]);
     $test->travelTo(CarbonImmutable::parse('2026-10-06 15:30', 'Africa/Cairo'));
-    $test->withoutVite();
+    (fn () => $this->withoutVite())->call($test); // protected on TestCase
 }
 
 function crUser(UserRole $role, bool $authority = false): User
