@@ -55,3 +55,12 @@ it('wakes snoozed alerts before building the 09:00 digest', function () {
 
     expect($snoozed->fresh()->state)->toBe('open');
 });
+
+it('skips the hourly run at 08:30 when the daily run covers every rule', function () {
+    $hourly = asEvent('ads:alerts --scope=hourly');
+
+    W::freeze('2026-10-06 08:30:00');
+    expect($hourly->filtersPass(app()))->toBeFalse();
+    W::freeze('2026-10-06 09:30:00');
+    expect($hourly->filtersPass(app()))->toBeTrue();
+});

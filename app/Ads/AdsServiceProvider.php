@@ -96,7 +96,9 @@ class AdsServiceProvider extends ServiceProvider
 
             // Decisions feed (S5): hourly facts after the :10 sync, everything at 08:30 after the 03:15 deep sync, digest at 09:00.
             $schedule->command(EvaluateAlertsCommand::class, ['--scope=hourly'])
-                ->hourlyAt(30)->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
+                ->hourlyAt(30)->timezone('Africa/Cairo')
+                ->skip(fn () => now('Africa/Cairo')->hour === 8) // 08:30 = the daily run, which includes every hourly rule
+                ->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
             $schedule->command(EvaluateAlertsCommand::class, ['--scope=daily'])
                 ->dailyAt('08:30')->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
             $schedule->command(AlertsDigestCommand::class)
