@@ -102,11 +102,11 @@ async function copyId(): Promise<void> {
             :parent-paused="row.parent_paused"
             @done="emit('done', $event)"
         />
-        <button type="button" data-test="why" class="h-7 whitespace-nowrap rounded-md px-2 text-2xs text-primary hover:bg-muted" @click="emit('open', row.id)">
+        <button type="button" data-test="why" class="h-11 whitespace-nowrap rounded-md px-3 text-xs text-primary hover:bg-muted md:h-7 md:px-2 md:text-2xs" @click="emit('open', row.id)">
             {{ t('ads.control.row.why') }}
         </button>
         <DropdownMenu>
-            <DropdownMenuTrigger class="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted" :aria-label="t('ads.control.row.more')">
+            <DropdownMenuTrigger class="inline-flex size-11 items-center justify-center rounded-md hover:bg-muted md:size-7" :aria-label="t('ads.control.row.more')">
                 <MoreHorizontal class="size-4" aria-hidden="true" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

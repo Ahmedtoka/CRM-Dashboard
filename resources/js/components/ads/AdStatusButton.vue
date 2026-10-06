@@ -48,7 +48,8 @@ function done(status: 'active' | 'paused'): void {
             type="button"
             class="inline-flex shrink-0 items-center gap-1 rounded-md border font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
             :class="[
-                size === 'md' ? 'h-11 px-4 text-sm' : 'h-7 px-2 text-2xs',
+                // sm is compact on desktop only: phones always get a 44 px target (Stop always reachable).
+                size === 'md' ? 'h-11 px-4 text-sm' : 'h-11 px-3 text-xs md:h-7 md:px-2 md:text-2xs',
                 stopping ? 'border-destructive/40 text-destructive hover:bg-destructive/10' : 'border-border text-foreground hover:bg-muted',
             ]"
             :aria-label="t(stopping ? 'ads.actions.stop_aria' : 'ads.actions.run_aria', { name })"
