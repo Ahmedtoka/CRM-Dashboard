@@ -44,12 +44,22 @@ final class ShopifyWebhookProcessor
             'customers/create', 'customers/update' => $this->customers->upsert($payload),
             'orders/create', 'orders/updated', 'orders/paid' => $this->routeOrderUpsert($payload),
             'orders/cancelled' => $this->routeOrderCancelled($payload),
-            'fulfillments/create', 'fulfillments/update' => $this->orders->applyFulfillment($payload),
-            'refunds/create' => $this->orders->applyRefund($payload),
+            'fulfillments/create', 'fulfillments/update' => $this->requireParent($payload) && $this->orders->applyFulfillment($payload),
+            'refunds/create' => $this->requireParent($payload) && $this->orders->applyRefund($payload),
             'draft_orders/update' => $this->routeDraftOrderUpdate($payload),
             'app/uninstalled' => $this->handleUninstalled(),
             default => null,
         };
+    }
+
+    /** @throws ParentOrderMissing when the payload's order is not stored here */
+    private function requireParent(array $payload): bool
+    {
+        if (! $this->orders->knowsOrder($payload['order_id'] ?? null)) {
+            throw new ParentOrderMissing('Shopify order '.($payload['order_id'] ?? '?').' is not in the CRM (before the data floor or not imported yet).');
+        }
+
+        return true;
     }
 
     private function handleProductDelete(array $payload): void

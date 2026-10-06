@@ -73,12 +73,11 @@ describe('lib/today', () => {
             from_store: 15,
             cancelled: 4,
             failed: 1,
-            outcome_date: '2026-10-05',
-            delivered: 61,
-            returned: 5,
-            links: { count: '/o', from_chat: '/oc', from_store: '/os', cancelled: '/ox', failed: '/of', delivered: '/od', returned: '/or' },
+            links: { count: '/o', from_chat: '/oc', from_store: '/os', cancelled: '/ox', failed: '/of' },
         };
         expect(ordersRows(orders, t, 'en').find((r) => r.key === 'failed')).toMatchObject({ value: '1', tone: 'bad', href: '/of' });
+        // Fresh-orders F4: no delivered / returned rows (the CRM no longer tracks shipments).
+        expect(ordersRows(orders, t, 'en').map((r) => r.key)).toEqual(['count', 'from_chat', 'from_store', 'cancelled', 'failed']);
 
         const ads: AdsCard = {
             from: '2026-10-05',

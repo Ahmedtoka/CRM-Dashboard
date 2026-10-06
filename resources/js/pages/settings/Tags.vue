@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import StarterEmptyState from '@/components/crm/StarterEmptyState.vue';
@@ -45,7 +46,6 @@ const columns = computed<Column[]>(() => [
 ]);
 
 const breadcrumbs = computed(() => [{ title: t('settings.tags.title'), href: '/settings/tags' }]);
-const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground';
 </script>
 
 <template>
@@ -90,10 +90,8 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                 <template #cell-conversations_count="{ row }"><span class="tabular-nums">{{ formatCount(row.conversations_count, locale) }}</span></template>
                 <template #cell-actions="{ row }">
                     <span class="inline-flex gap-0.5">
-                        <button type="button" :class="iconBtn" :title="t('ui.edit')" :aria-label="`${t('ui.edit')} ${row.name}`" @click="edit(row)"><Pencil class="size-3.5" /></button>
-                        <button type="button" :class="[iconBtn, 'hover:text-destructive']" :title="t('ui.delete')" :aria-label="`${t('ui.delete')} ${row.name}`" @click="crud.remove(row.id, t('ui.confirm_delete', { name: row.name }))">
-                            <Trash2 class="size-3.5" />
-                        </button>
+                        <IconAction :icon="Pencil" size="sm" :label="`${t('ui.edit')} ${row.name}`" @click="edit(row)" />
+                        <IconAction :icon="Trash2" size="sm" variant="destructive" :label="`${t('ui.delete')} ${row.name}`" @click="crud.remove(row.id, t('ui.confirm_delete', { name: row.name }))" />
                     </span>
                 </template>
             </DataTable>

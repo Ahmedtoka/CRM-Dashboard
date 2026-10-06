@@ -8,7 +8,7 @@ const pages: Record<string, string> = Object.fromEntries(
 /** Pages already moved to the S0 kit. Each sweep task (13-20) appends its group; the test fails until they comply. */
 const SWEPT: string[] = [
     // Task 13
-    'Orders/Index', 'Orders/Show', 'Customers/Index', 'Customers/Show',
+    'Orders/Index', 'Orders/Show', 'Orders/AdOrders', 'Customers/Index', 'Customers/Show',
     // Task 14
     'Inbox', 'Board', 'Comments/Index', 'Cases',
     // Task 15
@@ -17,7 +17,7 @@ const SWEPT: string[] = [
     'Ads/Accounts', 'Ads/BuyerShow', 'Ads/BuyersSetup',
     'Ads/Materials/Collections', 'Ads/Materials/Form', 'Ads/Materials/Index', 'Ads/Materials/Stock', 'Ads/Sync',
     // Task 17
-    'settings/Users', 'settings/Tags', 'settings/Cities', 'settings/Branches', 'settings/QuickReplies', 'settings/Queue',
+    'settings/Users', 'settings/Tags', 'settings/Cities', 'settings/QuickReplies', 'settings/Queue',
     'settings/Notifications', 'settings/Profile', 'settings/Password', 'settings/Appearance',
     // S1 launch approvals
     'Ads/Launches', 'Ads/Approvals',
@@ -41,6 +41,8 @@ const SWEPT: string[] = [
  */
 const RAW_TABLE_OK = new Set(['Ads/Materials/Index']);
 const OWN_SEARCH_OK = new Set(['Ads/Materials/Index']);
+/** Pages allowed hand-made row actions: none (settings/Branches, the last one, was deleted by FS2). */
+const ROW_ACTIONS_OK = new Set<string>();
 /** Raw tables that are layout inside a popover (not a list): allowed anywhere. */
 // Tempered: a match can never cross a `</PopoverContent>`, so it cannot swallow a list table that follows a filter popover.
 const POPOVER_TABLE = /<PopoverContent\b(?:(?!<\/PopoverContent>)[\s\S])*?<table[\s\S]*?<\/PopoverContent>/g;
@@ -74,7 +76,7 @@ describe('S0 kit adoption', () => {
         }
         // R2 one PageHeader.
         if (!NO_PAGE_HEADER.has(name)) expect(source, `${name}: no PageHeader`).toContain('<PageHeader');
-        // R3 every DataTable remembers its density: `table-id` is its first attribute.
+        // R3 every DataTable is identifiable (`data-table-id` hook for tests and screenshots): `table-id` is its first attribute.
         const tables = source.match(/<DataTable\b/g)?.length ?? 0;
         const withId = source.match(/<DataTable\s+table-id="/g)?.length ?? 0;
         expect(withId, `${name}: DataTable without table-id first`).toBe(tables);
@@ -82,5 +84,12 @@ describe('S0 kit adoption', () => {
         if (!OWN_SEARCH_OK.has(name)) expect(source, `${name}: raw search input`).not.toMatch(/<input[^>]*type="search"/);
         // R5 submit spinners come from <Button :loading>.
         expect(source, `${name}: hand-made submit spinner`).not.toMatch(/<LoaderCircle v-if="(busy|saving|submitting|processing|form\.processing)"/);
+        // R6 row actions are IconAction (icon + tooltip + aria-label, F7): no hand-made buttons in a table's actions cell.
+        if (!ROW_ACTIONS_OK.has(name)) {
+            for (const cell of source.match(/#cell-actions="[^"]*">[\s\S]*?<\/template>/g) ?? []) {
+                expect(cell, `${name}: row action without IconAction`).toContain('<IconAction');
+                expect(cell, `${name}: hand-made row action button`).not.toMatch(/<(button|Button|Link)[\s>]/);
+            }
+        }
     });
 });

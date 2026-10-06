@@ -276,7 +276,7 @@ const listHref = (list: (typeof LISTS)[number]) =>
                     <ul v-if="today[list].length" class="divide-y divide-border">
                         <li v-for="r in today[list]" :key="r.id" class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                             <!-- Phones: name on its own line, then real ROAS and Stop; sm+: one line. -->
-                            <AdRow :row="r" part="creative" :currency="currency" density="compact" class="col-span-2 sm:col-span-1" @open="drawer.open" />
+                            <AdRow :row="r" part="creative" :currency="currency" :thumb="false" class="col-span-2 sm:col-span-1" @open="drawer.open" />
                             <AdRow data-test="best-worst-return" :row="r" part="return" :currency="currency" @open="drawer.open" />
                             <AdRow :row="r" part="status" :currency="currency" :data-at="freshness" @open="drawer.open" />
                         </li>

@@ -14,7 +14,6 @@ use App\Enums\ActorType;
 use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
-use App\Enums\ShipmentStatus;
 use App\Enums\UserRole;
 use App\Events\OrderUpdated;
 use App\Events\UserNotified;
@@ -29,7 +28,6 @@ use App\Models\OrderItem;
 use App\Models\ProductVariant;
 use App\Models\ShippingZone;
 use App\Models\User;
-use App\Shipping\ShipmentService;
 use App\Shopify\Client\ShopifyException;
 use App\Shopify\Connection\IntegrationRepository;
 use App\Shopify\Connection\ShopifyIntegration;
@@ -65,7 +63,6 @@ class OrderService
 
     public function __construct(
         private readonly CommerceProvider $provider,
-        private readonly ShipmentService $shipments,
         private readonly AttributionRecorder $attribution,
         private readonly ActivityLogger $logger,
         private readonly OutboundService $outbound,
@@ -189,7 +186,7 @@ class OrderService
 
         $this->dispatchSubmission($order);
 
-        $fresh = $order->fresh(['items', 'shipment']);
+        $fresh = $order->fresh(['items']);
         $fresh->wasRecentlyCreated = true;
 
         return $fresh;
@@ -356,7 +353,7 @@ class OrderService
 
         $this->dispatchSubmission($order);
 
-        return $order->fresh(['items', 'shipment']);
+        return $order->fresh(['items']);
     }
 
     /**
@@ -391,17 +388,13 @@ class OrderService
         });
 
         if ($outcome === 'already_confirmed') {
-            return $order->fresh(['items', 'shipment']);
+            return $order->fresh(['items']);
         }
 
         if ($outcome === 'ignored') {
             $this->recordIgnoredPayment($order);
 
-            return $order->fresh(['items', 'shipment']);
-        }
-
-        if (! $order->shipment && $this->autoCreateShipment()) {
-            $this->shipments->createFor($order);
+            return $order->fresh(['items']);
         }
 
         $this->logger->log(
@@ -415,7 +408,7 @@ class OrderService
 
         SafeBroadcast::send(new OrderUpdated($order));
 
-        return $order->fresh(['items', 'shipment']);
+        return $order->fresh(['items']);
     }
 
     /**
@@ -467,11 +460,7 @@ class OrderService
         });
 
         if ($alreadyCancelled) {
-            return $order->fresh(['items', 'shipment']);
-        }
-
-        if ($order->shipment && ! in_array($order->shipment->status, [ShipmentStatus::Delivered, ShipmentStatus::Returned, ShipmentStatus::Cancelled], true)) {
-            $this->shipments->applyEvent($order->shipment, ShipmentStatus::Cancelled, ShipmentService::EVENT_ORDER_CANCELLED);
+            return $order->fresh(['items']);
         }
 
         $this->logger->log(
@@ -488,7 +477,7 @@ class OrderService
 
         SafeBroadcast::send(new OrderUpdated($order));
 
-        return $order->fresh(['items', 'shipment']);
+        return $order->fresh(['items']);
     }
 
     public function applyUpdate(OrderStatusUpdate $update): ?Order
@@ -530,7 +519,7 @@ class OrderService
 
         SafeBroadcast::send(new OrderUpdated($order));
 
-        return $order->fresh(['items', 'shipment']);
+        return $order->fresh(['items']);
     }
 
     /**
@@ -592,7 +581,7 @@ class OrderService
             throw new DomainException('idempotency_conflict');
         }
 
-        return $order->load(['items', 'shipment']);
+        return $order->load(['items']);
     }
 
     private function dispatchSubmission(Order $order): void
@@ -682,14 +671,9 @@ class OrderService
         $order->refresh();
 
         // The store order exists and the row says so: each follow-up step is
-        // isolated so one failure (carrier, chat, broadcast) can't skip the rest.
+        // isolated so one failure (chat, broadcast) can't skip the rest.
         if ($cod) {
             $this->postSubmitStep($order, 'customer_stats', fn () => $this->applyCustomerStats($order));
-            $this->postSubmitStep($order, 'shipment', function () use ($order) {
-                if ($this->autoCreateShipment() && ! $order->shipment()->exists()) {
-                    $this->shipments->createFor($order);
-                }
-            });
         }
 
         $this->postSubmitStep($order, 'attribution', fn () => $this->attribution->recordOrder($order));
@@ -1038,11 +1022,6 @@ class OrderService
     private function settings(): array
     {
         return ($this->integrations->current() ?? new ShopifyIntegration)->settingsWithDefaults();
-    }
-
-    private function autoCreateShipment(): bool
-    {
-        return (bool) config('crm.auto_create_shipment', true) && (bool) $this->settings()['auto_create_shipment'];
     }
 
     /**

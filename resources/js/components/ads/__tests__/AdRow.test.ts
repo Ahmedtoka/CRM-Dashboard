@@ -49,6 +49,11 @@ describe('AdRow', () => {
         expect(mount(AdRow, { props: { row: row({ currency: 'USD' }), part: 'spend' }, global: { stubs } }).text()).toContain('USD');
     });
 
+    it('shows the creative thumb unless thumb is off (no density any more)', () => {
+        expect(mount(AdRow, { props: { row: row(), part: 'creative' }, global: { stubs } }).findComponent({ name: 'CreativeThumb' }).exists()).toBe(true);
+        expect(mount(AdRow, { props: { row: row(), part: 'creative', thumb: false }, global: { stubs } }).findComponent({ name: 'CreativeThumb' }).exists()).toBe(false);
+    });
+
     it('shows at most two health badges and the name with today spend', () => {
         const w = mount(AdRow, { props: { row: row(), part: 'creative' }, global: { stubs } });
         expect(w.text()).toContain('Eid Abaya V2');
@@ -77,10 +82,9 @@ describe('AdCard', () => {
 });
 
 describe('adColumns', () => {
-    it('drops the trend column in compact density and maps the result sort to conversations', () => {
+    it('always keeps the trend column and maps the result sort to conversations', () => {
         const t = (k: string) => k;
-        expect(adColumns(t, 'comfortable').map((c) => c.key)).toContain('trend');
-        expect(adColumns(t, 'compact').map((c) => c.key)).not.toContain('trend');
+        expect(adColumns(t).map((c) => c.key)).toContain('trend');
         expect(columnSort('-conversations')).toBe('-result');
         expect(columnSort('-roas')).toBe('');
         expect(serverSort('result')).toBe('conversations');

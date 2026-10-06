@@ -13,7 +13,7 @@ it('records who and why on a manual account sync', function () {
     Queue::fake();
     $admin = User::factory()->create(['role' => 'admin']);
     $acc = AdAccount::factory()->meta()->create();
-    $this->actingAs($admin)->post("/ads/accounts/{$acc->id}/sync")->assertRedirect();
+    $this->actingAs($admin)->postJson('/ads/accounts/sync', ['accounts' => [$acc->id]])->assertOk();
     Queue::assertPushed(SyncAdAccount::class, fn ($j) => $j->trigger === 'manual' && $j->triggeredById === $admin->id);
 });
 
@@ -67,7 +67,7 @@ it('decodes waiting sync jobs from the raw queue payloads', function () {
     ]))->waiting();
 
     expect($rows)->toHaveCount(3)
-        ->and($rows[0])->toMatchArray(['account_id' => $acc->id, 'account' => 'Cloting', 'kind' => 'backfill', 'days' => 90, 'trigger' => 'manual', 'attempts' => 1, 'available_at' => null])
+        ->and($rows[0])->toMatchArray(['account_id' => $acc->id, 'account' => 'Cloting', 'kind' => 'backfill', 'days' => 90, 'trigger' => 'manual', 'triggered_by_id' => 1, 'attempts' => 1, 'available_at' => null])
         ->and($rows[1]['job'])->toBe('SomethingElse')
         ->and($rows[1]['account_id'])->toBeNull()
         ->and($rows[2])->toMatchArray(['account_id' => 5, 'attempts' => 2])
@@ -96,9 +96,9 @@ it('marks an account as syncing on the accounts page', function () {
     $admin = User::factory()->create(['role' => 'admin']);
     $busy = AdAccount::factory()->meta()->create();
     $idle = AdAccount::factory()->meta()->create();
-    AdsSyncRun::create(['ad_account_id' => $busy->id, 'platform' => 'meta', 'kind' => 'recent', 'status' => 'running', 'trigger' => 'manual', 'started_at' => now()]);
+    AdsSyncRun::create(['ad_account_id' => $busy->id, 'platform' => 'meta', 'kind' => 'recent', 'status' => 'running', 'trigger' => 'manual', 'triggered_by_id' => $admin->id, 'started_at' => now()]);
     AdsSyncRun::create(['ad_account_id' => $idle->id, 'platform' => 'meta', 'kind' => 'recent', 'status' => 'ok', 'trigger' => 'manual', 'started_at' => now()]);
 
     $this->actingAs($admin)->get('/ads/accounts')->assertInertia(fn (Assert $p) => $p->component('Ads/Accounts')
-        ->where('syncing', [$busy->id]));
+        ->where('sync_resume.accounts', [$busy->id])->where('sync_resume.others', 0));
 });

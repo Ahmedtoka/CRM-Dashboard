@@ -4,9 +4,9 @@ namespace Database\Seeders;
 
 use App\Commerce\OrderService;
 use App\Enums\ConversationStatus;
+use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Enums\Platform;
-use App\Enums\ShipmentStatus;
 use App\Enums\UserRole;
 use App\Inbox\ConversationActions;
 use App\Inbox\OutboundService;
@@ -17,13 +17,12 @@ use App\Models\ChannelAccount;
 use App\Models\City;
 use App\Models\Conversation;
 use App\Models\CustomerIdentity;
+use App\Models\Order;
 use App\Models\ProductVariant;
 use App\Models\QuickReply;
-use App\Models\Shipment;
 use App\Models\Tag;
 use App\Models\User;
 use App\Models\UserPlatform;
-use App\Shipping\ShipmentService;
 use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Sync\BulkImporter;
 use App\Simulator\Simulator;
@@ -94,7 +93,6 @@ class DemoSeeder extends Seeder
     private const DRIVER_CONFIG_KEYS = [
         'crm.drivers.channels',
         'crm.drivers.commerce',
-        'crm.drivers.shipping',
         'crm.drivers.ai',
         'crm.shopify.driver',
     ];
@@ -726,52 +724,39 @@ class DemoSeeder extends Seeder
             }
         }
 
-        $order = $order->fresh(['shipment']);
+        $order = $order->fresh();
 
-        if ($order->shipment) {
-            $this->advanceShipment($order->shipment, $dayOffset, $cursor);
+        if ($order->status === OrderStatus::Confirmed) {
+            $this->advanceDelivery($order, $dayOffset, $cursor);
         }
     }
 
-    private function advanceShipment(Shipment $shipment, int $dayOffset, CarbonImmutable $cursor): void
+    /**
+     * Shopify-style delivery progress on the order row (fresh-orders F4: the CRM keeps no shipments of its own).
+     */
+    private function advanceDelivery(Order $order, int $dayOffset, CarbonImmutable $cursor): void
     {
         $maxSteps = match (true) {
-            $dayOffset >= 6 => 4,
-            $dayOffset >= 3 => mt_rand(1, 3),
+            $dayOffset >= 6 => 3,
+            $dayOffset >= 3 => mt_rand(1, 2),
             default => mt_rand(0, 1),
         };
 
-        $sequence = [ShipmentStatus::PickedUp, ShipmentStatus::InTransit, ShipmentStatus::OutForDelivery, ShipmentStatus::Delivered];
+        $sequence = ['in_transit', 'out_for_delivery', 'delivered'];
 
-        foreach (array_slice($sequence, 0, $maxSteps) as $status) {
+        foreach (array_slice($sequence, 0, $maxSteps) as $step) {
             $cursor = $cursor->addHours(mt_rand(4, 30));
 
             if ($cursor->greaterThan($this->realNow)) {
                 return;
             }
 
-            $this->travelTo($cursor);
-
-            try {
-                app(ShipmentService::class)->applyEvent($shipment, $status, ucfirst(str_replace('_', ' ', $status->value)), null, $cursor);
-            } catch (Throwable) {
-                return; // Best-effort demo data: stop advancing this one shipment rather than abort the seed.
-            }
-        }
-
-        // 8% of fully-delivered shipments are later returned by the customer.
-        if ($maxSteps >= 4 && mt_rand(1, 100) <= 8) {
-            $cursor = $cursor->addHours(mt_rand(4, 48));
-
-            if ($cursor->lessThanOrEqualTo($this->realNow)) {
-                $this->travelTo($cursor);
-
-                try {
-                    app(ShipmentService::class)->applyEvent($shipment, ShipmentStatus::Returned, 'Customer returned the item', null, $cursor);
-                } catch (Throwable) {
-                    // Best-effort demo data.
-                }
-            }
+            $order->forceFill([
+                'fulfillment_status' => 'fulfilled',
+                'shipment_status' => $step,
+                'delivered_at' => $step === 'delivered' ? $cursor : null,
+                'shopify_updated_at' => $cursor,
+            ])->saveQuietly();
         }
     }
 

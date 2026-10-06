@@ -10,9 +10,9 @@ import Callout from '@/components/crm/Callout.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import FilterBar from '@/components/crm/FilterBar.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
-import { Button } from '@/components/ui/button';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BotTranslationRow, BotTranslationUsage } from '@/types/admin';
@@ -96,7 +96,6 @@ async function retranslate(row: BotTranslationRow): Promise<void> {
 
 const breadcrumbs = computed(() => [{ title: t('settings.bot_translations.title'), href: '/settings/bot-translations' }]);
 const chip = 'inline-flex h-7 items-center rounded-full border px-2.5 text-xs';
-const iconBtn = 'size-auto rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50';
 
 /** DataTable keys rows by `id`; a translation row is one Arabic source string. */
 const tableRows = computed(() => filtered.value.map((r) => ({ id: r.source, r })));
@@ -166,21 +165,8 @@ function clearFilters(): void {
                             class="w-full rounded-md border border-input bg-background p-2 text-sm"
                             :aria-label="t('settings.bot_translations.english')"
                         />
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            :class="iconBtn"
-                            :loading="busy === row.source"
-                            :title="t('common.save')"
-                            :aria-label="t('common.save')"
-                            @click="save(row)"
-                        >
-                            <Check class="size-3.5" />
-                        </Button>
-                        <button type="button" :class="iconBtn" :title="t('common.cancel')" :aria-label="t('common.cancel')" @click="cancelEdit">
-                            <X class="size-3.5" />
-                        </button>
+                        <IconAction :icon="Check" size="sm" variant="primary" :label="t('common.save')" :loading="busy === row.source" @click="save(row)" />
+                        <IconAction :icon="X" size="sm" :label="t('common.cancel')" @click="cancelEdit" />
                     </div>
 
                     <button
@@ -205,18 +191,7 @@ function clearFilters(): void {
                     <span v-if="row.orphan" class="ms-1 rounded bg-muted px-1 py-0.5 text-[10px]">{{ t('settings.bot_translations.orphan') }}</span>
                 </template>
                 <template #cell-actions="{ row: { r: row } }">
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        :class="iconBtn"
-                        :loading="busy === row.source"
-                        :title="t('settings.bot_translations.retranslate')"
-                        :aria-label="t('settings.bot_translations.retranslate')"
-                        @click="retranslate(row)"
-                    >
-                        <RotateCw class="size-3.5" />
-                    </Button>
+                    <IconAction :icon="RotateCw" size="sm" :label="t('settings.bot_translations.retranslate')" :loading="busy === row.source" @click="retranslate(row)" />
                 </template>
             </DataTable>
         </div>

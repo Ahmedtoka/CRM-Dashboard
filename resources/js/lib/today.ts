@@ -113,25 +113,12 @@ export function chatsRows(c: ChatsCard, t: Translate, locale: Locale): CardRow[]
 }
 
 export function ordersRows(o: OrdersCard, t: Translate, locale: Locale): CardRow[] {
-    const day = o.outcome_date;
     return [
         { key: 'count', label: t('today.orders.count'), value: `${n(o.count, locale)} · ${formatMoney(o.total, locale)}`, href: o.links.count },
         { key: 'from_chat', label: t('today.orders.from_chat'), value: n(o.from_chat, locale), href: o.links.from_chat },
         { key: 'from_store', label: t('today.orders.from_store'), value: n(o.from_store, locale), href: o.links.from_store },
         { key: 'cancelled', label: t('today.orders.cancelled'), value: n(o.cancelled, locale), href: o.links.cancelled },
         { key: 'failed', label: t('today.orders.failed'), value: n(o.failed, locale), href: o.links.failed, tone: o.failed > 0 ? 'bad' : 'default' },
-        {
-            key: 'delivered',
-            label: t('today.orders.delivered', { day: formatTodayDate(day, locale) }),
-            value: n(o.delivered, locale),
-            href: o.links.delivered,
-        },
-        {
-            key: 'returned',
-            label: t('today.orders.returned', { day: formatTodayDate(day, locale) }),
-            value: n(o.returned, locale),
-            href: o.links.returned,
-        },
     ];
 }
 

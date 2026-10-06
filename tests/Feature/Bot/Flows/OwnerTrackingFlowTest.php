@@ -21,7 +21,6 @@ use App\Channels\Data\InboundMessageData;
 use App\Enums\Handler;
 use App\Enums\Platform;
 use App\Enums\SenderType;
-use App\Enums\ShipmentStatus;
 use App\Enums\UserRole;
 use App\Inbox\InboxIngestor;
 use App\Models\BotFlow;
@@ -33,7 +32,6 @@ use App\Models\Message;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
-use App\Models\Shipment;
 use App\Models\SupportCase;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -157,7 +155,7 @@ it('asks for the order number or mobile from the main-menu button', function () 
 
 it('shows the status card straight away for her mobile, with the window and the tracking link', function () {
     $order = otfOrder([], ['shipment_status' => 'in_transit', 'tracking_url' => 'https://track.example/1047', 'tracking_number' => 'TRK1047', 'shopify_created_at' => now()->subDay()]);
-    Shipment::factory()->for($order)->create(['status' => ShipmentStatus::InTransit]);
+    $order->update(['shipment_status' => 'in_transit']);
     otfCard();
 
     expect(otfBot()->body)->toBe(implode("\n", [
@@ -325,7 +323,7 @@ it('records a delivery follow-up when she says it is late and the window has pas
 
 it('records a follow-up for a failed delivery attempt even inside the window', function () {
     $order = otfOrder();
-    Shipment::factory()->for($order)->create(['status' => ShipmentStatus::FailedAttempt]);
+    $order->update(['shipment_status' => 'attempted_delivery']);
     otfCard();
 
     expect(otfBot()->body)->toContain('الحالة: المندوب حاول يسلمه ومعرفش')
@@ -394,7 +392,7 @@ it('opens cancel/edit with the verified order carried, without asking the number
 
 it('shows a delivered order without a window and opens return/exchange with the order carried', function () {
     $order = otfOrder([], ['shipment_status' => 'delivered', 'tracking_url' => 'https://track.example/1047', 'delivered_at' => CarbonImmutable::parse('2026-09-18 13:00', 'Africa/Cairo'), 'shopify_created_at' => now()->subDays(2)]);
-    Shipment::factory()->for($order)->create(['status' => ShipmentStatus::Delivered]);
+    $order->update(['shipment_status' => 'delivered', 'delivered_at' => now()]);
     otfCard();
 
     expect(otfBot()->body)->toBe("أهلاً يا سارة، أوردر #1047 (اتطلب يوم الخميس 17/9 — 3 قطع)\nالحالة: اتسلم")

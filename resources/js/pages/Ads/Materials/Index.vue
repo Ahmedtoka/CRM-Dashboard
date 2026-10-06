@@ -12,6 +12,7 @@ import PublishDialog from '@/components/ads/PublishDialog.vue';
 import WinnerBadge from '@/components/ads/WinnerBadge.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { buttonVariants } from '@/components/ui/button';
@@ -619,78 +620,14 @@ const breadcrumbs = computed(() => [
                                 <span v-else class="text-2xs text-muted-foreground">{{ t('ads.materials.no_ads') }}</span>
                             </td>
                             <td class="px-3 py-2.5">
-                                <div class="flex flex-wrap justify-end gap-1">
-                                    <button
-                                        v-if="m.files?.some((f) => f.mime?.startsWith('video/'))"
-                                        type="button"
-                                        :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
-                                        :aria-label="t('ads.captions.button')"
-                                        :title="t('ads.captions.button')"
-                                        @click="captioning = m"
-                                    >
-                                        <Sparkles class="size-4" aria-hidden="true" />
-                                    </button>
-                                    <button
-                                        v-if="perms.canPrepare.value"
-                                        type="button"
-                                        :class="cn(iconBtn, 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/20')"
-                                        :aria-label="t('ads.launch.prepare')"
-                                        :title="t('ads.launch.prepare')"
-                                        :disabled="!m.files?.length || !m.product"
-                                        @click="preparing = m"
-                                    >
-                                        <Rocket class="size-4" aria-hidden="true" />
-                                    </button>
-                                    <button
-                                        v-if="perms.canDirectPublish.value"
-                                        type="button"
-                                        :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
-                                        :aria-label="t('ads.publish.button')"
-                                        :title="t('ads.publish.button')"
-                                        :disabled="!m.files?.length"
-                                        @click="publishing = m"
-                                    >
-                                        <Send class="size-4" aria-hidden="true" />
-                                    </button>
-                                    <button
-                                        v-if="perms.canOperate.value"
-                                        type="button"
-                                        :class="cn(iconBtn, 'border-border text-muted-foreground hover:bg-muted hover:text-foreground')"
-                                        :aria-label="t('ads.publish.publications')"
-                                        :title="t('ads.publish.publications')"
-                                        @click="publications = m"
-                                    >
-                                        <ListChecks class="size-4" aria-hidden="true" />
-                                    </button>
-                                    <button
-                                        v-if="perms.canOperate.value"
-                                        type="button"
-                                        :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
-                                        :aria-label="t('ads.materials.actions.link')"
-                                        :title="t('ads.materials.actions.link')"
-                                        @click="linking = m"
-                                    >
-                                        <Link2 class="size-4" aria-hidden="true" />
-                                    </button>
-                                    <Link
-                                        v-if="perms.canAuthor.value"
-                                        :href="`/ads/materials/${m.id}/edit`"
-                                        :class="cn(iconBtn, 'border-warning/50 bg-warning/15 text-amber-800 hover:bg-warning/25 dark:text-amber-200')"
-                                        :aria-label="t('ads.materials.actions.edit')"
-                                        :title="t('ads.materials.actions.edit')"
-                                    >
-                                        <Pencil class="size-4" aria-hidden="true" />
-                                    </Link>
-                                    <button
-                                        v-if="perms.canDelete(m)"
-                                        type="button"
-                                        :class="cn(iconBtn, 'border-destructive/30 text-destructive hover:bg-destructive/10')"
-                                        :aria-label="t('ads.materials.actions.delete')"
-                                        :title="t('ads.materials.actions.delete')"
-                                        @click="deleting = m"
-                                    >
-                                        <Trash2 class="size-4" aria-hidden="true" />
-                                    </button>
+                                <div class="flex flex-wrap justify-end gap-0.5">
+                                    <IconAction v-if="m.files?.some((f) => f.mime?.startsWith('video/'))" :icon="Sparkles" variant="primary" :label="t('ads.captions.button')" @click="captioning = m" />
+                                    <IconAction v-if="perms.canPrepare.value" :icon="Rocket" variant="primary" :label="t('ads.launch.prepare')" :disabled="!m.files?.length || !m.product" @click="preparing = m" />
+                                    <IconAction v-if="perms.canDirectPublish.value" :icon="Send" variant="primary" :label="t('ads.publish.button')" :disabled="!m.files?.length" @click="publishing = m" />
+                                    <IconAction v-if="perms.canOperate.value" :icon="ListChecks" :label="t('ads.publish.publications')" @click="publications = m" />
+                                    <IconAction v-if="perms.canOperate.value" :icon="Link2" variant="primary" :label="t('ads.materials.actions.link')" @click="linking = m" />
+                                    <IconAction v-if="perms.canAuthor.value" :icon="Pencil" :href="`/ads/materials/${m.id}/edit`" :label="t('ads.materials.actions.edit')" />
+                                    <IconAction v-if="perms.canDelete(m)" :icon="Trash2" variant="destructive" :label="t('ads.materials.actions.delete')" @click="deleting = m" />
                                 </div>
                             </td>
                         </tr>

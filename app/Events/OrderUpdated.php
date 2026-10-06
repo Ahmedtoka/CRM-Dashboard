@@ -30,7 +30,6 @@ class OrderUpdated implements ShouldBroadcastNow
     public function broadcastWith(): array
     {
         $o = $this->order;
-        $shipment = $o->relationLoaded('shipment') ? $o->shipment : $o->shipment()->first();
 
         return [
             'id' => $o->id,
@@ -42,10 +41,7 @@ class OrderUpdated implements ShouldBroadcastNow
             'invoice_url' => $o->invoice_url,
             'conversation_id' => $o->conversation_id,
             'customer_id' => $o->customer_id,
-            'shipment' => $shipment ? [
-                'status' => $shipment->status?->value,
-                'tracking_number' => $shipment->tracking_number,
-            ] : null,
+            'shipment' => null, // fresh-orders F4: no CRM shipment; Shopify's shipment_status below
             'created_at' => $o->created_at?->toIso8601String(),
             // Lets an open list patch its row in place after a Shopify refresh (spec §3.2).
             'financial_status' => $o->financial_status,

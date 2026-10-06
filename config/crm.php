@@ -1,10 +1,23 @@
 <?php
 
 return [
+    // F3 (2026-10-06): first day (Cairo) the CRM keeps any synced data for. Ads sync/backfill never request an earlier
+    // day and Shopify import/sync never stores an order created before it.
+    'data_floor' => env('CRM_DATA_FLOOR', '2026-10-01'),
+
+    // crm:fresh-start (F1): where the backup goes and how it is taken. backup_driver: auto | mysqldump | sqlite.
+    'fresh_start' => [
+        'mysqldump_binary' => env('CRM_MYSQLDUMP_PATH', 'mysqldump'),
+        // false = dump without --routines --events (when the DB user lacks those privileges).
+        'mysqldump_routines' => (bool) env('CRM_MYSQLDUMP_ROUTINES', true),
+        'backup_dir' => env('CRM_BACKUP_DIR', storage_path('app/backups')),
+        'backup_driver' => env('CRM_BACKUP_DRIVER', 'auto'),
+        'chunk' => 1000,
+    ],
+
     'drivers' => [
         'channels' => env('CRM_CHANNEL_DRIVER', 'fake'),
         'commerce' => env('CRM_COMMERCE_DRIVER', 'fake'),
-        'shipping' => env('CRM_SHIPPING_DRIVER', 'fake'),
         'ai' => env('CRM_AI_DRIVER', 'fake'),
         // Order-management system for the bot's order status lookup: 'live' (needs CRM_OMS_BASE_URL) or 'fake'.
         'oms' => env('CRM_OMS_DRIVER', 'fake'),
@@ -183,12 +196,6 @@ return [
         'SUZ' => 'السويس',
         'WAD' => 'الوادي الجديد',
     ],
-
-    // Shipment is created automatically when an order becomes confirmed/paid, or
-    // (when false) left to a supervisor to trigger manually (spec §5.8.4).
-    'auto_create_shipment' => true,
-
-    'notify_customer_on_shipment' => env('CRM_NOTIFY_CUSTOMER_ON_SHIPMENT', false),
 
     // WhatsApp menus (owner, 2026-09-26): 4–9 bot buttons go out as reply buttons, three per message
     // («زي الماسنجر»), instead of a one-button list. `list` restores the list.
@@ -420,7 +427,8 @@ return [
         // account-level total, 1.00) of the account-level total (A1, F-050).
         'control_tolerance_pct' => 0.5,
         // First day ads history is kept for (Cairo day). Sync, backfill, discovery and reports never go before it.
-        'history_start' => env('CRM_ADS_HISTORY_START', '2026-09-01'),
+        // The effective start is the later of this and crm.data_floor (null = the data floor).
+        'history_start' => env('CRM_ADS_HISTORY_START'),
         // ads:health (A8): a sync silent for stale_after_hours is a warning, for critical_after_hours critical; a status
         // is announced to the admins only once it has held for hold_down_minutes.
         'health' => [

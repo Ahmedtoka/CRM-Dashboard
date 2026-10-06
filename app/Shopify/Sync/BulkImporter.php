@@ -11,6 +11,7 @@ use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Jobs\RunBulkImportStage;
 use App\Shopify\Sync\Mappers\Payload;
 use App\Shopify\Sync\Mappers\ShippingZoneMapper;
+use App\Support\DataFloor;
 use App\Support\SafeBroadcast;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
@@ -130,7 +131,10 @@ final class BulkImporter
         $this->recorder->closeAbandoned();
 
         $timezone = self::shopTimezone();
-        $since = CarbonImmutable::parse($from, $timezone)->startOfDay()->toIso8601String();
+        // F3: never ask for orders created before the data floor.
+        $since = CarbonImmutable::parse($from, $timezone)->startOfDay();
+        $floor = DataFloor::start()->setTimezone($timezone);
+        $since = ($since->lessThan($floor) ? $floor : $since)->toIso8601String();
         $until = CarbonImmutable::parse($to, $timezone)->endOfDay()->toIso8601String();
 
         $state = DB::transaction(function () use ($since, $until) {
@@ -541,7 +545,7 @@ final class BulkImporter
 
         if ($stage === 'orders') {
             $state = $this->integrations->current()?->import_state ?? [];
-            $since = $state['orders_since'] ?? $this->defaultOrdersSince();
+            $since = self::floorSince($state['orders_since'] ?? $this->defaultOrdersSince());
             $until = is_string($state['orders_until'] ?? null) ? $state['orders_until'] : null;
             $this->updateStage($stage, ['orders_since' => $since]);
         }
@@ -816,7 +820,18 @@ final class BulkImporter
 
     private function defaultOrdersSince(): string
     {
-        return now()->subMonths(max(1, (int) config('crm.shopify.import_orders_months', 12)))->toDateString();
+        return self::floorSince(now()->subMonths(max(1, (int) config('crm.shopify.import_orders_months', 12)))->toDateString());
+    }
+
+    /** A stored/default orders_since (Y-m-d or ISO-8601) no earlier than the data floor (F3), in the same format. */
+    private static function floorSince(string $since): string
+    {
+        if (! DataFloor::isBefore(strlen($since) === 10 ? CarbonImmutable::parse($since, self::shopTimezone()) : $since)) {
+            return $since;
+        }
+        $floor = DataFloor::start()->setTimezone(self::shopTimezone());
+
+        return strlen($since) === 10 ? $floor->toDateString() : $floor->toIso8601String();
     }
 
     /** @return array{status: string, total: ?int, processed: int, failed: int, bulk_operation_id: ?string} */

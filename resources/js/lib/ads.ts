@@ -238,9 +238,12 @@ export function newIdempotencyKey(): string {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
 }
 
-/** Meta Ads Manager deep link for one ad; null for other platforms. */
-export function adsManagerUrl(ad: { platform: string; external_id: string }): string | null {
-    return ad.platform === 'meta' ? `https://www.facebook.com/adsmanager/manage/ads?selected_ad_ids=${encodeURIComponent(ad.external_id)}` : null;
+/** Meta Ads Manager deep link for one ad, with its account (`act=`) when known; null for other platforms. Mirrors App\Orders\AdsManagerLink. */
+export function adsManagerUrl(ad: { platform: string; external_id: string; account_external_id?: string | null }): string | null {
+    if (ad.platform !== 'meta') return null;
+    const act = (ad.account_external_id ?? '').replace(/^act_/, '');
+    const account = act ? `act=${encodeURIComponent(act)}&` : '';
+    return `https://www.facebook.com/adsmanager/manage/ads?${account}selected_ad_ids=${encodeURIComponent(ad.external_id)}`;
 }
 
 /** One status label for every Ads screen (quick win 12): own status ACTIVE/ENABLE = running, PAUSED/DISABLE = stopped. */

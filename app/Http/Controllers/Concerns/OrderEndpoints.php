@@ -4,25 +4,23 @@ namespace App\Http\Controllers\Concerns;
 
 use App\Analytics\MetricsService;
 use App\Commerce\OrderService;
+use App\Commerce\StuckOrderScope;
 use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Enums\Platform;
-use App\Enums\ShipmentStatus;
 use App\Http\Resources\OrderResource;
 use App\Http\Support\DateRange;
 use App\Http\Support\ModeratorScope;
 use App\Models\Order;
-use App\Shipping\ShipmentService;
-use App\Shipping\StuckOrderScope;
+use App\Orders\GovernorateKey;
+use App\Orders\OrdersAnalytics;
 use App\Shopify\Connection\IntegrationRepository;
 use DomainException;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Order listing and order actions shared by the web Orders screens and API v1.
@@ -72,33 +70,9 @@ trait OrderEndpoints
         return $this->orderResource($orders->markPaid($order));
     }
 
-    /**
-     * Manual shipment creation for `crm.auto_create_shipment = false` (spec §5.8.4).
-     */
-    public function ship(Request $request, Order $order, ShipmentService $shipments): OrderResource
-    {
-        Gate::authorize('ship', $order);
-
-        if ($order->status !== OrderStatus::Confirmed) {
-            throw ValidationException::withMessages(['order' => 'Only confirmed orders can be shipped.']);
-        }
-
-        if ($order->shipment()->exists()) {
-            throw ValidationException::withMessages(['order' => 'This order already has a shipment.']);
-        }
-
-        try {
-            $shipments->createFor($order);
-        } catch (UniqueConstraintViolationException) {
-            abort(response()->json(['message' => 'This order has already been shipped.'], 422));
-        }
-
-        return $this->orderResource($order->fresh());
-    }
-
     protected function orderResource(Order $order): OrderResource
     {
-        return new OrderResource($order->loadMissing(['items', 'shipment.events', 'createdBy', 'customer']));
+        return new OrderResource($order->loadMissing(['items', 'createdBy', 'customer']));
     }
 
     /**
@@ -106,11 +80,10 @@ trait OrderEndpoints
      *
      * Additive params (control room S4), all optional, so API v1 callers that omit them see no change:
      * - `older_than` (minutes, web and API): orders made at least that long ago.
-     * - web only (ignored on /api): `real=1` drops the statuses the reports never count (cancelled, failed);
-     *   `step_from`/`step_to` (Cairo dates, with `shipment_step`) keep orders whose latest event of that
-     *   step falls in the range, the way MetricsService dates deliveries and returns.
+     * - web only (ignored on /api): `real=1` drops the statuses the reports never count (cancelled, failed).
+     * The carrier filters (`shipment_step`, `step_from`, `step_to`) went with the CRM shipments (fresh-orders F4).
      *
-     * @return array{status?: ?string, type?: ?string, platform?: ?string, q?: ?string, created_by?: ?int, from?: ?string, to?: ?string, source?: ?string, financial_status?: ?string, fulfillment_status?: ?string, shipment_step?: ?string, mismatch?: ?bool, stuck?: ?bool, older_than?: ?int, real?: ?bool, step_from?: ?string, step_to?: ?string}
+     * @return array{status?: ?string, type?: ?string, platform?: ?string, q?: ?string, created_by?: ?int, from?: ?string, to?: ?string, source?: ?string, financial_status?: ?string, fulfillment_status?: ?string, mismatch?: ?bool, stuck?: ?bool, older_than?: ?int, real?: ?bool, governorate?: ?string, ad_platform?: ?string}
      */
     protected function orderFilters(Request $request): array
     {
@@ -125,15 +98,15 @@ trait OrderEndpoints
             'source' => ['nullable', Rule::enum(OrderSource::class)],
             'financial_status' => ['nullable', 'string', 'max:50'],
             'fulfillment_status' => ['nullable', 'string', 'max:50'],
-            'shipment_step' => ['nullable', Rule::enum(ShipmentStatus::class)],
             'mismatch' => ['nullable', 'boolean'],
             'stuck' => ['nullable', 'boolean'],
             // «النهارده» urgent strip (control room S4): orders still waiting this many minutes after they were made.
             'older_than' => ['nullable', 'integer', 'min:1', 'max:43200'],
+            // Fresh-orders F5: governorate (province code or Shopify province name) and the source ad platform.
+            'governorate' => ['nullable', 'string', 'max:60'],
+            'ad_platform' => ['nullable', Rule::in(['meta', 'tiktok', 'google', 'direct'])],
         ] + ($request->is('api/*') ? [] : [
             'real' => ['nullable', 'boolean'],
-            'step_from' => ['nullable', 'date_format:Y-m-d', 'required_with:step_to'],
-            'step_to' => ['nullable', 'date_format:Y-m-d'],
         ]));
     }
 
@@ -144,50 +117,51 @@ trait OrderEndpoints
      */
     protected function orderQuery(Request $request): Builder
     {
-        $f = $this->orderFilters($request);
-        $user = $request->user();
-
-        return Order::query()
-            ->with(['customer', 'createdBy', 'items', 'shipment.events'])
-            ->tap(fn (Builder $q) => ModeratorScope::orders($q, $user))
-            ->when($f['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
-            ->when($f['type'] ?? null, fn ($q, $v) => $q->where('type', $v))
-            ->when($f['platform'] ?? null, fn ($q, $v) => $q->where('platform', $v))
-            ->when($f['source'] ?? null, fn ($q, $v) => $q->where('source', $v))
-            ->when($f['financial_status'] ?? null, fn ($q, $v) => $q->where('financial_status', $v))
-            ->when($f['fulfillment_status'] ?? null, fn ($q, $v) => $q->where('fulfillment_status', $v))
-            ->when($f['shipment_step'] ?? null, fn ($q, $v) => $q->whereHas('shipment', fn (Builder $s) => $s->where('status', $v)))
-            ->when($f['created_by'] ?? null, fn ($q, $v) => $q->where('created_by_id', (int) $v))
-            ->when($f['from'] ?? null, fn ($q, $v) => $q->where('created_at', '>=', DateRange::startOfCairoDay($v)))
-            ->when($f['to'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', DateRange::endOfCairoDay($v)))
-            ->when($f['older_than'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', now()->subMinutes((int) $v)))
-            ->when(! empty($f['real']), fn ($q) => $q->whereNotIn('status', MetricsService::EXCLUDED_ORDER_STATUSES))
-            ->when(($f['shipment_step'] ?? null) && ($f['step_from'] ?? null), fn (Builder $q) => $this->stepBetween($q, (string) $f['shipment_step'], (string) $f['step_from'], (string) ($f['step_to'] ?? $f['step_from'])))
-            ->when(array_key_exists('mismatch', $f) && $f['mismatch'] !== null, fn ($q) => $q->where('mismatch', (bool) $f['mismatch']))
-            ->when(array_key_exists('stuck', $f) && $f['stuck'], fn (Builder $q) => StuckOrderScope::apply($q, $this->stuckOrderDays()))
-            ->when(trim((string) ($f['q'] ?? '')), fn ($q, $term) => $q->where(fn (Builder $w) => $w
-                ->where('order_number', 'like', "%{$term}%")
-                ->orWhere('shipping_phone', 'like', "%{$term}%")
-                ->orWhereHas('customer', fn (Builder $c) => $c->where('name', 'like', "%{$term}%")->orWhere('phone', 'like', "%{$term}%"))))
+        return $this->orderBaseQuery($request)
+            ->with(['customer', 'createdBy', 'items'])
             ->orderByDesc('id');
     }
 
     /**
-     * Orders whose shipment is at `$step` and whose latest `$step` event falls in the Cairo days given: the
-     * MetricsService rule for deliveries and returns, so the «النهارده» numbers open exactly their rows.
+     * The filtered, role-scoped orders without eager loads or ordering: the list, the analytics and the ads tab
+     * (fresh-orders F5) all read this one set. `from`/`to` match the order date, coalesce(placed_at, created_at):
+     * an imported Shopify order keeps the store time in placed_at (its created_at is the import time).
+     *
+     * @return Builder<Order>
      */
-    private function stepBetween(Builder $q, string $step, string $from, string $to): void
+    protected function orderBaseQuery(Request $request): Builder
     {
-        $start = DateRange::startOfCairoDay($from);
-        $end = DateRange::endOfCairoDay($to);
+        $f = $this->orderFilters($request);
+        $user = $request->user();
+        $date = OrdersAnalytics::ORDER_DATE;
 
-        $q->whereHas('shipment', fn (Builder $s) => $s->where('status', $step)
-            ->whereHas('events', fn (Builder $e) => $e->where('status', $step)->whereBetween('occurred_at', [$start, $end]))
-            ->whereDoesntHave('events', fn (Builder $e) => $e->where('status', $step)->where('occurred_at', '>', $end)));
+        return Order::query()
+            ->tap(fn (Builder $q) => ModeratorScope::orders($q, $user))
+            ->when($f['status'] ?? null, fn ($q, $v) => $q->where('orders.status', $v))
+            ->when($f['type'] ?? null, fn ($q, $v) => $q->where('orders.type', $v))
+            ->when($f['platform'] ?? null, fn ($q, $v) => $q->where('orders.platform', $v))
+            ->when($f['source'] ?? null, fn ($q, $v) => $q->where('orders.source', $v))
+            ->when($f['financial_status'] ?? null, fn ($q, $v) => $q->where('orders.financial_status', $v))
+            ->when($f['fulfillment_status'] ?? null, fn ($q, $v) => $q->where('orders.fulfillment_status', $v))
+            ->when($f['created_by'] ?? null, fn ($q, $v) => $q->where('orders.created_by_id', (int) $v))
+            ->when($f['from'] ?? null, fn ($q, $v) => $q->whereRaw("{$date} >= ?", [DateRange::startOfCairoDay($v)->toDateTimeString()]))
+            ->when($f['to'] ?? null, fn ($q, $v) => $q->whereRaw("{$date} <= ?", [DateRange::endOfCairoDay($v)->toDateTimeString()]))
+            ->when($f['governorate'] ?? null, fn ($q, $v) => $q->whereRaw(GovernorateKey::sql().' = ?', [GovernorateKey::codeFor($v) ?? $v]))
+            ->when($f['ad_platform'] ?? null, fn ($q, $v) => $v === 'direct'
+                ? $q->whereNull('orders.ad_id')
+                : $q->whereIn('orders.ad_id', fn ($s) => $s->select('ads.id')->from('ads')->join('ad_accounts', 'ad_accounts.id', '=', 'ads.ad_account_id')->where('ad_accounts.platform', $v)))
+            ->when($f['older_than'] ?? null, fn ($q, $v) => $q->where('orders.created_at', '<=', now()->subMinutes((int) $v)))
+            ->when(! empty($f['real']), fn ($q) => $q->whereNotIn('orders.status', MetricsService::EXCLUDED_ORDER_STATUSES))
+            ->when(array_key_exists('mismatch', $f) && $f['mismatch'] !== null, fn ($q) => $q->where('orders.mismatch', (bool) $f['mismatch']))
+            ->when(array_key_exists('stuck', $f) && $f['stuck'], fn (Builder $q) => StuckOrderScope::apply($q, $this->stuckOrderDays()))
+            ->when(trim((string) ($f['q'] ?? '')), fn ($q, $term) => $q->where(fn (Builder $w) => $w
+                ->where('orders.order_number', 'like', "%{$term}%")
+                ->orWhere('orders.shipping_phone', 'like', "%{$term}%")
+                ->orWhereHas('customer', fn (Builder $c) => $c->where('name', 'like', "%{$term}%")->orWhere('phone', 'like', "%{$term}%"))));
     }
 
     /**
-     * Days of shipment silence before an order counts as "stuck" (`?stuck=1`),
+     * Days without a Shopify change before an order counts as "stuck" (`?stuck=1`),
      * mirroring `CustomerOrderFlags::has_stuck_order`.
      */
     private function stuckOrderDays(): int

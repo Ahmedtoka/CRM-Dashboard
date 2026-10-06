@@ -58,8 +58,6 @@ class ActivityLogger
 
     public const ORDER_RETRIED = 'order.retried';
 
-    public const SHIPMENT_UPDATED = 'shipment.updated';
-
     public const BOT_RULE_MATCHED = 'bot.rule_matched';
 
     public const BOT_AI_REPLY = 'bot.ai_reply';

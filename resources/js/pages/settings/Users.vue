@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -70,7 +71,6 @@ const columns = computed<Column[]>(() => [
 ]);
 
 const breadcrumbs = computed(() => [{ title: t('settings.users.title'), href: '/settings/users' }]);
-const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground';
 </script>
 
 <template>
@@ -121,20 +121,16 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                 </template>
                 <template #cell-actions="{ row }">
                     <span class="inline-flex gap-0.5">
-                        <button type="button" :class="iconBtn" :title="t('ui.edit')" :aria-label="`${t('ui.edit')} ${row.name}`" @click="openForm(row)"><Pencil class="size-3.5" /></button>
-                        <button type="button" :class="iconBtn" :title="t('settings.users.reset_password')" :aria-label="`${t('settings.users.reset_password')} ${row.name}`" @click="openReset(row)">
-                            <KeyRound class="size-3.5" />
-                        </button>
-                        <button
+                        <IconAction :icon="Pencil" size="sm" :label="`${t('ui.edit')} ${row.name}`" @click="openForm(row)" />
+                        <IconAction :icon="KeyRound" size="sm" :label="`${t('settings.users.reset_password')} ${row.name}`" @click="openReset(row)" />
+                        <IconAction
                             v-if="row.is_active"
-                            type="button"
-                            :class="[iconBtn, 'hover:text-destructive']"
-                            :title="t('settings.users.deactivate')"
-                            :aria-label="`${t('settings.users.deactivate')} ${row.name}`"
+                            :icon="UserX"
+                            size="sm"
+                            variant="destructive"
+                            :label="`${t('settings.users.deactivate')} ${row.name}`"
                             @click="crud.remove(row.id, t('settings.users.deactivate_confirm', { name: row.name }), 'settings.users.deactivated')"
-                        >
-                            <UserX class="size-3.5" />
-                        </button>
+                        />
                     </span>
                 </template>
             </DataTable>

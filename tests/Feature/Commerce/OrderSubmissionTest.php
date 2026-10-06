@@ -1,5 +1,6 @@
 <?php
 
+use App\Analytics\AttributionRecorder;
 use App\Commerce\Data\OrderPayload;
 use App\Commerce\FakeCommerceProvider;
 use App\Commerce\Jobs\SubmitOrderToProvider;
@@ -18,7 +19,6 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\ShippingZone;
 use App\Models\User;
-use App\Shipping\ShipmentService;
 use App\Shopify\Client\ShopifyException;
 use App\Shopify\Connection\ShopifyIntegration;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -377,15 +377,14 @@ it('caps a fixed discount at the goods subtotal', function () {
 });
 
 it('runs the remaining follow-up steps when one fails after submission', function () {
-    $this->mock(ShipmentService::class, fn ($m) => $m->shouldReceive('createFor')->andThrow(new RuntimeException('carrier down')));
+    $this->mock(AttributionRecorder::class, fn ($m) => $m->shouldReceive('recordOrder')->andThrow(new RuntimeException('attribution down')));
 
     $order = app(OrderService::class)->create($this->conv, $this->sup, ($this->data)());
 
     $failure = ActivityLog::where('action', OrderService::POST_SUBMIT_FAILED)->where('subject_id', $order->id)->first();
 
     expect($order->fresh()->status)->toBe(OrderStatus::Confirmed)
-        ->and($failure?->meta['step'])->toBe('shipment')
-        ->and(ActivityLog::where('action', 'order.created')->where('subject_id', $order->id)->exists())->toBeTrue()
+        ->and($failure?->meta['step'])->toBe('attribution')
         ->and($this->conv->messages()->latest('id')->first()->body)->toStartWith('أوردر');
 });
 

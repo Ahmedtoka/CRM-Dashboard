@@ -12,7 +12,6 @@ use App\Bot\Flows\Sandbox\SandboxCaseRecorder;
 use App\Bot\Flows\Sandbox\SandboxMode;
 use App\Cases\CaseRecorder;
 use App\Channels\Adapters\FakeChannelAdapter;
-use App\Enums\ShipmentStatus;
 use App\Enums\UserRole;
 use App\Events\ConversationUpdated;
 use App\Inbox\OutboundService;
@@ -22,7 +21,6 @@ use App\Models\Customer;
 use App\Models\Message;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\Shipment;
 use App\Models\SupportCase;
 use App\Models\User;
 use App\Support\SafeBroadcast;
@@ -64,7 +62,7 @@ it('walks the whole return flow with state threaded through and saves nothing', 
     useOrderAwareReturnFlow();
     $order = Order::factory()->create(['order_number' => '1047', 'shipping_name' => 'سارة أحمد', 'shipping_phone' => '+201001234567']);
     $item = OrderItem::factory()->for($order)->create(['title' => 'فستان ليلى', 'qty' => 1, 'price' => 850, 'discount' => 0]);
-    Shipment::factory()->for($order)->create(['status' => ShipmentStatus::Delivered]);
+    $order->update(['shipment_status' => 'delivered', 'delivered_at' => now()]);
     $customers = Customer::count();
 
     $r = sbRun('return_exchange', 'published', null, []);

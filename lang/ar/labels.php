@@ -41,13 +41,6 @@ return [
         'facebook_disconnected' => 'صفحة فيسبوك اللي إنستجرام بيستخدمها مش متوصلة',
     ],
 
-    // ShipmentEvent.description values the CRM itself writes (carrier text is
-    // passed through untouched). Keyed by the stored sentinel in OrderResource.
-    'shipment_event' => [
-        'created' => 'الشحنة اتعملت',
-        'order_cancelled' => 'الأوردر اتلغى',
-    ],
-
     'csv' => [
         'yes' => 'نعم',
         'no' => 'لا',

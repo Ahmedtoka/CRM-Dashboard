@@ -22,7 +22,6 @@ it('refuses to run when a driver is not fake', function (string $key) {
 })->with([
     'crm.drivers.channels',
     'crm.drivers.commerce',
-    'crm.drivers.shipping',
     'crm.drivers.ai',
     'crm.shopify.driver',
 ]);

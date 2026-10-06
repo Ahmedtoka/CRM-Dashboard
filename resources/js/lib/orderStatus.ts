@@ -39,7 +39,7 @@ export function orderFamilies(o: Order): { payment: string | null; fulfillment: 
     return {
         payment: o.financial_status ?? o.display?.payment ?? null,
         fulfillment: o.fulfillment_status ?? o.display?.fulfillment ?? null,
-        step: o.display?.shipment_step ?? o.shipment?.status ?? null,
+        step: o.display?.shipment_step ?? null,
     };
 }
 

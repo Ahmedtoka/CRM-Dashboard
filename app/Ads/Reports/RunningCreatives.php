@@ -51,7 +51,7 @@ final class RunningCreatives
         $lastPage = max(1, (int) ceil($total / $perPage));
         $page = min(max(1, (int) ($opts['page'] ?? 1)), $lastPage);
 
-        $pageRows = $this->sorted($this->base($accountF, $status, $search, $extra)->select(self::AD_COLUMNS)->addSelect(['g.*', 'acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name', 'camp.status as campaign_status', 'st.status as adset_status', 'camp.objective as objective']), $sort, $dir)
+        $pageRows = $this->sorted($this->base($accountF, $status, $search, $extra)->select(self::AD_COLUMNS)->addSelect(['g.*', 'acc.name as account_name', 'acc.external_id as account_external_id', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name', 'camp.status as campaign_status', 'st.status as adset_status', 'camp.objective as objective']), $sort, $dir)
             ->forPage($page, $perPage)->get();
 
         $totals = $this->base($accountF, $status, $search, $extra)
@@ -98,7 +98,7 @@ final class RunningCreatives
             ->leftJoin('ad_campaigns as camp', 'camp.id', '=', 'ad.ad_campaign_id')
             ->leftJoin('ad_sets as st', 'st.id', '=', 'ad.ad_set_id')
             ->where('ad.id', $ad->id)
-            ->select(self::AD_COLUMNS)->addSelect(['acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name', 'camp.status as campaign_status', 'st.status as adset_status', 'camp.objective as objective'])
+            ->select(self::AD_COLUMNS)->addSelect(['acc.name as account_name', 'acc.external_id as account_external_id', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name', 'camp.status as campaign_status', 'st.status as adset_status', 'camp.objective as objective'])
             ->first();
         $row->msg_conversations = (int) DB::table('ad_daily_metrics')->where('ad_id', $ad->id)
             ->whereBetween('date', [$f->fromDate(), $f->toDate()])->sum('msg_conversations');
@@ -144,6 +144,8 @@ final class RunningCreatives
                 'platform' => (string) $r->platform,
                 'account' => (string) $r->account_name,
                 'account_id' => (int) $r->ad_account_id,
+                // The Ads Manager deep link needs the account (act=) as well as the ad (fresh-orders review).
+                'account_external_id' => isset($r->account_external_id) ? (string) $r->account_external_id : null,
                 'campaign' => $r->campaign_name,
                 'adset' => $r->adset_name,
                 'type' => $r->type,

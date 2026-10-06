@@ -8,25 +8,21 @@ use App\Models\Order;
 use Illuminate\Console\Command;
 
 /**
- * Hourly (CommerceServiceProvider) and once after the Shopify orders import:
- * re-evaluates the time-based mismatch rules (24/48/72 h grace periods) that
- * no webhook or carrier event would otherwise trigger. Flagged orders are
- * always re-checked so a cleared condition un-flags them.
+ * Hourly (CommerceServiceProvider) and once after the Shopify orders import: re-checks every flagged order, so a
+ * cleared condition (or a carrier reason left from before fresh-orders F4) un-flags it.
  */
 class DetectOrderMismatches extends Command
 {
-    protected $signature = 'orders:detect-mismatch {--days=30 : Re-check orders whose shipment moved within this many days}';
+    protected $signature = 'orders:detect-mismatch';
 
-    protected $description = 'Recompute Shopify/carrier status mismatches for recently active orders';
+    protected $description = 'Recompute the stored order mismatch flags';
 
     public function handle(OrderStatusResolver $resolver): int
     {
-        $since = now()->subDays(max(1, (int) $this->option('days')));
         $checked = 0;
 
         Order::query()
-            ->where(fn ($q) => $q->where('mismatch', true)
-                ->orWhereHas('shipment', fn ($s) => $s->where('last_event_at', '>=', $since)))
+            ->where('mismatch', true)
             ->select('id')
             ->chunkById(500, function ($orders) use ($resolver, &$checked) {
                 foreach ($orders as $order) {

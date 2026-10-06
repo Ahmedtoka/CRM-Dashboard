@@ -1,8 +1,18 @@
 <?php
 
-use App\Enums\{OrderStatus, Platform, ShipmentStatus};
+use App\Enums\OrderStatus;
+use App\Enums\Platform;
 use App\Inbox\SavedReplies\ReplyVariables;
-use App\Models\{ChannelAccount, Conversation, Customer, CustomerAddress, Order, Shipment, ShippingRate, ShippingZone, ShippingZoneRegion, User};
+use App\Models\ChannelAccount;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\CustomerAddress;
+use App\Models\Fulfillment;
+use App\Models\Order;
+use App\Models\ShippingRate;
+use App\Models\ShippingZone;
+use App\Models\ShippingZoneRegion;
+use App\Models\User;
 
 beforeEach(function () {
     $this->customer = Customer::factory()->create(['name' => 'منى أحمد']);
@@ -11,9 +21,9 @@ beforeEach(function () {
     $this->agent = User::factory()->create(['name' => 'سارة']);
 });
 
-it('renders english and arabic variables from the customer, order, shipment and agent', function () {
-    $order = Order::factory()->create(['customer_id' => $this->customer->id, 'status' => OrderStatus::Confirmed, 'shopify_order_name' => '#1024']);
-    Shipment::factory()->create(['order_id' => $order->id, 'status' => ShipmentStatus::InTransit, 'tracking_number' => 'BST-9']);
+it('renders english and arabic variables from the customer, order, Shopify fulfillment and agent', function () {
+    $order = Order::factory()->create(['customer_id' => $this->customer->id, 'status' => OrderStatus::Confirmed, 'shopify_order_name' => '#1024', 'shipment_status' => 'in_transit']);
+    Fulfillment::factory()->create(['order_id' => $order->id, 'tracking_number' => 'BST-9']);
     $zone = ShippingZone::factory()->create();
     ShippingZoneRegion::factory()->create(['shipping_zone_id' => $zone->id, 'country_code' => 'EG', 'province_code' => 'GZ']);
     ShippingRate::factory()->create(['shipping_zone_id' => $zone->id, 'title' => 'عادي', 'price' => 65, 'min_order_subtotal' => null, 'max_order_subtotal' => null]);
@@ -56,7 +66,7 @@ it('quotes shipping for the latest address by id, not the default address (spec 
 it('ignores cancelled and delivered orders when picking the latest open order', function () {
     Order::factory()->create(['customer_id' => $this->customer->id, 'status' => OrderStatus::Cancelled, 'order_number' => 'C-1']);
     $delivered = Order::factory()->create(['customer_id' => $this->customer->id, 'status' => OrderStatus::Confirmed, 'order_number' => 'D-1']);
-    Shipment::factory()->create(['order_id' => $delivered->id, 'status' => ShipmentStatus::Delivered]);
+    $delivered->update(['shipment_status' => 'delivered']);
 
     expect(app(ReplyVariables::class)->render('{order_number}', $this->conv, $this->agent)->missing)->toBe(['order_number']);
 });

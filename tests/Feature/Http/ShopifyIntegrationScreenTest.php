@@ -214,7 +214,6 @@ it('updates commerce settings within their bounds', function () {
 
     $this->actingAs($this->admin)->putJson('/settings/shopify/settings', [
         'default_shipping_fee' => 75,
-        'auto_create_shipment' => false,
         'stuck_order_days' => 7,
         'mismatch_alerts' => true,
         'order_creation_enabled' => true,
@@ -224,7 +223,6 @@ it('updates commerce settings within their bounds', function () {
 
     $this->actingAs($this->admin)->putJson('/settings/shopify/settings', [
         'default_shipping_fee' => 10001,
-        'auto_create_shipment' => false,
         'stuck_order_days' => 7,
         'mismatch_alerts' => true,
         'order_creation_enabled' => true,

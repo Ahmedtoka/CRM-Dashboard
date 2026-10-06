@@ -57,13 +57,12 @@ describe('DataTable', () => {
         expect(w.find('table').attributes('aria-busy')).toBe('true');
     });
 
-    it('reads and persists density per table id', async () => {
-        localStorage.setItem('crm.density.orders', 'compact');
+    it('has no density toggle and one comfortable spacing; the table id is a hook only', () => {
         const w = mount(Table, { props: { columns, rows, tableId: 'orders' } });
-        expect(w.find('table').attributes('data-density')).toBe('compact');
-        await w.find('[data-density-option="comfortable"]').trigger('click');
-        expect(w.find('table').attributes('data-density')).toBe('comfortable');
-        expect(localStorage.getItem('crm.density.orders')).toBe('comfortable');
+        expect(w.find('[data-density-option]').exists()).toBe(false);
+        expect(w.find('table').attributes('data-density')).toBeUndefined();
+        expect(w.find('[data-table-box]').attributes('data-table-id')).toBe('orders');
+        expect(w.find('td').classes()).toEqual(expect.arrayContaining(['px-3', 'py-2']));
     });
 
     it('selects rows and all rows', async () => {

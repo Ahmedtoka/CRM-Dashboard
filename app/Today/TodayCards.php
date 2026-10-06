@@ -18,6 +18,7 @@ use App\Models\Conversation;
 use App\Models\Order;
 use App\Models\QueueSetting;
 use App\Models\User;
+use App\Orders\OrdersAnalytics;
 use App\Queue\RatingStats;
 use App\TestLinks\TestScope;
 use Carbon\CarbonImmutable;
@@ -89,33 +90,32 @@ final class TodayCards
 
     public function orders(TodayWindow $w): array
     {
-        $team = $this->teamMetrics($w);
-        $out = $this->teamMetrics($w->outcomeDay());
-        $dayOrders = fn (OrderStatus $s) => Order::query()->where('status', $s->value)->whereBetween('created_at', [$w->from, $w->to])->count();
+        // One grouped query on the same order date the /orders list filters on (coalesce(placed_at, created_at),
+        // fresh-orders review): every number opens exactly its rows. Counted orders leave out cancelled and
+        // failed (MetricsService::EXCLUDED_ORDER_STATUSES): `real=1` lists the same set.
+        $rows = Order::query()->toBase()
+            ->whereRaw(OrdersAnalytics::ORDER_DATE.' between ? and ?', [$w->from->toDateTimeString(), $w->to->toDateTimeString()])
+            ->groupBy('source', 'status')
+            ->selectRaw('source, status, count(*) as n, sum(total) as total')
+            ->get();
+        $real = $rows->whereNotIn('status', MetricsService::EXCLUDED_ORDER_STATUSES);
+        $byStatus = fn (OrderStatus $s) => (int) $rows->where('status', $s->value)->sum('n');
         $day = ['from' => $w->date, 'to' => $w->date];
-        $outDay = $w->outcomeDay()->date;
-        // The counted orders leave out cancelled and failed (MetricsService): `real=1` lists the same set.
-        $real = ['real' => 1];
+        $realLink = ['real' => 1];
 
         return [
-            'count' => (int) $team['orders_count'],
-            'total' => (float) $team['orders_total'],
-            'from_chat' => (int) $team['by_source']['chat']['created_count'],
-            'from_store' => (int) $team['by_source']['store']['created_count'],
-            'cancelled' => $dayOrders(OrderStatus::Cancelled),
-            'failed' => $dayOrders(OrderStatus::Failed),
-            'outcome_date' => $w->outcomeDay()->date,
-            'delivered' => (int) $out['orders_delivered'],
-            'returned' => (int) $out['orders_returned'],
+            'count' => (int) $real->sum('n'),
+            'total' => round((float) $real->sum('total'), 2),
+            'from_chat' => (int) $real->where('source', 'chat')->sum('n'),
+            'from_store' => (int) $real->where('source', 'store')->sum('n'),
+            'cancelled' => $byStatus(OrderStatus::Cancelled),
+            'failed' => $byStatus(OrderStatus::Failed),
             'links' => [
-                'count' => self::link('/orders', $real + $day),
-                'from_chat' => self::link('/orders', $real + ['source' => 'chat'] + $day),
-                'from_store' => self::link('/orders', $real + ['source' => 'store'] + $day),
+                'count' => self::link('/orders', $realLink + $day),
+                'from_chat' => self::link('/orders', $realLink + ['source' => 'chat'] + $day),
+                'from_store' => self::link('/orders', $realLink + ['source' => 'store'] + $day),
                 'cancelled' => self::link('/orders', ['status' => 'cancelled'] + $day),
                 'failed' => self::link('/orders', ['status' => 'failed'] + $day),
-                // Dated by the latest delivered / returned event, as MetricsService counts them.
-                'delivered' => self::link('/orders', $real + ['shipment_step' => 'delivered', 'step_from' => $outDay, 'step_to' => $outDay]),
-                'returned' => self::link('/orders', $real + ['shipment_step' => 'returned', 'step_from' => $outDay, 'step_to' => $outDay]),
             ],
         ];
     }
