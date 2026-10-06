@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AdSourceChip from '@/components/crm/AdSourceChip.vue';
 import OrderNote from '@/components/crm/orders/OrderNote.vue';
 import OrderStatusChip from '@/components/crm/orders/OrderStatusChip.vue';
 import OrderSyncLine from '@/components/crm/orders/OrderSyncLine.vue';
@@ -128,6 +129,7 @@ async function copyStatus(): Promise<void> {
             <OrderStatusChip :order="current" />
             <span class="ms-auto font-bold tabular-nums">{{ formatMoney(current.total, locale) }}</span>
         </div>
+        <AdSourceChip v-if="current.ad_source" :source="current.ad_source" class="mt-1" />
 
         <p class="mt-1 text-2xs text-muted-foreground">
             {{ t(`order.${current.type}`) }}

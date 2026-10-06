@@ -98,7 +98,7 @@ trait ConversationEndpoints
 
         $customer = $conversation->customer;
         // Nested identities/orders are platform-scoped for moderators too.
-        $customer?->load(ModeratorScope::customerRelations($request->user(), orderLimit: 20));
+        $customer?->load(ModeratorScope::customerRelations($request->user(), orderLimit: 20, withAds: ! $request->is('api/*')));
 
         $this->attachUsers($conversation, $messages, $notes, $participantRows, $cases);
         foreach ($cases as $case) {

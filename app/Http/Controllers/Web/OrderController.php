@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Concerns\OrderEndpoints;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
+use App\Http\Support\ModeratorScope;
 use App\Http\Support\SortParam;
 use App\Models\Order;
 use App\Models\User;
@@ -37,6 +38,9 @@ class OrderController extends Controller
         $query = $this->orderQuery($request);
         $sort = SortParam::parse($request->query('sort'), self::SORTS);
         $sort?->apply($query);
+        if (! $request->wantsJson()) {
+            $query->with(ModeratorScope::ORDER_AD_RELATIONS); // S3: the «المصدر» column (web page only)
+        }
         $orders = OrderResource::collection($query->paginate(30)->withQueryString());
 
         if ($request->wantsJson()) {
