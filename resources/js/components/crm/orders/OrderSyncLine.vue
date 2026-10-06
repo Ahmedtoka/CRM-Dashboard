@@ -53,6 +53,7 @@ async function refresh(): Promise<void> {
                 <span v-else class="font-semibold text-amber-700 dark:text-amber-300">{{ t('orders.sync.never') }}</span>
             </span>
             <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 class="gap-1 bg-background font-medium [&_svg]:size-3.5"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
@@ -6,7 +7,7 @@ import { useToast } from '@/composables/useToast';
 import { formatDateTime } from '@/lib/format';
 import type { ChannelAccount, ChannelTestResult, FacebookLoginSettings } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
-import { ChevronDown, CircleCheck, Copy, Facebook, LoaderCircle } from 'lucide-vue-next';
+import { ChevronDown, CircleCheck, Copy, Facebook } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
@@ -225,19 +226,18 @@ async function copy(value: string | null): Promise<void> {
                 </details>
 
                 <div class="flex gap-2">
-                    <button type="button" class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border px-2 hover:bg-muted disabled:opacity-50" :disabled="testing" @click="emit('test', account)">
-                        <LoaderCircle v-if="testing" class="size-3 animate-spin" aria-hidden="true" />
+                    <Button variant="outline" class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border px-2 hover:bg-muted disabled:opacity-50 text-[length:inherit]" type="button" @click="emit('test', account)" :loading="testing">
                         {{ t('settings.channels.test') }}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                        variant="outline"
+                        class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border px-2 hover:bg-muted disabled:opacity-50 text-[length:inherit]"
                         type="button"
-                        class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border px-2 hover:bg-muted disabled:opacity-50"
-                        :disabled="subscribing"
                         @click="emit('subscribe', account)"
+                        :loading="subscribing"
                     >
-                        <LoaderCircle v-if="subscribing" class="size-3 animate-spin" aria-hidden="true" />
                         {{ t('settings.channels.subscribe') }}
-                    </button>
+                    </Button>
                 </div>
 
                 <p v-if="testResult?.ok" class="rounded bg-success/10 px-2 py-1 text-foreground">

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import ChannelCard from '@/components/crm/ChannelCard.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -10,7 +11,7 @@ import { formatCount, formatDateTime } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { ChannelAccount, ChannelTestResult, FacebookLoginSettings, FailedWebhookEvent } from '@/types/admin';
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { CircleAlert, CircleCheck, Info, LoaderCircle, RotateCw, TriangleAlert, X } from 'lucide-vue-next';
+import { CircleAlert, CircleCheck, Info, RotateCw, TriangleAlert, X } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 
 const props = defineProps<{ accounts: ChannelAccount[]; failedEvents: FailedWebhookEvent[]; facebookLogin: FacebookLoginSettings }>();
@@ -150,7 +151,7 @@ async function reprocess(event: FailedWebhookEvent): Promise<void> {
 
 const columns = computed<Column[]>(() => [
     { key: 'event', label: t('settings.channels.event') },
-    { key: 'attempts', label: t('settings.channels.attempts'), align: 'end' },
+    { key: 'attempts', label: t('settings.channels.attempts'), numeric: true },
     { key: 'error', label: t('settings.channels.error') },
     { key: 'created_at', label: t('orders.columns.date') },
     { key: 'actions', label: t('ui.actions'), align: 'end' },
@@ -198,7 +199,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.channels.title'), href:
 
             <section class="space-y-2">
                 <h2 class="text-sm font-medium">{{ t('settings.channels.failed_events') }}</h2>
-                <DataTable :columns="columns" :rows="failedEvents" :empty="t('settings.channels.no_failed')">
+                <DataTable table-id="settings-channels" :columns="columns" :rows="failedEvents" :empty="t('settings.channels.no_failed')" :empty-icon="CircleCheck">
                     <template #cell-event="{ row }">
                         <span class="font-medium" dir="ltr">#{{ row.id }} · {{ row.provider }} · {{ row.event_type ?? '—' }}</span>
                     </template>
@@ -206,10 +207,9 @@ const breadcrumbs = computed(() => [{ title: t('settings.channels.title'), href:
                     <template #cell-error="{ row }"><span class="line-clamp-2 max-w-md break-words text-destructive" dir="ltr">{{ row.error ?? '—' }}</span></template>
                     <template #cell-created_at="{ row }"><span class="whitespace-nowrap tabular-nums text-muted-foreground">{{ formatDateTime(row.created_at, locale) }}</span></template>
                     <template #cell-actions="{ row }">
-                        <button type="button" class="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 hover:bg-muted disabled:opacity-50" :disabled="busyEvent !== null" @click="reprocess(row)">
-                            <LoaderCircle v-if="busyEvent === row.id" class="size-3 animate-spin" aria-hidden="true" />
-                            <RotateCw v-else class="size-3" aria-hidden="true" />{{ t('settings.channels.reprocess') }}
-                        </button>
+                        <Button variant="outline" class="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 hover:bg-muted disabled:opacity-50 text-[length:inherit]" type="button" :disabled="busyEvent !== null" @click="reprocess(row)" :loading="busyEvent === row.id">
+                            <RotateCw class="size-3" aria-hidden="true" />{{ t('settings.channels.reprocess') }}
+                        </Button>
                     </template>
                 </DataTable>
             </section>

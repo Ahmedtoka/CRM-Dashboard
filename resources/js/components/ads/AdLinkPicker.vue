@@ -159,7 +159,7 @@ function save(): void {
             </li>
         </ul>
 
-        <Button size="sm" class="gap-1.5" @click="save" :loading="saving">
+        <Button type="button" size="sm" class="gap-1.5" @click="save" :loading="saving">
             <Link2 class="size-3.5" aria-hidden="true" />{{ t('ads.materials.link.save') }}
         </Button>
     </div>

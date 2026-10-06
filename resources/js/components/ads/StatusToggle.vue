@@ -104,6 +104,7 @@ const btn =
 <template>
     <span v-if="target && !disabled && canWrite" class="inline-flex">
         <Button
+            type="button"
             variant="outline"
             size="sm"
             :class="[btn, stopping ? 'border-destructive/40 text-destructive hover:bg-destructive/10' : 'border-border text-foreground hover:bg-muted']"

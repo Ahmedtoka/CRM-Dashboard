@@ -142,7 +142,7 @@ const area = 'min-h-24 w-full rounded-md border border-input bg-background px-2 
                             <option v-for="v in videos" :key="v.id" :value="v.id">{{ v.original_name ?? `#${v.id}` }}</option>
                         </select>
                     </div>
-                    <Button :variant="captions.length ? 'outline' : 'default'" class="ms-auto" :loading="generating" :disabled="busy || !fileId" @click="generate">
+                    <Button type="button" :variant="captions.length ? 'outline' : 'default'" class="ms-auto" :loading="generating" :disabled="busy || !fileId" @click="generate">
                         <Sparkles class="size-4" aria-hidden="true" />
                         {{ captions.length ? t('ads.captions.regenerate') : t('ads.captions.generate') }}
                     </Button>
@@ -180,7 +180,7 @@ const area = 'min-h-24 w-full rounded-md border border-input bg-background px-2 
             <p v-if="error" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{{ error }}</p>
 
             <DialogFooter class="gap-2 sm:justify-start">
-                <Button v-if="canPublish" :loading="saving" :disabled="busy || !valid" @click="createAds">
+                <Button v-if="canPublish" type="button" :loading="saving" :disabled="busy || !valid" @click="createAds">
                     <Rocket class="size-4" aria-hidden="true" />
                     {{ t('ads.captions.create_ads') }}
                 </Button>

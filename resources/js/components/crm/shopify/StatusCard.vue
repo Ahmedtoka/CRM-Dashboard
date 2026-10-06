@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import { formatDateTime } from '@/lib/format';
 import type { ShopifyIntegrationRow } from '@/types/admin';
-import { LoaderCircle } from 'lucide-vue-next';
 
 defineProps<{ integration: ShopifyIntegrationRow; disconnecting: boolean }>();
 const emit = defineEmits<{ disconnect: [] }>();
@@ -18,15 +18,15 @@ const statusTone = { connected: 'positive', error: 'negative', disconnected: 'ne
         <header class="flex flex-wrap items-center gap-2">
             <h2 class="text-sm font-semibold" dir="ltr">{{ integration.shop_name || integration.shop_domain }}</h2>
             <StatusChip :label="t(`settings.shopify.status.${integration.status}`)" :tone="statusTone[integration.status]" />
-            <button
+            <Button
+                variant="destructive"
+                class="ms-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50 text-[length:inherit]"
                 type="button"
-                class="ms-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
-                :disabled="disconnecting"
                 @click="emit('disconnect')"
+                :loading="disconnecting"
             >
-                <LoaderCircle v-if="disconnecting" class="size-3.5 animate-spin" aria-hidden="true" />
                 {{ t('settings.shopify.card.disconnect') }}
-            </button>
+            </Button>
         </header>
 
         <dl class="grid gap-1.5 sm:grid-cols-2">

@@ -229,7 +229,13 @@ function saveSettings(): void {
                         <Plus aria-hidden="true" />{{ t('ads.setup.add_buyer') }}
                     </button>
                 </div>
-                <DataTable table-id="ads-buyers-setup" :columns="columns" :rows="buyers" :caption="t('ads.setup.buyers_title')" :empty="t('ads.setup.no_buyers')">
+                <DataTable
+                    table-id="ads-buyers-setup"
+                    :columns="columns"
+                    :rows="buyers"
+                    :caption="t('ads.setup.buyers_title')"
+                    :empty="t('ads.setup.no_buyers')"
+                >
                     <template #cell-name="{ row }">
                         <span class="inline-flex items-center gap-2 font-medium">
                             <span
@@ -313,13 +319,12 @@ function saveSettings(): void {
                                 />
                             </div>
                             <Button
+                                type="button"
                                 size="sm"
                                 @click="saveTarget(row.month)"
                                 :loading="targetForm.processing && savingMonth === row.month"
                             >
-                                {{
-                                    t('ads.setup.save_row')
-                                }}
+                                {{ t('ads.setup.save_row') }}
                             </Button>
                         </div>
                         <p v-if="targetError(row.month)" role="alert" class="basis-full text-2xs text-destructive">{{ targetError(row.month) }}</p>

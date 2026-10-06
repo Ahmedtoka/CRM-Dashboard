@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import { Button } from '@/components/ui/button';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { FacebookPageOption } from '@/types/admin';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, ArrowRight, Facebook, LoaderCircle, ShieldAlert, ShieldCheck } from 'lucide-vue-next';
+import { ArrowLeft, ArrowRight, Facebook, ShieldAlert, ShieldCheck } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{ pages: FacebookPageOption[] }>();
@@ -57,7 +59,14 @@ const breadcrumbs = computed(() => [
                 <span class="font-medium text-muted-foreground tabular-nums">{{ t('settings.channels.facebook.pages_count', { count: pages.length }) }}</span>
             </div>
 
-            <ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div v-if="!pages.length" class="rounded-lg bg-card shadow-card">
+                <EmptyState :icon="Facebook" :title="t('settings.channels.facebook.flash.no_pages')">
+                    <template #action>
+                        <Link href="/settings/integrations" class="text-xs font-medium text-primary hover:underline">{{ t('settings.channels.facebook.back') }}</Link>
+                    </template>
+                </EmptyState>
+            </div>
+            <ul v-else class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <li
                     v-for="fbPage in sortedPages"
                     :key="fbPage.id"
@@ -95,17 +104,18 @@ const breadcrumbs = computed(() => [
                         <span>{{ t('settings.channels.facebook.missing_tasks', { tasks: missingLabel(fbPage) }) }}</span>
                     </p>
 
-                    <button
+                    <Button
                         type="button"
-                        class="mt-auto inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50"
-                        :class="fbPage.connected ? 'border border-[#0866FF]/40 text-[#0866FF] hover:bg-[#0866FF]/5' : 'bg-[#0866FF] text-white shadow-sm hover:bg-[#0759E0]'"
+                        variant="outline"
+                        class="mt-auto h-9 gap-2 px-3 text-sm font-semibold transition disabled:cursor-not-allowed"
+                        :class="fbPage.connected ? 'border-[#0866FF]/40 text-[#0866FF] hover:bg-[#0866FF]/5' : 'border-0 bg-[#0866FF] text-white shadow-sm hover:bg-[#0759E0]'"
+                        :loading="busyPage === fbPage.id"
                         :disabled="busyPage !== null || fbPage.missing_tasks.length > 0"
                         @click="connect(fbPage)"
                     >
-                        <LoaderCircle v-if="busyPage === fbPage.id" class="size-4 animate-spin" aria-hidden="true" />
-                        <Facebook v-else class="size-4" aria-hidden="true" />
+                        <Facebook class="size-4" aria-hidden="true" />
                         {{ fbPage.connected ? t('settings.channels.facebook.reconnect_page') : t('settings.channels.facebook.connect_page') }}
-                    </button>
+                    </Button>
                 </li>
             </ul>
         </div>

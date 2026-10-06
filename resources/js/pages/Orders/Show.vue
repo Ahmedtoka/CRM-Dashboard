@@ -140,6 +140,7 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
                 </a>
                 <Button
                     v-if="canRetry"
+                    type="button"
                     variant="outline"
                     size="sm"
                     class="text-destructive"
@@ -149,10 +150,10 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
                 >
                     <RotateCcw aria-hidden="true" />{{ t('orders.retry') }}
                 </Button>
-                <Button v-if="canMarkPaid" variant="outline" size="sm" :loading="busy === 'mark-paid'" :disabled="!!busy" @click="act('mark-paid')">
+                <Button v-if="canMarkPaid" type="button" variant="outline" size="sm" :loading="busy === 'mark-paid'" :disabled="!!busy" @click="act('mark-paid')">
                     {{ t('orders.mark_paid') }}
                 </Button>
-                <Button v-if="canShip" variant="outline" size="sm" :loading="busy === 'ship'" :disabled="!!busy" @click="act('ship')">
+                <Button v-if="canShip" type="button" variant="outline" size="sm" :loading="busy === 'ship'" :disabled="!!busy" @click="act('ship')">
                     {{ t('orders.ship') }}
                 </Button>
                 <button v-if="canCancel && !confirmingCancel" type="button" :class="[btn, 'text-destructive']" @click="confirmingCancel = true">
@@ -165,7 +166,7 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
                 class="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive"
             >
                 <label class="flex items-center gap-1.5"><input v-model="restock" type="checkbox" />{{ t('order.restock') }}</label>
-                <Button variant="destructive" size="sm" class="h-7 px-2" :loading="busy === 'cancel'" :disabled="!!busy" @click="act('cancel')">
+                <Button type="button" variant="destructive" size="sm" class="h-7 px-2" :loading="busy === 'cancel'" :disabled="!!busy" @click="act('cancel')">
                     {{ t('orders.cancel_confirm') }}
                 </Button>
                 <button

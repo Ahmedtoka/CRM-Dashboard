@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import { useI18n } from '@/composables/useI18n';
 import { formatDateTime } from '@/lib/format';
 import type { ShopifyWebhookRow } from '@/types/admin';
-import { LoaderCircle, RotateCw } from 'lucide-vue-next';
+import { RotateCw } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 defineProps<{ webhooks: ShopifyWebhookRow[]; reregistering: boolean }>();
@@ -22,16 +23,16 @@ const columns = computed<Column[]>(() => [
     <section class="grid gap-2">
         <header class="flex items-center gap-2">
             <h2 class="text-sm font-semibold">{{ t('settings.shopify.webhooks.title') }}</h2>
-            <button
-                type="button"
+            <Button
+                variant="outline"
                 class="ms-auto inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs hover:bg-muted disabled:opacity-50"
-                :disabled="reregistering"
+                type="button"
                 @click="emit('reregister')"
+                :loading="reregistering"
             >
-                <LoaderCircle v-if="reregistering" class="size-3 animate-spin" aria-hidden="true" />
-                <RotateCw v-else class="size-3" aria-hidden="true" />
+                <RotateCw class="size-3" aria-hidden="true" />
                 {{ t('settings.shopify.webhooks.reregister') }}
-            </button>
+            </Button>
         </header>
 
         <DataTable :columns="columns" :rows="webhooks.map((w) => ({ id: w.topic, ...w }))" :empty="t('settings.shopify.webhooks.empty')">

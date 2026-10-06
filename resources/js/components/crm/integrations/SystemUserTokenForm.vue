@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { integrationError } from '@/lib/integrations';
 import type { IntegrationAccount, IntegrationAccounts, SystemTokenPage } from '@/types/admin';
-import { CircleAlert, LoaderCircle } from 'lucide-vue-next';
+import { CircleAlert } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 /**
@@ -92,15 +92,16 @@ function missingLabel(page: SystemTokenPage): string {
                 />
                 <span class="text-2xs text-muted-foreground">{{ t('settings.integrations.facebook.system_user.token_note') }}</span>
             </label>
-            <button
+            <Button
+                variant="outline"
+                size="sm"
+                class="w-fit text-[length:inherit]"
                 type="submit"
-                :class="buttonVariants({ variant: 'outline', size: 'sm' })"
-                class="w-fit"
                 :disabled="busy || token.trim().length < 20"
+                :loading="busy"
             >
-                <LoaderCircle v-if="busy" class="animate-spin" aria-hidden="true" />
                 {{ t('settings.integrations.facebook.system_user.list') }}
-            </button>
+            </Button>
         </form>
 
         <form v-else class="grid gap-2" @submit.prevent="connect">
@@ -155,10 +156,9 @@ function missingLabel(page: SystemTokenPage): string {
                 />
             </label>
             <div class="flex flex-wrap gap-2">
-                <button type="submit" :class="buttonVariants({ size: 'sm' })" :disabled="busy || !pageId">
-                    <LoaderCircle v-if="busy" class="animate-spin" aria-hidden="true" />
+                <Button size="sm" type="submit" :disabled="busy || !pageId" :loading="busy">
                     {{ t('settings.integrations.facebook.system_user.connect') }}
-                </button>
+                </Button>
                 <button type="button" :class="buttonVariants({ variant: 'ghost', size: 'sm' })" :disabled="busy" @click="pages = null">
                     {{ t('settings.integrations.actions.cancel') }}
                 </button>

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useNow } from '@/composables/useNow';
 import { formatDateTime, formatSince } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { HealthCheckItem, IntegrationAccount } from '@/types/admin';
-import { CircleAlert, CircleCheck, LoaderCircle, RefreshCw, TriangleAlert, Unplug } from 'lucide-vue-next';
+import { CircleAlert, CircleCheck, RefreshCw, TriangleAlert, Unplug } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 /**
@@ -74,16 +74,18 @@ const lastMessage = computed(() =>
                     <span :class="check.status === 'problem' ? 'text-destructive' : 'text-foreground'">{{ text(check) }}</span>
                     <span v-if="detail(check)" class="block break-words text-2xs text-muted-foreground" dir="auto">{{ detail(check) }}</span>
                 </div>
-                <button
+                <Button
                     v-if="check.fix && check.status !== 'ok'"
+                    :variant="check.status === 'problem' ? 'default' : 'outline'"
+                    size="sm"
+                    class="h-7"
                     type="button"
-                    :class="cn(buttonVariants({ variant: check.status === 'problem' ? 'default' : 'outline', size: 'sm' }), 'h-7')"
                     :disabled="fixing || reconnecting"
                     @click="check.fix === 'resubscribe' ? emit('fix', check.fix) : emit('reconnect')"
+                    :loading="fixing && check.fix === 'resubscribe'"
                 >
-                    <LoaderCircle v-if="fixing && check.fix === 'resubscribe'" class="animate-spin" aria-hidden="true" />
                     {{ t(`settings.integrations.fixes.${check.fix}`) }}
-                </button>
+                </Button>
             </li>
             <li v-if="account.health_checked_at" class="text-2xs text-muted-foreground">
                 {{ t('settings.integrations.last_check') }}: {{ formatSince(account.health_checked_at, locale, now) }}
@@ -91,16 +93,14 @@ const lastMessage = computed(() =>
         </ul>
 
         <div class="flex flex-wrap items-center gap-2">
-            <button type="button" :class="buttonVariants({ variant: 'outline', size: 'sm' })" :disabled="testing" @click="emit('test')">
-                <LoaderCircle v-if="testing" class="animate-spin" aria-hidden="true" />
-                <CircleCheck v-else aria-hidden="true" />
+            <Button variant="outline" size="sm" type="button" @click="emit('test')" :loading="testing">
+                <CircleCheck aria-hidden="true" />
                 {{ t('settings.integrations.actions.test') }}
-            </button>
-            <button type="button" :class="buttonVariants({ variant: 'outline', size: 'sm' })" :disabled="reconnecting" @click="emit('reconnect')">
-                <LoaderCircle v-if="reconnecting" class="animate-spin" aria-hidden="true" />
-                <RefreshCw v-else aria-hidden="true" />
+            </Button>
+            <Button variant="outline" size="sm" type="button" @click="emit('reconnect')" :loading="reconnecting">
+                <RefreshCw aria-hidden="true" />
                 {{ t('settings.integrations.actions.reconnect') }}
-            </button>
+            </Button>
             <button
                 type="button"
                 :class="

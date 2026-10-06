@@ -283,10 +283,10 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                             {{ c.last_error }}
                         </p>
                         <div class="flex flex-wrap gap-2">
-                            <Button variant="outline" size="sm" class="gap-1.5" @click="testConnection(c)" :loading="busy(`test-${c.id}`)">
+                            <Button type="button" variant="outline" size="sm" class="gap-1.5" @click="testConnection(c)" :loading="busy(`test-${c.id}`)">
                                 <ShieldCheck aria-hidden="true" />{{ t('ads.accounts.test') }}
                             </Button>
-                            <Button variant="outline" size="sm" class="gap-1.5" @click="syncConnection(c)" :loading="busy(`sync-${c.id}`)">
+                            <Button type="button" variant="outline" size="sm" class="gap-1.5" @click="syncConnection(c)" :loading="busy(`sync-${c.id}`)">
                                 <RefreshCw aria-hidden="true" />{{ t('ads.accounts.sync') }}
                             </Button>
                             <button type="button" :class="outlineSm" @click="openEdit(c)">
@@ -347,6 +347,7 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                                     <label class="text-2xs text-muted-foreground" :for="`from-${row.id}`">{{ t('ads.accounts.from_date') }}</label>
                                     <input :id="`from-${row.id}`" v-model="drafts[row.id].date" type="date" dir="ltr" :class="smallInput" />
                                     <Button
+                                        type="button"
                                         size="sm"
                                         :disabled="!canAssign(row) || assigning(row)"
                                         @click="assign(row)"
@@ -399,6 +400,7 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                         </template>
                         <template #cell-actions="{ row }">
                             <Button
+                                type="button"
                                 variant="outline"
                                 size="sm"
                                 class="gap-1.5"
