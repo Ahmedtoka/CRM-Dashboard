@@ -24,7 +24,10 @@ describe('RatingsSection', () => {
 
     it('says so when nobody rated', () => {
         const w = mount(RatingsSection, {
-            props: { ratings: { ...base, summary: { count: 0, avg: null, low: 0 }, by_agent_day: [], list: [] }, range: { from: '2026-10-06', to: '2026-10-06' } },
+            props: {
+                ratings: { ...base, summary: { count: 0, avg: null, low: 0 }, by_agent_day: [], list: [] },
+                range: { from: '2026-10-06', to: '2026-10-06' },
+            },
             global: { stubs: { Link } },
         });
         expect(w.text()).toContain('No ratings in this period');

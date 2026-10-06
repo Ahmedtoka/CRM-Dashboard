@@ -100,7 +100,8 @@ const chips = computed(() => {
     if (f.from || f.to) out.push({ key: 'date', label: t('orders.list.date_chip', { from: f.from ?? '…', to: f.to ?? '…' }) });
     if (f.mismatch) out.push({ key: 'mismatch', label: t('orders.mismatch_only') });
     if (f.stuck) out.push({ key: 'stuck', label: t('orders.stuck_only') });
-    if (f.older_than) out.push({ key: 'older_than', label: t('orders.older_than_chip', { time: formatMinutes(Number(f.older_than), locale.value) }) });
+    if (f.older_than)
+        out.push({ key: 'older_than', label: t('orders.older_than_chip', { time: formatMinutes(Number(f.older_than), locale.value) }) });
     return out;
 });
 

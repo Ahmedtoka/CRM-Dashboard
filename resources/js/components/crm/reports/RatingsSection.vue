@@ -35,7 +35,9 @@ onMounted(() => {
             <h2 class="text-base font-bold text-foreground">{{ t('reports.ratings.title') }}</h2>
             <p v-if="ratings.summary.count > 0" class="text-sm tabular-nums text-muted-foreground">
                 {{ t('reports.ratings.summary', { avg: formatRatio(ratings.summary.avg, locale), n: formatCount(ratings.summary.count, locale) }) }}
-                <span v-if="ratings.summary.low > 0" class="ms-2 font-semibold text-destructive">{{ t('reports.ratings.low', { n: formatCount(ratings.summary.low, locale) }) }}</span>
+                <span v-if="ratings.summary.low > 0" class="ms-2 font-semibold text-destructive">{{
+                    t('reports.ratings.low', { n: formatCount(ratings.summary.low, locale) })
+                }}</span>
             </p>
         </header>
 
@@ -70,7 +72,9 @@ onMounted(() => {
             </div>
             <ul class="divide-y divide-border text-sm">
                 <li v-for="r in ratings.list" :key="r.entry_id" class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-                    <span class="w-10 font-bold tabular-nums" :class="r.stars <= 2 ? 'text-destructive' : 'text-foreground'">{{ formatCount(r.stars, locale) }}/{{ formatCount(5, locale) }}</span>
+                    <span class="w-10 font-bold tabular-nums" :class="r.stars <= 2 ? 'text-destructive' : 'text-foreground'"
+                        >{{ formatCount(r.stars, locale) }}/{{ formatCount(5, locale) }}</span
+                    >
                     <span class="min-w-0 flex-1 truncate">{{ r.customer ?? '—' }} · {{ r.user?.name ?? '—' }}</span>
                     <span class="text-xs tabular-nums text-muted-foreground">{{ formatDateTime(r.reviewed_at, locale) }}</span>
                     <Link v-if="r.conversation_id" :href="`/inbox?c=${r.conversation_id}`" class="text-xs font-medium text-primary hover:underline">{{

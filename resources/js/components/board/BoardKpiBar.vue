@@ -76,7 +76,8 @@ const tiles = computed(() => {
             value: n(k?.closed?.[key]),
         })),
         sla: k?.sla_pct === null || k?.sla_pct === undefined ? null : { value: `${n(k.sla_pct)}%`, good: k.sla_pct >= k.sla_target_pct },
-        rating: k?.rating && k.rating.count > 0 ? t('board.kpi.rating', { avg: formatRatio(k.rating.avg, locale.value), n: n(k.rating.count) }) : null,
+        rating:
+            k?.rating && k.rating.count > 0 ? t('board.kpi.rating', { avg: formatRatio(k.rating.avg, locale.value), n: n(k.rating.count) }) : null,
     };
 });
 </script>
