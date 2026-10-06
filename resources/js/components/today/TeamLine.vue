@@ -27,7 +27,7 @@ const state = (r: TeamRow) => (r.desk_status ? t(`today.team.desk.${r.desk_statu
             <h2 class="text-sm font-bold text-foreground">{{ t('today.team.title') }}</h2>
             <Link v-if="canSeeBoard" href="/board" class="ms-auto text-sm font-medium text-primary hover:underline">{{ t('today.team.room') }}</Link>
         </header>
-        <DataTable :columns="columns" :rows="tableRows" :empty="t('today.team.empty')">
+        <DataTable table-id="today-team" :columns="columns" :rows="tableRows" :empty="t('today.team.empty')">
             <template #cell-name="{ row }">
                 <Link :href="row.href" class="font-medium text-foreground hover:underline">{{ row.user.name }}</Link>
             </template>

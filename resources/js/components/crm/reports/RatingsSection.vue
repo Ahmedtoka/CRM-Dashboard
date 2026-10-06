@@ -45,7 +45,7 @@ onMounted(() => {
 
         <template v-else>
             <h3 class="text-xs font-semibold text-muted-foreground">{{ t('reports.ratings.by_agent_day') }}</h3>
-            <DataTable :columns="columns" :rows="rows">
+            <DataTable table-id="team-ratings" :columns="columns" :rows="rows">
                 <template #cell-date="{ row }">{{ formatDate(`${row.date}T12:00:00Z`, locale) }}</template>
                 <template #cell-agent="{ row }">{{ row.user.name }}</template>
                 <template #cell-avg="{ row }">{{ formatRatio(row.avg, locale) }}</template>
