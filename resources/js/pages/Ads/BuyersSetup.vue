@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import type { SharedData } from '@/types';
 import type { AdBuyerSetupRow, AdsBuyersSetupProps } from '@/types/ads';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { LoaderCircle, Pencil, Plus, Trash2, UserPlus } from 'lucide-vue-next';
+import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
 
 const props = defineProps<AdsBuyersSetupProps>();
@@ -23,11 +23,12 @@ const props = defineProps<AdsBuyersSetupProps>();
 const { t, locale } = useI18n();
 const toast = useToast();
 const page = usePage<SharedData>();
+/** The users page is admin-only: a supervisor gets no link that would end on 403. */
+const isAdmin = computed(() => (page.props.auth?.user as { role?: string } | undefined)?.role === 'admin');
 
 const inputClass =
     'flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50';
 const smallInput = 'h-8 w-28 rounded-md border border-input bg-card px-2 text-xs';
-const outlineSm = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5');
 const DEFAULT_COLOR = '#1877F2';
 
 const num = (value: number | string | null | undefined): string => (value === null || value === undefined ? '' : String(value));
@@ -214,8 +215,7 @@ const appCrumbs = computed(() => [
             <section class="space-y-3" :aria-label="t('ads.setup.buyers_title')">
                 <div class="flex flex-wrap items-center gap-2">
                     <h2 class="flex-1 text-sm font-semibold">{{ t('ads.setup.buyers_title') }}</h2>
-                    <Link href="/settings/users" :class="outlineSm"><UserPlus aria-hidden="true" />{{ t('ads.setup.add_user') }}</Link>
-                    <button type="button" :class="buttonVariants({ variant: 'default', size: 'sm' })" @click="openBuyer(null)">
+                    <button type="button" :class="buttonVariants({ variant: 'default', size: 'sm' })" data-test="add-buyer" @click="openBuyer(null)">
                         <Plus aria-hidden="true" />{{ t('ads.setup.add_buyer') }}
                     </button>
                 </div>
@@ -348,7 +348,7 @@ const appCrumbs = computed(() => [
                 </select>
                 <p class="text-2xs text-muted-foreground">
                     {{ t('ads.setup.add_user_hint') }}
-                    <Link href="/settings/users" class="text-primary underline-offset-2 hover:underline">{{ t('ads.setup.add_user') }}</Link>
+                    <Link v-if="isAdmin" href="/settings/users" class="text-primary underline-offset-2 hover:underline">{{ t('ads.setup.add_user') }}</Link>
                 </p>
                 <p v-if="buyerForm.errors.user_id" class="text-2xs text-destructive">{{ buyerForm.errors.user_id }}</p>
             </div>
