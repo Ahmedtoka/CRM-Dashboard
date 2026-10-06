@@ -5,6 +5,7 @@ namespace App\Ads\Alerts;
 use App\Ads\AdsSettings;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\AdsQuery;
+use App\Enums\ShipmentStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -26,8 +27,12 @@ final class BreakEven
 
     public const ASSUMED_REFUSAL = 0.2;
 
-    /** Shipment statuses that mean the COD order came back (refused or returned). */
-    public const REFUSED = ['returned', 'failure'];
+    /**
+     * Shipment statuses that mean the COD order came back (refused or returned). FailedAttempt is NOT here: the courier
+     * retries and the order is still on the way (OrderLookup shows it as such); it counts once it ends as Returned or
+     * Delivered.
+     */
+    public const REFUSED = [ShipmentStatus::Returned->value];
 
     /** @var array<int, array<string, mixed>> */
     private array $memo = [];

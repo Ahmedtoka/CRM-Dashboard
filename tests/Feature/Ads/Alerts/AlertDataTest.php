@@ -96,3 +96,13 @@ it('measures minutes to the first user or bot reply after each referral', functi
 
     expect(app(AlertData::class)->firstReplyWaits([(string) $ad->external_id], W::day(-1), W::day(-1)))->toEqualCanonicalizing([30.0, null]);
 });
+
+it('treats a failed delivery attempt as still on the way, not refused (courier retries)', function () {
+    $ad = W::ad(W::account());
+    W::order($ad, W::day(-3).' 12:00', 900, ['shipment_status' => 'returned']);
+    W::order($ad, W::day(-3).' 12:00', 900, ['shipment_status' => 'failed_attempt']);
+    W::order($ad, W::day(-3).' 12:00', 900, ['shipment_status' => 'delivered']);
+
+    expect(\App\Ads\Alerts\BreakEven::REFUSED)->toBe(['returned'])
+        ->and(app(AlertData::class)->shipmentOutcomes([$ad->id], W::day(-30), W::day(-1)))->toBe([$ad->id => ['terminal' => 2, 'refused' => 1]]);
+});
