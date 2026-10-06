@@ -30,7 +30,7 @@ class AlertController extends Controller
         $data = $request->validate(['until' => ['required', Rule::in(['tomorrow', '3d', '7d'])]]);
         $now = CarbonImmutable::now(AdsFilter::TIMEZONE);
         $until = match ($data['until']) {
-            'tomorrow' => $now->addDay()->setTime(9, 0),
+            'tomorrow' => self::nextMorning($now),
             '3d' => $now->addDays(3),
             default => $now->addDays(7),
         };
@@ -41,6 +41,14 @@ class AlertController extends Controller
         }
 
         return response()->json(['ok' => true, 'until' => $until->toIso8601String()]);
+    }
+
+    /** «بكرة»: the next 09:00 Cairo that is more than an hour away (07:00 → today 09:00; 08:30 → tomorrow 09:00). */
+    public static function nextMorning(CarbonImmutable $now): CarbonImmutable
+    {
+        $nine = $now->setTime(9, 0);
+
+        return $nine->greaterThan($now->addHour()) ? $nine : $nine->addDay();
     }
 
     public function dismiss(Request $request, AlertScope $scope, AlertStore $store): JsonResponse

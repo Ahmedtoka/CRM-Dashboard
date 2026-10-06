@@ -47,3 +47,11 @@ it('evaluates inline with --sync and wakes snoozed alerts first', function () {
 it('refuses an unknown scope', function () {
     $this->artisan('ads:alerts', ['--scope' => 'weekly'])->assertExitCode(2);
 });
+
+it('wakes snoozed alerts before building the 09:00 digest', function () {
+    $snoozed = AdsAlert::factory()->create(['state' => 'snoozed', 'snoozed_until' => now()->subMinute()]);
+
+    $this->artisan('ads:alerts-digest')->assertSuccessful();
+
+    expect($snoozed->fresh()->state)->toBe('open');
+});

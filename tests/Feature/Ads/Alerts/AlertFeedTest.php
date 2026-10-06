@@ -106,3 +106,16 @@ it('answers 404 for another buyer alert and 403 for content and moderators', fun
     $this->actingAs(User::factory()->create(['role' => UserRole::Supervisor]))->postJson('/ads/alerts/seen', ['ids' => [$foreign->id]])->assertOk();
     expect($foreign->fresh()->seen_at)->not->toBeNull();
 });
+
+it('snoozes «بكرة» to the next 09:00 Cairo at least an hour away', function (string $now, string $until) {
+    W::freeze($now);
+    $acc = W::account();
+    $buyer = W::buyer($acc);
+    $a = AdsAlert::factory()->create(['ad_id' => W::ad($acc)->id]);
+
+    $this->actingAs($buyer)->postJson('/ads/alerts/snooze', ['ids' => [$a->id], 'until' => 'tomorrow'])->assertOk()->assertJsonPath('until', $until);
+})->with([
+    ['2026-10-06 07:00:00', '2026-10-06T09:00:00+03:00'],
+    ['2026-10-06 08:30:00', '2026-10-07T09:00:00+03:00'],
+    ['2026-10-06 23:30:00', '2026-10-07T09:00:00+03:00'],
+]);
