@@ -78,4 +78,33 @@ describe('DataTable', () => {
         const w = mount(Table, { props: { columns, rows }, slots: { totals: '<tr><td>sum</td><td>30</td></tr>' } });
         expect(w.find('tfoot').text()).toContain('30');
     });
+
+    it('deselects all when every row is selected', async () => {
+        const w = mount(Table, { props: { columns, rows, selectable: true, selected: [1, 2] } });
+        expect((w.find('thead input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
+        await w.find('thead input[type="checkbox"]').setValue(false);
+        expect(w.emitted('update:selected')?.[0]).toEqual([[]]);
+    });
+
+    it('marks the header checkbox indeterminate for a partial selection', () => {
+        const w = mount(Table, { props: { columns, rows, selectable: true, selected: [1] } });
+        const box = w.find('thead input[type="checkbox"]').element as HTMLInputElement;
+        expect(box.indeterminate).toBe(true);
+        expect(box.checked).toBe(false);
+    });
+
+    it('does not treat keys on the row checkbox as a row activation', async () => {
+        const w = mount(Table, { props: { columns, rows, selectable: true, clickable: true, selected: [] } });
+        await w.find('tbody input[type="checkbox"]').trigger('keydown', { key: 'Enter' });
+        expect(w.emitted('rowClick')).toBeUndefined();
+        await w.find('tbody tr').trigger('keydown', { key: 'Enter' });
+        expect(w.emitted('rowClick')?.[0]).toEqual([rows[0]]);
+    });
+
+    it('sticks the checkbox column, not the data column, when both options are on', () => {
+        const w = mount(Table, { props: { columns, rows, selectable: true, stickyFirstColumn: true } });
+        const tds = w.findAll('tbody tr')[0].findAll('td');
+        expect(tds[0].classes()).toContain('crm-sticky-first');
+        expect(tds[1].classes()).not.toContain('crm-sticky-first');
+    });
 });

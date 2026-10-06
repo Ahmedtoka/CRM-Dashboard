@@ -90,7 +90,7 @@ function alignClass(col: Column): string {
 }
 
 function colClasses(col: Column, index: number): unknown[] {
-    return [alignClass(col), col.numeric ? 'tabular-nums' : '', col.class, props.stickyFirstColumn && index === 0 ? 'crm-sticky-first' : ''];
+    return [alignClass(col), col.numeric ? 'tabular-nums' : '', col.class, props.stickyFirstColumn && !props.selectable && index === 0 ? 'crm-sticky-first' : ''];
 }
 
 function ariaSort(col: Column): 'ascending' | 'descending' | 'none' | undefined {
@@ -117,6 +117,7 @@ function toggleRow(row: T): void {
 }
 
 function onKey(event: KeyboardEvent, row: T): void {
+    if (event.target !== event.currentTarget) return;
     if (props.clickable && (event.key === 'Enter' || event.key === ' ')) {
         event.preventDefault();
         emit('rowClick', row);
@@ -194,7 +195,7 @@ function defaultCell(row: T, key: string): unknown {
                 <caption v-if="caption" class="sr-only">{{ caption }}</caption>
                 <thead class="bg-card text-2xs font-semibold text-muted-foreground" :class="stickyHeader ? 'crm-sticky-head' : 'border-b border-border/60'">
                     <tr>
-                        <th v-if="selectable" scope="col" class="w-8" :class="cellPad">
+                        <th v-if="selectable" scope="col" class="w-8" :class="[cellPad, stickyFirstColumn ? 'crm-sticky-first' : '']">
                             <input
                                 type="checkbox"
                                 class="size-4 rounded border-input"
@@ -252,7 +253,7 @@ function defaultCell(row: T, key: string): unknown {
                             @click="clickable && emit('rowClick', row)"
                             @keydown="onKey($event, row)"
                         >
-                            <td v-if="selectable" :class="cellPad" @click.stop>
+                            <td v-if="selectable" :class="[cellPad, stickyFirstColumn ? 'crm-sticky-first' : '']" @click.stop>
                                 <input
                                     type="checkbox"
                                     class="size-4 rounded border-input"

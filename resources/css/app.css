@@ -160,9 +160,15 @@ html {
     /* One sticky-header table box: scrolls both ways inside itself, so `position: sticky` works with
        horizontal overflow and in RTL; its height leaves room for the sticky top bar / page header. */
     .table-scroll-box {
-        overflow: auto;
-        max-height: calc(100svh - var(--page-header-h) - 1rem);
-        overscroll-behavior-inline: contain;
+        overflow-x: auto;
+    }
+    /* Phones scroll the page, not the box (no nested vertical scroller); md and up cap the height so the header sticks. */
+    @media (min-width: 768px) {
+        .table-scroll-box {
+            overflow: auto;
+            max-height: calc(100svh - var(--page-header-h) - 1rem);
+            overscroll-behavior-inline: contain;
+        }
     }
     .crm-sticky-head th {
         position: sticky;
@@ -176,6 +182,12 @@ html {
         inset-inline-start: 0;
         z-index: 1;
         background: hsl(var(--card));
+    }
+    tr:hover > .crm-sticky-first {
+        background: color-mix(in oklab, hsl(var(--muted)) 50%, hsl(var(--card)));
+    }
+    tr[tabindex]:hover > .crm-sticky-first {
+        background: hsl(var(--muted));
     }
     .crm-sticky-head th.crm-sticky-first {
         z-index: 3;
