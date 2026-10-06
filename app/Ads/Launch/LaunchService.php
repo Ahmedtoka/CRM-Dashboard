@@ -425,6 +425,26 @@ final class LaunchService
             ->map(fn (AdPublication $p) => [$p, $ads->get((string) $p->external_ad_id)])->values()->all();
     }
 
+    /** T11: out of stock before going live (D6). The expiry clock keeps running (E9). */
+    public function hold(AdLaunch $l): AdLaunch
+    {
+        $from = $l->state;
+        $l = $this->transition($l, [$from], LaunchState::OnHold, ['hold_from_state' => $from->value], null, null, ['reason' => 'out_of_stock']);
+        $this->notify->onHold($l);
+
+        return $l;
+    }
+
+    /** T11 back: stock returned; the launch resumes where it was (T6 re-checked when it was creating its ads). */
+    public function release(AdLaunch $l): AdLaunch
+    {
+        $to = $l->hold_from_state ?? LaunchState::Draft;
+        $l = $this->transition($l, [LaunchState::OnHold], $to, ['hold_from_state' => null], null, null, ['reason' => 'restocked'], 'launch.released');
+        $this->notify->released($l);
+
+        return $to === LaunchState::CreatingPaused ? $this->syncCreating($l) : $l;
+    }
+
     /** E13: a closed slot sends its launches under review back to content (system reason slot_closed). */
     public function slotClosed(AdSet $s, ?User $by): int
     {
