@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Ads\Access\AdsScope;
+use App\Ads\Launch\LaunchCounters;
 use App\Channels\Integrations\ConnectionHealthCheck;
 use App\Enums\Platform;
 use App\Enums\UserRole;
@@ -66,6 +67,7 @@ class HandleInertiaRequests extends Middleware
                     'locale' => $user->locale,
                     'platforms' => array_map(fn (Platform $p) => $p->value, $user->platforms()),
                     'preferences' => $user->notificationPreferences(),
+                    'ads_authority' => $user->hasAdsAuthority(),
                 ] : null,
             ],
             'locale' => fn () => app()->getLocale(),
@@ -96,13 +98,15 @@ class HandleInertiaRequests extends Middleware
             'canSeeBoard' => fn () => BoardAccess::allows($user),
             // Ads Hub pages only: what the viewer may see and do there (cheap, computed lazily).
             'ads' => fn () => $request->routeIs('ads.*') ? $this->adsAccess($user) : null,
+            // Launch approvals (S1): what waits for this person, on every page (the sidebar badges).
+            'adsCounters' => fn () => $user !== null && ($user->isAdsRole() || $user->isSupervisorOrAbove()) ? LaunchCounters::for($user) : null,
             // Developer-only nav entries (simulator, latency report) show only when this is on.
             'devTools' => (bool) config('crm.dev_tools'),
         ]);
     }
 
     /**
-     * @return array{canSeeSpend: bool, canManage: bool, canWrite: bool, isBuyer: bool, buyerId: ?int}
+     * @return array{canSeeSpend: bool, canManage: bool, canWrite: bool, isBuyer: bool, buyerId: ?int, canApprove: bool, canDirectPublish: bool}
      */
     private function adsAccess(?User $user): array
     {
@@ -116,6 +120,9 @@ class HandleInertiaRequests extends Middleware
             'canWrite' => $user !== null && ($user->isSupervisorOrAbove() || $buyer !== null),
             'isBuyer' => $user?->role === UserRole::MediaBuyer,
             'buyerId' => $buyer?->id,
+            // Approve launches (Ads authority, D3) and the admin-only direct publish (O7).
+            'canApprove' => (bool) $user?->hasAdsAuthority(),
+            'canDirectPublish' => (bool) $user?->isAdmin(),
         ];
     }
 

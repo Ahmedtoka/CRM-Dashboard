@@ -14,6 +14,10 @@ export interface AdsAccess {
     canWrite: boolean;
     isBuyer: boolean;
     buyerId: number | null;
+    /** Approve launches (Ads authority). */
+    canApprove: boolean;
+    /** Admin-only direct publish (O7). */
+    canDirectPublish: boolean;
 }
 
 export interface AdsOption {

@@ -20,19 +20,27 @@ const allows = (min: Role) => rank[role.value] >= rank[min];
 // Ads Hub (spec §8): report pages for supervisor+ and media buyers (a buyer's «media buyers» page is
 // their own card), management pages for supervisor+, the materials library for content.
 const adsGroup = computed<NavItem | null>(() => {
+    const counters = page.props.adsCounters ?? null;
+    const canApprove = page.props.auth.user?.ads_authority === true;
     const materials: NavItem = { title: t('nav.ads_materials'), href: '/ads/materials' };
+    const launches: NavItem = { title: t('nav.ads_launches'), href: '/ads/launches', badge: counters?.content_returned ?? 0 };
+    const approvals: NavItem[] = canApprove ? [{ title: t('nav.ads_approvals'), href: '/ads/approvals', badge: counters?.awaiting_approval ?? 0 }] : [];
     if (role.value === 'content') {
         return {
             title: t('nav.ads'),
             href: '/ads',
             icon: Images,
-            children: [materials, { title: t('nav.ads_collections'), href: '/ads/collections' }, { title: t('nav.ads_stock'), href: '/ads/stock' }],
+            children: [materials, launches, { title: t('nav.ads_collections'), href: '/ads/collections' }, { title: t('nav.ads_stock'), href: '/ads/stock' }],
         };
     }
     if (role.value !== 'media_buyer' && !allows('supervisor')) return null;
 
+    const review: NavItem[] =
+        role.value === 'media_buyer' ? [{ title: t('nav.ads_review'), href: '/ads/launches?box=review', badge: counters?.buyer_review ?? 0 }] : [launches];
     const children: NavItem[] = [
         { title: t('nav.ads_overview'), href: '/ads', exact: true },
+        ...approvals,
+        ...review,
         { title: t('nav.ads_buyers'), href: '/ads/buyers' },
         { title: t('nav.ads_creatives'), href: '/ads/creatives' },
         { title: t('nav.ads_campaigns'), href: '/ads/campaigns' },
