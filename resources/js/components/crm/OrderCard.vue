@@ -11,6 +11,7 @@ import { notOnShopifyText, orderLabel, orderName, stripBidiControls } from '@/li
 import { formatDateTime, formatMoney } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { Order } from '@/types/crm';
+import { Button } from '@/components/ui/button';
 import { usePage } from '@inertiajs/vue3';
 import { ExternalLink, LoaderCircle, MessageCircle, Package, RotateCcw, SquarePen, Store, TriangleAlert, Truck, XCircle } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
@@ -189,17 +190,17 @@ async function copyStatus(): Promise<void> {
             <button type="button" class="inline-flex h-7 items-center gap-1 rounded-md px-2 text-2xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground" @click="copyStatus">
                 <Package class="size-3.5" aria-hidden="true" />{{ t('order.copy_status') }}
             </button>
-            <button
+            <Button
                 v-if="canRetry"
-                type="button"
-                class="inline-flex h-7 items-center gap-1 rounded-md px-2 text-2xs font-medium text-destructive hover:bg-muted disabled:opacity-50"
-                :disabled="retrying"
+                variant="ghost"
+                size="sm"
+                class="h-7 gap-1 px-2 text-2xs font-medium text-destructive [&_svg]:size-3.5"
+                :loading="retrying"
                 @click="retry"
             >
-                <LoaderCircle v-if="retrying" class="size-3.5 animate-spin" aria-hidden="true" />
-                <RotateCcw v-else class="size-3.5" aria-hidden="true" />
+                <RotateCcw aria-hidden="true" />
                 {{ t('order.retry') }}
-            </button>
+            </Button>
             <button
                 v-if="current.status === 'failed' && showEdit"
                 type="button"
@@ -224,14 +225,9 @@ async function copyStatus(): Promise<void> {
                 {{ t('order.restock') }}
             </label>
             <div class="flex gap-1.5">
-                <button
-                    type="button"
-                    class="inline-flex h-7 items-center gap-1 rounded-md bg-destructive px-2 text-2xs font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
-                    :disabled="cancelling"
-                    @click="cancel"
-                >
-                    <LoaderCircle v-if="cancelling" class="size-3.5 animate-spin" aria-hidden="true" />{{ t('orders.cancel_confirm') }}
-                </button>
+                <Button variant="destructive" size="sm" class="h-7 gap-1 px-2 text-2xs font-medium" :loading="cancelling" @click="cancel">
+                    {{ t('orders.cancel_confirm') }}
+                </Button>
                 <button type="button" class="inline-flex h-7 items-center rounded-md border border-border bg-card px-2 text-2xs font-medium hover:bg-muted" @click="confirmingCancel = false">
                     {{ t('ui.no') }}
                 </button>

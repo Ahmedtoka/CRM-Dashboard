@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import EmptyState from '@/components/crm/EmptyState.vue';
 import MergeSuggestions from '@/components/crm/MergeSuggestions.vue';
 import OrderCard from '@/components/crm/OrderCard.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -10,6 +11,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatListStamp, formatMoney } from '@/lib/format';
 import type { Conversation, Customer } from '@/types/crm';
 import { Head, Link } from '@inertiajs/vue3';
+import { MessagesSquare } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps<{ customer: Customer; conversations: Conversation[]; canMerge: boolean }>();
@@ -33,6 +35,7 @@ const breadcrumbs = computed(() => [
     { title: t('customers.title'), href: '/customers' },
     { title: title.value, href: `/customers/${props.customer.id}` },
 ]);
+const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, href: b.href })));
 </script>
 
 <template>
@@ -40,7 +43,7 @@ const breadcrumbs = computed(() => [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="title" />
+            <PageHeader :title="title" :breadcrumbs="crumbs" />
 
             <div class="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
                 <aside class="space-y-4">
@@ -95,7 +98,7 @@ const breadcrumbs = computed(() => [
                 <div class="grid content-start gap-4 xl:grid-cols-2">
                     <section class="rounded-lg bg-card shadow-card">
                         <h2 class="border-b border-border px-3 py-2 text-xs font-medium">{{ t('customers.conversations') }}</h2>
-                        <p v-if="!conversations.length" class="px-3 py-6 text-center text-xs text-muted-foreground">{{ t('customers.no_conversations') }}</p>
+                        <EmptyState v-if="!conversations.length" :icon="MessagesSquare" :title="t('customers.no_conversations')" />
                         <ul class="divide-y divide-border">
                             <li v-for="c in conversations" :key="c.id">
                                 <Link :href="`/inbox?c=${c.id}`" class="flex items-start gap-2 px-3 py-2 text-xs hover:bg-muted/50">

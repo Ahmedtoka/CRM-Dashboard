@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BoardKpiBar from '@/components/board/BoardKpiBar.vue';
+import SkeletonList from '@/components/crm/SkeletonList.vue';
 import RoomDesk from '@/components/board/RoomDesk.vue';
 import RoomLounge from '@/components/board/RoomLounge.vue';
 import RoomReception from '@/components/board/RoomReception.vue';
@@ -26,8 +27,10 @@ const props = withDefaults(
         canManage: boolean;
         /** The room fills its container (the phone's «عرض الصالة»): «ملء الشاشة» leaves it instead. */
         fill?: boolean;
+        /** The day has not loaded yet: the numbers bar shows skeleton tiles (the room itself is veiled). */
+        loading?: boolean;
     }>(),
-    { fill: false },
+    { fill: false, loading: false },
 );
 const emit = defineEmits<{ select: [selection: BoardSelection]; exit: [] }>();
 
@@ -225,7 +228,9 @@ watch(big, () => void refit());
 
 <template>
     <div ref="shell" class="board-shell" :class="{ 'is-max': max, 'is-big': big, paused: !active }">
+        <SkeletonList v-if="loading" variant="tiles" :count="4" />
         <BoardKpiBar
+            v-else
             :big="big"
             :compact="fill"
             :roster-open="selection?.kind === 'roster'"

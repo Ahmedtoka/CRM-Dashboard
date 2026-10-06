@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import Callout from '@/components/crm/Callout.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
+import SkeletonList from '@/components/crm/SkeletonList.vue';
+import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import type { Customer } from '@/types/crm';
 import { Link, router } from '@inertiajs/vue3';
-import { LoaderCircle, Users } from 'lucide-vue-next';
+import { Users } from 'lucide-vue-next';
 import { onMounted, ref } from 'vue';
 
 const props = defineProps<{ customerId: number; canMerge: boolean }>();
@@ -58,7 +60,7 @@ onMounted(load);
     >
         <h2 class="flex items-center gap-1.5 font-medium"><Users class="size-3.5" aria-hidden="true" />{{ t('customers.duplicates') }}</h2>
         <p class="mb-2 text-2xs text-muted-foreground">{{ t('customers.duplicates_hint') }}</p>
-        <LoaderCircle v-if="loading" class="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
+        <SkeletonList v-if="loading" variant="cards" :count="1" />
         <Callout v-else-if="!suggestions.length" tone="success">{{ t('customers.no_duplicates') }}</Callout>
         <ul v-else class="space-y-2">
             <li v-for="other in suggestions" :key="other.id" class="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5">
@@ -69,15 +71,17 @@ onMounted(load);
                         <PlatformBadge v-for="identity in other.identities ?? []" :key="identity.id" :platform="identity.platform" size="xs" />
                     </span>
                 </div>
-                <button
+                <Button
                     v-if="canMerge"
-                    type="button"
-                    class="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 font-medium hover:bg-muted disabled:opacity-50"
+                    variant="outline"
+                    size="sm"
+                    class="h-7 shrink-0 px-2 font-medium"
+                    :loading="merging === other.id"
                     :disabled="merging !== null"
                     @click="merge(other)"
                 >
-                    <LoaderCircle v-if="merging === other.id" class="size-3 animate-spin" aria-hidden="true" />{{ t('customers.merge') }}
-                </button>
+                    {{ t('customers.merge') }}
+                </Button>
             </li>
         </ul>
     </section>

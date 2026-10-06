@@ -7,7 +7,7 @@ import { useBoardContext } from '@/lib/board/context';
 import { notOnline } from '@/lib/board/state';
 import { formatClock, formatCount, formatMinutes, formatSeconds } from '@/lib/format';
 import { Link } from '@inertiajs/vue3';
-import { Coffee, ExternalLink, LoaderCircle, LogOut, Undo2, UserRoundCheck } from 'lucide-vue-next';
+import { Coffee, ExternalLink, LogOut, Undo2, UserRoundCheck } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 // A desk: her day so far, her open windows (each a link to the conversation), her break, her
@@ -197,9 +197,8 @@ async function handBack(): Promise<void> {
 
             <template v-if="canManage">
                 <div v-if="!closing" class="space-y-1 border-t border-border pt-3">
-                    <Button variant="outline" class="w-full" :disabled="board.busy.value !== null" @click="toggleBreak">
-                        <LoaderCircle v-if="board.busy.value === `status-${member.id}`" class="animate-spin" aria-hidden="true" />
-                        <UserRoundCheck v-else-if="onBreak" aria-hidden="true" />
+                    <Button variant="outline" class="w-full" :disabled="board.busy.value !== null" @click="toggleBreak" :loading="board.busy.value === `status-${member.id}`">
+                        <UserRoundCheck v-if="onBreak" aria-hidden="true" />
                         <Coffee v-else aria-hidden="true" />
                         {{ onBreak ? t('board.member.back') : t('board.member.break') }}
                     </Button>
@@ -225,8 +224,7 @@ async function handBack(): Promise<void> {
                             <option v-for="n in 10" :key="n" :value="n">{{ formatCount(n, locale) }}</option>
                         </select>
                     </div>
-                    <Button type="submit" variant="outline" :disabled="cap === member.cap || board.busy.value !== null">
-                        <LoaderCircle v-if="board.busy.value === `cap-${member.id}`" class="animate-spin" aria-hidden="true" />
+                    <Button type="submit" variant="outline" :disabled="cap === member.cap || board.busy.value !== null" :loading="board.busy.value === `cap-${member.id}`">
                         {{ t('board.member.cap_save') }}
                     </Button>
                 </form>
@@ -243,8 +241,7 @@ async function handBack(): Promise<void> {
                                 {{ t('board.member.hand_back_confirm_hint', { n: formatCount(windows.length, locale) }) }}
                             </p>
                             <div class="flex gap-2">
-                                <Button class="flex-1" :disabled="board.busy.value !== null" @click="handBack">
-                                    <LoaderCircle v-if="board.busy.value === `handback-${member.id}`" class="animate-spin" aria-hidden="true" />
+                                <Button class="flex-1" :disabled="board.busy.value !== null" @click="handBack" :loading="board.busy.value === `handback-${member.id}`">
                                     {{ t('board.member.hand_back_confirm') }}
                                 </Button>
                                 <Button variant="outline" @click="confirmingBack = false">{{ t('board.cancel.back') }}</Button>
@@ -252,9 +249,8 @@ async function handBack(): Promise<void> {
                         </div>
                         <p v-if="!confirmingBack" class="text-2xs text-muted-foreground">{{ t('board.member.hand_back_hint') }}</p>
                         <template v-if="!confirmingBack">
-                            <Button variant="outline" class="w-full" :disabled="board.busy.value !== null" @click="cancelCheckOut">
-                                <LoaderCircle v-if="board.busy.value === `status-${member.id}`" class="animate-spin" aria-hidden="true" />
-                                <UserRoundCheck v-else aria-hidden="true" />
+                            <Button variant="outline" class="w-full" :disabled="board.busy.value !== null" @click="cancelCheckOut" :loading="board.busy.value === `status-${member.id}`">
+                                <UserRoundCheck aria-hidden="true" />
                                 {{ t('board.member.back') }}
                             </Button>
                             <p class="text-2xs text-muted-foreground">{{ t('board.member.cancel_check_out_hint') }}</p>
@@ -267,8 +263,7 @@ async function handBack(): Promise<void> {
                     <div v-else class="space-y-2" role="alertdialog" :aria-label="t('board.member.check_out')">
                         <p class="text-xs text-foreground">{{ t('board.member.check_out_hint') }}</p>
                         <div class="flex gap-2">
-                            <Button variant="destructive" class="flex-1" :disabled="board.busy.value !== null" @click="checkOut">
-                                <LoaderCircle v-if="board.busy.value === `checkout-${member.id}`" class="animate-spin" aria-hidden="true" />
+                            <Button variant="destructive" class="flex-1" :disabled="board.busy.value !== null" @click="checkOut" :loading="board.busy.value === `checkout-${member.id}`">
                                 {{ t('board.member.check_out_confirm') }}
                             </Button>
                             <Button variant="outline" @click="confirming = false">{{ t('board.cancel.back') }}</Button>

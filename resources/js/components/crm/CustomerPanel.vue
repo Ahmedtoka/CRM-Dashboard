@@ -6,7 +6,7 @@ import OrderCard from '@/components/crm/OrderCard.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import StatCard from '@/components/crm/StatCard.vue';
 import NoteLine from '@/components/crm/thread/NoteLine.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useI18n } from '@/composables/useI18n';
 import { useInitials } from '@/composables/useInitials';
@@ -16,7 +16,7 @@ import { formatNumber } from '@/i18n';
 import { formatMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Customer, Note, Order, Participant, SupportCase, UserRef } from '@/types/crm';
-import { LoaderCircle, Mail, MapPin, Phone, Plus, ShoppingBag } from 'lucide-vue-next';
+import { Mail, MapPin, Phone, Plus, ShoppingBag } from 'lucide-vue-next';
 import { computed, nextTick, ref, watch } from 'vue';
 
 const props = defineProps<{
@@ -211,10 +211,9 @@ const heading = 'mb-2 text-sm font-bold';
                         @submit="submitNote"
                     />
                     <div class="flex justify-end">
-                        <button type="submit" :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-7 text-xs')" :disabled="!noteBody.trim() || addingNote">
-                            <LoaderCircle v-if="addingNote" class="animate-spin" />
-                            <Plus v-else />{{ t('customer.add_note') }}
-                        </button>
+                        <Button type="submit" variant="outline" size="sm" class="h-7 text-xs" :loading="addingNote" :disabled="!noteBody.trim()">
+                            <Plus />{{ t('customer.add_note') }}
+                        </Button>
                     </div>
                 </form>
                 <p v-if="!notes.length" class="mt-2 text-xs text-muted-foreground">{{ t('customer.no_notes') }}</p>
