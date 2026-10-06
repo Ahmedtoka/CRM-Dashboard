@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import RelativeTime from '@/components/crm/RelativeTime.vue';
+import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useNow } from '@/composables/useNow';
 import { useToast } from '@/composables/useToast';
 import { isSyncStale, notOnShopifyText } from '@/lib/orderStatus';
 import type { Order } from '@/types/crm';
-import { Button } from '@/components/ui/button';
 import { CloudOff, RefreshCw } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 

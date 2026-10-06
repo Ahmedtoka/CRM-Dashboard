@@ -229,7 +229,8 @@ async function cancel(): Promise<void> {
                                 type="submit"
                                 variant="destructive"
                                 class="flex-1"
-                                :disabled="reason.trim().length < 2 || board.busy.value !== null" :loading="board.busy.value === `cancel-${entryId}`"
+                                :disabled="reason.trim().length < 2 || board.busy.value !== null"
+                                :loading="board.busy.value === `cancel-${entryId}`"
                             >
                                 {{ t('board.cancel.confirm') }}
                             </Button>

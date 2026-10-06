@@ -1,3 +1,4 @@
+import { useVisitLoading } from '@/composables/useVisitLoading';
 import type { ReportRange } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
 import { router } from '@inertiajs/vue3';
@@ -7,6 +8,8 @@ import { router } from '@inertiajs/vue3';
  * so changing a filter is an Inertia visit that preserves scroll.
  */
 export function useReportFilters(extra: () => Record<string, string | number | null | undefined> = () => ({})) {
+    const { loading, track } = useVisitLoading();
+
     function visit(range: ReportRange, platform: PlatformValue | null): void {
         const query: Record<string, string | number> = { from: range.from, to: range.to };
         if (platform) query.platform = platform;
@@ -15,8 +18,9 @@ export function useReportFilters(extra: () => Record<string, string | number | n
             if (value !== null && value !== undefined && value !== '') query[key] = value;
         }
 
-        router.get(window.location.pathname, query, { preserveScroll: true, preserveState: true, replace: true });
+        router.get(window.location.pathname, query, track({ preserveScroll: true, preserveState: true, replace: true }));
     }
 
-    return { visit };
+    /** True while a range/platform visit is on its way (pages show skeletons for their tiles). */
+    return { visit, loading };
 }

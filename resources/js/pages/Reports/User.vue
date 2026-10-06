@@ -19,6 +19,7 @@ const breadcrumbs = computed(() => [
     { title: t('reports.team_title'), href: '/reports/team' },
     { title: props.user.name, href: `/reports/users/${props.user.id}` },
 ]);
+const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, href: b.href })));
 </script>
 
 <template>
@@ -26,9 +27,11 @@ const breadcrumbs = computed(() => [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="title" :description="t(`roles.${user.role}`)">
+            <PageHeader :title="title" :description="t(`roles.${user.role}`)" :breadcrumbs="crumbs" />
+
+            <div class="rounded-lg bg-card p-3 shadow-card">
                 <ReportFilters :range="range" :platform="platform" @change="visit" />
-            </PageHeader>
+            </div>
             <UserReportView :range="range" :platform="platform" :user="user" :metrics="metrics" :heatmap="heatmap" />
         </div>
     </AppLayout>

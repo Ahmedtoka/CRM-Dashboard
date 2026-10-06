@@ -7,6 +7,7 @@ import OrderStatusChip from '@/components/crm/orders/OrderStatusChip.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import Pagination from '@/components/crm/Pagination.vue';
 import RelativeTime from '@/components/crm/RelativeTime.vue';
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useNow } from '@/composables/useNow';
 import { useStaleOrderRefresh } from '@/composables/useStaleOrderRefresh';
@@ -19,7 +20,6 @@ import type { SharedData } from '@/types';
 import type { OrderRow, Paginated } from '@/types/admin';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { AlertTriangle, MessageCircle, SearchX, StickyNote, Store } from 'lucide-vue-next';
-import { Button } from '@/components/ui/button';
 import { computed, ref, watch } from 'vue';
 
 const FINANCIAL_STATUSES = ['paid', 'pending', 'partially_paid', 'refunded', 'partially_refunded', 'voided'];
@@ -130,7 +130,9 @@ const presets = computed(() =>
 );
 
 // The bar says what the list is showing: the result count, then every active filter.
-const summary = computed(() => [t('ui.results', { n: props.orders.meta?.total ?? rows.value.length }), ...chips.value.map((c) => c.label)].join(' · '));
+const summary = computed(() =>
+    [t('ui.results', { n: props.orders.meta?.total ?? rows.value.length }), ...chips.value.map((c) => c.label)].join(' · '),
+);
 const filtered = computed(() => chips.value.length > 0 || filters.value.q !== '');
 
 const breadcrumbs = computed(() => [{ title: t('orders.title'), href: '/orders' }]);

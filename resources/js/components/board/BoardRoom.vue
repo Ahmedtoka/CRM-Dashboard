@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import BoardKpiBar from '@/components/board/BoardKpiBar.vue';
-import SkeletonList from '@/components/crm/SkeletonList.vue';
 import RoomDesk from '@/components/board/RoomDesk.vue';
 import RoomLounge from '@/components/board/RoomLounge.vue';
 import RoomReception from '@/components/board/RoomReception.vue';
 import RoomSymbols from '@/components/board/RoomSymbols.vue';
 import RoomWalker from '@/components/board/RoomWalker.vue';
 import RoomWall from '@/components/board/RoomWall.vue';
+import SkeletonList from '@/components/crm/SkeletonList.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useInView } from '@/composables/useInView';
 import { useBoardContext } from '@/lib/board/context';

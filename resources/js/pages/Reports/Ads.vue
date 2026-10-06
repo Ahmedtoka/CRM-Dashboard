@@ -74,9 +74,11 @@ const breadcrumbs = computed(() => [{ title: t('reports.ads_title'), href: '/rep
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('reports.ads_title')" :description="t('reports.ads.hint')">
+            <PageHeader :title="t('reports.ads_title')" :description="t('reports.ads.hint')" />
+
+            <div class="rounded-lg bg-card p-3 shadow-card">
                 <ReportFilters :range="range" :platform="platform" @change="visit" />
-            </PageHeader>
+            </div>
 
             <div class="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
                 <StatCard v-for="card in cards" :key="card.label" :label="card.label" :value="card.value" />
@@ -84,7 +86,7 @@ const breadcrumbs = computed(() => [{ title: t('reports.ads_title'), href: '/rep
 
             <Callout v-if="!report.spend_available" tone="warning">{{ t('reports.ads.no_spend') }}</Callout>
 
-            <DataTable :columns="columns" :rows="rows" :empty="t('reports.no_data')" :caption="t('reports.ads_title')">
+            <DataTable table-id="report-ads" :columns="columns" :rows="rows" :empty="t('reports.no_data')" :caption="t('reports.ads_title')">
                 <template #cell-name="{ row }">
                     <span class="flex flex-col">
                         <span class="font-medium" dir="auto">{{ row.name }}</span>

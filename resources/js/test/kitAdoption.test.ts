@@ -11,6 +11,8 @@ const SWEPT: string[] = [
     'Orders/Index', 'Orders/Show', 'Customers/Index', 'Customers/Show',
     // Task 14
     'Inbox', 'Board', 'Comments/Index', 'Cases',
+    // Task 15
+    'Reports/Activity', 'Reports/Ads', 'Reports/Bot', 'Reports/Latency', 'Reports/Me', 'Reports/QuickReplies', 'Reports/Team', 'Reports/TeamTest', 'Reports/User',
 ];
 
 /** Raw tables allowed only on pages S1/S2 replace; they must sit in the shared sticky scroll box. */

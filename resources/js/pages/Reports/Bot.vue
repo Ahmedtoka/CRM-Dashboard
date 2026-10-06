@@ -13,6 +13,7 @@ import { formatCount, formatUsd } from '@/lib/format';
 import type { BotMetrics, ReportRange } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
 import { Head } from '@inertiajs/vue3';
+import { Workflow } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps<{ range: ReportRange; platform: PlatformValue | null; metrics: BotMetrics }>();
@@ -53,10 +54,10 @@ const reasons = computed(() =>
 const flowRows = computed(() => (props.metrics.flows ?? []).map((row) => ({ ...row, id: row.key })));
 const flowColumns = computed(() => [
     { key: 'title', label: t('reports.flows.flow') },
-    { key: 'started', label: t('reports.flows.started'), align: 'end' as const },
-    { key: 'finished', label: t('reports.flows.finished'), align: 'end' as const },
-    { key: 'handovers', label: t('reports.flows.handovers'), align: 'end' as const },
-    { key: 'cases', label: t('reports.flows.cases'), align: 'end' as const },
+    { key: 'started', label: t('reports.flows.started'), numeric: true },
+    { key: 'finished', label: t('reports.flows.finished'), numeric: true },
+    { key: 'handovers', label: t('reports.flows.handovers'), numeric: true },
+    { key: 'cases', label: t('reports.flows.cases'), numeric: true },
 ]);
 
 const breadcrumbs = computed(() => [{ title: t('reports.bot_title'), href: '/reports/bot' }]);
@@ -67,9 +68,11 @@ const breadcrumbs = computed(() => [{ title: t('reports.bot_title'), href: '/rep
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('reports.bot_title')">
+            <PageHeader :title="t('reports.bot_title')" />
+
+            <div class="rounded-lg bg-card p-3 shadow-card">
                 <ReportFilters :range="range" :platform="platform" @change="visit" />
-            </PageHeader>
+            </div>
 
             <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <StatCard v-for="card in cards" :key="card.label" :label="card.label" :value="card.value" />
@@ -80,7 +83,7 @@ const breadcrumbs = computed(() => [{ title: t('reports.bot_title'), href: '/rep
                     <h2 id="bot-flows-title" class="text-sm font-semibold">{{ t('reports.flows.title') }}</h2>
                     <p class="text-xs text-muted-foreground">{{ t('reports.flows.hint') }}</p>
                 </div>
-                <DataTable :columns="flowColumns" :rows="flowRows" :empty="t('reports.no_data')" :caption="t('reports.flows.title')">
+                <DataTable table-id="report-bot" :columns="flowColumns" :rows="flowRows" :empty="t('reports.no_data')" :empty-icon="Workflow" :caption="t('reports.flows.title')">
                     <template #cell-title="{ row }">
                         <span class="flex items-center gap-1.5">
                             <span class="font-medium" dir="auto">{{ row.title }}</span>

@@ -22,9 +22,11 @@ const breadcrumbs = computed(() => [{ title: t('reports.me_title'), href: '/repo
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('reports.me_title')" :description="user.name">
+            <PageHeader :title="t('reports.me_title')" :description="user.name" />
+
+            <div class="rounded-lg bg-card p-3 shadow-card">
                 <ReportFilters :range="range" :platform="platform" @change="visit" />
-            </PageHeader>
+            </div>
             <UserReportView :range="range" :platform="platform" :user="user" :metrics="metrics" :heatmap="heatmap" />
         </div>
     </AppLayout>

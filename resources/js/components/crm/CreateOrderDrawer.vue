@@ -3,12 +3,11 @@ import OrderAddressPicker, { type AddressFields } from '@/components/crm/OrderAd
 import OrderDiscountField, { type DiscountFields } from '@/components/crm/OrderDiscountField.vue';
 import OrderProductPicker from '@/components/crm/OrderProductPicker.vue';
 import OrderShippingPicker, { type ShippingFields } from '@/components/crm/OrderShippingPicker.vue';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { formatCount, formatMoney } from '@/lib/format';
-import { cn } from '@/lib/utils';
 import type { Customer, Order, ProductVariant } from '@/types/crm';
 import { Minus, Plus, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
