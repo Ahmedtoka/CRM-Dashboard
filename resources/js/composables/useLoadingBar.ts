@@ -1,16 +1,13 @@
 import { readonly, ref } from 'vue';
 
 /**
- * One global top loading bar (human bot flow Task 5). Every Inertia visit and
- * every non-silent `useApi` request calls `start()` / `done()`; the bar stays
- * up while any of them is pending, trickles towards 90%, then completes to 100%
- * and hides. Module-level so every caller shares the same counter.
- *
- * Fix round 1: the bar only appears once work has been pending for SHOW_DELAY_MS,
- * so fast requests never flash it; slow ones still get feedback. A restart while
- * the bar is completing jumps back to the start without animating backwards.
+ * One global top loading bar. Every Inertia visit (app.ts) and every non-silent request through axios (useApi's
+ * instance and the default instance, see attachLoadingBar) calls start()/done(); the bar is up while at least one is
+ * pending. It appears only after SHOW_DELAY_MS (fast work never flashes) and, once shown, stays at least
+ * MIN_VISIBLE_MS (no flicker), trickles towards 90%, completes to 100% and hides.
  */
-export const SHOW_DELAY_MS = 150;
+export const SHOW_DELAY_MS = 200;
+export const MIN_VISIBLE_MS = 200;
 const HIDE_AFTER_MS = 220;
 const START_PROGRESS = 8;
 
@@ -23,6 +20,8 @@ const instant = ref(false);
 let trickle: ReturnType<typeof setInterval> | undefined;
 let showTimer: ReturnType<typeof setTimeout> | undefined;
 let hideTimer: ReturnType<typeof setTimeout> | undefined;
+let completeTimer: ReturnType<typeof setTimeout> | undefined;
+let shownAt = 0;
 
 function startTrickle(): void {
     clearInterval(trickle);
@@ -43,6 +42,7 @@ function show(): void {
     showTimer = undefined;
     if (pending.value === 0) return;
     active.value = true;
+    shownAt = Date.now();
     resetWithoutAnimation();
     startTrickle();
 }
@@ -50,11 +50,19 @@ function show(): void {
 function start(): void {
     pending.value++;
 
+    // Waiting out the minimum visible time: just keep going.
+    if (completeTimer !== undefined) {
+        clearTimeout(completeTimer);
+        completeTimer = undefined;
+        return;
+    }
+
     if (active.value) {
         // Completing (100%, hide scheduled): cancel the hide and restart from the beginning.
         if (trickle === undefined) {
             clearTimeout(hideTimer);
             hideTimer = undefined;
+            shownAt = Date.now();
             resetWithoutAnimation();
             startTrickle();
         }
@@ -64,17 +72,9 @@ function start(): void {
     if (showTimer === undefined) showTimer = setTimeout(show, SHOW_DELAY_MS);
 }
 
-function done(): void {
-    pending.value = Math.max(0, pending.value - 1);
+function complete(): void {
+    completeTimer = undefined;
     if (pending.value > 0) return;
-
-    if (!active.value) {
-        // Finished before the delay: never show the bar.
-        clearTimeout(showTimer);
-        showTimer = undefined;
-        return;
-    }
-
     clearInterval(trickle);
     trickle = undefined;
     progress.value = 100;
@@ -89,6 +89,41 @@ function done(): void {
     }, HIDE_AFTER_MS);
 }
 
+function done(): void {
+    if (pending.value === 0) return;
+    pending.value--;
+    if (pending.value > 0) return;
+
+    if (!active.value) {
+        // Finished before the delay: never show the bar.
+        clearTimeout(showTimer);
+        showTimer = undefined;
+        return;
+    }
+
+    const remaining = MIN_VISIBLE_MS - (Date.now() - shownAt);
+    if (remaining > 0) {
+        clearTimeout(completeTimer);
+        completeTimer = setTimeout(complete, remaining);
+    } else {
+        complete();
+    }
+}
+
+/** Tests only: back to a clean idle state. */
+export function resetLoadingBar(): void {
+    clearInterval(trickle);
+    clearTimeout(showTimer);
+    clearTimeout(hideTimer);
+    clearTimeout(completeTimer);
+    trickle = showTimer = hideTimer = completeTimer = undefined;
+    pending.value = 0;
+    progress.value = 0;
+    active.value = false;
+    instant.value = false;
+    shownAt = 0;
+}
+
 export function useLoadingBar() {
-    return { active: readonly(active), progress: readonly(progress), instant: readonly(instant), start, done };
+    return { active: readonly(active), progress: readonly(progress), instant: readonly(instant), pending: readonly(pending), start, done };
 }

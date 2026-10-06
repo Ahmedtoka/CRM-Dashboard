@@ -33,28 +33,34 @@ function finish(config: unknown): void {
     bar.done();
 }
 
-api.interceptors.request.use(
-    (config) => {
-        if (!config.silent) {
-            // Non-enumerable, so it never leaks into serialised config or request data.
-            Object.defineProperty(config, BAR_STARTED, { value: true, writable: true, enumerable: false, configurable: true });
-            bar.start();
-        }
-        return config;
-    },
-    (error) => Promise.reject(error),
-);
+/** Every request through `instance` drives the global bar unless flagged `{ silent: true }`. */
+export function attachLoadingBar(instance: AxiosInstance): void {
+    instance.interceptors.request.use(
+        (config) => {
+            if (!config.silent) {
+                // Non-enumerable, so it never leaks into serialised config or request data.
+                Object.defineProperty(config, BAR_STARTED, { value: true, writable: true, enumerable: false, configurable: true });
+                bar.start();
+            }
+            return config;
+        },
+        (error) => Promise.reject(error),
+    );
+    instance.interceptors.response.use(
+        (response) => {
+            finish(response.config);
+            return response;
+        },
+        (error) => {
+            finish((error as AxiosError | undefined)?.config);
+            return Promise.reject(error);
+        },
+    );
+}
 
-api.interceptors.response.use(
-    (response) => {
-        finish(response.config);
-        return response;
-    },
-    (error) => {
-        finish((error as AxiosError | undefined)?.config);
-        return Promise.reject(error);
-    },
-);
+attachLoadingBar(api);
+// Code that imports axios directly (uploads, media grid) counts too.
+attachLoadingBar(axios);
 
 /** Best human-readable message from a failed request (Laravel `{message}` / first validation error / a plain `{error}` payload). */
 export function apiErrorMessage(error: unknown, fallback: string): string {
