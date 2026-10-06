@@ -8,12 +8,18 @@ const after = (ms: number): AxiosAdapter => (config) =>
 
 describe('useLoadingBar', () => {
     const bar = useLoadingBar();
+    const originalAxiosAdapter = axios.defaults.adapter;
+    const originalApiAdapter = useApi().defaults.adapter;
 
     beforeEach(() => {
         vi.useFakeTimers();
         resetLoadingBar();
     });
-    afterEach(() => vi.useRealTimers());
+    afterEach(() => {
+        vi.useRealTimers();
+        axios.defaults.adapter = originalAxiosAdapter;
+        useApi().defaults.adapter = originalApiAdapter;
+    });
 
     it('waits 200 ms before showing, so fast work never flashes', async () => {
         expect(SHOW_DELAY_MS).toBe(200);
@@ -72,6 +78,21 @@ describe('useLoadingBar', () => {
         expect(bar.pending.value).toBe(1);
         await vi.advanceTimersByTimeAsync(60);
         await request;
+        expect(bar.pending.value).toBe(0);
+    });
+    it('ignores Inertia requests on the default axios instance (router hooks count those)', async () => {
+        axios.defaults.adapter = after(50);
+        const inertia = axios.get('/visit', { headers: { 'X-Inertia': 'true' } });
+        await vi.advanceTimersByTimeAsync(1);
+        expect(bar.pending.value).toBe(0);
+        await vi.advanceTimersByTimeAsync(60);
+        await inertia;
+        expect(bar.pending.value).toBe(0);
+        const plain = axios.get('/plain');
+        await vi.advanceTimersByTimeAsync(1);
+        expect(bar.pending.value).toBe(1);
+        await vi.advanceTimersByTimeAsync(60);
+        await plain;
         expect(bar.pending.value).toBe(0);
     });
 });

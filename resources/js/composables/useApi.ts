@@ -37,7 +37,10 @@ function finish(config: unknown): void {
 export function attachLoadingBar(instance: AxiosInstance): void {
     instance.interceptors.request.use(
         (config) => {
-            if (!config.silent) {
+            // Inertia visits ride the default axios instance but are counted by the router hooks in app.ts
+            // (which skip background visits), so they must not count here.
+            const inertia = config.headers?.get?.('X-Inertia') ?? config.headers?.['X-Inertia'];
+            if (!config.silent && !inertia) {
                 // Non-enumerable, so it never leaks into serialised config or request data.
                 Object.defineProperty(config, BAR_STARTED, { value: true, writable: true, enumerable: false, configurable: true });
                 bar.start();
