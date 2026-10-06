@@ -32,6 +32,8 @@ class BuyerController extends Controller
             'buyer' => ['id' => $buyer->id, 'name' => $buyer->name, 'color' => $buyer->color],
             'detail' => $cards->detail($buyer, $filter),
             'summary' => $summary->build($buyerFilter, $user->isSupervisorOrAbove()),
+            // Data age for the drawer Stop dialog and the header chip.
+            'freshness' => $this->syncProps($filter, false)['oldest']['last_synced_at'] ?? null,
         ]);
     }
 }

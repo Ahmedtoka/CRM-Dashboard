@@ -39,3 +39,12 @@ it('still suggests a Messages ad whose material ran out of stock, with card data
     expect($s['reasons'][0]['key'])->toBe('need_stop')->and($s['objective'])->toBe('messages')
         ->and($s['thumbnail_url'])->toBe('https://x.test/t.jpg')->and($s)->toHaveKeys(['campaign', 'status']);
 });
+
+it('carries today spend on each suggestion for the Stop dialog', function () {
+    $acc = AdAccount::factory()->meta()->create(['currency' => 'EGP']);
+    $ad = crAd($acc, ['2026-10-01' => [1500, 0, 0, 0], '2026-10-06' => [120, 0, 0, 0]]);
+
+    $s = collect(saSuggest())->firstWhere('ad_id', $ad->id);
+
+    expect($s['spend_today'])->toBe(120.0);
+});

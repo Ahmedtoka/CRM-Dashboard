@@ -9,6 +9,7 @@ use App\Ads\Reports\AdsQuery;
 use App\Ads\Reports\Objective;
 use App\Ads\Reports\WinnerScorer;
 use App\Models\Ad;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -82,6 +83,12 @@ final class StopAdvisor
 
         $ads = $this->notStale(Ad::query()->with(['account:id,name,platform', 'campaign:id,name,objective'])->whereIn('id', array_keys($reasons))->whereIn('status', AdWriteService::ACTIVE_STATUSES), 'effective_status')->get()->keyBy('id');
 
+        // Spend today (Cairo, every campaign) for the Stop dialog, one grouped query for all candidates.
+        $day = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay();
+        $today = $this->q->sums($f->allSpend()->with(['from' => $day, 'to' => $day]), ['ad_id' => 'm.ad_id'],
+            fn ($b) => $b->whereIn('m.ad_id', array_keys($reasons)))
+            ->mapWithKeys(fn ($r) => [(int) $r->ad_id => round((float) $r->spend, 2)]);
+
         $out = [];
         foreach ($reasons as $adId => $list) {
             $ad = $ads->get($adId);
@@ -100,6 +107,7 @@ final class StopAdvisor
                 'thumbnail_url' => $ad->thumbnail_url,
                 'campaign' => $ad->campaign?->name,
                 'status' => $ad->status,
+                'spend_today' => (float) ($today[$adId] ?? 0),
             ];
         }
 

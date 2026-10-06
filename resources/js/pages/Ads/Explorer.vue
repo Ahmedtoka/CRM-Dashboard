@@ -14,6 +14,7 @@ import { useAdDrawer } from '@/composables/useAdDrawer';
 import { useDensity } from '@/composables/useDensity';
 import { useI18n } from '@/composables/useI18n';
 import { syncInertiaUrl } from '@/composables/useUrlFilters';
+import { usePathVisitLoading } from '@/composables/usePathVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAdsMoney, formatRoas } from '@/lib/ads';
 import { AD_PARTS, adColumns, columnSort, serverSort, type AdPart } from '@/lib/adsColumns';
@@ -21,9 +22,9 @@ import { buildHref, EXPLORER_DEFAULTS, readQuery, withParam } from '@/lib/adsFil
 import { formatCount } from '@/lib/format';
 import type { AdRowData, AdsExplorerProps, AdsView, WinnerTierFilter } from '@/types/ads';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { useMediaQuery } from '@vueuse/core';
+import { useEventListener, useMediaQuery } from '@vueuse/core';
 import { Megaphone } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps<AdsExplorerProps>();
 const { t, locale } = useI18n();
@@ -39,15 +40,7 @@ const money = (v: number | null) => formatAdsMoney(v, locale.value, props.curren
 const search = () => (typeof window === 'undefined' ? '' : window.location.search);
 
 /* Loading: the list dims while a filter visit to this page runs. */
-const loading = ref(false);
-const offStart = router.on?.('start', (e) => {
-    if (new URL(e.detail.visit.url.toString(), window.location.origin).pathname === '/ads/explorer') loading.value = true;
-});
-const offFinish = router.on?.('finish', () => (loading.value = false));
-onBeforeUnmount(() => {
-    offStart?.();
-    offFinish?.();
-});
+const loading = usePathVisitLoading('/ads/explorer');
 
 const go = (q: Record<string, string>) => router.get('/ads/explorer', q, { preserveState: true, preserveScroll: true, replace: true });
 const setParam = (key: string, value: string | null) => go(withParam(readQuery(search()), key, value, EXPLORER_DEFAULTS));
@@ -73,8 +66,10 @@ const tierChips = computed(() =>
         : [],
 );
 
-/* Tree: open nodes in the URL (replace). */
-const open = ref<string[]>((readQuery(search()).open ?? '').split(',').filter(Boolean));
+/* Tree: open nodes in the URL (replace); Back / Forward re-read them. */
+const readOpen = () => (readQuery(search()).open ?? '').split(',').filter(Boolean);
+const open = ref<string[]>(readOpen());
+useEventListener(typeof window === 'undefined' ? undefined : window, 'popstate', () => (open.value = readOpen()));
 function setOpen(keys: string[]): void {
     open.value = keys;
     const url = new URL(window.location.href);
@@ -180,7 +175,10 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2';
                         <td v-for="c in columns" :key="c.key" class="px-3 py-2 text-xs" :class="c.numeric ? 'text-end tabular-nums' : ''">
                             <template v-if="c.key === 'creative'">{{ t('ads.control.explorer.totals') }}</template>
                             <template v-else-if="c.key === 'spend'">{{ money(result.totals.spend_tax) }}</template>
-                            <template v-else-if="c.key === 'return'">{{ t('ads.control.row.meta') }} {{ formatRoas(result.totals.roas, locale) }}</template>
+                            <template v-else-if="c.key === 'return'">
+                                <span data-test="totals-real-roas" class="block text-sm font-semibold">{{ formatRoas(result.totals.real_roas, locale) }}</span>
+                                <span class="block text-2xs font-normal text-muted-foreground">{{ t('ads.control.row.meta') }} {{ formatRoas(result.totals.roas, locale) }}</span>
+                            </template>
                         </td>
                     </tr>
                 </template>
@@ -188,7 +186,7 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2';
 
             <nav v-if="view !== 'tree' && result && result.meta.last_page > 1" class="flex items-center justify-between text-xs" :aria-label="t('ui.pagination')">
                 <span class="tabular-nums text-muted-foreground">
-                    {{ t('ads.control.explorer.page', { n: result.meta.current_page, total: result.meta.last_page }) }}
+                    {{ t('ads.control.explorer.page', { n: formatCount(result.meta.current_page, locale), total: formatCount(result.meta.last_page, locale) }) }}
                 </span>
                 <div class="flex gap-2">
                     <Link
@@ -211,6 +209,13 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2';
             </nav>
         </div>
 
-        <AdDrawer :ad-id="drawer.adId.value" :filters="filters" :currency="currency" :data-at="freshness" @close="drawer.close" />
+        <AdDrawer
+            :ad-id="drawer.adId.value"
+            :filters="filters"
+            :currency="currency"
+            :data-at="freshness"
+            :reload-only="['result', 'tree', 'tier_counts']"
+            @close="drawer.close"
+        />
     </AppLayout>
 </template>

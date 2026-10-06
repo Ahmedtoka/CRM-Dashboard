@@ -1,9 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
-const { get } = vi.hoisted(() => ({ get: vi.fn() }));
+const { get, reload } = vi.hoisted(() => ({ get: vi.fn(), reload: vi.fn() }));
 vi.mock('@/composables/useApi', () => ({ useApi: () => ({ get }), apiErrorMessage: (_e: unknown, f: string) => f }));
-vi.mock('@inertiajs/vue3', () => ({ router: { reload: vi.fn() }, usePage: () => ({ props: { ads: { canWrite: true } } }), Link: { template: '<a><slot /></a>' } }));
+vi.mock('@inertiajs/vue3', () => ({ router: { reload }, usePage: () => ({ props: { ads: { canWrite: true } } }), Link: { template: '<a><slot /></a>' } }));
 
 import AdDrawer from '@/components/ads/AdDrawer.vue';
 
@@ -46,6 +46,17 @@ describe('AdDrawer', () => {
         });
         await flushPromises();
         expect(w.find('[data-test="funnel"]').text()).toContain('funnel here');
+    });
+
+    it('reloads the ad and only the named list props after a Stop', async () => {
+        get.mockResolvedValue({ data });
+        const w = mount(AdDrawer, { props: { adId: 7, filters, reloadOnly: ['result'] }, global: { stubs: { ...stubs, AdStatusButton: { name: 'AdStatusButton', template: '<i />' } } } });
+        await flushPromises();
+        w.findComponent({ name: 'AdStatusButton' }).vm.$emit('done', 'paused');
+        await flushPromises();
+        expect(get).toHaveBeenCalledTimes(2);
+        expect(reload).toHaveBeenCalledWith({ only: ['result'] });
+        get.mockReset();
     });
 
     it('offers a retry when the ad cannot be loaded', async () => {

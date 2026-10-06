@@ -250,8 +250,11 @@ export interface AdsBuyersProps extends AdsCommonProps {
 }
 
 export interface AdsBuyerShowProps extends AdsCommonProps {
-    filters: AdsFilters;
+    /** BuildsAdsPages::filterProps without the request: range key and an empty accounts list. */
+    filters: AdsFilters & { range: AdsRangeKey | null; accounts: number[] };
     buyer: { id: number; name: string; color: string | null };
+    /** Oldest last sync of the accounts in scope (data age for the Stop dialog). */
+    freshness: string | null;
     detail: BuyerDetail;
     summary: AdsRevenueSummary;
 }
@@ -351,6 +354,10 @@ export interface AdsCreativesProps extends AdsCommonProps {
 /** CampaignTree::build — Metrics = AdsQuery::derive plus the ad-attributed real orders. */
 export interface CampaignMetrics extends AdsDerived {
     real_orders: number;
+    /** Store revenue of the orders the node's ads brought (EGP). */
+    real_revenue?: number;
+    /** real_revenue / spend; null off EGP or without spend. */
+    real_roas?: number | null;
 }
 
 /** A node of the campaign tree. id 0 = the placeholder for ads without a campaign / ad set. Ad nodes carry ad_id and trend. */
@@ -595,8 +602,6 @@ export interface AdsSetupSettings {
 export interface AdsBuyersSetupProps {
     buyers: AdBuyerSetupRow[];
     users: { id: number; name: string; role: string }[];
-    settings: AdsSetupSettings;
-    launchExpiryDays: number;
 }
 
 /* ---- Materials library: MaterialController, MaterialCollectionController, AdStockController ---- */
@@ -791,6 +796,8 @@ export interface AdSuggestion {
     thumbnail_url: string | null;
     campaign: string | null;
     status: string | null;
+    /** Pre-tax spend today (Cairo), shown in the Stop dialog. */
+    spend_today: number;
 }
 
 /** One ad_write_actions row on the log (slice-1 rows are copied in as legacy rows). */
@@ -1148,7 +1155,8 @@ export interface AdsExplorerResult {
     data: AdRowData[];
     meta: { total: number; per_page: number; current_page: number; last_page: number };
     counts: { all: number; active: number; inactive: number };
-    totals: AdsDerived;
+    /** Over every matched ad (not just the page); real_roas null when an account is not EGP. */
+    totals: AdsDerived & { real_orders: number; real_revenue: number; real_roas: number | null };
 }
 
 export interface AdsExplorerProps extends AdsPageBase {

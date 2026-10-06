@@ -63,8 +63,29 @@ final class RunningCreatives
             'meta' => ['total' => $total, 'per_page' => $perPage, 'current_page' => $page, 'last_page' => $lastPage],
             'counts' => $counts,
             'accounts' => $accounts,
-            'totals' => $this->q->derive($totals ?? []),
+            'totals' => $this->q->derive($totals ?? []) + $this->realTotals($this->base($accountF, $status, $search, $extra), $accountF, (float) ($totals->spend ?? 0)),
         ];
+    }
+
+    /**
+     * Real (store) revenue and ROAS over every ad the list matches, not just the page. Real ROAS only when every matched
+     * account is EGP (store revenue is EGP, A9); null otherwise, like the rows.
+     *
+     * @return array{real_orders:int, real_revenue:float, real_roas:?float}
+     */
+    private function realTotals(Builder $matched, AdsFilter $f, float $spend): array
+    {
+        $ads = $matched->select(['ad.id', 'ad.ad_account_id'])->get();
+        if ($ads->isEmpty()) {
+            return ['real_orders' => 0, 'real_revenue' => 0.0, 'real_roas' => null];
+        }
+        $ids = $ads->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $orders = $this->q->orders($f)->whereIn('ad_id', $ids);
+        $revenue = round((float) $orders->sum('net'), 2);
+        $egp = DB::table('ad_accounts')->whereIn('id', $ads->pluck('ad_account_id')->unique()->all())->pluck('currency')
+            ->every(fn ($c) => AdDailySeries::isEgp($c));
+
+        return ['real_orders' => $orders->count(), 'real_revenue' => $revenue, 'real_roas' => $egp ? AdsQuery::ratio($revenue, $spend, 2) : null];
     }
 
     /** One ad's row (with preview_html) over the filter; zeros when it did not run in range. */

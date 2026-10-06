@@ -33,6 +33,9 @@ export function useWriteAction() {
     const message = ref<string | null>(null);
 
     async function propose(target: WriteTarget): Promise<void> {
+        // A retry replaces an earlier proposal: cancel it so no stale proposal waits on the server.
+        const stale = proposal.value?.action.id;
+        if (stale) await api.post(`/ads/write-actions/${stale}/cancel`).catch(() => undefined);
         phase.value = 'proposing';
         error.value = null;
         proposal.value = null;

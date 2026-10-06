@@ -4072,7 +4072,7 @@ const ar = {
                 stop: 'وقّف', run: 'شغّل', stop_title: 'توقيف {name}', run_title: 'تشغيل {name}', preparing: 'بنجهّز التغيير من ميتا...',
                 current: 'دلوقتي', next: 'هيبقى', today_spend: 'صرف النهارده', data_age: 'البيانات لحد {time}', reason: 'السبب (اختياري)',
                 confirm_stop: 'أيوه وقّفه', confirm_run: 'أيوه شغّله', reauth_title: 'أكّد كلمة السر', reauth_body: 'التشغيل محتاج تأكيد كلمة السر، وده بيفضل صالح ١٥ دقيقة.',
-                password: 'كلمة السر', reauth_submit: 'أكّد وشغّل', pending: 'التغيير لسه بيتنفذ، هيظهر في السجل.', done_stop: 'اتوقف', done_run: 'اشتغل',
+                password: 'كلمة السر', reauth_submit: 'أكّد وشغّل', retry: 'حاول تاني', pending: 'التغيير لسه بيتنفذ، هيظهر في السجل.', done_stop: 'اتوقف', done_run: 'اشتغل',
                 failed: 'معرفناش ننفذ التغيير', parent_paused: 'الحملة أو المجموعة اللي فوقه واقفة: الإعلان مش هيصرف حتى لو اشتغل.',
                 note_learning_reentry: 'الإعلان كان واقف من {days} يوم، ممكن يرجع يتعلّم من الأول.', status_active: 'شغال', status_paused: 'واقف', status_unknown: 'مش معروف',
                 path: { daily_budget: 'الميزانية اليومية', parent_daily_budget: 'الميزانية اليومية للمستوى اللي فوقه', lifetime_budget: 'ميزانية المدة كلها' },
@@ -4096,7 +4096,7 @@ const ar = {
                 spend_days: 'اتصرف {amount} في آخر ١٤ يوم', empty_open: 'مفيش قرارات مفتوحة دلوقتي', empty_snoozed: 'مفيش حاجة مأجّلة', empty_closed: 'مفيش حاجة اتقفلت لسه',
                 empty_log: 'مفيش تغييرات في السجل', log_at: 'الوقت', log_who: 'مين', log_level: 'المستوى', log_result: 'النتيجة', any: 'الكل', result_ok: 'تم', result_error: 'فشل', result_pending: 'لسه',
             },
-            explorer: { title: 'الإعلانات', description: 'كل الإعلانات في مكان واحد: جدول أو كروت أو شجرة الحملات', empty: 'مفيش إعلانات بالفلاتر دي', totals: 'الإجمالي', per_page: 'في الصفحة', page: 'صفحة {n} من {total}', prev: 'السابق', next: 'التالي', naming_bad: 'الاسم مش على النظام', naming_hint: 'اسم الحملة مش ماشي على نظام التسمية المتفق عليه', tiers: 'التصنيف', tier_top: 'الكسبان والواعد', tier_all: 'كل اللي اتقيّموا' },
+            explorer: { title: 'الإعلانات', description: 'كل الإعلانات في مكان واحد: جدول أو كروت أو شجرة الحملات', empty: 'مفيش إعلانات بالفلاتر دي', totals: 'الإجمالي', per_page: 'في الصفحة', page: 'صفحة {n} من {total}', prev: 'السابق', next: 'التالي', naming_bad: 'الاسم مش على النظام', naming_hint: 'اسم الحملة مش ماشي على نظام التسمية المتفق عليه', tiers: 'التصنيف', tier_top: 'الكسبان والواعد', tier_all: 'كل اللي اتقيّموا', expand: 'افتح {name}', collapse: 'اقفل {name}' },
             numbers: {
                 title: 'الأرقام', description: 'تقرير الفترة: الصرف والأوردرات والعائد', hero_spend: 'اتصرف', hero_real_orders: 'أوردرات حقيقية', hero_real_roas: 'عائد حقيقي',
                 hero_meta_roas: 'عائد ميتا', hero_losers: 'على إعلانات خسرانة', more: 'باقي الأرقام', less: 'خبّي باقي الأرقام', daily: 'يوم بيوم', accounts: 'الحسابات',

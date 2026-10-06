@@ -4117,7 +4117,7 @@ const en: Messages = {
                 stop: 'Stop', run: 'Run', stop_title: 'Stop {name}', run_title: 'Run {name}', preparing: 'Preparing the change from Meta...',
                 current: 'Now', next: 'Will be', today_spend: 'Spent today', data_age: 'Data as of {time}', reason: 'Reason (optional)',
                 confirm_stop: 'Yes, stop it', confirm_run: 'Yes, run it', reauth_title: 'Confirm your password', reauth_body: 'Running an ad needs your password; it stays valid for 15 minutes.',
-                password: 'Password', reauth_submit: 'Confirm and run', pending: 'The change is still running; it will show in the log.', done_stop: 'Stopped', done_run: 'Running',
+                password: 'Password', reauth_submit: 'Confirm and run', retry: 'Try again', pending: 'The change is still running; it will show in the log.', done_stop: 'Stopped', done_run: 'Running',
                 failed: 'The change could not be made', parent_paused: 'The campaign or ad set above is stopped: the ad will not spend even when running.',
                 note_learning_reentry: 'The ad was stopped {days} days ago; it may re-enter learning.', status_active: 'Running', status_paused: 'Stopped', status_unknown: 'Unknown',
                 path: { daily_budget: 'Daily budget', parent_daily_budget: 'Daily budget of the level above', lifetime_budget: 'Lifetime budget' },
@@ -4141,7 +4141,7 @@ const en: Messages = {
                 spend_days: 'Spent {amount} in the last 14 days', empty_open: 'No open decisions right now', empty_snoozed: 'Nothing snoozed', empty_closed: 'Nothing closed yet',
                 empty_log: 'No changes in the log', log_at: 'Time', log_who: 'Who', log_level: 'Level', log_result: 'Result', any: 'All', result_ok: 'Done', result_error: 'Failed', result_pending: 'Pending',
             },
-            explorer: { title: 'Ads', description: 'Every ad in one place: table, cards or campaign tree', empty: 'No ads match these filters', totals: 'Total', per_page: 'Per page', page: 'Page {n} of {total}', prev: 'Previous', next: 'Next', naming_bad: 'Name breaks the convention', naming_hint: 'The campaign name does not follow the agreed naming convention', tiers: 'Tier', tier_top: 'Winners and promising', tier_all: 'All scored' },
+            explorer: { title: 'Ads', description: 'Every ad in one place: table, cards or campaign tree', empty: 'No ads match these filters', totals: 'Total', per_page: 'Per page', page: 'Page {n} of {total}', prev: 'Previous', next: 'Next', naming_bad: 'Name breaks the convention', naming_hint: 'The campaign name does not follow the agreed naming convention', tiers: 'Tier', tier_top: 'Winners and promising', tier_all: 'All scored', expand: 'Expand {name}', collapse: 'Collapse {name}' },
             numbers: {
                 title: 'Numbers', description: 'Range report: spend, orders and return', hero_spend: 'Spent', hero_real_orders: 'Real orders', hero_real_roas: 'Real ROAS',
                 hero_meta_roas: 'Meta ROAS', hero_losers: 'On losing ads', more: 'More numbers', less: 'Hide more numbers', daily: 'Day by day', accounts: 'Accounts',

@@ -66,3 +66,25 @@ it('shows a buyer only the ads of accounts they hold', function () {
     $this->actingAs($w['user'])->get('/ads/explorer')
         ->assertInertia(fn (Assert $p) => $p->has('result.data', 1)->where('result.data.0.id', $own->id));
 });
+
+it('gives real revenue and real ROAS to the totals and to every tree level, null off EGP', function () {
+    $acc = AdAccount::factory()->meta()->create(['currency' => 'EGP']);
+    $a = crAd($acc, ['2026-10-04' => [100, 1, 100, 0]]);
+    $b = crAd($acc, ['2026-10-04' => [100, 0, 0, 0]]);
+    crOrder($a, '2026-10-04 13:00', 300);
+    crOrder($b, '2026-10-04 14:00', 100);
+    $usd = AdAccount::factory()->meta()->create(['currency' => 'USD']);
+    crAd($usd, ['2026-10-04' => [50, 0, 0, 0]]);
+
+    $this->actingAs(crAdmin())->get("/ads/explorer?accounts={$acc->id}")->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->where('result.totals.real_revenue', fn ($v) => (float) $v > 0)->where('result.totals.real_roas', fn ($v) => $v !== null && (float) $v > 0));
+    $this->actingAs(crAdmin())->get('/ads/explorer')->assertOk()->assertInertia(fn (Assert $p) => $p->where('result.totals.real_roas', null));
+
+    $this->actingAs(crAdmin())->get("/ads/explorer?view=tree&accounts={$acc->id}")->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->where('tree.0.metrics.real_roas', fn ($v) => $v !== null && (float) $v > 0)
+        ->has('tree.0.metrics.real_revenue')
+        ->where('tree.0.children.0.metrics.real_roas', fn ($v) => $v !== null)
+        ->has('tree.0.children.0.children.0.metrics.real_roas'));
+    $this->actingAs(crAdmin())->get("/ads/explorer?view=tree&accounts={$usd->id}")->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->where('tree.0.metrics.real_roas', null));
+});

@@ -12,6 +12,7 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import ProgressBar from '@/components/crm/ProgressBar.vue';
 import { useAdDrawer } from '@/composables/useAdDrawer';
 import { useI18n } from '@/composables/useI18n';
+import { usePathVisitLoading } from '@/composables/usePathVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAdsMoney, formatDayShort, formatPct, formatRoas, reasonTexts } from '@/lib/ads';
 import { buildHref, carryQuery, readQuery } from '@/lib/adsFilters';
@@ -23,6 +24,7 @@ import { computed } from 'vue';
 
 const props = defineProps<AdsTodayProps>();
 const { t, locale } = useI18n();
+const loading = usePathVisitLoading('/ads');
 const drawer = useAdDrawer();
 const money = (v: number | null) => formatAdsMoney(v, locale.value, props.currency);
 const n = (v: number) => formatCount(v, locale.value);
@@ -73,6 +75,8 @@ const listHref = (list: (typeof LISTS)[number]) =>
                 :platforms="platforms"
                 :show="{ range: false, status: false, list: false, presets: false }"
             />
+            <!-- Dims while a filter visit to this page runs (M7). -->
+            <div class="space-y-4 transition-opacity" :class="loading ? 'opacity-60' : ''" :aria-busy="loading" data-test="page-body">
 
             <!-- Decisions block: what needs me now comes first -->
             <section class="space-y-3 rounded-lg bg-card p-4 shadow-card" aria-labelledby="today-decisions">
@@ -83,7 +87,7 @@ const listHref = (list: (typeof LISTS)[number]) =>
                     <Link :href="href('/ads/decisions')" class="inline-flex h-9 items-center text-xs text-primary hover:underline">{{ t('ads.control.today.open_all') }}</Link>
                 </div>
                 <Link v-if="d.approvals > 0" data-test="approvals-link" href="/ads/approvals" class="block rounded-md bg-surface-accent px-3 py-2 text-xs font-medium hover:underline">
-                    {{ t('ads.control.today.approvals', { n: d.approvals }) }}
+                    {{ t('ads.control.today.approvals', { n: n(d.approvals) }) }}
                 </Link>
                 <ul v-if="d.suggestions.length" class="divide-y divide-border">
                     <li v-for="s in d.suggestions" :key="s.ad_id" class="flex flex-wrap items-center gap-3 py-2">
@@ -105,10 +109,13 @@ const listHref = (list: (typeof LISTS)[number]) =>
                                 :status="s.status"
                                 :can-write="s.can_write ?? false"
                                 :reason="reasonLine(s)"
+                                :spend-today="s.spend_today"
                                 :data-at="freshness"
                                 :currency="currency"
                             />
-                            <button type="button" class="h-7 rounded-md px-2 text-2xs text-primary hover:bg-muted" @click="drawer.open(s.ad_id)">{{ t('ads.control.row.why') }}</button>
+                            <button type="button" data-test="why" class="h-11 rounded-md px-3 text-xs text-primary hover:bg-muted md:h-7 md:px-2 md:text-2xs" @click="drawer.open(s.ad_id)">
+                                {{ t('ads.control.row.why') }}
+                            </button>
                         </div>
                     </li>
                 </ul>
@@ -206,7 +213,7 @@ const listHref = (list: (typeof LISTS)[number]) =>
                             :href="href('/ads/decisions', { buyer: String(b.buyer_id) })"
                             class="text-primary hover:underline"
                         >
-                            {{ t('ads.control.today.open_decisions', { n: b.open_decisions }) }}
+                            {{ t('ads.control.today.open_decisions', { n: n(b.open_decisions) }) }}
                         </Link>
                     </li>
                 </ul>
@@ -220,16 +227,18 @@ const listHref = (list: (typeof LISTS)[number]) =>
                         <Link :href="listHref(list)" class="text-xs text-primary hover:underline">{{ t('ads.control.today.see_all') }}</Link>
                     </div>
                     <ul v-if="today[list].length" class="divide-y divide-border">
-                        <li v-for="r in today[list]" :key="r.id" class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-                            <AdRow :row="r" part="creative" :currency="currency" density="compact" @open="drawer.open" />
-                            <AdRow :row="r" part="return" :currency="currency" class="hidden sm:block" @open="drawer.open" />
+                        <li v-for="r in today[list]" :key="r.id" class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                            <!-- Phones: name on its own line, then real ROAS and Stop; sm+: one line. -->
+                            <AdRow :row="r" part="creative" :currency="currency" density="compact" class="col-span-2 sm:col-span-1" @open="drawer.open" />
+                            <AdRow data-test="best-worst-return" :row="r" part="return" :currency="currency" @open="drawer.open" />
                             <AdRow :row="r" part="status" :currency="currency" :data-at="freshness" @open="drawer.open" />
                         </li>
                     </ul>
                     <p v-else class="text-xs text-muted-foreground">{{ t(list === 'best' ? 'ads.control.today.none_best' : 'ads.control.today.none_worst') }}</p>
                 </section>
             </div>
+            </div>
         </div>
-        <AdDrawer :ad-id="drawer.adId.value" :filters="filters" :currency="currency" :data-at="freshness" @close="drawer.close" />
+        <AdDrawer :ad-id="drawer.adId.value" :filters="filters" :currency="currency" :data-at="freshness" :reload-only="['today']" @close="drawer.close" />
     </AppLayout>
 </template>

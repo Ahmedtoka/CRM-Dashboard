@@ -50,3 +50,19 @@ it('keeps the worst five to EGP ads that spent in the range and today (review M2
 
     $this->actingAs(crAdmin())->get('/ads')->assertInertia(fn (Assert $p) => $p->has('today.worst', 1)->where('today.worst.0.id', $bad->id));
 });
+
+it('gives the buyer page a data age for its drawer', function () {
+    $w = crBuyer();
+    crAd($w['account'], ['2026-10-03' => [100, 1, 300, 0]]);
+
+    $this->actingAs(crAdmin())->get("/ads/buyers/{$w['buyer']->id}")->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->component('Ads/BuyerShow')->has('freshness'));
+});
+
+it('puts today spend on the decisions of Today', function () {
+    $acc = AdAccount::factory()->meta()->create(['currency' => 'EGP']);
+    $ad = crAd($acc, ['2026-10-01' => [1500, 0, 0, 0], '2026-10-06' => [80, 0, 0, 0]]);
+
+    $this->actingAs(crAdmin())->get('/ads')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->where('today.decisions.suggestions.0.ad_id', $ad->id)->where('today.decisions.suggestions.0.spend_today', 80));
+});
