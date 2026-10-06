@@ -354,7 +354,7 @@ it('lets the assignee resolve her own window through the inbox', function () {
     [$u, , $e] = deskWithWindow();
     $u->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
 
-    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
+    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/resolve", ['outcome' => 'browsing'])->assertOk();
 
     expect($e->fresh()->close_reason)->toBe('resolved_elsewhere')->and($e->conversation->fresh()->status->value)->toBe('resolved');
 });
@@ -362,7 +362,7 @@ it('lets the assignee resolve her own window through the inbox', function () {
 it('lets a supervisor or an admin resolve a moderator\'s window through the inbox', function (string $role) {
     [, , $e] = deskWithWindow();
 
-    $this->actingAs(User::factory()->create(['role' => $role]))->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
+    $this->actingAs(User::factory()->create(['role' => $role]))->postJson("/inbox/conversations/{$e->conversation_id}/resolve", ['outcome' => 'browsing'])->assertOk();
 
     expect($e->fresh()->status)->toBe('closed')->and($e->fresh()->close_reason)->toBe('resolved_elsewhere');
 })->with(['supervisor', 'admin']);
@@ -372,7 +372,7 @@ it('lets any moderator resolve a customer who is still waiting in the lounge', f
     $u = User::factory()->create(['role' => 'moderator']);
     $u->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
 
-    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
+    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/resolve", ['outcome' => 'browsing'])->assertOk();
 
     expect($e->fresh()->status)->toBe('cancelled');
 });
@@ -383,7 +383,7 @@ it('leaves the old resolve as it was while the queue is off', function () {
     $other->userPlatforms()->create(['platform' => $e->conversation->platform->value]);
     QueueSetting::current()->update(['enabled' => false]);
 
-    $this->actingAs($other)->postJson("/inbox/conversations/{$e->conversation_id}/resolve")->assertOk();
+    $this->actingAs($other)->postJson("/inbox/conversations/{$e->conversation_id}/resolve", ['outcome' => 'browsing'])->assertOk();
 
     expect($e->conversation->fresh()->status->value)->toBe('resolved');
 });
