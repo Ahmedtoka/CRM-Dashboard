@@ -2,12 +2,12 @@
 /** Ads Hub — مكتبة مواد الإعلانات: what the content team uploaded, its status, stock and (for spend viewers) performance (spec §8.7). */
 import AdLinkPicker from '@/components/ads/AdLinkPicker.vue';
 import CaptionsDialog from '@/components/ads/CaptionsDialog.vue';
+import LaunchEditor from '@/components/ads/launch/LaunchEditor.vue';
+import LaunchStateChip from '@/components/ads/launch/LaunchStateChip.vue';
 import MaterialLightbox from '@/components/ads/MaterialLightbox.vue';
 import MaterialStatusChip from '@/components/ads/MaterialStatusChip.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PublicationsList from '@/components/ads/PublicationsList.vue';
-import LaunchEditor from '@/components/ads/launch/LaunchEditor.vue';
-import LaunchStateChip from '@/components/ads/launch/LaunchStateChip.vue';
 import PublishDialog from '@/components/ads/PublishDialog.vue';
 import WinnerBadge from '@/components/ads/WinnerBadge.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -21,7 +21,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatRoas, roasTone, safeUrl } from '@/lib/ads';
-import { cleanQuery, links, pageList, queryString, useMaterialPermissions } from '@/lib/adsMaterials';
+import { cleanQuery, links, MATERIAL_STATUSES, pageList, queryString, statusCounts, useMaterialPermissions } from '@/lib/adsMaterials';
 import { formatClock, formatCount, formatDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AdsMaterialsIndexProps, MaterialRow, MaterialStatus, PublishCaption } from '@/types/ads';
@@ -31,6 +31,7 @@ import {
     ChevronLeft,
     ChevronRight,
     CircleCheckBig,
+    CirclePause,
     CirclePlay,
     Clapperboard,
     Download,
@@ -51,9 +52,10 @@ import {
     Play,
     Plus,
     Rocket,
+    Search,
+    SearchCheck,
     Send,
     Sparkles,
-    Search,
     Square,
     Trash2,
     X,
@@ -67,7 +69,7 @@ const toast = useToast();
 const perms = useMaterialPermissions();
 const n = (v: number) => formatCount(v, locale.value);
 
-const STATUSES: MaterialStatus[] = ['new', 'in_review', 'live', 'paused', 'retired'];
+const STATUSES: MaterialStatus[] = MATERIAL_STATUSES;
 const STOCKS = ['in', 'out', 'none'] as const;
 const TYPES = ['reel', 'carousel', 'post', 'story', 'image', 'video'] as const;
 
@@ -143,24 +145,25 @@ interface Kpi {
     border: string;
     tint: string;
     hint?: string;
+    /** Set when the label is not `ads.materials.kpi.<key>` (the status tiles). */
+    label?: string;
 }
+/** Status tiles carry the filter's status names (جديدة / في المراجعة / شغالة / واقفة / خلصت), in its order. */
+const STATUS_TILE: Record<MaterialStatus, Pick<Kpi, 'icon' | 'border' | 'tint'>> = {
+    new: { icon: Hourglass, border: 'border-t-warning', tint: 'bg-warning/20 text-amber-800 dark:text-amber-200' },
+    in_review: { icon: SearchCheck, border: 'border-t-info', tint: 'bg-info/10 text-blue-700 dark:text-blue-200' },
+    live: { icon: CirclePlay, border: 'border-t-success', tint: 'bg-success/15 text-emerald-700 dark:text-emerald-300' },
+    paused: { icon: CirclePause, border: 'border-t-muted-foreground', tint: 'bg-muted text-muted-foreground' },
+    retired: { icon: CircleCheckBig, border: 'border-t-info', tint: 'bg-info/10 text-blue-700 dark:text-blue-200' },
+};
 const kpis = computed<Kpi[]>(() => [
     { key: 'total', value: props.stats.total, icon: Layers, border: 'border-t-primary', tint: 'bg-primary/10 text-primary' },
-    {
-        key: 'activated',
-        value: props.stats.activated,
-        icon: CirclePlay,
-        border: 'border-t-success',
-        tint: 'bg-success/15 text-emerald-700 dark:text-emerald-300',
-    },
-    {
-        key: 'not_started',
-        value: props.stats.not_started,
-        icon: Hourglass,
-        border: 'border-t-warning',
-        tint: 'bg-warning/20 text-amber-800 dark:text-amber-200',
-    },
-    { key: 'done', value: props.stats.done, icon: CircleCheckBig, border: 'border-t-info', tint: 'bg-info/10 text-blue-700 dark:text-blue-200' },
+    ...statusCounts(props.stats).map((c) => ({
+        key: `status-${c.status}`,
+        label: t(`ads.materials.status.${c.status}`),
+        value: c.value,
+        ...STATUS_TILE[c.status],
+    })),
     {
         key: 'reels',
         value: props.stats.reels,
@@ -298,10 +301,10 @@ const breadcrumbs = computed(() => [
             </PageHeader>
 
             <!-- KPIs (whole library) -->
-            <ul class="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
+            <ul class="grid grid-cols-2 gap-3 sm:grid-cols-5" data-test="material-kpis">
                 <li v-for="k in kpis" :key="k.key" class="rounded-lg border-t-4 bg-card px-3 py-3 shadow-card" :class="k.border">
                     <div class="flex items-start justify-between gap-2">
-                        <p class="text-2xs font-medium text-muted-foreground">{{ t(`ads.materials.kpi.${k.key}`) }}</p>
+                        <p class="text-2xs font-medium text-muted-foreground">{{ k.label ?? t(`ads.materials.kpi.${k.key}`) }}</p>
                         <span class="flex size-7 shrink-0 items-center justify-center rounded-md" :class="k.tint">
                             <component :is="k.icon" class="size-3.5" aria-hidden="true" />
                         </span>
@@ -373,7 +376,7 @@ const breadcrumbs = computed(() => [
             </form>
 
             <!-- Table -->
-            <div class="scrollbar-thin relative table-scroll-box rounded-lg bg-card shadow-card [contain:inline-size]">
+            <div class="scrollbar-thin table-scroll-box relative rounded-lg bg-card shadow-card [contain:inline-size]">
                 <EmptyState
                     v-if="!page.data.length"
                     :icon="ImageOff"
@@ -557,7 +560,10 @@ const breadcrumbs = computed(() => [
                                 <MaterialStatusChip :status="m.status" />
                                 <ul v-if="m.launches?.length" class="mt-1 space-y-0.5">
                                     <li v-for="l in m.launches" :key="l.id">
-                                        <Link :href="`/ads/launches?material=${m.id}&box=all&launch=${l.id}`" class="inline-flex items-center gap-1 text-2xs hover:underline">
+                                        <Link
+                                            :href="`/ads/launches?material=${m.id}&box=all&launch=${l.id}`"
+                                            class="inline-flex items-center gap-1 text-2xs hover:underline"
+                                        >
                                             <LaunchStateChip :state="l.state" /><span class="truncate text-muted-foreground">{{ l.adset }}</span>
                                         </Link>
                                     </li>
@@ -738,8 +744,21 @@ const breadcrumbs = computed(() => [
             </DialogContent>
         </Dialog>
 
-        <CaptionsDialog v-if="captioning" v-model:open="captionsOpen" :material="captioning" :can-publish="perms.canDirectPublish.value" @create="createFromCaptions" />
-        <PublishDialog v-if="publishing" v-model:open="publishOpen" :material="publishing" :captions="publishCaptions" :file-ids="publishFileIds" @published="publications = publishing" />
+        <CaptionsDialog
+            v-if="captioning"
+            v-model:open="captionsOpen"
+            :material="captioning"
+            :can-publish="perms.canDirectPublish.value"
+            @create="createFromCaptions"
+        />
+        <PublishDialog
+            v-if="publishing"
+            v-model:open="publishOpen"
+            :material="publishing"
+            :captions="publishCaptions"
+            :file-ids="publishFileIds"
+            @published="publications = publishing"
+        />
 
         <Dialog v-model:open="publicationsOpen">
             <DialogContent class="max-h-[90svh] overflow-y-auto sm:max-w-2xl">

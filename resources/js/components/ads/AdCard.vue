@@ -27,8 +27,15 @@ const result = computed(() =>
 
 <template>
     <article class="flex min-w-0 flex-col overflow-hidden rounded-lg bg-card shadow-card">
-        <button type="button" class="aspect-[4/5] w-full overflow-hidden bg-muted" :aria-label="t('ads.control.row.preview')" @click="emit('open', row.id)">
-            <CreativeThumb :ad="row" size="fill" :show-pills="false" square />
+        <!-- Phones: the preview is capped (15rem, cropped to fill) so two cards fit a screen; md+ keeps the 4:5 frame. -->
+        <button
+            type="button"
+            data-test="card-media"
+            class="aspect-[4/5] max-h-60 w-full overflow-hidden bg-muted md:max-h-none"
+            :aria-label="t('ads.control.row.preview')"
+            @click="emit('open', row.id)"
+        >
+            <CreativeThumb :ad="row" size="fill" :show-pills="false" square class="max-md:aspect-auto max-md:h-full" />
         </button>
         <div class="flex flex-1 flex-col gap-2 p-3">
             <div class="flex items-center justify-between gap-2">
@@ -40,7 +47,11 @@ const result = computed(() =>
             </div>
             <h3 class="truncate text-sm font-semibold" dir="auto" :title="row.name">{{ row.name }}</h3>
             <p class="truncate text-2xs text-muted-foreground">
-                <span dir="auto">{{ row.account }}</span><template v-if="row.buyer"> · <span dir="auto">{{ row.buyer }}</span></template> ·
+                <span dir="auto">{{ row.account }}</span
+                ><template v-if="row.buyer">
+                    · <span dir="auto">{{ row.buyer }}</span></template
+                >
+                ·
                 {{ t(`ads.control.objective.${row.objective}`) }}
             </p>
             <button type="button" class="block w-full space-y-1 text-start hover:underline" @click="emit('open', row.id)">
@@ -58,7 +69,9 @@ const result = computed(() =>
             </button>
             <Sparkline :points="row.series" :currency="cur" :width="200" />
             <div class="mt-auto flex items-center justify-between gap-2 pt-1">
-                <button type="button" class="h-11 rounded-md px-3 text-xs text-primary hover:bg-muted" @click="emit('open', row.id)">{{ t('ads.control.row.why') }}</button>
+                <button type="button" class="h-11 rounded-md px-3 text-xs text-primary hover:bg-muted" @click="emit('open', row.id)">
+                    {{ t('ads.control.row.why') }}
+                </button>
                 <AdStatusButton
                     size="md"
                     :account-id="row.account_id"

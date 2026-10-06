@@ -85,4 +85,11 @@ describe('adColumns', () => {
         expect(columnSort('-roas')).toBe('');
         expect(serverSort('result')).toBe('conversations');
     });
+
+    it('caps the card preview on phones so two cards fit a screen (final fix 9)', () => {
+        const w = mount(AdCard, { props: { row: row() }, global: { stubs } });
+        const media = w.get('[data-test="card-media"]');
+        expect(media.classes()).toEqual(expect.arrayContaining(['max-h-60', 'md:max-h-none', 'overflow-hidden']));
+        expect(w.findComponent({ name: 'CreativeThumb' }).classes()).toEqual(expect.arrayContaining(['max-md:h-full', 'max-md:aspect-auto']));
+    });
 });

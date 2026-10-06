@@ -40,4 +40,17 @@ class LaunchRequest extends FormRequest
             'revision' => [$creating ? 'prohibited' : 'required', 'integer', 'min:1'],
         ]);
     }
+
+    /** A refused field says what it is and why (final fix 10), never «حقل daily budget مش مسموح بيه». */
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return array_fill_keys(array_map(fn (string $f) => $f.'.prohibited', self::PROHIBITED), __('ads.launch.prohibited'));
+    }
+
+    /** @return array<string, string> */
+    public function attributes(): array
+    {
+        return array_combine(self::PROHIBITED, array_map(fn (string $f) => __('ads.launch.fields.'.$f), self::PROHIBITED));
+    }
 }

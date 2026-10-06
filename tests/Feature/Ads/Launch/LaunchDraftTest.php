@@ -152,3 +152,16 @@ it('returns review launches to content when their slot closes (E13)', function (
     expect($l->fresh()->state)->toBe(LaunchState::ChangesRequested)->and($l->fresh()->decision_code)->toBe('slot_closed')
         ->and(UserNotification::where('type', 'ads.launch.changes_requested')->count())->toBe(1);
 });
+
+it('names a refused spend or link field in words, not its raw key (final fix 10)', function () {
+    $w = LaunchWorld::make();
+    $w['content']->forceFill(['locale' => 'ar'])->save();
+
+    $errors = ldStore($this, $w['content'], $w, ['daily_budget' => 5000, 'link' => 'https://evil.test', 'targeting' => ['x' => 1]])
+        ->assertStatus(422)->json('errors');
+
+    expect($errors['daily_budget'][0])->toBe('مش مسموح تحدد الميزانية اليومية في طلب الإطلاق، دي بتتظبط وقت النشر.')
+        ->and($errors['link'][0])->toContain('اللينك')
+        ->and($errors['targeting'][0])->toContain('الاستهداف')
+        ->and(implode(' ', array_merge(...array_values($errors))))->not->toContain('daily budget');
+});

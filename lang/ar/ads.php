@@ -149,6 +149,26 @@ return [
         ],
     ],
     'launch' => [
+        // A launch request field that spends or redirects (LaunchRequest::PROHIBITED): the 422 message and its name.
+        'prohibited' => 'مش مسموح تحدد :attribute في طلب الإطلاق، دي بتتظبط وقت النشر.',
+        'fields' => [
+            'budget' => 'الميزانية',
+            'daily_budget' => 'الميزانية اليومية',
+            'lifetime_budget' => 'الميزانية الإجمالية',
+            'bid' => 'المزايدة',
+            'bid_amount' => 'قيمة المزايدة',
+            'bid_strategy' => 'طريقة المزايدة',
+            'targeting' => 'الاستهداف',
+            'objective' => 'هدف الحملة',
+            'schedule' => 'الجدولة',
+            'link' => 'اللينك',
+            'url_tags' => 'تاجات اللينك',
+            'allow_duplicate' => 'التكرار',
+            'campaign_id' => 'الحملة',
+            'new_campaign' => 'حملة جديدة',
+            'new_adset' => 'مجموعة إعلانية جديدة',
+            'website_links' => 'لينكات الموقع',
+        ],
         'stop_reason' => 'إيقاف إطلاق :id',
         'approve_reason' => 'موافقة إطلاق :id',
         'flash' => [

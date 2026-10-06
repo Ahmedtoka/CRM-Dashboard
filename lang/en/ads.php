@@ -149,6 +149,26 @@ return [
         ],
     ],
     'launch' => [
+        // A launch request field that spends or redirects (LaunchRequest::PROHIBITED): the 422 message and its name.
+        'prohibited' => 'The :attribute can\'t be set in a launch request; it is set when the ad is published.',
+        'fields' => [
+            'budget' => 'budget',
+            'daily_budget' => 'daily budget',
+            'lifetime_budget' => 'lifetime budget',
+            'bid' => 'bid',
+            'bid_amount' => 'bid amount',
+            'bid_strategy' => 'bid strategy',
+            'targeting' => 'targeting',
+            'objective' => 'campaign objective',
+            'schedule' => 'schedule',
+            'link' => 'link',
+            'url_tags' => 'link tags',
+            'allow_duplicate' => 'duplicate permission',
+            'campaign_id' => 'campaign',
+            'new_campaign' => 'new campaign',
+            'new_adset' => 'new ad set',
+            'website_links' => 'website links',
+        ],
         'stop_reason' => 'Launch stop :id',
         'approve_reason' => 'Launch approval :id',
         'flash' => [
