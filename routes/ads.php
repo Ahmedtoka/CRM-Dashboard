@@ -83,6 +83,9 @@ Route::middleware('ads:manage')->group(function () {
     Route::post('/ads/connections/{connection}/test', [AccountController::class, 'test'])->name('ads.connections.test');
     Route::post('/ads/connections/{connection}/sync', [AccountController::class, 'sync'])->name('ads.connections.sync');
     Route::delete('/ads/connections/{connection}', [AccountController::class, 'destroy'])->name('ads.connections.destroy');
+    // F6: the page's one «سنك» (picked or all accounts) and the status it polls.
+    Route::post('/ads/accounts/sync', [AccountController::class, 'syncMany'])->middleware('throttle:20,1')->name('ads.accounts.sync-many');
+    Route::get('/ads/accounts/sync-status', [AccountController::class, 'syncStatus'])->name('ads.accounts.sync-status');
     Route::post('/ads/accounts/{account}/assign', [AccountController::class, 'assign'])->name('ads.accounts.assign');
     Route::patch('/ads/accounts/{account}', [AccountController::class, 'updateAccount'])->name('ads.accounts.update');
     Route::post('/ads/accounts/{account}/sync', [AccountController::class, 'syncAccount'])->name('ads.accounts.sync');

@@ -155,7 +155,7 @@ const columns = computed<Column[]>(() => [
     { key: 'status', label: t('ads.accounts.col_status') },
     { key: 'is_active', label: t('ads.accounts.col_active'), align: 'center' },
     { key: 'owner', label: t('ads.accounts.col_owner') },
-    { key: 'spend_30d', label: t('ads.accounts.col_spend'), align: 'end' },
+    { key: 'spend', label: t('ads.accounts.col_spend'), align: 'end' },
     { key: 'last_synced_at', label: t('ads.accounts.col_last_sync'), hideOnMobile: true },
     { key: 'actions', label: t('ads.accounts.col_actions'), align: 'end' },
 ]);
@@ -407,7 +407,7 @@ const appCrumbs = computed(() => [
                                 <p v-if="assignError(row)" role="alert" class="text-2xs text-destructive">{{ assignError(row) }}</p>
                             </div>
                         </template>
-                        <template #cell-spend_30d="{ row }">{{ money(row.spend_30d, row.currency) }}</template>
+                        <template #cell-spend="{ row }">{{ money(row.spend, row.currency) }}</template>
                         <template #cell-last_synced_at="{ row }">
                             <span v-if="props.syncing.includes(row.id)" class="inline-flex items-center gap-1.5 text-xs font-medium text-primary" role="status">
                                 <LoaderCircle class="size-3.5 animate-spin" aria-hidden="true" />{{ t('ads.accounts.syncing') }}

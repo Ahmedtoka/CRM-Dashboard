@@ -462,7 +462,11 @@ export interface AdAccountRow {
     last_synced_at: string | null;
     buyer: AdsOption | null;
     history: AdAssignmentPeriod[];
-    spend_30d: number;
+    platform: AdPlatformValue;
+    /** Spend in the page's range, in the account currency. */
+    spend: number;
+    /** The latest finished sync (ok or error); null before the first one. */
+    last_run: { status: 'ok' | 'error'; error: string | null; finished_at: string | null } | null;
 }
 
 export interface AdTokenHealth {
@@ -567,6 +571,41 @@ export interface AdsAccountsProps {
     syncing: number[];
     buyers: AdBuyerOption[];
     platforms: AdPlatformDefinition[];
+    /** Applied filter: range (default this Cairo month) and picked accounts (empty = all). */
+    filters: { from: string; to: string; accounts: number[] };
+    summary: AdsAccountsSummary;
+    /** Every account, for the filter and the sync picker. */
+    account_options: { id: number; name: string; platform: AdPlatformValue }[];
+}
+
+export interface AdsAccountsSummary {
+    accounts: number;
+    active: number;
+    /** Spend in range per currency. */
+    spend: { currency: string; amount: number }[];
+    last_sync: string | null;
+    errors: number;
+}
+
+/** AccountController::syncStatus — one account of the running «سنك». */
+export type AdSyncState = 'queued' | 'running' | 'done' | 'error';
+export interface AdSyncStatusRow {
+    id: number;
+    name: string;
+    platform: AdPlatformValue;
+    state: AdSyncState;
+    error: string | null;
+}
+export interface AdSyncStatusResponse {
+    accounts: AdSyncStatusRow[];
+    done: number;
+    total: number;
+    finished: boolean;
+}
+export interface AdSyncStartResponse {
+    since: string;
+    accounts: number[];
+    errors: { connection: string; message: string }[];
 }
 
 export interface AdBuyerTarget {
