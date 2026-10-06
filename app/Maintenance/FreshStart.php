@@ -39,10 +39,14 @@ final class FreshStart
         'ads', 'ad_sets', 'ad_campaigns',
         // Reports and notifications.
         'user_notifications', 'analytics_daily', 'latency_samples',
+        // Owner ruling 2026-10-06 (wipe all data): comments before their posts, suggestions before their reports,
+        // steps before their test sessions; logs and health state.
+        'comments', 'posts', 'bot_suggestions', 'bot_learning_reports', 'bot_test_session_steps', 'bot_test_sessions',
+        'quick_reply_usages', 'webhook_events', 'shopify_sync_runs', 'ads_health_state',
     ];
 
     /**
-     * Never touched. The "doubt" group is not named by F2 and is kept until the owner decides (plan FS1).
+     * Never touched.
      *
      * @var list<string>
      */
@@ -58,9 +62,8 @@ final class FreshStart
         'tags', 'cities', 'shipping_zones', 'shipping_zone_regions', 'shipping_rates', 'branches',
         'data_deletion_requests',
         'migrations', 'cache', 'cache_locks', 'sessions', 'jobs', 'job_batches', 'failed_jobs',
-        // Kept by doubt (not named in F2).
-        'posts', 'comments', 'webhook_events', 'shopify_sync_runs', 'bot_learning_reports', 'bot_suggestions',
-        'bot_test_sessions', 'bot_test_session_steps', 'quick_reply_usages', 'user_sessions', 'ads_health_state',
+        // Active staff logins/presence.
+        'user_sessions',
     ];
 
     /** Nullable links that form cycles (or point inside their own table): set to NULL before any delete. */

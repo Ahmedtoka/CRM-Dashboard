@@ -17,6 +17,7 @@ use App\Models\AnalyticsDaily;
 use App\Models\BotRun;
 use App\Models\ChannelAccount;
 use App\Models\City;
+use App\Models\Comment;
 use App\Models\Conversation;
 use App\Models\ConversationNote;
 use App\Models\ConversationParticipant;
@@ -30,20 +31,25 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Post;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\QueueEntry;
 use App\Models\QuickReply;
 use App\Models\QuickReplyAttachment;
+use App\Models\QuickReplyUsage;
 use App\Models\Refund;
 use App\Models\Shift;
 use App\Models\ShiftMember;
 use App\Models\Shipment;
 use App\Models\ShipmentEvent;
+use App\Models\ShopifySyncRun;
 use App\Models\SupportCase;
 use App\Models\Tag;
 use App\Models\User;
 use App\Models\UserNotification;
+use App\Models\UserSession;
+use App\Models\WebhookEvent;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
@@ -136,6 +142,20 @@ function fsSeed(): array
     DB::table('queue_attendance_events')->insert(['user_id' => $user->id, 'shift_id' => $shift->id, 'business_date' => '2026-09-20', 'event' => 'in', 'at' => $now]);
     DB::table('latency_samples')->insert(['kind' => 'k', 'ref' => 'r', 'started_at' => $now, 'ended_at' => $now, 'duration_ms' => 5]);
     UserNotification::factory()->create(['user_id' => $user->id]);
+    $post = Post::factory()->create(['channel_account_id' => $channel->id]);
+    $comment = Comment::factory()->create(['post_id' => $post->id, 'customer_id' => $customer->id, 'conversation_id' => $conversation->id]);
+    BotRun::factory()->create(['comment_id' => $comment->id]);
+    QuickReplyUsage::factory()->create(['quick_reply_id' => $reply->id, 'conversation_id' => $conversation->id]);
+    WebhookEvent::factory()->create();
+    ShopifySyncRun::factory()->create();
+    $report = DB::table('bot_learning_reports')->insertGetId(['report_date' => '2026-09-20']);
+    DB::table('bot_suggestions')->insert(['report_id' => $report, 'type' => 'faq', 'proposed' => '{}']);
+    DB::table('bot_learning_notes')->insert(['conversation_id' => $conversation->id, 'last_message_id' => $message->id, 'notes' => 'used', 'used_in_report_id' => $report]);
+    $link = DB::table('bot_test_links')->insertGetId(['token' => 'tok-fs', 'label' => 'L']);
+    $session = DB::table('bot_test_sessions')->insertGetId(['bot_test_link_id' => $link, 'session_token' => 's', 'tester_name' => 't', 'customer_id' => $customer->id, 'conversation_id' => $conversation->id]);
+    DB::table('bot_test_session_steps')->insert(['bot_test_session_id' => $session, 'flow_key' => 'f', 'entered_at' => $now]);
+    DB::table('ads_health_state')->insert(['key' => 'sync', 'status' => 'ok', 'since' => $now]);
+    UserSession::factory()->create(['user_id' => $user->id]);
     AnalyticsDaily::factory()->create(['user_id' => $user->id]);
 
     return compact('account', 'material', 'materialFile', 'replyFile', 'attachment');
@@ -175,7 +195,7 @@ it('empties every WIPE table, keeps every KEEP table and prints the next steps w
         ->expectsOutputToContain('php artisan shopify:reconcile-counts --from=2026-10-01 --fix')
         ->assertSuccessful();
 
-    expect($wipeSeeded->count())->toBeGreaterThanOrEqual(40);
+    expect($wipeSeeded->count())->toBeGreaterThanOrEqual(50);
     foreach (FreshStart::WIPE as $table) {
         if (Schema::hasTable($table)) {
             expect(DB::table($table)->count())->toBe(0, "{$table} should be empty");
@@ -183,6 +203,10 @@ it('empties every WIPE table, keeps every KEEP table and prints the next steps w
     }
     foreach ($keepBefore as $table => $n) {
         expect(DB::table($table)->count())->toBe($n, "{$table} should keep its rows");
+    }
+    expect(DB::table('user_sessions')->count())->toBe(1)->and(DB::table('bot_test_links')->count())->toBe(1);
+    foreach (['posts', 'comments', 'webhook_events', 'shopify_sync_runs', 'bot_learning_reports', 'bot_suggestions', 'bot_test_sessions', 'bot_test_session_steps', 'quick_reply_usages', 'ads_health_state'] as $t) {
+        expect($wipeSeeded->contains($t))->toBeTrue("{$t} should have been seeded");
     }
     expect(Schema::hasTable('orders_ad_attr_backup_20260920101010'))->toBeFalse()
         ->and(Storage::disk('media')->exists($w['attachment']->path))->toBeFalse()
