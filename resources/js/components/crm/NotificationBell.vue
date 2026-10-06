@@ -71,6 +71,10 @@ function itemText(n: AppNotification): string {
         });
     }
 
+    if (n.type === 'ads.alerts_stock') {
+        return t('notifications.ads_alerts_stock_item', { product: String(n.data.product ?? ''), count: Number(n.data.count ?? 0) });
+    }
+
     if (n.type === 'ads.alerts' || n.type === 'ads.alerts_digest') {
         return t('notifications.ads_alerts_item', { count: Number(n.data.count ?? 0), money: Number(n.data.money ?? 0) });
     }
@@ -130,7 +134,7 @@ function open(n: AppNotification): void {
         router.visit(String(n.data.link ?? '/ads/launches'));
         return;
     }
-    if (n.type === 'ads.alerts' || n.type === 'ads.alerts_digest') {
+    if (n.type === 'ads.alerts' || n.type === 'ads.alerts_digest' || n.type === 'ads.alerts_stock') {
         router.visit(String(n.data.link ?? '/ads/decisions'));
         return;
     }

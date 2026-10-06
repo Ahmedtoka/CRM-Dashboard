@@ -680,6 +680,7 @@ export interface AppNotification {
         | 'ads.need_stop'
         | 'ads.alerts'
         | 'ads.alerts_digest'
+        | 'ads.alerts_stock'
         | 'ads.token_invalid'
         | 'ads.token_scope_missing'
         | 'ads.token_expiring'

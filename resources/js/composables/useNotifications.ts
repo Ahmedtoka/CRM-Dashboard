@@ -23,6 +23,7 @@ export const TYPE_KEY = {
     'ads.need_stop': 'ads_need_stop',
     'ads.alerts': 'ads_alerts',
     'ads.alerts_digest': 'ads_alerts_digest',
+    'ads.alerts_stock': 'ads_alerts_stock',
     'ads.token_invalid': 'ads_token_invalid',
     'ads.token_scope_missing': 'ads_token_scope_missing',
     'ads.token_expiring': 'ads_token_expiring',
