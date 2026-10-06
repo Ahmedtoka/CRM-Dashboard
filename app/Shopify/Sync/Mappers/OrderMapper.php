@@ -180,6 +180,9 @@ final class OrderMapper
         $f = Payload::isGraphql($fulfillment) ? $this->fulfillmentFromGraphql($fulfillment) : $fulfillment;
         $fulfillmentId = Payload::id($f['id'] ?? null) ?? throw new InvalidArgumentException('Shopify fulfillment payload has no id.');
         $order = $this->orderForChild($f['order_id'] ?? null);
+        if ($order === null) {
+            return MapResult::Skipped; // parent never imported (before the data floor, or not here yet)
+        }
         $this->stampSynced($order);
 
         $existing = Fulfillment::where('shopify_fulfillment_id', $fulfillmentId)->first();
@@ -221,6 +224,9 @@ final class OrderMapper
         }
 
         $order = $this->orderForChild($r['order_id'] ?? null);
+        if ($order === null) {
+            return MapResult::Skipped; // parent never imported (before the data floor, or not here yet)
+        }
         $this->stampSynced($order);
 
         Refund::create([
@@ -252,11 +258,19 @@ final class OrderMapper
      * A fulfillment/refund must name its order; `where(col, null)` would otherwise match any
      * local order not yet pushed to Shopify. Unknown orders throw so the job retries later.
      */
-    private function orderForChild(mixed $orderId): Order
+    private function orderForChild(mixed $orderId): ?Order
     {
         $id = Payload::id($orderId) ?? throw new InvalidArgumentException('Shopify payload has no order_id.');
 
-        return Order::where('shopify_order_id', $id)->firstOrFail();
+        return Order::where('shopify_order_id', $id)->first();
+    }
+
+    /** Whether the order a fulfillment/refund payload names is stored here. */
+    public function knowsOrder(mixed $orderId): bool
+    {
+        $id = Payload::id($orderId);
+
+        return $id !== null && Order::where('shopify_order_id', $id)->exists();
     }
 
     /**

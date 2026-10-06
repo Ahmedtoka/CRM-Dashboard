@@ -4,6 +4,7 @@ namespace App\Commerce\Jobs;
 
 use App\Models\WebhookEvent;
 use App\Shopify\Connection\IntegrationRepository;
+use App\Shopify\Webhooks\ParentOrderMissing;
 use App\Shopify\Webhooks\ShopifyWebhookProcessor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -27,6 +28,9 @@ class ProcessShopifyWebhook implements ShouldQueue
     use SerializesModels;
 
     public int $tries = 5;
+
+    /** A fulfillment/refund whose order is unknown is retried only while the event is younger than this. */
+    public const PARENT_WAIT_MINUTES = 10;
 
     /** @var array<int, int> */
     public array $backoff = [5, 15, 60, 120];
@@ -62,6 +66,18 @@ class ProcessShopifyWebhook implements ShouldQueue
                 'processed_at' => now(),
                 'error' => null,
             ]);
+        } catch (ParentOrderMissing $e) {
+            // The parent order may still be on its way (orders/create race): retry while the event is young and
+            // attempts remain; after that it is an order this CRM never imports (before the data floor): ignore it.
+            $receivedAt = $event->received_at ?? $event->created_at;
+            $young = $receivedAt !== null && $receivedAt->greaterThan(now()->subMinutes(self::PARENT_WAIT_MINUTES));
+            if ($young && $this->attempts() < $this->tries) {
+                $event->update(['status' => 'failed', 'error' => Str::limit($e->getMessage(), 2000)]);
+
+                throw $e;
+            }
+
+            $event->update(['status' => 'ignored', 'processed_at' => now(), 'error' => Str::limit($e->getMessage(), 2000)]);
         } catch (Throwable $e) {
             $event->update([
                 'status' => 'failed',
