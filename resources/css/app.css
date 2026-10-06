@@ -11,6 +11,7 @@ html {
 @layer base {
     /* Business-Suite-inspired surfaces: light grey app background, white cards, blue action accent. */
     :root {
+        --page-header-h: 3.5rem; /* the app top bar; a sticky PageHeader overrides it */
         --background: 216 20% 95.1%; /* #F0F2F5 */
         --foreground: 0 0% 2%; /* #050505 */
         --card: 0 0% 100%; /* #FFFFFF */
@@ -156,6 +157,41 @@ html {
 }
 
 @layer utilities {
+    /* One sticky-header table box: scrolls both ways inside itself, so `position: sticky` works with
+       horizontal overflow and in RTL; its height leaves room for the sticky top bar / page header. */
+    .table-scroll-box {
+        overflow-x: auto;
+    }
+    /* Phones scroll the page, not the box (no nested vertical scroller); md and up cap the height so the header sticks. */
+    @media (min-width: 768px) {
+        .table-scroll-box {
+            overflow: auto;
+            max-height: calc(100svh - var(--page-header-h) - 1rem);
+            overscroll-behavior-inline: contain;
+        }
+    }
+    .crm-sticky-head th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: hsl(var(--card));
+        box-shadow: inset 0 -1px 0 hsl(var(--border) / 0.6);
+    }
+    .crm-sticky-first {
+        position: sticky;
+        inset-inline-start: 0;
+        z-index: 1;
+        background: hsl(var(--card));
+    }
+    tr:hover > .crm-sticky-first {
+        background: color-mix(in oklab, hsl(var(--muted)) 50%, hsl(var(--card)));
+    }
+    tr[tabindex]:hover > .crm-sticky-first {
+        background: hsl(var(--muted));
+    }
+    .crm-sticky-head th.crm-sticky-first {
+        z-index: 3;
+    }
     /* Mirror directional icons (chevrons, arrows, send) in RTL. */
     [dir='rtl'] .rtl-flip {
         transform: scaleX(-1);

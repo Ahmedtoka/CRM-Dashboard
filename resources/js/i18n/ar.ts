@@ -607,6 +607,7 @@ const ar = {
         totals: 'الإجمالي',
     },
     range: {
+        summary: 'من {from} لـ {to}',
         label: 'الفترة',
         today: 'اليوم',
         yesterday: 'أمس',
@@ -628,6 +629,9 @@ const ar = {
         intent_label: 'النية',
         ad_only: 'الإعلانات فقط',
         ad_only_hint: 'يطبق على التعليقات المحملة',
+        status_all: 'كل الحالات',
+        intent_all: 'كل النوايا',
+        post_chip: 'منشور #{id}',
         status: { new: 'جديد', replied: 'تم الرد', hidden: 'مخفي', ignored: 'متجاهل' },
         intent: { buy: 'شراء', question: 'سؤال', complaint: 'شكوى', spam: 'سبام', other: 'أخرى' },
         ad: 'إعلان',
@@ -660,6 +664,7 @@ const ar = {
     },
     orders: {
         title: 'أوردرات شوبيفاي',
+        presets: { awaiting_payment: 'مستنية الدفع', mismatch: 'فرق مع شوبيفاي', stuck: 'واقفة' },
         search: 'رقم الأوردر أو اسم/موبايل العميل',
         status_all: 'كل الحالات',
         type_all: 'كل الأنواع',
@@ -868,6 +873,7 @@ const ar = {
     customers: {
         title: 'العملاء',
         search: 'ابحث بالاسم أو الموبايل أو البريد',
+        clear_search: 'مسح البحث',
         columns: {
             name: 'الاسم',
             phone: 'الموبايل',

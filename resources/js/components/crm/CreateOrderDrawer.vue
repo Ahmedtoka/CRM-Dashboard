@@ -3,14 +3,14 @@ import OrderAddressPicker, { type AddressFields } from '@/components/crm/OrderAd
 import OrderDiscountField, { type DiscountFields } from '@/components/crm/OrderDiscountField.vue';
 import OrderProductPicker from '@/components/crm/OrderProductPicker.vue';
 import OrderShippingPicker, { type ShippingFields } from '@/components/crm/OrderShippingPicker.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { formatCount, formatMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Customer, Order, ProductVariant } from '@/types/crm';
-import { LoaderCircle, Minus, Plus, Trash2 } from 'lucide-vue-next';
+import { Minus, Plus, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
 
 const props = defineProps<{
@@ -258,9 +258,9 @@ const stepper = 'flex size-7 items-center justify-center hover:bg-muted disabled
                     <span>{{ t('order.total') }}</span><span class="tabular-nums">{{ formatMoney(total, locale) }}</span>
                 </div>
                 <p v-if="error" role="alert" class="rounded bg-destructive/10 px-2 py-1 text-foreground">{{ error }}</p>
-                <button type="button" :class="cn(buttonVariants(), 'mt-2 w-full')" :disabled="submitting || !lines.length" @click="submit">
-                    <LoaderCircle v-if="submitting" class="animate-spin" />{{ submitting ? t('order.sending') : t('order.submit') }}
-                </button>
+                <Button class="mt-2 w-full" :loading="submitting" :disabled="!lines.length" @click="submit">
+                    {{ submitting ? t('order.sending') : t('order.submit') }}
+                </Button>
             </footer>
         </SheetContent>
     </Sheet>

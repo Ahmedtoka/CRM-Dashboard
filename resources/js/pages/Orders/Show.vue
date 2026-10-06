@@ -16,10 +16,10 @@ import { orderFamilies, orderLabel, orderName, stripBidiControls, orderStatusTon
 import type { SharedData } from '@/types';
 import type { OrderRow } from '@/types/admin';
 import type { Order } from '@/types/crm';
+import { Button } from '@/components/ui/button';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     ExternalLink,
-    LoaderCircle,
     MessageCircle,
     MessagesSquare,
     Package,
@@ -122,6 +122,7 @@ const breadcrumbs = computed(() => [
     { title: t('orders.title'), href: '/orders' },
     { title: number.value, href: `/orders/${order.value.id}` },
 ]);
+const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, href: b.href })));
 const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-background px-3 text-xs font-medium hover:bg-muted disabled:opacity-50';
 </script>
 
@@ -130,23 +131,30 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full min-w-0 max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="number">
+            <PageHeader :title="number" :breadcrumbs="crumbs">
                 <button type="button" :class="btn" @click="copyStatus">
                     <Package class="size-3.5" aria-hidden="true" />{{ t('order.copy_status') }}
                 </button>
                 <a v-if="trackingUrl" :href="trackingUrl" target="_blank" rel="noopener noreferrer" :class="btn">
                     <Truck class="size-3.5" aria-hidden="true" />{{ t('order.track') }}
                 </a>
-                <button v-if="canRetry" type="button" :class="[btn, 'text-destructive']" :disabled="!!busy" @click="act('retry')">
-                    <LoaderCircle v-if="busy === 'retry'" class="size-3.5 animate-spin" aria-hidden="true" />
-                    <RotateCcw v-else class="size-3.5" aria-hidden="true" />{{ t('orders.retry') }}
-                </button>
-                <button v-if="canMarkPaid" type="button" :class="btn" :disabled="!!busy" @click="act('mark-paid')">
-                    <LoaderCircle v-if="busy === 'mark-paid'" class="size-3.5 animate-spin" aria-hidden="true" />{{ t('orders.mark_paid') }}
-                </button>
-                <button v-if="canShip" type="button" :class="btn" :disabled="!!busy" @click="act('ship')">
-                    <LoaderCircle v-if="busy === 'ship'" class="size-3.5 animate-spin" aria-hidden="true" />{{ t('orders.ship') }}
-                </button>
+                <Button
+                    v-if="canRetry"
+                    variant="outline"
+                    size="sm"
+                    class="text-destructive"
+                    :loading="busy === 'retry'"
+                    :disabled="!!busy"
+                    @click="act('retry')"
+                >
+                    <RotateCcw aria-hidden="true" />{{ t('orders.retry') }}
+                </Button>
+                <Button v-if="canMarkPaid" variant="outline" size="sm" :loading="busy === 'mark-paid'" :disabled="!!busy" @click="act('mark-paid')">
+                    {{ t('orders.mark_paid') }}
+                </Button>
+                <Button v-if="canShip" variant="outline" size="sm" :loading="busy === 'ship'" :disabled="!!busy" @click="act('ship')">
+                    {{ t('orders.ship') }}
+                </Button>
                 <button v-if="canCancel && !confirmingCancel" type="button" :class="[btn, 'text-destructive']" @click="confirmingCancel = true">
                     {{ t('orders.cancel') }}
                 </button>
@@ -157,14 +165,9 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
                 class="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive"
             >
                 <label class="flex items-center gap-1.5"><input v-model="restock" type="checkbox" />{{ t('order.restock') }}</label>
-                <button
-                    type="button"
-                    class="inline-flex h-7 items-center gap-1 rounded-md bg-destructive px-2 font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
-                    :disabled="!!busy"
-                    @click="act('cancel')"
-                >
-                    <LoaderCircle v-if="busy === 'cancel'" class="size-3.5 animate-spin" aria-hidden="true" />{{ t('orders.cancel_confirm') }}
-                </button>
+                <Button variant="destructive" size="sm" class="h-7 px-2" :loading="busy === 'cancel'" :disabled="!!busy" @click="act('cancel')">
+                    {{ t('orders.cancel_confirm') }}
+                </Button>
                 <button
                     type="button"
                     class="inline-flex h-7 items-center rounded-md border bg-background px-2 font-medium hover:bg-muted"

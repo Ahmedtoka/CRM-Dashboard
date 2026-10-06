@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilterBar from '@/components/crm/FilterBar.vue';
 import { useI18n } from '@/composables/useI18n';
 import type { SharedData } from '@/types';
 import type { CommentFilters, CommentIntent, CommentStatus } from '@/types/admin';
@@ -6,7 +7,8 @@ import type { PlatformValue } from '@/types/crm';
 import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
-const props = defineProps<{ filters: CommentFilters; adOnly: boolean }>();
+/** The comments feed's filter bar: platform and status inline, intent and «الإعلانات فقط» under «فلاتر». */
+const props = defineProps<{ filters: CommentFilters; adOnly: boolean; summary?: string }>();
 const emit = defineEmits<{ 'update:filters': [filters: CommentFilters]; 'update:adOnly': [value: boolean] }>();
 
 const { t } = useI18n();
@@ -25,62 +27,81 @@ function set(patch: Partial<CommentFilters>): void {
     emit('update:filters', { ...props.filters, ...patch });
 }
 
-const hasFilters = computed(() => Object.values(props.filters).some((v) => v !== null) || props.adOnly);
+const chips = computed(() => {
+    const f = props.filters;
+    const out: { key: string; label: string }[] = [];
+    if (f.platform) out.push({ key: 'platform', label: platforms.value.find((p) => p.value === f.platform)?.label ?? f.platform });
+    if (f.status) out.push({ key: 'status', label: t(`comments.status.${f.status}`) });
+    if (f.intent) out.push({ key: 'intent', label: t(`comments.intent.${f.intent}`) });
+    if (f.post_id) out.push({ key: 'post_id', label: t('comments.post_chip', { id: f.post_id }) });
+    if (props.adOnly) out.push({ key: 'ad', label: t('comments.ad_only') });
+    return out;
+});
+const moreCount = computed(() => (props.filters.intent ? 1 : 0) + (props.adOnly ? 1 : 0));
 
-const chip = (active: boolean) =>
-    active ? 'border-primary bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground';
+function remove(key: string): void {
+    if (key === 'ad') emit('update:adOnly', false);
+    else set({ [key]: null } as Partial<CommentFilters>);
+}
+
+function clear(): void {
+    emit('update:filters', { status: null, intent: null, platform: null, post_id: null });
+    emit('update:adOnly', false);
+}
+
+const selectValue = (event: Event) => (event.target as HTMLSelectElement).value || null;
+const selectClass = 'h-9 w-full rounded-md border border-input bg-background px-2 text-xs sm:w-auto';
+const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
 </script>
 
 <template>
-    <aside class="space-y-4 text-xs" :aria-label="t('comments.filters')">
-        <fieldset>
-            <legend class="mb-1.5 font-medium text-foreground">{{ t('ui.platforms') }}</legend>
-            <div class="flex flex-wrap gap-1.5 lg:flex-col">
-                <button type="button" class="rounded-md border px-2.5 py-1 text-start" :class="chip(filters.platform === null)" :aria-pressed="filters.platform === null" @click="set({ platform: null })">
-                    {{ t('ui.all_platforms') }}
-                </button>
-                <button
-                    v-for="p in platforms"
-                    :key="p.value"
-                    type="button"
-                    class="rounded-md border px-2.5 py-1 text-start"
-                    :class="chip(filters.platform === p.value)"
-                    :aria-pressed="filters.platform === p.value"
-                    @click="set({ platform: filters.platform === p.value ? null : (p.value as PlatformValue) })"
+    <section :aria-label="t('comments.filters')">
+        <FilterBar :chips="chips" :more-count="moreCount" :summary="summary" @remove="remove" @clear="clear">
+            <template #inline>
+                <select
+                    :value="filters.platform ?? ''"
+                    :class="selectClass"
+                    :aria-label="t('ui.platforms')"
+                    @change="set({ platform: selectValue($event) as PlatformValue | null })"
                 >
-                    {{ p.label }}
-                </button>
-            </div>
-        </fieldset>
-
-        <fieldset>
-            <legend class="mb-1.5 font-medium text-foreground">{{ t('comments.status_label') }}</legend>
-            <div class="flex flex-wrap gap-1.5">
-                <button v-for="s in STATUSES" :key="s" type="button" class="rounded-full border px-2.5 py-1" :class="chip(filters.status === s)" :aria-pressed="filters.status === s" @click="set({ status: filters.status === s ? null : s })">
-                    {{ t(`comments.status.${s}`) }}
-                </button>
-            </div>
-        </fieldset>
-
-        <fieldset>
-            <legend class="mb-1.5 font-medium text-foreground">{{ t('comments.intent_label') }}</legend>
-            <div class="flex flex-wrap gap-1.5">
-                <button v-for="i in INTENTS" :key="i" type="button" class="rounded-full border px-2.5 py-1" :class="chip(filters.intent === i)" :aria-pressed="filters.intent === i" @click="set({ intent: filters.intent === i ? null : i })">
-                    {{ t(`comments.intent.${i}`) }}
-                </button>
-            </div>
-        </fieldset>
-
-        <label class="flex items-start gap-2">
-            <input type="checkbox" class="mt-0.5 rounded border-input" :checked="adOnly" @change="emit('update:adOnly', ($event.target as HTMLInputElement).checked)" />
-            <span>
-                <span class="font-medium text-foreground">{{ t('comments.ad_only') }}</span>
-                <span class="block text-2xs text-muted-foreground">{{ t('comments.ad_only_hint') }}</span>
-            </span>
-        </label>
-
-        <button v-if="hasFilters" type="button" class="text-primary hover:underline" @click="emit('update:filters', { status: null, intent: null, platform: null, post_id: null }); emit('update:adOnly', false)">
-            {{ t('ui.clear_filters') }}
-        </button>
-    </aside>
+                    <option value="">{{ t('ui.all_platforms') }}</option>
+                    <option v-for="p in platforms" :key="p.value" :value="p.value">{{ p.label }}</option>
+                </select>
+                <select
+                    :value="filters.status ?? ''"
+                    :class="selectClass"
+                    :aria-label="t('comments.status_label')"
+                    @change="set({ status: selectValue($event) as CommentStatus | null })"
+                >
+                    <option value="">{{ t('comments.status_all') }}</option>
+                    <option v-for="s in STATUSES" :key="s" :value="s">{{ t(`comments.status.${s}`) }}</option>
+                </select>
+            </template>
+            <template #more>
+                <label class="block">
+                    <span :class="fieldLabel">{{ t('comments.intent_label') }}</span>
+                    <select
+                        :value="filters.intent ?? ''"
+                        :class="[selectClass, 'sm:w-full']"
+                        @change="set({ intent: selectValue($event) as CommentIntent | null })"
+                    >
+                        <option value="">{{ t('comments.intent_all') }}</option>
+                        <option v-for="i in INTENTS" :key="i" :value="i">{{ t(`comments.intent.${i}`) }}</option>
+                    </select>
+                </label>
+                <label class="flex items-start gap-2 text-xs">
+                    <input
+                        type="checkbox"
+                        class="mt-0.5 rounded border-input"
+                        :checked="adOnly"
+                        @change="emit('update:adOnly', ($event.target as HTMLInputElement).checked)"
+                    />
+                    <span>
+                        <span class="font-medium text-foreground">{{ t('comments.ad_only') }}</span>
+                        <span class="block text-2xs text-muted-foreground">{{ t('comments.ad_only_hint') }}</span>
+                    </span>
+                </label>
+            </template>
+        </FilterBar>
+    </section>
 </template>

@@ -630,6 +630,7 @@ const en: Messages = {
         totals: 'Total',
     },
     range: {
+        summary: 'From {from} to {to}',
         label: 'Date range',
         today: 'Today',
         yesterday: 'Yesterday',
@@ -651,6 +652,9 @@ const en: Messages = {
         intent_label: 'Intent',
         ad_only: 'Ads only',
         ad_only_hint: 'Applies to loaded comments',
+        status_all: 'All statuses',
+        intent_all: 'All intents',
+        post_chip: 'Post #{id}',
         status: { new: 'New', replied: 'Replied', hidden: 'Hidden', ignored: 'Ignored' },
         intent: { buy: 'Buy', question: 'Question', complaint: 'Complaint', spam: 'Spam', other: 'Other' },
         ad: 'Ad',
@@ -683,6 +687,7 @@ const en: Messages = {
     },
     orders: {
         title: 'Shopify orders',
+        presets: { awaiting_payment: 'Awaiting payment', mismatch: 'Shopify mismatch', stuck: 'Stuck' },
         search: 'Order number or customer name/phone',
         status_all: 'All statuses',
         type_all: 'All types',
@@ -897,6 +902,7 @@ const en: Messages = {
     customers: {
         title: 'Customers',
         search: 'Search by name, phone or email',
+        clear_search: 'Clear search',
         columns: { name: 'Name', phone: 'Phone', platforms: 'Platforms', orders: 'Orders', spent: 'Total spent', last_contact: 'Last contact' },
         empty: 'No customers',
         back: 'All customers',

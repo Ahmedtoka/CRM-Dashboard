@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Popover, PopoverContent } from '@/components/ui/popover';
 import { useI18n } from '@/composables/useI18n';
 import { useMyQueueContext } from '@/composables/useMyQueue';
@@ -13,7 +13,6 @@ import {
     FolderOpen,
     Hand,
     Hourglass,
-    LoaderCircle,
     LogIn,
     LogOut,
     MessageCircleReply,
@@ -307,9 +306,12 @@ const silenceTone: Record<Card['tone'], string> = {
             <template v-for="action in actions" :key="action.key">
                 <Popover v-if="action.key === 'hand-back'" :open="confirmingHandBack" @update:open="onHandBackOpen">
                     <PopoverAnchor as-child>
-                        <button
+                        <Button
                             type="button"
-                            :class="cn(buttonVariants({ variant: action.variant, size: 'sm' }), 'h-7 gap-1 rounded-full px-2.5 text-xs')"
+                            :variant="action.variant"
+                            size="sm"
+                            class="h-7 gap-1 rounded-full px-2.5 text-xs [&_svg]:size-3.5"
+                            :loading="queue.busy.value === action.busy"
                             :disabled="queue.busy.value !== null || action.disabled === true"
                             :title="action.hint"
                             :aria-expanded="confirmingHandBack"
@@ -317,10 +319,9 @@ const silenceTone: Record<Card['tone'], string> = {
                             data-hand-back
                             @click="press(action.run)"
                         >
-                            <LoaderCircle v-if="queue.busy.value === action.busy" class="size-3.5 animate-spin" aria-hidden="true" />
-                            <component :is="action.icon" v-else class="size-3.5" aria-hidden="true" />
+                            <component :is="action.icon" aria-hidden="true" />
                             {{ action.label }}
-                        </button>
+                        </Button>
                     </PopoverAnchor>
                     <PopoverContent align="start" class="w-72 p-3" @open-auto-focus="focusConfirm" @close-auto-focus="focusHandBack">
                         <!-- The popover's own element is role="dialog" (Radix sets it and the wrapper drops attrs):
@@ -343,33 +344,36 @@ const silenceTone: Record<Card['tone'], string> = {
                                 >
                                     {{ t('queue.attendance.hand_back_cancel') }}
                                 </button>
-                                <button
+                                <Button
                                     type="button"
-                                    :class="cn(buttonVariants({ variant: 'default', size: 'sm' }), 'h-8 gap-1 px-3 text-xs')"
+                                    size="sm"
+                                    class="h-8 gap-1 px-3 text-xs [&_svg]:size-3.5"
+                                    :loading="queue.busy.value === 'hand-back'"
                                     :disabled="queue.busy.value !== null"
                                     data-hand-back-confirm
                                     @click="confirmHandBack"
                                 >
-                                    <LoaderCircle v-if="queue.busy.value === 'hand-back'" class="size-3.5 animate-spin" aria-hidden="true" />
-                                    <Undo2 v-else class="size-3.5" aria-hidden="true" />
+                                    <Undo2 aria-hidden="true" />
                                     {{ t('queue.attendance.hand_back_confirm') }}
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     </PopoverContent>
                 </Popover>
-                <button
+                <Button
                     v-else
                     type="button"
-                    :class="cn(buttonVariants({ variant: action.variant, size: 'sm' }), 'h-7 gap-1 rounded-full px-2.5 text-xs')"
+                    :variant="action.variant"
+                    size="sm"
+                    class="h-7 gap-1 rounded-full px-2.5 text-xs [&_svg]:size-3.5"
+                    :loading="queue.busy.value === action.busy"
                     :disabled="queue.busy.value !== null || action.disabled === true"
                     :title="action.hint"
                     @click="press(action.run)"
                 >
-                    <LoaderCircle v-if="queue.busy.value === action.busy" class="size-3.5 animate-spin" aria-hidden="true" />
-                    <component :is="action.icon" v-else class="size-3.5" :class="action.flip ? 'rtl-flip' : ''" aria-hidden="true" />
+                    <component :is="action.icon" :class="action.flip ? 'rtl-flip' : ''" aria-hidden="true" />
                     {{ action.label }}
-                </button>
+                </Button>
             </template>
         </div>
 
