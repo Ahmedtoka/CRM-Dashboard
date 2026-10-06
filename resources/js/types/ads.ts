@@ -1224,3 +1224,45 @@ export interface AdDrawerData {
     funnel: ChatFunnel | null;
     levels: AdLevel[];
 }
+
+export interface BreakEvenInputs {
+    margin_pct: number | null;
+    shipping_subsidy: number | null;
+    return_cost: number | null;
+    target_cpp: number | null;
+    target_cpo: number | null;
+}
+
+export interface BreakEvenExplain {
+    floor: number;
+    is_default: boolean;
+    unprofitable: boolean;
+    margin_pct: number | null;
+    shipping_subsidy: number;
+    return_cost: number;
+    aov: number | null;
+    aov_source: 'account' | 'store' | 'none';
+    refusal_rate: number;
+    refusal_source: 'account' | 'store' | 'assumed';
+    max_cpa: number | null;
+    tax_rate: number;
+}
+
+export interface RulesSetupAccount {
+    id: number;
+    name: string;
+    currency: string | null;
+    platform: string;
+    inputs: BreakEvenInputs;
+    effective: BreakEvenExplain;
+    targets: { cpp: number | null; cpp_source: 'owner' | 'median' | 'none'; cpo: number | null; cpo_source: 'owner' | 'median' | 'none'; cpc: number | null };
+}
+
+export interface RulesSetupProps {
+    global: BreakEvenInputs;
+    general: { low_stock_units: number; spike_min_amount: number };
+    notify_enabled: boolean;
+    can_edit: boolean;
+    default_floor: number;
+    accounts: RulesSetupAccount[];
+}

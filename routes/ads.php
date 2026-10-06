@@ -19,6 +19,7 @@ use App\Http\Controllers\Web\Ads\MaterialController;
 use App\Http\Controllers\Web\Ads\NumbersController;
 use App\Http\Controllers\Web\Ads\PublishController;
 use App\Http\Controllers\Web\Ads\ReauthController;
+use App\Http\Controllers\Web\Ads\RulesSetupController;
 use App\Http\Controllers\Web\Ads\SlotController;
 use App\Http\Controllers\Web\Ads\SyncController;
 use App\Http\Controllers\Web\Ads\TodayController;
@@ -88,6 +89,8 @@ Route::middleware('ads:manage')->group(function () {
     Route::delete('/ads/setup/buyers/{buyer}', [BuyerSetupController::class, 'destroy'])->name('ads.setup.buyers.destroy');
     Route::put('/ads/setup/buyers/{buyer}/targets', [BuyerSetupController::class, 'targets'])->name('ads.setup.buyers.targets');
     Route::put('/ads/setup/settings', [BuyerSetupController::class, 'settings'])->name('ads.setup.settings');
+    Route::put('/ads/setup/rules', [RulesSetupController::class, 'update'])->name('ads.setup.rules.update');
+    Route::put('/ads/setup/rules/notify', [RulesSetupController::class, 'notify'])->name('ads.setup.rules.notify');
 });
 
 // Materials library: content, media buyers and supervisors (write permissions are checked per action).
