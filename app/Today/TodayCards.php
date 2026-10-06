@@ -8,8 +8,8 @@ use App\Ads\Reports\AdsOverview;
 use App\Ads\Reports\AdsQuery;
 use App\Analytics\ActivityLogger;
 use App\Analytics\MetricsService;
-use App\Enums\ConversationSource;
 use App\Enums\OrderStatus;
+use App\Inbox\ConversationQuery;
 use App\Inbox\Outcomes\ChatFunnel;
 use App\Inbox\Outcomes\Outcome;
 use App\Models\ActivityLog;
@@ -29,6 +29,11 @@ use Illuminate\Support\Facades\DB;
  */
 final class TodayCards
 {
+    /** Where «ليه ماشترتش» opens: one place to change (the integration may point it elsewhere). */
+    public const WHY_PATH = '/ads/numbers';
+
+    public const WHY_FRAGMENT = 'why';
+
     /** @var array<string, array<string, mixed>> teamMetrics per window, one request */
     private array $team = [];
 
@@ -40,26 +45,27 @@ final class TodayCards
         private readonly AdsQuery $adsQuery,
         private readonly AdsScope $adsScope,
         private readonly ChatFunnel $funnel,
+        private readonly ConversationQuery $conversations,
     ) {}
 
     /** @return array{chats: array, orders: array, ads: ?array, why: array} */
     public function all(TodayWindow $w, User $u): array
     {
-        return ['chats' => $this->chats($w), 'orders' => $this->orders($w), 'ads' => $this->ads($w, $u), 'why' => $this->why($w)];
+        return ['chats' => $this->chats($w, $u), 'orders' => $this->orders($w), 'ads' => $this->ads($w, $u), 'why' => $this->why($w)];
     }
 
-    public function chats(TodayWindow $w): array
+    /** `$u` is the viewer: «من إعلانات» is counted by the inbox's own query, so its link lists exactly those chats. */
+    public function chats(TodayWindow $w, User $u): array
     {
         $team = $this->teamMetrics($w);
         $new = (int) $team['conversations_new'];
-        $fromAds = Conversation::query()->where('is_test', false)->where('source', ConversationSource::Ad->value)
-            ->whereBetween('created_at', [$w->from, $w->to])->count();
+        $day = ['from' => $w->date, 'to' => $w->date];
+        $fromAds = $this->conversations->filtered($u, ['flags' => ['ad']] + $day)->count();
         // MetricsService::botMetrics' auto_resolved and handovers, without its flow replay.
         $botAlone = Conversation::query()->where('is_test', false)->whereBetween('resolved_at', [$w->from, $w->to])
             ->whereDoesntHave('participants', fn ($q) => $q->whereNotNull('user_id'))->count();
         $toAgent = TestScope::excludeConversations(ActivityLog::query())->where('action', ActivityLogger::CONVERSATION_HANDOVER)
             ->whereBetween('created_at', [$w->from, $w->to])->count();
-        $range = "from={$w->date}&to={$w->date}";
 
         return [
             'new' => $new,
@@ -71,11 +77,11 @@ final class TodayCards
             'queue' => QueueSetting::current()->enabled ? $this->queueDay->for($w->date) : null,
             'rating' => $this->ratings->summary($w->from, $w->to),
             'links' => [
-                'new' => "/reports/team?{$range}",
-                'ads' => '/inbox?flags=ad',
-                'bot' => "/reports/bot?{$range}",
-                'first_reply' => "/reports/team?{$range}",
-                'rating' => "/reports/team?{$range}#ratings",
+                'new' => self::link('/reports/team', $day),
+                'ads' => self::link('/inbox', ['flags' => 'ad'] + $day),
+                'bot' => self::link('/reports/bot', $day),
+                'first_reply' => self::link('/reports/team', $day),
+                'rating' => self::link('/reports/team', $day, 'ratings'),
                 'queue' => '/board',
             ],
         ];
@@ -86,7 +92,10 @@ final class TodayCards
         $team = $this->teamMetrics($w);
         $out = $this->teamMetrics($w->outcomeDay());
         $dayOrders = fn (OrderStatus $s) => Order::query()->where('status', $s->value)->whereBetween('created_at', [$w->from, $w->to])->count();
-        $d = $w->date;
+        $day = ['from' => $w->date, 'to' => $w->date];
+        $outDay = $w->outcomeDay()->date;
+        // The counted orders leave out cancelled and failed (MetricsService): `real=1` lists the same set.
+        $real = ['real' => 1];
 
         return [
             'count' => (int) $team['orders_count'],
@@ -99,13 +108,14 @@ final class TodayCards
             'delivered' => (int) $out['orders_delivered'],
             'returned' => (int) $out['orders_returned'],
             'links' => [
-                'count' => "/orders?from={$d}&to={$d}",
-                'from_chat' => "/orders?source=chat&from={$d}&to={$d}",
-                'from_store' => "/orders?source=store&from={$d}&to={$d}",
-                'cancelled' => "/orders?status=cancelled&from={$d}&to={$d}",
-                'failed' => "/orders?status=failed&from={$d}&to={$d}",
-                'delivered' => '/orders?shipment_step=delivered',
-                'returned' => '/orders?shipment_step=returned',
+                'count' => self::link('/orders', $real + $day),
+                'from_chat' => self::link('/orders', $real + ['source' => 'chat'] + $day),
+                'from_store' => self::link('/orders', $real + ['source' => 'store'] + $day),
+                'cancelled' => self::link('/orders', ['status' => 'cancelled'] + $day),
+                'failed' => self::link('/orders', ['status' => 'failed'] + $day),
+                // Dated by the latest delivered / returned event, as MetricsService counts them.
+                'delivered' => self::link('/orders', $real + ['shipment_step' => 'delivered', 'step_from' => $outDay, 'step_to' => $outDay]),
+                'returned' => self::link('/orders', $real + ['shipment_step' => 'returned', 'step_from' => $outDay, 'step_to' => $outDay]),
             ],
         ];
     }
@@ -131,7 +141,7 @@ final class TodayCards
         $bestId = $ordersByAd->sortDesc()->keys()->first();
         $loserId = $spendByAd->filter(fn (float $s, int $id) => $s > 0 && ! $ordersByAd->has($id))->sortDesc()->keys()->first();
         $names = Ad::query()->whereIn('id', array_filter([$bestId, $loserId]))->pluck('name', 'id');
-        $q = "from={$f->fromDate()}&to={$f->toDate()}";
+        $q = ['from' => $f->fromDate(), 'to' => $f->toDate()];
 
         return [
             'from' => $f->fromDate(),
@@ -146,10 +156,10 @@ final class TodayCards
             'best' => $bestId !== null ? ['id' => (int) $bestId, 'name' => (string) ($names[$bestId] ?? ''), 'orders' => (int) $ordersByAd[$bestId]] : null,
             'loser' => $loserId !== null && ! $mixed ? ['id' => (int) $loserId, 'name' => (string) ($names[$loserId] ?? ''), 'spend' => round($spendByAd[$loserId], 2)] : null,
             'links' => [
-                'spend' => "/ads/numbers?{$q}",
-                'orders' => "/ads/explorer?{$q}",
-                'best' => $bestId !== null ? "/ads/explorer?{$q}&ad={$bestId}" : null,
-                'loser' => $loserId !== null ? "/ads/explorer?{$q}&ad={$loserId}" : null,
+                'spend' => self::link('/ads/numbers', $q),
+                'orders' => self::link('/ads/explorer', $q),
+                'best' => $bestId !== null ? self::link('/ads/explorer', $q + ['ad' => $bestId]) : null,
+                'loser' => $loserId !== null ? self::link('/ads/explorer', $q + ['ad' => $loserId]) : null,
             ],
         ];
     }
@@ -163,7 +173,7 @@ final class TodayCards
 
         $lost = $counts->except([Outcome::Ordered->value, Outcome::Unknown->value])->sortDesc();
         $total = (int) $lost->sum();
-        $range = "from={$w->date}&to={$w->date}";
+        $range = ['from' => $w->date, 'to' => $w->date];
         $top = $this->topSizeOut($w);
 
         return [
@@ -171,7 +181,10 @@ final class TodayCards
             'ordered' => (int) ($counts[Outcome::Ordered->value] ?? 0),
             'reasons' => $lost->map(fn (int $n, string $key) => ['key' => $key, 'count' => $n, 'share' => round($n / max(1, $total), 2)])->values()->all(),
             'top_size_out' => $top,
-            'links' => ['reasons' => "/ads/numbers?{$range}#why", 'top_size_out' => $top ? "/ads/explorer?{$range}&ad={$top['id']}" : null],
+            'links' => [
+                'reasons' => self::link(self::WHY_PATH, $range, self::WHY_FRAGMENT),
+                'top_size_out' => $top ? self::link('/ads/explorer', $range + ['ad' => $top['id']]) : null,
+            ],
         ];
     }
 
@@ -195,6 +208,18 @@ final class TodayCards
         $id = (int) $best->keys()->first();
 
         return ['id' => $id, 'name' => (string) Ad::query()->whereKey($id)->value('name'), 'count' => $best->first()];
+    }
+
+    /**
+     * One link: path, query (null and '' dropped, in the order given) and an optional #fragment.
+     *
+     * @param  array<string, scalar|null>  $query
+     */
+    public static function link(string $path, array $query = [], ?string $fragment = null): string
+    {
+        $qs = http_build_query(array_filter($query, fn ($v) => $v !== null && $v !== ''), '', '&', PHP_QUERY_RFC3986);
+
+        return $path.($qs !== '' ? '?'.$qs : '').($fragment !== null && $fragment !== '' ? '#'.$fragment : '');
     }
 
     private function teamMetrics(TodayWindow $w): array

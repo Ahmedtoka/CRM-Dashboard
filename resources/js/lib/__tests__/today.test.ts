@@ -1,5 +1,5 @@
 import { translate } from '@/i18n';
-import { adsRows, chatsRows, formatRatio, formatShare, ordersRows, todayNavItem, urgentText, whyRows } from '@/lib/today';
+import { adsRows, chatsRows, formatRatio, formatShare, oldestStamp, ordersRows, todayNavItem, urgentText, whyRows } from '@/lib/today';
 import type { AdsCard, ChatsCard, OrdersCard, WhyCard } from '@/types/today';
 import { describe, expect, it } from 'vitest';
 
@@ -112,5 +112,11 @@ describe('lib/today', () => {
         expect(todayNavItem('supervisor', 'Today')).not.toBeNull();
         expect(todayNavItem('moderator', 'Today')).toBeNull();
         expect(todayNavItem('media_buyer', 'Today')).toBeNull();
+    });
+
+    it('shows the oldest of the cache stamps', () => {
+        expect(oldestStamp(['2026-10-06T09:01:00+00:00', '2026-10-06T09:00:30+00:00'])).toBe('2026-10-06T09:00:30+00:00');
+        expect(oldestStamp(['2026-10-06T09:01:00+00:00', undefined])).toBe('2026-10-06T09:01:00+00:00');
+        expect(oldestStamp([null, undefined])).toBeNull();
     });
 });

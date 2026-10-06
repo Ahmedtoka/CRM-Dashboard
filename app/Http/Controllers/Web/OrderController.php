@@ -52,7 +52,7 @@ class OrderController extends Controller
             'filters' => array_merge([
                 'status' => null, 'type' => null, 'platform' => null, 'q' => null, 'created_by' => null, 'from' => null, 'to' => null,
                 'source' => null, 'financial_status' => null, 'fulfillment_status' => null, 'shipment_step' => null, 'mismatch' => null, 'stuck' => null,
-                'older_than' => null,
+                'older_than' => null, 'real' => null, 'step_from' => null, 'step_to' => null,
             ], $filters, ['sort' => $sort?->value()]),
             // Options for the "created by" filter.
             'team' => User::query()->where('is_active', true)->inboxStaff()->orderBy('name')->get(['id', 'name']),

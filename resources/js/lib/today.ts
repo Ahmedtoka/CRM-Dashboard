@@ -184,3 +184,14 @@ export function whyRows(w: WhyCard, t: Translate, locale: Locale): CardRow[] {
 export function todayNavItem(role: Role | undefined, title: string, icon?: LucideIcon): NavItem | null {
     return role === 'admin' || role === 'supervisor' ? { title, href: '/today', icon, exact: true } : null;
 }
+
+/** The oldest of the blocks' cache stamps (ISO): the page's data is as fresh as its stalest block. */
+export function oldestStamp(stamps: (string | null | undefined)[]): string | null {
+    let oldest: string | null = null;
+    for (const s of stamps) {
+        if (!s || Number.isNaN(Date.parse(s))) continue;
+        if (oldest === null || Date.parse(s) < Date.parse(oldest)) oldest = s;
+    }
+
+    return oldest;
+}

@@ -25,3 +25,14 @@ it('validates older_than', function () {
     $this->actingAs($sup)->getJson('/orders?older_than=0')->assertUnprocessable();
     $this->actingAs($sup)->getJson('/orders?older_than=abc')->assertUnprocessable();
 });
+
+it('keeps real and step dates web only: the api ignores them', function () {
+    $sup = User::factory()->create(['role' => UserRole::Supervisor]);
+    Order::factory()->create(['status' => OrderStatus::Cancelled]);
+    Order::factory()->create(['status' => OrderStatus::Confirmed]);
+
+    $this->actingAs($sup)->getJson('/orders?real=1')->assertOk()->assertJsonPath('meta.total', 1);
+    auth()->forgetGuards();
+    $token = $sup->createToken('t')->plainTextToken;
+    $this->withToken($token)->getJson('/api/v1/orders?real=1&step_from=bad')->assertOk()->assertJsonPath('meta.total', 2);
+});

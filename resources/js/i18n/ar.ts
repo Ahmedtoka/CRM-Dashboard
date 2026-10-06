@@ -245,6 +245,7 @@ const ar = {
         you_prefix: 'إنتي: ',
         empty_filtered: 'مفيش محادثات بالفلاتر دي',
         clear_filters: 'مسح الفلاتر',
+        date_chip: 'بدأت من {from} لـ {to}',
         filters_panel: { queue: 'الطابور', moderator: 'الموظفة', platform: 'المنصة', tag: 'الوسم', more: 'كمان' },
         filters: {
             all: 'الكل',
@@ -780,6 +781,8 @@ const ar = {
         mismatch_only: 'المتعارضة فقط',
         stuck_only: 'المتعطلة فقط',
         older_than_chip: 'مستني أكتر من {time}',
+        real_chip: 'من غير الملغي والفاشل',
+        step_date_chip: 'حالة الشحن من {from} لـ {to}',
         list: {
             order: 'الأوردر',
             status: 'الحالة',

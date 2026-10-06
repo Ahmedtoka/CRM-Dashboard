@@ -8,7 +8,7 @@ import UrgentStrip from '@/components/today/UrgentStrip.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount } from '@/lib/format';
-import { adsRows, chatsRows, formatTodayDate, ordersRows, whyRows } from '@/lib/today';
+import { adsRows, chatsRows, formatTodayDate, oldestStamp, ordersRows, whyRows } from '@/lib/today';
 import type { SharedData } from '@/types';
 import type { TeamRow, TodayCardsData, TodayMode, UrgentItem } from '@/types/today';
 import { Deferred, Head, usePage } from '@inertiajs/vue3';
@@ -18,6 +18,8 @@ const props = defineProps<{
     mode: TodayMode;
     date: string;
     generated_at: string;
+    /** The cards' own cache stamp (deferred with them): the page shows the older of the two. */
+    cards_generated_at?: string;
     urgent: UrgentItem[] | null;
     cards?: TodayCardsData;
     team?: TeamRow[];
@@ -33,6 +35,7 @@ const title = computed(
 );
 const breadcrumbs = computed(() => [{ title: t('today.title'), href: '/today' }]);
 const c = computed(() => props.cards);
+const freshness = computed(() => oldestStamp([props.generated_at, props.cards_generated_at]));
 </script>
 
 <template>
@@ -43,7 +46,7 @@ const c = computed(() => props.cards);
             <PageHeader
                 :title="title"
                 :description="mode === 'today' ? t('today.description') : t('today.description_yesterday')"
-                :freshness="generated_at"
+                :freshness="freshness"
             >
                 <DayToggle :mode="mode" />
             </PageHeader>

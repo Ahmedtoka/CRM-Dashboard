@@ -5,6 +5,7 @@ use App\Models\QueueSetting;
 use App\Models\SupportCase;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Testing\AssertableInertia;
 
 beforeEach(function () {
@@ -47,4 +48,18 @@ it('keeps each manager\'s page for 60 seconds, apart from every other manager', 
 
     $this->travel(61)->seconds();
     expect(collect($urgent($admin))->pluck('key')->all())->toBe(['cases_overdue']);
+});
+
+it('reads the urgent cache only when the strip is asked for, and stamps the cards on their own', function () {
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $key = "today:urgent:{$admin->id}:today:2026-10-06";
+
+    $this->actingAs($admin)->get('/today')->assertOk()
+        ->assertInertia(function (AssertableInertia $p) use ($key) {
+            expect(Cache::has($key))->toBeTrue();
+            Cache::forget($key);
+
+            $p->loadDeferredProps('cards', fn (AssertableInertia $r) => $r->has('cards.chats')->has('cards_generated_at'));
+            expect(Cache::has($key))->toBeFalse(); // the deferred reload never touched the strip
+        });
 });

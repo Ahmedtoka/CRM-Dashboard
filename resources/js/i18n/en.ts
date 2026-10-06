@@ -261,6 +261,7 @@ const en: Messages = {
         you_prefix: 'You: ',
         empty_filtered: 'No conversations match these filters',
         clear_filters: 'Clear filters',
+        date_chip: 'Started {from} to {to}',
         filters_panel: { queue: 'Queue', moderator: 'Moderator', platform: 'Platform', tag: 'Tag', more: 'More' },
         filters: {
             all: 'All',
@@ -809,6 +810,8 @@ const en: Messages = {
         mismatch_only: 'Mismatch only',
         stuck_only: 'Stuck only',
         older_than_chip: 'Waiting more than {time}',
+        real_chip: 'Without cancelled and failed',
+        step_date_chip: 'Shipment step {from} to {to}',
         list: {
             order: 'Order',
             status: 'Status',

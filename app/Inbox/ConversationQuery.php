@@ -9,6 +9,7 @@ use App\Enums\Handler;
 use App\Enums\MessageDirection;
 use App\Enums\Platform;
 use App\Enums\SenderType;
+use App\Http\Support\DateRange;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Message;
@@ -351,6 +352,14 @@ class ConversationQuery
 
         if (($assignee = $f['assignee'] ?? null) !== null && $assignee !== '') {
             $this->assignee($q, $assignee === 'me' ? $u->id : $assignee);
+        }
+
+        // Control room S4 (optional, additive): chats that started on these Cairo days (the «النهارده» links).
+        if (! empty($f['from'])) {
+            $q->where('conversations.created_at', '>=', DateRange::startOfCairoDay((string) $f['from']));
+        }
+        if (! empty($f['to'])) {
+            $q->where('conversations.created_at', '<=', DateRange::endOfCairoDay((string) $f['to']));
         }
 
         if (! empty($f['tag'])) {
