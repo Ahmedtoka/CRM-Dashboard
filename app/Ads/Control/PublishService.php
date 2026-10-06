@@ -7,6 +7,7 @@ use App\Ads\Control\Jobs\PublishAd;
 use App\Ads\Naming;
 use App\Ads\Platforms\AdPlatform;
 use App\Models\AdAccount;
+use App\Models\AdLaunch;
 use App\Models\AdMaterial;
 use App\Models\AdMaterialFile;
 use App\Models\AdPublication;
@@ -38,9 +39,10 @@ final class PublishService
      * @throws ValidationException no link to send people to, or a file that is not the material's
      * @throws DuplicatePublication the same file + caption + ad set is already queued, running or done within 24 h
      */
-    public function publish(User $u, AdMaterial $m, AdAccount $a, array $input, ?string $idempotencyKey = null, bool $allowDuplicate = false): Collection
+    public function publish(User $u, AdMaterial $m, AdAccount $a, array $input, ?string $idempotencyKey = null, bool $allowDuplicate = false, ?AdLaunch $launch = null): Collection
     {
-        $link = $this->link($m);
+        // A launch carries the product page only (2.3: website_links are never a launch link); a direct publish keeps the fallback.
+        $link = $launch !== null ? $this->productLink($m) : $this->link($m);
         if ($link === null) {
             throw ValidationException::withMessages(['link' => __('ads.publish.no_link')]);
         }
@@ -62,7 +64,7 @@ final class PublishService
         $tags = $this->urlTags(AdPlatform::from($a->platform));
 
         try {
-            $rows = DB::transaction(function () use ($u, $m, $a, $input, $ordered, $identity, $link, $tags, $idempotencyKey, $allowDuplicate) {
+            $rows = DB::transaction(function () use ($u, $m, $a, $input, $ordered, $identity, $link, $tags, $idempotencyKey, $allowDuplicate, $launch) {
                 $made = [];
                 // Captions are numbered across files so every ad name in a publish is unique: file f, caption k -> C{f*K+k}.
                 $perFile = count($input['captions']);
@@ -76,7 +78,7 @@ final class PublishService
                             'headline' => $caption['headline'], 'primary_text' => $caption['primary_text'], 'cta' => $caption['cta'],
                             'ad_name' => Naming::adName($m->id, self::typeFor($m, $file), $f * $perFile + $i + 1),
                             'link' => $link, 'url_tags' => $tags, 'status' => AdPublication::QUEUED, 'created_by_id' => $u->id,
-                            'idempotency_key' => $idempotencyKey, 'allow_duplicate' => $allowDuplicate,
+                            'idempotency_key' => $idempotencyKey, 'allow_duplicate' => $allowDuplicate, 'ad_launch_id' => $launch?->id,
                             'open_key' => $allowDuplicate ? null : self::openKey($a, $input['adset_id'], $file->id, $caption),
                         ]);
                     }
@@ -136,12 +138,21 @@ final class PublishService
         return 'publish_identity_'.$a->id;
     }
 
-    /** The product page with the store URL, else the material's first website link, else null. */
-    public function link(AdMaterial $m): ?string
+    /** The product page with the store URL, or null (a launch uses this only: website_links are never a launch link, 2.3). */
+    public function productLink(AdMaterial $m): ?string
     {
         $product = $m->product;
-        if ($product !== null && trim((string) $product->handle) !== '') {
-            return rtrim(BotSetting::current()->storeUrl(), '/').'/products/'.$product->handle;
+
+        return $product !== null && trim((string) $product->handle) !== ''
+            ? rtrim(BotSetting::current()->storeUrl(), '/').'/products/'.$product->handle
+            : null;
+    }
+
+    /** The product page with the store URL, else the material's first website link, else null (direct publish). */
+    public function link(AdMaterial $m): ?string
+    {
+        if (($product = $this->productLink($m)) !== null) {
+            return $product;
         }
         foreach ((array) $m->website_links as $url) {
             if (is_string($url) && trim($url) !== '') {

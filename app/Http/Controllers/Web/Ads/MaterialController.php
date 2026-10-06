@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Web\Ads;
 
 use App\Ads\Access\AdsScope;
+use App\Ads\Control\Write\WriteDenied;
+use App\Ads\Launch\LaunchPolicy;
+use App\Ads\Launch\LaunchService;
+use App\Ads\Launch\LaunchState;
+use App\Ads\Launch\MaterialStatus;
 use App\Ads\Materials\MaterialService;
-use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Ads\StoreMaterialRequest;
 use App\Http\Requests\Ads\UpdateMaterialRequest;
@@ -84,20 +88,49 @@ class MaterialController extends Controller
         $user = $request->user();
         $own = $material->created_by_id !== null && $material->created_by_id === $user->id && MaterialService::canAuthor($user);
         abort_unless($user->isSupervisorOrAbove() || $own, 403);
+        if (($reason = $service->deleteBlockedReason($material)) !== null) {
+            return back()->withErrors(['material' => __('ads.materials.delete_blocked.'.$reason)]);
+        }
         $service->delete($material);
 
         return redirect()->route('ads.materials.index')->with('status', __('ads.flash.deleted'));
     }
 
-    /** Buyers and supervisors move a material along; content may only send it back to not started. */
-    public function status(Request $request, AdMaterial $material, MaterialService $service): RedirectResponse
+    /** Retire a material (خلصت): its live launches are stopped and retired, drafts withdrawn; a launch waiting for a decision blocks it. */
+    public function retire(Request $request, AdMaterial $material, LaunchService $launches, MaterialStatus $status): RedirectResponse
     {
         $user = $request->user();
-        $data = $request->validate(['status' => ['required', Rule::in(MaterialService::STATUSES)]]);
-        $allowed = MaterialService::canOperate($user) || ($user->role === UserRole::Content && $data['status'] === 'not_started');
-        abort_unless($allowed, 403);
+        abort_unless(MaterialService::canOperate($user), 403);
+        $data = $request->validate(['reason' => ['nullable', 'string', 'max:500']]);
+        $key = (string) $request->header('Idempotency-Key', 'retire-'.$material->id.'-'.now()->format('YmdHi'));
 
-        $service->setStatus($material, $data['status'], $user);
+        $pending = $material->launches()->whereIn('state', ['creating_paused', 'awaiting_approval', 'launching'])->exists();
+        if ($pending) {
+            return back()->withErrors(['material' => __('ads.errors.launches_pending')]);
+        }
+        // All or nothing: every running launch must be the user's to retire before the first one is touched.
+        $running = $material->launches()->whereIn('state', ['live', 'stopped'])->get();
+        if ($running->contains(fn ($l) => ! LaunchPolicy::isReviewer($user, $l))) {
+            return back()->withErrors(['material' => WriteDenied::messageFor('launch_forbidden')]);
+        }
+        try {
+            foreach ($running as $l) {
+                $launches->retire($user, $l, $data['reason'] ?? null, $key);
+            }
+            // The material retire is an operator decision: open drafts end whoever holds them (withdrawn; a held one expires).
+            foreach ($material->launches()->whereIn('state', ['draft', 'changes_requested', 'buyer_review', 'create_failed', 'on_hold'])->get() as $l) {
+                $from = $l->state;
+                $to = $from === LaunchState::OnHold ? LaunchState::Expired : LaunchState::Withdrawn;
+                $l = $launches->transition($l, [$from], $to, ['decided_by_id' => $user->id, 'decided_at' => now(), 'hold_from_state' => null], null, $user, ['by' => 'material_retired']);
+                if (in_array($from, [LaunchState::CreateFailed, LaunchState::OnHold], true)) {
+                    $launches->archive($l); // a held launch may already have its paused ads (O5)
+                }
+            }
+        } catch (WriteDenied $e) {
+            return back()->withErrors(['material' => $e->getMessage()]);
+        }
+        $material->forceFill(['status' => 'retired', 'retired_by_id' => $user->id, 'retire_reason' => $data['reason'] ?? null, 'done_at' => now(), 'need_stop_at' => null])->save();
+        $status->refresh($material->fresh());
 
         return back()->with('status', __('ads.flash.saved'));
     }

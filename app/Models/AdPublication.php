@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Ads\Launch\LaunchService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -24,11 +25,12 @@ class AdPublication extends Model
         'ad_material_id', 'ad_material_file_id', 'ad_account_id', 'platform', 'campaign_external_id', 'campaign_name', 'adset_external_id', 'adset_name',
         'identity', 'caption_index', 'headline', 'primary_text', 'cta', 'ad_name', 'link', 'url_tags', 'status', 'external_ad_id', 'error', 'attempts',
         'linked_at', 'ad_requested_at', 'created_by_id', 'idempotency_key', 'open_key', 'allow_duplicate',
+        'ad_launch_id', 'run_write_action_id', 'archived_at',
     ];
 
     protected function casts(): array
     {
-        return ['identity' => 'array', 'caption_index' => 'integer', 'attempts' => 'integer', 'linked_at' => 'datetime', 'ad_requested_at' => 'datetime', 'allow_duplicate' => 'boolean'];
+        return ['identity' => 'array', 'caption_index' => 'integer', 'attempts' => 'integer', 'linked_at' => 'datetime', 'ad_requested_at' => 'datetime', 'allow_duplicate' => 'boolean', 'archived_at' => 'datetime'];
     }
 
     protected static function booted(): void
@@ -38,6 +40,18 @@ class AdPublication extends Model
         static::saving(function (self $p) {
             if ($p->status === self::ERROR && $p->open_key !== null && $p->ad_requested_at === null) {
                 $p->open_key = null;
+            }
+        });
+
+        // A launch's ad changed state or got linked: T6 may be complete (LaunchService). Never breaks PublishAd or the sync.
+        static::saved(function (self $p) {
+            if ($p->ad_launch_id === null || ! $p->wasChanged(['status', 'linked_at'])) {
+                return;
+            }
+            try {
+                app(LaunchService::class)->publicationChanged($p);
+            } catch (\Throwable $e) {
+                report($e);
             }
         });
     }
@@ -55,6 +69,11 @@ class AdPublication extends Model
     public function account(): BelongsTo
     {
         return $this->belongsTo(AdAccount::class, 'ad_account_id');
+    }
+
+    public function launch(): BelongsTo
+    {
+        return $this->belongsTo(AdLaunch::class, 'ad_launch_id');
     }
 
     public function creator(): BelongsTo

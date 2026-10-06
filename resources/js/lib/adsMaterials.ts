@@ -18,7 +18,12 @@ export function useMaterialPermissions() {
     const canDelete = (m: Pick<MaterialRow, 'creator'>) =>
         canManage.value || (isContent.value && m.creator !== null && user.value !== null && m.creator.id === user.value.id);
 
-    return { canManage, canAuthor, canOperate, isContent, canDelete };
+    /** Prepare a launch draft (content, buyers, supervisor+). */
+    const canPrepare = computed(() => canAuthor.value || canOperate.value);
+    /** The old direct publish dialog (admins only, O7). */
+    const canDirectPublish = computed(() => ads.value?.canDirectPublish === true);
+
+    return { canManage, canAuthor, canOperate, isContent, canDelete, canPrepare, canDirectPublish };
 }
 
 /** Link arrays are null when they were never set. */

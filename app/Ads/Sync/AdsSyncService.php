@@ -4,6 +4,7 @@ namespace App\Ads\Sync;
 
 use App\Ads\Audit\AdsAudit;
 use App\Ads\Control\PublicationLinker;
+use App\Ads\Launch\LaunchMonitor;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdPlatformDriver;
 use App\Ads\Platforms\AdsApiException;
@@ -372,6 +373,7 @@ final class AdsSyncService
     {
         try {
             app(PublicationLinker::class)->link($a);
+            app(LaunchMonitor::class)->afterSync($a); // launches follow their ads (T8 / T13 / T14)
         } catch (Throwable $e) {
             report($e);
         }

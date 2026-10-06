@@ -6,6 +6,8 @@ import MaterialLightbox from '@/components/ads/MaterialLightbox.vue';
 import MaterialStatusChip from '@/components/ads/MaterialStatusChip.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PublicationsList from '@/components/ads/PublicationsList.vue';
+import LaunchEditor from '@/components/ads/launch/LaunchEditor.vue';
+import LaunchStateChip from '@/components/ads/launch/LaunchStateChip.vue';
 import PublishDialog from '@/components/ads/PublishDialog.vue';
 import WinnerBadge from '@/components/ads/WinnerBadge.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -49,8 +51,8 @@ import {
     Play,
     Plus,
     Rocket,
+    Send,
     Sparkles,
-    RotateCcw,
     Search,
     Square,
     Trash2,
@@ -65,7 +67,7 @@ const toast = useToast();
 const perms = useMaterialPermissions();
 const n = (v: number) => formatCount(v, locale.value);
 
-const STATUSES: MaterialStatus[] = ['not_started', 'activated', 'done'];
+const STATUSES: MaterialStatus[] = ['new', 'in_review', 'live', 'paused', 'retired'];
 const STOCKS = ['in', 'out', 'none'] as const;
 const TYPES = ['reel', 'carousel', 'post', 'story', 'image', 'video'] as const;
 
@@ -206,23 +208,6 @@ const stockChip = (m: MaterialRow) =>
 
 const typeLabel = (type: string) => (TYPES.includes(type as (typeof TYPES)[number]) ? t(`ads.materials.type.${type}`) : type);
 
-/* ---- status ---- */
-const busyId = ref<number | null>(null);
-function setStatus(m: MaterialRow, status: MaterialStatus): void {
-    busyId.value = m.id;
-    router.post(
-        `/ads/materials/${m.id}/status`,
-        { status },
-        {
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: () => toast.push(t(`ads.materials.status_saved.${status}`)),
-            onError: (errors) => toast.push(String(Object.values(errors)[0] ?? t('common.error')), 'error'),
-            onFinish: () => (busyId.value = null),
-        },
-    );
-}
-
 /* ---- gallery ---- */
 const gallery = ref<MaterialRow | null>(null);
 const galleryOpen = computed({ get: () => gallery.value !== null, set: (v) => !v && (gallery.value = null) });
@@ -257,6 +242,13 @@ function createFromCaptions(captions: PublishCaption[], fileId: number): void {
 }
 const publications = ref<MaterialRow | null>(null);
 const publicationsOpen = computed({ get: () => publications.value !== null, set: (v) => !v && (publications.value = null) });
+
+/* ---- launches (S1) ---- */
+const preparing = ref<MaterialRow | null>(null);
+const prepareOpen = computed({ get: () => preparing.value !== null, set: (v) => !v && (preparing.value = null) });
+function launchSaved(): void {
+    router.reload({ only: ['materials', 'stats'] });
+}
 
 /* ---- delete ---- */
 const deleting = ref<MaterialRow | null>(null);
@@ -561,7 +553,16 @@ const breadcrumbs = computed(() => [
                                     <StatusChip v-for="ty in m.types" :key="ty" :label="typeLabel(ty)" tone="info" />
                                 </div>
                             </td>
-                            <td class="px-2 py-2.5"><MaterialStatusChip :status="m.status" /></td>
+                            <td class="px-2 py-2.5">
+                                <MaterialStatusChip :status="m.status" />
+                                <ul v-if="m.launches?.length" class="mt-1 space-y-0.5">
+                                    <li v-for="l in m.launches" :key="l.id">
+                                        <Link :href="`/ads/launches?material=${m.id}&box=all&launch=${l.id}`" class="inline-flex items-center gap-1 text-2xs hover:underline">
+                                            <LaunchStateChip :state="l.state" /><span class="truncate text-muted-foreground">{{ l.adset }}</span>
+                                        </Link>
+                                    </li>
+                                </ul>
+                            </td>
                             <td class="px-2 py-2.5">
                                 <div class="flex flex-col items-start gap-1">
                                     <span
@@ -596,46 +597,6 @@ const breadcrumbs = computed(() => [
                             </td>
                             <td class="px-3 py-2.5">
                                 <div class="flex flex-wrap justify-end gap-1">
-                                    <template v-if="perms.canOperate.value">
-                                        <button
-                                            v-if="m.status !== 'activated'"
-                                            type="button"
-                                            :class="
-                                                cn(
-                                                    iconBtn,
-                                                    'border-success/40 bg-success/10 text-emerald-700 hover:bg-success/20 dark:text-emerald-300',
-                                                )
-                                            "
-                                            :disabled="busyId === m.id"
-                                            :aria-label="t('ads.materials.actions.activate')"
-                                            :title="t('ads.materials.actions.activate')"
-                                            @click="setStatus(m, 'activated')"
-                                        >
-                                            <Play class="size-4" aria-hidden="true" />
-                                        </button>
-                                        <button
-                                            v-else
-                                            type="button"
-                                            :class="cn(iconBtn, 'border-foreground/20 bg-foreground text-background hover:bg-foreground/85')"
-                                            :disabled="busyId === m.id"
-                                            :aria-label="t('ads.materials.actions.done')"
-                                            :title="t('ads.materials.actions.done')"
-                                            @click="setStatus(m, 'done')"
-                                        >
-                                            <Square class="size-4" aria-hidden="true" />
-                                        </button>
-                                    </template>
-                                    <button
-                                        v-if="m.status !== 'not_started' && (perms.canOperate.value || perms.isContent.value)"
-                                        type="button"
-                                        :class="cn(iconBtn, 'border-border text-muted-foreground hover:bg-muted hover:text-foreground')"
-                                        :disabled="busyId === m.id"
-                                        :aria-label="t('ads.materials.actions.reset')"
-                                        :title="t('ads.materials.actions.reset')"
-                                        @click="setStatus(m, 'not_started')"
-                                    >
-                                        <RotateCcw class="size-4" aria-hidden="true" />
-                                    </button>
                                     <button
                                         v-if="m.files?.some((f) => f.mime?.startsWith('video/'))"
                                         type="button"
@@ -647,7 +608,18 @@ const breadcrumbs = computed(() => [
                                         <Sparkles class="size-4" aria-hidden="true" />
                                     </button>
                                     <button
-                                        v-if="perms.canOperate.value"
+                                        v-if="perms.canPrepare.value"
+                                        type="button"
+                                        :class="cn(iconBtn, 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/20')"
+                                        :aria-label="t('ads.launch.prepare')"
+                                        :title="t('ads.launch.prepare')"
+                                        :disabled="!m.files?.length || !m.product"
+                                        @click="preparing = m"
+                                    >
+                                        <Rocket class="size-4" aria-hidden="true" />
+                                    </button>
+                                    <button
+                                        v-if="perms.canDirectPublish.value"
                                         type="button"
                                         :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
                                         :aria-label="t('ads.publish.button')"
@@ -655,7 +627,7 @@ const breadcrumbs = computed(() => [
                                         :disabled="!m.files?.length"
                                         @click="publishing = m"
                                     >
-                                        <Rocket class="size-4" aria-hidden="true" />
+                                        <Send class="size-4" aria-hidden="true" />
                                     </button>
                                     <button
                                         v-if="perms.canOperate.value"
@@ -759,7 +731,7 @@ const breadcrumbs = computed(() => [
             </DialogContent>
         </Dialog>
 
-        <CaptionsDialog v-if="captioning" v-model:open="captionsOpen" :material="captioning" :can-publish="perms.canOperate.value" @create="createFromCaptions" />
+        <CaptionsDialog v-if="captioning" v-model:open="captionsOpen" :material="captioning" :can-publish="perms.canDirectPublish.value" @create="createFromCaptions" />
         <PublishDialog v-if="publishing" v-model:open="publishOpen" :material="publishing" :captions="publishCaptions" :file-ids="publishFileIds" @published="publications = publishing" />
 
         <Dialog v-model:open="publicationsOpen">
@@ -779,5 +751,6 @@ const breadcrumbs = computed(() => [
             destructive
             @submit="confirmDelete"
         />
+        <LaunchEditor v-if="preparing" v-model:open="prepareOpen" :material="preparing" mode="content" @saved="launchSaved" />
     </AppLayout>
 </template>

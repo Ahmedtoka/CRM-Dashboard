@@ -19,6 +19,7 @@ class CheckProductStock implements ShouldQueue
     public function handle(StockWatcher $watcher): void
     {
         $watcher->run($this->productIds);
+        $watcher->holds($this->productIds);
     }
 
     /**
@@ -34,7 +35,7 @@ class CheckProductStock implements ShouldQueue
                 return;
             }
 
-            $watched = AdMaterial::query()->where('status', 'activated')->whereIn('product_id', $ids)
+            $watched = StockWatcher::watched(AdMaterial::query()->whereIn('product_id', $ids))
                 ->distinct()->pluck('product_id')->map(fn ($id) => (int) $id)->all();
 
             if ($watched !== []) {

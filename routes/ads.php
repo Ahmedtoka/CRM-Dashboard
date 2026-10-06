@@ -3,17 +3,22 @@
 use App\Http\Controllers\Web\Ads\AccountController;
 use App\Http\Controllers\Web\Ads\ActionController;
 use App\Http\Controllers\Web\Ads\AdStockController;
+use App\Http\Controllers\Web\Ads\ApprovalController;
 use App\Http\Controllers\Web\Ads\BuyerController;
 use App\Http\Controllers\Web\Ads\BuyerSetupController;
 use App\Http\Controllers\Web\Ads\CampaignController;
 use App\Http\Controllers\Web\Ads\CaptionController;
 use App\Http\Controllers\Web\Ads\CreativeController;
+use App\Http\Controllers\Web\Ads\LaunchController;
 use App\Http\Controllers\Web\Ads\MaterialCollectionController;
 use App\Http\Controllers\Web\Ads\MaterialController;
 use App\Http\Controllers\Web\Ads\OverviewController;
 use App\Http\Controllers\Web\Ads\PublishController;
+use App\Http\Controllers\Web\Ads\ReauthController;
+use App\Http\Controllers\Web\Ads\SlotController;
 use App\Http\Controllers\Web\Ads\SyncController;
 use App\Http\Controllers\Web\Ads\WriteActionController;
+use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
 
 // Ads Hub. Required from routes/crm.php inside the authenticated group (see EnsureAdsAccess for the `ads:*` areas).
@@ -34,6 +39,20 @@ Route::middleware('ads:report')->group(function () {
     Route::post('/ads/write-actions/{action}/confirm', [WriteActionController::class, 'confirm'])->middleware('throttle:ads-writes')->name('ads.write-actions.confirm');
     Route::post('/ads/write-actions/{action}/cancel', [WriteActionController::class, 'cancel'])->name('ads.write-actions.cancel');
     Route::post('/ads/write-actions/{action}/rollback', [WriteActionController::class, 'rollback'])->middleware('throttle:ads-writes')->name('ads.write-actions.rollback');
+
+    // Launch approvals (control room S1): open slots.
+    Route::get('/ads/slots', [SlotController::class, 'index'])->name('ads.slots.index');
+    Route::post('/ads/slots/{adSet}', [SlotController::class, 'toggle'])->name('ads.slots.toggle');
+
+    // Launch approvals (S1): the manager's queue. Approve / bulk need a password confirmed in the last 15 minutes (G3).
+    Route::get('/ads/approvals', [ApprovalController::class, 'index'])->name('ads.approvals.index');
+    Route::post('/ads/approvals/bulk', [ApprovalController::class, 'bulk'])
+        ->middleware(['ads:authority', RequirePassword::using(null, ApprovalController::REAUTH_SECONDS)])->name('ads.approvals.bulk');
+    Route::post('/ads/approvals/{launch}/approve', [ApprovalController::class, 'approve'])
+        ->middleware(['ads:authority', RequirePassword::using(null, ApprovalController::REAUTH_SECONDS)])->name('ads.approvals.approve');
+    Route::post('/ads/approvals/{launch}/return', [ApprovalController::class, 'sendBack'])->name('ads.approvals.return');
+    Route::post('/ads/approvals/{launch}/reject', [ApprovalController::class, 'reject'])->name('ads.approvals.reject');
+    Route::post('/ads/reauth', ReauthController::class)->middleware('throttle:6,1')->name('ads.reauth');
 });
 
 Route::middleware('ads:manage')->group(function () {
@@ -68,7 +87,6 @@ Route::middleware('ads:materials')->group(function () {
     Route::get('/ads/materials/{material}/edit', [MaterialController::class, 'edit'])->name('ads.materials.edit');
     Route::put('/ads/materials/{material}', [MaterialController::class, 'update'])->name('ads.materials.update');
     Route::delete('/ads/materials/{material}', [MaterialController::class, 'destroy'])->name('ads.materials.destroy');
-    Route::post('/ads/materials/{material}/status', [MaterialController::class, 'status'])->name('ads.materials.status');
     Route::post('/ads/materials/{material}/ads', [MaterialController::class, 'syncAds'])->name('ads.materials.ads');
     Route::get('/ads/products/search', [MaterialController::class, 'productSearch'])->name('ads.products.search');
     Route::get('/ads/publish/options', [PublishController::class, 'options'])->name('ads.publish.options');
@@ -87,4 +105,22 @@ Route::middleware('ads:materials')->group(function () {
     Route::get('/ads/stock', [AdStockController::class, 'index'])->name('ads.stock.index');
     Route::get('/ads/stock/export', [AdStockController::class, 'export'])->name('ads.stock.export');
     Route::post('/ads/stock/{material}/availability', [AdStockController::class, 'availability'])->name('ads.stock.availability');
+});
+
+// Launch approvals (control room S1): drafts and buyer review — content, buyers and supervisor+ (policy per launch).
+Route::middleware('ads:materials')->group(function () {
+    Route::get('/ads/launches', [LaunchController::class, 'index'])->name('ads.launches.index');
+    Route::get('/ads/launches/options', [LaunchController::class, 'options'])->name('ads.launches.options');
+    Route::get('/ads/launches/{launch}', [LaunchController::class, 'show'])->name('ads.launches.show');
+    Route::get('/ads/launches/{launch}/checks', [LaunchController::class, 'checks'])->name('ads.launches.checks');
+    Route::post('/ads/materials/{material}/launches', [LaunchController::class, 'store'])->name('ads.launches.store');
+    Route::put('/ads/launches/{launch}', [LaunchController::class, 'update'])->name('ads.launches.update');
+    Route::post('/ads/launches/{launch}/submit', [LaunchController::class, 'submit'])->name('ads.launches.submit');
+    Route::post('/ads/launches/{launch}/send-back', [LaunchController::class, 'sendBack'])->name('ads.launches.send-back');
+    Route::post('/ads/launches/{launch}/withdraw', [LaunchController::class, 'withdraw'])->name('ads.launches.withdraw');
+    Route::post('/ads/launches/{launch}/forward', [LaunchController::class, 'forward'])->name('ads.launches.forward');
+    Route::post('/ads/launches/{launch}/retry', [LaunchController::class, 'retry'])->name('ads.launches.retry');
+    Route::post('/ads/launches/{launch}/stop', [LaunchController::class, 'stop'])->name('ads.launches.stop');
+    Route::post('/ads/launches/{launch}/retire', [LaunchController::class, 'retire'])->name('ads.launches.retire');
+    Route::post('/ads/materials/{material}/retire', [MaterialController::class, 'retire'])->name('ads.materials.retire');
 });

@@ -87,7 +87,7 @@ it('lets a content user create a material with files and collections, with a thu
     ]))->assertRedirect('/ads/materials');
 
     $m = AdMaterial::with(['files', 'collections'])->firstOrFail();
-    expect($m->created_by_id)->toBe($content->id)->and($m->status)->toBe('not_started')
+    expect($m->created_by_id)->toBe($content->id)->and($m->status)->toBe('new')
         ->and($m->collections)->toHaveCount(2)->and($m->files)->toHaveCount(2)
         ->and($m->drive_links)->toBe(['https://drive.google.com/a', 'https://drive.google.com/b'])
         ->and($m->website_links)->toBe(['https://example.com/p', 'https://example.com/q']);
@@ -138,10 +138,10 @@ it('filters the index by status, collection, stock, type and date, with stats ov
     $outStock = Product::factory()->create();
     ProductVariant::factory()->create(['product_id' => $outStock->id, 'inventory_quantity' => 0]);
 
-    $a = AdMaterial::factory()->create(['title' => 'Alpha', 'status' => 'activated', 'types' => ['reel'], 'product_id' => $inStock->id]);
-    $b = AdMaterial::factory()->create(['title' => 'Beta', 'status' => 'not_started', 'types' => ['post', 'carousel'], 'product_id' => $outStock->id, 'need_stop_at' => now()]);
-    $c = AdMaterial::factory()->create(['title' => 'Gamma', 'status' => 'done', 'types' => ['reel'], 'product_id' => $outStock->id, 'stock_override' => true]);
-    $d = AdMaterial::factory()->create(['title' => 'Delta', 'status' => 'not_started', 'types' => ['story']]);
+    $a = AdMaterial::factory()->create(['title' => 'Alpha', 'status' => 'live', 'types' => ['reel'], 'product_id' => $inStock->id]);
+    $b = AdMaterial::factory()->create(['title' => 'Beta', 'status' => 'new', 'types' => ['post', 'carousel'], 'product_id' => $outStock->id, 'need_stop_at' => now()]);
+    $c = AdMaterial::factory()->create(['title' => 'Gamma', 'status' => 'retired', 'types' => ['reel'], 'product_id' => $outStock->id, 'stock_override' => true]);
+    $d = AdMaterial::factory()->create(['title' => 'Delta', 'status' => 'new', 'types' => ['story']]);
     $a->collections()->attach($col);
     $c->collections()->attach($col);
     $d->forceFill(['created_at' => now()->subDays(20)])->save();
@@ -150,7 +150,7 @@ it('filters the index by status, collection, stock, type and date, with stats ov
     $ids = fn (string $qs) => collect($this->actingAs($admin)->get('/ads/materials'.$qs)->assertOk()->viewData('page')['props']['materials']['data'])->pluck('title')->sort()->values()->all();
 
     expect($ids(''))->toBe(['Alpha', 'Beta', 'Delta', 'Gamma'])
-        ->and($ids('?status=not_started'))->toBe(['Beta', 'Delta'])
+        ->and($ids('?status=new'))->toBe(['Beta', 'Delta'])
         ->and($ids('?collection='.$col->id))->toBe(['Alpha', 'Gamma'])
         ->and($ids('?stock=in'))->toBe(['Alpha', 'Gamma'])
         ->and($ids('?stock=out'))->toBe(['Beta'])
@@ -161,10 +161,10 @@ it('filters the index by status, collection, stock, type and date, with stats ov
         ->and($ids('?to='.now('Africa/Cairo')->subDays(10)->toDateString()))->toBe(['Delta'])
         ->and($ids('?status=bogus&stock=bogus&type=bogus'))->toBe(['Alpha', 'Beta', 'Delta', 'Gamma']);
 
-    $this->actingAs($admin)->get('/ads/materials?status=activated&stock=in')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/ads/materials?status=live&stock=in')->assertInertia(fn (Assert $p) => $p
         ->component('Ads/Materials/Index')
-        ->where('filters.status', 'activated')->where('filters.stock', 'in')->where('filters.q', null)->has('filters.page')
-        ->where('stats', ['total' => 4, 'activated' => 1, 'not_started' => 2, 'done' => 1, 'reels' => 2, 'posts' => 1, 'carousels' => 1, 'in_stock' => 2, 'out_of_stock' => 1, 'need_stop' => 0]) // Beta's flag is stale: it is not activated
+        ->where('filters.status', 'live')->where('filters.stock', 'in')->where('filters.q', null)->has('filters.page')
+        ->where('stats', ['total' => 4, 'activated' => 1, 'not_started' => 2, 'done' => 1, 'in_review' => 0, 'paused' => 0, 'reels' => 2, 'posts' => 1, 'carousels' => 1, 'in_stock' => 2, 'out_of_stock' => 1, 'need_stop' => 0]) // Beta's flag is stale: it is not activated
         ->has('materials.data', 1)->has('materials.total')
         ->where('materials.data.0.title', 'Alpha')->where('materials.data.0.stock', 'in')->where('materials.data.0.product.inventory', 7)
         ->has('collections', 1)->where('canSeeSpend', true));
@@ -182,7 +182,7 @@ it('presents a MaterialRow with files, links and linked ads', function () {
         ->has('materials.data.0', fn (Assert $r) => $r
             ->where('title', 'Row')->where('files_count', 1)->where('need_stop', false)->where('stock', 'out')
             ->where('creator.id', $content->id)->where('product.title', $product->title)->where('product.image_url', 'https://x/y.jpg')
-            ->where('types', ['reel'])->where('status', 'not_started')->where('buyer', null)
+            ->where('types', ['reel'])->where('status', 'new')->where('buyer', null)
             ->where('ads.0.name', 'Linked')->where('ads.0.platform', $ad->account->platform)
             ->where('performance.spend', 0)->where('performance.roas', null)->where('performance.winner_tier', null)
             ->whereType('thumb_url', 'string')->whereType('created_at', 'string')
@@ -290,44 +290,12 @@ it('searches ads in scope, at most 20, by name or external id', function () {
     $this->actingAs(matUser(UserRole::Content))->getJson('/ads/materials/ad-search?q=a')->assertForbidden();
 });
 
-it('moves a material through its statuses and sets the timestamps', function () {
-    $w = matBuyerWorld();
-    $m = AdMaterial::factory()->create();
-
-    $this->actingAs($w['user'])->post("/ads/materials/{$m->id}/status", ['status' => 'activated'])->assertRedirect();
-    $m->refresh();
-    expect($m->status)->toBe('activated')->and($m->activated_at)->not->toBeNull()->and($m->done_at)->toBeNull()
-        ->and($m->media_buyer_id)->toBe($w['buyer']->id); // the buyer who activates takes it
-
-    $this->travel(1)->hours();
-    $first = $m->activated_at;
-    $this->actingAs($w['user'])->post("/ads/materials/{$m->id}/status", ['status' => 'done'])->assertRedirect();
-    $m->refresh();
-    expect($m->status)->toBe('done')->and($m->done_at)->not->toBeNull()->and($m->activated_at->equalTo($first))->toBeTrue();
-
-    $this->actingAs(matUser(UserRole::Supervisor))->post("/ads/materials/{$m->id}/status", ['status' => 'not_started'])->assertRedirect();
-    $m->refresh();
-    expect($m->status)->toBe('not_started')->and($m->activated_at)->toBeNull()->and($m->done_at)->toBeNull();
-
-    $this->actingAs($w['user'])->post("/ads/materials/{$m->id}/status", ['status' => 'bogus'])->assertSessionHasErrors('status');
-});
-
-it('lets content only send a material back to not started', function () {
-    $content = matUser(UserRole::Content);
-    $m = AdMaterial::factory()->create(['status' => 'activated', 'activated_at' => now()]);
-
-    $this->actingAs($content)->post("/ads/materials/{$m->id}/status", ['status' => 'activated'])->assertForbidden();
-    $this->actingAs($content)->post("/ads/materials/{$m->id}/status", ['status' => 'done'])->assertForbidden();
-    $this->actingAs($content)->post("/ads/materials/{$m->id}/status", ['status' => 'not_started'])->assertRedirect();
-    expect($m->refresh()->status)->toBe('not_started')->and($m->activated_at)->toBeNull();
-});
-
 it('exports the library as a streamed CSV with a BOM and one line per material', function () {
     $col = AdMaterialCollection::factory()->create(['name' => 'عيد']);
     $product = Product::factory()->create(['title' => 'عباية']);
     $ad = Ad::factory()->create(['name' => 'Ad one', 'ad_campaign_id' => activeCampaignId(AdAccount::factory()->create())]);
     matDays($ad, 4, 150, 450);
-    $a = AdMaterial::factory()->create(['title' => 'فيديو العيد', 'product_id' => $product->id, 'drive_links' => ['https://d/1', 'https://d/2'], 'status' => 'activated']);
+    $a = AdMaterial::factory()->create(['title' => 'فيديو العيد', 'product_id' => $product->id, 'drive_links' => ['https://d/1', 'https://d/2'], 'status' => 'live']);
     $a->collections()->attach($col);
     $a->ads()->attach($ad);
     AdMaterial::factory()->create(['title' => 'Plain']);
@@ -343,7 +311,7 @@ it('exports the library as a streamed CSV with a BOM and one line per material',
         ->and((float) $line[9])->toBe(600.0)->and((float) $line[10])->toBe(3.0);
 
     // content users get no spend columns; filters apply
-    $content = $this->actingAs(matUser(UserRole::Content))->get('/ads/materials/export?status=activated')->streamedContent();
+    $content = $this->actingAs(matUser(UserRole::Content))->get('/ads/materials/export?status=live')->streamedContent();
     $crow = array_map('str_getcsv', array_values(array_filter(preg_split('/\r?\n/', substr($content, 3)))));
     expect($crow)->toHaveCount(2)->and($crow[0])->toHaveCount(9);
 });
@@ -425,10 +393,10 @@ it('lists collections with their counts and totals, and manages them', function 
     $content = matUser(UserRole::Content);
     $a = AdMaterialCollection::factory()->create(['name' => 'A', 'sort' => 1]);
     $b = AdMaterialCollection::factory()->create(['name' => 'B', 'sort' => 2, 'is_active' => false]);
-    $m1 = AdMaterial::factory()->create(['status' => 'activated', 'need_stop_at' => now()]);
-    $m2 = AdMaterial::factory()->create(['status' => 'not_started']);
-    $m3 = AdMaterial::factory()->create(['status' => 'done']);
-    AdMaterial::factory()->create(['status' => 'not_started']); // in no collection
+    $m1 = AdMaterial::factory()->create(['status' => 'live', 'need_stop_at' => now()]);
+    $m2 = AdMaterial::factory()->create(['status' => 'new']);
+    $m3 = AdMaterial::factory()->create(['status' => 'retired']);
+    AdMaterial::factory()->create(['status' => 'new']); // in no collection
     $a->materials()->attach([$m1->id, $m2->id, $m3->id]);
     $b->materials()->attach([$m1->id]);
 

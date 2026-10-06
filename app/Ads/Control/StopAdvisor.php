@@ -119,7 +119,7 @@ final class StopAdvisor
             ->join('ad_materials as mat', 'mat.id', '=', 'l.ad_material_id')
             ->join('ads as ad', 'ad.id', '=', 'l.ad_id')
             ->join('ad_accounts as acc', 'acc.id', '=', 'ad.ad_account_id')
-            ->where('mat.status', 'activated')
+            ->where('mat.status', 'live')
             ->whereNotNull('mat.need_stop_at')
             ->whereIn('ad.status', AdWriteService::ACTIVE_STATUSES)
             ->where(fn ($w) => $this->notStale($w, 'ad.effective_status'))

@@ -59,6 +59,18 @@ function itemText(n: AppNotification): string {
         return t('notifications.queue_member_not_arrived_item', { name: String(n.data.name ?? ''), shift: String(n.data.shift ?? '') });
     }
 
+    if (n.type.startsWith('ads.launch.')) {
+        const event = n.type.slice('ads.launch.'.length);
+        const reason = String(n.data.code ?? '') ? t(`ads.launch.reason.${String(n.data.code)}`) : '';
+        return t(`notifications.ads_launch.${event}`, {
+            title: String(n.data.title ?? ''),
+            account: String(n.data.account ?? ''),
+            count: Number(n.data.count ?? 0),
+            failed: Number(n.data.failed ?? 0),
+            reason: [reason, String(n.data.reason ?? '')].filter(Boolean).join(': '),
+        });
+    }
+
     if (n.type === 'ads.need_stop') {
         return t('notifications.ads_need_stop_item', { product: String(n.data.product_title ?? ''), material: String(n.data.title ?? '') });
     }
@@ -110,8 +122,12 @@ function itemText(n: AppNotification): string {
 
 function open(n: AppNotification): void {
     void notifications.markRead([n.id]);
+    if (n.type.startsWith('ads.launch.')) {
+        router.visit(String(n.data.link ?? '/ads/launches'));
+        return;
+    }
     if (n.type === 'ads.need_stop') {
-        router.visit(String(n.data.link ?? '/ads/materials?status=activated&stock=out'));
+        router.visit(String(n.data.link ?? '/ads/materials?status=live&stock=out'));
         return;
     }
     if (n.type === 'ads.data_health') {

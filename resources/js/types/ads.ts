@@ -14,6 +14,10 @@ export interface AdsAccess {
     canWrite: boolean;
     isBuyer: boolean;
     buyerId: number | null;
+    /** Approve launches (Ads authority). */
+    canApprove: boolean;
+    /** Admin-only direct publish (O7). */
+    canDirectPublish: boolean;
 }
 
 export interface AdsOption {
@@ -592,11 +596,12 @@ export interface AdsBuyersSetupProps {
     buyers: AdBuyerSetupRow[];
     users: { id: number; name: string; role: string }[];
     settings: AdsSetupSettings;
+    launchExpiryDays: number;
 }
 
 /* ---- Materials library: MaterialController, MaterialCollectionController, AdStockController ---- */
 
-export type MaterialStatus = 'not_started' | 'activated' | 'done';
+export type MaterialStatus = 'new' | 'in_review' | 'live' | 'paused' | 'retired';
 export type MaterialStock = 'in' | 'out' | 'none';
 export type MaterialType = 'reel' | 'carousel' | 'post' | 'story' | 'image' | 'video';
 
@@ -661,6 +666,8 @@ export interface MaterialRow {
     done_at: string | null;
     ads: MaterialLinkedAd[];
     performance: MaterialPerformance | null;
+    /** Open launches of the material (S1), newest first, max 5. */
+    launches: MaterialLaunchSummary[];
 }
 
 /** A Laravel LengthAwarePaginator as Inertia serialises it. */
@@ -690,6 +697,8 @@ export interface MaterialStats {
     activated: number;
     not_started: number;
     done: number;
+    in_review: number;
+    paused: number;
     reels: number;
     posts: number;
     carousels: number;
@@ -858,4 +867,186 @@ export interface AdPublicationRow {
     external_ad_id: string | null;
     manager_url: string | null;
     created_at: string | null;
+}
+
+/* ---- Launch approvals (control room S1) ---- */
+
+export type LaunchState =
+    | 'draft'
+    | 'changes_requested'
+    | 'buyer_review'
+    | 'creating_paused'
+    | 'create_failed'
+    | 'awaiting_approval'
+    | 'on_hold'
+    | 'launching'
+    | 'live'
+    | 'stopped'
+    | 'retired'
+    | 'rejected'
+    | 'expired'
+    | 'withdrawn';
+export type CheckLevel = 'pass' | 'warn' | 'block';
+export interface CheckRow {
+    key: string;
+    level: CheckLevel;
+    message_ar: string;
+    message_en: string;
+    details: Record<string, unknown>;
+}
+export interface LaunchCaption {
+    headline: string;
+    primary_text: string;
+    cta: string;
+}
+export interface LaunchFile extends MaterialFile {
+    width: number | null;
+    height: number | null;
+}
+export interface LaunchPublication {
+    id: number;
+    ad_name: string;
+    status: string;
+    error: string | null;
+    external_ad_id: string | null;
+    archived: boolean;
+    ad_status: string | null;
+    effective_status: string | null;
+    preview_url: string | null;
+    manager_url: string | null;
+}
+export interface LaunchEvent {
+    action: string;
+    at: string | null;
+    actor: string | null;
+    code: string | null;
+    reason: string | null;
+}
+export interface LaunchAbilities {
+    edit: boolean;
+    submit: boolean;
+    send_back: boolean;
+    forward: boolean;
+    withdraw: boolean;
+    retry: boolean;
+    approve: boolean;
+    return: boolean;
+    reject: boolean;
+    stop: boolean;
+    retire: boolean;
+}
+export interface LaunchRow {
+    id: string;
+    state: LaunchState;
+    hold_from: LaunchState | null;
+    revision: number;
+    ads_count: number;
+    material: { id: number; title: string; thumb_url: string | null } | null;
+    product: { id: number; title: string; image_url: string | null; prices: number[]; inventory: number } | null;
+    account: { id: number; name: string; platform: string } | null;
+    campaign: { external_id: string | null; name: string | null; status: string | null; objective: string | null };
+    adset: { id: number | null; external_id: string | null; name: string | null; status: string | null };
+    identity: { page_id: string; page_name: string; instagram_id: string | null } | null;
+    link: string | null;
+    url_tags: string | null;
+    file_ids: number[];
+    files: LaunchFile[];
+    captions: LaunchCaption[];
+    original: { ad_set_id: number | null; file_ids: number[]; captions: LaunchCaption[] } | null;
+    people: { preparer: AdsOption | null; buyer: AdsOption | null; forwarder: AdsOption | null; decider: AdsOption | null };
+    dates: {
+        created_at: string | null;
+        submitted_at: string | null;
+        forwarded_at: string | null;
+        awaiting_at: string | null;
+        expires_at: string | null;
+        decided_at: string | null;
+        live_at: string | null;
+        stopped_at: string | null;
+    };
+    decision: { code: string; reason: string | null } | null;
+    last_error: string | null;
+    self_approved: boolean;
+    checks: CheckRow[] | null;
+    checks_hash: string | null;
+    publications: LaunchPublication[] | null;
+    history: LaunchEvent[] | null;
+    money: { cap: number; currency: string; parent_status: string | null; campaign_status: string | null } | null;
+    can: LaunchAbilities;
+}
+export interface OpenSlot {
+    id: number;
+    name: string;
+    external_id: string;
+    campaign: { external_id: string; name: string; objective: string | null };
+    account: { id: number; name: string; platform: string };
+    buyer: AdsOption;
+}
+export interface SlotRow {
+    id: number;
+    name: string;
+    status: string | null;
+    open: boolean;
+    opened_at: string | null;
+    campaign: { name: string; status: string | null };
+    account: AdsOption;
+}
+export interface LaunchOptions {
+    slots: OpenSlot[];
+    files: LaunchFile[];
+    captions: (LaunchCaption & { angle: string | null })[];
+    ctas: string[];
+    max_captions: number;
+}
+export interface MaterialLaunchSummary {
+    id: string;
+    state: LaunchState;
+    account: string | null;
+    adset: string | null;
+    ads_count: number;
+}
+export interface LaunchAnswer {
+    ok: boolean;
+    message: string;
+    launch: LaunchRow;
+}
+export interface AdsLaunchesProps {
+    box: 'mine' | 'review' | 'live' | 'all';
+    filters: { material: number | null; launch: string | null; stop: boolean };
+    launches: LaravelPage<LaunchRow>;
+    counts: { mine: number; review: number; live: number };
+    canReview: boolean;
+    canToggleSlots: boolean;
+    reasons: string[];
+}
+export interface ApprovalFilters {
+    buyer: string | null;
+    account: string | null;
+    age: '1d' | '3d' | '7d' | null;
+    fails: boolean;
+    expiring: boolean;
+    launch: string | null;
+}
+export interface AdsApprovalsProps {
+    filters: ApprovalFilters;
+    launches: LaunchRow[];
+    options: { buyers: AdsOption[]; accounts: AdsOption[] };
+    approvalsLeft: number;
+    writesOn: boolean;
+    canApprove: boolean;
+    isAdmin: boolean;
+    reasons: string[];
+}
+export interface ApproveResult {
+    ok: boolean;
+    message: string;
+    self_approved: boolean;
+    launch: { id: string; state: LaunchState; revision: number };
+    ads: { publication_id: number; ad_name: string; outcome: 'succeeded' | 'unknown' | 'failed'; code: string | null; message: string | null }[];
+}
+export interface BulkPlan {
+    launches: { id: string; title: string | null; account: string | null; ads: number; revision: number; checks_hash: string }[];
+    total_ads: number;
+    approvals_left: number;
+    skipped: { warned: number; first_launch: number; self: number; limit: number };
 }
