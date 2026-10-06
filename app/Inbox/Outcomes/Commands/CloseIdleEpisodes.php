@@ -11,10 +11,10 @@ use Illuminate\Support\Collection;
 /**
  * Hourly (control room S3): ends the episodes nobody closed — a bot-only chat she left, or a chat
  * with the queue off that was never resolved — once nothing happened for `crm.outcomes.idle_hours`.
- * Candidates: not a test, no open queue entry, the customer wrote after tracking started and after
- * the last episode end, and the chat went quiet within the last `crm.outcomes.recheck_hours` before
- * the idle mark (so a chat with nothing real to end, e.g. only a rating answer, is looked at by a few
- * runs, not every hour for weeks). OutcomeRecorder::endIdle() decides the rest.
+ * Candidates: not a test, no open queue entry, last message between max(tracking_from, now -
+ * `crm.outcomes.lookback_days`) and the idle mark (a scheduler gap is caught up on the next run; no
+ * history backfill), the customer wrote after tracking started, and her last message is not already
+ * covered by an ended episode (cheap rechecks). OutcomeRecorder::endIdle() decides the rest.
  */
 class CloseIdleEpisodes extends Command
 {
@@ -42,11 +42,12 @@ class CloseIdleEpisodes extends Command
     public function candidates(int $hours, OutcomeRecorder $recorder): Builder
     {
         $before = now()->subHours(max(1, $hours));
-        $after = $before->copy()->subHours(max(1, (int) config('crm.outcomes.recheck_hours', 12)));
+        // Bounded lookback (a scheduler gap is caught up on the next run), never before tracking started.
+        $after = max(now()->subDays(max(1, (int) config('crm.outcomes.lookback_days', 14))), $recorder->trackingFrom());
 
         return Conversation::query()
             ->where('is_test', false)
-            ->where('last_message_at', '>', $after)
+            ->where('last_message_at', '>=', $after)
             ->where('last_message_at', '<=', $before)
             // No history backfill: only chats where she wrote after tracking started.
             ->where('last_customer_message_at', '>=', $recorder->trackingFrom())

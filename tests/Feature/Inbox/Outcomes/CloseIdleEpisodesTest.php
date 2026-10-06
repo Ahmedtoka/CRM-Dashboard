@@ -49,24 +49,18 @@ it('is scheduled hourly', function () {
     expect($events)->toHaveCount(1)->and($events->first()->expression)->toBe('0 * * * *');
 });
 
-// Review round 1 (minor): the sweep looks at a chat only for a few runs after it went idle, and
-// never at chats where she has not written since tracking started.
-it('narrows the candidates to chats that went idle recently and after tracking started', function () {
-    config(['crm.outcomes.tracking_from' => '2026-10-08', 'crm.outcomes.recheck_hours' => 6]);
-    $justIdle = s3IdleChat(26);
-    $longIdle = s3IdleChat(40); // already looked at by the earlier runs
-    $preTracking = s3IdleChat(26, ['last_customer_message_at' => Carbon::parse('2026-10-07 10:00', 'Africa/Cairo')]);
-    $ratingOnly = s3IdleChat(27);
-    Message::query()->where('conversation_id', $ratingOnly->id)->where('direction', 'in')->update(['body' => '5']);
-
-    $command = app(CloseIdleEpisodes::class);
-    $ids = $command->candidates(24, app(OutcomeRecorder::class))->pluck('id')->sort()->values()->all();
-
-    expect($ids)->toBe([$justIdle->id, $ratingOnly->id]);
+// Review round 2: a chat quiet for days is still ended after a scheduler gap; history before
+// tracking started never is; a chat whose last message is covered by an ended episode is not rechecked.
+it('catches up after a scheduler gap but never reaches back before tracking started', function () {
+    config(['crm.outcomes.tracking_from' => '2026-10-06']);
+    $quietThreeDays = s3IdleChat(72);
+    $preTracking = s3IdleChat(26, ['last_customer_message_at' => Carbon::parse('2026-10-05 10:00', 'Africa/Cairo')]);
+    $beforeTracking = s3IdleChat(24 * 6); // last message 2026-10-04: older than tracking_from
 
     $this->artisan('outcomes:close-idle')->expectsOutputToContain('Ended 1 idle episodes.')->assertSuccessful();
-    expect(ConversationOutcome::pluck('conversation_id')->all())->toBe([$justIdle->id]);
 
-    Carbon::setTestNow(now()->addHours(7)); // the rating-only chat is no longer looked at
-    expect($command->candidates(24, app(OutcomeRecorder::class))->pluck('id')->all())->not->toContain($ratingOnly->id);
+    expect(ConversationOutcome::pluck('conversation_id')->all())->toBe([$quietThreeDays->id]);
+
+    $ids = app(CloseIdleEpisodes::class)->candidates(24, app(OutcomeRecorder::class))->pluck('id')->all();
+    expect($ids)->not->toContain($quietThreeDays->id)->not->toContain($preTracking->id)->not->toContain($beforeTracking->id);
 });

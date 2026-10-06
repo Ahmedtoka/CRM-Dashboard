@@ -325,9 +325,8 @@ return [
         // Episodes whose first customer message is older than this are never ended by the idle sweep
         // (no backfill of history as no_answer). Set to the deploy date on the server.
         'tracking_from' => env('CRM_OUTCOMES_FROM', '2026-10-08'),
-        // The hourly idle sweep looks at a chat while it has been quiet between idle_hours and
-        // idle_hours + recheck_hours (a few runs, so a missed run is caught up, never every hour for weeks).
-        'recheck_hours' => (int) env('CRM_OUTCOMES_RECHECK_HOURS', 12),
+        // The idle sweep looks back at most this many days (and never before tracking_from).
+        'lookback_days' => 14,
     ],
 
     // Learning v2 (spec 2026-09-18 §1-2): the bot learns from real conversations
