@@ -12,10 +12,21 @@ final class FakeLandingProbe implements LandingProbe
     /** @var list<string> */
     public static array $urls = [];
 
-    public function status(string $url): ?int
+    /** @var list<string> URLs probed live (an HTTP request in production) */
+    public static array $live = [];
+
+    public function status(string $url, bool $live = true): ?int
     {
         self::$urls[] = $url;
+        if ($live) {
+            self::$live[] = $url;
+        }
 
         return self::$status;
+    }
+
+    public function known(string $url): bool
+    {
+        return true;
     }
 }

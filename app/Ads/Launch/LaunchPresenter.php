@@ -30,7 +30,7 @@ final class LaunchPresenter
     ) {}
 
     /**
-     * @param  array{checks?: false|'stored'|'fresh', publications?: bool, history?: bool}  $opts
+     * @param  array{checks?: false|'stored'|'fresh', publications?: bool, history?: bool, probe?: bool}  $opts  probe: live landing request (single launch only)
      * @return array<string, mixed>
      */
     public function row(AdLaunch $l, User $viewer, array $opts = []): array
@@ -43,7 +43,7 @@ final class LaunchPresenter
         $checks = null;
         $hash = $l->checks_hash;
         if ($mode === 'fresh') {
-            $results = $this->checks->run($l, self::phaseFor($l), $viewer);
+            $results = $this->checks->run($l, self::phaseFor($l), $viewer, (bool) ($opts['probe'] ?? false));
             $checks = array_map(fn (CheckResult $c) => $c->toArray(), $results);
             $hash = LaunchChecks::hash($l, $results);
         } elseif ($mode === 'stored') {

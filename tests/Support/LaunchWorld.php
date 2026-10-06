@@ -35,6 +35,7 @@ final class LaunchWorld
         FakeAdsDriver::reset();
         FakeLandingProbe::$status = 200;
         FakeLandingProbe::$urls = [];
+        FakeLandingProbe::$live = [];
         app()->instance(LandingProbe::class, new FakeLandingProbe);
         config([
             'crm.ads.drivers.meta' => 'fake', 'crm.ads.drivers.tiktok' => 'fake', 'crm.ads.drivers.google' => 'fake',

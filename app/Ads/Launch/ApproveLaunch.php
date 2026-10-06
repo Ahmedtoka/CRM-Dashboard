@@ -115,7 +115,7 @@ final class ApproveLaunch
 
                 continue;
             }
-            $results = $this->checks->run($l, 'approve', $u);
+            $results = $this->checks->run($l, 'approve', $u, false);
             if (LaunchChecks::blocking($results) !== [] || LaunchChecks::warnings($results) !== []) {
                 $skipped['warned']++;
 

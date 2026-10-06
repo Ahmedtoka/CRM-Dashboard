@@ -186,8 +186,10 @@ final class MaterialService
             }
         }
         $perf = $this->performance->forMaterials($materials, $user);
+        $today = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay();
+        $launchAccounts = $user->role === UserRole::MediaBuyer ? ($this->scope->accountIds($user, $today, $today) ?? []) : [];
 
-        return $materials->map(function (AdMaterial $m) use ($perf, $withFiles, $user) {
+        return $materials->map(function (AdMaterial $m) use ($perf, $withFiles, $user, $launchAccounts) {
             $row = [
                 'id' => $m->id,
                 'title' => $m->title,
@@ -211,7 +213,7 @@ final class MaterialService
                 'creator' => $m->creator === null ? null : ['id' => $m->creator->id, 'name' => $m->creator->name],
                 'stock' => self::stockOf($m),
                 'need_stop' => $m->need_stop_at !== null && $m->status === 'live',
-                'launches' => $m->launches->filter(fn (AdLaunch $l) => $this->launchVisible($l, $user, $m))->take(5)
+                'launches' => $m->launches->filter(fn (AdLaunch $l) => $this->launchVisible($l, $user, $m, $launchAccounts))->take(5)
                     ->map(fn (AdLaunch $l) => ['id' => $l->public_id, 'state' => $l->state->value, 'account' => null, 'adset' => $l->adset_name, 'ads_count' => $l->adsCount()])
                     ->values()->all(),
                 'activated_at' => $m->activated_at?->toIso8601String(),
@@ -484,13 +486,14 @@ final class MaterialService
         }
     }
 
-    private function launchVisible(AdLaunch $l, User $user, AdMaterial $m): bool
+    /** @param  list<int>  $accounts  the buyer's accounts today (computed once per rows() call) */
+    private function launchVisible(AdLaunch $l, User $user, AdMaterial $m, array $accounts): bool
     {
         if ($user->isSupervisorOrAbove()) {
             return true;
         }
         if ($user->role === UserRole::MediaBuyer) {
-            return $l->prepared_by_id === $user->id || in_array($l->ad_account_id, $this->scope->accountIds($user, $today = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay(), $today) ?? [], true);
+            return $l->prepared_by_id === $user->id || in_array($l->ad_account_id, $accounts, true);
         }
 
         return $l->prepared_by_id === $user->id || $m->created_by_id === $user->id;

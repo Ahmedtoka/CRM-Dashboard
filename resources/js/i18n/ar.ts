@@ -2808,6 +2808,7 @@ const ar = {
     },
     notifications: {
         ads_launch: {
+            approve_failed: 'الموافقة على «{title}» ما كملتش، الإطلاق رجع مستني موافقتك',
             submitted: 'إطلاق «{title}» مستني مراجعتك',
             changes_requested: 'إطلاق «{title}» رجعلك: {reason}',
             forwarded: 'إطلاق «{title}» اتبعت للمدير',

@@ -57,6 +57,9 @@ final class LaunchMonitor
 
                 return true;
             }
+            if (! $active && $l->state === LaunchState::Launching) {
+                return $this->launches->unstick($l);
+            }
             if (! $active && $l->state === LaunchState::Live) {
                 $this->launches->transition($l, [LaunchState::Live], LaunchState::Stopped, ['stopped_at' => now()], null, null, ['by' => 'sync']);
 

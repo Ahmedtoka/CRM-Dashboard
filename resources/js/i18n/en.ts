@@ -2853,6 +2853,7 @@ const en: Messages = {
     },
     notifications: {
         ads_launch: {
+            approve_failed: 'The approval of "{title}" did not finish; the launch waits for your approval again',
             submitted: 'Launch "{title}" waits for your review',
             changes_requested: 'Launch "{title}" came back to you: {reason}',
             forwarded: 'Launch "{title}" was sent to the manager',

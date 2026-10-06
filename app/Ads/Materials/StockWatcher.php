@@ -98,6 +98,19 @@ final class StockWatcher
             }
         }
 
+        // The product is gone (deleted or unlinked): a held launch can never come back, so it ends (counted as released).
+        $gone = AdLaunch::query()->where('state', LaunchState::OnHold->value)->where(fn ($q) => $q->whereNull('ad_material_id')
+            ->orWhereIn('ad_material_id', AdMaterial::query()->select('ad_materials.id')->when($productIds !== null, fn ($m) => $m->whereIn('product_id', $productIds))
+                ->whereRaw("$stock = 'none'")));
+        foreach ($gone->get() as $l) {
+            try {
+                $this->launches->expire($l, 'product_gone');
+                $released++;
+            } catch (WriteDenied) {
+                // moved meanwhile
+            }
+        }
+
         return ['held' => $held, 'released' => $released];
     }
 

@@ -15,6 +15,7 @@ class LaunchSweepCommand extends Command
     {
         $r = $launches->sweep();
         $this->info("Warned {$r['warned']}, expired {$r['expired']}, reassigned {$r['reassigned']}.");
+        $this->info("Unstuck {$r['unstuck']}.");
 
         return self::SUCCESS;
     }

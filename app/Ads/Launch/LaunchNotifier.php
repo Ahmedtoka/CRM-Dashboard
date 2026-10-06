@@ -73,6 +73,12 @@ final class LaunchNotifier
         $this->send([$l->preparer, $this->buyerUser($l), ...$this->managers()], 'expiring', $l, ['expires_at' => $l->expires_at?->toIso8601String()]);
     }
 
+    /** A launching launch handed back (approve never finished): the approver approves again. */
+    public function approveFailed(AdLaunch $l, ?User $approver): void
+    {
+        $this->send([$approver], 'approve_failed', $l);
+    }
+
     public function expired(AdLaunch $l): void
     {
         $this->send([$l->preparer, $this->buyerUser($l)], 'expired', $l);

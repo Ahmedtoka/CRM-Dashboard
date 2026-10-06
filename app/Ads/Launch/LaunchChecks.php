@@ -39,6 +39,9 @@ final class LaunchChecks
     /** 9:16 Reels / Stories, 4:5 and 1:1 Feed. */
     private const RATIOS = [0.5625, 0.8, 1.0];
 
+    /** False on list pages and the bulk plan: the landing answer comes from the probe cache only. */
+    private bool $liveProbe = true;
+
     public function __construct(
         private readonly PublishService $publish,
         private readonly LandingProbe $probe,
@@ -51,8 +54,9 @@ final class LaunchChecks
      * @param  'submit'|'forward'|'approve'  $phase
      * @return list<CheckResult>
      */
-    public function run(AdLaunch $l, string $phase, ?User $actor = null): array
+    public function run(AdLaunch $l, string $phase, ?User $actor = null, bool $liveProbe = true): array
     {
+        $this->liveProbe = $liveProbe;
         $l->loadMissing(['material.product.variants', 'material.files', 'account.connection', 'adSet.campaign']);
         $out = [];
         if ($phase !== 'approve') {
@@ -417,7 +421,10 @@ final class LaunchChecks
 
     private function landingHttp(AdLaunch $l): CheckResult
     {
-        $status = $l->link ? $this->probe->status((string) $l->link) : null;
+        if ($l->link && ! $this->liveProbe && ! $this->probe->known((string) $l->link)) {
+            return CheckResult::pass('landing_http', [], ['unchecked' => true]); // checked live at approve
+        }
+        $status = $l->link ? $this->probe->status((string) $l->link, $this->liveProbe) : null;
 
         return $status === 200 ? CheckResult::pass('landing_http') : CheckResult::warn('landing_http', ['status' => $status ?? '-']);
     }

@@ -454,7 +454,12 @@ final class LaunchService
     public function sweep(): array
     {
         $now = now();
-        $out = ['warned' => 0, 'expired' => 0, 'reassigned' => 0];
+        $out = ['warned' => 0, 'expired' => 0, 'reassigned' => 0, 'unstuck' => 0];
+        foreach (AdLaunch::query()->where('state', LaunchState::Launching->value)->get() as $l) {
+            if ($this->unstick($l)) {
+                $out['unstuck']++;
+            }
+        }
         $waiting = fn () => AdLaunch::query()->whereNotNull('expires_at')->where(fn ($q) => $q->where('state', LaunchState::AwaitingApproval->value)
             ->orWhere(fn ($h) => $h->where('state', LaunchState::OnHold->value)->where('hold_from_state', LaunchState::AwaitingApproval->value)));
 
@@ -472,12 +477,12 @@ final class LaunchService
                 $out['warned']++;
             }
         }
-        foreach (AdLaunch::query()->with('account')->where('state', LaunchState::BuyerReview->value)->get() as $l) {
+        foreach (AdLaunch::query()->with('account')->whereIn('state', [LaunchState::BuyerReview->value, LaunchState::CreateFailed->value])->get() as $l) {
             $buyer = $l->account !== null ? AccountBuyer::today($l->account) : null;
             if ($buyer === null || $buyer->id === $l->reviewer_buyer_id) {
                 continue;
             }
-            if (AdLaunch::query()->whereKey($l->id)->where('state', LaunchState::BuyerReview->value)->update(['reviewer_buyer_id' => $buyer->id]) === 1) {
+            if (AdLaunch::query()->whereKey($l->id)->where('state', $l->state->value)->update(['reviewer_buyer_id' => $buyer->id]) === 1) {
                 AdsAudit::record('launch.reassigned', $l, ['reviewer_buyer_id' => $l->reviewer_buyer_id], ['reviewer_buyer_id' => $buyer->id]);
                 $this->notify->submitted($l->refresh());
                 $out['reassigned']++;
@@ -488,13 +493,48 @@ final class LaunchService
     }
 
     /** T12: the deadline passed; the paused ads are archived (O5). */
-    public function expire(AdLaunch $l): AdLaunch
+    public function expire(AdLaunch $l, ?string $code = null): AdLaunch
     {
-        $l = $this->transition($l, [LaunchState::AwaitingApproval, LaunchState::OnHold], LaunchState::Expired, ['hold_from_state' => null]);
+        $l = $this->transition($l, [LaunchState::AwaitingApproval, LaunchState::OnHold], LaunchState::Expired,
+            ['hold_from_state' => null] + ($code !== null ? ['decision_code' => $code, 'decided_at' => now()] : []), null, null, $code !== null ? ['code' => $code] : []);
         $this->archive($l);
         $this->notify->expired($l);
 
         return $l;
+    }
+
+    /** Minutes a launching launch may wait for its Runs before it is handed back to the approver. */
+    public const STUCK_MINUTES = 15;
+
+    /**
+     * A launching launch whose approve request died after the CAS, or whose Runs never went through: no open
+     * launch_approval write action, no ACTIVE ad, approved more than 15 minutes ago -> back to awaiting_approval
+     * (approved_at cleared, G1 blocks again) and the approver is told.
+     */
+    public function unstick(AdLaunch $l): bool
+    {
+        $l->refresh();
+        if ($l->state !== LaunchState::Launching || ($l->approved_at ?? $l->updated_at)?->gt(now()->subMinutes(self::STUCK_MINUTES))) {
+            return false;
+        }
+        $open = AdWriteAction::query()->where('source', ApproveLaunch::SOURCE)->where('source_ref', $l->public_id)
+            ->whereIn('state', [AdWriteAction::PROPOSED, ...AdWriteAction::OPEN])->exists();
+        $ext = AdPublication::query()->where('ad_launch_id', $l->id)->whereNull('archived_at')->whereNotNull('external_ad_id')->pluck('external_ad_id')->all();
+        $running = $ext !== [] && Ad::query()->where('ad_account_id', $l->ad_account_id)->whereIn('external_id', $ext)->whereRaw("UPPER(status) = 'ACTIVE'")->exists();
+        if ($open || $running) {
+            return false;
+        }
+        $approver = $l->decider;
+        try {
+            $l = $this->transition($l, [LaunchState::Launching], LaunchState::AwaitingApproval, [
+                'approved_at' => null, 'decided_by_id' => null, 'decided_at' => null, 'self_approved' => false, 'last_error' => 'approve_incomplete',
+            ], null, null, ['by' => 'sweep', 'reason' => 'stuck_launching'], 'launch.approve_failed');
+        } catch (WriteDenied) {
+            return false;
+        }
+        $this->notify->approveFailed($l, $approver);
+
+        return true;
     }
 
     /** E13: a closed slot sends its launches under review back to content (system reason slot_closed). */

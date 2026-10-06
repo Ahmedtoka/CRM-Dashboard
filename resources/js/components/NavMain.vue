@@ -82,11 +82,6 @@ const sectionsOf = (children: NavItem[]) => {
                                                 <SidebarMenuSubButton as-child :is-active="isActive(child.href, child.exact)">
                                                     <Link :href="child.href" :aria-current="isActive(child.href, child.exact) ? 'page' : undefined">
                                                         <span>{{ child.title }}</span>
-                                                    <span
-                                                        v-if="child.badge"
-                                                        class="ms-auto min-w-5 rounded-full bg-primary px-1.5 text-center text-2xs leading-5 font-semibold text-primary-foreground tabular-nums"
-                                                        >{{ child.badge }}</span
-                                                    >
                                                         <span
                                                             v-if="child.badge"
                                                             class="ms-auto min-w-5 rounded-full bg-primary px-1.5 text-center text-2xs leading-5 font-semibold text-primary-foreground tabular-nums"
@@ -102,6 +97,11 @@ const sectionsOf = (children: NavItem[]) => {
                                             <SidebarMenuSubButton as-child :is-active="isActive(child.href, child.exact)">
                                                 <Link :href="child.href" :aria-current="isActive(child.href, child.exact) ? 'page' : undefined">
                                                     <span>{{ child.title }}</span>
+                                                    <span
+                                                        v-if="child.badge"
+                                                        class="ms-auto min-w-5 rounded-full bg-primary px-1.5 text-center text-2xs leading-5 font-semibold text-primary-foreground tabular-nums"
+                                                        >{{ child.badge }}</span
+                                                    >
                                                 </Link>
                                             </SidebarMenuSubButton>
                                         </SidebarMenuSubItem>

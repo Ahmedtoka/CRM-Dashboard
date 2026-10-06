@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web\Ads;
 
 use App\Ads\Access\AdsScope;
 use App\Ads\Control\Write\WriteDenied;
+use App\Ads\Launch\LaunchPolicy;
 use App\Ads\Launch\LaunchService;
 use App\Ads\Launch\LaunchState;
 use App\Ads\Launch\MaterialStatus;
@@ -107,8 +108,13 @@ class MaterialController extends Controller
         if ($pending) {
             return back()->withErrors(['material' => __('ads.errors.launches_pending')]);
         }
+        // All or nothing: every running launch must be the user's to retire before the first one is touched.
+        $running = $material->launches()->whereIn('state', ['live', 'stopped'])->get();
+        if ($running->contains(fn ($l) => ! LaunchPolicy::isReviewer($user, $l))) {
+            return back()->withErrors(['material' => WriteDenied::messageFor('launch_forbidden')]);
+        }
         try {
-            foreach ($material->launches()->whereIn('state', ['live', 'stopped'])->get() as $l) {
+            foreach ($running as $l) {
                 $launches->retire($user, $l, $data['reason'] ?? null, $key);
             }
             // The material retire is an operator decision: open drafts end whoever holds them (withdrawn; a held one expires).
@@ -116,8 +122,8 @@ class MaterialController extends Controller
                 $from = $l->state;
                 $to = $from === LaunchState::OnHold ? LaunchState::Expired : LaunchState::Withdrawn;
                 $l = $launches->transition($l, [$from], $to, ['decided_by_id' => $user->id, 'decided_at' => now(), 'hold_from_state' => null], null, $user, ['by' => 'material_retired']);
-                if ($from === LaunchState::CreateFailed) {
-                    $launches->archive($l);
+                if (in_array($from, [LaunchState::CreateFailed, LaunchState::OnHold], true)) {
+                    $launches->archive($l); // a held launch may already have its paused ads (O5)
                 }
             }
         } catch (WriteDenied $e) {
