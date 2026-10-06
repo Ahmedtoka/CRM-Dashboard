@@ -196,6 +196,7 @@ const heading = 'mb-2 text-sm font-bold';
                         :order="order"
                         show-edit
                         @edit-order="emit('editOrder', $event)"
+                        insert-mode
                         @copy-status="emit('copyStatus', $event)"
                     />
                 </div>

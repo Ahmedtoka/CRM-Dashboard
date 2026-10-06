@@ -20,7 +20,7 @@ import { useShortcuts } from '@/composables/useShortcuts';
 import { useToast } from '@/composables/useToast';
 import { syncInertiaUrl } from '@/composables/useUrlFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { stripBidiControls } from '@/lib/orderStatus';
+import { orderStatusText, stripBidiControls } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type {
     Attachment,
@@ -429,6 +429,19 @@ function onCopyStatus(text: string): void {
     const clean = stripBidiControls(text);
     draft.value = draft.value.trim() ? `${draft.value}\n${clean}` : clean;
     showFlash(t('order.copy_status_done'));
+    // S3 (C 5 #3): an insert, never a send; she reads it and sends it herself.
+    threadView.value?.composer?.focus();
+}
+
+/** shift+o: the latest order's status into the reply. */
+function insertLatestStatus(): void {
+    const latest = detail.value?.customer?.orders?.[0];
+    if (!latest) {
+        toast.push(t('order.no_orders_to_insert'), 'info');
+
+        return;
+    }
+    onCopyStatus(orderStatusText(latest, t));
 }
 
 function onCaseUpdated(updated: SupportCase): void {
@@ -514,6 +527,7 @@ useShortcuts([
     { id: 'inbox.bot', keys: ['b'], labelKey: 'shortcuts.return_to_bot', group: 'inbox', handler: () => hasThread() && void runAction('return-to-bot') },
     { id: 'inbox.tags', keys: ['t'], labelKey: 'shortcuts.tags', group: 'inbox', handler: () => hasThread() && threadView.value?.header?.openTags() },
     { id: 'inbox.order', keys: ['o'], labelKey: 'shortcuts.order', group: 'inbox', handler: () => hasThread() && openOrderDrawer() },
+    { id: 'inbox.insert_status', keys: ['shift+o'], labelKey: 'shortcuts.insert_status', group: 'inbox', handler: () => hasThread() && insertLatestStatus() },
     { id: 'inbox.search', keys: ['/'], labelKey: 'shortcuts.focus_search', group: 'inbox', handler: () => listView.value?.focusSearch() },
     { id: 'inbox.filters', keys: ['f'], labelKey: 'shortcuts.open_filters', group: 'inbox', handler: () => listView.value?.openFilters() },
     { id: 'inbox.details', keys: ['i'], labelKey: 'shortcuts.toggle_details', group: 'inbox', handler: () => toggleDetails() },
