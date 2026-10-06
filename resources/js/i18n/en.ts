@@ -1037,6 +1037,18 @@ const en: Messages = {
         by_hour: 'Inbound messages by hour (Cairo)',
         leaderboard: 'Leaderboard',
         leaderboard_hint: 'Click a row to open the member report',
+        ratings: {
+            title: 'Ratings',
+            summary: 'Average {avg} from {n} ratings',
+            low: '{n} rated 1-2',
+            empty: 'No ratings in this period',
+            by_agent_day: 'Per agent per day',
+            list: 'Answers',
+            low_only: '1-2 only',
+            all: 'All',
+            open: 'Open chat',
+            columns: { date: 'Day', agent: 'Agent', count: 'Count', avg: 'Average', low: '1-2' },
+        },
         lb: {
             moderator: 'Member',
             messages: 'Messages',

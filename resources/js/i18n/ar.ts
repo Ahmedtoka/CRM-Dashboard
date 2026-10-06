@@ -1014,6 +1014,18 @@ const ar = {
         by_hour: 'الرسائل الواردة حسب الساعة (القاهرة)',
         leaderboard: 'ترتيب الفريق',
         leaderboard_hint: 'اضغط على صف لعرض تقرير الموظف',
+        ratings: {
+            title: 'التقييمات',
+            summary: 'متوسط {avg} من {n} تقييم',
+            low: '{n} تقييم ١-٢',
+            empty: 'مفيش تقييمات في الفترة دي',
+            by_agent_day: 'لكل موظفة لكل يوم',
+            list: 'التقييمات',
+            low_only: '١-٢ بس',
+            all: 'الكل',
+            open: 'افتح المحادثة',
+            columns: { date: 'اليوم', agent: 'الموظفة', count: 'العدد', avg: 'المتوسط', low: '١-٢' },
+        },
         lb: {
             moderator: 'الموظف',
             messages: 'الرسائل',
