@@ -190,4 +190,28 @@ describe('AlertsSection', () => {
         expect(w.text()).toContain('مفيش حاجة مأجّلة');
         expect(w.find('[data-test="shadow-ribbon"]').exists()).toBe(false);
     });
+
+    it('final review C8: an Escape that closes the ad drawer keeps review mode on', async () => {
+        const w = mount(AlertsSection, { props: { alerts: [card(1), card(2)], meta }, global: { stubs }, attachTo: document.body });
+        await w.get('[data-test="review"]').trigger('click');
+        // The drawer: an open dialog that closes itself on the document (as radix does), before the window hears the key.
+        const sheet = document.createElement('div');
+        sheet.setAttribute('role', 'dialog');
+        sheet.setAttribute('data-state', 'open');
+        document.body.appendChild(sheet);
+        const closeSheet = (e: KeyboardEvent) => e.key === 'Escape' && sheet.remove();
+        document.addEventListener('keydown', closeSheet);
+
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await flushPromises();
+        expect(sheet.isConnected).toBe(false);
+        expect(w.find('[data-test="review-hint"]').exists()).toBe(true);
+
+        // A second Escape, with no dialog left, exits the review.
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await flushPromises();
+        expect(w.find('[data-test="review-hint"]').exists()).toBe(false);
+        document.removeEventListener('keydown', closeSheet);
+        w.unmount();
+    });
 });

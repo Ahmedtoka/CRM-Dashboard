@@ -1,5 +1,5 @@
 import { translate } from '@/i18n';
-import { adsRows, chatsRows, formatRatio, formatShare, oldestStamp, ordersRows, todayNavItem, urgentText, whyRows } from '@/lib/today';
+import { adsRows, chatsRows, formatAge, formatRatio, formatShare, logoHref, oldestStamp, ordersRows, todayNavItem, urgentText, whyRows } from '@/lib/today';
 import type { AdsCard, ChatsCard, OrdersCard, WhyCard } from '@/types/today';
 import { describe, expect, it } from 'vitest';
 
@@ -118,5 +118,25 @@ describe('lib/today', () => {
         expect(oldestStamp(['2026-10-06T09:01:00+00:00', '2026-10-06T09:00:30+00:00'])).toBe('2026-10-06T09:00:30+00:00');
         expect(oldestStamp(['2026-10-06T09:01:00+00:00', undefined])).toBe('2026-10-06T09:01:00+00:00');
         expect(oldestStamp([null, undefined])).toBeNull();
+    });
+});
+
+describe('final review C4/C5', () => {
+    const ar = (k: string, p?: Record<string, string | number>) => translate('ar', k, p);
+
+    it('C5: the ads sync age is relative words, not h:mm', () => {
+        expect(urgentText({ key: 'ads_sync', count: 2, tone: 'warn', href: '/ads/sync', age_minutes: 180 }, ar, 'ar').detail).toBe('آخر مزامنة من ٣ ساعات');
+        expect(urgentText({ key: 'ads_sync', count: 2, tone: 'warn', href: '/ads/sync', age_minutes: 45 }, ar, 'ar').detail).toBe('آخر مزامنة من ٤٥ دقيقة');
+        expect(formatAge(120, ar, 'ar')).toBe('ساعتين');
+        expect(formatAge(3 * 1440, ar, 'ar')).toBe('٣ أيام');
+        expect(urgentText({ key: 'ads_sync', count: 1, tone: 'warn', href: '/ads/sync', age_minutes: 60 }, t, 'en').detail).toBe('Last sync 1 hour ago');
+    });
+
+    it('C4: the logo leads admins and supervisors to /today, everyone else to their home', () => {
+        expect(logoHref('admin')).toBe('/today');
+        expect(logoHref('supervisor')).toBe('/today');
+        expect(logoHref('moderator')).toBe('/');
+        expect(logoHref('media_buyer')).toBe('/');
+        expect(logoHref(undefined)).toBe('/');
     });
 });

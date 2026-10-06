@@ -15,7 +15,7 @@ import { groupBySeverity, type DismissReason, type SnoozeOption } from '@/lib/ad
 import type { AlertAdRef, AlertCardData, AlertsMeta } from '@/types/ads';
 import { Link, router } from '@inertiajs/vue3';
 import { CheckCircle2 } from 'lucide-vue-next';
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const props = withDefaults(
     defineProps<{ alerts: AlertCardData[]; meta: AlertsMeta; mode?: 'open' | 'later' | 'closed'; dataAt?: string | null; currency?: string }>(),
@@ -128,12 +128,31 @@ function step(by: 1 | -1): void {
 
 /** J/K/Esc only while reviewing with no dialog open; a held key (auto-repeat) does nothing. */
 const active = (e: KeyboardEvent) => reviewing.value && !dialogOpen.value && !e.repeat;
+
+/**
+ * Final review C8: an Escape that closes the ad drawer (or any open dialog) is that dialog's, not the review's. The dialog
+ * closes itself on the document before the registry hears the key on the window, so the open state is read at the very
+ * start of the event (window, capture phase) and remembered for that event only.
+ */
+const escapeOverDialog = new WeakSet<Event>();
+function noteEscape(e: KeyboardEvent): void {
+    if (e.key === 'Escape' && document.querySelector('[role="dialog"][data-state="open"]')) escapeOverDialog.add(e);
+}
+onMounted(() => window.addEventListener('keydown', noteEscape, true));
+onBeforeUnmount(() => window.removeEventListener('keydown', noteEscape, true));
 // Through the app registry: matched on the physical key (works on the Arabic layout), never with Ctrl/Cmd/Alt held (the
 // Ctrl+K palette is untouched), listed in the shortcuts dialog.
 useShortcuts([
     { id: 'decisions.next', keys: ['j'], labelKey: 'shortcuts.review_next', group: 'decisions', when: active, handler: () => step(1) },
     { id: 'decisions.prev', keys: ['k'], labelKey: 'shortcuts.review_prev', group: 'decisions', when: active, handler: () => step(-1) },
-    { id: 'decisions.exit', keys: ['escape'], labelKey: 'shortcuts.review_exit', group: 'decisions', when: active, handler: stopReview },
+    {
+        id: 'decisions.exit',
+        keys: ['escape'],
+        labelKey: 'shortcuts.review_exit',
+        group: 'decisions',
+        when: (e) => active(e) && !escapeOverDialog.has(e),
+        handler: stopReview,
+    },
 ]);
 
 // The list shrinks after an action or a reload: keep the focus on a card that exists.

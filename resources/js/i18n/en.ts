@@ -3530,7 +3530,7 @@ const en: Messages = {
             unverified: 'History not verified yet: {names}',
             reasons: {
                 reconnect: 'A connection needs a new token, so its numbers are not updating',
-                stale: 'The numbers are behind Ads Manager (the last sync is over 3 hours old)',
+                stale: 'The numbers are behind Ads Manager (the last sync is over {hours} hours old)',
                 read_only: 'The connection is read-only: Run and Stop are off',
                 incomplete: 'History is incomplete for part of this range',
                 timezone: 'Days for these accounts follow the account timezone, not Cairo time',
@@ -4062,6 +4062,7 @@ const en: Messages = {
         },
         materials: {
             launches: 'Launches',
+            review_queue: 'Waiting for your review ({n})',
             title: 'Ad materials library',
             description: 'Everything the content team uploaded: status, stock and linked ads.',
             new: 'New material',
@@ -4340,6 +4341,11 @@ const en: Messages = {
             cases_overdue: '{n} cases past SLA',
             ads_sync: 'Ads sync behind ({n} accounts)',
             ads_sync_age: 'Last sync {time} ago',
+            age: {
+                minute: { one: '1 minute', two: '{n} minutes', few: '{n} minutes', many: '{n} minutes', other: '{n} minutes' },
+                hour: { one: '1 hour', two: '{n} hours', few: '{n} hours', many: '{n} hours', other: '{n} hours' },
+                day: { one: '1 day', two: '{n} days', few: '{n} days', many: '{n} days', other: '{n} days' },
+            },
             launches: '{n} launches await your approval',
         },
         cards: { chats: 'Chats', orders: 'Orders', orders_hint: 'Cancelled and failed left out (awaiting payment included)', ads: 'Ads', why: 'Why they did not buy', ads_window_today: 'Yesterday complete + today so far', ads_window_yesterday: 'Yesterday complete', why_hint: 'From chat outcomes', ads_none: 'No ad accounts in your scope', ads_mixed: 'Mixed currencies: money figures hidden', why_empty: 'No chat outcomes recorded that day' },

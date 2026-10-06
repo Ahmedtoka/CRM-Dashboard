@@ -1,5 +1,5 @@
 import { formatNumber, type Locale } from '@/i18n';
-import { formatAvgSeconds, formatCount, formatMinutes, formatMoney, formatSeconds } from '@/lib/format';
+import { formatAvgSeconds, formatCount, formatMoney, formatSeconds } from '@/lib/format';
 import type { NavItem } from '@/types';
 import type { Role } from '@/types/crm';
 import type { AdsCard, ChatsCard, OrdersCard, UrgentItem, WhyCard } from '@/types/today';
@@ -34,12 +34,24 @@ export function formatTodayDate(ymd: string, locale: Locale): string {
     }).format(new Date(`${ymd}T12:00:00Z`));
 }
 
+/**
+ * A relative age in words (final review C5): «٤٥ دقيقة» / «٣ ساعات» / «يومين», "45 minutes" / "3 hours". Minutes under
+ * an hour, whole hours under two days, then whole days; Arabic plural forms from Intl.PluralRules.
+ */
+export function formatAge(minutes: number, t: Translate, locale: Locale): string {
+    const m = Math.max(1, Math.round(minutes));
+    const [unit, value] = m < 60 ? ['minute', m] : m < 48 * 60 ? ['hour', Math.floor(m / 60)] : ['day', Math.floor(m / 1440)];
+    const form = new Intl.PluralRules(locale === 'ar' ? 'ar' : 'en').select(value);
+
+    return t(`today.urgent.age.${unit}.${form}`, { n: n(value, locale) });
+}
+
 export function urgentText(item: UrgentItem, t: Translate, locale: Locale): { label: string; detail: string | null } {
     const label = t(`today.urgent.${item.key}`, { n: n(item.count, locale) });
     if (item.key === 'lounge' && item.longest_wait_seconds != null)
         return { label, detail: t('today.urgent.lounge_longest', { time: formatSeconds(item.longest_wait_seconds, locale) }) };
     if (item.key === 'ads_sync' && item.age_minutes != null)
-        return { label, detail: t('today.urgent.ads_sync_age', { time: formatMinutes(item.age_minutes, locale) }) };
+        return { label, detail: t('today.urgent.ads_sync_age', { time: formatAge(item.age_minutes, t, locale) }) };
 
     return { label, detail: null };
 }
@@ -178,6 +190,11 @@ export function whyRows(w: WhyCard, t: Translate, locale: Locale): CardRow[] {
     }
 
     return rows;
+}
+
+/** The sidebar logo (final review C4): «النهارده» for admins and supervisors, else `/` (HomeRoute picks the home). */
+export function logoHref(role: Role | undefined): string {
+    return role === 'admin' || role === 'supervisor' ? '/today' : '/';
 }
 
 /** «النهارده» first in the menu, for admins and supervisors only (spec §6). */

@@ -34,7 +34,11 @@ const SWEPT: string[] = [
     'Today',
 ];
 
-/** Raw tables allowed only on pages S1/S2 replace; they must sit in the shared sticky scroll box. */
+/**
+ * Ads/Materials/Index keeps its raw table and its own search: permanent debt, not a temporary exemption (final review
+ * C9). S2 kept the page (it was never replaced), so nothing retires this entry; moving it onto the kit DataTable and
+ * the shared filter bar is a separate task. Its raw table must still sit in the shared sticky scroll box.
+ */
 const RAW_TABLE_OK = new Set(['Ads/Materials/Index']);
 const OWN_SEARCH_OK = new Set(['Ads/Materials/Index']);
 /** Raw tables that are layout inside a popover (not a list): allowed anywhere. */

@@ -183,3 +183,13 @@ it('flags an account never judged (complete_from null) as not verified yet, but 
         ->where('data_health.reasons.0.reason', 'incomplete')->where('data_health.reasons.0.accounts', [])
         ->where('data_health.reasons.0.unverified', ['Fresh Synced']));
 });
+
+it('final review C6: the stale reason carries the configured hours for the banner text', function () {
+    config(['crm.ads.health.stale_after_hours' => 2]);
+    $admin = dbAdmin();
+    dbAccount('Stale Shop', 3 * 60);
+
+    Cache::flush();
+    $this->actingAs($admin)->get('/ads/numbers')->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
+        ->where('data_health.reasons.0.reason', 'stale')->where('data_health.reasons.0.hours', 2));
+});

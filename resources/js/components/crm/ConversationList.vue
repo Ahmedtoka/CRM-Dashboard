@@ -294,7 +294,8 @@ defineExpose({
                             ref="tabList"
                             role="tablist"
                             :aria-label="t('inbox.status_label')"
-                            class="scrollbar-none -ms-3 flex min-w-0 flex-1 gap-0.5 overflow-x-auto ps-3"
+                            class="scrollbar-none fade-inline-end -ms-3 flex min-w-0 flex-1 gap-0.5 overflow-x-auto pe-6 ps-3"
+                            data-chip-row
                             @keydown="onTabKeydown"
                         >
                             <button

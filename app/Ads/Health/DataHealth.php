@@ -193,6 +193,9 @@ class DataHealth
                 'accounts' => array_map(fn ($id) => (string) ($reason === 'timezone' ? $labels[$id.'|timezone'] : $names[$id]), array_slice($ids, 0, 3)),
                 'more' => max(0, count($ids) - 3),
             ];
+            if ($reason === 'stale') {
+                $entry['hours'] = (int) config('crm.ads.health.stale_after_hours', 3); // the banner says "over {hours} hours"
+            }
             if ($reason === 'incomplete') {
                 // `accounts` = a known later start; `unverified` = never judged (complete_from null): no account in both lists
                 $entry['unverified'] = array_map(fn ($id) => (string) $names[$id], array_slice($incomplete['unverified'], 0, 3));
