@@ -2,8 +2,8 @@
 
 namespace App\Inbox\Outcomes;
 
+use App\Ads\Reports\AdsQuery;
 use App\Enums\MessageDirection;
-use App\Enums\OrderStatus;
 use App\Enums\SenderType;
 use App\Models\Conversation;
 use App\Models\ConversationOutcome;
@@ -201,7 +201,8 @@ final class OutcomeRecorder
             'set_by_id' => $source === ConversationOutcome::SOURCE_AGENT ? $by?->id : null,
             'set_at' => $outcome === Outcome::Ordered && $row->exists ? $row->set_at : now(),
             'queue_entry_id' => $entry?->id ?? $row->queue_entry_id,
-            'order_id' => $row->order_id ?? ($outcome === Outcome::Ordered ? $this->episodeOrder($c, $ep['since'])?->id : null),
+            // Only an `ordered` episode holds an order (an unpaid order placed in it no longer counts once she picks another outcome).
+            'order_id' => $outcome === Outcome::Ordered ? ($row->order_id ?? $this->episodeOrder($c, $ep['since'])?->id) : null,
             'last_message_id' => (int) Message::query()->where('conversation_id', $c->id)->max('id') ?: null,
             'ended_at' => now(),
             'ended_by' => $how->value,
@@ -257,9 +258,18 @@ final class OutcomeRecorder
         return ConversationOutcome::query()->where('conversation_id', $c->id)->whereNotNull('ended_at')->latest('ended_at')->latest('id')->first();
     }
 
+    /**
+     * The latest real order (AdsQuery::NOT_REAL_STATUSES excluded, as the chat funnel counts them)
+     * linked to the conversation in this episode, never one an earlier ended episode already holds
+     * (an order placed between a close and her next message is credited once).
+     */
     private function episodeOrder(Conversation $c, ?CarbonInterface $since): ?Order
     {
-        return Order::query()->where('conversation_id', $c->id)->where('status', '!=', OrderStatus::Cancelled->value)
+        $held = ConversationOutcome::query()->where('conversation_id', $c->id)
+            ->whereNotNull('ended_at')->whereNotNull('order_id')->select('order_id');
+
+        return Order::query()->where('conversation_id', $c->id)->whereNotIn('status', AdsQuery::NOT_REAL_STATUSES)
+            ->whereNotIn('id', $held)
             ->when($since !== null, fn ($q) => $q->where('created_at', '>', $since))
             ->latest('id')->first(['id', 'created_at']);
     }
