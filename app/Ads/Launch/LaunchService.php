@@ -110,7 +110,7 @@ final class LaunchService
             $attrs['captions'] = self::cleanCaptions($data['captions']);
         }
         if ($inReview && array_key_exists('identity', $data)) {
-            $attrs['identity'] = $data['identity'];
+            $attrs['identity'] = $data['identity'] === null ? null : $this->accountIdentity($l, (array) $data['identity']);
         }
         $before = ['ad_set_id' => $l->ad_set_id, 'file_ids' => $l->file_ids, 'captions' => $l->captions];
         $after = array_merge($before, array_intersect_key($attrs, $before));
@@ -329,6 +329,38 @@ final class LaunchService
         }
 
         return ['page_id' => $first->pageId, 'page_name' => $first->pageName, 'instagram_id' => $first->instagramId];
+    }
+
+    /**
+     * The buyer's chosen page must be one of the account's own pages (final review A-m1): the saved account identity,
+     * or a page the platform lists for the account. Anything else (or an unreadable list) is a 422 on identity.
+     *
+     * @param  array<string, mixed>  $chosen
+     * @return array{page_id: string, page_name: string, instagram_id: ?string}
+     *
+     * @throws ValidationException
+     */
+    private function accountIdentity(AdLaunch $l, array $chosen): array
+    {
+        $pageId = (string) ($chosen['page_id'] ?? '');
+        $saved = $this->adsSettings->get(PublishService::identityKey($l->account));
+        if (is_array($saved) && $pageId !== '' && (string) ($saved['page_id'] ?? '') === $pageId) {
+            return ['page_id' => $pageId, 'page_name' => (string) ($saved['page_name'] ?? ''), 'instagram_id' => ($saved['instagram_id'] ?? null) ?: null];
+        }
+        try {
+            $writer = $this->drivers->writer(AdPlatform::from($l->account->platform));
+            WriteGuard::check($l->account, $writer);
+            $pages = $writer->identities($l->account);
+        } catch (WriteRefused|AdsApiException) {
+            $pages = [];
+        }
+        foreach ($pages as $p) {
+            if ($pageId !== '' && (string) $p->pageId === $pageId) {
+                return ['page_id' => $pageId, 'page_name' => (string) $p->pageName, 'instagram_id' => $p->instagramId ?: null];
+            }
+        }
+
+        throw ValidationException::withMessages(['identity.page_id' => __('ads.launch.errors.page_not_on_account')]);
     }
 
     /** T9: the manager returns the card to the buyer with a reason; the paused ads are archived (O5) and the deadline cleared. */

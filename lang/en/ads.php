@@ -219,6 +219,7 @@ return [
             'material_not_ready' => 'The material needs a product and at least one file',
             'slot_closed' => 'This ad set is not open for new materials',
             'slot_not_yours' => 'This ad set is on an account you do not hold today',
+            'page_not_on_account' => 'This page is not one of the account pages',
             'reason_required' => 'Pick a reason; for "other" write it',
         ],
         'reason' => [

@@ -84,3 +84,21 @@ it('review r1: refuses a Run of an archived round-1 ad after the launch was retu
 
     agPropose($this, $w['admin'], $w['account'], $old, 'active')->assertForbidden()->assertJsonPath('code', 'approval_required');
 });
+
+it('final review A1: refuses a Run of a retired launch ad through write-actions and the legacy endpoint; Stop still allowed', function () {
+    $w = LaunchWorld::make();
+    $l = LaunchWorld::launch($w, LaunchState::Live);
+    $this->actingAs($w['manager'])->withSession(LaunchWorld::confirmed());
+    app(\App\Ads\Launch\LaunchService::class)->retire($w['manager'], $l->fresh(), 'done', 'k-retire');
+    expect($l->fresh()->state)->toBe(LaunchState::Retired)->and($l->fresh()->approved_at)->not->toBeNull();
+    $ext = $l->publications()->value('external_ad_id');
+    Ad::query()->where('external_id', $ext)->update(['status' => 'PAUSED', 'effective_status' => 'PAUSED']);
+
+    agPropose($this, $w['buyerUser'], $w['account'], $ext, 'active')->assertForbidden()
+        ->assertJsonPath('code', 'approval_required')->assertJsonPath('details.launch_state', 'retired');
+    $this->actingAs($w['buyerUser'])->withSession(LaunchWorld::confirmed())->postJson('/ads/actions/status', [
+        'account_id' => $w['account']->id, 'level' => 'ad', 'external_id' => $ext, 'status' => 'active',
+    ])->assertForbidden()->assertJsonPath('code', 'approval_required');
+
+    agPropose($this, $w['buyerUser'], $w['account'], $ext, 'paused')->assertSuccessful();
+});

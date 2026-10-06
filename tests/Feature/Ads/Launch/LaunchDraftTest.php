@@ -165,3 +165,13 @@ it('names a refused spend or link field in words, not its raw key (final fix 10)
         ->and($errors['targeting'][0])->toContain('الاستهداف')
         ->and(implode(' ', array_merge(...array_values($errors))))->not->toContain('daily budget');
 });
+
+it('final review A-m1: refuses a review identity whose page is not one of the account pages (422)', function () {
+    $w = LaunchWorld::make();
+    $l = LaunchWorld::launch($w, LaunchState::BuyerReview, ['original' => ['ad_set_id' => null, 'file_ids' => [], 'captions' => [LaunchWorld::caption()]]]);
+
+    $this->actingAs($w['buyerUser'])->putJson("/ads/launches/{$l->public_id}", [
+        'revision' => 1, 'identity' => ['page_id' => 'someone_elses_page', 'page_name' => 'Other'],
+    ])->assertUnprocessable()->assertJsonValidationErrors(['identity.page_id']);
+    expect($l->fresh()->identity)->toBeNull()->and($l->fresh()->revision)->toBe(1);
+});
