@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import EmptyState from '@/components/crm/EmptyState.vue';
+import FilterBar from '@/components/crm/FilterBar.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import ToggleSwitch from '@/components/crm/ToggleSwitch.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -18,7 +20,7 @@ import { formatCount } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { BotFlowOption, BotIntentRoute, BotIntentRow, BotScriptOption } from '@/types/admin';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ChevronDown, FileText, LoaderCircle, Pencil, RotateCw, Search } from 'lucide-vue-next';
+import { ChevronDown, FileText, Pencil, RotateCw, SearchX } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
 
 const props = defineProps<{ intents: BotIntentRow[]; scripts: BotScriptOption[]; detailTokens: string[]; flows: BotFlowOption[] }>();
@@ -218,57 +220,51 @@ const priorityDot: Record<(typeof PRIORITIES)[number], string> = { high: 'bg-des
                 </Link>
             </PageHeader>
 
-            <div class="space-y-3 rounded-lg bg-card p-3 shadow-card">
-                <div class="flex flex-wrap items-center gap-2">
-                    <div class="relative w-full max-w-sm">
-                        <Search
-                            class="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                            aria-hidden="true"
-                        />
-                        <input
-                            v-model="query"
-                            type="search"
-                            :placeholder="t('settings.bot_intents.search')"
-                            :aria-label="t('settings.bot_intents.search')"
-                            class="h-9 w-full rounded-full border-0 bg-elevated pe-3 ps-9 text-sm placeholder:text-muted-foreground"
-                        />
-                    </div>
-                    <span class="text-xs tabular-nums text-muted-foreground" aria-live="polite">{{
-                        t('settings.bot_intents.showing', { n: filtered.length })
-                    }}</span>
-                    <button
-                        type="button"
-                        :class="cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'ms-auto h-9 gap-1.5 rounded-full px-3 text-xs')"
-                        :disabled="reloading"
-                        @click="refresh"
-                    >
-                        <LoaderCircle v-if="reloading" class="size-3.5 animate-spin" aria-hidden="true" />
-                        <RotateCw v-else class="size-3.5" aria-hidden="true" />{{ t('settings.bot_intents.refresh') }}
-                    </button>
-                </div>
-
-                <div
-                    class="scrollbar-thin -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5"
-                    role="group"
-                    :aria-label="t('settings.bot_intents.group_filter')"
+            <div class="rounded-lg bg-card p-3 shadow-card">
+                <FilterBar
+                    :search="query"
+                    :search-placeholder="t('settings.bot_intents.search')"
+                    :chips="[]"
+                    :summary="t('settings.bot_intents.showing', { n: filtered.length })"
+                    @update:search="query = $event"
                 >
-                    <button
-                        v-for="chip in [{ group: '', count: rows.length }, ...allGroups]"
-                        :key="chip.group || 'all'"
-                        type="button"
-                        :aria-pressed="groupFilter === chip.group"
-                        class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
-                        :class="
-                            groupFilter === chip.group
-                                ? 'border-primary bg-surface-accent text-primary'
-                                : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
-                        "
-                        @click="groupFilter = chip.group"
-                    >
-                        {{ chip.group ? groupLabel(chip.group) : t('settings.bot_intents.all_groups') }}
-                        <span class="tabular-nums opacity-70">{{ formatCount(chip.count, locale) }}</span>
-                    </button>
-                </div>
+                    <template #inline>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            class="h-9 gap-1.5 rounded-full px-3 text-xs"
+                            :loading="reloading"
+                            @click="refresh"
+                        >
+                            <RotateCw class="size-3.5" aria-hidden="true" />{{ t('settings.bot_intents.refresh') }}
+                        </Button>
+                    </template>
+                    <template #tabs>
+                        <div
+                            class="scrollbar-thin -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5"
+                            role="group"
+                            :aria-label="t('settings.bot_intents.group_filter')"
+                        >
+                            <button
+                                v-for="chip in [{ group: '', count: rows.length }, ...allGroups]"
+                                :key="chip.group || 'all'"
+                                type="button"
+                                :aria-pressed="groupFilter === chip.group"
+                                class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
+                                :class="
+                                    groupFilter === chip.group
+                                        ? 'border-primary bg-surface-accent text-primary'
+                                        : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+                                "
+                                @click="groupFilter = chip.group"
+                            >
+                                {{ chip.group ? groupLabel(chip.group) : t('settings.bot_intents.all_groups') }}
+                                <span class="tabular-nums opacity-70">{{ formatCount(chip.count, locale) }}</span>
+                            </button>
+                        </div>
+                    </template>
+                </FilterBar>
             </div>
 
             <div v-if="reloading" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true">
@@ -281,9 +277,9 @@ const priorityDot: Record<(typeof PRIORITIES)[number], string> = { high: 'bg-des
                 </div>
             </div>
 
-            <p v-else-if="!groups.length" class="rounded-lg bg-card px-3 py-10 text-center text-sm text-muted-foreground shadow-card">
-                {{ t('settings.bot_intents.empty') }}
-            </p>
+            <div v-else-if="!groups.length" class="rounded-lg bg-card shadow-card">
+                <EmptyState :icon="SearchX" :title="t('settings.bot_intents.empty')" />
+            </div>
 
             <section
                 v-for="{ group, rows: groupRows } in reloading ? [] : groups"
@@ -445,21 +441,16 @@ const priorityDot: Record<(typeof PRIORITIES)[number], string> = { high: 'bg-des
                                 >
                                     {{ t('common.cancel') }}
                                 </button>
-                                <button
+                                <Button
                                     type="button"
-                                    class="inline-flex h-9 items-center gap-1.5 rounded-md px-4 text-xs font-medium transition-colors disabled:cursor-not-allowed"
-                                    :class="
-                                        isDirty(row)
-                                            ? 'bg-primary text-primary-foreground hover:bg-primary-hover'
-                                            : 'bg-elevated text-muted-foreground opacity-60'
-                                    "
-                                    :disabled="!isDirty(row) || saving.includes(row.id)"
+                                    class="h-9 gap-1.5 px-4 text-xs font-medium disabled:cursor-not-allowed"
+                                    :class="isDirty(row) ? '' : 'bg-elevated text-muted-foreground opacity-60 hover:bg-elevated'"
+                                    :loading="saving.includes(row.id)"
+                                    :disabled="!isDirty(row)"
                                     @click="save(row)"
                                 >
-                                    <LoaderCircle v-if="saving.includes(row.id)" class="size-3.5 animate-spin" aria-hidden="true" />{{
-                                        t('settings.bot_intents.save')
-                                    }}
-                                </button>
+                                    {{ t('settings.bot_intents.save') }}
+                                </Button>
                             </div>
                         </div>
                     </li>

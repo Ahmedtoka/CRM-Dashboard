@@ -7,14 +7,17 @@
  * translated, they are put back exactly as they were.
  */
 import Callout from '@/components/crm/Callout.vue';
+import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import FilterBar from '@/components/crm/FilterBar.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BotTranslationRow, BotTranslationUsage } from '@/types/admin';
 import { Head, router } from '@inertiajs/vue3';
-import { Check, LoaderCircle, RotateCw, Search, X } from 'lucide-vue-next';
+import { Check, RotateCw, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{ rows: BotTranslationRow[]; usage: BotTranslationUsage; engine: boolean }>();
@@ -93,7 +96,21 @@ async function retranslate(row: BotTranslationRow): Promise<void> {
 
 const breadcrumbs = computed(() => [{ title: t('settings.bot_translations.title'), href: '/settings/bot-translations' }]);
 const chip = 'inline-flex h-7 items-center rounded-full border px-2.5 text-xs';
-const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50';
+const iconBtn = 'size-auto rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50';
+
+/** DataTable keys rows by `id`; a translation row is one Arabic source string. */
+const tableRows = computed(() => filtered.value.map((r) => ({ id: r.source, r })));
+const columns = computed<Column[]>(() => [
+    { key: 'source', label: t('settings.bot_translations.arabic'), primary: true },
+    { key: 'text', label: t('settings.bot_translations.english') },
+    { key: 'context', label: t('settings.bot_translations.where') },
+    { key: 'actions', label: t('ui.actions'), align: 'end' },
+]);
+
+function clearFilters(): void {
+    query.value = '';
+    onlyMissing.value = false;
+}
 </script>
 
 <template>
@@ -103,109 +120,105 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
         <div class="mx-auto w-full max-w-5xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.bot_translations.title')" :description="t('settings.bot_translations.description')" />
 
-            <div class="flex flex-wrap items-center gap-2">
-                <label class="relative flex-1 min-w-52">
-                    <Search class="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                    <input
-                        v-model="query"
-                        type="search"
-                        dir="auto"
-                        :placeholder="t('settings.bot_translations.search')"
-                        :aria-label="t('settings.bot_translations.search')"
-                        class="h-9 w-full rounded-md border border-input bg-background px-3 ps-8 text-sm"
-                    />
-                </label>
-
-                <button
-                    type="button"
-                    :class="[chip, onlyMissing ? 'border-primary bg-primary/10 text-primary' : 'border-input text-muted-foreground']"
-                    :aria-pressed="onlyMissing"
-                    @click="onlyMissing = !onlyMissing"
+            <div class="rounded-lg bg-card p-3 shadow-card">
+                <FilterBar
+                    :search="query"
+                    :search-placeholder="t('settings.bot_translations.search')"
+                    :chips="onlyMissing ? [{ key: 'missing', label: t('settings.bot_translations.only_missing') }] : []"
+                    :summary="t('settings.bot_translations.usage', { used: usage.used, cap: usage.cap })"
+                    @update:search="query = $event"
+                    @remove="onlyMissing = false"
+                    @clear="clearFilters"
                 >
-                    {{ t('settings.bot_translations.only_missing') }} ({{ missingCount }})
-                </button>
-
-                <span class="text-xs text-muted-foreground">{{ t('settings.bot_translations.usage', { used: usage.used, cap: usage.cap }) }}</span>
+                    <template #inline>
+                        <button
+                            type="button"
+                            :class="[chip, onlyMissing ? 'border-primary bg-primary/10 text-primary' : 'border-input text-muted-foreground']"
+                            :aria-pressed="onlyMissing"
+                            @click="onlyMissing = !onlyMissing"
+                        >
+                            {{ t('settings.bot_translations.only_missing') }} ({{ missingCount }})
+                        </button>
+                    </template>
+                </FilterBar>
             </div>
 
             <Callout v-if="!engine" tone="warning">{{ t('settings.bot_translations.no_engine') }}</Callout>
 
-            <div class="scrollbar-thin relative overflow-x-auto rounded-md border border-border">
-                <table class="w-full min-w-[36rem] text-sm">
-                    <caption class="sr-only">{{ t('settings.bot_translations.title') }}</caption>
-                    <thead class="bg-muted/50 text-xs text-muted-foreground">
-                        <tr>
-                            <th scope="col" class="p-2 text-start font-medium">{{ t('settings.bot_translations.arabic') }}</th>
-                            <th scope="col" class="p-2 text-start font-medium">{{ t('settings.bot_translations.english') }}</th>
-                            <th scope="col" class="p-2 text-start font-medium">{{ t('settings.bot_translations.where') }}</th>
-                            <th scope="col" class="p-2 text-end font-medium">{{ t('ui.actions') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-if="!filtered.length">
-                            <td colspan="4" class="p-6 text-center text-xs text-muted-foreground">{{ t('settings.bot_translations.empty') }}</td>
-                        </tr>
-                        <tr v-for="row in filtered" :key="row.source" class="border-t border-border align-top">
-                            <td class="max-w-xs p-2" dir="auto">
-                                <span class="whitespace-pre-wrap">{{ row.source }}</span>
-                                <span v-if="row.short" class="ms-1 text-[10px] text-muted-foreground">({{ t('settings.bot_translations.button') }})</span>
-                            </td>
+            <DataTable
+                table-id="bot-translations"
+                :columns="columns"
+                :rows="tableRows"
+                mobile="scroll"
+                :empty="t('settings.bot_translations.empty')"
+                :caption="t('settings.bot_translations.title')"
+            >
+                <template #cell-source="{ row: { r: row } }">
+                    <span class="max-w-xs whitespace-pre-wrap" dir="auto">{{ row.source }}</span>
+                    <span v-if="row.short" class="ms-1 text-[10px] text-muted-foreground">({{ t('settings.bot_translations.button') }})</span>
+                </template>
+                <template #cell-text="{ row: { r: row } }">
+                    <div v-if="editing === row.source" class="flex max-w-xs items-start gap-1">
+                        <textarea
+                            v-model="draft"
+                            rows="3"
+                            dir="ltr"
+                            class="w-full rounded-md border border-input bg-background p-2 text-sm"
+                            :aria-label="t('settings.bot_translations.english')"
+                        />
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            :class="iconBtn"
+                            :loading="busy === row.source"
+                            :title="t('common.save')"
+                            :aria-label="t('common.save')"
+                            @click="save(row)"
+                        >
+                            <Check class="size-3.5" />
+                        </Button>
+                        <button type="button" :class="iconBtn" :title="t('common.cancel')" :aria-label="t('common.cancel')" @click="cancelEdit">
+                            <X class="size-3.5" />
+                        </button>
+                    </div>
 
-                            <td class="max-w-xs p-2" dir="auto">
-                                <div v-if="editing === row.source" class="flex items-start gap-1">
-                                    <textarea
-                                        v-model="draft"
-                                        rows="3"
-                                        dir="ltr"
-                                        class="w-full rounded-md border border-input bg-background p-2 text-sm"
-                                        :aria-label="t('settings.bot_translations.english')"
-                                    />
-                                    <button type="button" :class="iconBtn" :disabled="busy === row.source" :title="t('common.save')" @click="save(row)">
-                                        <LoaderCircle v-if="busy === row.source" class="size-3.5 animate-spin" />
-                                        <Check v-else class="size-3.5" />
-                                    </button>
-                                    <button type="button" :class="iconBtn" :title="t('common.cancel')" @click="cancelEdit"><X class="size-3.5" /></button>
-                                </div>
+                    <button
+                        v-else
+                        type="button"
+                        class="block max-w-xs whitespace-pre-wrap text-start hover:underline disabled:cursor-not-allowed disabled:no-underline"
+                        dir="auto"
+                        :disabled="row.id === null"
+                        :title="row.id === null ? t('settings.bot_translations.missing') : t('ui.edit')"
+                        @click="startEdit(row)"
+                    >
+                        <span v-if="row.text">{{ row.text }}</span>
+                        <span v-else class="text-xs text-amber-600 dark:text-amber-400">{{ t('settings.bot_translations.missing') }}</span>
+                    </button>
 
-                                <button
-                                    v-else
-                                    type="button"
-                                    class="w-full whitespace-pre-wrap text-start hover:underline disabled:cursor-not-allowed disabled:no-underline"
-                                    :disabled="row.id === null"
-                                    :title="row.id === null ? t('settings.bot_translations.missing') : t('ui.edit')"
-                                    @click="startEdit(row)"
-                                >
-                                    <span v-if="row.text">{{ row.text }}</span>
-                                    <span v-else class="text-xs text-amber-600 dark:text-amber-400">{{ t('settings.bot_translations.missing') }}</span>
-                                </button>
-
-                                <span v-if="row.origin" class="mt-1 block text-[10px] text-muted-foreground">
-                                    {{ row.origin === 'human' ? t('settings.bot_translations.origin_human') : t('settings.bot_translations.origin_auto') }}
-                                </span>
-                            </td>
-
-                            <td class="p-2 text-xs text-muted-foreground">
-                                <span dir="ltr">{{ row.context }}</span>
-                                <span v-if="row.orphan" class="ms-1 rounded bg-muted px-1 py-0.5 text-[10px]">{{ t('settings.bot_translations.orphan') }}</span>
-                            </td>
-
-                            <td class="p-2 text-end">
-                                <button
-                                    type="button"
-                                    :class="iconBtn"
-                                    :disabled="busy === row.source"
-                                    :title="t('settings.bot_translations.retranslate')"
-                                    :aria-label="t('settings.bot_translations.retranslate')"
-                                    @click="retranslate(row)"
-                                >
-                                    <LoaderCircle v-if="busy === row.source" class="size-3.5 animate-spin" />
-                                    <RotateCw v-else class="size-3.5" />
-                                </button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+                    <span v-if="row.origin" class="mt-1 block text-[10px] text-muted-foreground">
+                        {{ row.origin === 'human' ? t('settings.bot_translations.origin_human') : t('settings.bot_translations.origin_auto') }}
+                    </span>
+                </template>
+                <template #cell-context="{ row: { r: row } }">
+                    <span class="text-muted-foreground" dir="ltr">{{ row.context }}</span>
+                    <span v-if="row.orphan" class="ms-1 rounded bg-muted px-1 py-0.5 text-[10px]">{{ t('settings.bot_translations.orphan') }}</span>
+                </template>
+                <template #cell-actions="{ row: { r: row } }">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        :class="iconBtn"
+                        :loading="busy === row.source"
+                        :title="t('settings.bot_translations.retranslate')"
+                        :aria-label="t('settings.bot_translations.retranslate')"
+                        @click="retranslate(row)"
+                    >
+                        <RotateCw class="size-3.5" />
+                    </Button>
+                </template>
+            </DataTable>
         </div>
     </AppLayout>
 </template>

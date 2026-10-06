@@ -21,6 +21,9 @@ const SWEPT: string[] = [
     'settings/Notifications', 'settings/Profile', 'settings/Password', 'settings/Appearance',
     // Task 18
     'settings/Integrations', 'settings/Channels', 'settings/FacebookPages', 'settings/Shopify', 'settings/ShopifyReconcile',
+    // Task 19
+    'settings/Bot', 'settings/BotFlows', 'settings/BotIntents', 'settings/BotKnowledge', 'settings/BotLearning', 'settings/BotReplies',
+    'settings/BotTestLinks', 'settings/BotTranslations', 'Simulator',
 ];
 
 /** Raw tables allowed only on pages S1/S2 replace; they must sit in the shared sticky scroll box. */
