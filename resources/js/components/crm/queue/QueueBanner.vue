@@ -5,7 +5,7 @@ import { formatCount, formatSeconds } from '@/lib/format';
 import { queueReason } from '@/lib/queueReason';
 import type { Conversation, QueuePriority } from '@/types/crm';
 import { ArrowUpCircle, Bot, FolderOpen, Hand, Hourglass, Moon, Star, Ticket, type LucideIcon } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 
 /**
  * The queue's part of the thread header (spec §1.2): `chips` renders inline in header row 2
@@ -16,6 +16,8 @@ const props = withDefaults(defineProps<{ conversation: Conversation; meId: numbe
 
 const { t, locale } = useI18n();
 const queue = useMyQueueContext();
+/** The inbox's details panel: the bot-summary chips open it (the full summary lives there, C 2.1). */
+const details = inject<{ toggle: () => void } | null>('inboxDetails', null);
 
 const LAST_SECONDS = 60;
 /** The first hand-off value seen per ticket: the bar's full width (the payload has no total). */
@@ -105,10 +107,10 @@ const barTone: Record<Tone, string> = { calm: 'bg-primary/60', warning: 'bg-warn
 
 const text = (value: unknown): string => (typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '');
 
-/** What the bot already learned: topic, order, reason (translated, unknown reasons hidden); its full lines on hover. */
+/** What the bot already learned: topic, order, reason (translated, unknown reasons hidden); its full lines in the details panel, one click away. */
 const summary = computed(() => {
     const s = entry.value?.bot_summary ?? null;
-    if (!s) return { chips: [] as string[], lines: '' };
+    if (!s) return { chips: [] as string[] };
     const order = text(s.order_number);
     const topic = text(s.topic);
 
@@ -118,7 +120,6 @@ const summary = computed(() => {
             order ? t('queue.banner.order_chip', { number: order }) : '',
             queueReason(s.reason, t) ?? '',
         ].filter(Boolean),
-        lines: Array.isArray(s.lines) ? s.lines.map(text).filter(Boolean).join('\n') : '',
     };
 });
 </script>
@@ -140,7 +141,14 @@ const summary = computed(() => {
         <span v-if="caseId" :class="[chip, 'bg-primary/10 text-primary']" :title="t('queue.open_case', { id: caseId })">
             <FolderOpen class="size-3" aria-hidden="true" />{{ t('queue.banner.case_chip', { id: caseId }) }}
         </span>
-        <span v-if="summary.chips.length" class="inline-flex shrink-0 items-center gap-1" :title="summary.lines || undefined" data-bot-summary>
+        <button
+            v-if="summary.chips.length"
+            type="button"
+            class="inline-flex shrink-0 items-center gap-1 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            :aria-label="`${t('inbox.bot_summary.title')}: ${summary.chips.join('، ')}`"
+            data-bot-summary
+            @click="details?.toggle()"
+        >
             <Bot class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span class="sr-only">{{ t('queue.banner.bot_summary') }}: </span>
             <span
@@ -151,7 +159,7 @@ const summary = computed(() => {
             >
                 <span class="truncate">{{ item }}</span>
             </span>
-        </span>
+        </button>
         <span v-if="since !== null" class="shrink-0 text-2xs tabular-nums text-muted-foreground">{{
             t('queue.banner.received_since', { time: since })
         }}</span>
