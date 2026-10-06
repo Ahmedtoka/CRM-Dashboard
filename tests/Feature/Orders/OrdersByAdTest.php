@@ -40,7 +40,7 @@ it('groups the orders by ad with campaign, ad set and a direct row', function ()
         ->assertInertia(fn (AssertableInertia $p) => $p->where('tab', 'ads')->where('orders', null)->where('canOpenAds', true)
             ->where('adsBreakdown.0', [
                 'ad_id' => $this->ad->id, 'ad' => 'اسدال كتان', 'thumbnail_url' => 'https://cdn.test/a.jpg', 'external_id' => (string) $this->ad->external_id,
-                'platform' => 'meta', 'campaign_id' => $this->ad->ad_campaign_id, 'campaign' => 'خريف', 'ad_set_id' => $this->ad->ad_set_id, 'ad_set' => 'نساء ٢٥+',
+                'platform' => 'meta', 'account_external_id' => $this->ad->account->external_id, 'campaign_id' => $this->ad->ad_campaign_id, 'campaign' => 'خريف', 'ad_set_id' => $this->ad->ad_set_id, 'ad_set' => 'نساء ٢٥+',
                 'orders' => 4, 'revenue' => 1000, 'units' => 4,
             ])
             ->where('adsBreakdown', fn ($rows) => collect($rows)->firstWhere('ad_id', null)['platform'] === 'direct'
@@ -52,7 +52,7 @@ it('opens the ad orders page: summary, products and the orders list, role-scoped
 
     $this->actingAs($admin)->get("/orders/ads/{$this->ad->id}")->assertOk()
         ->assertInertia(fn (AssertableInertia $p) => $p->component('Orders/AdOrders')
-            ->where('ad.name', 'اسدال كتان')->where('ad.manager_url', "https://www.facebook.com/adsmanager/manage/ads?selected_ad_ids={$this->ad->external_id}")
+            ->where('ad.name', 'اسدال كتان')->where('ad.manager_url', 'https://www.facebook.com/adsmanager/manage/ads?act='.str_replace('act_', '', $this->ad->account->external_id)."&selected_ad_ids={$this->ad->external_id}")
             ->where('summary.orders', 4)->where('summary.real_orders', 3)->where('summary.revenue', 1000)->where('summary.units', 4)
             ->where('products.0', ['title' => 'اسدال', 'image_url' => 'https://cdn.test/p.jpg', 'units' => 4, 'revenue' => 400])
             ->where('orders.meta.total', 4));

@@ -21,7 +21,7 @@ it('shows the ad source on the order list and the customer page', function () {
         ->assertInertia(fn ($page) => $page->where('orders.data.0.ad_source', [
             'id' => $ad->id, 'name' => 'اسدال كتان', 'thumbnail_url' => 'https://cdn.test/a.jpg', 'campaign' => 'خريف 2026', 'attribution' => 'utm_ad',
             'platform' => 'meta', 'external_id' => (string) $ad->external_id,
-            'manager_url' => "https://www.facebook.com/adsmanager/manage/ads?selected_ad_ids={$ad->external_id}",
+            'manager_url' => 'https://www.facebook.com/adsmanager/manage/ads?act='.str_replace('act_', '', $ad->account->external_id)."&selected_ad_ids={$ad->external_id}",
         ]));
 
     $this->actingAs($admin)->get("/customers/{$customer->id}")->assertOk()

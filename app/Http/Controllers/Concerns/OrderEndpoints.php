@@ -13,6 +13,7 @@ use App\Http\Resources\OrderResource;
 use App\Http\Support\DateRange;
 use App\Http\Support\ModeratorScope;
 use App\Models\Order;
+use App\Orders\GovernorateKey;
 use App\Orders\OrdersAnalytics;
 use App\Shopify\Connection\IntegrationRepository;
 use DomainException;
@@ -145,8 +146,7 @@ trait OrderEndpoints
             ->when($f['created_by'] ?? null, fn ($q, $v) => $q->where('orders.created_by_id', (int) $v))
             ->when($f['from'] ?? null, fn ($q, $v) => $q->whereRaw("{$date} >= ?", [DateRange::startOfCairoDay($v)->toDateTimeString()]))
             ->when($f['to'] ?? null, fn ($q, $v) => $q->whereRaw("{$date} <= ?", [DateRange::endOfCairoDay($v)->toDateTimeString()]))
-            ->when($f['governorate'] ?? null, fn ($q, $v) => $q->where(fn (Builder $w) => $w->where('orders.shipping_province_code', $v)
-                ->orWhere(fn (Builder $n) => $n->whereNull('orders.shipping_province_code')->where('orders.shipping_province', $v))))
+            ->when($f['governorate'] ?? null, fn ($q, $v) => $q->whereRaw(GovernorateKey::sql().' = ?', [GovernorateKey::codeFor($v) ?? $v]))
             ->when($f['ad_platform'] ?? null, fn ($q, $v) => $v === 'direct'
                 ? $q->whereNull('orders.ad_id')
                 : $q->whereIn('orders.ad_id', fn ($s) => $s->select('ads.id')->from('ads')->join('ad_accounts', 'ad_accounts.id', '=', 'ads.ad_account_id')->where('ad_accounts.platform', $v)))

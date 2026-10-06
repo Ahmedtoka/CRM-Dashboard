@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Refund;
 use App\Orders\AdsManagerLink;
+use App\Orders\GovernorateKey;
 use App\Shopify\Connection\IntegrationRepository;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -139,7 +140,7 @@ class OrderResource extends JsonResource
                 // Fresh-orders F5: the source chip opens the AdDrawer and «افتح في ميتا».
                 'platform' => $this->ad->relationLoaded('account') ? $this->ad->account?->platform : null,
                 'external_id' => $this->ad->external_id !== null ? (string) $this->ad->external_id : null,
-                'manager_url' => AdsManagerLink::for($this->ad->relationLoaded('account') ? $this->ad->account?->platform : null, $this->ad->external_id !== null ? (string) $this->ad->external_id : null),
+                'manager_url' => AdsManagerLink::for($this->ad->relationLoaded('account') ? $this->ad->account?->platform : null, $this->ad->external_id !== null ? (string) $this->ad->external_id : null, $this->ad->relationLoaded('account') ? $this->ad->account?->external_id : null),
             ]),
             // Fresh-orders F5, web list: governorate name and district (Shopify's city line; no district column exists).
             'governorate' => $this->when(! $request->is('api/*'), fn () => self::governorateName($this->shipping_province_code, $this->shipping_province)),
@@ -156,7 +157,13 @@ class OrderResource extends JsonResource
             return $names[strtoupper((string) $code)] ?? (filled($name) ? $name : $code);
         }
 
-        return filled($name) ? $name : null;
+        if (! filled($name)) {
+            return null;
+        }
+
+        $mapped = GovernorateKey::codeFor((string) $name);
+
+        return $mapped !== null ? ($names[$mapped] ?? $name) : $name;
     }
 
     /**

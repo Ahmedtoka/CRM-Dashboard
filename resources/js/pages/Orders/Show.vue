@@ -6,28 +6,26 @@ import OrderTimeline from '@/components/crm/OrderTimeline.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
+import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatDateTime } from '@/lib/format';
-import { orderFamilies, orderLabel, orderName, stripBidiControls, orderStatusTone, shipmentTone, statusLabel as shopifyLabel } from '@/lib/orderStatus';
+import {
+    orderFamilies,
+    orderLabel,
+    orderName,
+    orderStatusTone,
+    shipmentTone,
+    statusLabel as shopifyLabel,
+    stripBidiControls,
+} from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type { OrderRow } from '@/types/admin';
 import type { Order } from '@/types/crm';
-import { Button } from '@/components/ui/button';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import {
-    ExternalLink,
-    MessageCircle,
-    MessagesSquare,
-    Package,
-    RotateCcw,
-    StickyNote,
-    Store,
-    TriangleAlert,
-    Truck,
-} from 'lucide-vue-next';
+import { ExternalLink, MessageCircle, MessagesSquare, Package, RotateCcw, StickyNote, Store, TriangleAlert, Truck } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{ order: OrderRow; canManage: boolean }>();
@@ -148,7 +146,15 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
                 >
                     <RotateCcw aria-hidden="true" />{{ t('orders.retry') }}
                 </Button>
-                <Button v-if="canMarkPaid" type="button" variant="outline" size="sm" :loading="busy === 'mark-paid'" :disabled="!!busy" @click="act('mark-paid')">
+                <Button
+                    v-if="canMarkPaid"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    :loading="busy === 'mark-paid'"
+                    :disabled="!!busy"
+                    @click="act('mark-paid')"
+                >
                     {{ t('orders.mark_paid') }}
                 </Button>
                 <button v-if="canCancel && !confirmingCancel" type="button" :class="[btn, 'text-destructive']" @click="confirmingCancel = true">
@@ -161,7 +167,15 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
                 class="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive"
             >
                 <label class="flex items-center gap-1.5"><input v-model="restock" type="checkbox" />{{ t('order.restock') }}</label>
-                <Button type="button" variant="destructive" size="sm" class="h-7 px-2" :loading="busy === 'cancel'" :disabled="!!busy" @click="act('cancel')">
+                <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    class="h-7 px-2"
+                    :loading="busy === 'cancel'"
+                    :disabled="!!busy"
+                    @click="act('cancel')"
+                >
                     {{ t('orders.cancel_confirm') }}
                 </Button>
                 <button

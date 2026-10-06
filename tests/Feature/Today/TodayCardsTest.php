@@ -104,3 +104,19 @@ it('opens every chats and orders number on a list of exactly that many rows', fu
         $this->getJson($o['links'][$key])->assertOk()->assertJsonPath('meta.total', $o[$key]);
     }
 });
+
+it('counts orders by the same order date the /orders list filters on (placed in the store, else made)', function () {
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    // Imported today, placed in the store yesterday: yesterday's order, not today's.
+    Order::factory()->create(['status' => OrderStatus::Confirmed, 'source' => OrderSource::Store, 'created_at' => now()->subMinutes(5), 'placed_at' => now()->subDay()]);
+    // Placed today.
+    Order::factory()->create(['status' => OrderStatus::Confirmed, 'source' => OrderSource::Store, 'total' => 400, 'created_at' => now()->subMinutes(5), 'placed_at' => now()->subHour()]);
+    Order::factory()->create(['status' => OrderStatus::Confirmed, 'source' => OrderSource::Chat, 'total' => 600, 'created_at' => now()->subHour()]);
+
+    $o = app(TodayCards::class)->orders(TodayWindow::for('today'));
+
+    expect([$o['count'], $o['from_chat'], $o['from_store'], $o['total']])->toBe([2, 1, 1, 1000.0]);
+    foreach (['count', 'from_chat', 'from_store'] as $key) {
+        $this->actingAs($admin)->getJson($o['links'][$key])->assertOk()->assertJsonPath('meta.total', $o[$key]);
+    }
+});

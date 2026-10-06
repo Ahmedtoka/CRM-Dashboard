@@ -3,7 +3,7 @@ import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import OrderSourceChip from '@/components/crm/orders/OrderSourceChip.vue';
 import OrderStatusChip from '@/components/crm/orders/OrderStatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
-import { formatMoney } from '@/lib/format';
+import { formatDateTime, formatMoney } from '@/lib/format';
 import { notOnShopifyText, orderLabel } from '@/lib/orderStatus';
 import type { OrderRow } from '@/types/admin';
 import { router } from '@inertiajs/vue3';
@@ -29,6 +29,8 @@ const columns = computed<Column[]>(() => [
     { key: 'status', label: t('ordersHub.columns.status') },
     { key: 'products', label: t('ordersHub.columns.products'), hideOnMobile: true },
     ...(props.showSource ? [{ key: 'source', label: t('ordersHub.columns.source') }] : []),
+    // The order date the filters use: placed in the store, else made in the CRM (server sort key `date`).
+    { key: 'date', label: t('ordersHub.columns.date'), hideOnMobile: true, sortable: true },
 ]);
 </script>
 
@@ -104,6 +106,9 @@ const columns = computed<Column[]>(() => [
                     t('ordersHub.more_products', { n: (row.items?.length ?? 0) - MAX_THUMBS })
                 }}</span>
             </span>
+        </template>
+        <template #cell-date="{ row }">
+            <span class="whitespace-nowrap tabular-nums text-muted-foreground">{{ formatDateTime(row.placed_at ?? row.created_at, locale) }}</span>
         </template>
         <template #cell-source="{ row }">
             <OrderSourceChip :source="row.ad_source" :can-open-ads="canOpenAds" @open="emit('open-ad', $event)" />

@@ -796,8 +796,6 @@ const en: Messages = {
         cancelled_done: 'Order cancelled',
         mark_paid: 'Mark as paid',
         paid_done: 'Payment recorded',
-        ship: 'Create shipment',
-        shipped_done: 'Shipment created',
         retry: 'Retry on Shopify',
         retried_done: 'Order sent to Shopify again',
         retry_still_failed: 'Shopify still refused the order — see the note',
@@ -808,12 +806,10 @@ const en: Messages = {
         source_all: 'All sources',
         financial_all: 'All payment states',
         fulfillment_all: 'All fulfillment states',
-        shipment_step_all: 'All shipment steps',
         mismatch_only: 'Mismatch only',
         stuck_only: 'Stuck only',
         older_than_chip: 'Waiting more than {time}',
         real_chip: 'Without cancelled and failed',
-        step_date_chip: 'Shipment step {from} to {to}',
         list: {
             order: 'Order',
             status: 'Status',
@@ -826,10 +822,7 @@ const en: Messages = {
             filter_team: 'Team member',
             filter_platform: 'Platform',
             filter_fulfillment: 'Fulfilment',
-            filter_shipment: 'Shipment step',
-            filter_date: 'Date',
             filter_flags: 'Needs attention',
-            date_chip: '{from} to {to}',
         },
         combined: {
             cancelled: 'Cancelled',
@@ -2178,7 +2171,6 @@ const en: Messages = {
             settings_form: {
                 title: 'Operational settings',
                 default_shipping_fee: 'Default shipping fee',
-                auto_create_shipment: 'Auto-create a shipment when an order is confirmed',
                 stuck_order_days: 'Days before an order is considered stuck',
                 mismatch_alerts: 'Order status mismatch alerts',
                 order_creation_enabled: 'Allow creating new orders from conversations',
@@ -3081,7 +3073,6 @@ const en: Messages = {
             queued: '{n} messages scheduled',
         },
         orders: { title: 'Shopify orders awaiting payment', empty: 'No orders awaiting payment', pay: 'Pay', paid: 'Order {number} paid' },
-        shipments: { title: 'Active shipments', empty: 'No active shipments', advance: 'Next step', advanced: 'Shipment {number}: {status}' },
     },
     ads: {
         alerts: {
@@ -4337,7 +4328,7 @@ const en: Messages = {
     ordersHub: {
         tabs: { list: 'Orders', analytics: 'Analytics', ads: 'Ads' },
         filters: { governorate: 'Governorate', governorate_all: 'All governorates', ad_platform: 'Source', ad_platform_all: 'All sources', direct: 'Direct / no ad', range: 'Period' },
-        columns: { customer: 'Customer', phone: 'Phone', governorate: 'Governorate', district: 'District', total: 'Total', status: 'Status', products: 'Products', source: 'Source' },
+        columns: { customer: 'Customer', phone: 'Phone', governorate: 'Governorate', district: 'District', total: 'Total', status: 'Status', products: 'Products', source: 'Source', date: 'Date' },
         more_products: '+{n}',
         open_meta: 'Open in Meta',
         open_ad: 'Ad details',

@@ -288,6 +288,8 @@ export interface CreativeRow {
     platform: AdPlatformValue;
     account: string;
     account_id: number;
+    /** The account's platform id (`act_…` on Meta), for the Ads Manager link. */
+    account_external_id?: string | null;
     campaign: string | null;
     adset: string | null;
     type: string | null;

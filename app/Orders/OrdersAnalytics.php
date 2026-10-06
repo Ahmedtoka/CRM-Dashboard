@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\DB;
  * - Order date = coalesce(placed_at, created_at) (imported Shopify orders keep the store time in placed_at).
  * - "orders" counts every matching order; revenue, AOV, customers, products and the day chart count only real
  *   orders (not cancelled / failed, MetricsService::EXCLUDED_ORDER_STATUSES).
- * - Governorate = shipping_province_code (Arabic name from crm.eg_provinces), else shipping_province.
+ * - Governorate = GovernorateKey: the province code, else the Shopify province name mapped back to its code
+ *   (so one governorate is never split between a code and a name); Arabic label from crm.eg_provinces.
  *   District = shipping_city: the order/address schema has no district column; Shopify's "city" line is where
  *   Egyptian stores put the district/area.
  * - Days are Cairo calendar days: the rows are grouped by UTC hour in SQL and folded into Cairo days here, so the
@@ -32,7 +33,7 @@ final class OrdersAnalytics
     /**
      * @param  Builder<Order>  $base  the filtered list query, without eager loads or ordering
      */
-    public function build(Builder $base, string $fromDate, string $toDate): array
+    public function build(Builder $base, ?string $fromDate, ?string $toDate): array
     {
         return [
             'totals' => $this->totals($base, $fromDate),
@@ -41,7 +42,8 @@ final class OrdersAnalytics
             'frequency' => $this->frequency($base),
             'products' => $this->products($base),
             'statuses' => $this->statuses($base),
-            'days' => $this->days($base, $fromDate, $toDate),
+            // No period (a triage view): no day chart.
+            'days' => $fromDate !== null && $toDate !== null ? $this->days($base, $fromDate, $toDate) : [],
         ];
     }
 
@@ -117,7 +119,7 @@ final class OrdersAnalytics
     public function governorates(Builder $base): array
     {
         $names = (array) config('crm.eg_provinces', []);
-        $rows = $this->grouped($base, 'coalesce(orders.shipping_province_code, orders.shipping_province)');
+        $rows = $this->grouped($base, GovernorateKey::sql());
 
         return $this->topWithRest(array_map(fn (array $r) => $r + [
             'label' => $r['key'] === null ? null : ($names[strtoupper((string) $r['key'])] ?? $r['key']),

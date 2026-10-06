@@ -27,9 +27,9 @@ final class OrdersByAd
             ->leftJoin('ad_accounts', 'ad_accounts.id', '=', 'ads.ad_account_id')
             ->leftJoin('ad_campaigns', 'ad_campaigns.id', '=', 'ads.ad_campaign_id')
             ->leftJoin('ad_sets', 'ad_sets.id', '=', 'ads.ad_set_id')
-            ->groupBy('orders.ad_id', 'ads.name', 'ads.thumbnail_url', 'ads.external_id', 'ad_accounts.platform', 'ads.ad_campaign_id', 'ad_campaigns.name', 'ads.ad_set_id', 'ad_sets.name')
+            ->groupBy('orders.ad_id', 'ads.name', 'ads.thumbnail_url', 'ads.external_id', 'ad_accounts.platform', 'ad_accounts.external_id', 'ads.ad_campaign_id', 'ad_campaigns.name', 'ads.ad_set_id', 'ad_sets.name')
             ->selectRaw('orders.ad_id as ad_id, ads.name as ad, ads.thumbnail_url as thumbnail_url, ads.external_id as external_id, '
-                .'ad_accounts.platform as platform, ads.ad_campaign_id as campaign_id, ad_campaigns.name as campaign, ads.ad_set_id as ad_set_id, ad_sets.name as ad_set, '
+                .'ad_accounts.platform as platform, ad_accounts.external_id as account_external_id, ads.ad_campaign_id as campaign_id, ad_campaigns.name as campaign, ads.ad_set_id as ad_set_id, ad_sets.name as ad_set, '
                 ."count(*) as n, sum(case when {$real} then orders.total else 0 end) as revenue", $b)
             ->get();
 
@@ -46,6 +46,7 @@ final class OrdersByAd
             'thumbnail_url' => $r->thumbnail_url,
             'external_id' => $r->external_id === null ? null : (string) $r->external_id,
             'platform' => $r->ad_id === null ? 'direct' : ($r->platform ?? null),
+            'account_external_id' => $r->account_external_id === null ? null : (string) $r->account_external_id,
             'campaign_id' => $r->campaign_id === null ? null : (int) $r->campaign_id,
             'campaign' => $r->campaign,
             'ad_set_id' => $r->ad_set_id === null ? null : (int) $r->ad_set_id,

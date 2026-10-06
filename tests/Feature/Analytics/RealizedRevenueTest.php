@@ -53,8 +53,8 @@ it('dates revenue by delivery, payment and refund, and reports rates and store o
         ->and($m['orders_created_total'])->toBe(0.0)
         ->and($m['orders_delivered'])->toBe(1)
         ->and($m['orders_returned'])->toBe(0)
-        ->and($m['delivery_rate'])->toBe(1.0)
-        ->and($m['return_rate'])->toBe(0.0)
+        ->and($m['delivery_rate'])->toBeNull()
+        ->and($m['return_rate'])->toBeNull()
         ->and($m['by_source']['store'])->toBe(['created_count' => 0, 'revenue_realized' => 0.0]);
 
     $team = app(MetricsService::class)->teamMetrics(...$day);
@@ -65,7 +65,7 @@ it('dates revenue by delivery, payment and refund, and reports rates and store o
         ->and($team['orders_count'])->toBe(1)
         ->and($team['by_source']['store'])->toBe(['created_count' => 1, 'revenue_realized' => 250.0])
         ->and($team['by_source']['chat'])->toBe(['created_count' => 0, 'revenue_realized' => 320.0])
-        ->and($team['delivery_rate'])->toBe(1.0);
+        ->and($team['delivery_rate'])->toBeNull();
 
     // Long ranges return the same keys and figures for the new metrics.
     $long = app(MetricsService::class)->userMetrics($u, CarbonImmutable::parse('2026-08-01 00:00:00'), CarbonImmutable::parse('2026-09-12 23:59:59'));
@@ -97,11 +97,11 @@ it('counts store orders net of refunds once while still subtracting chat refunds
         ->and(app(MetricsService::class)->userMetrics($u, ...$day)['revenue_realized'])->toBe(800.0);
 });
 
-it('reports zero rates without deliveries', function () {
+it('keeps the rate keys, null now that returns are not tracked', function () {
     $u = User::factory()->create();
     $m = app(MetricsService::class)->userMetrics($u, CarbonImmutable::parse('2026-09-10'), CarbonImmutable::parse('2026-09-10 23:59:59'));
 
-    expect($m['delivery_rate'])->toBe(0.0)->and($m['return_rate'])->toBe(0.0)->and($m['revenue_realized'])->toBe(0.0);
+    expect($m)->toHaveKeys(['delivery_rate', 'return_rate'])->and($m['delivery_rate'])->toBeNull()->and($m['return_rate'])->toBeNull()->and($m['revenue_realized'])->toBe(0.0);
 });
 
 it('rolls up delivered, returned and realized revenue on the Cairo day', function () {

@@ -10,8 +10,9 @@ import { useI18n } from '@/composables/useI18n';
 import { useStaleOrderRefresh } from '@/composables/useStaleOrderRefresh';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatMoney } from '@/lib/format';
-import type { OrderRow, Paginated, ReportRange } from '@/types/admin';
-import type { AdOrdersAd, OrdersProductRow, OrdersTotals } from '@/types/orders';
+import { drawerRange } from '@/lib/ordersHub';
+import type { OrderRow, Paginated } from '@/types/admin';
+import type { AdOrdersAd, OrdersProductRow, OrdersRange, OrdersTotals } from '@/types/orders';
 import { Head } from '@inertiajs/vue3';
 import { ExternalLink, Megaphone } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
@@ -23,7 +24,7 @@ const props = withDefaults(
         summary: OrdersTotals;
         products: OrdersProductRow[];
         orders: Paginated<OrderRow>;
-        range: ReportRange;
+        range: OrdersRange;
         canOpenAds?: boolean;
     }>(),
     { canOpenAds: false },
@@ -55,7 +56,7 @@ const breadcrumbs = computed(() => [
     { title: t('orders.title'), href: backHref.value },
     { title: title.value, href: `/orders/ads/${props.ad.id}` },
 ]);
-const drawerFilters = computed(() => ({ from: props.range.from, to: props.range.to, platform: null, buyer: null }));
+const drawerFilters = computed(() => drawerRange(props.range));
 const subtitle = computed(() => [props.ad.campaign, props.ad.ad_set].filter(Boolean).join(' · '));
 </script>
 

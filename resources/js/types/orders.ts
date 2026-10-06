@@ -52,6 +52,8 @@ export interface OrdersByAdRow {
     external_id: string | null;
     /** Ad account platform, or `direct` for orders without an ad. */
     platform: string | null;
+    /** The ad account's platform id (`act_…` on Meta), for the Ads Manager link. */
+    account_external_id?: string | null;
     campaign_id: number | null;
     campaign: string | null;
     ad_set_id: number | null;
@@ -77,4 +79,10 @@ export interface AdOrdersPage {
     summary: OrdersTotals;
     products: OrdersProductRow[];
     orders: Paginated<OrderRow>;
+}
+
+/** The period the server used; both null on a triage view (stuck, mismatch, awaiting payment, older than) with no dates. */
+export interface OrdersRange {
+    from: string | null;
+    to: string | null;
 }

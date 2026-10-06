@@ -76,6 +76,9 @@ describe('OrdersAdsTab', () => {
         await w.findAll('[data-open-ad]')[0].trigger('click');
         expect(w.emitted('open-ad')?.[0]).toEqual([1]);
         expect(w.find('[data-direct]').text()).toContain('مباشر');
+        // 390 px: the figures drop under the name, full width, each cell truncating; sm+: a fixed end column.
+        const figures = w.find('[data-ad-row] .grid').classes();
+        expect(figures).toEqual(expect.arrayContaining(['w-full', 'sm:w-64', '[&>*]:truncate']));
     });
 });
 

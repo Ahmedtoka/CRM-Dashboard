@@ -71,14 +71,18 @@ const tree = computed(() =>
 );
 const direct = computed(() => props.rows.find((r) => r.ad_id === null) ?? null);
 const adHref = (id: number) => `/orders/ads/${id}${props.query ? `?${props.query}` : ''}`;
-const metaUrl = (r: OrdersByAdRow) => (r.platform && r.external_id ? adsManagerUrl({ platform: r.platform, external_id: r.external_id }) : null);
-const figures = 'grid w-40 shrink-0 grid-cols-3 gap-2 text-end text-xs tabular-nums sm:w-60';
+const metaUrl = (r: OrdersByAdRow) =>
+    r.platform && r.external_id
+        ? adsManagerUrl({ platform: r.platform, external_id: r.external_id, account_external_id: r.account_external_id })
+        : null;
+// Phones: the three figures drop under the name, full width, each cell truncating (Arabic money is long); sm+: a fixed end column.
+const figures = 'grid w-full grid-cols-3 gap-2 text-xs tabular-nums sm:w-64 sm:shrink-0 sm:text-end [&>*]:min-w-0 [&>*]:truncate';
 </script>
 
 <template>
     <EmptyState v-if="!rows.length" :icon="Megaphone" :title="t('ordersHub.ads.empty')" />
     <div v-else class="min-w-0 space-y-3" data-orders-ads>
-        <div class="flex items-center gap-2 px-3 text-2xs font-medium text-muted-foreground">
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 text-2xs font-medium text-muted-foreground">
             <span class="min-w-0 flex-1">{{ t('ordersHub.ads.ad') }}</span>
             <span :class="figures">
                 <span>{{ t('ordersHub.ads.orders') }}</span>
@@ -87,7 +91,7 @@ const figures = 'grid w-40 shrink-0 grid-cols-3 gap-2 text-end text-xs tabular-n
             </span>
         </div>
         <section v-for="p in tree" :key="p.key" class="min-w-0 rounded-lg bg-card shadow-card" :data-platform="p.key">
-            <h3 class="flex items-center gap-2 border-b border-border px-3 py-2 text-sm font-semibold">
+            <h3 class="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-3 py-2 text-sm font-semibold">
                 <span class="min-w-0 flex-1 truncate">{{ p.label }}</span>
                 <span :class="figures">
                     <span>{{ n(p.orders) }}</span>
@@ -96,7 +100,7 @@ const figures = 'grid w-40 shrink-0 grid-cols-3 gap-2 text-end text-xs tabular-n
                 </span>
             </h3>
             <div v-for="c in p.children" :key="c.key" class="border-b border-border last:border-b-0">
-                <div class="flex items-center gap-2 bg-muted/40 px-3 py-1.5 text-xs font-medium">
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 bg-muted/40 px-3 py-1.5 text-xs font-medium">
                     <span class="min-w-0 flex-1 truncate" dir="auto">{{ c.label }}</span>
                     <span :class="figures">
                         <span>{{ n(c.orders) }}</span>
@@ -105,7 +109,7 @@ const figures = 'grid w-40 shrink-0 grid-cols-3 gap-2 text-end text-xs tabular-n
                     </span>
                 </div>
                 <div v-for="s in c.children" :key="s.key">
-                    <div class="flex items-center gap-2 px-3 py-1 ps-6 text-2xs text-muted-foreground">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1 ps-6 text-2xs text-muted-foreground">
                         <span class="min-w-0 flex-1 truncate" dir="auto">{{ s.label }}</span>
                         <span :class="figures">
                             <span>{{ n(s.orders) }}</span>
@@ -114,7 +118,12 @@ const figures = 'grid w-40 shrink-0 grid-cols-3 gap-2 text-end text-xs tabular-n
                         </span>
                     </div>
                     <ul>
-                        <li v-for="ad in s.children" :key="ad.ad_id ?? 0" class="flex min-h-11 items-center gap-2 px-3 py-1 ps-9" data-ad-row>
+                        <li
+                            v-for="ad in s.children"
+                            :key="ad.ad_id ?? 0"
+                            class="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1 ps-9"
+                            data-ad-row
+                        >
                             <img v-if="ad.thumbnail_url" :src="ad.thumbnail_url" alt="" class="size-9 shrink-0 rounded object-cover" loading="lazy" />
                             <Megaphone v-else class="size-4 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden="true" />
                             <span class="flex min-w-0 flex-1 flex-col">
@@ -155,7 +164,7 @@ const figures = 'grid w-40 shrink-0 grid-cols-3 gap-2 text-end text-xs tabular-n
                 </div>
             </div>
         </section>
-        <section v-if="direct" class="flex min-h-11 items-center gap-2 rounded-lg bg-card px-3 py-2 shadow-card" data-direct>
+        <section v-if="direct" class="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-card px-3 py-2 shadow-card" data-direct>
             <span class="min-w-0 flex-1 text-sm font-medium">{{ t('ordersHub.ads.direct') }}</span>
             <span :class="figures">
                 <span>{{ n(direct.orders) }}</span>

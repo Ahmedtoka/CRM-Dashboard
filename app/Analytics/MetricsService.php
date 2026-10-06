@@ -947,7 +947,6 @@ class MetricsService
     {
         $delivered = $outcomes['delivered'];
         $returned = $outcomes['returned'];
-        $deliveryDenominator = $delivered + $returned + $outcomes['failed_final'];
 
         return [
             'orders_created_count' => $createdCount,
@@ -955,8 +954,10 @@ class MetricsService
             'orders_delivered' => $delivered,
             'revenue_realized' => $outcomes['revenue'],
             'orders_returned' => $returned,
-            'delivery_rate' => $deliveryDenominator > 0 ? round($delivered / $deliveryDenominator, 2) : 0.0,
-            'return_rate' => ($delivered + $returned) > 0 ? round($returned / ($delivered + $returned), 2) : 0.0,
+            // Fresh-orders F4: Shopify reports no returns or final failures, so no rate can be computed; the keys
+            // stay (null) for the API shape.
+            'delivery_rate' => null,
+            'return_rate' => null,
             'by_source' => [
                 'chat' => ['created_count' => $createdBySource['chat'], 'revenue_realized' => $outcomes['revenue_by_source']['chat']],
                 'store' => ['created_count' => $createdBySource['store'], 'revenue_realized' => $outcomes['revenue_by_source']['store']],

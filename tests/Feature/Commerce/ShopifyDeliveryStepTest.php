@@ -22,7 +22,8 @@ it('reads the delivery step from the Shopify shipment status only', function (?s
     'delivered' => ['delivered', null, ShipmentStatus::Delivered],
     'delivered by date' => ['fulfilled', '2026-10-02 10:00:00', ShipmentStatus::Delivered],
     'plain fulfilled' => ['fulfilled', null, null],
-    'cancelled' => ['canceled', null, ShipmentStatus::Cancelled],
+    'cancelled label (falls back to fulfillment)' => ['canceled', null, null],
+    'voided label' => ['label_voided', null, null],
     'returned (not sent by Shopify today)' => ['returned', null, ShipmentStatus::Returned],
     'unknown' => ['weird', null, null],
 ]);

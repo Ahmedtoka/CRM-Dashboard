@@ -60,8 +60,14 @@ it('maps the Shopify delivery step when the OMS has no status', function (string
     expect(app(OrderLookup::class)->find(Conversation::factory()->create(), ['order_ref' => '4000'])['snapshots'][0]->statusKey)->toBe($key);
 })->with([
     ['label_printed', 'confirmed'], ['picked_up', 'shipped'], ['in_transit', 'shipped'], ['out_for_delivery', 'on_the_way'],
-    ['delivered', 'delivered'], ['canceled', 'cancelled'], ['attempted_delivery', 'on_the_way'],
+    ['delivered', 'delivered'], ['canceled', 'confirmed'], ['attempted_delivery', 'on_the_way'],
 ]);
+
+it('falls back to the Shopify fulfillment status when the label was cancelled or voided', function () {
+    Order::factory()->create(['order_number' => '4050', 'shipment_status' => 'label_voided', 'fulfillment_status' => 'fulfilled']);
+
+    expect(app(OrderLookup::class)->find(Conversation::factory()->create(), ['order_ref' => '4050'])['snapshots'][0]->statusKey)->toBe('shipped');
+});
 
 it('flags a failed delivery attempt on the snapshot', function () {
     Order::factory()->create(['order_number' => '4100', 'shipment_status' => 'attempted_delivery']);

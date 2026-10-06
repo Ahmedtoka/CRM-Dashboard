@@ -767,8 +767,6 @@ const ar = {
         cancelled_done: 'تم إلغاء الطلب',
         mark_paid: 'تسجيل كمدفوع',
         paid_done: 'تم تسجيل الدفع',
-        ship: 'إنشاء شحنة',
-        shipped_done: 'تم إنشاء الشحنة',
         retry: 'إعادة الإرسال لـ Shopify',
         retried_done: 'تم إرسال الطلب لـ Shopify مرة أخرى',
         retry_still_failed: 'Shopify رفض الطلب مرة أخرى — راجع الملاحظة',
@@ -779,12 +777,10 @@ const ar = {
         source_all: 'كل المصادر',
         financial_all: 'كل حالات الدفع',
         fulfillment_all: 'كل حالات التجهيز',
-        shipment_step_all: 'كل مراحل الشحن',
         mismatch_only: 'المتعارضة فقط',
         stuck_only: 'المتعطلة فقط',
         older_than_chip: 'مستني أكتر من {time}',
         real_chip: 'من غير الملغي والفاشل',
-        step_date_chip: 'حالة الشحن من {from} لـ {to}',
         list: {
             order: 'الأوردر',
             status: 'الحالة',
@@ -797,10 +793,7 @@ const ar = {
             filter_team: 'عضو الفريق',
             filter_platform: 'المنصة',
             filter_fulfillment: 'التجهيز',
-            filter_shipment: 'مرحلة الشحن',
-            filter_date: 'التاريخ',
             filter_flags: 'محتاجة متابعة',
-            date_chip: 'من {from} لـ {to}',
         },
         combined: {
             cancelled: 'ملغي',
@@ -2134,7 +2127,6 @@ const ar = {
             settings_form: {
                 title: 'إعدادات التشغيل',
                 default_shipping_fee: 'مصاريف الشحن الافتراضية',
-                auto_create_shipment: 'إنشاء شحنة تلقائيًا عند تأكيد الطلب',
                 stuck_order_days: 'عدد الأيام لاعتبار الطلب متعثر',
                 mismatch_alerts: 'تنبيهات تعارض حالة الأوردر',
                 order_creation_enabled: 'السماح بإنشاء طلبات جديدة من المحادثات',
@@ -3036,7 +3028,6 @@ const ar = {
             queued: 'تمت جدولة {n} رسالة',
         },
         orders: { title: 'طلبات Shopify في انتظار الدفع', empty: 'لا توجد طلبات في انتظار الدفع', pay: 'دفع', paid: 'تم دفع الطلب {number}' },
-        shipments: { title: 'شحنات نشطة', empty: 'لا توجد شحنات نشطة', advance: 'المرحلة التالية', advanced: 'الشحنة {number}: {status}' },
     },
     ads: {
         alerts: {
@@ -4292,7 +4283,7 @@ const ar = {
     ordersHub: {
         tabs: { list: 'الأوردرات', analytics: 'تحليلات', ads: 'الإعلانات' },
         filters: { governorate: 'المحافظة', governorate_all: 'كل المحافظات', ad_platform: 'المصدر', ad_platform_all: 'كل المصادر', direct: 'مباشر / من غير إعلان', range: 'الفترة' },
-        columns: { customer: 'العميلة', phone: 'الموبايل', governorate: 'المحافظة', district: 'المنطقة', total: 'الإجمالي', status: 'الحالة', products: 'المنتجات', source: 'المصدر' },
+        columns: { customer: 'العميلة', phone: 'الموبايل', governorate: 'المحافظة', district: 'المنطقة', total: 'الإجمالي', status: 'الحالة', products: 'المنتجات', source: 'المصدر', date: 'التاريخ' },
         more_products: '+{n}',
         open_meta: 'افتح في ميتا',
         open_ad: 'تفاصيل الإعلان',

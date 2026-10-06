@@ -10,6 +10,7 @@ use App\Models\OrderItem;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia;
 
 beforeEach(function () {
@@ -38,7 +39,7 @@ it('builds the analytics tab from grouped queries over the filtered range, on Ca
     analyticsOrder(['customer_id' => $old->id, 'placed_at' => '2026-09-20 10:00:00', 'total' => 100]);
 
     analyticsOrder(['customer_id' => $mona->id, 'placed_at' => '2026-10-04 21:30:00', 'total' => 500, 'shipping_province_code' => 'C', 'shipping_city' => 'مدينة نصر', 'delivered_at' => '2026-10-05 10:00:00'], [['اسدال', 2, 200]]);
-    analyticsOrder(['customer_id' => $mona->id, 'placed_at' => '2026-10-05 08:00:00', 'total' => 300, 'shipping_province_code' => 'C', 'shipping_city' => 'مدينة نصر', 'fulfillment_status' => 'fulfilled'], [['اسدال', 1, 200], ['طرحة', 3, 30]]);
+    analyticsOrder(['customer_id' => $mona->id, 'placed_at' => '2026-10-05 08:00:00', 'total' => 300, 'shipping_province_code' => null, 'shipping_province' => 'Cairo', 'shipping_city' => 'مدينة نصر', 'fulfillment_status' => 'fulfilled'], [['اسدال', 1, 200], ['طرحة', 3, 30]]);
     analyticsOrder(['customer_id' => $sara->id, 'placed_at' => '2026-10-05 09:00:00', 'total' => 200, 'shipping_province_code' => 'GZ', 'shipping_city' => 'الدقي'], [['طرحة', 1, 30]]);
     analyticsOrder(['customer_id' => $old->id, 'placed_at' => '2026-10-06 09:00:00', 'total' => 400, 'shipping_province' => 'Alexandria', 'shipping_province_code' => null]);
     // Cancelled: counted as an order, never as revenue / customers / units.
@@ -55,7 +56,7 @@ it('builds the analytics tab from grouped queries over the filtered range, on Ca
             ])
             ->where('analytics.governorates.0', ['key' => 'C', 'orders' => 2, 'revenue' => 800, 'label' => 'القاهرة'])
             ->where('analytics.governorates.1', ['key' => 'GZ', 'orders' => 2, 'revenue' => 200, 'label' => 'الجيزة'])
-            ->where('analytics.governorates.2.key', 'Alexandria')
+            ->where('analytics.governorates.2', ['key' => 'ALX', 'orders' => 1, 'revenue' => 400, 'label' => 'الإسكندرية'])
             ->where('analytics.districts.0', ['key' => 'مدينة نصر', 'orders' => 2, 'revenue' => 800, 'label' => 'مدينة نصر'])
             ->where('analytics.frequency.one', 2)->where('analytics.frequency.two', 1)->where('analytics.frequency.three_plus', 0)
             ->where('analytics.frequency.customers.0.name', 'منى')
@@ -86,23 +87,51 @@ it('defaults the page to this Cairo month and filters by governorate and ad plat
     analyticsOrder(['placed_at' => '2026-10-02 10:00:00', 'shipping_province_code' => 'C']);
     analyticsOrder(['placed_at' => '2026-10-02 10:00:00', 'shipping_province_code' => 'GZ']);
     analyticsOrder(['placed_at' => '2026-09-25 10:00:00', 'shipping_province_code' => 'C']);
+    // Shopify gave a province name but no code: still Cairo.
+    analyticsOrder(['placed_at' => '2026-10-04 10:00:00', 'shipping_province_code' => null, 'shipping_province' => 'Cairo']);
     $ad = Ad::factory()->create();
     analyticsOrder(['placed_at' => '2026-10-03 10:00:00', 'shipping_province_code' => 'C', 'ad_id' => $ad->id]);
 
     $this->actingAs($this->admin)->get('/orders')->assertOk()
         ->assertInertia(fn (AssertableInertia $p) => $p->where('tab', 'list')->where('range', ['from' => '2026-10-01', 'to' => '2026-10-06'])
-            ->where('orders.meta.total', 3));
+            ->where('orders.meta.total', 4));
 
     $this->actingAs($this->admin)->get('/orders?governorate=C')->assertOk()
-        ->assertInertia(fn (AssertableInertia $p) => $p->where('orders.meta.total', 2));
+        ->assertInertia(fn (AssertableInertia $p) => $p->where('orders.meta.total', 3));
     $this->actingAs($this->admin)->get('/orders?ad_platform=direct')->assertOk()
-        ->assertInertia(fn (AssertableInertia $p) => $p->where('orders.meta.total', 2));
+        ->assertInertia(fn (AssertableInertia $p) => $p->where('orders.meta.total', 3));
     $this->actingAs($this->admin)->get('/orders?ad_platform=meta')->assertOk()
         ->assertInertia(fn (AssertableInertia $p) => $p->where('orders.meta.total', 1)
             ->where('orders.data.0.governorate', 'القاهرة')
             ->where('orders.data.0.ad_source.platform', 'meta')
-            ->where('orders.data.0.ad_source.manager_url', "https://www.facebook.com/adsmanager/manage/ads?selected_ad_ids={$ad->external_id}"));
+            ->where('orders.data.0.ad_source.manager_url', 'https://www.facebook.com/adsmanager/manage/ads?act='.str_replace('act_', '', $ad->account->external_id)."&selected_ad_ids={$ad->external_id}"));
 
     // The JSON list (Today links, widgets) keeps no default range.
-    $this->actingAs($this->admin)->getJson('/orders')->assertOk()->assertJsonPath('meta.total', 4);
+    $this->actingAs($this->admin)->getJson('/orders')->assertOk()->assertJsonPath('meta.total', 5);
+});
+
+it('shows every matching order for the triage presets, whatever the month', function () {
+    $stuck = analyticsOrder(['placed_at' => '2026-09-10 10:00:00', 'fulfillment_status' => 'fulfilled', 'shipment_status' => 'in_transit', 'shopify_updated_at' => '2026-09-12 10:00:00', 'created_at' => '2026-09-10 10:00:00']);
+    $mismatch = analyticsOrder(['placed_at' => '2026-09-11 10:00:00', 'mismatch' => true, 'mismatch_reason' => 'shopify_total_differs', 'created_at' => '2026-09-11 10:00:00']);
+    $waiting = analyticsOrder(['placed_at' => '2026-09-12 10:00:00', 'status' => OrderStatus::AwaitingPayment, 'created_at' => '2026-09-12 10:00:00']);
+
+    $this->actingAs($this->admin)->get('/orders?stuck=1')->assertOk()
+        ->assertInertia(fn (AssertableInertia $p) => $p->where('range', ['from' => null, 'to' => null])->where('orders.meta.total', 1)->where('orders.data.0.id', $stuck->id));
+    $this->actingAs($this->admin)->get('/orders?mismatch=1')->assertOk()
+        ->assertInertia(fn (AssertableInertia $p) => $p->where('orders.data.0.id', $mismatch->id));
+    $this->actingAs($this->admin)->get('/orders?status=awaiting_payment')->assertOk()
+        ->assertInertia(fn (AssertableInertia $p) => $p->where('orders.data.0.id', $waiting->id));
+    $this->actingAs($this->admin)->get('/orders?older_than=60&real=1')->assertOk()
+        ->assertInertia(fn (AssertableInertia $p) => $p->where('orders.meta.total', 3));
+    // A period in the URL still narrows a triage view.
+    $this->actingAs($this->admin)->get('/orders?stuck=1&from=2026-10-01&to=2026-10-06')->assertOk()
+        ->assertInertia(fn (AssertableInertia $p) => $p->where('orders.meta.total', 0));
+    // Analytics on a triage view: no period, no day chart.
+    $this->actingAs($this->admin)->get('/orders?stuck=1&tab=analytics')->assertOk()
+        ->assertInertia(fn (AssertableInertia $p) => $p->where('analytics.totals.orders', 1)->where('analytics.days', []));
+});
+
+it('indexes the order date and the governorate code the tabs read', function () {
+    expect(Schema::hasIndex('orders', ['placed_at']))->toBeTrue()
+        ->and(Schema::hasIndex('orders', 'orders_shipping_province_code_idx'))->toBeTrue();
 });

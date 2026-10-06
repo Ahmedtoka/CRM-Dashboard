@@ -17,6 +17,7 @@ use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Jobs\RefreshShopifyOrders;
 use App\Shopify\Sync\OrderRefresher;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -31,7 +32,7 @@ class OrderController extends Controller
     use OrderEndpoints;
 
     /** Sortable columns of the web list (DataTable key => column). The API list keeps id desc. */
-    private const SORTS = ['created_at' => 'created_at', 'total' => 'total'];
+    private const SORTS = ['created_at' => 'created_at', 'total' => 'total', 'date' => 'date'];
 
     /** The /orders tabs (fresh-orders F5). */
     private const TABS = ['list', 'analytics', 'ads'];
@@ -50,7 +51,7 @@ class OrderController extends Controller
 
         if ($request->wantsJson()) {
             $query = $this->orderQuery($request);
-            SortParam::parse($request->query('sort'), self::SORTS)?->apply($query);
+            $this->applySort(SortParam::parse($request->query('sort'), self::SORTS), $query);
 
             return OrderResource::collection($query->paginate(30)->withQueryString());
         }
@@ -61,7 +62,7 @@ class OrderController extends Controller
 
         if ($tab === 'list') {
             $query = $this->orderQuery($request);
-            $sort?->apply($query);
+            $this->applySort($sort, $query);
             $query->with(ModeratorScope::ORDER_AD_RELATIONS); // the «المصدر» column (web page only)
             $orders = OrderResource::collection($query->paginate(30)->withQueryString());
         }
@@ -69,7 +70,7 @@ class OrderController extends Controller
         return Inertia::render('Orders/Index', [
             'tab' => $tab,
             'orders' => $orders,
-            'analytics' => $tab === 'analytics' ? $analytics->build($this->orderBaseQuery($request), $range['from'] ?? '', $range['to'] ?? '') : null,
+            'analytics' => $tab === 'analytics' ? $analytics->build($this->orderBaseQuery($request), $range['from'] ?? null, $range['to'] ?? null) : null,
             'adsBreakdown' => $tab === 'ads' ? $byAd->rows($this->orderBaseQuery($request)) : null,
             'range' => $range,
             'canOpenAds' => $request->user()->isSupervisorOrAbove(),
@@ -92,7 +93,7 @@ class OrderController extends Controller
     {
         $range = $this->defaultRange($request);
         $base = $this->orderBaseQuery($request)->where('orders.ad_id', $ad->id);
-        $ad->loadMissing(['campaign:id,name', 'adSet:id,name', 'account:id,platform']);
+        $ad->loadMissing(['campaign:id,name', 'adSet:id,name', 'account:id,platform,external_id']);
         $platform = $ad->account?->platform;
 
         $query = $this->orderQuery($request)->where('orders.ad_id', $ad->id)->with(ModeratorScope::ORDER_AD_RELATIONS);
@@ -106,7 +107,7 @@ class OrderController extends Controller
                 'external_id' => $ad->external_id !== null ? (string) $ad->external_id : null,
                 'campaign' => $ad->campaign?->name,
                 'ad_set' => $ad->adSet?->name,
-                'manager_url' => AdsManagerLink::for($platform, $ad->external_id !== null ? (string) $ad->external_id : null),
+                'manager_url' => AdsManagerLink::for($platform, $ad->external_id !== null ? (string) $ad->external_id : null, $ad->account?->external_id),
             ],
             'summary' => $analytics->totals($base, $range['from']),
             'products' => $analytics->products($base, 20),
@@ -120,12 +121,18 @@ class OrderController extends Controller
      * Without from/to the page reads this Cairo month (F5 default), written into the request so the filters, the
      * queries and the page props all see the same range.
      *
-     * @return array{from: string, to: string}
+     * @return array{from: ?string, to: ?string}
      */
     private function defaultRange(Request $request): array
     {
         $tz = (string) config('crm.timezone_display', 'Africa/Cairo');
         $today = CarbonImmutable::now($tz);
+
+        // Triage presets («متوقف», «مش متطابق», «مستني الدفع», the «النهارده» waiting link) show every matching
+        // order whatever its date: no month default, and no range unless the URL gives one.
+        if (! $request->filled('from') && ! $request->filled('to') && $this->isTriage($request)) {
+            return ['from' => null, 'to' => null];
+        }
 
         if (! $request->filled('from') && ! $request->filled('to')) {
             $request->merge(['from' => $today->startOfMonth()->toDateString(), 'to' => $today->toDateString()]);
@@ -135,6 +142,35 @@ class OrderController extends Controller
         $to = (string) ($request->input('to') ?: max($from, $today->toDateString()));
 
         return ['from' => $from, 'to' => $to];
+    }
+
+    /**
+     * `date` sorts by the order date the filters use (coalesce(placed_at, created_at)); the other keys by column.
+     *
+     * @param  Builder<Order>  $query
+     */
+    private function applySort(?SortParam $sort, Builder $query): void
+    {
+        if ($sort === null) {
+            return;
+        }
+
+        if ($sort->key === 'date') {
+            $query->reorder()->orderByRaw(OrdersAnalytics::ORDER_DATE.' '.($sort->direction === 'desc' ? 'desc' : 'asc'))->orderBy('orders.id', 'desc');
+
+            return;
+        }
+
+        $sort->apply($query);
+    }
+
+    /** stuck / mismatch / older_than / awaiting payment: the triage views that are not bound to a period. */
+    private function isTriage(Request $request): bool
+    {
+        return $request->boolean('stuck')
+            || $request->boolean('mismatch')
+            || $request->filled('older_than')
+            || $request->query('status') === 'awaiting_payment';
     }
 
     /** @return list<array{value: string, label: string}> the governorate filter (province codes, Arabic names) */

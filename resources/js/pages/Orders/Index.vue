@@ -17,9 +17,10 @@ import { useUrlFilters } from '@/composables/useUrlFilters';
 import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatMinutes } from '@/lib/format';
+import { drawerRange } from '@/lib/ordersHub';
 import type { SharedData } from '@/types';
 import type { OrderRow, Paginated, ReportRange } from '@/types/admin';
-import type { OrdersAnalytics, OrdersByAdRow, OrdersTab } from '@/types/orders';
+import type { OrdersAnalytics, OrdersByAdRow, OrdersRange, OrdersTab } from '@/types/orders';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { SearchX } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
@@ -40,7 +41,7 @@ const props = withDefaults(
         analytics?: OrdersAnalytics | null;
         adsBreakdown?: OrdersByAdRow[] | null;
         /** The range the server used (this Cairo month when the URL has none). */
-        range: ReportRange;
+        range: OrdersRange;
         canOpenAds?: boolean;
         governorates?: { value: string; label: string }[];
         team?: { id: number; name: string }[];
@@ -142,7 +143,8 @@ function clearAll(): void {
     if (tab !== 'list') set({ tab });
 }
 
-const range = computed<ReportRange>(() => ({ from: filters.value.from ?? props.range.from, to: filters.value.to ?? props.range.to }));
+// Empty on a triage view without dates (all matching orders, any period).
+const range = computed<ReportRange>(() => ({ from: filters.value.from ?? props.range.from ?? '', to: filters.value.to ?? props.range.to ?? '' }));
 const selectValue = (event: Event) => (event.target as HTMLSelectElement).value || null;
 
 // One-click saved views: each preset is a plain filtered address, so the chip, the URL and the list agree.
@@ -165,11 +167,11 @@ const filtered = computed(() => chips.value.length > 0 || filters.value.q !== ''
 const adQuery = computed(() => {
     const p = new URLSearchParams(query.value as Record<string, string>);
     for (const k of ['tab', 'sort', 'page']) p.delete(k);
-    p.set('from', range.value.from);
-    p.set('to', range.value.to);
+    if (range.value.from) p.set('from', range.value.from);
+    if (range.value.to) p.set('to', range.value.to);
     return p.toString();
 });
-const drawerFilters = computed(() => ({ from: range.value.from, to: range.value.to, platform: null, buyer: null }));
+const drawerFilters = computed(() => drawerRange(range.value));
 
 const breadcrumbs = computed(() => [{ title: t('orders.title'), href: '/orders' }]);
 const selectClass = 'h-9 w-full rounded-md border border-input bg-background px-2 text-xs sm:w-auto';

@@ -9,7 +9,8 @@ use App\Models\Order;
  * The order's delivery step, read from Shopify only (fresh-orders F4: the CRM keeps no carrier tracking).
  * `orders.shipment_status` is the latest live fulfillment's shipment status (OrderMapper::syncShipmentStatus),
  * lower-cased from REST (`in_transit`) or GraphQL display status (`IN_TRANSIT`); `delivered_at` wins.
- * Plain "fulfilled" carries no step: callers fall back to `fulfillment_status`.
+ * Plain "fulfilled" and a cancelled/voided label carry no step: callers fall back to `fulfillment_status`
+ * (a cancelled ORDER is cancelled_at / status, never a delivery step).
  */
 final class ShopifyDeliveryStep
 {
@@ -28,9 +29,6 @@ final class ShopifyDeliveryStep
         'delivered' => ShipmentStatus::Delivered,
         // Not a Shopify value today; kept so a returned state written by the store (or a later carrier sync) reads right.
         'returned' => ShipmentStatus::Returned,
-        'canceled' => ShipmentStatus::Cancelled,
-        'cancelled' => ShipmentStatus::Cancelled,
-        'label_voided' => ShipmentStatus::Cancelled,
     ];
 
     public static function of(Order $order): ?ShipmentStatus

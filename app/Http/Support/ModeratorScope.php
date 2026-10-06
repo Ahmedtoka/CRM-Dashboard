@@ -77,7 +77,7 @@ final class ModeratorScope
      * @return array<string, \Closure>
      */
     /** The order's ad and its campaign, as `ad_source` needs them. */
-    public const ORDER_AD_RELATIONS = ['ad:id,name,thumbnail_url,ad_campaign_id,ad_account_id,external_id', 'ad.campaign:id,name', 'ad.account:id,platform'];
+    public const ORDER_AD_RELATIONS = ['ad:id,name,thumbnail_url,ad_campaign_id,ad_account_id,external_id', 'ad.campaign:id,name', 'ad.account:id,platform,external_id'];
 
     public static function customerRelations(User $u, int $orderLimit = 0, bool $withAds = false): array
     {
