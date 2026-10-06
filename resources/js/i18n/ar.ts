@@ -3719,7 +3719,7 @@ const ar = {
                 stop: 'وقّف', run: 'شغّل', stop_title: 'توقيف {name}', run_title: 'تشغيل {name}', preparing: 'بنجهّز التغيير من ميتا...',
                 current: 'دلوقتي', next: 'هيبقى', today_spend: 'صرف النهارده', data_age: 'البيانات لحد {time}', reason: 'السبب (اختياري)',
                 confirm_stop: 'أيوه وقّفه', confirm_run: 'أيوه شغّله', reauth_title: 'أكّد كلمة السر', reauth_body: 'التشغيل محتاج تأكيد كلمة السر، وده بيفضل صالح ١٥ دقيقة.',
-                password: 'كلمة السر', reauth_submit: 'أكّد وشغّل', pending: 'التغيير لسه بيتنفذ، هيظهر في السجل.', done_stop: 'اتوقف', done_run: 'اشتغل',
+                password: 'كلمة السر', reauth_submit: 'أكّد وشغّل', retry: 'حاول تاني', pending: 'التغيير لسه بيتنفذ، هيظهر في السجل.', done_stop: 'اتوقف', done_run: 'اشتغل',
                 failed: 'معرفناش ننفذ التغيير', parent_paused: 'الحملة أو المجموعة اللي فوقه واقفة: الإعلان مش هيصرف حتى لو اشتغل.',
                 note_learning_reentry: 'الإعلان كان واقف من {days} يوم، ممكن يرجع يتعلّم من الأول.', status_active: 'شغال', status_paused: 'واقف', status_unknown: 'مش معروف',
                 path: { daily_budget: 'الميزانية اليومية', parent_daily_budget: 'الميزانية اليومية للمستوى اللي فوقه', lifetime_budget: 'ميزانية المدة كلها' },

@@ -68,6 +68,13 @@ describe('AdsFilterBar', () => {
         expect(get).toHaveBeenCalledWith('/ads/explorer', { range: 'last7', ad: '9' }, expect.objectContaining({ replace: true }));
     });
 
+    it('keys presets on the applied filters, not on a stale address', () => {
+        window.history.replaceState({}, '', '/ads/explorer');
+        const w = mount(AdsFilterBar, { props: base as never, global: { stubs } });
+        const presets = w.findComponent({ name: 'FilterBar' }).props('presets') as { key: string; active: boolean }[];
+        expect(presets.find((p) => p.key === 'tired')?.active).toBe(true);
+    });
+
     it('switches to a named range and drops custom dates', async () => {
         window.history.replaceState({}, '', '/ads/explorer?from=2026-09-01&to=2026-09-10');
         const w = mount(AdsFilterBar, { props: base as never, global: { stubs } });

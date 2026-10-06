@@ -15,13 +15,21 @@ import { useI18n } from '@/composables/useI18n';
 import { adsManagerUrl, allowedPreviewUrl, formatAdsMoney, formatRoas, previewSrcFromHtml } from '@/lib/ads';
 import { formatCount, formatDateTime } from '@/lib/format';
 import type { AdDrawerData, AdsFilters, ChatFunnel } from '@/types/ads';
+import { router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
-const props = withDefaults(defineProps<{ adId: number | null; filters: AdsFilters; currency?: string; dataAt?: string | null; funnel?: ChatFunnel | null }>(), {
-    currency: 'EGP',
-    dataAt: null,
-    funnel: null,
-});
+const props = withDefaults(
+    defineProps<{
+        adId: number | null;
+        filters: AdsFilters;
+        currency?: string;
+        dataAt?: string | null;
+        funnel?: ChatFunnel | null;
+        /** Page props to refresh after a Stop / Run from the drawer (the list behind it), e.g. ['result']. */
+        reloadOnly?: string[];
+    }>(),
+    { currency: 'EGP', dataAt: null, funnel: null, reloadOnly: () => [] },
+);
 const emit = defineEmits<{ close: [] }>();
 const { t, locale, dir } = useI18n();
 const api = useApi();
@@ -57,6 +65,11 @@ const funnel = computed(() => props.funnel ?? data.value?.funnel ?? null);
 const previewSrc = computed(() => allowedPreviewUrl(previewSrcFromHtml(ad.value?.preview_html ?? null)));
 const adsManager = computed(() => (ad.value ? adsManagerUrl(ad.value) : null));
 const money = (v: number | null) => formatAdsMoney(v, locale.value, cur.value);
+/** The drawer reloads its own ad; the list behind it reloads only the keys the page named. */
+function afterWrite(): void {
+    if (props.adId) void load(props.adId);
+    if (props.reloadOnly.length) router.reload({ only: props.reloadOnly });
+}
 const resultTone = (r: 'ok' | 'error' | 'pending') => (r === 'ok' ? 'positive' : r === 'pending' ? 'info' : 'negative');
 </script>
 
@@ -180,7 +193,7 @@ const resultTone = (r: 'ok' | 'error' | 'pending') => (r === 'ok' ? 'positive' :
                         :currency="cur"
                         :parent-paused="ad.parent_paused"
                         no-reload
-                        @done="adId && load(adId)"
+                        @done="afterWrite"
                     />
                     <a v-if="adsManager" :href="adsManager" target="_blank" rel="noopener noreferrer" class="inline-flex h-11 items-center px-2 text-xs text-primary underline">
                         {{ t('ads.control.row.open_ads_manager') }}

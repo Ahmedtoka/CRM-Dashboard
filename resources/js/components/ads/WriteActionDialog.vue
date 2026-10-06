@@ -11,7 +11,7 @@ import { useWriteAction } from '@/composables/useWriteAction';
 import { flowArrow, formatAdsMoney } from '@/lib/ads';
 import { formatDateTime } from '@/lib/format';
 import type { AdLevel } from '@/types/ads';
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 
 const props = withDefaults(
     defineProps<{
@@ -71,9 +71,19 @@ const statusRow = computed(() => w.proposal.value?.diff.find((d) => d.path === '
 const otherRows = computed(() => w.proposal.value?.diff.filter((d) => d.path !== 'status') ?? []);
 const notes = computed(() => (w.proposal.value?.notes ?? []).filter((n) => n.key === 'learning_reentry'));
 const busy = computed(() => ['proposing', 'confirming'].includes(w.phase.value));
-const submitLabel = computed(() =>
-    w.phase.value === 'reauth' ? t('ads.control.write.reauth_submit') : t(stopping.value ? 'ads.control.write.confirm_stop' : 'ads.control.write.confirm_run'),
-);
+const submitLabel = computed(() => {
+    if (w.phase.value === 'reauth') return t('ads.control.write.reauth_submit');
+    if (w.phase.value === 'error') return t('ads.control.write.retry');
+    return t(stopping.value ? 'ads.control.write.confirm_stop' : 'ads.control.write.confirm_run');
+});
+
+/* The password step takes the focus as soon as it shows. */
+const passwordInput = ref<HTMLInputElement | null>(null);
+watch(w.phase, async (p) => {
+    if (p !== 'reauth') return;
+    await nextTick();
+    passwordInput.value?.focus();
+});
 
 function submit(): void {
     if (w.phase.value === 'reauth') void w.reauth(password.value);
@@ -126,7 +136,7 @@ function submit(): void {
                 <p class="text-2xs text-muted-foreground">{{ t('ads.control.write.reauth_body') }}</p>
                 <label class="block space-y-1 text-xs">
                     <span>{{ t('ads.control.write.password') }}</span>
-                    <input v-model="password" type="password" autocomplete="current-password" class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm" />
+                    <input ref="passwordInput" v-model="password" data-test="reauth-password" type="password" autocomplete="current-password" class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm" />
                 </label>
             </div>
         </template>

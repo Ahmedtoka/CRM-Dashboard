@@ -66,6 +66,20 @@ describe('useWriteAction', () => {
         expect(w.message.value).toBe('later');
     });
 
+    it('cancels the earlier proposal when it proposes again', async () => {
+        post.mockResolvedValueOnce({ status: 201, data: proposal })
+            .mockRejectedValueOnce({ response: { status: 409, data: { message: 'changed' } } })
+            .mockResolvedValueOnce({ status: 200, data: {} })
+            .mockResolvedValueOnce({ status: 201, data: { ...proposal, action: { ...proposal.action, id: 'wa_2' } } });
+        const w = useWriteAction();
+        await w.propose(target);
+        await w.confirm();
+        expect(w.phase.value).toBe('error');
+        await w.propose(target);
+        expect(post.mock.calls[2][0]).toBe('/ads/write-actions/wa_1/cancel');
+        expect(w.proposal.value?.action.id).toBe('wa_2');
+    });
+
     it('shows a refusal message', async () => {
         post.mockRejectedValueOnce({ response: { status: 403, data: { code: 'out_of_scope', message: 'not yours' } } });
         const w = useWriteAction();

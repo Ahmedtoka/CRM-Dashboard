@@ -37,6 +37,18 @@ describe('Today', () => {
         expect(w.find('[data-test="buyers-strip"]').exists()).toBe(false);
     });
 
+    it('passes today spend to Stop, keeps real ROAS on phones and gives «ليه؟» a 44 px target', () => {
+        const s = { ad_id: 7, external_id: '1', account_id: 1, account: 'LV', platform: 'meta', name: 'Eid', spend: 1500, spend_tax: 1710, roas: null, reasons: [], can_write: true, objective: 'sales', thumbnail_url: null, campaign: null, status: 'ACTIVE', spend_today: 95 };
+        const row = { id: 9, external_id: '9', name: 'Best', platform: 'meta', account: 'LV', account_id: 1, status: 'ACTIVE', effective_status: 'ACTIVE', objective: 'sales', health: [], series: [], real_roas: 3, roas: 2, currency: 'EGP', spend_tax: 10, spend_today: 1, conversations: 0, real_orders: 0, purchases: 0, clicks: 0, can_write: true, parent_paused: false, buyer: null };
+        const today = { ...base.today, decisions: { ...base.today.decisions, suggestions: [s], suggestions_total: 1 }, best: [row] };
+        const w = mount(Today, { props: { ...base, today } as never, global: { stubs: { ...stubs, AdStatusButton: { name: 'AdStatusButton', props: ['spendToday'], template: '<i />' }, CreativeThumb: true, AdRow: { props: ['part'], template: '<div :data-part="part" />' } } } });
+        expect(w.findComponent({ name: 'AdStatusButton' }).props('spendToday')).toBe(95);
+        const ret = w.find('[data-test="best-worst-return"]');
+        expect(ret.exists()).toBe(true);
+        expect(ret.classes()).not.toContain('hidden');
+        expect(w.find('[data-test="why"]').classes()).toContain('h-11');
+    });
+
     it('shows the buyers strip for managers with a link to their open decisions', () => {
         const buyers = [{ buyer_id: 5, name: 'Bakinam', color: null, accounts: [], spend: 100, spend_tax: 114, purchase_value: 0, roas: null, purchases: 0, cpa: null, ctr: null, real_orders: 0, real_revenue: 0, real_roas: 2, conversations: 0, conversations_ordered: 0, budget: 1000, budget_used_pct: 40, target_roas: 3, roas_vs_target: null, open_decisions: 2 }];
         const w = mount(Today, { props: { ...base, today: { ...base.today, buyers } } as never, global: { stubs } });

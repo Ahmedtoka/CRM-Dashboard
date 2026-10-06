@@ -12,6 +12,7 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useAdDrawer } from '@/composables/useAdDrawer';
 import { useI18n } from '@/composables/useI18n';
+import { usePathVisitLoading } from '@/composables/usePathVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAdsMoney, reasonTexts } from '@/lib/ads';
 import { buildHref, readQuery, withParam } from '@/lib/adsFilters';
@@ -23,6 +24,7 @@ import { computed } from 'vue';
 
 const props = defineProps<AdsDecisionsProps>();
 const { t, locale } = useI18n();
+const loading = usePathVisitLoading('/ads/decisions');
 const drawer = useAdDrawer();
 const TABS: DecisionsTab[] = ['open', 'snoozed', 'closed', 'log'];
 const search = () => (typeof window === 'undefined' ? '' : window.location.search);
@@ -66,6 +68,8 @@ const selectClass = 'h-9 rounded-md border border-input bg-background px-2 text-
                 :platforms="platforms"
                 :show="{ range: false, status: false, list: false, presets: false }"
             />
+            <!-- Dims while a filter visit to this page runs (M7). -->
+            <div class="space-y-4 transition-opacity" :class="loading ? 'opacity-60' : ''" :aria-busy="loading" data-test="page-body">
 
             <nav class="scrollbar-none flex gap-1 overflow-x-auto border-b border-border" :aria-label="t('ads.control.decisions.title')">
                 <Link
@@ -86,7 +90,7 @@ const selectClass = 'h-9 rounded-md border border-input bg-background px-2 text-
                 <section v-if="approvals && approvals.count > 0" data-test="approvals" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-accent p-4">
                     <div>
                         <h2 class="text-sm font-semibold">{{ t('ads.control.decisions.approvals') }}</h2>
-                        <p class="text-xs">{{ t('ads.control.decisions.approvals_body', { n: approvals.count }) }}</p>
+                        <p class="text-xs">{{ t('ads.control.decisions.approvals_body', { n: formatCount(approvals.count, locale) }) }}</p>
                     </div>
                     <Link :href="approvals.href" class="inline-flex h-11 items-center rounded-md bg-primary px-4 text-xs font-medium text-primary-foreground">
                         {{ t('ads.control.decisions.approvals_open') }}
@@ -170,7 +174,15 @@ const selectClass = 'h-9 rounded-md border border-input bg-background px-2 text-
                     </template>
                 </DataTable>
             </template>
+            </div>
         </div>
-        <AdDrawer :ad-id="drawer.adId.value" :filters="filters" :currency="currency" :data-at="freshness" @close="drawer.close" />
+        <AdDrawer
+            :ad-id="drawer.adId.value"
+            :filters="filters"
+            :currency="currency"
+            :data-at="freshness"
+            :reload-only="['suggestions', 'counts', 'log']"
+            @close="drawer.close"
+        />
     </AppLayout>
 </template>

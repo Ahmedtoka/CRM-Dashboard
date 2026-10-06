@@ -272,6 +272,6 @@ const crumbs = computed(() => [{ label: t('nav.ads_numbers'), href: '/ads/number
             </div>
         </div>
 
-        <AdDrawer :ad-id="drawer.adId.value" :filters="filters" :currency="currency" :data-at="freshness" @close="drawer.close" />
+        <AdDrawer :ad-id="drawer.adId.value" :filters="filters" :currency="currency" :data-at="freshness" :reload-only="['detail']" @close="drawer.close" />
     </AppLayout>
 </template>

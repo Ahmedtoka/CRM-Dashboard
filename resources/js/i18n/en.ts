@@ -3764,7 +3764,7 @@ const en: Messages = {
                 stop: 'Stop', run: 'Run', stop_title: 'Stop {name}', run_title: 'Run {name}', preparing: 'Preparing the change from Meta...',
                 current: 'Now', next: 'Will be', today_spend: 'Spent today', data_age: 'Data as of {time}', reason: 'Reason (optional)',
                 confirm_stop: 'Yes, stop it', confirm_run: 'Yes, run it', reauth_title: 'Confirm your password', reauth_body: 'Running an ad needs your password; it stays valid for 15 minutes.',
-                password: 'Password', reauth_submit: 'Confirm and run', pending: 'The change is still running; it will show in the log.', done_stop: 'Stopped', done_run: 'Running',
+                password: 'Password', reauth_submit: 'Confirm and run', retry: 'Try again', pending: 'The change is still running; it will show in the log.', done_stop: 'Stopped', done_run: 'Running',
                 failed: 'The change could not be made', parent_paused: 'The campaign or ad set above is stopped: the ad will not spend even when running.',
                 note_learning_reentry: 'The ad was stopped {days} days ago; it may re-enter learning.', status_active: 'Running', status_paused: 'Stopped', status_unknown: 'Unknown',
                 path: { daily_budget: 'Daily budget', parent_daily_budget: 'Daily budget of the level above', lifetime_budget: 'Lifetime budget' },

@@ -9,6 +9,7 @@ import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import StatCard from '@/components/crm/StatCard.vue';
 import { useI18n } from '@/composables/useI18n';
+import { usePathVisitLoading } from '@/composables/usePathVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAdsMoney, formatDayShort, formatPct, formatQty, formatRoas } from '@/lib/ads';
 import { buildHref, carryQuery, readQuery } from '@/lib/adsFilters';
@@ -19,6 +20,7 @@ import { computed, onMounted } from 'vue';
 
 const props = defineProps<AdsNumbersProps>();
 const { t, locale } = useI18n();
+const loading = usePathVisitLoading('/ads/numbers');
 const money = (v: number | null | undefined, currency: string = props.currency) => formatAdsMoney(v ?? null, locale.value, currency);
 const tot = computed(() => props.overview.totals);
 const shared = computed(() => carryQuery(readQuery(typeof window === 'undefined' ? '' : window.location.search)));
@@ -98,6 +100,8 @@ onMounted(() => {
                 :platforms="platforms"
                 :show="{ status: false, list: false, presets: false }"
             />
+            <!-- Dims while a filter visit to this page runs (M7). -->
+            <div class="space-y-4 transition-opacity" :class="loading ? 'opacity-60' : ''" :aria-busy="loading" data-test="page-body">
 
             <section class="grid grid-cols-2 gap-3 md:grid-cols-5" :aria-label="t('ads.control.numbers.title')">
                 <StatCard v-for="h in hero" :key="h.key" data-test="hero" :label="h.label" :value="h.value">
@@ -164,6 +168,7 @@ onMounted(() => {
                     <template #cell-roas="{ row }">{{ formatRoas(row.roas, locale) }}</template>
                 </DataTable>
             </section>
+            </div>
         </div>
     </AppLayout>
 </template>

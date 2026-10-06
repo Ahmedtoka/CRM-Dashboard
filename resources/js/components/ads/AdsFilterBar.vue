@@ -5,7 +5,8 @@ import FilterBar from '@/components/crm/FilterBar.vue';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useI18n } from '@/composables/useI18n';
 import { AD_PLATFORM_LABELS, formatDayLong } from '@/lib/ads';
-import { activePreset, buildHref, PRESETS, presetQuery, readQuery, withParam, type Query } from '@/lib/adsFilters';
+import { formatCount } from '@/lib/format';
+import { activePreset, BASE_KEYS, buildHref, LIST_KEYS, PRESETS, presetQuery, readQuery, withParam, type Query } from '@/lib/adsFilters';
 import type { AdPlatformValue, AdsAccess, AdsAccountOption, AdsControlFilters, AdsExplorerFilters, AdsOption } from '@/types/ads';
 import { router, usePage } from '@inertiajs/vue3';
 import { ChevronDown } from 'lucide-vue-next';
@@ -80,7 +81,7 @@ function toggleAccount(id: number): void {
 }
 const accountsLabel = computed(() =>
     props.filters.accounts.length
-        ? t('ads.control.filter.summary_accounts', { n: props.filters.accounts.length, total: props.accountOptions.length })
+        ? t('ads.control.filter.summary_accounts', { n: formatCount(props.filters.accounts.length, locale.value), total: formatCount(props.accountOptions.length, locale.value) })
         : t('ads.control.filter.accounts_all'),
 );
 
@@ -109,10 +110,37 @@ function clearAll(): void {
     go(next);
 }
 
+/**
+ * The applied filters as a URL query (defaults left out, like the address), plus the params this bar does not own
+ * (`ad`, `open`, `tab`) from the address. Presets key on this, so they follow the props after every visit.
+ */
+const OWNED: readonly string[] = [...BASE_KEYS, ...LIST_KEYS];
+const filtersQuery = computed<Query>(() => {
+    const f = props.filters;
+    const q: Query = {};
+    const put = (k: string, v: string | number | null | undefined) => {
+        if (v === null || v === undefined || v === '') return;
+        if (props.defaults[k] === String(v)) return;
+        q[k] = String(v);
+    };
+    if (f.range) put('range', f.range);
+    else {
+        put('from', f.from);
+        put('to', f.to);
+    }
+    put('platform', f.platform);
+    put('buyer', f.buyer);
+    if (f.accounts.length) q.accounts = f.accounts.join(',');
+    for (const k of ['status', 'objective', 'health', 'changed', 'q', 'sort', 'view'] as const) put(k, f[k] ?? null);
+    if (f.per_page && f.per_page !== 25) q.per_page = String(f.per_page);
+    for (const [k, v] of Object.entries(current())) if (!OWNED.includes(k)) q[k] = v;
+    return q;
+});
+
 /* presets */
 const presets = computed(() => {
     if (!can('presets')) return [];
-    const q = current();
+    const q = filtersQuery.value;
     const active = activePreset(q, props.defaults);
     return PRESETS.filter((p) => p.key !== 'mine' || (access.value?.isBuyer !== true && access.value?.buyerId !== null && access.value?.buyerId !== undefined)).map((p) => ({
         key: p.key,
