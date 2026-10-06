@@ -34,10 +34,14 @@ class LegacyAdsRedirectController extends Controller
 
     public function winners(Request $r): RedirectResponse
     {
+        // Every old tier chip keeps its answer; an unknown tier was the page default (top = winner + promising).
         $health = match ($r->query('tier', 'top')) {
             'loser' => 'losing',
-            'all', 'neutral' => null,
-            default => 'winning', // top, winner, promising
+            'winner' => 'winning',
+            'promising' => 'promising',
+            'neutral' => 'neutral',
+            'all' => null,
+            default => 'top',
         };
         $sort = match ($r->query('sort')) {
             'spend' => '-spend',

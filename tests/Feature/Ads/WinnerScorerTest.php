@@ -115,22 +115,29 @@ it('clamps the window to at least 7 days anchored at the end', function () {
         ->and($rows[0]['spend'])->toBe(700.0)->and($rows[0]['active_days'])->toBe(7);
 });
 
-it('serves the old winners questions from the explorer cards (S2: winning / losing health)', function () {
+it('serves every old winners question from the explorer cards, tier chips and counts included', function () {
     winWorld();
     app(AdsSettings::class)->set('winner_thresholds', ['min_spend' => 300]); // B joins as neutral
     $admin = User::factory()->create(['role' => UserRole::Admin]);
     $names = fn ($res) => collect($res->viewData('page')['props']['result']['data'])->pluck('name')->sort()->values()->all();
+    $follow = fn (string $old) => $this->get($this->get($old)->assertRedirect()->headers->get('Location'))->assertOk();
     $this->withoutVite()->actingAs($admin);
 
+    // The old default (winner + promising) survives the redirect.
     $this->get('/ads/winners?from=2026-09-01&to=2026-09-30')
-        ->assertRedirect('/ads/explorer?from=2026-09-01&to=2026-09-30&view=cards&status=all&health=winning&sort=-roas');
-    $this->get('/ads/winners?from=2026-09-01&to=2026-09-30&tier=loser')
-        ->assertRedirect('/ads/explorer?from=2026-09-01&to=2026-09-30&view=cards&status=all&health=losing&sort=-roas');
+        ->assertRedirect('/ads/explorer?from=2026-09-01&to=2026-09-30&view=cards&status=all&health=top&sort=-roas');
+    $res = $follow('/ads/winners?from=2026-09-01&to=2026-09-30');
+    expect($names($res))->toBe(['A', 'D'])
+        ->and($res->viewData('page')['props']['filters']['health'])->toBe('top')
+        ->and($res->viewData('page')['props']['tier_counts'])->toBe(['top' => 2, 'all' => 4, 'winner' => 1, 'promising' => 1, 'neutral' => 1, 'loser' => 1]);
 
-    $base = '/ads/explorer?from=2026-09-01&to=2026-09-30&view=cards&status=all';
-    expect($names($this->get($base.'&health=winning')->assertOk()))->toBe(['A'])
-        ->and($names($this->get($base.'&health=losing')))->toBe(['C'])
-        ->and($names($this->get($base)))->toBe(['A', 'B', 'C', 'D', 'E']); // the explorer lists every ad that ran, gate or not
+    expect($names($follow('/ads/winners?from=2026-09-01&to=2026-09-30&tier=loser')))->toBe(['C'])
+        ->and($names($follow('/ads/winners?from=2026-09-01&to=2026-09-30&tier=neutral')))->toBe(['B'])
+        ->and($names($follow('/ads/winners?from=2026-09-01&to=2026-09-30&tier=winner')))->toBe(['A'])
+        ->and($names($follow('/ads/winners?from=2026-09-01&to=2026-09-30&tier=promising')))->toBe(['D'])
+        ->and($names($follow('/ads/winners?from=2026-09-01&to=2026-09-30&tier=bogus')))->toBe(['A', 'D'])
+        // tier=all: the explorer lists every ad that ran, the below-gate E too (tier_counts.all stays the scored 4).
+        ->and($names($follow('/ads/winners?from=2026-09-01&to=2026-09-30&tier=all')))->toBe(['A', 'B', 'C', 'D', 'E']);
 });
 
 it('pages the explorer cards by per_page (the old winners paging)', function () {

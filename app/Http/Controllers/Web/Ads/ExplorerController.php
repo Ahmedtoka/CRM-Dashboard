@@ -31,7 +31,11 @@ class ExplorerController extends Controller
     /** URL status => RunningCreatives status. */
     public const STATUSES = ['running' => 'active', 'paused' => 'inactive', 'all' => 'all'];
 
-    public const HEALTH = ['no_result', 'losing', 'tired', 'winning', 'out_of_stock'];
+    /** `top` = winner + promising (the old Winners default), `promising` / `neutral` = the old tier chips. */
+    public const HEALTH = ['no_result', 'losing', 'tired', 'winning', 'out_of_stock', 'top', 'promising', 'neutral'];
+
+    /** WinnerScorer tiers behind each tier-based health filter. */
+    public const HEALTH_TIERS = ['losing' => ['loser'], 'winning' => ['winner'], 'top' => ['winner', 'promising'], 'promising' => ['promising'], 'neutral' => ['neutral']];
 
     public const PER_PAGE = [25, 50, 100];
 
@@ -66,6 +70,7 @@ class ExplorerController extends Controller
             'freshness' => $this->syncProps($filter, false)['oldest']['last_synced_at'] ?? null,
             'result' => null,
             'tree' => null,
+            'tier_counts' => null, // view=cards only
         ];
 
         if ($view === 'tree') {
@@ -87,6 +92,12 @@ class ExplorerController extends Controller
         }
 
         $result = $creatives->build($filter, $opts);
+        if ($view === 'cards') {
+            // The old Winners chips: how many scored ads sit in each tier (the gate keeps too-early ads out of `all`).
+            $byTier = collect($this->scorer->tiers($filter))->countBy();
+            $props['tier_counts'] = ['top' => ($byTier['winner'] ?? 0) + ($byTier['promising'] ?? 0), 'all' => $byTier->sum()]
+                + collect(['winner', 'promising', 'neutral', 'loser'])->mapWithKeys(fn (string $t) => [$t => $byTier[$t] ?? 0])->all();
+        }
         $result['data'] = $enricher->enrich($result['data'], $filter, $user);
         $props['result'] = $result;
         $props['filters']['page'] = $result['meta']['current_page'];
@@ -107,8 +118,7 @@ class ExplorerController extends Controller
     private function healthIds(?string $health, AdsFilter $f): ?array
     {
         return match ($health) {
-            'losing' => array_keys(array_filter($this->scorer->tiers($f), fn (string $t) => $t === 'loser')),
-            'winning' => array_keys(array_filter($this->scorer->tiers($f), fn (string $t) => $t === 'winner')),
+            'losing', 'winning', 'top', 'promising', 'neutral' => array_keys(array_filter($this->scorer->tiers($f), fn (string $t) => in_array($t, self::HEALTH_TIERS[$health], true))),
             'out_of_stock' => $this->health->needStopIds($f),
             'tired' => $this->tiredIds($f),
             default => null,

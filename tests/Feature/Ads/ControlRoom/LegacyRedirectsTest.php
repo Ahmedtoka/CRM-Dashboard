@@ -17,7 +17,7 @@ it('sends running-creatives links to the explorer table with an equivalent query
 it('sends winners links to the explorer cards', function () {
     $this->actingAs(crAdmin())->get('/ads/winners?tier=loser&from=2026-09-20&to=2026-09-22')
         ->assertRedirect('/ads/explorer?from=2026-09-20&to=2026-09-22&view=cards&status=all&health=losing&sort=-roas');
-    $this->actingAs(crAdmin())->get('/ads/winners')->assertRedirect('/ads/explorer?view=cards&status=all&health=winning&sort=-roas');
+    $this->actingAs(crAdmin())->get('/ads/winners')->assertRedirect('/ads/explorer?view=cards&status=all&health=top&sort=-roas');
 });
 
 it('sends campaign tree links to the explorer tree, keeping picked accounts', function () {
