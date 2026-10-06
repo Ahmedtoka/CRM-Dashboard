@@ -1,5 +1,5 @@
 import { translate } from '@/i18n';
-import { MATERIAL_STATUSES, statusCounts } from '@/lib/adsMaterials';
+import { MATERIAL_STATUSES, reviewQueueLink, statusCounts } from '@/lib/adsMaterials';
 import type { MaterialStats } from '@/types/ads';
 import { describe, expect, it } from 'vitest';
 
@@ -33,5 +33,13 @@ describe('statusCounts (final fix 2)', () => {
         const labels = MATERIAL_STATUSES.map((s) => translate('ar', `ads.materials.status.${s}`));
         expect(labels).toEqual(['جديدة', 'في المراجعة', 'شغالة', 'واقفة', 'خلصت']);
         expect(labels).not.toContain('لسه ما بدأتش');
+    });
+});
+
+describe('reviewQueueLink (final review C1)', () => {
+    it('points the buyer at the review tab when drafts wait, else nothing', () => {
+        expect(reviewQueueLink({ buyer_review: 3 })).toEqual({ href: '/ads/launches?box=review', count: 3 });
+        expect(reviewQueueLink({ buyer_review: 0 })).toBeNull();
+        expect(reviewQueueLink(null)).toBeNull();
     });
 });

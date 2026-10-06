@@ -141,6 +141,8 @@ export interface AdsDataHealthReason {
     accounts: string[];
     /** Accounts beyond the three named. */
     more: number;
+    /** For `stale`: the hours after which an account counts as behind (crm.ads.health.stale_after_hours). */
+    hours?: number;
 }
 
 export interface AdsDataHealth {
@@ -1028,7 +1030,7 @@ export interface LaunchAnswer {
 }
 export interface AdsLaunchesProps {
     box: 'mine' | 'review' | 'live' | 'all';
-    filters: { material: number | null; launch: string | null; stop: boolean };
+    filters: { material: number | null; launch: string | null; stop: boolean; tab?: 'slots' | null };
     launches: LaravelPage<LaunchRow>;
     counts: { mine: number; review: number; live: number };
     canReview: boolean;

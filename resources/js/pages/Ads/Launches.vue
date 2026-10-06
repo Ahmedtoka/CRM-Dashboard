@@ -29,7 +29,7 @@ const toast = useToast();
 const { t } = useI18n();
 
 type Tab = AdsLaunchesProps['box'] | 'slots';
-const tab = ref<Tab>(props.box);
+const tab = ref<Tab>(props.filters.tab === 'slots' && props.canToggleSlots ? 'slots' : props.box);
 const tabs = computed<{ key: Tab; count: number | null }[]>(() => [
     { key: 'mine', count: props.counts.mine },
     ...(props.canReview ? [{ key: 'review' as Tab, count: props.counts.review }] : []),
@@ -163,6 +163,7 @@ async function toggleSlot(s: SlotRow, open: boolean): Promise<void> {
 
 /* ---- deep links ---- */
 onMounted(async () => {
+    if (tab.value === 'slots') void loadSlots();
     if (props.filters.launch) {
         const row = props.launches.data.find((l) => l.id === props.filters.launch);
         if (row) editing.value = row.can.edit ? row : null;

@@ -49,13 +49,19 @@ class LaunchController extends Controller
         $page = $inBox($base(), $box)->with(LaunchPresenter::WITH)->orderByDesc('updated_at')->paginate(20)->withQueryString();
         $page->setCollection($page->getCollection()->map(fn (AdLaunch $l) => $presenter->row($l, $user, ['checks' => 'stored', 'publications' => $box === 'live'])));
 
+        $canToggleSlots = $user->hasAdsAuthority() || $buyer !== null;
+
         return Inertia::render('Ads/Launches', [
             'box' => $box,
-            'filters' => ['material' => $material, 'launch' => is_string($request->query('launch')) ? $request->query('launch') : null, 'stop' => $request->boolean('stop')],
+            'filters' => [
+                'material' => $material, 'launch' => is_string($request->query('launch')) ? $request->query('launch') : null, 'stop' => $request->boolean('stop'),
+                // ?box=slots opens the open-slots tab on first load (final review C1); the list underneath stays the default box.
+                'tab' => $request->query('box') === 'slots' && $canToggleSlots ? 'slots' : null,
+            ],
             'launches' => $page,
             'counts' => ['mine' => $inBox($base(), 'mine')->count(), 'review' => $inBox($base(), 'review')->count(), 'live' => $inBox($base(), 'live')->count()],
             'canReview' => $user->hasAdsAuthority() || $buyer !== null,
-            'canToggleSlots' => $user->hasAdsAuthority() || $buyer !== null,
+            'canToggleSlots' => $canToggleSlots,
             'reasons' => LaunchService::REASONS,
         ]);
     }

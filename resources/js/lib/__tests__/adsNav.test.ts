@@ -24,3 +24,9 @@ describe('adsNavChildren', () => {
         expect(adsNavChildren('supervisor', t, { decisions: null, library: 0 }, '')[1].badge).toBeNull();
     });
 });
+
+describe('adsNavChildren library match (final review C1)', () => {
+    it('keeps «المكتبة» active on the launches page its badge counts', () => {
+        expect(adsNavChildren('media_buyer', t, { decisions: 0, library: 2 }, '')[4].match).toContain('/ads/launches');
+    });
+});

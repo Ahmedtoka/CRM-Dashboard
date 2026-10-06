@@ -97,3 +97,12 @@ it('lists the open launches on the Library rows', function () {
         ->where('materials.data.0.launches.0.id', $l->public_id)->where('materials.data.0.launches.0.state', 'buyer_review')
         ->where('materials.data.0.launches.0.adset', 'Broad | EG | Advantage+'));
 });
+
+it('final review C1: ?box=slots opens the slots tab for a buyer, never for content', function () {
+    $w = LaunchWorld::make();
+
+    $this->actingAs($w['buyerUser'])->get('/ads/launches?box=slots')->assertOk()->assertInertia(fn (Assert $p) => $p
+        ->where('filters.tab', 'slots')->where('canToggleSlots', true)->where('box', 'review'));
+    $this->actingAs($w['buyerUser'])->get('/ads/launches')->assertInertia(fn (Assert $p) => $p->where('filters.tab', null));
+    $this->actingAs($w['content'])->get('/ads/launches?box=slots')->assertInertia(fn (Assert $p) => $p->where('filters.tab', null));
+});

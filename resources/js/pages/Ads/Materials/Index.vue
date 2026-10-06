@@ -21,11 +21,11 @@ import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatRoas, roasTone, safeUrl } from '@/lib/ads';
-import { cleanQuery, links, MATERIAL_STATUSES, pageList, queryString, statusCounts, useMaterialPermissions } from '@/lib/adsMaterials';
+import { cleanQuery, links, MATERIAL_STATUSES, pageList, queryString, reviewQueueLink, statusCounts, useMaterialPermissions } from '@/lib/adsMaterials';
 import { formatClock, formatCount, formatDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AdsMaterialsIndexProps, MaterialRow, MaterialStatus, PublishCaption } from '@/types/ads';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     ArrowUp,
     ChevronLeft,
@@ -67,6 +67,8 @@ const props = defineProps<AdsMaterialsIndexProps>();
 const { t, locale } = useI18n();
 const toast = useToast();
 const perms = useMaterialPermissions();
+/** The buyer's drafts to review live on /ads/launches (final review C1). */
+const reviewQueue = computed(() => reviewQueueLink(usePage().props.adsCounters as { buyer_review?: number } | null | undefined));
 const n = (v: number) => formatCount(v, locale.value);
 
 const STATUSES: MaterialStatus[] = MATERIAL_STATUSES;
@@ -288,6 +290,14 @@ const breadcrumbs = computed(() => [
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-[1400px] space-y-4 p-3 md:p-6">
             <PageHeader :title="t('ads.materials.title')" :description="t('ads.materials.description')">
+                <Link
+                    v-if="reviewQueue"
+                    :href="reviewQueue.href"
+                    :class="cn(buttonVariants({ variant: 'default', size: 'sm' }), 'gap-1.5')"
+                    data-test="review-queue-link"
+                >
+                    {{ t('ads.materials.review_queue', { n: n(reviewQueue.count) }) }}
+                </Link>
                 <a :href="exportUrl" :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')">
                     <Download aria-hidden="true" />{{ t('ads.materials.export') }}
                 </a>

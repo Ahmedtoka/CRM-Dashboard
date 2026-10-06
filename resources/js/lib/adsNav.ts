@@ -17,7 +17,7 @@ export function adsNavChildren(role: Role, t: (key: string) => string, counts: A
         { title: t('nav.ads_decisions'), href: '/ads/decisions', badge: counts.decisions, query, match: ['/ads/approvals'] },
         { title: t('nav.ads_explorer'), href: '/ads/explorer', query },
         { title: t('nav.ads_numbers'), href: '/ads/numbers', query, match: ['/ads/buyers'] },
-        { title: t('nav.ads_library'), href: '/ads/materials', badge: counts.library, match: ['/ads/collections', '/ads/stock'] },
+        { title: t('nav.ads_library'), href: '/ads/materials', badge: counts.library, match: ['/ads/collections', '/ads/stock', '/ads/launches'] },
     ];
     if (role === 'admin' || role === 'supervisor') {
         items.push({ title: t('nav.ads_setup'), href: '/ads/setup', match: ['/ads/accounts', '/ads/sync', '/ads/setup'] });
