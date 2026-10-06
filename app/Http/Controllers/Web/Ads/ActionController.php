@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web\Ads;
 
 use App\Ads\Control\AdWriteService;
+use App\Ads\Control\Write\RecentPassword;
 use App\Ads\Control\Write\WriteActionService;
 use App\Ads\Control\Write\WriteDenied;
 use App\Http\Controllers\Controller;
@@ -32,6 +33,10 @@ class ActionController extends Controller
             'reason' => ['nullable', 'string', 'max:1000'],
         ]);
         $user = $request->user();
+        // Same rule as the pipeline confirm (R-31): Run needs a password typed in the last 15 minutes; Stop never does.
+        if ($data['status'] !== 'paused' && ! RecentPassword::fresh($request)) {
+            throw WriteDenied::make('password_confirmation_required');
+        }
         $key = $this->legacyKey($request, $data);
         $x = null;
 

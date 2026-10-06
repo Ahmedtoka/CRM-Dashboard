@@ -64,3 +64,28 @@ it('confirms the password over JSON and stores the time in the session', functio
 it('keeps reauth to ads report users', function () {
     $this->actingAs(crUser(UserRole::Moderator))->postJson('/ads/reauth', ['password' => 'password'])->assertForbidden();
 });
+
+it('refuses a Run through the legacy one-shot endpoint without a recent password (review I1)', function () {
+    $w = crBuyer();
+    $ad = crAd($w['account'], [], ['status' => 'PAUSED']);
+    $post = fn () => $this->actingAs($w['user'])->postJson('/ads/actions/status', [
+        'account_id' => $w['account']->id, 'level' => 'ad', 'external_id' => $ad->external_id, 'status' => 'active',
+    ]);
+
+    $post()->assertStatus(423)->assertJsonPath('code', 'password_confirmation_required');
+    expect(AdWriteAction::count())->toBe(0)->and(Cache::get('ads-fake-writer'))->toBeNull();
+
+    $res = $this->actingAs($w['user'])->withSession(['auth.password_confirmed_at' => time() - 60])->postJson('/ads/actions/status', [
+        'account_id' => $w['account']->id, 'level' => 'ad', 'external_id' => $ad->external_id, 'status' => 'active',
+    ]);
+    expect($res->status())->not->toBe(423);
+});
+
+it('never asks for a password on a legacy Stop', function () {
+    $w = crBuyer();
+    $ad = crAd($w['account'], [], ['status' => 'ACTIVE']);
+
+    $this->actingAs($w['user'])->postJson('/ads/actions/status', [
+        'account_id' => $w['account']->id, 'level' => 'ad', 'external_id' => $ad->external_id, 'status' => 'paused',
+    ])->assertOk()->assertJsonPath('ok', true);
+});
