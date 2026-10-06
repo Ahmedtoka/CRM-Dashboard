@@ -2,6 +2,7 @@
 
 namespace App\Ads\Decisions;
 
+use App\Ads\Alerts\AlertFeed;
 use App\Ads\Control\StopAdvisor;
 use App\Ads\Reports\AdsFilter;
 use App\Enums\UserRole;
@@ -11,7 +12,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * The «محتاج قرار» badge: approvals waiting for the viewer + open stop suggestions in scope (S5 adds alerts).
+ * The «محتاج قرار» badge: approvals waiting for the viewer + open stop suggestions in scope (minus the ads folded into an
+ * alert card) + open S5 alert cards (before the buyer cap).
  *
  * Never computed inside an ordinary page request: the shared Inertia prop reads the cached number only (a miss = no
  * badge). The number is written by refresh(): the Decisions page visit (which has the suggestions anyway) and the
@@ -52,8 +54,11 @@ class DecisionCounter
     public function refresh(User $u): int
     {
         $f = self::window(AdsFilter::fromRequest(Request::create('/ads/decisions'), $u, 'last7'));
+        $feed = app(AlertFeed::class);
+        $folded = $feed->adIdsWithLiveAlerts($u);
+        $suggestions = array_filter($this->advisor->suggest($f), fn (array $s) => ! in_array((int) $s['ad_id'], $folded, true));
 
-        return self::store($u, $this->approvals->count($u) + count($this->advisor->suggest($f)));
+        return self::store($u, $this->approvals->count($u) + count($suggestions) + $feed->openCardCount($u));
     }
 
     /** Caches a count the caller already has (the Decisions page). */

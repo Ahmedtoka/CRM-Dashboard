@@ -52,6 +52,14 @@ final class AlertFeed
         ]];
     }
 
+    /** Open cards before the buyer cap: what the «محتاج قرار» badge counts (one light query, no card building). */
+    public function openCardCount(User $u): int
+    {
+        $rows = $this->scope->visible($u)->where('state', AdsAlert::OPEN)->get(['ads_alerts.id', 'rule_id', 'ad_id', 'product_id', 'ad_account_id']);
+
+        return count($this->groups($rows));
+    }
+
     /** @return list<int> */
     public function adIdsWithLiveAlerts(User $u): array
     {
@@ -93,8 +101,26 @@ final class AlertFeed
     {
         $accounts = AdAccount::query()->whereIn('id', $rows->pluck('ad_account_id')->filter()->unique()->values())->get();
         $canWrite = $this->writer->canWriteMany($u, $accounts);
-        $perAd = $rows->whereNotNull('ad_id')->countBy('ad_id');
 
+        $cards = [];
+        foreach ($this->groups($rows) as $key => $alerts) {
+            $cards[] = $this->card($u, (string) $key, collect($alerts), $canWrite);
+        }
+        usort($cards, fn (array $x, array $y) => [Severity::rank($y['severity']), $y['money_at_risk_per_day'], $x['first_fired_at'] ?? '']
+            <=> [Severity::rank($x['severity']), $x['money_at_risk_per_day'], $y['first_fired_at'] ?? '']);
+
+        return $cards;
+    }
+
+    /**
+     * Card keys: an out-of-stock alert groups per product only when it is the ad's only live reason.
+     *
+     * @param  Collection<int, AdsAlert>  $rows
+     * @return array<string, list<AdsAlert>>
+     */
+    private function groups(Collection $rows): array
+    {
+        $perAd = $rows->whereNotNull('ad_id')->countBy('ad_id');
         $groups = [];
         foreach ($rows as $a) {
             $key = match (true) {
@@ -105,14 +131,7 @@ final class AlertFeed
             $groups[$key][] = $a;
         }
 
-        $cards = [];
-        foreach ($groups as $key => $alerts) {
-            $cards[] = $this->card($u, (string) $key, collect($alerts), $canWrite);
-        }
-        usort($cards, fn (array $x, array $y) => [Severity::rank($y['severity']), $y['money_at_risk_per_day'], $x['first_fired_at'] ?? '']
-            <=> [Severity::rank($x['severity']), $x['money_at_risk_per_day'], $y['first_fired_at'] ?? '']);
-
-        return $cards;
+        return $groups;
     }
 
     /**
