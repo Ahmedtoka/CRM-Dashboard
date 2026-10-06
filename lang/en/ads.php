@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'alerts' => ['cannot_dismiss' => 'Only Ads authority can dismiss this alert. You can snooze it.'],
     'assignment_before_open' => 'The start date is before the current assignment starts.',
     'assignment_overlaps' => 'The start date overlaps an earlier assignment.',
     'unassigned' => 'Unassigned',

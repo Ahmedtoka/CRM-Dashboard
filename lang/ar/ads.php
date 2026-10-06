@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'alerts' => ['cannot_dismiss' => 'التنبيه ده يترفض من صاحب صلاحية الإعلانات بس. تقدر تأجّله.'],
     'assignment_before_open' => 'تاريخ البداية قبل بداية التسكين الحالي.',
     'assignment_overlaps' => 'تاريخ البداية بيتداخل مع تسكين سابق.',
     'unassigned' => 'غير مسند',
