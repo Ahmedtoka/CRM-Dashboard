@@ -787,6 +787,10 @@ export interface AdSuggestion {
     roas: number | null;
     reasons: AdReason[];
     can_write: boolean;
+    objective: AdObjective;
+    thumbnail_url: string | null;
+    campaign: string | null;
+    status: string | null;
 }
 
 /** One ad_write_actions row on the log (slice-1 rows are copied in as legacy rows). */
@@ -803,6 +807,11 @@ export interface AdActionLogRow {
     reason: string | null;
     result: 'ok' | 'error' | 'pending';
     error: string | null;
+    ad_id: number | null;
+    user_id: number | null;
+    account_id: number;
+    external_id: string;
+    source: string;
 }
 
 export interface AdsActionsProps extends AdsBannerProps {
@@ -1050,6 +1059,151 @@ export interface BulkPlan {
     approvals_left: number;
     skipped: { warned: number; first_launch: number; self: number; limit: number };
 }
+/* ---- S2 control room ---- */
+export type AdObjective = 'messages' | 'sales' | 'traffic' | 'other';
+export type AdHealthKey = 'out_of_stock' | 'losing' | 'tired' | 'too_early' | 'parent_paused' | 'winning';
+export type AdsRangeKey = 'today' | 'yesterday' | 'last7' | 'last30' | 'this_month';
+export type AdsStatusFilter = 'running' | 'paused' | 'all';
+/** `top` = winner + promising, `promising` / `neutral` = the old Winners tier chips (kept for redirected links). */
+export type AdsHealthFilter = 'no_result' | 'losing' | 'tired' | 'winning' | 'out_of_stock' | 'top' | 'promising' | 'neutral';
+export type AdsView = 'table' | 'cards' | 'tree';
+export type AdLevel = 'campaign' | 'adset' | 'ad';
+
+export interface AdSeriesPoint {
+    date: string;
+    spend: number;
+    roas: number | null;
+}
+
+/** RunningCreatives::rows + AdRowEnricher::enrich */
+export interface AdRowData extends CreativeRow {
+    objective: AdObjective;
+    conversations: number;
+    real_revenue: number;
+    /** null on non-EGP accounts: store revenue is EGP, so the ratio would mean nothing (render «—»). */
+    real_roas: number | null;
+    /** The ad account currency (upper-case); money on the row is in it. */
+    currency: string;
+    spend_today: number;
+    need_stop: boolean;
+    tier: WinnerTier | null;
+    health: AdHealthKey[];
+    series: AdSeriesPoint[];
+    can_write: boolean;
+}
+
+export interface AdsControlFilters extends AdsFilters {
+    range: AdsRangeKey | null;
+    accounts: number[];
+}
+
+export interface AdsAccountOption {
+    id: number;
+    name: string;
+    platform: AdPlatformValue | string;
+}
+
+export interface AdsPageBase extends AdsCommonProps {
+    account_options: AdsAccountOption[];
+    freshness: string | null;
+}
+
+/** SpendByHour::today */
+export interface AdsSpendByHour {
+    spend_so_far: number;
+    usual_by_now: number | null;
+    ratio: number | null;
+    baseline: 'snapshots' | 'prorated' | 'none';
+    hour: number;
+    hours: { hour: number; today: number; usual: number | null }[];
+}
+
+export interface AdsTodayData {
+    decisions: { approvals: number; suggestions: AdSuggestion[]; suggestions_total: number; alerts: unknown[] };
+    money_today: AdsSpendByHour & { conversations: number; orders: number };
+    last7: { from: string; to: string; totals: AdsTotals; daily: AdsDailyRow[] };
+    buyers: (BuyerCardData & { open_decisions: number })[] | null;
+    best: AdRowData[];
+    worst: AdRowData[];
+}
+
+export interface AdsTodayProps extends AdsPageBase {
+    filters: AdsControlFilters;
+    today: AdsTodayData;
+}
+
+export interface AdsExplorerFilters extends AdsControlFilters {
+    view: AdsView;
+    status: AdsStatusFilter;
+    objective: Exclude<AdObjective, 'other'> | null;
+    health: AdsHealthFilter | null;
+    changed: 'today' | null;
+    q: string | null;
+    sort: string;
+    per_page: 25 | 50 | 100;
+    page: number;
+}
+
+export interface AdsExplorerResult {
+    data: AdRowData[];
+    meta: { total: number; per_page: number; current_page: number; last_page: number };
+    counts: { all: number; active: number; inactive: number };
+    totals: AdsDerived;
+}
+
+export interface AdsExplorerProps extends AdsPageBase {
+    filters: AdsExplorerFilters;
+    result: AdsExplorerResult | null;
+    tree: CampaignNode[] | null;
+    /** view=cards only: scored ads per tier (`top` = winner + promising). */
+    tier_counts: Record<WinnerTierFilter, number> | null;
+}
+
+export type DecisionsTab = 'open' | 'snoozed' | 'closed' | 'log';
+
+export interface AdsDecisionsProps extends AdsPageBase {
+    filters: AdsControlFilters & { tab: DecisionsTab; who: number | null; level: AdLevel | null; result: 'ok' | 'error' | 'pending' | null };
+    counts: { open: number; snoozed: number; closed: number };
+    approvals: { count: number; href: string; items: unknown[] } | null;
+    suggestions: AdSuggestion[];
+    /** S5 fills this (ads_alerts); always [] in S2. */
+    alerts: unknown[];
+    log: AdActionLogRow[];
+    log_users: AdsOption[];
+}
+
+export interface AdsChatRow {
+    campaign: string;
+    ads: string[];
+    conversations: number;
+    customers: number;
+    orders: number;
+    revenue: number;
+    spend: number | null;
+    cost_per_conversation: number | null;
+    cost_per_order: number | null;
+    roas: number | null;
+}
+
+export interface AdsChatReport {
+    rows: AdsChatRow[];
+    totals: { conversations: number; customers: number; orders: number; revenue: number; spend: number | null; roas: number | null; cost_per_order: number | null };
+    currency: string | null;
+    spend_available: boolean;
+}
+
+/** `buyers` here is the buyer cards (it replaces the common buyer options; the filter bar derives its options from the cards). */
+export interface AdsNumbersProps extends Omit<AdsPageBase, 'buyers'> {
+    filters: AdsControlFilters & { section: 'buyers' | 'chat' | 'accounts' | null };
+    sync_errors: { account: string; error: string }[];
+    sync: AdsSync;
+    overview: AdsOverviewData;
+    summary: AdsRevenueSummary;
+    top_accounts: AdsTopAccountRow[];
+    buyers: BuyerCardData[];
+    chat_campaigns: AdsChatReport | null;
+}
+
 /* Control room S3: the per-ad chat funnel (GET /ads/chat-funnel). */
 export type LostReason = 'price' | 'size_out' | 'shipping' | 'no_answer' | 'browsing' | 'other';
 export interface ChatFunnel {
@@ -1059,4 +1213,14 @@ export interface ChatFunnel {
     delivered: number;
     returned: number;
     reasons: Partial<Record<LostReason, number>>;
+}
+
+/** GET /ads/ad/{id} */
+export interface AdDrawerData {
+    ad: AdRowData & { preview_html: string | null };
+    reasons: AdReason[];
+    decisions: { kind: 'stop_suggestion'; reasons: AdReason[] }[];
+    history: AdActionLogRow[];
+    funnel: ChatFunnel | null;
+    levels: AdLevel[];
 }

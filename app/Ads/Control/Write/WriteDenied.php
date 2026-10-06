@@ -26,6 +26,7 @@ class WriteDenied extends RuntimeException
         'diff_changed' => 409,
         'precondition_failed' => 409,
         'proposal_expired' => 410,
+        'password_confirmation_required' => 423,
         'rate_limited' => 429,
         'writes_disabled' => 503,
         'launch_state' => 409,

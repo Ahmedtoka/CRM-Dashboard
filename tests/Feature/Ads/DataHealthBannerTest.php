@@ -46,7 +46,7 @@ function dbAdmin(): User
 /** @return list<string> every Ads report page that must carry the banner props */
 function dbPages(MediaBuyer $buyer): array
 {
-    return ['/ads', '/ads/buyers', "/ads/buyers/{$buyer->id}", '/ads/creatives', '/ads/campaigns', '/ads/winners', '/ads/actions'];
+    return ['/ads', '/ads/numbers', "/ads/buyers/{$buyer->id}", '/ads/explorer', '/ads/explorer?view=tree', '/ads/explorer?view=cards', '/ads/decisions', '/ads/decisions?tab=log'];
 }
 
 it('puts the stale reason on every Ads report page and names the account', function () {

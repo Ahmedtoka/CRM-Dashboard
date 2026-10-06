@@ -8,7 +8,7 @@ describe('NavMain badges', () => {
         expect(blocks).toHaveLength(2);
         for (const block of blocks) {
             const beforeLinkEnd = block.slice(0, block.indexOf('</Link>'));
-            expect(beforeLinkEnd.match(/\{\{ child\.badge \}\}/g) ?? []).toHaveLength(1);
+            expect(beforeLinkEnd.match(/\{\{ (?:formatCount\()?child\.badge/g) ?? []).toHaveLength(1);
         }
     });
 });

@@ -200,7 +200,7 @@ class WriteExecutor
         $type = $x->state === AdWriteAction::UNKNOWN ? 'ads.stop_unknown' : 'ads.stop_failed';
         app(UserNotifier::class)->notifyAdsAuthority($type, array_filter([
             'action_id' => $x->public_id, 'name' => $x->target_name, 'account' => $x->account_name, 'level' => $x->target_level,
-            'error_code' => $x->error_code, 'deep_link' => $link, 'link' => '/ads/actions',
+            'error_code' => $x->error_code, 'deep_link' => $link, 'link' => '/ads/decisions?tab=log',
         ], fn ($v) => $v !== null));
     }
 

@@ -17,17 +17,6 @@ class BuyerController extends Controller
 {
     use BuildsAdsPages;
 
-    public function index(Request $request, BuyerScorecard $cards): Response
-    {
-        $filter = AdsFilter::fromRequest($request, $request->user());
-
-        return Inertia::render('Ads/Buyers', [
-            'filters' => $this->filterProps($filter),
-            ...$this->commonProps($request->user(), $filter),
-            'cards' => $cards->build($filter),
-        ]);
-    }
-
     public function show(Request $request, MediaBuyer $buyer, BuyerScorecard $cards, AdsScope $scope, RevenueSummary $summary): Response
     {
         $user = $request->user();

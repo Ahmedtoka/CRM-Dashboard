@@ -346,7 +346,7 @@ async function runAction(name: ConversationAction): Promise<void> {
     if (conversation) list.applyConversation(conversation);
 }
 
-/** «حل ▾» confirmed with its outcome (control room S3). */
+/** «حل» confirmed with its outcome (control room S3). */
 async function resolveWith(payload: OutcomePayload): Promise<void> {
     const conversation = await thread.action('resolve', { ...payload });
     if (conversation) {

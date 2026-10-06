@@ -135,7 +135,7 @@ function open(n: AppNotification): void {
         return;
     }
     if (n.type === 'ads.stop_failed' || n.type === 'ads.stop_unknown') {
-        router.visit('/ads/actions');
+        router.visit(String(n.data.link ?? '/ads/decisions?tab=log'));
         return;
     }
     if (n.type === 'ads.token_invalid' || n.type === 'ads.token_scope_missing' || n.type === 'ads.token_expiring') {

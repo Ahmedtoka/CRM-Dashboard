@@ -19,6 +19,7 @@ use App\Ads\Control\Commands\WriteResolveCommand;
 use App\Ads\Control\Commands\WritesSwitchCommand;
 use App\Ads\Control\Commands\WriteSweepCommand;
 use App\Ads\Control\Write\WriteRateLimits;
+use App\Ads\Decisions\Commands\DecisionsCountCommand;
 use App\Ads\Doctor\DoctorCommand;
 use App\Ads\Health\Commands\GateCommand;
 use App\Ads\Health\Commands\HealthCommand;
@@ -64,7 +65,7 @@ class AdsServiceProvider extends ServiceProvider
     {
         Event::listen(LaunchMoved::class, [MaterialStatus::class, 'handle']);
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, LaunchSweepCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, AdsAuthorityCommand::class, WritesSwitchCommand::class, WriteResolveCommand::class, WriteSweepCommand::class, WriteLimitsCommand::class, WritePreviewCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class, ReconcileCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, LaunchSweepCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, AdsAuthorityCommand::class, WritesSwitchCommand::class, WriteResolveCommand::class, WriteSweepCommand::class, WriteLimitsCommand::class, WritePreviewCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class, ReconcileCommand::class, DecisionsCountCommand::class]);
         }
 
         WriteRateLimits::register();
@@ -111,6 +112,10 @@ class AdsServiceProvider extends ServiceProvider
             // Never a new platform decision: it only re-sends an already confirmed Stop, within its 3-call bound.
             $schedule->command(WriteSweepCommand::class)->name('ads:write-sweep-stop-retries')
                 ->everyFiveMinutes()->timezone('Africa/Cairo')->withoutOverlapping(10)->onOneServer()->appendOutputTo(storage_path('logs/ads-schedule.log'));
+
+            // «محتاج قرار» badge counts, after the hourly sync (:10) and the attribution (:40).
+            $schedule->command(DecisionsCountCommand::class)
+                ->hourlyAt(50)->timezone('Africa/Cairo')->withoutOverlapping()->onOneServer()->runInBackground()->appendOutputTo(storage_path('logs/ads-schedule.log'));
 
             $schedule->command(SweepStuckRunsCommand::class)
                 ->everyFiveMinutes()->timezone('Africa/Cairo')->withoutOverlapping(10)->onOneServer()->appendOutputTo(storage_path('logs/ads-schedule.log'));

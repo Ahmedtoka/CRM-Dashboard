@@ -3,8 +3,10 @@
 namespace App\Ads\Control;
 
 use App\Ads\AdsSettings;
+use App\Ads\Reports\AdHealth;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\AdsQuery;
+use App\Ads\Reports\Objective;
 use App\Ads\Reports\WinnerScorer;
 use App\Models\Ad;
 use Illuminate\Support\Facades\DB;
@@ -13,8 +15,9 @@ use Illuminate\Support\Facades\DB;
  * Running ads worth stopping, each with the written reasons (spec 2.3). Candidates, all limited to ads whose OWN status is active (ACTIVE or ENABLE, never
  * effective_status) in the filter's scope:
  *   - loser tier or creative fatigue (WinnerScorer, same gate and numbers as the Winners page);
- *   - zero purchases with spend at or above `loser_min_spend`;
- *   - ads linked to an activated material flagged `need_stop` (its product ran out of stock), spend or not.
+ *   - zero purchases with spend at or above `loser_min_spend` (never a Messages ad: those are judged on chats and real
+ *     orders, U X7 / quick win 7);
+ *   - ads linked to a live (activated before the S1 remap) material flagged `need_stop` (its product ran out of stock), spend or not.
  *
  * Reasons are {key, params} under `ads.reasons.*`; the first one that fired comes first.
  */
@@ -40,7 +43,10 @@ final class StopAdvisor
         $days = (int) $f->from->diffInDays($f->to) + 1;
         $scored = collect($this->scorer->build($f, 'all'))->keyBy(fn (array $r) => $r['ad']['id']);
 
-        $sums = $this->q->sums($f, ['ad_id' => 'm.ad_id'], fn ($b) => $this->notStale($b->whereIn('ad.status', AdWriteService::ACTIVE_STATUSES), 'ad.effective_status'))->keyBy(fn ($r) => (int) $r->ad_id);
+        $sums = $this->q->sums($f, ['ad_id' => 'm.ad_id'], fn ($b) => $this->notStale($b->whereIn('ad.status', AdWriteService::ACTIVE_STATUSES), 'ad.effective_status')
+            ->leftJoin('ad_campaigns as oc', 'oc.id', '=', 'ad.ad_campaign_id')
+            ->selectRaw('MAX(oc.objective) as objective, COALESCE(SUM(m.msg_conversations), 0) as msg_conversations'))
+            ->keyBy(fn ($r) => (int) $r->ad_id);
         $needStop = $this->needStopMaterials($f);
 
         $reasons = [];
@@ -58,6 +64,10 @@ final class StopAdvisor
             }
         }
         foreach ($sums as $adId => $s) {
+            // Messages ads are judged on chats and real orders, never on pixel purchases (U X7, quick win 7).
+            if (Objective::family($s->objective, (int) $s->msg_conversations) === Objective::MESSAGES) {
+                continue;
+            }
             if ((float) $s->purchases <= 0 && (float) $s->spend >= $minSpend && $minSpend > 0) {
                 $take($adId, ['key' => 'no_purchases', 'params' => ['spend' => round((float) $s->spend, 2), 'days' => $days]]);
             }
@@ -70,7 +80,7 @@ final class StopAdvisor
             return [];
         }
 
-        $ads = $this->notStale(Ad::query()->with('account:id,name,platform')->whereIn('id', array_keys($reasons))->whereIn('status', AdWriteService::ACTIVE_STATUSES), 'effective_status')->get()->keyBy('id');
+        $ads = $this->notStale(Ad::query()->with(['account:id,name,platform', 'campaign:id,name,objective'])->whereIn('id', array_keys($reasons))->whereIn('status', AdWriteService::ACTIVE_STATUSES), 'effective_status')->get()->keyBy('id');
 
         $out = [];
         foreach ($reasons as $adId => $list) {
@@ -86,6 +96,10 @@ final class StopAdvisor
                 'name' => (string) $ad->name,
                 'spend' => (float) ($d['spend'] ?? 0), 'spend_tax' => (float) ($d['spend_tax'] ?? 0), 'roas' => $d['roas'] ?? null,
                 'reasons' => $list,
+                'objective' => Objective::family($ad->campaign?->objective, (int) ($s->msg_conversations ?? 0)),
+                'thumbnail_url' => $ad->thumbnail_url,
+                'campaign' => $ad->campaign?->name,
+                'status' => $ad->status,
             ];
         }
 
@@ -109,7 +123,7 @@ final class StopAdvisor
     }
 
     /**
-     * Linked ads of activated materials that are flagged need-stop, inside the filter's accounts.
+     * Linked ads of live (activated) materials that are flagged need-stop, inside the filter's accounts.
      *
      * @return array<int, list<string>> ad id => material titles
      */
@@ -119,7 +133,7 @@ final class StopAdvisor
             ->join('ad_materials as mat', 'mat.id', '=', 'l.ad_material_id')
             ->join('ads as ad', 'ad.id', '=', 'l.ad_id')
             ->join('ad_accounts as acc', 'acc.id', '=', 'ad.ad_account_id')
-            ->where('mat.status', 'live')
+            ->whereIn('mat.status', AdHealth::NEED_STOP_MATERIAL_STATUSES)
             ->whereNotNull('mat.need_stop_at')
             ->whereIn('ad.status', AdWriteService::ACTIVE_STATUSES)
             ->where(fn ($w) => $this->notStale($w, 'ad.effective_status'))

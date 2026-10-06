@@ -91,11 +91,11 @@ it('returns null ratios when there is no spend or store revenue', function () {
 it('shows store totals to admins and hides them from media buyers on the overview', function () {
     rsWorld();
     $admin = User::factory()->create(['role' => UserRole::Admin]);
-    $this->actingAs($admin)->get('/ads?from=2026-09-01&to=2026-09-30')
+    $this->actingAs($admin)->get('/ads/numbers?from=2026-09-01&to=2026-09-30')
         ->assertInertia(fn (Assert $p) => $p->where('summary.store.orders', 0));
 
     $buyer = User::factory()->create(['role' => UserRole::MediaBuyer]);
-    $this->actingAs($buyer)->get('/ads?from=2026-09-01&to=2026-09-30')
+    $this->actingAs($buyer)->get('/ads/numbers?from=2026-09-01&to=2026-09-30')
         ->assertInertia(fn (Assert $p) => $p->where('summary.store', null)->has('summary.platform'));
 });
 

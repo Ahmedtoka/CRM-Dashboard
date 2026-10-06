@@ -14,7 +14,7 @@ final class RunningCreatives
 {
     public const PER_PAGE = [10, 25, 50, 100];
 
-    public const SORTS = ['spend', 'roas', 'ctr', 'impressions', 'clicks', 'purchases', 'date'];
+    public const SORTS = ['spend', 'roas', 'ctr', 'impressions', 'clicks', 'purchases', 'conversations', 'date'];
 
     public const AD_COLUMNS = [
         'ad.id', 'ad.external_id', 'ad.name', 'ad.type', 'ad.status', 'ad.effective_status', 'ad.thumbnail_url', 'ad.image_url',
@@ -36,12 +36,14 @@ final class RunningCreatives
         $search = trim((string) ($opts['q'] ?? ''));
         $sort = in_array($opts['sort'] ?? null, self::SORTS, true) ? $opts['sort'] : 'spend';
         $perPage = in_array((int) ($opts['per_page'] ?? 0), self::PER_PAGE, true) ? (int) $opts['per_page'] : 25;
+        $dir = ($opts['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
+        $extra = array_intersect_key($opts, array_flip(['only_ids', 'no_result_min', 'objective']));
 
         // counts: every filter but status; accounts: every filter but the account
-        $c = $this->base($accountF, null, $search)
+        $c = $this->base($accountF, null, $search, $extra)
             ->selectRaw("COUNT(*) as total, COALESCE(SUM(CASE WHEN ad.effective_status = 'ACTIVE' THEN 1 ELSE 0 END), 0) as active")->first();
         $counts = ['all' => (int) $c->total, 'active' => (int) $c->active, 'inactive' => (int) $c->total - (int) $c->active];
-        $accounts = $this->base($f, $status, $search)
+        $accounts = $this->base($f, $status, $search, $extra)
             ->select(['acc.id', 'acc.name'])->selectRaw('COUNT(*) as n')->groupBy('acc.id', 'acc.name')->orderByDesc('n')->orderBy('acc.id')->get()
             ->map(fn ($r) => ['id' => (int) $r->id, 'name' => (string) $r->name, 'count' => (int) $r->n])->all();
 
@@ -49,10 +51,10 @@ final class RunningCreatives
         $lastPage = max(1, (int) ceil($total / $perPage));
         $page = min(max(1, (int) ($opts['page'] ?? 1)), $lastPage);
 
-        $pageRows = $this->sorted($this->base($accountF, $status, $search)->select(self::AD_COLUMNS)->addSelect(['g.*', 'acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name', 'camp.status as campaign_status', 'st.status as adset_status']), $sort)
+        $pageRows = $this->sorted($this->base($accountF, $status, $search, $extra)->select(self::AD_COLUMNS)->addSelect(['g.*', 'acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name', 'camp.status as campaign_status', 'st.status as adset_status', 'camp.objective as objective']), $sort, $dir)
             ->forPage($page, $perPage)->get();
 
-        $totals = $this->base($accountF, $status, $search)
+        $totals = $this->base($accountF, $status, $search, $extra)
             ->selectRaw('COALESCE(SUM(g.spend), 0) as spend, COALESCE(SUM(g.purchase_value), 0) as purchase_value, COALESCE(SUM(g.purchases), 0) as purchases, '
                 .'COALESCE(SUM(g.impressions), 0) as impressions, COALESCE(SUM(g.clicks), 0) as clicks, COALESCE(SUM(g.reach), 0) as reach')->first();
 
@@ -75,8 +77,10 @@ final class RunningCreatives
             ->leftJoin('ad_campaigns as camp', 'camp.id', '=', 'ad.ad_campaign_id')
             ->leftJoin('ad_sets as st', 'st.id', '=', 'ad.ad_set_id')
             ->where('ad.id', $ad->id)
-            ->select(self::AD_COLUMNS)->addSelect(['acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name', 'camp.status as campaign_status', 'st.status as adset_status'])
+            ->select(self::AD_COLUMNS)->addSelect(['acc.name as account_name', 'acc.platform', 'camp.name as campaign_name', 'st.name as adset_name', 'camp.status as campaign_status', 'st.status as adset_status', 'camp.objective as objective'])
             ->first();
+        $row->msg_conversations = (int) DB::table('ad_daily_metrics')->where('ad_id', $ad->id)
+            ->whereBetween('date', [$f->fromDate(), $f->toDate()])->sum('msg_conversations');
         foreach (['spend', 'purchase_value', 'purchases', 'impressions', 'clicks', 'reach'] as $k) {
             $row->{$k} = $agg->{$k} ?? 0;
         }
@@ -93,12 +97,24 @@ final class RunningCreatives
     public function rows(array $rows, AdsFilter $f, ?array $insights = null): array
     {
         $ids = array_map(fn ($r) => (int) $r->id, $rows);
-        $real = $ids === [] ? collect() : $this->q->orders($f)->whereIn('ad_id', $ids)->countBy('ad_id');
+        $orders = $ids === [] ? collect() : $this->q->orders($f)->whereIn('ad_id', $ids)->groupBy('ad_id');
+        $day = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay();
+        $todayF = $f->allSpend()->with(['from' => $day, 'to' => $day]);
+        $today = $ids === [] ? collect() : $this->q->sums($todayF, ['ad_id' => 'm.ad_id'], fn ($b) => $b->whereIn('m.ad_id', $ids))
+            ->mapWithKeys(fn ($s) => [(int) $s->ad_id => (float) $s->spend]);
         $buyers = $this->buyers($ids, $f);
         $insights ??= $this->insights->forAds($ids, $f->to);
+        // Real ROAS divides EGP order revenue by spend: only meaningful on an EGP account (A9).
+        $currencies = $ids === [] ? collect() : DB::table('ad_accounts')
+            ->whereIn('id', array_unique(array_map(fn ($r) => (int) $r->ad_account_id, $rows)))->pluck('currency', 'id');
 
-        return array_map(function (object $r) use ($real, $buyers, $insights) {
+        return array_map(function (object $r) use ($orders, $today, $buyers, $insights, $currencies) {
             $d = $this->q->derive($r);
+            $mine = $orders->get((int) $r->id, collect());
+            $revenue = round((float) $mine->sum('net'), 2);
+            $chats = (int) ($r->msg_conversations ?? 0);
+            $currency = $currencies[(int) $r->ad_account_id] ?? null;
+            $egp = AdDailySeries::isEgp($currency);
 
             return [
                 'id' => (int) $r->id,
@@ -131,7 +147,13 @@ final class RunningCreatives
                 'spend_tax' => $d['spend_tax'],
                 'purchase_value' => $d['purchase_value'],
                 'roas' => $d['roas'],
-                'real_orders' => (int) ($real[$r->id] ?? 0),
+                'real_orders' => $mine->count(),
+                'real_revenue' => $revenue,
+                'real_roas' => $egp ? AdsQuery::ratio($revenue, $d['spend'], 2) : null,
+                'currency' => $currency !== null && $currency !== '' ? strtoupper((string) $currency) : 'EGP',
+                'objective' => Objective::family($r->objective ?? null, $chats),
+                'conversations' => $chats,
+                'spend_today' => round((float) ($today[(int) $r->id] ?? 0), 2),
                 'buyer' => $buyers[(int) $r->id] ?? null,
                 'trend' => $insights[(int) $r->id]['trend'],
                 'fatigue' => $insights[(int) $r->id]['fatigue'],
@@ -157,10 +179,15 @@ final class RunningCreatives
         return $changes === [] ? $f : $f->with($changes);
     }
 
-    /** ads joined to their range aggregates (g), accounts, campaigns and ad sets. */
-    private function base(AdsFilter $f, ?string $status, string $search): Builder
+    /**
+     * ads joined to their range aggregates (g), accounts, campaigns and ad sets.
+     *
+     * @param  array{only_ids?: ?list<int>, no_result_min?: float|int|string|null, objective?: ?string}  $extra
+     */
+    private function base(AdsFilter $f, ?string $status, string $search, array $extra = []): Builder
     {
-        $agg = $this->q->metrics($f)->select(['m.ad_id'])->selectRaw(AdsQuery::SUMS)->groupBy('m.ad_id');
+        $agg = $this->q->metrics($f)->select(['m.ad_id'])
+            ->selectRaw(AdsQuery::SUMS.', COALESCE(SUM(m.msg_conversations), 0) as msg_conversations')->groupBy('m.ad_id');
 
         $q = DB::table('ads as ad')
             ->joinSub($agg, 'g', 'g.ad_id', '=', 'ad.id')
@@ -176,17 +203,34 @@ final class RunningCreatives
         if ($search !== '') {
             $q->where('ad.name', 'like', '%'.$search.'%');
         }
+        if (array_key_exists('only_ids', $extra) && $extra['only_ids'] !== null) {
+            $extra['only_ids'] === [] ? $q->whereRaw('1 = 0') : $q->whereIn('ad.id', $extra['only_ids']);
+        }
+        if (($extra['no_result_min'] ?? null) !== null) {
+            // Inlined as a formatted float: SQLite binds floats as text, and a text bound never compares as a number
+            // against an aggregate with no column affinity.
+            $q->whereRaw('g.spend >= '.sprintf('%.2F', (float) $extra['no_result_min']))
+                ->where('g.purchases', '<=', 0)->where('g.msg_conversations', '<=', 0);
+        }
+        $family = $extra['objective'] ?? null;
+        if ($family === Objective::MESSAGES) {
+            $q->where(fn ($w) => $w->whereIn('camp.objective', Objective::values(Objective::MESSAGES))->orWhere('g.msg_conversations', '>', 0));
+        } elseif (in_array($family, [Objective::SALES, Objective::TRAFFIC], true)) {
+            $q->whereIn('camp.objective', Objective::values($family))->where('g.msg_conversations', '<=', 0);
+        }
 
         return $q;
     }
 
-    private function sorted(Builder $q, string $sort): Builder
+    private function sorted(Builder $q, string $sort, string $dir = 'desc'): Builder
     {
+        $d = $dir === 'asc' ? 'ASC' : 'DESC';
         match ($sort) {
-            'roas' => $q->orderByRaw('g.purchase_value * 1.0 / NULLIF(g.spend, 0) DESC'),
-            'ctr' => $q->orderByRaw('g.clicks * 1.0 / NULLIF(g.impressions, 0) DESC'),
-            'date' => $q->orderByDesc('ad.created_time'),
-            default => $q->orderByDesc("g.{$sort}"),
+            'roas' => $q->orderByRaw("g.purchase_value * 1.0 / NULLIF(g.spend, 0) {$d}"),
+            'ctr' => $q->orderByRaw("g.clicks * 1.0 / NULLIF(g.impressions, 0) {$d}"),
+            'date' => $q->orderBy('ad.created_time', $dir),
+            'conversations' => $q->orderBy('g.msg_conversations', $dir),
+            default => $q->orderBy("g.{$sort}", $dir),
         };
 
         return $q->orderByDesc('g.spend')->orderByDesc('ad.id');

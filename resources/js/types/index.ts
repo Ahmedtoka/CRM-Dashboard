@@ -22,8 +22,12 @@ export interface NavItem {
     section?: string;
     /** Active only on this exact path (a parent-path child such as /ads would light up on every sub-page). */
     exact?: boolean;
-    /** A count shown as a small pill (0 hides it). */
-    badge?: number;
+    /** Count shown at the end of the item (open decisions, drafts to review). Hidden when 0 or missing. */
+    badge?: number | null;
+    /** Query string appended to the link only (carried filters); `isActive` still compares the path. */
+    query?: string;
+    /** Other path prefixes that light this item up (setup tabs live under /ads/accounts and /ads/sync). */
+    match?: string[];
 }
 
 export interface SharedData {

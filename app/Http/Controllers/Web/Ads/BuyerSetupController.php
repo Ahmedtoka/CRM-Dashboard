@@ -16,10 +16,10 @@ use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** Media buyers (who they are, their monthly targets) and the Ads Hub settings. Supervisor and up. */
+/** Media buyers (who they are, their monthly targets) and the Ads Hub settings («الإعداد» tabs). Supervisor and up. */
 class BuyerSetupController extends Controller
 {
-    public function index(AdsSettings $settings): Response
+    public function index(): Response
     {
         $buyers = MediaBuyer::with(['user:id,name', 'targets'])->orderBy('name')->get()
             ->map(fn (MediaBuyer $b) => [
@@ -39,6 +39,13 @@ class BuyerSetupController extends Controller
             'buyers' => $buyers,
             'users' => User::where('role', UserRole::MediaBuyer->value)->orderBy('name')->get(['id', 'name', 'role'])
                 ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'role' => $u->role->value])->all(),
+        ]);
+    }
+
+    /** «الإعداد › القواعد»: tax rate and winner/loser thresholds (S5 adds break-even and rule settings here). */
+    public function rules(AdsSettings $settings): Response
+    {
+        return Inertia::render('Ads/SetupRules', [
             'settings' => [
                 'tax_rate' => $settings->taxRate(),
                 'tax_rate_percent' => round($settings->taxRate() * 100, 2),

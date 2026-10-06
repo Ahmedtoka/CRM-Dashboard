@@ -6,6 +6,7 @@ use App\Ads\Access\AdsScope;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Sync\HistoryWindow;
 use App\Enums\UserRole;
+use App\Models\MediaBuyer;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -41,12 +42,24 @@ final readonly class AdsFilter
         [$this->from, $this->to] = $f->greaterThan($t) ? [$t, $f] : [$f, $t];
     }
 
-    /** Defaults to the last 30 days ending today (Cairo) and applies the user's AdsScope. */
-    public static function fromRequest(Request $r, User $u): self
+    public const RANGES = ['today', 'yesterday', 'last7', 'last30', 'this_month'];
+
+    /**
+     * The page's default range (D9: Today/Explorer `last7`, Numbers `this_month`), overridden by `range=` or by
+     * `from`/`to`. Applies the user's AdsScope. `buyer=me` = the viewer's own buyer row (0 = nothing).
+     */
+    public static function fromRequest(Request $r, User $u, string $default = 'last30'): self
     {
         $today = CarbonImmutable::now(self::TIMEZONE)->startOfDay();
-        $to = self::date($r->query('to')) ?? $today;
-        $from = self::date($r->query('from')) ?? $to->subDays(29);
+        $preset = in_array($r->query('range'), self::RANGES, true) ? (string) $r->query('range') : null;
+        $from = self::date($r->query('from'));
+        $to = self::date($r->query('to'));
+        if ($preset !== null || ($from === null && $to === null)) {
+            [$from, $to] = self::preset($preset ?? $default, $today);
+        } else {
+            $to ??= $today;
+            $from ??= $to->subDays(29);
+        }
         if ($from->greaterThan($to)) {
             [$from, $to] = [$to, $from];
         }
@@ -69,8 +82,7 @@ final readonly class AdsFilter
         $scope = app(AdsScope::class);
         $allowed = $scope->accountIds($u, $from, $to);
 
-        $requested = collect((array) ($r->query('accounts') ?? []))
-            ->filter(fn ($v) => is_numeric($v))->map(fn ($v) => (int) $v)->unique()->values()->all();
+        $requested = self::accountIdsFrom($r->query('accounts'));
         $accountIds = match (true) {
             $allowed === null => $requested === [] ? null : $requested,
             $requested === [] => $allowed,
@@ -81,11 +93,50 @@ final readonly class AdsFilter
         $buyerId = null;
         if ($u->role === UserRole::MediaBuyer) {
             $restrict = $scope->buyerFor($u)?->id ?? 0; // 0 never matches: an unlinked buyer sees nothing
+        } elseif ($u->isSupervisorOrAbove() && $r->query('buyer') === 'me') {
+            // AdsScope::buyerFor answers media buyers only; a supervisor who also buys is found by user_id.
+            $buyerId = (int) (MediaBuyer::query()->where('user_id', $u->id)->value('id') ?? 0);
         } elseif ($u->isSupervisorOrAbove() && is_numeric($r->query('buyer'))) {
             $buyerId = (int) $r->query('buyer');
         }
 
         return new self($from, $to, $platform, $buyerId, $accountIds, $restrict, $clamped, true);
+    }
+
+    /** @return array{0: CarbonImmutable, 1: CarbonImmutable} `last7` = the last 7 COMPLETE days (D9), today excluded */
+    public static function preset(string $key, ?CarbonImmutable $today = null): array
+    {
+        $today ??= CarbonImmutable::now(self::TIMEZONE)->startOfDay();
+        $yesterday = $today->subDay();
+
+        return match ($key) {
+            'today' => [$today, $today],
+            'yesterday' => [$yesterday, $yesterday],
+            'last7' => [$yesterday->subDays(6), $yesterday],
+            'this_month' => [$today->startOfMonth(), $today],
+            default => [$today->subDays(29), $today],
+        };
+    }
+
+    /** The preset these dates equal today, or null for a custom range. */
+    public function rangeKey(): ?string
+    {
+        foreach (self::RANGES as $key) {
+            [$f, $t] = self::preset($key);
+            if ($f->equalTo($this->from) && $t->equalTo($this->to)) {
+                return $key;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return list<int> `accounts[]=1&accounts[]=2` (old links) or `accounts=1,2` (useUrlFilters) */
+    public static function accountIdsFrom(mixed $raw): array
+    {
+        $list = is_string($raw) ? explode(',', $raw) : (array) ($raw ?? []);
+
+        return collect($list)->filter(fn ($v) => is_numeric($v))->map(fn ($v) => (int) $v)->unique()->values()->all();
     }
 
     /** @param  array<string, mixed>  $changes */

@@ -60,8 +60,11 @@ it('groups ad conversations by campaign, attributes the customers\' later orders
         ->and($report['spend_available'])->toBeTrue();
 
     $supervisor = User::factory()->create(['role' => 'supervisor']);
-    $this->actingAs($supervisor)->get('/reports/ads?from=2026-09-01&to=2026-09-30')->assertOk()
-        ->assertInertia(fn ($page) => $page->component('Reports/Ads')->has('report.rows', 3));
+    // S2 (D11): the page moved to «الأرقام»; its chat table reads the synced spend (none here), not a live Graph call.
+    $this->actingAs($supervisor)->get('/reports/ads?from=2026-09-01&to=2026-09-30')
+        ->assertStatus(301)->assertRedirect('/ads/numbers?from=2026-09-01&to=2026-09-30&section=chat');
+    $this->actingAs($supervisor)->get('/ads/numbers?from=2026-09-01&to=2026-09-30&section=chat')->assertOk()
+        ->assertInertia(fn ($page) => $page->component('Ads/Numbers', false)->has('chat_campaigns.rows', 2)->where('chat_campaigns.spend_available', false));
 });
 
 it('says the spend is unavailable when the token cannot read ads', function () {

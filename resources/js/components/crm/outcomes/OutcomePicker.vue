@@ -7,7 +7,7 @@ import { Lock } from 'lucide-vue-next';
 import { computed, nextTick, ref } from 'vue';
 
 /**
- * The outcome row of «خلصت ▾» (C 3.1, D13): one tap or one digit (1-4) for the four sales reasons,
+ * The outcome row of «خلصت» (C 3.1, D13): one tap or one digit (1-4) for the four sales reasons,
  * a second row for the rest; locked when an order exists in this chat (automatic `ordered`).
  * Plain buttons (radio semantics), so it works inside a reka dropdown without stealing its items.
  */

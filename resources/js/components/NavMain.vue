@@ -10,6 +10,8 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
+import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import { ChevronRight } from 'lucide-vue-next';
@@ -20,11 +22,14 @@ defineProps<{
 }>();
 
 const page = usePage<SharedData>();
+const { locale } = useI18n();
 
-const isActive = (href: string, exact = false) => {
+/** Path match only (carried query strings never matter); `match` lists other prefixes that light the item up. */
+const isActive = (item: NavItem) => {
     const path = page.url.split('?')[0];
+    const hit = (href: string) => path === href || path.startsWith(`${href}/`);
 
-    return path === href || (!exact && path.startsWith(`${href}/`));
+    return path === item.href || (!item.exact && path.startsWith(`${item.href}/`)) || (item.match ?? []).some(hit);
 };
 
 /** Consecutive children sharing a `section` render under one small heading. */
@@ -48,12 +53,12 @@ const sectionsOf = (children: NavItem[]) => {
         <SidebarGroupLabel v-if="label">{{ label }}</SidebarGroupLabel>
         <SidebarMenu>
             <template v-for="item in items" :key="item.href">
-                <Collapsible v-if="item.children?.length" as-child :default-open="isActive(item.href)" class="group/collapsible">
+                <Collapsible v-if="item.children?.length" as-child :default-open="isActive(item)" class="group/collapsible">
                     <SidebarMenuItem>
                         <CollapsibleTrigger as-child>
                             <SidebarMenuButton
                                 :tooltip="item.title"
-                                :is-active="isActive(item.href)"
+                                :is-active="isActive(item)"
                                 class="h-10 gap-3 rounded-md font-medium [&>svg]:size-5 data-[active=true]:bg-surface-accent data-[active=true]:text-primary"
                             >
                                 <component :is="item.icon" v-if="item.icon" />
@@ -79,14 +84,12 @@ const sectionsOf = (children: NavItem[]) => {
                                             class="flex flex-col gap-1"
                                         >
                                             <SidebarMenuSubItem v-for="child in section.items" :key="child.href">
-                                                <SidebarMenuSubButton as-child :is-active="isActive(child.href, child.exact)">
-                                                    <Link :href="child.href" :aria-current="isActive(child.href, child.exact) ? 'page' : undefined">
+                                                <SidebarMenuSubButton as-child :is-active="isActive(child)">
+                                                    <Link :href="child.href + (child.query ?? '')" :aria-current="isActive(child) ? 'page' : undefined">
                                                         <span>{{ child.title }}</span>
-                                                        <span
-                                                            v-if="child.badge"
-                                                            class="ms-auto min-w-5 rounded-full bg-primary px-1.5 text-center text-2xs leading-5 font-semibold text-primary-foreground tabular-nums"
-                                                            >{{ child.badge }}</span
-                                                        >
+                                                        <span v-if="child.badge" class="ms-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs font-semibold tabular-nums text-primary-foreground">
+                                                            {{ formatCount(child.badge, locale) }}
+                                                        </span>
                                                     </Link>
                                                 </SidebarMenuSubButton>
                                             </SidebarMenuSubItem>
@@ -94,14 +97,12 @@ const sectionsOf = (children: NavItem[]) => {
                                     </li>
                                     <template v-else>
                                         <SidebarMenuSubItem v-for="child in section.items" :key="child.href">
-                                            <SidebarMenuSubButton as-child :is-active="isActive(child.href, child.exact)">
-                                                <Link :href="child.href" :aria-current="isActive(child.href, child.exact) ? 'page' : undefined">
+                                            <SidebarMenuSubButton as-child :is-active="isActive(child)">
+                                                <Link :href="child.href + (child.query ?? '')" :aria-current="isActive(child) ? 'page' : undefined">
                                                     <span>{{ child.title }}</span>
-                                                    <span
-                                                        v-if="child.badge"
-                                                        class="ms-auto min-w-5 rounded-full bg-primary px-1.5 text-center text-2xs leading-5 font-semibold text-primary-foreground tabular-nums"
-                                                        >{{ child.badge }}</span
-                                                    >
+                                                    <span v-if="child.badge" class="ms-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs font-semibold tabular-nums text-primary-foreground">
+                                                        {{ formatCount(child.badge, locale) }}
+                                                    </span>
                                                 </Link>
                                             </SidebarMenuSubButton>
                                         </SidebarMenuSubItem>
@@ -116,7 +117,7 @@ const sectionsOf = (children: NavItem[]) => {
                     <SidebarMenuButton
                         as-child
                         :tooltip="item.title"
-                        :is-active="isActive(item.href)"
+                        :is-active="isActive(item)"
                         class="h-10 gap-3 rounded-md font-medium [&>svg]:size-5 data-[active=true]:bg-surface-accent data-[active=true]:text-primary"
                     >
                         <Link :href="item.href">
