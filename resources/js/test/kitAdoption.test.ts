@@ -6,7 +6,10 @@ const pages: Record<string, string> = Object.fromEntries(
 );
 
 /** Pages already moved to the S0 kit. Each sweep task (13-20) appends its group; the test fails until they comply. */
-const SWEPT: string[] = [];
+const SWEPT: string[] = [
+    // Task 13
+    'Orders/Index', 'Orders/Show', 'Customers/Index', 'Customers/Show',
+];
 
 /** Raw tables allowed only on pages S1/S2 replace; they must sit in the shared sticky scroll box. */
 const RAW_TABLE_OK = new Set(['Ads/Actions', 'Ads/Campaigns', 'Ads/Creatives', 'Ads/Materials/Index']);

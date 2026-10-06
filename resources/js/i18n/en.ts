@@ -680,6 +680,7 @@ const en: Messages = {
     },
     orders: {
         title: 'Shopify orders',
+        presets: { awaiting_payment: 'Awaiting payment', mismatch: 'Shopify mismatch', stuck: 'Stuck' },
         search: 'Order number or customer name/phone',
         status_all: 'All statuses',
         type_all: 'All types',
@@ -894,6 +895,7 @@ const en: Messages = {
     customers: {
         title: 'Customers',
         search: 'Search by name, phone or email',
+        clear_search: 'Clear search',
         columns: { name: 'Name', phone: 'Phone', platforms: 'Platforms', orders: 'Orders', spent: 'Total spent', last_contact: 'Last contact' },
         empty: 'No customers',
         back: 'All customers',

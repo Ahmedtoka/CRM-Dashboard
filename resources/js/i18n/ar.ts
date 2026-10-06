@@ -657,6 +657,7 @@ const ar = {
     },
     orders: {
         title: 'أوردرات شوبيفاي',
+        presets: { awaiting_payment: 'مستنية الدفع', mismatch: 'فرق مع شوبيفاي', stuck: 'واقفة' },
         search: 'رقم الأوردر أو اسم/موبايل العميل',
         status_all: 'كل الحالات',
         type_all: 'كل الأنواع',
@@ -865,6 +866,7 @@ const ar = {
     customers: {
         title: 'العملاء',
         search: 'ابحث بالاسم أو الموبايل أو البريد',
+        clear_search: 'مسح البحث',
         columns: {
             name: 'الاسم',
             phone: 'الموبايل',
