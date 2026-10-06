@@ -2,6 +2,8 @@
 
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
+use App\Inbox\Outcomes\Commands\CloseIdleEpisodes;
+use App\Inbox\Outcomes\OutcomeRecorder;
 use App\Models\Conversation;
 use App\Models\ConversationOutcome;
 use App\Models\Message;
@@ -45,4 +47,26 @@ it('does not end the same episode twice', function () {
 it('is scheduled hourly', function () {
     $events = collect(app(Schedule::class)->events())->filter(fn ($e) => str_contains((string) $e->command, 'outcomes:close-idle'));
     expect($events)->toHaveCount(1)->and($events->first()->expression)->toBe('0 * * * *');
+});
+
+// Review round 1 (minor): the sweep looks at a chat only for a few runs after it went idle, and
+// never at chats where she has not written since tracking started.
+it('narrows the candidates to chats that went idle recently and after tracking started', function () {
+    config(['crm.outcomes.tracking_from' => '2026-10-08', 'crm.outcomes.recheck_hours' => 6]);
+    $justIdle = s3IdleChat(26);
+    $longIdle = s3IdleChat(40); // already looked at by the earlier runs
+    $preTracking = s3IdleChat(26, ['last_customer_message_at' => Carbon::parse('2026-10-07 10:00', 'Africa/Cairo')]);
+    $ratingOnly = s3IdleChat(27);
+    Message::query()->where('conversation_id', $ratingOnly->id)->where('direction', 'in')->update(['body' => '5']);
+
+    $command = app(CloseIdleEpisodes::class);
+    $ids = $command->candidates(24, app(OutcomeRecorder::class))->pluck('id')->sort()->values()->all();
+
+    expect($ids)->toBe([$justIdle->id, $ratingOnly->id]);
+
+    $this->artisan('outcomes:close-idle')->expectsOutputToContain('Ended 1 idle episodes.')->assertSuccessful();
+    expect(ConversationOutcome::pluck('conversation_id')->all())->toBe([$justIdle->id]);
+
+    Carbon::setTestNow(now()->addHours(7)); // the rating-only chat is no longer looked at
+    expect($command->candidates(24, app(OutcomeRecorder::class))->pluck('id')->all())->not->toContain($ratingOnly->id);
 });
