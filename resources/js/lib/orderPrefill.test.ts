@@ -32,6 +32,14 @@ describe('orderPrefill', () => {
         expect(pickVariant([v(1, 'L', 0)], 'اسدال كتان', [], [])).toEqual({ miss: 'stock' });
     });
 
+    it('needs every word of a noted colour or size: «بيج فاتح» is never «بيج غامق»', () => {
+        const variants = [v(1, 'L / بيج غامق'), v(2, 'L / بيج فاتح'), v(3, 'XL / اسود')];
+        expect(id(pickVariant(variants, 'اسدال كتان', ['L'], ['بيج فاتح']))).toBe(2);
+        expect(pickVariant([v(1, 'L / بيج غامق')], 'اسدال كتان', ['L'], ['بيج فاتح'])).toEqual({ miss: 'color', value: 'بيج فاتح' });
+        // Any one of several noted values may match, each one in full.
+        expect(id(pickVariant(variants, 'اسدال كتان', [], ['كحلي', 'بيج فاتح']))).toBe(2);
+    });
+
     it('keeps to the product whose title matches the noted name', () => {
         const hits = [v(7, 'L / بيج', 5, 'deny', 'طرحة شيفون', 2), v(8, 'L / بيج', 5, 'deny', 'عباية سادة', 3)];
         expect(id(pickVariant(hits, 'عباية', ['L'], ['بيج']))).toBe(8);

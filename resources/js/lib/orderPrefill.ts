@@ -60,9 +60,15 @@ export function pickVariant(variants: ProductVariant[], product: string, sizes: 
     const hits = productHits(variants, product);
     if (!hits.length) return { miss: 'product' };
     const pool = hits.filter(sellable);
-    const wantSizes = sizes.flatMap(tokens);
-    const wantColors = colors.flatMap(tokens);
-    const has = (v: ProductVariant, want: string[]) => !want.length || want.some((w) => tokens(v.title).includes(w));
+    const wantSizes = sizes.map(tokens).filter((t) => t.length);
+    const wantColors = colors.map(tokens).filter((t) => t.length);
+    /** One noted value (any of them) must match in full: every word of «بيج فاتح», so never «بيج غامق». */
+    const has = (v: ProductVariant, want: string[][]) => {
+        if (!want.length) return true;
+        const words = tokens(v.title);
+
+        return want.some((value) => value.every((w) => words.includes(w)));
+    };
 
     if (!pool.length) return { miss: 'stock' };
     const sized = pool.filter((v) => has(v, wantSizes));
