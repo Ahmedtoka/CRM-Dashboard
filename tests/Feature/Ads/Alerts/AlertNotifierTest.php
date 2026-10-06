@@ -74,3 +74,17 @@ it('rings for an out-of-stock alert at any severity, once per product per day', 
     $third = AdsAlert::factory()->create(['ad_id' => W::ad($acc)->id, 'rule_id' => 'all.out_of_stock', 'severity' => 'high', 'product_id' => $p->id]);
     expect(app(AlertNotifier::class)->critical([$third->id]))->toBe(2);
 });
+
+it('counts only critical alerts on the grouped bell (a high stock alert without a product does not ring it)', function () {
+    $w = anWorld();
+    app(RuleSettings::class)->setNotify($w['admin'], true);
+    $acc = $w['critical']->account;
+    $noProduct = AdsAlert::factory()->create(['ad_id' => W::ad($acc, 'MESSAGES')->id, 'rule_id' => 'all.out_of_stock', 'severity' => 'high', 'action' => 'check_stock', 'product_id' => null, 'money_at_risk_per_day' => 999]);
+
+    app(AlertNotifier::class)->critical([$w['critical']->id, $noProduct->id]);
+
+    $note = UserNotification::where('type', 'ads.alerts')->where('user_id', $w['admin']->id)->sole();
+    expect($note->data)->toMatchArray(['count' => 1, 'critical' => 1, 'money' => 300])
+        ->and(UserNotification::where('type', 'ads.alerts_stock')->count())->toBe(0)
+        ->and($noProduct->fresh()->notified_at)->toBeNull();
+});

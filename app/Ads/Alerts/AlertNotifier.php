@@ -52,7 +52,10 @@ final class AlertNotifier
             return 0;
         }
         $stock = $rows->filter(fn (AdsAlert $a) => $a->rule_id === OutOfStock::ID && $a->product_id !== null);
-        $grouped = $rows->diffKeys($stock)->pluck('id')->all();
+        // The grouped bell is the critical bell: an out-of-stock alert without a product (no per-product item) rings it
+        // only when it is critical itself, so a high one never inflates the count.
+        $groupedRows = $rows->diffKeys($stock)->filter(fn (AdsAlert $a) => $a->severity === Severity::CRITICAL);
+        $grouped = $groupedRows->pluck('id')->all();
 
         $sent = 0;
         $recipients = $this->scope->recipients();
@@ -63,7 +66,7 @@ final class AlertNotifier
                     continue;
                 }
                 $this->notifier->notify($user, self::TYPE, [
-                    'count' => $mine->count(), 'critical' => $mine->count(),
+                    'count' => $mine->count(), 'critical' => $mine->where('severity', Severity::CRITICAL)->count(),
                     'money' => (int) round((float) $mine->sum('money_at_risk_per_day')), 'link' => self::LINK,
                 ]);
                 $sent++;
@@ -71,7 +74,7 @@ final class AlertNotifier
         }
         $sent += $this->stock($stock->groupBy('product_id'), $recipients);
 
-        foreach ($rows as $a) {
+        foreach ($groupedRows->concat($stock) as $a) {
             $a->forceFill(['notified_at' => now()])->save();
             $this->store->event($a, 'notified');
         }
