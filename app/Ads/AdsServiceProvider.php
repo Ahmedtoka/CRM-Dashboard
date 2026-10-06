@@ -23,6 +23,8 @@ use App\Ads\Doctor\DoctorCommand;
 use App\Ads\Health\Commands\GateCommand;
 use App\Ads\Health\Commands\HealthCommand;
 use App\Ads\Health\QueueHeartbeat;
+use App\Ads\Launch\HttpLandingProbe;
+use App\Ads\Launch\LandingProbe;
 use App\Ads\Materials\Commands\StockWatchCommand;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\Meta\UsageRecorder;
@@ -44,6 +46,7 @@ class AdsServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(DriverFactory::class);
+        $this->app->bind(LandingProbe::class, HttpLandingProbe::class);
         $this->app->singleton(UsageRecorder::class);
         // One per request: the account-control read inside AdsQuery is memoised per filter and shared by every report.
         $this->app->scoped(AdsQuery::class);
