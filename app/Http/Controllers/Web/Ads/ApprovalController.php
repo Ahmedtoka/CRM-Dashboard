@@ -33,6 +33,12 @@ class ApprovalController extends Controller
         ]);
     }
 
+    /** The safe plan; the page runs it one approval at a time and draws the progress bar (A5). */
+    public function bulk(Request $request, ApproveLaunch $approve): JsonResponse
+    {
+        return response()->json(['ok' => true] + $approve->safePlan($request->user()));
+    }
+
     public function sendBack(Request $request, AdLaunch $launch, LaunchService $launches): JsonResponse
     {
         $data = $this->reason($request);

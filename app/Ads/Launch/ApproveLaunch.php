@@ -80,6 +80,59 @@ final class ApproveLaunch
         return ['launch' => $this->settle($u, $l, $ads), 'ads' => $ads, 'self_approved' => $self];
     }
 
+    /**
+     * «وافق على الآمن كله» (L 3.3): the launches safe to approve in one go, with the activations they use (G4) and why
+     * the others were left for one-by-one review.
+     *
+     * @return array{launches: list<array{id: string, title: ?string, account: ?string, ads: int, revision: int, checks_hash: string}>, total_ads: int, approvals_left: int, skipped: array{warned: int, first_launch: int, self: int, limit: int}}
+     */
+    public function safePlan(User $u): array
+    {
+        if (! LaunchPolicy::canApprove($u)) {
+            throw WriteDenied::make('ads_authority_required');
+        }
+        $userLeft = $this->writes->activationsLeftToday($u);
+        $accountUsed = [];
+        $total = 0;
+        $out = [];
+        $skipped = ['warned' => 0, 'first_launch' => 0, 'self' => 0, 'limit' => 0];
+
+        $candidates = AdLaunch::query()->with(['material', 'account'])->where('state', LaunchState::AwaitingApproval->value)
+            ->orderBy('awaiting_at')->orderBy('id')->get();
+        foreach ($candidates as $l) {
+            if (in_array($u->id, array_values(array_filter([$l->prepared_by_id, $l->forwarded_by_id])), true) && ! $u->isAdmin()) {
+                $skipped['self']++;
+
+                continue;
+            }
+            $veteran = AdLaunch::query()->where('prepared_by_id', $l->prepared_by_id)->where('id', '<>', $l->id)->whereNotNull('approved_at')->exists();
+            if (! $veteran) {
+                $skipped['first_launch']++;
+
+                continue;
+            }
+            $results = $this->checks->run($l, 'approve', $u);
+            if (LaunchChecks::blocking($results) !== [] || LaunchChecks::warnings($results) !== []) {
+                $skipped['warned']++;
+
+                continue;
+            }
+            $n = AdPublication::query()->where('ad_launch_id', $l->id)->whereNull('archived_at')->count();
+            $accountLeft = $this->writes->activationsLeft($u, $l->account)['account'] - ($accountUsed[$l->ad_account_id] ?? 0);
+            if ($total + $n > $userLeft || $n > $accountLeft) {
+                $skipped['limit']++;
+
+                continue;
+            }
+            $total += $n;
+            $accountUsed[$l->ad_account_id] = ($accountUsed[$l->ad_account_id] ?? 0) + $n;
+            $out[] = ['id' => $l->public_id, 'title' => $l->material?->title, 'account' => $l->account?->name, 'ads' => $n,
+                'revision' => $l->revision, 'checks_hash' => LaunchChecks::hash($l, $results)];
+        }
+
+        return ['launches' => $out, 'total_ads' => $total, 'approvals_left' => $userLeft, 'skipped' => $skipped];
+    }
+
     /** E5: someone else got there first → 409 launch_taken with their name; anything else → launch_state. */
     private function notWaiting(AdLaunch $l): WriteDenied
     {

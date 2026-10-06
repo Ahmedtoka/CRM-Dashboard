@@ -45,6 +45,8 @@ Route::middleware('ads:report')->group(function () {
     Route::post('/ads/slots/{adSet}', [SlotController::class, 'toggle'])->name('ads.slots.toggle');
 
     // Launch approvals (S1): the manager's queue. Approve / bulk need a password confirmed in the last 15 minutes (G3).
+    Route::post('/ads/approvals/bulk', [ApprovalController::class, 'bulk'])
+        ->middleware(RequirePassword::using(null, ApprovalController::REAUTH_SECONDS))->name('ads.approvals.bulk');
     Route::post('/ads/approvals/{launch}/approve', [ApprovalController::class, 'approve'])
         ->middleware(RequirePassword::using(null, ApprovalController::REAUTH_SECONDS))->name('ads.approvals.approve');
     Route::post('/ads/approvals/{launch}/return', [ApprovalController::class, 'sendBack'])->name('ads.approvals.return');
