@@ -3,7 +3,7 @@ import NavMain from '@/components/NavMain.vue';
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail } from '@/components/ui/sidebar';
 import { useI18n } from '@/composables/useI18n';
 import { adsNavChildren } from '@/lib/adsNav';
-import { todayNavItem } from '@/lib/today';
+import { logoHref, todayNavItem } from '@/lib/today';
 import { type NavItem, type SharedData } from '@/types';
 import type { Role } from '@/types/crm';
 import { Link, usePage } from '@inertiajs/vue3';
@@ -146,7 +146,7 @@ const mainNavItems = computed<NavItem[]>(() => {
             <SidebarMenu>
                 <SidebarMenuItem>
                     <SidebarMenuButton size="lg" as-child>
-                        <Link :href="today ? '/today' : '/inbox'">
+                        <Link :href="logoHref(role)">
                             <AppLogo />
                         </Link>
                     </SidebarMenuButton>

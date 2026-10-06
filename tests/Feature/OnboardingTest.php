@@ -39,7 +39,7 @@ it('lands a fresh admin on the page after login, not a moderator, and not once s
     $this->actingAs($admin)->get('/onboarding')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('Onboarding')->has('progress.steps', 7));
     $this->actingAs($moderator)->get('/onboarding')->assertForbidden();
 
-    $this->actingAs($admin)->post('/onboarding/dismiss')->assertRedirect(route('inbox'));
+    $this->actingAs($admin)->post('/onboarding/dismiss')->assertRedirect(route('today', absolute: false)); // final review C3: HomeRoute
     expect(BotSetting::current()->onboarding_dismissed_at)->not->toBeNull();
     auth()->logout();
     $this->post('/login', ['email' => $admin->email, 'password' => 'password'])->assertRedirect(route('today', absolute: false));

@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\BotSetting;
+use App\Onboarding\HomeRoute;
 use App\Onboarding\OnboardingProgress;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -18,11 +20,11 @@ class OnboardingController extends Controller
     }
 
     /** «تخطي دلوقتي»: no more automatic landing here; the page stays in the menu. */
-    public function dismiss(): RedirectResponse
+    public function dismiss(Request $request): RedirectResponse
     {
         BotSetting::current()->forceFill(['onboarding_dismissed_at' => now()])->save();
 
-        return redirect()->route('inbox');
+        return redirect(HomeRoute::for($request->user()));
     }
 
     /** Back to the automatic landing (from the page itself). */
