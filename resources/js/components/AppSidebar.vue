@@ -3,10 +3,11 @@ import NavMain from '@/components/NavMain.vue';
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail } from '@/components/ui/sidebar';
 import { useI18n } from '@/composables/useI18n';
 import { adsNavChildren } from '@/lib/adsNav';
+import { todayNavItem } from '@/lib/today';
 import { type NavItem, type SharedData } from '@/types';
 import type { Role } from '@/types/crm';
 import { Link, usePage } from '@inertiajs/vue3';
-import { BarChart3, ClipboardList, FlaskConical, Images, Inbox, LayoutGrid, Megaphone, MessagesSquare, Package, Rocket, Settings, Users } from 'lucide-vue-next';
+import { BarChart3, ClipboardList, FlaskConical, Gauge, Images, Inbox, LayoutGrid, Megaphone, MessagesSquare, Package, Rocket, Settings, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -50,6 +51,9 @@ const adsGroup = computed<NavItem | null>(() => {
 
 // Nav by role (spec §6): reports/settings subsets for supervisor+, admin-only tools last.
 // Settings children carry a `section` so NavMain renders them under small headings.
+/** Admins and supervisors start on «النهارده» (control room S4); the logo leads to each one's home. */
+const today = computed(() => todayNavItem(role.value, t('nav.today'), Gauge));
+
 const mainNavItems = computed<NavItem[]>(() => {
     // Ads roles see only the Ads Hub (RestrictAdsRoles keeps them out of everything else).
     if (role.value === 'media_buyer' || role.value === 'content') return adsGroup.value ? [adsGroup.value] : [];
@@ -111,7 +115,9 @@ const mainNavItems = computed<NavItem[]>(() => {
 
     const onboarding = page.props.onboarding as { done: number; total: number; complete: boolean; dismissed: boolean } | null | undefined;
     const items: NavItem[] = [
-        // «ابدأ من هنا» stays first for the admin until every required step is done (2026-09-26).
+        // «النهارده» (control room S4): the admin/supervisor home, first.
+        ...(today.value ? [today.value] : []),
+        // «ابدأ من هنا» stays near the top for the admin until every required step is done (2026-09-26).
         ...(onboarding && onboarding.done < onboarding.total
             ? [{ title: `${t('nav.onboarding')} · ${onboarding.done}/${onboarding.total}`, href: '/onboarding', icon: Rocket }]
             : []),
@@ -140,7 +146,7 @@ const mainNavItems = computed<NavItem[]>(() => {
             <SidebarMenu>
                 <SidebarMenuItem>
                     <SidebarMenuButton size="lg" as-child>
-                        <Link href="/inbox">
+                        <Link :href="today ? '/today' : '/inbox'">
                             <AppLogo />
                         </Link>
                     </SidebarMenuButton>
