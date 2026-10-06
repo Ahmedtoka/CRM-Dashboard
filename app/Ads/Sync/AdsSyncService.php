@@ -16,6 +16,7 @@ use App\Ads\Platforms\PreviewMarkup;
 use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
 use App\Ads\Platforms\TokenInvalid;
+use App\Ads\Reports\SpendSnapshots;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdAccountDaily;
@@ -555,6 +556,8 @@ final class AdsSyncService
         foreach (array_chunk(array_values($rows), self::CHUNK) as $chunk) {
             AdAccountDaily::upsert($chunk, ['ad_account_id', 'date'], ['spend', 'impressions', 'purchases', 'purchase_value', 'currency', 'fetched_at']);
         }
+        // Intraday history for «today vs usual by this hour» (S2 A3).
+        app(SpendSnapshots::class)->record($a, $control);
     }
 
     /**
