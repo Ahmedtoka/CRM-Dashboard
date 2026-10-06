@@ -9,6 +9,9 @@ use App\Enums\ActorType;
 use App\Enums\Handler;
 use App\Events\ConversationUpdated;
 use App\Inbox\OutboundService;
+use App\Inbox\Outcomes\EpisodeEnd;
+use App\Inbox\Outcomes\Outcome;
+use App\Inbox\Outcomes\OutcomeRecorder;
 use App\Inbox\UserNotifier;
 use App\Models\Conversation;
 use App\Models\QueueEntry;
@@ -146,6 +149,8 @@ class WindowLifecycle
      * `$opts['note']` is why a waiting customer was taken out of the lounge (`close_note`).
      * A still-waiting entry resolved / cancelled elsewhere leaves the lounge as `cancelled`.
      * Anything else that is no longer open is returned untouched.
+     * `$opts['outcome']` (Outcome) and `$opts['outcome_note']` are the episode outcome a person picked
+     * (control room S3).
      */
     public function close(QueueEntry $e, string $reason, ?User $by = null, array $opts = []): QueueEntry
     {
@@ -714,6 +719,16 @@ class WindowLifecycle
         ])->save();
 
         $c?->forceFill(['assignee_id' => null, 'assigned_at' => null])->save();
+
+        // Control room S3 (D13): her final close or the silence auto-close ends the conversation episode
+        // with its outcome, in this transaction. Reroutes (escalation, transfer, no_reply) do not.
+        if ($c !== null && in_array($reason, OutcomeRecorder::ENDING_CLOSE_REASONS, true)) {
+            $picked = $opts['outcome'] ?? null;
+            app(OutcomeRecorder::class)->endEpisode(
+                $c, $e, $picked instanceof Outcome ? $picked : null, $opts['outcome_note'] ?? null, $by,
+                $reason === 'auto' ? EpisodeEnd::AutoClose : EpisodeEnd::Close,
+            );
+        }
 
         if ($reason === 'auto' && $c) {
             $until = now()->addMinutes($s->return_priority_minutes);
