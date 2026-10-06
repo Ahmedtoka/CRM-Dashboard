@@ -1,16 +1,17 @@
 <script setup lang="ts">
-/** «الإعداد › القواعد»: tax rate and winner/loser thresholds (moved from BuyersSetup). S5 adds break-even and rules. */
+/** «الإعداد › القواعد»: tax rate and winner/loser thresholds (moved from BuyersSetup), then the S5 break-even inputs and the notifications switch. */
 import AdsSetupTabs from '@/components/ads/AdsSetupTabs.vue';
+import BreakEvenRules from '@/components/ads/BreakEvenRules.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { AdsSetupSettings, AdsWinnerThresholds } from '@/types/ads';
+import type { AdsSetupSettings, AdsWinnerThresholds, RulesSetupProps } from '@/types/ads';
 import { Head, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
-const props = defineProps<{ settings: AdsSetupSettings; launchExpiryDays: number }>();
+const props = defineProps<{ settings: AdsSetupSettings; launchExpiryDays: number; rules?: RulesSetupProps | null }>();
 const { t } = useI18n();
 const toast = useToast();
 const num = (v: number | null | undefined) => (v === null || v === undefined ? '' : String(v));
@@ -73,6 +74,7 @@ const appCrumbs = computed(() => [
                 </div>
                 <Button type="submit" :loading="form.processing">{{ t('common.save') }}</Button>
             </form>
+            <BreakEvenRules v-if="rules" v-bind="rules" />
         </div>
     </AppLayout>
 </template>
