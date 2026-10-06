@@ -113,7 +113,8 @@ final class AlertFeed
     }
 
     /**
-     * Card keys: an out-of-stock alert groups per product only when it is the ad's only live reason.
+     * Card keys: an out-of-stock alert groups per product and action (Stop vs check stock, R-10) only when it is the
+     * ad's only live reason.
      *
      * @param  Collection<int, AdsAlert>  $rows
      * @return array<string, list<AdsAlert>>
@@ -124,7 +125,7 @@ final class AlertFeed
         $groups = [];
         foreach ($rows as $a) {
             $key = match (true) {
-                $a->rule_id === 'all.out_of_stock' && $a->product_id !== null && ($perAd[$a->ad_id] ?? 0) === 1 => 'product:'.$a->product_id,
+                $a->rule_id === 'all.out_of_stock' && $a->product_id !== null && ($perAd[$a->ad_id] ?? 0) === 1 => 'product:'.$a->product_id.':'.$a->action, // a Stop and a check-stock never share a verb (R-10)
                 $a->ad_id !== null => 'ad:'.$a->ad_id,
                 default => 'account:'.($a->ad_account_id ?? 0).':'.$a->rule_id,
             };
@@ -155,7 +156,7 @@ final class AlertFeed
             'ad' => $kind === 'ad' ? $this->adRef($top, $canWrite) : null,
             'product' => $top->product !== null ? ['id' => (int) $top->product->id, 'title' => (string) $top->product->title] : null,
             'account' => $top->account !== null ? ['id' => (int) $top->account->id, 'name' => (string) $top->account->name] : null,
-            'ads' => $kind === 'product' ? $alerts->map(fn (AdsAlert $a) => $this->adRef($a, $canWrite) + ['alert_id' => $a->id])->values()->all() : [],
+            'ads' => $kind === 'product' ? $alerts->map(fn (AdsAlert $a) => $this->adRef($a, $canWrite) + ['alert_id' => $a->id, 'action' => $a->action])->values()->all() : [],
             'reasons' => ($kind === 'product' ? $alerts->take(1) : $alerts)->map(fn (AdsAlert $a) => $this->reason($u, $a))->values()->all(),
             'primary' => ['verb' => self::VERBS[$top->action] ?? 'why', 'action' => $top->action, 'alert_id' => $top->id, 'href' => $this->href($top)],
             'alert_ids' => $alerts->pluck('id')->all(),

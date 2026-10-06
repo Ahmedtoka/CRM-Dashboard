@@ -35,8 +35,23 @@ it('groups out-of-stock ads per product and sorts by severity then money', funct
 
     $items = app(AlertFeed::class)->forUser(W::authority())['items'];
 
-    expect(array_column($items, 'key'))->toBe(['product:'.$p->id, 'ad:'.$dear->ad_id, 'ad:'.$cheap->ad_id])
+    expect(array_column($items, 'key'))->toBe(['product:'.$p->id.':stop', 'ad:'.$dear->ad_id, 'ad:'.$cheap->ad_id])
         ->and($items[0]['ads'])->toHaveCount(2)->and($items[0]['money_at_risk_per_day'])->toBe(500.0);
+});
+
+it('never puts a sales Stop and a messages check-stock on one product card (R-10)', function () {
+    $acc = W::account();
+    $p = W::product([0]);
+    $stop = AdsAlert::factory()->create(['ad_id' => W::ad($acc)->id, 'rule_id' => 'all.out_of_stock', 'severity' => 'critical', 'action' => 'stop', 'product_id' => $p->id]);
+    $check = AdsAlert::factory()->create(['ad_id' => W::ad($acc, 'MESSAGES')->id, 'rule_id' => 'all.out_of_stock', 'severity' => 'high', 'action' => 'check_stock', 'product_id' => $p->id]);
+
+    $items = collect(app(AlertFeed::class)->forUser(W::authority())['items'])->keyBy('key');
+
+    expect($items->keys()->all())->toBe(['product:'.$p->id.':stop', 'product:'.$p->id.':check_stock'])
+        ->and($items['product:'.$p->id.':stop']['primary']['verb'])->toBe('stop')
+        ->and($items['product:'.$p->id.':stop']['ads'][0])->toMatchArray(['alert_id' => $stop->id, 'action' => 'stop'])
+        ->and($items['product:'.$p->id.':check_stock']['primary']['verb'])->toBe('open_stock')
+        ->and($items['product:'.$p->id.':check_stock']['ads'][0])->toMatchArray(['alert_id' => $check->id, 'action' => 'check_stock']);
 });
 
 it('caps a buyer at seven open cards and keeps the rest for the digest', function () {
