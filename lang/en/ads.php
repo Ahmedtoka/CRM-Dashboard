@@ -146,6 +146,7 @@ return [
         ],
     ],
     'launch' => [
+        'stop_reason' => 'Launch stop :id',
         'approve_reason' => 'Launch approval :id',
         'flash' => [
             'slot_opened' => 'Ad set opened for new materials',
@@ -162,6 +163,8 @@ return [
             'approved_awaiting_approval' => 'Running failed; the launch is still waiting',
             'returned' => 'Returned to the media buyer',
             'rejected' => 'Launch rejected',
+            'stopped' => 'Ads stopped',
+            'retired' => 'Launch retired',
         ],
         'checks' => [
             'slot_open' => ['pass' => 'Ad set is open for new materials', 'block' => 'Ad set closed: pick an open one'],

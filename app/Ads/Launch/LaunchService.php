@@ -16,10 +16,12 @@ use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\WriteGuard;
 use App\Ads\Platforms\WriteRefused;
+use App\Models\Ad;
 use App\Models\AdLaunch;
 use App\Models\AdMaterial;
 use App\Models\AdPublication;
 use App\Models\AdSet;
+use App\Models\AdWriteAction;
 use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Validation\ValidationException;
@@ -348,6 +350,73 @@ final class LaunchService
         $notify($l);
 
         return $l;
+    }
+
+    /**
+     * One-click Stop (D6 alert, T13 by hand): every ACTIVE ad of the launch, through the pipeline (propose + confirm by the
+     * same user; a Stop is exempt from the kill switch and never gated by G1).
+     *
+     * @return list<array{publication_id: int, ad_name: string, outcome: string, code: ?string}>
+     */
+    public function stop(User $by, AdLaunch $l, string $key): array
+    {
+        if (! in_array($l->state, [LaunchState::Launching, LaunchState::Live, LaunchState::Stopped], true)) {
+            throw WriteDenied::make('launch_state', ['state' => $l->state->value]);
+        }
+        if ($l->account === null || ! $this->policy->inScope($by, $l->account)) {
+            throw WriteDenied::make('out_of_scope');
+        }
+        $out = [];
+        foreach ($this->activeAds($l) as [$p, $ad]) {
+            $row = ['publication_id' => $p->id, 'ad_name' => (string) $p->ad_name];
+            try {
+                $x = $this->writes->propose($by, $l->account, 'ad', (string) $ad->external_id, 'paused',
+                    __('ads.launch.stop_reason', ['id' => $l->public_id]), 'lstop:'.$key.':'.$p->id, 'launch_stop', $l->public_id)['action'];
+                if ($x->state === AdWriteAction::PROPOSED) {
+                    $x = $this->writes->confirm($by, $x, (string) $x->diff_hash);
+                }
+                $out[] = $row + ['outcome' => match ($x->state) {
+                    AdWriteAction::SUCCEEDED => 'succeeded',
+                    AdWriteAction::EXECUTING, AdWriteAction::UNKNOWN => 'unknown',
+                    default => 'failed',
+                }, 'code' => $x->error_code];
+            } catch (WriteDenied $e) {
+                $out[] = $row + ['outcome' => 'failed', 'code' => $e->errorCode];
+            }
+        }
+        app(LaunchMonitor::class)->follow($l);
+
+        return $out;
+    }
+
+    /** T15: retire a live / stopped launch; its running ads are stopped first (E15: a failed Stop keeps it live). */
+    public function retire(User $by, AdLaunch $l, ?string $reason, string $key): AdLaunch
+    {
+        if (! in_array($l->state, [LaunchState::Live, LaunchState::Stopped], true)) {
+            throw WriteDenied::make('launch_state', ['state' => $l->state->value]);
+        }
+        if (! LaunchPolicy::isReviewer($by, $l)) {
+            throw WriteDenied::make('launch_forbidden');
+        }
+        $stops = $this->stop($by, $l, $key);
+        $l->refresh();
+        if ($this->activeAds($l) !== []) {
+            throw WriteDenied::make('retire_stop_failed', ['stops' => $stops]);
+        }
+
+        return $this->transition($l, [LaunchState::Live, LaunchState::Stopped], LaunchState::Retired, [
+            'retired_at' => now(), 'decided_by_id' => $by->id, 'decided_at' => now(), 'decision_reason' => $reason,
+        ], null, $by, ['stops' => $stops]);
+    }
+
+    /** @return list<array{0: AdPublication, 1: Ad}> the launch's ads whose own status is ACTIVE */
+    private function activeAds(AdLaunch $l): array
+    {
+        $pubs = AdPublication::query()->where('ad_launch_id', $l->id)->whereNull('archived_at')->whereNotNull('external_ad_id')->orderBy('id')->get();
+        $ads = Ad::query()->where('ad_account_id', $l->ad_account_id)->whereIn('external_id', $pubs->pluck('external_ad_id')->all())->get()->keyBy('external_id');
+
+        return $pubs->filter(fn (AdPublication $p) => strtoupper((string) $ads->get((string) $p->external_ad_id)?->status) === 'ACTIVE')
+            ->map(fn (AdPublication $p) => [$p, $ads->get((string) $p->external_ad_id)])->values()->all();
     }
 
     /** E13: a closed slot sends its launches under review back to content (system reason slot_closed). */

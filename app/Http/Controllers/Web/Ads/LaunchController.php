@@ -12,6 +12,7 @@ use App\Models\AdMaterial;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /** Launch drafts (control room S1): content prepares, the buyer of the account reviews. Every rule lives in LaunchService. */
 class LaunchController extends Controller
@@ -75,6 +76,36 @@ class LaunchController extends Controller
         $launch = $launches->retry($request->user(), $launch);
 
         return $this->answer($request, $launch, __('ads.launch.flash.retried'));
+    }
+
+    public function stop(Request $request, AdLaunch $launch, LaunchService $launches): JsonResponse
+    {
+        $this->see($request, $launch);
+        $ads = $launches->stop($request->user(), $launch, $this->key($request));
+        $launch->refresh();
+
+        return response()->json(['ok' => true, 'message' => __('ads.launch.flash.stopped'), 'ads' => $ads,
+            'launch' => ['id' => $launch->public_id, 'state' => $launch->state->value, 'revision' => $launch->revision]]);
+    }
+
+    public function retire(Request $request, AdLaunch $launch, LaunchService $launches): JsonResponse
+    {
+        $this->see($request, $launch);
+        $data = $request->validate(['reason' => ['nullable', 'string', 'max:500']]);
+        $launch = $launches->retire($request->user(), $launch, $data['reason'] ?? null, $this->key($request));
+
+        return $this->answer($request, $launch, __('ads.launch.flash.retired'));
+    }
+
+    /** The client's Idempotency-Key: a double click repeats nothing (the pipeline replays the same actions). */
+    protected function key(Request $request): string
+    {
+        $key = (string) $request->header('Idempotency-Key', '');
+        if (! preg_match('/^[A-Za-z0-9-]{8,64}$/', $key)) {
+            throw ValidationException::withMessages(['idempotency_key' => __('ads.publish.idempotency_key_required')]);
+        }
+
+        return $key;
     }
 
     /** Not visible = not found (a launch id is not a secret, but its contents are). */
