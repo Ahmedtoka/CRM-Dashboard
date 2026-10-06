@@ -7,6 +7,7 @@ use App\Ads\Control\Write\Types\SetStatusType;
 use App\Ads\Control\Write\WriteActionService;
 use App\Ads\Control\Write\WriteDenied;
 use App\Ads\Control\Write\WritePolicy;
+use App\Ads\Decisions\DecisionCounter;
 use App\Ads\Platforms\SecretScrubber;
 use App\Http\Controllers\Controller;
 use App\Models\AdAccount;
@@ -79,7 +80,12 @@ class WriteActionController extends Controller
             throw WriteDenied::make('password_confirmation_required');
         }
 
-        return self::outcome($service->confirm($request->user(), $x, $data['diff_hash']));
+        $done = $service->confirm($request->user(), $x, $data['diff_hash']);
+        // The badge counted this ad's suggestion: drop it rather than show a stale number (refreshed on the next
+        // Decisions visit or hourly run).
+        DecisionCounter::forget($request->user());
+
+        return self::outcome($done);
     }
 
     /** Propose the inverse of a finished action (a new proposal, confirmed like any other). */

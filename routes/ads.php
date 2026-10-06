@@ -9,6 +9,7 @@ use App\Http\Controllers\Web\Ads\BuyerSetupController;
 use App\Http\Controllers\Web\Ads\CampaignController;
 use App\Http\Controllers\Web\Ads\CaptionController;
 use App\Http\Controllers\Web\Ads\CreativeController;
+use App\Http\Controllers\Web\Ads\DecisionsController;
 use App\Http\Controllers\Web\Ads\MaterialCollectionController;
 use App\Http\Controllers\Web\Ads\MaterialController;
 use App\Http\Controllers\Web\Ads\PublishController;
@@ -21,6 +22,7 @@ use Illuminate\Support\Facades\Route;
 // Ads Hub. Required from routes/crm.php inside the authenticated group (see EnsureAdsAccess for the `ads:*` areas).
 Route::middleware('ads:report')->group(function () {
     Route::get('/ads', TodayController::class)->name('ads.today');
+    Route::get('/ads/decisions', DecisionsController::class)->name('ads.decisions');
     Route::get('/ads/buyers', [BuyerController::class, 'index'])->name('ads.buyers.index');
     Route::get('/ads/buyers/{buyer}', [BuyerController::class, 'show'])->name('ads.buyers.show');
     Route::get('/ads/creatives', [CreativeController::class, 'index'])->name('ads.creatives.index');

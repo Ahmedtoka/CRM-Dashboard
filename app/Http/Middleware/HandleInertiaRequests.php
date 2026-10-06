@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Ads\Access\AdsScope;
+use App\Ads\Decisions\DecisionCounter;
 use App\Channels\Integrations\ConnectionHealthCheck;
 use App\Enums\Platform;
 use App\Enums\UserRole;
@@ -96,6 +97,9 @@ class HandleInertiaRequests extends Middleware
             'canSeeBoard' => fn () => BoardAccess::allows($user),
             // Ads Hub pages only: what the viewer may see and do there (cheap, computed lazily).
             'ads' => fn () => $request->routeIs('ads.*') ? $this->adsAccess($user) : null,
+            // «محتاج قرار» nav badge (S2): the cached count only, never computed here (a miss = no badge). Written by the
+            // Decisions page visit and the hourly ads:decisions-count; see DecisionCounter.
+            'adsDecisions' => fn () => DecisionCounter::eligible($user) ? DecisionCounter::cached($user) : null,
             // Developer-only nav entries (simulator, latency report) show only when this is on.
             'devTools' => (bool) config('crm.dev_tools'),
         ]);
