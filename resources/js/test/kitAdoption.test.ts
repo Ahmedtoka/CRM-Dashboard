@@ -12,7 +12,7 @@ const SWEPT: string[] = [
     // Task 14
     'Inbox', 'Board', 'Comments/Index', 'Cases',
     // S1 launch approvals
-    'Ads/Launches',
+    'Ads/Launches', 'Ads/Approvals',
 ];
 
 /** Raw tables allowed only on pages S1/S2 replace; they must sit in the shared sticky scroll box. */

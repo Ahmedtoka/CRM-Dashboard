@@ -1019,3 +1019,34 @@ export interface AdsLaunchesProps {
     canToggleSlots: boolean;
     reasons: string[];
 }
+export interface ApprovalFilters {
+    buyer: string | null;
+    account: string | null;
+    age: '1d' | '3d' | '7d' | null;
+    fails: boolean;
+    expiring: boolean;
+    launch: string | null;
+}
+export interface AdsApprovalsProps {
+    filters: ApprovalFilters;
+    launches: LaunchRow[];
+    options: { buyers: AdsOption[]; accounts: AdsOption[] };
+    approvalsLeft: number;
+    writesOn: boolean;
+    canApprove: boolean;
+    isAdmin: boolean;
+    reasons: string[];
+}
+export interface ApproveResult {
+    ok: boolean;
+    message: string;
+    self_approved: boolean;
+    launch: { id: string; state: LaunchState; revision: number };
+    ads: { publication_id: number; ad_name: string; outcome: 'succeeded' | 'unknown' | 'failed'; code: string | null; message: string | null }[];
+}
+export interface BulkPlan {
+    launches: { id: string; title: string | null; account: string | null; ads: number; revision: number; checks_hash: string }[];
+    total_ads: number;
+    approvals_left: number;
+    skipped: { warned: number; first_launch: number; self: number; limit: number };
+}
