@@ -7,6 +7,7 @@ use App\Ads\Control\Write\WriteActionService;
 use App\Ads\Control\Write\WriteDenied;
 use App\Models\AdLaunch;
 use App\Models\AdPublication;
+use App\Models\AdsAuditLog;
 use App\Models\AdWriteAction;
 use App\Models\User;
 
@@ -72,9 +73,12 @@ final class ApproveLaunch
             throw $e->errorCode === 'launch_state' ? $this->notWaiting($l->fresh() ?? $l) : $e;
         }
 
+        // One key per approval attempt: after an attempt whose every Run failed (E7), the next approve runs again instead of
+        // replaying the failed actions (the revision does not move on approve).
+        $attempt = AdsAuditLog::query()->where('action', 'launch.launching')->where('subject_type', 'AdLaunch')->where('subject_id', $l->id)->count();
         $ads = [];
         foreach (AdPublication::query()->where('ad_launch_id', $l->id)->whereNull('archived_at')->where('status', AdPublication::DONE)->whereNotNull('external_ad_id')->orderBy('id')->get() as $p) {
-            $ads[] = $this->runOne($u, $l, $p);
+            $ads[] = $this->runOne($u, $l, $p, $attempt);
         }
 
         return ['launch' => $this->settle($u, $l, $ads), 'ads' => $ads, 'self_approved' => $self];
@@ -144,12 +148,12 @@ final class ApproveLaunch
     }
 
     /** @return array{publication_id: int, ad_name: string, outcome: string, code: ?string, message: ?string} */
-    private function runOne(User $u, AdLaunch $l, AdPublication $p): array
+    private function runOne(User $u, AdLaunch $l, AdPublication $p, int $attempt): array
     {
         $base = ['publication_id' => $p->id, 'ad_name' => (string) $p->ad_name];
         try {
             $x = $this->writes->propose($u, $l->account, 'ad', (string) $p->external_ad_id, 'active',
-                __('ads.launch.approve_reason', ['id' => $l->public_id]), 'launch:'.$l->public_id.':'.$p->id.':r'.$l->revision,
+                __('ads.launch.approve_reason', ['id' => $l->public_id]), 'launch:'.$l->public_id.':'.$p->id.':r'.$l->revision.':a'.$attempt,
                 self::SOURCE, $l->public_id)['action'];
             if ($x->state === AdWriteAction::PROPOSED) {
                 $x = $this->writes->confirm($u, $x, (string) $x->diff_hash);

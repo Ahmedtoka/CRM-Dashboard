@@ -4,7 +4,6 @@ namespace App\Ads\Launch;
 
 use App\Ads\AdsSettings;
 use App\Ads\Audit\AdsAudit;
-use App\Ads\Control\DuplicatePublication;
 use App\Ads\Control\Jobs\PublishAd;
 use App\Ads\Control\PublishService;
 use App\Ads\Control\Write\WriteActionService;
@@ -26,6 +25,7 @@ use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Validation\ValidationException;
 use LogicException;
+use Throwable;
 
 /**
  * Every launch transition (L 2.2 with the 2026-10-06 overrides). Each one is one compare-and-set on ad_launches.state
@@ -210,9 +210,15 @@ final class LaunchService
                 'adset_id' => (string) $l->adset_external_id, 'adset_name' => $l->adset_name, 'identity' => $identity,
                 'file_ids' => array_map('intval', (array) $l->file_ids), 'captions' => (array) $l->captions,
             ], 'launch-'.$l->public_id.'-r'.$l->revision, false, $l);
-        } catch (DuplicatePublication|ValidationException $e) {
-            $this->transition($l, [LaunchState::CreatingPaused], LaunchState::BuyerReview, ['last_error' => mb_substr($e->getMessage(), 0, 1000)],
-                null, $by, ['error' => class_basename($e)], 'launch.forward_failed');
+        } catch (Throwable $e) {
+            // Nothing may stay stuck in creating_paused: back to the buyer, rows of this round archived (O5), rethrown.
+            try {
+                $this->transition($l, [LaunchState::CreatingPaused], LaunchState::BuyerReview, ['last_error' => mb_substr($e->getMessage(), 0, 1000)],
+                    null, $by, ['error' => class_basename($e)], 'launch.forward_failed');
+                $this->archive($l);
+            } catch (WriteDenied) {
+                // the launch already moved on (e.g. the ads were created meanwhile)
+            }
 
             throw $e;
         }

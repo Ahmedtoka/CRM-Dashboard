@@ -5,10 +5,12 @@ namespace App\Ads\Launch;
 use App\Ads\Access\AdsScope;
 use App\Ads\Control\Write\WritePolicy;
 use App\Ads\Materials\MaterialService;
+use App\Ads\Reports\AdsFilter;
 use App\Enums\UserRole;
 use App\Models\AdLaunch;
 use App\Models\AdMaterial;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -54,7 +56,8 @@ final class LaunchPolicy
             return $q;
         }
         if ($u->role === UserRole::MediaBuyer) {
-            $ids = app(AdsScope::class)->accountIds($u) ?? [];
+            $today = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay();
+            $ids = app(AdsScope::class)->accountIds($u, $today, $today) ?? [];
 
             return $q->where(fn (Builder $w) => $w->whereIn('ad_launches.ad_account_id', $ids)->orWhere('ad_launches.prepared_by_id', $u->id));
         }

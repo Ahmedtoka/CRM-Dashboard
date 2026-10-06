@@ -130,3 +130,13 @@ it('O7: only an admin publishes directly; buyers go through launches', function 
     $this->actingAs($w['admin'])->postJson("/ads/materials/{$w['material']->id}/publish", $body, ['Idempotency-Key' => 'k-33333333'])->assertOk();
     expect(AdPublication::whereNull('ad_launch_id')->count())->toBe(1);
 });
+
+it('review r1: an unexpected failure during forward never leaves the launch stuck in creating_paused', function () {
+    Queue::fake();
+    $w = LaunchWorld::make();
+    $l = lfReview($w);
+    AdPublication::creating(fn () => throw new RuntimeException('boom'));
+
+    $this->actingAs($w['buyerUser'])->postJson("/ads/launches/{$l->public_id}/forward", ['revision' => 1])->assertStatus(500);
+    expect($l->fresh()->state)->toBe(LaunchState::BuyerReview)->and($l->fresh()->last_error)->toBe('boom');
+});

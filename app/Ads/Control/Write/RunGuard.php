@@ -59,11 +59,16 @@ class RunGuard
         if ($level !== 'ad') {
             return;
         }
-        $launch = AdLaunch::query()->whereIn('id', AdPublication::query()->select('ad_launch_id')
-            ->where('ad_account_id', $a->id)->where('external_ad_id', $externalId)->whereNotNull('ad_launch_id'))
-            ->orderByDesc('id')->first(['id', 'public_id', 'approved_at']);
-        if ($launch !== null && $launch->approved_at === null) {
-            throw WriteDenied::make('approval_required', ['launch_id' => $launch->public_id]);
+        $pub = AdPublication::query()->where('ad_account_id', $a->id)->where('external_ad_id', $externalId)->whereNotNull('ad_launch_id')
+            ->orderByDesc('id')->first(['id', 'ad_launch_id', 'archived_at']);
+        if ($pub === null) {
+            return;
+        }
+        $launch = AdLaunch::query()->whereKey($pub->ad_launch_id)->first(['id', 'public_id', 'approved_at']);
+        // An archived ad (returned / rejected / expired round) left the workflow: it may never run, even when a later
+        // round of the same launch was approved.
+        if ($pub->archived_at !== null || ($launch !== null && $launch->approved_at === null)) {
+            throw WriteDenied::make('approval_required', array_filter(['launch_id' => $launch?->public_id]));
         }
     }
 

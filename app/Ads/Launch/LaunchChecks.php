@@ -98,7 +98,7 @@ final class LaunchChecks
             }
             $verdict = $this->runGuard->budgetVerdict($approver, $account, $ad, $state);
             $refusal ??= $verdict['refusal'];
-            $rows = $verdict['rows'];
+            $rows[(string) $p->external_ad_id] = $verdict['rows'];
             foreach ($state->parents as $parent) {
                 if (strtoupper((string) $parent['status']) !== 'ACTIVE') {
                     $parentPaused = true;

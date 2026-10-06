@@ -71,3 +71,11 @@ it('knows who prepares, reviews and approves', function () {
         ->and(LaunchPolicy::canApprove($w['manager']))->toBeTrue()->and(LaunchPolicy::canApprove($w['buyerUser']))->toBeFalse()
         ->and(LaunchPolicy::canEditDraft($w['content'], $l))->toBeTrue()->and(LaunchPolicy::canEditDraft($w['buyerUser'], $l))->toBeFalse();
 });
+
+it('review r1: a buyer whose assignment ended no longer sees the account launches', function () {
+    $w = LaunchWorld::make();
+    LaunchWorld::launch($w, LaunchState::BuyerReview);
+    AdAccountAssignment::query()->update(['ends_on' => now('Africa/Cairo')->subDay()->toDateString()]);
+
+    expect(LaunchPolicy::visible(AdLaunch::query(), $w['buyerUser'])->count())->toBe(0);
+});

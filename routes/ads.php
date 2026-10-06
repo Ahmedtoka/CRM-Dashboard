@@ -46,9 +46,9 @@ Route::middleware('ads:report')->group(function () {
 
     // Launch approvals (S1): the manager's queue. Approve / bulk need a password confirmed in the last 15 minutes (G3).
     Route::post('/ads/approvals/bulk', [ApprovalController::class, 'bulk'])
-        ->middleware(RequirePassword::using(null, ApprovalController::REAUTH_SECONDS))->name('ads.approvals.bulk');
+        ->middleware(['ads:authority', RequirePassword::using(null, ApprovalController::REAUTH_SECONDS)])->name('ads.approvals.bulk');
     Route::post('/ads/approvals/{launch}/approve', [ApprovalController::class, 'approve'])
-        ->middleware(RequirePassword::using(null, ApprovalController::REAUTH_SECONDS))->name('ads.approvals.approve');
+        ->middleware(['ads:authority', RequirePassword::using(null, ApprovalController::REAUTH_SECONDS)])->name('ads.approvals.approve');
     Route::post('/ads/approvals/{launch}/return', [ApprovalController::class, 'sendBack'])->name('ads.approvals.return');
     Route::post('/ads/approvals/{launch}/reject', [ApprovalController::class, 'reject'])->name('ads.approvals.reject');
     Route::post('/ads/reauth', ReauthController::class)->middleware('throttle:6,1')->name('ads.reauth');

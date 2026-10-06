@@ -217,3 +217,24 @@ it('TC-05 / T10: reject is terminal, archives, notifies; buyers cannot return or
         ->and(UserNotification::where('type', 'ads.launch.rejected')->count())->toBe(2);
     $this->actingAs($w['manager'])->postJson("/ads/approvals/{$l->public_id}/return", ['code' => 'other', 'text' => 'x'])->assertStatus(409);
 });
+
+it('review r1: after every Run failed the same manager can approve again and it runs anew', function () {
+    $w = LaunchWorld::make();
+    [$l, $hash] = apCard($w);
+    FakeAdsDriver::failNext('setStatus', 'rejected');
+
+    apApprove($this, $w['manager'], $l, $hash)->assertOk()->assertJsonPath('launch.state', 'awaiting_approval');
+    $l->refresh();
+    $hash = LaunchChecks::hash($l, app(LaunchChecks::class)->run($l, 'approve', $w['manager']));
+    apApprove($this, $w['manager'], $l, $hash)->assertOk()->assertJsonPath('launch.state', 'live')->assertJsonPath('ads.0.outcome', 'succeeded');
+    expect(AdWriteAction::count())->toBe(2);
+});
+
+it('review r1: refuses a buyer before the password prompt (403, never 423)', function () {
+    $w = LaunchWorld::make();
+    [$l, $hash] = apCard($w);
+
+    $this->actingAs($w['buyerUser'])->postJson("/ads/approvals/{$l->public_id}/approve", ['revision' => $l->revision, 'checks_hash' => $hash, 'ack_warnings' => []])
+        ->assertForbidden()->assertJsonPath('code', 'ads_authority_required');
+    $this->actingAs($w['buyerUser'])->postJson('/ads/approvals/bulk')->assertForbidden();
+});
