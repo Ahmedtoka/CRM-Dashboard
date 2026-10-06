@@ -242,3 +242,11 @@ export function newIdempotencyKey(): string {
 export function adsManagerUrl(ad: { platform: string; external_id: string }): string | null {
     return ad.platform === 'meta' ? `https://www.facebook.com/adsmanager/manage/ads?selected_ad_ids=${encodeURIComponent(ad.external_id)}` : null;
 }
+
+/** One status label for every Ads screen (quick win 12): own status ACTIVE/ENABLE = running, PAUSED/DISABLE = stopped. */
+export function adStatusLabel(status: string | null | undefined, t: (k: string) => string): string {
+    const s = String(status ?? '').toUpperCase();
+    if (RUNNING_STATUSES.includes(s)) return t('ads.control.row.running');
+    if (PAUSED_STATUSES.includes(s)) return t('ads.control.row.stopped');
+    return s === '' ? '—' : s.toLowerCase();
+}

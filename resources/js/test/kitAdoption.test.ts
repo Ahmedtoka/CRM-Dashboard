@@ -11,6 +11,8 @@ const SWEPT: string[] = [
     'Orders/Index', 'Orders/Show', 'Customers/Index', 'Customers/Show',
     // Task 14
     'Inbox', 'Board', 'Comments/Index', 'Cases',
+    // S2 control room
+    'Ads/Explorer',
 ];
 
 /** Raw tables allowed only on pages S1/S2 replace; they must sit in the shared sticky scroll box. */
@@ -27,8 +29,8 @@ const NO_PAGE_HEADER = new Set([
 ]);
 
 describe('S0 kit adoption', () => {
-    it('sees all 62 pages and only real ones are listed', () => {
-        expect(Object.keys(pages)).toHaveLength(62);
+    it('sees all 63 pages and only real ones are listed', () => {
+        expect(Object.keys(pages)).toHaveLength(63);
         for (const name of SWEPT) expect(pages[name], name).toBeDefined();
     });
 
