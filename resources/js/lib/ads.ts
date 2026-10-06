@@ -231,3 +231,9 @@ export function reasonTexts(reasons: AdReason[], locale: Locale, currency = 'EGP
         return { key: r.key, text: translate(locale, `ads.reasons.${r.key}`, v), bad: BAD_REASONS.includes(r.key) };
     });
 }
+
+/** Idempotency key: crypto.randomUUID in a secure context, else time + random (matches [A-Za-z0-9:_-]{8,100}). */
+export function newIdempotencyKey(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
+}
