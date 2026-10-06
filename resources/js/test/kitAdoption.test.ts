@@ -17,7 +17,7 @@ const SWEPT: string[] = [
     'Ads/Accounts', 'Ads/BuyerShow', 'Ads/BuyersSetup',
     'Ads/Materials/Collections', 'Ads/Materials/Form', 'Ads/Materials/Index', 'Ads/Materials/Stock', 'Ads/Sync',
     // Task 17
-    'settings/Users', 'settings/Tags', 'settings/Cities', 'settings/Branches', 'settings/QuickReplies', 'settings/Queue',
+    'settings/Users', 'settings/Tags', 'settings/Cities', 'settings/QuickReplies', 'settings/Queue',
     'settings/Notifications', 'settings/Profile', 'settings/Password', 'settings/Appearance',
     // S1 launch approvals
     'Ads/Launches', 'Ads/Approvals',
@@ -53,8 +53,8 @@ const NO_PAGE_HEADER = new Set([
 ]);
 
 describe('S0 kit adoption', () => {
-    it('sees all 63 pages and only real ones are listed', () => {
-        expect(Object.keys(pages)).toHaveLength(63);
+    it('sees all 62 pages and only real ones are listed', () => {
+        expect(Object.keys(pages)).toHaveLength(62);
         for (const name of SWEPT) expect(pages[name], name).toBeDefined();
     });
 

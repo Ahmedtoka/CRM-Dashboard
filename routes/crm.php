@@ -28,7 +28,6 @@ use App\Http\Controllers\Web\Settings\BotLearningController;
 use App\Http\Controllers\Web\Settings\BotReplyController;
 use App\Http\Controllers\Web\Settings\BotTestLinkController;
 use App\Http\Controllers\Web\Settings\BotTranslationController;
-use App\Http\Controllers\Web\Settings\BranchController;
 use App\Http\Controllers\Web\Settings\ChannelController;
 use App\Http\Controllers\Web\Settings\CityController;
 use App\Http\Controllers\Web\Settings\FacebookLoginController;
@@ -245,12 +244,6 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('tags/examples', [TagController::class, 'examples'])->name('tags.examples');
         Route::put('tags/{tag}', [TagController::class, 'update'])->name('tags.update');
         Route::delete('tags/{tag}', [TagController::class, 'destroy'])->name('tags.destroy');
-
-        // Branch directory (Task 2): store locations App\Bot\Flows\BranchFinder lists by area.
-        Route::get('branches', [BranchController::class, 'index'])->name('branches.index');
-        Route::post('branches', [BranchController::class, 'store'])->name('branches.store');
-        Route::patch('branches/{branch}', [BranchController::class, 'update'])->name('branches.update');
-        Route::delete('branches/{branch}', [BranchController::class, 'destroy'])->name('branches.destroy');
 
         // Flow designer (2026-09-17 Task 2): drafts, publish, versions, create, main menu.
         // Task 3: the sandbox simulator (one simulated turn, nothing sent or saved).
