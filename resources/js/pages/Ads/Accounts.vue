@@ -319,6 +319,7 @@ const appCrumbs = computed(() => [
                 <template v-if="connectionsOf(platform.value).length">
                     <h3 class="pt-1 text-sm font-semibold">{{ t('ads.accounts.accounts_title', { platform: platform.label }) }}</h3>
                     <DataTable
+                        table-id="ads-accounts"
                         :columns="columns"
                         :rows="accountsOf(platform.value)"
                         mobile="scroll"

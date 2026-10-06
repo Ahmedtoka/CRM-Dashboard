@@ -14,6 +14,7 @@ const SWEPT: string[] = [
     // Task 15
     'Reports/Activity', 'Reports/Bot', 'Reports/Latency', 'Reports/Me', 'Reports/QuickReplies', 'Reports/Team', 'Reports/TeamTest', 'Reports/User',
     // Task 16
+    'Ads/Accounts', 'Ads/BuyerShow', 'Ads/BuyersSetup',
     'Ads/Materials/Collections', 'Ads/Materials/Form', 'Ads/Materials/Index', 'Ads/Materials/Stock', 'Ads/Sync',
     // Task 17
     'settings/Users', 'settings/Tags', 'settings/Cities', 'settings/Branches', 'settings/QuickReplies', 'settings/Queue',

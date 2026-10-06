@@ -213,6 +213,7 @@ const crumbs = computed(() => [{ label: t('nav.ads_numbers'), href: '/ads/number
                 <section class="space-y-2">
                     <h2 class="text-sm font-bold">{{ t('ads.buyers.accounts') }}</h2>
                     <DataTable
+                        table-id="ads-buyer-assignments"
                         :columns="assignmentColumns"
                         :rows="assignments"
                         :caption="t('ads.buyers.accounts')"
@@ -235,7 +236,7 @@ const crumbs = computed(() => [{ label: t('nav.ads_numbers'), href: '/ads/number
 
                 <section class="space-y-2">
                     <h2 class="text-sm font-bold">{{ t('ads.buyers.campaigns') }}</h2>
-                    <DataTable :columns="campaignColumns" :rows="campaigns" :caption="t('ads.buyers.campaigns')" :empty="t('ads.empty.range')">
+                    <DataTable table-id="ads-buyer-campaigns" :columns="campaignColumns" :rows="campaigns" :caption="t('ads.buyers.campaigns')" :empty="t('ads.empty.range')">
                         <template #cell-name="{ row }">
                             <span class="flex flex-col">
                                 <Link :href="campaignHref(row as CampaignRow)" class="font-medium hover:underline" dir="auto">{{
