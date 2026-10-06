@@ -34,7 +34,7 @@ class CheckProductStock implements ShouldQueue
                 return;
             }
 
-            $watched = AdMaterial::query()->where('status', 'activated')->whereIn('product_id', $ids)
+            $watched = AdMaterial::query()->where('status', 'live')->whereIn('product_id', $ids)
                 ->distinct()->pluck('product_id')->map(fn ($id) => (int) $id)->all();
 
             if ($watched !== []) {

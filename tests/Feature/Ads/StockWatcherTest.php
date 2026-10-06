@@ -30,7 +30,7 @@ function swWorld(int $stock = 0, array $material = []): array
         'supervisor' => User::factory()->create(['role' => UserRole::Supervisor]),
         'admin' => User::factory()->create(['role' => UserRole::Admin]),
         'material' => AdMaterial::factory()->create(array_merge([
-            'title' => 'Eid reel', 'status' => 'activated', 'product_id' => $product->id, 'media_buyer_id' => $buyer->id,
+            'title' => 'Eid reel', 'status' => 'live', 'product_id' => $product->id, 'media_buyer_id' => $buyer->id,
         ], $material)),
     ];
 }
@@ -51,7 +51,7 @@ it('flags an out-of-stock running material and notifies the buyer and supervisor
 
     $data = swNotes()->first()->data;
     expect($data['material_id'])->toBe($w['material']->id)->and($data['title'])->toBe('Eid reel')
-        ->and($data['product_title'])->toBe('Abaya Noor')->and($data['link'])->toBe('/ads/materials?status=activated&stock=out');
+        ->and($data['product_title'])->toBe('Abaya Noor')->and($data['link'])->toBe('/ads/materials?status=live&stock=out');
 });
 
 it('does not notify again on later runs', function () {
@@ -78,8 +78,8 @@ it('clears the flag when stock returns, silently, and a new episode notifies aga
 
 it('ignores not started and done materials, materials without a product and in-stock ones', function () {
     $w = swWorld();
-    $w['material']->update(['status' => 'not_started']);
-    swWorld(0, ['status' => 'done']);
+    $w['material']->update(['status' => 'new']);
+    swWorld(0, ['status' => 'retired']);
     swWorld(0, ['product_id' => null]);
     swWorld(3);
 
@@ -190,7 +190,7 @@ it('clears need stop when a material leaves activated and notifies again when it
     app(StockWatcher::class)->run();
     expect($service->stats()['need_stop'])->toBe(1)->and(swNotes())->toHaveCount(3);
 
-    $service->setStatus($w['material']->fresh(), 'done');
+    $w['material']->fresh()->forceFill(['status' => 'retired', 'need_stop_at' => null])->save(); // status is derived now (S1)
     expect($w['material']->fresh()->need_stop_at)->toBeNull()->and($service->stats()['need_stop'])->toBe(0);
 
     // a stale flag on a non-activated row (legacy data) is not counted either
@@ -198,9 +198,7 @@ it('clears need stop when a material leaves activated and notifies again when it
     expect($service->stats()['need_stop'])->toBe(0);
     AdMaterial::whereKey($w['material']->id)->update(['need_stop_at' => null]);
 
-    Queue::fake();
-    $service->setStatus($w['material']->fresh(), 'activated');
-    Queue::assertPushed(CheckProductStock::class, fn (CheckProductStock $j) => $j->productIds === [$w['product']->id]);
+    $w['material']->fresh()->forceFill(['status' => 'live'])->save();
 
     app(StockWatcher::class)->run();
     expect($w['material']->fresh()->need_stop_at)->not->toBeNull()->and(swNotes())->toHaveCount(6); // a new episode

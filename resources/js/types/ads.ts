@@ -596,7 +596,7 @@ export interface AdsBuyersSetupProps {
 
 /* ---- Materials library: MaterialController, MaterialCollectionController, AdStockController ---- */
 
-export type MaterialStatus = 'not_started' | 'activated' | 'done';
+export type MaterialStatus = 'new' | 'in_review' | 'live' | 'paused' | 'retired';
 export type MaterialStock = 'in' | 'out' | 'none';
 export type MaterialType = 'reel' | 'carousel' | 'post' | 'story' | 'image' | 'video';
 
@@ -690,6 +690,8 @@ export interface MaterialStats {
     activated: number;
     not_started: number;
     done: number;
+    in_review: number;
+    paused: number;
     reels: number;
     posts: number;
     carousels: number;

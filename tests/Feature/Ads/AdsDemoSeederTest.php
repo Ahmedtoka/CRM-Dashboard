@@ -88,9 +88,9 @@ it('seeds buyers, accounts, assignments, targets, collections and materials, and
     // Two activated materials are out of stock and flagged; some materials are linked to ads.
     expect(AdMaterial::whereNotNull('need_stop_at')->count())->toBe(2)
         ->and(AdMaterial::has('ads')->count())->toBeGreaterThan(0)
-        ->and(AdMaterial::where('status', 'activated')->count())->toBeGreaterThan(0)
-        ->and(AdMaterial::where('status', 'done')->count())->toBeGreaterThan(0)
-        ->and(AdMaterial::where('status', 'not_started')->count())->toBeGreaterThan(0);
+        ->and(AdMaterial::where('status', 'live')->count())->toBeGreaterThan(0)
+        ->and(AdMaterial::where('status', 'retired')->count())->toBeGreaterThan(0)
+        ->and(AdMaterial::where('status', 'new')->count())->toBeGreaterThan(0);
 });
 
 it('leaves a real Meta connection alone and creates no fake Meta connection next to it', function () {

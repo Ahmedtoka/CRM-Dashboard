@@ -14,7 +14,7 @@ final class StockWatcher
 {
     public const NOTIFICATION_TYPE = 'ads.need_stop';
 
-    public const LINK = '/ads/materials?status=activated&stock=out';
+    public const LINK = '/ads/materials?status=live&stock=out';
 
     public function __construct(private readonly UserNotifier $notifier) {}
 
@@ -27,7 +27,7 @@ final class StockWatcher
         $flagged = 0;
 
         $base = fn () => AdMaterial::query()
-            ->where('status', 'activated')
+            ->where('status', 'live')
             ->whereNotNull('product_id')
             ->when($productIds !== null, fn ($q) => $q->whereIn('product_id', $productIds));
 

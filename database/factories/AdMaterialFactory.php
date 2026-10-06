@@ -15,7 +15,7 @@ class AdMaterialFactory extends Factory
         return [
             'title' => fake()->words(3, true),
             'types' => ['reel'],
-            'status' => 'not_started',
+            'status' => 'new',
             'website_links' => [],
             'drive_links' => [],
             'ig_links' => [],

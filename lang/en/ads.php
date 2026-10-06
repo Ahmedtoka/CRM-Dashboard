@@ -100,11 +100,12 @@ return [
         'login_customer_id' => 'Manager account ID (optional)',
     ],
     'materials' => [
+        'delete_blocked' => ['launches_open' => 'The material has an open launch: withdraw or finish it first', 'ads_live' => 'The material has running ads: stop them or retire the material first'],
         'file_type' => 'The file :name is not supported. Allowed: images (JPG, PNG, WebP, GIF) and video (MP4, MOV, WebM).',
         'file_too_big' => 'The file :name is larger than the allowed :mb MB.',
         'file_upload_failed' => 'The file could not be uploaded. Try again.',
         'bad_link' => 'This link is not valid. It must start with http or https.',
-        'status' => ['not_started' => 'Not started', 'activated' => 'Activated', 'done' => 'Done'],
+        'status' => ['new' => 'New', 'in_review' => 'In review', 'live' => 'Live', 'paused' => 'Paused', 'retired' => 'Retired'],
         'stock' => ['in' => 'In stock', 'out' => 'Out of stock', 'none' => 'No product'],
         'csv' => [
             'title' => 'Title', 'created' => 'Created', 'product' => 'Product', 'collections' => 'Collections', 'types' => 'Types',

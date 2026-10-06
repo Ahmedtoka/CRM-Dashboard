@@ -200,7 +200,7 @@ it('suggests losers, fatigued and need-stop ads, not winners or paused ads', fun
     $paused = Ad::factory()->for($acc, 'account')->create(['name' => 'Paused loser', 'status' => 'PAUSED', 'effective_status' => 'PAUSED']);
     $nothing = Ad::factory()->for($acc, 'account')->create(['name' => 'No sales']);
     $stock = Ad::factory()->for($acc, 'account')->create(['name' => 'Out of stock']);
-    $material = AdMaterial::factory()->create(['title' => 'Black abaya', 'status' => 'activated', 'need_stop_at' => now()]);
+    $material = AdMaterial::factory()->create(['title' => 'Black abaya', 'status' => 'live', 'need_stop_at' => now()]);
     $material->ads()->attach($stock->id);
 
     foreach (CarbonPeriod::create('2026-09-17', '2026-09-30') as $d) {

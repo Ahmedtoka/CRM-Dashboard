@@ -50,7 +50,6 @@ import {
     Plus,
     Rocket,
     Sparkles,
-    RotateCcw,
     Search,
     Square,
     Trash2,
@@ -65,7 +64,7 @@ const toast = useToast();
 const perms = useMaterialPermissions();
 const n = (v: number) => formatCount(v, locale.value);
 
-const STATUSES: MaterialStatus[] = ['not_started', 'activated', 'done'];
+const STATUSES: MaterialStatus[] = ['new', 'in_review', 'live', 'paused', 'retired'];
 const STOCKS = ['in', 'out', 'none'] as const;
 const TYPES = ['reel', 'carousel', 'post', 'story', 'image', 'video'] as const;
 
@@ -205,23 +204,6 @@ const stockChip = (m: MaterialRow) =>
           : { label: t('ads.materials.stock.none'), cls: 'bg-muted text-muted-foreground' };
 
 const typeLabel = (type: string) => (TYPES.includes(type as (typeof TYPES)[number]) ? t(`ads.materials.type.${type}`) : type);
-
-/* ---- status ---- */
-const busyId = ref<number | null>(null);
-function setStatus(m: MaterialRow, status: MaterialStatus): void {
-    busyId.value = m.id;
-    router.post(
-        `/ads/materials/${m.id}/status`,
-        { status },
-        {
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: () => toast.push(t(`ads.materials.status_saved.${status}`)),
-            onError: (errors) => toast.push(String(Object.values(errors)[0] ?? t('common.error')), 'error'),
-            onFinish: () => (busyId.value = null),
-        },
-    );
-}
 
 /* ---- gallery ---- */
 const gallery = ref<MaterialRow | null>(null);
@@ -596,46 +578,6 @@ const breadcrumbs = computed(() => [
                             </td>
                             <td class="px-3 py-2.5">
                                 <div class="flex flex-wrap justify-end gap-1">
-                                    <template v-if="perms.canOperate.value">
-                                        <button
-                                            v-if="m.status !== 'activated'"
-                                            type="button"
-                                            :class="
-                                                cn(
-                                                    iconBtn,
-                                                    'border-success/40 bg-success/10 text-emerald-700 hover:bg-success/20 dark:text-emerald-300',
-                                                )
-                                            "
-                                            :disabled="busyId === m.id"
-                                            :aria-label="t('ads.materials.actions.activate')"
-                                            :title="t('ads.materials.actions.activate')"
-                                            @click="setStatus(m, 'activated')"
-                                        >
-                                            <Play class="size-4" aria-hidden="true" />
-                                        </button>
-                                        <button
-                                            v-else
-                                            type="button"
-                                            :class="cn(iconBtn, 'border-foreground/20 bg-foreground text-background hover:bg-foreground/85')"
-                                            :disabled="busyId === m.id"
-                                            :aria-label="t('ads.materials.actions.done')"
-                                            :title="t('ads.materials.actions.done')"
-                                            @click="setStatus(m, 'done')"
-                                        >
-                                            <Square class="size-4" aria-hidden="true" />
-                                        </button>
-                                    </template>
-                                    <button
-                                        v-if="m.status !== 'not_started' && (perms.canOperate.value || perms.isContent.value)"
-                                        type="button"
-                                        :class="cn(iconBtn, 'border-border text-muted-foreground hover:bg-muted hover:text-foreground')"
-                                        :disabled="busyId === m.id"
-                                        :aria-label="t('ads.materials.actions.reset')"
-                                        :title="t('ads.materials.actions.reset')"
-                                        @click="setStatus(m, 'not_started')"
-                                    >
-                                        <RotateCcw class="size-4" aria-hidden="true" />
-                                    </button>
                                     <button
                                         v-if="m.files?.some((f) => f.mime?.startsWith('video/'))"
                                         type="button"

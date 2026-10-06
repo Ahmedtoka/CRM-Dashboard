@@ -6,6 +6,7 @@ use App\Ads\Control\Write\WriteDenied;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdLaunch;
+use App\Models\AdMaterial;
 use App\Models\AdPublication;
 
 /**
@@ -24,6 +25,11 @@ final class LaunchMonitor
                 $moved++;
             }
         }
+
+        $status = app(MaterialStatus::class);
+        AdMaterial::query()->whereIn('status', ['live', 'paused', 'new'])
+            ->whereHas('ads', fn ($q) => $q->where('ads.ad_account_id', $a->id))->get()
+            ->each(fn (AdMaterial $m) => $status->refresh($m));
 
         return $moved;
     }

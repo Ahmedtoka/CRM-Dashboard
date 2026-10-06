@@ -111,7 +111,7 @@ function itemText(n: AppNotification): string {
 function open(n: AppNotification): void {
     void notifications.markRead([n.id]);
     if (n.type === 'ads.need_stop') {
-        router.visit(String(n.data.link ?? '/ads/materials?status=activated&stock=out'));
+        router.visit(String(n.data.link ?? '/ads/materials?status=live&stock=out'));
         return;
     }
     if (n.type === 'ads.data_health') {

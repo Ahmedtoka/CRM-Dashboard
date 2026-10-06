@@ -25,6 +25,8 @@ use App\Ads\Health\Commands\HealthCommand;
 use App\Ads\Health\QueueHeartbeat;
 use App\Ads\Launch\HttpLandingProbe;
 use App\Ads\Launch\LandingProbe;
+use App\Ads\Launch\LaunchMoved;
+use App\Ads\Launch\MaterialStatus;
 use App\Ads\Materials\Commands\StockWatchCommand;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\Meta\UsageRecorder;
@@ -39,6 +41,7 @@ use App\Ads\Sync\Commands\TokenProbeCommand;
 use App\Ads\Sync\HistoryWindow;
 use App\Ads\Sync\SyncAdAccount;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class AdsServiceProvider extends ServiceProvider
@@ -58,6 +61,7 @@ class AdsServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        Event::listen(LaunchMoved::class, [MaterialStatus::class, 'handle']);
         if ($this->app->runningInConsole()) {
             $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, AdsAuthorityCommand::class, WritesSwitchCommand::class, WriteResolveCommand::class, WriteSweepCommand::class, WriteLimitsCommand::class, WritePreviewCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class, ReconcileCommand::class]);
         }

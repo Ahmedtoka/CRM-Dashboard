@@ -86,7 +86,6 @@ Route::middleware('ads:materials')->group(function () {
     Route::get('/ads/materials/{material}/edit', [MaterialController::class, 'edit'])->name('ads.materials.edit');
     Route::put('/ads/materials/{material}', [MaterialController::class, 'update'])->name('ads.materials.update');
     Route::delete('/ads/materials/{material}', [MaterialController::class, 'destroy'])->name('ads.materials.destroy');
-    Route::post('/ads/materials/{material}/status', [MaterialController::class, 'status'])->name('ads.materials.status');
     Route::post('/ads/materials/{material}/ads', [MaterialController::class, 'syncAds'])->name('ads.materials.ads');
     Route::get('/ads/products/search', [MaterialController::class, 'productSearch'])->name('ads.products.search');
     Route::get('/ads/publish/options', [PublishController::class, 'options'])->name('ads.publish.options');
@@ -118,4 +117,5 @@ Route::middleware('ads:materials')->group(function () {
     Route::post('/ads/launches/{launch}/retry', [LaunchController::class, 'retry'])->name('ads.launches.retry');
     Route::post('/ads/launches/{launch}/stop', [LaunchController::class, 'stop'])->name('ads.launches.stop');
     Route::post('/ads/launches/{launch}/retire', [LaunchController::class, 'retire'])->name('ads.launches.retire');
+    Route::post('/ads/materials/{material}/retire', [MaterialController::class, 'retire'])->name('ads.materials.retire');
 });

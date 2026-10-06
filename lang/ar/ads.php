@@ -100,11 +100,12 @@ return [
         'login_customer_id' => 'رقم حساب المدير (اختياري)',
     ],
     'materials' => [
+        'delete_blocked' => ['launches_open' => 'المادة عليها إطلاق مفتوح: اسحبيه أو خلّصيه الأول', 'ads_live' => 'المادة عليها إعلانات شغالة: وقّفيها أو اقفلي المادة الأول'],
         'file_type' => 'الملف :name مش مدعوم. المسموح صور (JPG, PNG, WebP, GIF) وفيديو (MP4, MOV, WebM).',
         'file_too_big' => 'الملف :name أكبر من الحد المسموح (:mb ميجا).',
         'file_upload_failed' => 'فشل رفع الملف. جرّب تاني.',
         'bad_link' => 'اللينك ده مش صحيح. لازم يبدأ بـ http أو https.',
-        'status' => ['not_started' => 'لسه مبدأش', 'activated' => 'شغّال', 'done' => 'خلص'],
+        'status' => ['new' => 'جديدة', 'in_review' => 'في المراجعة', 'live' => 'شغالة', 'paused' => 'واقفة', 'retired' => 'خلصت'],
         'stock' => ['in' => 'متوفر', 'out' => 'خلص من المخزون', 'none' => 'من غير منتج'],
         'csv' => [
             'title' => 'العنوان', 'created' => 'تاريخ الإنشاء', 'product' => 'المنتج', 'collections' => 'المجموعات', 'types' => 'النوع',
