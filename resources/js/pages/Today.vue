@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DigestCard from '@/components/ads/DigestCard.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import SkeletonList from '@/components/crm/SkeletonList.vue';
 import DayToggle from '@/components/today/DayToggle.vue';
@@ -10,6 +11,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount } from '@/lib/format';
 import { adsRows, chatsRows, formatTodayDate, oldestStamp, ordersRows, whyRows } from '@/lib/today';
 import type { SharedData } from '@/types';
+import type { DigestData } from '@/types/ads';
 import type { TeamRow, TodayCardsData, TodayMode, UrgentItem } from '@/types/today';
 import { Deferred, Head, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
@@ -23,8 +25,8 @@ const props = defineProps<{
     urgent: UrgentItem[] | null;
     cards?: TodayCardsData;
     team?: TeamRow[];
-    /** S5 fills this with the 09:00 digest (DigestCard); null or absent until then, and the page renders nothing for it. */
-    digest?: unknown | null;
+    /** The 09:00 ads digest (S5, deferred) on the today view; null on yesterday, absent while it loads. */
+    digest?: DigestData | null;
 }>();
 
 const { t, locale } = useI18n();
@@ -53,8 +55,12 @@ const freshness = computed(() => oldestStamp([props.generated_at, props.cards_ge
 
             <UrgentStrip v-if="urgent !== null" :items="urgent" />
 
-            <!-- S5: <DigestCard v-if="digest" :digest="digest" /> -->
-            <div v-if="digest" data-today-digest />
+            <Deferred v-if="mode === 'today'" data="digest">
+                <template #fallback>
+                    <SkeletonList variant="tiles" :count="4" />
+                </template>
+                <DigestCard v-if="digest" :digest="digest" data-today-digest />
+            </Deferred>
 
             <Deferred data="cards">
                 <template #fallback>

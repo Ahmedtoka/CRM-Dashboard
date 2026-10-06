@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Ads\Alerts\Digest;
 use App\Http\Controllers\Controller;
 use App\Today\TeamLine;
 use App\Today\TodayCache;
@@ -20,7 +21,7 @@ use Inertia\Response;
  */
 final class TodayController extends Controller
 {
-    public function __invoke(Request $request, UrgentStrip $urgent, TodayCards $cards, TeamLine $team, TodayCache $cache): Response|RedirectResponse
+    public function __invoke(Request $request, UrgentStrip $urgent, TodayCards $cards, TeamLine $team, TodayCache $cache, Digest $digest): Response|RedirectResponse
     {
         $user = $request->user();
 
@@ -52,8 +53,8 @@ final class TodayController extends Controller
             'cards' => Inertia::defer(fn () => $cardsOf()['data'], 'cards'),
             'cards_generated_at' => Inertia::defer(fn () => $cardsOf()['generated_at'], 'cards'),
             'team' => Inertia::defer(fn () => $cache->remember($user, $w, 'team', fn () => $team->for($w))['data'], 'team'),
-            // S5 (decisions feed) fills this with the 09:00 digest; S4 keeps the slot.
-            'digest' => null,
+            // The 09:00 ads digest (S5, D14) on the today view; the end-of-day report has none.
+            'digest' => $w->mode === 'today' ? Inertia::defer(fn () => $digest->forUser($user), 'digest') : null,
         ]);
     }
 }

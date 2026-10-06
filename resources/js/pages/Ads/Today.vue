@@ -7,6 +7,7 @@ import AdsFilterBar from '@/components/ads/AdsFilterBar.vue';
 import ComboChart from '@/components/ads/ComboChart.vue';
 import CreativeThumb from '@/components/ads/CreativeThumb.vue';
 import DataHealthBanner from '@/components/ads/DataHealthBanner.vue';
+import DigestCard from '@/components/ads/DigestCard.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import ProgressBar from '@/components/crm/ProgressBar.vue';
@@ -77,6 +78,8 @@ const listHref = (list: (typeof LISTS)[number]) =>
             />
             <!-- Dims while a filter visit to this page runs (M7). -->
             <div class="space-y-4 transition-opacity" :class="loading ? 'opacity-60' : ''" :aria-busy="loading" data-test="page-body">
+            <!-- 09:00 digest (S5, D14): owner or buyer variant, fetched on its own so the page does not wait for it -->
+            <DigestCard />
 
             <!-- Decisions block: what needs me now comes first -->
             <section class="space-y-3 rounded-lg bg-card p-4 shadow-card" aria-labelledby="today-decisions">

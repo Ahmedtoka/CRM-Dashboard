@@ -24,7 +24,7 @@ const base = {
         buyers: null, best: [], worst: [],
     },
 };
-const stubs = { AppLayout: { template: '<div><slot /></div>' }, AdsFilterBar: true, AdDrawer: true, ComboChart: true, DataHealthBanner: true, PageHeader: { props: ['title'], template: '<h1>{{ title }}</h1>' } };
+const stubs = { AppLayout: { template: '<div><slot /></div>' }, AdsFilterBar: true, AdDrawer: true, ComboChart: true, DataHealthBanner: true, DigestCard: { template: '<div data-test="digest" />' }, PageHeader: { props: ['title'], template: '<h1>{{ title }}</h1>' } };
 
 describe('Today', () => {
     it('leads with decisions, then money today and the last 7 complete days with real ROAS first', () => {
@@ -54,5 +54,9 @@ describe('Today', () => {
         const w = mount(Today, { props: { ...base, today: { ...base.today, buyers } } as never, global: { stubs } });
         expect(w.find('[data-test="buyers-strip"]').exists()).toBe(true);
         expect(w.find('a[href="/ads/decisions?buyer=5"]').exists()).toBe(true);
+    });
+    it('opens with the morning digest card', () => {
+        const w = mount(Today, { props: base as never, global: { stubs } });
+        expect(w.find('[data-test="digest"]').exists()).toBe(true);
     });
 });
