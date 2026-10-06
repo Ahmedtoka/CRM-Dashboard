@@ -18,7 +18,7 @@ import type { AgentOutcome, OutcomePayload } from '@/types/crm';
 import { CheckCircle2, ChevronDown, LoaderCircle } from 'lucide-vue-next';
 import { computed, inject, ref, watch } from 'vue';
 
-/** «حل ▾» for a chat outside the queue (D13): the same outcome row as the queue's «خلصت ▾», then one close. */
+/** «حل» for a chat outside the queue (D13): the same outcome row as the queue's «خلصت», then one close. */
 const props = withDefaults(defineProps<{ disabled?: boolean; busy?: boolean; hint?: string }>(), { disabled: false, busy: false, hint: '' });
 const emit = defineEmits<{ resolve: [payload: OutcomePayload] }>();
 

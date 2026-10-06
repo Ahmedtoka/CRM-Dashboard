@@ -66,7 +66,7 @@ const emit = defineEmits<{
     back: [];
     openCustomer: [];
     action: [name: ConversationAction];
-    /** Control room S3: «حل ▾» outside the queue, with the picked outcome. */
+    /** Control room S3: «حل» outside the queue, with the picked outcome. */
     resolve: [payload: OutcomePayload];
     priority: [value: ConversationPriority];
     toggleTag: [id: number];
