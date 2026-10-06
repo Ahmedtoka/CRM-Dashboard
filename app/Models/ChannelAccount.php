@@ -18,6 +18,8 @@ class ChannelAccount extends Model
         'name',
         'external_id',
         'driver',
+        // Production load test (2026-10-07): a «تيست» channel; its sends never leave the system.
+        'is_load_test',
         'credentials',
         'status',
         'last_webhook_at',
@@ -36,6 +38,7 @@ class ChannelAccount extends Model
     {
         return [
             'platform' => Platform::class,
+            'is_load_test' => 'boolean',
             'credentials' => 'encrypted:array',
             'last_webhook_at' => 'datetime',
             'profile' => 'array',

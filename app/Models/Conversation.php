@@ -66,6 +66,8 @@ class Conversation extends Model
         'assigned_at',
         'queue_entry_id',
         'return_priority_until',
+        // Free json; `meta.load_test` = a production load-test chat's run, scenario and step (2026-10-07).
+        'meta',
     ];
 
     protected function casts(): array
@@ -91,6 +93,7 @@ class Conversation extends Model
             'ad_attributed_at' => 'datetime',
             'assigned_at' => 'datetime',
             'return_priority_until' => 'datetime',
+            'meta' => 'array',
         ];
     }
 

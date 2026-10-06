@@ -21,7 +21,7 @@ function seedCanonicalAccounts(): void
     }
 }
 
-it('reuses the canonical demo account so follow-up messages stay in one conversation', function () {
+it('uses the load-test channel of the platform (never the demo or real account) so follow-up messages stay in one conversation', function () {
     seedCanonicalAccounts();
 
     foreach (['السلام عليكم', 'بكام؟'] as $text) {
@@ -30,14 +30,15 @@ it('reuses the canonical demo account so follow-up messages stay in one conversa
         ])->assertCreated();
     }
 
-    expect(ChannelAccount::count())->toBe(4)
+    expect(ChannelAccount::count())->toBe(5)
         ->and(ChannelAccount::where('external_id', 'fake')->exists())->toBeFalse()
         ->and(Conversation::count())->toBe(1)
-        ->and(Conversation::first()->channelAccount->external_id)->toBe('demo-instagram')
+        ->and(Conversation::first()->channelAccount->external_id)->toBe('loadtest-instagram')
+        ->and(Conversation::first()->channelAccount->is_load_test)->toBeTrue()
         ->and(Conversation::first()->messages()->where('direction', 'in')->count())->toBe(2);
 });
 
-it('creates a single demo-{platform} account when none exists yet', function () {
+it('creates a single loadtest-{platform} account when none exists yet', function () {
     $this->actingAs($this->admin)->postJson('/simulator/message', [
         'platform' => 'whatsapp', 'customer_key' => 'cust-8', 'name' => 'Hala', 'text' => 'مرحبا',
     ])->assertCreated();
@@ -46,22 +47,22 @@ it('creates a single demo-{platform} account when none exists yet', function () 
         'platform' => 'whatsapp', 'post_key' => 'post-1', 'customer_key' => 'cust-8', 'name' => 'Hala', 'text' => 'تمام',
     ])->assertCreated();
 
-    expect(ChannelAccount::where('platform', 'whatsapp')->pluck('external_id')->all())->toBe(['demo-whatsapp'])
+    expect(ChannelAccount::where('platform', 'whatsapp')->pluck('external_id')->all())->toBe(['loadtest-whatsapp'])
         ->and(Post::first()->channel_account_id)->toBe(ChannelAccount::where('platform', 'whatsapp')->value('id'));
 });
 
-it('gives every burst message its own customer key on the canonical account', function () {
+it('gives every burst message its own customer key on the load-test channel', function () {
     seedCanonicalAccounts();
 
     $this->actingAs($this->admin)->postJson('/simulator/burst', [
         'count' => 5, 'seconds' => 0, 'platforms' => ['facebook'],
     ])->assertStatus(202)->assertJsonPath('data.queued', 5);
 
-    expect(ChannelAccount::count())->toBe(4)
+    expect(ChannelAccount::count())->toBe(5)
         ->and(CustomerIdentity::where('platform', 'facebook')->distinct()->count('external_id'))->toBe(5)
         ->and(Conversation::where('platform', 'facebook')->count())->toBe(5)
         ->and(Conversation::pluck('channel_account_id')->unique()->all())
-        ->toBe([ChannelAccount::where('external_id', 'demo-facebook')->value('id')]);
+        ->toBe([ChannelAccount::where('external_id', 'loadtest-facebook')->value('id')]);
 });
 
 it('reports the channel account external id from the fake adapter instead of a fixed "fake" id', function () {
