@@ -154,6 +154,8 @@ return [
             'submitted' => 'Sent to the media buyer',
             'changes_requested' => 'Sent back to content',
             'withdrawn' => 'Launch withdrawn',
+            'forwarded' => 'Sent to the manager; the paused ads are being created',
+            'retried' => 'Re-creating the failed ads',
         ],
         'checks' => [
             'slot_open' => ['pass' => 'Ad set is open for new materials', 'block' => 'Ad set closed: pick an open one'],

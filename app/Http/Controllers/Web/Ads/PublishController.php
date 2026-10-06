@@ -98,7 +98,8 @@ class PublishController extends Controller
     public function publish(Request $request, AdMaterial $material, AdWriteService $writes, PublishService $publish): JsonResponse
     {
         $user = $request->user();
-        abort_unless(MaterialService::canOperate($user), 403);
+        // O7: a paused ad a buyer creates must go through a launch (approval); direct publish stays an admin tool.
+        abort_unless($user->isAdmin(), 403);
         WriteSwitch::assertAllows('publish'); // the kill switch stops publish too (a write); only Stop is exempt
 
         $data = $request->validate([

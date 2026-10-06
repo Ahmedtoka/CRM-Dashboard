@@ -1,12 +1,15 @@
 <?php
 
 use App\Ads\Launch\LaunchState;
+use App\Enums\UserRole;
 use App\Models\AdLaunch;
 use App\Models\AdMaterial;
 use App\Models\AdMaterialFile;
-use App\Models\AdSet;
 use App\Models\AdsAuditLog;
+use App\Models\AdSet;
 use App\Models\BotSetting;
+use App\Models\MediaBuyer;
+use App\Models\User;
 use App\Models\UserNotification;
 use Tests\Support\LaunchWorld;
 
@@ -108,8 +111,8 @@ it('requires a known reason code, and text for other', function () {
 it('lets only the reviewing buyer or Ads authority send back or edit in review', function () {
     $w = LaunchWorld::make();
     $l = LaunchWorld::launch($w, LaunchState::BuyerReview);
-    $stranger = \App\Models\User::factory()->create(['role' => \App\Enums\UserRole::MediaBuyer]);
-    \App\Models\MediaBuyer::factory()->create(['user_id' => $stranger->id]);
+    $stranger = User::factory()->create(['role' => UserRole::MediaBuyer]);
+    MediaBuyer::factory()->create(['user_id' => $stranger->id]);
 
     $this->actingAs($stranger)->postJson("/ads/launches/{$l->public_id}/send-back", ['code' => 'off_brand'])->assertNotFound(); // cannot even see it
     $this->actingAs($w['supervisor'])->postJson("/ads/launches/{$l->public_id}/send-back", ['code' => 'off_brand'])->assertForbidden()->assertJsonPath('code', 'launch_forbidden');

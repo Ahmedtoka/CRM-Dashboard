@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Ads\Launch\LaunchService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -39,6 +40,18 @@ class AdPublication extends Model
         static::saving(function (self $p) {
             if ($p->status === self::ERROR && $p->open_key !== null && $p->ad_requested_at === null) {
                 $p->open_key = null;
+            }
+        });
+
+        // A launch's ad changed state or got linked: T6 may be complete (LaunchService). Never breaks PublishAd or the sync.
+        static::saved(function (self $p) {
+            if ($p->ad_launch_id === null || ! $p->wasChanged(['status', 'linked_at'])) {
+                return;
+            }
+            try {
+                app(LaunchService::class)->publicationChanged($p);
+            } catch (\Throwable $e) {
+                report($e);
             }
         });
     }

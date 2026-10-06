@@ -102,4 +102,6 @@ Route::middleware('ads:materials')->group(function () {
     Route::post('/ads/launches/{launch}/submit', [LaunchController::class, 'submit'])->name('ads.launches.submit');
     Route::post('/ads/launches/{launch}/send-back', [LaunchController::class, 'sendBack'])->name('ads.launches.send-back');
     Route::post('/ads/launches/{launch}/withdraw', [LaunchController::class, 'withdraw'])->name('ads.launches.withdraw');
+    Route::post('/ads/launches/{launch}/forward', [LaunchController::class, 'forward'])->name('ads.launches.forward');
+    Route::post('/ads/launches/{launch}/retry', [LaunchController::class, 'retry'])->name('ads.launches.retry');
 });

@@ -4,16 +4,24 @@ namespace App\Ads\Launch;
 
 use App\Ads\AdsSettings;
 use App\Ads\Audit\AdsAudit;
+use App\Ads\Control\DuplicatePublication;
+use App\Ads\Control\Jobs\PublishAd;
 use App\Ads\Control\PublishService;
 use App\Ads\Control\Write\WriteActionService;
 use App\Ads\Control\Write\WriteDenied;
 use App\Ads\Control\Write\WritePolicy;
+use App\Ads\Control\Write\WriteSwitch;
+use App\Ads\Platforms\AdPlatform;
+use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\DriverFactory;
+use App\Ads\Platforms\WriteGuard;
+use App\Ads\Platforms\WriteRefused;
 use App\Models\AdLaunch;
 use App\Models\AdMaterial;
 use App\Models\AdPublication;
 use App\Models\AdSet;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Validation\ValidationException;
 use LogicException;
 
@@ -171,6 +179,147 @@ final class LaunchService
         }
 
         return $l;
+    }
+
+    /** T5: the reviewing buyer forwards; the PAUSED ads are created through the existing publish path (D2, O5). */
+    public function forward(User $by, AdLaunch $l, int $revision): AdLaunch
+    {
+        if ($l->state !== LaunchState::BuyerReview) {
+            throw WriteDenied::make('launch_state', ['state' => $l->state->value]);
+        }
+        if (! LaunchPolicy::isReviewer($by, $l)) {
+            throw WriteDenied::make('launch_forbidden');
+        }
+        if ($l->revision !== $revision) {
+            throw WriteDenied::make('launch_changed', ['revision' => $l->revision]);
+        }
+        if (! WriteSwitch::allows('publish')) {
+            throw WriteDenied::make(WriteSwitch::CODE);
+        }
+        $this->assertChecks($l, 'forward', $by);
+        $identity = $this->identityFor($l);
+        $l = $this->transition($l, [LaunchState::BuyerReview], LaunchState::CreatingPaused, [
+            'forwarded_by_id' => $by->id, 'forwarded_at' => now(), 'identity' => $identity, 'revision' => $revision + 1, 'last_error' => null,
+        ], $revision, $by);
+
+        try {
+            $this->publish->publish($by, $l->material()->with('product')->firstOrFail(), $l->account, [
+                'campaign_id' => (string) $l->campaign_external_id, 'campaign_name' => $l->campaign_name,
+                'adset_id' => (string) $l->adset_external_id, 'adset_name' => $l->adset_name, 'identity' => $identity,
+                'file_ids' => array_map('intval', (array) $l->file_ids), 'captions' => (array) $l->captions,
+            ], 'launch-'.$l->public_id.'-r'.$l->revision, false, $l);
+        } catch (DuplicatePublication|ValidationException $e) {
+            $this->transition($l, [LaunchState::CreatingPaused], LaunchState::BuyerReview, ['last_error' => mb_substr($e->getMessage(), 0, 1000)],
+                null, $by, ['error' => class_basename($e)], 'launch.forward_failed');
+
+            throw $e;
+        }
+        $this->notify->forwarded($l);
+
+        return $l->refresh(); // with a sync queue the ads may already be done
+    }
+
+    /** T6: creating_paused → awaiting_approval once every ad is created and synced; every ad finished with an error → create_failed. */
+    public function syncCreating(AdLaunch $l): AdLaunch
+    {
+        $l->refresh();
+        if ($l->state !== LaunchState::CreatingPaused) {
+            return $l;
+        }
+        $rows = AdPublication::query()->where('ad_launch_id', $l->id)->whereNull('archived_at')->get();
+        if ($rows->isEmpty()) {
+            return $l;
+        }
+        if ($rows->every(fn (AdPublication $p) => $p->isFinished()) && $rows->contains(fn (AdPublication $p) => $p->status === AdPublication::ERROR)) {
+            $error = (string) $rows->firstWhere('status', AdPublication::ERROR)?->error;
+            $l = $this->transition($l, [LaunchState::CreatingPaused], LaunchState::CreateFailed, ['last_error' => mb_substr($error, 0, 1000)]);
+            $this->notify->createFailed($l);
+
+            return $l;
+        }
+        if ($rows->every(fn (AdPublication $p) => $p->status === AdPublication::DONE && $p->linked_at !== null)) {
+            $results = $this->checks->run($l, 'approve');
+            $l = $this->transition($l, [LaunchState::CreatingPaused], LaunchState::AwaitingApproval, [
+                'awaiting_at' => now(), 'expires_at' => now()->addDays($this->settings->expiryDays()), 'expiring_notified_at' => null,
+                'checks' => array_map(fn (CheckResult $c) => $c->toArray(), $results), 'checks_hash' => LaunchChecks::hash($l, $results),
+            ]);
+            $this->notify->awaitingApproval($l);
+        }
+
+        return $l;
+    }
+
+    /** The AdPublication saved hook: a launch ad changed state or got linked. Another worker winning the move is fine. */
+    public function publicationChanged(AdPublication $p): void
+    {
+        $l = $p->launch;
+        if ($l === null || $l->state !== LaunchState::CreatingPaused) {
+            return;
+        }
+        try {
+            $this->syncCreating($l);
+        } catch (WriteDenied) {
+            // another worker made the move
+        }
+    }
+
+    /** E1: re-queue the failed ads whose ad-create request never left; an ad that may exist is never re-created (E2). */
+    public function retry(User $by, AdLaunch $l): AdLaunch
+    {
+        if ($l->state !== LaunchState::CreateFailed) {
+            throw WriteDenied::make('launch_state', ['state' => $l->state->value]);
+        }
+        if (! LaunchPolicy::isReviewer($by, $l)) {
+            throw WriteDenied::make('launch_forbidden');
+        }
+        if (! WriteSwitch::allows('publish')) {
+            throw WriteDenied::make(WriteSwitch::CODE);
+        }
+        $rows = AdPublication::query()->with('account')->where('ad_launch_id', $l->id)->whereNull('archived_at')
+            ->where('status', AdPublication::ERROR)->whereNull('ad_requested_at')->get();
+        if ($rows->isEmpty()) {
+            throw WriteDenied::make('retry_not_possible');
+        }
+        $l = $this->transition($l, [LaunchState::CreateFailed], LaunchState::CreatingPaused, ['last_error' => null], null, $by);
+        foreach ($rows as $p) {
+            try {
+                $p->forceFill(['status' => AdPublication::QUEUED, 'error' => null, 'attempts' => 0,
+                    'open_key' => PublishService::openKey($p->account, (string) $p->adset_external_id, (int) $p->ad_material_file_id,
+                        ['headline' => $p->headline, 'primary_text' => $p->primary_text, 'cta' => $p->cta])])->save();
+            } catch (UniqueConstraintViolationException) {
+                continue; // the same ad is in flight elsewhere: this row stays in error
+            }
+            PublishAd::dispatch($p->id);
+        }
+
+        return $this->syncCreating($l);
+    }
+
+    /**
+     * A10: the launch's identity, else the one remembered for the account, else the first the platform lists.
+     *
+     * @return array{page_id: string, page_name: string, instagram_id: ?string}
+     *
+     * @throws WriteDenied 422 identity_missing
+     */
+    private function identityFor(AdLaunch $l): array
+    {
+        $saved = $l->identity ?: $this->adsSettings->get(PublishService::identityKey($l->account));
+        if (is_array($saved) && (string) ($saved['page_id'] ?? '') !== '') {
+            return ['page_id' => (string) $saved['page_id'], 'page_name' => (string) ($saved['page_name'] ?? ''), 'instagram_id' => ($saved['instagram_id'] ?? null) ?: null];
+        }
+        try {
+            $writer = $this->drivers->writer(AdPlatform::from($l->account->platform));
+            WriteGuard::check($l->account, $writer);
+            $first = $writer->identities($l->account)[0] ?? null;
+        } catch (WriteRefused|AdsApiException) {
+            $first = null;
+        }
+        if ($first === null) {
+            throw WriteDenied::make('identity_missing');
+        }
+
+        return ['page_id' => $first->pageId, 'page_name' => $first->pageName, 'instagram_id' => $first->instagramId];
     }
 
     /** E13: a closed slot sends its launches under review back to content (system reason slot_closed). */

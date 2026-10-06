@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Web\Ads;
 
+use App\Ads\Control\DuplicatePublication;
 use App\Ads\Launch\LaunchPolicy;
 use App\Ads\Launch\LaunchService;
 use App\Http\Controllers\Controller;
@@ -54,6 +55,26 @@ class LaunchController extends Controller
         $launch = $launches->withdraw($request->user(), $launch);
 
         return $this->answer($request, $launch, __('ads.launch.flash.withdrawn'));
+    }
+
+    public function forward(Request $request, AdLaunch $launch, LaunchService $launches): JsonResponse
+    {
+        $this->see($request, $launch);
+        try {
+            $launch = $launches->forward($request->user(), $launch, $this->revision($request));
+        } catch (DuplicatePublication $e) {
+            return response()->json(['code' => 'duplicate_in_flight', 'message' => $e->getMessage()], 409);
+        }
+
+        return $this->answer($request, $launch, __('ads.launch.flash.forwarded'));
+    }
+
+    public function retry(Request $request, AdLaunch $launch, LaunchService $launches): JsonResponse
+    {
+        $this->see($request, $launch);
+        $launch = $launches->retry($request->user(), $launch);
+
+        return $this->answer($request, $launch, __('ads.launch.flash.retried'));
     }
 
     /** Not visible = not found (a launch id is not a secret, but its contents are). */
