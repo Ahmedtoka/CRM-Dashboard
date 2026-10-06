@@ -175,6 +175,16 @@ class Conversation extends Model
     }
 
     /**
+     * Episode outcomes (control room S3, D13).
+     *
+     * @return HasMany<ConversationOutcome, $this>
+     */
+    public function outcomes(): HasMany
+    {
+        return $this->hasMany(ConversationOutcome::class);
+    }
+
+    /**
      * @return BelongsToMany<Tag, $this>
      */
     public function tags(): BelongsToMany
