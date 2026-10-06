@@ -268,7 +268,7 @@ class DatabaseBackup
         $message = "mysqldump failed (exit {$exit}): {$stderr}";
         if (preg_match('/access denied|privilege|routine|event|SHOW VIEW|TRIGGER|LOCK TABLES/i', $stderr) === 1) {
             $message .= "\nThe database user lacks a privilege the dump needs (SELECT, SHOW VIEW, TRIGGER, EVENT, and access to routines)."
-                .' Ask the host to grant them, or retry without routines/events: CRM_MYSQLDUMP_ROUTINES=false php artisan crm:fresh-start';
+                .' Ask the host to grant them, or retry without routines/events: php artisan crm:fresh-start --no-routines';
         }
 
         return $message;

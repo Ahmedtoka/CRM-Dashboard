@@ -41,12 +41,18 @@ class FreshStartCommand extends Command
     protected $signature = 'crm:fresh-start
         {--confirm= : The confirmation phrase, for non-interactive runs}
         {--force : Skip the typed confirmation (production: only with --i-have-a-backup)}
-        {--i-have-a-backup= : Path of an existing backup file (required with --force in production)}';
+        {--i-have-a-backup= : Path of an existing backup file (required with --force in production)}
+        {--no-routines : Dump without --routines --events (the DB user lacks those privileges); overrides CRM_MYSQLDUMP_ROUTINES}';
 
     protected $description = 'Back up the database, then wipe ads history, orders, conversations, customers and queue data for a fresh start';
 
     public function handle(DatabaseBackup $backups, FreshStart $fresh): int
     {
+        // Runtime override: an env prefix cannot reach a cached config, an option can.
+        if ($this->option('no-routines')) {
+            config(['crm.fresh_start.mysqldump_routines' => false]);
+        }
+
         if (! app()->isDownForMaintenance()) {
             $this->error('Refused: the CRM is still up. Nothing was deleted. Prepare first:');
             foreach (self::PREP_STEPS as $step) {

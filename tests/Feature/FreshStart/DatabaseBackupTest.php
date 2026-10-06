@@ -87,8 +87,8 @@ it('refuses when the folder has less free space than half the database', functio
 
 it('explains a privilege error of mysqldump with the retry flag', function () {
     expect(DatabaseBackup::explainDumpError(2, 'mysqldump: Couldn\'t execute SHOW EVENTS: Access denied for user'))
-        ->toContain('privilege')->toContain('CRM_MYSQLDUMP_ROUTINES=false')
-        ->and(DatabaseBackup::explainDumpError(2, 'Unknown database'))->not->toContain('CRM_MYSQLDUMP_ROUTINES');
+        ->toContain('privilege')->toContain('php artisan crm:fresh-start --no-routines')
+        ->and(DatabaseBackup::explainDumpError(2, 'Unknown database'))->not->toContain('--no-routines');
 });
 
 it('makes the backup readable by its owner only', function () {

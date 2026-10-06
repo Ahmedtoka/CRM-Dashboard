@@ -93,7 +93,6 @@ class DemoSeeder extends Seeder
     private const DRIVER_CONFIG_KEYS = [
         'crm.drivers.channels',
         'crm.drivers.commerce',
-        'crm.drivers.shipping',
         'crm.drivers.ai',
         'crm.shopify.driver',
     ];

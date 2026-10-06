@@ -170,6 +170,16 @@ it('keeps the sync and status endpoints to supervisors and up', function () {
     $this->actingAs(fs4User(UserRole::Supervisor))->getJson('/ads/accounts/sync-status?accounts='.$account->id)->assertOk();
 });
 
+it('caps the sync and status account lists at 500 ids', function () {
+    Queue::fake();
+    $ids = range(1, 501);
+
+    $this->actingAs(fs4User())->postJson('/ads/accounts/sync', ['accounts' => $ids])->assertUnprocessable()->assertJsonValidationErrors('accounts');
+    $this->actingAs(fs4User())->getJson('/ads/accounts/sync-status?accounts='.implode(',', $ids))->assertUnprocessable()->assertJsonValidationErrors('accounts');
+    $this->actingAs(fs4User())->getJson('/ads/accounts/sync-status?'.http_build_query(['accounts' => $ids]))->assertUnprocessable();
+    $this->actingAs(fs4User())->getJson('/ads/accounts/sync-status?accounts='.implode(',', range(1, 500)))->assertOk();
+});
+
 /* ---- review round 1 ---- */
 
 function fs4Queue(array $ready, array $delayed = []): void

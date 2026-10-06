@@ -268,6 +268,22 @@ it('refuses to wipe when the backup fails', function () {
     expect(Customer::count())->toBe(1)->and(Conversation::count())->toBe(1);
 });
 
+it('--no-routines turns off routines/events in the dump at runtime, whatever the config says', function () {
+    config(['crm.fresh_start.mysqldump_routines' => true]);
+
+    fsRun($this, ['--no-routines' => true])->assertSuccessful();
+
+    expect(config('crm.fresh_start.mysqldump_routines'))->toBeFalse();
+});
+
+it('keeps routines/events on without --no-routines', function () {
+    config(['crm.fresh_start.mysqldump_routines' => true]);
+
+    fsRun($this)->assertSuccessful();
+
+    expect(config('crm.fresh_start.mysqldump_routines'))->toBeTrue();
+});
+
 it('requires the typed confirmation phrase', function () {
     Customer::factory()->create();
 

@@ -294,7 +294,7 @@ class AccountController extends Controller
      */
     public function syncMany(Request $request, AdsSyncService $sync): JsonResponse
     {
-        $data = $request->validate(['accounts' => ['sometimes', 'array'], 'accounts.*' => ['integer']]);
+        $data = $request->validate(['accounts' => ['sometimes', 'array', 'max:500'], 'accounts.*' => ['integer']]);
         $since = now();
         $picked = array_values(array_unique(array_map('intval', $data['accounts'] ?? [])));
         $errors = [];
@@ -348,7 +348,15 @@ class AccountController extends Controller
      */
     public function syncStatus(Request $request, QueueInspector $queue): JsonResponse
     {
-        $data = $request->validate(['accounts' => ['required'], 'since' => ['nullable', 'date']]);
+        $data = $request->validate([
+            // A comma list or an array: at most 500 ids either way.
+            'accounts' => ['required', function (string $attribute, mixed $value, \Closure $fail) {
+                if (count($this->idList($value)) > 500) {
+                    $fail(__('validation.max.array', ['attribute' => $attribute, 'max' => 500]));
+                }
+            }],
+            'since' => ['nullable', 'date'],
+        ]);
         $since = isset($data['since']) ? CarbonImmutable::parse($data['since']) : CarbonImmutable::now()->subMinutes(10);
         $ids = array_map('intval', $this->idList($data['accounts']));
 
