@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { formatCount, formatMoney } from '@/lib/format';
-import { prefillLines, type OrderSuggestion } from '@/lib/orderPrefill';
+import { prefillLines, type OrderSuggestion, type PrefillMiss } from '@/lib/orderPrefill';
 import { cn } from '@/lib/utils';
 import type { Customer, Order, ProductVariant } from '@/types/crm';
 import { Minus, Plus, Trash2 } from 'lucide-vue-next';
@@ -48,7 +48,20 @@ const error = ref<string | null>(null);
 // One key per open drawer, reused on every submit attempt until the drawer closes (spec ruling #1).
 const idempotencyKey = ref('');
 /** What the bot summary filled in (and what it could not find), shown above the lines. */
-const prefill = ref<{ count: number; missing: string[] } | null>(null);
+const prefill = ref<{ count: number; missing: PrefillMiss[] } | null>(null);
+/** The notice lines: products not found in one line, then each size / colour / stock miss named. */
+const prefillNotes = computed(() => {
+    const missing = prefill.value?.missing ?? [];
+    const notFound = missing.filter((m) => m.reason === 'product').map((m) => m.product);
+    const out = notFound.length ? [t('order.prefill_missing', { names: notFound.join('، ') })] : [];
+    for (const m of missing) {
+        if (m.reason === 'size') out.push(t('order.prefill_size_out', { size: m.value ?? '', product: m.product }));
+        else if (m.reason === 'color') out.push(t('order.prefill_color_out', { color: m.value ?? '', product: m.product }));
+        else if (m.reason === 'stock') out.push(t('order.prefill_stock_out', { product: m.product }));
+    }
+
+    return out;
+});
 
 // The server requires a real UUID; `crypto.randomUUID` needs a secure context (HTTPS or
 // localhost), which a plain-HTTP LAN IP is not, so this falls back to building a v4 UUID
@@ -218,9 +231,7 @@ const stepper = 'flex size-7 items-center justify-center hover:bg-muted disabled
                         data-order-prefill
                     >
                         <span v-if="prefill.count">{{ t('order.prefilled') }}</span>
-                        <span v-if="prefill.missing.length" class="text-muted-foreground" dir="auto">{{
-                            t('order.prefill_missing', { names: prefill.missing.join('، ') })
-                        }}</span>
+                        <span v-for="line in prefillNotes" :key="line" class="text-muted-foreground" dir="auto">{{ line }}</span>
                         <button v-if="prefill.count" type="button" class="ms-auto font-medium text-primary hover:underline" @click="clearPrefill">
                             {{ t('order.prefill_clear') }}
                         </button>

@@ -41,6 +41,24 @@ describe('useDetailsPanel', () => {
         expect(p.showColumn.value).toBe(false);
     });
 
+    it('show() only opens: the overlay at xl with the column closed, the sheet below xl, nothing when the column is open', () => {
+        const laptop = useDetailsPanel({ isXl: ref(true), initialOpen: false });
+        laptop.show();
+        laptop.show();
+        expect(laptop.overlay.value).toBe(true);
+        expect(laptop.open.value).toBe(false);
+
+        const wide = useDetailsPanel({ isXl: ref(true), initialOpen: true });
+        wide.show();
+        expect(wide.open.value).toBe(true);
+        expect(wide.overlay.value).toBe(false);
+
+        const phone = useDetailsPanel({ isXl: ref(false), initialOpen: false });
+        phone.show();
+        phone.show();
+        expect(phone.sheet.value).toBe(true);
+    });
+
     it('drops the overlay and the sheet when she opens another chat', () => {
         const p = useDetailsPanel({ isXl: ref(true), initialOpen: false });
         p.onWindowDelivered();

@@ -80,7 +80,7 @@ const emit = defineEmits<{
     retryAttachment: [attachment: Attachment];
     typing: [];
     action: [name: ConversationAction];
-    resolve: [payload: OutcomePayload];
+    resolve: [payload: OutcomePayload, done: (error: string | null) => void];
     priority: [value: ConversationPriority];
     toggleTag: [id: number];
     claim: [];
@@ -354,7 +354,7 @@ defineExpose({ composer, header, viewState: list.viewState, moveNote });
             @back="emit('back')"
             @open-customer="emit('openCustomer')"
             @action="emit('action', $event)"
-            @resolve="emit('resolve', $event)"
+            @resolve="(payload, done) => emit('resolve', payload, done)"
             @priority="emit('priority', $event)"
             @toggle-tag="emit('toggleTag', $event)"
             @claim="emit('claim')"
@@ -430,6 +430,8 @@ defineExpose({ composer, header, viewState: list.viewState, moveNote });
             <div v-if="topDay" class="pointer-events-none absolute inset-x-0 top-2 z-[1] flex justify-center" aria-hidden="true">
                 <span class="rounded-md bg-card/90 px-2.5 py-0.5 text-2xs font-medium text-muted-foreground shadow-card">{{ topDay }}</span>
             </div>
+            <!-- Control room S3: the details overlay, over the messages only (header and composer stay clear). -->
+            <slot name="overlay" />
         </div>
 
         <MediaLightbox

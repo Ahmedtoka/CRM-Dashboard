@@ -45,6 +45,17 @@ describe('ConversationItem waiting age', () => {
         w.unmount();
     });
 
+    it('shows no waiting age on a chat the bot is handling', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-10-08T10:07:00Z'));
+        const w = mount(ConversationItem, {
+            props: { conversation: { ...base, handler: 'bot', needs_human: false }, state: null, firstReplyTarget: 300 },
+            global: { stubs: { PlatformBadge: true } },
+        });
+        expect(w.find('[data-waiting-age]').exists()).toBe(false);
+        w.unmount();
+    });
+
     it('keeps the time before the target', () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-10-08T10:02:00Z'));

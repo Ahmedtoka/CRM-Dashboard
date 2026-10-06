@@ -580,6 +580,9 @@ const en: Messages = {
         prefilled: 'Filled from the bot summary, please check',
         prefill_clear: 'Clear',
         prefill_missing: 'Not found: {names}',
+        prefill_size_out: 'Size {size} is not available ({product})',
+        prefill_color_out: 'Colour {color} is not available ({product})',
+        prefill_stock_out: '{product} is out of stock',
         mismatch: {
             title: 'Status mismatch',
             reasons: {

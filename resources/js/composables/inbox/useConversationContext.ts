@@ -2,8 +2,14 @@ import { useApi } from '@/composables/useApi';
 import type { ConversationContext, OutcomeState } from '@/types/crm';
 import { ref, watch, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 
-/** The open chat's outcome state, provided by the inbox to the close menus. */
+/**
+ * The open chat's outcome state, provided by the inbox to the close menus. `null` = not known yet
+ * (the context is loading): the menus show the outcome row as loading and send nothing.
+ */
 export const INBOX_OUTCOME: InjectionKey<ComputedRef<OutcomeState | null>> = Symbol('inbox-outcome');
+
+/** A failed load: nothing automatic is known, she picks (the server still records `ordered` first). */
+const UNKNOWN: ConversationContext = { outcome: { current: null, source: null, auto: null }, handover: null, ad: null };
 
 /**
  * GET /inbox/conversations/{id}/context (control room S3): the outcome state, the bot's digest and
@@ -30,7 +36,7 @@ export function useConversationContext(id: Ref<number | null>) {
             const { data } = await api.get<{ data: ConversationContext }>(`/inbox/conversations/${current}/context`, { silent: true });
             if (mine === seq) context.value = data.data;
         } catch {
-            if (mine === seq) context.value = null;
+            if (mine === seq) context.value = UNKNOWN;
         } finally {
             if (mine === seq) loading.value = false;
         }

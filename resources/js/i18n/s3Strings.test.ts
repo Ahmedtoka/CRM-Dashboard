@@ -14,7 +14,7 @@ const KEYS = [
     'inbox.bot_summary.governorate', 'inbox.bot_summary.last_message',
     'inbox.ad.title', 'inbox.ad.campaign', 'inbox.ad.adset', 'inbox.ad.open', 'inbox.ad.more', 'inbox.ad.history',
     'orders.columns.ad', 'orders.ad_source.direct', 'customer.ads',
-    'order.insert_status', 'order.no_orders_to_insert', 'order.prefilled', 'order.prefill_clear', 'order.prefill_missing',
+    'order.insert_status', 'order.no_orders_to_insert', 'order.prefilled', 'order.prefill_clear', 'order.prefill_missing', 'order.prefill_size_out', 'order.prefill_color_out', 'order.prefill_stock_out',
     'shortcuts.insert_status',
     'ads.funnel.title', 'ads.funnel.chats', 'ads.funnel.to_agent', 'ads.funnel.orders', 'ads.funnel.delivered',
     'ads.funnel.returned', 'ads.funnel.why', 'ads.funnel.no_reasons', 'ads.funnel.empty', 'ads.funnel.multi_touch',
