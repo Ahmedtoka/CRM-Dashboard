@@ -103,7 +103,7 @@ trait OrderEndpoints
     /**
      * `from`/`to` are Cairo calendar dates (Y-m-d), like the report filters.
      *
-     * @return array{status?: ?string, type?: ?string, platform?: ?string, q?: ?string, created_by?: ?int, from?: ?string, to?: ?string, source?: ?string, financial_status?: ?string, fulfillment_status?: ?string, shipment_step?: ?string, mismatch?: ?bool, stuck?: ?bool}
+     * @return array{status?: ?string, type?: ?string, platform?: ?string, q?: ?string, created_by?: ?int, from?: ?string, to?: ?string, source?: ?string, financial_status?: ?string, fulfillment_status?: ?string, shipment_step?: ?string, mismatch?: ?bool, stuck?: ?bool, older_than?: ?int}
      */
     protected function orderFilters(Request $request): array
     {
@@ -121,6 +121,8 @@ trait OrderEndpoints
             'shipment_step' => ['nullable', Rule::enum(ShipmentStatus::class)],
             'mismatch' => ['nullable', 'boolean'],
             'stuck' => ['nullable', 'boolean'],
+            // «النهارده» urgent strip (control room S4): orders still waiting this many minutes after they were made.
+            'older_than' => ['nullable', 'integer', 'min:1', 'max:43200'],
         ]);
     }
 
@@ -147,6 +149,7 @@ trait OrderEndpoints
             ->when($f['created_by'] ?? null, fn ($q, $v) => $q->where('created_by_id', (int) $v))
             ->when($f['from'] ?? null, fn ($q, $v) => $q->where('created_at', '>=', DateRange::startOfCairoDay($v)))
             ->when($f['to'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', DateRange::endOfCairoDay($v)))
+            ->when($f['older_than'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', now()->subMinutes((int) $v)))
             ->when(array_key_exists('mismatch', $f) && $f['mismatch'] !== null, fn ($q) => $q->where('mismatch', (bool) $f['mismatch']))
             ->when(array_key_exists('stuck', $f) && $f['stuck'], fn (Builder $q) => StuckOrderScope::apply($q, $this->stuckOrderDays()))
             ->when(trim((string) ($f['q'] ?? '')), fn ($q, $term) => $q->where(fn (Builder $w) => $w

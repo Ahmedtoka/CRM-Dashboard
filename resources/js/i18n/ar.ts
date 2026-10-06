@@ -778,6 +778,7 @@ const ar = {
         shipment_step_all: 'كل مراحل الشحن',
         mismatch_only: 'المتعارضة فقط',
         stuck_only: 'المتعطلة فقط',
+        older_than_chip: 'مستني أكتر من {time}',
         list: {
             order: 'الأوردر',
             status: 'الحالة',
@@ -862,6 +863,7 @@ const ar = {
         empty_filtered: 'مفيش طلبات بالفلاتر دي. جربي تغيري التاريخ أو النوع.',
         filter_date: 'التاريخ',
         date_chip: 'من {from} لـ {to}',
+        overdue_chip: 'عدّت الـ SLA',
         tabs: { all: 'الكل', new: 'جديدة', in_progress: 'قيد المتابعة', closed: 'مغلقة' },
         types: {
             return_exchange: 'مرتجع/استبدال',

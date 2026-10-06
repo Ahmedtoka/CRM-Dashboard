@@ -807,6 +807,7 @@ const en: Messages = {
         shipment_step_all: 'All shipment steps',
         mismatch_only: 'Mismatch only',
         stuck_only: 'Stuck only',
+        older_than_chip: 'Waiting more than {time}',
         list: {
             order: 'Order',
             status: 'Status',
@@ -891,6 +892,7 @@ const en: Messages = {
         empty_filtered: 'No requests match these filters. Try another date or type.',
         filter_date: 'Date',
         date_chip: '{from} to {to}',
+        overdue_chip: 'Past SLA',
         tabs: { all: 'All', new: 'New', in_progress: 'In progress', closed: 'Closed' },
         types: {
             return_exchange: 'Return/exchange',
