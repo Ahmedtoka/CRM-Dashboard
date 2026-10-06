@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Concerns;
 
 use App\Analytics\MetricsService;
 use App\Commerce\OrderService;
+use App\Commerce\StuckOrderScope;
 use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
@@ -14,7 +15,6 @@ use App\Http\Support\DateRange;
 use App\Http\Support\ModeratorScope;
 use App\Models\Order;
 use App\Shipping\ShipmentService;
-use App\Shipping\StuckOrderScope;
 use App\Shopify\Connection\IntegrationRepository;
 use DomainException;
 use Illuminate\Database\Eloquent\Builder;

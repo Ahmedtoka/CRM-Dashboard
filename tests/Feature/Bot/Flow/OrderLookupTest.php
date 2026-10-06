@@ -6,12 +6,10 @@ use App\Bot\Flow\Orders\OmsStatus;
 use App\Bot\Flow\Orders\OrderLookup;
 use App\Bot\Flow\Orders\OrderSnapshot;
 use App\Bot\Flow\Orders\OrderStatusText;
-use App\Enums\ShipmentStatus;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Fulfillment;
 use App\Models\Order;
-use App\Models\Shipment;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Exceptions;
 
@@ -56,19 +54,17 @@ it('uses shopify data and reports when the OMS throws', function () {
     Exceptions::assertReported(RuntimeException::class);
 });
 
-it('maps the local shipment step when the OMS has no status', function (string $step, string $key) {
-    $o = Order::factory()->create(['order_number' => '4000']);
-    Shipment::factory()->for($o)->create(['status' => $step]);
+it('maps the Shopify delivery step when the OMS has no status', function (string $step, string $key) {
+    $o = Order::factory()->create(['order_number' => '4000', 'shipment_status' => $step]);
 
     expect(app(OrderLookup::class)->find(Conversation::factory()->create(), ['order_ref' => '4000'])['snapshots'][0]->statusKey)->toBe($key);
 })->with([
-    ['created', 'confirmed'], ['picked_up', 'shipped'], ['in_transit', 'shipped'], ['out_for_delivery', 'on_the_way'],
-    ['delivered', 'delivered'], ['returned', 'returned'], ['cancelled', 'cancelled'], ['failed_attempt', 'on_the_way'],
+    ['label_printed', 'confirmed'], ['picked_up', 'shipped'], ['in_transit', 'shipped'], ['out_for_delivery', 'on_the_way'],
+    ['delivered', 'delivered'], ['canceled', 'cancelled'], ['attempted_delivery', 'on_the_way'],
 ]);
 
 it('flags a failed delivery attempt on the snapshot', function () {
-    $o = Order::factory()->create(['order_number' => '4100']);
-    Shipment::factory()->for($o)->create(['status' => ShipmentStatus::FailedAttempt]);
+    Order::factory()->create(['order_number' => '4100', 'shipment_status' => 'attempted_delivery']);
 
     expect(app(OrderLookup::class)->find(Conversation::factory()->create(), ['order_ref' => '4100'])['snapshots'][0]->failedAttempt)->toBeTrue();
 });
@@ -119,7 +115,7 @@ it('never returns another customer\'s orders for a phone or email', function () 
 it('picks the one open order for a phone even when delivered ones exist', function () {
     $open = Order::factory()->create(['order_number' => '7001', 'shipping_phone' => '01001234567', 'created_at' => now()->subDays(3)]);
     $done = Order::factory()->create(['order_number' => '7002', 'shipping_phone' => '01001234567', 'created_at' => now()->subDay()]);
-    Shipment::factory()->for($done)->create(['status' => ShipmentStatus::Delivered]);
+    $done->update(['shipment_status' => 'delivered']);
 
     $r = app(OrderLookup::class)->find(Conversation::factory()->create(), ['phone' => '01001234567']);
 
@@ -142,7 +138,7 @@ it('takes the governorate from the province code, then the city, then the unders
 
 it('prefers the most recent non-cancelled order and returns a cancelled one only when all are', function () {
     $delivered = Order::factory()->create(['order_number' => '9201', 'shipping_phone' => '01001234567', 'created_at' => now()->subDays(5)]);
-    Shipment::factory()->for($delivered)->create(['status' => ShipmentStatus::Delivered]);
+    $delivered->update(['shipment_status' => 'delivered']);
     Order::factory()->create(['order_number' => '9202', 'shipping_phone' => '01001234567', 'cancelled_at' => now(), 'created_at' => now()->subDay()]);
     Order::factory()->create(['order_number' => '9203', 'shipping_phone' => '01112223334', 'cancelled_at' => now(), 'created_at' => now()->subDays(3)]);
     $latestCancelled = Order::factory()->create(['order_number' => '9204', 'shipping_phone' => '01112223334', 'cancelled_at' => now(), 'created_at' => now()->subDay()]);
@@ -169,7 +165,7 @@ it('stops calling the OMS after the first failure and never asks about finished 
     app()->instance(OmsClient::class, $oms);
     Order::factory()->count(3)->create(['shipping_phone' => '01001234567']);
     $done = Order::factory()->create(['order_number' => '9100', 'shipping_phone' => '01001234567']);
-    Shipment::factory()->for($done)->create(['status' => ShipmentStatus::Delivered]);
+    $done->update(['shipment_status' => 'delivered']);
 
     $r = app(OrderLookup::class)->find(Conversation::factory()->create(), ['phone' => '01001234567']);
 

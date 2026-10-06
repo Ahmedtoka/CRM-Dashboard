@@ -134,6 +134,20 @@ class Order extends Model
     }
 
     /**
+     * Delivered according to Shopify (fresh-orders F4: the CRM keeps no carrier tracking): `delivered_at` set, the
+     * order's `shipment_status` delivered, or one of its fulfillments delivered.
+     *
+     * @param  Builder<Order>  $query
+     */
+    public function scopeDeliveredOnShopify(Builder $query): void
+    {
+        $query->where(fn (Builder $q) => $q
+            ->whereNotNull('orders.delivered_at')
+            ->orWhere('orders.shipment_status', 'delivered')
+            ->orWhereHas('fulfillments', fn (Builder $f) => $f->where('shipment_status', 'delivered')));
+    }
+
+    /**
      * The row-level twin of scopeOpenForSync(): true when the order is FINAL
      * (cancelled, refunded/voided, or delivered) and is never auto-refreshed.
      * The list uses it to skip such rows in the on-view refresh.
