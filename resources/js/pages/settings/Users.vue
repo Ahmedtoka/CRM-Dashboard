@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
@@ -7,15 +8,22 @@ import StatusChip from '@/components/crm/StatusChip.vue';
 import UserForm from '@/components/crm/UserForm.vue';
 import { useCrud } from '@/composables/useCrud';
 import { useI18n } from '@/composables/useI18n';
+import { useUrlFilters } from '@/composables/useUrlFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatDateTime } from '@/lib/format';
+import { sortRows } from '@/lib/sort';
 import type { ManagedUser } from '@/types/admin';
 import type { Role } from '@/types/crm';
 import { Head } from '@inertiajs/vue3';
-import { KeyRound, Pencil, Plus, UserX } from 'lucide-vue-next';
+import { Button } from '@/components/ui/button';
+import { KeyRound, Pencil, Plus, Users as UsersIcon, UserX } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
-defineProps<{ users: ManagedUser[]; roles: Role[] }>();
+const props = defineProps<{ users: ManagedUser[]; roles: Role[] }>();
+
+// A full list: it sorts in the browser, and the sort stays in the URL.
+const { filters, set } = useUrlFilters({ sort: '' });
+const shown = computed(() => sortRows(props.users, filters.value.sort));
 
 const { t, locale } = useI18n();
 const crud = useCrud('/settings/users', 'users');
@@ -50,11 +58,11 @@ async function submitReset(): Promise<void> {
 }
 
 const columns = computed<Column[]>(() => [
-    { key: 'name', label: t('settings.users.name') },
-    { key: 'role', label: t('settings.users.role') },
+    { key: 'name', label: t('settings.users.name'), sortable: true },
+    { key: 'role', label: t('settings.users.role'), sortable: true },
     { key: 'platforms', label: t('settings.users.platforms') },
     { key: 'is_active', label: t('ui.active') },
-    { key: 'last_seen_at', label: t('settings.users.last_seen') },
+    { key: 'last_seen_at', label: t('settings.users.last_seen'), sortable: true },
     { key: 'actions', label: t('ui.actions'), align: 'end' },
 ]);
 
@@ -73,7 +81,21 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                 </button>
             </PageHeader>
 
-            <DataTable :columns="columns" :rows="users" :caption="t('settings.users.title')">
+            <DataTable
+                table-id="settings-users"
+                :columns="columns"
+                :rows="shown"
+                :caption="t('settings.users.title')"
+                :sort="filters.sort || null"
+                @update:sort="set({ sort: $event })"
+            >
+                <template #empty>
+                    <EmptyState :icon="UsersIcon" :title="t('settings.users.empty')">
+                        <template #action>
+                            <Button size="sm" @click="openForm(null)"><Plus aria-hidden="true" />{{ t('settings.users.add') }}</Button>
+                        </template>
+                    </EmptyState>
+                </template>
                 <template #cell-name="{ row }">
                     <span class="flex items-center gap-2">
                         <span class="size-2.5 shrink-0 rounded-full" :style="{ backgroundColor: row.color ?? '#94a3b8' }" aria-hidden="true" />

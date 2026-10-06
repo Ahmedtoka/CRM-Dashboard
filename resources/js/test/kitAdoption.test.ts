@@ -16,6 +16,9 @@ const SWEPT: string[] = [
     // Task 16
     'Ads/Accounts', 'Ads/Actions', 'Ads/BuyerShow', 'Ads/Buyers', 'Ads/BuyersSetup', 'Ads/Campaigns', 'Ads/Creatives',
     'Ads/Materials/Collections', 'Ads/Materials/Form', 'Ads/Materials/Index', 'Ads/Materials/Stock', 'Ads/Overview', 'Ads/Sync', 'Ads/Winners',
+    // Task 17
+    'settings/Users', 'settings/Tags', 'settings/Cities', 'settings/Branches', 'settings/QuickReplies', 'settings/Queue',
+    'settings/Notifications', 'settings/Profile', 'settings/Password', 'settings/Appearance',
 ];
 
 /** Raw tables allowed only on pages S1/S2 replace; they must sit in the shared sticky scroll box. */

@@ -1283,6 +1283,7 @@ const en: Messages = {
             deleted: 'Deleted',
         },
         users: {
+            empty: 'No users yet',
             title: 'Users',
             add: 'New user',
             edit: 'Edit user',
