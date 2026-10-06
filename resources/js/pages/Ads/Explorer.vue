@@ -11,7 +11,6 @@ import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import SkeletonList from '@/components/crm/SkeletonList.vue';
 import { useAdDrawer } from '@/composables/useAdDrawer';
-import { useDensity } from '@/composables/useDensity';
 import { useI18n } from '@/composables/useI18n';
 import { syncInertiaUrl } from '@/composables/useUrlFilters';
 import { usePathVisitLoading } from '@/composables/usePathVisitLoading';
@@ -28,13 +27,12 @@ import { computed, ref } from 'vue';
 
 const props = defineProps<AdsExplorerProps>();
 const { t, locale } = useI18n();
-const density = useDensity('ads-explorer');
 const phone = useMediaQuery('(max-width: 767px)');
 const drawer = useAdDrawer();
 
 /** Phones get cards for the table view (U 3.2); the tree stays desktop-only. */
 const view = computed<AdsView>(() => (props.filters.view === 'table' && phone.value ? 'cards' : props.filters.view));
-const columns = computed(() => adColumns(t, density.value));
+const columns = computed(() => adColumns(t));
 const rows = computed<AdRowData[]>(() => props.result?.data ?? []);
 const money = (v: number | null) => formatAdsMoney(v, locale.value, props.currency);
 const search = () => (typeof window === 'undefined' ? '' : window.location.search);
@@ -157,7 +155,6 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2';
             <DataTable
                 table-id="ads-explorer"
                 v-else
-                v-model:density="density"
                 :columns="columns"
                 :rows="rows"
                 :sort="tableSort"
@@ -168,7 +165,7 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2';
                 @update:sort="onSort"
             >
                 <template v-for="c in columns" :key="c.key" #[`cell-${c.key}`]="{ row }">
-                    <AdRow v-if="isPart(c.key)" :row="row" :part="c.key" :currency="currency" :density="density" :data-at="freshness" @open="drawer.open" />
+                    <AdRow v-if="isPart(c.key)" :row="row" :part="c.key" :currency="currency" :data-at="freshness" @open="drawer.open" />
                 </template>
                 <template v-if="result && rows.length" #totals>
                     <tr>

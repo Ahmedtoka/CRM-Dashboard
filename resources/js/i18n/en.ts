@@ -665,9 +665,6 @@ const en: Messages = {
         sort_by: 'Sort by {label}',
         select_all: 'Select all',
         select_row: 'Select row',
-        density: 'Table density',
-        density_comfortable: 'Comfortable',
-        density_compact: 'Compact',
         totals: 'Total',
     },
     range: {

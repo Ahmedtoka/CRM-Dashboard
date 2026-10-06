@@ -642,9 +642,6 @@ const ar = {
         sort_by: 'رتّب حسب {label}',
         select_all: 'اختار الكل',
         select_row: 'اختار الصف',
-        density: 'كثافة الجدول',
-        density_comfortable: 'مريح',
-        density_compact: 'مضغوط',
         totals: 'الإجمالي',
     },
     range: {

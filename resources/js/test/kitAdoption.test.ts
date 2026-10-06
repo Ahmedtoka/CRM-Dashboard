@@ -74,7 +74,7 @@ describe('S0 kit adoption', () => {
         }
         // R2 one PageHeader.
         if (!NO_PAGE_HEADER.has(name)) expect(source, `${name}: no PageHeader`).toContain('<PageHeader');
-        // R3 every DataTable remembers its density: `table-id` is its first attribute.
+        // R3 every DataTable is identifiable (`data-table-id` hook for tests and screenshots): `table-id` is its first attribute.
         const tables = source.match(/<DataTable\b/g)?.length ?? 0;
         const withId = source.match(/<DataTable\s+table-id="/g)?.length ?? 0;
         expect(withId, `${name}: DataTable without table-id first`).toBe(tables);
