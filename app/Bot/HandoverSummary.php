@@ -38,6 +38,27 @@ final class HandoverSummary
         'window_closed', 'no_rule', 'rule', 'no_product_match', 'intent',
     ];
 
+    /** The handover note's first line and labels (HandoverDigest parses the note with these). */
+    public const NOTE_HEADER = 'تحويل من البوت';
+
+    public const LABEL_REASON = 'السبب';
+
+    public const LABEL_CATEGORY = 'التصنيف';
+
+    public const LABEL_PRIORITY = 'الأولوية';
+
+    public const LABEL_INTENT = 'النية';
+
+    public const LABEL_PRODUCTS = 'المنتجات';
+
+    public const LABEL_SIZES = 'المقاسات';
+
+    public const LABEL_COLORS = 'الألوان';
+
+    public const LABEL_GOVERNORATE = 'المحافظة';
+
+    public const LABEL_LAST = 'آخر رسالة';
+
     public function __construct(private readonly GovernorateMatcher $governorates) {}
 
     public static function reasonLabel(string $reason): string
@@ -90,32 +111,32 @@ final class HandoverSummary
         app()->setLocale('ar');
 
         try {
-            $lines = ['تحويل من البوت', 'السبب: '.self::reasonLabel($reason)];
+            $lines = [self::NOTE_HEADER, self::LABEL_REASON.': '.self::reasonLabel($reason)];
 
             if ($c->handover_category !== null && $c->handover_category !== '') {
-                $lines[] = 'التصنيف: '.self::categoryLabel((string) $c->handover_category);
+                $lines[] = self::LABEL_CATEGORY.': '.self::categoryLabel((string) $c->handover_category);
             }
             if ($c->priority_level !== null && $c->priority_level !== '') {
-                $lines[] = 'الأولوية: '.self::priorityLabel((string) $c->priority_level);
+                $lines[] = self::LABEL_PRIORITY.': '.self::priorityLabel((string) $c->priority_level);
             }
         } finally {
             app()->setLocale($locale);
         }
 
         if ($intent !== null) {
-            $lines[] = 'النية: '.$intent->label();
+            $lines[] = self::LABEL_INTENT.': '.$intent->label();
         }
         if ($ctx?->products) {
-            $lines[] = 'المنتجات: '.implode('، ', $ctx->products);
+            $lines[] = self::LABEL_PRODUCTS.': '.implode('، ', $ctx->products);
         }
         if ($ctx?->sizes) {
-            $lines[] = 'المقاسات: '.implode('، ', $ctx->sizes);
+            $lines[] = self::LABEL_SIZES.': '.implode('، ', $ctx->sizes);
         }
         if ($ctx?->colors) {
-            $lines[] = 'الألوان: '.implode('، ', $ctx->colors);
+            $lines[] = self::LABEL_COLORS.': '.implode('، ', $ctx->colors);
         }
         if ($ctx?->governorate) {
-            $lines[] = 'المحافظة: '.$this->governorates->name($ctx->governorate);
+            $lines[] = self::LABEL_GOVERNORATE.': '.$this->governorates->name($ctx->governorate);
         }
 
         foreach ($summaryExtra as $extra) {
@@ -124,7 +145,7 @@ final class HandoverSummary
             }
         }
 
-        $lines[] = 'آخر رسالة: «'.Str::limit($customerText, 200).'»';
+        $lines[] = self::LABEL_LAST.': «'.Str::limit($customerText, 200).'»';
 
         return $c->notes()->create(['user_id' => null, 'body' => implode("\n", $lines)]);
     }
