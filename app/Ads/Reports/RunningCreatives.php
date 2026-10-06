@@ -104,12 +104,17 @@ final class RunningCreatives
             ->mapWithKeys(fn ($s) => [(int) $s->ad_id => (float) $s->spend]);
         $buyers = $this->buyers($ids, $f);
         $insights ??= $this->insights->forAds($ids, $f->to);
+        // Real ROAS divides EGP order revenue by spend: only meaningful on an EGP account (A9).
+        $currencies = $ids === [] ? collect() : DB::table('ad_accounts')
+            ->whereIn('id', array_unique(array_map(fn ($r) => (int) $r->ad_account_id, $rows)))->pluck('currency', 'id');
 
-        return array_map(function (object $r) use ($orders, $today, $buyers, $insights) {
+        return array_map(function (object $r) use ($orders, $today, $buyers, $insights, $currencies) {
             $d = $this->q->derive($r);
             $mine = $orders->get((int) $r->id, collect());
             $revenue = round((float) $mine->sum('net'), 2);
             $chats = (int) ($r->msg_conversations ?? 0);
+            $currency = $currencies[(int) $r->ad_account_id] ?? null;
+            $egp = AdDailySeries::isEgp($currency);
 
             return [
                 'id' => (int) $r->id,
@@ -144,7 +149,8 @@ final class RunningCreatives
                 'roas' => $d['roas'],
                 'real_orders' => $mine->count(),
                 'real_revenue' => $revenue,
-                'real_roas' => AdsQuery::ratio($revenue, $d['spend'], 2),
+                'real_roas' => $egp ? AdsQuery::ratio($revenue, $d['spend'], 2) : null,
+                'currency' => $currency !== null && $currency !== '' ? strtoupper((string) $currency) : 'EGP',
                 'objective' => Objective::family($r->objective ?? null, $chats),
                 'conversations' => $chats,
                 'spend_today' => round((float) ($today[(int) $r->id] ?? 0), 2),

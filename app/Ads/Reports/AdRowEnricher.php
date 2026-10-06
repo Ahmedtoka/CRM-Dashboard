@@ -27,7 +27,8 @@ final class AdRowEnricher
         $ids = array_map(fn (array $r) => (int) $r['id'], $rows);
         $signals = $this->health->signals($ids, $f);
         [$from, $to] = AdDailySeries::window($f->to);
-        $series = $this->series->forAds($ids, $from, $to);
+        // The page's own filter: a buyer's sparkline never shows another holder's days.
+        $series = $this->series->forAds($ids, $from, $to, $f);
         $accountIds = array_values(array_unique(array_map(fn (array $r) => (int) $r['account_id'], $rows)));
         $can = $this->writes->canWriteMany($u, AdAccount::query()->whereIn('id', $accountIds)->get(['id', 'is_active', 'write_enabled', 'platform', 'external_id']));
 

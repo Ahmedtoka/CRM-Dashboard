@@ -50,3 +50,14 @@ it('filters by objective family and by an id list, and sorts ascending on reques
         ->and(collect(rcBuild(['only_ids' => [$a->id]])['data'])->pluck('id')->all())->toBe([$a->id])
         ->and(rcBuild(['only_ids' => []])['data'])->toBe([]);
 });
+
+it('gives no real ROAS on a non-EGP account and keeps it out of the Today best five (review I2)', function () {
+    $usd = AdAccount::factory()->meta()->create(['currency' => 'USD']);
+    $ad = crAd($usd, ['2026-10-03' => [20, 1, 40, 0]]);
+    crOrder($ad, '2026-10-03 13:00', 1000);
+
+    $row = collect(rcBuild()['data'])->firstWhere('id', $ad->id);
+    expect($row['real_roas'])->toBeNull()->and($row['currency'])->toBe('USD')->and($row['real_revenue'])->toBe(1000.0);
+
+    $this->actingAs(crAdmin())->get('/ads')->assertInertia(fn ($p) => $p->where('today.best', []));
+});
