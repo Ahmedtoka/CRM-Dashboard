@@ -18,6 +18,7 @@ const KEYS = [
     'shortcuts.insert_status',
     'ads.funnel.title', 'ads.funnel.chats', 'ads.funnel.to_agent', 'ads.funnel.orders', 'ads.funnel.delivered',
     'ads.funnel.returned', 'ads.funnel.why', 'ads.funnel.no_reasons', 'ads.funnel.empty', 'ads.funnel.multi_touch',
+    'ads.funnel.empty_all', 'ads.funnel.load_failed', 'ads.funnel.retry',
 ];
 
 /** translate() falls back to Arabic, so the English file is checked directly. */

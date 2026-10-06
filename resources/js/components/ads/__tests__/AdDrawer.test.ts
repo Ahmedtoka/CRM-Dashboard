@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { get, reload } = vi.hoisted(() => ({ get: vi.fn(), reload: vi.fn() }));
 vi.mock('@/composables/useApi', () => ({ useApi: () => ({ get }), apiErrorMessage: (_e: unknown, f: string) => f }));
@@ -25,20 +25,52 @@ const data = {
 const passthrough = { template: '<div><slot /></div>' };
 const stubs = { AdStatusButton: true, Sparkline: true, CreativeThumb: true, WhyList: true, Sheet: passthrough, SheetContent: passthrough, SheetTitle: { template: '<h2><slot /></h2>' }, SheetDescription: { template: '<p><slot /></p>' } };
 const filters = { from: '2026-09-29', to: '2026-10-05', platform: null, buyer: null };
+const funnelRow = { chats: 12, to_agent: 5, orders: 3, delivered: 2, returned: 1, reasons: { price: 4 } };
+/** The drawer asks for the ad and, in parallel, for its chat funnel. */
+const route = (ad: () => Promise<unknown>, funnel: () => Promise<unknown> = async () => ({ data: { data: { 7: funnelRow } } })) =>
+    get.mockImplementation((url: string) => (url === '/ads/chat-funnel' ? funnel() : ad()));
+const adCalls = () => get.mock.calls.filter((c) => c[0] !== '/ads/chat-funnel');
 
 describe('AdDrawer', () => {
-    it('loads the ad with the page range and shows history; no funnel block until S3', async () => {
-        get.mockResolvedValueOnce({ data });
+    beforeEach(() => get.mockReset());
+
+    it('loads the ad with the page range and shows history', async () => {
+        route(async () => ({ data }));
         const w = mount(AdDrawer, { props: { adId: 7, filters }, global: { stubs } });
         await flushPromises();
-        expect(get.mock.calls[0][0]).toBe('/ads/ad/7?from=2026-09-29&to=2026-10-05');
+        expect(adCalls()[0][0]).toBe('/ads/ad/7?from=2026-09-29&to=2026-10-05');
         expect(w.text()).toContain('Eid Abaya V2');
         expect(w.text()).toContain('Bakinam');
-        expect(w.find('[data-test="funnel"]').exists()).toBe(false);
     });
 
-    it('renders the funnel slot when S3 passes one', async () => {
-        get.mockResolvedValueOnce({ data });
+    it('fetches the chat funnel once per open, silently, for the page range', async () => {
+        route(async () => ({ data }));
+        const w = mount(AdDrawer, { props: { adId: 7, filters }, global: { stubs } });
+        await flushPromises();
+        const calls = get.mock.calls.filter((c) => c[0] === '/ads/chat-funnel');
+        expect(calls).toEqual([['/ads/chat-funnel', { params: { ads: [7], from: '2026-09-29', to: '2026-10-05' }, silent: true }]]);
+        expect(w.find('[data-test="funnel"] [data-funnel-stage="chats"]').text()).toContain('١٢');
+        expect(w.findAll('[data-funnel-reason]')).toHaveLength(1);
+    });
+
+    it('shows the funnel error with a retry and an empty state', async () => {
+        let fail = true;
+        route(async () => ({ data }), async () => {
+            if (fail) throw new Error('x');
+            return { data: { data: { 7: { chats: 0, to_agent: 0, orders: 0, delivered: 0, returned: 0, reasons: {} } } } };
+        });
+        const w = mount(AdDrawer, { props: { adId: 7, filters }, global: { stubs } });
+        await flushPromises();
+        const alert = w.find('[data-test="funnel"] [role="alert"]');
+        expect(alert.exists()).toBe(true);
+        fail = false;
+        await alert.find('button').trigger('click');
+        await flushPromises();
+        expect(w.find('[data-test="funnel"]').text()).toContain('مفيش محادثات');
+    });
+
+    it('renders a host funnel (prop + slot) without fetching its own', async () => {
+        route(async () => ({ data }));
         const w = mount(AdDrawer, {
             props: { adId: 7, filters, funnel: { chats: 4, to_agent: 2, orders: 1, delivered: 1, returned: 0, reasons: {} } },
             slots: { funnel: '<div>funnel here</div>' },
@@ -46,21 +78,26 @@ describe('AdDrawer', () => {
         });
         await flushPromises();
         expect(w.find('[data-test="funnel"]').text()).toContain('funnel here');
+        expect(get.mock.calls.some((c) => c[0] === '/ads/chat-funnel')).toBe(false);
     });
 
     it('reloads the ad and only the named list props after a Stop', async () => {
-        get.mockResolvedValue({ data });
+        route(async () => ({ data }));
         const w = mount(AdDrawer, { props: { adId: 7, filters, reloadOnly: ['result'] }, global: { stubs: { ...stubs, AdStatusButton: { name: 'AdStatusButton', template: '<i />' } } } });
         await flushPromises();
         w.findComponent({ name: 'AdStatusButton' }).vm.$emit('done', 'paused');
         await flushPromises();
-        expect(get).toHaveBeenCalledTimes(2);
+        expect(adCalls()).toHaveLength(2);
+        expect(get.mock.calls.filter((c) => c[0] === '/ads/chat-funnel')).toHaveLength(1);
         expect(reload).toHaveBeenCalledWith({ only: ['result'] });
-        get.mockReset();
     });
 
     it('offers a retry when the ad cannot be loaded', async () => {
-        get.mockRejectedValueOnce(new Error('x')).mockResolvedValueOnce({ data });
+        let n = 0;
+        route(async () => {
+            if (n++ === 0) throw new Error('x');
+            return { data };
+        });
         const w = mount(AdDrawer, { props: { adId: 7, filters }, global: { stubs } });
         await flushPromises();
         expect(w.find('[role="alert"]').exists()).toBe(true);

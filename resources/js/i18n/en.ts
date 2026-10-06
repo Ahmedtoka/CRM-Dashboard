@@ -3353,6 +3353,9 @@ const en: Messages = {
             no_reasons: 'No outcomes recorded for these chats yet',
             empty: 'No chats from this ad in this range',
             multi_touch: 'A chat that came from two ads counts for both',
+            empty_all: 'No chats from ads in this range',
+            load_failed: 'The chat journey could not be loaded',
+            retry: 'Try again',
         },
         health: {
             title: 'Check these numbers',

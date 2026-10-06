@@ -1,15 +1,18 @@
 <script setup lang="ts">
 /**
  * One drawer for every ad list (U 3.4): preview, numbers + sparkline, ليه؟, open decisions, write history, actions.
- * Inline-end side (left in RTL), full width on phones. `funnel` is S3's chat funnel (prop, server field or named slot).
+ * Inline-end side (left in RTL), full width on phones. The chat funnel (S3) is fetched once per open, silently, from
+ * GET /ads/chat-funnel for the page range; a host may pass `funnel` (or the `funnel` slot) instead.
  */
 import AdStatusButton from '@/components/ads/AdStatusButton.vue';
+import ChatFunnelBlock from '@/components/ads/ChatFunnelBlock.vue';
 import CreativeThumb from '@/components/ads/CreativeThumb.vue';
 import HealthBadge from '@/components/ads/HealthBadge.vue';
 import Sparkline from '@/components/ads/Sparkline.vue';
 import WhyList from '@/components/ads/WhyList.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
+import { useAdFunnel } from '@/composables/useAdFunnel';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { adsManagerUrl, allowedPreviewUrl, formatAdsMoney, formatRoas, previewSrcFromHtml } from '@/lib/ads';
@@ -61,7 +64,12 @@ watch(
 
 const ad = computed(() => data.value?.ad ?? null);
 const cur = computed(() => ad.value?.currency || props.currency);
-const funnel = computed(() => props.funnel ?? data.value?.funnel ?? null);
+/** Fetched here unless the host passes one; once per open (not again after a Stop / Run). */
+const own = useAdFunnel(
+    () => (props.funnel === null ? props.adId : null),
+    () => ({ from: props.filters.from, to: props.filters.to }),
+);
+const funnel = computed(() => props.funnel ?? own.funnel.value ?? data.value?.funnel ?? null);
 const previewSrc = computed(() => allowedPreviewUrl(previewSrcFromHtml(ad.value?.preview_html ?? null)));
 const adsManager = computed(() => (ad.value ? adsManagerUrl(ad.value) : null));
 const money = (v: number | null) => formatAdsMoney(v, locale.value, cur.value);
@@ -157,9 +165,11 @@ const resultTone = (r: 'ok' | 'error' | 'pending') => (r === 'ok' ? 'positive' :
                         <p v-else class="text-2xs text-muted-foreground">{{ t('ads.control.drawer.no_decisions') }}</p>
                     </section>
 
-                    <section v-if="$slots.funnel || funnel" data-test="funnel" class="space-y-1">
-                        <h3 class="text-sm font-semibold">{{ t('ads.control.drawer.funnel') }}</h3>
-                        <slot name="funnel" :funnel="funnel" />
+                    <section data-test="funnel" class="space-y-1">
+                        <h3 class="text-sm font-semibold" :title="t('ads.funnel.multi_touch')">{{ t('ads.control.drawer.funnel') }}</h3>
+                        <slot name="funnel" :funnel="funnel">
+                            <ChatFunnelBlock :funnel="funnel" :loading="own.loading.value" :error="own.error.value" :heading="false" @retry="own.retry" />
+                        </slot>
                     </section>
 
                     <section class="space-y-1">
