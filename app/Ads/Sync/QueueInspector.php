@@ -99,7 +99,7 @@ class QueueInspector
         return [$ready, $delayed];
     }
 
-    /** @return array{job: string, account_id: ?int, account: ?string, kind: ?string, days: ?int, attempts: int, available_at: ?string, trigger: ?string} */
+    /** @return array{job: string, account_id: ?int, account: ?string, kind: ?string, days: ?int, attempts: int, available_at: ?string, trigger: ?string, triggered_by_id: ?int} */
     private function decode(string $payload, ?float $availableAt): array
     {
         $data = json_decode($payload, true);
@@ -110,6 +110,7 @@ class QueueInspector
             'attempts' => (int) ($data['attempts'] ?? 0),
             'available_at' => $availableAt === null ? null : CarbonImmutable::createFromTimestamp((int) $availableAt)->toIso8601String(),
             'trigger' => null,
+            'triggered_by_id' => null,
         ];
 
         if ($name === SyncAdAccount::class && is_string($data['data']['command'] ?? null)) {
@@ -119,6 +120,7 @@ class QueueInspector
                 $row['kind'] = $job->kind;
                 $row['days'] = $job->days;
                 $row['trigger'] = $job->trigger;
+                $row['triggered_by_id'] = $job->triggeredById;
             }
         }
 

@@ -10,6 +10,7 @@ use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\TokenInvalid;
 use App\Ads\Sync\AdsSyncService;
 use App\Ads\Sync\ConnectionHealth;
+use App\Ads\Sync\HistoryWindow;
 use App\Ads\Sync\QueueInspector;
 use App\Ads\Sync\SyncAdAccount;
 use App\Http\Controllers\Controller;
@@ -54,6 +55,9 @@ class AccountController extends Controller
             ['key' => 'login_customer_id', 'secret' => false, 'required' => false],
         ],
     ];
+
+    /** A connection that is stopped or whose token is dead: its accounts never sync (as in SyncAdsCommand). */
+    private const BLOCKED = ['disabled', 'needs_reconnect'];
 
     public function __construct(private readonly AssignmentService $assignments) {}
 
@@ -115,16 +119,19 @@ class AccountController extends Controller
                 'last_sync' => $accounts->pluck('last_synced_at')->filter()->max(),
                 // Accounts whose latest finished sync failed, plus connections that need attention.
                 'errors' => $accounts->filter(fn (array $a) => ($a['last_run']['status'] ?? null) === 'error')->count()
-                    + $all->filter(fn (AdPlatformConnection $c) => in_array($c->status, ['error', 'needs_reconnect'], true))->count(),
+                    + collect($connections)->filter(fn (array $c) => $c['accounts'] !== [] && in_array($c['status'], ['error', 'needs_reconnect'], true))->count(),
             ],
-            'account_options' => $all->flatMap(fn (AdPlatformConnection $c) => $c->accounts)->sortBy('name')->values()
-                ->map(fn (AdAccount $a) => ['id' => $a->id, 'name' => $a->name, 'platform' => $a->platform])->all(),
+            'account_options' => $all->flatMap(fn (AdPlatformConnection $c) => $c->accounts->map(fn (AdAccount $a) => [$a, $c]))->sortBy(fn ($p) => $p[0]->name)->values()
+                ->map(fn (array $p) => [
+                    'id' => $p[0]->id, 'name' => $p[0]->name, 'platform' => $p[0]->platform,
+                    // The sync picker offers only accounts that can sync: active, on a connection that is not stopped or dead.
+                    'can_sync' => $p[0]->is_active && ! in_array($p[1]->status, self::BLOCKED, true),
+                ])->all(),
             // Share of the last 14 days' chat orders that carry a conversation (so an ad can be credited).
             'link_rate' => app(DataHealth::class)->linkRateStats(),
-            // Accounts with a sync running now or a sync job still waiting in the queue.
-            'syncing' => collect($queue->waiting())->pluck('account_id')
-                ->merge(AdsSyncRun::query()->where('status', 'running')->pluck('ad_account_id'))
-                ->filter()->map(fn ($id) => (int) $id)->unique()->sort()->values()->all(),
+            // Syncs going when the page opens: the bar resumes only the ones this user started (server clock);
+            // others (the hourly schedule, a colleague) only show as a «مزامنة شغالة» note.
+            'sync_resume' => $this->resume($queue),
             // Archived buyers stay listed only as the current holder of an account (the page shows active ones plus that holder).
             'buyers' => MediaBuyer::query()
                 ->where(fn ($q) => $q->where('is_active', true)->orWhereIn('id', $open->pluck('media_buyer_id')->filter()->values()))
@@ -229,23 +236,6 @@ class AccountController extends Controller
             : back()->withErrors(['connection' => $error]);
     }
 
-    /** Re-discover the connection's accounts, backfill the new ones and queue a recent sync for the rest. */
-    public function sync(AdPlatformConnection $connection, AdsSyncService $sync): RedirectResponse
-    {
-        $known = AdAccount::pluck('id')->all();
-        try {
-            $sync->syncAccounts($connection);
-        } catch (AdsApiException $e) {
-            return back()->withErrors(['connection' => AdsSyncService::scrub($e->getMessage())]);
-        }
-
-        $this->dispatchBackfill($connection, $known);
-        $connection->accounts()->where('is_active', true)->whereIn('id', $known)->pluck('id')
-            ->each(fn (int $id) => SyncAdAccount::dispatch($id, 3, 'recent', 'manual', auth()->id()));
-
-        return back()->with('status', __('ads.flash.sync_queued'));
-    }
-
     /**
      * A connection with spend history is stopped, never deleted: the delete would cascade through its
      * accounts, ads and daily metrics and unlink the orders, wiping past spend and buyer numbers for
@@ -296,17 +286,11 @@ class AccountController extends Controller
         return back()->with('status', __('ads.flash.saved'));
     }
 
-    public function syncAccount(AdAccount $account): RedirectResponse
-    {
-        SyncAdAccount::dispatch($account->id, 3, 'recent', 'manual', auth()->id());
-
-        return back()->with('status', __('ads.flash.sync_queued'));
-    }
-
     /**
-     * The page's one «سنك» (F6): the picked active accounts, or (none picked) every connection re-discovered first —
-     * new accounts get the backfill, known ones a recent sync. A connection the platform refuses is reported and
-     * skipped; its known accounts still sync. Returns what to poll.
+     * The page's one «سنك» (F6): the picked accounts, or (none picked) every connection re-discovered first —
+     * new accounts get the backfill, known ones a recent sync. Like SyncAdsCommand, accounts of a stopped or
+     * needs-a-new-token connection are skipped and reported per connection; so is a connection the platform
+     * refuses on discovery (its known accounts still sync). Returns what to poll.
      */
     public function syncMany(Request $request, AdsSyncService $sync): JsonResponse
     {
@@ -316,8 +300,19 @@ class AccountController extends Controller
         $errors = [];
         $ids = [];
 
+        $connections = AdPlatformConnection::query()->orderBy('id')->get();
+        $blocked = $connections->filter(fn (AdPlatformConnection $c) => in_array($c->status, self::BLOCKED, true));
+        $candidates = AdAccount::query()->where('is_active', true)->when($picked !== [], fn ($q) => $q->whereIn('id', $picked));
+        foreach ($blocked as $c) {
+            // Reported only when it holds accounts this sync wanted; an archived connection is not noise for «all».
+            $wanted = (clone $candidates)->where('connection_id', $c->id)->exists();
+            if ($wanted && ($c->status === 'needs_reconnect' || $picked !== [])) {
+                $errors[] = ['connection' => $c->name, 'message' => __('ads.sync_skip.'.$c->status)];
+            }
+        }
+
         if ($picked === []) {
-            foreach (AdPlatformConnection::query()->where('status', '!=', 'disabled')->orderBy('id')->get() as $connection) {
+            foreach ($connections->diff($blocked) as $connection) {
                 $known = AdAccount::pluck('id')->all();
                 try {
                     $sync->syncAccounts($connection);
@@ -330,11 +325,9 @@ class AccountController extends Controller
                 $this->dispatchBackfill($connection, $known);
                 $ids = [...$ids, ...$new];
             }
-            $recent = AdAccount::query()->where('is_active', true)->whereNotIn('id', $ids)->orderBy('id')->pluck('id')->all();
-        } else {
-            $recent = AdAccount::query()->where('is_active', true)->whereIn('id', $picked)->orderBy('id')->pluck('id')->all();
         }
 
+        $recent = (clone $candidates)->whereNotIn('connection_id', $blocked->pluck('id'))->whereNotIn('id', $ids)->orderBy('id')->pluck('id')->all();
         foreach ($recent as $id) {
             SyncAdAccount::dispatch($id, 3, 'recent', 'manual', auth()->id());
         }
@@ -345,28 +338,38 @@ class AccountController extends Controller
     }
 
     /**
-     * Where each account's sync stands since `since`: running (a run is going now), done / error (the latest run
-     * started or finished since then; `skipped` means another run covered it), else queued. `done` counts finished
-     * accounts whatever the outcome, so the bar reaches the end.
+     * Where each account's sync stands since `since`:
+     *  - running: a run is going, or a backfill sits between its 30-day chunks (done only once the oldest chunk is in);
+     *  - retrying: the last run failed but its job is back in the queue (Meta asked to wait);
+     *  - queued: nothing ran yet;
+     *  - done / error: the latest run since then finished (`skipped` run = another run covered it);
+     *  - skipped: the account stopped syncing, or its connection is stopped or needs a new token.
+     * Accounts that no longer exist are left out. `done` counts every finished account, so the bar reaches the end.
      */
-    public function syncStatus(Request $request): JsonResponse
+    public function syncStatus(Request $request, QueueInspector $queue): JsonResponse
     {
         $data = $request->validate(['accounts' => ['required'], 'since' => ['nullable', 'date']]);
         $since = isset($data['since']) ? CarbonImmutable::parse($data['since']) : CarbonImmutable::now()->subMinutes(10);
-        $ids = $this->idList($data['accounts']);
+        $ids = array_map('intval', $this->idList($data['accounts']));
 
-        $accounts = AdAccount::query()->whereIn('id', array_map('intval', $ids))->orderBy('name')->get(['id', 'name', 'platform']);
+        $accounts = AdAccount::query()->with('connection:id,status')->whereIn('id', $ids)->orderBy('name')->get(['id', 'name', 'platform', 'is_active', 'connection_id']);
         $runs = AdsSyncRun::query()->whereIn('ad_account_id', $accounts->pluck('id'))
             ->where(fn ($q) => $q->where('status', 'running')->orWhere('started_at', '>=', $since)->orWhere('finished_at', '>=', $since))
             ->orderByDesc('id')->get()->groupBy('ad_account_id');
+        $waiting = collect($queue->waiting(SyncAdAccount::queueName()))->where('job', 'SyncAdAccount')->groupBy('account_id');
+        $oldest = $this->backfillOldest();
 
-        $rows = $accounts->map(function (AdAccount $a) use ($runs) {
+        $rows = $accounts->map(function (AdAccount $a) use ($runs, $waiting, $oldest) {
             $mine = $runs->get($a->id, collect());
             $latest = $mine->first();
             $state = match (true) {
                 $mine->contains('status', 'running') => 'running',
+                ! $a->is_active || in_array($a->connection?->status, self::BLOCKED, true) => 'skipped',
                 $latest === null => 'queued',
+                $latest->status === 'error' && $waiting->has($a->id) => 'retrying',
                 $latest->status === 'error' => 'error',
+                $latest->kind === 'backfill' && $latest->status === 'ok' && $oldest !== null && $latest->from_date !== null
+                    && $latest->from_date->toDateString() > $oldest => 'running',
                 default => 'done',
             };
 
@@ -375,13 +378,45 @@ class AccountController extends Controller
                 'name' => $a->name,
                 'platform' => $a->platform,
                 'state' => $state,
-                'error' => $state === 'error' && $latest->error !== null ? AdsSyncService::scrub($latest->error) : null,
+                'error' => in_array($state, ['error', 'retrying'], true) && $latest?->error !== null ? AdsSyncService::scrub($latest->error) : null,
             ];
         })->values();
 
-        $done = $rows->whereIn('state', ['done', 'error'])->count();
+        $done = $rows->whereIn('state', ['done', 'error', 'skipped'])->count();
 
         return response()->json(['accounts' => $rows->all(), 'done' => $done, 'total' => $rows->count(), 'finished' => $done === $rows->count()]);
+    }
+
+    /** The oldest day a manual backfill reaches (its last 30-day chunk starts there); null when there is nothing to backfill. */
+    private function backfillOldest(): ?string
+    {
+        $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
+        $days = min((int) config('crm.ads.backfill_days', 90), HistoryWindow::daysFromStart($today));
+
+        return $days > 0 ? $today->subDays($days - 1)->toDateString() : null;
+    }
+
+    /**
+     * Syncs going when the page opens. `accounts` = the ones this user started (a running run or a queued job of theirs),
+     * which the bar resumes from the server's `since`; `others` = how many accounts the schedule or a colleague is syncing.
+     *
+     * @return array{since: string, accounts: list<int>, others: int}
+     */
+    private function resume(QueueInspector $queue): array
+    {
+        $me = auth()->id();
+        $running = AdsSyncRun::query()->where('status', 'running')->get(['ad_account_id', 'triggered_by_id', 'started_at']);
+        $waiting = collect($queue->waiting(SyncAdAccount::queueName()))->where('job', 'SyncAdAccount')->filter(fn ($r) => $r['account_id'] !== null);
+
+        $mine = $running->where('triggered_by_id', $me)->pluck('ad_account_id')
+            ->merge($waiting->where('triggered_by_id', $me)->pluck('account_id'))
+            ->map(fn ($id) => (int) $id)->unique()->sort()->values();
+        $others = $running->pluck('ad_account_id')->merge($waiting->pluck('account_id'))
+            ->map(fn ($id) => (int) $id)->unique()->diff($mine)->count();
+        // From the oldest of my running runs (server clock), so one that finishes right after the page opened still counts.
+        $since = $running->where('triggered_by_id', $me)->min('started_at') ?? now();
+
+        return ['since' => CarbonImmutable::parse($since)->toIso8601String(), 'accounts' => $mine->all(), 'others' => $others];
     }
 
     /** @return array{from: string, to: string, accounts: list<int>} range (default: this Cairo month) and picked accounts */

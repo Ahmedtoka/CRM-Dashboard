@@ -81,14 +81,12 @@ Route::middleware('ads:manage')->group(function () {
     Route::post('/ads/connections', [AccountController::class, 'store'])->name('ads.connections.store');
     Route::put('/ads/connections/{connection}', [AccountController::class, 'update'])->name('ads.connections.update');
     Route::post('/ads/connections/{connection}/test', [AccountController::class, 'test'])->name('ads.connections.test');
-    Route::post('/ads/connections/{connection}/sync', [AccountController::class, 'sync'])->name('ads.connections.sync');
     Route::delete('/ads/connections/{connection}', [AccountController::class, 'destroy'])->name('ads.connections.destroy');
     // F6: the page's one «سنك» (picked or all accounts) and the status it polls.
     Route::post('/ads/accounts/sync', [AccountController::class, 'syncMany'])->middleware('throttle:20,1')->name('ads.accounts.sync-many');
     Route::get('/ads/accounts/sync-status', [AccountController::class, 'syncStatus'])->name('ads.accounts.sync-status');
     Route::post('/ads/accounts/{account}/assign', [AccountController::class, 'assign'])->name('ads.accounts.assign');
     Route::patch('/ads/accounts/{account}', [AccountController::class, 'updateAccount'])->name('ads.accounts.update');
-    Route::post('/ads/accounts/{account}/sync', [AccountController::class, 'syncAccount'])->name('ads.accounts.sync');
 
     // «الإعداد» tabs: الحسابات (/ads/accounts), المزامنة (/ads/sync), الميديا باير, القواعد.
     Route::redirect('/ads/setup', '/ads/accounts')->name('ads.setup');

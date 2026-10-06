@@ -36,11 +36,12 @@ import type {
     AdSyncState,
     AdSyncStatusResponse,
 } from '@/types/ads';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     Check,
     ChevronDown,
     History,
+    Hourglass,
     ListChecks,
     LoaderCircle,
     MoreHorizontal,
@@ -123,21 +124,32 @@ const linkRateHint = computed(() =>
 const pickerOpen = ref(false);
 const syncScope = ref<'all' | 'some'>('all');
 const syncPicked = ref<number[]>([]);
-const activeOptions = computed(() => {
-    const active = new Set(props.connections.flatMap((c) => c.accounts).filter((a) => a.is_active).map((a) => a.id));
-    // Accounts hidden by the filter are still offered: the picker covers every active account.
-    return props.account_options.filter((o) => active.has(o.id) || !props.connections.some((c) => c.accounts.some((a) => a.id === o.id)));
-});
+/** Only accounts that can sync: active, on a connection that is neither stopped nor waiting for a new token. */
+const syncOptions = computed(() => props.account_options.filter((o) => o.can_sync));
+const canSyncId = (id: number) => syncOptions.value.some((o) => o.id === id);
 function toggleSyncAccount(id: number): void {
     syncPicked.value = syncPicked.value.includes(id) ? syncPicked.value.filter((x) => x !== id) : [...syncPicked.value, id];
 }
-const canStart = computed(() => syncScope.value === 'all' || syncPicked.value.length > 0);
+const canStart = computed(() => (syncScope.value === 'all' ? syncOptions.value.length > 0 : syncPicked.value.length > 0));
 
+/** No state change for this long: stop polling and point to the sync page (the worker may be down or busy). */
+const STALL_MS = 10 * 60 * 1000;
 const tracked = ref<{ since: string; ids: number[] } | null>(null);
 const status = ref<AdSyncStatusResponse | null>(null);
 const starting = ref(false);
+const stalled = ref(false);
+let lastSignature = '';
+let lastChangeAt = 0;
 const connectionErrors = ref<{ connection: string; message: string }[]>([]);
-const syncRunning = computed(() => tracked.value !== null && !(status.value?.finished ?? false));
+const syncRunning = computed(() => tracked.value !== null && !(status.value?.finished ?? false) && !stalled.value);
+
+function track(since: string, ids: number[]): void {
+    tracked.value = { since, ids };
+    status.value = null;
+    stalled.value = false;
+    lastSignature = '';
+    lastChangeAt = Date.now();
+}
 
 async function startSync(ids: number[] | null): Promise<void> {
     if (starting.value) return;
@@ -152,11 +164,7 @@ async function startSync(ids: number[] | null): Promise<void> {
         }
         // A sync started while another is still going joins the same bar.
         const keep = syncRunning.value && tracked.value ? tracked.value : null;
-        tracked.value = {
-            since: keep?.since ?? data.since,
-            ids: [...new Set([...(keep?.ids ?? []), ...data.accounts])],
-        };
-        status.value = null;
+        track(keep?.since ?? data.since, [...new Set([...(keep?.ids ?? []), ...data.accounts])]);
         toast.push(t('ads.accounts.sync_queued'));
         await poll();
     } catch (e) {
@@ -170,7 +178,7 @@ const syncOne = (a: AdAccountRow) => startSync([a.id]);
 
 async function poll(): Promise<void> {
     const job = tracked.value;
-    if (!job || status.value?.finished) return;
+    if (!job || status.value?.finished || stalled.value) return;
     try {
         const { data } = await api.get<AdSyncStatusResponse>('/ads/accounts/sync-status', {
             params: { accounts: job.ids.join(','), since: job.since },
@@ -178,10 +186,17 @@ async function poll(): Promise<void> {
         });
         if (tracked.value !== job) return;
         status.value = data;
+        const signature = data.accounts.map((a) => `${a.id}:${a.state}`).join(',');
+        if (signature !== lastSignature) {
+            lastSignature = signature;
+            lastChangeAt = Date.now();
+        } else if (!data.finished && Date.now() - lastChangeAt >= STALL_MS) {
+            stalled.value = true;
+        }
         if (data.finished) {
             const failed = data.accounts.filter((a) => a.state === 'error').length;
             toast.push(failed ? t('ads.accounts.sync_done_errors', { n: n(failed) }) : t('ads.accounts.sync_done'), failed ? 'error' : 'success');
-            router.reload({ only: ['connections', 'summary', 'syncing'] });
+            router.reload({ only: ['connections', 'summary', 'sync_resume'] });
         }
     } catch {
         // A missed poll is retried on the next tick.
@@ -189,15 +204,22 @@ async function poll(): Promise<void> {
 }
 useVisiblePoll(() => void poll(), 3000);
 
-// Syncs already going when the page opens show in the same bar.
+// Syncs this user started that are still going when the page opens resume in the bar, from the server's clock.
 onMounted(() => {
-    if (props.syncing.length) {
-        tracked.value = { since: new Date().toISOString(), ids: [...props.syncing] };
+    if (props.sync_resume.accounts.length) {
+        track(props.sync_resume.since, [...props.sync_resume.accounts]);
         void poll();
     }
 });
 
-const STATE_TONE: Record<AdSyncState, 'neutral' | 'info' | 'positive' | 'negative'> = { queued: 'neutral', running: 'info', done: 'positive', error: 'negative' };
+const STATE_TONE: Record<AdSyncState, 'neutral' | 'info' | 'positive' | 'negative' | 'warning'> = {
+    queued: 'neutral',
+    running: 'info',
+    retrying: 'warning',
+    done: 'positive',
+    error: 'negative',
+    skipped: 'neutral',
+};
 const stateOf = (id: number): AdSyncState | null => {
     const row = status.value?.accounts.find((a) => a.id === id);
     if (row) return row.state;
@@ -205,14 +227,21 @@ const stateOf = (id: number): AdSyncState | null => {
 };
 const isSyncing = (id: number) => {
     const s = stateOf(id);
-    return (s === 'queued' || s === 'running') && syncRunning.value;
+    return (s === 'queued' || s === 'running' || s === 'retrying') && syncRunning.value;
 };
 const progressDone = computed(() => status.value?.done ?? 0);
 const progressTotal = computed(() => status.value?.total ?? tracked.value?.ids.length ?? 0);
 function dismissProgress(): void {
     tracked.value = null;
     status.value = null;
+    stalled.value = false;
     connectionErrors.value = [];
+}
+/** Why a row cannot sync, as its icon's tooltip. */
+function rowSyncLabel(a: AdAccountRow): string {
+    if (!a.is_active) return t('ads.accounts.sync_blocked_paused');
+    if (!canSyncId(a.id)) return t('ads.accounts.sync_blocked_connection');
+    return t('ads.accounts.sync_account_named', { name: a.name });
 }
 
 /* ---------------- actions without a form of their own ---------------- */
@@ -402,7 +431,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                 </Button>
                 <Popover v-model:open="pickerOpen">
                     <PopoverTrigger as-child>
-                        <Button type="button" size="sm" data-test="sync-open" :loading="starting">
+                        <Button type="button" size="sm" data-test="sync-open" :loading="starting" :disabled="syncRunning">
                             <RefreshCw aria-hidden="true" />{{ t('ads.accounts.sync_button') }}
                         </Button>
                     </PopoverTrigger>
@@ -412,7 +441,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                             <legend class="sr-only">{{ t('ads.accounts.sync_picker_title') }}</legend>
                             <label class="flex items-center gap-2 text-xs">
                                 <input v-model="syncScope" type="radio" value="all" name="sync-scope" data-test="sync-scope-all" />
-                                {{ t('ads.accounts.sync_all', { n: n(activeOptions.length) }) }}
+                                {{ t('ads.accounts.sync_all', { n: n(syncOptions.length) }) }}
                             </label>
                             <label class="flex items-center gap-2 text-xs">
                                 <input v-model="syncScope" type="radio" value="some" name="sync-scope" data-test="sync-scope-some" />
@@ -420,7 +449,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                             </label>
                         </fieldset>
                         <ul v-if="syncScope === 'some'" class="scrollbar-thin max-h-56 space-y-1 overflow-y-auto">
-                            <li v-for="o in activeOptions" :key="o.id">
+                            <li v-for="o in syncOptions" :key="o.id">
                                 <label class="flex items-center gap-2 rounded px-1 py-1 text-xs hover:bg-muted">
                                     <input
                                         type="checkbox"
@@ -483,15 +512,28 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                 <StatCard :label="t('ads.accounts.tile_link_rate')" :value="linkRateTile" :hint="linkRateHint" />
             </section>
 
+            <!-- Syncs the schedule or a colleague started: a note, never this user's bar. -->
+            <p v-if="sync_resume.others && !syncRunning" class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-test="sync-others">
+                <LoaderCircle class="size-3.5 animate-spin" aria-hidden="true" />{{ t('ads.accounts.sync_others', { n: n(sync_resume.others) }) }}
+                <Link href="/ads/sync" class="text-primary hover:underline">{{ t('ads.accounts.sync_open_log') }}</Link>
+            </p>
+
             <!-- One overall progress for the «سنك» -->
             <section v-if="tracked" class="space-y-3 rounded-lg bg-card p-4 shadow-card" role="status" data-test="sync-progress">
                 <div class="flex items-center gap-2">
                     <LoaderCircle v-if="syncRunning" class="size-4 animate-spin text-primary" aria-hidden="true" />
+                    <Hourglass v-else-if="stalled" class="size-4 text-warning" aria-hidden="true" />
                     <Check v-else class="size-4 text-success" aria-hidden="true" />
-                    <p class="flex-1 text-sm font-semibold">{{ syncRunning ? t('ads.accounts.sync_progress') : t('ads.accounts.sync_finished') }}</p>
-                    <IconAction v-if="!syncRunning" :icon="X" :label="t('ads.accounts.sync_hide')" size="sm" data-test="sync-hide" @click="dismissProgress" />
+                    <p class="flex-1 text-sm font-semibold">
+                        {{ syncRunning ? t('ads.accounts.sync_progress') : stalled ? t('ads.accounts.sync_stalled_title') : t('ads.accounts.sync_finished') }}
+                    </p>
+                    <IconAction :icon="X" :label="t('ads.accounts.sync_hide')" size="sm" data-test="sync-hide" @click="dismissProgress" />
                 </div>
                 <ProgressBar :value="progressDone" :max="progressTotal" :unit="t('ads.accounts.sync_unit')" />
+                <p v-if="stalled" class="text-xs text-muted-foreground" data-test="sync-stalled">
+                    {{ t('ads.accounts.sync_stalled') }}
+                    <Link href="/ads/sync" class="text-primary hover:underline">{{ t('ads.accounts.sync_open_log') }}</Link>
+                </p>
                 <ul v-if="status" class="flex flex-wrap gap-1.5">
                     <li v-for="a in status.accounts" :key="a.id" :title="a.error ?? undefined" :data-test="`sync-chip-${a.id}`">
                         <StatusChip :label="`${a.name} · ${t(`ads.accounts.sync_state_${a.state}`)}`" :tone="STATE_TONE[a.state]" dot />
@@ -554,6 +596,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                                           ? t('ads.accounts.token_valid')
                                           : t('ads.accounts.token_unverified')
                                 }}
+                                · {{ t('ads.accounts.token_scopes') }}: <span dir="ltr">{{ c.token_health.scopes.join(', ') || '—' }}</span>
                                 · {{ t('ads.accounts.token_expires') }}: {{ tokenDate(c.token_health.expires_at) }}
                                 · {{ t('ads.accounts.token_data_access') }}: {{ tokenDate(c.token_health.data_access_expires_at) }}
                             </template>
@@ -580,7 +623,9 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                     <template #cell-name="{ row }">
                         <div class="min-w-40">
                             <p class="font-medium" dir="auto">{{ row.name }}</p>
-                            <p class="text-2xs text-muted-foreground" dir="auto">{{ row.connection }}</p>
+                            <p class="text-2xs text-muted-foreground">
+                                <span dir="ltr" class="tabular-nums">{{ row.external_id }}</span> · <span dir="auto">{{ row.connection }}</span>
+                            </p>
                         </div>
                     </template>
                     <template #cell-platform="{ row }"><PlatformChip :platform="row.platform" size="xs" /></template>
@@ -641,9 +686,9 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                         <div class="flex items-center justify-end gap-0.5" :data-test="`actions-${row.id}`">
                             <IconAction
                                 :icon="RefreshCw"
-                                :label="t('ads.accounts.sync_account_named', { name: row.name })"
+                                :label="rowSyncLabel(row)"
                                 :loading="isSyncing(row.id)"
-                                :disabled="!row.is_active || starting"
+                                :disabled="!canSyncId(row.id) || starting"
                                 @click="syncOne(row)"
                             />
                             <Popover>

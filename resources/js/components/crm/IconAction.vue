@@ -57,6 +57,22 @@ function onClick(event: MouseEvent): void {
                 <Link v-if="href" :href="href" v-bind="$attrs" :class="classes" :aria-label="label" data-icon-action>
                     <component :is="icon" aria-hidden="true" />
                 </Link>
+                <!-- A disabled button gets no pointer or focus events: a focusable wrapper carries the tooltip that says why. -->
+                <span v-else-if="disabled && !loading" tabindex="0" class="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-icon-action-wrap>
+                    <button
+                        v-bind="$attrs"
+                        type="button"
+                        :class="classes"
+                        :aria-label="label"
+                        :disabled="inactive"
+                        :aria-busy="loading || undefined"
+                        data-icon-action
+                        @click="onClick"
+                    >
+                        <LoaderCircle v-if="loading" class="animate-spin" aria-hidden="true" />
+                        <component :is="icon" v-else aria-hidden="true" />
+                    </button>
+                </span>
                 <button
                     v-else
                     v-bind="$attrs"

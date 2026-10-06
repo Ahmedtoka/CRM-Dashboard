@@ -11,6 +11,11 @@ return [
         'loser' => 'Stop it or change the creative',
         'neutral' => 'Keep watching it',
     ],
+    // F6: why the setup page's sync skipped a connection's accounts.
+    'sync_skip' => [
+        'disabled' => 'This connection is stopped; its accounts do not sync.',
+        'needs_reconnect' => 'This connection needs a new token; its accounts do not sync until it is reconnected.',
+    ],
     'flash' => [
         'stopped' => 'Stopped.',
         'resumed' => 'Running again.',

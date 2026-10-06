@@ -37,6 +37,17 @@ describe('IconAction', () => {
         expect(w.emitted('click')).toBeUndefined();
     });
 
+    it('keeps the tooltip on a disabled action so it can say why (focusable wrapper)', async () => {
+        const w = mount(IconAction, { props: { label: 'Sync stopped for this account', icon: Pencil, disabled: true }, attachTo: document.body });
+        const wrap = w.get('[data-icon-action-wrap]');
+        expect(wrap.attributes('tabindex')).toBe('0');
+        expect(wrap.get('button').attributes('disabled')).toBeDefined();
+        await wrap.trigger('focus');
+        await new Promise((r) => setTimeout(r, 20));
+        expect(document.body.textContent).toContain('Sync stopped for this account');
+        w.unmount();
+    });
+
     it('renders a link when given an href', () => {
         const w = mount(IconAction, { props: { label: 'Open', icon: Pencil, href: '/ads/sync?account=3' } });
         const a = w.get('a');

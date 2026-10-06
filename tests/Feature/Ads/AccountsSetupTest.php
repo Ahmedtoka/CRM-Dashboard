@@ -2,6 +2,8 @@
 
 use App\Ads\Platforms\AdsApiException;
 use App\Ads\Platforms\Fake\FakeAdsDriver;
+use App\Ads\Sync\HistoryWindow;
+use App\Ads\Sync\QueueInspector;
 use App\Ads\Sync\SyncAdAccount;
 use App\Enums\UserRole;
 use App\Models\Ad;
@@ -166,4 +168,111 @@ it('keeps the sync and status endpoints to supervisors and up', function () {
         $this->actingAs($user)->getJson('/ads/accounts/sync-status?accounts='.$account->id)->assertForbidden();
     }
     $this->actingAs(fs4User(UserRole::Supervisor))->getJson('/ads/accounts/sync-status?accounts='.$account->id)->assertOk();
+});
+
+/* ---- review round 1 ---- */
+
+function fs4Queue(array $ready, array $delayed = []): void
+{
+    $payload = fn (SyncAdAccount $job) => json_encode(['displayName' => SyncAdAccount::class, 'attempts' => 1, 'data' => ['command' => serialize($job)]]);
+    app()->instance(QueueInspector::class, new QueueInspector(fn () => [
+        array_map($payload, $ready),
+        array_map(fn (SyncAdAccount $j) => [$payload($j), (float) now()->addMinutes(15)->timestamp], $delayed),
+    ]));
+}
+
+it('skips accounts of stopped or dead connections and reports them per connection (I2)', function () {
+    Queue::fake();
+    $ok = AdPlatformConnection::factory()->create(['name' => 'Live BM']);
+    $dead = AdPlatformConnection::factory()->create(['name' => 'Dead BM', 'status' => 'needs_reconnect']);
+    $off = AdPlatformConnection::factory()->create(['name' => 'Old BM', 'status' => 'disabled']);
+    $a = AdAccount::factory()->create(['connection_id' => $ok->id]);
+    $b = AdAccount::factory()->create(['connection_id' => $dead->id]);
+    $c = AdAccount::factory()->create(['connection_id' => $off->id]);
+
+    $this->actingAs(fs4User())->postJson('/ads/accounts/sync', ['accounts' => [$a->id, $b->id, $c->id]])->assertOk()
+        ->assertJsonPath('accounts', [$a->id])
+        ->assertJsonPath('errors.0.connection', 'Dead BM')
+        ->assertJsonPath('errors.1.connection', 'Old BM');
+    Queue::assertPushed(SyncAdAccount::class, 1);
+
+    // All accounts: the dead one is reported and never re-discovered; the archived one stays quiet.
+    Queue::fake();
+    $res = $this->actingAs(fs4User())->postJson('/ads/accounts/sync')->assertOk();
+    expect(collect($res->json('errors'))->pluck('connection')->all())->toBe(['Dead BM'])
+        ->and($res->json('accounts'))->not->toContain($b->id)->not->toContain($c->id);
+    Queue::assertNotPushed(SyncAdAccount::class, fn (SyncAdAccount $j) => in_array($j->accountId, [$b->id, $c->id], true));
+});
+
+it('counts stopped, dead-connection and missing accounts as finished (I1)', function () {
+    $dead = AdPlatformConnection::factory()->create(['status' => 'needs_reconnect']);
+    $paused = AdAccount::factory()->create(['is_active' => false]);
+    $orphan = AdAccount::factory()->create(['connection_id' => $dead->id]);
+
+    $this->actingAs(fs4User())->getJson("/ads/accounts/sync-status?accounts={$paused->id},{$orphan->id},999999&since=".urlencode(now()->toIso8601String()))
+        ->assertOk()
+        ->assertJsonPath('total', 2)->assertJsonPath('done', 2)->assertJsonPath('finished', true)
+        ->assertJsonPath('accounts.0.state', 'skipped');
+});
+
+it('keeps a backfill running between its 30-day chunks and done only at the oldest chunk (I3)', function () {
+    config(['crm.ads.backfill_days' => 90]);
+    $a = AdAccount::factory()->create();
+    $since = now()->subMinute();
+    $today = CarbonImmutable::now('Africa/Cairo')->startOfDay();
+    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'kind' => 'backfill', 'status' => 'ok', 'from_date' => $today->subDays(29), 'to_date' => $today, 'started_at' => now(), 'finished_at' => now()]);
+    $url = "/ads/accounts/sync-status?accounts={$a->id}&since=".urlencode($since->toIso8601String());
+
+    $this->actingAs(fs4User())->getJson($url)->assertJsonPath('accounts.0.state', 'running')->assertJsonPath('finished', false);
+
+    $days = min(90, HistoryWindow::daysFromStart($today));
+    $oldest = $today->subDays($days - 1);
+    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'kind' => 'backfill', 'status' => 'ok', 'from_date' => $oldest, 'to_date' => $oldest->addDays(29), 'started_at' => now(), 'finished_at' => now()]);
+    $this->actingAs(fs4User())->getJson($url)->assertJsonPath('accounts.0.state', 'done')->assertJsonPath('finished', true);
+});
+
+it('shows a rate-limited run whose job is back in the queue as retrying, not failed (I3)', function () {
+    $a = AdAccount::factory()->create();
+    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'error', 'error' => 'User request limit reached', 'started_at' => now(), 'finished_at' => now()]);
+    fs4Queue([], [new SyncAdAccount($a->id, 3, 'recent', 'manual', 1)]);
+
+    $this->actingAs(fs4User())->getJson("/ads/accounts/sync-status?accounts={$a->id}&since=".urlencode(now()->subMinute()->toIso8601String()))
+        ->assertJsonPath('accounts.0.state', 'retrying')->assertJsonPath('done', 0)->assertJsonPath('finished', false);
+});
+
+it('resumes only the syncs this user started, from the server clock (I1)', function () {
+    $me = fs4User();
+    $other = fs4User();
+    [$a, $b, $c] = AdAccount::factory()->count(3)->create()->all();
+    $started = now()->subMinutes(2)->startOfSecond();
+    AdsSyncRun::factory()->create(['ad_account_id' => $a->id, 'status' => 'running', 'trigger' => 'manual', 'triggered_by_id' => $me->id, 'started_at' => $started, 'finished_at' => null]);
+    AdsSyncRun::factory()->create(['ad_account_id' => $b->id, 'status' => 'running', 'trigger' => 'schedule', 'triggered_by_id' => null, 'started_at' => now(), 'finished_at' => null]);
+    fs4Queue([new SyncAdAccount($c->id, 3, 'recent', 'manual', $other->id)]);
+
+    $this->actingAs($me)->get('/ads/accounts')->assertInertia(fn (Assert $p) => $p
+        ->where('sync_resume.accounts', [$a->id])
+        ->where('sync_resume.others', 2)
+        ->where('sync_resume.since', fn ($v) => CarbonImmutable::parse($v)->equalTo($started)));
+});
+
+it('offers only syncable accounts to the picker and counts connection problems only for shown accounts', function () {
+    $ok = AdPlatformConnection::factory()->create();
+    $dead = AdPlatformConnection::factory()->create(['status' => 'needs_reconnect']);
+    $a = AdAccount::factory()->create(['connection_id' => $ok->id, 'name' => 'A']);
+    AdAccount::factory()->create(['connection_id' => $ok->id, 'name' => 'B', 'is_active' => false]);
+    AdAccount::factory()->create(['connection_id' => $dead->id, 'name' => 'C']);
+
+    $this->actingAs(fs4User())->get('/ads/accounts')->assertInertia(fn (Assert $p) => $p
+        ->where('account_options.0.can_sync', true)
+        ->where('account_options.1.can_sync', false)
+        ->where('account_options.2.can_sync', false)
+        ->where('summary.errors', 1));
+    $this->actingAs(fs4User())->get("/ads/accounts?accounts={$a->id}")->assertInertia(fn (Assert $p) => $p->where('summary.errors', 0));
+});
+
+it('has no per-connection or per-account sync routes any more', function () {
+    $c = AdPlatformConnection::factory()->create();
+    $a = AdAccount::factory()->create(['connection_id' => $c->id]);
+    $this->actingAs(fs4User())->post("/ads/connections/{$c->id}/sync")->assertNotFound();
+    $this->actingAs(fs4User())->post("/ads/accounts/{$a->id}/sync")->assertNotFound();
 });

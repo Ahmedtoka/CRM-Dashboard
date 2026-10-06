@@ -567,15 +567,15 @@ export interface AdsAccountsProps {
     connections: AdConnectionRow[];
     /** Share of the last `days` days' chat orders that carry a conversation; rate is null with no chat orders. */
     link_rate: { rate: number | null; orders: number; linked: number; days: number };
-    /** Ids of accounts with a sync running or waiting in the queue. */
-    syncing: number[];
+    /** Syncs going when the page opened: `accounts` this user started (resumed from the server's `since`), `others` the schedule's or a colleague's. */
+    sync_resume: { since: string; accounts: number[]; others: number };
     buyers: AdBuyerOption[];
     platforms: AdPlatformDefinition[];
     /** Applied filter: range (default this Cairo month) and picked accounts (empty = all). */
     filters: { from: string; to: string; accounts: number[] };
     summary: AdsAccountsSummary;
     /** Every account, for the filter and the sync picker. */
-    account_options: { id: number; name: string; platform: AdPlatformValue }[];
+    account_options: { id: number; name: string; platform: AdPlatformValue; can_sync: boolean }[];
 }
 
 export interface AdsAccountsSummary {
@@ -588,7 +588,7 @@ export interface AdsAccountsSummary {
 }
 
 /** AccountController::syncStatus — one account of the running «سنك». */
-export type AdSyncState = 'queued' | 'running' | 'done' | 'error';
+export type AdSyncState = 'queued' | 'running' | 'retrying' | 'done' | 'error' | 'skipped';
 export interface AdSyncStatusRow {
     id: number;
     name: string;
