@@ -5,8 +5,12 @@ require_once __DIR__.'/../../../Support/AdsControlRoom.php';
 use App\Ads\Control\StopAdvisor;
 use App\Ads\Decisions\DecisionCounter;
 use App\Ads\Decisions\PendingApprovals;
+use App\Ads\Launch\LaunchMoved;
+use App\Ads\Launch\LaunchPolicy;
+use App\Ads\Launch\LaunchState;
 use App\Enums\UserRole;
 use App\Models\AdAccount;
+use App\Models\AdLaunch;
 use App\Models\AdWriteAction;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -113,19 +117,19 @@ it('lists every log user while the log is filtered to one of them (review M4)', 
 
 it('final review B-m7: an admin without Ads authority is not an approver (one definition: LaunchPolicy)', function () {
     $admin = crUser(UserRole::Admin);
-    expect(app(PendingApprovals::class)->canApprove($admin))->toBe(\App\Ads\Launch\LaunchPolicy::canApprove($admin))->toBeFalse();
+    expect(app(PendingApprovals::class)->canApprove($admin))->toBe(LaunchPolicy::canApprove($admin))->toBeFalse();
 });
 
 it('final review B-m8: a launch entering awaiting_approval drops the cached count of every approver', function () {
     $holder = crAdmin();
     $other = crUser(UserRole::Supervisor);
-    \App\Ads\Decisions\DecisionCounter::store($holder, 4);
-    \App\Ads\Decisions\DecisionCounter::store($other, 2);
-    $l = new \App\Models\AdLaunch;
+    DecisionCounter::store($holder, 4);
+    DecisionCounter::store($other, 2);
+    $l = new AdLaunch;
 
-    event(new \App\Ads\Launch\LaunchMoved($l, \App\Ads\Launch\LaunchState::BuyerReview, \App\Ads\Launch\LaunchState::Live));
-    expect(\App\Ads\Decisions\DecisionCounter::cached($holder))->toBe(4);
+    event(new LaunchMoved($l, LaunchState::BuyerReview, LaunchState::Live));
+    expect(DecisionCounter::cached($holder))->toBe(4);
 
-    event(new \App\Ads\Launch\LaunchMoved($l, \App\Ads\Launch\LaunchState::BuyerReview, \App\Ads\Launch\LaunchState::AwaitingApproval));
-    expect(\App\Ads\Decisions\DecisionCounter::cached($holder))->toBeNull()->and(\App\Ads\Decisions\DecisionCounter::cached($other))->toBe(2);
+    event(new LaunchMoved($l, LaunchState::BuyerReview, LaunchState::AwaitingApproval));
+    expect(DecisionCounter::cached($holder))->toBeNull()->and(DecisionCounter::cached($other))->toBe(2);
 });

@@ -1,5 +1,6 @@
 <?php
 
+use App\Ads\Reports\AdsFilter;
 use App\Inbox\Outcomes\ChatFunnel;
 use App\Models\Ad;
 use App\Models\Conversation;
@@ -108,7 +109,7 @@ it('final review B2: page totals count a multi-touch chat once and a customer-ma
     $perAd = app(ChatFunnel::class)->forAds([$a->id, $b->id], ...$range);
     expect(ChatFunnel::total($perAd)['orders'])->toBe(3); // per-ad rows still credit each ad
 
-    $filter = new \App\Ads\Reports\AdsFilter(CarbonImmutable::now()->subDays(7), CarbonImmutable::now(), accountIds: [$a->ad_account_id]);
+    $filter = new AdsFilter(CarbonImmutable::now()->subDays(7), CarbonImmutable::now(), accountIds: [$a->ad_account_id]);
     expect(app(ChatFunnel::class)->forFilter($filter))->toBe([
         'chats' => 2, 'to_agent' => 1, 'orders' => 1, 'delivered' => 1, 'returned' => 0, 'reasons' => ['price' => 1],
     ]);

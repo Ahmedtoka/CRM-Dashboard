@@ -5,6 +5,7 @@ use App\Ads\Launch\LaunchState;
 use App\Ads\Launch\MaterialStatus;
 use App\Models\Ad;
 use App\Models\AdMaterial;
+use Illuminate\Support\Facades\Schema;
 use Tests\Support\LaunchWorld;
 
 beforeEach(fn () => LaunchWorld::boot());
@@ -111,7 +112,7 @@ it('final review B1: the sweep pass moves a live material with no running ad to 
 
 it('final review B-m5: the remap migration sets the status default to new, and down restores it', function () {
     $migration = require database_path('migrations/2026_10_08_100050_remap_ad_material_statuses.php');
-    $default = fn () => trim((string) collect(\Illuminate\Support\Facades\Schema::getColumns('ad_materials'))->firstWhere('name', 'status')['default'], "'\"");
+    $default = fn () => trim((string) collect(Schema::getColumns('ad_materials'))->firstWhere('name', 'status')['default'], "'\"");
 
     $migration->up();
     expect($default())->toBe('new');

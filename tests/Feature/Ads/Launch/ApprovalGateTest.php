@@ -2,6 +2,7 @@
 
 use App\Ads\Control\PublicationLinker;
 use App\Ads\Launch\LaunchChecks;
+use App\Ads\Launch\LaunchService;
 use App\Ads\Launch\LaunchState;
 use App\Ads\Sync\SyncAdAccount;
 use App\Models\Ad;
@@ -89,7 +90,7 @@ it('final review A1: refuses a Run of a retired launch ad through write-actions 
     $w = LaunchWorld::make();
     $l = LaunchWorld::launch($w, LaunchState::Live);
     $this->actingAs($w['manager'])->withSession(LaunchWorld::confirmed());
-    app(\App\Ads\Launch\LaunchService::class)->retire($w['manager'], $l->fresh(), 'done', 'k-retire');
+    app(LaunchService::class)->retire($w['manager'], $l->fresh(), 'done', 'k-retire');
     expect($l->fresh()->state)->toBe(LaunchState::Retired)->and($l->fresh()->approved_at)->not->toBeNull();
     $ext = $l->publications()->value('external_ad_id');
     Ad::query()->where('external_id', $ext)->update(['status' => 'PAUSED', 'effective_status' => 'PAUSED']);
