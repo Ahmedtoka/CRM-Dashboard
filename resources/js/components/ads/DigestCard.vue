@@ -79,8 +79,8 @@ const buyerRows = computed<(DigestBuyerRow & { id: number })[]>(() => (data.valu
                 <div>
                     <dt class="text-muted-foreground">{{ t('ads.digest.spend') }}</dt>
                     <dd class="text-base font-bold tabular-nums">{{ money(data.yesterday.spend_tax) }}</dd>
-                    <dd v-if="data.yesterday.usual_spend !== null" class="text-2xs text-muted-foreground">
-                        {{ t('ads.digest.usual', { money: Math.round(data.yesterday.usual_spend) }) }}
+                    <dd v-if="data.yesterday.usual_spend !== null" class="text-2xs text-muted-foreground" data-test="usual">
+                        {{ t('ads.digest.usual', { money: money(data.yesterday.usual_spend) }) }}
                     </dd>
                 </div>
                 <div>
@@ -101,7 +101,7 @@ const buyerRows = computed<(DigestBuyerRow & { id: number })[]>(() => (data.valu
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-muted-foreground">{{ t('ads.digest.vs_floor', { floor: data.yesterday.floor }) }}</dt>
+                    <dt class="text-muted-foreground">{{ t('ads.digest.vs_floor', { floor: formatRoas(data.yesterday.floor, locale) }) }}</dt>
                     <dd v-if="data.yesterday.floor_default" class="text-2xs text-muted-foreground" data-test="floor-default">
                         {{ t('ads.digest.floor_default') }}
                     </dd>
@@ -109,8 +109,8 @@ const buyerRows = computed<(DigestBuyerRow & { id: number })[]>(() => (data.valu
             </dl>
 
             <p class="text-sm">
-                <Link href="/ads/decisions" class="font-semibold text-primary hover:underline">
-                    {{ t('ads.digest.open', { count: data.open.count, money: data.open.money }) }}
+                <Link href="/ads/decisions" class="font-semibold text-primary hover:underline" data-test="open-decisions">
+                    {{ t('ads.digest.open', { count: formatCount(data.open.count, locale), money: money(data.open.money) }) }}
                 </Link>
             </p>
 

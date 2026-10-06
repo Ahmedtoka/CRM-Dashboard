@@ -3,6 +3,7 @@
 namespace App\Ads\Alerts;
 
 use App\Ads\Access\AdsScope;
+use App\Ads\Decisions\DecisionCounter;
 use App\Ads\Launch\LaunchCounters;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\AdsQuery;
@@ -44,6 +45,7 @@ final class Digest
         private readonly RuleSettings $settings,
         private readonly AlertData $data,
         private readonly Gates $gates,
+        private readonly DecisionCounter $decisions,
     ) {}
 
     /** @return array<string, mixed> */
@@ -79,7 +81,8 @@ final class Digest
             'currency' => 'EGP',
             'yesterday' => $this->yesterday($yesterday, $accountIds, $buyerId),
             'open' => [
-                'count' => $problems->count(), 'critical' => $problems->where('severity', Severity::CRITICAL)->count(),
+                // «N قرار مفتوح» is the one open-decisions count of the badge and the Today block (DecisionCounter).
+                'count' => $this->openDecisions($u), 'critical' => $problems->where('severity', Severity::CRITICAL)->count(),
                 'high' => $problems->where('severity', Severity::HIGH)->count(), 'money' => round((float) $problems->sum('money_at_risk_per_day')),
             ],
             'top' => $top->map(fn (AdsAlert $a) => $this->item($a, $now))->all(),
@@ -99,7 +102,8 @@ final class Digest
 
     /**
      * Yesterday in the user's scope, every campaign (all-spend totals): spend with tax, real orders and revenue, real
-     * ROAS against the spend-weighted floor, and the usual spend (median of the 14 days before).
+     * ROAS against the spend-weighted floor, and the usual spend (median of the 14 days before, with tax like the spend
+     * it sits under, «صرف امبارح (بالضريبة)»).
      *
      * @param  list<int>|null  $accountIds
      * @return array<string, mixed>
@@ -119,7 +123,7 @@ final class Digest
         return [
             'spend' => (float) ($d['spend'] ?? 0), 'spend_tax' => (float) ($d['spend_tax'] ?? 0), 'orders' => $orders->count(), 'revenue' => $revenue,
             'roas' => AdsQuery::ratio($revenue, (float) ($d['spend'] ?? 0), 2), 'meta_roas' => $d['roas'] ?? null,
-            'usual_spend' => $usual === null ? null : round($usual, 2), 'floor' => $floor, 'floor_default' => $default,
+            'usual_spend' => $usual === null ? null : $this->q->withTax($usual), 'floor' => $floor, 'floor_default' => $default,
         ];
     }
 
@@ -148,6 +152,12 @@ final class Digest
         }
 
         return [round($weighted / $total, 2), $default];
+    }
+
+    /** DecisionCounter's count for the viewer's whole scope; refreshing it keeps the nav badge on the same number. */
+    private function openDecisions(User $u): int
+    {
+        return DecisionCounter::eligible($u) ? $this->decisions->refresh($u) : $this->decisions->breakdown($u)['total'];
     }
 
     private function staleAccounts(CarbonImmutable $now): int

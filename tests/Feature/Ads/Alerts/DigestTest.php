@@ -62,3 +62,15 @@ it('gives a supervisor the owner variant without approvals', function () {
 it('is closed to content and moderators', function (UserRole $role) {
     $this->actingAs(User::factory()->create(['role' => $role]))->getJson('/ads/alerts/digest')->assertForbidden();
 })->with([UserRole::Content, UserRole::Moderator]);
+
+it('puts the usual spend on the same tax basis as yesterday spend with tax (final fix 6)', function () {
+    config(['crm.ads.tax_rate' => 0.14]);
+    $acc = W::account();
+    $ad = W::ad($acc);
+    W::spendDays($ad, 14, 1000, -2); // the 14 days before yesterday
+    W::spend($ad, W::day(-1), 1000);
+
+    $d = $this->actingAs(W::authority())->getJson('/ads/alerts/digest')->assertOk()->json();
+
+    expect($d['yesterday']['spend_tax'])->toEqual(1140)->and($d['yesterday']['usual_spend'])->toEqual(1140);
+});

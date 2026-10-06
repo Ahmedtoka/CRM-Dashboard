@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Web\Ads;
 
 use App\Ads\Alerts\AlertFeed;
 use App\Ads\Control\AdWriteService;
-use App\Ads\Control\StopAdvisor;
 use App\Ads\Control\WriteActionLog;
 use App\Ads\Decisions\DecisionCounter;
 use App\Ads\Decisions\PendingApprovals;
@@ -30,7 +29,7 @@ class DecisionsController extends Controller
     /** Page tab → AlertFeed tab. */
     public const FEED_TABS = ['open' => 'open', 'snoozed' => 'later', 'closed' => 'closed', 'log' => 'log'];
 
-    public function __invoke(Request $request, StopAdvisor $advisor, AdWriteService $writer, WriteActionLog $log,
+    public function __invoke(Request $request, AdWriteService $writer, WriteActionLog $log,
         PendingApprovals $approvals, DecisionCounter $counter, AlertFeed $feed): Response
     {
         $user = $request->user();
@@ -42,24 +41,24 @@ class DecisionsController extends Controller
             'result' => in_array($request->query('result'), ['ok', 'error', 'pending'], true) ? (string) $request->query('result') : null,
         ];
 
-        $pending = $approvals->count($user);
         $feedData = $feed->forUser($user, self::FEED_TABS[$tab]);
-        $openCards = $tab === 'open' ? count($feedData['items']) + $feedData['meta']['hidden_by_cap'] : $feed->openCardCount($user);
         $suggestions = [];
+        $openNow = null; // the open tab counts here (DecisionCounter::breakdown), on the page's filter
         if ($tab === 'open') {
-            $folded = $feed->adIdsWithLiveAlerts($user);
-            $found = array_values(array_filter($advisor->suggest(DecisionCounter::window($filter)),
-                fn (array $s) => ! in_array((int) $s['ad_id'], $folded, true)));
-            $accounts = AdAccount::query()->whereIn('id', array_unique(array_column($found, 'account_id')))->get(['id', 'is_active', 'write_enabled', 'platform', 'external_id']);
+            $b = $counter->breakdown($user, $filter);
+            $openNow = $b['total'];
+            $accounts = AdAccount::query()->whereIn('id', array_unique(array_column($b['suggestions'], 'account_id')))->get(['id', 'is_active', 'write_enabled', 'platform', 'external_id']);
             $can = $writer->canWriteMany($user, $accounts);
-            $suggestions = array_map(fn (array $s) => $s + ['can_write' => $can[$s['account_id']] ?? false], $found);
+            $suggestions = array_map(fn (array $s) => $s + ['can_write' => $can[$s['account_id']] ?? false], $b['suggestions']);
         }
+        $pending = $approvals->count($user);
         // The visit refreshes the viewer's badge; the open tab already has the numbers. The badge counts the viewer's
         // whole scope, so a narrowed filter (accounts, buyer, platform) recounts instead of storing a partial number.
         $narrowed = $request->filled('accounts') || $request->filled('buyer') || $request->filled('platform');
         $open = match (true) {
-            ! DecisionCounter::eligible($user) => count($suggestions) + $pending + $openCards,
-            $tab === 'open' && ! $narrowed => DecisionCounter::store($user, count($suggestions) + $pending + $openCards),
+            $openNow !== null && ! DecisionCounter::eligible($user) => $openNow,
+            $openNow !== null && ! $narrowed => DecisionCounter::store($user, $openNow),
+            ! DecisionCounter::eligible($user) => $counter->breakdown($user)['total'],
             default => DecisionCounter::cached($user) ?? $counter->refresh($user),
         };
         $logRows = $tab === 'log' ? $log->rows($user, $logFilters) : [];
@@ -73,7 +72,7 @@ class DecisionsController extends Controller
             'account_options' => $this->accountOptions($request, $filter),
             'freshness' => $this->syncProps($filter, false)['oldest']['last_synced_at'] ?? null,
             'counts' => [
-                'open' => $tab === 'open' ? count($suggestions) + $pending + $openCards : $open,
+                'open' => $openNow ?? $open,
                 'snoozed' => $feedData['meta']['counts']['later'], 'closed' => $feedData['meta']['counts']['closed'],
             ],
             'approvals' => $approvals->canApprove($user) ? ['count' => $pending, 'href' => '/ads/approvals', 'items' => $approvals->items($user)] : null,

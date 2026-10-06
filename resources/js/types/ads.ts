@@ -1126,7 +1126,8 @@ export interface AdsSpendByHour {
 }
 
 export interface AdsTodayData {
-    decisions: { approvals: number; suggestions: AdSuggestion[]; suggestions_total: number; alerts: unknown[] };
+    /** total = the one open-decisions count (DecisionCounter): approvals + open alert cards + unfolded suggestions. */
+    decisions: { total: number; approvals: number; suggestions: AdSuggestion[]; suggestions_total: number; alerts: AlertCardData[]; alerts_total: number };
     money_today: AdsSpendByHour & { conversations: number; orders: number };
     last7: { from: string; to: string; totals: AdsTotals; daily: AdsDailyRow[] };
     buyers: (BuyerCardData & { open_decisions: number })[] | null;

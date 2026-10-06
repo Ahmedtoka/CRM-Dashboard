@@ -49,10 +49,10 @@ it('shares the cached nav badge count with buyers and managers only', function (
     crAd($w['account'], ['2026-10-01' => [1500, 0, 0, 0]]);
 
     // Nothing cached yet: no badge, and nothing computed to get one.
-    $this->actingAs($w['user'])->get('/ads')->assertInertia(fn (Assert $p) => $p->where('adsDecisions', null));
-    // The Decisions visit writes the count; every page then reads it.
+    $this->actingAs($w['user'])->get('/ads/explorer')->assertInertia(fn (Assert $p) => $p->where('adsDecisions', null));
+    // The Decisions visit (and Today, which shows the same count, final fix 8) writes the count; every page then reads it.
     $this->actingAs($w['user'])->get('/ads/decisions')->assertOk();
-    $this->actingAs($w['user'])->get('/ads')->assertInertia(fn (Assert $p) => $p->where('adsDecisions', 1));
+    $this->actingAs($w['user'])->get('/ads')->assertInertia(fn (Assert $p) => $p->where('adsDecisions', 1)->where('today.decisions.total', 1));
     $this->actingAs($w['user'])->get('/ads/explorer')->assertInertia(fn (Assert $p) => $p->where('adsDecisions', 1));
     $this->actingAs(crUser(UserRole::Moderator))->get('/inbox')->assertInertia(fn (Assert $p) => $p->where('adsDecisions', null));
 });

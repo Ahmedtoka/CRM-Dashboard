@@ -3,17 +3,18 @@
 namespace App\Ads\Reports;
 
 use App\Ads\AdsSettings;
+use App\Ads\Alerts\AlertFeed;
 use App\Ads\Control\AdWriteService;
 use App\Ads\Control\StopAdvisor;
-use App\Ads\Decisions\PendingApprovals;
+use App\Ads\Decisions\DecisionCounter;
 use App\Models\AdAccount;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * «النهارده» (U 2.3): decisions block, money today vs usual by this hour, the last 7 complete days (D9) with real ROAS
- * first (D10), the buyers strip (managers) and best/worst 5. Cached 60 s per user and filter (spec 8).
+ * «النهارده» (U 2.3): decisions block (DecisionCounter's one count, the top stop suggestions and alert cards), money
+ * today vs usual by this hour, the last 7 complete days (D9) with real ROAS first (D10), the buyers strip (managers) and best/worst 5. Cached 60 s per user and filter (spec 8).
  */
 final class AdsToday
 {
@@ -30,25 +31,33 @@ final class AdsToday
         private readonly StopAdvisor $advisor,
         private readonly BuyerScorecard $buyers,
         private readonly AdsSettings $settings,
-        private readonly PendingApprovals $approvals,
         private readonly AdWriteService $writes,
+        private readonly DecisionCounter $counter,
+        private readonly AlertFeed $feed,
     ) {}
 
-    public function build(AdsFilter $week, User $u): array
+    /** $wholeScope = no accounts, buyer or platform picked: the block's count is then the viewer's badge (stored). */
+    public function build(AdsFilter $week, User $u, bool $wholeScope = true): array
     {
-        $key = 'ads:today:'.$u->id.':'.md5(serialize([$week->fromDate(), $week->toDate(), $week->platform, $week->buyerId, $week->accountIds, $week->restrictBuyerId]));
+        $key = 'ads:today:'.$u->id.':'.md5(serialize([$week->fromDate(), $week->toDate(), $week->platform, $week->buyerId, $week->accountIds, $week->restrictBuyerId, $wholeScope]));
 
-        return Cache::remember($key, self::CACHE_SECONDS, fn () => $this->fresh($week, $u));
+        return Cache::remember($key, self::CACHE_SECONDS, fn () => $this->fresh($week, $u, $wholeScope));
     }
 
-    private function fresh(AdsFilter $week, User $u): array
+    private function fresh(AdsFilter $week, User $u, bool $wholeScope): array
     {
         $today = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay();
         $todayF = $week->with(['from' => $today, 'to' => $today]);
-        $suggestions = $this->advisor->suggest($week->with(['from' => $today->subDays(13), 'to' => $today]));
-        $can = $suggestions === [] ? [] : $this->writes->canWriteMany($u, AdAccount::query()
-            ->whereIn('id', array_unique(array_column($suggestions, 'account_id')))->get(['id', 'is_active', 'write_enabled', 'platform', 'external_id']));
-        $suggestions = array_map(fn (array $x) => $x + ['can_write' => $can[$x['account_id']] ?? false], $suggestions);
+        $suggestions = $this->advisor->suggest(DecisionCounter::window($week));
+        // The one open-decisions count (final fix 8): approvals + open alert cards + suggestions not folded into a card.
+        $decisions = $this->counter->breakdown($u, $week, $suggestions);
+        if ($wholeScope && DecisionCounter::eligible($u)) {
+            DecisionCounter::store($u, $decisions['total']);
+        }
+        $open = $decisions['suggestions'];
+        $can = $open === [] ? [] : $this->writes->canWriteMany($u, AdAccount::query()
+            ->whereIn('id', array_unique(array_column($open, 'account_id')))->get(['id', 'is_active', 'write_enabled', 'platform', 'external_id']));
+        $open = array_map(fn (array $x) => $x + ['can_write' => $can[$x['account_id']] ?? false], $open);
         $overview = $this->overview->build($week);
 
         $thr = $this->settings->winnerThresholds();
@@ -64,10 +73,13 @@ final class AdsToday
 
         return [
             'decisions' => [
-                'approvals' => $this->approvals->count($u),
-                'suggestions' => array_slice($suggestions, 0, self::TOP),
-                'suggestions_total' => count($suggestions),
-                'alerts' => [], // S5
+                'total' => $decisions['total'],
+                'approvals' => $decisions['approvals'],
+                'suggestions' => array_slice($open, 0, self::TOP),
+                'suggestions_total' => count($open),
+                // The top open S5 alert cards (same cards as «محتاج قرار»), the count before the buyer cap.
+                'alerts' => $decisions['alert_cards'] > 0 ? array_slice($this->feed->forUser($u)['items'], 0, self::TOP) : [],
+                'alerts_total' => $decisions['alert_cards'],
             ],
             'money_today' => $this->byHour->today($week) + [
                 'conversations' => $this->q->conversations($todayF->allSpend())->count(),

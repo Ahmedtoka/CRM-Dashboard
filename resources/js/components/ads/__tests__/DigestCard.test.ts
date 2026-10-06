@@ -94,4 +94,12 @@ describe('DigestCard', () => {
         await flushPromises();
         expect(w.find('[data-test="buyers"]').exists()).toBe(true);
     });
+
+    it('formats the usual spend, the open-decisions line and the floor with the ads formatters (final fixes 6 and 7)', () => {
+        const digest = { ...base, yesterday: { ...base.yesterday, usual_spend: 1140.4 }, open: { ...base.open, count: 12, money: 1500 } };
+        const w = mount(DigestCard, { props: { digest }, global: { stubs } });
+        expect(w.get('[data-test="usual"]').text()).toBe('المعتاد ١٬١٤٠ ج.م');
+        expect(w.get('[data-test="open-decisions"]').text()).toBe('١٢ قرار مفتوح · ١٬٥٠٠ ج.م/يوم معرّضة');
+        expect(w.text()).toContain('نقطة التعادل ٢٫٥٠×');
+    });
 });

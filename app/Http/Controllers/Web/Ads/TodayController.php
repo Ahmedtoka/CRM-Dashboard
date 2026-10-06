@@ -23,7 +23,7 @@ class TodayController extends Controller
             'filters' => $this->filterProps($week, $request),
             ...$this->commonProps($user, $week),
             'account_options' => $this->accountOptions($request, $week),
-            'today' => $today->build($week, $user),
+            'today' => $today->build($week, $user, ! ($request->filled('accounts') || $request->filled('buyer') || $request->filled('platform'))),
             'freshness' => $this->syncProps($week, false)['oldest']['last_synced_at'] ?? null,
         ]);
     }

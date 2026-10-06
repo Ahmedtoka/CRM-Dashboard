@@ -16,9 +16,10 @@ import { useI18n } from '@/composables/useI18n';
 import { usePathVisitLoading } from '@/composables/usePathVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAdsMoney, formatDayShort, formatPct, formatRoas, reasonTexts } from '@/lib/ads';
+import { alertSentence } from '@/lib/adsAlerts';
 import { buildHref, carryQuery, readQuery } from '@/lib/adsFilters';
 import { formatCount } from '@/lib/format';
-import type { AdSuggestion, AdsTodayProps } from '@/types/ads';
+import type { AdSuggestion, AdsTodayProps, AlertCardData, AlertSeverity } from '@/types/ads';
 import { Head, Link } from '@inertiajs/vue3';
 import { CheckCircle2 } from 'lucide-vue-next';
 import { computed } from 'vue';
@@ -35,7 +36,16 @@ const w = computed(() => props.today.last7.totals);
 const shared = computed(() => carryQuery(readQuery(typeof window === 'undefined' ? '' : window.location.search)));
 /** Links keep the shared filters (accounts, buyer, platform) and set their own range. */
 const href = (path: string, extra: Record<string, string> = {}) => buildHref(path, { ...shared.value, ...extra });
-const decisionsCount = computed(() => d.value.approvals + d.value.suggestions_total + d.value.alerts.length);
+/** The one open-decisions count (DecisionCounter on the server): the same number as the nav badge and the digest. */
+const decisionsCount = computed(() => d.value.total);
+const severityTone: Record<AlertSeverity, string> = {
+    critical: 'text-destructive',
+    high: 'text-orange-700 dark:text-orange-400',
+    medium: 'text-amber-700 dark:text-amber-400',
+    info: 'text-sky-700 dark:text-sky-400',
+};
+const alertTitle = (c: AlertCardData) => c.ad?.name ?? c.product?.title ?? c.account?.name ?? '';
+const alertLine = (c: AlertCardData) => (c.reasons[0] ? alertSentence(c.reasons[0], locale.value) : '');
 
 const usualLabel = computed(() =>
     m.value.baseline === 'snapshots' ? t('ads.control.today.usual') : m.value.baseline === 'prorated' ? t('ads.control.today.usual_prorated') : t('ads.control.today.usual_none'),
@@ -122,7 +132,41 @@ const listHref = (list: (typeof LISTS)[number]) =>
                         </div>
                     </li>
                 </ul>
-                <EmptyState v-else-if="d.approvals === 0" :icon="CheckCircle2" :title="t('ads.control.today.empty_decisions')" />
+                <!-- The top open alert cards (S5), same cards as «محتاج قرار»; the actions live there. -->
+                <ul v-if="d.alerts.length" class="divide-y divide-border" data-test="today-alerts">
+                    <li v-for="c in d.alerts" :key="c.key" class="flex items-start gap-3 py-2" :data-alert-card="c.key">
+                        <span :class="['mt-1 inline-flex shrink-0 items-center gap-1 text-2xs font-semibold', severityTone[c.severity]]">
+                            <span class="size-2 rounded-full bg-current" aria-hidden="true" />{{ t(`ads.alerts.severity.${c.severity}`) }}
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <button
+                                v-if="c.ad"
+                                type="button"
+                                class="block max-w-full truncate text-start text-xs font-medium hover:underline"
+                                dir="auto"
+                                @click="drawer.open(c.ad.id)"
+                            >
+                                <bdi>{{ alertTitle(c) }}</bdi>
+                            </button>
+                            <Link v-else :href="href('/ads/decisions')" class="block truncate text-xs font-medium hover:underline" dir="auto">
+                                <bdi>{{ alertTitle(c) }}</bdi>
+                            </Link>
+                            <p class="line-clamp-2 text-2xs text-muted-foreground">{{ alertLine(c) }}</p>
+                        </div>
+                        <span v-if="Math.round(c.money_at_risk_per_day) > 0" class="shrink-0 text-2xs tabular-nums">
+                            {{ t('ads.alerts.money_at_risk', { money: Math.round(c.money_at_risk_per_day) }) }}
+                        </span>
+                    </li>
+                </ul>
+                <Link
+                    v-if="d.alerts_total > d.alerts.length"
+                    :href="href('/ads/decisions')"
+                    class="block text-xs text-primary hover:underline"
+                    data-test="more-alerts"
+                >
+                    {{ t('ads.control.today.more_alerts', { n: n(d.alerts_total - d.alerts.length) }) }}
+                </Link>
+                <EmptyState v-if="decisionsCount === 0" :icon="CheckCircle2" :title="t('ads.control.today.empty_decisions')" />
             </section>
 
             <div class="grid gap-4 lg:grid-cols-2">
