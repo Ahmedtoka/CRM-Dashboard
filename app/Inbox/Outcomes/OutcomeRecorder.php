@@ -36,14 +36,16 @@ final class OutcomeRecorder
     public const ENDING_CLOSE_REASONS = ['inquiry', 'problem', 'case', 'auto'];
 
     /**
-     * The episode running now.
+     * The episode running now. Before the first end, the episode window starts at
+     * `crm.outcomes.tracking_from` (the deploy date): older messages, orders and handovers never
+     * leak into it. A thanks, a sticker or a rating answer never starts an episode.
      *
-     * @return array{key:string, first_message_id:?int, started_at:?CarbonInterface, since:?CarbonInterface}
+     * @return array{key:string, first_message_id:?int, started_at:?CarbonInterface, since:CarbonInterface}
      */
     public function episode(Conversation $c): array
     {
         $lastEnded = $this->lastEnded($c);
-        $since = $lastEnded?->ended_at;
+        $since = $lastEnded?->ended_at ?? $this->trackingFrom();
         $open = $this->currentRow($c);
 
         if ($open !== null) {
@@ -51,13 +53,49 @@ final class OutcomeRecorder
         }
 
         $watermark = (int) ($lastEnded?->last_message_id ?? 0);
-        $first = Message::query()->where('conversation_id', $c->id)->where('id', '>', $watermark)
-            ->where('direction', MessageDirection::In->value)->where('sender_type', SenderType::Customer->value)
-            ->orderBy('id')->first(['id', 'created_at']);
+        $first = $this->firstRealInbound($c, $watermark, $lastEnded === null ? $since : null);
 
         return $first !== null
             ? ['key' => 'm'.$first->id, 'first_message_id' => (int) $first->id, 'started_at' => $first->created_at, 'since' => $since]
             : ['key' => 'w'.$watermark, 'first_message_id' => null, 'started_at' => null, 'since' => $since];
+    }
+
+    /** Start of `crm.outcomes.tracking_from` (Cairo), as a UTC instant: nothing before it is ever an episode. */
+    public function trackingFrom(): CarbonImmutable
+    {
+        return CarbonImmutable::parse((string) config('crm.outcomes.tracking_from', '2026-10-08'), 'Africa/Cairo')->startOfDay()->utc();
+    }
+
+    /** True for a customer message that only acknowledges (thanks, sticker, like) or answers the rating question. */
+    public function isAckOrRating(Message $m): bool
+    {
+        return str_starts_with((string) $m->payload, RatingService::PAYLOAD_PREFIX)
+            || app(Acknowledgement::class)->matches($m)
+            || app(RatingService::class)->typedStars((string) $m->body) !== null;
+    }
+
+    /** The first inbound customer message after the watermark (and `$from`) that is not a thanks or a rating answer. */
+    private function firstRealInbound(Conversation $c, int $watermark, ?CarbonInterface $from): ?Message
+    {
+        $after = $watermark;
+
+        while (true) {
+            $batch = Message::query()->where('conversation_id', $c->id)->where('id', '>', $after)
+                ->where('direction', MessageDirection::In->value)->where('sender_type', SenderType::Customer->value)
+                ->when($from !== null, fn ($q) => $q->where('created_at', '>=', $from))
+                ->orderBy('id')->limit(50)->get();
+
+            if ($batch->isEmpty()) {
+                return null;
+            }
+
+            $real = $batch->first(fn (Message $m) => ! $this->isAckOrRating($m));
+            if ($real !== null) {
+                return $real;
+            }
+
+            $after = (int) $batch->last()->id;
+        }
     }
 
     /** The episode's row while it is still open (an order was placed in it); null otherwise. */
@@ -73,7 +111,7 @@ final class OutcomeRecorder
      */
     public function autoOutcome(Conversation $c, ?QueueEntry $entry = null, ?CarbonInterface $since = null, bool $sinceKnown = false): ?Outcome
     {
-        $since = $sinceKnown ? $since : $this->lastEnded($c)?->ended_at;
+        $since = $sinceKnown && $since !== null ? $since : ($this->lastEnded($c)?->ended_at ?? $this->trackingFrom());
 
         if ($this->episodeOrder($c, $since) !== null) {
             return Outcome::Ordered;
@@ -185,20 +223,13 @@ final class OutcomeRecorder
         }
 
         $ep = $this->episode($c);
-        $from = CarbonImmutable::parse((string) config('crm.outcomes.tracking_from', '2026-10-08'), 'Africa/Cairo');
 
-        if ($ep['first_message_id'] === null || $ep['started_at'] === null || $ep['started_at']->lessThan($from)) {
+        // episode() only starts an episode on a real customer message after tracking_from (no history backfill).
+        if ($ep['first_message_id'] === null || $ep['started_at'] === null || $ep['started_at']->lessThan($this->trackingFrom())) {
             return null;
         }
 
-        $ack = app(Acknowledgement::class);
-        $rating = app(RatingService::class);
-        $real = Message::query()->where('conversation_id', $c->id)->where('id', '>=', $ep['first_message_id'])
-            ->where('direction', MessageDirection::In->value)->get()
-            ->contains(fn (Message $m) => ! $ack->matches($m) && $rating->typedStars((string) $m->body) === null
-                && ! str_starts_with((string) $m->payload, RatingService::PAYLOAD_PREFIX));
-
-        return $real ? $this->endEpisode($c, null, null, null, null, EpisodeEnd::Idle) : null;
+        return $this->endEpisode($c, null, null, null, null, EpisodeEnd::Idle);
     }
 
     /** Idle: our side spoke last (or the bot holds her) → she stopped answering; she wrote last to a person → we dropped her. */

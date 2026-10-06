@@ -28,7 +28,7 @@ it('keys the episode by its first customer message, never by our own messages', 
 
     expect($ep['key'])->toBe('m'.$first->id)
         ->and($ep['first_message_id'])->toBe($first->id)
-        ->and($ep['since'])->toBeNull();
+        ->and($ep['since']->equalTo(app(OutcomeRecorder::class)->trackingFrom()))->toBeTrue(); // before any end: the tracking start
 });
 
 it('starts the next episode after the watermark of the last end', function () {

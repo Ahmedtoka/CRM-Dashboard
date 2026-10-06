@@ -35,6 +35,7 @@
         <env name="CRM_SHOPIFY_DRIVER" value="fake"/>
         <env name="CRM_AI_DRIVER" value="fake"/>
         <env name="CRM_ADS_HISTORY_START" value="2000-01-01"/>
+        <env name="CRM_OUTCOMES_FROM" value="2000-01-01"/>
         <env name="CRM_OMS_DRIVER" value="fake"/>
         <env name="CRM_BOT_BURST_WAIT_SECONDS" value="0"/>
         <env name="CRM_BOT_MAX_WAIT_SECONDS" value="0"/>
