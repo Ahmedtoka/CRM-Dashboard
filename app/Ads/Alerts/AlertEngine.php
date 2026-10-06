@@ -3,6 +3,7 @@
 namespace App\Ads\Alerts;
 
 use App\Ads\Alerts\Rules\ChatsNoOrders;
+use App\Ads\Alerts\Rules\InboxSlowForAds;
 use App\Ads\Alerts\Rules\SalesBelowBreakeven;
 use App\Ads\Alerts\Rules\ScaleWinner;
 use App\Ads\Alerts\Rules\SpendNoResult;
@@ -51,13 +52,72 @@ final class AlertEngine
             }
         }
 
-        $findings = $this->dropInfoBesideProblems($this->replacementGate($findings, $ctx));
+        $findings = $this->dropInfoBesideProblems($this->replacementGate($this->inboxSlowCap($findings, $ctx), $ctx));
         if (! $egp) {
             $findings = array_map(fn (Finding $f) => $f->with(['moneyAtRiskPerDay' => 0.0, 'evidence' => $f->evidence + ['currency' => $currency]]), $findings);
         }
         $result = $this->store->sync($account->id, $ran, $findings, $ctx->ads->keys()->map(fn ($id) => (int) $id)->all(), $ctx->now);
 
         return $result + ['skipped' => $skipped, 'fresh' => $fresh];
+    }
+
+    /**
+     * Catalogue 1.4: a Messages performance Stop is capped at medium, with the suffix «الإنبوكس كان بطيء» (params
+     * inbox_slow), when the ad's own chats in the rule window waited too long for a first reply (median > 10 min or
+     * > 25 % unanswered within an hour, the msg.inbox_slow_for_ads thresholds): the ad may not be the problem.
+     *
+     * @param  list<Finding>  $findings
+     * @return list<Finding>
+     */
+    private function inboxSlowCap(array $findings, RuleContext $ctx): array
+    {
+        $byWindow = [];
+        foreach ($findings as $f) {
+            if ($this->inboxCappable($f, $ctx)) {
+                $w = $f->evidence['window'];
+                $byWindow[$w['from'].'|'.$w['to']][] = (string) $ctx->ads[$f->adId]->external_id;
+            }
+        }
+        if ($byWindow === []) {
+            return $findings;
+        }
+        $waits = [];
+        foreach ($byWindow as $key => $externals) {
+            [$from, $to] = explode('|', $key);
+            $waits[$key] = $ctx->data->firstReplyWaitsByAd(array_values(array_unique($externals)), $from, $to);
+        }
+
+        return array_map(function (Finding $f) use ($ctx, $waits) {
+            if (! $this->inboxCappable($f, $ctx)) {
+                return $f;
+            }
+            $list = $waits[$f->evidence['window']['from'].'|'.$f->evidence['window']['to']][(string) $ctx->ads[$f->adId]->external_id] ?? [];
+            if ($list === []) {
+                return $f;
+            }
+            $late = count(array_filter($list, fn (?float $w) => $w === null || $w > InboxSlowForAds::UNANSWERED_AFTER_MIN));
+            $share = $late / count($list);
+            $median = (float) Stats::median(array_map(fn (?float $w) => $w ?? 1.0e9, $list));
+            if ($median <= InboxSlowForAds::SLOW_MEDIAN_MIN && $share <= InboxSlowForAds::UNANSWERED_SHARE) {
+                return $f;
+            }
+
+            return $f->with([
+                'severity' => Severity::rank($f->severity) > Severity::rank(Severity::MEDIUM) ? Severity::MEDIUM : $f->severity,
+                'params' => $f->params + ['inbox_slow' => true],
+                'evidence' => $f->evidence + ['inbox' => [
+                    'chats' => count($list), 'median_minutes' => $median >= 1.0e9 ? null : $median, 'unanswered_share' => round($share, 3),
+                    'capped_from' => $f->severity,
+                ]],
+            ]);
+        }, $findings);
+    }
+
+    private function inboxCappable(Finding $f, RuleContext $ctx): bool
+    {
+        return $f->family === Family::MESSAGES && $f->adId !== null && $ctx->ads->has($f->adId)
+            && in_array($f->ruleId, [SpendNoResult::ID, ChatsNoOrders::ID], true)
+            && isset($f->evidence['window']['from'], $f->evidence['window']['to']);
     }
 
     /**

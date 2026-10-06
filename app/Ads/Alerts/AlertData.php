@@ -262,20 +262,35 @@ final class AlertData
      */
     public function firstReplyWaits(array $externalIds, string $from, string $to): array
     {
+        return array_merge([], ...array_values($this->firstReplyWaitsByAd($externalIds, $from, $to)));
+    }
+
+    /**
+     * The same waits per ad external id (one query for every ad).
+     *
+     * @param  list<string>  $externalIds
+     * @return array<string, list<?float>>
+     */
+    public function firstReplyWaitsByAd(array $externalIds, string $from, string $to): array
+    {
         if ($externalIds === []) {
             return [];
         }
         [$s, $e] = self::utcRange($from, $to);
 
-        return DB::table('conversation_ad_referrals as r')
+        $out = [];
+        DB::table('conversation_ad_referrals as r')
             ->whereIn('r.ad_external_id', $externalIds)->whereBetween('r.referred_at', [$s, $e])
-            ->select(['r.id', 'r.referred_at'])
+            ->select(['r.id', 'r.ad_external_id', 'r.referred_at'])
             ->selectSub(DB::table('messages as m')->whereColumn('m.conversation_id', 'r.conversation_id')
                 ->where('m.direction', 'out')->whereIn('m.sender_type', ['user', 'bot'])
                 ->whereColumn('m.created_at', '>=', 'r.referred_at')->selectRaw('MIN(m.created_at)'), 'replied_at')
             ->orderBy('r.id')->get()
-            ->map(fn (object $r) => $r->replied_at === null ? null : round(
-                CarbonImmutable::parse((string) $r->referred_at, 'UTC')->diffInSeconds(CarbonImmutable::parse((string) $r->replied_at, 'UTC'), true) / 60, 1))
-            ->values()->all();
+            ->each(function (object $r) use (&$out) {
+                $out[(string) $r->ad_external_id][] = $r->replied_at === null ? null : round(
+                    CarbonImmutable::parse((string) $r->referred_at, 'UTC')->diffInSeconds(CarbonImmutable::parse((string) $r->replied_at, 'UTC'), true) / 60, 1);
+            });
+
+        return $out;
     }
 }
