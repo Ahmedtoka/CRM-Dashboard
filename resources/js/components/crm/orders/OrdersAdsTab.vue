@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import EmptyState from '@/components/crm/EmptyState.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import { useI18n } from '@/composables/useI18n';
 import { adsManagerUrl } from '@/lib/ads';
 import { formatCount, formatMoney } from '@/lib/format';
 import type { OrdersByAdRow } from '@/types/orders';
 import { Link } from '@inertiajs/vue3';
-import { Megaphone } from 'lucide-vue-next';
+import { ExternalLink, Megaphone } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 /**
@@ -138,16 +139,17 @@ const figures = 'grid w-full grid-cols-3 gap-2 text-xs tabular-nums sm:w-64 sm:s
                                     {{ ad.ad ?? '—' }}
                                 </button>
                                 <span v-else class="truncate text-xs font-medium" dir="auto">{{ ad.ad ?? '—' }}</span>
-                                <a
-                                    v-if="canOpenAds && metaUrl(ad)"
-                                    :href="metaUrl(ad) ?? undefined"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="w-fit text-2xs text-primary underline"
-                                    data-open-meta
-                                    >{{ t('ordersHub.open_meta') }}</a
-                                >
                             </span>
+                            <IconAction
+                                v-if="canOpenAds && metaUrl(ad)"
+                                :href="metaUrl(ad) ?? undefined"
+                                external
+                                :icon="ExternalLink"
+                                :label="t('ordersHub.open_meta')"
+                                variant="primary"
+                                size="sm"
+                                data-open-meta
+                            />
                             <span :class="figures">
                                 <Link
                                     :href="adHref(ad.ad_id as number)"

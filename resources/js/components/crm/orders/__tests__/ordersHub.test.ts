@@ -33,7 +33,9 @@ describe('OrderSourceChip', () => {
         await w.find('[data-open-ad]').trigger('click');
         expect(w.emitted('open')?.[0]).toEqual([7]);
         expect(w.find('[data-open-meta]').attributes('href')).toBe(source.manager_url);
-        expect(w.find('[data-open-meta]').text()).toBe('افتح في ميتا');
+        // A secondary inline action is an icon (F7): the label is its accessible name and tooltip; opens in a new tab.
+        expect(w.find('[data-open-meta]').attributes('aria-label')).toBe('افتح في ميتا');
+        expect(w.find('[data-open-meta]').attributes('target')).toBe('_blank');
     });
 
     it('is a plain chip without ads access, and says direct without an ad', () => {

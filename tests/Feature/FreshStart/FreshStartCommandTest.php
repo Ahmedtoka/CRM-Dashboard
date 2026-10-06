@@ -42,8 +42,6 @@ use App\Models\QuickReplyUsage;
 use App\Models\Refund;
 use App\Models\Shift;
 use App\Models\ShiftMember;
-use App\Models\Shipment;
-use App\Models\ShipmentEvent;
 use App\Models\ShopifySyncRun;
 use App\Models\SupportCase;
 use App\Models\Tag;
@@ -159,8 +157,6 @@ function fsSeed(): array
     OrderItem::factory()->create(['order_id' => $order->id, 'variant_id' => $variant->id]);
     Fulfillment::factory()->create(['order_id' => $order->id]);
     Refund::factory()->create(['order_id' => $order->id]);
-    $shipment = Shipment::factory()->create(['order_id' => $order->id]);
-    ShipmentEvent::factory()->create(['shipment_id' => $shipment->id]);
 
     $shift = Shift::factory()->create();
     ShiftMember::factory()->create(['shift_id' => $shift->id, 'user_id' => $user->id]);

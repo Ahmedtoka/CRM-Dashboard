@@ -41,8 +41,8 @@ const SWEPT: string[] = [
  */
 const RAW_TABLE_OK = new Set(['Ads/Materials/Index']);
 const OWN_SEARCH_OK = new Set(['Ads/Materials/Index']);
-/** settings/Branches is deleted by FS2 (F4); it keeps its hand-made row icons until then. */
-const ROW_ACTIONS_OK = new Set(['settings/Branches']);
+/** Pages allowed hand-made row actions: none (settings/Branches, the last one, was deleted by FS2). */
+const ROW_ACTIONS_OK = new Set<string>();
 /** Raw tables that are layout inside a popover (not a list): allowed anywhere. */
 // Tempered: a match can never cross a `</PopoverContent>`, so it cannot swallow a list table that follows a filter popover.
 const POPOVER_TABLE = /<PopoverContent\b(?:(?!<\/PopoverContent>)[\s\S])*?<table[\s\S]*?<\/PopoverContent>/g;

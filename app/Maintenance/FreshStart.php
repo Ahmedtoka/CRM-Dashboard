@@ -28,8 +28,8 @@ final class FreshStart
         'ad_material_ads', 'ad_daily_metrics', 'ad_account_daily', 'ad_spend_snapshots', 'ads_sync_runs', 'ads_api_usage', 'ads_audit_log',
         // Conversation outcomes, cases and the queue (entries carry the ratings; days/shifts are the windows).
         'conversation_outcomes', 'support_cases', 'queue_decisions', 'queue_attendance_events', 'queue_entries', 'shift_members', 'shifts', 'queue_days',
-        // Shopify orders.
-        'shipment_events', 'shipments', 'fulfillments', 'refunds', 'order_items', 'orders',
+        // Shopify orders (shipments/shipment_events were dropped by fresh-orders F4).
+        'fulfillments', 'refunds', 'order_items', 'orders',
         // Conversations and everything hanging off them.
         'message_attachments', 'messages', 'conversation_notes', 'conversation_tag', 'conversation_participants', 'conversation_ad_referrals',
         'bot_learning_notes', 'bot_runs', 'activity_logs', 'conversations',

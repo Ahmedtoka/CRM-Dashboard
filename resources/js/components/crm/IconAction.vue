@@ -19,9 +19,11 @@ const props = withDefaults(
         disabled?: boolean;
         /** Renders an Inertia link instead of a button. */
         href?: string;
+        /** With `href`: a plain link to another site, opened in a new tab (e.g. Meta Ads Manager). */
+        external?: boolean;
         class?: HTMLAttributes['class'];
     }>(),
-    { variant: 'ghost', size: 'md', loading: false, disabled: false, href: undefined, class: undefined },
+    { variant: 'ghost', size: 'md', loading: false, disabled: false, href: undefined, external: false, class: undefined },
 );
 const emit = defineEmits<{ click: [event: MouseEvent] }>();
 // Attributes (a popover / menu trigger's aria-expanded, data-state, pointer handlers) land on the button itself.
@@ -54,7 +56,20 @@ function onClick(event: MouseEvent): void {
     <TooltipProvider :delay-duration="300">
         <Tooltip>
             <TooltipTrigger as-child>
-                <Link v-if="href" :href="href" v-bind="$attrs" :class="classes" :aria-label="label" data-icon-action>
+                <a
+                    v-if="href && external"
+                    :href="href"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    v-bind="$attrs"
+                    :class="classes"
+                    :aria-label="label"
+                    data-icon-action
+                    @click="emit('click', $event)"
+                >
+                    <component :is="icon" aria-hidden="true" />
+                </a>
+                <Link v-else-if="href" :href="href" v-bind="$attrs" :class="classes" :aria-label="label" data-icon-action>
                     <component :is="icon" aria-hidden="true" />
                 </Link>
                 <!-- A disabled button gets no pointer or focus events: a focusable wrapper carries the tooltip that says why. -->

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import AdSourceChip from '@/components/crm/AdSourceChip.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import { useI18n } from '@/composables/useI18n';
 import type { OrderAdSource } from '@/types/crm';
+import { ExternalLink } from 'lucide-vue-next';
 
 /**
  * The order's source (fresh-orders F5): the ad chip; for users with ads access a button that opens the AdDrawer
@@ -25,15 +27,16 @@ const { t } = useI18n();
             <AdSourceChip :source="props.source" />
         </button>
         <AdSourceChip v-else :source="props.source ?? null" />
-        <a
+        <IconAction
             v-if="props.source?.manager_url && canOpenAds"
             :href="props.source.manager_url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="shrink-0 whitespace-nowrap text-2xs text-primary underline"
+            external
+            :icon="ExternalLink"
+            :label="t('ordersHub.open_meta')"
+            variant="primary"
+            size="sm"
             data-open-meta
             @click.stop
-            >{{ t('ordersHub.open_meta') }}</a
-        >
+        />
     </span>
 </template>
