@@ -42,3 +42,26 @@ export function newIdempotencyKey(): string {
     const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
+
+/**
+ * last_error as people read it: comma-separated machine codes go through ads.launch.error.<code> (an unknown code reads
+ * "refused"); anything else is the platform's own sentence and is shown as is.
+ */
+export function launchErrorText(raw: string | null | undefined, t: (key: string, params?: Record<string, string | number>) => string): string {
+    if (!raw) return '';
+    const parts = raw
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean);
+    if (!parts.every((p) => /^[a-z][a-z_]*$/.test(p))) return raw;
+
+    return [
+        ...new Set(
+            parts.map((code) => {
+                const key = `ads.launch.error.${code}`;
+                const text = t(key);
+                return text === key ? t('ads.launch.error.other') : text;
+            }),
+        ),
+    ].join(' · ');
+}

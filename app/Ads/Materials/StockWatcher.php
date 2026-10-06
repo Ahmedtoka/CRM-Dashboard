@@ -100,7 +100,9 @@ final class StockWatcher
 
         // The product is gone (deleted or unlinked): a held launch can never come back, so it ends (counted as released).
         $gone = AdLaunch::query()->where('state', LaunchState::OnHold->value)->where(fn ($q) => $q->whereNull('ad_material_id')
-            ->orWhereIn('ad_material_id', AdMaterial::query()->select('ad_materials.id')->when($productIds !== null, fn ($m) => $m->whereIn('product_id', $productIds))
+            ->orWhereIn('ad_material_id', AdMaterial::query()->select('ad_materials.id')
+                // a scoped run (one product's Shopify update) also sees materials unlinked from any product
+                ->when($productIds !== null, fn ($m) => $m->where(fn ($w) => $w->whereIn('product_id', $productIds)->orWhereNull('product_id')))
                 ->whereRaw("$stock = 'none'")));
         foreach ($gone->get() as $l) {
             try {

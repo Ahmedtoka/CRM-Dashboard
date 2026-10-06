@@ -147,9 +147,12 @@ async function decide(payload: { code: string; text: string }): Promise<void> {
 
 /* ---- bulk ---- */
 const bulkOpen = ref(false);
+const bulkResume = ref(0);
+/** 423 before the plan: the dialog closed itself, reopen it. 423 mid-run: the dialog is open, resume the pending rows. */
 function bulkReauth(): void {
     needReauth(async () => {
-        bulkOpen.value = true;
+        if (bulkOpen.value) bulkResume.value++;
+        else bulkOpen.value = true;
     });
 }
 
@@ -251,6 +254,6 @@ const field = 'h-9 rounded-md border border-input bg-background px-2 text-sm';
             @submit="decide"
         />
         <ReauthDialog v-model:open="reauthOpen" @confirmed="reauthed" />
-        <BulkApproveDialog v-model:open="bulkOpen" @done="reload" @reauth="bulkReauth" />
+        <BulkApproveDialog v-model:open="bulkOpen" :resume="bulkResume" @done="reload" @reauth="bulkReauth" />
     </AppLayout>
 </template>

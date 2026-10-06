@@ -144,3 +144,25 @@ it('ends a held launch whose product is gone instead of holding it forever', fun
     expect(app(StockWatcher::class)->holds()['released'])->toBe(1)
         ->and($l->fresh()->state)->toBe(LaunchState::Expired)->and($l->fresh()->decision_code)->toBe('product_gone');
 });
+
+it('review r3: a product-scoped stock run also ends a held launch whose material was unlinked from its product', function () {
+    $w = LaunchWorld::make();
+    $l = LaunchWorld::launch($w, LaunchState::Draft);
+    $l->forceFill(['state' => LaunchState::OnHold, 'hold_from_state' => LaunchState::Draft])->save();
+    AdMaterial::whereKey($w['material']->id)->update(['product_id' => null]);
+
+    app(StockWatcher::class)->holds([$w['product']->id]);
+
+    expect($l->fresh()->state)->toBe(LaunchState::Expired)->and($l->fresh()->decision_code)->toBe('product_gone');
+});
+
+it('review r3: history carries codes, not free text, for hold, release and the stuck hand-back', function () {
+    $w = LaunchWorld::make();
+    $l = LaunchWorld::launch($w, LaunchState::AwaitingApproval);
+    app(LaunchService::class)->hold($l);
+    app(LaunchService::class)->release($l->fresh());
+
+    $meta = AdsAuditLog::where('subject_type', 'AdLaunch')->where('subject_id', $l->id)->whereIn('action', ['launch.on_hold', 'launch.released'])->orderBy('id')->get()->pluck('meta');
+    expect($meta[0]['code'])->toBe('out_of_stock')->and($meta[1]['code'])->toBe('restocked')
+        ->and($meta[0])->not->toHaveKey('reason');
+});

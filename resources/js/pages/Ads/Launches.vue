@@ -16,7 +16,7 @@ import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { newIdempotencyKey } from '@/lib/launch';
+import { launchErrorText, newIdempotencyKey } from '@/lib/launch';
 import type { AdsLaunchesProps, LaunchAnswer, LaunchRow, SlotRow } from '@/types/ads';
 import { Head, router } from '@inertiajs/vue3';
 import { Rocket } from 'lucide-vue-next';
@@ -270,7 +270,9 @@ onMounted(async () => {
                                     }}<template v-if="l.decision.reason">: {{ l.decision.reason }}</template>
                                 </span>
                             </p>
-                            <p v-if="l.last_error && l.state === 'create_failed'" class="text-2xs text-destructive">{{ l.last_error }}</p>
+                            <p v-if="l.last_error && l.state === 'create_failed'" class="text-2xs text-destructive">
+                                {{ launchErrorText(l.last_error, t) }}
+                            </p>
                         </div>
                         <div class="flex flex-wrap gap-1.5">
                             <Button v-if="l.can.edit" size="sm" @click="editing = l">{{ t('ads.launch.actions.open') }}</Button>
@@ -291,16 +293,22 @@ onMounted(async () => {
                     </li>
                 </ul>
                 <div v-if="launches.last_page > 1" class="flex items-center justify-center gap-2 text-xs">
-                    <Button size="sm" variant="outline" :disabled="launches.current_page <= 1" @click="page(launches.current_page - 1)"
-                        >&lsaquo;</Button
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        :disabled="launches.current_page <= 1"
+                        :aria-label="t('ui.prev')"
+                        @click="page(launches.current_page - 1)"
+                        ><span class="inline-block rtl:rotate-180" aria-hidden="true">&lsaquo;</span></Button
                     >
                     <span class="tabular-nums">{{ launches.current_page }} / {{ launches.last_page }}</span>
                     <Button
                         size="sm"
                         variant="outline"
                         :disabled="launches.current_page >= launches.last_page"
+                        :aria-label="t('ui.next')"
                         @click="page(launches.current_page + 1)"
-                        >&rsaquo;</Button
+                        ><span class="inline-block rtl:rotate-180" aria-hidden="true">&rsaquo;</span></Button
                     >
                 </div>
             </section>

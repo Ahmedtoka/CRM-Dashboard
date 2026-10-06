@@ -8,7 +8,8 @@ import { useI18n } from '@/composables/useI18n';
 import { CircleCheck, CircleX, LoaderCircle } from 'lucide-vue-next';
 import { watch } from 'vue';
 
-const props = defineProps<{ open: boolean }>();
+/** Bumped by the page after a mid-run re-auth: the run resumes with the launches still pending. */
+const props = withDefaults(defineProps<{ open: boolean; resume?: number }>(), { resume: 0 });
 const emit = defineEmits<{ 'update:open': [open: boolean]; done: []; reauth: [] }>();
 
 const { t } = useI18n();
@@ -26,6 +27,13 @@ watch(
         }
     },
     { immediate: true },
+);
+
+watch(
+    () => props.resume,
+    () => {
+        if (props.open && plan.value) void start();
+    },
 );
 
 async function start(): Promise<void> {

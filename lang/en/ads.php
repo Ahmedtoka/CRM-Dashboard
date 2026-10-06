@@ -203,6 +203,7 @@ return [
             'caption_wrong' => 'Caption needs changes', 'price_wrong' => 'Wrong price', 'media_quality' => 'Image or video quality',
             'wrong_adset' => 'Wrong ad set', 'off_brand' => 'Off brand', 'out_of_stock' => 'Out of stock', 'other' => 'Other reason',
             'slot_closed' => 'Ad set closed',
+            'product_gone' => 'Product removed from the material', 'stuck_launching' => 'Approval did not finish', 'restocked' => 'Back in stock',
         ],
     ],
 ];

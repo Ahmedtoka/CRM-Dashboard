@@ -36,7 +36,8 @@ final class LaunchService
 {
     public const REASONS = ['caption_wrong', 'price_wrong', 'media_quality', 'wrong_adset', 'off_brand', 'out_of_stock', 'other'];
 
-    public const SYSTEM_REASONS = ['slot_closed'];
+    /** Codes the system writes (decision_code / audit meta code); each has ads.launch.reason.<code> in ar + en. */
+    public const SYSTEM_REASONS = ['slot_closed', 'product_gone', 'stuck_launching', 'restocked'];
 
     public function __construct(
         private readonly LaunchChecks $checks,
@@ -429,7 +430,7 @@ final class LaunchService
     public function hold(AdLaunch $l): AdLaunch
     {
         $from = $l->state;
-        $l = $this->transition($l, [$from], LaunchState::OnHold, ['hold_from_state' => $from->value], null, null, ['reason' => 'out_of_stock']);
+        $l = $this->transition($l, [$from], LaunchState::OnHold, ['hold_from_state' => $from->value], null, null, ['code' => 'out_of_stock']);
         $this->notify->onHold($l);
 
         return $l;
@@ -439,7 +440,7 @@ final class LaunchService
     public function release(AdLaunch $l): AdLaunch
     {
         $to = $l->hold_from_state ?? LaunchState::Draft;
-        $l = $this->transition($l, [LaunchState::OnHold], $to, ['hold_from_state' => null], null, null, ['reason' => 'restocked'], 'launch.released');
+        $l = $this->transition($l, [LaunchState::OnHold], $to, ['hold_from_state' => null], null, null, ['code' => 'restocked'], 'launch.released');
         $this->notify->released($l);
 
         return $to === LaunchState::CreatingPaused ? $this->syncCreating($l) : $l;
@@ -528,7 +529,7 @@ final class LaunchService
         try {
             $l = $this->transition($l, [LaunchState::Launching], LaunchState::AwaitingApproval, [
                 'approved_at' => null, 'decided_by_id' => null, 'decided_at' => null, 'self_approved' => false, 'last_error' => 'approve_incomplete',
-            ], null, null, ['by' => 'sweep', 'reason' => 'stuck_launching'], 'launch.approve_failed');
+            ], null, null, ['by' => 'sweep', 'code' => 'stuck_launching'], 'launch.approve_failed');
         } catch (WriteDenied) {
             return false;
         }
