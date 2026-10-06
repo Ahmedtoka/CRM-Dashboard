@@ -47,3 +47,12 @@ it('stays quiet when the whole account stopped converting chats (inbox problem)'
 
     expect(app(ChatsNoOrders::class)->evaluate(RuleContext::for($acc)))->toBe([]);
 });
+
+it('counts chat orders placed through today, not only inside the mature window', function () {
+    $acc = W::account();
+    $ad = W::ad($acc, 'MESSAGES');
+    W::spendDays($ad, 14, 80, -3);
+    W::fakeChats([$ad->id => ['chats' => 20, 'orders' => 0]], fn (array $ids, string $from, string $to) => $to === W::day(0) ? [$ad->id => ['chats' => 22, 'orders' => 1]] : null);
+
+    expect(app(ChatsNoOrders::class)->evaluate(RuleContext::for($acc)))->toBe([]);
+});

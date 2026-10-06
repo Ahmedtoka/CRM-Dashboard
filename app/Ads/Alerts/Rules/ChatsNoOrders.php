@@ -66,6 +66,9 @@ final class ChatsNoOrders implements Rule
         $from = $ctx->day(-self::LAG_DAYS - self::WINDOW_DAYS + 1);
         $ids = $messages->keys()->all();
         $current = $this->chats->forAds($ids, $from, $to);
+        // Orders lag the chat (R-01 for chats): a late order through today clears the ad. Chats newer than the window only
+        // add orders here, never chats.
+        $through = $this->chats->forAds($ids, $from, $ctx->day(0));
         $start = CarbonImmutable::parse($from);
         $previous = $this->chats->forAds($ids, $start->subDays(self::WINDOW_DAYS)->toDateString(), $start->subDay()->toDateString());
 
@@ -83,6 +86,7 @@ final class ChatsNoOrders implements Rule
         $out = [];
         foreach ($messages as $id => $ad) {
             $f = array_merge(ChatSignals::empty(), $current[$id] ?? []);
+            $f['orders'] = max((int) $f['orders'], (int) ($through[$id]['orders'] ?? 0));
             if ($f['chats'] < self::MIN_CHATS || $f['orders'] > 0) {
                 continue;
             }
