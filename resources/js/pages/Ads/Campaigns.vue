@@ -185,7 +185,7 @@ const breadcrumbs = computed(() => [
                 </button>
             </div>
 
-            <div class="scrollbar-thin relative overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
+            <div class="scrollbar-thin relative table-scroll-box rounded-lg bg-card shadow-card [contain:inline-size]">
                 <EmptyState v-if="!tree.length" :icon="Layers" :title="t('ads.campaigns.empty')" :body="t('ads.empty.body')" />
                 <table v-else class="w-full min-w-[1100px] text-xs">
                     <caption class="sr-only">
@@ -193,7 +193,7 @@ const breadcrumbs = computed(() => [
                             t('ads.campaigns.tree')
                         }}
                     </caption>
-                    <thead class="border-b border-border/60 text-2xs font-semibold text-muted-foreground">
+                    <thead class="crm-sticky-head border-b border-border/60 text-2xs font-semibold text-muted-foreground">
                         <tr>
                             <th scope="col" class="px-3 py-2 text-start">{{ t('ads.campaigns.name') }}</th>
                             <th scope="col" class="px-2 py-2 text-start">{{ t('ads.table.platform') }}</th>

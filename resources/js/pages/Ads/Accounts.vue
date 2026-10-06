@@ -8,7 +8,7 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import RelativeTime from '@/components/crm/RelativeTime.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import ToggleSwitch from '@/components/crm/ToggleSwitch.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
@@ -283,14 +283,12 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                             {{ c.last_error }}
                         </p>
                         <div class="flex flex-wrap gap-2">
-                            <button type="button" :class="outlineSm" :disabled="busy(`test-${c.id}`)" @click="testConnection(c)">
-                                <LoaderCircle v-if="busy(`test-${c.id}`)" class="animate-spin" aria-hidden="true" />
-                                <ShieldCheck v-else aria-hidden="true" />{{ t('ads.accounts.test') }}
-                            </button>
-                            <button type="button" :class="outlineSm" :disabled="busy(`sync-${c.id}`)" @click="syncConnection(c)">
-                                <LoaderCircle v-if="busy(`sync-${c.id}`)" class="animate-spin" aria-hidden="true" />
-                                <RefreshCw v-else aria-hidden="true" />{{ t('ads.accounts.sync') }}
-                            </button>
+                            <Button variant="outline" size="sm" class="gap-1.5" @click="testConnection(c)" :loading="busy(`test-${c.id}`)">
+                                <ShieldCheck aria-hidden="true" />{{ t('ads.accounts.test') }}
+                            </Button>
+                            <Button variant="outline" size="sm" class="gap-1.5" @click="syncConnection(c)" :loading="busy(`sync-${c.id}`)">
+                                <RefreshCw aria-hidden="true" />{{ t('ads.accounts.sync') }}
+                            </Button>
                             <button type="button" :class="outlineSm" @click="openEdit(c)">
                                 <Pencil aria-hidden="true" />{{ t('ads.accounts.edit') }}
                             </button>
@@ -304,6 +302,7 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                 <template v-if="connectionsOf(platform.value).length">
                     <h3 class="pt-1 text-sm font-semibold">{{ t('ads.accounts.accounts_title', { platform: platform.label }) }}</h3>
                     <DataTable
+                        table-id="ads-accounts"
                         :columns="columns"
                         :rows="accountsOf(platform.value)"
                         mobile="scroll"
@@ -347,16 +346,16 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                                 <div class="flex flex-wrap items-center gap-1.5">
                                     <label class="text-2xs text-muted-foreground" :for="`from-${row.id}`">{{ t('ads.accounts.from_date') }}</label>
                                     <input :id="`from-${row.id}`" v-model="drafts[row.id].date" type="date" dir="ltr" :class="smallInput" />
-                                    <button
-                                        type="button"
-                                        :class="buttonVariants({ variant: 'default', size: 'sm' })"
+                                    <Button
+                                        size="sm"
                                         :disabled="!canAssign(row) || assigning(row)"
                                         @click="assign(row)"
+                                        :loading="assigning(row)"
                                     >
-                                        <LoaderCircle v-if="assigning(row)" class="animate-spin" aria-hidden="true" />{{
+                                        {{
                                             correctingStart(row) ? t('ads.accounts.save_start') : t('ads.accounts.assign_save')
                                         }}
-                                    </button>
+                                    </Button>
                                     <Popover>
                                         <PopoverTrigger as-child>
                                             <button
@@ -399,18 +398,18 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                             <RelativeTime v-else :iso="row.last_synced_at" />
                         </template>
                         <template #cell-actions="{ row }">
-                            <button
-                                type="button"
-                                :class="outlineSm"
-                                :disabled="busy(`sync-acc-${row.id}`)"
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="gap-1.5"
                                 :title="t('ads.accounts.sync_account')"
                                 @click="syncAccount(row)"
+                                :loading="busy(`sync-acc-${row.id}`)"
                             >
-                                <LoaderCircle v-if="busy(`sync-acc-${row.id}`)" class="animate-spin" aria-hidden="true" />
-                                <RefreshCw v-else aria-hidden="true" /><span class="sr-only 2xl:not-sr-only">{{
+                                <RefreshCw aria-hidden="true" /><span class="sr-only 2xl:not-sr-only">{{
                                     t('ads.accounts.sync_account')
                                 }}</span>
-                            </button>
+                            </Button>
                         </template>
                     </DataTable>
                 </template>

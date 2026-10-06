@@ -4,14 +4,13 @@
  * (emotional, offer, quality) from its frames and the product data, edit them by hand, and (media buyers and supervisors)
  * open the publish dialog with the three captions through "Create 3 ads".
  */
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
-import { cn } from '@/lib/utils';
 import type { MaterialCaption, MaterialRow, PublishCaption } from '@/types/ads';
-import { LoaderCircle, Rocket, Sparkles } from 'lucide-vue-next';
+import { Rocket, Sparkles } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{ open: boolean; material: MaterialRow; canPublish: boolean }>();
@@ -143,11 +142,10 @@ const area = 'min-h-24 w-full rounded-md border border-input bg-background px-2 
                             <option v-for="v in videos" :key="v.id" :value="v.id">{{ v.original_name ?? `#${v.id}` }}</option>
                         </select>
                     </div>
-                    <button type="button" :class="cn(buttonVariants({ variant: captions.length ? 'outline' : 'default' }), 'ms-auto')" :disabled="busy || !fileId" @click="generate">
-                        <LoaderCircle v-if="generating" class="size-4 animate-spin" aria-hidden="true" />
-                        <Sparkles v-else class="size-4" aria-hidden="true" />
+                    <Button :variant="captions.length ? 'outline' : 'default'" class="ms-auto" :loading="generating" :disabled="busy || !fileId" @click="generate">
+                        <Sparkles class="size-4" aria-hidden="true" />
                         {{ captions.length ? t('ads.captions.regenerate') : t('ads.captions.generate') }}
-                    </button>
+                    </Button>
                 </div>
 
                 <p v-if="generating" class="text-xs text-muted-foreground" role="status">{{ t('ads.captions.working') }}</p>
@@ -182,11 +180,10 @@ const area = 'min-h-24 w-full rounded-md border border-input bg-background px-2 
             <p v-if="error" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{{ error }}</p>
 
             <DialogFooter class="gap-2 sm:justify-start">
-                <button v-if="canPublish" type="button" :class="buttonVariants({ variant: 'default' })" :disabled="busy || !valid" @click="createAds">
-                    <LoaderCircle v-if="saving" class="size-4 animate-spin" aria-hidden="true" />
-                    <Rocket v-else class="size-4" aria-hidden="true" />
+                <Button v-if="canPublish" :loading="saving" :disabled="busy || !valid" @click="createAds">
+                    <Rocket class="size-4" aria-hidden="true" />
                     {{ t('ads.captions.create_ads') }}
-                </button>
+                </Button>
                 <button type="button" :class="buttonVariants({ variant: canPublish ? 'outline' : 'default' })" :disabled="busy || !dirty.length" @click="save">
                     {{ t('ads.captions.save') }}
                 </button>

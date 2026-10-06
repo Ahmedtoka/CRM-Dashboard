@@ -50,7 +50,7 @@ const breadcrumbs = computed(() => [
                     <h2 id="suggestions-title" class="text-sm font-bold">{{ t('ads.actions.suggestions') }}</h2>
                     <p class="text-xs text-muted-foreground">{{ t('ads.actions.suggestions_hint', { days }) }}</p>
                 </div>
-                <div class="scrollbar-thin relative overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
+                <div class="scrollbar-thin relative table-scroll-box rounded-lg bg-card shadow-card [contain:inline-size]">
                     <EmptyState v-if="!suggestions.length" :icon="CircleCheck" :title="t('ads.actions.suggestions_empty')" />
                     <table v-else class="w-full min-w-[820px] text-xs">
                         <caption class="sr-only">
@@ -58,7 +58,7 @@ const breadcrumbs = computed(() => [
                                 t('ads.actions.suggestions')
                             }}
                         </caption>
-                        <thead class="border-b border-border/60 text-2xs font-semibold text-muted-foreground">
+                        <thead class="crm-sticky-head border-b border-border/60 text-2xs font-semibold text-muted-foreground">
                             <tr>
                                 <th scope="col" class="px-3 py-2 text-start">{{ t('ads.table.creative') }}</th>
                                 <th scope="col" class="px-2 py-2 text-start">{{ t('ads.table.platform') }}</th>
@@ -101,7 +101,7 @@ const breadcrumbs = computed(() => [
 
             <section class="space-y-2" aria-labelledby="log-title">
                 <h2 id="log-title" class="text-sm font-bold">{{ t('ads.actions.log') }}</h2>
-                <div class="scrollbar-thin relative overflow-x-auto rounded-lg bg-card shadow-card [contain:inline-size]">
+                <div class="scrollbar-thin relative table-scroll-box rounded-lg bg-card shadow-card [contain:inline-size]">
                     <EmptyState v-if="!log.length" :icon="ClipboardList" :title="t('ads.actions.log_empty')" />
                     <table v-else class="w-full min-w-[820px] text-xs">
                         <caption class="sr-only">
@@ -109,7 +109,7 @@ const breadcrumbs = computed(() => [
                                 t('ads.actions.log')
                             }}
                         </caption>
-                        <thead class="border-b border-border/60 text-2xs font-semibold text-muted-foreground">
+                        <thead class="crm-sticky-head border-b border-border/60 text-2xs font-semibold text-muted-foreground">
                             <tr>
                                 <th scope="col" class="px-3 py-2 text-start">{{ t('ads.actions.col_time') }}</th>
                                 <th scope="col" class="px-2 py-2 text-start">{{ t('ads.actions.col_user') }}</th>

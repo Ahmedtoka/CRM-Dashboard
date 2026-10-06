@@ -4,7 +4,7 @@ import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import ToggleSwitch from '@/components/crm/ToggleSwitch.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import type { SharedData } from '@/types';
 import type { AdBuyerSetupRow, AdsBuyersSetupProps, AdsWinnerThresholds } from '@/types/ads';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { LoaderCircle, Pencil, Plus, Trash2, UserPlus } from 'lucide-vue-next';
+import { Pencil, Plus, Trash2, UserPlus } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
 
 const props = defineProps<AdsBuyersSetupProps>();
@@ -229,7 +229,7 @@ function saveSettings(): void {
                         <Plus aria-hidden="true" />{{ t('ads.setup.add_buyer') }}
                     </button>
                 </div>
-                <DataTable :columns="columns" :rows="buyers" :caption="t('ads.setup.buyers_title')" :empty="t('ads.setup.no_buyers')">
+                <DataTable table-id="ads-buyers-setup" :columns="columns" :rows="buyers" :caption="t('ads.setup.buyers_title')" :empty="t('ads.setup.no_buyers')">
                     <template #cell-name="{ row }">
                         <span class="inline-flex items-center gap-2 font-medium">
                             <span
@@ -312,16 +312,15 @@ function saveSettings(): void {
                                     :class="smallInput"
                                 />
                             </div>
-                            <button
-                                type="button"
-                                :class="buttonVariants({ variant: 'default', size: 'sm' })"
-                                :disabled="targetForm.processing && savingMonth === row.month"
+                            <Button
+                                size="sm"
                                 @click="saveTarget(row.month)"
+                                :loading="targetForm.processing && savingMonth === row.month"
                             >
-                                <LoaderCircle v-if="targetForm.processing && savingMonth === row.month" class="animate-spin" aria-hidden="true" />{{
+                                {{
                                     t('ads.setup.save_row')
                                 }}
-                            </button>
+                            </Button>
                         </div>
                         <p v-if="targetError(row.month)" role="alert" class="basis-full text-2xs text-destructive">{{ targetError(row.month) }}</p>
                     </li>
@@ -373,9 +372,9 @@ function saveSettings(): void {
                     </div>
                 </div>
 
-                <button type="submit" :class="buttonVariants({ variant: 'default' })" :disabled="settingsForm.processing">
-                    <LoaderCircle v-if="settingsForm.processing" class="animate-spin" aria-hidden="true" />{{ t('common.save') }}
-                </button>
+                <Button type="submit" :loading="settingsForm.processing">
+                    {{ t('common.save') }}
+                </Button>
             </form>
         </div>
 

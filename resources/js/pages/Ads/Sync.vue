@@ -120,7 +120,7 @@ const count = (v: number | null) => (v === null ? '—' : formatCount(v, locale.
                         <option v-for="g in TRIGGERS" :key="g" :value="g">{{ triggerLabel(g) }}</option>
                     </select>
                 </div>
-                <DataTable :columns="columns" :rows="runs" :empty="t('ads.sync.log_empty')" :empty-icon="RefreshCw" :caption="t('ads.sync.log')">
+                <DataTable table-id="ads-sync" :columns="columns" :rows="runs" :empty="t('ads.sync.log_empty')" :empty-icon="RefreshCw" :caption="t('ads.sync.log')">
                     <template #cell-started_at="{ row }"><RelativeTime :iso="row.started_at" mode="stamp" /></template>
                     <template #cell-account="{ row }">
                         <span class="inline-flex items-center gap-1.5">{{ row.account ?? '—' }}<PlatformChip :platform="row.platform" size="xs" /></span>

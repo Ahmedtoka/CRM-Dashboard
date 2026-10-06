@@ -110,13 +110,13 @@ const campaigns = computed<CampaignRow[]>(() => d.value.campaigns.map((c, i) => 
 const campaignColumns = computed(() => [
     { key: 'name', label: t('ads.table.campaign'), primary: true },
     { key: 'account', label: t('ads.table.account'), hideOnMobile: true },
-    { key: 'spend', label: t('ads.kpi.spend_tax'), align: 'end' as const },
-    { key: 'purchase_value', label: t('ads.kpi.purchase_value'), align: 'end' as const, hideOnMobile: true },
-    { key: 'roas', label: t('ads.kpi.roas'), align: 'end' as const },
-    { key: 'purchases', label: t('ads.kpi.meta_orders'), align: 'end' as const },
-    { key: 'cpa', label: t('ads.kpi.cpa'), align: 'end' as const, hideOnMobile: true },
-    { key: 'ctr', label: t('ads.kpi.ctr'), align: 'end' as const, hideOnMobile: true },
-    { key: 'real_orders', label: t('ads.kpi.real_orders'), align: 'end' as const },
+    { key: 'spend', label: t('ads.kpi.spend_tax'), numeric: true },
+    { key: 'purchase_value', label: t('ads.kpi.purchase_value'), numeric: true, hideOnMobile: true },
+    { key: 'roas', label: t('ads.kpi.roas'), numeric: true },
+    { key: 'purchases', label: t('ads.kpi.meta_orders'), numeric: true },
+    { key: 'cpa', label: t('ads.kpi.cpa'), numeric: true, hideOnMobile: true },
+    { key: 'ctr', label: t('ads.kpi.ctr'), numeric: true, hideOnMobile: true },
+    { key: 'real_orders', label: t('ads.kpi.real_orders'), numeric: true },
 ]);
 
 const selected = ref<CreativeRow | null>(null);
@@ -131,6 +131,7 @@ const breadcrumbs = computed(() => [
     { title: t('nav.ads_buyers'), href: '/ads/buyers' },
     { title: props.buyer.name, href: `/ads/buyers/${props.buyer.id}` },
 ]);
+const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, href: b.href })));
 </script>
 
 <template>
@@ -139,7 +140,7 @@ const breadcrumbs = computed(() => [
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
-            <PageHeader :title="buyer.name" :description="t('ads.buyers.show_hint')">
+            <PageHeader :title="buyer.name" :description="t('ads.buyers.show_hint')" :breadcrumbs="crumbs">
                 <AdsRangeBar :filters="filters" :platforms="platforms" :show-buyer="false" />
             </PageHeader>
 
@@ -200,6 +201,7 @@ const breadcrumbs = computed(() => [
                 <section class="space-y-2">
                     <h2 class="text-sm font-bold">{{ t('ads.buyers.accounts') }}</h2>
                     <DataTable
+                        table-id="buyer-accounts"
                         :columns="assignmentColumns"
                         :rows="assignments"
                         :caption="t('ads.buyers.accounts')"
@@ -222,7 +224,7 @@ const breadcrumbs = computed(() => [
 
                 <section class="space-y-2">
                     <h2 class="text-sm font-bold">{{ t('ads.buyers.campaigns') }}</h2>
-                    <DataTable :columns="campaignColumns" :rows="campaigns" :caption="t('ads.buyers.campaigns')" :empty="t('ads.empty.range')">
+                    <DataTable table-id="buyer-campaigns" :columns="campaignColumns" :rows="campaigns" :caption="t('ads.buyers.campaigns')" :empty="t('ads.empty.range')">
                         <template #cell-name="{ row }">
                             <span class="flex flex-col">
                                 <span class="font-medium" dir="auto">{{ (row as CampaignRow).name ?? t('ads.buyers.no_campaign') }}</span>

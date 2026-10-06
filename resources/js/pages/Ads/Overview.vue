@@ -269,7 +269,7 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
                         <h2 id="top-accounts-title" class="text-sm font-semibold">{{ t('ads.overview.top_accounts') }}</h2>
                         <p class="text-2xs text-muted-foreground">{{ t('ads.overview.top_accounts_hint') }}</p>
                     </div>
-                    <DataTable :columns="accountColumns" :rows="top_accounts" :caption="t('ads.overview.top_accounts')" :empty="t('ads.empty.range')">
+                    <DataTable table-id="ads-overview-accounts" :columns="accountColumns" :rows="top_accounts" :caption="t('ads.overview.top_accounts')" :empty="t('ads.empty.range')">
                         <template #cell-name="{ row }">
                             <div class="flex min-w-40 items-center gap-2">
                                 <PlatformChip :platform="acc(row).platform" size="xs" />
@@ -306,7 +306,7 @@ const breadcrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
                     </DataTable>
                 </section>
 
-                <DataTable :columns="columns" :rows="rows" :caption="t('ads.overview.daily_table')" :empty="t('ads.empty.range')">
+                <DataTable table-id="ads-overview-daily" :columns="columns" :rows="rows" :caption="t('ads.overview.daily_table')" :empty="t('ads.empty.range')">
                     <template #cell-date="{ row }">
                         <span v-if="row.id === TOTAL" class="font-bold">{{ t('ads.table.totals') }}</span>
                         <span v-else class="whitespace-nowrap font-medium">{{ formatDayLong((row as Row).date, locale) }}</span>

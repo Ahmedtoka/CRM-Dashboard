@@ -5,7 +5,7 @@ import MaterialFileDrop from '@/components/ads/MaterialFileDrop.vue';
 import MaterialStatusChip from '@/components/ads/MaterialStatusChip.vue';
 import ProductPicker from '@/components/ads/ProductPicker.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -13,7 +13,7 @@ import { links, useMaterialPermissions } from '@/lib/adsMaterials';
 import { cn } from '@/lib/utils';
 import type { AdsMaterialFormProps, MaterialProduct } from '@/types/ads';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Check, LoaderCircle, Plus, Save } from 'lucide-vue-next';
+import { Check, Plus, Save } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<AdsMaterialFormProps>();
@@ -121,6 +121,7 @@ const breadcrumbs = computed(() => [
     { title: t('nav.ads_materials'), href: '/ads/materials' },
     { title: pageTitle.value, href: props.material ? `/ads/materials/${props.material.id}/edit` : '/ads/materials/create' },
 ]);
+const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, href: b.href })));
 </script>
 
 <template>
@@ -128,7 +129,7 @@ const breadcrumbs = computed(() => [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <form class="mx-auto w-full max-w-5xl space-y-4 p-3 md:p-6" novalidate @submit.prevent="submit">
-            <PageHeader :title="pageTitle" :description="t('ads.materials.form.description')">
+            <PageHeader :title="pageTitle" :description="t('ads.materials.form.description')" :breadcrumbs="crumbs">
                 <MaterialStatusChip v-if="material" :status="material.status" />
             </PageHeader>
 
@@ -206,15 +207,16 @@ const breadcrumbs = computed(() => [
                         :class="cn(inputClass, 'h-8 max-w-60 text-xs')"
                         @keydown.enter.prevent="addCollection"
                     />
-                    <button
-                        type="button"
-                        :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1')"
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="gap-1"
                         :disabled="addingCollection || !newCollection.trim()"
                         @click="addCollection"
+                        :loading="addingCollection"
                     >
-                        <LoaderCircle v-if="addingCollection" class="size-3.5 animate-spin" aria-hidden="true" />
-                        <Plus v-else class="size-3.5" aria-hidden="true" />{{ t('ads.materials.form.add_collection') }}
-                    </button>
+                        <Plus class="size-3.5" aria-hidden="true" />{{ t('ads.materials.form.add_collection') }}
+                    </Button>
                     <p v-if="collectionError" role="alert" class="w-full text-2xs text-destructive">{{ collectionError }}</p>
                 </div>
             </section>
@@ -276,11 +278,11 @@ const breadcrumbs = computed(() => [
             <div
                 class="sticky bottom-0 z-10 -mx-3 flex flex-wrap items-center gap-2 border-t border-border bg-background/95 px-3 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0"
             >
-                <button type="submit" :class="cn(buttonVariants({ variant: 'default' }), 'gap-1.5')" :disabled="form.processing">
-                    <LoaderCircle v-if="form.processing" class="size-4 animate-spin" aria-hidden="true" />
-                    <Save v-else class="size-4" aria-hidden="true" />
+                <!-- While a file uploads the label carries the percentage, so the spinner only covers the rest of the save. -->
+                <Button type="submit" class="gap-1.5" :loading="form.processing && progress === null" :disabled="form.processing">
+                    <Save class="size-4" aria-hidden="true" />
                     {{ form.processing && progress !== null ? t('ads.materials.form.uploading', { n: progress }) : t('ads.materials.form.submit') }}
-                </button>
+                </Button>
                 <Link href="/ads/materials" :class="buttonVariants({ variant: 'outline' })">{{ t('common.cancel') }}</Link>
             </div>
         </form>

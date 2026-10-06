@@ -5,13 +5,14 @@
  * Never rendered for placeholder nodes: the caller passes a real external id only.
  */
 import FormDialog from '@/components/crm/FormDialog.vue';
+import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import { toggleTarget } from '@/lib/ads';
 import type { AdsAccess } from '@/types/ads';
 import { router, usePage } from '@inertiajs/vue3';
-import { LoaderCircle, Pause, Play } from 'lucide-vue-next';
+import { Pause, Play } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = withDefaults(
@@ -102,19 +103,19 @@ const btn =
 
 <template>
     <span v-if="target && !disabled && canWrite" class="inline-flex">
-        <button
-            type="button"
+        <Button
+            variant="outline"
+            size="sm"
             :class="[btn, stopping ? 'border-destructive/40 text-destructive hover:bg-destructive/10' : 'border-border text-foreground hover:bg-muted']"
             :aria-label="t(stopping ? 'ads.actions.stop_aria' : 'ads.actions.run_aria', { name })"
-            :disabled="busy"
+            :loading="busy"
             @click.stop="open = true"
             @keydown.stop
         >
-            <LoaderCircle v-if="busy" class="size-3.5 animate-spin" aria-hidden="true" />
-            <Pause v-else-if="stopping" class="size-3.5" aria-hidden="true" />
+            <Pause v-if="stopping" class="size-3.5" aria-hidden="true" />
             <Play v-else class="rtl-flip size-3.5" aria-hidden="true" />
             {{ t(stopping ? 'ads.actions.stop' : 'ads.actions.run') }}
-        </button>
+        </Button>
 
         <FormDialog
             v-model:open="open"

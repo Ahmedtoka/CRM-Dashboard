@@ -138,7 +138,7 @@ const breadcrumbs = computed(() => [
                             </button>
                         </div>
                     </div>
-                    <DataTable :columns="columns" :rows="rows" clickable :caption="t('ads.buyers.compare')" @row-click="open">
+                    <DataTable table-id="ads-buyers" :columns="columns" :rows="rows" clickable :caption="t('ads.buyers.compare')" @row-click="open">
                         <template #cell-name="{ row }">
                             <span class="inline-flex items-center gap-2 font-semibold">
                                 <span
