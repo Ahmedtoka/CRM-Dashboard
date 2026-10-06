@@ -88,6 +88,11 @@ function relativeDuration(ms: number, locale: Locale): string {
     return translate(locale, 'time.days', { n: Math.floor(minutes / 1440) });
 }
 
+/** An age in whole units, "٧ د" / "2h" (the list row's waiting chip, control room S3). */
+export function formatAge(seconds: number, locale: Locale): string {
+    return relativeDuration(seconds * 1000, locale);
+}
+
 /** "منذ ٥ د" / "5m ago". */
 export function formatSince(iso: string | null | undefined, locale: Locale, now: number): string {
     const d = toDate(iso);

@@ -54,6 +54,8 @@ const props = defineProps<{
     quickReplyCategories: QuickReplyCategory[];
     tags: Tag[];
     cities: City[];
+    /** Control room S3: the queue's first-reply target, the list's «مستنية ٧ د» threshold. */
+    firstReplyTargetSeconds?: number;
 }>();
 
 const page = usePage<SharedData>();
@@ -551,6 +553,7 @@ onBeforeUnmount(() => {
         >
             <ConversationList
                 ref="listView"
+                :first-reply-target="firstReplyTargetSeconds ?? null"
                 :class="selectedId !== null ? 'hidden md:flex' : 'flex'"
                 :conversations="listRows"
                 :filters="listFilters"

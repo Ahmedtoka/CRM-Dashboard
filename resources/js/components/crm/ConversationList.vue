@@ -33,6 +33,8 @@ const props = withDefaults(
         filtered?: boolean;
         /** The substring search matched too many customers: hint to narrow it. */
         searchTruncated?: boolean;
+        /** Control room S3: the first-reply target (seconds) for the rows' waiting age. */
+        firstReplyTarget?: number | null;
     }>(),
     {
         loading: false,
@@ -44,6 +46,7 @@ const props = withDefaults(
         queueEnabled: false,
         filtered: false,
         searchTruncated: false,
+        firstReplyTarget: null,
     },
 );
 
@@ -367,6 +370,7 @@ defineExpose({
                         :conversation="conversations[item.index]"
                         :state="states.get(conversations[item.index].id) ?? null"
                         :active="conversations[item.index].id === selectedId"
+                        :first-reply-target="firstReplyTarget"
                         @select="(id, pointer) => emit('select', id, pointer)"
                         @intent="(id) => emit('intent', id)"
                         @contextmenu="(id, event) => emit('tagMenu', id, event.clientX, event.clientY)"
