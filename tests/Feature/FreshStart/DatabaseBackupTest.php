@@ -58,3 +58,45 @@ it('verifies a backup: rejects a missing, empty or non-gzip file', function () {
         ->and(fn () => $verify($empty))->toThrow(BackupFailed::class)
         ->and(fn () => $verify($plain))->toThrow(BackupFailed::class);
 });
+
+it('ends the dump with the completed marker and rejects a truncated or unfinished gzip', function () {
+    $backup = app(DatabaseBackup::class)->take();
+    $gz = gzopen($backup['path'], 'rb');
+    $body = '';
+    while (! gzeof($gz)) {
+        $body .= gzread($gz, 65536);
+    }
+    gzclose($gz);
+    expect($body)->toContain(DatabaseBackup::COMPLETED_MARKER);
+
+    $truncated = $this->dir.'/truncated.sql.gz';
+    file_put_contents($truncated, substr(file_get_contents($backup['path']), 0, (int) (filesize($backup['path']) / 2)));
+    $unfinished = $this->dir.'/unfinished.sql.gz';
+    file_put_contents($unfinished, gzencode("-- MariaDB dump 10.19\nCREATE TABLE t (id int);\nINSERT INTO t VALUES (1);\n"));
+
+    expect(fn () => app(DatabaseBackup::class)->verify($truncated))->toThrow(BackupFailed::class)
+        ->and(fn () => app(DatabaseBackup::class)->verify($unfinished))->toThrow(BackupFailed::class, 'incomplete');
+});
+
+it('refuses when the folder has less free space than half the database', function () {
+    File::ensureDirectoryExists($this->dir);
+
+    expect(fn () => app(DatabaseBackup::class)->ensureRoom($this->dir, PHP_INT_MAX))->toThrow(BackupFailed::class, 'not enough disk space');
+    app(DatabaseBackup::class)->ensureRoom($this->dir, 1024);
+});
+
+it('explains a privilege error of mysqldump with the retry flag', function () {
+    expect(DatabaseBackup::explainDumpError(2, 'mysqldump: Couldn\'t execute SHOW EVENTS: Access denied for user'))
+        ->toContain('privilege')->toContain('CRM_MYSQLDUMP_ROUTINES=false')
+        ->and(DatabaseBackup::explainDumpError(2, 'Unknown database'))->not->toContain('CRM_MYSQLDUMP_ROUTINES');
+});
+
+it('makes the backup readable by its owner only', function () {
+    $backup = app(DatabaseBackup::class)->take();
+
+    if (DIRECTORY_SEPARATOR === '/') {
+        expect(fileperms($backup['path']) & 0777)->toBe(0600);
+    } else {
+        expect(is_file($backup['path']))->toBeTrue(); // Windows has no POSIX modes
+    }
+});

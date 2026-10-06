@@ -8,6 +8,8 @@ return [
     // crm:fresh-start (F1): where the backup goes and how it is taken. backup_driver: auto | mysqldump | sqlite.
     'fresh_start' => [
         'mysqldump_binary' => env('CRM_MYSQLDUMP_PATH', 'mysqldump'),
+        // false = dump without --routines --events (when the DB user lacks those privileges).
+        'mysqldump_routines' => (bool) env('CRM_MYSQLDUMP_ROUTINES', true),
         'backup_dir' => env('CRM_BACKUP_DIR', storage_path('app/backups')),
         'backup_driver' => env('CRM_BACKUP_DRIVER', 'auto'),
         'chunk' => 1000,

@@ -1,6 +1,7 @@
 <?php
 
 use App\Console\Commands\FreshStartCommand;
+use App\Maintenance\DatabaseBackup;
 use App\Maintenance\FreshStart;
 use App\Models\ActivityLog;
 use App\Models\Ad;
@@ -50,13 +51,44 @@ use App\Models\User;
 use App\Models\UserNotification;
 use App\Models\UserSession;
 use App\Models\WebhookEvent;
+use Illuminate\Contracts\Foundation\MaintenanceMode as MaintenanceModeContract;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
+/** In-memory maintenance mode: never touches storage/framework/down, which parallel test processes share. */
+function fsMaintenance(bool $down): void
+{
+    app()->instance(MaintenanceModeContract::class, new class($down) implements MaintenanceModeContract
+    {
+        public function __construct(private bool $down) {}
+
+        public function activate(array $payload): void
+        {
+            $this->down = true;
+        }
+
+        public function deactivate(): void
+        {
+            $this->down = false;
+        }
+
+        public function active(): bool
+        {
+            return $this->down;
+        }
+
+        public function data(): array
+        {
+            return [];
+        }
+    });
+}
+
 beforeEach(function () {
+    fsMaintenance(true);
     Queue::fake();
     Storage::fake('media');
     Storage::fake('public');
@@ -270,7 +302,15 @@ it('refuses --force alone in production and accepts it with an existing backup f
     expect(Customer::count())->toBe(1);
 
     File::ensureDirectoryExists($this->dir);
-    file_put_contents($this->dir.'/owner.sql.gz', gzencode('-- MariaDB dump'));
+    file_put_contents($this->dir.'/owner.sql.gz', gzencode('-- MariaDB dump 10.19
+CREATE TABLE t (id int);
+-- Dump completed on 2026-10-06 22:00:00
+'));
+    file_put_contents($this->dir.'/half.sql.gz', gzencode('-- MariaDB dump 10.19
+CREATE TABLE t (id int);
+'));
+    $this->artisan('crm:fresh-start', ['--force' => true, '--i-have-a-backup' => $this->dir.'/half.sql.gz'])->expectsOutputToContain('incomplete')->assertFailed();
+    expect(Customer::count())->toBe(1);
     $this->artisan('crm:fresh-start', ['--force' => true, '--i-have-a-backup' => $this->dir.'/owner.sql.gz'])->assertSuccessful();
     expect(Customer::count())->toBe(0)
         ->and(File::glob($this->dir.'/fresh-start-*.gz'))->toHaveCount(1); // its own backup is still taken first
@@ -299,4 +339,61 @@ it('is idempotent: a second run succeeds and deletes nothing more', function () 
     foreach ($keep as $table => $n) {
         expect(DB::table($table)->count())->toBe($n);
     }
+});
+
+it('refuses unless the CRM is in maintenance mode and prints the preparation steps', function () {
+    fsMaintenance(false);
+    Customer::factory()->create();
+
+    fsRun($this)
+        ->expectsOutputToContain('still up')
+        ->expectsOutputToContain('php artisan down')
+        ->expectsOutputToContain('stop the queue workers')
+        ->expectsOutputToContain('pause the scheduler')
+        ->assertFailed();
+
+    expect(Customer::count())->toBe(1)->and(File::glob($this->dir.'/*.gz'))->toBe([]);
+});
+
+it('closes with cache:clear, restarting workers and php artisan up', function () {
+    fsRun($this)
+        ->expectsOutputToContain('php artisan cache:clear')
+        ->expectsOutputToContain('restart the queue workers')
+        ->expectsOutputToContain('php artisan up')
+        ->assertSuccessful();
+});
+
+it('says the phrase was empty when nothing is typed', function () {
+    Customer::factory()->create();
+
+    $this->artisan('crm:fresh-start')
+        ->expectsQuestion('Everything listed above will be deleted. Type «'.FreshStartCommand::PHRASE.'» to continue', '')
+        ->expectsOutputToContain('The phrase was empty')
+        ->assertFailed();
+
+    expect(Customer::count())->toBe(1);
+});
+
+it('does not wipe when the backup comes out truncated', function () {
+    app()->instance(DatabaseBackup::class, new class extends DatabaseBackup
+    {
+        protected function writeSqliteDump(string $path): void
+        {
+            parent::writeSqliteDump($path);
+            file_put_contents($path, substr((string) file_get_contents($path), 0, (int) (filesize($path) / 2)));
+        }
+    });
+    Customer::factory()->create();
+
+    fsRun($this)->expectsOutputToContain('No backup, no wipe')->assertFailed();
+
+    expect(Customer::count())->toBe(1)->and(File::glob($this->dir.'/*.gz'))->toBe([]);
+});
+
+it('resets the usage counters of the kept saved replies', function () {
+    $reply = QuickReply::factory()->create(['use_count' => 7, 'last_used_at' => now()]);
+
+    fsRun($this)->assertSuccessful();
+
+    expect($reply->fresh()->use_count)->toBe(0)->and($reply->fresh()->last_used_at)->toBeNull();
 });

@@ -17,12 +17,26 @@ use Illuminate\Console\Command;
  *   php artisan crm:fresh-start --confirm="امسح كل حاجة"         (non-interactive)
  *   php artisan crm:fresh-start --force --i-have-a-backup=/path  (production: --force needs an existing backup file)
  *
- * The backup always comes first; if it cannot be taken and verified nothing is deleted. It never starts a sync: it
+ * The CRM must be in maintenance mode (`php artisan down`, workers and scheduler stopped). The backup always comes first; if it cannot be taken and verified nothing is deleted. It never starts a sync: it
  * prints the commands for the first syncs from the data floor.
  */
 class FreshStartCommand extends Command
 {
     public const PHRASE = 'امسح كل حاجة';
+
+    /** Printed when the CRM is not in maintenance mode: nothing may write while the tables are emptied. */
+    public const PREP_STEPS = [
+        'php artisan down',
+        'stop the queue workers (Cloudways: Supervisor → stop the crm-* programs, or: supervisorctl stop all)',
+        'pause the scheduler (comment out the `php artisan schedule:run` cron line)',
+        'then run php artisan crm:fresh-start again',
+    ];
+
+    public const AFTER_STEPS = [
+        'php artisan cache:clear',
+        're-enable the scheduler cron line and restart the queue workers (supervisorctl start all)',
+        'php artisan up',
+    ];
 
     protected $signature = 'crm:fresh-start
         {--confirm= : The confirmation phrase, for non-interactive runs}
@@ -33,10 +47,24 @@ class FreshStartCommand extends Command
 
     public function handle(DatabaseBackup $backups, FreshStart $fresh): int
     {
+        if (! app()->isDownForMaintenance()) {
+            $this->error('Refused: the CRM is still up. Nothing was deleted. Prepare first:');
+            foreach (self::PREP_STEPS as $step) {
+                $this->line('  '.$step);
+            }
+
+            return self::FAILURE;
+        }
+
         if ($this->option('force') && app()->environment('production')) {
             $proof = (string) $this->option('i-have-a-backup');
-            if ($proof === '' || ! is_file($proof) || ! is_readable($proof) || filesize($proof) === 0) {
-                $this->error('Refused: in production --force needs --i-have-a-backup=<path of an existing, non-empty backup file>. Nothing was deleted.');
+            try {
+                if ($proof === '') {
+                    throw new BackupFailed('no file given');
+                }
+                $backups->verify($proof);
+            } catch (BackupFailed $e) {
+                $this->error('Refused: in production --force needs --i-have-a-backup=<path of a verified .sql.gz dump> ('.$e->getMessage().'). Nothing was deleted.');
 
                 return self::FAILURE;
             }
@@ -80,6 +108,10 @@ class FreshStartCommand extends Command
         $this->info("Done. Nothing was synced. Run the first syncs from the data floor ({$floor}) when ready:");
         $this->line("  php artisan ads:backfill --from={$floor} --queue");
         $this->line("  php artisan shopify:reconcile-counts --from={$floor} --fix");
+        $this->info('Then bring the CRM back:');
+        foreach (self::AFTER_STEPS as $step) {
+            $this->line('  '.$step);
+        }
         $this->line('Backup: '.$backup['path']);
 
         return self::SUCCESS;
@@ -92,12 +124,17 @@ class FreshStartCommand extends Command
         }
 
         $given = $this->option('confirm');
-        if ($given === null && $this->input->isInteractive()) {
+        if ($given === null) {
+            if (! $this->input->isInteractive()) {
+                $this->error('Non-interactive run: pass --confirm="'.self::PHRASE.'".');
+
+                return false;
+            }
             $given = $this->ask('Everything listed above will be deleted. Type «'.self::PHRASE.'» to continue');
         }
 
-        if ($given === null) {
-            $this->error('Non-interactive run: pass --confirm="'.self::PHRASE.'".');
+        if (trim((string) $given) === '') {
+            $this->error('The phrase was empty.');
 
             return false;
         }

@@ -141,6 +141,14 @@ final class FreshStart
             }
         }
 
+        // Usage counters of the kept saved replies describe the wiped conversations.
+        if (Schema::hasTable('quick_replies')) {
+            $columns = array_intersect_key(['use_count' => 0, 'last_used_at' => null], array_flip(array_filter(['use_count', 'last_used_at'], fn ($c) => Schema::hasColumn('quick_replies', $c))));
+            if ($columns !== []) {
+                DB::table('quick_replies')->update($columns);
+            }
+        }
+
         return ['deleted' => $deleted, 'files' => $files, 'dropped' => $dropped];
     }
 
