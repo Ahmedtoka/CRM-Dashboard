@@ -53,7 +53,7 @@ class CustomerController extends Controller
     {
         Gate::authorize('view', $customer);
 
-        $customer->load(ModeratorScope::customerRelations($request->user()));
+        $customer->load(ModeratorScope::customerRelations($request->user(), withAds: true));
 
         $conversations = ConversationQuery::withListColumns(ConversationQuery::visibleTo($request->user()))
             ->where('conversations.customer_id', $customer->id)

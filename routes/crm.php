@@ -55,6 +55,7 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         // Before conversations/{conversation}, or the binding swallows "counts".
         Route::get('conversations/counts', [InboxController::class, 'counts'])->name('conversations.counts');
         Route::get('conversations/{conversation}', [InboxController::class, 'show'])->name('conversations.show');
+        Route::get('conversations/{conversation}/context', [InboxController::class, 'context'])->name('conversations.context');
         Route::get('conversations/{conversation}/messages', [InboxController::class, 'messages'])->name('conversations.messages.index');
         Route::post('conversations/{conversation}/messages', [InboxController::class, 'sendMessage'])->name('conversations.messages.store');
         Route::get('conversations/{conversation}/media', [InboxController::class, 'media'])->name('conversations.media.index');

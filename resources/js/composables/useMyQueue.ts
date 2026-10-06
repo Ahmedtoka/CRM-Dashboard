@@ -2,7 +2,7 @@ import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useEcho } from '@/composables/useEcho';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
-import type { Message, MyAttendance, MyQueuePayload, QueueCloseReason, QueueEntry, ShiftMember, SupportCaseType } from '@/types/crm';
+import type { Message, MyAttendance, MyQueuePayload, OutcomePayload, QueueCloseReason, QueueEntry, ShiftMember, SupportCaseType } from '@/types/crm';
 import { AxiosError } from 'axios';
 import { computed, inject, onScopeDispose, provide, ref, watch, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 
@@ -64,7 +64,7 @@ export interface MyQueue {
     /** The strip is shown: she holds a desk or a window, or she may check in. */
     shown: ComputedRef<boolean>;
     entryOf: (conversationId: number) => QueueEntry | null;
-    closeEntry: (id: number, reason: QueueCloseReason, caseType?: SupportCaseType | null) => Promise<boolean>;
+    closeEntry: (id: number, reason: QueueCloseReason, caseType?: SupportCaseType | null, outcome?: OutcomePayload) => Promise<boolean>;
     escalate: (id: number) => Promise<boolean>;
     setStatus: (status: MyStatus) => Promise<boolean>;
     checkIn: () => Promise<boolean>;
@@ -92,6 +92,11 @@ interface Options {
 const KEY: InjectionKey<MyQueue> = Symbol('my-queue');
 
 /** The inbox's queue state for the components below it; null outside the inbox. */
+/** The close request body (control room S3 adds the outcome, D13). */
+export function closeBody(reason: QueueCloseReason, caseType: SupportCaseType | null, outcome: OutcomePayload): Record<string, unknown> {
+    return { reason, ...(reason === 'case' ? { case_type: caseType } : {}), ...outcome };
+}
+
 export function useMyQueueContext(): MyQueue | null {
     return inject(KEY, null);
 }
@@ -359,10 +364,10 @@ export function useMyQueue(options: Options): MyQueue {
         options.onReleased?.(id);
     }
 
-    function closeEntry(id: number, reason: QueueCloseReason, caseType: SupportCaseType | null = null): Promise<boolean> {
+    function closeEntry(id: number, reason: QueueCloseReason, caseType: SupportCaseType | null = null, outcome: OutcomePayload = {}): Promise<boolean> {
         return act(
             `close-${id}`,
-            () => api.post(`/queue/entries/${id}/close`, reason === 'case' ? { reason, case_type: caseType } : { reason }),
+            () => api.post(`/queue/entries/${id}/close`, closeBody(reason, caseType, outcome)),
             () => release(id),
         );
     }

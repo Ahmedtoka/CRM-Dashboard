@@ -151,3 +151,12 @@ export function isSyncStale(o: Order, now: number, minutes: number = SYNC_STALE_
 export function notOnShopifyText(o: Order, t: Translate): string {
     return t(o.shopify_draft_order_id ? 'orders.sync.draft_on_shopify' : 'orders.sync.not_on_shopify');
 }
+
+/** The order status line sent to the customer (OrderCard «حطي الحالة في الرد», shortcut shift+o), bidi-clean. */
+export function orderStatusText(o: Order, t: Translate): string {
+    const payment = statusLabel(t, 'orders.payment_status', o.display?.payment);
+    const shipment = o.display?.shipment_step ? t(`shipment.status.${o.display.shipment_step}`) : '';
+    const trackingUrl = o.fulfillments?.find((f) => f.tracking_url)?.tracking_url ?? null;
+
+    return stripBidiControls(t('order.status_message', { number: orderName(o), payment, shipment, tracking: trackingUrl ? ` ${trackingUrl}` : '' }));
+}

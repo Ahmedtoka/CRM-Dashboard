@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AdSourceChip from '@/components/crm/AdSourceChip.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import DateRangePicker from '@/components/crm/DateRangePicker.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -112,6 +113,7 @@ const selectValue = (event: Event) => (event.target as HTMLSelectElement).value 
 const columns = computed<Column[]>(() => [
     { key: 'order', label: t('orders.list.order'), primary: true },
     { key: 'customer', label: t('orders.columns.customer') },
+    { key: 'ad', label: t('orders.columns.ad'), hideOnMobile: true },
     { key: 'total', label: t('orders.columns.total'), numeric: true, sortable: true },
     { key: 'status', label: t('orders.list.status') },
     { key: 'shopify_updated_at', label: t('orders.list.updated') },
@@ -335,6 +337,7 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                         <span class="block max-w-[12rem] truncate">{{ row.customer?.name ?? '—' }}</span>
                         <span v-if="row.customer?.phone" class="block text-2xs text-muted-foreground" dir="ltr">{{ row.customer.phone }}</span>
                     </template>
+                    <template #cell-ad="{ row }"><AdSourceChip :source="row.ad_source ?? null" /></template>
                     <template #cell-total="{ row }"
                         ><span class="whitespace-nowrap font-bold tabular-nums">{{ formatMoney(row.total, locale) }}</span></template
                     >

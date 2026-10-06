@@ -1050,3 +1050,13 @@ export interface BulkPlan {
     approvals_left: number;
     skipped: { warned: number; first_launch: number; self: number; limit: number };
 }
+/* Control room S3: the per-ad chat funnel (GET /ads/chat-funnel). */
+export type LostReason = 'price' | 'size_out' | 'shipping' | 'no_answer' | 'browsing' | 'other';
+export interface ChatFunnel {
+    chats: number;
+    to_agent: number;
+    orders: number;
+    delivered: number;
+    returned: number;
+    reasons: Partial<Record<LostReason, number>>;
+}

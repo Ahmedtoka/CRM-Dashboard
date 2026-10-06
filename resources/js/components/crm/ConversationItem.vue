@@ -4,8 +4,10 @@ import RelativeTime from '@/components/crm/RelativeTime.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useInitials } from '@/composables/useInitials';
+import { useNow } from '@/composables/useNow';
 import type { RowState } from '@/lib/conversationState';
-import { formatCount } from '@/lib/format';
+import { formatAge, formatCount } from '@/lib/format';
+import { waitingAge } from '@/lib/waitingAge';
 import type { Conversation } from '@/types/crm';
 import { computed, onBeforeUnmount } from 'vue';
 
@@ -13,7 +15,16 @@ import { computed, onBeforeUnmount } from 'vue';
  * One inbox row, exactly 72 px (the list virtualises on that height): avatar + platform,
  * name · tag dots · time, then the one state badge · preview · unread pill (spec §1.2).
  */
-const props = withDefaults(defineProps<{ conversation: Conversation; state: RowState | null; active?: boolean }>(), { active: false });
+const props = withDefaults(
+    defineProps<{
+        conversation: Conversation;
+        state: RowState | null;
+        active?: boolean;
+        /** Control room S3 (G7): the first-reply target in seconds; past it the time becomes «مستنية ٧ د». */
+        firstReplyTarget?: number | null;
+    }>(),
+    { active: false, firstReplyTarget: null },
+);
 /** `pointer`: opened by a mouse / touch click (the composer takes the focus), not by the keyboard. */
 const emit = defineEmits<{ select: [id: number, pointer: boolean]; contextmenu: [id: number, event: MouseEvent]; intent: [id: number] }>();
 
@@ -40,6 +51,14 @@ const unread = computed(() => props.conversation.unread_count > 0);
 const ours = computed(() => !!props.conversation.last_message_preview && props.conversation.last_message_sender === 'user');
 
 const tags = computed(() => props.conversation.tags ?? []);
+
+const now = useNow();
+/** Shown only once she waits past the target; before that the row keeps its time. */
+const waiting = computed(() => {
+    const age = waitingAge(props.conversation, now.value, props.firstReplyTarget);
+
+    return age?.late ? age : null;
+});
 const tagTitle = computed(() => tags.value.map((tag) => tag.name).join('، '));
 const dotColor = (color: string | null) => (color && /^#[0-9a-f]{6}$/i.test(color) ? color : '#64748b');
 </script>
@@ -71,7 +90,14 @@ const dotColor = (color: string | null) => (color && /^#[0-9a-f]{6}$/i.test(colo
                     <span v-for="tag in tags.slice(0, 2)" :key="tag.id" class="size-2 rounded-full" :style="{ backgroundColor: dotColor(tag.color) }" />
                     <span v-if="tags.length > 2" class="text-2xs leading-none text-muted-foreground tabular-nums">+{{ formatCount(tags.length - 2, locale) }}</span>
                 </span>
+                <span
+                    v-if="waiting"
+                    class="ms-auto shrink-0 rounded-full bg-amber-500/15 px-1.5 text-2xs font-semibold tabular-nums text-amber-800 dark:text-amber-200"
+                    data-waiting-age
+                    >{{ t('inbox.waiting_age', { time: formatAge(waiting.seconds, locale) }) }}</span
+                >
                 <RelativeTime
+                    v-else
                     :iso="conversation.last_message_at"
                     mode="stamp"
                     class="ms-auto shrink-0 text-2xs"

@@ -6,6 +6,7 @@ use App\Bot\BotEngine;
 use App\Commerce\OrderService;
 use App\Enums\AttachmentStatus;
 use App\Enums\ConversationPriority;
+use App\Enums\ConversationStatus;
 use App\Enums\OrderType;
 use App\Enums\Platform;
 use App\Enums\SenderType;
@@ -22,6 +23,9 @@ use App\Inbox\ConversationActions;
 use App\Inbox\ConversationPriorityClassifier;
 use App\Inbox\ConversationQuery;
 use App\Inbox\OutboundService;
+use App\Inbox\Outcomes\EpisodeEnd;
+use App\Inbox\Outcomes\Outcome;
+use App\Inbox\Outcomes\OutcomeRecorder;
 use App\Inbox\SavedReplies\AttachmentCopier;
 use App\Inbox\SavedReplies\QuickReplyUsageRecorder;
 use App\Inbox\SavedReplies\ReplyVariables;
@@ -94,7 +98,7 @@ trait ConversationEndpoints
 
         $customer = $conversation->customer;
         // Nested identities/orders are platform-scoped for moderators too.
-        $customer?->load(ModeratorScope::customerRelations($request->user(), orderLimit: 20));
+        $customer?->load(ModeratorScope::customerRelations($request->user(), orderLimit: 20, withAds: ! $request->is('api/*')));
 
         $this->attachUsers($conversation, $messages, $notes, $participantRows, $cases);
         foreach ($cases as $case) {
@@ -343,12 +347,31 @@ trait ConversationEndpoints
         return response()->json(['data' => $users]);
     }
 
-    public function resolve(Request $request, Conversation $conversation, ConversationActions $actions): ConversationResource
+    public function resolve(Request $request, Conversation $conversation, ConversationActions $actions, OutcomeRecorder $outcomes): ConversationResource
     {
         Gate::authorize('reply', $conversation);
         $this->guardQueueWindow($request->user(), $conversation);
 
-        return new ConversationResource($this->listRow($actions->resolve($conversation, $request->user())));
+        // D16: the mobile app sends no body; there the outcome is optional and recorded `unknown`.
+        $api = $request->is('api/*');
+        $data = $request->validate([
+            'outcome' => ['nullable', 'string', Rule::in(Outcome::agentValues())],
+            'outcome_note' => ['nullable', 'required_if:outcome,other', 'string', 'max:120'],
+        ], [
+            'outcome.in' => __('errors.outcome.required'),
+            'outcome_note.required_if' => __('errors.outcome.note_required'),
+        ]);
+        $outcome = isset($data['outcome']) ? Outcome::from($data['outcome']) : null;
+
+        // D13: on the web a resolve needs the chat's outcome unless it is automatic or the chat is already resolved.
+        if (! $api && $outcome === null && $conversation->status !== ConversationStatus::Resolved
+            && $outcomes->autoOutcome($conversation, app(QueueService::class)->activeEntry($conversation)) === null) {
+            throw ValidationException::withMessages(['outcome' => __('errors.outcome.required')]);
+        }
+
+        $resolved = $actions->resolve($conversation, $request->user(), $outcome, $data['outcome_note'] ?? null, $api ? EpisodeEnd::ApiResolve : EpisodeEnd::Resolve);
+
+        return new ConversationResource($this->listRow($resolved));
     }
 
     /**
@@ -522,7 +545,7 @@ trait ConversationEndpoints
     {
         $user = $request->user();
         $params = $this->conversationFilters($request);
-        unset($params['status'], $params['queue'], $params['qmode']);
+        unset($params['status'], $params['queue'], $params['qmode'], $params['sort']);
         ksort($params);
 
         $counts = Cache::remember(
@@ -589,6 +612,7 @@ trait ConversationEndpoints
             'q' => ['nullable', 'string', 'max:100'],
             'qmode' => ['nullable', Rule::in(['like'])],
             'tag' => ['nullable', 'integer', 'exists:tags,id'],
+            'sort' => ['nullable', Rule::in(ConversationQuery::SORTS)],
         ]);
 
         $flags = ConversationQuery::flagsOf(['flags' => $data['flags'] ?? null, 'filter' => $data['filter'] ?? null]);

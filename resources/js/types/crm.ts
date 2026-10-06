@@ -383,6 +383,8 @@ export interface Order {
     /** Cancelled, refunded/voided or delivered: never refreshed in the background (Order::isFinalForSync). */
     is_final?: boolean;
     paid_at?: string | null;
+    /** Web only (control room S3): the ad the order is credited to; null = direct. */
+    ad_source?: OrderAdSource | null;
 }
 
 export interface Identity {
@@ -625,6 +627,8 @@ export interface InboxFilters {
     platform: PlatformValue | null;
     tag: number | null;
     q: string | null;
+    /** Control room S3: list order; null = newest activity first. */
+    sort?: InboxSort | null;
 }
 
 /** GET /inbox/conversations/counts: each value over a capped sub-select (> capped_at shows "999+"). */
@@ -684,3 +688,60 @@ export interface AppNotification {
     read_at: string | null;
     created_at: string | null;
 }
+
+/* Control room S3: conversation outcomes (D13), the context endpoint, ad source. */
+export type OutcomeKey = 'ordered' | 'price' | 'size_out' | 'shipping' | 'no_answer' | 'browsing' | 'service' | 'other' | 'unknown';
+export type AgentOutcome = Exclude<OutcomeKey, 'ordered' | 'unknown'>;
+export interface OutcomePayload {
+    outcome?: AgentOutcome;
+    outcome_note?: string;
+}
+export interface OutcomeState {
+    current: OutcomeKey | null;
+    source: 'auto' | 'agent' | 'bot' | null;
+    auto: OutcomeKey | null;
+}
+export interface HandoverDigest {
+    reason: string | null;
+    category: string | null;
+    topic: string | null;
+    order_number: string | null;
+    lines: { label: string | null; value: string }[];
+    products: string[];
+    sizes: string[];
+    colors: string[];
+    governorate: string | null;
+    last_message: string | null;
+}
+export interface AdReferral {
+    ad_id: number | null;
+    external_id: string;
+    name: string | null;
+    thumbnail_url: string | null;
+    referred_at: string;
+}
+export interface AdContext {
+    ad_id: number | null;
+    external_id: string | null;
+    name: string | null;
+    thumbnail_url: string | null;
+    campaign: string | null;
+    adset: string | null;
+    referred_at: string | null;
+    history: AdReferral[];
+    can_open: boolean;
+}
+/** GET /inbox/conversations/{id}/context (web only). */
+export interface ConversationContext {
+    outcome: OutcomeState;
+    handover: HandoverDigest | null;
+    ad: AdContext | null;
+}
+export interface OrderAdSource {
+    id: number;
+    name: string | null;
+    thumbnail_url: string | null;
+    campaign: string | null;
+    attribution: string | null;
+}
+export type InboxSort = 'oldest_waiting';

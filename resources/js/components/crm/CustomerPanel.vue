@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AdSourceCard from '@/components/crm/AdSourceCard.vue';
+import BotSummaryCard from '@/components/crm/BotSummaryCard.vue';
 import CaseCard from '@/components/crm/cases/CaseCard.vue';
 import ConversationMediaGrid from '@/components/crm/media/ConversationMediaGrid.vue';
 import MentionTextarea from '@/components/crm/MentionTextarea.vue';
@@ -15,7 +17,7 @@ import { shortcutHint } from '@/composables/useShortcuts';
 import { formatNumber } from '@/i18n';
 import { formatMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { Customer, Note, Order, Participant, SupportCase, UserRef } from '@/types/crm';
+import type { AdContext, Customer, HandoverDigest, Note, Order, Participant, SupportCase, UserRef } from '@/types/crm';
 import { Mail, MapPin, Phone, Plus, ShoppingBag } from 'lucide-vue-next';
 import { computed, nextTick, ref, watch } from 'vue';
 
@@ -31,6 +33,10 @@ const props = defineProps<{
     mentionable: UserRef[];
     /** The signed-in user's id — excluded from the note box's @mention suggestions. */
     meId: number;
+    /** Control room S3: what the bot learned before the handover (shown first, never hover-only). */
+    handover?: HandoverDigest | null;
+    /** Control room S3: the ad she came from. */
+    ad?: AdContext | null;
 }>();
 const emit = defineEmits<{
     addNote: [body: string, done: () => void, mentions: number[]];
@@ -108,6 +114,8 @@ const heading = 'mb-2 text-sm font-bold';
         <ConversationMediaGrid v-if="tab === 'media' && conversationId" class="min-h-0 flex-1 overflow-y-auto" :conversation-id="conversationId" />
 
         <div v-else class="scrollbar-thin min-h-0 flex-1 space-y-3 overflow-y-auto bg-background p-3">
+            <AdSourceCard v-if="ad" :ad="ad" />
+            <BotSummaryCard v-if="handover" :digest="handover" />
             <Card class="space-y-3 p-4">
                 <section class="flex items-start gap-3">
                     <span class="flex size-11 shrink-0 items-center justify-center rounded-full bg-elevated text-sm font-semibold text-muted-foreground">
@@ -188,6 +196,7 @@ const heading = 'mb-2 text-sm font-bold';
                         :order="order"
                         show-edit
                         @edit-order="emit('editOrder', $event)"
+                        insert-mode
                         @copy-status="emit('copyStatus', $event)"
                     />
                 </div>

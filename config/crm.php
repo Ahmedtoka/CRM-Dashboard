@@ -319,6 +319,16 @@ return [
 
     'private_reply_days' => 7,
 
+    // Control room S3 (D13): conversation episode outcomes.
+    'outcomes' => [
+        'idle_hours' => (int) env('CRM_OUTCOMES_IDLE_HOURS', 24),
+        // Episodes whose first customer message is older than this are never ended by the idle sweep
+        // (no backfill of history as no_answer). Set to the deploy date on the server.
+        'tracking_from' => env('CRM_OUTCOMES_FROM', '2026-10-08'),
+        // The idle sweep looks back at most this many days (and never before tracking_from).
+        'lookback_days' => 14,
+    ],
+
     // Learning v2 (spec 2026-09-18 §1-2): the bot learns from real conversations
     // only — a conversation counts when its channel account's driver is listed
     // here (the demo accounts use `fake`). Per-conversation reviews stop at the

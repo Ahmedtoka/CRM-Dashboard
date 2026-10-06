@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AdSourceChip from '@/components/crm/AdSourceChip.vue';
 import OrderNote from '@/components/crm/orders/OrderNote.vue';
 import OrderStatusChip from '@/components/crm/orders/OrderStatusChip.vue';
 import OrderSyncLine from '@/components/crm/orders/OrderSyncLine.vue';
@@ -7,7 +8,7 @@ import StatusChip from '@/components/crm/StatusChip.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
-import { notOnShopifyText, orderLabel, orderName, stripBidiControls } from '@/lib/orderStatus';
+import { notOnShopifyText, orderLabel, orderStatusText } from '@/lib/orderStatus';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { Order } from '@/types/crm';
@@ -16,7 +17,15 @@ import { usePage } from '@inertiajs/vue3';
 import { ExternalLink, LoaderCircle, MessageCircle, Package, RotateCcw, SquarePen, Store, TriangleAlert, Truck, XCircle } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
-const props = withDefaults(defineProps<{ order: Order; showEdit?: boolean }>(), { showEdit: false });
+const props = withDefaults(
+    defineProps<{
+        order: Order;
+        showEdit?: boolean;
+        /** Control room S3: in the inbox the status goes into the reply (no clipboard), labelled as an insert. */
+        insertMode?: boolean;
+    }>(),
+    { showEdit: false, insertMode: false },
+);
 const emit = defineEmits<{ editOrder: [order: Order]; copyStatus: [text: string] }>();
 
 const { t, locale } = useI18n();
@@ -83,37 +92,23 @@ async function cancel(): Promise<void> {
     }
 }
 
-/** Falls back to the raw Shopify value (an open-ended vocabulary) when there's no translation for it. */
-function statusLabel(prefix: string, value: string | null | undefined): string {
-    if (!value) return '';
-    const key = `${prefix}.${value}`;
-    const label = t(key);
-    return label === key ? value : label;
-}
-
-const paymentLabel = (value: string | null | undefined) => statusLabel('orders.payment_status', value);
-
 function onRefreshed(fresh: Order): void {
     current.value = { ...current.value, ...fresh };
 }
 
 async function copyStatus(): Promise<void> {
-    const payment = paymentLabel(current.value.display?.payment);
-    const shipment = current.value.display?.shipment_step ? t(`shipment.status.${current.value.display.shipment_step}`) : '';
-    const tracking = trackingUrl.value ? ` ${trackingUrl.value}` : '';
-    // Customer-facing: the plain name (never «مسودة», no bidi controls), and nothing invisible left in it.
-    const text = stripBidiControls(t('order.status_message', { number: orderName(current.value), payment, shipment, tracking }));
+    // Customer-facing: the plain name (never «مسودة»), no bidi controls (lib/orderStatus).
+    const text = orderStatusText(current.value, t);
 
-    // Clipboard write is a best-effort convenience only (it can be blocked by permissions or
-    // an insecure context) and never claims to have reached the reply composer — the parent
-    // (Inbox.vue, via CustomerPanel) is the one that actually inserts `text` there and toasts
-    // that outcome once it happens. A caller with no composer (e.g. the customer profile page)
-    // gets this neutral "copied" toast instead.
-    try {
-        await navigator.clipboard.writeText(text);
-        toast.push(t('order.copy_status_clipboard_done'));
-    } catch {
-        // Nothing more useful to do; the parent still gets the text via the emit below.
+    // In the inbox (insertMode) the parent puts `text` straight into the reply and focuses it: no
+    // clipboard. Elsewhere (the customer page) the clipboard write is a best-effort convenience.
+    if (!props.insertMode) {
+        try {
+            await navigator.clipboard.writeText(text);
+            toast.push(t('order.copy_status_clipboard_done'));
+        } catch {
+            // Nothing more useful to do; the parent still gets the text via the emit below.
+        }
     }
     emit('copyStatus', text);
 }
@@ -128,6 +123,7 @@ async function copyStatus(): Promise<void> {
             <OrderStatusChip :order="current" />
             <span class="ms-auto font-bold tabular-nums">{{ formatMoney(current.total, locale) }}</span>
         </div>
+        <AdSourceChip v-if="current.ad_source" :source="current.ad_source" class="mt-1" />
 
         <p class="mt-1 text-2xs text-muted-foreground">
             {{ t(`order.${current.type}`) }}
@@ -188,7 +184,7 @@ async function copyStatus(): Promise<void> {
                 <Truck class="size-3.5" aria-hidden="true" />{{ t('order.track') }}
             </a>
             <button type="button" class="inline-flex h-7 items-center gap-1 rounded-md px-2 text-2xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground" @click="copyStatus">
-                <Package class="size-3.5" aria-hidden="true" />{{ t('order.copy_status') }}
+                <Package class="size-3.5" aria-hidden="true" />{{ insertMode ? t('order.insert_status') : t('order.copy_status') }}
             </button>
             <Button
                 v-if="canRetry"

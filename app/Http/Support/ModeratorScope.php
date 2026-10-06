@@ -76,13 +76,21 @@ final class ModeratorScope
      *
      * @return array<string, \Closure>
      */
-    public static function customerRelations(User $u, int $orderLimit = 0): array
+    /** The order's ad and its campaign, as `ad_source` needs them. */
+    public const ORDER_AD_RELATIONS = ['ad:id,name,thumbnail_url,ad_campaign_id', 'ad.campaign:id,name'];
+
+    public static function customerRelations(User $u, int $orderLimit = 0, bool $withAds = false): array
     {
+        // Control room S3: web callers also load each order's ad (OrderResource `ad_source`, web only).
+        $with = $withAds
+            ? ['items', 'shipment.events', 'createdBy', ...self::ORDER_AD_RELATIONS]
+            : ['items', 'shipment.events', 'createdBy'];
+
         return [
             'identities' => fn ($q) => self::identities($q, $u),
             'addresses',
             'orders' => fn ($q) => self::orders($q, $u)
-                ->with(['items', 'shipment.events', 'createdBy'])
+                ->with($with)
                 ->orderByDesc('id')
                 ->when($orderLimit > 0, fn ($l) => $l->limit($orderLimit)),
         ];

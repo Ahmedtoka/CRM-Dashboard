@@ -28,7 +28,7 @@ it('resolves, logs and reopens a conversation', function () {
     $mod = User::factory()->create(['role'=>UserRole::Moderator]); $mod->userPlatforms()->create(['platform'=>Platform::Facebook]);
     $c->forceFill(['locked_by_id'=>$mod->id, 'locked_until'=>now()->addSeconds(30)])->save();
 
-    $this->actingAs($mod)->postJson("/inbox/conversations/{$c->id}/resolve")
+    $this->actingAs($mod)->postJson("/inbox/conversations/{$c->id}/resolve", ['outcome' => 'browsing'])
         ->assertOk()->assertJsonPath('data.status', 'resolved');
 
     $fresh = $c->fresh();

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AdSourceChip from '@/components/crm/AdSourceChip.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import MergeSuggestions from '@/components/crm/MergeSuggestions.vue';
 import OrderCard from '@/components/crm/OrderCard.vue';
@@ -15,6 +16,19 @@ import { MessagesSquare } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps<{ customer: Customer; conversations: Conversation[]; canMerge: boolean }>();
+
+/** Control room S3: the ads she came from (her chats' ad referrals), each once. */
+const adSources = computed(() => {
+    const seen = new Map<string, { key: string; name: string | null; thumbnail_url: string | null; campaign: string | null }>();
+    for (const c of props.conversations) {
+        const ad = c.ad;
+        if (!ad) continue;
+        const key = ad.id ?? ad.ref ?? `c${c.id}`;
+        if (!seen.has(key)) seen.set(key, { key, name: ad.title || ad.name, thumbnail_url: ad.photo_url, campaign: ad.campaign });
+    }
+
+    return [...seen.values()];
+});
 
 const { t, locale } = useI18n();
 const now = Date.now();
@@ -78,6 +92,12 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                             <span v-for="tag in customer.tags" :key="tag" class="rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground">{{ tag }}</span>
                         </div>
                         <p v-else class="text-muted-foreground">{{ t('customer.no_tags') }}</p>
+                        <template v-if="adSources.length">
+                            <h2 class="mb-1 mt-3 font-medium">{{ t('customer.ads') }}</h2>
+                            <ul class="space-y-1">
+                                <li v-for="ad in adSources" :key="ad.key"><AdSourceChip :source="ad" /></li>
+                            </ul>
+                        </template>
 
                         <h2 class="mb-1 mt-3 font-medium">{{ t('customer.addresses') }}</h2>
                         <ul v-if="customer.addresses?.length" class="space-y-1.5">

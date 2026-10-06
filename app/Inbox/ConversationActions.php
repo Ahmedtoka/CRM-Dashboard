@@ -7,6 +7,9 @@ use App\Bot\Learning\Jobs\ReviewConversation;
 use App\Enums\ActorType;
 use App\Enums\ConversationStatus;
 use App\Events\ConversationUpdated;
+use App\Inbox\Outcomes\EpisodeEnd;
+use App\Inbox\Outcomes\Outcome;
+use App\Inbox\Outcomes\OutcomeRecorder;
 use App\Models\BotRun;
 use App\Models\Conversation;
 use App\Models\ConversationNote;
@@ -29,13 +32,19 @@ class ConversationActions
 {
     public function __construct(private readonly ActivityLogger $logger, private readonly UserNotifier $notifier) {}
 
-    public function resolve(Conversation $c, User $u): Conversation
+    public function resolve(Conversation $c, User $u, ?Outcome $outcome = null, ?string $note = null, EpisodeEnd $how = EpisodeEnd::Resolve): Conversation
     {
+        $entry = app(QueueService::class)->activeEntry($c);
+
         // Handover queue: her window (or her place in the lounge) ends here.
-        if ($e = app(QueueService::class)->activeEntry($c)) {
-            app(WindowLifecycle::class)->close($e, 'resolved_elsewhere', $u);
+        if ($entry) {
+            app(WindowLifecycle::class)->close($entry, 'resolved_elsewhere', $u);
             $c->refresh();
         }
+
+        // Control room S3 (D13): the episode ends with its outcome before the routing fields are cleared
+        // (`service` reads the handover category). Never fails the resolve.
+        rescue(fn () => app(OutcomeRecorder::class)->endEpisode($c, $entry, $outcome, $note, $u, $how), null, report: true);
 
         // A resolved conversation has nobody "replying", whoever held the soft lock.
         // The bot handover routing (priority_level/queue/handover_category) is done once
