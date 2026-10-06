@@ -449,6 +449,13 @@ function onCaseUpdated(updated: SupportCase): void {
     detail.value.cases = detail.value.cases.map((c) => (c.id === updated.id ? updated : c));
 }
 
+/** Control room S3 (C 5 #4): the order drawer starts from what the bot noted. */
+const orderSuggestion = computed(() => {
+    const h = ctx.context.value?.handover;
+
+    return h ? { products: h.products, sizes: h.sizes, colors: h.colors } : null;
+});
+
 /** One set of props and listeners for the three CustomerPanel homes (column, overlay, sheet), so they never drift. */
 const panelProps = computed(() =>
     detail.value
@@ -690,6 +697,7 @@ onBeforeUnmount(() => {
             :customer="detail.customer"
             :can-discount="canDiscount"
             :retry-order="editingOrder"
+            :suggestion="orderSuggestion"
             @created="onOrderCreated"
         />
     </AppLayout>
