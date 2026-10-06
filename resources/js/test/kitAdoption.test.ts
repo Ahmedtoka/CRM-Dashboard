@@ -8,7 +8,7 @@ const pages: Record<string, string> = Object.fromEntries(
 /** Pages already moved to the S0 kit. Each sweep task (13-20) appends its group; the test fails until they comply. */
 const SWEPT: string[] = [
     // Task 13
-    'Orders/Index', 'Orders/Show', 'Customers/Index', 'Customers/Show',
+    'Orders/Index', 'Orders/Show', 'Orders/AdOrders', 'Customers/Index', 'Customers/Show',
     // Task 14
     'Inbox', 'Board', 'Comments/Index', 'Cases',
     // Task 15
@@ -53,8 +53,8 @@ const NO_PAGE_HEADER = new Set([
 ]);
 
 describe('S0 kit adoption', () => {
-    it('sees all 62 pages and only real ones are listed', () => {
-        expect(Object.keys(pages)).toHaveLength(62);
+    it('sees all 63 pages and only real ones are listed', () => {
+        expect(Object.keys(pages)).toHaveLength(63);
         for (const name of SWEPT) expect(pages[name], name).toBeDefined();
     });
 
