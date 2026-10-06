@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Skeleton } from '@/components/ui/skeleton';
 import { INBOX_OUTCOME, useConversationContext } from '@/composables/inbox/useConversationContext';
 import { useConversationList } from '@/composables/inbox/useConversationList';
+import { useDetailsPanel } from '@/composables/inbox/useDetailsPanel';
 import { useConversationThread } from '@/composables/inbox/useConversationThread';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
@@ -40,7 +41,7 @@ import type {
     TemplatePayload,
 } from '@/types/crm';
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { useMediaQuery } from '@vueuse/core';
+import { useEventListener, useMediaQuery } from '@vueuse/core';
 import { MessageSquareText } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 
@@ -71,22 +72,27 @@ function initialDetails(): boolean {
     }
     return window.matchMedia('(min-width: 1600px)').matches;
 }
-const detailsOpen = ref(initialDetails());
-watch(detailsOpen, (open) => {
+// Control room S3 (G16): the column, the sheet below xl, and the overlay a delivered window opens.
+const details = useDetailsPanel({ isXl, initialOpen: initialDetails() });
+watch(details.open, (open) => {
     try {
         window.localStorage.setItem('inbox:details', open ? '1' : '0');
     } catch {
         // Not remembered this time; still toggles.
     }
 });
-function toggleDetails(): void {
-    if (isXl.value) detailsOpen.value = !detailsOpen.value;
-    else customerOpen.value = !customerOpen.value;
-}
-const showDetails = computed(() => isXl.value && detailsOpen.value);
-/** What the header's details toggle reports as pressed: the column on xl, the sheet below it. */
-const detailsActive = computed(() => (isXl.value ? detailsOpen.value : customerOpen.value));
-provide('inboxDetails', { open: detailsOpen, active: detailsActive, toggle: toggleDetails });
+const toggleDetails = details.toggle;
+const showDetails = details.showColumn;
+/** The sheet below xl (her toggle), the customer panel's home on a phone or a tablet. */
+const customerOpen = details.sheet;
+/** What the header's details toggle reports as pressed: the column (or its overlay) on xl, the sheet below it. */
+provide('inboxDetails', { open: details.open, active: details.active, toggle: details.toggle });
+// Escape closes the overlay (not while a dialog or a menu has it).
+useEventListener(document, 'keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && details.overlay.value && !document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]')) {
+        details.overlay.value = false;
+    }
+});
 
 const api = useApi();
 const toast = useToast();
@@ -97,7 +103,6 @@ const selectedId = ref<number | null>(null);
  * into it (Task 6 controller addition). `r` / `n` and a click in the box focus it as always.
  */
 const focusComposer = ref(false);
-const customerOpen = ref(false);
 const orderOpen = ref(false);
 const editingOrder = ref<Order | null>(null);
 const addingNote = ref(false);
@@ -212,7 +217,11 @@ function openFromToast(conversationId: number): void {
 // something (isBusy). Then only the toast, whose button opens the chat in place.
 function onWindowAssigned(entry: QueueEntry): void {
     const busy = selectedId.value !== entry.conversation_id && isBusy();
-    if (!busy) select(entry.conversation_id);
+    if (!busy) {
+        select(entry.conversation_id);
+        // C 2.1, G16: the details (bot summary, ad, orders) open by themselves for a delivered customer.
+        details.onWindowDelivered();
+    }
     toast.push(
         t('queue.assigned_toast', { ticket: entry.ticket % 100000 }),
         'info',
@@ -258,7 +267,7 @@ function select(id: number, pointer = false): void {
     }
     focusComposer.value = pointer;
     selectedId.value = id;
-    customerOpen.value = false;
+    details.onSelect();
     syncSelectionUrl(id);
     void thread.open(id);
 }
@@ -425,6 +434,25 @@ function onCaseUpdated(updated: SupportCase): void {
     detail.value.cases = detail.value.cases.map((c) => (c.id === updated.id ? updated : c));
 }
 
+/** One set of props and listeners for the three CustomerPanel homes (column, overlay, sheet), so they never drift. */
+const panelProps = computed(() =>
+    detail.value
+        ? {
+              customer: detail.value.customer,
+              notes: detail.value.notes,
+              participants: detail.value.participants,
+              cases: detail.value.cases,
+              addingNote: addingNote.value,
+              conversationId: detail.value.conversation.id,
+              mentionable: mentionable.value,
+              meId: me.id,
+              handover: ctx.context.value?.handover ?? null,
+              ad: ctx.context.value?.ad ?? null,
+          }
+        : null,
+);
+const panelListeners = { addNote, createOrder: openOrderDrawer, editOrder, copyStatus: onCopyStatus, caseUpdated: onCaseUpdated };
+
 function onOrderCreated(order: Order): void {
     // A new order (not an edit of an older one) locks the close menu to «اتعمل أوردر» at once.
     if (editingOrder.value === null && order.conversation_id === selectedId.value) ctx.markOrdered();
@@ -518,7 +546,7 @@ onBeforeUnmount(() => {
 
         <!-- Fills the space left under the header and any admin alert strip (no fixed calc). -->
         <div
-            class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background"
+            class="relative grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background"
             :class="showDetails ? 'md:grid-cols-[360px_minmax(0,1fr)_340px]' : 'md:grid-cols-[360px_minmax(0,1fr)]'"
         >
             <ConversationList
@@ -606,25 +634,16 @@ onBeforeUnmount(() => {
             </main>
 
             <div v-if="showDetails" class="hidden min-h-0 flex-col border-s bg-card xl:flex">
-                <CustomerPanel
-                    v-if="detail"
-                    class="flex-1"
-                    :customer="detail.customer"
-                    :notes="detail.notes"
-                    :participants="detail.participants"
-                    :cases="detail.cases"
-                    :adding-note="addingNote"
-                    :conversation-id="detail.conversation.id"
-                    :handover="ctx.context.value?.handover ?? null"
-                    :ad="ctx.context.value?.ad ?? null"
-                    :mentionable="mentionable"
-                    :me-id="me.id"
-                    @add-note="addNote"
-                    @create-order="openOrderDrawer"
-                    @edit-order="editOrder"
-                    @copy-status="onCopyStatus"
-                    @case-updated="onCaseUpdated"
-                />
+                <CustomerPanel v-if="panelProps" class="flex-1" v-bind="panelProps" v-on="panelListeners" />
+            </div>
+            <div
+                v-else-if="details.overlay.value && panelProps"
+                class="absolute inset-y-0 end-0 z-30 hidden w-[340px] flex-col border-s bg-card shadow-xl xl:flex"
+                role="complementary"
+                :aria-label="t('thread.customer')"
+                data-details-overlay
+            >
+                <CustomerPanel class="min-h-0 flex-1" v-bind="panelProps" v-on="panelListeners" />
             </div>
         </div>
 
@@ -643,25 +662,7 @@ onBeforeUnmount(() => {
                 <SheetHeader class="border-b px-4 py-3 text-start">
                     <SheetTitle class="text-sm">{{ t('thread.customer') }}</SheetTitle>
                 </SheetHeader>
-                <CustomerPanel
-                    v-if="detail"
-                    class="min-h-0 flex-1"
-                    :customer="detail.customer"
-                    :notes="detail.notes"
-                    :participants="detail.participants"
-                    :cases="detail.cases"
-                    :adding-note="addingNote"
-                    :conversation-id="detail.conversation.id"
-                    :handover="ctx.context.value?.handover ?? null"
-                    :ad="ctx.context.value?.ad ?? null"
-                    :mentionable="mentionable"
-                    :me-id="me.id"
-                    @add-note="addNote"
-                    @create-order="openOrderDrawer"
-                    @edit-order="editOrder"
-                    @copy-status="onCopyStatus"
-                    @case-updated="onCaseUpdated"
-                />
+                <CustomerPanel v-if="panelProps" class="min-h-0 flex-1" v-bind="panelProps" v-on="panelListeners" />
             </SheetContent>
         </Sheet>
 
