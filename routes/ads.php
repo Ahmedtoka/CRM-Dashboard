@@ -3,6 +3,7 @@
 use App\Http\Controllers\Web\Ads\AccountController;
 use App\Http\Controllers\Web\Ads\ActionController;
 use App\Http\Controllers\Web\Ads\AdStockController;
+use App\Http\Controllers\Web\Ads\ApprovalController;
 use App\Http\Controllers\Web\Ads\BuyerController;
 use App\Http\Controllers\Web\Ads\BuyerSetupController;
 use App\Http\Controllers\Web\Ads\CampaignController;
@@ -13,9 +14,11 @@ use App\Http\Controllers\Web\Ads\MaterialCollectionController;
 use App\Http\Controllers\Web\Ads\MaterialController;
 use App\Http\Controllers\Web\Ads\OverviewController;
 use App\Http\Controllers\Web\Ads\PublishController;
+use App\Http\Controllers\Web\Ads\ReauthController;
 use App\Http\Controllers\Web\Ads\SlotController;
 use App\Http\Controllers\Web\Ads\SyncController;
 use App\Http\Controllers\Web\Ads\WriteActionController;
+use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
 
 // Ads Hub. Required from routes/crm.php inside the authenticated group (see EnsureAdsAccess for the `ads:*` areas).
@@ -40,6 +43,13 @@ Route::middleware('ads:report')->group(function () {
     // Launch approvals (control room S1): open slots.
     Route::get('/ads/slots', [SlotController::class, 'index'])->name('ads.slots.index');
     Route::post('/ads/slots/{adSet}', [SlotController::class, 'toggle'])->name('ads.slots.toggle');
+
+    // Launch approvals (S1): the manager's queue. Approve / bulk need a password confirmed in the last 15 minutes (G3).
+    Route::post('/ads/approvals/{launch}/approve', [ApprovalController::class, 'approve'])
+        ->middleware(RequirePassword::using(null, ApprovalController::REAUTH_SECONDS))->name('ads.approvals.approve');
+    Route::post('/ads/approvals/{launch}/return', [ApprovalController::class, 'sendBack'])->name('ads.approvals.return');
+    Route::post('/ads/approvals/{launch}/reject', [ApprovalController::class, 'reject'])->name('ads.approvals.reject');
+    Route::post('/ads/reauth', ReauthController::class)->middleware('throttle:6,1')->name('ads.reauth');
 });
 
 Route::middleware('ads:manage')->group(function () {

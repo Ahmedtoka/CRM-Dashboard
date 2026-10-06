@@ -146,6 +146,7 @@ return [
         ],
     ],
     'launch' => [
+        'approve_reason' => 'Launch approval :id',
         'flash' => [
             'slot_opened' => 'Ad set opened for new materials',
             'slot_closed' => 'Ad set closed for new materials',
@@ -156,6 +157,11 @@ return [
             'withdrawn' => 'Launch withdrawn',
             'forwarded' => 'Sent to the manager; the paused ads are being created',
             'retried' => 'Re-creating the failed ads',
+            'approved_live' => 'The ads are live',
+            'approved_launching' => 'Checking the ads status',
+            'approved_awaiting_approval' => 'Running failed; the launch is still waiting',
+            'returned' => 'Returned to the media buyer',
+            'rejected' => 'Launch rejected',
         ],
         'checks' => [
             'slot_open' => ['pass' => 'Ad set is open for new materials', 'block' => 'Ad set closed: pick an open one'],

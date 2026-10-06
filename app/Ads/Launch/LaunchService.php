@@ -322,6 +322,34 @@ final class LaunchService
         return ['page_id' => $first->pageId, 'page_name' => $first->pageName, 'instagram_id' => $first->instagramId];
     }
 
+    /** T9: the manager returns the card to the buyer with a reason; the paused ads are archived (O5) and the deadline cleared. */
+    public function managerReturn(User $by, AdLaunch $l, string $code, ?string $text): AdLaunch
+    {
+        return $this->decide($by, $l, LaunchState::BuyerReview, $code, $text, 'launch.returned', fn (AdLaunch $l) => $this->notify->returned($l));
+    }
+
+    /** T10: the manager rejects; terminal; the paused ads are archived. */
+    public function reject(User $by, AdLaunch $l, string $code, ?string $text): AdLaunch
+    {
+        return $this->decide($by, $l, LaunchState::Rejected, $code, $text, 'launch.rejected', fn (AdLaunch $l) => $this->notify->rejected($l));
+    }
+
+    private function decide(User $by, AdLaunch $l, LaunchState $to, string $code, ?string $text, string $event, callable $notify): AdLaunch
+    {
+        if (! LaunchPolicy::canApprove($by)) {
+            throw WriteDenied::make('ads_authority_required');
+        }
+        $this->assertReason($code, $text);
+        $l = $this->transition($l, [LaunchState::AwaitingApproval], $to, [
+            'decided_by_id' => $by->id, 'decided_at' => now(), 'decision_code' => $code, 'decision_reason' => $text,
+            'awaiting_at' => null, 'expires_at' => null, 'expiring_notified_at' => null, 'checks' => null, 'checks_hash' => null,
+        ], null, $by, ['code' => $code, 'reason' => $text], $event);
+        $this->archive($l);
+        $notify($l);
+
+        return $l;
+    }
+
     /** E13: a closed slot sends its launches under review back to content (system reason slot_closed). */
     public function slotClosed(AdSet $s, ?User $by): int
     {
