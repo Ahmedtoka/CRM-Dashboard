@@ -82,6 +82,9 @@ export function useUrlFilters<T extends Record<string, FilterValue>>(
 
     const set = (patch: Partial<T>) => {
         const changed = keys.filter((k) => k in patch && !same(patch[k] as FilterValue, filters.value[k]));
+        // Nothing new (e.g. the FilterBar re-emitting a search term after a reset): keep the same object, so
+        // `query` watchers do not fire a second, identical visit.
+        if (changed.length === 0) return;
         filters.value = { ...filters.value, ...patch };
         // Keys like a search term change on every debounced keystroke: they replace the entry, never push.
         const onlyReplaceKeys = changed.length > 0 && changed.every((k) => opts.replaceKeys?.includes(k));

@@ -2,6 +2,7 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useI18n } from '@/composables/useI18n';
 import { Link } from '@inertiajs/vue3';
+import { useMediaQuery } from '@vueuse/core';
 import { ListFilter, Search, X } from 'lucide-vue-next';
 import { onBeforeUnmount, ref, watch } from 'vue';
 
@@ -25,6 +26,8 @@ const emit = defineEmits<{ 'update:search': [string]; remove: [key: string]; cle
 const open = defineModel<boolean>('open', { default: false });
 const { t } = useI18n();
 const input = ref<HTMLInputElement | null>(null);
+// The inline filters render once: in the bar from sm up, inside the «فلاتر» popover below it (no duplicate ids).
+const wide = useMediaQuery('(min-width: 640px)');
 defineExpose({ focusSearch: () => input.value?.focus() });
 
 // Debounced search (300 ms), as the inbox list does today.
@@ -49,10 +52,10 @@ onBeforeUnmount(() => window.clearTimeout(timer));
             <label v-if="searchPlaceholder" class="relative min-w-0 flex-1">
                 <span class="sr-only">{{ searchPlaceholder }}</span>
                 <Search class="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <input ref="input" v-model="term" type="search" :placeholder="searchPlaceholder" class="h-9 w-full rounded-full border-0 bg-elevated pe-3 ps-9 text-sm placeholder:text-muted-foreground" />
+                <input ref="input" v-model="term" type="search" dir="auto" :placeholder="searchPlaceholder" class="h-9 w-full rounded-full border-0 bg-elevated pe-3 ps-9 text-sm placeholder:text-muted-foreground" />
             </label>
-            <div class="hidden items-center gap-2 sm:flex" :class="searchPlaceholder ? '' : 'flex-1'"><slot name="inline" /></div>
-            <Popover v-if="$slots.more || $slots.inline" v-model:open="open">
+            <div v-if="wide && $slots.inline" class="flex items-center gap-2" :class="searchPlaceholder ? '' : 'flex-1'"><slot name="inline" /></div>
+            <Popover v-if="$slots.more || ($slots.inline && !wide)" v-model:open="open">
                 <PopoverTrigger
                     class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-input bg-card px-3 text-xs font-medium hover:bg-muted"
                     :aria-label="moreLabel ?? t('filters.more')"
@@ -62,7 +65,7 @@ onBeforeUnmount(() => window.clearTimeout(timer));
                     <span v-if="moreCount" class="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs text-primary-foreground tabular-nums">{{ moreCount }}</span>
                 </PopoverTrigger>
                 <PopoverContent class="w-80 max-w-[calc(100vw-2rem)] space-y-3" :collision-padding="16">
-                    <div class="space-y-3 sm:hidden"><slot name="inline" /></div>
+                    <div v-if="!wide && $slots.inline" class="space-y-3"><slot name="inline" /></div>
                     <slot name="more" />
                 </PopoverContent>
             </Popover>

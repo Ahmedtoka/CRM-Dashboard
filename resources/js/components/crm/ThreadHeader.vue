@@ -6,7 +6,7 @@ import CloseWindowMenu from '@/components/crm/queue/CloseWindowMenu.vue';
 import QueueBanner from '@/components/crm/queue/QueueBanner.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import ResetDialog from '@/components/crm/thread/ResetDialog.vue';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -84,7 +84,6 @@ const selectedTags = computed(() => new Set((props.conversation.tags ?? []).map(
 const busy = computed(() => props.busyAction !== null);
 const headerBg = computed(() => skinClasses(props.skin).header);
 const iconButton = cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'size-9 shrink-0 rounded-lg');
-const primaryButton = cn(buttonVariants({ size: 'sm' }), 'h-9 shrink-0 gap-1.5 rounded-lg px-2.5 font-semibold sm:px-3');
 
 const adTooltip = computed(() => {
     const ad = props.conversation.ad;
@@ -235,34 +234,37 @@ defineExpose({
                 <span class="hidden truncate sm:inline" dir="auto">{{ t('queue.held_by', { name: holderName }) }}</span>
                 <span class="sr-only sm:hidden">{{ t('queue.held_by', { name: holderName }) }}</span>
             </span>
-            <button
+            <Button
+                size="sm"
+                class="h-9 shrink-0 gap-1.5 rounded-lg px-2.5 font-semibold sm:px-3"
                 v-else-if="conversation.status !== 'resolved'"
                 type="button"
                 :title="`${t('thread.header.resolve')}${hint('inbox.resolve')}`"
-                :class="primaryButton"
                 :disabled="busy"
                 :aria-label="t('thread.header.resolve')"
                 data-primary-action
                 @click="emit('action', 'resolve')"
+                :loading="busyAction === 'resolve'"
             >
-                <LoaderCircle v-if="busyAction === 'resolve'" class="animate-spin" aria-hidden="true" />
-                <CheckCircle2 v-else aria-hidden="true" />
+                <CheckCircle2 aria-hidden="true" />
                 <span class="hidden sm:inline">{{ t('thread.header.resolve') }}</span>
-            </button>
-            <button
+            </Button>
+            <Button
                 v-else
+                variant="outline"
+                size="sm"
+                class="h-9 shrink-0 gap-1.5 rounded-lg px-2.5 sm:px-3"
                 type="button"
                 :title="`${t('thread.header.reopen')}${hint('inbox.reopen')}`"
-                :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-9 shrink-0 gap-1.5 rounded-lg px-2.5 sm:px-3')"
                 :disabled="busy"
                 :aria-label="t('thread.header.reopen')"
                 data-primary-action
                 @click="emit('action', 'reopen')"
+                :loading="busyAction === 'reopen'"
             >
-                <LoaderCircle v-if="busyAction === 'reopen'" class="animate-spin" aria-hidden="true" />
-                <RotateCcw v-else aria-hidden="true" />
+                <RotateCcw aria-hidden="true" />
                 <span class="hidden sm:inline">{{ t('thread.header.reopen') }}</span>
-            </button>
+            </Button>
 
             <button
                 type="button"

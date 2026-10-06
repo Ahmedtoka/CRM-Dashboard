@@ -2,7 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useI18n } from '@/composables/useI18n';
-import { Eraser, LoaderCircle } from 'lucide-vue-next';
+import { Eraser } from 'lucide-vue-next';
 import { nextTick, ref, watch } from 'vue';
 
 /**
@@ -66,9 +66,8 @@ watch(
             </DialogHeader>
             <DialogFooter class="gap-2">
                 <Button ref="cancelButton" type="button" variant="ghost" :disabled="pending" @click="setOpen(false)">{{ t('common.cancel') }}</Button>
-                <Button type="button" variant="destructive" :disabled="pending || busy" data-reset-confirm @click="confirm">
-                    <LoaderCircle v-if="pending" class="animate-spin" aria-hidden="true" />
-                    <Eraser v-else aria-hidden="true" />
+                <Button type="button" variant="destructive" :disabled="pending || busy" data-reset-confirm @click="confirm" :loading="pending">
+                    <Eraser aria-hidden="true" />
                     {{ t('thread.reset_dialog.confirm') }}
                 </Button>
             </DialogFooter>

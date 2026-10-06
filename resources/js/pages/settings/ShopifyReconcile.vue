@@ -212,7 +212,14 @@ const breadcrumbs = computed(() => [
                 <div class="grid gap-4 lg:grid-cols-2">
                     <section class="grid content-start gap-2 rounded-lg bg-card p-4 text-xs shadow-card">
                         <h2 class="text-sm font-semibold">{{ t('settings.shopify.reconcile.per_day') }}</h2>
-                        <DataTable table-id="reconcile-days" :columns="dayColumns" :rows="dayRows" mobile="scroll" :caption="t('settings.shopify.reconcile.per_day')">
+                        <DataTable
+                            table-id="reconcile-days"
+                            :columns="dayColumns"
+                            :rows="dayRows"
+                            :row-class="(day) => (day.diff !== 0 ? 'bg-destructive/5' : undefined)"
+                            mobile="scroll"
+                            :caption="t('settings.shopify.reconcile.per_day')"
+                        >
                             <template #cell-date="{ row }">{{ formatDate(row.date, locale) }}</template>
                             <template #cell-diff="{ row }">
                                 <span class="font-medium" :class="row.diff === 0 ? 'text-success' : 'text-destructive'">

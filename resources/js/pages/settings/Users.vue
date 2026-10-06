@@ -23,7 +23,10 @@ const props = defineProps<{ users: ManagedUser[]; roles: Role[] }>();
 
 // A full list: it sorts in the browser, and the sort stays in the URL.
 const { filters, set } = useUrlFilters({ sort: '' });
-const shown = computed(() => sortRows(props.users, filters.value.sort));
+// Roles sort by the label people read, not by the stored key.
+const shown = computed(() =>
+    sortRows(props.users, filters.value.sort, (row, key) => (key === 'role' ? t(`roles.${row.role}`) : row[key as keyof ManagedUser])),
+);
 
 const { t, locale } = useI18n();
 const crud = useCrud('/settings/users', 'users');
