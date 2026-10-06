@@ -11,6 +11,7 @@ use App\Ads\Reports\TopAccounts;
 use App\Analytics\AdsReport;
 use App\Http\Controllers\Concerns\BuildsAdsPages;
 use App\Http\Controllers\Controller;
+use App\Inbox\Outcomes\ChatFunnel;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,7 +24,7 @@ class NumbersController extends Controller
     public const SECTIONS = ['buyers', 'chat', 'accounts'];
 
     public function __invoke(Request $request, AdsOverview $overview, RevenueSummary $summary, TopAccounts $top,
-        BuyerScorecard $cards, AdsReport $chat, AdsQuery $q): Response
+        BuyerScorecard $cards, AdsReport $chat, AdsQuery $q, ChatFunnel $funnel): Response
     {
         $user = $request->user();
         $filter = AdsFilter::fromRequest($request, $user, 'this_month');
@@ -45,6 +46,8 @@ class NumbersController extends Controller
             'top_accounts' => $top->build($filter),
             'buyers' => $cards->build($filter),
             'chat_campaigns' => $manager ? $this->chat($filter, $chat, $q) : null,
+            // S3 (spec 5.3): the chat funnel and why-not-bought over the page's own filter (a buyer: her accounts only), deferred.
+            'chatFunnel' => Inertia::defer(fn () => $funnel->forFilter($filter), 'funnel'),
         ]);
     }
 

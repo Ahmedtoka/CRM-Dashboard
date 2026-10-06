@@ -1210,6 +1210,8 @@ export interface AdsNumbersProps extends Omit<AdsPageBase, 'buyers'> {
     top_accounts: AdsTopAccountRow[];
     buyers: BuyerCardData[];
     chat_campaigns: AdsChatReport | null;
+    /** S3: deferred (group `funnel`), totals over the page filter. */
+    chatFunnel?: ChatFunnel;
 }
 
 /* Control room S3: the per-ad chat funnel (GET /ads/chat-funnel). */

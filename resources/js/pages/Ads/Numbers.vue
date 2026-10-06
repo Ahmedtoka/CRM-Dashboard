@@ -1,12 +1,14 @@
 <script setup lang="ts">
-/** «الأرقام» (D11, U 2.1, quick win 9): 5 hero tiles + «باقي الأرقام», daily chart and table, accounts, buyers, chat table. */
+/** «الأرقام» (D11, U 2.1, quick win 9): 5 hero tiles + «باقي الأرقام», chat funnel (S3, deferred), daily chart and table, accounts, buyers, chat table. */
 import AdsFilterBar from '@/components/ads/AdsFilterBar.vue';
 import BuyerCard from '@/components/ads/BuyerCard.vue';
+import ChatFunnelBlock from '@/components/ads/ChatFunnelBlock.vue';
 import ComboChart from '@/components/ads/ComboChart.vue';
 import DataHealthBanner from '@/components/ads/DataHealthBanner.vue';
 import RevenueSummaryCard from '@/components/ads/RevenueSummaryCard.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import SkeletonList from '@/components/crm/SkeletonList.vue';
 import StatCard from '@/components/crm/StatCard.vue';
 import { useI18n } from '@/composables/useI18n';
 import { usePathVisitLoading } from '@/composables/usePathVisitLoading';
@@ -15,7 +17,7 @@ import { formatAdsMoney, formatDayShort, formatPct, formatQty, formatRoas } from
 import { buildHref, carryQuery, readQuery } from '@/lib/adsFilters';
 import { formatCount } from '@/lib/format';
 import type { AdsNumbersProps, AdsOption } from '@/types/ads';
-import { Head, Link } from '@inertiajs/vue3';
+import { Deferred, Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted } from 'vue';
 
 const props = defineProps<AdsNumbersProps>();
@@ -116,6 +118,14 @@ onMounted(() => {
                     </Link>
                 </div>
             </details>
+
+            <section id="funnel" class="scroll-mt-20 space-y-2 rounded-lg bg-card p-3 shadow-card" data-test="chat-funnel">
+                <h2 class="text-sm font-semibold" :title="t('ads.funnel.multi_touch')">{{ t('ads.funnel.title') }}</h2>
+                <Deferred data="chatFunnel">
+                    <template #fallback><SkeletonList variant="tiles" :count="5" /></template>
+                    <ChatFunnelBlock :funnel="chatFunnel ?? null" :heading="false" scope="all" />
+                </Deferred>
+            </section>
 
             <RevenueSummaryCard :summary="summary" />
             <ComboChart

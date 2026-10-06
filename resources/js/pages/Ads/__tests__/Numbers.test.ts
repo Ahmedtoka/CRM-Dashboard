@@ -6,6 +6,20 @@ vi.mock('@inertiajs/vue3', () => ({
     usePage: () => ({ props: { ads: { isBuyer: false } }, url: '/ads/numbers' }),
     Head: { template: '<div />' },
     Link: { props: ['href'], template: '<a :href="href"><slot /></a>' },
+    // Inertia's Deferred: the fallback until the prop arrives.
+    Deferred: {
+        props: ['data'],
+        computed: {
+            ready() {
+                // The page's prop of that name (the nearest ancestor that declares it).
+                let p = (this as unknown as { $parent: { $props?: Record<string, unknown>; $parent: unknown } | null }).$parent;
+                const key = (this as unknown as { data: string }).data;
+                while (p && !(p.$props && key in p.$props)) p = p.$parent as typeof p;
+                return p?.$props?.[key] !== undefined;
+            },
+        },
+        template: '<div><slot v-if="ready" /><slot v-else name="fallback" /></div>',
+    },
 }));
 
 import Numbers from '@/pages/Ads/Numbers.vue';
@@ -40,6 +54,15 @@ describe('Numbers', () => {
 
     it('shows the chat campaigns table from the old /reports/ads page', () => {
         expect(mount(Numbers, { props: base as never, global: { stubs } }).find('#chat').text()).toContain('Eid');
+    });
+
+    it('shows a skeleton until the deferred chat funnel arrives, then the funnel over the filter', () => {
+        expect(mount(Numbers, { props: base as never, global: { stubs } }).find('[data-test="chat-funnel"] [role="status"]').exists()).toBe(true);
+        const chatFunnel = { chats: 50, to_agent: 20, orders: 10, delivered: 8, returned: 1, reasons: { price: 6, shipping: 2 } };
+        const w = mount(Numbers, { props: { ...base, chatFunnel } as never, global: { stubs } });
+        expect(w.findAll('[data-test="chat-funnel"] [data-funnel-stage]')).toHaveLength(5);
+        expect(w.find('[data-funnel-stage="orders"]').text()).toContain('٢٠'); // 10 / 50
+        expect(w.findAll('[data-funnel-reason]').map((r) => r.attributes('data-funnel-reason'))).toEqual(['price', 'shipping']);
     });
 
     it('gives the filter bar buyer options from the buyer cards', () => {
