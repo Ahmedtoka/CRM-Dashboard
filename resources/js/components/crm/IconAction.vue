@@ -24,6 +24,8 @@ const props = withDefaults(
     { variant: 'ghost', size: 'md', loading: false, disabled: false, href: undefined, class: undefined },
 );
 const emit = defineEmits<{ click: [event: MouseEvent] }>();
+// Attributes (a popover / menu trigger's aria-expanded, data-state, pointer handlers) land on the button itself.
+defineOptions({ inheritAttrs: false });
 
 const VARIANTS = {
     ghost: 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -52,11 +54,12 @@ function onClick(event: MouseEvent): void {
     <TooltipProvider :delay-duration="300">
         <Tooltip>
             <TooltipTrigger as-child>
-                <Link v-if="href" :href="href" :class="classes" :aria-label="label" data-icon-action>
+                <Link v-if="href" :href="href" v-bind="$attrs" :class="classes" :aria-label="label" data-icon-action>
                     <component :is="icon" aria-hidden="true" />
                 </Link>
                 <button
                     v-else
+                    v-bind="$attrs"
                     type="button"
                     :class="classes"
                     :aria-label="label"

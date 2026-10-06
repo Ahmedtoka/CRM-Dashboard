@@ -3,11 +3,14 @@ import { useI18n } from '@/composables/useI18n';
 import { computed } from 'vue';
 
 /** Determinate progress for long jobs (sync, bulk approve, backfill): «n من m». */
-const props = withDefaults(defineProps<{ value: number; max: number; label?: string }>(), { label: undefined });
+const props = withDefaults(defineProps<{ value: number; max: number; label?: string; /** What is counted: «٣ من ٥ حسابات». */ unit?: string }>(), {
+    label: undefined,
+    unit: undefined,
+});
 
 const { t } = useI18n();
 const percent = computed(() => (props.max > 0 ? Math.min(100, Math.max(0, Math.round((props.value / props.max) * 100))) : 0));
-const text = computed(() => t('ui.progress', { n: props.value, m: props.max }));
+const text = computed(() => [t('ui.progress', { n: props.value, m: props.max }), props.unit].filter(Boolean).join(' '));
 </script>
 
 <template>
