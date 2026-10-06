@@ -204,6 +204,7 @@ return [
             'caption_wrong' => 'الكابشن محتاج تعديل', 'price_wrong' => 'السعر غلط', 'media_quality' => 'جودة الصورة أو الفيديو',
             'wrong_adset' => 'المجموعة غلط', 'off_brand' => 'مش ماشي مع البراند', 'out_of_stock' => 'المنتج خلص', 'other' => 'سبب تاني',
             'slot_closed' => 'المجموعة اتقفلت',
+            'product_gone' => 'المنتج اتشال من المادة', 'stuck_launching' => 'الموافقة ما كملتش', 'restocked' => 'المنتج رجع',
         ],
     ],
 ];

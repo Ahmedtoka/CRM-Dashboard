@@ -6,6 +6,7 @@
  */
 import ChecksPanel from '@/components/ads/launch/ChecksPanel.vue';
 import ReasonDialog from '@/components/ads/launch/ReasonDialog.vue';
+import SkeletonList from '@/components/crm/SkeletonList.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
@@ -205,7 +206,8 @@ const field = 'w-full rounded-md border border-input bg-background px-3 py-2 tex
                 <DialogDescription class="text-xs">{{ material.title }}</DialogDescription>
             </DialogHeader>
 
-            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+            <SkeletonList v-if="!options && !error" variant="cards" :count="2" />
+            <div v-else-if="options" class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
                 <div class="space-y-4">
                     <!-- slot -->
                     <label class="block space-y-1">

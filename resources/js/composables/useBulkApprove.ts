@@ -1,4 +1,5 @@
 import { apiErrorMessage, useApi } from '@/composables/useApi';
+import { useI18n } from '@/composables/useI18n';
 import type { ApproveResult, BulkPlan } from '@/types/ads';
 import { isAxiosError } from 'axios';
 import { computed, ref } from 'vue';
@@ -18,6 +19,7 @@ const STOP_CHECKS = ['ap.activations_left', 'ap.writes_on'];
 /** «وافق على الآمن كله»: load the safe plan, then approve one launch at a time (the progress bar follows `done`). */
 export function useBulkApprove() {
     const api = useApi();
+    const { t } = useI18n();
     const plan = ref<BulkPlan | null>(null);
     const rows = ref<BulkRow[]>([]);
     const done = ref(0);
@@ -38,7 +40,7 @@ export function useBulkApprove() {
             done.value = 0;
         } catch (e) {
             if (isAxiosError(e) && e.response?.status === 423) needsReauth.value = true;
-            else error.value = apiErrorMessage(e, 'error');
+            else error.value = apiErrorMessage(e, t('common.error'));
         }
     }
 
@@ -46,6 +48,7 @@ export function useBulkApprove() {
         if (!plan.value || running.value) return;
         running.value = true;
         stoppedReason.value = null;
+        needsReauth.value = false; // a run after the re-auth resumes the rows still pending
         for (const [i, item] of plan.value.launches.entries()) {
             if (rows.value[i].outcome !== 'pending') continue;
             try {
@@ -69,7 +72,7 @@ export function useBulkApprove() {
                     needsReauth.value = true;
                     break;
                 }
-                rows.value[i] = { ...rows.value[i], outcome: 'failed', message: apiErrorMessage(e, 'error') };
+                rows.value[i] = { ...rows.value[i], outcome: 'failed', message: apiErrorMessage(e, t('common.error')) };
                 done.value = i + 1;
                 const stop =
                     status === 503 ||

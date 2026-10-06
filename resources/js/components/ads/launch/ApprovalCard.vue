@@ -8,7 +8,7 @@ import LaunchStateChip from '@/components/ads/launch/LaunchStateChip.vue';
 import RelativeTime from '@/components/crm/RelativeTime.vue';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
-import { blockingKeys, warningKeys } from '@/lib/launch';
+import { blockingKeys, launchErrorText, warningKeys } from '@/lib/launch';
 import type { LaunchRow } from '@/types/ads';
 import { computed, ref, watch } from 'vue';
 
@@ -85,7 +85,7 @@ const status = (s: string | null) =>
             {{ t('ads.launch.approvals.card.launching') }}
         </p>
         <p v-if="launch.last_error && launch.state === 'awaiting_approval'" class="text-2xs text-destructive">
-            {{ t('ads.launch.approvals.card.last_error', { error: launch.last_error }) }}
+            {{ t('ads.launch.approvals.card.last_error', { error: launchErrorText(launch.last_error, t) }) }}
         </p>
 
         <div class="grid gap-3 md:grid-cols-2">

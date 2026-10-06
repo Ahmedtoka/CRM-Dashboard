@@ -79,4 +79,28 @@ describe('useBulkApprove', () => {
         expect(bulk.needsReauth.value).toBe(true);
         expect(bulk.plan.value).toBeNull();
     });
+
+    it('resumes the pending launches after a password prompt mid-run', async () => {
+        const calls: string[] = [];
+        let locked = true;
+        api.defaults.adapter = adapter((c) => {
+            calls.push(String(c.url));
+            if (c.url === '/ads/approvals/bulk') return { status: 200, data: plan };
+            if (c.url === '/ads/approvals/B/approve' && locked) return { status: 423, data: { message: 'Password confirmation required.' } };
+            return { status: 200, data: { ok: true, message: 'm', self_approved: false, ads: [], launch: { id: 'x', state: 'live', revision: 2 } } };
+        });
+        const bulk = useBulkApprove();
+
+        await bulk.load();
+        await bulk.run();
+        expect(bulk.needsReauth.value).toBe(true);
+        expect(bulk.leftCount.value).toBe(2);
+
+        locked = false;
+        await bulk.run();
+
+        expect(bulk.needsReauth.value).toBe(false);
+        expect(bulk.okCount.value).toBe(3);
+        expect(calls.filter((u) => u === '/ads/approvals/A/approve')).toHaveLength(1);
+    });
 });
