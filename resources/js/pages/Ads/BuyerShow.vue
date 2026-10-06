@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /** Ads Hub — one media buyer: KPIs, daily trend, accounts held, campaigns, top creatives (spec §8.2). */
-import AdsRangeBar from '@/components/ads/AdsRangeBar.vue';
+import AdDrawer from '@/components/ads/AdDrawer.vue';
+import AdsFilterBar from '@/components/ads/AdsFilterBar.vue';
 import ComboChart, { type ComboSeries } from '@/components/ads/ComboChart.vue';
-import CreativePreviewModal from '@/components/ads/CreativePreviewModal.vue';
 import CreativeThumb from '@/components/ads/CreativeThumb.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
@@ -12,13 +12,15 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import DataHealthBanner from '@/components/ads/DataHealthBanner.vue';
 import StatCard from '@/components/crm/StatCard.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
+import { useAdDrawer } from '@/composables/useAdDrawer';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { flowArrow, formatAdsMoney, formatCompact, formatDayLong, formatDayShort, formatPct, formatQty, formatRoas, roasTone } from '@/lib/ads';
 import { formatCount } from '@/lib/format';
-import type { AdsBuyerShowProps, BuyerAssignment, BuyerCampaignRow, CreativeRow } from '@/types/ads';
-import { Head } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { buildHref, carryQuery, readQuery } from '@/lib/adsFilters';
+import type { AdsBuyerShowProps, BuyerAssignment, BuyerCampaignRow } from '@/types/ads';
+import { Head, Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const props = defineProps<AdsBuyerShowProps>();
 
@@ -119,18 +121,23 @@ const campaignColumns = computed(() => [
     { key: 'real_orders', label: t('ads.kpi.real_orders'), align: 'end' as const },
 ]);
 
-const selected = ref<CreativeRow | null>(null);
-const modalOpen = ref(false);
-function openAd(ad: CreativeRow): void {
-    selected.value = ad;
-    modalOpen.value = true;
-}
+const drawer = useAdDrawer();
+/** Quick win 4: a campaign row opens that campaign in the explorer tree (this buyer, every status). */
+const campaignHref = (row: CampaignRow) =>
+    buildHref('/ads/explorer', {
+        ...carryQuery(readQuery(typeof window === 'undefined' ? '' : window.location.search)),
+        view: 'tree',
+        status: 'all',
+        buyer: String(props.buyer.id),
+        ...(row.id.startsWith('none-') ? {} : { open: `c:${row.id}` }),
+    });
 
 const breadcrumbs = computed(() => [
     { title: t('nav.ads'), href: '/ads' },
-    { title: t('nav.ads_buyers'), href: '/ads/buyers' },
+    { title: t('nav.ads_numbers'), href: '/ads/numbers?section=buyers' },
     { title: props.buyer.name, href: `/ads/buyers/${props.buyer.id}` },
 ]);
+const crumbs = computed(() => [{ label: t('nav.ads_numbers'), href: '/ads/numbers?section=buyers' }, { label: props.buyer.name }]);
 </script>
 
 <template>
@@ -139,9 +146,15 @@ const breadcrumbs = computed(() => [
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
-            <PageHeader :title="buyer.name" :description="t('ads.buyers.show_hint')">
-                <AdsRangeBar :filters="filters" :platforms="platforms" :show-buyer="false" />
-            </PageHeader>
+            <PageHeader :title="buyer.name" :description="t('ads.buyers.show_hint')" :breadcrumbs="crumbs" />
+            <AdsFilterBar
+                :path="`/ads/buyers/${buyer.id}`"
+                :filters="filters"
+                :account-options="[]"
+                :buyers="[]"
+                :platforms="platforms"
+                :show="{ status: false, list: false, presets: false }"
+            />
 
             <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
                 <div class="rounded-lg border-t-4 bg-card px-4 py-3 shadow-card" :style="{ borderTopColor: buyer.color ?? 'hsl(var(--primary))' }">
@@ -183,7 +196,7 @@ const breadcrumbs = computed(() => [
                         <button
                             type="button"
                             class="flex w-full flex-col gap-2 rounded-lg bg-card p-2 text-start shadow-card hover:shadow-md"
-                            @click="openAd(ad)"
+                            @click="drawer.open(ad.id)"
                         >
                             <CreativeThumb :ad="ad" size="fill" />
                             <span class="line-clamp-2 text-xs font-semibold" dir="auto">{{ ad.name }}</span>
@@ -225,7 +238,9 @@ const breadcrumbs = computed(() => [
                     <DataTable :columns="campaignColumns" :rows="campaigns" :caption="t('ads.buyers.campaigns')" :empty="t('ads.empty.range')">
                         <template #cell-name="{ row }">
                             <span class="flex flex-col">
-                                <span class="font-medium" dir="auto">{{ (row as CampaignRow).name ?? t('ads.buyers.no_campaign') }}</span>
+                                <Link :href="campaignHref(row as CampaignRow)" class="font-medium hover:underline" dir="auto">{{
+                                    (row as CampaignRow).name ?? t('ads.buyers.no_campaign')
+                                }}</Link>
                                 <span v-if="(row as CampaignRow).platform" class="mt-0.5"
                                     ><PlatformChip :platform="(row as CampaignRow).platform" size="xs"
                                 /></span>
@@ -257,6 +272,6 @@ const breadcrumbs = computed(() => [
             </div>
         </div>
 
-        <CreativePreviewModal v-model:open="modalOpen" :ad="selected" :filters="{ ...filters, buyer: buyer.id }" :currency="currency" />
+        <AdDrawer :ad-id="drawer.adId.value" :filters="filters" :currency="currency" @close="drawer.close" />
     </AppLayout>
 </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /** Ads Hub — إعداد الميديا باير: buyers, monthly targets, tax rate and winner thresholds (spec §8.6). */
+import AdsSetupTabs from '@/components/ads/AdsSetupTabs.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -11,7 +12,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { addDays, cairoToday } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { SharedData } from '@/types';
-import type { AdBuyerSetupRow, AdsBuyersSetupProps, AdsWinnerThresholds } from '@/types/ads';
+import type { AdBuyerSetupRow, AdsBuyersSetupProps } from '@/types/ads';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { LoaderCircle, Pencil, Plus, Trash2, UserPlus } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
@@ -193,32 +194,20 @@ function saveTarget(month: string): void {
     });
 }
 
-/* ---- settings: tax rate + winner thresholds ---- */
-const THRESHOLD_KEYS: (keyof AdsWinnerThresholds)[] = ['winner', 'promising', 'loser', 'loser_min_spend', 'min_spend', 'min_days'];
-const settingsForm = useForm({
-    tax_rate_percent: num(props.settings.tax_rate_percent),
-    winner_thresholds: Object.fromEntries(THRESHOLD_KEYS.map((k) => [k, num(props.settings.winner_thresholds[k])])) as Record<
-        keyof AdsWinnerThresholds,
-        string
-    >,
-});
-const settingsError = (key: string): string | undefined => (settingsForm.errors as Record<string, string | undefined>)[key];
-const thresholdStep = (key: keyof AdsWinnerThresholds) => (key === 'min_days' ? '1' : key.endsWith('spend') ? '1' : '0.01');
-
-function saveSettings(): void {
-    settingsForm.put('/ads/setup/settings', {
-        preserveScroll: true,
-        onSuccess: () => toast.push(t('ads.setup.saved')),
-    });
-}
+const crumbs = computed(() => [{ label: t('nav.ads_setup'), href: '/ads/setup' }, { label: t('ads.control.setup.buyers') }]);
+const appCrumbs = computed(() => [
+    { title: t('nav.ads_setup'), href: '/ads/setup' },
+    { title: t('ads.control.setup.buyers'), href: '/ads/setup/buyers' },
+]);
 </script>
 
 <template>
     <Head :title="t('ads.setup.title')" />
 
-    <AppLayout>
+    <AppLayout :breadcrumbs="appCrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-8 p-4 md:p-6">
-            <PageHeader :title="t('ads.setup.title')" :description="t('ads.setup.description')" />
+            <PageHeader :title="t('ads.setup.title')" :description="t('ads.setup.description')" :breadcrumbs="crumbs" />
+            <AdsSetupTabs />
 
             <!-- Buyers -->
             <section class="space-y-3" :aria-label="t('ads.setup.buyers_title')">
@@ -328,55 +317,6 @@ function saveSettings(): void {
                 </ul>
             </section>
 
-            <!-- Settings -->
-            <form class="space-y-5 rounded-lg bg-card p-4 shadow-card" :aria-label="t('ads.setup.settings_title')" @submit.prevent="saveSettings">
-                <h2 class="text-sm font-semibold">{{ t('ads.setup.settings_title') }}</h2>
-
-                <div class="max-w-xs space-y-1">
-                    <label class="text-xs font-medium" for="tax-rate">{{ t('ads.setup.tax_rate') }} (%)</label>
-                    <input
-                        id="tax-rate"
-                        v-model="settingsForm.tax_rate_percent"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        inputmode="decimal"
-                        dir="ltr"
-                        :class="inputClass"
-                    />
-                    <p class="text-2xs text-muted-foreground">{{ t('ads.setup.tax_help') }}</p>
-                    <p v-if="settingsError('tax_rate_percent')" class="text-2xs text-destructive">{{ settingsError('tax_rate_percent') }}</p>
-                </div>
-
-                <div class="space-y-3">
-                    <h3 class="text-xs font-semibold">{{ t('ads.setup.thresholds_title') }}</h3>
-                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <div v-for="key in THRESHOLD_KEYS" :key="key" class="space-y-1">
-                            <label class="text-xs font-medium" :for="`th-${key}`">{{ t(`ads.setup.${key}`) }}</label>
-                            <input
-                                :id="`th-${key}`"
-                                v-model="settingsForm.winner_thresholds[key]"
-                                type="number"
-                                :min="key === 'min_days' ? 1 : 0"
-                                :max="key === 'min_days' ? 30 : undefined"
-                                :step="thresholdStep(key)"
-                                inputmode="decimal"
-                                dir="ltr"
-                                :class="inputClass"
-                            />
-                            <p class="text-2xs text-muted-foreground">{{ t(`ads.setup.${key}_help`) }}</p>
-                            <p v-if="settingsError(`winner_thresholds.${key}`)" class="text-2xs text-destructive">
-                                {{ settingsError(`winner_thresholds.${key}`) }}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <button type="submit" :class="buttonVariants({ variant: 'default' })" :disabled="settingsForm.processing">
-                    <LoaderCircle v-if="settingsForm.processing" class="animate-spin" aria-hidden="true" />{{ t('common.save') }}
-                </button>
-            </form>
         </div>
 
         <FormDialog

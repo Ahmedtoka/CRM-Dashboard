@@ -246,7 +246,8 @@ export interface AdsBuyersProps extends AdsCommonProps {
 }
 
 export interface AdsBuyerShowProps extends AdsCommonProps {
-    filters: AdsFilters;
+    /** BuildsAdsPages::filterProps without the request: range key and an empty accounts list. */
+    filters: AdsFilters & { range: AdsRangeKey | null; accounts: number[] };
     buyer: { id: number; name: string; color: string | null };
     detail: BuyerDetail;
     summary: AdsRevenueSummary;
@@ -591,7 +592,6 @@ export interface AdsSetupSettings {
 export interface AdsBuyersSetupProps {
     buyers: AdBuyerSetupRow[];
     users: { id: number; name: string; role: string }[];
-    settings: AdsSetupSettings;
 }
 
 /* ---- Materials library: MaterialController, MaterialCollectionController, AdStockController ---- */

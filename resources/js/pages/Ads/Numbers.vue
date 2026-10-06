@@ -41,6 +41,7 @@ const more = computed(() => [
     { key: 'cpa', label: t('ads.kpi.cpa'), value: money(tot.value.cpa), href: explorer({ sort: '-purchases' }) },
     { key: 'ctr', label: t('ads.kpi.ctr'), value: formatPct(tot.value.ctr, locale.value), href: explorer({ sort: '-ctr' }) },
     { key: 'impressions', label: t('ads.kpi.impressions'), value: formatCount(tot.value.impressions, locale.value), href: explorer({ sort: '-impressions' }) },
+    { key: 'reach', label: t('ads.kpi.reach_daily_sum'), value: formatCount(tot.value.reach, locale.value), href: explorer({ sort: '-impressions' }) },
     { key: 'conversations', label: t('ads.control.numbers.conversations'), value: formatCount(tot.value.conversations, locale.value), href: explorer({ sort: '-conversations' }) },
 ]);
 
@@ -105,7 +106,7 @@ onMounted(() => {
             </section>
             <details data-test="more" class="rounded-lg bg-card p-3 shadow-card">
                 <summary class="cursor-pointer text-xs font-medium">{{ t('ads.control.numbers.more') }}</summary>
-                <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+                <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
                     <Link v-for="m in more" :key="m.key" :href="m.href" class="block rounded-lg hover:ring-1 hover:ring-primary">
                         <StatCard :label="m.label" :value="m.value" />
                     </Link>

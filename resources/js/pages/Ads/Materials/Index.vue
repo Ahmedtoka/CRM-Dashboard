@@ -590,7 +590,14 @@ const breadcrumbs = computed(() => [
                                     <MoneyCell :amount="m.performance.spend" :with-tax="m.performance.spend_tax" />
                                     <StatusChip :label="formatRoas(m.performance.roas, locale)" :tone="roasTone(m.performance.roas)" />
                                     <WinnerBadge v-if="m.performance.winner_tier" :tier="m.performance.winner_tier" />
-                                    <span class="text-2xs text-muted-foreground">{{ t('ads.materials.ads_n', { n: n(m.ads.length) }) }}</span>
+                                    <!-- No dead end (U 1.1): the linked ads open in the explorer. -->
+                                    <Link
+                                        :href="`/ads/explorer?status=all&q=${encodeURIComponent(m.ads[0].name)}`"
+                                        class="text-2xs text-primary hover:underline"
+                                        :title="t('ads.control.today.see_all')"
+                                    >
+                                        {{ t('ads.materials.ads_n', { n: n(m.ads.length) }) }}
+                                    </Link>
                                 </div>
                                 <span v-else class="text-2xs text-muted-foreground">{{ t('ads.materials.no_ads') }}</span>
                             </td>

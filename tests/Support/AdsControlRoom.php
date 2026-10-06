@@ -22,8 +22,6 @@ function crSetup($test): void
     config([
         'crm.ads.drivers.meta' => 'fake', 'crm.ads.drivers.tiktok' => 'fake', 'crm.ads.drivers.google' => 'fake',
         'crm.ads.history_start' => '2026-09-01',
-        // The S2 pages (Ads/Today, Decisions, Explorer, Numbers) land with the frontend tasks; backend tests assert props only.
-        'inertia.testing.ensure_pages_exist' => false,
     ]);
     $test->travelTo(CarbonImmutable::parse('2026-10-06 15:30', 'Africa/Cairo'));
     (fn () => $this->withoutVite())->call($test); // protected on TestCase

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /** Ads Hub — الحسابات الإعلانية: platform connections, their ad accounts, and who holds each account (spec §8.5). */
+import AdsSetupTabs from '@/components/ads/AdsSetupTabs.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -9,6 +10,7 @@ import RelativeTime from '@/components/crm/RelativeTime.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import ToggleSwitch from '@/components/crm/ToggleSwitch.vue';
 import { buttonVariants } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
@@ -19,7 +21,7 @@ import { cairoToday } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AdAccountRow, AdConnectionRow, AdPlatformDefinition, AdsAccountsProps } from '@/types/ads';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { History, LoaderCircle, Pencil, Plug, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-vue-next';
+import { History, LoaderCircle, MoreHorizontal, Pencil, Plug, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
 
 const props = defineProps<AdsAccountsProps>();
@@ -220,18 +222,25 @@ const ownerOptions = (a: AdAccountRow) => props.buyers.filter((b) => b.is_active
 const assigning = (a: AdAccountRow) => assignForm.processing && assigningId.value === a.id;
 const periodOwner = (name: string | null) => name ?? t('ads.accounts.unassigned');
 const money = (value: number, currency: string) => formatAdsMoney(value, locale.value, currency);
+
+const crumbs = computed(() => [{ label: t('nav.ads_setup'), href: '/ads/setup' }, { label: t('ads.control.setup.accounts') }]);
+const appCrumbs = computed(() => [
+    { title: t('nav.ads_setup'), href: '/ads/setup' },
+    { title: t('ads.control.setup.accounts'), href: '/ads/accounts' },
+]);
 </script>
 
 <template>
     <Head :title="t('ads.accounts.title')" />
 
-    <AppLayout>
+    <AppLayout :breadcrumbs="appCrumbs">
         <div class="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-6">
-            <PageHeader :title="t('ads.accounts.title')" :description="t('ads.accounts.description')">
+            <PageHeader :title="t('ads.accounts.title')" :description="t('ads.accounts.description')" :breadcrumbs="crumbs">
                 <button type="button" :class="buttonVariants({ variant: 'default', size: 'sm' })" @click="openConnect('meta')">
                     <Plus aria-hidden="true" />{{ t('ads.accounts.connect') }}
                 </button>
             </PageHeader>
+            <AdsSetupTabs />
 
             <p class="rounded-lg bg-card px-4 py-3 text-xs shadow-card" data-testid="ads-link-rate">
                 <span class="font-medium">{{ t('ads.accounts.link_rate') }}:</span>
@@ -294,9 +303,17 @@ const money = (value: number, currency: string) => formatAdsMoney(value, locale.
                             <button type="button" :class="outlineSm" @click="openEdit(c)">
                                 <Pencil aria-hidden="true" />{{ t('ads.accounts.edit') }}
                             </button>
-                            <button type="button" :class="cn(outlineSm, 'text-destructive')" @click="deleting = c">
-                                <Trash2 aria-hidden="true" />{{ t('ads.accounts.delete') }}
-                            </button>
+                            <!-- Delete lives in the ⋯ menu, away from edit / test / sync (U 1.1). -->
+                            <DropdownMenu>
+                                <DropdownMenuTrigger :class="cn(outlineSm, 'ms-auto')" :aria-label="t('ads.control.row.more')">
+                                    <MoreHorizontal aria-hidden="true" />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem class="text-destructive" @select="deleting = c">
+                                        <Trash2 class="size-4" aria-hidden="true" />{{ t('ads.accounts.delete') }}
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </li>
                 </ul>

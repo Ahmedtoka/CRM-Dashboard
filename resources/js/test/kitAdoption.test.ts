@@ -12,11 +12,11 @@ const SWEPT: string[] = [
     // Task 14
     'Inbox', 'Board', 'Comments/Index', 'Cases',
     // S2 control room
-    'Ads/Explorer', 'Ads/Today', 'Ads/Decisions', 'Ads/Numbers',
+    'Ads/Explorer', 'Ads/Today', 'Ads/Decisions', 'Ads/Numbers', 'Ads/SetupRules',
 ];
 
 /** Raw tables allowed only on pages S1/S2 replace; they must sit in the shared sticky scroll box. */
-const RAW_TABLE_OK = new Set(['Ads/Actions', 'Ads/Campaigns', 'Ads/Creatives', 'Ads/Materials/Index']);
+const RAW_TABLE_OK = new Set(['Ads/Materials/Index']);
 /** Raw tables that are layout inside a popover (not a list): allowed anywhere. */
 // Tempered: a match can never cross a `</PopoverContent>`, so it cannot swallow a list table that follows a filter popover.
 const POPOVER_TABLE = /<PopoverContent\b(?:(?!<\/PopoverContent>)[\s\S])*?<table[\s\S]*?<\/PopoverContent>/g;
@@ -29,8 +29,8 @@ const NO_PAGE_HEADER = new Set([
 ]);
 
 describe('S0 kit adoption', () => {
-    it('sees all 66 pages and only real ones are listed', () => {
-        expect(Object.keys(pages)).toHaveLength(66);
+    it('sees all 60 pages and only real ones are listed', () => {
+        expect(Object.keys(pages)).toHaveLength(60);
         for (const name of SWEPT) expect(pages[name], name).toBeDefined();
     });
 

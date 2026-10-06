@@ -43,6 +43,6 @@ it('labels the reach figure as a sum of daily reach in both languages', function
         expect($ts)->toMatch('/\breach_daily_sum:/');
     }
 
-    $vue = file_get_contents(resource_path('js/pages/Ads/Overview.vue'));
+    $vue = file_get_contents(resource_path('js/pages/Ads/Numbers.vue'));
     expect($vue)->toContain('ads.kpi.reach_daily_sum')->and($vue)->not->toContain("t('ads.kpi.reach')");
 });
