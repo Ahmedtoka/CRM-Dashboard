@@ -3722,6 +3722,7 @@ const ar = {
                 password: 'كلمة السر', reauth_submit: 'أكّد وشغّل', pending: 'التغيير لسه بيتنفذ، هيظهر في السجل.', done_stop: 'اتوقف', done_run: 'اشتغل',
                 failed: 'معرفناش ننفذ التغيير', parent_paused: 'الحملة أو المجموعة اللي فوقه واقفة: الإعلان مش هيصرف حتى لو اشتغل.',
                 note_learning_reentry: 'الإعلان كان واقف من {days} يوم، ممكن يرجع يتعلّم من الأول.', status_active: 'شغال', status_paused: 'واقف', status_unknown: 'مش معروف',
+                path: { daily_budget: 'الميزانية اليومية', parent_daily_budget: 'الميزانية اليومية للمستوى اللي فوقه', lifetime_budget: 'ميزانية المدة كلها' },
             },
             drawer: {
                 title: 'تفاصيل الإعلان', numbers: 'الأرقام', why: 'ليه؟', decisions: 'قرارات مفتوحة', history: 'سجل التغييرات', no_history: 'مفيش تغييرات على الإعلان ده',

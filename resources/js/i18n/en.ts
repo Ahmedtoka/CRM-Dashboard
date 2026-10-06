@@ -3767,6 +3767,7 @@ const en: Messages = {
                 password: 'Password', reauth_submit: 'Confirm and run', pending: 'The change is still running; it will show in the log.', done_stop: 'Stopped', done_run: 'Running',
                 failed: 'The change could not be made', parent_paused: 'The campaign or ad set above is stopped: the ad will not spend even when running.',
                 note_learning_reentry: 'The ad was stopped {days} days ago; it may re-enter learning.', status_active: 'Running', status_paused: 'Stopped', status_unknown: 'Unknown',
+                path: { daily_budget: 'Daily budget', parent_daily_budget: 'Daily budget of the level above', lifetime_budget: 'Lifetime budget' },
             },
             drawer: {
                 title: 'Ad details', numbers: 'Numbers', why: 'Why?', decisions: 'Open decisions', history: 'Change history', no_history: 'No changes on this ad',
