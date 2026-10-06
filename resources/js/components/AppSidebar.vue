@@ -2,6 +2,7 @@
 import NavMain from '@/components/NavMain.vue';
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail } from '@/components/ui/sidebar';
 import { useI18n } from '@/composables/useI18n';
+import { adsNavChildren } from '@/lib/adsNav';
 import { type NavItem, type SharedData } from '@/types';
 import type { Role } from '@/types/crm';
 import { Link, usePage } from '@inertiajs/vue3';
@@ -20,8 +21,8 @@ const allows = (min: Role) => rank[role.value] >= rank[min];
 // Ads Hub (spec §8): report pages for supervisor+ and media buyers (a buyer's «media buyers» page is
 // their own card), management pages for supervisor+, the materials library for content.
 const adsGroup = computed<NavItem | null>(() => {
-    const materials: NavItem = { title: t('nav.ads_materials'), href: '/ads/materials' };
     if (role.value === 'content') {
+        const materials: NavItem = { title: t('nav.ads_materials'), href: '/ads/materials' };
         return {
             title: t('nav.ads'),
             href: '/ads',
@@ -31,18 +32,17 @@ const adsGroup = computed<NavItem | null>(() => {
     }
     if (role.value !== 'media_buyer' && !allows('supervisor')) return null;
 
-    const children: NavItem[] = [
-        { title: t('nav.ads_overview'), href: '/ads', exact: true },
-        { title: t('nav.ads_buyers'), href: '/ads/buyers' },
-        { title: t('nav.ads_creatives'), href: '/ads/creatives' },
-        { title: t('nav.ads_campaigns'), href: '/ads/campaigns' },
-        { title: t('nav.ads_winners'), href: '/ads/winners' },
-        { title: t('nav.ads_actions'), href: '/ads/actions' },
-        materials,
-    ];
-    if (allows('supervisor')) {
-        children.push({ title: t('nav.ads_accounts'), href: '/ads/accounts' }, { title: t('nav.ads_sync'), href: '/ads/sync' }, { title: t('nav.ads_buyers_setup'), href: '/ads/setup/buyers' });
-    }
+    // D8: six items; approvals live under «محتاج قرار» (match /ads/approvals), drafts to review count on «المكتبة».
+    const counters = (page.props.adsCounters ?? null) as { content_returned?: number; buyer_review?: number } | null;
+    const children = adsNavChildren(
+        role.value,
+        t,
+        {
+            decisions: (page.props.adsDecisions as number | null | undefined) ?? null,
+            library: (counters?.buyer_review ?? 0) + (counters?.content_returned ?? 0),
+        },
+        page.url.includes('?') ? page.url.slice(page.url.indexOf('?')) : '',
+    );
 
     return { title: t('nav.ads'), href: '/ads', icon: Megaphone, children };
 });
@@ -72,7 +72,6 @@ const mainNavItems = computed<NavItem[]>(() => {
         reports.push(
             { title: t('nav.reports_team'), href: '/reports/team' },
             { title: t('nav.reports_bot'), href: '/reports/bot' },
-            { title: t('nav.reports_ads'), href: '/reports/ads' },
             { title: t('nav.reports_activity'), href: '/reports/activity' },
             { title: t('nav.reports_quick_replies'), href: '/reports/quick-replies' },
             { title: t('nav.reports_team_test'), href: '/reports/team-test' },
