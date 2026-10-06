@@ -3,6 +3,7 @@
 import AdsSetupTabs from '@/components/ads/AdsSetupTabs.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import ToggleSwitch from '@/components/crm/ToggleSwitch.vue';
 import { buttonVariants } from '@/components/ui/button';
@@ -245,13 +246,9 @@ const appCrumbs = computed(() => [
                         />
                     </template>
                     <template #cell-actions="{ row }">
-                        <div class="flex justify-end gap-2">
-                            <button type="button" :class="outlineSm" @click="openBuyer(row)">
-                                <Pencil aria-hidden="true" />{{ t('ads.accounts.edit') }}
-                            </button>
-                            <button type="button" :class="cn(outlineSm, 'text-destructive')" @click="deleting = row">
-                                <Trash2 aria-hidden="true" />{{ t('ads.accounts.delete') }}
-                            </button>
+                        <div class="flex justify-end gap-0.5">
+                            <IconAction :icon="Pencil" :label="t('ads.setup.edit_named', { name: row.name })" @click="openBuyer(row)" />
+                            <IconAction :icon="Trash2" variant="destructive" :label="t('ads.setup.delete_named', { name: row.name })" @click="deleting = row" />
                         </div>
                     </template>
                 </DataTable>

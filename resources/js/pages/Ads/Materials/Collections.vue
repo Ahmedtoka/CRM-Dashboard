@@ -3,6 +3,7 @@
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { buttonVariants } from '@/components/ui/button';
@@ -13,7 +14,7 @@ import { useMaterialPermissions } from '@/lib/adsMaterials';
 import { formatCount } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AdsMaterialCollectionsProps, MaterialCollectionRow } from '@/types/ads';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import { CircleCheckBig, CirclePlay, Eye, FolderOpen, Hourglass, Layers, OctagonAlert, Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import { computed, ref, type Component } from 'vue';
 
@@ -94,7 +95,6 @@ function confirmDelete(): void {
     });
 }
 
-const iconBtn = 'inline-flex size-8 items-center justify-center rounded-md border transition-colors';
 const columns = computed<Column[]>(() => [
     { key: 'name', label: t('ads.materials.collections.col.name'), primary: true },
     { key: 'materials', label: t('ads.materials.collections.col.materials'), align: 'center', numeric: true },
@@ -166,34 +166,11 @@ const breadcrumbs = computed(() => [
                     >
                 </template>
                 <template #cell-actions="{ row: c }">
-                    <div class="flex justify-end gap-1">
-                        <Link
-                            :href="`/ads/materials?collection=${c.id}`"
-                            :class="cn(iconBtn, 'border-primary/30 text-primary hover:bg-primary/10')"
-                            :aria-label="t('ads.materials.collections.view', { name: c.name })"
-                            :title="t('ads.materials.collections.view', { name: c.name })"
-                        >
-                            <Eye class="size-4" aria-hidden="true" />
-                        </Link>
+                    <div class="flex justify-end gap-0.5">
+                        <IconAction :icon="Eye" variant="primary" :href="`/ads/materials?collection=${c.id}`" :label="t('ads.materials.collections.view', { name: c.name })" />
                         <template v-if="perms.canAuthor.value">
-                            <button
-                                type="button"
-                                :class="cn(iconBtn, 'border-warning/50 bg-warning/15 text-amber-800 hover:bg-warning/25 dark:text-amber-200')"
-                                :aria-label="t('ads.materials.actions.edit')"
-                                :title="t('ads.materials.actions.edit')"
-                                @click="openEdit(c)"
-                            >
-                                <Pencil class="size-4" aria-hidden="true" />
-                            </button>
-                            <button
-                                type="button"
-                                :class="cn(iconBtn, 'border-destructive/30 text-destructive hover:bg-destructive/10')"
-                                :aria-label="t('ads.materials.actions.delete')"
-                                :title="t('ads.materials.actions.delete')"
-                                @click="deleting = c"
-                            >
-                                <Trash2 class="size-4" aria-hidden="true" />
-                            </button>
+                            <IconAction :icon="Pencil" :label="t('ads.materials.actions.edit')" @click="openEdit(c)" />
+                            <IconAction :icon="Trash2" variant="destructive" :label="t('ads.materials.actions.delete')" @click="deleting = c" />
                         </template>
                     </div>
                 </template>

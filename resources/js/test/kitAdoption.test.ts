@@ -41,6 +41,8 @@ const SWEPT: string[] = [
  */
 const RAW_TABLE_OK = new Set(['Ads/Materials/Index']);
 const OWN_SEARCH_OK = new Set(['Ads/Materials/Index']);
+/** settings/Branches is deleted by FS2 (F4); it keeps its hand-made row icons until then. */
+const ROW_ACTIONS_OK = new Set(['settings/Branches']);
 /** Raw tables that are layout inside a popover (not a list): allowed anywhere. */
 // Tempered: a match can never cross a `</PopoverContent>`, so it cannot swallow a list table that follows a filter popover.
 const POPOVER_TABLE = /<PopoverContent\b(?:(?!<\/PopoverContent>)[\s\S])*?<table[\s\S]*?<\/PopoverContent>/g;
@@ -82,5 +84,12 @@ describe('S0 kit adoption', () => {
         if (!OWN_SEARCH_OK.has(name)) expect(source, `${name}: raw search input`).not.toMatch(/<input[^>]*type="search"/);
         // R5 submit spinners come from <Button :loading>.
         expect(source, `${name}: hand-made submit spinner`).not.toMatch(/<LoaderCircle v-if="(busy|saving|submitting|processing|form\.processing)"/);
+        // R6 row actions are IconAction (icon + tooltip + aria-label, F7): no hand-made buttons in a table's actions cell.
+        if (!ROW_ACTIONS_OK.has(name)) {
+            for (const cell of source.match(/#cell-actions="[^"]*">[\s\S]*?<\/template>/g) ?? []) {
+                expect(cell, `${name}: row action without IconAction`).toContain('<IconAction');
+                expect(cell, `${name}: hand-made row action button`).not.toMatch(/<(button|Button|Link)[\s>]/);
+            }
+        }
     });
 });

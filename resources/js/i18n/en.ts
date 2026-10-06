@@ -3982,6 +3982,8 @@ const en: Messages = {
         setup: {
             title: 'Media buyers setup',
             description: 'Media buyers, their monthly targets, and the tax and winner settings.',
+            edit_named: 'Edit {name}',
+            delete_named: 'Delete {name}',
             buyers_title: 'Media buyers',
             add_buyer: 'Add media buyer',
             edit_buyer: 'Edit media buyer',

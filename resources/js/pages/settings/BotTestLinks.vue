@@ -6,10 +6,10 @@
 import DateInput from '@/components/crm/DateInput.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import InlineError from '@/components/crm/InlineError.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import SkeletonList from '@/components/crm/SkeletonList.vue';
-import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
@@ -155,7 +155,6 @@ function status(row: TestLinkRow): { label: string; tone: string } {
 
 const breadcrumbs = computed(() => [{ title: t('settings.test_links.title'), href: '/settings/bot-test-links' }]);
 const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';
-const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground';
 </script>
 
 <template>
@@ -190,36 +189,24 @@ const iconBtn = 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-f
                         </p>
                     </div>
                     <div class="flex shrink-0 items-center gap-0.5">
-                        <button type="button" :class="iconBtn" :title="t('ui.edit')" :aria-label="`${t('ui.edit')} ${row.label}`" @click="edit(row)">
-                            <Pencil class="size-3.5" />
-                        </button>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            :class="[iconBtn, 'size-auto']"
+                        <IconAction :icon="Pencil" size="sm" :label="`${t('ui.edit')} ${row.label}`" @click="edit(row)" />
+                        <IconAction
+                            :icon="row.is_active ? Square : Play"
+                            size="sm"
+                            :label="row.is_active ? t('settings.test_links.stop') : t('settings.test_links.activate')"
                             :loading="rowBusy === `toggle-${row.id}`"
                             :disabled="rowBusy !== null"
-                            :title="row.is_active ? t('settings.test_links.stop') : t('settings.test_links.activate')"
-                            :aria-label="row.is_active ? t('settings.test_links.stop') : t('settings.test_links.activate')"
                             @click="toggle(row)"
-                        >
-                            <Square v-if="row.is_active" class="size-3.5" />
-                            <Play v-else class="size-3.5" />
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            :class="[iconBtn, 'size-auto hover:text-destructive']"
+                        />
+                        <IconAction
+                            :icon="Trash2"
+                            size="sm"
+                            variant="destructive"
+                            :label="`${t('ui.delete')} ${row.label}`"
                             :loading="rowBusy === `delete-${row.id}`"
                             :disabled="rowBusy !== null"
-                            :title="t('ui.delete')"
-                            :aria-label="`${t('ui.delete')} ${row.label}`"
                             @click="remove(row)"
-                        >
-                            <Trash2 class="size-3.5" />
-                        </Button>
+                        />
                     </div>
                 </header>
 

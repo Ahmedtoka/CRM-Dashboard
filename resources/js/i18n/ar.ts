@@ -3937,6 +3937,8 @@ const ar = {
         setup: {
             title: 'إعداد الميديا باير',
             description: 'الميديا باير، أهدافهم الشهرية، وإعدادات الضريبة والكرييتف الكسبان.',
+            edit_named: 'تعديل {name}',
+            delete_named: 'مسح {name}',
             buyers_title: 'الميديا باير',
             add_buyer: 'إضافة ميديا باير',
             edit_buyer: 'تعديل الميديا باير',
