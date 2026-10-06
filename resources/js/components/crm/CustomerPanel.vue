@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AdSourceCard from '@/components/crm/AdSourceCard.vue';
 import BotSummaryCard from '@/components/crm/BotSummaryCard.vue';
 import CaseCard from '@/components/crm/cases/CaseCard.vue';
 import ConversationMediaGrid from '@/components/crm/media/ConversationMediaGrid.vue';
@@ -113,6 +114,7 @@ const heading = 'mb-2 text-sm font-bold';
         <ConversationMediaGrid v-if="tab === 'media' && conversationId" class="min-h-0 flex-1 overflow-y-auto" :conversation-id="conversationId" />
 
         <div v-else class="scrollbar-thin min-h-0 flex-1 space-y-3 overflow-y-auto bg-background p-3">
+            <AdSourceCard v-if="ad" :ad="ad" />
             <BotSummaryCard v-if="handover" :digest="handover" />
             <Card class="space-y-3 p-4">
                 <section class="flex items-start gap-3">
