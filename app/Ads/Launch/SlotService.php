@@ -17,7 +17,7 @@ use App\Models\User;
  */
 final class SlotService
 {
-    public function __construct(private readonly WritePolicy $policy, private readonly AdsScope $scope) {}
+    public function __construct(private readonly WritePolicy $policy, private readonly AdsScope $scope, private readonly LaunchService $launches) {}
 
     public function canToggle(User $u, AdSet $s): bool
     {
@@ -46,6 +46,9 @@ final class SlotService
         if ($was !== $open) {
             AdsAudit::record($open ? 'launch.slot_opened' : 'launch.slot_closed', $s->campaign->account, null,
                 ['ad_set_id' => $s->id, 'external_id' => $s->external_id, 'open' => $open], ['ad_set_name' => $s->name], $u);
+            if (! $open) {
+                $this->launches->slotClosed($s, $u);
+            }
         }
 
         return $s;

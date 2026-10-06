@@ -8,6 +8,7 @@ use App\Http\Controllers\Web\Ads\BuyerSetupController;
 use App\Http\Controllers\Web\Ads\CampaignController;
 use App\Http\Controllers\Web\Ads\CaptionController;
 use App\Http\Controllers\Web\Ads\CreativeController;
+use App\Http\Controllers\Web\Ads\LaunchController;
 use App\Http\Controllers\Web\Ads\MaterialCollectionController;
 use App\Http\Controllers\Web\Ads\MaterialController;
 use App\Http\Controllers\Web\Ads\OverviewController;
@@ -92,4 +93,13 @@ Route::middleware('ads:materials')->group(function () {
     Route::get('/ads/stock', [AdStockController::class, 'index'])->name('ads.stock.index');
     Route::get('/ads/stock/export', [AdStockController::class, 'export'])->name('ads.stock.export');
     Route::post('/ads/stock/{material}/availability', [AdStockController::class, 'availability'])->name('ads.stock.availability');
+});
+
+// Launch approvals (control room S1): drafts and buyer review — content, buyers and supervisor+ (policy per launch).
+Route::middleware('ads:materials')->group(function () {
+    Route::post('/ads/materials/{material}/launches', [LaunchController::class, 'store'])->name('ads.launches.store');
+    Route::put('/ads/launches/{launch}', [LaunchController::class, 'update'])->name('ads.launches.update');
+    Route::post('/ads/launches/{launch}/submit', [LaunchController::class, 'submit'])->name('ads.launches.submit');
+    Route::post('/ads/launches/{launch}/send-back', [LaunchController::class, 'sendBack'])->name('ads.launches.send-back');
+    Route::post('/ads/launches/{launch}/withdraw', [LaunchController::class, 'withdraw'])->name('ads.launches.withdraw');
 });

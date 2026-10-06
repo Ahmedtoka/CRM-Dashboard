@@ -28,6 +28,12 @@ class WriteDenied extends RuntimeException
         'proposal_expired' => 410,
         'rate_limited' => 429,
         'writes_disabled' => 503,
+        'launch_state' => 409,
+        'launch_changed' => 409,
+        'launch_taken' => 409,
+        'launch_forbidden' => 403,
+        'self_approval' => 403,
+        'approval_required' => 403,
     ];
 
     /**

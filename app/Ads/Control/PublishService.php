@@ -136,12 +136,21 @@ final class PublishService
         return 'publish_identity_'.$a->id;
     }
 
-    /** The product page with the store URL, else the material's first website link, else null. */
-    public function link(AdMaterial $m): ?string
+    /** The product page with the store URL, or null (a launch uses this only: website_links are never a launch link, 2.3). */
+    public function productLink(AdMaterial $m): ?string
     {
         $product = $m->product;
-        if ($product !== null && trim((string) $product->handle) !== '') {
-            return rtrim(BotSetting::current()->storeUrl(), '/').'/products/'.$product->handle;
+
+        return $product !== null && trim((string) $product->handle) !== ''
+            ? rtrim(BotSetting::current()->storeUrl(), '/').'/products/'.$product->handle
+            : null;
+    }
+
+    /** The product page with the store URL, else the material's first website link, else null (direct publish). */
+    public function link(AdMaterial $m): ?string
+    {
+        if (($product = $this->productLink($m)) !== null) {
+            return $product;
         }
         foreach ((array) $m->website_links as $url) {
             if (is_string($url) && trim($url) !== '') {
