@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\SupportCaseResource;
 use App\Http\Support\DateRange;
 use App\Http\Support\ModeratorScope;
+use App\Http\Support\SortParam;
 use App\Models\SupportCase;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -23,17 +24,21 @@ use Inertia\Response;
  */
 class CaseController extends Controller
 {
+    /** Sortable columns of the web list (DataTable key => column). */
+    private const SORTS = ['date' => 'created_at', 'id' => 'id'];
+
     public function index(Request $request): Response
     {
         $filters = $this->filters($request);
 
-        $cases = SupportCaseResource::collection(
-            $this->query($request, $filters)->with(['customer', 'assignedTo', 'order.items.variant'])->paginate(25)->withQueryString()
-        );
+        $query = $this->query($request, $filters)->with(['customer', 'assignedTo', 'order.items.variant']);
+        $sort = SortParam::parse($request->query('sort'), self::SORTS);
+        $sort?->apply($query);
+        $cases = SupportCaseResource::collection($query->paginate(25)->withQueryString());
 
         return Inertia::render('Cases', [
             'cases' => $cases,
-            'filters' => array_merge(['type' => null, 'status' => null, 'q' => null, 'from' => null, 'to' => null], $filters),
+            'filters' => array_merge(['type' => null, 'status' => null, 'q' => null, 'from' => null, 'to' => null], $filters, ['sort' => $sort?->value()]),
             'counts' => $this->counts($request, $filters),
             // Options for the drawer's "assigned to" select.
             'team' => User::query()->where('is_active', true)->inboxStaff()->orderBy('name')->get(['id', 'name']),
