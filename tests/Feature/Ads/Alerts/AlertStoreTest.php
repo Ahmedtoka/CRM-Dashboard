@@ -134,3 +134,17 @@ it('closes the ad alerts as acted when a Stop succeeds, and only run alerts when
     $run = AdWriteAction::factory()->create(['state' => AdWriteAction::SUCCEEDED, 'ad_account_id' => $ad->ad_account_id, 'target_level' => 'ad', 'target_external_id' => $ad->external_id, 'to_status' => 'active']);
     expect($store->actOnWrite($run))->toBe(1)->and(AdsAlert::where('rule_id', 'restock.rule')->sole()->state)->toBe('acted');
 });
+
+it('reads the account buyer once per evaluation, not once per new alert', function () {
+    $acc = W::account();
+    W::buyer($acc);
+    $ads = [W::ad($acc), W::ad($acc), W::ad($acc)];
+    $store = app(AlertStore::class);
+
+    \Illuminate\Support\Facades\DB::enableQueryLog();
+    $store->sync($acc->id, [stRule()], array_map(fn (Ad $ad) => stFinding($ad), $ads), array_map(fn (Ad $ad) => $ad->id, $ads), W::freeze());
+    $reads = collect(\Illuminate\Support\Facades\DB::getQueryLog())->filter(fn (array $q) => str_contains($q['query'], 'from "ad_accounts"'))->count();
+
+    expect(AdsAlert::count())->toBe(3)->and($reads)->toBe(1)
+        ->and(AdsAlert::query()->distinct()->pluck('buyer_id')->filter()->count())->toBe(1);
+});

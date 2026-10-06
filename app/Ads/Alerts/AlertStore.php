@@ -22,6 +22,9 @@ final class AlertStore
 
     public const DISMISS_MUTE_DAYS = 7;
 
+    /** @var array<string, ?int> account|day => media buyer id */
+    private array $buyers = [];
+
     /**
      * @param  list<Rule>  $rules  the rules that ran: only their live rows may resolve
      * @param  list<Finding>  $findings
@@ -142,13 +145,27 @@ final class AlertStore
         AdsAlertEvent::query()->create(['ads_alert_id' => $a->id, 'event' => $event, 'user_id' => $userId, 'data' => $data]);
     }
 
+    /** The media buyer holding the account on that day, read once per account and day for this store instance. */
+    private function buyerId(?int $accountId, CarbonImmutable $now): ?int
+    {
+        if ($accountId === null) {
+            return null;
+        }
+        $key = $accountId.'|'.$now->toDateString();
+        if (! array_key_exists($key, $this->buyers)) {
+            $this->buyers[$key] = AdAccount::query()->find($accountId)?->buyerOn($now->toDateString())?->id;
+        }
+
+        return $this->buyers[$key];
+    }
+
     private function open(Finding $f, CarbonImmutable $now): ?int
     {
         try {
             $a = AdsAlert::query()->create([
                 'kind' => $f->kind, 'rule_id' => $f->ruleId, 'entity_level' => $f->entityLevel, 'entity_id' => $f->entityId,
                 'ad_account_id' => $f->accountId, 'ad_id' => $f->adId, 'product_id' => $f->productId,
-                'buyer_id' => $f->accountId !== null ? AdAccount::query()->find($f->accountId)?->buyerOn($now->toDateString())?->id : null,
+                'buyer_id' => $this->buyerId($f->accountId, $now),
                 'family' => $f->family, 'severity' => $f->severity, 'action' => $f->action, 'state' => AdsAlert::OPEN,
                 'fingerprint' => $f->fingerprint(), 'dedupe_key' => $f->fingerprint(), 'sentence_key' => $f->sentenceKey,
                 'params' => $f->params, 'evidence' => $f->evidence + ['computed_at' => $now->toIso8601String()],
