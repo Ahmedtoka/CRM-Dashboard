@@ -2,6 +2,7 @@
 
 namespace App\Ads\Materials;
 
+use App\Ads\Alerts\RuleSettings;
 use App\Ads\Control\Write\WriteDenied;
 use App\Ads\Launch\LaunchService;
 use App\Ads\Launch\LaunchState;
@@ -116,6 +117,10 @@ final class StockWatcher
 
     private function notify(AdMaterial $m): void
     {
+        // R-06: once decision notifications are on, the all.out_of_stock alert (grouped bell item) replaces this notice.
+        if (app(RuleSettings::class)->notifyEnabled()) {
+            return;
+        }
         $live = AdLaunch::query()->with('reviewer.user')->where('ad_material_id', $m->id)->whereIn('state', ['live', 'launching'])->get();
         $data = [
             'material_id' => $m->id,

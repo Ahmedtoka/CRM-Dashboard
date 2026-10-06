@@ -678,6 +678,8 @@ export interface AppNotification {
         | 'queue.member_not_arrived'
         | 'queue.break_overrun'
         | 'ads.need_stop'
+        | 'ads.alerts'
+        | 'ads.alerts_digest'
         | 'ads.token_invalid'
         | 'ads.token_scope_missing'
         | 'ads.token_expiring'

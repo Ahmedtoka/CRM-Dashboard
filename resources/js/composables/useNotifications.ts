@@ -21,6 +21,8 @@ export const TYPE_KEY = {
     'queue.reply_overdue_leader': 'queue_reply_overdue_leader',
     'queue.member_not_arrived': 'queue_member_not_arrived',
     'ads.need_stop': 'ads_need_stop',
+    'ads.alerts': 'ads_alerts',
+    'ads.alerts_digest': 'ads_alerts_digest',
     'ads.token_invalid': 'ads_token_invalid',
     'ads.token_scope_missing': 'ads_token_scope_missing',
     'ads.token_expiring': 'ads_token_expiring',

@@ -71,6 +71,10 @@ function itemText(n: AppNotification): string {
         });
     }
 
+    if (n.type === 'ads.alerts' || n.type === 'ads.alerts_digest') {
+        return t('notifications.ads_alerts_item', { count: Number(n.data.count ?? 0), money: Number(n.data.money ?? 0) });
+    }
+
     if (n.type === 'ads.need_stop') {
         return t('notifications.ads_need_stop_item', { product: String(n.data.product_title ?? ''), material: String(n.data.title ?? '') });
     }
@@ -124,6 +128,10 @@ function open(n: AppNotification): void {
     void notifications.markRead([n.id]);
     if (n.type.startsWith('ads.launch.')) {
         router.visit(String(n.data.link ?? '/ads/launches'));
+        return;
+    }
+    if (n.type === 'ads.alerts' || n.type === 'ads.alerts_digest') {
+        router.visit(String(n.data.link ?? '/ads/decisions'));
         return;
     }
     if (n.type === 'ads.need_stop') {
