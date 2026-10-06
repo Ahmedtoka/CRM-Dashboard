@@ -48,7 +48,7 @@ it('lets the creator retry a failed order from the web', function () {
     $this->actingAs($this->mod)->postJson("/orders/{$id}/retry")
         ->assertOk()
         ->assertJsonPath('data.status', 'confirmed')
-        ->assertJsonPath('data.shipment.status', 'created');
+        ->assertJsonPath('data.shipment', null);
 });
 
 it('forbids other moderators from retrying', function () {

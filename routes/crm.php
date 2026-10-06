@@ -28,7 +28,6 @@ use App\Http\Controllers\Web\Settings\BotLearningController;
 use App\Http\Controllers\Web\Settings\BotReplyController;
 use App\Http\Controllers\Web\Settings\BotTestLinkController;
 use App\Http\Controllers\Web\Settings\BotTranslationController;
-use App\Http\Controllers\Web\Settings\BranchController;
 use App\Http\Controllers\Web\Settings\ChannelController;
 use App\Http\Controllers\Web\Settings\CityController;
 use App\Http\Controllers\Web\Settings\FacebookLoginController;
@@ -143,13 +142,14 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
     // Orders
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::post('/orders/refresh-stale', [OrderController::class, 'refreshStale'])->middleware('throttle:30,1')->name('orders.refresh-stale');
+    // Fresh-orders F5: one ad's orders (before /orders/{order}).
+    Route::get('/orders/ads/{ad}', [OrderController::class, 'ad'])->name('orders.ads.show');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
     Route::post('/orders/{order}/retry', [OrderController::class, 'retry'])->name('orders.retry');
     Route::post('/orders/{order}/refresh', [OrderController::class, 'refresh'])->middleware('throttle:20,1')->name('orders.refresh');
     Route::middleware('role:supervisor')->group(function () {
         Route::post('/orders/{order}/mark-paid', [OrderController::class, 'markPaid'])->name('orders.mark-paid');
-        Route::post('/orders/{order}/ship', [OrderController::class, 'ship'])->name('orders.ship');
     });
 
     // Support cases (spec §4)
@@ -247,12 +247,6 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::put('tags/{tag}', [TagController::class, 'update'])->name('tags.update');
         Route::delete('tags/{tag}', [TagController::class, 'destroy'])->name('tags.destroy');
 
-        // Branch directory (Task 2): store locations App\Bot\Flows\BranchFinder lists by area.
-        Route::get('branches', [BranchController::class, 'index'])->name('branches.index');
-        Route::post('branches', [BranchController::class, 'store'])->name('branches.store');
-        Route::patch('branches/{branch}', [BranchController::class, 'update'])->name('branches.update');
-        Route::delete('branches/{branch}', [BranchController::class, 'destroy'])->name('branches.destroy');
-
         // Flow designer (2026-09-17 Task 2): drafts, publish, versions, create, main menu.
         // Task 3: the sandbox simulator (one simulated turn, nothing sent or saved).
         Route::get('bot-flows', [BotFlowController::class, 'index'])->name('bot-flows.index');
@@ -345,7 +339,6 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('comment', [SimulatorController::class, 'comment'])->name('comment');
         Route::post('burst', [SimulatorController::class, 'burst'])->name('burst');
         Route::post('orders/{order}/pay', [SimulatorController::class, 'pay'])->name('orders.pay');
-        Route::post('shipments/{shipment}/advance', [SimulatorController::class, 'advance'])->name('shipments.advance');
     });
 
     Route::post('/locale/{locale}', [LocaleController::class, 'update'])->whereIn('locale', SetLocale::SUPPORTED)->name('locale.update');

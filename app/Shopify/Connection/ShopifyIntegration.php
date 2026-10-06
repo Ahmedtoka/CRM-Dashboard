@@ -39,7 +39,6 @@ class ShopifyIntegration extends Model
      */
     private const SETTINGS_DEFAULTS = [
         'default_shipping_fee' => 60.0,
-        'auto_create_shipment' => true,
         'stuck_order_days' => 5,
         'mismatch_alerts' => true,
         'order_creation_enabled' => true,

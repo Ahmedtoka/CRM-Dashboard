@@ -90,7 +90,6 @@ const mainNavItems = computed<NavItem[]>(() => {
             { title: t('nav.settings_bot_learning'), href: '/settings/bot-learning', section: bot },
             { title: t('nav.settings_bot_translations'), href: '/settings/bot-translations', section: bot },
             { title: t('nav.settings_test_links'), href: '/settings/bot-test-links', section: bot },
-            { title: t('nav.settings_branches'), href: '/settings/branches', section: store },
             { title: t('nav.settings_queue'), href: '/settings/queue', section: team },
         );
         if (allows('admin')) {

@@ -3,9 +3,23 @@
 use App\Channels\Adapters\FakeChannelAdapter;
 use App\Commerce\FakeCommerceProvider;
 use App\Commerce\OrderService;
-use App\Enums\{Handler, MessageStatus, OrderStatus, Platform, SenderType, UserRole};
+use App\Enums\Handler;
+use App\Enums\MessageStatus;
+use App\Enums\OrderStatus;
+use App\Enums\Platform;
+use App\Enums\SenderType;
+use App\Enums\UserRole;
 use App\Inbox\OutboundService;
-use App\Models\{BotRule, BotSetting, ChannelAccount, City, Conversation, Customer, CustomerIdentity, Product, ProductVariant, User};
+use App\Models\BotRule;
+use App\Models\BotSetting;
+use App\Models\ChannelAccount;
+use App\Models\City;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\CustomerIdentity;
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Models\User;
 use App\Simulator\Simulator;
 use Illuminate\Broadcasting\Broadcasters\Broadcaster;
 use Illuminate\Broadcasting\BroadcastException;
@@ -72,6 +86,5 @@ it('still creates an order when broadcasting fails', function () {
         'shipping' => ['name' => 'Nour', 'phone' => '01001234567', 'city_id' => $city->id, 'address' => 'شارع النصر'],
     ]);
 
-    expect($order->status)->toBe(OrderStatus::Confirmed)
-        ->and($order->shipment)->not->toBeNull();
+    expect($order->status)->toBe(OrderStatus::Confirmed);
 });

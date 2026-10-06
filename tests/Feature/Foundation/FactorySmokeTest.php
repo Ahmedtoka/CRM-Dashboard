@@ -1,34 +1,30 @@
 <?php
 
-use App\Models\{
-    ActivityLog,
-    AnalyticsDaily,
-    BotRule,
-    BotRun,
-    BotSetting,
-    ChannelAccount,
-    City,
-    Comment,
-    Conversation,
-    ConversationNote,
-    ConversationParticipant,
-    Customer,
-    CustomerIdentity,
-    Message,
-    Order,
-    OrderItem,
-    Post,
-    Product,
-    ProductVariant,
-    QuickReply,
-    Shipment,
-    ShipmentEvent,
-    Tag,
-    User,
-    UserPlatform,
-    UserSession,
-    WebhookEvent,
-};
+use App\Models\ActivityLog;
+use App\Models\AnalyticsDaily;
+use App\Models\BotRule;
+use App\Models\BotRun;
+use App\Models\BotSetting;
+use App\Models\ChannelAccount;
+use App\Models\City;
+use App\Models\Comment;
+use App\Models\Conversation;
+use App\Models\ConversationNote;
+use App\Models\ConversationParticipant;
+use App\Models\Customer;
+use App\Models\CustomerIdentity;
+use App\Models\Message;
+use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\Post;
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Models\QuickReply;
+use App\Models\Tag;
+use App\Models\User;
+use App\Models\UserPlatform;
+use App\Models\UserSession;
+use App\Models\WebhookEvent;
 
 it('creates every model via its factory', function () {
     expect(User::factory()->create())->toBeInstanceOf(User::class)
@@ -52,8 +48,6 @@ it('creates every model via its factory', function () {
         ->and(ProductVariant::factory()->create())->toBeInstanceOf(ProductVariant::class)
         ->and(Order::factory()->create())->toBeInstanceOf(Order::class)
         ->and(OrderItem::factory()->create())->toBeInstanceOf(OrderItem::class)
-        ->and(Shipment::factory()->create())->toBeInstanceOf(Shipment::class)
-        ->and(ShipmentEvent::factory()->create())->toBeInstanceOf(ShipmentEvent::class)
         ->and(ActivityLog::factory()->create())->toBeInstanceOf(ActivityLog::class)
         ->and(UserSession::factory()->create())->toBeInstanceOf(UserSession::class)
         ->and(AnalyticsDaily::factory()->create())->toBeInstanceOf(AnalyticsDaily::class)
@@ -71,7 +65,6 @@ it('wires up the key relationships', function () {
     $conv->update(['first_responder_id' => $u1->id, 'last_responder_id' => $u1->id, 'locked_by_id' => $u1->id, 'resolved_by_id' => $u1->id]);
 
     $order = Order::factory()->for($customer)->for($conv, 'conversation')->create();
-    $shipment = Shipment::factory()->for($order)->create();
 
     expect($conv->customer->is($customer))->toBeTrue()
         ->and($conv->channelAccount->is($account))->toBeTrue()
@@ -81,6 +74,5 @@ it('wires up the key relationships', function () {
         ->and($conv->lockedBy->is($u1))->toBeTrue()
         ->and($conv->resolvedBy->is($u1))->toBeTrue()
         ->and($customer->orders->pluck('id'))->toContain($order->id)
-        ->and($order->shipment->is($shipment))->toBeTrue()
         ->and($u1->userPlatforms()->count())->toBe(0);
 });

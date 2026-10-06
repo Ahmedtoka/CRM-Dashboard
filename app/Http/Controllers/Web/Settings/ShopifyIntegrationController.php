@@ -166,7 +166,6 @@ class ShopifyIntegrationController extends Controller
     {
         $data = $request->validate([
             'default_shipping_fee' => ['required', 'numeric', 'min:0', 'max:10000'],
-            'auto_create_shipment' => ['required', 'boolean'],
             'stuck_order_days' => ['required', 'integer', 'min:1', 'max:60'],
             'mismatch_alerts' => ['required', 'boolean'],
             'order_creation_enabled' => ['required', 'boolean'],

@@ -24,8 +24,8 @@ export interface OrderUpdatedPayload {
     updated_at?: string | null;
     is_final?: boolean;
     invoice_url?: string | null;
-    shipment?: { status: string | null; tracking_number: string | null } | null;
-    /** Shopify's own shipment status column (the fulfilment's), not the carrier step. */
+    shipment?: null;
+    /** Shopify's own shipment status column (the fulfilment's). */
     shipment_status?: string | null;
     mismatch?: boolean;
     mismatch_reason?: MismatchReason | null;
@@ -57,16 +57,14 @@ export function applyOrderUpdate(row: Order, p: OrderUpdatedPayload): void {
         // The server resolved it (OrderStatusResolver): take it as is.
         row.display = { ...p.display };
     } else if (row.display) {
-        // Older payloads: keep `display` in step with the raw columns. The resolver's step is the carrier
-        // shipment's, so the CRM shipment's status comes first and Shopify's shipment_status second.
+        // Older payloads: keep `display` in step with the raw columns (Shopify's shipment_status).
         row.display = {
             ...row.display,
             payment: p.financial_status ?? row.display.payment,
             fulfillment: p.fulfillment_status ?? row.display.fulfillment,
-            shipment_step: p.shipment?.status ?? p.shipment_status ?? row.display.shipment_step,
+            shipment_step: p.shipment_status ?? row.display.shipment_step,
         };
     }
-    if (row.shipment && p.shipment) row.shipment = { ...row.shipment, status: p.shipment.status as typeof row.shipment.status };
 }
 
 /**

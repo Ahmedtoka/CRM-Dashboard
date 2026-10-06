@@ -3,12 +3,10 @@
 namespace App\Bot\Flows\Returns;
 
 use App\Bot\ArabicNormalizer;
-use App\Enums\ShipmentStatus;
 use App\Models\BotSetting;
 use App\Models\Fulfillment;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\ShipmentEvent;
 use Carbon\CarbonImmutable;
 
 /**
@@ -114,21 +112,8 @@ class ReturnItems
             return CarbonImmutable::parse($shopify);
         }
 
-        $shipment = $order->shipment;
-
-        if ($shipment === null) {
-            return null;
-        }
-
-        $event = $shipment->events()->where('status', ShipmentStatus::Delivered->value)->whereNotNull('occurred_at')->orderBy('occurred_at')->first();
-
-        if ($event instanceof ShipmentEvent && $event->occurred_at !== null) {
-            return CarbonImmutable::instance($event->occurred_at);
-        }
-
-        return $shipment->status === ShipmentStatus::Delivered && $shipment->last_event_at !== null
-            ? CarbonImmutable::instance($shipment->last_event_at)
-            : null;
+        // The order's own Shopify delivery time (fresh-orders F4: no CRM carrier tracking any more).
+        return $order->delivered_at !== null ? CarbonImmutable::instance($order->delivered_at) : null;
     }
 
     /** Whether the 14 days from delivery are over (unknown delivery → still open). */

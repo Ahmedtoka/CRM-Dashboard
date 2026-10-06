@@ -6,11 +6,11 @@ import SimMessagePanel from '@/components/crm/SimMessagePanel.vue';
 import SimOrdersPanel from '@/components/crm/SimOrdersPanel.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { OrderRow, SimPost, SimShipment } from '@/types/admin';
+import type { OrderRow, SimPost } from '@/types/admin';
 import { Head } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
-defineProps<{ awaitingPayment: OrderRow[]; shipments: SimShipment[]; posts: SimPost[] }>();
+defineProps<{ awaitingPayment: OrderRow[]; posts: SimPost[] }>();
 
 const { t } = useI18n();
 const breadcrumbs = computed(() => [{ title: t('simulator.title'), href: '/simulator' }]);
@@ -27,7 +27,7 @@ const breadcrumbs = computed(() => [{ title: t('simulator.title'), href: '/simul
                 <SimCommentPanel :posts="posts" />
                 <SimBurstPanel />
             </div>
-            <SimOrdersPanel :orders="awaitingPayment" :shipments="shipments" />
+            <SimOrdersPanel :orders="awaitingPayment" />
         </div>
     </AppLayout>
 </template>

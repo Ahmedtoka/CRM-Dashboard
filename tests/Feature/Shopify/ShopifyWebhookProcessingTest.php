@@ -3,10 +3,11 @@
 use App\Analytics\ActivityLogger;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
-use App\Enums\ShipmentStatus;
-use App\Models\{ActivityLog, Order, Product, Shipment, WebhookEvent};
+use App\Models\ActivityLog;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\WebhookEvent;
 use App\Shopify\Connection\ShopifyIntegration;
-use App\Shipping\ShipmentService;
 use Illuminate\Support\Str;
 
 function signedPost($test, string $topic, array $payload, string $secret = 'sec', ?string $id = null)
@@ -66,11 +67,10 @@ it('confirms an awaiting-payment chat order via markPaid when orders/paid arrive
     $fresh = $order->fresh();
     expect($fresh->status)->toBe(OrderStatus::Confirmed)
         ->and($fresh->shopify_order_id)->toBe('9100')
-        ->and($fresh->paid_at)->not->toBeNull()
-        ->and($fresh->shipment)->not->toBeNull();
+        ->and($fresh->paid_at)->not->toBeNull();
 });
 
-it('confirms a chat order exactly once with one shipment and one stats increment, whichever order webhook carries the paid signal first', function () {
+it('confirms a chat order exactly once with one stats increment, whichever order webhook carries the paid signal first', function () {
     // Case A: orders/create already carries the paid signal, before the dedicated orders/paid webhook.
     $orderA = Order::factory()->create(['type' => OrderType::Cod, 'status' => OrderStatus::AwaitingPayment, 'shopify_order_id' => null]);
     $orderA->customer->update(['orders_count' => 0, 'total_spent' => 0]);
@@ -81,7 +81,7 @@ it('confirms a chat order exactly once with one shipment and one stats increment
 
     $freshA = $orderA->fresh();
     expect($freshA->status)->toBe(OrderStatus::Confirmed)
-        ->and(Shipment::where('order_id', $orderA->id)->count())->toBe(1)
+        ->and(ActivityLog::where('action', 'order.paid')->where('subject_id', $orderA->id)->count())->toBe(1)
         ->and($freshA->customer->orders_count)->toBe(1);
 
     // Case B: orders/paid arrives first, then a later orders/updated for the same order.
@@ -94,25 +94,22 @@ it('confirms a chat order exactly once with one shipment and one stats increment
 
     $freshB = $orderB->fresh();
     expect($freshB->status)->toBe(OrderStatus::Confirmed)
-        ->and(Shipment::where('order_id', $orderB->id)->count())->toBe(1)
+        ->and(ActivityLog::where('action', 'order.paid')->where('subject_id', $orderB->id)->count())->toBe(1)
         ->and($freshB->customer->orders_count)->toBe(1);
 });
 
-it('cancels a confirmed chat order via webhook, reversing stats and recording the shipment/activity events, idempotently', function () {
+it('cancels a confirmed chat order via webhook, reversing stats and recording the activity event, idempotently', function () {
     $order = Order::factory()->create(['status' => OrderStatus::Confirmed, 'shopify_order_id' => '9400', 'financial_status' => 'paid']);
     $order->customer->update(['orders_count' => 1, 'total_spent' => $order->total]);
-    app(ShipmentService::class)->createFor($order);
-    expect($order->shipment)->not->toBeNull();
 
     $payload = ['id' => 9400, 'name' => '#9400', 'cancelled_at' => now()->toIso8601String(), 'cancel_reason' => 'customer'];
 
     signedPost($this, 'orders-cancelled', $payload, 'sec', 'cancel-1')->assertOk();
 
-    $fresh = $order->fresh(['shipment', 'customer']);
+    $fresh = $order->fresh(['customer']);
     expect($fresh->status)->toBe(OrderStatus::Cancelled)
         ->and($fresh->customer->orders_count)->toBe(0)
         ->and((float) $fresh->customer->total_spent)->toBe(0.0)
-        ->and($fresh->shipment->status)->toBe(ShipmentStatus::Cancelled)
         ->and(ActivityLog::where('action', ActivityLogger::ORDER_CANCELLED)->where('subject_id', $order->id)->count())->toBe(1);
 
     // A second delivery of the same webhook is a no-op (order already cancelled).

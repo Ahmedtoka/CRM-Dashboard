@@ -5,20 +5,15 @@ namespace App\Http\Controllers\Web;
 use App\Commerce\OrderService;
 use App\Enums\OrderStatus;
 use App\Enums\Platform;
-use App\Enums\ShipmentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
 use App\Media\SampleMedia;
 use App\Models\Order;
 use App\Models\Post;
-use App\Models\Shipment;
-use App\Shipping\FakeShippingProvider;
-use App\Shipping\ShipmentService;
 use App\Simulator\Simulator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -35,20 +30,10 @@ class SimulatorController extends Controller
     {
         return Inertia::render('Simulator', [
             'awaitingPayment' => OrderResource::collection(
-                Order::with(['customer', 'createdBy', 'items', 'shipment.events'])
+                Order::with(['customer', 'createdBy', 'items'])
                     ->where('status', OrderStatus::AwaitingPayment->value)
                     ->orderByDesc('id')->limit(20)->get()
             )->resolve($request),
-            'shipments' => Shipment::with('order')
-                ->whereNotIn('status', [ShipmentStatus::Delivered->value, ShipmentStatus::Cancelled->value, ShipmentStatus::Returned->value])
-                ->orderByDesc('id')->limit(20)->get()
-                ->map(fn (Shipment $s) => [
-                    'id' => $s->id,
-                    'order_id' => $s->order_id,
-                    'order_number' => $s->order?->order_number,
-                    'status' => $s->status?->value,
-                    'tracking_number' => $s->tracking_number,
-                ]),
             'posts' => Post::orderByDesc('id')->limit(20)->get(['id', 'platform', 'external_id', 'caption', 'is_ad']),
         ]);
     }
@@ -119,19 +104,6 @@ class SimulatorController extends Controller
             ], 422));
         }
 
-        return new OrderResource($orders->markPaid($order)->loadMissing(['items', 'shipment.events', 'createdBy', 'customer']));
-    }
-
-    public function advance(Request $request, Shipment $shipment, ShipmentService $shipments): OrderResource
-    {
-        $next = FakeShippingProvider::nextStatus($shipment->status);
-
-        if ($next === null) {
-            throw ValidationException::withMessages(['shipment' => __('errors.orders.shipment_cannot_advance', ['status' => $shipment->status->value])]);
-        }
-
-        $shipments->applyEvent($shipment, $next, 'Simulator: '.$next->value);
-
-        return new OrderResource($shipment->order()->firstOrFail()->load(['items', 'shipment.events', 'createdBy', 'customer']));
+        return new OrderResource($orders->markPaid($order)->loadMissing(['items', 'createdBy', 'customer']));
     }
 }

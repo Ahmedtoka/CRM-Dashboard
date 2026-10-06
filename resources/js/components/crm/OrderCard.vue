@@ -3,7 +3,6 @@ import AdSourceChip from '@/components/crm/AdSourceChip.vue';
 import OrderNote from '@/components/crm/orders/OrderNote.vue';
 import OrderStatusChip from '@/components/crm/orders/OrderStatusChip.vue';
 import OrderSyncLine from '@/components/crm/orders/OrderSyncLine.vue';
-import ShipmentTimeline from '@/components/crm/ShipmentTimeline.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
@@ -61,7 +60,7 @@ const isSupervisorPlus = computed(() => me.value.role === 'admin' || me.value.ro
 const canRetry = computed(() => current.value.status === 'failed' && (isSupervisorPlus.value || current.value.created_by?.id === me.value.id));
 // Mirrors OrderPolicy::cancel — supervisor+, and only while nothing shipped yet.
 const canCancel = computed(
-    () => isSupervisorPlus.value && !isFulfilled.value && !['cancelled', 'failed'].includes(current.value.status) && current.value.shipment?.status !== 'delivered',
+    () => isSupervisorPlus.value && !isFulfilled.value && !['cancelled', 'failed'].includes(current.value.status) && current.value.display?.shipment_step !== 'delivered',
 );
 
 async function retry(): Promise<void> {
@@ -162,7 +161,6 @@ async function copyStatus(): Promise<void> {
             <ExternalLink class="size-3" aria-hidden="true" />{{ t('order.invoice') }}
         </a>
 
-        <ShipmentTimeline v-if="current.shipment" :shipment="current.shipment" class="mt-2 border-t border-border pt-2" />
 
         <div class="mt-2 flex flex-wrap items-center gap-1.5 border-t border-border pt-2">
             <a

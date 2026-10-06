@@ -4,7 +4,6 @@ namespace App\Inbox\SavedReplies;
 
 use App\Commerce\ShippingQuote;
 use App\Enums\OrderStatus;
-use App\Enums\ShipmentStatus;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Order;
@@ -56,7 +55,7 @@ final class ReplyVariables
             'order_status' => ($o = $latestOrder()) ? $this->labels->for($o) : null,
             'shipping_fee' => $this->shippingFee($customer),
             'tracking_number' => ($o = $latestOrder())
-                ? ($o->shipment?->tracking_number ?: $o->fulfillments()->whereNotNull('tracking_number')->latest('id')->value('tracking_number'))
+                ? $o->fulfillments()->whereNotNull('tracking_number')->latest('id')->value('tracking_number')
                 : null,
             'agent_name' => $agent->name,
             'store_name' => $this->storeName(),
@@ -111,9 +110,7 @@ final class ReplyVariables
     {
         return Order::query()->where('customer_id', $customerId)
             ->whereIn('status', [OrderStatus::Submitting->value, OrderStatus::AwaitingPayment->value, OrderStatus::Confirmed->value])
-            ->whereNot(fn (Builder $q) => $q
-                ->whereHas('shipment', fn (Builder $s) => $s->whereIn('status', [ShipmentStatus::Delivered->value, ShipmentStatus::Returned->value]))
-                ->orWhereHas('fulfillments', fn (Builder $f) => $f->where('shipment_status', 'delivered')))
+            ->whereNot(fn (Builder $q) => $q->deliveredOnShopify())
             ->latest('id')->first();
     }
 

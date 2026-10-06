@@ -33,7 +33,7 @@ it('turns into the end-of-day report on yesterday: no urgent strip, complete-day
     $this->actingAs($admin)->get('/today?day=yesterday')->assertOk()
         ->assertInertia(fn (AssertableInertia $p) => $p->where('mode', 'yesterday')->where('date', '2026-10-05')->where('urgent', null)->where('digest', null)
             ->loadDeferredProps('cards', fn (AssertableInertia $r) => $r->where('cards.chats.links.new', '/reports/team?from=2026-10-05&to=2026-10-05')
-                ->where('cards.orders.outcome_date', '2026-10-05')));
+                ->where('cards.orders.links.count', '/orders?real=1&from=2026-10-05&to=2026-10-05')));
 });
 
 it('keeps each manager\'s page for 60 seconds, apart from every other manager', function () {

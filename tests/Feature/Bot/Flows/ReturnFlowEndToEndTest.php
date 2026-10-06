@@ -10,7 +10,6 @@ use App\Channels\Data\InboundMessageData;
 use App\Enums\Handler;
 use App\Enums\Platform;
 use App\Enums\SenderType;
-use App\Enums\ShipmentStatus;
 use App\Inbox\InboxIngestor;
 use App\Models\BotSetting;
 use App\Models\ChannelAccount;
@@ -20,7 +19,6 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\Shipment;
 use App\Models\SupportCase;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
@@ -65,7 +63,7 @@ function rfLastBot(): Message
 it('records a return/exchange case at the end of the whole return flow', function () {
     $order = Order::factory()->create(['order_number' => '5566', 'shipping_phone' => '+201001234567']);
     OrderItem::factory()->for($order)->create(['title' => 'فستان ليلى', 'qty' => 1, 'price' => 850, 'discount' => 0]);
-    Shipment::factory()->for($order)->create(['status' => ShipmentStatus::Delivered]);
+    $order->update(['shipment_status' => 'delivered', 'delivered_at' => now()]);
 
     // flow:return_exchange → policy script + order prompt
     app(InboxIngestor::class)->ingestMessage(new InboundMessageData(

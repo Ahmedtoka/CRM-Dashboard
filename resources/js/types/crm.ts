@@ -271,22 +271,6 @@ export interface Note {
     created_at: string | null;
 }
 
-export interface ShipmentEvent {
-    status: string;
-    description: string | null;
-    location: string | null;
-    occurred_at: string | null;
-}
-
-export interface Shipment {
-    id?: number;
-    carrier?: string | null;
-    status: string | null;
-    tracking_number: string | null;
-    last_event_at?: string | null;
-    events?: ShipmentEvent[];
-}
-
 export interface OrderItem {
     id: number;
     variant_id: number | null;
@@ -297,7 +281,7 @@ export interface OrderItem {
     image_url?: string | null;
 }
 
-/** `OrderResource.display` — the combined Shopify + shipping status (Task 7). */
+/** `OrderResource.display` — the combined Shopify status; `shipment_step` is Shopify's delivery step (ShopifyDeliveryStep). */
 export interface OrderDisplay {
     payment: string | null;
     fulfillment: string | null;
@@ -364,7 +348,8 @@ export interface Order {
     note?: string | null;
     last_error?: string | null;
     items?: OrderItem[];
-    shipment: Shipment | null;
+    /** Always null since fresh-orders F4 (no CRM shipments); kept for the API shape. */
+    shipment?: null;
     fulfillments?: Fulfillment[];
     refunds?: Refund[];
     timeline?: OrderTimelineEntry[];
@@ -385,6 +370,9 @@ export interface Order {
     paid_at?: string | null;
     /** Web only (control room S3): the ad the order is credited to; null = direct. */
     ad_source?: OrderAdSource | null;
+    /** Web list only (fresh-orders F5): governorate name and district (Shopify city line). */
+    governorate?: string | null;
+    district?: string | null;
 }
 
 export interface Identity {
@@ -749,5 +737,9 @@ export interface OrderAdSource {
     thumbnail_url: string | null;
     campaign: string | null;
     attribution: string | null;
+    /** Fresh-orders F5 (web list): the ad account platform, the platform ad id and the Ads Manager link (Meta only). */
+    platform?: string | null;
+    external_id?: string | null;
+    manager_url?: string | null;
 }
 export type InboxSort = 'oldest_waiting';

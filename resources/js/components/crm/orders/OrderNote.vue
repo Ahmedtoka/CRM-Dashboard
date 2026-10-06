@@ -55,7 +55,9 @@ async function copy(): Promise<void> {
     <div v-if="text" class="flex min-w-0 items-start gap-1">
         <div class="min-w-0 flex-1">
             <!-- Customer / staff text: plain text only, its own direction, its own line breaks. -->
-            <p ref="body" class="whitespace-pre-wrap break-words text-start leading-relaxed text-foreground" dir="auto" :style="clampStyle">{{ text }}</p>
+            <p ref="body" class="whitespace-pre-wrap break-words text-start leading-relaxed text-foreground" dir="auto" :style="clampStyle">
+                {{ text }}
+            </p>
             <button
                 v-if="clamped || expanded"
                 type="button"

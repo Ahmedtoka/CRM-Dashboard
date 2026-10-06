@@ -8,7 +8,7 @@ const pages: Record<string, string> = Object.fromEntries(
 /** Pages already moved to the S0 kit. Each sweep task (13-20) appends its group; the test fails until they comply. */
 const SWEPT: string[] = [
     // Task 13
-    'Orders/Index', 'Orders/Show', 'Customers/Index', 'Customers/Show',
+    'Orders/Index', 'Orders/Show', 'Orders/AdOrders', 'Customers/Index', 'Customers/Show',
     // Task 14
     'Inbox', 'Board', 'Comments/Index', 'Cases',
     // Task 15
@@ -17,7 +17,7 @@ const SWEPT: string[] = [
     'Ads/Accounts', 'Ads/BuyerShow', 'Ads/BuyersSetup',
     'Ads/Materials/Collections', 'Ads/Materials/Form', 'Ads/Materials/Index', 'Ads/Materials/Stock', 'Ads/Sync',
     // Task 17
-    'settings/Users', 'settings/Tags', 'settings/Cities', 'settings/Branches', 'settings/QuickReplies', 'settings/Queue',
+    'settings/Users', 'settings/Tags', 'settings/Cities', 'settings/QuickReplies', 'settings/Queue',
     'settings/Notifications', 'settings/Profile', 'settings/Password', 'settings/Appearance',
     // S1 launch approvals
     'Ads/Launches', 'Ads/Approvals',

@@ -9,8 +9,8 @@ use App\Models\Fulfillment;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Refund;
-use App\Models\ShipmentEvent;
-use App\Shipping\ShipmentService;
+use App\Orders\AdsManagerLink;
+use App\Orders\GovernorateKey;
 use App\Shopify\Connection\IntegrationRepository;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -29,7 +29,7 @@ class OrderResource extends JsonResource
     private const LOGS_RELATION = 'timelineActivityLogs';
 
     /**
-     * Lists preload fulfillments, refunds, shipment events and timeline logs in a
+     * Lists preload fulfillments, refunds and timeline logs in a
      * fixed number of queries instead of several per order.
      */
     public static function collection($resource)
@@ -37,7 +37,7 @@ class OrderResource extends JsonResource
         $models = $resource instanceof AbstractPaginator ? $resource->getCollection() : $resource;
 
         if ($models instanceof EloquentCollection && $models->isNotEmpty() && $models->first() instanceof Order) {
-            $models->loadMissing(['fulfillments', 'refunds', 'shipment.events']);
+            $models->loadMissing(['fulfillments', 'refunds']);
 
             $logs = self::timelineLogs($models->modelKeys())->groupBy('subject_id');
             $models->each(fn (Order $o) => $o->setRelation(self::LOGS_RELATION, $logs->get($o->id, new EloquentCollection)));
@@ -50,7 +50,6 @@ class OrderResource extends JsonResource
     {
         $createdBy = $this->created_by_id !== null ? $this->createdBy : null;
         $customer = $this->customer_id !== null ? $this->customer : null;
-        $shipment = $this->shipment;
         $display = app(OrderStatusResolver::class)->resolve($this->resource);
 
         return [
@@ -111,19 +110,8 @@ class OrderResource extends JsonResource
                 'price' => (float) $i->price,
                 'image_url' => $i->image_url,
             ])->values()->all(),
-            'shipment' => $shipment ? [
-                'id' => $shipment->id,
-                'carrier' => $shipment->carrier,
-                'status' => $shipment->status?->value,
-                'tracking_number' => $shipment->tracking_number,
-                'last_event_at' => $shipment->last_event_at?->toIso8601String(),
-                'events' => $shipment->events->sortBy('occurred_at')->map(fn (ShipmentEvent $e) => [
-                    'status' => $e->status?->value,
-                    'description' => self::eventDescription($e->description),
-                    'location' => $e->location,
-                    'occurred_at' => $e->occurred_at?->toIso8601String(),
-                ])->values()->all(),
-            ] : null,
+            // Fresh-orders F4: no CRM shipment any more; the key stays (null) for the mobile app's order model.
+            'shipment' => null,
             'fulfillments' => $this->fulfillments->sortBy('shopify_created_at')->map(fn (Fulfillment $f) => [
                 'id' => $f->id,
                 'status' => $f->status,
@@ -149,23 +137,33 @@ class OrderResource extends JsonResource
                 'thumbnail_url' => $this->ad->thumbnail_url,
                 'campaign' => $this->ad->relationLoaded('campaign') ? $this->ad->campaign?->name : null,
                 'attribution' => $this->ad_attribution,
+                // Fresh-orders F5: the source chip opens the AdDrawer and «افتح في ميتا».
+                'platform' => $this->ad->relationLoaded('account') ? $this->ad->account?->platform : null,
+                'external_id' => $this->ad->external_id !== null ? (string) $this->ad->external_id : null,
+                'manager_url' => AdsManagerLink::for($this->ad->relationLoaded('account') ? $this->ad->account?->platform : null, $this->ad->external_id !== null ? (string) $this->ad->external_id : null, $this->ad->relationLoaded('account') ? $this->ad->account?->external_id : null),
             ]),
+            // Fresh-orders F5, web list: governorate name and district (Shopify's city line; no district column exists).
+            'governorate' => $this->when(! $request->is('api/*'), fn () => self::governorateName($this->shipping_province_code, $this->shipping_province)),
+            'district' => $this->when(! $request->is('api/*'), fn () => filled($this->shipping_city) ? trim((string) $this->shipping_city) : null),
         ];
     }
 
-    /**
-     * ShipmentTimeline.vue renders `shipment.events[].description` raw — unlike the
-     * `timeline` below it carries no `key`/`label_params`, so the CRM's own two
-     * sentinels are mapped to the viewer's language here. Carrier text (and any
-     * older row) is passed through unchanged.
-     */
-    private static function eventDescription(?string $stored): ?string
+    /** Arabic name from crm.eg_provinces for a province code, else the Shopify province name. */
+    public static function governorateName(?string $code, ?string $name): ?string
     {
-        return match ($stored) {
-            ShipmentService::EVENT_CREATED => __('labels.shipment_event.created'),
-            ShipmentService::EVENT_ORDER_CANCELLED => __('labels.shipment_event.order_cancelled'),
-            default => $stored,
-        };
+        $names = (array) config('crm.eg_provinces', []);
+
+        if (filled($code)) {
+            return $names[strtoupper((string) $code)] ?? (filled($name) ? $name : $code);
+        }
+
+        if (! filled($name)) {
+            return null;
+        }
+
+        $mapped = GovernorateKey::codeFor((string) $name);
+
+        return $mapped !== null ? ($names[$mapped] ?? $name) : $name;
     }
 
     /**
@@ -225,10 +223,6 @@ class OrderResource extends JsonResource
                 'amount' => (float) $r->amount,
                 'currency' => $order->currency,
             ]);
-        }
-
-        foreach ($order->shipment?->events ?? [] as $e) {
-            $add($e->occurred_at, 'shipping', 'shipment.'.$e->status?->value, ['location' => $e->location]);
         }
 
         $logs = $order->relationLoaded(self::LOGS_RELATION)

@@ -11,7 +11,6 @@ use App\Channels\Data\InboundMessageData;
 use App\Enums\Handler;
 use App\Enums\Platform;
 use App\Enums\SenderType;
-use App\Enums\ShipmentStatus;
 use App\Enums\UserRole;
 use App\Events\ConversationUpdated;
 use App\Inbox\InboxIngestor;
@@ -22,7 +21,6 @@ use App\Models\ConversationNote;
 use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\Order;
-use App\Models\Shipment;
 use App\Models\SupportCase;
 use App\Models\User;
 use App\Models\UserNotification;
@@ -189,7 +187,7 @@ function crTrackLate(string $phone): ?string
 it('records a delivery follow-up case when she says a returned order is late', function () {
     $c = crConversation();
     $order = Order::factory()->create(['order_number' => '4455', 'shipping_phone' => '+201001234567']);
-    Shipment::factory()->for($order)->create(['status' => ShipmentStatus::Returned]);
+    $order->update(['shipment_status' => 'returned']);
 
     crTrackLate('01001234567');
 
@@ -263,9 +261,9 @@ it('rejects an unknown case type', function () {
 it('keeps one open delivery follow-up case per order when she tracks it again', function () {
     $supervisor = User::factory()->create(['role' => UserRole::Supervisor]);
     $held = Order::factory()->create(['order_number' => '6601', 'shipping_phone' => '+201001111111']);
-    Shipment::factory()->for($held)->create(['status' => ShipmentStatus::Returned]);
+    $held->update(['shipment_status' => 'returned']);
     $other = Order::factory()->create(['order_number' => '6602', 'shipping_phone' => '+201002222222']);
-    Shipment::factory()->for($other)->create(['status' => ShipmentStatus::Returned]);
+    $other->update(['shipment_status' => 'returned']);
 
     $phones = ['6601' => '01001111111', '6602' => '01002222222'];
     $track = fn (string $number) => crTrackLate($phones[$number]);

@@ -3,9 +3,20 @@
 use App\Commerce\Data\OrderStatusUpdate;
 use App\Commerce\FakeCommerceProvider;
 use App\Commerce\OrderService;
-use App\Enums\{OrderStatus, OrderType, Platform, UserRole};
+use App\Enums\OrderStatus;
+use App\Enums\OrderType;
+use App\Enums\Platform;
+use App\Enums\UserRole;
 use App\Events\UserNotified;
-use App\Models\{ActivityLog, ChannelAccount, City, Conversation, Customer, Order, Product, ProductVariant, User};
+use App\Models\ActivityLog;
+use App\Models\ChannelAccount;
+use App\Models\City;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Models\User;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 
@@ -49,7 +60,6 @@ it('ignores a paid signal for a cancelled order and alerts supervisors', functio
 
     expect($result->status)->toBe(OrderStatus::Cancelled)
         ->and($result->paid_at)->toBeNull()
-        ->and($result->shipment)->toBeNull()
         ->and($this->customer->fresh()->orders_count)->toBe(0)
         ->and(ActivityLog::where('action', 'order.paid_ignored')->where('subject_id', $order->id)->exists())->toBeTrue();
 
@@ -65,7 +75,6 @@ it('ignores a shopify paid webhook for a failed order', function () {
 
     expect($order->fresh()->status)->toBe(OrderStatus::Failed)
         ->and($order->fresh()->paid_at)->toBeNull()
-        ->and($order->fresh()->shipment)->toBeNull()
         ->and(ActivityLog::where('action', 'order.paid_ignored')->exists())->toBeTrue();
 });
 
@@ -113,7 +122,6 @@ it('retries a failed cod order', function () {
     expect($retried->status)->toBe(OrderStatus::Confirmed)
         ->and($retried->shopify_order_id)->not->toBeNull()
         ->and($retried->order_number)->not->toBeNull()
-        ->and($retried->shipment)->not->toBeNull()
         ->and($this->customer->fresh()->orders_count)->toBe(1)
         ->and(ActivityLog::where('action', 'order.retried')->where('subject_id', $order->id)->exists())->toBeTrue();
 });

@@ -14,7 +14,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Recomputes an order's stored mismatch after a related change (Shopify
- * mapper, carrier event) and re-broadcasts the order when the verdict moved.
+ * mapper) and re-broadcasts the order when the verdict moved.
  */
 class RefreshOrderStatus implements ShouldQueue
 {
@@ -32,7 +32,7 @@ class RefreshOrderStatus implements ShouldQueue
 
     public function handle(OrderStatusResolver $resolver): void
     {
-        $order = Order::with('shipment.events')->find($this->orderId);
+        $order = Order::query()->find($this->orderId);
 
         if ($order === null) {
             return;

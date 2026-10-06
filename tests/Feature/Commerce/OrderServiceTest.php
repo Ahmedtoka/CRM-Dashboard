@@ -1,54 +1,66 @@
 <?php
 
 use App\Analytics\ActivityLogger;
-use App\Commerce\{OrderService, FakeCommerceProvider};
 use App\Commerce\Data\OrderStatusUpdate;
-use App\Enums\{Platform, OrderStatus, OrderType, UserRole, ShipmentStatus};
-use App\Models\{ActivityLog, ChannelAccount, City, Conversation, Customer, Order, Product, ProductVariant, Shipment, User};
+use App\Commerce\FakeCommerceProvider;
+use App\Commerce\OrderService;
+use App\Enums\OrderStatus;
+use App\Enums\OrderType;
+use App\Enums\Platform;
+use App\Enums\UserRole;
+use App\Models\ActivityLog;
+use App\Models\ChannelAccount;
+use App\Models\City;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
     Event::fake();
     FakeCommerceProvider::$payloads = [];
     FakeCommerceProvider::$forceError = null;
-    $acc = ChannelAccount::factory()->create(['platform'=>Platform::Instagram]);
-    $this->conv = Conversation::factory()->for(Customer::factory())->for($acc,'channelAccount')->create(['platform'=>Platform::Instagram]);
-    $this->variant = ProductVariant::factory()->for(Product::factory())->create(['price'=>500,'shopify_id'=>'111']);
-    $this->city = City::factory()->create(['shipping_fee'=>60]);
-    $this->mod = User::factory()->create(['role'=>UserRole::Moderator,'name'=>'Mona Ali']);
-    $this->mod->userPlatforms()->create(['platform'=>Platform::Instagram]);
+    $acc = ChannelAccount::factory()->create(['platform' => Platform::Instagram]);
+    $this->conv = Conversation::factory()->for(Customer::factory())->for($acc, 'channelAccount')->create(['platform' => Platform::Instagram]);
+    $this->variant = ProductVariant::factory()->for(Product::factory())->create(['price' => 500, 'shopify_id' => '111']);
+    $this->city = City::factory()->create(['shipping_fee' => 60]);
+    $this->mod = User::factory()->create(['role' => UserRole::Moderator, 'name' => 'Mona Ali']);
+    $this->mod->userPlatforms()->create(['platform' => Platform::Instagram]);
 });
 
-function orderData(array $o = []): array {
-    return array_merge(['type'=>'cod','items'=>[['variant_id'=>test()->variant->id,'qty'=>2,'price'=>1]],
-        'shipping'=>['name'=>'Nour','phone'=>'01001234567','city_id'=>test()->city->id,'address'=>'12 شارع النصر'],'discount'=>0], $o);
+function orderData(array $o = []): array
+{
+    return array_merge(['type' => 'cod', 'items' => [['variant_id' => test()->variant->id, 'qty' => 2, 'price' => 1]],
+        'shipping' => ['name' => 'Nour', 'phone' => '01001234567', 'city_id' => test()->city->id, 'address' => '12 شارع النصر'], 'discount' => 0], $o);
 }
 
-it('creates a cod order with db prices, attribution tags and a shipment', function () {
+it('creates a cod order with db prices and attribution tags (no CRM shipment, fresh-orders F4)', function () {
     $order = app(OrderService::class)->create($this->conv, $this->mod, orderData());
     $payload = FakeCommerceProvider::$payloads[0];
     expect((float) $order->total)->toBe(1060.0)->and($order->status)->toBe(OrderStatus::Confirmed)
         ->and($payload->tags)->toContain('social-crm', 'platform:instagram', 'mod:mona-ali')
         ->and($payload->note)->toStartWith('Created by Mona Ali from Instagram conversation #'.$this->conv->id)
-        ->and($order->shipment->status)->toBe(ShipmentStatus::Created)
         ->and($order->created_by_id)->toBe($this->mod->id);
 });
 
 it('creates a payment link awaiting payment', function () {
-    $order = app(OrderService::class)->create($this->conv, $this->mod, orderData(['type'=>'payment_link']));
-    expect($order->status)->toBe(OrderStatus::AwaitingPayment)->and($order->invoice_url)->toStartWith('https://')
-        ->and($order->shipment)->toBeNull();
+    $order = app(OrderService::class)->create($this->conv, $this->mod, orderData(['type' => 'payment_link']));
+    expect($order->status)->toBe(OrderStatus::AwaitingPayment)->and($order->invoice_url)->toStartWith('https://');
     app(OrderService::class)->markPaid($order);
-    expect($order->fresh()->status)->toBe(OrderStatus::Confirmed)->and($order->fresh()->shipment)->not->toBeNull();
+    expect($order->fresh()->status)->toBe(OrderStatus::Confirmed)->and($order->fresh()->paid_at)->not->toBeNull();
 });
 
 it('forbids moderator discounts', function () {
-    app(OrderService::class)->create($this->conv, $this->mod, orderData(['discount'=>50]));
-})->throws(Illuminate\Auth\Access\AuthorizationException::class);
+    app(OrderService::class)->create($this->conv, $this->mod, orderData(['discount' => 50]));
+})->throws(AuthorizationException::class);
 
 it('falls back to the email local-part for a mod tag when the name has no latin transliteration', function () {
-    $arabicMod = User::factory()->create(['role'=>UserRole::Moderator,'name'=>'منى علي','email'=>'mona@crm.test']);
-    $arabicMod->userPlatforms()->create(['platform'=>Platform::Instagram]);
+    $arabicMod = User::factory()->create(['role' => UserRole::Moderator, 'name' => 'منى علي', 'email' => 'mona@crm.test']);
+    $arabicMod->userPlatforms()->create(['platform' => Platform::Instagram]);
 
     app(OrderService::class)->create($this->conv, $arabicMod, orderData());
 
@@ -86,8 +98,7 @@ it('persists the shopify order id from a draft-to-order conversion so later webh
     ));
 
     expect($order->fresh()->shopify_order_id)->toBe('9002')
-        ->and($order->fresh()->status)->toBe(OrderStatus::Confirmed)
-        ->and($order->fresh()->shipment)->not->toBeNull();
+        ->and($order->fresh()->status)->toBe(OrderStatus::Confirmed);
 
     // A later orders/paid webhook only carries the now-persisted order id, not the draft id.
     $service->applyUpdate(new OrderStatusUpdate(
@@ -100,7 +111,7 @@ it('persists the shopify order id from a draft-to-order conversion so later webh
     ));
 
     expect($order->fresh()->status)->toBe(OrderStatus::Confirmed)
-        ->and(Shipment::where('order_id', $order->id)->count())->toBe(1);
+        ->and(ActivityLog::where('action', 'order.paid')->where('subject_id', $order->id)->count())->toBe(1);
 });
 
 it('is idempotent when markPaid is called twice on stale instances of the same order', function () {
@@ -116,8 +127,7 @@ it('is idempotent when markPaid is called twice on stale instances of the same o
     $service->markPaid($stale2);
 
     $fresh = $order->fresh();
-    expect(Shipment::where('order_id', $order->id)->count())->toBe(1)
-        ->and($fresh->customer->orders_count)->toBe(1)
+    expect($fresh->customer->orders_count)->toBe(1)
         ->and((float) $fresh->customer->total_spent)->toBe((float) $fresh->total);
 });
 
@@ -126,7 +136,7 @@ it('is idempotent when cancel is called twice on stale instances of a confirmed 
     $order->customer->update(['orders_count' => 0, 'total_spent' => 0]);
 
     $service = app(OrderService::class);
-    $service->markPaid($order); // confirms it: increments customer stats and creates a shipment
+    $service->markPaid($order); // confirms it: increments customer stats
 
     expect($order->fresh()->customer->orders_count)->toBe(1);
 
@@ -144,11 +154,9 @@ it('is idempotent when cancel is called twice on stale instances of a confirmed 
         ->where('subject_type', $order->getMorphClass())
         ->where('subject_id', $order->id)
         ->count();
-    $cancelledShipmentEvents = $fresh->shipment->events()->where('status', ShipmentStatus::Cancelled->value)->count();
 
     expect($fresh->status)->toBe(OrderStatus::Cancelled)
         ->and($cancelledLogs)->toBe(1)
-        ->and($cancelledShipmentEvents)->toBe(1)
         ->and($fresh->customer->orders_count)->toBe(0)
         ->and((float) $fresh->customer->total_spent)->toBe(0.0);
 });

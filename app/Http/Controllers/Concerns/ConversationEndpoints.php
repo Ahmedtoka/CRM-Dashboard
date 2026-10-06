@@ -533,7 +533,7 @@ trait ConversationEndpoints
             abort(response()->json(['message' => __('errors.orders.idempotency_conflict')], 409));
         }
 
-        return (new OrderResource($order->loadMissing(['items', 'shipment.events', 'createdBy', 'customer'])))
+        return (new OrderResource($order->loadMissing(['items', 'createdBy', 'customer'])))
             ->response()->setStatusCode($order->wasRecentlyCreated ? 201 : 200);
     }
 

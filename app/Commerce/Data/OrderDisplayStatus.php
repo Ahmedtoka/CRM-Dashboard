@@ -5,8 +5,8 @@ namespace App\Commerce\Data;
 use Carbon\CarbonInterface;
 
 /**
- * Combined order status (spec §6.1): Shopify payment/fulfillment next to the
- * carrier's latest step, plus the mismatch verdict.
+ * Combined order status (spec §6.1, fresh-orders F4): Shopify payment/fulfillment next to the
+ * Shopify delivery step (ShopifyDeliveryStep), plus the mismatch verdict.
  */
 final readonly class OrderDisplayStatus
 {
