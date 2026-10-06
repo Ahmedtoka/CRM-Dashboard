@@ -31,6 +31,7 @@ import type {
     InboxFilters,
     InboxModerator,
     Order,
+    OutcomePayload,
     QueueEntry,
     QuickReply,
     QuickReplyCategory,
@@ -326,10 +327,21 @@ async function runAction(name: ConversationAction): Promise<void> {
 
             return;
         }
+        // D13: outside the queue «حل» (and `e`, and send-and-resolve) opens the outcome menu.
+        if (name === 'resolve' && header?.openResolve()) return;
     }
 
     const conversation = await thread.action(name);
     if (conversation) list.applyConversation(conversation);
+}
+
+/** «حل ▾» confirmed with its outcome (control room S3). */
+async function resolveWith(payload: OutcomePayload): Promise<void> {
+    const conversation = await thread.action('resolve', { ...payload });
+    if (conversation) {
+        list.applyConversation(conversation);
+        void ctx.reload();
+    }
 }
 
 async function setPriority(value: ConversationPriority): Promise<void> {
@@ -567,6 +579,7 @@ onBeforeUnmount(() => {
                     @load-older="thread.loadOlder"
                     @send="send"
                     @send-and-resolve="sendAndResolve"
+                    @resolve="resolveWith"
                     @note="onNote"
                     @send-template="sendTemplate"
                     @retry="thread.retry"

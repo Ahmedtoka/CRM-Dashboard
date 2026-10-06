@@ -24,6 +24,7 @@ import type {
     ConversationDetail,
     ConversationPriority,
     Message,
+    OutcomePayload,
     QuickReply,
     QuickReplyCategory,
     RenderedQuickReply,
@@ -79,6 +80,7 @@ const emit = defineEmits<{
     retryAttachment: [attachment: Attachment];
     typing: [];
     action: [name: ConversationAction];
+    resolve: [payload: OutcomePayload];
     priority: [value: ConversationPriority];
     toggleTag: [id: number];
     claim: [];
@@ -352,6 +354,7 @@ defineExpose({ composer, header, viewState: list.viewState, moveNote });
             @back="emit('back')"
             @open-customer="emit('openCustomer')"
             @action="emit('action', $event)"
+            @resolve="emit('resolve', $event)"
             @priority="emit('priority', $event)"
             @toggle-tag="emit('toggleTag', $event)"
             @claim="emit('claim')"
