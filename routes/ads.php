@@ -45,6 +45,7 @@ Route::middleware('ads:report')->group(function () {
     Route::post('/ads/slots/{adSet}', [SlotController::class, 'toggle'])->name('ads.slots.toggle');
 
     // Launch approvals (S1): the manager's queue. Approve / bulk need a password confirmed in the last 15 minutes (G3).
+    Route::get('/ads/approvals', [ApprovalController::class, 'index'])->name('ads.approvals.index');
     Route::post('/ads/approvals/bulk', [ApprovalController::class, 'bulk'])
         ->middleware(['ads:authority', RequirePassword::using(null, ApprovalController::REAUTH_SECONDS)])->name('ads.approvals.bulk');
     Route::post('/ads/approvals/{launch}/approve', [ApprovalController::class, 'approve'])
@@ -108,6 +109,10 @@ Route::middleware('ads:materials')->group(function () {
 
 // Launch approvals (control room S1): drafts and buyer review — content, buyers and supervisor+ (policy per launch).
 Route::middleware('ads:materials')->group(function () {
+    Route::get('/ads/launches', [LaunchController::class, 'index'])->name('ads.launches.index');
+    Route::get('/ads/launches/options', [LaunchController::class, 'options'])->name('ads.launches.options');
+    Route::get('/ads/launches/{launch}', [LaunchController::class, 'show'])->name('ads.launches.show');
+    Route::get('/ads/launches/{launch}/checks', [LaunchController::class, 'checks'])->name('ads.launches.checks');
     Route::post('/ads/materials/{material}/launches', [LaunchController::class, 'store'])->name('ads.launches.store');
     Route::put('/ads/launches/{launch}', [LaunchController::class, 'update'])->name('ads.launches.update');
     Route::post('/ads/launches/{launch}/submit', [LaunchController::class, 'submit'])->name('ads.launches.submit');

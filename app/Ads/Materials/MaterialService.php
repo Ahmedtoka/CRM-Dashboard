@@ -5,8 +5,10 @@ namespace App\Ads\Materials;
 use App\Ads\Access\AdsScope;
 use App\Ads\Launch\LaunchState;
 use App\Ads\Launch\MaterialStatus;
+use App\Ads\Reports\AdsFilter;
 use App\Enums\UserRole;
 use App\Models\Ad;
+use App\Models\AdLaunch;
 use App\Models\AdMaterial;
 use App\Models\AdMaterialFile;
 use App\Models\ProductVariant;
@@ -157,6 +159,7 @@ final class MaterialService
             'collections:ad_material_collections.id,ad_material_collections.name',
             'buyer:id,name', 'creator:id,name',
             'ads:ads.id,ads.name,ads.status,ads.effective_status,ads.ad_account_id', 'ads.account:id,platform',
+            'launches' => fn ($q) => $q->whereIn('state', LaunchState::NON_TERMINAL_VALUES)->orderByDesc('id'),
         ];
         if ($files) {
             $with[] = 'files';
@@ -184,7 +187,7 @@ final class MaterialService
         }
         $perf = $this->performance->forMaterials($materials, $user);
 
-        return $materials->map(function (AdMaterial $m) use ($perf, $withFiles) {
+        return $materials->map(function (AdMaterial $m) use ($perf, $withFiles, $user) {
             $row = [
                 'id' => $m->id,
                 'title' => $m->title,
@@ -208,6 +211,9 @@ final class MaterialService
                 'creator' => $m->creator === null ? null : ['id' => $m->creator->id, 'name' => $m->creator->name],
                 'stock' => self::stockOf($m),
                 'need_stop' => $m->need_stop_at !== null && $m->status === 'live',
+                'launches' => $m->launches->filter(fn (AdLaunch $l) => $this->launchVisible($l, $user, $m))->take(5)
+                    ->map(fn (AdLaunch $l) => ['id' => $l->public_id, 'state' => $l->state->value, 'account' => null, 'adset' => $l->adset_name, 'ads_count' => $l->adsCount()])
+                    ->values()->all(),
                 'activated_at' => $m->activated_at?->toIso8601String(),
                 'done_at' => $m->done_at?->toIso8601String(),
                 'ads' => $m->ads->map(fn (Ad $a) => [
@@ -476,5 +482,17 @@ final class MaterialService
         } catch (Throwable) {
             return null;
         }
+    }
+
+    private function launchVisible(AdLaunch $l, User $user, AdMaterial $m): bool
+    {
+        if ($user->isSupervisorOrAbove()) {
+            return true;
+        }
+        if ($user->role === UserRole::MediaBuyer) {
+            return $l->prepared_by_id === $user->id || in_array($l->ad_account_id, $this->scope->accountIds($user, $today = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay(), $today) ?? [], true);
+        }
+
+        return $l->prepared_by_id === $user->id || $m->created_by_id === $user->id;
     }
 }
