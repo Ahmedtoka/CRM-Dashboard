@@ -59,3 +59,20 @@ it('does not judge an ad in learning or with too little spend', function () {
 
     expect(app(SalesBelowBreakeven::class)->evaluate(RuleContext::for($acc)))->toBe([]);
 });
+
+it('says once per account that every order loses money, instead of judging each ad', function () {
+    $acc = W::account(['name' => 'LV-Main 2']);
+    $old = W::ad($acc, 'OUTCOME_SALES', ['status' => 'PAUSED', 'effective_status' => 'PAUSED']);
+    foreach (range(1, 20) as $i) {
+        W::order($old, W::day(-40).' 12:00', 1200, ['shipment_status' => 'delivered']);
+    }
+    app(RuleSettings::class)->saveInputs(W::authority(), null, ['margin_pct' => 4, 'shipping_subsidy' => 60]);
+    W::spendDays(W::ad($acc), 14, 200, -2, ['purchases' => 1, 'purchase_value' => 200]);
+    W::spendDays(W::ad($acc), 14, 100, -2, ['purchases' => 1, 'purchase_value' => 100]);
+
+    $f = app(SalesBelowBreakeven::class)->evaluate(RuleContext::for($acc));
+
+    expect($f)->toHaveCount(1)->and($f[0]->entityLevel)->toBe('account')->and($f[0]->entityId)->toBe($acc->id)->and($f[0]->adId)->toBeNull()
+        ->and($f[0]->sentenceKey)->toBe('breakeven_unprofitable')->and($f[0]->action)->toBe('open_settings')->and($f[0]->severity)->toBe('high')
+        ->and($f[0]->params)->toBe(['account' => 'LV-Main 2'])->and($f[0]->moneyAtRiskPerDay)->toBe(200.0);
+});

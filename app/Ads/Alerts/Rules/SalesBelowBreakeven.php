@@ -59,6 +59,15 @@ final class SalesBelowBreakeven implements Rule
         }
 
         $be = $ctx->breakEven();
+        if ($be['unprofitable']) {
+            // Contribution ≤ 0: every order loses money before any ad, so every ad would be "below break-even". One
+            // account card asks to check the numbers in Setup instead («الأرقام بتقول إن كل أوردر بيخسر — راجع الإعدادات»).
+            $a = $ctx->account;
+
+            return [new Finding(self::ID, Severity::HIGH, 'open_settings', 'account', (int) $a->id, (int) $a->id, null, null, Family::SALES,
+                round($sales->keys()->sum(fn (int $id) => $ctx->dailySpend($id)), 2), 'breakeven_unprofitable',
+                ['account' => (string) $a->name], ['break_even' => $be, 'sales_ads' => $sales->count()])];
+        }
         $floor = (float) $be['floor'];
         $aov = (float) ($be['aov'] ?? 0);
         $minSpend = max(self::MIN_SPEND, 2 * (float) ($ctx->targets()['cpp'] ?? 0));

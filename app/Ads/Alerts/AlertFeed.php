@@ -26,7 +26,7 @@ final class AlertFeed
     /** Finding action → the card's one primary verb (U 5.2). */
     public const VERBS = [
         'stop' => 'stop', 'run' => 'run', 'check_stock' => 'open_stock', 'look' => 'open_campaigns', 'edit_ad' => 'open_library',
-        'open_queue' => 'open_queue', 'add_replacement' => 'add_replacement', 'view_orders' => 'view_orders', 'none' => 'why',
+        'open_queue' => 'open_queue', 'open_settings' => 'open_settings', 'add_replacement' => 'add_replacement', 'view_orders' => 'view_orders', 'none' => 'why',
     ];
 
     public function __construct(
@@ -198,6 +198,7 @@ final class AlertFeed
             'look' => '/ads/explorer?accounts='.$a->ad_account_id,
             'edit_ad', 'add_replacement' => '/ads/materials',
             'open_queue' => '/board',
+            'open_settings' => '/ads/setup/rules',
             default => null,
         };
     }
