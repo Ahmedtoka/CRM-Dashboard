@@ -41,7 +41,11 @@ final class ChatFunnel
         return $out;
     }
 
-    /** Totals over every ad of the filter's accounts and platform in its range (the Numbers page). */
+    /**
+     * Totals over every ad of the filter's accounts, platform and buyer in its range (the Numbers page). A buyer
+     * (`?buyer=N`, `buyer=me`, or a media buyer's own scope) keeps the accounts that buyer held at some point of the
+     * range, from the same assignment periods as AdsQuery / BuyerScorecard.
+     */
     public function forFilter(AdsFilter $f): array
     {
         if ($f->isEmpty()) {
@@ -52,6 +56,13 @@ final class ChatFunnel
             ->join('ad_accounts as acc', 'acc.id', '=', 'ads.ad_account_id')
             ->when($f->accountIds !== null, fn ($q) => $q->whereIn('ads.ad_account_id', $f->accountIds))
             ->when($f->platform !== null, fn ($q) => $q->where('acc.platform', $f->platform));
+        foreach (array_filter([$f->buyerId, $f->restrictBuyerId], fn ($b) => $b !== null) as $buyer) {
+            $externals->whereExists(fn ($q) => $q->selectRaw('1')->from('ad_account_assignments as a')
+                ->whereColumn('a.ad_account_id', 'ads.ad_account_id')
+                ->where('a.media_buyer_id', $buyer)
+                ->where('a.starts_on', '<=', $f->toDate())
+                ->where(fn ($w) => $w->whereNull('a.ends_on')->orWhere('a.ends_on', '>=', $f->fromDate())));
+        }
 
         return self::total($this->byExternal($externals, $f->startUtc(), $f->endUtc()));
     }

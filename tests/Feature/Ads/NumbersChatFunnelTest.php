@@ -47,3 +47,23 @@ it('shows an unlinked buyer nothing', function () {
     $this->actingAs($user)->get('/ads/numbers?from=2026-10-01&to=2026-10-07')->assertOk()
         ->assertInertia(fn ($page) => $page->loadDeferredProps('funnel', fn ($reload) => $reload->where('chatFunnel.chats', 0)));
 });
+
+it('narrows a supervisor funnel to the picked buyer and to buyer=me', function () {
+    $buyer = MediaBuyer::factory()->create();
+    $held = AdAccount::factory()->create();
+    AdAccountAssignment::factory()->create(['ad_account_id' => $held->id, 'media_buyer_id' => $buyer->id, 'starts_on' => '2026-01-01', 'ends_on' => null]);
+    $past = AdAccount::factory()->create(); // held before the range only
+    AdAccountAssignment::factory()->create(['ad_account_id' => $past->id, 'media_buyer_id' => $buyer->id, 'starts_on' => '2026-01-01', 'ends_on' => '2026-09-01']);
+    numbersFunnelTouch(Ad::factory()->create(['ad_account_id' => $held->id]));
+    numbersFunnelTouch(Ad::factory()->create(['ad_account_id' => $past->id]));
+    numbersFunnelTouch(Ad::factory()->create()); // nobody's account
+    $supervisor = User::factory()->create(['role' => UserRole::Supervisor]);
+
+    $this->actingAs($supervisor)->get('/ads/numbers?from=2026-10-01&to=2026-10-07&buyer='.$buyer->id)->assertOk()
+        ->assertInertia(fn ($page) => $page->loadDeferredProps('funnel', fn ($reload) => $reload->where('chatFunnel.chats', 1)));
+    $this->actingAs($supervisor)->get('/ads/numbers?from=2026-10-01&to=2026-10-07')->assertOk()
+        ->assertInertia(fn ($page) => $page->loadDeferredProps('funnel', fn ($reload) => $reload->where('chatFunnel.chats', 3)));
+    // A supervisor who buys nothing: buyer=me shows nothing.
+    $this->actingAs($supervisor)->get('/ads/numbers?from=2026-10-01&to=2026-10-07&buyer=me')->assertOk()
+        ->assertInertia(fn ($page) => $page->loadDeferredProps('funnel', fn ($reload) => $reload->where('chatFunnel.chats', 0)));
+});
