@@ -113,7 +113,7 @@ final class ScaleWinner implements Rule
         foreach ($ads as $id => $ad) {
             $orders14 = (int) ($c14[$id]['orders'] ?? 0);
             $orders7 = (int) ($c7[$id]['orders'] ?? 0);
-            if ($orders14 < self::MIN_CHAT_ORDERS || $orders7 < 1) {
+            if ($orders14 < self::MIN_CHAT_ORDERS || $orders7 < 1 || $ctx->barelyDelivered($ad, $f14, $t)) {
                 continue;
             }
             $cpo14 = $ctx->sumOf($id, $f14, $t)['spend'] / $orders14;

@@ -55,3 +55,15 @@ it('suggests scaling a messages ad with cheap chat orders', function () {
 
     expect($f[0]->sentenceKey)->toBe('scale_winner_msg')->and($f[0]->params)->toMatchArray(['cpo' => 233, 'target' => 300, 'orders' => 12]);
 });
+
+it('does not suggest scaling a messages ad Meta barely delivers', function () {
+    app(RuleSettings::class)->saveInputs(W::authority(), null, ['target_cpo' => 300]);
+    $acc = W::account();
+    $ad = W::ad($acc, 'MESSAGES');
+    $sibling = W::ad($acc, 'MESSAGES', [], $ad->adSet);
+    W::spendDays($ad, 14, 200, -3);
+    W::spendDays($sibling, 14, 5000, -3);
+    W::fakeChats([$ad->id => ['chats' => 40, 'orders' => 12]]);
+
+    expect(app(ScaleWinner::class)->evaluate(RuleContext::for($acc)))->toBe([]);
+});
