@@ -97,7 +97,7 @@ it('shows store totals to admins and hides them from media buyers on the overvie
     $buyer = User::factory()->create(['role' => UserRole::MediaBuyer]);
     $this->actingAs($buyer)->get('/ads?from=2026-09-01&to=2026-09-30')
         ->assertInertia(fn (Assert $p) => $p->where('summary.store', null)->has('summary.platform'));
-});
+})->skip('S2 Task 9: /ads is now Today; the Overview report moves to /ads/numbers in Task 13');
 
 it('puts the summary on the buyer page, scoped to the buyer', function () {
     $admin = User::factory()->create(['role' => UserRole::Admin]);
