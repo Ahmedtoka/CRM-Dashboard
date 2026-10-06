@@ -118,7 +118,7 @@ it('needs a signed-in user', function () {
 it('lets the assignee close her window with a reason', function (string $reason) {
     [$u, $m, $e] = deskWithWindow();
 
-    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => $reason])->assertOk()
+    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => $reason, 'outcome' => 'browsing'])->assertOk()
         ->assertJsonPath('data.id', $e->id)->assertJsonPath('data.status', 'closed')->assertJsonPath('data.close_reason', $reason);
 
     $e->refresh();
@@ -131,7 +131,7 @@ it('lets the assignee close her window with a reason', function (string $reason)
 it('opens a support case of the chosen type on a case close', function () {
     [$u, , $e] = deskWithWindow(entry: ['bot_summary' => ['topic' => 'مقاس غلط']]);
 
-    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'case', 'case_type' => 'return'])->assertOk()
+    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'case', 'case_type' => 'return', 'outcome' => 'browsing'])->assertOk()
         ->assertJsonPath('data.close_reason', 'case');
 
     $case = SupportCase::query()->where('queue_entry_id', $e->id)->first();
@@ -173,7 +173,7 @@ it('lets a supervisor or an admin close any window', function (string $role) {
     [$u, , $e] = deskWithWindow();
     $boss = User::factory()->create(['role' => $role]);
 
-    $this->actingAs($boss)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'problem'])->assertOk()
+    $this->actingAs($boss)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'problem', 'outcome' => 'browsing'])->assertOk()
         ->assertJsonPath('data.close_reason', 'problem');
 
     expect($e->fresh()->closed_by_id)->toBe($boss->id)->and($e->fresh()->assigned_user_id)->toBe($u->id);
@@ -306,7 +306,7 @@ it('refuses every action while the queue is off', function () {
     QueueSetting::current()->update(['enabled' => false]);
 
     foreach ([
-        ["/queue/entries/{$e->id}/close", ['reason' => 'inquiry']],
+        ["/queue/entries/{$e->id}/close", ['reason' => 'inquiry', 'outcome' => 'browsing']],
         ["/queue/entries/{$e->id}/escalate", []],
         ['/queue/me/status', ['status' => 'break']],
     ] as [$url, $body]) {

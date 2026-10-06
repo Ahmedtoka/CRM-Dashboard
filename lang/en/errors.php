@@ -86,6 +86,11 @@ return [
         'burst_max_wait_attribute' => 'burst max wait seconds',
     ],
 
+    'outcome' => [
+        'required' => 'Pick the chat outcome first',
+        'note_required' => 'Write the reason in a few words',
+    ],
+
     'queue' => [
         'warn_before_close' => 'The warning timer must be shorter than the close timer.',
         'apology_before_handoff' => 'The apology must come before both hand-off times (first reply and later message).',
