@@ -142,6 +142,8 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
     // Orders
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::post('/orders/refresh-stale', [OrderController::class, 'refreshStale'])->middleware('throttle:30,1')->name('orders.refresh-stale');
+    // Fresh-orders F5: one ad's orders (before /orders/{order}).
+    Route::get('/orders/ads/{ad}', [OrderController::class, 'ad'])->name('orders.ads.show');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
     Route::post('/orders/{order}/retry', [OrderController::class, 'retry'])->name('orders.retry');

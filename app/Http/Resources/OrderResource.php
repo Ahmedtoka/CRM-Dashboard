@@ -9,6 +9,7 @@ use App\Models\Fulfillment;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Refund;
+use App\Orders\AdsManagerLink;
 use App\Shopify\Connection\IntegrationRepository;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -135,8 +136,27 @@ class OrderResource extends JsonResource
                 'thumbnail_url' => $this->ad->thumbnail_url,
                 'campaign' => $this->ad->relationLoaded('campaign') ? $this->ad->campaign?->name : null,
                 'attribution' => $this->ad_attribution,
+                // Fresh-orders F5: the source chip opens the AdDrawer and «افتح في ميتا».
+                'platform' => $this->ad->relationLoaded('account') ? $this->ad->account?->platform : null,
+                'external_id' => $this->ad->external_id !== null ? (string) $this->ad->external_id : null,
+                'manager_url' => AdsManagerLink::for($this->ad->relationLoaded('account') ? $this->ad->account?->platform : null, $this->ad->external_id !== null ? (string) $this->ad->external_id : null),
             ]),
+            // Fresh-orders F5, web list: governorate name and district (Shopify's city line; no district column exists).
+            'governorate' => $this->when(! $request->is('api/*'), fn () => self::governorateName($this->shipping_province_code, $this->shipping_province)),
+            'district' => $this->when(! $request->is('api/*'), fn () => filled($this->shipping_city) ? trim((string) $this->shipping_city) : null),
         ];
+    }
+
+    /** Arabic name from crm.eg_provinces for a province code, else the Shopify province name. */
+    public static function governorateName(?string $code, ?string $name): ?string
+    {
+        $names = (array) config('crm.eg_provinces', []);
+
+        if (filled($code)) {
+            return $names[strtoupper((string) $code)] ?? (filled($name) ? $name : $code);
+        }
+
+        return filled($name) ? $name : null;
     }
 
     /**
