@@ -723,11 +723,12 @@ class WindowLifecycle
         // Control room S3 (D13): her final close or the silence auto-close ends the conversation episode
         // with its outcome, in this transaction. Reroutes (escalation, transfer, no_reply) do not.
         if ($c !== null && in_array($reason, OutcomeRecorder::ENDING_CLOSE_REASONS, true)) {
+            // A savepoint: an outcomes failure is reported and rolled back alone, never the close itself.
             $picked = $opts['outcome'] ?? null;
-            app(OutcomeRecorder::class)->endEpisode(
+            rescue(fn () => DB::transaction(fn () => app(OutcomeRecorder::class)->endEpisode(
                 $c, $e, $picked instanceof Outcome ? $picked : null, $opts['outcome_note'] ?? null, $by,
                 $reason === 'auto' ? EpisodeEnd::AutoClose : EpisodeEnd::Close,
-            );
+            )), null, report: true);
         }
 
         if ($reason === 'auto' && $c) {

@@ -191,8 +191,9 @@ final class OutcomeRecorder
             default => [Outcome::Unknown, $person ? ConversationOutcome::SOURCE_AGENT : ConversationOutcome::SOURCE_AUTO],
         };
 
-        $row ??= new ConversationOutcome(['conversation_id' => $c->id, 'episode_key' => $ep['key']]);
-        $row->forceFill([
+        $lastMessageId = (int) Message::query()->where('conversation_id', $c->id)->max('id') ?: null;
+        $reached = $entry?->delivered_at !== null || $this->reachedAgent($c, $ep['since']);
+        $fill = fn (ConversationOutcome $row, Outcome $outcome, string $source) => $row->forceFill([
             'first_message_id' => $row->first_message_id ?? $ep['first_message_id'],
             'started_at' => $row->started_at ?? $ep['started_at'],
             'outcome' => $outcome->value,
@@ -203,11 +204,31 @@ final class OutcomeRecorder
             'queue_entry_id' => $entry?->id ?? $row->queue_entry_id,
             // Only an `ordered` episode holds an order (an unpaid order placed in it no longer counts once she picks another outcome).
             'order_id' => $outcome === Outcome::Ordered ? ($row->order_id ?? $this->episodeOrder($c, $ep['since'])?->id) : null,
-            'last_message_id' => (int) Message::query()->where('conversation_id', $c->id)->max('id') ?: null,
+            'last_message_id' => $lastMessageId,
             'ended_at' => now(),
             'ended_by' => $how->value,
-            'reached_agent' => $entry?->delivered_at !== null || $this->reachedAgent($c, $ep['since']),
+            'reached_agent' => $reached,
         ])->save();
+
+        if ($row !== null) {
+            $fill($row, $outcome, $source);
+
+            return $row;
+        }
+
+        $row = new ConversationOutcome(['conversation_id' => $c->id, 'episode_key' => $ep['key']]);
+
+        try {
+            $fill($row, $outcome, $source);
+        } catch (UniqueConstraintViolationException) {
+            // orderPlaced() inserted this episode's row between our read and our insert (a failed INSERT does
+            // not abort the surrounding close transaction on MariaDB): end that row instead. Its order wins.
+            $row = ConversationOutcome::query()->where('conversation_id', $c->id)->where('episode_key', $ep['key'])->firstOrFail();
+            if ($row->outcome === Outcome::Ordered->value && $row->order_id !== null) {
+                [$outcome, $source] = [Outcome::Ordered, ConversationOutcome::SOURCE_AUTO];
+            }
+            $fill($row, $outcome, $source);
+        }
 
         return $row;
     }
