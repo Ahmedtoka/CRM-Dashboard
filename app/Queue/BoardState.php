@@ -7,6 +7,7 @@ use App\Enums\Handler;
 use App\Enums\Platform;
 use App\Http\Resources\QueueEntryResource;
 use App\Http\Resources\ShiftMemberResource;
+use App\Http\Support\DateRange;
 use App\Models\Conversation;
 use App\Models\QueueDecision;
 use App\Models\QueueEntry;
@@ -41,6 +42,7 @@ class BoardState
         private readonly PresenceTracker $presence,
         private readonly ShiftService $shifts,
         private readonly Attendance $attendance,
+        private readonly RatingStats $ratings,
     ) {}
 
     /** The board with the queue switched off: nothing but the fact. Reads the settings row only. */
@@ -79,6 +81,8 @@ class BoardState
             ->orderBy('enqueued_at')->orderBy('id')->limit(self::WAITING_LIMIT)->get();
 
         $desks = $members->where('shift_id', $open?->id)->values();
+        // Ratings of the Cairo day (G11), numbers only: one summary and one grouped query whatever the desks.
+        $ratingsByUser = $this->ratings->byAgent(DateRange::startOfCairoDay($date), now());
 
         return [
             'enabled' => true,
@@ -92,12 +96,12 @@ class BoardState
             'shifts' => $shifts->map(fn (Shift $sh) => $this->shift($sh) + [
                 'member_user_ids' => $members->where('shift_id', $sh->id)->pluck('user_id')->map(fn ($id) => (int) $id)->values()->all(),
             ])->values()->all(),
-            'members' => $this->desks($desks, $windows, $open, $s),
+            'members' => $this->desks($desks, $windows, $open, $s, $ratingsByUser),
             'waiting' => $lounge->map(fn (QueueEntry $e) => QueueEntryResource::data($e, $s))->values()->all(),
             'open' => $windows->map(fn (QueueEntry $e) => QueueEntryResource::data($e, $s))->values()->all(),
             'decisions' => $this->decisions(),
             'last_call' => $this->lastCall($stored),
-            'kpis' => $this->kpis($stored, $windows, $desks, $s),
+            'kpis' => $this->kpis($stored, $windows, $desks, $s, $date),
             'reception' => ['with_bot' => $this->withBot()],
             'settings' => [
                 'windows_per_moderator' => (int) $s->windows_per_moderator,
@@ -139,7 +143,7 @@ class BoardState
      * @param  Collection<int, QueueEntry>  $windows
      * @return list<array<string, mixed>>
      */
-    private function desks(Collection $desks, Collection $windows, ?Shift $open, QueueSetting $s): array
+    private function desks(Collection $desks, Collection $windows, ?Shift $open, QueueSetting $s, array $ratingsByUser): array
     {
         if ($desks->isEmpty()) {
             return [];
@@ -157,7 +161,7 @@ class BoardState
             (int) $s->break_minutes,
         );
 
-        return $desks->map(function (ShiftMember $m) use ($counts, $byUser, $open, $s, $attendance) {
+        return $desks->map(function (ShiftMember $m) use ($counts, $byUser, $open, $s, $attendance, $ratingsByUser) {
             $rows = $counts->get($m->id, collect());
             $mine = $byUser->get($m->user_id, collect())
                 ->map(fn (QueueEntry $e) => ShiftMemberResource::window($e, $s))->values()->all();
@@ -172,6 +176,7 @@ class BoardState
                 'is_leader' => $open !== null && $open->leader_user_id !== null && (int) $open->leader_user_id === (int) $m->user_id,
                 'platforms' => $user ? $this->platformsOf($user) : [],
                 'attendance' => $attendance[(int) $m->user_id] ?? Attendance::EMPTY,
+                'rating' => $ratingsByUser[(int) $m->user_id] ?? RatingStats::EMPTY,
             ];
         })->values()->all();
     }
@@ -213,7 +218,7 @@ class BoardState
      * @param  Collection<int, ShiftMember>  $desks
      * @return array<string, mixed>
      */
-    private function kpis(string $stored, Collection $windows, Collection $desks, QueueSetting $s): array
+    private function kpis(string $stored, Collection $windows, Collection $desks, QueueSetting $s, string $date): array
     {
         $lounge = QueueEntry::query()->toBase()->where('status', 'waiting')
             ->selectRaw('priority, COUNT(*) as n, MIN(enqueued_at) as oldest')->groupBy('priority')->get();
@@ -247,6 +252,7 @@ class BoardState
             'closed' => $closed,
             'closed_manual' => $closed['inquiry'] + $closed['problem'] + $closed['case'],
             'closed_total' => array_sum($closed),
+            'rating' => $this->ratings->summary(DateRange::startOfCairoDay($date), now()),
         ];
     }
 

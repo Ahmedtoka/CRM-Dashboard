@@ -2781,6 +2781,7 @@ const en: Messages = {
         },
         wall: { title: 'Router screen', idle: 'No decisions yet today' },
         kpi: {
+            rating: 'Rating {avg} ({n})',
             lounge: 'In the lounge',
             oldest: 'Oldest {time}',
             windows: 'At windows',
@@ -2868,6 +2869,9 @@ const en: Messages = {
             back: 'Back',
         },
         member: {
+            rating: 'Rating today',
+            rating_value: '{avg} from {n}',
+            rating_low: '· {n} low',
             gone_title: 'The desk is empty',
             gone: 'This moderator no longer has a desk on the open shift.',
             today: { received: 'Received', inquiry: 'Inquiry', problem: 'Problem', case: 'Case', auto: 'Auto', escalation: 'Escalation', no_reply: 'No reply' },

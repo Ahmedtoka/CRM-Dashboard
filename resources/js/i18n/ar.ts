@@ -2736,6 +2736,7 @@ const ar = {
         },
         wall: { title: 'شاشة التوزيع', idle: 'لسه مفيش قرارات النهارده' },
         kpi: {
+            rating: 'التقييم {avg} ({n})',
             lounge: 'في الصالة',
             oldest: 'أقدم واحدة {time}',
             windows: 'في الشبابيك',
@@ -2823,6 +2824,9 @@ const ar = {
             back: 'رجوع',
         },
         member: {
+            rating: 'تقييم النهارده',
+            rating_value: '{avg} من {n}',
+            rating_low: '· {n} واطي',
             gone_title: 'المكتب فضي',
             gone: 'الموظفة دي مبقتش على مكتب في الشيفت المفتوح.',
             today: { received: 'استلمت', inquiry: 'استفسار', problem: 'مشكلة', case: 'كيس', auto: 'تلقائي', escalation: 'تصعيد', no_reply: 'ما ردّتش' },

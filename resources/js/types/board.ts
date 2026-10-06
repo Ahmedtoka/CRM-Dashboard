@@ -1,4 +1,5 @@
 import type { PlatformValue, QueueEntry, Role, ShiftMember, UserRef } from '@/types/crm';
+import type { RatingSummary } from '@/types/today';
 
 /** One open window as the desk carries it (ShiftMemberResource `windows`). */
 export interface BoardWindowRef {
@@ -34,6 +35,8 @@ export interface BoardMember extends ShiftMember {
     platforms?: PlatformValue[];
     /** Board state only; kept across `QueueMemberUpdated` like the platforms. */
     attendance?: AttendanceFigures;
+    /** Board state only; kept across QueueMemberUpdated. Today's customer ratings (G11). */
+    rating?: RatingSummary;
 }
 
 export interface BoardShift {
@@ -83,6 +86,8 @@ export interface BoardKpis {
     closed: Record<string, number>;
     closed_manual: number;
     closed_total: number;
+    /** Today's customer ratings, everyone (G11). */
+    rating?: RatingSummary;
 }
 
 export interface BoardSettings {
