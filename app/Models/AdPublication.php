@@ -24,11 +24,12 @@ class AdPublication extends Model
         'ad_material_id', 'ad_material_file_id', 'ad_account_id', 'platform', 'campaign_external_id', 'campaign_name', 'adset_external_id', 'adset_name',
         'identity', 'caption_index', 'headline', 'primary_text', 'cta', 'ad_name', 'link', 'url_tags', 'status', 'external_ad_id', 'error', 'attempts',
         'linked_at', 'ad_requested_at', 'created_by_id', 'idempotency_key', 'open_key', 'allow_duplicate',
+        'ad_launch_id', 'run_write_action_id', 'archived_at',
     ];
 
     protected function casts(): array
     {
-        return ['identity' => 'array', 'caption_index' => 'integer', 'attempts' => 'integer', 'linked_at' => 'datetime', 'ad_requested_at' => 'datetime', 'allow_duplicate' => 'boolean'];
+        return ['identity' => 'array', 'caption_index' => 'integer', 'attempts' => 'integer', 'linked_at' => 'datetime', 'ad_requested_at' => 'datetime', 'allow_duplicate' => 'boolean', 'archived_at' => 'datetime'];
     }
 
     protected static function booted(): void
@@ -55,6 +56,11 @@ class AdPublication extends Model
     public function account(): BelongsTo
     {
         return $this->belongsTo(AdAccount::class, 'ad_account_id');
+    }
+
+    public function launch(): BelongsTo
+    {
+        return $this->belongsTo(AdLaunch::class, 'ad_launch_id');
     }
 
     public function creator(): BelongsTo
