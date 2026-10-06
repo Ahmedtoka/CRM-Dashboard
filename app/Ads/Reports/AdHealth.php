@@ -2,6 +2,7 @@
 
 namespace App\Ads\Reports;
 
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -58,7 +59,7 @@ final class AdHealth
             ->distinct()->pluck('l.ad_id')->map(fn ($id) => (int) $id)->values()->all();
     }
 
-    private function needStopQuery(): \Illuminate\Database\Query\Builder
+    private function needStopQuery(): Builder
     {
         return DB::table('ad_material_ads as l')->join('ad_materials as mat', 'mat.id', '=', 'l.ad_material_id')
             ->whereIn('mat.status', self::NEED_STOP_MATERIAL_STATUSES)->whereNotNull('mat.need_stop_at');

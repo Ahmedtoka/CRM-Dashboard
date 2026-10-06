@@ -5,11 +5,12 @@ require_once __DIR__.'/../../../Support/AdsControlRoom.php';
 use App\Ads\Reports\AdsFilter;
 use App\Enums\UserRole;
 use App\Models\MediaBuyer;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 beforeEach(fn () => crSetup($this));
 
-function rangeFilter(array $q, string $default = 'last30', ?App\Models\User $u = null): AdsFilter
+function rangeFilter(array $q, string $default = 'last30', ?User $u = null): AdsFilter
 {
     return AdsFilter::fromRequest(Request::create('/ads', 'GET', $q), $u ?? crAdmin(), $default);
 }
