@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Web\Ads;
 
+use App\Ads\Control\Write\RecentPassword;
 use App\Ads\Control\Write\Types\SetStatusType;
 use App\Ads\Control\Write\WriteActionService;
 use App\Ads\Control\Write\WriteDenied;
@@ -73,6 +74,10 @@ class WriteActionController extends Controller
     {
         $x = $service->find($request->user(), $action);
         $data = $this->validated($request, ['diff_hash' => ['required', 'string', 'size:64']]);
+        // Run needs a password typed in the last 15 minutes (R-31); Stop never does.
+        if (! $x->isStop() && ! RecentPassword::fresh($request)) {
+            throw WriteDenied::make('password_confirmation_required');
+        }
 
         return self::outcome($service->confirm($request->user(), $x, $data['diff_hash']));
     }

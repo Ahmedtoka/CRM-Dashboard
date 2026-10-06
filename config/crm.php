@@ -442,6 +442,8 @@ return [
             'timeout_seconds' => 20,
             // Minutes a UI proposal stays confirmable (write-api 3; 2.1 rule 1: a proposal never locks anything).
             'proposal_ttl_minutes' => 10,
+            // Run confirm needs a password confirmation within this many seconds (R-31, B9); 0 turns the check off.
+            'run_reauth_seconds' => (int) env('ADS_RUN_REAUTH_SECONDS', 900),
             // A Run's propose-time live read younger than this is reused at confirm; older, the object is read again (B3).
             'preread_fresh_seconds' => 60,
             // Confirmed-Stop retry (2.1 rule 6): attempts in all, seconds between them (at least; Meta's regain time wins

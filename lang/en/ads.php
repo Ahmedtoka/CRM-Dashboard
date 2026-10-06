@@ -23,6 +23,7 @@ return [
         'buyer_archived' => 'The buyer has account history, so it was archived instead of deleted.',
     ],
     'errors' => [
+        'password_confirmation_required' => 'Running an ad needs your password first.',
         'campaign_level_not_allowed' => 'Running or stopping a whole campaign needs Ads authority. Run and Stop the ads instead.',
         'adset_level_not_allowed' => 'Running or stopping a whole ad set needs Ads authority. Run and Stop the ads instead.',
         'writes_disabled' => 'CRM writes are switched off by the owner. Stop still works; use Ads Manager for anything else.',

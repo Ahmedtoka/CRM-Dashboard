@@ -12,6 +12,7 @@ use App\Http\Controllers\Web\Ads\MaterialCollectionController;
 use App\Http\Controllers\Web\Ads\MaterialController;
 use App\Http\Controllers\Web\Ads\OverviewController;
 use App\Http\Controllers\Web\Ads\PublishController;
+use App\Http\Controllers\Web\Ads\ReauthController;
 use App\Http\Controllers\Web\Ads\SyncController;
 use App\Http\Controllers\Web\Ads\WriteActionController;
 use Illuminate\Support\Facades\Route;
@@ -33,6 +34,7 @@ Route::middleware('ads:report')->group(function () {
     Route::get('/ads/write-actions/{action}', [WriteActionController::class, 'show'])->name('ads.write-actions.show');
     Route::post('/ads/write-actions/{action}/confirm', [WriteActionController::class, 'confirm'])->middleware('throttle:ads-writes')->name('ads.write-actions.confirm');
     Route::post('/ads/write-actions/{action}/cancel', [WriteActionController::class, 'cancel'])->name('ads.write-actions.cancel');
+    Route::post('/ads/reauth', ReauthController::class)->middleware('throttle:6,1')->name('ads.reauth');
     Route::post('/ads/write-actions/{action}/rollback', [WriteActionController::class, 'rollback'])->middleware('throttle:ads-writes')->name('ads.write-actions.rollback');
 });
 
