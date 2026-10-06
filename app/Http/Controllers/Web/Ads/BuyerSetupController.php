@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web\Ads;
 
 use App\Ads\AdsSettings;
+use App\Ads\Launch\LaunchSettings;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\BuyerTarget;
@@ -43,6 +44,7 @@ class BuyerSetupController extends Controller
                 'tax_rate_percent' => round($settings->taxRate() * 100, 2),
                 'winner_thresholds' => $settings->winnerThresholds(),
             ],
+            'launchExpiryDays' => app(LaunchSettings::class)->expiryDays(),
         ]);
     }
 
@@ -102,6 +104,7 @@ class BuyerSetupController extends Controller
             'winner_thresholds.loser_min_spend' => ['sometimes', 'numeric', 'gt:0'],
             'winner_thresholds.min_spend' => ['sometimes', 'numeric', 'gt:0'],
             'winner_thresholds.min_days' => ['sometimes', 'integer', 'min:1', 'max:30'],
+            'launch_expiry_days' => ['sometimes', 'integer', 'min:1', 'max:30'],
         ]);
 
         if (isset($data['tax_rate_percent'])) {
@@ -109,6 +112,9 @@ class BuyerSetupController extends Controller
         }
         if (isset($data['winner_thresholds'])) {
             $settings->set('winner_thresholds', array_merge($settings->winnerThresholds(), $data['winner_thresholds']));
+        }
+        if (isset($data['launch_expiry_days'])) {
+            $settings->set(LaunchSettings::EXPIRY_KEY, (int) $data['launch_expiry_days']);
         }
 
         return back()->with('status', __('ads.flash.saved'));

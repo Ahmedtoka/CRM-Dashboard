@@ -592,6 +592,7 @@ export interface AdsBuyersSetupProps {
     buyers: AdBuyerSetupRow[];
     users: { id: number; name: string; role: string }[];
     settings: AdsSetupSettings;
+    launchExpiryDays: number;
 }
 
 /* ---- Materials library: MaterialController, MaterialCollectionController, AdStockController ---- */

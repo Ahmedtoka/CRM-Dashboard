@@ -3439,6 +3439,8 @@ const en: Messages = {
             settings_title: 'Settings',
             tax_rate: 'Tax rate',
             tax_help: 'Added to spend to get the real cost. ROAS is computed on pre-tax spend.',
+            launch_expiry_days: 'Approval waiting time (days)',
+            launch_expiry_hint: 'A launch not approved within this time closes by itself; a warning comes a day before.',
             thresholds_title: 'Winner creative thresholds',
             winner: 'Winner ROAS',
             winner_help: 'Smoothed ROAS from which an ad counts as a winner.',

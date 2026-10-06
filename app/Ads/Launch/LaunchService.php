@@ -445,6 +445,58 @@ final class LaunchService
         return $to === LaunchState::CreatingPaused ? $this->syncCreating($l) : $l;
     }
 
+    /**
+     * Hourly housekeeping (D7, E12): the day-6 warning once, expiry of waiting launches (held ones too, E9; never
+     * launching, E19), and launches under review re-pointed to the buyer who holds the account today.
+     *
+     * @return array{warned: int, expired: int, reassigned: int}
+     */
+    public function sweep(): array
+    {
+        $now = now();
+        $out = ['warned' => 0, 'expired' => 0, 'reassigned' => 0];
+        $waiting = fn () => AdLaunch::query()->whereNotNull('expires_at')->where(fn ($q) => $q->where('state', LaunchState::AwaitingApproval->value)
+            ->orWhere(fn ($h) => $h->where('state', LaunchState::OnHold->value)->where('hold_from_state', LaunchState::AwaitingApproval->value)));
+
+        foreach ($waiting()->where('expires_at', '<=', $now)->get() as $l) {
+            try {
+                $this->expire($l);
+                $out['expired']++;
+            } catch (WriteDenied) {
+                // decided meanwhile
+            }
+        }
+        foreach ($waiting()->where('expires_at', '>', $now)->where('expires_at', '<=', $now->copy()->addDay())->whereNull('expiring_notified_at')->get() as $l) {
+            if (AdLaunch::query()->whereKey($l->id)->whereNull('expiring_notified_at')->update(['expiring_notified_at' => $now]) === 1) {
+                $this->notify->expiring($l->refresh());
+                $out['warned']++;
+            }
+        }
+        foreach (AdLaunch::query()->with('account')->where('state', LaunchState::BuyerReview->value)->get() as $l) {
+            $buyer = $l->account !== null ? AccountBuyer::today($l->account) : null;
+            if ($buyer === null || $buyer->id === $l->reviewer_buyer_id) {
+                continue;
+            }
+            if (AdLaunch::query()->whereKey($l->id)->where('state', LaunchState::BuyerReview->value)->update(['reviewer_buyer_id' => $buyer->id]) === 1) {
+                AdsAudit::record('launch.reassigned', $l, ['reviewer_buyer_id' => $l->reviewer_buyer_id], ['reviewer_buyer_id' => $buyer->id]);
+                $this->notify->submitted($l->refresh());
+                $out['reassigned']++;
+            }
+        }
+
+        return $out;
+    }
+
+    /** T12: the deadline passed; the paused ads are archived (O5). */
+    public function expire(AdLaunch $l): AdLaunch
+    {
+        $l = $this->transition($l, [LaunchState::AwaitingApproval, LaunchState::OnHold], LaunchState::Expired, ['hold_from_state' => null]);
+        $this->archive($l);
+        $this->notify->expired($l);
+
+        return $l;
+    }
+
     /** E13: a closed slot sends its launches under review back to content (system reason slot_closed). */
     public function slotClosed(AdSet $s, ?User $by): int
     {

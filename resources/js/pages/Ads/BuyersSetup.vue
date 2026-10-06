@@ -197,6 +197,7 @@ function saveTarget(month: string): void {
 const THRESHOLD_KEYS: (keyof AdsWinnerThresholds)[] = ['winner', 'promising', 'loser', 'loser_min_spend', 'min_spend', 'min_days'];
 const settingsForm = useForm({
     tax_rate_percent: num(props.settings.tax_rate_percent),
+    launch_expiry_days: String(props.launchExpiryDays),
     winner_thresholds: Object.fromEntries(THRESHOLD_KEYS.map((k) => [k, num(props.settings.winner_thresholds[k])])) as Record<
         keyof AdsWinnerThresholds,
         string
@@ -347,6 +348,23 @@ function saveSettings(): void {
                     />
                     <p class="text-2xs text-muted-foreground">{{ t('ads.setup.tax_help') }}</p>
                     <p v-if="settingsError('tax_rate_percent')" class="text-2xs text-destructive">{{ settingsError('tax_rate_percent') }}</p>
+                </div>
+
+                <div class="max-w-xs space-y-1">
+                    <label class="text-xs font-medium" for="launch-expiry">{{ t('ads.setup.launch_expiry_days') }}</label>
+                    <input
+                        id="launch-expiry"
+                        v-model="settingsForm.launch_expiry_days"
+                        type="number"
+                        min="1"
+                        max="30"
+                        step="1"
+                        inputmode="numeric"
+                        dir="ltr"
+                        :class="inputClass"
+                    />
+                    <p class="text-2xs text-muted-foreground">{{ t('ads.setup.launch_expiry_hint') }}</p>
+                    <p v-if="settingsError('launch_expiry_days')" class="text-2xs text-destructive">{{ settingsError('launch_expiry_days') }}</p>
                 </div>
 
                 <div class="space-y-3">
