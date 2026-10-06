@@ -372,6 +372,11 @@ it('manages buyers, targets and settings', function () {
         ->where('buyers.0.user.id', $u->id)->where('buyers.0.targets.0.month', '2026-09')->where('buyers.0.targets.0.budget', 60000)
         ->where('buyers.0.targets.0.target_roas', null)
         ->has('users', 1)->where('users.0.role', 'media_buyer')
+        ->missing('settings'));
+
+    // S2: the settings moved to the «القواعد» setup tab.
+    $this->actingAs($admin)->get('/ads/setup/rules')->assertInertia(fn (Assert $p) => $p
+        ->component('Ads/SetupRules', false)
         ->where('settings.tax_rate', 0.125)->where('settings.tax_rate_percent', 12.5)
         ->where('settings.winner_thresholds.winner', 3)->where('settings.winner_thresholds.min_days', 4)->where('settings.winner_thresholds.promising', 1.3));
 });

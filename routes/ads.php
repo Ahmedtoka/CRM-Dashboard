@@ -59,6 +59,9 @@ Route::middleware('ads:manage')->group(function () {
     Route::patch('/ads/accounts/{account}', [AccountController::class, 'updateAccount'])->name('ads.accounts.update');
     Route::post('/ads/accounts/{account}/sync', [AccountController::class, 'syncAccount'])->name('ads.accounts.sync');
 
+    // «الإعداد» tabs: الحسابات (/ads/accounts), المزامنة (/ads/sync), الميديا باير, القواعد.
+    Route::redirect('/ads/setup', '/ads/accounts')->name('ads.setup');
+    Route::get('/ads/setup/rules', [BuyerSetupController::class, 'rules'])->name('ads.setup.rules');
     Route::get('/ads/setup/buyers', [BuyerSetupController::class, 'index'])->name('ads.setup.buyers');
     Route::post('/ads/setup/buyers', [BuyerSetupController::class, 'store'])->name('ads.setup.buyers.store');
     Route::put('/ads/setup/buyers/{buyer}', [BuyerSetupController::class, 'update'])->name('ads.setup.buyers.update');
