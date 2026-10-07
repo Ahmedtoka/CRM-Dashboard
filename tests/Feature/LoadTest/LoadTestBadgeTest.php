@@ -7,6 +7,7 @@ use App\Http\Resources\QueueEntryResource;
 use App\Http\Resources\ShiftMemberResource;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
+use App\Models\LoadTestRun;
 use App\Models\QueueEntry;
 use App\Models\User;
 use App\Simulator\LoadTest\LoadTestChannels;
@@ -15,15 +16,18 @@ use App\Simulator\Simulator;
 /** A load-test chat as the waves create it: the opener carries its run and scenario. */
 function lbChat(): Conversation
 {
+    config(['crm.load_test' => true]);
+    $run = LoadTestRun::activeOrStart();
+
     return app(Simulator::class)->customerMessage(Platform::Instagram, 'lb-1', 'دينا', 'المقاس ده متاح؟', loadTest: [
-        'run' => 1, 'scenario' => 'size_color', 'name' => 'دينا', 'customer_key' => 'lb-1',
+        'run' => $run->id, 'scenario' => 'size_color', 'name' => 'دينا', 'customer_key' => 'lb-1',
     ])->conversation->fresh();
 }
 
 it('tags the conversation a load-test opener opened, and marks it «تيست» without making it a team test', function () {
     $c = lbChat();
 
-    expect($c->meta['load_test'])->toMatchArray(['run' => 1, 'scenario' => 'size_color', 'step' => 0])
+    expect($c->meta['load_test'])->toMatchArray(['run' => LoadTestRun::active()->id, 'scenario' => 'size_color', 'step' => 0])
         ->and($c->isLoadTest())->toBeTrue()
         ->and($c->is_test)->toBeFalse(); // reports, rating and idle sweep treat it like a real chat
 

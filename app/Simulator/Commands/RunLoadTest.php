@@ -3,6 +3,7 @@
 namespace App\Simulator\Commands;
 
 use App\Simulator\LoadTest\LoadTest;
+use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 
 /**
@@ -51,7 +52,10 @@ class RunLoadTest extends Command
 
         return match ($action) {
             'seed-yesterday' => $this->seedYesterday($loadTest),
-            default => $this->notYet($action),
+            'start' => $this->start($loadTest),
+            'status' => $this->status($loadTest),
+            'stop' => $this->stop($loadTest),
+            'tick' => $this->tick($loadTest),
         };
     }
 
@@ -65,10 +69,94 @@ class RunLoadTest extends Command
         return self::SUCCESS;
     }
 
-    private function notYet(string $action): int
+    private function start(LoadTest $loadTest): int
     {
-        $this->error("«{$action}» is not available yet.");
+        $plan = [
+            'every' => (int) $this->option('every'),
+            'count' => (int) $this->option('count'),
+            'hours' => (int) $this->option('hours'),
+            'spread' => (int) $this->option('spread'),
+        ];
 
-        return self::FAILURE;
+        $problem = match (true) {
+            $plan['every'] < 1 || $plan['every'] > 1440 => '--every must be 1-1440 minutes.',
+            $plan['count'] < 1 || $plan['count'] > 1000 => '--count must be 1-1000 chats per wave.',
+            $plan['hours'] < 1 || $plan['hours'] > 24 => '--hours must be 1-24.',
+            $plan['spread'] < 0 || $plan['spread'] > $plan['every'] => '--spread must be 0 to --every minutes.',
+            default => null,
+        };
+
+        if ($problem !== null) {
+            $this->error($problem);
+
+            return self::FAILURE;
+        }
+
+        $run = $loadTest->start($plan);
+
+        $this->info("Run #{$run->id}: wave 1 queued ({$plan['count']} new chats over {$plan['spread']} min).");
+        $this->line("Wave 1 of {$this->wavesTotal($plan)}; next wave at ".$this->cairo($run->next_wave_at).' (Cairo), last one before '.$this->cairo($run->waves_until).'.');
+
+        return self::SUCCESS;
+    }
+
+    private function tick(LoadTest $loadTest): int
+    {
+        $sent = $loadTest->tick();
+
+        if ($sent > 0) {
+            $this->info("Wave queued: {$sent} new chats.");
+        }
+
+        return self::SUCCESS;
+    }
+
+    private function status(LoadTest $loadTest): int
+    {
+        $s = $loadTest->status();
+
+        if ($s === null) {
+            $this->info('No active load test.');
+
+            return self::SUCCESS;
+        }
+
+        $run = $s['run'];
+        $plan = $run->plan;
+
+        $this->info("Run #{$run->id} active since ".$this->cairo($run->started_at).' (Cairo).');
+        $this->line(is_array($plan)
+            ? "Plan: every {$plan['every']} min, {$plan['count']} per wave, spread {$plan['spread']} min, for {$plan['hours']} h"
+                .($run->next_wave_at ? '; next wave at '.$this->cairo($run->next_wave_at) : '; no more waves')
+            : 'Plan: none (backlog only).');
+        $this->line("Waves: {$run->waves_done} of {$s['waves_total']}");
+        $this->line("Openers sent: {$run->openers_sent}");
+        $this->line("Backlog seeded: {$run->seeded}");
+        $this->line("Follow-ups sent: {$run->followups_sent}");
+        $this->line("Test chats: {$s['chats']} (open {$s['open']}, closed {$s['closed']})");
+
+        return self::SUCCESS;
+    }
+
+    private function stop(LoadTest $loadTest): int
+    {
+        $run = $loadTest->stop();
+
+        $this->info($run === null
+            ? 'No active load test.'
+            : "Stopped run #{$run->id}: no more waves; queued openers and follow-ups will do nothing.");
+
+        return self::SUCCESS;
+    }
+
+    /** @param array{every:int, hours:int} $plan */
+    private function wavesTotal(array $plan): int
+    {
+        return (int) ceil(($plan['hours'] * 60) / max(1, $plan['every']));
+    }
+
+    private function cairo(?\DateTimeInterface $at): string
+    {
+        return $at === null ? '-' : CarbonImmutable::instance($at)->setTimezone(LoadTest::TZ)->format('Y-m-d H:i');
     }
 }

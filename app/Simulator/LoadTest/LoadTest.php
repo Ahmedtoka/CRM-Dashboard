@@ -3,11 +3,14 @@
 namespace App\Simulator\LoadTest;
 
 use App\Bot\BotEngine;
+use App\Enums\ConversationStatus;
 use App\Enums\Handler;
 use App\Enums\Platform;
 use App\Inbox\CustomerResolver;
 use App\Inbox\InboxIngestor;
+use App\Models\Conversation;
 use App\Models\LoadTestRun;
+use App\Models\QueueEntry;
 use App\Simulator\Simulator;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
@@ -95,6 +98,148 @@ class LoadTest
         ]);
 
         $run->increment('seeded');
+    }
+
+    /**
+     * Stores the plan on the active run (a new run when none) and emits its first wave now; the
+     * scheduler's tick emits the next ones. Starting again replaces the plan of the active run.
+     *
+     * @param  array{every:int, count:int, hours:int, spread:int}  $plan
+     */
+    public function start(array $plan): LoadTestRun
+    {
+        LoadTestChannels::ensureAll();
+        $run = LoadTestRun::activeOrStart();
+        $run->forceFill([
+            'plan' => $plan,
+            'next_wave_at' => now(),
+            'waves_until' => now()->addHours($plan['hours']),
+        ])->save();
+
+        $this->tick();
+
+        return $run->fresh();
+    }
+
+    /**
+     * The scheduler's every-minute call: emits the active run's wave when it is due. At most one
+     * wave per call — after a scheduler gap the next one follows `every` minutes later instead of
+     * a flood of the missed ones. Returns the openers it queued (0 = nothing was due).
+     */
+    public function tick(): int
+    {
+        if (! self::enabled()) {
+            return 0;
+        }
+
+        $run = LoadTestRun::query()->where('status', LoadTestRun::ACTIVE)
+            ->whereNotNull('next_wave_at')->where('next_wave_at', '<=', now())
+            ->latest('id')->first();
+
+        if ($run === null || ! is_array($run->plan)) {
+            return 0;
+        }
+
+        $plan = $run->plan;
+        $due = $run->next_wave_at;
+
+        if ($run->waves_until === null || $due->greaterThanOrEqualTo($run->waves_until)) {
+            $run->forceFill(['next_wave_at' => null])->save();
+
+            return 0;
+        }
+
+        $next = $due->copy()->addMinutes($plan['every']);
+
+        if ($next->lessThanOrEqualTo(now())) {
+            $next = now()->addMinutes($plan['every']); // missed waves are skipped, not replayed
+        }
+
+        // Claimed before anything is queued, so an overlapping tick can never emit the same wave twice.
+        $claimed = LoadTestRun::query()->whereKey($run->id)->where('status', LoadTestRun::ACTIVE)->where('next_wave_at', $due)
+            ->update(['next_wave_at' => $next->lessThan($run->waves_until) ? $next : null]);
+
+        if ($claimed !== 1) {
+            return 0;
+        }
+
+        $sent = $this->emitWave($run, (int) $plan['count'], (int) $plan['spread']);
+
+        LoadTestRun::query()->whereKey($run->id)->update([
+            'waves_done' => DB::raw('waves_done + 1'),
+            'openers_sent' => DB::raw('openers_sent + '.$sent),
+        ]);
+
+        return $sent;
+    }
+
+    /** $count new customers, their openers queued over $spread minutes through the webhook pipeline. */
+    private function emitWave(LoadTestRun $run, int $count, int $spread): int
+    {
+        for ($i = 0; $i < $count; $i++) {
+            $key = Scenarios::randomKey();
+            $name = Scenarios::randomName();
+            $customerKey = $this->customerKey($run, 'w');
+
+            $this->simulator->queueCustomerMessage(
+                Scenarios::randomPlatform(), $customerKey, $name, Scenarios::get($key)['opener'],
+                $count > 1 ? intdiv($i * $spread * 60, $count) : 0,
+                extra: $this->referral($key),
+                loadTest: $this->tag($run, $key, $name, $customerKey),
+            );
+        }
+
+        return $count;
+    }
+
+    /** Ends the active run: no more waves; its queued openers and follow-ups do nothing when they run. */
+    public function stop(): ?LoadTestRun
+    {
+        $run = LoadTestRun::active();
+
+        $run?->forceFill(['status' => LoadTestRun::STOPPED, 'stopped_at' => now(), 'next_wave_at' => null])->save();
+
+        return $run;
+    }
+
+    /**
+     * Whether a load-test line tagged with this run may still be delivered: the gate is on and
+     * its run is the active one.
+     */
+    public static function runIsLive(mixed $runId): bool
+    {
+        return self::enabled() && is_numeric($runId)
+            && LoadTestRun::query()->whereKey((int) $runId)->where('status', LoadTestRun::ACTIVE)->exists();
+    }
+
+    /**
+     * The active run's figures for `status`.
+     *
+     * @return array{run: LoadTestRun, waves_total: int, chats: int, open: int, closed: int}|null
+     */
+    public function status(): ?array
+    {
+        $run = LoadTestRun::active();
+
+        if ($run === null) {
+            return null;
+        }
+
+        $chats = Conversation::query()->where('meta->load_test->run', $run->id);
+        $closed = (clone $chats)->where(fn ($q) => $q->where('status', ConversationStatus::Resolved->value)
+            ->orWhere(fn ($q) => $q->whereNotNull('queue_entry_id')->whereNotExists(fn ($e) => $e->selectRaw('1')->from('queue_entries')
+                ->whereColumn('queue_entries.conversation_id', 'conversations.id')->whereIn('queue_entries.status', ['waiting', ...QueueEntry::OPEN_STATUSES]))));
+        $total = $chats->count();
+        $closedCount = $closed->count();
+        $plan = $run->plan;
+
+        return [
+            'run' => $run,
+            'waves_total' => is_array($plan) ? (int) ceil(((int) $plan['hours'] * 60) / max(1, (int) $plan['every'])) : 0,
+            'chats' => $total,
+            'open' => $total - $closedCount,
+            'closed' => $closedCount,
+        ];
     }
 
     /** Her conversation, opened as a person's: the opener then reaches no bot turn. */

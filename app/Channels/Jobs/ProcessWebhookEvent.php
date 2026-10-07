@@ -9,6 +9,7 @@ use App\Channels\Data\InboundCommentData;
 use App\Channels\Data\InboundMessageData;
 use App\Enums\Platform;
 use App\Models\WebhookEvent;
+use App\Simulator\LoadTest\LoadTest;
 use App\Simulator\LoadTest\LoadTestChannels;
 use App\Simulator\LoadTest\LoadTestTagger;
 use Illuminate\Bus\Queueable;
@@ -51,6 +52,14 @@ class ProcessWebhookEvent implements ShouldQueue
         try {
             $platform = Platform::from($event->provider);
             $loadTest = self::isLoadTest($platform, (array) ($event->payload ?? []));
+
+            // A load-test line whose run was stopped (or whose gate was turned off) while it waited
+            // on the queue: dropped, so `crm:load-test stop` really stops the customers.
+            if ($loadTest && isset($event->payload['load_test']) && ! LoadTest::runIsLive($event->payload['load_test']['run'] ?? null)) {
+                $event->update(['status' => 'processed', 'processed_at' => now(), 'error' => 'load_test_stopped']);
+
+                return;
+            }
             $adapter = $loadTest ? new FakeChannelAdapter($platform) : $registry->adapter($platform);
             $normalized = $adapter->normalize($event->payload ?? []);
 
