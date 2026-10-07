@@ -130,6 +130,12 @@ final class FreshStart
             }
         }
 
+        // The production load test's «تيست» channels (2026-10-07) go with the data they carried
+        // (their chats, customers and test orders are in WIPE above); every other channel is kept.
+        if (Schema::hasTable('channel_accounts') && Schema::hasColumn('channel_accounts', 'is_load_test')) {
+            $deleted['channel_accounts (load test)'] = DB::table('channel_accounts')->where('is_load_test', true)->delete();
+        }
+
         $dropped = [];
         foreach ($this->attributionBackups() as $table) {
             Schema::dropIfExists($table);

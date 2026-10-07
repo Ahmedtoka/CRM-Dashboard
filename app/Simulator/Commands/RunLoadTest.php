@@ -100,10 +100,12 @@ class RunLoadTest extends Command
             return self::FAILURE;
         }
 
+        $planned = LoadTest::planned($plan);
         $run = $loadTest->start($plan);
 
         $this->info("Run #{$run->id}: wave 1 queued ({$plan['count']} new chats over {$plan['spread']} min).");
-        $this->line("Wave 1 of {$this->wavesTotal($plan)}; next wave at ".$this->cairo($run->next_wave_at).' (Cairo), last one before '.$this->cairo($run->waves_until).'.');
+        $this->line("Wave 1 of {$planned['waves']}; next wave at ".$this->cairo($run->next_wave_at).' (Cairo), last one before '.$this->cairo($run->waves_until).'.');
+        $this->line("Planned in all: {$planned['openers']} new chats (a run never sends more than ".LoadTest::MAX_OPENERS.').');
 
         return self::SUCCESS;
     }
@@ -160,12 +162,6 @@ class RunLoadTest extends Command
         }
 
         return self::SUCCESS;
-    }
-
-    /** @param array{every:int, hours:int} $plan */
-    private function wavesTotal(array $plan): int
-    {
-        return (int) ceil(($plan['hours'] * 60) / max(1, $plan['every']));
     }
 
     private function cairo(?\DateTimeInterface $at): string

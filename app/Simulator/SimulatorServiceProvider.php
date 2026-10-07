@@ -25,7 +25,7 @@ class SimulatorServiceProvider extends ServiceProvider
         // Production load test (2026-10-07): emits the waves that are due. A cheap no-op when no
         // plan is active (the gate is read first, then one indexed query).
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
-            $schedule->command(RunLoadTest::class, ['tick'])->everyMinute()->withoutOverlapping(10)->onOneServer();
+            $schedule->command(RunLoadTest::class, ['tick'])->everyMinute()->when(fn () => LoadTest::enabled())->withoutOverlapping(10)->onOneServer();
         });
     }
 }

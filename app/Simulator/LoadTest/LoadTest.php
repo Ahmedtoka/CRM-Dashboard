@@ -36,6 +36,9 @@ class LoadTest
 {
     public const TZ = 'Africa/Cairo';
 
+    /** A run never sends more openers than this in all (its waves stop there). */
+    public const MAX_OPENERS = 5000;
+
     /** Yesterday's backlog is spread over this evening slot (Cairo) so the 24 h reply window is still open this morning. */
     private const BACKLOG_FROM = '18:00';
 
@@ -189,7 +192,16 @@ class LoadTest
             return 0;
         }
 
-        $sent = $this->emitWave($run, (int) $plan['count'], (int) $plan['spread']);
+        // The run's cap: the last wave is cut short, and no wave follows it.
+        $count = min((int) $plan['count'], max(0, self::MAX_OPENERS - (int) $run->openers_sent));
+
+        if ($count === 0) {
+            LoadTestRun::query()->whereKey($run->id)->update(['next_wave_at' => null]);
+
+            return 0;
+        }
+
+        $sent = $this->emitWave($run, $count, (int) $plan['spread']);
 
         LoadTestRun::query()->whereKey($run->id)->update([
             'waves_done' => DB::raw('waves_done + 1'),
@@ -197,6 +209,20 @@ class LoadTest
         ]);
 
         return $sent;
+    }
+
+    /**
+     * Waves and openers a plan sends in all: one wave at start, then every `every` minutes for
+     * `hours`, capped at MAX_OPENERS.
+     *
+     * @param  array{every:int, count:int, hours:int}  $plan
+     * @return array{waves:int, openers:int}
+     */
+    public static function planned(array $plan): array
+    {
+        $waves = (int) ceil(($plan['hours'] * 60) / max(1, $plan['every']));
+
+        return ['waves' => $waves, 'openers' => min(self::MAX_OPENERS, $waves * $plan['count'])];
     }
 
     /** $count new customers, their openers queued over $spread minutes through the webhook pipeline. */
