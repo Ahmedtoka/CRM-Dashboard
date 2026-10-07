@@ -84,16 +84,19 @@ class LoadTest
         Carbon::setTestNow($at->setTimezone(config('app.timezone')));
         $this->openAsHuman($platform, $customerKey, $name);
 
+        $tag = $this->tag($run, $key, $name, $customerKey);
+        $opener = Scenarios::render($scenario['opener'], $tag['order_number']);
+
         $message = $this->simulator->customerMessage(
-            $platform, $customerKey, $name, $scenario['opener'], $at,
+            $platform, $customerKey, $name, $opener, $at,
             extra: $this->referral($key),
-            loadTest: $this->tag($run, $key, $name, $customerKey) + ['seeded' => true],
+            loadTest: $tag + ['seeded' => true],
         );
 
         Carbon::setTestNow($at->addSeconds(random_int(20, 90))->setTimezone(config('app.timezone')));
         $c = $message->conversation()->first();
 
-        app(BotEngine::class)->handover($c, 'intent', $scenario['opener'], null, null, [
+        app(BotEngine::class)->handover($c, 'intent', $opener, null, null, [
             'category' => $scenario['category'], 'priority' => 'medium', 'queue' => 'agents',
         ]);
 
@@ -180,12 +183,13 @@ class LoadTest
             $key = Scenarios::randomKey();
             $name = Scenarios::randomName();
             $customerKey = $this->customerKey($run, 'w');
+            $tag = $this->tag($run, $key, $name, $customerKey);
 
             $this->simulator->queueCustomerMessage(
-                Scenarios::randomPlatform(), $customerKey, $name, Scenarios::get($key)['opener'],
+                Scenarios::randomPlatform(), $customerKey, $name, Scenarios::render(Scenarios::get($key)['opener'], $tag['order_number']),
                 $count > 1 ? intdiv($i * $spread * 60, $count) : 0,
                 extra: $this->referral($key),
-                loadTest: $this->tag($run, $key, $name, $customerKey),
+                loadTest: $tag,
             );
         }
 
@@ -260,10 +264,18 @@ class LoadTest
         return $referral !== null ? ['referral' => $referral] : [];
     }
 
-    /** @return array{run:int, scenario:string, name:string, customer_key:string} */
+    /**
+     * What the opener tags her conversation with. A scenario that names her order gets a fake order
+     * number (LoadTestTagger then makes that test order for her), never a real customer's.
+     *
+     * @return array{run:int, scenario:string, name:string, customer_key:string, order_number:?string}
+     */
     public function tag(LoadTestRun $run, string $scenario, string $name, string $customerKey): array
     {
-        return ['run' => $run->id, 'scenario' => $scenario, 'name' => $name, 'customer_key' => $customerKey];
+        return [
+            'run' => $run->id, 'scenario' => $scenario, 'name' => $name, 'customer_key' => $customerKey,
+            'order_number' => Scenarios::needsOrder($scenario) ? Scenarios::fakeOrderNumber() : null,
+        ];
     }
 
     /** A brand-new customer of this run: every opener starts a new chat. */

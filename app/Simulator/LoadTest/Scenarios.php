@@ -3,7 +3,6 @@
 namespace App\Simulator\LoadTest;
 
 use App\Enums\Platform;
-use App\Models\Ad;
 
 /**
  * The customers of the production load test (2026-10-07): Le Voile's real problem types in
@@ -17,6 +16,18 @@ final class Scenarios
     /** At most this many follow-ups per chat; the last one is the thanks line. */
     public const MAX_FOLLOWUPS = 3;
 
+    /** Where a line names her order: replaced by her chat's fake order number. */
+    public const ORDER = '{order}';
+
+    /**
+     * Fake order numbers live from here up (scenario orders below +500000, orders the agents take in
+     * a test chat above it): eight digits, far beyond the store's real numbering.
+     */
+    public const ORDER_NUMBER_BASE = 99000000;
+
+    /** The «جاية من إعلان» chats come from fake ads: never a real ad id. */
+    public const FAKE_AD_PREFIX = 'loadtest-ad-';
+
     /** @var array<string, array{label: string, category: string, opener: string, followups: list<string>, thanks: string}> */
     private const ALL = [
         'quality_complaint' => [
@@ -24,7 +35,7 @@ final class Scenarios
             'category' => 'complaint',
             'opener' => 'السلام عليكم، الفستان اللي وصلني القماش بتاعه خفيف جداً ومش زي الصور خالص',
             'followups' => [
-                'ده رقم الأوردر 10482، واستلمته امبارح',
+                'ده رقم الأوردر {order}، واستلمته امبارح',
                 'الخياطة كمان فاكة من عند الكم، أبعتلك صورة؟',
                 'طب أنا عايزة أرجعه ولا ممكن تبدلوه بحاجة أحسن؟',
             ],
@@ -35,7 +46,7 @@ final class Scenarios
             'category' => 'return',
             'opener' => 'لو سمحتي عايزة أرجع الطقم اللي اشتريته الأسبوع اللي فات',
             'followups' => [
-                'رقم الأوردر 10391 ولسه بالتيكيت',
+                'رقم الأوردر {order} ولسه بالتيكيت',
                 'المندوب هييجي ياخده إمتى؟ وفلوسي هترجع إزاي؟',
             ],
             'thanks' => 'تمام كده، متشكرة',
@@ -45,7 +56,7 @@ final class Scenarios
             'category' => 'exchange',
             'opener' => 'البنطلون جه ضيق عليا، ينفع أبدله بمقاس أكبر؟',
             'followups' => [
-                'أنا واخدة لارج وعايزة اكس لارج، رقم الأوردر 10517',
+                'أنا واخدة لارج وعايزة اكس لارج، رقم الأوردر {order}',
                 'هل الاستبدال عليه مصاريف شحن تاني؟',
                 'ماشي، ابعتوا المندوب يوم السبت لو ينفع',
             ],
@@ -56,7 +67,7 @@ final class Scenarios
             'category' => 'late_order',
             'opener' => 'أنا طالبة أوردر من خمس أيام ولسه موصلش لحد دلوقتي',
             'followups' => [
-                'رقم الأوردر 10455 والعنوان في مدينة نصر',
+                'رقم الأوردر {order} والعنوان في مدينة نصر',
                 'محدش كلمني من شركة الشحن خالص',
                 'طب ممكن تأكدولي هيوصل إمتى بالظبط؟',
             ],
@@ -67,7 +78,7 @@ final class Scenarios
             'category' => 'defect',
             'opener' => 'وصلني بلوزة لونها بيج وأنا طالبة أسود',
             'followups' => [
-                'رقم الأوردر 10502، ومفتحتش الكيس غير عشان أتأكد',
+                'رقم الأوردر {order}، ومفتحتش الكيس غير عشان أتأكد',
                 'هو أنا هبعتها إزاي وأستلم الصح؟',
             ],
             'thanks' => 'تمام، متشكرة على سرعة الرد',
@@ -126,7 +137,7 @@ final class Scenarios
         'track_order' => [
             'label' => 'تتبع أوردر برقم',
             'category' => 'order_status',
-            'opener' => 'عايزة أعرف الأوردر بتاعي فين، رقمه 10533',
+            'opener' => 'عايزة أعرف الأوردر بتاعي فين، رقمه {order}',
             'followups' => [
                 'هو مكتوب عندي إنه اتشحن من يومين',
                 'ممكن رقم المندوب أكلمه؟',
@@ -138,7 +149,7 @@ final class Scenarios
             'category' => 'cancel_order',
             'opener' => 'لو سمحتي عايزة ألغي الأوردر اللي عملته النهارده الصبح',
             'followups' => [
-                'رقمه 10561، وملحقش يتشحن على ما أعتقد',
+                'رقمه {order}، وملحقش يتشحن على ما أعتقد',
                 'هل ممكن بدل ما ألغيه أغير المقاس بس؟',
             ],
             'thanks' => 'تمام، شكراً على تعاونكم',
@@ -168,7 +179,7 @@ final class Scenarios
             'category' => 'complaint',
             'opener' => 'أنا باعتة من امبارح ومحدش رد عليا، هو في حد هنا؟',
             'followups' => [
-                'كنت عايزة أسأل على أوردر رقم 10470 ومحدش بيرد على التليفون كمان',
+                'كنت عايزة أسأل على أوردر رقم {order} ومحدش بيرد على التليفون كمان',
                 'ياريت تشوفولي الموضوع ده بسرعة لو سمحتي',
             ],
             'thanks' => 'ماشي، شكراً إنك رديتي',
@@ -188,7 +199,7 @@ final class Scenarios
             'category' => 'address',
             'opener' => 'عايزة أغير عنوان التوصيل في الأوردر بتاعي',
             'followups' => [
-                'رقم الأوردر 10548، والعنوان الجديد في الشيخ زايد',
+                'رقم الأوردر {order}، والعنوان الجديد في الشيخ زايد',
                 'هل ده هيأخر التوصيل؟',
             ],
             'thanks' => 'تمام، متشكرة',
@@ -259,10 +270,31 @@ final class Scenarios
         return self::followUps($key)[$step - 1] ?? null;
     }
 
+    /** Whether the scenario's lines mention her order (a fake load-test order is then made for her chat). */
+    public static function needsOrder(string $key): bool
+    {
+        $s = self::ALL[$key] ?? null;
+
+        return $s !== null && str_contains(implode('
+', [$s['opener'], ...$s['followups'], $s['thanks']]), self::ORDER);
+    }
+
+    /** A fresh fake order number in the load test's own range (never a real order's). */
+    public static function fakeOrderNumber(): string
+    {
+        return (string) (self::ORDER_NUMBER_BASE + random_int(1, 499999));
+    }
+
+    /** The line with her (fake) order number in place of {order}. */
+    public static function render(string $line, ?string $orderNumber): string
+    {
+        return str_replace(self::ORDER, $orderNumber ?? self::fakeOrderNumber(), $line);
+    }
+
     /**
-     * A Meta-shaped `referral` for the «جاية من إعلان» scenario: the most recently seen real synced
-     * Meta ad, so the conversation is attributed like a real click-to-message chat. Null for any
-     * other scenario or when no ad is synced (the chat then simply has no ad).
+     * A Meta-shaped `referral` for the «جاية من إعلان» scenario. Never a real ad (review round 1):
+     * a fake ad id `loadtest-ad-<n>` with a fake title and no picture, so no real ad's chats,
+     * funnel, alerts or attribution ever count a load-test chat. Null for any other scenario.
      *
      * @return array<string, mixed>|null
      */
@@ -272,22 +304,13 @@ final class Scenarios
             return null;
         }
 
-        $ad = Ad::query()->whereNotNull('external_id')
-            ->whereHas('account', fn ($q) => $q->where('platform', 'meta'))
-            ->orderByDesc('last_seen_at')->orderByDesc('id')->first();
-
-        if ($ad === null) {
-            return null;
-        }
+        $n = random_int(1, 5);
 
         return [
             'source' => 'ADS',
             'type' => 'OPEN_THREAD',
-            'ad_id' => (string) $ad->external_id,
-            'ads_context_data' => array_filter([
-                'ad_title' => $ad->name ?: $ad->headline,
-                'photo_url' => $ad->thumbnail_url ?: $ad->image_url,
-            ]),
+            'ad_id' => self::FAKE_AD_PREFIX.$n,
+            'ads_context_data' => ['ad_title' => 'إعلان تيست '.$n],
         ];
     }
 }

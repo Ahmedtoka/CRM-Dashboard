@@ -303,7 +303,7 @@ final class OrderItemsStep extends BaseStep
             return null;
         }
 
-        return Order::query()->with(['items' => fn ($q) => $q->orderBy('id'), 'items.variant.product', 'customer'])->find((int) $data['order_id']);
+        return Order::withLoadTest()->with(['items' => fn ($q) => $q->orderBy('id'), 'items.variant.product', 'customer'])->find((int) $data['order_id']);
     }
 
     /** @return array{mode:string, queue?:list<int>, qty_for?:int} */

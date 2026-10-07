@@ -127,7 +127,7 @@ final class AlertData
         [$s, $e] = self::utcRange($from, $to);
         $refused = "'".implode("','", BreakEven::REFUSED)."'";
 
-        return DB::table('orders as o')->whereIn('o.ad_id', $adIds)->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)
+        return DB::table('orders as o')->whereIn('o.ad_id', $adIds)->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)->where('o.is_load_test', false)
             ->whereBetween('o.placed_at', [$s, $e])
             ->groupBy('o.ad_id')
             ->selectRaw("o.ad_id, SUM(CASE WHEN o.shipment_status IN ({$refused}) THEN 1 ELSE 0 END) as refused, "
@@ -191,7 +191,7 @@ final class AlertData
         DB::table('order_items as i')
             ->join('orders as o', 'o.id', '=', 'i.order_id')
             ->join('product_variants as v', 'v.id', '=', 'i.variant_id')
-            ->whereIn('v.product_id', $productIds)->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)
+            ->whereIn('v.product_id', $productIds)->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)->where('o.is_load_test', false)
             ->whereBetween('o.placed_at', [$s, $e])
             ->groupBy('v.product_id', 'i.variant_id')
             ->selectRaw('v.product_id, i.variant_id, SUM(i.qty) as qty')

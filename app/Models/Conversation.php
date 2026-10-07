@@ -180,7 +180,8 @@ class Conversation extends Model
      */
     public function orders(): HasMany
     {
-        return $this->hasMany(Order::class);
+        // Its own orders, a load-test chat's test orders included (a real chat never has one).
+        return $this->hasMany(Order::class)->withoutGlobalScope(Order::LOAD_TEST_SCOPE);
     }
 
     /**

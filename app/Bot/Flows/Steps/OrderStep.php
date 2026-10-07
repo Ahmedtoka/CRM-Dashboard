@@ -106,7 +106,7 @@ final class OrderStep extends BaseStep
 
         $id = (int) substr($value, 5);
         $offered = array_map('intval', (array) ($state['data']['order_choices'] ?? []));
-        $order = in_array($id, $offered, true) ? Order::with('customer')->find($id) : null;
+        $order = in_array($id, $offered, true) ? Order::withLoadTest()->with('customer')->find($id) : null;
 
         if ($order === null) {
             return null;
@@ -224,7 +224,7 @@ final class OrderStep extends BaseStep
     /** Only "found it" and the question: no number, name, address or items before the proof. */
     private function askLastDigits(OrderSnapshot $s): StepOutcome
     {
-        $order = Order::with('customer')->find($s->orderId);
+        $order = Order::withLoadTest()->with('customer')->find($s->orderId);
 
         if ($order === null || $this->lookup->orderPhoneDigits($order) === []) {
             return StepOutcome::handover('order_verification_failed', [['text' => self::VERIFY_FAILED_TEXT]]);
@@ -245,7 +245,7 @@ final class OrderStep extends BaseStep
             return null;
         }
 
-        $order = Order::with('customer')->find((int) ($state['data']['order_verify']['order_id'] ?? 0));
+        $order = Order::withLoadTest()->with('customer')->find((int) ($state['data']['order_verify']['order_id'] ?? 0));
 
         if ($order === null) {
             return StepOutcome::handover('order_verification_failed', [['text' => self::VERIFY_FAILED_TEXT]]);
@@ -278,7 +278,7 @@ final class OrderStep extends BaseStep
     {
         $ids = array_map('intval', (array) ($state['data']['verified_order_ids'] ?? []));
 
-        $order = Order::with('customer')->find($s->orderId);
+        $order = Order::withLoadTest()->with('customer')->find($s->orderId);
 
         return $this->orderData($s) + [
             // Only once she proved the order is hers (2026-09-19): the greeting's name and the 14-day branch.
@@ -330,7 +330,7 @@ final class OrderStep extends BaseStep
             'order_status_key' => $s->statusKey,
             'order_governorate' => $s->governorate,
             'order_failed_attempt' => $s->failedAttempt,
-            'order_editable' => self::editable($s->statusKey, Order::find($s->orderId)),
+            'order_editable' => self::editable($s->statusKey, Order::withLoadTest()->find($s->orderId)),
             'order_ref_text' => null,
             'order_choices' => null,
         ];

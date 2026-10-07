@@ -106,7 +106,7 @@ class FollowUps
 
         [$c, $lt, $text] = $line;
 
-        $this->simulator->customerMessage($c->platform, (string) $lt['customer_key'], (string) ($lt['name'] ?? ''), $text);
+        $this->simulator->customerMessage($c->platform, (string) $lt['customer_key'], (string) ($lt['name'] ?? ''), Scenarios::render($text, $lt['order_number'] ?? null));
 
         return true;
     }

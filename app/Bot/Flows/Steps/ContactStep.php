@@ -54,7 +54,7 @@ final class ContactStep extends BaseStep
         $data = $state['data'] ?? [];
 
         // Known from the order she proved is hers: the complaint goes on without asking.
-        if (OrderStep::hasVerifiedOrder($data) && ($order = Order::with('customer')->find((int) $data['order_id'])) !== null) {
+        if (OrderStep::hasVerifiedOrder($data) && ($order = Order::withLoadTest()->with('customer')->find((int) $data['order_id'])) !== null) {
             $name = $this->validName((string) ($order->shipping_name ?: $order->customer?->name));
             $phone = EntityExtractor::phone((string) ($order->shipping_phone ?: $order->customer?->phone));
 

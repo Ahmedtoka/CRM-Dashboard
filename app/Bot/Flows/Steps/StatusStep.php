@@ -150,7 +150,7 @@ final class StatusStep extends BaseStep
         $key = (string) $data['order_status_key'];
         $failed = ($data['order_failed_attempt'] ?? false) === true;
         $finished = in_array($key, self::FINISHED, true);
-        $order = is_numeric($data['order_id'] ?? null) ? Order::with('items')->find((int) $data['order_id']) : null;
+        $order = is_numeric($data['order_id'] ?? null) ? Order::withLoadTest()->with('items')->find((int) $data['order_id']) : null;
         $owner = ($data['order_verified'] ?? null) === true;
         $placed = $this->placedAt($data, $order);
 

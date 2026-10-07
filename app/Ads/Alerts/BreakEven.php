@@ -100,7 +100,7 @@ final class BreakEven
 
     private function orders(CarbonImmutable $since): Builder
     {
-        return DB::table('orders as o')->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)->where('o.placed_at', '>=', $since);
+        return DB::table('orders as o')->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)->where('o.is_load_test', false)->where('o.placed_at', '>=', $since);
     }
 
     /** @return array{0: ?float, 1: string} */

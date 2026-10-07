@@ -75,7 +75,35 @@ class Order extends Model
         'ad_campaign_id',
         'ad_attribution',
         'last_synced_at',
+        // Production load test (2026-10-07): taken in a load-test chat, never sent to Shopify.
+        'is_load_test',
     ];
+
+    /** The global scope that keeps load-test orders out of every query that does not ask for them. */
+    public const LOAD_TEST_SCOPE = 'not_load_test';
+
+    /**
+     * Load-test orders (2026-10-07) are invisible by default: reports, analytics, ads attribution,
+     * Shopify sync/reconcile/refresh, search and lookups never see them. Only the paths that serve
+     * the load-test chat itself opt in (withLoadTest(): the order service, the conversation's and
+     * customer's own orders, route binding, the bot's lookup of a load-test chat).
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope(self::LOAD_TEST_SCOPE, fn (Builder $q) => $q->where($q->qualifyColumn('is_load_test'), false));
+    }
+
+    /** @return Builder<Order> every order, load-test ones included */
+    public static function withLoadTest(): Builder
+    {
+        return static::query()->withoutGlobalScope(self::LOAD_TEST_SCOPE);
+    }
+
+    /** Route binding sees load-test orders too (the policies still decide who may open them). */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return static::withLoadTest()->where($field ?? $this->getRouteKeyName(), $value)->first();
+    }
 
     protected function casts(): array
     {
@@ -98,6 +126,7 @@ class Order extends Model
             'submit_attempts' => 'integer',
             'mismatch' => 'boolean',
             'mismatch_notified_reasons' => 'array',
+            'is_load_test' => 'boolean',
         ];
     }
 

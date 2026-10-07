@@ -265,7 +265,7 @@ class DataHealth
     /** @return array{rate: ?float, orders: int, linked: int, days: int} */
     public function linkRateStats(): array
     {
-        $q = DB::table('orders')->where('source', 'chat')->where('created_at', '>=', now()->subDays(14));
+        $q = DB::table('orders')->where('source', 'chat')->where('is_load_test', false)->where('created_at', '>=', now()->subDays(14));
         $orders = (clone $q)->count();
         $linked = (clone $q)->whereNotNull('conversation_id')->count();
 

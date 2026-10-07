@@ -10,6 +10,7 @@ use App\Models\Message;
 use App\Models\QueueEntry;
 use App\Models\User;
 use App\Simulator\LoadTest\Jobs\SendLoadTestFollowUp;
+use App\Simulator\LoadTest\LoadTest;
 use App\Simulator\LoadTest\Scenarios;
 use App\Simulator\Simulator;
 use Illuminate\Support\Carbon;
@@ -26,11 +27,10 @@ beforeEach(function () {
 
 function fuChat(string $scenario = 'late_order'): Conversation
 {
-    $run = LoadTestRun::active();
+    $tag = app(LoadTest::class)->tag(LoadTestRun::active(), $scenario, 'منى', 'fu-'.$scenario);
 
-    return app(Simulator::class)->customerMessage(Platform::WhatsApp, 'fu-'.$scenario, 'منى', Scenarios::get($scenario)['opener'], loadTest: [
-        'run' => $run->id, 'scenario' => $scenario, 'name' => 'منى', 'customer_key' => 'fu-'.$scenario,
-    ])->conversation->fresh();
+    return app(Simulator::class)->customerMessage(Platform::WhatsApp, 'fu-'.$scenario, 'منى', Scenarios::render(Scenarios::get($scenario)['opener'], $tag['order_number']), loadTest: $tag)
+        ->conversation->fresh();
 }
 
 /** Runs the queued follow-up jobs (as the worker would after their delay) and forgets them. */
@@ -64,7 +64,9 @@ it('queues the next scenario line 60-120 s after an agent reply, through the inb
 
     fuRunPending();
 
-    expect(fuCustomerLines($c))->toBe([Scenarios::get('late_order')['opener'], Scenarios::followUp('late_order', 1)])
+    $number = $c->meta['load_test']['order_number'];
+    expect($number)->not->toBeNull()
+        ->and(fuCustomerLines($c))->toBe([Scenarios::render(Scenarios::get('late_order')['opener'], $number), Scenarios::render(Scenarios::followUp('late_order', 1), $number)])
         ->and($c->fresh()->meta['load_test']['step'])->toBe(1)
         ->and($c->fresh()->meta['load_test']['pending'])->toBeNull()
         ->and($this->run->fresh()->followups_sent)->toBe(1)

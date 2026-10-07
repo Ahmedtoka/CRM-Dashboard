@@ -32,6 +32,7 @@ use App\Shopify\Client\ShopifyException;
 use App\Shopify\Connection\IntegrationRepository;
 use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Customers\PhoneNormalizer;
+use App\Simulator\LoadTest\LoadTestCommerceProvider;
 use App\Support\SafeBroadcast;
 use DomainException;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -154,6 +155,8 @@ class OrderService
             'shipping_province_code' => $shipping['province_code'] ?? null,
             'shipping_address' => $shipping['address1'] ?? ($shipping['address'] ?? null),
             'note' => $this->buildNote($user, $conversation, $data['note'] ?? null),
+            // Production load test (2026-10-07): a test chat's order is a test order (see providerFor()).
+            'is_load_test' => $conversation->isLoadTest(),
         ];
 
         try {
@@ -224,7 +227,7 @@ class OrderService
 
     private function submitLocked(int $orderId): void
     {
-        $order = Order::with(['items', 'customer', 'conversation', 'createdBy'])->find($orderId);
+        $order = Order::withLoadTest()->with(['items', 'customer', 'conversation', 'createdBy'])->find($orderId);
 
         if ($order === null || $order->status !== OrderStatus::Submitting) {
             return;
@@ -257,16 +260,16 @@ class OrderService
 
             // A previous attempt may have created it and then failed (timeout/5xx
             // on the response): adopt that store order instead of creating a duplicate.
-            $result = $order->submit_attempts > 1 ? $this->provider->findSubmittedOrder($order) : null;
+            $result = $order->submit_attempts > 1 ? $this->providerFor($order)->findSubmittedOrder($order) : null;
 
             if ($result === null) {
                 $address = $this->shippingAddressFor($order);
-                $customerId = $order->customer ? $this->linkStoreCustomer($order->customer, $address) : null;
+                $customerId = $order->customer ? $this->linkStoreCustomer($order, $order->customer, $address) : null;
                 $payload = $this->payloadFor($order, $variants, $address, $customerId);
 
                 $result = $order->type === OrderType::PaymentLink
-                    ? $this->provider->createPaymentLink($payload)
-                    : $this->provider->createCodOrder($payload);
+                    ? $this->providerFor($order)->createPaymentLink($payload)
+                    : $this->providerFor($order)->createCodOrder($payload);
             }
         } catch (ShopifyException $e) {
             if (in_array($e->kind, ['throttled', 'transport'], true)) {
@@ -297,7 +300,7 @@ class OrderService
      */
     public function markSubmissionFailed(int $orderId, ?Throwable $exception): void
     {
-        $order = Order::find($orderId);
+        $order = Order::withLoadTest()->find($orderId);
 
         if ($order === null) {
             return;
@@ -330,13 +333,13 @@ class OrderService
             throw new AuthorizationException(__('commerce.order.retry_forbidden'));
         }
 
-        $claimed = Order::query()
+        $claimed = Order::withLoadTest()
             ->whereKey($order->id)
             ->where('status', OrderStatus::Failed->value)
             ->update(['status' => OrderStatus::Submitting->value, 'last_error' => null]);
 
         if ($claimed === 0) {
-            $status = Order::whereKey($order->id)->value('status');
+            $status = Order::withLoadTest()->whereKey($order->id)->value('status');
 
             throw ValidationException::withMessages([
                 'order' => __('commerce.order.retry_not_failed', [
@@ -345,7 +348,7 @@ class OrderService
             ]);
         }
 
-        $order = Order::findOrFail($order->id);
+        $order = Order::withLoadTest()->findOrFail($order->id);
 
         $this->logger->log(ActorType::User, $user, ActivityLogger::ORDER_RETRIED, $order, $order->conversation);
 
@@ -366,7 +369,7 @@ class OrderService
     public function markPaid(Order $order): Order
     {
         [$order, $outcome] = DB::transaction(function () use ($order) {
-            $locked = Order::query()->lockForUpdate()->findOrFail($order->id);
+            $locked = Order::withLoadTest()->lockForUpdate()->findOrFail($order->id);
 
             if ($locked->status === OrderStatus::Confirmed) {
                 return [$locked, 'already_confirmed'];
@@ -432,7 +435,7 @@ class OrderService
         }
 
         [$order, $alreadyCancelled] = DB::transaction(function () use ($order, $syncProvider) {
-            $locked = Order::query()->lockForUpdate()->findOrFail($order->id);
+            $locked = Order::withLoadTest()->lockForUpdate()->findOrFail($order->id);
 
             if ($locked->status === OrderStatus::Cancelled) {
                 return [$locked, true];
@@ -571,7 +574,7 @@ class OrderService
      */
     private function findReplay(string $key, Conversation $conversation, User $user): ?Order
     {
-        $order = Order::query()->where('idempotency_key', $key)->first();
+        $order = Order::withLoadTest()->where('idempotency_key', $key)->first();
 
         if ($order === null) {
             return null;
@@ -607,7 +610,7 @@ class OrderService
      */
     private function failSubmission(Order $order, string $error): bool
     {
-        $claimed = Order::query()
+        $claimed = Order::withLoadTest()
             ->whereKey($order->id)
             ->where('status', OrderStatus::Submitting->value)
             ->update(['status' => OrderStatus::Failed->value, 'last_error' => $error]);
@@ -650,7 +653,7 @@ class OrderService
             $state['mismatch_reason'] = OrderStatusResolver::SHOPIFY_TOTAL_DIFFERS;
         }
 
-        $claimed = Order::query()
+        $claimed = Order::withLoadTest()
             ->whereKey($order->id)
             ->where('status', OrderStatus::Submitting->value)
             ->update($ids + $state);
@@ -658,7 +661,7 @@ class OrderService
         if ($claimed === 0) {
             // Cancelled locally while the store was creating it: keep the ids so
             // webhooks still match, and undo it on the store.
-            Order::query()->whereKey($order->id)->update($ids);
+            Order::withLoadTest()->whereKey($order->id)->update($ids);
             $order->refresh();
 
             if ($order->status === OrderStatus::Cancelled) {
@@ -676,7 +679,10 @@ class OrderService
             $this->postSubmitStep($order, 'customer_stats', fn () => $this->applyCustomerStats($order));
         }
 
-        $this->postSubmitStep($order, 'attribution', fn () => $this->attribution->recordOrder($order));
+        // A load-test order (2026-10-07) is credited to nobody: it never counts in the analytics.
+        if (! $order->is_load_test) {
+            $this->postSubmitStep($order, 'attribution', fn () => $this->attribution->recordOrder($order));
+        }
 
         $this->postSubmitStep($order, 'chat_line', function () use ($order, $cod, $result) {
             if ($order->conversation === null) {
@@ -793,9 +799,19 @@ class OrderService
      *
      * @param  array<string, string>  $address
      */
-    private function linkStoreCustomer(Customer $customer, array $address): string
+    /**
+     * The store an order goes to. A load-test order (2026-10-07) always goes to the load-test
+     * provider, whatever the global commerce driver: no Shopify order, draft, payment link,
+     * customer or stock movement ever comes from a test chat.
+     */
+    private function providerFor(Order $order): CommerceProvider
     {
-        $id = $this->provider->ensureCustomer($customer, $address);
+        return $order->is_load_test ? app(LoadTestCommerceProvider::class) : $this->provider;
+    }
+
+    private function linkStoreCustomer(Order $order, Customer $customer, array $address): string
+    {
+        $id = $this->providerFor($order)->ensureCustomer($customer, $address);
 
         if ($id !== ''
             && (string) $customer->shopify_customer_id !== $id
@@ -869,7 +885,7 @@ class OrderService
     private function cancelOnProvider(Order $order, ?User $user, bool $restock = true): void
     {
         try {
-            $result = $this->provider->cancelOrder($order, $restock);
+            $result = $this->providerFor($order)->cancelOrder($order, $restock);
         } catch (Throwable $e) {
             report($e);
             $result = new CommerceResult(success: false, error: $e->getMessage());

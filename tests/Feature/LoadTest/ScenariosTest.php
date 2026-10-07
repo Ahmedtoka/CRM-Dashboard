@@ -44,13 +44,13 @@ it('picks realistic Egyptian names, random platforms among the three test channe
         ->and($platforms->count())->toBe(3);
 });
 
-it('sends the ad scenario with a referral of a real synced ad, or none when no ad is synced', function () {
-    expect(Scenarios::referral('from_ad'))->toBeNull()
-        ->and(Scenarios::referral('price'))->toBeNull();
+it('sends the ad scenario from a fake ad, never a real synced one', function () {
+    Ad::factory()->create(['external_id' => '120200000777', 'name' => 'فستان سواريه ستان']);
 
-    $ad = Ad::factory()->create(['external_id' => '120200000777', 'name' => 'فستان سواريه ستان']);
+    $referral = Scenarios::referral('from_ad');
 
-    expect(Scenarios::referral('from_ad'))->toMatchArray(['source' => 'ADS', 'ad_id' => '120200000777'])
-        ->and(Scenarios::referral('from_ad')['ads_context_data']['ad_title'])->toBe('فستان سواريه ستان')
+    expect($referral['source'])->toBe('ADS')
+        ->and($referral['ad_id'])->toStartWith(Scenarios::FAKE_AD_PREFIX)
+        ->and($referral['ads_context_data']['ad_title'])->toStartWith('إعلان تيست')
         ->and(Scenarios::referral('price'))->toBeNull();
 });

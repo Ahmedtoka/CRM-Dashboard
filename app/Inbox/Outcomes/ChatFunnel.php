@@ -98,7 +98,7 @@ final class ChatFunnel
             ->whereRaw($match)->whereRaw("{$at} > t.touched_at");
         $returned = AdsQuery::RETURNED_SHIPMENT;
         $orders = DB::table('orders as o')
-            ->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)
+            ->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)->where('o.is_load_test', false)
             ->whereRaw("{$at} <= ?", [$t])
             ->where(fn ($w) => $w->whereExists($after('o.conversation_id = c.id'))
                 ->orWhereExists($after('c.customer_id IS NOT NULL AND o.customer_id = c.customer_id')))

@@ -336,7 +336,7 @@ final class AdsQuery
             ->whereBetween('c.ad_attributed_at', [$f->startUtc(), $end])
             ->select(['c.id', 'c.customer_id', 'c.ad_attributed_at', 'acc.id as account_id'])
             ->selectRaw('CASE WHEN EXISTS ('
-                .'SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id AND o.status NOT IN (?, ?, ?) '
+                .'SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id AND o.is_load_test = 0 AND o.status NOT IN (?, ?, ?) '
                 .'AND (o.shipment_status IS NULL OR o.shipment_status <> ?) '
                 .'AND o.placed_at > c.ad_attributed_at AND o.placed_at <= ?) THEN 1 ELSE 0 END as ordered',
                 [...self::NOT_REAL_STATUSES, self::RETURNED_SHIPMENT, $end->format('Y-m-d H:i:s')])
@@ -366,7 +366,7 @@ final class AdsQuery
      */
     public static function realOrders(Builder $q): Builder
     {
-        return $q->whereNotIn('o.status', self::NOT_REAL_STATUSES)
+        return $q->whereNotIn('o.status', self::NOT_REAL_STATUSES)->where('o.is_load_test', false) // never a load-test order (2026-10-07)
             ->where(fn ($w) => $w->whereNull('o.shipment_status')->orWhere('o.shipment_status', '!=', self::RETURNED_SHIPMENT));
     }
 

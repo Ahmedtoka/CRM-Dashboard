@@ -28,7 +28,7 @@ final class ReturnPolicyChecker
     /** @return list<string> */
     public function notes(array $data): array
     {
-        $order = is_numeric($data['order_id'] ?? null) ? Order::query()->with('items.variant')->find((int) $data['order_id']) : null;
+        $order = is_numeric($data['order_id'] ?? null) ? Order::withLoadTest()->with('items.variant')->find((int) $data['order_id']) : null;
         $notes = [];
 
         $placedAt = $order !== null ? ($order->placed_at ?? $order->created_at) : null;

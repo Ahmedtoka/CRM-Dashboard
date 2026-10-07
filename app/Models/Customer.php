@@ -83,7 +83,8 @@ class Customer extends Model
      */
     public function orders(): HasMany
     {
-        return $this->hasMany(Order::class);
+        // Her own orders: a load-test customer's test orders included (a real customer never has one).
+        return $this->hasMany(Order::class)->withoutGlobalScope(Order::LOAD_TEST_SCOPE);
     }
 
     /**
