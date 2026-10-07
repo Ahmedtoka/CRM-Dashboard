@@ -61,10 +61,17 @@ class RunLoadTest extends Command
 
     private function seedYesterday(LoadTest $loadTest): int
     {
+        if (LoadTest::shiftIsOpen()) {
+            $this->error('Refusing: a shift is open. Seed the backlog before the team checks in (close the open shift first).');
+
+            return self::FAILURE;
+        }
+
         $count = max(1, min(1000, (int) $this->option('count')));
         $seeded = $loadTest->seedYesterday($count);
 
         $this->info("Seeded {$seeded} chats from yesterday evening, handed over and waiting for a person.");
+        $this->line("They land in yesterday's numbers only as test chats, and test chats are left out of every report, Today and team figure.");
 
         return self::SUCCESS;
     }

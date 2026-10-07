@@ -10,6 +10,9 @@ use App\Models\LoadTestRun;
 use App\Models\Message;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
+use App\Models\Shift;
+use App\Queue\QueueRouter;
+use App\Simulator\LoadTest\BacklogRouter;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -81,4 +84,27 @@ it('seeds N chats from yesterday evening, handed over and waiting in the queue, 
     }
 
     Http::assertNothingSent();
+});
+
+it('refuses to seed while a shift is open', function () {
+    config(['crm.load_test' => true]);
+    Shift::factory()->create(['status' => 'open']);
+
+    $this->artisan('crm:load-test', ['action' => 'seed-yesterday', '--count' => 2])
+        ->expectsOutputToContain('a shift is open')
+        ->assertFailed();
+
+    expect(Conversation::count())->toBe(0);
+});
+
+it('never runs the queue router under the fake clock, and gives it back afterwards', function () {
+    config(['crm.load_test' => true]);
+    $this->mock(QueueRouter::class, fn ($m) => $m->shouldReceive('run')->never()->shouldReceive('runAfterCommit')->never());
+
+    $this->artisan('crm:load-test', ['action' => 'seed-yesterday', '--count' => 3])
+        ->expectsOutputToContain('left out of every report')
+        ->assertSuccessful();
+
+    expect(app(QueueRouter::class))->not->toBeInstanceOf(BacklogRouter::class)
+        ->and(QueueEntry::query()->where('status', 'waiting')->count())->toBe(3);
 });

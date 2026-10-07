@@ -11,6 +11,8 @@ use App\Inbox\InboxIngestor;
 use App\Models\Conversation;
 use App\Models\LoadTestRun;
 use App\Models\QueueEntry;
+use App\Models\Shift;
+use App\Queue\QueueRouter;
 use App\Simulator\Simulator;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
@@ -33,6 +35,12 @@ class LoadTest
 
     public function __construct(private readonly Simulator $simulator) {}
 
+    /** Any shift still open: the backlog must not be written then (its clock runs yesterday). */
+    public static function shiftIsOpen(): bool
+    {
+        return Shift::query()->where('status', 'open')->exists();
+    }
+
     public static function enabled(): bool
     {
         return (bool) config('crm.load_test', false);
@@ -50,6 +58,10 @@ class LoadTest
      */
     public function seedYesterday(int $count): int
     {
+        if (self::shiftIsOpen()) {
+            throw new \RuntimeException('A shift is open: seed the backlog before the team checks in (close the shift first).');
+        }
+
         $run = LoadTestRun::activeOrStart();
         LoadTestChannels::ensureAll();
 
@@ -60,6 +72,8 @@ class LoadTest
 
         $previous = Carbon::getTestNow();
         $seeded = 0;
+        // No router pass under the fake clock: the backlog is only enqueued (review round 1).
+        app()->instance(QueueRouter::class, app(BacklogRouter::class));
 
         try {
             foreach ($moments as $at) {
@@ -68,6 +82,7 @@ class LoadTest
             }
         } finally {
             Carbon::setTestNow($previous);
+            app()->forgetInstance(QueueRouter::class);
         }
 
         return $seeded;
