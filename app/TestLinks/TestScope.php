@@ -39,12 +39,15 @@ class TestScope
         }
 
         if (! array_key_exists($channelAccountId, $this->accounts)) {
-            // A production load-test channel (2026-10-07) counts as a test too: its chats leave every
-            // report like a team test's. Unlike a team test it still gets the rating question and the
-            // idle sweep (RatingService, CloseIdleEpisodes) and shows its real state (ConversationResource).
+            // A load-test channel (2026-10-07) counts as a test too on a server that serves the real
+            // channels (driver live): its chats leave every report like a team test's. Unlike a team test
+            // it still gets the rating question and the idle sweep (RatingService, CloseIdleEpisodes) and
+            // shows its real state (ConversationResource). On a fake-driver install (the local demo) the
+            // simulated traffic IS the demo's data, so it is counted there.
+            $loadTestIsTest = self::loadTestCountsAsTest();
             $this->remember($this->accounts, $channelAccountId, ChannelAccount::query()
                 ->whereKey($channelAccountId)
-                ->where(fn ($q) => $q->where('driver', self::DRIVER)->orWhere('is_load_test', true))
+                ->where(fn ($q) => $q->where('driver', self::DRIVER)->when($loadTestIsTest, fn ($q) => $q->orWhere('is_load_test', true)))
                 ->exists());
         }
 
@@ -84,6 +87,12 @@ class TestScope
     public static function realConversations(Builder|QueryBuilder $query, string $alias = 'conversations'): Builder|QueryBuilder
     {
         return $query->where($alias.'.is_test', false);
+    }
+
+    /** Whether a load-test channel's chats are tests (left out of the reports): everywhere but a fake-driver demo. */
+    public static function loadTestCountsAsTest(): bool
+    {
+        return config('crm.drivers.channels') !== 'fake';
     }
 
     /** The load-test channels' ids, as a subquery. */

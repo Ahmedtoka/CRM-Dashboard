@@ -12,6 +12,7 @@ use App\Simulator\Simulator;
 use App\TestLinks\TestScope;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 
 /*
  * Review round 1: a load-test chat leaves every report, ads and Today count (it is a test for
@@ -19,7 +20,8 @@ use Illuminate\Support\Facades\DB;
  */
 beforeEach(function () {
     Carbon::setTestNow(Carbon::parse('2026-10-07 12:00', 'Africa/Cairo'));
-    config(['crm.load_test' => true]);
+    config(['crm.load_test' => true, 'crm.drivers.channels' => 'live']); // a production server: load-test chats are tests
+    Http::fake();
 });
 
 function reChat(string $key = 're-1'): Conversation
@@ -57,4 +59,10 @@ it('still sweeps an idle load-test chat like a real one', function () {
     $ids = (new CloseIdleEpisodes)->candidates(1, app(OutcomeRecorder::class))->pluck('id')->all();
 
     expect($ids)->toContain($c->id);
+});
+
+it('counts the simulated traffic on a fake-driver demo install (the local demo data)', function () {
+    config(['crm.drivers.channels' => 'fake']);
+
+    expect(reChat('re-demo')->is_test)->toBeFalse();
 });

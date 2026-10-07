@@ -16,7 +16,7 @@ use App\Simulator\Simulator;
 /** A load-test chat as the waves create it: the opener carries its run and scenario. */
 function lbChat(): Conversation
 {
-    config(['crm.load_test' => true]);
+    config(['crm.load_test' => true, 'crm.drivers.channels' => 'live']);
     $run = LoadTestRun::activeOrStart();
 
     return app(Simulator::class)->customerMessage(Platform::Instagram, 'lb-1', 'دينا', 'المقاس ده متاح؟', loadTest: [

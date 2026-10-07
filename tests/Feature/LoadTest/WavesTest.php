@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Simulator\LoadTest\LoadTest;
 use App\Simulator\Simulator;
+use App\TestLinks\TestScope;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
@@ -165,11 +166,11 @@ it('closes every open load-test ticket and resolves the test chats on stop --clo
         ->expectsOutputToContain('Closed 2 load-test chats')
         ->assertSuccessful();
 
-    $testEntries = QueueEntry::query()->whereIn('conversation_id', Conversation::query()->where('is_test', true)->select('id'))->get();
+    $testEntries = QueueEntry::query()->whereIn('conversation_id', Conversation::query()->whereIn('channel_account_id', TestScope::loadTestAccountIds())->select('id'))->get();
     expect($testEntries)->toHaveCount(2)
         ->and($testEntries->every(fn ($e) => in_array($e->status, ['closed', 'cancelled'], true)))->toBeTrue()
         ->and($testEntries->pluck('close_reason')->unique()->all())->toBe(['resolved_elsewhere'])
-        ->and(Conversation::query()->where('is_test', true)->where('status', '!=', 'resolved')->count())->toBe(0)
+        ->and(Conversation::query()->whereIn('channel_account_id', TestScope::loadTestAccountIds())->where('status', '!=', 'resolved')->count())->toBe(0)
         ->and(Message::query()->where('sender_type', 'bot')->count())->toBe($botBefore) // no closing message, no rating
         ->and(ConversationOutcome::query()->where('conversation_id', $inWindow->id)->value('outcome'))->toBe('other')
         ->and($real->fresh()->status)->toBe('active')
