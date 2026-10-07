@@ -47,7 +47,8 @@ class CaseRecorder
         }
 
         $data = array_diff_key($data, array_flip(self::INTERNAL_KEYS));
-        $order = is_numeric($data['order_id'] ?? null) ? Order::find((int) $data['order_id']) : null;
+        // A load-test chat's case names its test order (hidden from everything else by the global scope).
+        $order = is_numeric($data['order_id'] ?? null) ? Order::withLoadTest()->find((int) $data['order_id']) : null;
 
         if ($type === 'delivery_followup' && ($open = $this->openFollowUp($c, $order, $data)) !== null) {
             return $open;

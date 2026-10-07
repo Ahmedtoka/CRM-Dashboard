@@ -3,6 +3,7 @@
 namespace App\Channels\Adapters;
 
 use App\Channels\Contracts\ChannelAdapter;
+use App\Channels\Data\AdReferralData;
 use App\Channels\Data\ChannelCapabilities;
 use App\Channels\Data\DeliveryReceiptData;
 use App\Channels\Data\InboundCommentData;
@@ -120,6 +121,9 @@ final class FakeChannelAdapter implements ChannelAdapter
                     occurredAt: CarbonImmutable::parse($event['at']),
                     attachments: $event['attachments'] ?? [],
                     customerPhone: $event['phone'] ?? null,
+                    payload: isset($event['payload']) ? (string) $event['payload'] : null,
+                    // A Meta-shaped `referral` (the load test's «جاية من إعلان» scenario).
+                    referral: is_array($event['referral'] ?? null) ? AdReferralData::fromMeta($event['referral']) : null,
                 ),
                 'comment' => new InboundCommentData(
                     platform: $this->platform,

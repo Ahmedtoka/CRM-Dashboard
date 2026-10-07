@@ -213,7 +213,8 @@ class OrderController extends Controller
     {
         Gate::authorize('view', $order);
 
-        if ($order->shopify_order_id === null) {
+        // A load-test order (2026-10-07) is never on Shopify, whatever id its fake store gave it.
+        if ($order->shopify_order_id === null || $order->is_load_test) {
             return response()->json(['message' => __('errors.orders.not_on_shopify')], 409);
         }
 

@@ -29,6 +29,12 @@ class ChannelRegistry
             return new TestChannelAdapter;
         }
 
+        // A «تيست» channel of the production load test (2026-10-07): whatever the global driver,
+        // its sends, typing and attachments are recorded by the fake adapter and never reach Meta.
+        if ($account->is_load_test) {
+            return new FakeChannelAdapter($account->platform);
+        }
+
         return $this->adapter($account->platform);
     }
 
@@ -47,9 +53,10 @@ class ChannelRegistry
         // Instagram/WhatsApp account connected later from Settings → Integrations must
         // not have its Meta webhooks parsed (and its replies "sent") by the fake adapter.
         // One read of the platform's few accounts decides both (Task 4a: the thread detail ran two).
-        // Test-link accounts are not a channel at all, so they never decide this.
+        // Test-link accounts and the load-test channels are not a real channel, so they never decide this.
         $accounts = ChannelAccount::query()->where('platform', $platform)
             ->where('driver', '!=', TestScope::DRIVER)
+            ->where('is_load_test', false)
             ->orderBy('id')
             ->get(['id', 'driver', 'status']);
 
@@ -71,6 +78,7 @@ class ChannelRegistry
     {
         return ChannelAccount::where('platform', $platform)
             ->where('driver', '!=', TestScope::DRIVER)
+            ->where('is_load_test', false)
             ->firstOrFail();
     }
 }

@@ -9,6 +9,8 @@ use App\Models\ChannelAccount;
 use App\Models\Comment;
 use App\Models\Message;
 use App\Models\WebhookEvent;
+use App\Simulator\LoadTest\LoadTestChannels;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Database\Seeders\Demo\ArabicCorpus;
 use Illuminate\Broadcasting\BroadcastException;
@@ -37,24 +39,17 @@ class Simulator
      * Sends a customer message on $p from $customerKey and returns the
      * persisted inbound Message once ingestion (and, synchronously when the
      * queue is `sync`, the bot's reaction) has completed.
+     *
+     * @param  array<string, mixed>  $extra  more fields for the fake event (`referral`)
+     * @param  array<string, mixed>|null  $loadTest  tags the conversation's `meta.load_test` once ingested
      */
-    public function customerMessage(Platform $p, string $customerKey, string $name, string $text, ?CarbonInterface $at = null, ?string $attachment = null): Message
+    public function customerMessage(Platform $p, string $customerKey, string $name, string $text, ?CarbonInterface $at = null, ?string $attachment = null, array $extra = [], ?array $loadTest = null): Message
     {
         $at ??= now();
 
-        $this->ensureAccount($p);
-
         $externalId = 'sim_msg_'.Str::uuid();
 
-        $event = $this->createWebhookEvent($p, 'message', [[
-            'type' => 'message',
-            'id' => $externalId,
-            'customer_id' => $customerKey,
-            'name' => $name,
-            'text' => $text,
-            'at' => $at->toIso8601String(),
-            'attachments' => $attachment ? [['type' => ['image' => 'image', 'voice' => 'audio', 'video' => 'video', 'file' => 'file'][$attachment], 'fixture' => $attachment]] : [],
-        ]]);
+        $event = $this->createWebhookEvent($p, 'message', [$this->messagePayload($p, $externalId, $customerKey, $name, $text, $at, $attachment, $extra)], $loadTest);
 
         ProcessWebhookEvent::dispatchSync($event->id);
 
@@ -70,12 +65,11 @@ class Simulator
     {
         $at ??= now();
 
-        $this->ensureAccount($p);
-
         $commentExternalId = 'sim_c_'.Str::uuid();
 
         $event = $this->createWebhookEvent($p, 'comment', [[
             'type' => 'comment',
+            'channel_id' => $this->ensureAccount($p)->external_id,
             'post_id' => $postKey,
             'post_caption' => 'Post '.$postKey,
             'is_ad' => $isAd,
@@ -83,7 +77,7 @@ class Simulator
             'customer_id' => $customerKey,
             'name' => $name,
             'text' => $text,
-            'at' => $at->toIso8601String(),
+            'at' => CarbonImmutable::instance($at)->utc()->toIso8601String(),
         ]]);
 
         ProcessWebhookEvent::dispatchSync($event->id);
@@ -98,10 +92,9 @@ class Simulator
     {
         $platform = $m->platform instanceof Platform ? $m->platform : Platform::from((string) $m->platform);
 
-        $this->ensureAccount($platform);
-
         $event = $this->createWebhookEvent($platform, 'receipt', [[
             'type' => 'receipt',
+            'channel_id' => $this->ensureAccount($platform)->external_id,
             'message_id' => $m->external_id,
             'status' => $status->value,
             'at' => now()->toIso8601String(),
@@ -179,19 +172,15 @@ class Simulator
      * webhook is processed by the queue worker (optionally after a delay) so
      * the HTTP request returns immediately, exactly like a real platform push.
      */
-    public function queueCustomerMessage(Platform $p, string $customerKey, string $name, string $text, int $delaySeconds = 0, ?string $attachment = null): WebhookEvent
+    /**
+     * @param  array<string, mixed>  $extra  more fields for the fake event (`referral`)
+     * @param  array<string, mixed>|null  $loadTest  tags the conversation's `meta.load_test` once ingested
+     */
+    public function queueCustomerMessage(Platform $p, string $customerKey, string $name, string $text, int $delaySeconds = 0, ?string $attachment = null, array $extra = [], ?array $loadTest = null): WebhookEvent
     {
-        $this->ensureAccount($p);
-
-        $event = $this->createWebhookEvent($p, 'message', [[
-            'type' => 'message',
-            'id' => 'sim_msg_'.Str::uuid(),
-            'customer_id' => $customerKey,
-            'name' => $name,
-            'text' => $text,
-            'at' => now()->addSeconds($delaySeconds)->toIso8601String(),
-            'attachments' => $attachment ? [['type' => ['image' => 'image', 'voice' => 'audio', 'video' => 'video', 'file' => 'file'][$attachment], 'fixture' => $attachment]] : [],
-        ]]);
+        $event = $this->createWebhookEvent($p, 'message', [
+            $this->messagePayload($p, 'sim_msg_'.Str::uuid(), $customerKey, $name, $text, now()->addSeconds($delaySeconds), $attachment, $extra),
+        ], $loadTest);
 
         $this->dispatchEvent($event, $delaySeconds);
 
@@ -203,10 +192,9 @@ class Simulator
      */
     public function queueComment(Platform $p, string $postKey, string $customerKey, string $name, string $text, bool $isAd = false): WebhookEvent
     {
-        $this->ensureAccount($p);
-
         $event = $this->createWebhookEvent($p, 'comment', [[
             'type' => 'comment',
+            'channel_id' => $this->ensureAccount($p)->external_id,
             'post_id' => $postKey,
             'post_caption' => 'Post '.$postKey,
             'is_ad' => $isAd,
@@ -256,15 +244,35 @@ class Simulator
     }
 
     /**
-     * The one canonical account per platform used by all simulated traffic
-     * (DemoSeeder creates the same `demo-{platform}` rows).
+     * The one account all simulated traffic of a platform uses: its dedicated «تيست» channel
+     * (load test, 2026-10-07). Found by its own external id, never by platform alone, so on a
+     * server with the real page connected a simulated message can never attach to the real
+     * account, and an agent's reply to it can never reach Meta (the account is `is_load_test`).
      */
     public function ensureAccount(Platform $p): ChannelAccount
     {
-        return ChannelAccount::firstOrCreate(
-            ['platform' => $p->value],
-            ['name' => 'Demo '.$p->label(), 'external_id' => 'demo-'.$p->value, 'driver' => 'fake', 'status' => 'connected'],
-        );
+        return LoadTestChannels::account($p);
+    }
+
+    /**
+     * One fake `message` event. It always names the test channel (`channel_id`), so the fake
+     * adapter never falls back to the platform's first account.
+     *
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     */
+    private function messagePayload(Platform $p, string $externalId, string $customerKey, string $name, string $text, CarbonInterface $at, ?string $attachment, array $extra): array
+    {
+        return [
+            'type' => 'message',
+            'channel_id' => $this->ensureAccount($p)->external_id,
+            'id' => $externalId,
+            'customer_id' => $customerKey,
+            'name' => $name,
+            'text' => $text,
+            'at' => CarbonImmutable::instance($at)->utc()->toIso8601String(),
+            'attachments' => $attachment ? [['type' => ['image' => 'image', 'voice' => 'audio', 'video' => 'video', 'file' => 'file'][$attachment], 'fixture' => $attachment]] : [],
+        ] + $extra;
     }
 
     private function dispatchEvent(WebhookEvent $event, int $delaySeconds = 0): void
@@ -279,13 +287,15 @@ class Simulator
     /**
      * @param  array<int, array<string, mixed>>  $events
      */
-    private function createWebhookEvent(Platform $p, string $type, array $events): WebhookEvent
+    private function createWebhookEvent(Platform $p, string $type, array $events, ?array $loadTest = null): WebhookEvent
     {
         return WebhookEvent::create([
             'provider' => $p->value,
             'event_type' => $type,
             'dedupe_key' => (string) Str::uuid(),
-            'payload' => ['fake' => true, 'events' => $events],
+            // `loadtest`: ProcessWebhookEvent reads it with the fake adapter even where the live driver
+            // serves the platform — only when every event names a load-test channel.
+            'payload' => ['fake' => true, 'loadtest' => true, 'events' => $events] + ($loadTest !== null ? ['load_test' => $loadTest] : []),
             'signature_valid' => true,
             'status' => 'received',
         ]);

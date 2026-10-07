@@ -8,6 +8,7 @@ export interface BoardWindowRef {
     window_no: number | null;
     kind: string;
     platform: PlatformValue | null;
+    is_load_test?: boolean;
     delivered_at: string | null;
     silence_left_seconds: number | null;
 }

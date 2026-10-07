@@ -126,7 +126,8 @@ class SupportCase extends Model
     /** @return BelongsTo<Order, $this> */
     public function order(): BelongsTo
     {
-        return $this->belongsTo(Order::class);
+        // A load-test chat's case keeps its test order (2026-10-07).
+        return $this->belongsTo(Order::class)->withoutGlobalScope(Order::LOAD_TEST_SCOPE);
     }
 
     /** @return BelongsTo<User, $this> */

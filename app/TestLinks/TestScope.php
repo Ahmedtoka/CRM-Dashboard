@@ -39,9 +39,15 @@ class TestScope
         }
 
         if (! array_key_exists($channelAccountId, $this->accounts)) {
+            // A load-test channel (2026-10-07) counts as a test too on a server that serves the real
+            // channels (driver live): its chats leave every report like a team test's. Unlike a team test
+            // it still gets the rating question and the idle sweep (RatingService, CloseIdleEpisodes) and
+            // shows its real state (ConversationResource). On a fake-driver install (the local demo) the
+            // simulated traffic IS the demo's data, so it is counted there.
+            $loadTestIsTest = self::loadTestCountsAsTest();
             $this->remember($this->accounts, $channelAccountId, ChannelAccount::query()
                 ->whereKey($channelAccountId)
-                ->where('driver', self::DRIVER)
+                ->where(fn ($q) => $q->where('driver', self::DRIVER)->when($loadTestIsTest, fn ($q) => $q->orWhere('is_load_test', true)))
                 ->exists());
         }
 
@@ -67,6 +73,32 @@ class TestScope
     public function noteConversation(int $conversationId, bool $isTest): void
     {
         $this->remember($this->conversations, $conversationId, $isTest);
+    }
+
+    /**
+     * Real customer conversations only (alias = the conversations table or its alias): neither a team
+     * test link nor a load-test chat. The one helper the reports, ads and Today counts use.
+     *
+     * @template TBuilder of Builder|QueryBuilder
+     *
+     * @param  TBuilder  $query
+     * @return TBuilder
+     */
+    public static function realConversations(Builder|QueryBuilder $query, string $alias = 'conversations'): Builder|QueryBuilder
+    {
+        return $query->where($alias.'.is_test', false);
+    }
+
+    /** Whether a load-test channel's chats are tests (left out of the reports): everywhere but a fake-driver demo. */
+    public static function loadTestCountsAsTest(): bool
+    {
+        return config('crm.drivers.channels') !== 'fake';
+    }
+
+    /** The load-test channels' ids, as a subquery. */
+    public static function loadTestAccountIds(): QueryBuilder
+    {
+        return ChannelAccount::query()->where('is_load_test', true)->select('id')->toBase();
     }
 
     /** A subquery of the test conversations' ids, for the analytics exclusions. */

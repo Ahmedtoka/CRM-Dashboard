@@ -113,6 +113,13 @@ const dotColor = (color: string | null) => (color && /^#[0-9a-f]{6}$/i.test(colo
                     {{ state.label }}
                 </span>
                 <StatusChip v-else-if="state" :label="state.label" :tone="state.tone" />
+                <span
+                    v-if="conversation.is_load_test"
+                    class="inline-flex h-5 shrink-0 items-center rounded-full bg-orange-500/15 px-2 text-2xs font-semibold text-orange-800 dark:bg-orange-400/20 dark:text-orange-200"
+                    data-load-test-chip
+                >
+                    {{ t('inbox.load_test_badge') }}
+                </span>
                 <span class="min-w-0 flex-1 truncate text-xs" :class="unread ? 'font-semibold text-foreground' : 'text-muted-foreground'">
                     <span v-if="ours" class="text-muted-foreground">{{ t('inbox.you_prefix') }}</span>
                     <span dir="auto">{{ conversation.last_message_preview || '—' }}</span>

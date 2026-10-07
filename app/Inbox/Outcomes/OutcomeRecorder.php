@@ -289,7 +289,7 @@ final class OutcomeRecorder
         $held = ConversationOutcome::query()->where('conversation_id', $c->id)
             ->whereNotNull('ended_at')->whereNotNull('order_id')->select('order_id');
 
-        return Order::query()->where('conversation_id', $c->id)->whereNotIn('status', AdsQuery::NOT_REAL_STATUSES)
+        return Order::withLoadTest()->where('conversation_id', $c->id)->whereNotIn('status', AdsQuery::NOT_REAL_STATUSES)
             ->whereNotIn('id', $held)
             ->when($since !== null, fn ($q) => $q->where('created_at', '>', $since))
             ->latest('id')->first(['id', 'created_at']);

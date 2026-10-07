@@ -251,7 +251,8 @@ class HealthController extends Controller
         $statuses = [];
 
         try {
-            foreach (ChannelAccount::query()->get(['platform', 'status']) as $account) {
+            // The load test's «تيست» channels (2026-10-07) are not channels: they never mask a real one's status.
+            foreach (ChannelAccount::query()->where('is_load_test', false)->get(['platform', 'status']) as $account) {
                 $platform = $account->platform instanceof Platform ? $account->platform->value : (string) $account->platform;
                 $statuses[$platform] = $account->status;
             }

@@ -22,6 +22,7 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\User;
 use App\Queue\WindowLifecycle;
+use App\Simulator\LoadTest\FollowUps;
 use App\Support\Emoji;
 use App\Support\SafeBroadcast;
 use DomainException;
@@ -203,6 +204,12 @@ class OutboundService
             SafeBroadcast::send(new MessageCreated($message));
         }
         SafeBroadcast::send(new ConversationUpdated($c));
+
+        // Production load test (2026-10-07): a test chat's simulated customer answers an agent's
+        // reply (never a bot's). No query for a real chat; never allowed to break the send.
+        if ($c->isLoadTest()) {
+            rescue(fn () => app(FollowUps::class)->agentReplied($c), report: true);
+        }
 
         return $messages;
     }

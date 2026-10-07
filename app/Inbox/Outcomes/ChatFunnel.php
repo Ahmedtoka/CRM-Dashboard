@@ -98,7 +98,7 @@ final class ChatFunnel
             ->whereRaw($match)->whereRaw("{$at} > t.touched_at");
         $returned = AdsQuery::RETURNED_SHIPMENT;
         $orders = DB::table('orders as o')
-            ->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)
+            ->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)->where('o.is_load_test', false)
             ->whereRaw("{$at} <= ?", [$t])
             ->where(fn ($w) => $w->whereExists($after('o.conversation_id = c.id'))
                 ->orWhereExists($after('c.customer_id IS NOT NULL AND o.customer_id = c.customer_id')))
@@ -161,7 +161,7 @@ final class ChatFunnel
 
         $notReal = AdsQuery::NOT_REAL_STATUSES;
         $in = implode(', ', array_fill(0, count($notReal), '?'));
-        $common = "AND COALESCE(o.placed_at, o.created_at) > t.touched_at AND COALESCE(o.placed_at, o.created_at) <= ? AND o.status NOT IN ({$in})";
+        $common = "AND o.is_load_test = 0 AND COALESCE(o.placed_at, o.created_at) > t.touched_at AND COALESCE(o.placed_at, o.created_at) <= ? AND o.status NOT IN ({$in})";
         // A real order after the touch, from this conversation or the same customer: two EXISTS ORed so each
         // uses its own index (orders.conversation_id / orders.customer_id) instead of an OR inside one.
         $order = function (string $extra = '', array $extraBindings = []) use ($common, $t, $notReal): array {

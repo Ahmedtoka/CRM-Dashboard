@@ -76,6 +76,7 @@ class ShiftMemberResource extends JsonResource
             'window_no' => $e->window_no,
             'kind' => $e->kind,
             'platform' => $e->conversation?->platform?->value,
+            'is_load_test' => (bool) $e->conversation?->isLoadTest(),
             'delivered_at' => $e->delivered_at?->toIso8601String(),
             // Null while the silence clock is not running (no reply yet, or she wrote last).
             'silence_left_seconds' => QueueEntryResource::silenceLeft($e, $settings),

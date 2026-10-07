@@ -7,6 +7,7 @@ use App\Enums\ConversationSource;
 use App\Enums\ConversationStatus;
 use App\Enums\Handler;
 use App\Enums\Platform;
+use App\Simulator\LoadTest\LoadTestChannels;
 use App\TestLinks\TestScope;
 use Database\Factories\ConversationFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -66,6 +67,8 @@ class Conversation extends Model
         'assigned_at',
         'queue_entry_id',
         'return_priority_until',
+        // Free json; `meta.load_test` = a production load-test chat's run, scenario and step (2026-10-07).
+        'meta',
     ];
 
     protected function casts(): array
@@ -91,6 +94,7 @@ class Conversation extends Model
             'ad_attributed_at' => 'datetime',
             'assigned_at' => 'datetime',
             'return_priority_until' => 'datetime',
+            'meta' => 'array',
         ];
     }
 
@@ -116,6 +120,24 @@ class Conversation extends Model
         }
 
         return $inserted;
+    }
+
+    /**
+     * A chat of the production load test (2026-10-07): its opener tagged `meta.load_test`, or — so a
+     * missing tag can never send a test chat to live Shopify/Meta — it sits on a load-test channel
+     * (the loaded relation, else LoadTestChannels' short-lived id memo: no query per list row).
+     */
+    public function isLoadTest(): bool
+    {
+        if (is_array(($this->meta ?? [])['load_test'] ?? null)) {
+            return true;
+        }
+
+        if ($this->relationLoaded('channelAccount')) {
+            return (bool) $this->channelAccount?->is_load_test;
+        }
+
+        return LoadTestChannels::isTestAccountId($this->channel_account_id);
     }
 
     /**
@@ -171,7 +193,8 @@ class Conversation extends Model
      */
     public function orders(): HasMany
     {
-        return $this->hasMany(Order::class);
+        // Its own orders, a load-test chat's test orders included (a real chat never has one).
+        return $this->hasMany(Order::class)->withoutGlobalScope(Order::LOAD_TEST_SCOPE);
     }
 
     /**

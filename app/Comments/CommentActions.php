@@ -5,6 +5,7 @@ namespace App\Comments;
 use App\Analytics\ActivityLogger;
 use App\Analytics\AttributionRecorder;
 use App\Channels\ChannelRegistry;
+use App\Channels\Contracts\ChannelAdapter;
 use App\Enums\ActorType;
 use App\Enums\CommentStatus;
 use App\Enums\ConversationSource;
@@ -19,6 +20,7 @@ use App\Inbox\InboxIngestor;
 use App\Models\Comment;
 use App\Models\Conversation;
 use App\Models\CustomerIdentity;
+use App\Models\Post;
 use App\Models\User;
 use App\Support\SafeBroadcast;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -43,12 +45,23 @@ class CommentActions
      * @throws AuthorizationException
      * @throws CommentActionFailedException
      */
+    /**
+     * The adapter of the post's own account: a load-test channel's comments (2026-10-07) are answered
+     * by the fake adapter even where the live driver serves the platform.
+     */
+    private function adapterFor(Post $post): ChannelAdapter
+    {
+        return $post->channelAccount !== null
+            ? $this->registry->adapterFor($post->channelAccount)
+            : $this->registry->adapter($post->platform);
+    }
+
     public function reply(Comment $c, string $text, ?User $by): Comment
     {
         $post = $c->post;
         $this->authorize($post->platform, $by);
 
-        $result = $this->registry->adapter($post->platform)->replyToComment($post->channelAccount, $c->external_id, $text);
+        $result = $this->adapterFor($post)->replyToComment($post->channelAccount, $c->external_id, $text);
 
         if (! $result->success) {
             throw new CommentActionFailedException((string) $result->error);
@@ -85,7 +98,7 @@ class CommentActions
         $post = $c->post;
         $this->authorize($post->platform, $by);
 
-        $result = $this->registry->adapter($post->platform)->hideComment($post->channelAccount, $c->external_id);
+        $result = $this->adapterFor($post)->hideComment($post->channelAccount, $c->external_id);
 
         if (! $result->success) {
             throw new CommentActionFailedException((string) $result->error);
@@ -117,7 +130,7 @@ class CommentActions
         $post = $c->post;
         $this->authorize($post->platform, $by);
 
-        $adapter = $this->registry->adapter($post->platform);
+        $adapter = $this->adapterFor($post);
 
         if (! $adapter->capabilities()->privateReply) {
             throw new PrivateReplyNotAllowedException($post->platform->label().' does not support private replies.');

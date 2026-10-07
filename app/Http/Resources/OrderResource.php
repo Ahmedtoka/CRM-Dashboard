@@ -79,7 +79,9 @@ class OrderResource extends JsonResource
             'invoice_url' => $this->invoice_url,
             'shopify_order_id' => $this->shopify_order_id,
             'shopify_draft_order_id' => $this->shopify_draft_order_id,
-            'shopify_admin_url' => $this->shopifyAdminUrl($request),
+            // A load-test order (2026-10-07) is not on Shopify: no admin link.
+            'shopify_admin_url' => $this->is_load_test ? null : $this->shopifyAdminUrl($request),
+            'is_load_test' => (bool) $this->is_load_test,
             'shipping' => [
                 'name' => $this->shipping_name,
                 'phone' => $this->shipping_phone,

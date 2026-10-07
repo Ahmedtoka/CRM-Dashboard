@@ -8,6 +8,7 @@ use App\Models\Conversation;
 use App\Models\Order;
 use App\Shopify\Customers\PhoneNormalizer;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Throwable;
 
@@ -35,6 +36,18 @@ class OrderLookup
     /** Set after the first OMS failure of one find(): the rest of that lookup uses local data. */
     private bool $omsDown = false;
 
+    /**
+     * The current find() serves a load-test chat (2026-10-07): it looks only at load-test orders
+     * (its fake order numbers), a real chat only at real ones — neither ever sees the other's.
+     */
+    private bool $loadTest = false;
+
+    /** @return Builder<Order> the orders this find() may read */
+    private function orders(): Builder
+    {
+        return Order::withLoadTest()->where('orders.is_load_test', $this->loadTest);
+    }
+
     /** The current find()'s listing limit. */
     private int $maxListed = self::MAX_LISTED;
 
@@ -51,6 +64,7 @@ class OrderLookup
     public function find(Conversation $c, array $entities, int $maxListed = self::MAX_LISTED): array
     {
         $this->omsDown = false;
+        $this->loadTest = $c->isLoadTest();
         $this->maxListed = max(1, $maxListed);
 
         $ref = $this->ref($entities['order_ref'] ?? null);
@@ -62,7 +76,7 @@ class OrderLookup
         }
 
         if ($ref !== null) {
-            $order = Order::query()
+            $order = $this->orders()
                 ->where(fn ($q) => $q->where('order_number', $ref)->orWhereIn('shopify_order_name', ['#'.$ref, $ref]))
                 ->orderByDesc('created_at')->orderByDesc('id')
                 ->first();
@@ -120,7 +134,7 @@ class OrderLookup
 
         $tail = '%'.substr($digits, -9);
 
-        return Order::query()
+        return $this->orders()
             ->with('customer')
             ->where(fn ($q) => $q->where('shipping_phone', 'like', $tail)
                 ->orWhereHas('customer', fn ($c) => $c->where('normalized_phone', $e164)->orWhere('phone', 'like', $tail)))
@@ -136,7 +150,7 @@ class OrderLookup
     /** @return Collection<int, Order> */
     private function byEmail(string $email): Collection
     {
-        return Order::query()
+        return $this->orders()
             ->whereHas('customer', fn ($c) => $c->whereRaw('lower(email) = ?', [$email]))
             ->orderByDesc('created_at')->orderByDesc('id')
             ->limit(50)
@@ -252,7 +266,8 @@ class OrderLookup
         $source = 'shopify';
         $oms = null;
 
-        if (! in_array($localKey, self::FINAL_STATES, true)) {
+        // A load-test order (2026-10-07) is never asked about outside: its local data is the answer.
+        if (! in_array($localKey, self::FINAL_STATES, true) && ! $o->is_load_test) {
             if ($this->omsDown) {
                 $source = 'shopify_fallback';
             } else {

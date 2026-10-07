@@ -43,6 +43,8 @@ final class FreshStart
         // steps before their test sessions; logs and health state.
         'comments', 'posts', 'bot_suggestions', 'bot_learning_reports', 'bot_test_session_steps', 'bot_test_sessions',
         'quick_reply_usages', 'webhook_events', 'shopify_sync_runs', 'ads_health_state',
+        // The production load test's runs (2026-10-07); its «تيست» channels stay with the channel accounts.
+        'load_test_runs',
     ];
 
     /**
@@ -126,6 +128,12 @@ final class FreshStart
             if ($progress !== null) {
                 $progress($table, $deleted[$table]);
             }
+        }
+
+        // The production load test's «تيست» channels (2026-10-07) go with the data they carried
+        // (their chats, customers and test orders are in WIPE above); every other channel is kept.
+        if (Schema::hasTable('channel_accounts') && Schema::hasColumn('channel_accounts', 'is_load_test')) {
+            $deleted['channel_accounts (load test)'] = DB::table('channel_accounts')->where('is_load_test', true)->delete();
         }
 
         $dropped = [];

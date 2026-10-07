@@ -404,6 +404,10 @@ return [
     // default: both disappear from the nav and their routes 404 (EnsureDevToolsEnabled).
     'dev_tools' => (bool) env('CRM_DEV_TOOLS', false),
 
+    // Production load test (2026-10-07): `crm:load-test` refuses to run, and its scheduler tick and
+    // simulated follow-ups do nothing, unless this is true. Turn it off again right after the test.
+    'load_test' => (bool) env('CRM_LOAD_TEST', false),
+
     // Ads Hub (media buyers, ad accounts, creatives, materials library).
     'ads' => [
         // live | fake. Default: live on APP_ENV=production (fake spend must never land in the real

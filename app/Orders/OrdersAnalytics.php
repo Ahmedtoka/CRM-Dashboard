@@ -103,7 +103,7 @@ final class OrdersAnalytics
             ->select('orders.customer_id');
 
         $firsts = DB::table('orders')
-            ->whereNotIn('status', MetricsService::EXCLUDED_ORDER_STATUSES)
+            ->whereNotIn('status', MetricsService::EXCLUDED_ORDER_STATUSES)->where('is_load_test', false)
             ->whereIn('customer_id', $inRange)
             ->groupBy('customer_id')
             ->selectRaw('customer_id, min(coalesce(placed_at, created_at)) as first_at');

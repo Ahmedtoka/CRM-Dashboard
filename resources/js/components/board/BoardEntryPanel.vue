@@ -5,6 +5,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useBoardContext } from '@/lib/board/context';
 import { notOnline } from '@/lib/board/state';
 import { formatCount, formatSeconds } from '@/lib/format';
+import { loadTestName } from '@/lib/loadTest';
 import type { BoardMember } from '@/types/board';
 import { Link } from '@inertiajs/vue3';
 import { ExternalLink, LoaderCircle } from 'lucide-vue-next';
@@ -19,7 +20,7 @@ const board = useBoardContext();
 const entry = computed(() => [...board.waiting.value, ...board.open.value].find((e) => e.id === props.entryId) ?? null);
 const waiting = computed(() => entry.value?.status === 'waiting');
 const ticket = computed(() => (entry.value ? entry.value.ticket % 100000 : 0));
-const name = computed(() => entry.value?.customer?.name || t('queue.customer_fallback'));
+const name = computed(() => loadTestName(entry.value?.customer?.name || t('queue.customer_fallback'), entry.value?.is_load_test, t));
 const holder = computed(() =>
     entry.value?.assigned_user_id ? (board.members.value.find((m) => m.user?.id === entry.value?.assigned_user_id) ?? null) : null,
 );

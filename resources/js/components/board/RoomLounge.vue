@@ -5,6 +5,7 @@ import { useBoardContext } from '@/lib/board/context';
 import { cardSpot, headsTop, loungeSeats, type Box } from '@/lib/board/layout';
 import { outfitOf, platformVar, teamColour } from '@/lib/board/state';
 import { formatCount, formatSeconds } from '@/lib/format';
+import { loadTestName } from '@/lib/loadTest';
 import type { BoardSelection } from '@/types/board';
 import type { QueueEntry } from '@/types/crm';
 import { computed } from 'vue';
@@ -24,7 +25,7 @@ function describe(entry: QueueEntry) {
         Math.max(0, Math.floor((board.serverNow() - (Date.parse(entry.enqueued_at ?? '') || board.serverNow())) / 1000)),
         locale.value,
     );
-    const name = entry.customer?.name || t('queue.customer_fallback');
+    const name = loadTestName(entry.customer?.name || t('queue.customer_fallback'), entry.is_load_test, t);
     const ticket = entry.ticket % 100000;
 
     return {

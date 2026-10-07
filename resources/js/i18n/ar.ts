@@ -223,6 +223,7 @@ const ar = {
     },
     inbox: {
         test_badge: 'تجربة',
+        load_test_badge: 'تيست',
         title: 'صندوق الرسائل',
         search: 'دوري بالاسم أو رقم الموبايل',
         search_truncated: 'في نتايج كتير، دققي البحث',

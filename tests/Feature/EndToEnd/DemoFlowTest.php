@@ -66,7 +66,7 @@ it('runs the whole demo flow over HTTP', function () {
 
     expect($botReply->body)->toBe('الأسعار في الكتالوج')
         ->and($botReply->status)->toBe(MessageStatus::Sent)
-        ->and($conversation->channelAccount->external_id)->toBe('demo-whatsapp');
+        ->and($conversation->channelAccount->external_id)->toBe('loadtest-whatsapp');
 
     // 2) The customer asks for a human: «محتاجة إيه؟» first (flow 7), then the handover with her topic.
     $this->actingAs($admin)->postJson('/simulator/message', ['platform' => 'whatsapp', 'customer_key' => '201001112233', 'name' => 'Nour', 'text' => 'عايز اكلم حد'])->assertCreated();

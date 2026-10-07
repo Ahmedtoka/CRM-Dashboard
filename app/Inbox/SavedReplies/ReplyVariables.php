@@ -108,7 +108,7 @@ final class ReplyVariables
 
     private function latestOpenOrder(int $customerId): ?Order
     {
-        return Order::query()->where('customer_id', $customerId)
+        return Order::withLoadTest()->where('customer_id', $customerId)
             ->whereIn('status', [OrderStatus::Submitting->value, OrderStatus::AwaitingPayment->value, OrderStatus::Confirmed->value])
             ->whereNot(fn (Builder $q) => $q->deliveredOnShopify())
             ->latest('id')->first();

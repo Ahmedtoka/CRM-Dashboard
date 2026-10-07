@@ -45,7 +45,8 @@ class EnrichAdAttribution implements ShouldQueue
     {
         $c = Conversation::with('channelAccount')->find($this->conversationId);
 
-        if ($c === null || $c->ad_id === null || $c->channelAccount === null || $c->ad_campaign_name !== null) {
+        // Only a live account has a token to ask with: a fake / test / load-test channel never calls Graph.
+        if ($c === null || $c->ad_id === null || $c->channelAccount === null || $c->channelAccount->driver !== 'live' || $c->channelAccount->is_load_test || $c->ad_campaign_name !== null) {
             return;
         }
 
