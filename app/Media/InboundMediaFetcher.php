@@ -88,7 +88,8 @@ final class InboundMediaFetcher
 
         $conversation = $a->message?->conversation ?? throw new MediaFetchFailed('no_conversation');
 
-        if ($this->registry->adapter($conversation->platform) instanceof FakeChannelAdapter) {
+        // Per account: a load-test channel (2026-10-07) is fake even where the live driver serves the platform.
+        if (($conversation->channelAccount !== null ? $this->registry->adapterFor($conversation->channelAccount) : $this->registry->adapter($conversation->platform)) instanceof FakeChannelAdapter) {
             throw new MediaFetchFailed('fake_driver_no_network');
         }
 
