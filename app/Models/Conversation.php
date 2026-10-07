@@ -7,6 +7,7 @@ use App\Enums\ConversationSource;
 use App\Enums\ConversationStatus;
 use App\Enums\Handler;
 use App\Enums\Platform;
+use App\Simulator\LoadTest\LoadTestChannels;
 use App\TestLinks\TestScope;
 use Database\Factories\ConversationFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -121,10 +122,22 @@ class Conversation extends Model
         return $inserted;
     }
 
-    /** A chat of the production load test (2026-10-07): its opener tagged `meta.load_test`. */
+    /**
+     * A chat of the production load test (2026-10-07): its opener tagged `meta.load_test`, or — so a
+     * missing tag can never send a test chat to live Shopify/Meta — it sits on a load-test channel
+     * (the loaded relation, else LoadTestChannels' short-lived id memo: no query per list row).
+     */
     public function isLoadTest(): bool
     {
-        return is_array(($this->meta ?? [])['load_test'] ?? null);
+        if (is_array(($this->meta ?? [])['load_test'] ?? null)) {
+            return true;
+        }
+
+        if ($this->relationLoaded('channelAccount')) {
+            return (bool) $this->channelAccount?->is_load_test;
+        }
+
+        return LoadTestChannels::isTestAccountId($this->channel_account_id);
     }
 
     /**

@@ -1,6 +1,7 @@
 <?php
 
 use App\Bot\Flow\Orders\OrderLookup;
+use App\Cases\CaseRecorder;
 use App\Commerce\FakeCommerceProvider;
 use App\Commerce\OrderService;
 use App\Enums\OrderStatus;
@@ -68,7 +69,7 @@ it('takes a COD order and a payment link in a test chat without touching Shopify
         ->and($cod->fresh()->shopify_order_id)->toStartWith('loadtest-')
         ->and((int) ltrim((string) $cod->fresh()->order_number, '#'))->toBeGreaterThan(Scenarios::ORDER_NUMBER_BASE)
         ->and($link->fresh()->invoice_url)->toContain('.invalid/')
-        ->and($c->customer->fresh()->shopify_customer_id)->toStartWith('loadtest-');
+        ->and($c->customer->fresh()->shopify_customer_id)->toBeNull(); // a loadtest- store id is never written on a customer
 
     // Paid, then cancelled: still nothing outside.
     app(OrderService::class)->markPaid($link->fresh());
@@ -117,4 +118,25 @@ it('never mentions a real order number in a scenario line', function () {
             expect(preg_match('/\d{4,}/u', $line))->toBe(0);
         }
     }
+});
+
+it('routes an order of a test-channel chat WITHOUT its load-test tag to the load-test store', function () {
+    $c = app(Simulator::class)->customerMessage(Platform::WhatsApp, 'ci-untagged', 'سلمى', 'عايزة أطلب')->conversation->fresh();
+
+    expect($c->meta)->toBeNull()->and($c->isLoadTest())->toBeTrue();
+
+    $order = app(OrderService::class)->create($c, $this->agent, ciOrder());
+
+    expect($order->fresh()->is_load_test)->toBeTrue()
+        ->and($order->fresh()->shopify_order_id)->toStartWith('loadtest-');
+});
+
+it('keeps the test order on the case of a test chat', function () {
+    $c = ciChat('track_order');
+    $order = Order::withLoadTest()->where('order_number', $c->meta['load_test']['order_number'])->sole();
+
+    $case = app(CaseRecorder::class)->record($c, 'complaint', ['order_id' => $order->id]);
+
+    expect($case->order_id)->toBe($order->id)
+        ->and($case->fresh()->order?->id)->toBe($order->id);
 });

@@ -156,7 +156,7 @@ class OrderService
             'shipping_address' => $shipping['address1'] ?? ($shipping['address'] ?? null),
             'note' => $this->buildNote($user, $conversation, $data['note'] ?? null),
             // Production load test (2026-10-07): a test chat's order is a test order (see providerFor()).
-            'is_load_test' => $conversation->isLoadTest(),
+            'is_load_test' => $conversation->isLoadTest() || (bool) $conversation->channelAccount?->is_load_test,
         ];
 
         try {
@@ -806,14 +806,18 @@ class OrderService
      */
     private function providerFor(Order $order): CommerceProvider
     {
-        return $order->is_load_test ? app(LoadTestCommerceProvider::class) : $this->provider;
+        $test = $order->is_load_test || (bool) $order->conversation?->channelAccount?->is_load_test;
+
+        return $test ? app(LoadTestCommerceProvider::class) : $this->provider;
     }
 
     private function linkStoreCustomer(Order $order, Customer $customer, array $address): string
     {
         $id = $this->providerFor($order)->ensureCustomer($customer, $address);
 
-        if ($id !== ''
+        // A load-test store id (loadtest-…) is never written onto a customer: a later merge could
+        // otherwise carry it to a real customer and on to Shopify.
+        if ($id !== '' && ! str_starts_with($id, LoadTestCommerceProvider::ID_PREFIX)
             && (string) $customer->shopify_customer_id !== $id
             && Customer::query()->where('shopify_customer_id', $id)->whereKeyNot($customer->id)->doesntExist()) {
             $customer->forceFill(['shopify_customer_id' => $id])->save();

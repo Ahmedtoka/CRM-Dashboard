@@ -28,6 +28,36 @@ final class LoadTestChannels
         'tiktok' => 'تيست — تيك توك',
     ];
 
+    /** Short, so a worker that started before the channels existed sees them within half a minute. */
+    private const MEMO_SECONDS = 30;
+
+    /**
+     * Whether this channel account is a load-test channel: one query per MEMO_SECONDS, memoized on
+     * the container (a fresh app — each test — starts empty; a long-lived worker refreshes it).
+     */
+    public static function isTestAccountId(?int $channelAccountId): bool
+    {
+        if ($channelAccountId === null) {
+            return false;
+        }
+
+        $memo = app()->bound(self::MEMO) ? app(self::MEMO) : null;
+
+        if (! is_array($memo) || time() - $memo['at'] > self::MEMO_SECONDS) {
+            $memo = ['at' => time(), 'ids' => ChannelAccount::query()->where('is_load_test', true)->pluck('id')->map(fn ($id) => (int) $id)->all()];
+            app()->instance(self::MEMO, $memo);
+        }
+
+        return in_array($channelAccountId, $memo['ids'], true);
+    }
+
+    public static function forgetIds(): void
+    {
+        app()->forgetInstance(self::MEMO);
+    }
+
+    private const MEMO = 'loadtest.channel_ids';
+
     public static function externalId(Platform $p): string
     {
         return self::PREFIX.$p->value;
@@ -40,6 +70,10 @@ final class LoadTestChannels
             ['platform' => $p->value, 'external_id' => self::externalId($p)],
             ['name' => self::NAMES[$p->value], 'driver' => 'fake', 'status' => 'connected', 'is_load_test' => true],
         );
+
+        if ($account->wasRecentlyCreated) {
+            self::forgetIds();
+        }
 
         // A row with our external id that somehow lost its flags is put back, never trusted as-is.
         if (! $account->is_load_test || $account->driver !== 'fake') {
