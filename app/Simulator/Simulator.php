@@ -10,6 +10,7 @@ use App\Models\Comment;
 use App\Models\Message;
 use App\Models\WebhookEvent;
 use App\Simulator\LoadTest\LoadTestChannels;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Database\Seeders\Demo\ArabicCorpus;
 use Illuminate\Broadcasting\BroadcastException;
@@ -76,7 +77,7 @@ class Simulator
             'customer_id' => $customerKey,
             'name' => $name,
             'text' => $text,
-            'at' => $at->toIso8601String(),
+            'at' => CarbonImmutable::instance($at)->utc()->toIso8601String(),
         ]]);
 
         ProcessWebhookEvent::dispatchSync($event->id);
@@ -269,7 +270,7 @@ class Simulator
             'customer_id' => $customerKey,
             'name' => $name,
             'text' => $text,
-            'at' => $at->toIso8601String(),
+            'at' => CarbonImmutable::instance($at)->utc()->toIso8601String(),
             'attachments' => $attachment ? [['type' => ['image' => 'image', 'voice' => 'audio', 'video' => 'video', 'file' => 'file'][$attachment], 'fixture' => $attachment]] : [],
         ] + $extra;
     }
