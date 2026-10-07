@@ -3,7 +3,12 @@
 use App\Channels\Jobs\ProcessWebhookEvent;
 use App\Enums\Platform;
 use App\Models\Conversation;
+use App\Models\ConversationOutcome;
 use App\Models\LoadTestRun;
+use App\Models\Message;
+use App\Models\QueueEntry;
+use App\Models\QueueSetting;
+use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Simulator\LoadTest\LoadTest;
 use App\Simulator\Simulator;
@@ -145,4 +150,28 @@ it('runs the tick every minute on one server without overlapping', function () {
         ->and($event->expression)->toBe('* * * * *')
         ->and($event->onOneServer)->toBeTrue()
         ->and($event->withoutOverlapping)->toBeTrue();
+});
+
+it('closes every open load-test ticket and resolves the test chats on stop --close, real chats untouched', function () {
+    QueueSetting::factory()->create(['id' => 1, 'enabled' => true]);
+    $this->artisan('crm:load-test', ['action' => 'seed-yesterday', '--count' => 2])->assertSuccessful();
+    $agent = User::factory()->create(['role' => 'moderator', 'last_seen_at' => now()]);
+    $inWindow = Conversation::query()->latest('id')->first();
+    QueueEntry::query()->where('conversation_id', $inWindow->id)->update(['status' => 'active', 'assigned_user_id' => $agent->id, 'delivered_at' => now(), 'window_no' => 1]);
+    $real = QueueEntry::factory()->create(['status' => 'active', 'assigned_user_id' => $agent->id]);
+    $botBefore = Message::query()->where('sender_type', 'bot')->count();
+
+    $this->artisan('crm:load-test', ['action' => 'stop', '--close' => true])
+        ->expectsOutputToContain('Closed 2 load-test chats')
+        ->assertSuccessful();
+
+    $testEntries = QueueEntry::query()->whereIn('conversation_id', Conversation::query()->where('is_test', true)->select('id'))->get();
+    expect($testEntries)->toHaveCount(2)
+        ->and($testEntries->every(fn ($e) => in_array($e->status, ['closed', 'cancelled'], true)))->toBeTrue()
+        ->and($testEntries->pluck('close_reason')->unique()->all())->toBe(['resolved_elsewhere'])
+        ->and(Conversation::query()->where('is_test', true)->where('status', '!=', 'resolved')->count())->toBe(0)
+        ->and(Message::query()->where('sender_type', 'bot')->count())->toBe($botBefore) // no closing message, no rating
+        ->and(ConversationOutcome::query()->where('conversation_id', $inWindow->id)->value('outcome'))->toBe('other')
+        ->and($real->fresh()->status)->toBe('active')
+        ->and($real->conversation->fresh()->status->value)->not->toBe('resolved');
 });

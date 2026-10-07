@@ -63,8 +63,9 @@ final class LoadTestTagger
 
         $order = Order::withLoadTest()->create([
             'is_load_test' => true,
+            // Hers from an earlier purchase: not this chat's order (the chat's own outcome stays its own).
             'customer_id' => $c->customer_id,
-            'conversation_id' => $c->id,
+            'conversation_id' => null,
             'platform' => $c->platform,
             'type' => OrderType::Cod,
             'source' => OrderSource::Chat,

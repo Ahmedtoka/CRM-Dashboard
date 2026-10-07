@@ -102,7 +102,8 @@ it('gives the bot of a test chat its fake order, and a real chat never sees it',
     $fromReal = app(OrderLookup::class)->find($realChat, ['order_ref' => $number]);
 
     expect($fake->is_load_test)->toBeTrue()
-        ->and($fake->conversation_id)->toBe($c->id)
+        ->and($fake->customer_id)->toBe($c->customer_id)
+        ->and($c->customer->orders()->pluck('id')->all())->toBe([$fake->id])
         ->and((int) $number)->toBeGreaterThan(Scenarios::ORDER_NUMBER_BASE)
         ->and(Scenarios::get('track_order')['opener'])->toContain(Scenarios::ORDER)
         ->and($c->messages()->where('direction', 'in')->value('body'))->toContain($number)

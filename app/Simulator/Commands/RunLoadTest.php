@@ -24,7 +24,8 @@ class RunLoadTest extends Command
         {--count=100 : Chats to seed (seed-yesterday) or new chats per wave (start)}
         {--every=30 : Minutes between two waves}
         {--hours=3 : How long the waves run}
-        {--spread=10 : Minutes one wave is spread over}';
+        {--spread=10 : Minutes one wave is spread over}
+        {--close : With stop: close every open load-test ticket and resolve the test chats (no closing message, no rating)}';
 
     protected $description = 'Production load test on the «تيست» channels: backlog, waves of customers, simulated follow-ups';
 
@@ -152,6 +153,11 @@ class RunLoadTest extends Command
         $this->info($run === null
             ? 'No active load test.'
             : "Stopped run #{$run->id}: no more waves; queued openers and follow-ups will do nothing.");
+
+        if ($this->option('close')) {
+            $closed = $loadTest->closeAll();
+            $this->info("Closed {$closed} load-test chats: their tickets left the agents' windows and the lounge (no closing message, no rating).");
+        }
 
         return self::SUCCESS;
     }

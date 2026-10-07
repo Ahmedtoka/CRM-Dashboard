@@ -6,14 +6,22 @@ use App\Bot\BotEngine;
 use App\Enums\ConversationStatus;
 use App\Enums\Handler;
 use App\Enums\Platform;
+use App\Events\ConversationUpdated;
 use App\Inbox\CustomerResolver;
 use App\Inbox\InboxIngestor;
+use App\Inbox\Outcomes\EpisodeEnd;
+use App\Inbox\Outcomes\Outcome;
+use App\Inbox\Outcomes\OutcomeRecorder;
 use App\Models\Conversation;
 use App\Models\LoadTestRun;
 use App\Models\QueueEntry;
 use App\Models\Shift;
 use App\Queue\QueueRouter;
+use App\Queue\QueueService;
+use App\Queue\WindowLifecycle;
 use App\Simulator\Simulator;
+use App\Support\SafeBroadcast;
+use App\TestLinks\TestScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -219,6 +227,50 @@ class LoadTest
         $run?->forceFill(['status' => LoadTestRun::STOPPED, 'stopped_at' => now(), 'next_wave_at' => null])->save();
 
         return $run;
+    }
+
+    /**
+     * `stop --close`: every load-test chat still open ends now, so nothing stays in the agents'
+     * windows or the lounge. Its ticket is closed as «resolved elsewhere» by the system (no closing
+     * message, no rating question), its episode ends with the outcome `other`, and the chat is
+     * resolved. Returns how many chats it closed.
+     */
+    public function closeAll(): int
+    {
+        $closed = 0;
+
+        Conversation::query()
+            ->whereIn('channel_account_id', TestScope::loadTestAccountIds())
+            ->where('status', '!=', ConversationStatus::Resolved->value)
+            ->chunkById(100, function ($chats) use (&$closed) {
+                foreach ($chats as $c) {
+                    $closed += (int) rescue(fn () => $this->closeChat($c), false, report: true);
+                }
+            });
+
+        return $closed;
+    }
+
+    private function closeChat(Conversation $c): bool
+    {
+        $entry = app(QueueService::class)->activeEntry($c);
+
+        if ($entry !== null) {
+            app(WindowLifecycle::class)->close($entry, 'resolved_elsewhere', null, ['note' => 'load test stopped']);
+            $c->refresh();
+        }
+
+        rescue(fn () => app(OutcomeRecorder::class)->endEpisode($c, $entry, Outcome::Other, 'load test stopped', null, EpisodeEnd::Resolve), null, report: true);
+
+        $c->forceFill([
+            'status' => ConversationStatus::Resolved, 'resolved_at' => now(), 'resolved_by_id' => null,
+            'needs_human' => false, 'locked_by_id' => null, 'locked_until' => null,
+            'priority_level' => null, 'queue' => null, 'handover_category' => null, 'handover_topic' => null,
+        ])->save();
+
+        SafeBroadcast::send(new ConversationUpdated($c));
+
+        return true;
     }
 
     /**
