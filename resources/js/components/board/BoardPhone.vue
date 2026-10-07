@@ -5,6 +5,7 @@ import { getInitials } from '@/composables/useInitials';
 import { useBoardContext } from '@/lib/board/context';
 import { notOnline, teamColour, windowSlots } from '@/lib/board/state';
 import { formatCount } from '@/lib/format';
+import { loadTestName } from '@/lib/loadTest';
 import type { BoardMember, BoardSelection } from '@/types/board';
 import type { QueueEntry } from '@/types/crm';
 import { computed } from 'vue';
@@ -96,7 +97,7 @@ const lounge = computed(() =>
         return {
             id: entry.id,
             ticket: entry.ticket % 100000,
-            name: entry.customer?.name || t('queue.customer_fallback'),
+            name: loadTestName(entry.customer?.name || t('queue.customer_fallback'), entry.is_load_test, t),
             platform: entry.platform ?? 'facebook',
             priority: entry.priority,
             badge: entry.priority === 'live' ? null : t(`board.priority.${entry.priority}`),
@@ -186,7 +187,9 @@ const TONES: Record<string, string> = {
                         @click="$emit('select', { kind: 'entry', id: entry.id })"
                     >
                         <b class="num rounded bg-amber-300 px-1 text-[13px] text-amber-950">{{ entry.ticket % 100000 }}</b>
-                        <span class="max-w-[6rem] truncate">{{ (entry.customer?.name || t('queue.customer_fallback')).split(' ')[0] }}</span>
+                        <span class="max-w-[6rem] truncate">{{
+                            loadTestName((entry.customer?.name || t('queue.customer_fallback')).split(' ')[0], entry.is_load_test, t)
+                        }}</span>
                         <TickText
                             v-if="entry.reply_overdue && board.deadline(entry, 'handoff')"
                             class="font-bold"

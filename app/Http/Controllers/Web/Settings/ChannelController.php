@@ -34,7 +34,8 @@ class ChannelController extends Controller
         return Inertia::render('settings/Channels', [
             // A team test link's account (driver `test`, design 2026-09-21 §4) is not a
             // channel: it is managed from Settings → روابط التجربة and never shown here.
-            'accounts' => ChannelAccount::where('driver', '!=', TestScope::DRIVER)
+            // The load test's «تيست» channels (2026-10-07) are not channels either.
+            'accounts' => ChannelAccount::where('driver', '!=', TestScope::DRIVER)->where('is_load_test', false)
                 ->orderBy('platform')->orderBy('id')->get()->map(fn (ChannelAccount $a) => $this->present($a)),
             'failedEvents' => WebhookEvent::where('status', 'failed')
                 ->orderByDesc('id')

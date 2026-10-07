@@ -6,6 +6,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useBoardContext } from '@/lib/board/context';
 import { notOnline } from '@/lib/board/state';
 import { formatClock, formatCount, formatMinutes, formatSeconds } from '@/lib/format';
+import { loadTestName } from '@/lib/loadTest';
 import { formatRatio } from '@/lib/today';
 import { Link } from '@inertiajs/vue3';
 import { Coffee, ExternalLink, LogOut, Undo2, UserRoundCheck } from 'lucide-vue-next';
@@ -188,7 +189,7 @@ async function handBack(): Promise<void> {
                                     formatCount(e.ticket % 100000, locale)
                                 }}
                                 ·
-                                {{ e.customer?.name || t('queue.customer_fallback') }}
+                                {{ loadTestName(e.customer?.name || t('queue.customer_fallback'), e.is_load_test, t) }}
                             </span>
                             <span class="block text-2xs tabular-nums text-muted-foreground">
                                 {{ t('board.member.since', { time: formatSeconds(board.secondsSince(e.delivered_at), locale) }) }}

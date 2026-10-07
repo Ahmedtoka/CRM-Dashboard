@@ -121,6 +121,12 @@ class Conversation extends Model
         return $inserted;
     }
 
+    /** A chat of the production load test (2026-10-07): its opener tagged `meta.load_test`. */
+    public function isLoadTest(): bool
+    {
+        return is_array(($this->meta ?? [])['load_test'] ?? null);
+    }
+
     /**
      * @return BelongsTo<Customer, $this>
      */

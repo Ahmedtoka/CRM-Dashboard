@@ -352,6 +352,7 @@ defineExpose({
         >
             <StatusChip v-if="state" :label="state.label" :tone="state.tone" :icon="state.key === 'bot' ? Bot : undefined" data-state-chip />
             <StatusChip v-if="conversation.is_test" :label="t('inbox.test_badge')" tone="neutral" />
+            <StatusChip v-if="conversation.is_load_test" :label="t('inbox.load_test_badge')" tone="warning" data-load-test-chip />
             <QueueBanner :conversation="conversation" :me-id="meId" part="chips" />
             <StatusChip v-if="conversation.priority_level === 'high'" :label="t('inbox.priority_level.high')" tone="negative" />
             <StatusChip v-else-if="conversation.priority_level === 'medium'" :label="t('inbox.priority_level.medium')" tone="warning" />

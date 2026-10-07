@@ -5,6 +5,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useBoardContext } from '@/lib/board/context';
 import { outfitOf, platformVar } from '@/lib/board/state';
 import { formatSeconds } from '@/lib/format';
+import { loadTestName } from '@/lib/loadTest';
 import type { QueueEntry } from '@/types/crm';
 import { computed } from 'vue';
 
@@ -33,7 +34,7 @@ const view = computed(() => {
     const entry = props.entry;
     if (entry === null) return null;
 
-    const name = entry.customer?.name || t('queue.customer_fallback');
+    const name = loadTestName(entry.customer?.name || t('queue.customer_fallback'), entry.is_load_test, t);
     const ticket = entry.ticket % 100000;
     // She waits for the moderator past the apology: orange, counting down to the hand-off.
     const overdue = entry.reply_overdue === true;

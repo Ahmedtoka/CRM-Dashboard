@@ -47,6 +47,8 @@ class QueueEntryResource extends JsonResource
             'platform' => $c?->platform?->value,
             'customer' => $customer ? ['id' => $customer->id, 'name' => $customer->name, 'avatar_url' => $customer->avatar_url] : null,
             'conversation_id' => $e->conversation_id,
+            // «تيست» on the board (load test 2026-10-07).
+            'is_load_test' => (bool) $c?->isLoadTest(),
             'assigned_user_id' => $e->assigned_user_id,
             'reserved_user_id' => $e->reserved_user_id,
             'window_no' => $e->window_no,

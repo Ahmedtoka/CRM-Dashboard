@@ -239,6 +239,7 @@ const en: Messages = {
     },
     inbox: {
         test_badge: 'Test',
+        load_test_badge: 'Load test',
         title: 'Inbox',
         search: 'Search by name or phone',
         search_truncated: 'Too many results, narrow the search',

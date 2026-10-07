@@ -65,6 +65,9 @@ class ConversationResource extends JsonResource
             ] : null,
             // «تجربة» badge (design 2026-09-21 §4): a run of a public team test link.
             'is_test' => (bool) $c->is_test,
+            // «تيست» chip (load test 2026-10-07): a chat of a load-test channel. Unlike is_test it changes
+            // nothing else — bot, queue, board, rating and reports treat it like a real chat.
+            'is_load_test' => $c->isLoadTest(),
             'unread_count' => (int) $c->unread_count,
             'last_message_at' => $c->last_message_at?->toIso8601String(),
             'last_customer_message_at' => $c->last_customer_message_at?->toIso8601String(),

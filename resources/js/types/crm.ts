@@ -55,6 +55,8 @@ export interface Conversation {
     ad?: { id: string | null; title: string | null; name: string | null; adset: string | null; campaign: string | null; post_id: string | null; photo_url: string | null; ref: string | null } | null;
     /** A run of a public team test link (design 2026-09-21): shown with a «تجربة» badge. */
     is_test: boolean;
+    /** A production load-test chat (2026-10-07): an extra «تيست» chip, nothing else changes. */
+    is_load_test?: boolean;
     unread_count: number;
     last_message_at: string | null;
     last_customer_message_at: string | null;
@@ -121,6 +123,8 @@ export interface QueueEntry {
     platform: PlatformValue | null;
     customer: { id: number; name: string | null; avatar_url: string | null } | null;
     conversation_id: number;
+    /** A production load-test chat (2026-10-07): «تيست» before her name on the board. */
+    is_load_test?: boolean;
     assigned_user_id: number | null;
     reserved_user_id: number | null;
     window_no: number | null;
