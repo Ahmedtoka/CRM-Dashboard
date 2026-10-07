@@ -9,6 +9,7 @@ use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\ShipmentStatus;
 use App\Models\AdAccountAssignment;
+use App\TestLinks\TestScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
@@ -329,7 +330,7 @@ final class AdsQuery
         }
 
         $end = $f->endUtc();
-        $q = DB::table('conversations as c')
+        $q = TestScope::realConversations(DB::table('conversations as c'), 'c')
             ->join('ads as ad', 'ad.external_id', '=', 'c.ad_id')
             ->join('ad_accounts as acc', 'acc.id', '=', 'ad.ad_account_id')
             ->whereNotNull('c.ad_id')

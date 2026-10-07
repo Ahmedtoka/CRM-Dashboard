@@ -10,6 +10,7 @@ use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdsSyncRun;
 use App\Models\Product;
+use App\TestLinks\TestScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -247,7 +248,7 @@ final class AlertData
         }
         [$s, $e] = self::utcRange($from, $to);
 
-        return DB::table('conversation_ad_referrals')->whereIn('ad_external_id', $externalIds)
+        return TestScope::excludeConversations(DB::table('conversation_ad_referrals'))->whereIn('ad_external_id', $externalIds)
             ->groupBy('ad_external_id', 'conversation_id')
             ->selectRaw('ad_external_id, conversation_id, MIN(referred_at) as first_at')
             ->havingRaw('MIN(referred_at) >= ? AND MIN(referred_at) <= ?', [$s->format('Y-m-d H:i:s'), $e->format('Y-m-d H:i:s')])
@@ -279,7 +280,7 @@ final class AlertData
         [$s, $e] = self::utcRange($from, $to);
 
         $out = [];
-        DB::table('conversation_ad_referrals as r')
+        TestScope::excludeConversations(DB::table('conversation_ad_referrals as r'), 'r.conversation_id')
             ->whereIn('r.ad_external_id', $externalIds)->whereBetween('r.referred_at', [$s, $e])
             ->select(['r.id', 'r.ad_external_id', 'r.referred_at'])
             ->selectSub(DB::table('messages as m')->whereColumn('m.conversation_id', 'r.conversation_id')

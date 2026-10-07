@@ -10,6 +10,7 @@ use App\Models\BotRule;
 use App\Models\BotSetting;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
+use App\Models\LoadTestRun;
 use App\Models\Message;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
@@ -18,6 +19,7 @@ use App\Models\ShiftMember;
 use App\Models\User;
 use App\Queue\RatingService;
 use App\Queue\WindowLifecycle;
+use App\Simulator\LoadTest\LoadTest;
 use App\Simulator\LoadTest\LoadTestChannels;
 use App\Simulator\Simulator;
 use Illuminate\Support\Carbon;
@@ -55,7 +57,10 @@ afterEach(function () {
 
 function osConversation(Platform $p = Platform::Facebook): Conversation
 {
-    return app(Simulator::class)->customerMessage($p, 'os-'.$p->value, 'منى', 'السلام عليكم')->conversation->fresh();
+    config(['crm.load_test' => true]);
+    $tag = app(LoadTest::class)->tag(LoadTestRun::activeOrStart(), 'price', 'منى', 'os-'.$p->value);
+
+    return app(Simulator::class)->customerMessage($p, 'os-'.$p->value, 'منى', 'السلام عليكم', loadTest: $tag)->conversation->fresh();
 }
 
 /** @return list<string> what the fake adapter "sent" with this method */

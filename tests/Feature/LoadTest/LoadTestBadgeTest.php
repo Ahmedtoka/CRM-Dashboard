@@ -29,7 +29,7 @@ it('tags the conversation a load-test opener opened, and marks it «تيست» w
 
     expect($c->meta['load_test'])->toMatchArray(['run' => LoadTestRun::active()->id, 'scenario' => 'size_color', 'step' => 0])
         ->and($c->isLoadTest())->toBeTrue()
-        ->and($c->is_test)->toBeFalse(); // reports, rating and idle sweep treat it like a real chat
+        ->and($c->is_test)->toBeTrue(); // out of the reports; the rating, idle sweep and state chip stay real
 
     $row = (new ConversationResource($c))->resolve(request());
     expect($row['is_load_test'])->toBeTrue()->and($row['is_test'])->toBeFalse();

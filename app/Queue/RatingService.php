@@ -98,7 +98,8 @@ class RatingService
             $e->status !== 'closed' || $e->closed_at === null || ! in_array($e->close_reason, QueueEntry::RATED_CLOSE_REASONS, true) => 'not_rated',
             $e->review_requested_at !== null => 'already_asked',
             $e->assigned_user_id === null => 'no_agent',
-            $e->is_test || (bool) $c->is_test => 'test',
+            // A load-test chat (2026-10-07) is rated like a real one: the team tests the whole close.
+            ($e->is_test || (bool) $c->is_test) && ! $c->isLoadTest() => 'test',
             self::dueAt($e, $s)->copy()->addMinutes(self::LATE_AFTER_MINUTES)->isPast() => 'late',
             app(QueueService::class)->activeEntry($c) !== null || $this->wroteSince($c, $e->closed_at) => 'customer_back',
             $this->askedRecently($e) => 'asked_today',

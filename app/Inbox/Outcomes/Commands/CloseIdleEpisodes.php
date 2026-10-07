@@ -4,6 +4,7 @@ namespace App\Inbox\Outcomes\Commands;
 
 use App\Inbox\Outcomes\OutcomeRecorder;
 use App\Models\Conversation;
+use App\TestLinks\TestScope;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -46,7 +47,8 @@ class CloseIdleEpisodes extends Command
         $after = max(now()->subDays(max(1, (int) config('crm.outcomes.lookback_days', 14))), $recorder->trackingFrom());
 
         return Conversation::query()
-            ->where('is_test', false)
+            // Not a test — but a load-test chat (2026-10-07) is swept like a real one.
+            ->where(fn ($q) => $q->where('is_test', false)->orWhereIn('channel_account_id', TestScope::loadTestAccountIds()))
             ->where('last_message_at', '>=', $after)
             ->where('last_message_at', '<=', $before)
             // No history backfill: only chats where she wrote after tracking started.
