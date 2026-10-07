@@ -34,6 +34,7 @@ use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Customers\PhoneNormalizer;
 use App\Simulator\LoadTest\LoadTestCommerceProvider;
 use App\Support\SafeBroadcast;
+use App\TestLinks\TestScope;
 use DomainException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -156,7 +157,8 @@ class OrderService
             'shipping_address' => $shipping['address1'] ?? ($shipping['address'] ?? null),
             'note' => $this->buildNote($user, $conversation, $data['note'] ?? null),
             // Production load test (2026-10-07): a test chat's order is a test order (see providerFor()).
-            'is_load_test' => $conversation->isLoadTest() || (bool) $conversation->channelAccount?->is_load_test,
+            // (Not on a fake-driver demo install, whose simulated chats are the demo's own data.)
+            'is_load_test' => ($conversation->isLoadTest() || (bool) $conversation->channelAccount?->is_load_test) && TestScope::loadTestCountsAsTest(),
         ];
 
         try {
@@ -806,7 +808,9 @@ class OrderService
      */
     private function providerFor(Order $order): CommerceProvider
     {
-        $test = $order->is_load_test || (bool) $order->conversation?->channelAccount?->is_load_test;
+        // Defence in depth: a load-test channel's order never reaches a live store, flagged or not.
+        $test = $order->is_load_test
+            || ((bool) $order->conversation?->channelAccount?->is_load_test && config('crm.drivers.commerce', 'fake') !== 'fake');
 
         return $test ? app(LoadTestCommerceProvider::class) : $this->provider;
     }
