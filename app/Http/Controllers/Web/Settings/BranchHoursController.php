@@ -22,6 +22,8 @@ class BranchHoursController extends Controller
 {
     use RespondsWithData;
 
+    public const HOURS_MAX = 60;
+
     private const FIELDS = ['hours', 'phone', 'is_active'];
 
     public function index(): Response
@@ -34,9 +36,17 @@ class BranchHoursController extends Controller
     public function update(Request $request, Branch $branch, ActivityLogger $logger): HttpResponse
     {
         $data = $request->validate([
-            'hours' => ['sometimes', 'nullable', 'string', 'max:200'],
-            // Digits (Latin or Arabic-Indic), spaces, dashes and a leading +: what OutboundCards::phone() can dial.
-            'phone' => ['sometimes', 'nullable', 'string', 'max:30', 'regex:/^\+?[0-9٠-٩][0-9٠-٩ \-]*$/u'],
+            // 60 leaves the phone room in Messenger's 80-character card subtitle (BranchFinder::cards()).
+            'hours' => ['sometimes', 'nullable', 'string', 'max:'.self::HOURS_MAX],
+            // Digits (Latin or Arabic-Indic), spaces, dashes and a leading +, 9–13 digits: what OutboundCards::phone()
+            // turns into a number Meta accepts (a bad call button makes Meta reject the whole carousel).
+            'phone' => ['sometimes', 'nullable', 'string', 'max:30', 'regex:/^\+?[0-9٠-٩][0-9٠-٩ \-]*$/u', function (string $attribute, mixed $value, \Closure $fail) {
+                $digits = preg_match_all('/[0-9٠-٩]/u', (string) $value);
+
+                if ($digits < 9 || $digits > 13) {
+                    $fail('validation.digits_between')->translate(['min' => 9, 'max' => 13]);
+                }
+            }],
             'is_active' => ['sometimes', 'boolean'],
         ]);
 

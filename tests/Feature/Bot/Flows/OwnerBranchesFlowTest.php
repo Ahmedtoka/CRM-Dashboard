@@ -138,7 +138,7 @@ it('shows the hours line only once the owner filled it in', function () {
     obrTurn('المرغني');
 
     $card = obrCards()->cards['cards'][0];
-    expect($card['subtitle'])->toContain("يوميًا من 10 الصبح لـ 11 بالليل\n01094538159")
+    expect($card['subtitle'])->toContain("01094538159\nيوميًا من 10 الصبح لـ 11 بالليل")
         ->and($card['text'])->toContain('يوميًا من 10 الصبح لـ 11 بالليل');
 });
 
@@ -147,6 +147,19 @@ it('keeps the phone in an 80-character subtitle by shortening a long address', f
     $card = app(BranchFinder::class)->cards([$b])['cards'][0];
 
     expect(mb_strlen($card['subtitle']))->toBeLessThanOrEqual(80)->and($card['subtitle'])->toEndWith('01000000000');
+});
+
+it('keeps the phone in the subtitle when the hours are long (phone before hours)', function () {
+    $b = Branch::factory()->create(['area_key' => 'long', 'area_ar' => 'منطقة', 'name' => 'Long', 'address' => '1 St.', 'phone' => '01000000000', 'hours' => str_repeat('س', 60)]);
+    $sent = OutboundCards::generic([app(BranchFinder::class)->cards([$b])['cards'][0]])['cards'][0];
+
+    expect(mb_strlen($sent['subtitle']))->toBeLessThanOrEqual(80)->and($sent['subtitle'])->toContain('01000000000');
+
+    // Rows written before the 60-character cap: the hours are cut, never the phone.
+    $b->update(['hours' => str_repeat('س', 100)]);
+    $sent = OutboundCards::generic([app(BranchFinder::class)->cards([$b])['cards'][0]])['cards'][0];
+
+    expect($sent['subtitle'])->toContain('01000000000');
 });
 
 it('sends the first 10 of a big area, says there are more, and takes a typed name', function () {

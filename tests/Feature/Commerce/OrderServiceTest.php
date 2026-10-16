@@ -91,16 +91,17 @@ it('persists the shopify order id from a draft-to-order conversion so later webh
     $service->applyUpdate(new OrderStatusUpdate(
         shopifyOrderId: '9002',
         draftOrderId: '800123',
-        financialStatus: 'paid',
+        financialStatus: null,
         fulfillmentStatus: null,
         cancelled: false,
         orderNumber: '#2002',
     ));
 
+    // The draft conversion only links (audit A1): it may have been completed unpaid.
     expect($order->fresh()->shopify_order_id)->toBe('9002')
-        ->and($order->fresh()->status)->toBe(OrderStatus::Confirmed);
+        ->and($order->fresh()->status)->toBe(OrderStatus::AwaitingPayment);
 
-    // A later orders/paid webhook only carries the now-persisted order id, not the draft id.
+    // Even a paid status on an update never confirms here; the orders/paid webhook does (via markPaid).
     $service->applyUpdate(new OrderStatusUpdate(
         shopifyOrderId: '9002',
         draftOrderId: null,
@@ -110,8 +111,8 @@ it('persists the shopify order id from a draft-to-order conversion so later webh
         orderNumber: '#2002',
     ));
 
-    expect($order->fresh()->status)->toBe(OrderStatus::Confirmed)
-        ->and(ActivityLog::where('action', 'order.paid')->where('subject_id', $order->id)->count())->toBe(1);
+    expect($order->fresh()->status)->toBe(OrderStatus::AwaitingPayment)
+        ->and(ActivityLog::where('action', 'order.paid')->where('subject_id', $order->id)->count())->toBe(0);
 });
 
 it('is idempotent when markPaid is called twice on stale instances of the same order', function () {

@@ -5,6 +5,7 @@ namespace App\Shopify\Webhooks;
 use App\Commerce\Contracts\CommerceProvider;
 use App\Commerce\OrderService;
 use App\Enums\OrderSource;
+use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Events\UserNotified;
 use App\Models\Order;
@@ -19,7 +20,6 @@ use App\Shopify\Sync\Mappers\OrderMapper;
 use App\Shopify\Sync\Mappers\Payload;
 use App\Shopify\Sync\Mappers\ProductMapper;
 use App\Support\SafeBroadcast;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Routes a stored, verified Shopify webhook to its mapper (spec §4.2). One
@@ -132,7 +132,8 @@ final class ShopifyWebhookProcessor
     /**
      * Whether the payload's total (current_total_price, after order edits, else
      * total_price) covers the local order total. A payload without a total, or a
-     * smaller one, is logged and left for staff instead of confirming the order.
+     * smaller one, is left for staff (OrderService::recordUnconfirmedPayment)
+     * instead of confirming an order still awaiting payment.
      */
     private function coversTotal(Order $order, array $payload): bool
     {
@@ -142,12 +143,9 @@ final class ShopifyWebhookProcessor
             return true;
         }
 
-        Log::warning('Shopify paid total does not cover the CRM order total; not confirming it.', [
-            'order_id' => $order->id,
-            'order_total' => $order->total,
-            'paid_total' => $paid,
-            'shopify_order_id' => isset($payload['id']) ? (string) $payload['id'] : null,
-        ]);
+        if ($order->status === OrderStatus::AwaitingPayment) {
+            $this->orderService->recordUnconfirmedPayment($order, $paid, $paid === null ? 'no_total' : 'underpaid');
+        }
 
         return false;
     }

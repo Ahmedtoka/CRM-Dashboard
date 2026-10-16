@@ -69,9 +69,8 @@ it('ignores a paid signal for a cancelled order and alerts supervisors', functio
 it('ignores a shopify paid webhook for a failed order', function () {
     $order = Order::factory()->create(['status' => OrderStatus::Failed, 'shopify_order_id' => '9300', 'customer_id' => $this->customer->id]);
 
-    app(OrderService::class)->applyUpdate(new OrderStatusUpdate(
-        shopifyOrderId: '9300', draftOrderId: null, financialStatus: 'paid', fulfillmentStatus: null, cancelled: false,
-    ));
+    // markPaid is the one place a paid signal lands (the orders/paid webhook path, audit A1).
+    app(OrderService::class)->markPaid($order);
 
     expect($order->fresh()->status)->toBe(OrderStatus::Failed)
         ->and($order->fresh()->paid_at)->toBeNull()

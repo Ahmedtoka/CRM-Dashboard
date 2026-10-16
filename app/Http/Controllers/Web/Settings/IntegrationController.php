@@ -10,6 +10,7 @@ use App\Channels\Integrations\InstagramConnector;
 use App\Channels\Integrations\IntegrationException;
 use App\Channels\Integrations\WhatsAppConnector;
 use App\Channels\MetaPageSubscriber;
+use App\Channels\VerifyToken;
 use App\Enums\Platform;
 use App\Http\Controllers\Controller;
 use App\Models\ChannelAccount;
@@ -55,6 +56,8 @@ class IntegrationController extends Controller
                 'app_id_set' => filled(config('crm.meta.app_id')),
                 'app_secret_set' => filled(config('crm.meta.app_secret')),
                 'verify_token' => (string) config('crm.meta.verify_token'),
+                // Why Meta's webhook verification would be refused (VerifyToken), else null.
+                'verify_token_problem' => VerifyToken::problem(),
                 'callback_urls' => [
                     'facebook' => $this->callbackUrl('facebook'),
                     'instagram' => $this->callbackUrl('instagram'),
