@@ -41,7 +41,10 @@ class ConfirmationsServiceProvider extends ServiceProvider
     /** Slice W3: tags, cases, notifications, sweep schedule. */
     private function bootFollowUp(): void
     {
-        Event::subscribe(FollowUp\ConfirmationFollowUp::class);
+        // Listed one by one (not Event::subscribe): the listener and its Shopify client are only built when an event fires.
+        foreach (FollowUp\ConfirmationFollowUp::LISTENERS as $event => $method) {
+            Event::listen($event, [FollowUp\ConfirmationFollowUp::class, $method]);
+        }
 
         if ($this->app->runningInConsole()) {
             $this->commands([Commands\SweepOrderConfirmationsCommand::class]);

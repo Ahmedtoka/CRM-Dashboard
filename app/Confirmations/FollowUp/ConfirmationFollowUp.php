@@ -12,7 +12,6 @@ use App\Inbox\UserNotifier;
 use App\Models\ConversationNote;
 use App\Models\OrderConfirmation;
 use App\Models\SupportCase;
-use Illuminate\Events\Dispatcher;
 
 /**
  * What happens after a customer answers or stays silent (spec 2026-10-16, slice W3):
@@ -23,18 +22,18 @@ use Illuminate\Events\Dispatcher;
  */
 final class ConfirmationFollowUp
 {
+    /** Event => method, registered by ConfirmationsServiceProvider::bootFollowUp(). */
+    public const LISTENERS = [
+        OrderConfirmationAnswered::class => 'onAnswered',
+        OrderConfirmationEditNote::class => 'onEditNote',
+        OrderConfirmationNoResponse::class => 'onNoResponse',
+    ];
+
     public function __construct(
         private readonly TagSync $tags,
         private readonly CaseRecorder $cases,
         private readonly UserNotifier $notifier,
     ) {}
-
-    public function subscribe(Dispatcher $events): void
-    {
-        $events->listen(OrderConfirmationAnswered::class, [self::class, 'onAnswered']);
-        $events->listen(OrderConfirmationEditNote::class, [self::class, 'onEditNote']);
-        $events->listen(OrderConfirmationNoResponse::class, [self::class, 'onNoResponse']);
-    }
 
     public function onAnswered(OrderConfirmationAnswered $event): void
     {
