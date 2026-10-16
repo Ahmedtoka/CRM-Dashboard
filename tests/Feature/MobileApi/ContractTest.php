@@ -67,7 +67,7 @@ function ctKeys(array $actual, array $expected, string $where): void
 }
 
 /** The moderator, her open shift, a waiting WhatsApp customer and the rest of the world the walk needs. */
-function ctWorld(): array
+function mobileContractWorld(): array
 {
     Carbon::setTestNow(Carbon::parse('2026-10-05 12:00', 'Africa/Cairo'));
     config([
@@ -111,7 +111,7 @@ function ctWorld(): array
 }
 
 it('walks the whole mobile contract with a real token', function () {
-    $w = ctWorld();
+    $w = mobileContractWorld();
     $mod = $w['mod'];
     $conv = $w['conv'];
 
@@ -264,7 +264,7 @@ it('walks the whole mobile contract with a real token', function () {
 });
 
 it('still serves the old app: legacy login, resolve without outcome, orders, cities and provinces', function () {
-    $w = ctWorld();
+    $w = mobileContractWorld();
     $mod = $w['mod'];
     $fb = Conversation::factory()->create(['platform' => Platform::Facebook, 'handler' => Handler::Human, 'last_customer_message_at' => now()]);
     Order::factory()->create(['conversation_id' => $fb->id, 'customer_id' => $fb->customer_id, 'platform' => 'facebook', 'created_by_id' => $mod->id]);
