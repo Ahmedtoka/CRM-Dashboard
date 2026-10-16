@@ -41,7 +41,7 @@ final class WriteActionLog
             'user' => ($a->confirmer ?? $a->proposer)?->name, 'user_id' => $a->confirmed_by_id ?? $a->proposed_by_id,
             'platform' => $a->platform, 'account' => (string) ($a->account?->name ?? $a->account_name ?? ''), 'account_id' => (int) $a->ad_account_id,
             'level' => $a->target_level, 'name' => (string) $a->target_name, 'external_id' => (string) $a->target_external_id,
-            'from_status' => $a->from_status, 'to_status' => $a->to_status === 'active' ? 'ACTIVE' : 'PAUSED',
+            'from_status' => $a->from_status, 'to_status' => match ($a->to_status) { 'active' => 'ACTIVE', 'archived' => 'ARCHIVED', default => 'PAUSED' },
             'reason' => $a->reason, 'result' => self::result($a->state), 'error' => self::error($a), 'source' => (string) $a->source,
         ])->all();
     }

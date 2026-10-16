@@ -38,12 +38,21 @@ final class MaterialStatus
         if ($status !== $m->status) {
             $m->forceFill(array_merge(
                 ['status' => $status],
-                $status === 'live' && $m->activated_at === null ? ['activated_at' => now()] : [],
+                // Stamped only when an ad really ran: a launch that is merely launching (and may come back unrun,
+                // then be rejected) must not make the material «واقفة» forever (MORNING-REPORT 6-a).
+                $status === 'live' && $m->activated_at === null && self::ran($m) ? ['activated_at' => now()] : [],
                 $status !== 'live' ? ['need_stop_at' => null] : [],
             ))->save();
         }
 
         return $status;
+    }
+
+    /** An ad of the material is running, or one of its launches is live. */
+    private static function ran(AdMaterial $m): bool
+    {
+        return $m->ads()->whereRaw("UPPER(ads.status) = 'ACTIVE'")->exists()
+            || AdLaunch::query()->where('ad_material_id', $m->id)->where('state', LaunchState::Live->value)->exists();
     }
 
     /**

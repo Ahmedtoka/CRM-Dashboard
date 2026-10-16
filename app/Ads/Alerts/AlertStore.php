@@ -14,7 +14,8 @@ use Illuminate\Database\UniqueConstraintViolationException;
 /**
  * Persistence of findings (spec 7.6, alerts spec 3.3-3.4, 5.5): one live row per dedupe key, refreshed on every
  * evaluation; a finding that stops firing is resolved with the rule's cooldown; dismiss mutes 7 days; snooze returns to
- * open; a succeeded write closes the ad's alerts as acted. No escalation re-open, no repeated re-notify (red-team 2.1).
+ * open; a succeeded write closes the ad's alerts as acted. Inside a cooldown only a worse severity tier re-fires
+ * (early, once per tier); no repeated re-notify (red-team 2.1).
  */
 final class AlertStore
 {
@@ -51,10 +52,15 @@ final class AlertStore
 
                 continue;
             }
-            if (AdsAlert::query()->where('fingerprint', $fp)->where('cooldown_until', '>', $now->utc())->exists()) {
+            // Cooldown (resolved or dismissed): held back unless it is worse than every cooled row of it, i.e. it
+            // crossed into a higher severity tier of its rule; the early re-fire becomes a cooled row itself once it
+            // closes, so each tier breaks through at most once per cooldown.
+            $cooled = AdsAlert::query()->where('fingerprint', $fp)->where('cooldown_until', '>', $now->utc())->pluck('severity')->all();
+            $worstCooled = array_reduce($cooled, fn (?string $m, string $s) => $m === null ? $s : Severity::max($m, $s));
+            if ($worstCooled !== null && Severity::rank($f->severity) <= Severity::rank($worstCooled)) {
                 continue;
             }
-            $id = $this->open($f, $now);
+            $id = $this->open($f, $now, $worstCooled);
             if ($id !== null) {
                 $opened[] = $id;
             } else {
@@ -159,7 +165,7 @@ final class AlertStore
         return $this->buyers[$key];
     }
 
-    private function open(Finding $f, CarbonImmutable $now): ?int
+    private function open(Finding $f, CarbonImmutable $now, ?string $escalatedFrom = null): ?int
     {
         try {
             $a = AdsAlert::query()->create([
@@ -180,7 +186,9 @@ final class AlertStore
 
             return null;
         }
-        $this->event($a, 'fired', null, ['severity' => $f->severity]);
+        $this->event($a, 'fired', null, $escalatedFrom !== null
+            ? ['severity' => $f->severity, 'early' => true, 'escalated_from' => $escalatedFrom]
+            : ['severity' => $f->severity]);
 
         return $a->id;
     }
