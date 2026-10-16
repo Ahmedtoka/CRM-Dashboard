@@ -178,7 +178,7 @@ it('disables a device after 5 consecutive failures, and resets the count on succ
 // ───── FCM HTTP v1 driver ─────
 
 /** A throwaway service-account key file; returns the public key PEM for signature checks. */
-function mbFcmCredentials(): string
+function mbFcmCredentials(string $mode = 'file'): string
 {
     // Windows PHP builds (XAMPP) need an explicit openssl.cnf to generate keys.
     $options = ['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA];
@@ -188,12 +188,18 @@ function mbFcmCredentials(): string
     }
     $key = openssl_pkey_new($options);
     openssl_pkey_export($key, $privatePem, null, $options);
-    $path = tempnam(sys_get_temp_dir(), 'fcm').'.json';
-    file_put_contents($path, json_encode([
+    $json = json_encode([
         'type' => 'service_account', 'project_id' => 'levoile-test', 'client_email' => 'push@levoile-test.iam.gserviceaccount.com',
         'private_key' => $privatePem, 'token_uri' => 'https://oauth2.googleapis.com/token',
-    ]));
-    config(['crm.push.driver' => 'fcm', 'crm.push.fcm.project_id' => 'levoile-test', 'crm.push.fcm.credentials' => $path]);
+    ]);
+    $path = tempnam(sys_get_temp_dir(), 'fcm').'.json';
+    file_put_contents($path, $json);
+    $value = match ($mode) {
+        'inline' => $json,
+        'base64' => base64_encode($json),
+        default => $path,
+    };
+    config(['crm.push.driver' => 'fcm', 'crm.push.fcm.project_id' => 'levoile-test', 'crm.push.fcm.credentials' => $value]);
 
     return openssl_pkey_get_details($key)['key'];
 }
@@ -270,10 +276,89 @@ it('disables a device FCM reports as unregistered or invalid', function (int $st
         ->and($this->device->fresh()->disabled_at)->not->toBeNull();
 })->with([
     'unregistered' => [404, ['code' => 404, 'status' => 'NOT_FOUND', 'details' => [['@type' => 'type.googleapis.com/google.firebase.fcm.v1.FcmError', 'errorCode' => 'UNREGISTERED']]]],
-    'invalid argument' => [400, ['code' => 400, 'status' => 'INVALID_ARGUMENT', 'details' => [['@type' => 'type.googleapis.com/google.firebase.fcm.v1.FcmError', 'errorCode' => 'INVALID_ARGUMENT']]]],
+    'invalid token' => [400, ['code' => 400, 'status' => 'INVALID_ARGUMENT', 'message' => 'The registration token is not a valid FCM registration token', 'details' => [['@type' => 'type.googleapis.com/google.firebase.fcm.v1.FcmError', 'errorCode' => 'INVALID_ARGUMENT']]]],
+    'sender id mismatch' => [403, ['code' => 403, 'status' => 'PERMISSION_DENIED', 'details' => [['@type' => 'type.googleapis.com/google.firebase.fcm.v1.FcmError', 'errorCode' => 'SENDER_ID_MISMATCH']]]],
 ]);
 
-it('counts a server error as a failure without disabling at once', function () {
+it('leaves the device alone when FCM rejects the payload, not the token', function () {
+    Cache::flush();
+    mbFcmCredentials();
+    Http::fake([
+        'oauth2.googleapis.com/token' => Http::response(['access_token' => 'ya29.x']),
+        'fcm.googleapis.com/*' => Http::response(['error' => ['code' => 400, 'status' => 'INVALID_ARGUMENT', 'message' => 'Invalid value at message.android.collapse_key',
+            'details' => [['@type' => 'type.googleapis.com/google.firebase.fcm.v1.FcmError', 'errorCode' => 'INVALID_ARGUMENT']]]], 400),
+    ]);
+
+    $result = app(PushManager::class)->sendToDevice($this->device, app(PushMessageFactory::class)->test($this->user));
+
+    expect($result->deviceFault)->toBeFalse()->and($result->transient)->toBeFalse()
+        ->and($this->device->fresh()->failure_count)->toBe(0)->and($this->device->fresh()->disabled_at)->toBeNull();
+});
+
+it('never disables devices because Google auth keeps failing', function () {
+    Cache::flush();
+    mbFcmCredentials();
+    Http::fake(['oauth2.googleapis.com/token' => Http::response(['error' => 'invalid_grant'], 400), 'fcm.googleapis.com/*' => Http::response([], 200)]);
+
+    foreach (range(1, 6) as $i) {
+        expect(app(PushManager::class)->sendToDevice($this->device->fresh(), app(PushMessageFactory::class)->test($this->user))->transient)->toBeTrue();
+    }
+
+    expect($this->device->fresh()->failure_count)->toBe(0)->and($this->device->fresh()->disabled_at)->toBeNull();
+});
+
+it('accepts the service-account key inline or base64-encoded', function (string $mode) {
+    Cache::flush();
+    mbFcmCredentials($mode);
+    Http::fake([
+        'oauth2.googleapis.com/token' => Http::response(['access_token' => 'ya29.x']),
+        'fcm.googleapis.com/*' => Http::response(['name' => 'ok']),
+    ]);
+
+    expect(app(PushManager::class)->sendToDevice($this->device, app(PushMessageFactory::class)->test($this->user))->ok)->toBeTrue();
+})->with(['inline', 'base64']);
+
+it('hides the text on the lock screen and collapses on iOS too', function () {
+    Cache::flush();
+    mbFcmCredentials();
+    Http::fake(['oauth2.googleapis.com/token' => Http::response(['access_token' => 'ya29.x']), 'fcm.googleapis.com/*' => Http::response(['name' => 'ok'])]);
+
+    mbNotify($this->user, 'queue.assigned', ['entry_id' => 7, 'conversation_id' => 55, 'ticket' => 12]);
+
+    Http::assertSent(fn (HttpRequest $r) => str_contains($r->url(), 'messages:send')
+        && $r['message']['android']['notification']['visibility'] === 'PRIVATE'
+        && $r['message']['apns']['headers']['apns-collapse-id'] === 'conversation-55');
+});
+
+it('retries transient failures later, only to the devices that missed the push', function () {
+    $second = DeviceToken::factory()->create(['user_id' => $this->user->id]);
+    $n = UserNotification::create(['user_id' => $this->user->id, 'type' => 'queue.assigned', 'data' => ['ticket' => 3, 'conversation_id' => 9]]);
+    Bus::fake([SendPushNotification::class]);
+
+    $fake = app(FakePushSender::class);
+    $fake->failDevice($second->id, 'transient');
+
+    (new SendPushNotification($n->id))->handle(app(PushManager::class), app(PushMessageFactory::class));
+
+    Bus::assertDispatched(SendPushNotification::class, fn (SendPushNotification $j) => $j->deviceIds === [$second->id] && $j->attempt === 1 && $j->delay !== null);
+    expect($fake->sent)->toHaveCount(1)->and($second->fresh()->failure_count)->toBe(0);
+
+    $fake->succeedAgain();
+    (new SendPushNotification($n->id, [$second->id], 1))->handle(app(PushManager::class), app(PushMessageFactory::class));
+    expect($fake->sent)->toHaveCount(2)->and($fake->sent[1]['device']->id)->toBe($second->id);
+});
+
+it('stops retrying after the last backoff step', function () {
+    $n = UserNotification::create(['user_id' => $this->user->id, 'type' => 'queue.assigned', 'data' => ['ticket' => 3]]);
+    Bus::fake([SendPushNotification::class]);
+    app(FakePushSender::class)->failNext('fcm_503', kind: 'transient');
+
+    (new SendPushNotification($n->id, [$this->device->id], count(SendPushNotification::BACKOFF)))->handle(app(PushManager::class), app(PushMessageFactory::class));
+
+    Bus::assertNotDispatched(SendPushNotification::class);
+});
+
+it('treats a server error as transient: no failure counted', function () {
     Cache::flush();
     mbFcmCredentials();
     Http::fake([
@@ -281,9 +366,10 @@ it('counts a server error as a failure without disabling at once', function () {
         'fcm.googleapis.com/*' => Http::response(['error' => ['code' => 503, 'status' => 'UNAVAILABLE']], 503),
     ]);
 
-    app(PushManager::class)->sendToDevice($this->device, app(PushMessageFactory::class)->test($this->user));
+    $result = app(PushManager::class)->sendToDevice($this->device, app(PushMessageFactory::class)->test($this->user));
 
-    expect($this->device->fresh()->failure_count)->toBe(1)->and($this->device->fresh()->disabled_at)->toBeNull();
+    expect($result->transient)->toBeTrue()
+        ->and($this->device->fresh()->failure_count)->toBe(0)->and($this->device->fresh()->disabled_at)->toBeNull();
 });
 
 it('fails cleanly when the FCM credentials are missing', function () {
@@ -292,6 +378,7 @@ it('fails cleanly when the FCM credentials are missing', function () {
 
     $result = app(PushManager::class)->sendToDevice($this->device, app(PushMessageFactory::class)->test($this->user));
 
-    expect($result->ok)->toBeFalse()->and($result->invalidToken)->toBeFalse();
+    expect($result->ok)->toBeFalse()->and($result->invalidToken)->toBeFalse()->and($result->deviceFault)->toBeFalse()
+        ->and($this->device->fresh()->failure_count)->toBe(0);
     Http::assertNothingSent();
 });

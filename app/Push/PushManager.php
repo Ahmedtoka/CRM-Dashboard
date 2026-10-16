@@ -8,12 +8,14 @@ use App\Push\Drivers\FakePushSender;
 use App\Push\Drivers\FcmPushSender;
 use App\Push\Drivers\LogPushSender;
 use App\Push\Drivers\NullPushSender;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Picks the configured driver (`crm.push.driver`: null|log|fake|fcm) and keeps each
- * device row honest: a success stamps last_push_at and clears the failure count; a
- * failure counts up and a dead token — or MAX_FAILURES failures in a row — disables
- * the device (spec §6).
+ * device row honest (review 01, I3): a success stamps last_push_at and clears the
+ * failure count; only a device fault counts up, and a dead token — or MAX_FAILURES
+ * device faults in a row — disables the device. Transient and configuration failures
+ * are logged (never the token or the text) and leave the device alone.
  */
 class PushManager
 {
@@ -41,31 +43,62 @@ class PushManager
         };
     }
 
-    /** @return array{devices: int, sent: int, failed: int} */
-    public function sendToUser(User $user, PushMessage $message): array
+    /**
+     * @param  list<int>|null  $onlyDeviceIds  a retry goes only to the devices that failed transiently
+     * @return array{devices: int, sent: int, failed: int, retry: list<int>}
+     */
+    public function sendToUser(User $user, PushMessage $message, ?array $onlyDeviceIds = null): array
     {
-        $devices = DeviceToken::query()->active()->where('user_id', $user->id)->get();
+        $devices = DeviceToken::query()->active()->where('user_id', $user->id)
+            ->when($onlyDeviceIds !== null, fn ($q) => $q->whereKey($onlyDeviceIds))->get();
         $sent = 0;
         $failed = 0;
+        $retry = [];
 
         if (! $this->enabled()) {
-            return ['devices' => $devices->count(), 'sent' => 0, 'failed' => 0];
+            return ['devices' => $devices->count(), 'sent' => 0, 'failed' => 0, 'retry' => []];
         }
 
         foreach ($devices as $device) {
-            $this->sendToDevice($device, $message)->ok ? $sent++ : $failed++;
+            $result = $this->sendToDevice($device, $message);
+
+            if ($result->ok) {
+                $sent++;
+
+                continue;
+            }
+
+            $failed++;
+
+            if ($result->transient) {
+                $retry[] = (int) $device->id;
+            }
         }
 
-        return ['devices' => $devices->count(), 'sent' => $sent, 'failed' => $failed];
+        return ['devices' => $devices->count(), 'sent' => $sent, 'failed' => $failed, 'retry' => $retry];
     }
 
     public function sendToDevice(DeviceToken $device, PushMessage $message): PushResult
     {
-        $result = rescue(fn () => $this->sender()->send($device, $message), fn () => PushResult::failed('driver_exception'), report: true);
+        $result = rescue(fn () => $this->sender()->send($device, $message), fn () => PushResult::transient('driver_exception'), report: true);
 
         if ($result->ok) {
             $device->forceFill(['last_push_at' => now(), 'failure_count' => 0])->save();
 
+            return $result;
+        }
+
+        Log::warning('push.failed', [
+            'driver' => $this->driverName(),
+            'user_id' => $device->user_id,
+            'device_id' => $device->id,
+            'type' => $message->type(),
+            'error' => $result->error,
+            'device_fault' => $result->deviceFault,
+            'transient' => $result->transient,
+        ]);
+
+        if (! $result->deviceFault) {
             return $result;
         }
 

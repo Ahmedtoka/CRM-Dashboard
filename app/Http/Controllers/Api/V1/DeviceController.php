@@ -71,6 +71,8 @@ class DeviceController extends Controller
         $user = $request->user();
         $result = $push->sendToUser($user, $factory->test($user));
 
-        return response()->json(['data' => ['driver' => $push->driverName()] + $result]);
+        return response()->json(['data' => [
+            'driver' => $push->driverName(), 'devices' => $result['devices'], 'sent' => $result['sent'], 'failed' => $result['failed'],
+        ]]);
     }
 }

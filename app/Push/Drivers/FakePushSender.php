@@ -9,7 +9,7 @@ use App\Push\PushResult;
 use App\Push\PushSender;
 use PHPUnit\Framework\Assert;
 
-/** Test driver: records every send; `failNext()` makes the following sends fail. */
+/** Test driver: records every send; `failNext()` makes the following sends fail until `succeedAgain()`. */
 final class FakePushSender implements PushSender
 {
     /** @var list<array{device: DeviceToken, message: PushMessage}> */
@@ -17,9 +17,11 @@ final class FakePushSender implements PushSender
 
     private ?PushResult $failure = null;
 
+    private ?int $failOnlyDevice = null;
+
     public function send(DeviceToken $device, PushMessage $message): PushResult
     {
-        if ($this->failure !== null) {
+        if ($this->failure !== null && ($this->failOnlyDevice === null || $this->failOnlyDevice === (int) $device->id)) {
             return $this->failure;
         }
 
@@ -28,9 +30,27 @@ final class FakePushSender implements PushSender
         return PushResult::sent();
     }
 
-    public function failNext(string $error = 'fake_failure', bool $invalidToken = false): void
+    /** `$kind`: device (counts towards disabling), transient (retried) or error (logged only). */
+    public function failNext(string $error = 'fake_failure', bool $invalidToken = false, string $kind = 'device'): void
     {
-        $this->failure = PushResult::failed($error, $invalidToken);
+        $this->failure = match ($kind) {
+            'transient' => PushResult::transient($error),
+            'error' => PushResult::failed($error),
+            default => PushResult::deviceFault($error, $invalidToken),
+        };
+    }
+
+    /** Only this device fails (with the given kind) until `succeedAgain()`. */
+    public function failDevice(int $deviceId, string $kind = 'device'): void
+    {
+        $this->failNext('fake_failure', false, $kind);
+        $this->failOnlyDevice = $deviceId;
+    }
+
+    public function succeedAgain(): void
+    {
+        $this->failure = null;
+        $this->failOnlyDevice = null;
     }
 
     /** @return list<PushMessage> */

@@ -13,13 +13,17 @@ use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 /**
- * Firebase Cloud Messaging HTTP v1 (spec D8). Authenticates with the service account
- * from `crm.push.fcm.credentials` (a JSON key file kept outside the web root): a JWT
+ * Firebase Cloud Messaging HTTP v1 (spec D8). Authenticates with a service account: a JWT
  * signed RS256 with openssl is exchanged for an OAuth2 access token, cached 50 minutes
  * (Google issues them for 60). No SDK dependency.
  *
- * A token FCM reports as gone (404 / UNREGISTERED, or INVALID_ARGUMENT about the
- * token) comes back as `invalidToken` so PushManager disables the device.
+ * `crm.push.fcm.credentials` (FCM_CREDENTIALS) may be a path to the JSON key file
+ * (relative paths resolve from the project root), the JSON itself, or the JSON base64-encoded.
+ *
+ * Only token-attributable answers are device faults (review 01, I3): 404 / UNREGISTERED,
+ * SENDER_ID_MISMATCH, and INVALID_ARGUMENT whose message is about the registration token.
+ * Auth, connection, 429 and 5xx are transient (the job retries); anything else is an error
+ * that leaves the device alone.
  */
 final class FcmPushSender implements PushSender
 {
@@ -29,39 +33,84 @@ final class FcmPushSender implements PushSender
 
     public function send(DeviceToken $device, PushMessage $message): PushResult
     {
-        $project = (string) config('crm.push.fcm.project_id');
-
         try {
             $credentials = $this->credentials();
+        } catch (RuntimeException $e) {
+            return PushResult::failed('fcm_config: '.$e->getMessage());
+        }
+
+        $project = (string) (config('crm.push.fcm.project_id') ?: ($credentials['project_id'] ?? ''));
+
+        if ($project === '') {
+            return PushResult::failed('fcm_config: project id missing');
+        }
+
+        try {
             $accessToken = $this->accessToken($credentials);
         } catch (RuntimeException|ConnectionException $e) {
-            return PushResult::failed('fcm_auth: '.$e->getMessage());
-        }
-
-        if ($project === '') {
-            $project = (string) ($credentials['project_id'] ?? '');
-        }
-
-        if ($project === '') {
-            return PushResult::failed('fcm_not_configured');
+            return PushResult::transient('fcm_auth: '.$e->getMessage());
         }
 
         try {
             $response = Http::withToken($accessToken)->acceptJson()->timeout(5)->connectTimeout(3)
                 ->post("https://fcm.googleapis.com/v1/projects/{$project}/messages:send", ['message' => $this->payload($device, $message)]);
-        } catch (ConnectionException $e) {
-            return PushResult::failed('fcm_connection');
+        } catch (ConnectionException) {
+            return PushResult::transient('fcm_connection');
         }
 
         if ($response->successful()) {
             return PushResult::sent();
         }
 
-        if ($response->status() === 401) {
-            Cache::forget($this->cacheKey($credentials));
+        return $this->classify($response, $credentials);
+    }
+
+    /** @param  array<string, mixed>  $credentials */
+    private function classify(Response $response, array $credentials): PushResult
+    {
+        $status = $response->status();
+        $code = $this->errorCode($response);
+        $error = 'fcm_'.$status.($code !== null ? ':'.$code : '');
+
+        if ($status === 404 || $code === 'UNREGISTERED' || $code === 'SENDER_ID_MISMATCH') {
+            return PushResult::deviceFault($error, invalidToken: true);
         }
 
-        return PushResult::failed('fcm_'.$response->status().($this->errorCode($response) ? ':'.$this->errorCode($response) : ''), $this->isInvalidToken($response));
+        if ($status === 400 && $code === 'INVALID_ARGUMENT' && $this->aboutToken($response)) {
+            return PushResult::deviceFault($error, invalidToken: true);
+        }
+
+        if ($status === 401) {
+            Cache::forget($this->cacheKey($credentials));
+
+            return PushResult::transient($error);
+        }
+
+        if ($status === 429 || $status >= 500) {
+            return PushResult::transient($error);
+        }
+
+        return PushResult::failed($error);
+    }
+
+    /** FCM says "The registration token is not a valid FCM registration token" for a bad token. */
+    private function aboutToken(Response $response): bool
+    {
+        $message = strtolower((string) $response->json('error.message', ''));
+
+        if (str_contains($message, 'registration token')) {
+            return true;
+        }
+
+        foreach ((array) $response->json('error.details', []) as $detail) {
+            foreach ((array) ($detail['fieldViolations'] ?? []) as $violation) {
+                if (is_array($violation) && in_array($violation['field'] ?? null, ['message.token', 'token'], true)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /** @return array<string, mixed> */
@@ -70,11 +119,14 @@ final class FcmPushSender implements PushSender
         $high = $message->priority === 'high';
         $android = [
             'priority' => $high ? 'HIGH' : 'NORMAL',
-            'notification' => ['channel_id' => $message->channel],
+            // Lock screen shows the app name only, not the customer's name or the excerpt (review 01, M7).
+            'notification' => ['channel_id' => $message->channel, 'visibility' => 'PRIVATE'],
         ];
+        $apnsHeaders = ['apns-priority' => $high ? '10' : '5'];
 
         if ($message->collapseKey !== null) {
             $android['collapse_key'] = $message->collapseKey;
+            $apnsHeaders['apns-collapse-id'] = substr($message->collapseKey, 0, 64);
         }
 
         return [
@@ -82,17 +134,8 @@ final class FcmPushSender implements PushSender
             'notification' => ['title' => $message->title, 'body' => $message->body],
             'data' => array_map('strval', $message->data),
             'android' => $android,
-            'apns' => ['headers' => ['apns-priority' => $high ? '10' : '5']],
+            'apns' => ['headers' => $apnsHeaders],
         ];
-    }
-
-    private function isInvalidToken(Response $response): bool
-    {
-        $code = $this->errorCode($response);
-
-        return $response->status() === 404
-            || $code === 'UNREGISTERED'
-            || ($response->status() === 400 && ($code === 'INVALID_ARGUMENT' || $response->json('error.status') === 'INVALID_ARGUMENT'));
     }
 
     private function errorCode(Response $response): ?string
@@ -108,22 +151,36 @@ final class FcmPushSender implements PushSender
         return is_string($status) ? $status : null;
     }
 
-    /** @return array{client_email: string, private_key: string, token_uri?: string, project_id?: string} */
+    /** @return array<string, mixed> */
     private function credentials(): array
     {
-        $path = (string) config('crm.push.fcm.credentials');
+        $raw = trim((string) config('crm.push.fcm.credentials'));
 
-        if ($path === '' || ! is_file($path) || ! is_readable($path)) {
-            throw new RuntimeException('credentials file missing');
+        if ($raw === '') {
+            throw new RuntimeException('FCM_CREDENTIALS is empty');
         }
 
-        $json = json_decode((string) file_get_contents($path), true);
+        if (str_starts_with($raw, '{')) {
+            $json = $raw;
+        } else {
+            $path = preg_match('#^([A-Za-z]:[\\\\/]|/|\\\\)#', $raw) === 1 ? $raw : base_path($raw);
 
-        if (! is_array($json) || empty($json['client_email']) || empty($json['private_key'])) {
-            throw new RuntimeException('credentials file invalid');
+            if (is_file($path) && is_readable($path)) {
+                $json = (string) file_get_contents($path);
+            } elseif (($decoded = base64_decode($raw, true)) !== false && str_starts_with(trim($decoded), '{')) {
+                $json = $decoded;
+            } else {
+                throw new RuntimeException('credentials not found (not a readable file, JSON or base64 JSON)');
+            }
         }
 
-        return $json;
+        $data = json_decode($json, true);
+
+        if (! is_array($data) || empty($data['client_email']) || empty($data['private_key'])) {
+            throw new RuntimeException('credentials invalid (client_email / private_key missing)');
+        }
+
+        return $data;
     }
 
     /** @param  array<string, mixed>  $credentials */
