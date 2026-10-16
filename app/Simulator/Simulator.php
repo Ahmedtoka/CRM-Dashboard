@@ -3,11 +3,13 @@
 namespace App\Simulator;
 
 use App\Channels\Jobs\ProcessWebhookEvent;
+use App\Commerce\Jobs\ProcessShopifyWebhook;
 use App\Enums\MessageStatus;
 use App\Enums\Platform;
 use App\Models\ChannelAccount;
 use App\Models\Comment;
 use App\Models\Message;
+use App\Models\Order;
 use App\Models\WebhookEvent;
 use App\Simulator\LoadTest\LoadTestChannels;
 use Carbon\CarbonImmutable;
@@ -16,6 +18,7 @@ use Database\Seeders\Demo\ArabicCorpus;
 use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 /**
  * Demo traffic generator (Task 11, spec §10). Every method posts through the
@@ -155,6 +158,68 @@ class Simulator
         }
 
         return $count;
+    }
+
+    /**
+     * A brand-new store order arriving from Shopify (orders/create, placed now), stored and
+     * processed exactly like a real webhook so the WhatsApp order confirmation trigger runs
+     * (spec 2026-10-16). Local and testing only: a fake order must never reach a real store's data.
+     */
+    public function shopifyOrderCreated(string $phone, ?string $name = null): Order
+    {
+        if (! app()->environment(['local', 'testing'])) {
+            throw new RuntimeException('Fake Shopify orders are for local and testing only.');
+        }
+
+        $id = (int) (now()->format('U').random_int(100, 999));
+        $name = trim((string) $name) !== '' ? trim((string) $name) : ArabicCorpus::names()[array_rand(ArabicCorpus::names())];
+        [$first, $last] = array_pad(explode(' ', $name, 2), 2, '');
+        $at = now()->toIso8601String();
+        $address = ['first_name' => $first, 'last_name' => $last, 'name' => $name, 'address1' => '12 شارع عباس العقاد', 'city' => 'مدينة نصر', 'province' => 'Cairo', 'country' => 'Egypt', 'country_code' => 'EG', 'phone' => $phone];
+
+        $event = WebhookEvent::create([
+            'provider' => 'shopify',
+            'event_type' => 'orders/create',
+            'dedupe_key' => 'sim-shopify-'.Str::uuid(),
+            'received_at' => now(),
+            'payload' => [
+                'id' => $id,
+                'admin_graphql_api_id' => 'gid://shopify/Order/'.$id,
+                'name' => '#'.substr((string) $id, -6),
+                'created_at' => $at,
+                'processed_at' => $at,
+                'updated_at' => $at,
+                'cancelled_at' => null,
+                'currency' => 'EGP',
+                'financial_status' => 'pending',
+                'fulfillment_status' => null,
+                'gateway' => 'Cash on Delivery (COD)',
+                'payment_gateway_names' => ['Cash on Delivery (COD)'],
+                'source_name' => 'web',
+                'tags' => '',
+                'phone' => $phone,
+                'subtotal_price' => '650.00',
+                'total_price' => '710.00',
+                'total_discounts' => '0.00',
+                'total_shipping_price_set' => ['shop_money' => ['amount' => '60.00', 'currency_code' => 'EGP']],
+                'customer' => ['id' => $id + 1, 'first_name' => $first, 'last_name' => $last, 'phone' => $phone, 'created_at' => $at, 'updated_at' => $at, 'default_address' => $address],
+                'shipping_address' => $address,
+                'billing_address' => $address,
+                'line_items' => [
+                    ['id' => $id + 2, 'title' => 'فستان سهرة شيفون', 'variant_title' => 'أسود / M', 'name' => 'فستان سهرة شيفون - أسود / M', 'sku' => 'SIM-DRS', 'quantity' => 1, 'price' => '450.00', 'product_id' => null, 'variant_id' => null],
+                    ['id' => $id + 3, 'title' => 'طرحة شيفون', 'variant_title' => 'بيج', 'name' => 'طرحة شيفون - بيج', 'sku' => 'SIM-HJB', 'quantity' => 2, 'price' => '100.00', 'product_id' => null, 'variant_id' => null],
+                ],
+                'shipping_lines' => [['title' => 'شحن القاهرة والجيزة', 'price' => '60.00']],
+                'fulfillments' => [],
+                'refunds' => [],
+            ],
+            'signature_valid' => true,
+            'status' => 'received',
+        ]);
+
+        ProcessShopifyWebhook::dispatchSync($event->id);
+
+        return Order::where('shopify_order_id', (string) $id)->firstOrFail();
     }
 
     /**
