@@ -66,7 +66,8 @@ class OrderConfirmationController extends Controller
     }
 
     /**
-     * The call list: staff record how the call went. Only a confirmation still waiting for a call (no_response).
+     * Staff record the customer's answer: how the call went, or what she said in her own words
+     * (ConfirmationBoard::RECORDABLE statuses only).
      */
     public function call(Request $request, OrderConfirmation $confirmation, ConfirmationBoard $board): JsonResponse
     {
@@ -74,7 +75,7 @@ class OrderConfirmationController extends Controller
 
         $data = $request->validate(['outcome' => ['required', 'string', Rule::in(OrderConfirmation::CALL_OUTCOMES)]]);
 
-        if (! $confirmation->status->needsCall()) {
+        if (! ConfirmationBoard::canRecord($confirmation)) {
             return response()->json(['message' => __('errors.order_confirmations.not_on_call_list')], 422);
         }
 

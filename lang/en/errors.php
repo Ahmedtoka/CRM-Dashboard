@@ -162,6 +162,6 @@ return [
     ],
 
     'order_confirmations' => [
-        'not_on_call_list' => 'This order is no longer on the call list.',
+        'not_on_call_list' => "The customer's answer for this order is already recorded.",
     ],
 ];

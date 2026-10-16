@@ -32,6 +32,17 @@ final class ConfirmationBoard
      */
     public const ALL_DAYS_TABS = ['needs_call'];
 
+    /**
+     * Statuses staff may record an answer on (CallOutcome): the call list, plus an answer the customer gave in her
+     * own words (still `sent`, or an edit request settled by talking) and a later try after «مابتردش».
+     */
+    public const RECORDABLE = [S::NoResponse, S::Sent, S::EditRequested, S::Unreachable];
+
+    public static function canRecord(OrderConfirmation $c): bool
+    {
+        return in_array($c->status, self::RECORDABLE, true);
+    }
+
     public function __construct(private readonly ConfirmationSettings $settings) {}
 
     /**
@@ -132,6 +143,7 @@ final class ConfirmationBoard
             'case_id' => $c->case_id,
             'conversation_id' => $c->conversation_id,
             'needs_call' => $c->status->needsCall(),
+            'can_record' => self::canRecord($c),
             'created_at' => $c->created_at?->toIso8601String(),
         ];
     }
