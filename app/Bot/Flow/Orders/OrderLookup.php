@@ -4,6 +4,7 @@ namespace App\Bot\Flow\Orders;
 
 use App\Bot\ArabicNormalizer;
 use App\Commerce\OrderStatusResolver;
+use App\Enums\Platform;
 use App\Models\Conversation;
 use App\Models\Order;
 use App\Shopify\Customers\PhoneNormalizer;
@@ -18,10 +19,25 @@ use Throwable;
  * Shopify/carrier data is mapped. A phone or email lookup only returns orders
  * whose shipping phone or customer phone/email matches the value given, so one
  * customer can never read another's orders.
+ *
+ * Full audit A4 (2026-10-16): knowing a mobile or email is not proof of owning its
+ * orders. Only the chat's own contact (its customer's phone/email, or the WhatsApp
+ * number it writes from) is; any other one returns `unverified` with no snapshot
+ * at all, until the order number is given with it.
  */
 class OrderLookup
 {
     public const CANCEL_WINDOW_MINUTES = 120;
+
+    /** Full audit A4: the only reply to an `unverified` lookup — found, nothing else, and the ask. */
+    public const UNVERIFIED_PHONE_TEXT = 'لقيت أوردرات على الرقم ده. للتأكيد، ابعتيلي رقم الأوردر';
+
+    public const UNVERIFIED_EMAIL_TEXT = 'لقيت أوردرات على الإيميل ده. للتأكيد، ابعتيلي رقم الأوردر';
+
+    public static function unverifiedText(?string $via): string
+    {
+        return $via === 'email' ? self::UNVERIFIED_EMAIL_TEXT : self::UNVERIFIED_PHONE_TEXT;
+    }
 
     /** Shopify province codes that count as main cities for the delivery-time policy. */
     private const PROVINCES = ['C' => 'القاهرة', 'GZ' => 'الجيزة', 'ALX' => 'الإسكندرية'];
@@ -57,9 +73,12 @@ class OrderLookup
     ) {}
 
     /**
+     * `unverified` (audit A4): orders match a mobile/email that is not the chat's own; nothing about
+     * them may be said (no snapshot) until she gives the order number with it.
+     *
      * @param  array<string, mixed>  $entities  order_ref, phone, email, governorate (others ignored)
      * @param  int  $maxListed  how many open orders a "multiple" result lists (the flow offers up to 13 buttons)
-     * @return array{status:'found'|'multiple'|'not_found'|'missing_details', snapshots:list<OrderSnapshot>}
+     * @return array{status:'found'|'multiple'|'not_found'|'missing_details'|'unverified', snapshots:list<OrderSnapshot>, via?:'phone'|'email'}
      */
     public function find(Conversation $c, array $entities, int $maxListed = self::MAX_LISTED): array
     {
@@ -89,16 +108,22 @@ class OrderLookup
             }
         }
 
-        foreach ([[$phone, fn () => $this->byPhone((string) $phone)], [$email, fn () => $this->byEmail((string) $email)]] as [$value, $query]) {
+        foreach (['phone' => [$phone, fn () => $this->byPhone((string) $phone)], 'email' => [$email, fn () => $this->byEmail((string) $email)]] as $via => [$value, $query]) {
             if ($value === null) {
                 continue;
             }
 
             $orders = $query();
 
-            if ($orders->isNotEmpty()) {
-                return $this->pick($orders, $entities);
+            if ($orders->isEmpty()) {
+                continue;
             }
+
+            if (! $this->isOwnContact($c, $via, $value) && $orders->contains(fn (Order $o) => ! $this->linkedToConversation($o, $c))) {
+                return ['status' => 'unverified', 'snapshots' => [], 'via' => $via];
+            }
+
+            return $this->pick($orders, $entities);
         }
 
         return ['status' => 'not_found', 'snapshots' => []];
@@ -166,7 +191,7 @@ class OrderLookup
     private function pick(Collection $orders, array $entities): array
     {
         // Each snapshot may call the OMS: only the most recent orders are considered.
-        // Found by her own mobile or email: ownership is proven (spec 2026-09-19 §1).
+        // Found by the chat's own mobile or email (or every order is already hers): ownership is proven.
         $snapshots = $orders->take(max(self::MAX_SNAPSHOTS, $this->maxListed))->map(fn (Order $o) => $this->snapshot($o, $entities, true, true))->values();
         $notCancelled = $snapshots->reject(fn (OrderSnapshot $s) => $s->statusKey === 'cancelled')->values();
         $open = $notCancelled->reject(fn (OrderSnapshot $s) => $s->statusKey === 'delivered')->values();
@@ -193,6 +218,31 @@ class OrderLookup
         }
 
         return $email !== null && $email === mb_strtolower(trim((string) $o->customer?->email));
+    }
+
+    /**
+     * Full audit A4: the mobile/email is the chat's own — its customer's phone or email, or the
+     * WhatsApp number the chat writes from. A number she only typed is not.
+     */
+    private function isOwnContact(Conversation $c, string $via, string $value): bool
+    {
+        $mine = $c->customer_id !== null ? $c->customer : null;
+
+        if ($mine === null) {
+            return false;
+        }
+
+        if ($via === 'email') {
+            return $value === mb_strtolower(trim((string) $mine->email));
+        }
+
+        $own = [$mine->normalized_phone, PhoneNormalizer::toE164($mine->phone)];
+
+        if ($c->platform === Platform::WhatsApp) {
+            $own = [...$own, ...$mine->identities()->where('platform', Platform::WhatsApp)->pluck('external_id')->map(fn ($id) => PhoneNormalizer::toE164((string) $id))->all()];
+        }
+
+        return in_array($value, array_filter($own), true);
     }
 
     /**

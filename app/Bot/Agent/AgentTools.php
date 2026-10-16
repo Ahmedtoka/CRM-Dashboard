@@ -154,6 +154,8 @@ class AgentTools
         return match ($found['status']) {
             'missing_details' => 'Ask her for the order number, or the mobile number or email used on the order.',
             'not_found' => 'NO ORDER FOUND with these details. Ask her to check them; after a second miss hand over to a human.',
+            // Full audit A4: not her chat's own mobile/email, so nothing about these orders reaches the model.
+            'unverified' => 'Orders exist for this '.($found['via'] ?? 'contact').', but it is not the one on her chat, so nothing about them may be shared yet. Ask her for the order number to confirm, then call this tool again with the order number and the same '.($found['via'] ?? 'contact').'.',
             default => implode("\n", array_map(
                 fn ($s) => $this->statusText->line($s).($this->statusText->needsAgent($s) ? ' (needs a human: hand over)' : ''),
                 $found['snapshots'],
