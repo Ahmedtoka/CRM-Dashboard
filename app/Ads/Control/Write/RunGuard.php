@@ -61,7 +61,8 @@ class RunGuard
             return;
         }
         $pub = AdPublication::query()->where('ad_account_id', $a->id)->where('external_ad_id', $externalId)->whereNotNull('ad_launch_id')
-            ->orderByDesc('id')->first(['id', 'ad_launch_id', 'archived_at']);
+            ->orderByDesc('id')->first(['id', 'ad_launch_id', 'archived_at'])
+            ?? self::orphanOf($a, $externalId);
         if ($pub === null) {
             return;
         }
@@ -77,6 +78,23 @@ class RunGuard
         if ($state !== null && in_array($state, LaunchState::TERMINAL_VALUES, true)) {
             throw WriteDenied::make('approval_required', ['launch_id' => $launch->public_id, 'launch_state' => $state]);
         }
+    }
+
+    /**
+     * A6: a launch publication whose ad-create request went out but never returned the id (ERROR "create may exist")
+     * while the platform made the ad anyway. Until PublicationLinker adopts it, the synced ad is matched by its
+     * deterministic name (Naming::adName) in the same ad set, so the gate still applies to it.
+     */
+    private static function orphanOf(AdAccount $a, string $externalId): ?AdPublication
+    {
+        $ad = Ad::query()->where('ad_account_id', $a->id)->where('external_id', $externalId)->with('adSet:id,external_id')->first(['id', 'name', 'ad_set_id']);
+        if ($ad === null || $ad->adSet === null || trim((string) $ad->name) === '') {
+            return null;
+        }
+
+        return AdPublication::query()->where('ad_account_id', $a->id)->whereNotNull('ad_launch_id')->whereNull('external_ad_id')
+            ->whereNotNull('ad_requested_at')->where('ad_name', $ad->name)->where('adset_external_id', $ad->adSet->external_id)
+            ->orderByDesc('id')->first(['id', 'ad_launch_id', 'archived_at']);
     }
 
     /**
