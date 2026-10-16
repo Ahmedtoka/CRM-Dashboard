@@ -504,6 +504,40 @@ return [
         'captions' => ['model' => env('CRM_ADS_CAPTIONS_MODEL'), 'frames' => 4, 'timeout' => 60],
     ],
 
+    // Moderator mobile app (spec 2026-10-16). Login tokens expire after token_ttl_days and the app refreshes
+    // them when fewer than token_refresh_days are left; media URLs given to the app are signed for
+    // media_url_ttl_minutes; a send's client_id is remembered client_id_ttl_hours for idempotent retries.
+    'mobile' => [
+        'token_ttl_days' => (int) env('CRM_MOBILE_TOKEN_TTL_DAYS', 30),
+        'token_refresh_days' => 7,
+        'media_url_ttl_minutes' => (int) env('CRM_MOBILE_MEDIA_TTL', 120),
+        'client_id_ttl_hours' => 48,
+    ],
+
+    // Push to staff phones (spec 2026-10-16 §6). driver: null (off), log or fcm. fcm.credentials is the
+    // service-account JSON (path or the JSON itself). types: the UserNotifier types that also go out as a
+    // push, with their Android channel and priority; any type not listed never pushes. Keys contain dots,
+    // so read the map as config('crm.push.types')[$type], not config("crm.push.types.$type").
+    'push' => [
+        'driver' => env('CRM_PUSH_DRIVER'),
+        'fcm' => [
+            'project_id' => env('FCM_PROJECT_ID'),
+            'credentials' => env('FCM_CREDENTIALS'),
+        ],
+        'types' => [
+            'queue.assigned' => ['channel' => 'queue', 'priority' => 'high'],
+            'queue.reply_overdue' => ['channel' => 'queue', 'priority' => 'high'],
+            'note.mention' => ['channel' => 'mentions', 'priority' => 'normal'],
+            'conversation.handover' => ['channel' => 'handover', 'priority' => 'normal'],
+            'conversation.handover_urgent' => ['channel' => 'handover', 'priority' => 'high'],
+            'case.created' => ['channel' => 'general', 'priority' => 'normal'],
+            // Leader / supervisor alerts (only they receive these notifications).
+            'queue.break_overrun' => ['channel' => 'queue', 'priority' => 'normal'],
+            'queue.escalation_waiting' => ['channel' => 'queue', 'priority' => 'high'],
+            'queue.reply_overdue_leader' => ['channel' => 'queue', 'priority' => 'high'],
+        ],
+    ],
+
     // Approved WhatsApp templates (spec §5.6), shared with the web
     // TemplatePicker (resources/js/components/crm/TemplatePicker.vue) and the
     // mobile app so both stop hardcoding the name/param-count list.

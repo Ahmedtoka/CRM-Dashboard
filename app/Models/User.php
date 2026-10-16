@@ -86,6 +86,16 @@ class User extends Authenticatable
     }
 
     /**
+     * Phones registered for push (mobile app).
+     *
+     * @return HasMany<DeviceToken, $this>
+     */
+    public function deviceTokens(): HasMany
+    {
+        return $this->hasMany(DeviceToken::class);
+    }
+
+    /**
      * @return HasMany<UserPlatform, $this>
      */
     public function userPlatforms(): HasMany
