@@ -6,6 +6,7 @@ use App\Ads\Access\AdsScope;
 use App\Ads\Control\DuplicatePublication;
 use App\Ads\Launch\CheckResult;
 use App\Ads\Launch\LaunchChecks;
+use App\Ads\Launch\LaunchHandoff;
 use App\Ads\Launch\LaunchPolicy;
 use App\Ads\Launch\LaunchPresenter;
 use App\Ads\Launch\LaunchService;
@@ -31,16 +32,23 @@ class LaunchController extends Controller
     {
         $user = $request->user();
         $buyer = $scope->buyerFor($user);
-        $boxes = ['mine', 'review', 'live', 'all'];
+        $boxes = ['mine', 'review', 'ready', 'live', 'all'];
+        // «جاهزة للنشر» (F4) for content and managers; a buyer's own queue is already «مستنية مراجعتك».
+        $canSeeReady = LaunchPolicy::canPrepare($user) && ($buyer === null || $user->hasAdsAuthority());
+        $reviewer = is_numeric($request->query('reviewer')) ? (int) $request->query('reviewer') : null;
         $box = in_array($request->query('box'), $boxes, true) ? (string) $request->query('box') : ($user->role === UserRole::MediaBuyer ? 'review' : 'mine');
+        if ($box === 'ready' && ! $canSeeReady) {
+            $box = $user->role === UserRole::MediaBuyer ? 'review' : 'mine';
+        }
         $material = is_numeric($request->query('material')) ? (int) $request->query('material') : null;
 
         $base = fn () => LaunchPolicy::visible(AdLaunch::query(), $user)->when($material !== null, fn ($q) => $q->where('ad_material_id', $material));
-        $inBox = function ($q, string $b) use ($user, $buyer) {
+        $inBox = function ($q, string $b) use ($user, $buyer, $reviewer) {
             return match ($b) {
                 'mine' => $q->where('prepared_by_id', $user->id),
                 'review' => $q->whereIn('state', ['buyer_review', 'create_failed', 'creating_paused'])
                     ->when(! $user->hasAdsAuthority() && ! $user->isSupervisorOrAbove(), fn ($w) => $w->where('reviewer_buyer_id', $buyer?->id ?? 0)),
+                'ready' => LaunchHandoff::scope($q, $user)->when($reviewer !== null, fn ($w) => $w->where('reviewer_buyer_id', $reviewer)),
                 'live' => $q->whereIn('state', ['launching', 'live', 'stopped']),
                 default => $q,
             };
@@ -57,9 +65,13 @@ class LaunchController extends Controller
                 'material' => $material, 'launch' => is_string($request->query('launch')) ? $request->query('launch') : null, 'stop' => $request->boolean('stop'),
                 // ?box=slots opens the open-slots tab on first load (final review C1); the list underneath stays the default box.
                 'tab' => $request->query('box') === 'slots' && $canToggleSlots ? 'slots' : null,
+                'reviewer' => $box === 'ready' ? $reviewer : null,
             ],
             'launches' => $page,
-            'counts' => ['mine' => $inBox($base(), 'mine')->count(), 'review' => $inBox($base(), 'review')->count(), 'live' => $inBox($base(), 'live')->count()],
+            'counts' => ['mine' => $inBox($base(), 'mine')->count(), 'review' => $inBox($base(), 'review')->count(), 'live' => $inBox($base(), 'live')->count(),
+                'ready' => $canSeeReady ? LaunchHandoff::scope($base(), $user)->count() : 0],
+            'canSeeReady' => $canSeeReady,
+            'handoff' => $canSeeReady && $box === 'ready' ? LaunchHandoff::byBuyer($user) : [],
             'canReview' => $user->hasAdsAuthority() || $buyer !== null,
             'canToggleSlots' => $canToggleSlots,
             'reasons' => LaunchService::REASONS,

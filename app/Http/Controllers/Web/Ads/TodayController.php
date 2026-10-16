@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Web\Ads;
 
+use App\Ads\Launch\LaunchHandoff;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\AdsToday;
 use App\Http\Controllers\Concerns\BuildsAdsPages;
@@ -24,6 +25,8 @@ class TodayController extends Controller
             ...$this->commonProps($user, $week),
             'account_options' => $this->accountOptions($request, $week),
             'today' => $today->build($week, $user, ! ($request->filled('accounts') || $request->filled('buyer') || $request->filled('platform'))),
+            // «جاهزة للنشر» (F4): drafts waiting for a buyer, per buyer for managers (two small indexed reads, not cached).
+            'handoff' => LaunchHandoff::summary($user),
             'freshness' => $this->syncProps($week, false)['oldest']['last_synced_at'] ?? null,
         ]);
     }

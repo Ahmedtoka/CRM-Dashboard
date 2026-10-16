@@ -3232,6 +3232,7 @@ const ar = {
                 permission_missing: 'الربط ناقصه صلاحية الإعلانات',
                 platform_rejected: 'ميتا رفضت التغيير',
                 fake_writer_in_production: 'الكتابة التجريبية مقفولة على السيرفر',
+                archive_unsupported: 'المنصة دي مفيهاش أرشفة',
                 sandbox_only: 'الحساب ده للتجربة بس',
                 writes_disabled: 'التشغيل من السيستم مقفول',
                 account_not_writable: 'الحساب مقفول للتعديل',
@@ -3340,8 +3341,9 @@ const ar = {
             page: {
                 title: 'الإطلاقات',
                 description: 'كل إطلاق من المسودة لحد ما يشتغل: مين ماسكه دلوقتي وإيه اللي ناقص.',
-                box: { mine: 'إطلاقاتي', review: 'مستنية مراجعتك', live: 'شغالة', all: 'الكل', slots: 'المجموعات المفتوحة' },
-                empty: { mine: 'مفيش إطلاقات ليكي', review: 'مفيش حاجة مستنية مراجعتك', live: 'مفيش إطلاقات شغالة', all: 'مفيش إطلاقات' },
+                box: { mine: 'إطلاقاتي', review: 'مستنية مراجعتك', ready: 'جاهزة للنشر', live: 'شغالة', all: 'الكل', slots: 'المجموعات المفتوحة' },
+                ready_hint: 'المسودات اللي الكونتنت جهّزتها ومستنية الباير يراجعها، لكل باير.', ready_all: 'كل الباير', ready_oldest: 'أقدم واحدة',
+                empty: { mine: 'مفيش إطلاقات ليكي', review: 'مفيش حاجة مستنية مراجعتك', ready: 'مفيش مسودات مستنية الباير', live: 'مفيش إطلاقات شغالة', all: 'مفيش إطلاقات' },
                 empty_body: 'من المكتبة دوسي «حضّر إطلاق» على أي مادة.',
                 col: { material: 'المادة', target: 'المجموعة', state: 'الحالة', ads: 'الإعلانات', updated: 'آخر تحديث', actions: 'إجراءات' },
                 material_filter: 'إطلاقات مادة واحدة',
@@ -4256,7 +4258,7 @@ const ar = {
                 retry: 'جرّب تاني', stop_suggestion: 'اقتراح إيقاف',
             },
             today: {
-                title: 'النهارده', description: 'اللي محتاجك دلوقتي وفلوس النهارده', decisions: 'محتاج قرارك', open_all: 'افتح الكل', approvals: '{n} إطلاق مستني موافقتك',
+                title: 'النهارده', description: 'اللي محتاجك دلوقتي وفلوس النهارده', decisions: 'محتاج قرارك', open_all: 'افتح الكل', approvals: '{n} إطلاق مستني موافقتك', handoff: 'جاهزة للنشر', handoff_total: '{n} مسودة مستنية الباير', handoff_mine: '{n} مسودة مستنية مراجعتك',
                 empty_decisions: 'مفيش حاجة محتاجة قرار دلوقتي', more_alerts: 'و{n} تنبيه كمان في «محتاج قرار»', money_today: 'فلوس النهارده', spent: 'اتصرف', usual: 'المعتاد لحد الساعة دي', usual_prorated: 'المعتاد (تقريبي)',
                 usual_none: 'لسه بنجمع المعتاد', ratio: '{x}× المعتاد', chats_orders: 'محادثات {chats} ← أوردرات {orders}', by_hour: 'الصرف بالساعة', last7: 'آخر ٧ أيام (كاملة)',
                 real_orders: 'أوردرات حقيقية', real_roas: 'عائد حقيقي', meta_roas: 'عائد ميتا', losers: 'اتصرف على إعلانات خسرانة {pct}', who: 'مين؟',

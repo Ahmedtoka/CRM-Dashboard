@@ -3277,6 +3277,7 @@ const en: Messages = {
                 permission_missing: 'The connection is missing the ads permission',
                 platform_rejected: 'Meta rejected the change',
                 fake_writer_in_production: 'The test writer is off in production',
+                archive_unsupported: 'This platform has no archive',
                 sandbox_only: 'This account is sandbox only',
                 writes_disabled: 'CRM writes are switched off',
                 account_not_writable: 'The account is not writable',
@@ -3385,8 +3386,9 @@ const en: Messages = {
             page: {
                 title: 'Launches',
                 description: 'Every launch from draft to live: who holds it now and what is missing.',
-                box: { mine: 'My launches', review: 'Waiting for your review', live: 'Live', all: 'All', slots: 'Open ad sets' },
-                empty: { mine: 'You have no launches', review: 'Nothing waits for your review', live: 'No live launches', all: 'No launches' },
+                box: { mine: 'My launches', review: 'Waiting for your review', ready: 'Ready to publish', live: 'Live', all: 'All', slots: 'Open ad sets' },
+                ready_hint: 'Drafts content prepared that wait for the buyer to review, per buyer.', ready_all: 'All buyers', ready_oldest: 'Oldest',
+                empty: { mine: 'You have no launches', review: 'Nothing waits for your review', ready: 'No drafts wait for a buyer', live: 'No live launches', all: 'No launches' },
                 empty_body: 'In the Library, press "Prepare a launch" on any material.',
                 col: { material: 'Material', target: 'Ad set', state: 'Status', ads: 'Ads', updated: 'Updated', actions: 'Actions' },
                 material_filter: 'Launches of one material',
@@ -4301,7 +4303,7 @@ const en: Messages = {
                 retry: 'Retry', stop_suggestion: 'Stop suggestion',
             },
             today: {
-                title: 'Today', description: 'What needs you now and today’s money', decisions: 'Needs your decision', open_all: 'Open all', approvals: '{n} launches wait for your approval',
+                title: 'Today', description: 'What needs you now and today’s money', decisions: 'Needs your decision', open_all: 'Open all', approvals: '{n} launches wait for your approval', handoff: 'Ready to publish', handoff_total: '{n} drafts wait for a buyer', handoff_mine: '{n} drafts wait for your review',
                 empty_decisions: 'Nothing needs a decision right now', more_alerts: 'and {n} more alerts in Needs a decision', money_today: 'Money today', spent: 'Spent', usual: 'Usual by this hour', usual_prorated: 'Usual (estimate)',
                 usual_none: 'Still learning the usual', ratio: '{x}× usual', chats_orders: 'Chats {chats} → orders {orders}', by_hour: 'Spend by hour', last7: 'Last 7 days (complete)',
                 real_orders: 'Real orders', real_roas: 'Real ROAS', meta_roas: 'Meta ROAS', losers: 'Spent on losing ads {pct}', who: 'Which?',
