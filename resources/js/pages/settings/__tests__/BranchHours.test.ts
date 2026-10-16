@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const put = vi.hoisted(() => vi.fn());
+const push = vi.hoisted(() => vi.fn());
 
 vi.mock('@inertiajs/vue3', () => ({
     router: { reload: vi.fn() },
@@ -10,6 +11,7 @@ vi.mock('@inertiajs/vue3', () => ({
     Link: { props: ['href'], template: '<a :href="href"><slot /></a>' },
 }));
 vi.mock('@/composables/useApi', () => ({ useApi: () => ({ put }), apiErrorMessage: (_e: unknown, f: string) => f }));
+vi.mock('@/composables/useToast', () => ({ useToast: () => ({ push }) }));
 
 import { setCurrentLocale } from '@/composables/useI18n';
 import { activitySentence } from '@/lib/activity';
@@ -23,7 +25,11 @@ const branches = [
 const stubs = { AppLayout: { template: '<div><slot /></div>' } };
 
 beforeAll(() => setCurrentLocale('ar'));
-beforeEach(() => put.mockReset().mockResolvedValue({ data: {} }));
+beforeEach(() => {
+    put.mockReset().mockResolvedValue({ data: {} });
+    push.mockReset();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+});
 
 describe('settings › مواعيد الفروع', () => {
     it('lists each branch with its area, hours, phone and status, and offers no add or delete', () => {
@@ -39,16 +45,52 @@ describe('settings › مواعيد الفروع', () => {
         expect(w.find('[aria-label^="حذف"]').exists()).toBe(false);
     });
 
-    it('switches a branch off and on with only is_active', async () => {
+    it('switches a branch off (after a confirm) and on with only is_active', async () => {
         const w = mount(BranchHours, { props: { branches }, global: { stubs } });
 
         await w.get('[aria-label="إيقاف El Marghany"]').trigger('click');
         await flushPromises();
+        expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('El Marghany'));
         expect(put).toHaveBeenCalledWith('/settings/branch-hours/1', { is_active: false });
 
         await w.get('[aria-label="إظهار Degla"]').trigger('click');
         await flushPromises();
         expect(put).toHaveBeenLastCalledWith('/settings/branch-hours/2', { is_active: true });
+        // Showing a branch again asks nothing.
+        expect(window.confirm).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not stop a branch when the confirm is cancelled', async () => {
+        vi.mocked(window.confirm).mockReturnValue(false);
+        const w = mount(BranchHours, { props: { branches }, global: { stubs } });
+
+        await w.get('[aria-label="إيقاف El Marghany"]').trigger('click');
+        await flushPromises();
+        expect(put).not.toHaveBeenCalled();
+    });
+
+    it('shows an error toast when the switch fails', async () => {
+        put.mockRejectedValue(new Error('boom'));
+        const w = mount(BranchHours, { props: { branches }, global: { stubs } });
+
+        await w.get('[aria-label="إظهار Degla"]').trigger('click');
+        await flushPromises();
+        expect(push).toHaveBeenCalledWith(expect.any(String), 'error');
+    });
+
+    it('caps the hours at 60 characters with a live counter', async () => {
+        const w = mount(BranchHours, { props: { branches }, global: { stubs }, attachTo: document.body });
+
+        await w.get('[aria-label="تعديل Degla"]').trigger('click');
+        await flushPromises();
+        const hours = document.querySelector('textarea') as HTMLTextAreaElement;
+        expect(hours.maxLength).toBe(60);
+        expect(document.body.textContent).toContain('٠ / ٦٠');
+        hours.value = 'abc';
+        hours.dispatchEvent(new Event('input'));
+        await flushPromises();
+        expect(document.body.textContent).toContain('٣ / ٦٠');
+        w.unmount();
     });
 
     it('saves the edited hours and phone of the branch', async () => {
