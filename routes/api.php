@@ -1,17 +1,22 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\CaseController;
 use App\Http\Controllers\Api\V1\CityController;
 use App\Http\Controllers\Api\V1\CommentController;
 use App\Http\Controllers\Api\V1\ConversationController;
 use App\Http\Controllers\Api\V1\CustomerController;
+use App\Http\Controllers\Api\V1\DeviceController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\PresenceController;
 use App\Http\Controllers\Api\V1\ProductController;
+use App\Http\Controllers\Api\V1\QueueDeskController;
 use App\Http\Controllers\Api\V1\QuickReplyController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\SearchController;
 use App\Http\Controllers\Api\V1\ShippingController;
+use App\Http\Controllers\Api\V1\TagController;
 use App\Http\Controllers\Api\V1\WhatsappTemplateController;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\RejectAdsRolesOnApi;
@@ -27,6 +32,37 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
         Route::get('me', [AuthController::class, 'me'])->name('me');
         Route::post('heartbeat', [PresenceController::class, 'heartbeat'])->name('heartbeat');
+
+        // Moderator mobile app (docs/mobile-app/API-CONTRACT.md in the outer repo).
+        Route::post('auth/refresh', [AuthController::class, 'refresh'])->middleware('throttle:10,1')->name('auth.refresh');
+        Route::post('devices', [DeviceController::class, 'store'])->name('devices.store');
+        Route::delete('devices', [DeviceController::class, 'destroy'])->name('devices.destroy');
+        Route::post('devices/test', [DeviceController::class, 'test'])->middleware('throttle:5,1')->name('devices.test');
+
+        Route::middleware('throttle:60,1')->group(function () {
+            Route::get('queue/me', [QueueDeskController::class, 'me'])->name('queue.me');
+            Route::post('queue/me/check-in', [QueueDeskController::class, 'checkIn'])->name('queue.check-in');
+            Route::post('queue/me/check-out', [QueueDeskController::class, 'checkOut'])->name('queue.check-out');
+            Route::post('queue/me/hand-back', [QueueDeskController::class, 'handBack'])->name('queue.hand-back');
+            Route::post('queue/me/status', [QueueDeskController::class, 'status'])->name('queue.status');
+            Route::post('queue/entries/{entry}/close', [QueueDeskController::class, 'close'])->name('queue.entries.close');
+            Route::post('queue/entries/{entry}/escalate', [QueueDeskController::class, 'escalate'])->name('queue.entries.escalate');
+        });
+
+        Route::get('cases', [CaseController::class, 'index'])->name('cases.index');
+        Route::get('cases/{supportCase}', [CaseController::class, 'show'])->name('cases.show');
+        Route::patch('cases/{supportCase}', [CaseController::class, 'update'])->name('cases.update');
+
+        Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+        Route::post('notifications/read', [NotificationController::class, 'read'])->name('notifications.read');
+
+        Route::get('tags', [TagController::class, 'index'])->name('tags.index');
+
+        // Declared before conversations/{conversation} so "counts" is not taken for an id.
+        Route::get('conversations/counts', [ConversationController::class, 'counts'])->name('conversations.counts');
+        Route::get('conversations/{conversation}/context', [ConversationController::class, 'context'])->name('conversations.context');
+        Route::post('conversations/{conversation}/tags', [ConversationController::class, 'syncTags'])->name('conversations.tags');
+        Route::post('conversations/{conversation}/quick-replies/{quickReply}/render', [ConversationController::class, 'renderQuickReply'])->name('conversations.quick-replies.render');
 
         Route::get('conversations', [ConversationController::class, 'list'])->middleware('record-list-latency')->name('conversations.index');
         Route::get('conversations/{conversation}', [ConversationController::class, 'show'])->name('conversations.show');
