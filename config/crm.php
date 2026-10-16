@@ -512,6 +512,14 @@ return [
         'token_refresh_days' => 7,
         'media_url_ttl_minutes' => (int) env('CRM_MOBILE_MEDIA_TTL', 120),
         'client_id_ttl_hours' => 48,
+        // The PUBLIC realtime endpoint the phones connect to (review 01, I4). REVERB_HOST/PORT/SCHEME
+        // are how this server reaches Reverb (often 127.0.0.1:8080 behind a proxy), so the app gets
+        // CRM_MOBILE_REVERB_*, else the browser's VITE_REVERB_*, else REVERB_* as a last resort.
+        'reverb' => [
+            'host' => env('CRM_MOBILE_REVERB_HOST') ?: env('VITE_REVERB_HOST'),
+            'port' => env('CRM_MOBILE_REVERB_PORT') ?: env('VITE_REVERB_PORT'),
+            'scheme' => env('CRM_MOBILE_REVERB_SCHEME') ?: env('VITE_REVERB_SCHEME'),
+        ],
     ],
 
     // Push to staff phones (spec 2026-10-16 §6). driver: null (off), log or fcm. fcm.credentials is the

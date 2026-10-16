@@ -37,6 +37,7 @@ beforeEach(function () {
         'broadcasting.connections.reverb.options.host' => 'ws.example.test',
         'broadcasting.connections.reverb.options.port' => 443,
         'broadcasting.connections.reverb.options.scheme' => 'https',
+        'crm.mobile.reverb' => ['host' => null, 'port' => null, 'scheme' => null],
     ]);
     $this->user = User::factory()->create(['password' => bcrypt('secret123'), 'role' => 'moderator']);
 });
@@ -205,4 +206,44 @@ it('also deletes the device named in the logout body, only if it is hers', funct
     $this->withToken($t2)->postJson('/api/v1/auth/logout', ['device_token' => 'someone-else'])->assertOk();
 
     expect(DeviceToken::find($orphan->id))->toBeNull()->and(DeviceToken::find($foreign->id))->not->toBeNull();
+});
+
+it('hands the app the public reverb endpoint, not the server-internal one', function () {
+    config([
+        'broadcasting.connections.reverb.options.host' => '127.0.0.1',
+        'broadcasting.connections.reverb.options.port' => 8080,
+        'broadcasting.connections.reverb.options.scheme' => 'http',
+        'crm.mobile.reverb' => ['host' => 'ws.levoile.test', 'port' => null, 'scheme' => 'https'],
+    ]);
+
+    expect(mbLogin($this->user)['realtime'])->toBe(['driver' => 'reverb', 'key' => 'pub-key', 'host' => 'ws.levoile.test', 'port' => 443, 'scheme' => 'https']);
+
+    config(['crm.mobile.reverb' => ['host' => 'ws.levoile.test', 'port' => '6001', 'scheme' => 'http']]);
+    expect(mbLogin($this->user)['realtime'])->toMatchArray(['host' => 'ws.levoile.test', 'port' => 6001, 'scheme' => 'http']);
+});
+
+it('reads the public endpoint from CRM_MOBILE_REVERB_* then VITE_REVERB_*', function () {
+    $config = fn () => (require base_path('config/crm.php'))['mobile']['reverb'];
+    $set = function (array $vars) {
+        foreach ($vars as $k => $v) {
+            putenv($v === null ? $k : "{$k}={$v}");
+            $_ENV[$k] = $_SERVER[$k] = $v;
+            if ($v === null) {
+                unset($_ENV[$k], $_SERVER[$k]);
+            }
+        }
+    };
+
+    $keys = ['CRM_MOBILE_REVERB_HOST', 'VITE_REVERB_HOST', 'CRM_MOBILE_REVERB_SCHEME', 'VITE_REVERB_SCHEME'];
+    $original = array_combine($keys, array_map(fn ($k) => $_ENV[$k] ?? null, $keys));
+
+    try {
+        $set(['CRM_MOBILE_REVERB_HOST' => '', 'VITE_REVERB_HOST' => 'vite.example.test', 'CRM_MOBILE_REVERB_SCHEME' => null, 'VITE_REVERB_SCHEME' => 'https']);
+        expect($config())->toMatchArray(['host' => 'vite.example.test', 'scheme' => 'https']);
+
+        $set(['CRM_MOBILE_REVERB_HOST' => 'mobile.example.test']);
+        expect($config()['host'])->toBe('mobile.example.test');
+    } finally {
+        $set($original);
+    }
 });
