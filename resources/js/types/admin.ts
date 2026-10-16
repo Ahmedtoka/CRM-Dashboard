@@ -719,6 +719,8 @@ export interface IntegrationsMeta {
     app_id_set: boolean;
     app_secret_set: boolean;
     verify_token: string;
+    /** Why Meta's webhook verification would be refused (VerifyToken on the server), else null. */
+    verify_token_problem: 'missing' | 'default' | 'too_short' | null;
     callback_urls: { facebook: string; instagram: string; whatsapp: string };
     can_override_callback: boolean;
     required_scopes: Record<'facebook' | 'instagram' | 'whatsapp', { required: string[]; recommended: string[] }>;

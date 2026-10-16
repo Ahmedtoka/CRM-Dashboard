@@ -13,6 +13,7 @@ export const TYPE_KEY = {
     'conversation.handover_urgent': 'handover_urgent',
     'note.mention': 'mention',
     'channel.problem': 'channel_problem',
+    'legal.deletion_review': 'legal_deletion_review',
     'queue.assigned': 'queue_assigned',
     'queue.escalation_waiting': 'queue_escalation_waiting',
     'queue.mass_offline': 'queue_mass_offline',
@@ -122,7 +123,9 @@ export function useNotifications() {
 
     async function refresh(): Promise<void> {
         const gen = generation;
-        const { data } = await api.get<{ data: AppNotification[]; unread_notifications: number; unread_conversations: number }>('/notifications', { silent: true });
+        const { data } = await api.get<{ data: AppNotification[]; unread_notifications: number; unread_conversations: number }>('/notifications', {
+            silent: true,
+        });
         if (gen !== generation) return; // answered for a session that has since been reset
         items.value = data.data;
         unreadNotifications.value = data.unread_notifications;
@@ -199,10 +202,17 @@ export function useNotifications() {
     }
 
     function onUserNotified(e: { type: AppNotification['type']; data: Record<string, unknown> }): void {
-        items.value = [{ id: Number(e.data.id), type: e.type, data: e.data, read_at: null, created_at: new Date().toISOString() }, ...items.value].slice(0, 30);
+        items.value = [
+            { id: Number(e.data.id), type: e.type, data: e.data, read_at: null, created_at: new Date().toISOString() },
+            ...items.value,
+        ].slice(0, 30);
         unreadNotifications.value += 1;
         play(); // handover and mentions always notify (subject to the sound/desktop preferences)
-        desktop(t(`notifications.types.${TYPE_KEY[e.type] ?? 'mention'}`), preview(String(e.data.customer_name ?? e.data.excerpt ?? e.data.name ?? '')), Number(e.data.conversation_id) || null);
+        desktop(
+            t(`notifications.types.${TYPE_KEY[e.type] ?? 'mention'}`),
+            preview(String(e.data.customer_name ?? e.data.excerpt ?? e.data.name ?? '')),
+            Number(e.data.conversation_id) || null,
+        );
     }
 
     /**
