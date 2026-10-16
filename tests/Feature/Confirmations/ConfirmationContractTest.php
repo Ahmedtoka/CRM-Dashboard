@@ -6,7 +6,6 @@ use App\Confirmations\Contracts\ConfirmationSender;
 use App\Confirmations\Contracts\ShopifyOrderTagger;
 use App\Enums\OrderConfirmationStatus;
 use App\Models\OrderConfirmation;
-use Illuminate\Database\UniqueConstraintViolationException;
 
 it('round-trips button payloads and rejects anything else', function () {
     expect(ConfirmationPayload::parse(ConfirmationPayload::make(42, 'cancel')))->toBe(['id' => 42, 'action' => 'cancel'])
@@ -45,7 +44,7 @@ it('stores one confirmation per order with its status enum', function () {
         ->and(OrderConfirmationStatus::Sent->awaitingCustomer())->toBeTrue();
 
     expect(fn () => OrderConfirmation::factory()->create(['order_id' => $confirmation->order_id]))
-        ->toThrow(UniqueConstraintViolationException::class);
+        ->toThrow(Illuminate\Database\UniqueConstraintViolationException::class);
 });
 
 it('binds the slice contracts', function () {
