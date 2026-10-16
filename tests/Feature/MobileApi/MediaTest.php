@@ -3,6 +3,7 @@
 use App\Enums\AttachmentStatus;
 use App\Enums\Platform;
 use App\Enums\UserRole;
+use App\Events\MessageCreated;
 use App\Http\Resources\SupportCaseResource;
 use App\Inbox\QuickReplyCatalog;
 use App\Media\MediaUrls;
@@ -171,4 +172,13 @@ it('builds web-style urls inside an api request when asked (payloads shared with
     expect(MediaUrls::forRequest($a))->toContain('signature=')
         ->and(MediaUrls::sessionUrls(fn () => MediaUrls::forRequest($a)))->toBe('/media/'.$a->id)
         ->and(MediaUrls::forRequest($a))->toContain('signature=');
+});
+
+it('broadcasts session urls in the message payload even when the send came from the api', function () {
+    $a = mbStored(['message_id' => $this->message->id]);
+    app()->instance('request', Request::create('/api/v1/conversations/'.$this->conv->id.'/messages', 'POST'));
+
+    $payload = MessageCreated::payload($this->message->fresh());
+
+    expect($payload['attachments'][0]['url'])->toBe('/media/'.$a->id);
 });
