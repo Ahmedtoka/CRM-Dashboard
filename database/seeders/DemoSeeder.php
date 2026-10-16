@@ -39,7 +39,7 @@ use Throwable;
 /**
  * Replays a realistic 30-day history through the real services (spec §10),
  * clock frozen per event, so conversations/messages/bot decisions/comments/
- * orders/shipments/activity logs are all internally consistent — as if every
+ * orders/activity logs are all internally consistent — as if every
  * platform had been live for the last month. Safe to re-run via
  * `migrate:fresh --seed` (each run starts from an empty database).
  */

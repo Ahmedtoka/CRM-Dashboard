@@ -154,12 +154,13 @@ trait NormalizesMetaMessaging
     }
 
     /**
-     * Media download/display is a later sub-project; for now attachments are kept
-     * as a flat {type, url} list (image/video/audio/file/story_mention/...). A
-     * sticker send (e.g. the built-in thumbs-up) arrives as an `image` attachment
-     * carrying `payload.sticker_id` — sometimes mirrored on `message.sticker_id`
-     * too — and is reported as its own `sticker` type so the spam classifier can
-     * treat it as content-free like other emoji-only replies.
+     * Attachments are normalized to a flat {type, url} list (image/video/audio/
+     * file/story_mention/...); App\Media\InboundAttachmentRecorder records them
+     * and DownloadInboundMedia fetches the files. A sticker send (e.g. the
+     * built-in thumbs-up) arrives as an `image` attachment carrying
+     * `payload.sticker_id` — sometimes mirrored on `message.sticker_id` too — and
+     * is reported as its own `sticker` type so the spam classifier can treat it
+     * as content-free like other emoji-only replies.
      *
      * @param  array<string, mixed>  $message
      * @return array<int, array{type: string, url: ?string, sticker_id?: string}>

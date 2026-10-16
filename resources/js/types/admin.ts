@@ -423,20 +423,15 @@ export interface CityRow {
     shipping_fee: string | number;
 }
 
+/** «مواعيد الفروع»: the editable slice of a bot branch (BranchHoursController::row). */
 export interface BranchRow {
     id: number;
-    governorate: string;
-    area_key: string;
+    name: string;
     area_ar: string;
     area_en: string | null;
-    name: string;
-    address: string;
-    phone: string | null;
-    map_url: string | null;
     hours: string | null;
-    aliases: string[] | null;
+    phone: string | null;
     is_active: boolean;
-    sort: number;
 }
 
 /** Daily learning (design §6): one nightly report and the suggestions waiting for approval. */
