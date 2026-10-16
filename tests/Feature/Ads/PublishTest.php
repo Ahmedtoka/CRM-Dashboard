@@ -799,3 +799,17 @@ it('fails a stale queued row when clearing its key, so a late PublishAd job neve
     (new PublishAd($id))->handle(app(DriverFactory::class));
     expect($double::$creates)->toBe(0)->and($row->fresh()->status)->toBe('error');
 });
+
+it('A10: a second click that races past the replay check gets the first rows back, never a second copy or a duplicate warning', function () {
+    Queue::fake();
+    [$acc, $material, $files] = pubSetup();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $service = app(PublishService::class);
+
+    // Both clicks carry the dialog's one key; the second insert runs after the first committed (both passed replay()).
+    $first = $service->publish($admin, $material, $acc, pubInput([$files[0]->id], 2), 'key-dbl-click', true);
+    $second = $service->publish($admin, $material, $acc, pubInput([$files[0]->id], 2), 'key-dbl-click', true);
+
+    expect(AdPublication::count())->toBe(2)->and($second->pluck('id')->all())->toBe($first->pluck('id')->all());
+    Queue::assertPushed(PublishAd::class, 2);
+});
