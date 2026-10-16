@@ -5,7 +5,9 @@ namespace App\Confirmations;
 use App\Confirmations\Contracts\ConfirmationSender;
 use App\Confirmations\Contracts\ShopifyOrderTagger;
 use App\Confirmations\Shopify\GraphqlOrderTagger;
+use App\Confirmations\WhatsApp\ConfirmationMessageWatcher;
 use App\Confirmations\WhatsApp\WhatsAppConfirmationSender;
+use App\Models\Message;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -34,7 +36,10 @@ class ConfirmationsServiceProvider extends ServiceProvider
     private function bootTrigger(): void {}
 
     /** Slice W2: button replies. */
-    private function bootWhatsApp(): void {}
+    private function bootWhatsApp(): void
+    {
+        Message::updated(fn (Message $m) => app(ConfirmationMessageWatcher::class)->updated($m));
+    }
 
     /** Slice W3: tags, cases, notifications, sweep schedule. */
     private function bootFollowUp(): void {}

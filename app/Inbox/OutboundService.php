@@ -335,6 +335,42 @@ class OutboundService
     }
 
     /**
+     * An automatic WhatsApp template (order confirmation, 2026-10-16), sent as the bot. Templates
+     * are allowed outside the 24h window, so no window check; the template (params and button
+     * payloads) is kept on the message so a retry re-sends the same template (audit A9).
+     * `$body` is the readable text staff see in the thread.
+     *
+     * @param  array{name: string, language: string, params: array, buttons?: list<string>}  $template
+     */
+    public function sendTemplate(Conversation $c, string $body, array $template): Message
+    {
+        $message = DB::transaction(function () use ($c, $body, $template) {
+            $message = $c->messages()->create([
+                'platform' => $c->platform,
+                'direction' => MessageDirection::Out,
+                'sender_type' => SenderType::Bot,
+                'body' => $body,
+                'status' => MessageStatus::Queued,
+                'is_template' => true,
+                'template' => $template,
+                'queued_at_ms' => $this->nowMs(),
+            ]);
+            $message->setRelation('conversation', $c);
+
+            $c->forceFill(['last_message_at' => now()])->save();
+
+            return $message;
+        });
+
+        SendOutboundMessage::dispatch($message->id, ['template' => $template]);
+
+        SafeBroadcast::send(new MessageCreated($message));
+        SafeBroadcast::send(new ConversationUpdated($c));
+
+        return $message;
+    }
+
+    /**
      * Internal system line shown in the thread; never sent to the platform.
      */
     public function sendSystem(Conversation $c, string $body): Message
