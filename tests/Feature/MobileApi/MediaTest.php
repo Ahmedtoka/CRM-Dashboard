@@ -163,3 +163,12 @@ it('signs case photos on api requests and keeps session urls on the web', functi
     $web = (new SupportCaseResource($case))->resolve(request());
     expect($web['photos'][0]['url'])->toBe('/media/'.$a->id);
 });
+
+it('builds web-style urls inside an api request when asked (payloads shared with web clients)', function () {
+    $a = mbStored(['message_id' => $this->message->id]);
+    app()->instance('request', Request::create('/api/v1/conversations/1'));
+
+    expect(MediaUrls::forRequest($a))->toContain('signature=')
+        ->and(MediaUrls::sessionUrls(fn () => MediaUrls::forRequest($a)))->toBe('/media/'.$a->id)
+        ->and(MediaUrls::forRequest($a))->toContain('signature=');
+});

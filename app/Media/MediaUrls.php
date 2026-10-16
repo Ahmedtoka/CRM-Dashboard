@@ -35,7 +35,30 @@ final class MediaUrls
      */
     public static function signedForRequest(): bool
     {
-        return app()->bound('request') && request()->is('api/*');
+        return self::$sessionDepth === 0 && app()->bound('request') && request()->is('api/*');
+    }
+
+    private static int $sessionDepth = 0;
+
+    /**
+     * Runs $build with web-style (relative session) URLs even inside an api/* request — for
+     * payloads that are not the API response itself, e.g. a broadcast event built while a
+     * mobile request is being handled, which web clients receive too.
+     *
+     * @template T
+     *
+     * @param  \Closure(): T  $build
+     * @return T
+     */
+    public static function sessionUrls(\Closure $build): mixed
+    {
+        self::$sessionDepth++;
+
+        try {
+            return $build();
+        } finally {
+            self::$sessionDepth--;
+        }
     }
 
     /** The attachment's url for this request: signed absolute on `api/*`, the session route otherwise. Null until stored. */
