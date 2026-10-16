@@ -101,7 +101,8 @@ it('skips an order older than the max age (imports and backfills)', function () 
 });
 
 it('skips an order placed before the data floor', function () {
-    config(['crm.data_floor' => now()->addDay()->toDateString()]);
+    // Two days ahead: the floor is a Cairo date, so "tomorrow" in UTC has already begun in Cairo late at night.
+    config(['crm.data_floor' => now()->addDays(2)->toDateString()]);
 
     expect(ocSkipReason(ocStoreOrder()))->toBe(SkipReason::BeforeFloor->value);
 });
