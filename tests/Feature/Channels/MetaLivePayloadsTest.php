@@ -1,15 +1,15 @@
 <?php
 
 use App\Channels\Adapters\{MessengerAdapter, InstagramAdapter};
-use App\Channels\Data\{InboundMessageData, InboundCommentData};
+use App\Channels\Data\{InboundMessageData, InboundCommentData, OutboundEchoData};
 
 $fx = fn (string $n) => json_decode(file_get_contents(base_path("tests/Fixtures/meta/{$n}.json")), true);
 
-it('normalizes messenger text and image, ignores echoes', function () use ($fx) {
+it('normalizes messenger text and image, and echoes as outbound echoes', function () use ($fx) {
     $a = app(MessengerAdapter::class);
     expect($a->normalize($fx('messenger_text'))[0])->toBeInstanceOf(InboundMessageData::class)
         ->and($a->normalize($fx('messenger_image'))[0]->attachments[0]['type'])->toBe('image')
-        ->and($a->normalize($fx('messenger_echo')))->toBe([]);
+        ->and($a->normalize($fx('messenger_echo'))[0])->toBeInstanceOf(OutboundEchoData::class);
 });
 
 it('normalizes a messenger sticker as a sticker attachment', function () use ($fx) {
@@ -46,10 +46,10 @@ it('ignores edited and page-authored comments', function () use ($fx) {
         ->and($a->normalize($fx('feed_comment_by_page')))->toBe([]);
 });
 
-it('normalizes instagram messages, comments and story mentions; ignores echoes', function () use ($fx) {
+it('normalizes instagram messages, comments, story mentions and echoes', function () use ($fx) {
     $a = app(InstagramAdapter::class);
     expect($a->normalize($fx('instagram_message'))[0])->toBeInstanceOf(InboundMessageData::class)
-        ->and($a->normalize($fx('instagram_message_echo')))->toBe([])
+        ->and($a->normalize($fx('instagram_message_echo'))[0])->toBeInstanceOf(OutboundEchoData::class)
         ->and($a->normalize($fx('instagram_comment'))[0])->toBeInstanceOf(InboundCommentData::class)
         ->and($a->normalize($fx('instagram_story_mention'))[0]->attachments[0]['type'])->toBe('story_mention');
 });

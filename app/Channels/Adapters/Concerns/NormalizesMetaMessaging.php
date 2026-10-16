@@ -5,6 +5,7 @@ namespace App\Channels\Adapters\Concerns;
 use App\Channels\Data\AdReferralData;
 use App\Channels\Data\DeliveryReceiptData;
 use App\Channels\Data\InboundMessageData;
+use App\Channels\Data\OutboundEchoData;
 use App\Enums\MessageStatus;
 use App\Enums\Platform;
 use Carbon\CarbonImmutable;
@@ -18,7 +19,7 @@ trait NormalizesMetaMessaging
 {
     /**
      * @param  array<string, mixed>  $entry
-     * @return array<int, InboundMessageData|DeliveryReceiptData>
+     * @return array<int, InboundMessageData|OutboundEchoData|DeliveryReceiptData>
      */
     protected function normalizeMessaging(array $entry, Platform $platform): array
     {
@@ -27,9 +28,25 @@ trait NormalizesMetaMessaging
 
         foreach ($entry['messaging'] ?? [] as $item) {
             if (isset($item['message'])) {
-                // Echoes are the page's own outgoing messages mirrored back on the webhook;
-                // they were already recorded when we sent them, so they are dropped here.
+                // Echoes are the page's own outgoing messages mirrored back on the webhook
+                // (2026-10-17): the CRM's own sends are skipped by EchoIngestor; a reply sent
+                // from Meta Business Suite or the phone app is recorded as sent outside the CRM.
                 if ($item['message']['is_echo'] ?? false) {
+                    if (($item['message']['is_deleted'] ?? false) || ($item['message']['mid'] ?? '') === '') {
+                        continue;
+                    }
+
+                    $events[] = new OutboundEchoData(
+                        platform: $platform,
+                        channelExternalId: $channelExternalId,
+                        customerExternalId: (string) ($item['recipient']['id'] ?? ''),
+                        externalMessageId: (string) $item['message']['mid'],
+                        body: (string) ($item['message']['text'] ?? ''),
+                        occurredAt: $this->fromMsTimestamp($item['timestamp'] ?? 0),
+                        attachments: $this->mapAttachments($item['message']),
+                        appId: isset($item['message']['app_id']) ? (string) $item['message']['app_id'] : null,
+                    );
+
                     continue;
                 }
 

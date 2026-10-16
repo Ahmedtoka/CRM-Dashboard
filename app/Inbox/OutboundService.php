@@ -57,6 +57,23 @@ class OutboundService
     }
 
     /**
+     * A moderator's product card («ابعت منتج», 2026-10-17): the bot's own card shape
+     * (App\Bot\Catalog\ProductCards), sent by the same job, so every platform draws it — or
+     * falls back to `$body` — exactly as it does a bot card.
+     *
+     * @param  array  $cards  rich cards (App\Channels\Cards\OutboundCards); `$body` is their plain-text fallback
+     *
+     * @throws AuthorizationException
+     * @throws WindowClosedException
+     */
+    public function sendHumanCards(Conversation $c, User $u, string $body, array $cards, array $options = []): Message
+    {
+        $this->authorize($c, $u);
+
+        return $this->dispatchHuman($c, $u, [['body' => $body, 'attachment' => null, 'cards' => $cards]], $options)->first();
+    }
+
+    /**
      * Uploads first (spec §1.4): each attachment id must already be a stored,
      * unclaimed upload owned by this user. One outbound `messages` row per
      * attachment, the caption (if any) riding on the first.
@@ -105,7 +122,7 @@ class OutboundService
     }
 
     /**
-     * @param  list<array{body: ?string, attachment: ?MessageAttachment}>  $rows
+     * @param  list<array{body: ?string, attachment: ?MessageAttachment, cards?: ?array}>  $rows
      * @param  array{tag?: string, template?: array{name: string, language: string, params: array}}  $options
      * @return Collection<int, Message>
      *
@@ -132,6 +149,7 @@ class OutboundService
                     'sender_type' => SenderType::User,
                     'user_id' => $u->id,
                     'body' => $row['body'],
+                    'cards' => $row['cards'] ?? null,
                     'status' => MessageStatus::Queued,
                     'is_template' => ! empty($options['template']),
                     // Kept so a retry re-sends the same template (audit A9).

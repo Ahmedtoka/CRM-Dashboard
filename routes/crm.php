@@ -65,6 +65,7 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::get('conversations/{conversation}/context', [InboxController::class, 'context'])->name('conversations.context');
         Route::get('conversations/{conversation}/messages', [InboxController::class, 'messages'])->name('conversations.messages.index');
         Route::post('conversations/{conversation}/messages', [InboxController::class, 'sendMessage'])->name('conversations.messages.store');
+        Route::post('conversations/{conversation}/product', [InboxController::class, 'sendProduct'])->name('conversations.product.store');
         Route::get('conversations/{conversation}/media', [InboxController::class, 'media'])->name('conversations.media.index');
         Route::post('conversations/{conversation}/attachments', [InboxController::class, 'uploadAttachment'])->name('conversations.attachments.store');
         Route::post('messages/{message}/retry', [InboxController::class, 'retryMessage'])->name('messages.retry');
