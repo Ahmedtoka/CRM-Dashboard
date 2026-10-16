@@ -163,3 +163,34 @@ it('rejects an unknown call outcome', function () {
     expect(fn () => app(CallOutcome::class)->record($c, 'maybe', User::factory()->create()))
         ->toThrow(InvalidArgumentException::class);
 });
+
+it('records a manual outcome from sent, edit_requested and unreachable too', function (OrderConfirmationStatus $from) {
+    $c = answeredConfirmation($from);
+
+    $result = app(CallOutcome::class)->record($c, 'confirmed', User::factory()->create());
+
+    expect($result->status)->toBe(OrderConfirmationStatus::CalledConfirmed);
+})->with([
+    'sent' => [OrderConfirmationStatus::Sent],
+    'edit_requested' => [OrderConfirmationStatus::EditRequested],
+    'unreachable' => [OrderConfirmationStatus::Unreachable],
+]);
+
+it('leaves a row another request already moved without a second tag or event', function () {
+    $staff = User::factory()->create();
+    $c = answeredConfirmation(OrderConfirmationStatus::NoResponse);
+    $stale = $c->fresh();
+    app(CallOutcome::class)->record($c, 'cancelled', $staff); // first click wins
+    Event::fake([OrderConfirmationCalled::class]);
+
+    $result = app(CallOutcome::class)->record($stale, 'confirmed', $staff); // a second tab, same row
+
+    expect($result->status)->toBe(OrderConfirmationStatus::CalledCancelled)
+        ->and(writtenTags())->toHaveCount(1)
+        ->and(ActivityLog::where('action', CallOutcome::ACTION)->count())->toBe(1);
+    Event::assertNotDispatched(OrderConfirmationCalled::class);
+});
+
+it('can be extended (the page tests swap in a spy)', function () {
+    expect((new ReflectionClass(CallOutcome::class))->isFinal())->toBeFalse();
+});

@@ -5,8 +5,10 @@ namespace App\Confirmations\Commands;
 use App\Confirmations\ConfirmationSettings;
 use App\Confirmations\Contracts\ConfirmationSender;
 use App\Confirmations\Events\OrderConfirmationNoResponse;
+use App\Confirmations\SkipReason;
 use App\Confirmations\TagSync;
 use App\Enums\OrderConfirmationStatus;
+use App\Enums\OrderStatus;
 use App\Models\OrderConfirmation;
 use Carbon\CarbonInterface;
 use Illuminate\Console\Command;
@@ -34,14 +36,21 @@ final class SweepOrderConfirmationsCommand extends Command
 
     private const SEND_JOB = 'App\\Confirmations\\Jobs\\SendOrderConfirmation';
 
+    /** Rows closed this run because their order was cancelled or is gone. */
+    private int $skipped = 0;
+
     public function handle(ConfirmationSettings $settings, ConfirmationSender $sender, TagSync $tags): int
     {
         $noResponseCutoff = now()->subHours($settings->noResponseAfterHours());
+        // Switched off: nothing new reaches customers and no order moves to the call list;
+        // tags already owed to Shopify are still written.
+        $on = $settings->enabled();
         $counts = [
-            'no_response' => $this->noResponse($noResponseCutoff),
-            'reminded' => $this->remind($sender, now()->subHours($settings->reminderAfterHours()), $noResponseCutoff),
+            'no_response' => $on ? $this->noResponse($noResponseCutoff) : 0,
+            'reminded' => $on ? $this->remind($sender, now()->subHours($settings->reminderAfterHours()), $noResponseCutoff) : 0,
             'tags_retried' => $this->retryTags($tags),
-            'requeued' => $this->requeueLost(),
+            'requeued' => $on ? $this->requeueLost() : 0,
+            'skipped' => $this->skipped,
         ];
 
         $this->info(collect($counts)->map(fn ($n, $k) => "{$k}={$n}")->implode(' '));
@@ -83,7 +92,7 @@ final class SweepOrderConfirmationsCommand extends Command
         try {
             $row = $row->fresh();
 
-            if ($row === null || $row->status !== OrderConfirmationStatus::Sent || $row->reminded_at !== null) {
+            if ($row === null || $row->status !== OrderConfirmationStatus::Sent || $row->reminded_at !== null || $this->skipDeadOrder($row)) {
                 return false;
             }
 
@@ -109,6 +118,30 @@ final class SweepOrderConfirmationsCommand extends Command
         }
     }
 
+    /**
+     * A cancelled order (or one that is gone, e.g. hidden as a load test) gets no reminder
+     * and no call: the row is closed as skipped (`cancelled` / `test_order`).
+     */
+    private function skipDeadOrder(OrderConfirmation $row): bool
+    {
+        $order = $row->order()->first();
+        $reason = match (true) {
+            $order === null => SkipReason::TestOrder,
+            $order->status === OrderStatus::Cancelled || $order->cancelled_at !== null => SkipReason::Cancelled,
+            default => null,
+        };
+
+        if ($reason === null) {
+            return false;
+        }
+
+        $this->skipped += OrderConfirmation::whereKey($row->id)
+            ->where('status', OrderConfirmationStatus::Sent->value)
+            ->update(['status' => OrderConfirmationStatus::Skipped->value, 'skip_reason' => $reason->value, 'updated_at' => now()]);
+
+        return true;
+    }
+
     private function noResponse(CarbonInterface $cutoff): int
     {
         $count = 0;
@@ -118,6 +151,10 @@ final class SweepOrderConfirmationsCommand extends Command
             ->where('sent_at', '<=', $cutoff)
             ->chunkById(self::CHUNK, function ($rows) use (&$count) {
                 foreach ($rows as $row) {
+                    if ($this->skipDeadOrder($row)) {
+                        continue;
+                    }
+
                     // Claimed with a guarded update: a button tap landing now wins.
                     $claimed = OrderConfirmation::whereKey($row->id)
                         ->where('status', OrderConfirmationStatus::Sent->value)

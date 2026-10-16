@@ -49,7 +49,7 @@ final class ConfirmationFollowUp
             return;
         }
 
-        $this->tags->push($confirmation, $status->shopifyTag());
+        $this->tags->request($confirmation, $status->shopifyTag());
 
         if ($event->answer !== 'confirm') {
             rescue(fn () => $this->openCase($confirmation->fresh(), $event->answer));
@@ -76,7 +76,7 @@ final class ConfirmationFollowUp
     public function onNoResponse(OrderConfirmationNoResponse $event): void
     {
         if (($confirmation = $event->confirmation->fresh()) !== null) {
-            $this->tags->push($confirmation, OrderConfirmationStatus::NoResponse->shopifyTag());
+            $this->tags->request($confirmation, OrderConfirmationStatus::NoResponse->shopifyTag());
         }
     }
 

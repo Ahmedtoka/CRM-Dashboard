@@ -111,6 +111,19 @@ final class ShopifyClient
     }
 
     /**
+     * A best-effort mutation that never flags the integration as errored (an auth or
+     * ACCESS_DENIED answer only throws), for optional writes such as the WhatsApp
+     * confirmation tags. Never resent after a transport error or 5xx. The caller
+     * checks each root's userErrors.
+     *
+     * @return array<mixed>
+     */
+    public function mutateWithoutFlagging(string $mutation, array $variables): array
+    {
+        return $this->execute($mutation, $variables, true, true);
+    }
+
+    /**
      * Read-only probe: no journey fallback and never flags the integration as errored.
      *
      * @return array<mixed>

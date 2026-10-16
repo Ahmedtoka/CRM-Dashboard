@@ -1,10 +1,14 @@
 <?php
 
 use App\Confirmations\Contracts\ShopifyOrderTagger;
+use App\Confirmations\Jobs\SyncConfirmationTags;
 use App\Confirmations\TagSync;
 use App\Enums\OrderConfirmationStatus;
 use App\Models\Order;
 use App\Models\OrderConfirmation;
+use App\Shopify\Client\FakeShopifyTransport;
+use App\Shopify\Connection\ShopifyIntegration;
+use Illuminate\Support\Facades\Queue;
 
 /** A tagger that answers $ok and records every call. */
 function recordingTagger(bool $ok = true): object
@@ -50,7 +54,7 @@ it('does nothing for a status without a tag', function () {
         ->and($c->fresh()->tag_synced_at)->toBeNull();
 });
 
-it('keeps a failed tag pending and the next push sends it again with the new one', function () {
+it('keeps a failed tag pending with the reason, and a newer state replaces it', function () {
     $tagger = recordingTagger(false);
     $c = OrderConfirmation::factory()->status(OrderConfirmationStatus::NoResponse)->create(['tag_synced_at' => now()->subDay()]);
 
@@ -58,14 +62,53 @@ it('keeps a failed tag pending and the next push sends it again with the new one
 
     $c->refresh();
     expect($c->tag_synced_at)->toBeNull()
-        ->and($c->pending_tags)->toBe(['tags' => ['wa-no-response'], 'attempts' => 1]);
+        ->and($c->pending_tags)->toBe(['tags' => ['wa-no-response'], 'attempts' => 1])
+        ->and($c->last_error)->toContain('wa-no-response');
 
     $tagger->ok = true;
     $c->update(['status' => OrderConfirmationStatus::CalledConfirmed]);
 
     expect(app(TagSync::class)->push($c))->toBeTrue()
-        ->and($tagger->calls[1]['tags'])->toBe(['wa-no-response', 'wa-confirmed'])
+        ->and($tagger->calls[1]['tags'])->toBe(['wa-confirmed'])
         ->and($c->fresh()->pending_tags)->toBeNull();
+});
+
+it('drops the superseded wa- tags when the tagger can remove them', function () {
+    ShopifyIntegration::create(['shop_domain' => 'levoile-test.myshopify.com', 'access_token' => 't', 'api_secret' => 's', 'status' => 'connected']);
+    $c = OrderConfirmation::factory()->status(OrderConfirmationStatus::CalledConfirmed)
+        ->create(['order_id' => Order::factory()->create(['shopify_order_id' => '77'])->id]);
+
+    expect(app(TagSync::class)->push($c))->toBeTrue()
+        ->and(FakeShopifyTransport::tagsAdded()[0]['tags'])->toBe(['wa-confirmed'])
+        ->and(FakeShopifyTransport::tagsRemoved()[0]['tags'])->toEqualCanonicalizing(['wa-cancel-request', 'wa-edit-request', 'wa-no-response', 'wa-unreachable']);
+});
+
+it('stops calling Shopify and says why when the app lacks write_orders', function () {
+    ShopifyIntegration::create(['shop_domain' => 'levoile-test.myshopify.com', 'access_token' => 't', 'api_secret' => 's', 'status' => 'connected', 'granted_scopes' => ['read_orders']]);
+    $c = OrderConfirmation::factory()->status(OrderConfirmationStatus::Confirmed)
+        ->create(['order_id' => Order::factory()->create(['shopify_order_id' => '78'])->id]);
+
+    expect(app(TagSync::class)->push($c))->toBeFalse()
+        ->and($c->fresh()->last_error)->toContain('Shopify app lacks write_orders')
+        ->and($c->fresh()->pending_tags['tags'])->toBe(['wa-confirmed'])
+        ->and(FakeShopifyTransport::tagsAdded())->toBe([]);
+});
+
+it('queues the write instead of calling Shopify in the request', function () {
+    Queue::fake();
+    $tagger = recordingTagger();
+    $c = OrderConfirmation::factory()->status(OrderConfirmationStatus::Confirmed)->create();
+
+    app(TagSync::class)->request($c);
+
+    expect($tagger->calls)->toBe([])
+        ->and($c->fresh()->pending_tags)->toBe(['tags' => ['wa-confirmed'], 'attempts' => 0]);
+    Queue::assertPushedOn('commerce', SyncConfirmationTags::class, fn ($job) => $job->confirmationId === $c->id);
+
+    (new SyncConfirmationTags($c->id))->handle(app(TagSync::class));
+
+    expect($tagger->calls)->toHaveCount(1)
+        ->and($c->fresh()->tag_synced_at)->not->toBeNull();
 });
 
 it('retries pending tags and gives up after the attempt cap', function () {
