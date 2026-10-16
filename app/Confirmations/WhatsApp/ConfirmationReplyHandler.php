@@ -54,42 +54,122 @@ final class ConfirmationReplyHandler
 
     public function __construct(private readonly OutboundService $outbound, private readonly ArabicNormalizer $normalizer) {}
 
+    /**
+     * Read-only: whether handle() will take this message. The inbox asks before it records the
+     * message (InboundInterceptors), so a handled answer leaves no unread count, no queue ticket and
+     * no reopened thread behind.
+     *
+     * @param  array<int, mixed>  $attachments
+     */
+    public function claims(?string $payload, string $body, array $attachments, Conversation $conversation): bool
+    {
+        return $this->decide($payload, $body, $attachments, $conversation) !== null;
+    }
+
     public function handle(Message $message, Conversation $conversation): bool
     {
-        if ($conversation->platform !== Platform::WhatsApp || $message->direction !== MessageDirection::In) {
+        if ($message->direction !== MessageDirection::In) {
             return false;
         }
 
-        if (filled($message->payload)) {
-            $parsed = ConfirmationPayload::parse($message->payload);
+        $decision = $this->decide($message->payload, (string) $message->body, (array) ($message->attachments ?? []), $conversation);
 
-            return $parsed !== null && $this->tap($parsed['id'], $parsed['action'], $conversation);
-        }
-
-        return $this->captureEditNote($message, $conversation) || $this->typed($message, $conversation);
+        return match ($decision['type'] ?? null) {
+            'foreign' => $this->ignoreForeign($decision['id'], $conversation),
+            'already' => $this->already($conversation),
+            'answer' => $this->answer($decision['confirmation'], $decision['action'], $conversation)
+                || ($this->sameAnswer($decision['confirmation']->refresh()->status, $decision['action']) && $this->already($conversation)),
+            'edit_note' => $this->saveEditNote($decision['confirmation'], $decision['text'], $conversation),
+            default => false,
+        };
     }
 
-    private function tap(int $id, string $action, Conversation $conversation): bool
+    /**
+     * What this message is for the confirmation flow, or null when it is not ours.
+     *
+     * @param  array<int, mixed>  $attachments
+     * @return array<string, mixed>|null
+     */
+    private function decide(?string $payload, string $body, array $attachments, Conversation $conversation): ?array
+    {
+        if ($conversation->platform !== Platform::WhatsApp) {
+            return null;
+        }
+
+        if (filled($payload)) {
+            $parsed = ConfirmationPayload::parse($payload);
+
+            return $parsed === null ? null : $this->decideTap($parsed['id'], $parsed['action'], $conversation);
+        }
+
+        if (($note = $this->pendingEditNote($body, $conversation)) !== null) {
+            return ['type' => 'edit_note', 'confirmation' => $note, 'text' => trim($body)];
+        }
+
+        return $this->decideTyped($body, $attachments, $conversation);
+    }
+
+    /** @return array<string, mixed>|null */
+    private function decideTap(int $id, string $action, Conversation $conversation): ?array
     {
         $confirmation = OrderConfirmation::query()->find($id);
 
         if ($confirmation === null || ! $this->belongsTo($confirmation, $conversation)) {
-            // A forwarded template, or a payload that names someone else's order: never acted on.
-            Log::warning('order_confirmation.foreign_payload', ['confirmation_id' => $id, 'conversation_id' => $conversation->id]);
-
-            return true;
+            return ['type' => 'foreign', 'id' => $id];
         }
 
-        if (! $this->answer($confirmation, $action, $conversation)) {
-            $this->reply($conversation, self::REPLY_ALREADY);
+        if ($this->sameAnswer($confirmation->status, $action)) {
+            return ['type' => 'already'];
         }
+
+        // Not answerable from here (e.g. confirm after a cancel request): staff read it.
+        return in_array($confirmation->status->value, $this->answerableFrom($action), true)
+            ? ['type' => 'answer', 'confirmation' => $confirmation, 'action' => $action]
+            : null;
+    }
+
+    private function ignoreForeign(int $id, Conversation $conversation): bool
+    {
+        // A forwarded template, or a payload that names someone else's order: never acted on.
+        Log::warning('order_confirmation.foreign_payload', ['confirmation_id' => $id, 'conversation_id' => $conversation->id]);
 
         return true;
     }
 
+    private function already(Conversation $conversation): bool
+    {
+        $this->reply($conversation, self::REPLY_ALREADY);
+
+        return true;
+    }
+
+    /** The tap repeats what is already recorded (by her, or by staff after a call). */
+    private function sameAnswer(OrderConfirmationStatus $status, string $action): bool
+    {
+        return $status === self::STATUS_FOR[$action]
+            || ($action === 'confirm' && $status === OrderConfirmationStatus::CalledConfirmed)
+            || ($action === 'cancel' && $status === OrderConfirmationStatus::CalledCancelled);
+    }
+
     /**
-     * Moves an awaiting confirmation to the answer's status (once: a concurrent second tap loses
-     * the conditional update), tells W3 and answers the customer. False when it was answered already.
+     * Statuses an answer may come from. Confirm only while waiting for her; a cancel or an edit is
+     * still taken after a confirm, an edit request, a failed call or a failed send (she may change
+     * her mind). Anything else (e.g. confirm after a cancel request) is left to staff.
+     *
+     * @return list<string>
+     */
+    private function answerableFrom(string $action): array
+    {
+        $waiting = [OrderConfirmationStatus::Sent, OrderConfirmationStatus::NoResponse];
+        $later = [OrderConfirmationStatus::Confirmed, OrderConfirmationStatus::EditRequested, OrderConfirmationStatus::Unreachable,
+            OrderConfirmationStatus::Failed, OrderConfirmationStatus::CalledConfirmed];
+
+        return array_map(fn (OrderConfirmationStatus $s) => $s->value, $action === 'confirm' ? $waiting : [...$waiting, ...$later]);
+    }
+
+    /**
+     * Moves the confirmation to the answer's status (once: a concurrent second tap loses the
+     * conditional update), tells W3 and answers the customer. False when the answer is not taken.
      */
     private function answer(OrderConfirmation $confirmation, string $action, Conversation $conversation): bool
     {
@@ -106,7 +186,8 @@ final class ConfirmationReplyHandler
         }
 
         $won = OrderConfirmation::query()->whereKey($confirmation->id)
-            ->whereIn('status', [OrderConfirmationStatus::Sent->value, OrderConfirmationStatus::NoResponse->value])
+            ->whereIn('status', $this->answerableFrom($action))
+            ->where('status', '!=', self::STATUS_FOR[$action]->value)
             ->update($values);
 
         if ($won !== 1) {
@@ -127,25 +208,22 @@ final class ConfirmationReplyHandler
     }
 
     /** The first free text after «تعديل» (within the window) is the edit itself. */
-    private function captureEditNote(Message $message, Conversation $conversation): bool
+    private function pendingEditNote(string $body, Conversation $conversation): ?OrderConfirmation
     {
-        $text = trim((string) $message->body);
-
-        if ($text === '') {
-            return false;
+        if (trim($body) === '') {
+            return null;
         }
 
-        $confirmation = $this->ofConversation($conversation)
+        return $this->ofConversation($conversation)
             ->where('status', OrderConfirmationStatus::EditRequested->value)
             ->whereNull('edit_note')
             ->where('edit_note_requested_at', '>=', now()->subHours(self::EDIT_WINDOW_HOURS))
             ->latest('id')
             ->first();
+    }
 
-        if ($confirmation === null) {
-            return false;
-        }
-
+    private function saveEditNote(OrderConfirmation $confirmation, string $text, Conversation $conversation): bool
+    {
         $saved = OrderConfirmation::query()->whereKey($confirmation->id)->whereNull('edit_note')
             ->update(['edit_note' => mb_substr($text, 0, 2000), 'updated_at' => now()]);
 
@@ -160,18 +238,23 @@ final class ConfirmationReplyHandler
         return true;
     }
 
-    /** «تمام» / «الغي» typed right after the template, while it still waits for her. */
-    private function typed(Message $message, Conversation $conversation): bool
+    /**
+     * «تمام» / «الغي» typed right after the template, while it still waits for her.
+     *
+     * @param  array<int, mixed>  $attachments
+     * @return array<string, mixed>|null
+     */
+    private function decideTyped(string $body, array $attachments, Conversation $conversation): ?array
     {
-        if (! empty($message->attachments)) {
-            return false;
+        if ($attachments !== []) {
+            return null;
         }
 
-        $words = trim(preg_replace('/\s+/u', ' ', preg_replace('/[^\p{L}\p{N}\s]/u', '', $this->normalizer->normalize((string) $message->body)) ?? '') ?? '');
+        $words = trim(preg_replace('/\s+/u', ' ', preg_replace('/[^\p{L}\p{N}\s]/u', '', $this->normalizer->normalize($body)) ?? '') ?? '');
         $action = self::TYPED[$words] ?? null;
 
         if ($action === null) {
-            return false;
+            return null;
         }
 
         $confirmation = $this->ofConversation($conversation)
@@ -180,7 +263,7 @@ final class ConfirmationReplyHandler
             ->first();
 
         if ($confirmation === null) {
-            return false;
+            return null;
         }
 
         // Only an answer to the template itself: once anyone wrote after it, «تمام» may mean anything.
@@ -190,10 +273,10 @@ final class ConfirmationReplyHandler
             ->max('id');
 
         if ($lastOutbound === null || ! in_array((int) $lastOutbound, array_filter([$confirmation->outbound_message_id, $confirmation->reminder_message_id]), true)) {
-            return false;
+            return null;
         }
 
-        return $this->answer($confirmation, $action, $conversation);
+        return ['type' => 'answer', 'confirmation' => $confirmation, 'action' => $action];
     }
 
     private function ofConversation(Conversation $conversation)

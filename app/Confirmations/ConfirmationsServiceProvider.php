@@ -54,6 +54,8 @@ class ConfirmationsServiceProvider extends ServiceProvider
 
         // Button taps, the edit text and typed «تمام» / «الغي» are answered before the bot sees them.
         $this->app->make(InboundInterceptors::class)->register(
+            fn (\App\Channels\Data\InboundMessageData $d, Conversation $c) => $this->app->make(ConfirmationReplyHandler::class)
+                ->claims($d->payload, $d->body, $d->attachments, $c),
             fn (Message $m, Conversation $c) => $this->app->make(ConfirmationReplyHandler::class)->handle($m, $c),
         );
     }
