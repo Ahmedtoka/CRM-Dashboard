@@ -4,6 +4,7 @@ namespace App\Shopify\Webhooks;
 
 use App\Commerce\Contracts\CommerceProvider;
 use App\Commerce\OrderService;
+use App\Confirmations\Events\ShopifyOrderCreated;
 use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\UserRole;
@@ -48,7 +49,8 @@ final class ShopifyWebhookProcessor
             'products/delete' => $this->handleProductDelete($payload),
             'inventory_levels/update' => $this->inventory->apply($payload),
             'customers/create', 'customers/update' => $this->customers->upsert($payload),
-            'orders/create', 'orders/updated', 'orders/paid' => $this->routeOrderUpsert($payload),
+            'orders/create' => $this->routeOrderCreate($payload),
+            'orders/updated', 'orders/paid' => $this->routeOrderUpsert($payload),
             'orders/cancelled' => $this->routeOrderCancelled($payload),
             'fulfillments/create', 'fulfillments/update' => $this->requireParent($payload) && $this->orders->applyFulfillment($payload),
             'refunds/create' => $this->requireParent($payload) && $this->orders->applyRefund($payload),
@@ -148,6 +150,25 @@ final class ShopifyWebhookProcessor
         }
 
         return false;
+    }
+
+    /**
+     * orders/create is the one topic that may start a WhatsApp order confirmation (spec 2026-10-16):
+     * once the payload is applied, the local order is announced on a queued listener, so the webhook
+     * stays fast and a confirmation failure never fails (or retries) the webhook. The order is
+     * announced whenever it exists here, also when this copy was stale because orders/updated
+     * arrived first; OrderConfirmations keeps one row per order and its own age/test/floor rules.
+     */
+    private function routeOrderCreate(array $payload): void
+    {
+        $this->routeOrderUpsert($payload);
+
+        $shopifyId = Payload::id($payload['id'] ?? null);
+        $orderId = $shopifyId === null ? null : Order::where('shopify_order_id', $shopifyId)->value('id');
+
+        if ($orderId !== null) {
+            rescue(fn () => ShopifyOrderCreated::dispatch((int) $orderId, (bool) ($payload['test'] ?? false)), report: true);
+        }
     }
 
     private function routeOrderCancelled(array $payload): void
