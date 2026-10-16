@@ -45,6 +45,7 @@ class ConfirmationsServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 Commands\ConfirmationTemplatesCommand::class,
+                Commands\ConfirmationTestCommand::class,
             ]);
         }
     }
