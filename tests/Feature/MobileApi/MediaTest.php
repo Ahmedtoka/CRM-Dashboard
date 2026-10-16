@@ -182,3 +182,32 @@ it('broadcasts session urls in the message payload even when the send came from 
 
     expect($payload['attachments'][0]['url'])->toBe('/media/'.$a->id);
 });
+
+it('refuses tampered, unsigned, expired and path-swapped thumb and saved-reply urls', function () {
+    $a = mbStored(['message_id' => $this->message->id]);
+    Storage::disk('media')->put('thumbs/t.webp', SampleMedia::bytes('image'));
+    $a->forceFill(['thumb_path' => 'thumbs/t.webp'])->save();
+    $b = mbStored(['message_id' => $this->message->id]);
+    Storage::disk('media')->put('replies/q.png', SampleMedia::bytes('image'));
+    $qa = QuickReplyAttachment::factory()->create(['path' => 'replies/q.png']);
+    $qb = QuickReplyAttachment::factory()->create(['path' => 'replies/q.png']);
+
+    $thumb = mbPath(MediaUrls::signedThumb($a));
+    $show = mbPath(MediaUrls::signedShow($a));
+    $reply = mbPath(MediaUrls::signedQuickReply($qa));
+
+    $this->get($thumb)->assertOk();
+    $this->get($reply)->assertOk();
+
+    // Tampered id, unsigned, and a show signature replayed on the thumb path.
+    $this->get(str_replace('/media/s/'.$a->id.'/', '/media/s/'.$b->id.'/', $thumb))->assertForbidden();
+    $this->get('/media/s/'.$a->id.'/thumb')->assertForbidden();
+    $this->get(str_replace('/media/s/'.$a->id.'?', '/media/s/'.$a->id.'/thumb?', $show))->assertForbidden();
+    $this->get(str_replace('/s/'.$qa->id.'?', '/s/'.$qb->id.'?', $reply))->assertForbidden();
+    $this->get('/quick-reply-attachments/s/'.$qa->id)->assertForbidden();
+    $this->get($reply.'&extra=1')->assertForbidden();
+
+    $this->travel(121)->minutes();
+    $this->get($thumb)->assertForbidden();
+    $this->get($reply)->assertForbidden();
+});
