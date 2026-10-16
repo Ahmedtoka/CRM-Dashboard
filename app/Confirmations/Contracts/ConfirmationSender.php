@@ -11,6 +11,6 @@ use App\Models\OrderConfirmation;
  */
 interface ConfirmationSender
 {
-    /** @param  'confirm'|'reminder'  $kind */
+    /** @param  'confirm'|'reminder'|'test'  $kind  test: the confirm template to a phone the owner picks (ConfirmationTestCommand) */
     public function send(OrderConfirmation $confirmation, string $kind = 'confirm'): void;
 }

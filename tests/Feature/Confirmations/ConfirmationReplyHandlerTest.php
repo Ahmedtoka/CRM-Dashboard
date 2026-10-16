@@ -4,6 +4,7 @@ use App\Bot\Flow\ReplyScheduler;
 use App\Channels\Adapters\FakeChannelAdapter;
 use App\Channels\Data\InboundMessageData;
 use App\Confirmations\ConfirmationPayload;
+use App\Confirmations\ConfirmationSettings;
 use App\Confirmations\Contracts\ConfirmationSender;
 use App\Confirmations\Events\OrderConfirmationAnswered;
 use App\Confirmations\Events\OrderConfirmationEditNote;
@@ -30,6 +31,7 @@ beforeEach(function () {
     FakeChannelAdapter::reset();
     Event::fake([OrderConfirmationAnswered::class, OrderConfirmationEditNote::class]);
     BotSetting::current()->update(['enabled' => true]);
+    app(ConfirmationSettings::class)->save(['enabled' => true]);
 
     $this->scheduler = Mockery::mock(ReplyScheduler::class)->shouldIgnoreMissing();
     app()->instance(ReplyScheduler::class, $this->scheduler);
