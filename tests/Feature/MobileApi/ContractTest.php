@@ -266,7 +266,9 @@ it('walks the whole mobile contract with a real token', function () {
 it('still serves the old app: legacy login, resolve without outcome, orders, cities and provinces', function () {
     $w = mobileContractWorld();
     $mod = $w['mod'];
-    $fb = Conversation::factory()->create(['platform' => Platform::Facebook, 'handler' => Handler::Human, 'last_customer_message_at' => now()]);
+    // The factory takes the platform from the channel account (random by default), so the account fixes it.
+    $fb = Conversation::factory()->for(ChannelAccount::factory()->create(['platform' => Platform::Facebook]), 'channelAccount')
+        ->create(['platform' => Platform::Facebook, 'handler' => Handler::Human, 'last_customer_message_at' => now()]);
     Order::factory()->create(['conversation_id' => $fb->id, 'customer_id' => $fb->customer_id, 'platform' => 'facebook', 'created_by_id' => $mod->id]);
 
     // The old app sends exactly these three fields and reads `token` + `user`.
