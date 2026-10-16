@@ -7,10 +7,10 @@ namespace App\Confirmations\WhatsApp;
  * `POST /{waba-id}/message_templates` takes. The one place for their copy, buttons
  * and the example values Meta reviews.
  *
- * Body variables follow TemplateParams::BODY. Buttons follow BUTTON_ACTIONS, so the
- * sender's quick-reply payload at index i is the answer BUTTON_ACTIONS[i]. The copy is
- * transactional only (no offers, no prices beyond the order's own) so Meta approves
- * it as UTILITY.
+ * Body variables, their examples and the buttons all come from TemplateParams (shared
+ * with the sender), so the quick-reply payload at index i is the answer BUTTON_ACTIONS[i].
+ * The copy is transactional only (no offers, no prices beyond the order's own) so Meta
+ * approves it as UTILITY.
  */
 final class TemplateDefinitions
 {
@@ -21,14 +21,9 @@ final class TemplateDefinitions
     public const LANGUAGE = 'ar';
 
     /** Answer of each quick-reply button, by index. */
-    public const BUTTON_ACTIONS = ['confirm', 'edit', 'cancel'];
-
-    private const BUTTON_TEXTS = ['تأكيد الأوردر', 'تعديل', 'إلغاء'];
+    public const BUTTON_ACTIONS = TemplateParams::BUTTONS;
 
     private const FOOTER = 'Le Voile';
-
-    /** Example values for {{1}}..{{5}}, in TemplateParams::BODY order. */
-    private const EXAMPLE = ['نور', '#1234', 'فستان شيفون (1)، طرحة بيج (2)', '685 ج.م', 'الدفع كاش عند الاستلام'];
 
     private const BODIES = [
         self::CONFIRM => "أهلاً {{1}}،\nاستلمنا أوردرك رقم {{2}}:\n{{3}}\nالإجمالي: {{4}}\n{{5}}\n\nياريت تأكدي الأوردر عشان نبدأ نجهزه. لو محتاجة تعدلي حاجة أو تلغي الأوردر اختاري من الزراير اللي تحت.",
@@ -58,13 +53,19 @@ final class TemplateDefinitions
             'language' => self::LANGUAGE,
             'category' => 'UTILITY',
             'components' => [
-                ['type' => 'BODY', 'text' => self::BODIES[$name], 'example' => ['body_text' => [self::EXAMPLE]]],
+                ['type' => 'BODY', 'text' => self::BODIES[$name], 'example' => ['body_text' => [self::examples()]]],
                 ['type' => 'FOOTER', 'text' => self::FOOTER],
                 ['type' => 'BUTTONS', 'buttons' => array_map(
-                    fn (string $text) => ['type' => 'QUICK_REPLY', 'text' => $text],
-                    self::BUTTON_TEXTS,
+                    fn (string $action) => ['type' => 'QUICK_REPLY', 'text' => TemplateParams::BUTTON_TITLES[$action]],
+                    TemplateParams::BUTTONS,
                 )],
             ],
         ];
+    }
+
+    /** @return list<string> example values for {{1}}..{{n}}, in TemplateParams::BODY order */
+    private static function examples(): array
+    {
+        return array_map(fn (string $param) => TemplateParams::EXAMPLES[$param], TemplateParams::BODY);
     }
 }
