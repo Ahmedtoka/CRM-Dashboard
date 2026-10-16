@@ -222,7 +222,11 @@ it('confirms a new Shopify order on WhatsApp and turns a cancel tap into a tag, 
     expect($case->data['request'])->toBe('cancel')
         ->and($row->case_id)->toBe($case->id);
 
-    expect(UserNotification::where('user_id', $this->admin->id)->where('type', 'like', 'order_confirmation.%')->exists())->toBeTrue();
+    // The bell: the case's own `case.created` (W3 records it through CaseRecorder), or
+    // `order_confirmation.*` when the answer has no conversation to hang a case on.
+    expect(UserNotification::where('user_id', $this->admin->id)
+        ->where(fn ($q) => $q->where('type', 'case.created')->orWhere('type', 'like', 'order_confirmation.%'))
+        ->exists())->toBeTrue();
 
     // The order itself is never cancelled by the CRM.
     expect($order->fresh()->status?->value)->not->toBe('cancelled');
