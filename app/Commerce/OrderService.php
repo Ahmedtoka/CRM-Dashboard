@@ -19,6 +19,7 @@ use App\Events\OrderUpdated;
 use App\Events\UserNotified;
 use App\Inbox\OutboundService;
 use App\Inbox\Outcomes\OutcomeRecorder;
+use App\Models\ActivityLog;
 use App\Models\City;
 use App\Models\Conversation;
 use App\Models\Customer;
@@ -41,6 +42,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -518,10 +520,10 @@ class OrderService
             return $this->cancel($order, null, syncProvider: false);
         }
 
-        if ($update->financialStatus === 'paid' && $order->status !== OrderStatus::Confirmed) {
-            return $this->markPaid($order);
-        }
-
+        // Never confirms (audit A1): a completed draft may have been paid by a
+        // manual/COD method and still be pending. Payment is decided in one place,
+        // the orders/paid|updated webhook (ShopifyWebhookProcessor::routeOrderUpsert),
+        // which this call just made able to find the order.
         SafeBroadcast::send(new OrderUpdated($order));
 
         return $order->fresh(['items']);
@@ -543,12 +545,12 @@ class OrderService
             return null;
         }
 
-        // Guard against a foreign/stale attribute pointing at an unrelated order.
-        if ($order->shopify_order_id !== null && $update->shopifyOrderId !== null && $order->shopify_order_id !== $update->shopifyOrderId) {
-            return null;
-        }
+        // Audit A1: the attribute is customer-settable, so it only counts when the
+        // payload also names this order's own draft or Shopify order.
+        $sameDraft = $update->draftOrderId !== null && $order->shopify_draft_order_id === $update->draftOrderId;
+        $sameOrder = $update->shopifyOrderId !== null && $order->shopify_order_id === $update->shopifyOrderId;
 
-        return $order;
+        return $sameDraft || $sameOrder ? $order : null;
     }
 
     private function findByShopifyIds(?string $shopifyOrderId, ?string $draftOrderId): ?Order
@@ -911,6 +913,53 @@ class OrderService
             $order->conversation,
             ['error' => $result->error ?? 'Unknown error'],
         );
+    }
+
+    /**
+     * A paid webhook that does not confirm the order because its total is missing
+     * or short of the order total (audit A1): logged, recorded on the order and
+     * raised to supervisors through the same `paid_ignored` signal, with the reason.
+     *
+     * @param  'underpaid'|'no_total'  $reason
+     */
+    public function recordUnconfirmedPayment(Order $order, ?float $paidTotal, string $reason): void
+    {
+        // orders/create, orders/paid and orders/updated can all carry the same
+        // shortfall: raise it once per order, reason and amount.
+        $alreadyRaised = ActivityLog::query()
+            ->where('action', ActivityLogger::ORDER_PAID_IGNORED)
+            ->where('subject_type', $order->getMorphClass())
+            ->where('subject_id', $order->id)
+            ->get(['meta'])
+            ->contains(fn (ActivityLog $log) => ($log->meta['reason'] ?? null) === $reason
+                && (string) ($log->meta['paid_total'] ?? '') === (string) $paidTotal);
+
+        if ($alreadyRaised) {
+            return;
+        }
+
+        Log::warning('Shopify paid total does not cover the CRM order total; not confirming it.', [
+            'order_id' => $order->id,
+            'order_total' => $order->total,
+            'paid_total' => $paidTotal,
+            'reason' => $reason,
+        ]);
+
+        $this->logger->log(
+            ActorType::System,
+            null,
+            ActivityLogger::ORDER_PAID_IGNORED,
+            $order,
+            $order->conversation,
+            ['status' => $order->status?->value, 'total' => $order->total, 'paid_total' => $paidTotal, 'reason' => $reason],
+        );
+
+        $this->notifySupervisors('order.paid_ignored', [
+            'order_id' => $order->id,
+            'order_number' => $order->order_number,
+            'status' => $order->status?->value,
+            'reason' => $reason,
+        ]);
     }
 
     private function recordIgnoredPayment(Order $order): void

@@ -807,7 +807,7 @@ class TurnRunner
         $key = (string) $i->key;
         $text = app(OrderStatusText::class);
 
-        if (in_array($r['status'], ['missing_details', 'multiple'], true)) {
+        if (in_array($r['status'], ['missing_details', 'multiple', 'unverified'], true)) {
             if ((int) ($asks[$key] ?? 0) >= self::MAX_ASKS) {
                 $this->forget($state, $asks, $key);
 
@@ -821,6 +821,10 @@ class TurnRunner
             if ($r['status'] === 'missing_details') {
                 $scripts = array_merge($scripts, $this->askScripts($i));
                 $this->nextSteps[] = 'Ask only for the order number, mobile number or email used for the order.';
+            } elseif ($r['status'] === 'unverified') {
+                // Full audit A4: not her chat's own mobile/email — no order number, status or place yet.
+                $facts[] = OrderLookup::unverifiedText($r['via'] ?? null);
+                $this->nextSteps[] = 'Orders were found but she has not proven they are hers: ask only for the order number, and say nothing about any order.';
             } else {
                 $list = array_map(fn (OrderSnapshot $s) => $s->number.' ('.$s->placedAt->setTimezone(OrderStatusText::TIMEZONE)->format('j/n').')', $r['snapshots']);
                 $facts[] = 'لقيت أكتر من أوردر: '.implode('، ', $list).' تحبي أتابع أنهي واحد؟';

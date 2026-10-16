@@ -26,3 +26,20 @@ it('rejects bad meta signatures in live mode', function () {
     $this->postJson('/webhooks/facebook', ['object' => 'page', 'entry' => []], ['X-Hub-Signature-256' => 'sha256=bad'])
         ->assertForbidden();
 });
+
+it('never overwrites the original row when a duplicate arrives', function (string $status) {
+    Queue::fake();
+    $payload = ['fake' => true, 'events' => [['type'=>'message','customer_id'=>'c1','name'=>'Ahmed','text'=>'بكام','id'=>'m-dup','at'=>'2026-09-12T10:00:00Z']]];
+    $raw = json_encode($payload);
+    $original = WebhookEvent::create([
+        'provider' => 'whatsapp', 'dedupe_key' => sha1($raw), 'payload' => $payload,
+        'signature_valid' => true, 'status' => $status, 'error' => $status === 'failed' ? 'boom' : null,
+    ]);
+
+    $this->call('POST', '/webhooks/whatsapp', [], [], [], ['CONTENT_TYPE' => 'application/json'], $raw)->assertOk();
+
+    expect(WebhookEvent::count())->toBe(1)
+        ->and($original->fresh()->status)->toBe($status)
+        ->and($original->fresh()->error)->toBe($status === 'failed' ? 'boom' : null);
+    Queue::assertNothingPushed();
+})->with(['failed', 'processed', 'received']);

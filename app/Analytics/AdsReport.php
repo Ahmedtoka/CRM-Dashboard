@@ -27,7 +27,7 @@ class AdsReport
 
     /**
      * @param  array<string, array{campaign_id:string, campaign_name:string, spend:float, currency:?string}>|null  $spendByName
-     *                                                                                                                           synced spend by campaign name; null = read it live from the page token (old /reports/ads behaviour)
+     *                                                                                                                           synced spend by campaign name; null = read it live from the page token
      * @return array{rows:list<array<string, mixed>>, totals:array<string, mixed>, currency:?string, spend_available:bool}
      */
     public function build(CarbonInterface $from, CarbonInterface $to, ?Platform $platform = null, ?array $spendByName = null): array

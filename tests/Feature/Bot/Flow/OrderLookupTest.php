@@ -15,6 +15,12 @@ use Illuminate\Support\Facades\Exceptions;
 
 beforeEach(fn () => app()->instance(OmsClient::class, new FakeOmsClient));
 
+/** A chat whose own customer has this mobile/email: only then do they prove the orders are hers (audit A4). */
+function olOwnChat(?string $phone = null, ?string $email = null): Conversation
+{
+    return Conversation::factory()->create(['customer_id' => Customer::factory()->create(['phone' => $phone, 'email' => $email])->id]);
+}
+
 it('finds an order by number and prefers the OMS status', function () {
     $o = Order::factory()->create(['shopify_order_name' => '#1234', 'order_number' => '1234']);
     FakeOmsClient::$statuses['1234'] = new OmsStatus('on_the_way', now()->toImmutable(), 'Bosta', null);
@@ -32,7 +38,7 @@ it('falls back to shopify state when OMS does not know the order', function () {
 it('finds by phone, lists several open orders, and reports missing details', function () {
     Order::factory()->count(2)->create(['shipping_phone' => '+201001234567']);
     $lookup = app(OrderLookup::class);
-    expect($lookup->find(Conversation::factory()->create(), ['phone' => '01001234567'])['status'])->toBe('multiple')
+    expect($lookup->find(olOwnChat('01001234567'), ['phone' => '01001234567'])['status'])->toBe('multiple')
         ->and($lookup->find(Conversation::factory()->create(), [])['status'])->toBe('missing_details')
         ->and($lookup->find(Conversation::factory()->create(), ['order_ref' => '999999'])['status'])->toBe('not_found');
 });
@@ -109,13 +115,13 @@ it('never returns another customer\'s orders for a phone or email', function () 
     Order::factory()->create(['order_number' => '6001', 'shipping_phone' => '+201224444444']);
 
     $lookup = app(OrderLookup::class);
-    $byCustomerPhone = $lookup->find(Conversation::factory()->create(), ['phone' => '+20 100 123 4567']);
-    $byEmail = $lookup->find(Conversation::factory()->create(), ['email' => 'mona@example.test']);
+    $byCustomerPhone = $lookup->find(olOwnChat('+20 100 123 4567'), ['phone' => '+20 100 123 4567']);
+    $byEmail = $lookup->find(olOwnChat(email: 'mona@example.test'), ['email' => 'mona@example.test']);
 
     expect($byCustomerPhone['status'])->toBe('found')->and($byCustomerPhone['snapshots'][0]->number)->toBe('#6000')
         ->and($byEmail['status'])->toBe('found')->and($byEmail['snapshots'][0]->number)->toBe('#6000')
-        ->and($lookup->find(Conversation::factory()->create(), ['phone' => '01005555555'])['status'])->toBe('not_found')
-        ->and($lookup->find(Conversation::factory()->create(), ['email' => 'other@example.test'])['status'])->toBe('not_found');
+        ->and($lookup->find(olOwnChat('01005555555'), ['phone' => '01005555555'])['status'])->toBe('not_found')
+        ->and($lookup->find(olOwnChat(email: 'other@example.test'), ['email' => 'other@example.test'])['status'])->toBe('not_found');
 });
 
 it('picks the one open order for a phone even when delivered ones exist', function () {
@@ -123,7 +129,7 @@ it('picks the one open order for a phone even when delivered ones exist', functi
     $done = Order::factory()->create(['order_number' => '7002', 'shipping_phone' => '01001234567', 'created_at' => now()->subDay()]);
     $done->update(['shipment_status' => 'delivered']);
 
-    $r = app(OrderLookup::class)->find(Conversation::factory()->create(), ['phone' => '01001234567']);
+    $r = app(OrderLookup::class)->find(olOwnChat('01001234567'), ['phone' => '01001234567']);
 
     expect($r['status'])->toBe('found')->and($r['snapshots'])->toHaveCount(1)->and($r['snapshots'][0]->orderId)->toBe($open->id);
 });
@@ -151,8 +157,8 @@ it('prefers the most recent non-cancelled order and returns a cancelled one only
 
     $lookup = app(OrderLookup::class);
 
-    expect($lookup->find(Conversation::factory()->create(), ['phone' => '01001234567'])['snapshots'][0]->orderId)->toBe($delivered->id)
-        ->and($lookup->find(Conversation::factory()->create(), ['phone' => '01112223334'])['snapshots'][0]->orderId)->toBe($latestCancelled->id);
+    expect($lookup->find(olOwnChat('01001234567'), ['phone' => '01001234567'])['snapshots'][0]->orderId)->toBe($delivered->id)
+        ->and($lookup->find(olOwnChat('01112223334'), ['phone' => '01112223334'])['snapshots'][0]->orderId)->toBe($latestCancelled->id);
 });
 
 it('stops calling the OMS after the first failure and never asks about finished orders', function () {
@@ -173,7 +179,7 @@ it('stops calling the OMS after the first failure and never asks about finished 
     $done = Order::factory()->create(['order_number' => '9100', 'shipping_phone' => '01001234567']);
     $done->update(['shipment_status' => 'delivered']);
 
-    $r = app(OrderLookup::class)->find(Conversation::factory()->create(), ['phone' => '01001234567']);
+    $r = app(OrderLookup::class)->find(olOwnChat('01001234567'), ['phone' => '01001234567']);
 
     expect($oms->calls)->toBe(1)
         ->and($r['status'])->toBe('multiple')

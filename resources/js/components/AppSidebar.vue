@@ -95,6 +95,7 @@ const mainNavItems = computed<NavItem[]>(() => {
         if (allows('admin')) {
             settings.push(
                 { title: t('nav.settings_cities'), href: '/settings/cities', section: store },
+                { title: t('nav.settings_branch_hours'), href: '/settings/branch-hours', section: store },
                 { title: t('nav.settings_shopify'), href: '/settings/shopify', section: store },
             );
         }

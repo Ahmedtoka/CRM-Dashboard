@@ -66,6 +66,8 @@ function srRunJobs(int $from = 0): int
 }
 
 it('schedules a retry of a throttled Stop instead of failing it', function () {
+    // Frozen clock: a slow request under parallel runs must not shrink the measured back-off.
+    Carbon::setTestNow(now()->startOfSecond());
     $acc = AdAccount::factory()->meta()->create();
     $ad = Ad::factory()->for($acc, 'account')->create(['status' => 'ACTIVE']);
     $buyer = srBuyer($acc);

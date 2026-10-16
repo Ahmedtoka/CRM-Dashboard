@@ -12,11 +12,13 @@
         'pending' => 'border-warning/40 bg-warning/10',
         'completed' => 'border-success/40 bg-success/10',
         'not_found' => 'border-border bg-muted',
+        'needs_manual_review' => 'border-warning/40 bg-warning/10',
     ];
     $badgeTone = [
         'pending' => 'bg-warning text-warning-foreground',
         'completed' => 'bg-success text-success-foreground',
         'not_found' => 'bg-secondary text-secondary-foreground',
+        'needs_manual_review' => 'bg-warning text-warning-foreground',
     ];
     $dateFormat = fn ($date) => $date?->locale($locale === 'ar' ? 'ar_EG' : 'en')->translatedFormat('j F Y');
 @endphp

@@ -107,6 +107,41 @@ class MetaGraphClient
     }
 
     /**
+     * The page-scoped ids of an app-scoped user id (`GET /{user-id}/ids_for_pages`, app
+     * access token) — what a Data Deletion Callback's user_id is to the pages we serve.
+     * Null when the app id/secret are not configured or Meta does not answer.
+     *
+     * @return list<string>|null
+     */
+    public function idsForPages(string $appScopedUserId): ?array
+    {
+        $appId = (string) config('crm.meta.app_id');
+        $secret = (string) config('crm.meta.app_secret');
+
+        if ($appId === '' || $secret === '') {
+            return null;
+        }
+
+        $token = $appId.'|'.$secret;
+
+        try {
+            $response = $this->getWithToken($token, rawurlencode($appScopedUserId).'/ids_for_pages', ['access_token' => $token]);
+        } catch (ConnectionException) {
+            return null;
+        }
+
+        if (! $response->successful() || ! is_array($response->json('data'))) {
+            return null;
+        }
+
+        return collect($response->json('data'))
+            ->map(fn ($row) => is_array($row) ? (string) ($row['id'] ?? '') : '')
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
      * Meta requires `appsecret_proof` (an HMAC of the access token actually used for the
      * call, keyed by the app secret) on every Graph API request once "Require App Secret"
      * is enabled for the app — added here as a query parameter for both GET and POST.

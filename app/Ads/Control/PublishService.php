@@ -87,7 +87,13 @@ final class PublishService
                 return collect($made);
             });
         } catch (UniqueConstraintViolationException) {
-            // The unique open_key (or a racing identical request key) refused the insert: the whole request rolled back.
+            // A10: a second click with the same key that raced past replay() lost the insert to the first: it gets the
+            // first click's rows back (nothing new queued, nothing dispatched twice), never a duplicate warning.
+            if ($idempotencyKey !== null && ($mine = $this->replay($u, $idempotencyKey)) !== null) {
+                return $mine;
+            }
+
+            // The unique open_key refused the insert: the whole request rolled back.
             throw new DuplicatePublication($this->existingFor($a, $input, $ordered, $idempotencyKey, $u));
         }
 

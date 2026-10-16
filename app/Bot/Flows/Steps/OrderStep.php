@@ -22,7 +22,7 @@ use Illuminate\Support\Collection;
  * its number alone is only accepted once she proves it is hers: the last 4
  * digits of the order's mobile, 2 tries, then a handover
  * (`order_verification_failed`). Before that the bot only says it found the
- * order, nothing else about it. A mobile/email lookup, or a conversation
+ * order, nothing else about it. The chat's own mobile/email (audit A4), or a conversation
  * already linked to the order's customer, is proof by itself. The proof is
  * kept as `order_verified` (+ `verified_order_ids`) so it is not asked again.
  * Once proven, the step also keeps `customer_first_name` (the order's customer)
@@ -171,6 +171,20 @@ final class OrderStep extends BaseStep
             return $this->owned($state, $snapshot)
                 ? StepOutcome::continue($this->verifiedData($state, $snapshot))
                 : $this->askLastDigits($snapshot);
+        }
+
+        if ($result['status'] === 'unverified') {
+            // Full audit A4: not her chat's own mobile/email. Only "found", then the order number,
+            // which is looked up together with this contact (order_lookup_contact) next turn.
+            if ($state['retries'] >= self::MAX_MULTIPLE_ASKS) {
+                return $this->keepTyped($text);
+            }
+
+            return StepOutcome::wait(
+                [['text' => OrderLookup::unverifiedText($result['via'] ?? null)]],
+                $state['retries'] + 1,
+                ['order_lookup_contact' => array_intersect_key($entities, array_flip(['phone', 'email'])), 'order_choices' => null],
+            );
         }
 
         if ($result['status'] === 'multiple') {

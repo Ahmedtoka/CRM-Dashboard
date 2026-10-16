@@ -66,9 +66,7 @@ class InboxIngestor
             return null;
         }
 
-        $account = ChannelAccount::where('platform', $d->platform)
-            ->where('external_id', $d->channelExternalId)
-            ->first() ?? $this->registry->account($d->platform);
+        $account = $this->registry->connectedAccount($d->platform, $d->channelExternalId);
 
         try {
             [$message, $conversation, $pendingAttachments, $settled] = DB::transaction(function () use ($d, $account) {

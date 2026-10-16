@@ -115,6 +115,31 @@ final class AlertData
     }
 
     /**
+     * Every order placed in range, refused/returned shipments INCLUDED (A5): the revenue a break-even floor is compared
+     * against. BreakEven prices refusals into max CPA per placed order ((1 − r) × contribution − r × return cost), so
+     * floor = AOV / max CPA is a ROAS on placed revenue; dropping returned orders as well (realOrders) would charge the
+     * refusal rate twice. Meta purchase value counts placed orders too, so best-of / worst-of stays like for like.
+     *
+     * @param  list<int>  $adIds
+     * @return array<int, array{count: int, net: float}>
+     */
+    public function placedOrders(array $adIds, string $from, string $to): array
+    {
+        if ($adIds === []) {
+            return [];
+        }
+        [$s, $e] = self::utcRange($from, $to);
+
+        return DB::table('orders as o')->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)->where('o.is_load_test', false)
+            ->whereIn('o.ad_id', $adIds)->whereBetween('o.placed_at', [$s, $e])
+            ->groupBy('o.ad_id')
+            ->selectRaw('o.ad_id, COUNT(*) as n, COALESCE(SUM('.AdsQuery::netRevenueSql().'), 0) as net')
+            ->get()
+            ->mapWithKeys(fn (object $r) => [(int) $r->ad_id => ['count' => (int) $r->n, 'net' => round((float) $r->net, 2)]])
+            ->all();
+    }
+
+    /**
      * Orders placed in range with a final shipment: delivered, or refused/returned (BreakEven::REFUSED).
      *
      * @param  list<int>  $adIds

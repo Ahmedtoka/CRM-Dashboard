@@ -81,6 +81,9 @@ class ActivityLogger
 
     public const BOT_FLOW_UPDATED = 'bot_flow.updated';
 
+    /** «مواعيد الفروع» (audit 2026-10-16): an admin changed a branch's hours, phone or active flag. */
+    public const BRANCH_UPDATED = 'branch.updated';
+
     /** Handover queue (2026-09-29): a customer took a ticket / was given a window / her window closed. */
     public const QUEUE_ENQUEUE = 'queue.enqueue';
 

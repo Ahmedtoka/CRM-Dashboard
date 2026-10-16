@@ -9,8 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * One Le Voile store location (seeded from the brand website, Task 2): its
  * App\Bot\Flows\BranchFinder area key, address/contact and the alias phrases
- * that match a customer's free-text location to that area. Managed from
- * settings/Branches.
+ * that match a customer's free-text location to that area. Rows come from
+ * migrations; admins edit only hours, phone and is_active on settings/BranchHours.
  */
 class Branch extends Model
 {

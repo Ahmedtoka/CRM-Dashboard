@@ -28,6 +28,7 @@ use App\Http\Controllers\Web\Settings\BotLearningController;
 use App\Http\Controllers\Web\Settings\BotReplyController;
 use App\Http\Controllers\Web\Settings\BotTestLinkController;
 use App\Http\Controllers\Web\Settings\BotTranslationController;
+use App\Http\Controllers\Web\Settings\BranchHoursController;
 use App\Http\Controllers\Web\Settings\ChannelController;
 use App\Http\Controllers\Web\Settings\CityController;
 use App\Http\Controllers\Web\Settings\FacebookLoginController;
@@ -317,6 +318,10 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('cities', [CityController::class, 'store'])->name('cities.store');
         Route::put('cities/{city}', [CityController::class, 'update'])->name('cities.update');
         Route::delete('cities/{city}', [CityController::class, 'destroy'])->name('cities.destroy');
+
+        // «مواعيد الفروع» (audit 2026-10-16): hours, phone and active flag of the bot's branches only.
+        Route::get('branch-hours', [BranchHoursController::class, 'index'])->name('branch-hours.index');
+        Route::put('branch-hours/{branch}', [BranchHoursController::class, 'update'])->name('branch-hours.update');
 
         Route::get('shopify', [ShopifyIntegrationController::class, 'index'])->name('shopify.index');
         Route::get('shopify/status', [ShopifyIntegrationController::class, 'status'])->name('shopify.status');

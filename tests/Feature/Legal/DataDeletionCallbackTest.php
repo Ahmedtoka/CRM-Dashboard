@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Platform;
+use App\Enums\UserRole;
 use App\Legal\Jobs\DeleteMetaUserData;
 use App\Legal\SignedRequest;
 use App\Models\BotRun;
@@ -13,14 +14,21 @@ use App\Models\DataDeletionRequest;
 use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\SupportCase;
+use App\Models\User;
+use App\Models\UserNotification;
 use App\Models\WebhookEvent;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
-    config(['crm.meta.app_secret' => 'test-app-secret', 'app.url' => 'https://crm.example.test']);
+    config(['crm.meta.app_secret' => 'test-app-secret', 'crm.meta.app_id' => 'app-1', 'app.url' => 'https://crm.example.test']);
     Storage::fake('media');
+    // Meta's ids_for_pages lookup (audit A8): unanswered by default, so it "fails".
+    fakeMetaGraph([]);
 });
 
 function deletionSigned(array $payload, string $secret = 'test-app-secret'): string
@@ -149,6 +157,8 @@ it("deletes only that person's data and marks the request completed", function (
 it('marks the request not_found when no customer has that id', function () {
     $other = customerWithMessengerData('444555666');
 
+    fakeMetaGraph(['GET 000000001/ids_for_pages' => ['data' => [['id' => '999888777', 'page' => ['id' => 'page-1']]]]]);
+
     $this->post('/webhooks/facebook/data-deletion', [
         'signed_request' => deletionSigned(['user_id' => '000000001']),
     ])->assertOk();
@@ -161,6 +171,8 @@ it('marks the request not_found when no customer has that id', function () {
 it('only matches the id on the same platform', function () {
     $instagram = Customer::factory()->create();
     CustomerIdentity::factory()->create(['customer_id' => $instagram->id, 'platform' => Platform::Instagram, 'external_id' => '777']);
+
+    fakeMetaGraph(['GET 777/ids_for_pages' => ['data' => [['id' => '778', 'page' => ['id' => 'page-1']]]]]);
 
     $this->post('/webhooks/facebook/data-deletion', [
         'signed_request' => deletionSigned(['user_id' => '777']),
@@ -185,4 +197,139 @@ it('does not run again for a request that is already finished', function () {
 
     expect($request->fresh()->completed_at->isYesterday())->toBeTrue()
         ->and(Customer::whereKey($target['customer']->id)->exists())->toBeTrue();
+});
+
+// Audit A8: Meta's callback carries the APP-scoped user id; identities hold PAGE-scoped ids.
+
+it('finds the customer through Meta ids_for_pages and deletes their data', function () {
+    $target = customerWithMessengerData('psid-on-our-page');
+    $other = customerWithMessengerData('psid-someone-else');
+    fakeMetaGraph(['GET asid-42/ids_for_pages' => function ($request) {
+        expect($request->data()['access_token'] ?? null)->toBe('app-1|test-app-secret');
+
+        return ['data' => [['id' => 'psid-on-our-page', 'page' => ['id' => 'page-1', 'name' => 'Le Voile']]]];
+    }]);
+
+    $this->post('/webhooks/facebook/data-deletion', [
+        'signed_request' => deletionSigned(['user_id' => 'asid-42']),
+    ])->assertOk();
+
+    expect(DataDeletionRequest::sole()->status)->toBe('completed')
+        ->and(Customer::whereKey($target['customer']->id)->exists())->toBeFalse()
+        ->and(WebhookEvent::whereKey($target['event']->id)->exists())->toBeFalse()
+        ->and(Customer::whereKey($other['customer']->id)->exists())->toBeTrue();
+});
+
+it('keeps the request for manual review when Meta cannot map the id', function (array $routes) {
+    Log::spy();
+    $other = customerWithMessengerData('444555666');
+    fakeMetaGraph($routes);
+
+    $this->post('/webhooks/facebook/data-deletion', [
+        'signed_request' => deletionSigned(['user_id' => 'asid-77']),
+    ])->assertOk();
+
+    $request = DataDeletionRequest::sole();
+    expect($request->status)->toBe('needs_manual_review')
+        ->and($request->external_user_id)->toBe('asid-77')
+        ->and($request->completed_at)->toBeNull()
+        ->and(Customer::whereKey($other['customer']->id)->exists())->toBeTrue();
+    Log::shouldHaveReceived('warning')->withArgs(fn ($msg, $ctx) => $msg === 'crm.data_deletion.needs_manual_review' && $ctx['request_id'] === $request->id);
+})->with([
+    'graph error' => [['GET asid-77/ids_for_pages' => [['error' => ['message' => 'nope']], 400]]],
+    'not answered' => [[]],
+]);
+
+it('marks the request not_found when Meta answers with no page ids', function () {
+    $other = customerWithMessengerData('444555666');
+    fakeMetaGraph(['GET asid-77/ids_for_pages' => ['data' => []]]);
+
+    $this->post('/webhooks/facebook/data-deletion', [
+        'signed_request' => deletionSigned(['user_id' => 'asid-77']),
+    ])->assertOk();
+
+    $request = DataDeletionRequest::sole();
+    expect($request->status)->toBe('not_found')
+        ->and($request->completed_at)->not->toBeNull()
+        ->and(Customer::whereKey($other['customer']->id)->exists())->toBeTrue()
+        ->and(UserNotification::count())->toBe(0);
+});
+
+it('tells active admins (only) when a request needs manual review', function () {
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $inactiveAdmin = User::factory()->create(['role' => UserRole::Admin, 'is_active' => false]);
+    $supervisor = User::factory()->create(['role' => UserRole::Supervisor]);
+
+    $this->post('/webhooks/facebook/data-deletion', [
+        'signed_request' => deletionSigned(['user_id' => 'asid-77']),
+    ])->assertOk();
+
+    $request = DataDeletionRequest::sole();
+    $notification = UserNotification::sole();
+    expect($notification->user_id)->toBe($admin->id)
+        ->and($notification->type)->toBe('legal.deletion_review')
+        ->and($notification->data['request_id'])->toBe($request->id)
+        ->and($notification->data['code'])->toBe($request->confirmation_code)
+        // The platform id stays out of the bell; `php artisan legal:deletion-requests` shows it.
+        ->and(json_encode($notification->data))->not->toContain('asid-77');
+});
+
+it('lists open deletion requests for staff on the command line', function () {
+    $make = fn (string $id, string $status) => DataDeletionRequest::create([
+        'confirmation_code' => DataDeletionRequest::newConfirmationCode(),
+        'platform' => 'facebook',
+        'external_user_id' => $id,
+        'status' => $status,
+        'requested_at' => now(),
+        'completed_at' => in_array($status, ['completed', 'not_found'], true) ? now() : null,
+    ]);
+    $review = $make('asid-review', 'needs_manual_review');
+    $pending = $make('asid-pending', 'pending');
+    $make('asid-done', 'completed');
+    $make('asid-none', 'not_found');
+
+    expect(Artisan::call('legal:deletion-requests'))->toBe(0)
+        ->and(Artisan::output())
+        ->toContain('asid-review', $review->confirmation_code, 'needs_manual_review', 'asid-pending')
+        ->not->toContain('asid-done')
+        ->not->toContain('asid-none');
+
+    expect(Artisan::call('legal:deletion-requests', ['--all' => true]))->toBe(0)
+        ->and(Artisan::output())->toContain('asid-done', 'asid-none');
+
+    DataDeletionRequest::whereIn('id', [$review->id, $pending->id])->delete();
+    expect(Artisan::call('legal:deletion-requests'))->toBe(0)
+        ->and(Artisan::output())->toContain('No open deletion requests');
+});
+
+it('asks for manual review without calling Meta when the app id is not configured', function () {
+    config(['crm.meta.app_id' => null]);
+    Http::preventStrayRequests();
+
+    $this->post('/webhooks/facebook/data-deletion', [
+        'signed_request' => deletionSigned(['user_id' => 'asid-77']),
+    ])->assertOk();
+
+    expect(DataDeletionRequest::sole()->status)->toBe('needs_manual_review');
+});
+
+it('shows a manual-review request honestly on the status page', function () {
+    $request = DataDeletionRequest::create([
+        'confirmation_code' => DataDeletionRequest::newConfirmationCode(),
+        'platform' => 'facebook',
+        'external_user_id' => 'asid-77',
+        'status' => 'needs_manual_review',
+        'requested_at' => now(),
+    ]);
+
+    $this->withoutVite();
+
+    $this->get('/data-deletion?lang=en&code='.$request->confirmation_code)
+        ->assertOk()
+        ->assertSee('data-status="needs_manual_review"', false)
+        ->assertSee('reviewing it by hand')
+        ->assertDontSee('asid-77');
+    $this->get('/data-deletion?lang=ar&code='.$request->confirmation_code)
+        ->assertOk()
+        ->assertSee('data-status="needs_manual_review"', false);
 });
