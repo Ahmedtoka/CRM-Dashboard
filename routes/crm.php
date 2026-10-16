@@ -12,6 +12,7 @@ use App\Http\Controllers\Web\LocaleController;
 use App\Http\Controllers\Web\MediaController;
 use App\Http\Controllers\Web\NotificationController;
 use App\Http\Controllers\Web\OnboardingController;
+use App\Http\Controllers\Web\OrderConfirmationController;
 use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\PresenceController;
 use App\Http\Controllers\Web\ProductController;
@@ -33,6 +34,7 @@ use App\Http\Controllers\Web\Settings\ChannelController;
 use App\Http\Controllers\Web\Settings\CityController;
 use App\Http\Controllers\Web\Settings\FacebookLoginController;
 use App\Http\Controllers\Web\Settings\IntegrationController;
+use App\Http\Controllers\Web\Settings\OrderConfirmationSettingsController;
 use App\Http\Controllers\Web\Settings\QueueSettingController;
 use App\Http\Controllers\Web\Settings\QuickReplyCategoryController;
 use App\Http\Controllers\Web\Settings\QuickReplyController;
@@ -143,6 +145,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
     // Orders
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::post('/orders/refresh-stale', [OrderController::class, 'refreshStale'])->middleware('throttle:30,1')->name('orders.refresh-stale');
+    // WhatsApp order confirmation (spec 2026-10-16, W4): the day's confirmations and the call list (before /orders/{order}).
+    Route::get('/orders/confirmations', [OrderConfirmationController::class, 'index'])->name('orders.confirmations.index');
+    Route::post('/orders/confirmations/{confirmation}/call', [OrderConfirmationController::class, 'call'])->middleware('throttle:60,1')->name('orders.confirmations.call');
     // Fresh-orders F5: one ad's orders (before /orders/{order}).
     Route::get('/orders/ads/{ad}', [OrderController::class, 'ad'])->name('orders.ads.show');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
@@ -322,6 +327,10 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         // «مواعيد الفروع» (audit 2026-10-16): hours, phone and active flag of the bot's branches only.
         Route::get('branch-hours', [BranchHoursController::class, 'index'])->name('branch-hours.index');
         Route::put('branch-hours/{branch}', [BranchHoursController::class, 'update'])->name('branch-hours.update');
+
+        // «تأكيد الأوردرات على الواتساب» (spec 2026-10-16): ConfirmationSettings and the WhatsApp number's state.
+        Route::get('order-confirmations', [OrderConfirmationSettingsController::class, 'index'])->name('order-confirmations.index');
+        Route::put('order-confirmations', [OrderConfirmationSettingsController::class, 'update'])->name('order-confirmations.update');
 
         Route::get('shopify', [ShopifyIntegrationController::class, 'index'])->name('shopify.index');
         Route::get('shopify/status', [ShopifyIntegrationController::class, 'status'])->name('shopify.status');

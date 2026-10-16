@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OrderConfirmationCard from '@/components/crm/confirmations/OrderConfirmationCard.vue';
 import OrderNote from '@/components/crm/orders/OrderNote.vue';
 import OrderSyncLine from '@/components/crm/orders/OrderSyncLine.vue';
 import OrderSummary from '@/components/crm/OrderSummary.vue';
@@ -24,11 +25,20 @@ import {
 import type { SharedData } from '@/types';
 import type { OrderRow } from '@/types/admin';
 import type { Order } from '@/types/crm';
+import type { OrderConfirmationBlock } from '@/types/orderConfirmations';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { ExternalLink, MessageCircle, MessagesSquare, Package, RotateCcw, StickyNote, Store, TriangleAlert, Truck } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
-const props = defineProps<{ order: OrderRow; canManage: boolean }>();
+const props = withDefaults(
+    defineProps<{
+        order: OrderRow;
+        canManage: boolean;
+        /** WhatsApp order confirmation (spec 2026-10-16); null when none was made. */
+        confirmation?: OrderConfirmationBlock | null;
+    }>(),
+    { confirmation: null },
+);
 
 const { t, locale } = useI18n();
 const api = useApi();
@@ -241,6 +251,8 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
                         </h2>
                         <OrderNote :note="order.note" :lines="6" class="text-sm" />
                     </section>
+
+                    <OrderConfirmationCard v-if="confirmation" :confirmation="confirmation" />
 
                     <section class="space-y-1.5 rounded-lg bg-card p-3 shadow-card">
                         <h2 class="font-medium">{{ t('orders.columns.customer') }}</h2>

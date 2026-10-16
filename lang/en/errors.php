@@ -160,4 +160,8 @@ return [
     'bot_replies' => [
         'values_missing' => 'The new sentence must keep the numbers, names and links of the original',
     ],
+
+    'order_confirmations' => [
+        'not_on_call_list' => 'This order is no longer on the call list.',
+    ],
 ];
