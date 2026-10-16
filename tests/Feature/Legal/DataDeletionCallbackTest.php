@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Platform;
+use App\Enums\UserRole;
 use App\Legal\Jobs\DeleteMetaUserData;
 use App\Legal\SignedRequest;
 use App\Models\BotRun;
@@ -13,8 +14,11 @@ use App\Models\DataDeletionRequest;
 use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\SupportCase;
+use App\Models\User;
+use App\Models\UserNotification;
 use App\Models\WebhookEvent;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
@@ -233,9 +237,70 @@ it('keeps the request for manual review when Meta cannot map the id', function (
     Log::shouldHaveReceived('warning')->withArgs(fn ($msg, $ctx) => $msg === 'crm.data_deletion.needs_manual_review' && $ctx['request_id'] === $request->id);
 })->with([
     'graph error' => [['GET asid-77/ids_for_pages' => [['error' => ['message' => 'nope']], 400]]],
-    'no page ids' => [['GET asid-77/ids_for_pages' => ['data' => []]]],
     'not answered' => [[]],
 ]);
+
+it('marks the request not_found when Meta answers with no page ids', function () {
+    $other = customerWithMessengerData('444555666');
+    fakeMetaGraph(['GET asid-77/ids_for_pages' => ['data' => []]]);
+
+    $this->post('/webhooks/facebook/data-deletion', [
+        'signed_request' => deletionSigned(['user_id' => 'asid-77']),
+    ])->assertOk();
+
+    $request = DataDeletionRequest::sole();
+    expect($request->status)->toBe('not_found')
+        ->and($request->completed_at)->not->toBeNull()
+        ->and(Customer::whereKey($other['customer']->id)->exists())->toBeTrue()
+        ->and(UserNotification::count())->toBe(0);
+});
+
+it('tells active admins (only) when a request needs manual review', function () {
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $inactiveAdmin = User::factory()->create(['role' => UserRole::Admin, 'is_active' => false]);
+    $supervisor = User::factory()->create(['role' => UserRole::Supervisor]);
+
+    $this->post('/webhooks/facebook/data-deletion', [
+        'signed_request' => deletionSigned(['user_id' => 'asid-77']),
+    ])->assertOk();
+
+    $request = DataDeletionRequest::sole();
+    $notification = UserNotification::sole();
+    expect($notification->user_id)->toBe($admin->id)
+        ->and($notification->type)->toBe('legal.deletion_review')
+        ->and($notification->data['request_id'])->toBe($request->id)
+        ->and($notification->data['code'])->toBe($request->confirmation_code)
+        // The platform id stays out of the bell; `php artisan legal:deletion-requests` shows it.
+        ->and(json_encode($notification->data))->not->toContain('asid-77');
+});
+
+it('lists open deletion requests for staff on the command line', function () {
+    $make = fn (string $id, string $status) => DataDeletionRequest::create([
+        'confirmation_code' => DataDeletionRequest::newConfirmationCode(),
+        'platform' => 'facebook',
+        'external_user_id' => $id,
+        'status' => $status,
+        'requested_at' => now(),
+        'completed_at' => in_array($status, ['completed', 'not_found'], true) ? now() : null,
+    ]);
+    $review = $make('asid-review', 'needs_manual_review');
+    $pending = $make('asid-pending', 'pending');
+    $make('asid-done', 'completed');
+    $make('asid-none', 'not_found');
+
+    expect(Artisan::call('legal:deletion-requests'))->toBe(0)
+        ->and(Artisan::output())
+        ->toContain('asid-review', $review->confirmation_code, 'needs_manual_review', 'asid-pending')
+        ->not->toContain('asid-done')
+        ->not->toContain('asid-none');
+
+    expect(Artisan::call('legal:deletion-requests', ['--all' => true]))->toBe(0)
+        ->and(Artisan::output())->toContain('asid-done', 'asid-none');
+
+    DataDeletionRequest::whereIn('id', [$review->id, $pending->id])->delete();
+    expect(Artisan::call('legal:deletion-requests'))->toBe(0)
+        ->and(Artisan::output())->toContain('No open deletion requests');
+});
 
 it('asks for manual review without calling Meta when the app id is not configured', function () {
     config(['crm.meta.app_id' => null]);
