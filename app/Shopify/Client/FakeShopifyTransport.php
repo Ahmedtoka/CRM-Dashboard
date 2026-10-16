@@ -59,6 +59,9 @@ final class FakeShopifyTransport implements ShopifyTransport
     /** @var array<int, array{kind: string, tags: array<int, string>, node: array<string, mixed>}> orders/drafts created via orderCreate()/draftOrderCreate(). */
     private static array $storeOrders = [];
 
+    /** @var list<array{id: string, tags: list<string>}> tagsAdd() calls (WhatsApp order confirmation tags), in order. */
+    private static array $tagsAdded = [];
+
     /** Clears every static in-memory store; called from Tests\TestCase::setUp(). */
     public static function reset(): void
     {
@@ -68,6 +71,13 @@ final class FakeShopifyTransport implements ShopifyTransport
         self::$draftSeq = 0;
         self::$webhooks = [];
         self::$storeOrders = [];
+        self::$tagsAdded = [];
+    }
+
+    /** @return list<array{id: string, tags: list<string>}> every tagsAdd() call since the last reset() */
+    public static function tagsAdded(): array
+    {
+        return self::$tagsAdded;
     }
 
     public function post(string $url, array $headers, array $body): array
@@ -195,6 +205,13 @@ final class FakeShopifyTransport implements ShopifyTransport
 
         if (str_contains($query, 'mutation orderCancel(')) {
             return $this->ok(['orderCancel' => ['job' => ['id' => 'gid://shopify/Job/fake-cancel'], 'orderCancelUserErrors' => []]]);
+        }
+
+        if (str_contains($query, 'tagsAdd(')) {
+            $id = (string) ($variables['id'] ?? '');
+            self::$tagsAdded[] = ['id' => $id, 'tags' => array_values(array_map('strval', (array) ($variables['tags'] ?? [])))];
+
+            return $this->ok(['tagsAdd' => ['node' => ['id' => $id], 'userErrors' => []]]);
         }
 
         if (str_contains($query, 'webhookSubscriptionCreate(')) {
