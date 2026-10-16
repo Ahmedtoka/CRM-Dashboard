@@ -16,13 +16,33 @@ trait VerifiesMetaWebhooks
     {
         $mode = $request->query('hub_mode');
         $token = $request->query('hub_verify_token');
-        $challenge = (string) $request->query('hub_challenge');
+        $challenge = $request->query('hub_challenge');
+        $expected = (string) config('crm.meta.verify_token');
 
-        if ($mode === 'subscribe' && is_string($token) && hash_equals((string) config('crm.meta.verify_token'), $token)) {
-            return response($challenge, 200);
+        if ($mode === 'subscribe'
+            && $this->verifyTokenUsable($expected)
+            && is_string($token)
+            && hash_equals($expected, $token)
+            && is_string($challenge)
+            && preg_match('/^[0-9A-Za-z_-]{1,128}$/', $challenge) === 1) {
+            // Echoed back verbatim, so never as HTML (audit A2: reflected XSS).
+            return response($challenge, 200, [
+                'Content-Type' => 'text/plain; charset=UTF-8',
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
         }
 
         return response('Forbidden', 403);
+    }
+
+    /** No token, or the old published default in production, verifies nobody. */
+    private function verifyTokenUsable(string $token): bool
+    {
+        if ($token === '') {
+            return false;
+        }
+
+        return ! ($token === 'crm-verify' && app()->environment('production'));
     }
 
     public function verifySignature(Request $request): bool

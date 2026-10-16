@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\WebhookEvent;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 class WebhookController extends Controller
@@ -43,7 +44,9 @@ class WebhookController extends Controller
         $receivedAt = CarbonImmutable::now();
         $receivedAtMs = (int) floor(microtime(true) * 1000);
 
-        $event = WebhookEvent::firstOrCreate(
+        // Insert-first on the (provider, dedupe_key) unique index: two concurrent deliveries
+        // of the same payload cannot both pass a read-then-insert check (audit A7).
+        $event = WebhookEvent::createOrFirst(
             ['provider' => $platform, 'dedupe_key' => $dedupeKey],
             [
                 'payload' => json_decode($raw, true) ?? [],
@@ -55,7 +58,9 @@ class WebhookController extends Controller
         );
 
         if (! $event->wasRecentlyCreated) {
-            $event->update(['status' => 'duplicate']);
+            // The original row keeps its own status: overwriting it would hide a failed
+            // event from the reprocess list on Settings → Channels.
+            Log::info('webhook.duplicate', ['provider' => $platform, 'webhook_event_id' => $event->id]);
 
             return response('EVENT_RECEIVED', 200);
         }

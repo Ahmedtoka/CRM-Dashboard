@@ -7,6 +7,7 @@ use App\Channels\ChannelRegistry;
 use App\Channels\Data\DeliveryReceiptData;
 use App\Channels\Data\InboundCommentData;
 use App\Channels\Data\InboundMessageData;
+use App\Channels\UnknownChannelAccount;
 use App\Enums\Platform;
 use App\Models\WebhookEvent;
 use App\Simulator\LoadTest\LoadTest;
@@ -66,20 +67,31 @@ class ProcessWebhookEvent implements ShouldQueue
             $inboxIngestor = app('App\\Inbox\\InboxIngestor');
             $commentIngestor = app('App\\Comments\\CommentIngestor');
 
+            $dropped = [];
+            $droppedCount = 0;
+
             foreach ($normalized as $dto) {
-                match (true) {
-                    $dto instanceof InboundMessageData => $loadTest
-                        ? LoadTestTagger::tag($inboxIngestor->ingestMessage($dto, $event), $event->payload['load_test'] ?? null)
-                        : $inboxIngestor->ingestMessage($dto, $event),
-                    $dto instanceof DeliveryReceiptData => $inboxIngestor->ingestReceipt($dto),
-                    $dto instanceof InboundCommentData => $commentIngestor->ingest($dto),
-                    default => null,
-                };
+                try {
+                    match (true) {
+                        $dto instanceof InboundMessageData => $loadTest
+                            ? LoadTestTagger::tag($inboxIngestor->ingestMessage($dto, $event), $event->payload['load_test'] ?? null)
+                            : $inboxIngestor->ingestMessage($dto, $event),
+                        $dto instanceof DeliveryReceiptData => $inboxIngestor->ingestReceipt($dto),
+                        $dto instanceof InboundCommentData => $commentIngestor->ingest($dto),
+                        default => null,
+                    };
+                } catch (UnknownChannelAccount $e) {
+                    // Not ours (another page in the app, or a disconnected one): no conversation, no bot turn.
+                    $dropped[$e->channelExternalId] = true;
+                    $droppedCount++;
+                }
             }
 
             $event->update([
-                'status' => 'processed',
+                // 'ignored' only when nothing in the event was for one of our accounts.
+                'status' => $droppedCount > 0 && $droppedCount === count($normalized) ? 'ignored' : 'processed',
                 'processed_at' => now(),
+                'error' => $dropped === [] ? null : 'no connected account for '.implode(', ', array_keys($dropped)),
             ]);
         } catch (\Throwable $e) {
             // The error column has room for a real diagnostic message (up to

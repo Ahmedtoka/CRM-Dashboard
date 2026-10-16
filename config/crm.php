@@ -57,7 +57,7 @@ return [
 
     'meta' => [
         'app_secret' => env('META_APP_SECRET'),
-        'verify_token' => env('META_VERIFY_TOKEN', 'crm-verify'),
+        'verify_token' => env('META_VERIFY_TOKEN'),
         'graph_version' => env('META_GRAPH_VERSION', 'v23.0'),
 
         // "Connect with Facebook" (Facebook Login) on Settings → Channels. The app id is
