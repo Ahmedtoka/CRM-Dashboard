@@ -164,8 +164,9 @@ class Simulator
      * A brand-new store order arriving from Shopify (orders/create, placed now), stored and
      * processed exactly like a real webhook so the WhatsApp order confirmation trigger runs
      * (spec 2026-10-16). Local and testing only: a fake order must never reach a real store's data.
+     * It carries Shopify's `test` flag unless $test is false, so the trigger skips it by default.
      */
-    public function shopifyOrderCreated(string $phone, ?string $name = null): Order
+    public function shopifyOrderCreated(string $phone, ?string $name = null, bool $test = true): Order
     {
         if (! app()->environment(['local', 'testing'])) {
             throw new RuntimeException('Fake Shopify orders are for local and testing only.');
@@ -186,6 +187,7 @@ class Simulator
                 'id' => $id,
                 'admin_graphql_api_id' => 'gid://shopify/Order/'.$id,
                 'name' => '#'.substr((string) $id, -6),
+                'test' => $test,
                 'created_at' => $at,
                 'processed_at' => $at,
                 'updated_at' => $at,
