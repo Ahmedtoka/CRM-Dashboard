@@ -11,6 +11,7 @@ use App\Channels\Contracts\ChannelAdapter;
 use App\Enums\Platform;
 use App\Models\ChannelAccount;
 use App\TestLinks\TestScope;
+use Illuminate\Support\Facades\Log;
 
 class ChannelRegistry
 {
@@ -72,6 +73,27 @@ class ChannelRegistry
             Platform::WhatsApp => app(WhatsAppAdapter::class),
             Platform::TikTok => new FakeChannelAdapter($platform),
         };
+    }
+
+    /**
+     * The connected (not disconnected) account an inbound event names by its page /
+     * Instagram / WhatsApp phone-number id; throws (and logs) when there is none, so
+     * the event is dropped instead of landing on another account (audit A3).
+     */
+    public function connectedAccount(Platform $platform, string $externalId): ChannelAccount
+    {
+        $account = $externalId === '' ? null : ChannelAccount::where('platform', $platform)
+            ->where('external_id', $externalId)
+            ->where('status', '!=', 'disconnected')
+            ->first();
+
+        if ($account === null) {
+            Log::warning('webhook.unknown_channel_account', ['platform' => $platform->value, 'channel_external_id' => $externalId]);
+
+            throw new UnknownChannelAccount($platform, $externalId);
+        }
+
+        return $account;
     }
 
     public function account(Platform $platform): ChannelAccount

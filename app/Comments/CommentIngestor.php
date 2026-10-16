@@ -11,7 +11,6 @@ use App\Enums\Platform;
 use App\Events\CommentUpdated;
 use App\Inbox\CustomerResolver;
 use App\Models\BotSetting;
-use App\Models\ChannelAccount;
 use App\Models\Comment;
 use App\Models\Post;
 use App\Support\SafeBroadcast;
@@ -38,9 +37,7 @@ class CommentIngestor
             return null;
         }
 
-        $account = ChannelAccount::where('platform', $d->platform)
-            ->where('external_id', $d->channelExternalId)
-            ->first() ?? $this->registry->account($d->platform);
+        $account = $this->registry->connectedAccount($d->platform, $d->channelExternalId);
 
         $post = Post::firstOrCreate(
             ['platform' => $d->platform, 'external_id' => $d->postExternalId],
