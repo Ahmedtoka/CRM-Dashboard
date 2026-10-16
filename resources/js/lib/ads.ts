@@ -253,3 +253,11 @@ export function adStatusLabel(status: string | null | undefined, t: (k: string) 
     if (PAUSED_STATUSES.includes(s)) return t('ads.control.row.stopped');
     return s === '' ? '—' : s.toLowerCase();
 }
+
+/** The i18n key of a write-log row's change: a Stop, a Run, or a CRM archive of a dropped launch ad. */
+export function writeChangeKey(toStatus: string): string {
+    if (toStatus === 'PAUSED') return 'ads.control.write.done_stop';
+    if (toStatus === 'ARCHIVED') return 'ads.control.write.done_archive';
+
+    return 'ads.control.write.done_run';
+}
