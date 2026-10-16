@@ -127,17 +127,70 @@ it('only takes the first text as the edit note', function () {
     expect($this->confirmation->fresh()->edit_note)->toBe('المقاس L بدل M');
 });
 
-it('answers a second tap politely without changing the answer', function () {
+it('answers the same tap again politely without a second event', function () {
     customerSays('تأكيد الأوردر', ConfirmationPayload::make($this->confirmation->id, 'confirm'));
 
     $this->scheduler->shouldNotReceive('schedule');
-    customerSays('إلغاء', ConfirmationPayload::make($this->confirmation->id, 'cancel'));
+    customerSays('تأكيد الأوردر', ConfirmationPayload::make($this->confirmation->id, 'confirm'));
 
     $row = $this->confirmation->fresh();
     expect($row->status)->toBe(OrderConfirmationStatus::Confirmed)
         ->and(botReplies($row->conversation))->toBe([ConfirmationReplyHandler::REPLY_CONFIRMED, ConfirmationReplyHandler::REPLY_ALREADY]);
     Event::assertDispatchedTimes(OrderConfirmationAnswered::class, 1);
 });
+
+it('takes a later cancel or edit after another answer', function (OrderConfirmationStatus $from, string $action, OrderConfirmationStatus $to) {
+    $this->confirmation->forceFill(['status' => $from, 'answer' => 'confirm', 'answered_at' => now()->subHour()])->save();
+    $this->scheduler->shouldNotReceive('schedule');
+
+    customerSays('زرار', ConfirmationPayload::make($this->confirmation->id, $action));
+
+    $row = $this->confirmation->fresh();
+    expect($row->status)->toBe($to)->and($row->answer)->toBe($action)
+        ->and(botReplies($row->conversation))->not->toContain(ConfirmationReplyHandler::REPLY_ALREADY);
+    Event::assertDispatched(OrderConfirmationAnswered::class, fn ($e) => $e->answer === $action);
+})->with([
+    'confirmed → cancel' => [OrderConfirmationStatus::Confirmed, 'cancel', OrderConfirmationStatus::CancelRequested],
+    'confirmed → edit' => [OrderConfirmationStatus::Confirmed, 'edit', OrderConfirmationStatus::EditRequested],
+    'edit requested → cancel' => [OrderConfirmationStatus::EditRequested, 'cancel', OrderConfirmationStatus::CancelRequested],
+    'unreachable → cancel' => [OrderConfirmationStatus::Unreachable, 'cancel', OrderConfirmationStatus::CancelRequested],
+    'unreachable → edit' => [OrderConfirmationStatus::Unreachable, 'edit', OrderConfirmationStatus::EditRequested],
+    'failed → cancel' => [OrderConfirmationStatus::Failed, 'cancel', OrderConfirmationStatus::CancelRequested],
+    'called confirmed → edit' => [OrderConfirmationStatus::CalledConfirmed, 'edit', OrderConfirmationStatus::EditRequested],
+]);
+
+it('answers a repeated answer politely', function (OrderConfirmationStatus $status, string $action) {
+    $this->confirmation->forceFill(['status' => $status])->save();
+    $this->scheduler->shouldNotReceive('schedule');
+
+    customerSays('زرار', ConfirmationPayload::make($this->confirmation->id, $action));
+
+    expect($this->confirmation->fresh()->status)->toBe($status)
+        ->and(botReplies($this->confirmation->conversation))->toBe([ConfirmationReplyHandler::REPLY_ALREADY]);
+    Event::assertNotDispatched(OrderConfirmationAnswered::class);
+})->with([
+    [OrderConfirmationStatus::CancelRequested, 'cancel'],
+    [OrderConfirmationStatus::EditRequested, 'edit'],
+    [OrderConfirmationStatus::CalledConfirmed, 'confirm'],
+    [OrderConfirmationStatus::CalledCancelled, 'cancel'],
+]);
+
+it('hands any other late answer to staff untouched', function (OrderConfirmationStatus $status, string $action) {
+    $this->confirmation->forceFill(['status' => $status])->save();
+    $this->scheduler->shouldReceive('schedule')->once();
+
+    customerSays('زرار', ConfirmationPayload::make($this->confirmation->id, $action));
+
+    expect($this->confirmation->fresh()->status)->toBe($status)
+        ->and(botReplies($this->confirmation->conversation))->toBe([]);
+    Event::assertNotDispatched(OrderConfirmationAnswered::class);
+})->with([
+    'cancel requested → confirm' => [OrderConfirmationStatus::CancelRequested, 'confirm'],
+    'cancel requested → edit' => [OrderConfirmationStatus::CancelRequested, 'edit'],
+    'edit requested → confirm' => [OrderConfirmationStatus::EditRequested, 'confirm'],
+    'called cancelled → confirm' => [OrderConfirmationStatus::CalledCancelled, 'confirm'],
+    'skipped → confirm' => [OrderConfirmationStatus::Skipped, 'confirm'],
+]);
 
 it('still takes a tap after the no-response deadline', function () {
     $this->confirmation->forceFill(['status' => OrderConfirmationStatus::NoResponse])->save();

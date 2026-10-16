@@ -80,16 +80,53 @@ final class ConfirmationReplyHandler
             return true;
         }
 
-        if (! $this->answer($confirmation, $action, $conversation)) {
+        if ($this->sameAnswer($confirmation->status, $action)) {
             $this->reply($conversation, self::REPLY_ALREADY);
+
+            return true;
         }
 
-        return true;
+        if ($this->answer($confirmation, $action, $conversation)) {
+            return true;
+        }
+
+        // Lost a race with a second tap: the same answer gets the polite line; anything else is for staff.
+        if ($this->sameAnswer($confirmation->refresh()->status, $action)) {
+            $this->reply($conversation, self::REPLY_ALREADY);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /** The tap repeats what is already recorded (by her, or by staff after a call). */
+    private function sameAnswer(OrderConfirmationStatus $status, string $action): bool
+    {
+        return $status === self::STATUS_FOR[$action]
+            || ($action === 'confirm' && $status === OrderConfirmationStatus::CalledConfirmed)
+            || ($action === 'cancel' && $status === OrderConfirmationStatus::CalledCancelled);
     }
 
     /**
-     * Moves an awaiting confirmation to the answer's status (once: a concurrent second tap loses
-     * the conditional update), tells W3 and answers the customer. False when it was answered already.
+     * Statuses an answer may come from. Confirm only while waiting for her; a cancel or an edit is
+     * still taken after a confirm, an edit request, a failed call or a failed send (she may change
+     * her mind). Anything else (e.g. confirm after a cancel request) is left to staff.
+     *
+     * @return list<string>
+     */
+    private function answerableFrom(string $action): array
+    {
+        $waiting = [OrderConfirmationStatus::Sent, OrderConfirmationStatus::NoResponse];
+        $later = [OrderConfirmationStatus::Confirmed, OrderConfirmationStatus::EditRequested, OrderConfirmationStatus::Unreachable,
+            OrderConfirmationStatus::Failed, OrderConfirmationStatus::CalledConfirmed];
+
+        return array_map(fn (OrderConfirmationStatus $s) => $s->value, $action === 'confirm' ? $waiting : [...$waiting, ...$later]);
+    }
+
+    /**
+     * Moves the confirmation to the answer's status (once: a concurrent second tap loses the
+     * conditional update), tells W3 and answers the customer. False when the answer is not taken.
      */
     private function answer(OrderConfirmation $confirmation, string $action, Conversation $conversation): bool
     {
@@ -106,7 +143,8 @@ final class ConfirmationReplyHandler
         }
 
         $won = OrderConfirmation::query()->whereKey($confirmation->id)
-            ->whereIn('status', [OrderConfirmationStatus::Sent->value, OrderConfirmationStatus::NoResponse->value])
+            ->whereIn('status', $this->answerableFrom($action))
+            ->where('status', '!=', self::STATUS_FOR[$action]->value)
             ->update($values);
 
         if ($won !== 1) {
