@@ -8,6 +8,8 @@ use App\Ads\Reports\AdsOverview;
 use App\Ads\Reports\AdsQuery;
 use App\Analytics\ActivityLogger;
 use App\Analytics\MetricsService;
+use App\Confirmations\ConfirmationSettings;
+use App\Confirmations\Ui\ConfirmationBoard;
 use App\Enums\OrderStatus;
 use App\Inbox\ConversationQuery;
 use App\Inbox\Outcomes\ChatFunnel;
@@ -47,12 +49,51 @@ final class TodayCards
         private readonly AdsScope $adsScope,
         private readonly ChatFunnel $funnel,
         private readonly ConversationQuery $conversations,
+        private readonly ConfirmationBoard $confirmationBoard,
+        private readonly ConfirmationSettings $confirmationSettings,
     ) {}
 
-    /** @return array{chats: array, orders: array, ads: ?array, why: array} */
+    /** @return array{chats: array, orders: array, ads: ?array, why: array, confirmations: ?array} */
     public function all(TodayWindow $w, User $u): array
     {
-        return ['chats' => $this->chats($w, $u), 'orders' => $this->orders($w), 'ads' => $this->ads($w, $u), 'why' => $this->why($w)];
+        return [
+            'chats' => $this->chats($w, $u), 'orders' => $this->orders($w), 'ads' => $this->ads($w, $u), 'why' => $this->why($w),
+            'confirmations' => $this->confirmations($w, $u),
+        ];
+    }
+
+    /**
+     * WhatsApp order confirmation (spec 2026-10-16, W4): the day's counters and the call list, each opening its tab
+     * of «تأكيدات الأوردرات». Null while the feature is off and the day has none (no empty card).
+     */
+    public function confirmations(TodayWindow $w, User $u): ?array
+    {
+        $counts = $this->confirmationBoard->counts($this->confirmationBoard->between($this->confirmationBoard->visibleTo($u), $w->from, $w->to));
+        if ($counts['total'] === 0 && ! $this->confirmationSettings->enabled()) {
+            return null;
+        }
+
+        // The call list is every confirmation still waiting for a call, whatever day it was made.
+        $needsCall = $this->confirmationBoard->visibleTo($u)->needsCall()->count();
+        $page = fn (string $tab) => self::link('/orders/confirmations', ['date' => $w->date, 'tab' => $tab === 'all' ? null : $tab]);
+
+        return [
+            'sent' => $counts['sent'],
+            'confirmed' => $counts['confirmed'],
+            'confirmed_share' => $counts['confirmed_share'],
+            'cancel' => $counts['cancel'],
+            'edit' => $counts['edit'],
+            'no_response' => $counts['no_response'],
+            'waiting' => $counts['waiting'],
+            'needs_call' => $needsCall,
+            'links' => [
+                'sent' => $page('all'),
+                'confirmed' => $page('confirmed'),
+                'requests' => $page('requests'),
+                // The call list has no day (ConfirmationBoard::ALL_DAYS_TABS).
+                'needs_call' => self::link('/orders/confirmations', ['tab' => 'needs_call']),
+            ],
+        ];
     }
 
     /** `$u` is the viewer: «من إعلانات» is counted by the inbox's own query, so its link lists exactly those chats. */

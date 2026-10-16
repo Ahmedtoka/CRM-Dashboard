@@ -5,6 +5,7 @@ use App\Analytics\AnalyticsServiceProvider;
 use App\Bot\BotServiceProvider;
 use App\Channels\ChannelsServiceProvider;
 use App\Comments\CommentsServiceProvider;
+use App\Confirmations\ConfirmationsServiceProvider;
 use App\Commerce\CommerceServiceProvider;
 use App\Inbox\InboxServiceProvider;
 use App\Legal\LegalServiceProvider;
@@ -28,4 +29,5 @@ return [
     LegalServiceProvider::class,
     QueueServiceProvider::class,
     AdsServiceProvider::class,
+    ConfirmationsServiceProvider::class,
 ];

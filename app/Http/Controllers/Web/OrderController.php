@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Confirmations\Ui\ConfirmationBoard;
 use App\Http\Controllers\Concerns\OrderEndpoints;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
@@ -9,6 +10,7 @@ use App\Http\Support\ModeratorScope;
 use App\Http\Support\SortParam;
 use App\Models\Ad;
 use App\Models\Order;
+use App\Models\OrderConfirmation;
 use App\Models\User;
 use App\Orders\AdsManagerLink;
 use App\Orders\OrdersAnalytics;
@@ -186,13 +188,17 @@ class OrderController extends Controller
             ->sortBy('label')->values()->all();
     }
 
-    public function show(Request $request, Order $order): Response
+    public function show(Request $request, Order $order, ConfirmationBoard $board): Response
     {
         Gate::authorize('view', $order);
 
         return Inertia::render('Orders/Show', [
             'order' => $this->orderResource($order)->resolve($request),
             'canManage' => $request->user()->isSupervisorOrAbove(),
+            // WhatsApp order confirmation (spec 2026-10-16, W4): status and timeline, null when none was made.
+            'confirmation' => fn () => ($c = OrderConfirmation::query()->with('caller:id,name')->where('order_id', $order->id)->first())
+                ? $board->forOrder($c->setRelation('order', $order))
+                : null,
         ]);
     }
 

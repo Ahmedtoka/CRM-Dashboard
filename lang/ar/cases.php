@@ -100,6 +100,15 @@ return [
         'note_unknown' => 'طلب استبدال: :items ← المنتج البديل مش متحدد',
     ],
 
+    'confirmation' => [
+        'edit_note' => 'التعديل اللي العميلة بعتته على رسالة تأكيد الأوردر: :note',
+        'request_changed' => 'العميلة غيّرت طلبها على رسالة تأكيد الأوردر: :request',
+        'requests' => [
+            'cancel' => 'إلغاء الأوردر',
+            'edit' => 'تعديل الأوردر',
+        ],
+    ],
+
     'edit' => [
         'new_address' => 'العنوان الجديد: :address',
         'new_phone' => 'الموبايل الجديد: :phone',

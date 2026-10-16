@@ -3,6 +3,7 @@
 namespace App\Simulator;
 
 use App\Simulator\Commands\RunLoadTest;
+use App\Simulator\Commands\SimulateShopifyOrder;
 use App\Simulator\Commands\SimulateTraffic;
 use App\Simulator\LoadTest\LoadTest;
 use Illuminate\Console\Scheduling\Schedule;
@@ -19,7 +20,7 @@ class SimulatorServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([SimulateTraffic::class, RunLoadTest::class]);
+            $this->commands([SimulateTraffic::class, RunLoadTest::class, SimulateShopifyOrder::class]);
         }
 
         // Production load test (2026-10-07): emits the waves that are due. A cheap no-op when no

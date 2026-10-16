@@ -257,6 +257,17 @@ class WhatsAppAdapter implements ChannelAdapter
                     'parameters' => array_map(fn ($param) => ['type' => 'text', 'text' => (string) $param], array_values($params)),
                 ]];
             }
+
+            // Quick-reply buttons on the template (order confirmation, 2026-10-16): the payload of
+            // button N comes back on the customer's tap (`type: button`, see normalizeMessage()).
+            foreach (array_values($template['buttons'] ?? []) as $index => $buttonPayload) {
+                $payload['template']['components'][] = [
+                    'type' => 'button',
+                    'sub_type' => 'quick_reply',
+                    'index' => (string) $index,
+                    'parameters' => [['type' => 'payload', 'payload' => (string) $buttonPayload]],
+                ];
+            }
         } elseif (! empty($options['quick_replies']) && ($chunks = $this->buttonChunks($text, $options['quick_replies'])) !== null) {
             // 4–9 options as reply buttons, three per message (owner, 2026-09-26: «زي الماسنجر» — the
             // one-button list hid the menu). Any tap works whichever message it sits on.

@@ -69,7 +69,7 @@ class InboxIngestor
         $account = $this->registry->connectedAccount($d->platform, $d->channelExternalId);
 
         try {
-            [$message, $conversation, $pendingAttachments, $settled] = DB::transaction(function () use ($d, $account) {
+            [$message, $conversation, $pendingAttachments, $settled, $claim] = DB::transaction(function () use ($d, $account) {
                 $identity = $this->resolver->resolve(
                     $d->platform,
                     $d->customerExternalId,
@@ -79,7 +79,11 @@ class InboxIngestor
                     $d->customerPhone,
                 );
 
-                $conversation = $this->openConversationFor($identity, $account);
+                // An answer a handler takes (an order-confirmation tap, 2026-10-16) goes into her latest
+                // thread as it is: never reopened, not unread, no queue ticket, no bot (InboundInterceptors).
+                $claim = $this->claimFor($d, $identity, $account);
+                $conversation = $claim !== null ? $claim[1] : $this->openConversationFor($identity, $account);
+                $claim = $claim[0] ?? null;
                 $opened = $conversation->wasRecentlyCreated;
 
                 $message = $conversation->messages()->create([
@@ -105,7 +109,7 @@ class InboxIngestor
                 $previous = $conversation->last_customer_message_at;
 
                 $conversation->forceFill([
-                    'status' => ConversationStatus::Open,
+                    'status' => $claim !== null ? $conversation->status : ConversationStatus::Open,
                     'last_message_at' => now(),
                     'last_customer_message_at' => $previous && $previous->greaterThan($occurred) ? $previous : $occurred,
                 ])->save();
@@ -119,8 +123,8 @@ class InboxIngestor
                 // unread, no queue hook (no ticket), no bot turn. The acknowledgement
                 // is judged once here; the queue decides under the conversation lock, and the unread
                 // count and the bot follow that one decision.
-                $settled = ! $message->is_spam
-                    && app(QueueService::class)->settles($conversation, $message, app(Acknowledgement::class)->matches($message));
+                $settled = $claim !== null || (! $message->is_spam
+                    && app(QueueService::class)->settles($conversation, $message, app(Acknowledgement::class)->matches($message)));
 
                 if (! $settled) {
                     $conversation->increment('unread_count');
@@ -133,7 +137,7 @@ class InboxIngestor
                     app(AdAttribution::class)->apply($conversation, $d->referral, $opened);
                 }
 
-                return [$message, $conversation, $pendingAttachments, $settled];
+                return [$message, $conversation, $pendingAttachments, $settled, $claim];
             });
         } catch (UniqueConstraintViolationException) {
             return null; // concurrent duplicate of the same external message id
@@ -142,9 +146,16 @@ class InboxIngestor
         $message->setRelation('conversation', $conversation);
         $message->load('mediaAttachments');
 
+        $intercepted = $claim !== null && app(InboundInterceptors::class)->handle($claim, $message, $conversation);
+
+        // A claimed answer the handler did not take after all (e.g. lost a race): an ordinary message.
+        if ($claim !== null && ! $intercepted) {
+            $settled = $this->settleUnclaimed($message, $conversation);
+        }
+
         // Queue the bot before broadcasting so a realtime outage can't silence it. A settled
         // message (spec 2026-09-30: a rating answer, a thanks after the close) never reaches the bot.
-        if (! $settled) {
+        if (! $settled && ! $intercepted) {
             $this->maybeRunBot($message, $conversation);
         }
 
@@ -270,6 +281,38 @@ class InboxIngestor
             'source_comment_id' => $sourceCommentId,
             'unread_count' => 0,
         ]);
+    }
+
+    /**
+     * The handler that takes this message, with her latest thread on the account (any status).
+     * The customer row is locked first, as openConversationFor() does.
+     *
+     * @return array{0: \Closure, 1: Conversation}|null
+     */
+    private function claimFor(InboundMessageData $d, CustomerIdentity $identity, ChannelAccount $account): ?array
+    {
+        Customer::query()->whereKey($identity->customer_id)->lockForUpdate()->first();
+
+        $latest = Conversation::query()->where('customer_id', $identity->customer_id)
+            ->where('channel_account_id', $account->id)->latest('id')->first();
+        $handle = $latest === null ? null : app(InboundInterceptors::class)->claim($d, $latest);
+
+        return $handle === null ? null : [$handle, $latest];
+    }
+
+    /** What the ingest skipped for a claimed message, done afterwards: open, the queue hook, unread. */
+    private function settleUnclaimed(Message $message, Conversation $conversation): bool
+    {
+        $conversation->forceFill(['status' => ConversationStatus::Open, 'resolved_at' => null])->save();
+
+        $settled = ! $message->is_spam
+            && app(QueueService::class)->settles($conversation, $message, app(Acknowledgement::class)->matches($message));
+
+        if (! $settled) {
+            $conversation->increment('unread_count');
+        }
+
+        return $settled;
     }
 
     private function isDuplicate(InboundMessageData $d): bool

@@ -28,6 +28,8 @@ export interface NavItem {
     query?: string;
     /** Other path prefixes that light this item up (setup tabs live under /ads/accounts and /ads/sync). */
     match?: string[];
+    /** Path prefixes under this item that belong to another item (/orders/confirmations is not «الأوردرات»). */
+    exclude?: string[];
 }
 
 export interface SharedData {
