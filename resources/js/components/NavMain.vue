@@ -28,6 +28,7 @@ const { locale } = useI18n();
 const isActive = (item: NavItem) => {
     const path = page.url.split('?')[0];
     const hit = (href: string) => path === href || path.startsWith(`${href}/`);
+    if ((item.exclude ?? []).some(hit)) return false;
 
     return path === item.href || (!item.exact && path.startsWith(`${item.href}/`)) || (item.match ?? []).some(hit);
 };

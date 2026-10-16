@@ -34,6 +34,8 @@ const SWEPT: string[] = [
     'auth/ConfirmPassword', 'auth/ForgotPassword', 'auth/Login', 'auth/ResetPassword', 'auth/VerifyEmail', 'Error', 'Onboarding',
     // S4 manager today
     'Today',
+    // WhatsApp order confirmation (W4)
+    'Orders/Confirmations', 'settings/OrderConfirmations',
 ];
 
 /**
@@ -57,8 +59,8 @@ const NO_PAGE_HEADER = new Set([
 ]);
 
 describe('S0 kit adoption', () => {
-    it('sees all 64 pages and only real ones are listed', () => {
-        expect(Object.keys(pages)).toHaveLength(64);
+    it('sees all 66 pages and only real ones are listed', () => {
+        expect(Object.keys(pages)).toHaveLength(66);
         for (const name of SWEPT) expect(pages[name], name).toBeDefined();
     });
 

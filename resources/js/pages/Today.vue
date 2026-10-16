@@ -9,6 +9,7 @@ import UrgentStrip from '@/components/today/UrgentStrip.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount } from '@/lib/format';
+import { confirmationsRows } from '@/lib/orderConfirmations';
 import { adsRows, chatsRows, formatTodayDate, oldestStamp, ordersRows, whyRows } from '@/lib/today';
 import type { SharedData } from '@/types';
 import type { DigestData } from '@/types/ads';
@@ -82,6 +83,12 @@ const freshness = computed(() => oldestStamp([props.generated_at, props.cards_ge
                         :hint="c.why.total > 0 ? t('today.why.total', { n: formatCount(c.why.total, locale) }) : t('today.cards.why_hint')"
                         :rows="whyRows(c.why, t, locale)"
                         :empty="t('today.cards.why_empty')"
+                    />
+                    <TodayCard
+                        v-if="c.confirmations"
+                        :title="t('order_confirmations.today.title')"
+                        :rows="confirmationsRows(c.confirmations, t, locale)"
+                        data-today-confirmations
                     />
                 </div>
             </Deferred>
