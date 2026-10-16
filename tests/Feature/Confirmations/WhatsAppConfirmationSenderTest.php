@@ -2,10 +2,13 @@
 
 use App\Channels\Adapters\FakeChannelAdapter;
 use App\Confirmations\ConfirmationPayload;
+use App\Confirmations\ConfirmationSettings;
 use App\Confirmations\Contracts\ConfirmationSender;
 use App\Confirmations\WhatsApp\TemplateParams;
+use App\Confirmations\WhatsApp\WhatsAppConfirmationSender;
 use App\Enums\MessageStatus;
 use App\Enums\OrderConfirmationStatus;
+use App\Enums\OrderStatus;
 use App\Enums\Platform;
 use App\Enums\SenderType;
 use App\Models\ChannelAccount;
@@ -21,11 +24,13 @@ use App\Models\OrderItem;
 
 beforeEach(function () {
     FakeChannelAdapter::reset();
+    app(ConfirmationSettings::class)->save(['enabled' => true]);
     $this->account = ChannelAccount::factory()->create(['platform' => Platform::WhatsApp, 'external_id' => '1098765432']);
     $this->customer = Customer::factory()->create(['name' => 'ليلى أحمد']);
     $this->order = Order::factory()->for($this->customer)->create([
         'shopify_order_name' => '#1234', 'order_number' => '1234', 'shipping_name' => 'ليلى أحمد',
         'total' => 1250, 'currency' => 'EGP', 'financial_status' => 'pending',
+        'shipping_province' => 'القاهرة', 'shipping_city' => 'مدينة نصر', 'shipping_address' => '12 شارع مكرم عبيد، الدور الثالث، شقة 7',
     ]);
     OrderItem::factory()->create(['order_id' => $this->order->id, 'title' => 'فستان سهرة', 'qty' => 2]);
     OrderItem::factory()->create(['order_id' => $this->order->id, 'title' => 'طرحة', 'qty' => 1]);
@@ -35,27 +40,33 @@ beforeEach(function () {
 });
 
 it('builds the body params in the template order', function () {
-    expect(TemplateParams::BODY)->toBe(['customer_name', 'order_number', 'items_summary', 'total', 'payment_line'])
+    expect(TemplateParams::BODY)->toBe(['first_name', 'order_number', 'items', 'total', 'address', 'payment'])
+        ->and(array_keys(TemplateParams::EXAMPLES))->toBe(TemplateParams::BODY)
         ->and(TemplateParams::forOrder($this->order->fresh()))->toBe([
-            'customer_name' => 'ليلى',
+            'first_name' => 'ليلى',
             'order_number' => '#1234',
-            'items_summary' => 'فستان سهرة ×2، طرحة',
+            'items' => 'فستان سهرة ×2، طرحة',
             'total' => '1,250 ج.م',
-            'payment_line' => 'الدفع عند الاستلام',
+            'address' => 'القاهرة - 12 شارع مكرم عبيد، الدور الثا…',
+            'payment' => 'الدفع عند الاستلام',
         ]);
 
     $this->order->forceFill(['financial_status' => 'paid', 'total' => 999.5])->save();
     $params = TemplateParams::forOrder($this->order->fresh());
-    expect($params['payment_line'])->toBe('مدفوع')->and($params['total'])->toBe('999.50 ج.م');
+    expect($params['payment'])->toBe('اتأكدنا من الدفع')->and($params['total'])->toBe('999.50 ج.م');
 });
 
-it('keeps the items summary short and never empty', function () {
+it('keeps the items and address short and never empty', function () {
     OrderItem::factory()->create(['order_id' => $this->order->id, 'title' => str_repeat('بلوزة قطن ', 8), 'qty' => 1]);
-    expect(mb_strlen(TemplateParams::forOrder($this->order->fresh())['items_summary']))->toBeLessThanOrEqual(60);
+    expect(mb_strlen(TemplateParams::forOrder($this->order->fresh())['items']))->toBeLessThanOrEqual(60);
 
-    $empty = Order::factory()->create(['shipping_name' => null]);
+    $empty = Order::factory()->create(['shipping_name' => null, 'shipping_province' => null, 'shipping_city' => null, 'shipping_address' => null]);
     $params = TemplateParams::forOrder($empty);
-    expect($params['items_summary'])->not->toBe('')->and($params['customer_name'])->not->toBe('');
+    expect($params['items'])->not->toBe('')->and($params['first_name'])->not->toBe('')
+        ->and($params['address'])->toBe(TemplateParams::NO_ADDRESS);
+
+    $cityOnly = Order::factory()->create(['shipping_province' => null, 'shipping_city' => 'الإسكندرية', 'shipping_address' => "سموحة\nش فوزي معاذ"]);
+    expect(TemplateParams::forOrder($cityOnly)['address'])->toBe('الإسكندرية - سموحة ش فوزي معاذ');
 });
 
 it('sends the confirmation template with button payloads and records it in the conversation', function () {
@@ -79,7 +90,7 @@ it('sends the confirmation template with button payloads and records it in the c
         ->and($message->template)->toBe([
             'name' => 'order_confirm_ar',
             'language' => 'ar',
-            'params' => ['ليلى', '#1234', 'فستان سهرة ×2، طرحة', '1,250 ج.م', 'الدفع عند الاستلام'],
+            'params' => ['ليلى', '#1234', 'فستان سهرة ×2، طرحة', '1,250 ج.م', 'القاهرة - 12 شارع مكرم عبيد، الدور الثا…', 'الدفع عند الاستلام'],
             'buttons' => [ConfirmationPayload::make($row->id, 'confirm'), ConfirmationPayload::make($row->id, 'edit'), ConfirmationPayload::make($row->id, 'cancel')],
         ]);
 
@@ -175,4 +186,61 @@ it('marks the row failed when WhatsApp later reports the template undelivered', 
 
     expect($this->confirmation->fresh()->status)->toBe(OrderConfirmationStatus::Failed)
         ->and($this->confirmation->fresh()->last_error)->toBe('(131026) undeliverable');
+});
+
+it('sends nothing while the feature is off, and parks the confirmation as skipped', function () {
+    app(ConfirmationSettings::class)->save(['enabled' => false]);
+
+    app(ConfirmationSender::class)->send($this->confirmation, 'confirm');
+
+    expect($this->confirmation->fresh()->status)->toBe(OrderConfirmationStatus::Skipped)
+        ->and($this->confirmation->fresh()->skip_reason)->toBe('disabled')
+        ->and(FakeChannelAdapter::sent())->toBe([]);
+});
+
+it('never confirms or reminds about a cancelled order', function () {
+    app(ConfirmationSender::class)->send($this->confirmation, 'confirm');
+    $this->order->forceFill(['status' => OrderStatus::Cancelled, 'cancelled_at' => now()])->save();
+
+    app(ConfirmationSender::class)->send($this->confirmation->fresh(), 'reminder');
+
+    $row = $this->confirmation->fresh();
+    expect($row->reminded_at)->toBeNull()->and($row->status)->toBe(OrderConfirmationStatus::Sent)
+        ->and(FakeChannelAdapter::sent())->toHaveCount(1);
+
+    $other = OrderConfirmation::factory()->create([
+        'order_id' => Order::factory()->create(['status' => OrderStatus::Cancelled, 'cancelled_at' => now()])->id,
+        'channel_account_id' => $this->account->id, 'phone_e164' => '+201112220000',
+    ]);
+    app(ConfirmationSender::class)->send($other, 'confirm');
+
+    expect($other->fresh()->status)->toBe(OrderConfirmationStatus::Skipped)
+        ->and($other->fresh()->skip_reason)->toBe('cancelled')
+        ->and(FakeChannelAdapter::sent())->toHaveCount(1);
+});
+
+it('sends no reminder while the feature is off', function () {
+    app(ConfirmationSender::class)->send($this->confirmation, 'confirm');
+    app(ConfirmationSettings::class)->save(['enabled' => false]);
+
+    app(ConfirmationSender::class)->send($this->confirmation->fresh(), 'reminder');
+
+    expect($this->confirmation->fresh()->reminded_at)->toBeNull()->and(FakeChannelAdapter::sent())->toHaveCount(1);
+});
+
+it('sends a test even while the feature is off, without giving the phone to the order customer', function () {
+    app(ConfirmationSettings::class)->save(['enabled' => false]);
+
+    app(ConfirmationSender::class)->send($this->confirmation, WhatsAppConfirmationSender::TEST);
+
+    $row = $this->confirmation->fresh();
+    $identity = CustomerIdentity::where('platform', Platform::WhatsApp)->where('external_id', '201112223334')->first();
+    $message = Message::find($row->outbound_message_id);
+
+    expect($row->status)->toBe(OrderConfirmationStatus::Sent)
+        ->and($identity->customer_id)->not->toBe($this->customer->id)
+        ->and($identity->customer->name)->not->toBe($this->customer->name)
+        ->and($row->customer_id)->toBe($identity->customer_id)
+        ->and($message->template['name'])->toBe('order_confirm_ar')
+        ->and(FakeChannelAdapter::sent()[0]['to'])->toBe('201112223334');
 });

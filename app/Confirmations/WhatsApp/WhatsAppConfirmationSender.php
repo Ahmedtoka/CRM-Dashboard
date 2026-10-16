@@ -5,8 +5,10 @@ namespace App\Confirmations\WhatsApp;
 use App\Confirmations\ConfirmationPayload;
 use App\Confirmations\ConfirmationSettings;
 use App\Confirmations\Contracts\ConfirmationSender;
+use App\Confirmations\SkipReason;
 use App\Enums\MessageStatus;
 use App\Enums\OrderConfirmationStatus;
+use App\Enums\OrderStatus;
 use App\Enums\Platform;
 use App\Inbox\CustomerResolver;
 use App\Inbox\InboxIngestor;
@@ -34,6 +36,9 @@ use Throwable;
  */
 final class WhatsAppConfirmationSender implements ConfirmationSender
 {
+    /** Kind for a test send to a phone the owner picks: the confirm template, even while the feature is off. */
+    public const TEST = 'test';
+
     public function __construct(
         private readonly ConfirmationSettings $settings,
         private readonly OutboundService $outbound,
@@ -43,9 +48,9 @@ final class WhatsAppConfirmationSender implements ConfirmationSender
 
     public function send(OrderConfirmation $confirmation, string $kind = 'confirm'): void
     {
-        $kind = $kind === 'reminder' ? 'reminder' : 'confirm';
+        $kind = in_array($kind, ['reminder', self::TEST], true) ? $kind : 'confirm';
         // Its own key: SendOrderConfirmation already holds `order-confirmation-send:{id}` while it calls us.
-        $claim = Cache::lock('order-confirmation-deliver:'.$confirmation->id.':'.$kind, 60);
+        $claim = Cache::lock('order-confirmation-deliver:'.$confirmation->id.':'.($kind === 'reminder' ? 'reminder' : 'confirm'), 60);
 
         if (! $claim->get()) {
             return;
@@ -58,9 +63,41 @@ final class WhatsAppConfirmationSender implements ConfirmationSender
                 return;
             }
 
+            if ($kind !== self::TEST && ($reason = $this->blocked($confirmation)) !== null) {
+                $this->skip($confirmation, $kind, $reason);
+
+                return;
+            }
+
             $this->sendClaimed($confirmation, $kind);
         } finally {
             $claim->release();
+        }
+    }
+
+    /**
+     * Nothing goes to a customer while the feature is off, or for a cancelled or missing order
+     * (a load-test order is hidden by Order's scope). A test send (kind `test`) skips this check.
+     */
+    private function blocked(OrderConfirmation $c): ?SkipReason
+    {
+        $order = $c->order;
+
+        return match (true) {
+            ! $this->settings->enabled() => SkipReason::Disabled,
+            $order === null => SkipReason::TestOrder,
+            $order->status === OrderStatus::Cancelled || $order->cancelled_at !== null => SkipReason::Cancelled,
+            default => null,
+        };
+    }
+
+    /** A blocked confirmation is parked as skipped; a blocked reminder is simply not sent. */
+    private function skip(OrderConfirmation $c, string $kind, SkipReason $reason): void
+    {
+        Log::info('order_confirmation.not_sent', ['confirmation_id' => $c->id, 'kind' => $kind, 'reason' => $reason->value]);
+
+        if ($kind === 'confirm') {
+            $c->forceFill(['status' => OrderConfirmationStatus::Skipped, 'skip_reason' => $reason->value])->save();
         }
     }
 
@@ -100,17 +137,18 @@ final class WhatsAppConfirmationSender implements ConfirmationSender
         }
 
         try {
-            $conversation = DB::transaction(fn () => $this->conversationFor($order, $account, $waId, (string) $c->phone_e164));
+            $conversation = DB::transaction(fn () => $this->conversationFor($order, $account, $waId, (string) $c->phone_e164, $kind === self::TEST));
 
+            $templateKind = $kind === 'reminder' ? 'reminder' : 'confirm';
             $params = TemplateParams::forOrder($order);
             $template = [
-                'name' => $this->settings->template($kind),
+                'name' => $this->settings->template($templateKind),
                 'language' => $this->settings->templateLanguage(),
                 'params' => array_values($params),
                 'buttons' => array_map(fn (string $action) => ConfirmationPayload::make($c->id, $action), TemplateParams::BUTTONS),
             ];
 
-            $message = $this->outbound->sendTemplate($conversation, TemplateParams::preview($kind, $params), $template);
+            $message = $this->outbound->sendTemplate($conversation, TemplateParams::preview($templateKind, $params), $template);
         } catch (Throwable $e) {
             Log::warning('order_confirmation.send_failed', ['confirmation_id' => $c->id, 'kind' => $kind, 'exception' => $e::class]);
             $this->fail($c, $kind, SendOutboundMessage::errorCode($e));
@@ -147,12 +185,13 @@ final class WhatsAppConfirmationSender implements ConfirmationSender
      * exists; otherwise it joins the order's customer, unless that customer already chats from
      * another WhatsApp number (a send picks the customer's latest identity, so the number gets
      * its own customer instead). An existing conversation is used as it is (a resolved one is
-     * not reopened: the customer's reply does that).
+     * not reopened: the customer's reply does that). A test send never touches the order's
+     * customer: the number is resolved on its own.
      */
-    private function conversationFor(Order $order, ChannelAccount $account, string $waId, string $phone): Conversation
+    private function conversationFor(Order $order, ChannelAccount $account, string $waId, string $phone, bool $test = false): Conversation
     {
         $identity = CustomerIdentity::query()->where('platform', Platform::WhatsApp)->where('external_id', $waId)->first()
-            ?? $this->identityFor($order, $waId, $phone);
+            ?? ($test ? $this->resolver->resolve(Platform::WhatsApp, $waId, '', phone: $phone) : $this->identityFor($order, $waId, $phone));
 
         $existing = Conversation::query()->where('customer_id', $identity->customer_id)
             ->where('channel_account_id', $account->id)->latest('id')->first();
