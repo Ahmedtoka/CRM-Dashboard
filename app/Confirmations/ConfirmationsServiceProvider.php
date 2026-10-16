@@ -2,11 +2,8 @@
 
 namespace App\Confirmations;
 
-use App\Channels\Data\InboundMessageData;
 use App\Confirmations\Contracts\ConfirmationSender;
 use App\Confirmations\Contracts\ShopifyOrderTagger;
-use App\Confirmations\Events\ShopifyOrderCreated;
-use App\Confirmations\Listeners\ScheduleOrderConfirmation;
 use App\Confirmations\Shopify\GraphqlOrderTagger;
 use App\Confirmations\WhatsApp\ConfirmationMessageWatcher;
 use App\Confirmations\WhatsApp\ConfirmationReplyHandler;
@@ -44,9 +41,9 @@ class ConfirmationsServiceProvider extends ServiceProvider
     private function bootTrigger(): void
     {
         // Fully qualified on purpose: keeps the shared import block free of merge conflicts between slices.
-        Event::listen(
-            ShopifyOrderCreated::class,
-            ScheduleOrderConfirmation::class,
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Confirmations\Events\ShopifyOrderCreated::class,
+            \App\Confirmations\Listeners\ScheduleOrderConfirmation::class,
         );
     }
 
@@ -57,7 +54,7 @@ class ConfirmationsServiceProvider extends ServiceProvider
 
         // Button taps, the edit text and typed «تمام» / «الغي» are answered before the bot sees them.
         $this->app->make(InboundInterceptors::class)->register(
-            fn (InboundMessageData $d, Conversation $c) => $this->app->make(ConfirmationReplyHandler::class)
+            fn (\App\Channels\Data\InboundMessageData $d, Conversation $c) => $this->app->make(ConfirmationReplyHandler::class)
                 ->claims($d->payload, $d->body, $d->attachments, $c),
             fn (Message $m, Conversation $c) => $this->app->make(ConfirmationReplyHandler::class)->handle($m, $c),
         );
