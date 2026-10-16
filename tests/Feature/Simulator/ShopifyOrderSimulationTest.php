@@ -78,7 +78,9 @@ it('marks the order as a Shopify test so no confirmation is made without --fake-
         ->skip_reason->toBe('test_order');
 });
 
-it('refuses --fake-channel while a live WhatsApp number is connected', function () {
+it('refuses --fake-channel when confirmations would go out from a live number', function () {
+    // Outside production a live number is only used with this switch on (W1).
+    config(['crm.confirmations.allow_live_outside_production' => true]);
     app(ConfirmationSettings::class)->save(['enabled' => true]);
     ChannelAccount::factory()->create(['platform' => Platform::WhatsApp, 'driver' => 'live', 'status' => 'connected', 'external_id' => 'real-number']);
     ChannelAccount::factory()->create(['platform' => Platform::WhatsApp, 'driver' => 'fake', 'status' => 'connected', 'external_id' => 'demo-whatsapp']);
@@ -88,6 +90,16 @@ it('refuses --fake-channel while a live WhatsApp number is connected', function 
         ->assertFailed();
 
     expect(Order::count())->toBe(0)->and(OrderConfirmation::count())->toBe(0);
+});
+
+it('uses the demo number, never a live one connected next to it, by default', function () {
+    app(ConfirmationSettings::class)->save(['enabled' => true]);
+    ChannelAccount::factory()->create(['platform' => Platform::WhatsApp, 'driver' => 'live', 'status' => 'connected', 'external_id' => 'real-number']);
+    $demo = ChannelAccount::factory()->create(['platform' => Platform::WhatsApp, 'driver' => 'fake', 'status' => 'connected', 'external_id' => 'demo-whatsapp']);
+
+    $this->artisan('crm:simulate-shopify-order', ['--phone' => '01001234567', '--fake-channel' => true])->assertSuccessful();
+
+    expect(OrderConfirmation::sole()->channel_account_id)->toBe($demo->id);
 });
 
 it('is not available in production', function () {
