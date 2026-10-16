@@ -91,12 +91,27 @@ it('validates the input', function (array $payload, string $field) {
 
     $this->actingAs($this->admin)->putJson("/settings/branch-hours/{$branch->id}", $payload)->assertJsonValidationErrors($field);
 })->with([
-    'hours too long' => [['hours' => str_repeat('a', 201)], 'hours'],
+    // 60 keeps the phone inside Messenger's 80-character card subtitle.
+    'hours over 60 characters' => [['hours' => str_repeat('س', 61)], 'hours'],
     'hours not text' => [['hours' => ['x']], 'hours'],
     'phone with letters' => [['phone' => 'call us'], 'phone'],
     'phone too long' => [['phone' => str_repeat('1', 31)], 'phone'],
+    // Fewer than 9 or more than 13 digits cannot be dialled, and Meta rejects the whole carousel.
+    'phone of one digit' => [['phone' => '0'], 'phone'],
+    'phone of two digits' => [['phone' => '12'], 'phone'],
+    'phone of 8 digits' => [['phone' => '0100 0000'], 'phone'],
+    'phone of 14 digits' => [['phone' => '+20 1094 538 15901'], 'phone'],
+    'Arabic phone of 3 digits' => [['phone' => '٠١٢'], 'phone'],
     'active not boolean' => [['is_active' => 'maybe'], 'is_active'],
 ]);
+
+it('accepts 60-character hours and dialable phone shapes', function (string $phone) {
+    $branch = Branch::factory()->create();
+
+    $this->actingAs($this->admin)->putJson("/settings/branch-hours/{$branch->id}", ['hours' => str_repeat('س', 60), 'phone' => $phone])->assertOk();
+
+    expect($branch->fresh()->phone)->toBe($phone);
+})->with(['01094538159', '+20 109 453 8159', '201094538159', '٠١٠٩٤٥٣٨١٥٩', '02 2414 5678', '010-9453-8159']);
 
 it('accepts Arabic digits and spaces in the phone', function () {
     $branch = Branch::factory()->create();

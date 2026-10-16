@@ -222,7 +222,9 @@ final class BranchFinder
         foreach ($branches as $b) {
             $phone = trim((string) $b->phone);
             $hours = trim((string) $b->hours);
-            $tail = array_values(array_filter([$hours !== '' ? "{$hours}" : null, $phone !== '' ? "{$phone}" : null]));
+            // Phone before hours: OutboundCards cuts the subtitle's end at 80 characters, so long hours lose
+            // their end, never the phone.
+            $tail = array_values(array_filter([$phone !== '' ? "{$phone}" : null, $hours !== '' ? "{$hours}" : null]));
             $tailText = implode("\n", $tail);
             // The address gives way first: the phone must survive Messenger's 80-character subtitle.
             $room = OutboundCards::SUBTITLE_MAX - mb_strlen($tailText) - ($tailText !== '' ? 1 : 0);

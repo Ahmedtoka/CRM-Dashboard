@@ -7,6 +7,7 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useCrud } from '@/composables/useCrud';
 import { useI18n } from '@/composables/useI18n';
+import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BranchRow } from '@/types/admin';
 import { Head } from '@inertiajs/vue3';
@@ -19,6 +20,10 @@ defineProps<{ branches: BranchRow[] }>();
 
 const { t, locale } = useI18n();
 const crud = useCrud('/settings/branch-hours', 'branches');
+const toast = useToast();
+
+/** BranchHoursController::HOURS_MAX: keeps the phone inside Messenger's 80-character card subtitle. */
+const HOURS_MAX = 60;
 
 const open = ref(false);
 const editing = ref<BranchRow | null>(null);
@@ -37,8 +42,10 @@ async function submit(): Promise<void> {
 }
 
 async function toggle(row: BranchRow): Promise<void> {
+    if (row.is_active && !window.confirm(t('settings.branch_hours.confirm_deactivate', { name: row.name }))) return;
+
     toggling.value = row.id;
-    await crud.save(row.id, { is_active: !row.is_active });
+    if (!(await crud.save(row.id, { is_active: !row.is_active }))) toast.push(crud.error.value ?? t('common.error'), 'error');
     toggling.value = null;
 }
 
@@ -60,7 +67,7 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
     <Head :title="t('settings.branch_hours.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-4xl space-y-4 p-3 md:p-6">
+        <div class="mx-auto w-full max-w-3xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.branch_hours.title')" :description="t('settings.branch_hours.description')" />
 
             <DataTable
@@ -119,11 +126,16 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
                     v-model="form.hours"
                     dir="auto"
                     rows="2"
-                    maxlength="200"
+                    :maxlength="HOURS_MAX"
                     :placeholder="t('settings.branch_hours.hours_placeholder')"
                     class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
-                <span class="text-xs text-muted-foreground">{{ t('settings.branch_hours.hours_hint') }}</span>
+                <span class="flex justify-between gap-2 text-xs text-muted-foreground">
+                    <span>{{ t('settings.branch_hours.hours_hint') }}</span>
+                    <span class="shrink-0 tabular-nums" aria-live="polite">{{
+                        t('settings.branch_hours.hours_count', { n: form.hours.length, max: HOURS_MAX })
+                    }}</span>
+                </span>
             </label>
             <label class="grid gap-1">
                 <span class="text-sm font-semibold">{{ t('settings.branch_hours.phone') }}</span>
