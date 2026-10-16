@@ -237,9 +237,10 @@ it('needs no digits when she gives the mobile the order was placed with', functi
         ->and(oarBot()->body)->toContain('فستان ليلى');
 });
 
-it('needs no digits when the order is found by her mobile alone', function () {
+it('needs no digits when the order is found by her own mobile alone', function () {
     oarOrder();
-    oarStart();
+    // Her chat's own mobile (audit A4): a number she only typed is not proof.
+    oarStart()->customer->update(['phone' => '01001234567']);
 
     oarTurn('01001234567');
 

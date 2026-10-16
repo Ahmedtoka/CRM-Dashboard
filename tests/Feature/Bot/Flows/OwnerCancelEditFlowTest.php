@@ -120,11 +120,18 @@ function oceOrder(array $attrs = []): Order
     return $order->fresh();
 }
 
-/** Starts the flow and finds the order by her mobile (ownership proven): the greeting is on screen. */
+/** Her chat's own mobile (audit A4): only that one proves the orders on it are hers. */
+function oceOwnMobile(): void
+{
+    Conversation::firstOrFail()->customer->update(['phone' => '01001234567']);
+}
+
+/** Starts the flow and finds the order by her own mobile (ownership proven): the greeting is on screen. */
 function oceGreeting(): void
 {
     $c = oceSay('اهلا');
     app(FlowEngine::class)->runPayload($c, 'flow:cancel_edit');
+    oceOwnMobile();
     oceTurn('01001234567');
 }
 
@@ -135,6 +142,7 @@ it('greets her by name with the order and asks cancel or edit', function () {
 
     expect(oceBot()->body)->toBe(OwnerFlowsUpgrade::ASK_ORDER_TEXT);
 
+    oceOwnMobile();
     oceTurn('01001234567');
 
     expect(oceFlow()['step'])->toBe('request')
@@ -355,7 +363,8 @@ it('validates and walks the published flow in the designer sandbox, showing the 
         ->and(FlowDefinition::warnings($flow->definition))->toBe([]);
 
     $r = $sandbox->run($flow, 'published', null, [], $user);
-    foreach ([['text' => '01001234567'], ['payload' => 'step:cancel_edit:request:cancel'], ['text' => 'غيرت رأيي']] as $input) {
+    // The sandbox's throwaway customer has no mobile of its own (audit A4): the order number proves it.
+    foreach ([['text' => '01001234567'], ['text' => '1047'], ['payload' => 'step:cancel_edit:request:cancel'], ['text' => 'غيرت رأيي']] as $input) {
         $r = $sandbox->run($flow, 'published', $r['state'], $input, $user);
     }
 

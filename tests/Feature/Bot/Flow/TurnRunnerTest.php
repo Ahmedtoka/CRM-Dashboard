@@ -8,6 +8,7 @@ use App\Bot\Flow\HumanPacing;
 use App\Bot\Flow\Orders\FakeOmsClient;
 use App\Bot\Flow\Orders\OmsClient;
 use App\Bot\Flow\Orders\OmsStatus;
+use App\Bot\Flow\Orders\OrderLookup;
 use App\Bot\Flow\ReplyScheduler;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Flow\TurnUnderstanding;
@@ -26,7 +27,9 @@ use App\Models\BotRun;
 use App\Models\BotSetting;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
+use App\Models\Customer;
 use App\Models\CustomerIdentity;
+use App\Models\Fulfillment;
 use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
@@ -61,6 +64,13 @@ function enableFlows(): void
 function say(string $id, string $text): void
 {
     app(InboxIngestor::class)->ingestMessage(new InboundMessageData(Platform::Facebook, 'PAGE1', 'PSID-1', 'Mona', $id, $text, CarbonImmutable::now()));
+}
+
+/** Her chat's customer already has this mobile (audit A4: only the chat's own number proves her orders). */
+function ownChatPhone(string $phone): void
+{
+    $customer = Customer::factory()->create(['phone' => $phone]);
+    CustomerIdentity::factory()->create(['customer_id' => $customer->id, 'platform' => Platform::Facebook, 'external_id' => 'PSID-1']);
 }
 
 function botText(): string
@@ -234,12 +244,31 @@ it('routes a store complaint to the senior queue at high priority with the custo
 
 it('lists several open orders for a phone and asks which one', function () {
     Order::factory()->count(2)->create(['shipping_phone' => '+201001234567']);
+    ownChatPhone('01001234567');
 
     say('m1', 'الاوردر فين؟ رقمي 01001234567');
 
     expect(botText())->toContain('لقيت أكتر من أوردر')->and(botText())->toContain('تحبي أتابع أنهي واحد؟')
         ->and(Conversation::first()->handler)->toBe(Handler::Bot)
         ->and(Conversation::first()->bot_state['awaiting'])->toBe('order_ref');
+});
+
+it('reveals nothing for a mobile that is not her chat number until she gives the order number', function () {
+    $order = Order::factory()->create(['order_number' => '4321', 'shipping_phone' => '+201001234567', 'shipping_province_code' => 'C', 'fulfillment_status' => 'fulfilled']);
+    Fulfillment::factory()->for($order)->create(['tracking_url' => 'https://track.test/4321', 'shopify_created_at' => now()]);
+    Order::factory()->create(['order_number' => '4322', 'shipping_phone' => '+201001234567']);
+
+    say('m1', 'الاوردر فين؟ رقمي 01001234567');
+
+    expect(botText())->toContain(OrderLookup::UNVERIFIED_PHONE_TEXT)
+        ->not->toContain('#4321')->not->toContain('#4322')->not->toContain('track.test')->not->toContain('لقيت أكتر من أوردر')
+        ->and(Conversation::first()->handler)->toBe(Handler::Bot)
+        ->and(Conversation::first()->bot_state['awaiting'])->toBe('order_ref');
+
+    // The order number, looked up together with the mobile she gave, proves it.
+    say('m2', '4321');
+
+    expect(Message::where('sender_type', 'bot')->latest('id')->value('body'))->toContain('#4321')->toContain('track.test');
 });
 
 it('asks and then hands over when order lookup is turned off', function () {
@@ -291,6 +320,7 @@ it('does not let a stale remembered photo satisfy a later defect', function () {
 it('uses a new phone after an earlier order number was already answered', function () {
     Order::factory()->create(['order_number' => '1111', 'shipping_phone' => '01229998887', 'created_at' => now()->subDay()]);
     Order::factory()->create(['order_number' => '2222', 'shipping_phone' => '01001234567', 'created_at' => now()->subDay()]);
+    ownChatPhone('01001234567');
 
     say('m1', 'الاوردر فين؟ 1111');
     expect(botText())->toContain('#1111');
@@ -575,6 +605,7 @@ it('hands a customer who sends her order details over as a new order, with the a
 
 it('still resumes an awaiting order lookup when the customer answers with her phone', function () {
     Order::factory()->create(['order_number' => '8888', 'shipping_phone' => '01001234567', 'created_at' => now()->subDay()]);
+    ownChatPhone('01001234567');
 
     say('m1', 'فين الاوردر بتاعي');
     say('m2', '01001234567');

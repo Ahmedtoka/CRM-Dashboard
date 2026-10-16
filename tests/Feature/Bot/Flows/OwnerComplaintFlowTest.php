@@ -219,6 +219,8 @@ it('skips the contact question with a verified order: the name and mobile come f
 
     expect(ocpBot()->body)->toBe(OwnerFlowsUpgrade::ASK_ORDER_TEXT);
 
+    // Her chat's own mobile (audit A4): a number she only typed is not proof.
+    Conversation::firstOrFail()->customer->update(['phone' => '01001234567']);
     ocpTurn('01001234567');
     expect(ocpFlow()['step'])->toBe('description')
         ->and(ocpBot()->body)->toBe(OwnerFlowsUpgrade::DESCRIPTION_TEXT)
