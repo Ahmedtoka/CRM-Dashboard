@@ -388,6 +388,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.integrations.title'), h
                     :object="setup.facebook.object"
                     :callback-url="meta.callback_urls.facebook"
                     :verify-token="meta.verify_token"
+                    :verify-token-problem="meta.verify_token_problem"
                     :fields="setup.facebook.fields"
                     :permissions="setup.facebook.permissions"
                 />
@@ -476,6 +477,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.integrations.title'), h
                     :object="setup.instagram.object"
                     :callback-url="meta.callback_urls.instagram"
                     :verify-token="meta.verify_token"
+                    :verify-token-problem="meta.verify_token_problem"
                     :fields="setup.instagram.fields"
                     :permissions="setup.instagram.permissions"
                 />
@@ -532,6 +534,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.integrations.title'), h
                     :object="setup.whatsapp.object"
                     :callback-url="meta.callback_urls.whatsapp"
                     :verify-token="meta.verify_token"
+                    :verify-token-problem="meta.verify_token_problem"
                     :fields="setup.whatsapp.fields"
                     :permissions="setup.whatsapp.permissions"
                 />

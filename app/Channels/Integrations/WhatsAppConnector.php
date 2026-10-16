@@ -4,6 +4,7 @@ namespace App\Channels\Integrations;
 
 use App\Channels\Adapters\MetaGraphClient;
 use App\Channels\Data\SendResult;
+use App\Channels\VerifyToken;
 use App\Enums\Platform;
 use App\Models\ChannelAccount;
 use Illuminate\Http\Client\ConnectionException;
@@ -31,10 +32,10 @@ final class WhatsAppConnector
         return rtrim((string) config('app.url'), '/').'/webhooks/whatsapp';
     }
 
-    /** Meta only accepts an https callback override. */
+    /** Meta only accepts an https callback override, and verifies it with a token our handshake accepts. */
     public static function canOverrideCallback(): bool
     {
-        return str_starts_with(self::callbackUrl(), 'https://') && filled(config('crm.meta.verify_token'));
+        return str_starts_with(self::callbackUrl(), 'https://') && VerifyToken::usable();
     }
 
     /**

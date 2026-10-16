@@ -3,6 +3,7 @@
 namespace App\Legal\Jobs;
 
 use App\Channels\Adapters\MetaGraphClient;
+use App\Inbox\UserNotifier;
 use App\Legal\PersonalDataEraser;
 use App\Models\Conversation;
 use App\Models\CustomerIdentity;
@@ -24,8 +25,11 @@ use Illuminate\Support\Facades\Log;
  * CRM's copy of their orders / addresses. Other customers are never touched.
  *
  * Meta sends an APP-scoped user id while identities hold PAGE-scoped ids (audit A8):
- * a direct match is tried first, then Meta's ids_for_pages mapping. When Meta cannot
- * map the id the request waits as needs_manual_review — never a false "nothing found".
+ * a direct match is tried first, then Meta's ids_for_pages mapping. Meta answering
+ * with no page ids means the person never wrote to our pages (not_found); when Meta
+ * cannot answer at all the request waits as needs_manual_review — never a false
+ * "nothing found" — and active admins get a bell notification
+ * (`php artisan legal:deletion-requests` lists what is open).
  * The row deletion itself is shared with crm:prune-retention (PersonalDataEraser).
  *
  * Logs counts only — never names, ids or message text.
@@ -57,9 +61,14 @@ class DeleteMetaUserData implements ShouldQueue
         if ($customerIds === []) {
             $pageIds = $graph->idsForPages($request->external_user_id);
 
-            if ($pageIds === null || $pageIds === []) {
+            if ($pageIds === null) {
                 $request->forceFill(['status' => DataDeletionRequest::STATUS_NEEDS_REVIEW])->save();
                 Log::warning('crm.data_deletion.needs_manual_review', ['request_id' => $request->id]);
+                // The confirmation code only: the platform id stays off the bell.
+                rescue(fn () => app(UserNotifier::class)->notifyAdmins('legal.deletion_review', [
+                    'request_id' => $request->id,
+                    'code' => $request->confirmation_code,
+                ]), report: true);
 
                 return;
             }

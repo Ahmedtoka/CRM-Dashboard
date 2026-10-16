@@ -665,6 +665,7 @@ export interface AppNotification {
         | 'conversation.handover_urgent'
         | 'note.mention'
         | 'channel.problem'
+        | 'legal.deletion_review'
         | 'queue.assigned'
         | 'queue.escalation_waiting'
         | 'queue.mass_offline'

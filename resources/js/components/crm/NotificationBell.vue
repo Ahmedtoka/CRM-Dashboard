@@ -113,19 +113,27 @@ function itemText(n: AppNotification): string {
         return t('notifications.ads_token_expiring_item', { name: String(n.data.connection ?? ''), days: Number(n.data.days ?? 0) });
     }
 
+    if (n.type === 'legal.deletion_review') {
+        return t('notifications.legal_deletion_review_item', { code: String(n.data.code ?? '') });
+    }
+
     if (n.type === 'channel.problem') {
         const title = t('notifications.channel_problem_item', { name: String(n.data.name ?? '') });
         // The health check writes the notification from the scheduler, so its `excerpt` is
         // frozen in the server's default language; the `codes` beside it are not.
         const codes = Array.isArray(n.data.codes) ? (n.data.codes as string[]) : [];
-        const detail = codes.length ? codes.map((code) => t(`notifications.channel_problem_codes.${code}`)).join(' · ') : String(n.data.excerpt ?? '');
+        const detail = codes.length
+            ? codes.map((code) => t(`notifications.channel_problem_codes.${code}`)).join(' · ')
+            : String(n.data.excerpt ?? '');
 
         return detail ? `${title}: ${detail}` : title;
     }
 
     const excerpt = String(n.data.excerpt ?? '');
 
-    return excerpt ? `${t('notifications.mention_item', { name: String(n.data.by ?? '') })}: ${excerpt}` : t('notifications.mention_item', { name: String(n.data.by ?? '') });
+    return excerpt
+        ? `${t('notifications.mention_item', { name: String(n.data.by ?? '') })}: ${excerpt}`
+        : t('notifications.mention_item', { name: String(n.data.by ?? '') });
 }
 
 function open(n: AppNotification): void {
@@ -158,6 +166,11 @@ function open(n: AppNotification): void {
         router.visit('/settings/integrations');
         return;
     }
+    if (n.type === 'legal.deletion_review') {
+        // The public status page (Blade, not Inertia); the platform id is on `php artisan legal:deletion-requests`.
+        window.open(`/data-deletion?code=${encodeURIComponent(String(n.data.code ?? ''))}#status`, '_blank', 'noopener');
+        return;
+    }
     if (n.type === 'queue.mass_offline' || n.type === 'queue.member_not_arrived' || n.type === 'queue.break_overrun') {
         router.visit('/board');
         return;
@@ -171,7 +184,10 @@ const desktopEnabled = computed(() => notifications.permission.value === 'grante
 
 <template>
     <DropdownMenu>
-        <DropdownMenuTrigger class="relative flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted" :aria-label="t('notifications.title')">
+        <DropdownMenuTrigger
+            class="relative flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+            :aria-label="t('notifications.title')"
+        >
             <Bell class="size-5" aria-hidden="true" />
             <span
                 v-if="notifications.unreadNotifications.value > 0"
@@ -194,7 +210,9 @@ const desktopEnabled = computed(() => notifications.permission.value === 'grante
             </div>
             <DropdownMenuSeparator />
             <div class="max-h-80 overflow-y-auto">
-                <p v-if="!notifications.items.value.length" class="px-2 py-4 text-center text-xs text-muted-foreground">{{ t('notifications.empty') }}</p>
+                <p v-if="!notifications.items.value.length" class="px-2 py-4 text-center text-xs text-muted-foreground">
+                    {{ t('notifications.empty') }}
+                </p>
                 <button
                     v-for="n in notifications.items.value"
                     :key="n.id"
@@ -234,7 +252,9 @@ const desktopEnabled = computed(() => notifications.permission.value === 'grante
                 >
                     {{ t('notifications.enable_desktop') }}
                 </button>
-                <p v-else-if="notifications.permission.value === 'denied'" class="text-2xs text-muted-foreground">{{ t('notifications.desktop_denied') }}</p>
+                <p v-else-if="notifications.permission.value === 'denied'" class="text-2xs text-muted-foreground">
+                    {{ t('notifications.desktop_denied') }}
+                </p>
             </div>
             <DropdownMenuSeparator />
             <Link href="/settings/notifications" class="block px-2 py-1.5 text-xs text-primary hover:underline">{{ t('notifications.title') }}</Link>
