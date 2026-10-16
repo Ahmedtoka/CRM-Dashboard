@@ -179,6 +179,8 @@ it('prints no amount for the shared mixed currency and carries the new strings i
 
     foreach (['en', 'ar'] as $lang) {
         $ts = file_get_contents(resource_path("js/i18n/{$lang}.ts"));
-        expect($ts)->toContain('foreign_currency_note:')->and($ts)->toMatch('/\bunverified: [^\n]*\{names\}/')->and($ts)->toContain('mixed_currencies:');
+        expect($ts)->toContain('foreign_currency_note:')->and($ts)->toMatch('/\bunverified: [^\n]*\{names\}/')
+            // The mixed-currency line the UI shows (Today's ads card); the old overview page's string is gone.
+            ->and($ts)->toContain('ads_mixed:');
     }
 });
