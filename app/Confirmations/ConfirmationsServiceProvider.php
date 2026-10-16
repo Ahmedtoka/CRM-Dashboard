@@ -6,7 +6,10 @@ use App\Confirmations\Contracts\ConfirmationSender;
 use App\Confirmations\Contracts\ShopifyOrderTagger;
 use App\Confirmations\Shopify\GraphqlOrderTagger;
 use App\Confirmations\WhatsApp\ConfirmationMessageWatcher;
+use App\Confirmations\WhatsApp\ConfirmationReplyHandler;
 use App\Confirmations\WhatsApp\WhatsAppConfirmationSender;
+use App\Inbox\InboundInterceptors;
+use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Support\ServiceProvider;
 
@@ -39,6 +42,11 @@ class ConfirmationsServiceProvider extends ServiceProvider
     private function bootWhatsApp(): void
     {
         Message::updated(fn (Message $m) => app(ConfirmationMessageWatcher::class)->updated($m));
+
+        // Button taps, the edit text and typed «تمام» / «الغي» are answered before the bot sees them.
+        $this->app->make(InboundInterceptors::class)->register(
+            fn (Message $m, Conversation $c) => $this->app->make(ConfirmationReplyHandler::class)->handle($m, $c),
+        );
     }
 
     /** Slice W3: tags, cases, notifications, sweep schedule. */

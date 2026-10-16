@@ -142,9 +142,13 @@ class InboxIngestor
         $message->setRelation('conversation', $conversation);
         $message->load('mediaAttachments');
 
+        // A handler that takes this message (an order-confirmation button tap, 2026-10-16) answers it
+        // instead of the bot; it runs for a settled message too («تمام» may be the confirm answer).
+        $intercepted = ! $message->is_spam && app(InboundInterceptors::class)->handle($message, $conversation);
+
         // Queue the bot before broadcasting so a realtime outage can't silence it. A settled
         // message (spec 2026-09-30: a rating answer, a thanks after the close) never reaches the bot.
-        if (! $settled) {
+        if (! $settled && ! $intercepted) {
             $this->maybeRunBot($message, $conversation);
         }
 
