@@ -11,6 +11,12 @@ beforeEach(function () {
     $this->token = $this->user->createToken('pixel', ['mobile'], now()->addDays(30));
 });
 
+/** A plausible FCM registration token. */
+function mbFcm(string $seed): string
+{
+    return substr(hash('sha256', $seed), 0, 22).':APA91b'.str_repeat(hash('sha256', $seed.'x'), 2);
+}
+
 function mbAs(string $plain)
 {
     app('auth')->forgetGuards();
@@ -20,18 +26,18 @@ function mbAs(string $plain)
 
 it('registers a device bound to the current token, then updates it in place', function () {
     $res = mbAs($this->token->plainTextToken)->postJson('/api/v1/devices', [
-        'token' => 'fcm-abc', 'platform' => 'android', 'app_version' => '1.0.0', 'locale' => 'ar',
+        'token' => mbFcm('abc'), 'platform' => 'android', 'app_version' => '1.0.0', 'locale' => 'ar',
     ])->assertCreated()->assertJsonStructure(['data' => ['id', 'platform', 'app_version', 'last_registered_at']]);
 
     $device = DeviceToken::find($res->json('data.id'));
     expect($device->user_id)->toBe($this->user->id)
         ->and($device->personal_access_token_id)->toBe($this->token->accessToken->id)
-        ->and($device->token_hash)->toBe(hash('sha256', 'fcm-abc'))
+        ->and($device->token_hash)->toBe(hash('sha256', mbFcm('abc')))
         ->and($res->json())->not->toHaveKey('data.token');
 
     $device->forceFill(['disabled_at' => now(), 'failure_count' => 4])->save();
 
-    mbAs($this->token->plainTextToken)->postJson('/api/v1/devices', ['token' => 'fcm-abc', 'platform' => 'android', 'app_version' => '1.1.0'])
+    mbAs($this->token->plainTextToken)->postJson('/api/v1/devices', ['token' => mbFcm('abc'), 'platform' => 'android', 'app_version' => '1.1.0'])
         ->assertOk()->assertJsonPath('data.id', $device->id)->assertJsonPath('data.app_version', '1.1.0');
 
     expect(DeviceToken::count())->toBe(1)
@@ -41,9 +47,9 @@ it('registers a device bound to the current token, then updates it in place', fu
 
 it('rebinds a token registered by another user or another login to the caller', function () {
     $other = User::factory()->create();
-    $row = DeviceToken::factory()->create(['user_id' => $other->id, 'token' => 'shared-phone', 'token_hash' => hash('sha256', 'shared-phone')]);
+    $row = DeviceToken::factory()->create(['user_id' => $other->id, 'token' => mbFcm('shared'), 'token_hash' => hash('sha256', mbFcm('shared'))]);
 
-    mbAs($this->token->plainTextToken)->postJson('/api/v1/devices', ['token' => 'shared-phone', 'platform' => 'android'])->assertOk();
+    mbAs($this->token->plainTextToken)->postJson('/api/v1/devices', ['token' => mbFcm('shared'), 'platform' => 'android'])->assertOk();
 
     expect($row->fresh()->user_id)->toBe($this->user->id)
         ->and($row->fresh()->personal_access_token_id)->toBe($this->token->accessToken->id);
@@ -107,4 +113,37 @@ it('sends the test push from the CLI', function () {
     $this->artisan('crm:push-test', ['user' => 'nobody@example.test'])->assertFailed();
 
     expect(app(FakePushSender::class)->sent)->toHaveCount(2);
+});
+
+it('refuses a token that does not look like an FCM token', function (string $token) {
+    mbAs($this->token->plainTextToken)->postJson('/api/v1/devices', ['token' => $token, 'platform' => 'android'])
+        ->assertUnprocessable()->assertJsonValidationErrors('token');
+})->with(['too short' => ['abc'], 'spaces' => [str_repeat('a b', 20)], 'markup' => [str_repeat('<x>', 20)]]);
+
+it('keeps at most 10 devices per user, dropping the least recently registered', function () {
+    $old = DeviceToken::factory()->create(['user_id' => $this->user->id, 'last_registered_at' => now()->subDays(20)]);
+    DeviceToken::factory()->count(9)->create(['user_id' => $this->user->id, 'last_registered_at' => now()->subDay()]);
+    $someoneElse = DeviceToken::factory()->create(['last_registered_at' => now()->subYear()]);
+
+    mbAs($this->token->plainTextToken)->postJson('/api/v1/devices', ['token' => mbFcm('new'), 'platform' => 'android'])->assertCreated();
+
+    expect(DeviceToken::where('user_id', $this->user->id)->count())->toBe(10)
+        ->and(DeviceToken::find($old->id))->toBeNull()
+        ->and(DeviceToken::find($someoneElse->id))->not->toBeNull();
+});
+
+it('turns a lost insert race on the same token into an update instead of a 500', function () {
+    $token = mbFcm('race');
+    $raced = false;
+    DeviceToken::creating(function (DeviceToken $d) use (&$raced, $token) {
+        if (! $raced && $d->token_hash === hash('sha256', $token)) {
+            $raced = true;
+            // The concurrent request's row lands first.
+            DeviceToken::withoutEvents(fn () => DeviceToken::factory()->create(['user_id' => $this->user->id, 'token' => $token, 'token_hash' => hash('sha256', $token)]));
+        }
+    });
+
+    mbAs($this->token->plainTextToken)->postJson('/api/v1/devices', ['token' => $token, 'platform' => 'android'])->assertOk();
+
+    expect(DeviceToken::where('token_hash', hash('sha256', $token))->count())->toBe(1);
 });
