@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CaseDrawer from '@/components/crm/cases/CaseDrawer.vue';
+import CaseSlaChip from '@/components/crm/cases/CaseSlaChip.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import DateRangePicker from '@/components/crm/DateRangePicker.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -20,7 +21,7 @@ import { ClipboardList } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
 
 const TYPES: CaseType[] = ['return', 'exchange', 'return_exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
-const TABS: Array<CaseStatus | 'all'> = ['all', 'new', 'in_progress', 'closed'];
+const TABS: Array<CaseStatus | 'all'> = ['all', 'new', 'in_progress', 'resolved', 'closed'];
 
 // The server still shares `filters`; the page reads the same values from the URL (useUrlFilters).
 defineOptions({ inheritAttrs: false });
@@ -203,7 +204,10 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                         <StatusChip :label="t(`cases.priority.${row.priority}`)" :tone="casePriorityTone[row.priority]" />
                     </template>
                     <template #cell-status="{ row }">
-                        <StatusChip :label="t(`cases.tabs.${row.status}`)" :tone="caseStatusTone[row.status]" />
+                        <span class="flex flex-wrap items-center gap-1">
+                            <StatusChip :label="t(`cases.tabs.${row.status}`)" :tone="caseStatusTone[row.status]" />
+                            <CaseSlaChip :sla="row.sla" />
+                        </span>
                     </template>
                     <template #cell-date="{ row }"><span class="whitespace-nowrap tabular-nums text-muted-foreground">{{ formatDateTime(row.created_at, locale) }}</span></template>
                 </DataTable>

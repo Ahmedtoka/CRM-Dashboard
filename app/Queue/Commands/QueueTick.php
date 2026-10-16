@@ -4,6 +4,7 @@ namespace App\Queue\Commands;
 
 use App\Models\QueueDecision;
 use App\Models\QueueSetting;
+use App\Queue\Cases\CaseSla;
 use App\Queue\QueueRouter;
 use App\Queue\ShiftService;
 use App\Queue\WaitEstimator;
@@ -83,6 +84,7 @@ TXT;
                 'silence' => fn () => $windows->tickSilence($settings),
                 'replies' => fn () => $windows->tickReplies($settings),
                 'confirm' => fn () => $windows->confirmDue($settings),
+                'cases' => fn () => app(CaseSla::class)->sweep(),
                 'router' => fn () => $router->run('التيك الدوري'),
                 'waiting' => fn () => $estimator->tickLounge($settings),
                 'prune' => fn () => $this->pruneDecisions(),
