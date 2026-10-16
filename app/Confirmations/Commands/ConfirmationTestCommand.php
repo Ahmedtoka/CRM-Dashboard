@@ -4,38 +4,37 @@ namespace App\Confirmations\Commands;
 
 use App\Confirmations\ConfirmationSettings;
 use App\Confirmations\Contracts\ConfirmationSender;
-use App\Enums\OrderConfirmationStatus;
+use App\Confirmations\EgyptPhone;
+use App\Confirmations\OrderConfirmations;
 use App\Models\Order;
-use App\Models\OrderConfirmation;
-use App\Shopify\Customers\PhoneNormalizer;
 use Illuminate\Console\Command;
+use Throwable;
 
 /**
- * Sends one order-confirmation template for a real order to a phone the owner chooses,
- * through the same ConfirmationSender the feature uses, to see it on a real phone.
- *
- * By default the buttons are inert: after the send the row is parked as skipped
- * (`test_send`), so a tap never tags the real order in Shopify or opens a case.
- * --live-buttons keeps the row live (use it with a test order).
+ * Sends the order-confirmation template of one order to a phone the owner chooses, to see it
+ * on a real phone. It goes through the sender's rowless test path (sendTest): no
+ * order_confirmations row is made or changed, so the order's real confirmation is never
+ * blocked, and a tap on the test message's buttons never tags the order in Shopify.
  */
 class ConfirmationTestCommand extends Command
 {
-    use ResolvesWhatsAppAccount;
-
-    public const SKIP_REASON = 'test_send';
-
     protected $signature = 'whatsapp:confirmation-test
         {phone : The phone that receives the test (01xxxxxxxxx or +20...)}
-        {--order= : Order id or order number (default: the latest order)}
-        {--account= : ChannelAccount id of the WhatsApp number (default: the connected live one)}
-        {--live-buttons : Keep the buttons working: a tap tags the order in Shopify and opens a case}
+        {--order= : Order id or order number (required)}
         {--force : Send even while the feature is turned off; with --no-interaction, skip the question}';
 
     protected $description = 'Send one WhatsApp order-confirmation test message to a phone';
 
-    public function handle(ConfirmationSettings $settings, ConfirmationSender $sender): int
+    public function handle(ConfirmationSettings $settings, ConfirmationSender $sender, OrderConfirmations $confirmations): int
     {
         $force = (bool) $this->option('force');
+        $wanted = trim((string) $this->option('order'));
+
+        if ($wanted === '') {
+            $this->error('--order is required: pick the order whose message you want to see (its id or its number).');
+
+            return self::FAILURE;
+        }
 
         if (! $settings->enabled() && ! $force) {
             $this->error('Order confirmation is turned off in settings. Pass --force to send a test anyway.');
@@ -43,49 +42,44 @@ class ConfirmationTestCommand extends Command
             return self::FAILURE;
         }
 
-        $phone = PhoneNormalizer::toE164((string) $this->argument('phone'));
+        $phone = EgyptPhone::toE164((string) $this->argument('phone'));
 
-        // The feature messages Egyptian mobiles only (the sender's own rule), so the test does too.
-        if (! PhoneNormalizer::isEgyptianMobile($phone)) {
+        if ($phone === null) {
             $this->error("'{$this->argument('phone')}' is not an Egyptian mobile number (01xxxxxxxxx or +201xxxxxxxxx).");
 
             return self::FAILURE;
         }
 
-        $order = $this->order();
+        $order = $this->order($wanted);
 
         if ($order === null) {
-            $this->error('No order found'.(filled($this->option('order')) ? " for '{$this->option('order')}'." : '.'));
+            $this->error("No order found for '{$wanted}'.");
 
             return self::FAILURE;
         }
 
-        if (OrderConfirmation::query()->where('order_id', $order->id)->exists()) {
-            $this->error("Order {$order->order_number} already has a confirmation. Pick another one with --order.");
+        if (! method_exists($sender, 'sendTest')) {
+            $this->error('This build has no test send in the WhatsApp sender yet.');
 
             return self::FAILURE;
         }
 
-        $account = $this->whatsAppAccount();
+        $account = $confirmations->whatsAppAccount();
 
         if ($account === null) {
+            $this->error('No connected WhatsApp number to send from. Connect it in Settings > Integrations first.');
+
             return self::FAILURE;
         }
 
-        $live = (bool) $this->option('live-buttons');
-
         $this->table(['', ''], [
-            ['WhatsApp number', "{$account->name} (account {$account->id})"],
+            ['WhatsApp number', "{$account->name} (account {$account->id}, {$account->driver})"],
             ['Order', "{$order->order_number} (id {$order->id}), total {$order->total} {$order->currency}"],
             ['Customer on the order', (string) ($order->shipping_name ?: $order->customer?->name)],
             ['Send to', $phone],
             ['Template', $settings->template('confirm').' ('.$settings->templateLanguage().')'],
-            ['Buttons', $live ? 'LIVE' : 'inert (test only)'],
         ]);
-
-        if ($live) {
-            $this->warn('Live buttons: a tap will tag this order in Shopify (wa-confirmed / wa-cancel-request / wa-edit-request) and may open a case.');
-        }
+        $this->line('Test only: nothing is recorded on the order, and the buttons in this message do nothing.');
 
         // Without a terminal only --force sends; otherwise the owner says yes first.
         $approved = $this->input->isInteractive()
@@ -98,28 +92,16 @@ class ConfirmationTestCommand extends Command
             return self::SUCCESS;
         }
 
-        $confirmation = OrderConfirmation::create([
-            'order_id' => $order->id,
-            'channel_account_id' => $account->id,
-            'customer_id' => $order->customer_id,
-            'phone_e164' => $phone,
-            'status' => OrderConfirmationStatus::Scheduled,
-            'send_at' => now(),
-        ]);
-
-        $sender->send($confirmation, 'confirm');
-        $confirmation->refresh();
-
-        if ($confirmation->status !== OrderConfirmationStatus::Sent) {
-            $this->error('Not sent: '.($confirmation->last_error ?: $confirmation->status->value));
-            // Nothing reached the phone: drop the row so the order and the counters stay clean.
-            $confirmation->delete();
-
-            return self::FAILURE;
+        try {
+            $error = $sender->sendTest($order, $phone);
+        } catch (Throwable $e) {
+            $error = $e->getMessage();
         }
 
-        if (! $live) {
-            $confirmation->forceFill(['status' => OrderConfirmationStatus::Skipped, 'skip_reason' => self::SKIP_REASON])->save();
+        if ($error !== null) {
+            $this->error('Not sent: '.$error);
+
+            return self::FAILURE;
         }
 
         $this->info('Sent. Check WhatsApp on the phone above.');
@@ -127,17 +109,11 @@ class ConfirmationTestCommand extends Command
         return self::SUCCESS;
     }
 
-    private function order(): ?Order
+    private function order(string $wanted): ?Order
     {
-        $wanted = trim((string) $this->option('order'));
+        $number = ltrim($wanted, '#');
 
-        if ($wanted === '') {
-            return Order::query()->latest('id')->first();
-        }
-
-        $number = '#'.ltrim($wanted, '#');
-
-        return Order::query()->where('order_number', $number)->orWhere('order_number', ltrim($wanted, '#'))->latest('id')->first()
+        return Order::query()->whereIn('order_number', ['#'.$number, $number])->latest('id')->first()
             ?? (ctype_digit($wanted) ? Order::find((int) $wanted) : null);
     }
 }
