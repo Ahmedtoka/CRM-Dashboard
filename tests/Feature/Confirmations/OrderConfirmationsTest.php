@@ -161,8 +161,37 @@ it('never uses a fake WhatsApp account in production', function () {
     }
 });
 
-it('prefers a live WhatsApp account over a fake one', function () {
+it('never uses a live WhatsApp account outside production by default', function () {
+    // A local copy restored from production keeps the real WhatsApp number: a local worker must not message customers.
+    $this->whatsapp->update(['status' => 'disconnected']);
     $live = ChannelAccount::factory()->create(['platform' => Platform::WhatsApp, 'driver' => 'live', 'status' => 'connected']);
 
-    expect(app(OrderConfirmations::class)->onOrderCreated(ocStoreOrder())->channel_account_id)->toBe($live->id);
+    expect(ocSkipReason(ocStoreOrder()))->toBe(SkipReason::NoWhatsAppChannel->value)
+        ->and(OrderConfirmations::accountUsable($live))->toBeFalse();
 });
+
+it('keeps using the fake account outside production while a live one is on file', function () {
+    ChannelAccount::factory()->create(['platform' => Platform::WhatsApp, 'driver' => 'live', 'status' => 'connected']);
+
+    expect(app(OrderConfirmations::class)->onOrderCreated(ocStoreOrder())->channel_account_id)->toBe($this->whatsapp->id);
+});
+
+it('prefers a live WhatsApp account outside production only when explicitly allowed', function () {
+    config(['crm.confirmations.allow_live_outside_production' => true]);
+    $live = ChannelAccount::factory()->create(['platform' => Platform::WhatsApp, 'driver' => 'live', 'status' => 'connected']);
+
+    expect(app(OrderConfirmations::class)->onOrderCreated(ocStoreOrder())->channel_account_id)->toBe($live->id)
+        ->and(OrderConfirmations::accountUsable($live))->toBeTrue();
+});
+
+it('skips a Shopify POS order', function () {
+    $c = app(OrderConfirmations::class)->onOrderCreated(ocStoreOrder(), false, 'pos');
+
+    expect($c->status)->toBe(OrderConfirmationStatus::Skipped)->and($c->skip_reason)->toBe(SkipReason::PosOrder->value);
+    Queue::assertNotPushed(SendOrderConfirmation::class);
+});
+
+it('confirms online-store, draft and app orders', function (?string $source) {
+    expect(app(OrderConfirmations::class)->onOrderCreated(ocStoreOrder(), false, $source)->status)
+        ->toBe(OrderConfirmationStatus::Scheduled);
+})->with(['web', 'shopify_draft_order', 'iphone', null]);

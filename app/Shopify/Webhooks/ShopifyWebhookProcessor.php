@@ -167,7 +167,11 @@ final class ShopifyWebhookProcessor
         $orderId = $shopifyId === null ? null : Order::where('shopify_order_id', $shopifyId)->value('id');
 
         if ($orderId !== null) {
-            rescue(fn () => ShopifyOrderCreated::dispatch((int) $orderId, (bool) ($payload['test'] ?? false)), report: true);
+            rescue(fn () => ShopifyOrderCreated::dispatch(
+                (int) $orderId,
+                (bool) ($payload['test'] ?? false),
+                Payload::string($payload['source_name'] ?? null),
+            ), report: true);
         }
     }
 

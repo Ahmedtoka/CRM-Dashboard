@@ -17,4 +17,6 @@ enum SkipReason: string
     case ChatOrder = 'chat_order';
     case NoWhatsAppChannel = 'no_whatsapp_channel';
     case Duplicate = 'duplicate';
+    case PosOrder = 'pos_order';
+    case TooLate = 'too_late';
 }

@@ -22,7 +22,7 @@ final class ScheduleOrderConfirmation implements ShouldQueue
         $order = Order::withLoadTest()->find($event->orderId);
 
         if ($order !== null) {
-            $this->confirmations->onOrderCreated($order, $event->test);
+            $this->confirmations->onOrderCreated($order, $event->test, $event->sourceName);
         }
     }
 }
