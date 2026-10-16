@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\DB;
  * Break-even ROAS per account (D12, R 1.2). Inputs come from RuleSettings (account, else global); refusal rate and AOV are
  * measured over the last 60 days from orders.shipment_status / delivered_at and net revenue (account orders first, then
  * the whole store, then an assumed 20 % refusal). F = 2.5 with is_default=true until a margin is entered.
+ * F is a ROAS on PLACED-order revenue (returned orders included): max CPA already charges refusals per placed order,
+ * so the rules compare F against AlertData::placedOrders, never realOrders (A5: that would count refusals twice).
  */
 final class BreakEven
 {
