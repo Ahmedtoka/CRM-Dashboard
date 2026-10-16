@@ -100,6 +100,9 @@ final class ChatFunnel
         $orders = DB::table('orders as o')
             ->whereNotIn('o.status', AdsQuery::NOT_REAL_STATUSES)->where('o.is_load_test', false)
             ->whereRaw("{$at} <= ?", [$t])
+            // Lower bound (MORNING-REPORT 6-a): every counted order is after a touch, and every touch is in the range,
+            // so nothing before $f can count; written without COALESCE so the placed_at index can bound the scan.
+            ->where(fn ($w) => $w->where('o.placed_at', '>', $f)->orWhere(fn ($n) => $n->whereNull('o.placed_at')->where('o.created_at', '>', $f)))
             ->where(fn ($w) => $w->whereExists($after('o.conversation_id = c.id'))
                 ->orWhereExists($after('c.customer_id IS NOT NULL AND o.customer_id = c.customer_id')))
             ->selectRaw('COUNT(*) as orders')
