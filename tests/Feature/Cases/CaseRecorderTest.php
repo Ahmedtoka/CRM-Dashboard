@@ -171,6 +171,8 @@ it('records the case from the complaint flow and sends the closing script with t
 function crTrackLate(string $phone): ?string
 {
     $c = Conversation::firstOrFail();
+    // Tracked by her chat's own mobile (audit A4): a number she only typed is not proof.
+    $c->customer->update(['phone' => $phone]);
     app(FlowEngine::class)->start($c, 'order_tracking');
 
     foreach ([[$phone, null], ['الأوردر اتأخر', 'step:order_tracking:status:late']] as [$text, $payload]) {

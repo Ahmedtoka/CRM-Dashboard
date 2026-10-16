@@ -1,6 +1,7 @@
 <?php
 
 use App\Bot\Flow\Orders\DeliveryEstimate;
+use App\Bot\Flow\Orders\OrderLookup;
 use App\Bot\Flow\ReplyScheduler;
 use App\Bot\Flows\ClaudeFlowAnswerInterpreter;
 use App\Bot\Flows\FakeFlowAnswerInterpreter;
@@ -134,10 +135,17 @@ function otfStart(): void
     expect(app(FlowEngine::class)->runPayload($c, 'flow:order_tracking'))->toBeTrue();
 }
 
-/** The flow started, the order found by her mobile: the status card is on screen. */
+/** Her chat's own mobile (audit A4): only that one proves the orders on it are hers. */
+function otfOwnMobile(string $phone = '01001234567'): void
+{
+    Conversation::firstOrFail()->customer->update(['phone' => $phone]);
+}
+
+/** The flow started, the order found by her own mobile: the status card is on screen. */
 function otfCard(): void
 {
     otfStart();
+    otfOwnMobile();
     otfTurn('01001234567');
     expect(otfFlow()['step'])->toBe('status');
 }
@@ -214,6 +222,7 @@ it('lists several open orders on her mobile as buttons and shows the one she tap
     $second = otfOrder(['order_number' => '2222', 'shopify_order_name' => '#2222', 'placed_at' => CarbonImmutable::parse('2026-09-18 10:00', 'Africa/Cairo')]);
     $stranger = otfOrder(['order_number' => '3333', 'shopify_order_name' => '#3333', 'shipping_phone' => '+201119998877']);
     otfStart();
+    otfOwnMobile();
 
     otfTurn('01001234567');
     expect(otfFlow()['step'])->toBe('order')
@@ -237,9 +246,28 @@ it('offers at most 13 orders as buttons', function () {
         Order::factory()->create(['order_number' => (string) (5000 + $i), 'shipping_phone' => '+201001234567', 'fulfillment_status' => null, 'placed_at' => now()->subDays($i)]);
     }
     otfStart();
+    otfOwnMobile();
 
     otfTurn('01001234567');
     expect(otfButtons())->toHaveCount(OrderStep::MAX_ORDER_BUTTONS);
+});
+
+it('reveals nothing for a mobile that is not her own chat number until she gives the order number', function () {
+    otfOrder(['order_number' => '1111', 'shopify_order_name' => '#1111'], ['tracking_url' => 'https://track.example/1111']);
+    otfOrder(['order_number' => '2222', 'shopify_order_name' => '#2222']);
+    otfStart();
+
+    otfTurn('01001234567');
+    expect(otfFlow()['step'])->toBe('order')
+        ->and(otfBot()->body)->toBe(OrderLookup::UNVERIFIED_PHONE_TEXT)
+        ->and(otfButtons())->toBe([])
+        ->and(implode("\n", otfBodies()))->not->toContain('#1111')->not->toContain('#2222')->not->toContain('سارة')->not->toContain('track.example');
+
+    // The order number, looked up together with the mobile she gave, is the proof.
+    otfTurn('1111');
+    expect(otfFlow()['step'])->toBe('status')
+        ->and(otfBot()->body)->toStartWith('أهلاً يا سارة، أوردر #1111')
+        ->and(otfBodies())->not->toContain(OrderStep::VERIFY_TEXT);
 });
 
 it('asks once more when nothing is found, then offers a person or the main menu', function () {
@@ -567,7 +595,12 @@ it('walks the tracking flow in the designer sandbox and saves nothing', function
     $start = otfSandbox(null, []);
     expect($texts($start))->toBe(TrackingFlowUpgrade::ASK_TEXT);
 
-    $card = otfSandbox($start['state'], ['text' => '01001234567']);
+    // The sandbox's throwaway customer has no mobile of its own (audit A4): the order number proves it.
+    $mobile = otfSandbox($start['state'], ['text' => '01001234567']);
+    expect($mobile['current']['step_id'])->toBe('order')
+        ->and($texts($mobile))->toBe(OrderLookup::UNVERIFIED_PHONE_TEXT);
+
+    $card = otfSandbox($mobile['state'], ['text' => '1047']);
     expect($card['current']['step_id'])->toBe('status')
         ->and($texts($card))->toStartWith('أهلاً يا سارة، أوردر #1047 (اتطلب يوم الثلاثاء 1/9 — 3 قطع)')
         ->and(array_column($card['messages'][0]['buttons'], 'title'))->toBe(['تمام شكرًا', 'الأوردر اتأخر', 'عايزة ألغي/أعدل', 'كلم موظف'])

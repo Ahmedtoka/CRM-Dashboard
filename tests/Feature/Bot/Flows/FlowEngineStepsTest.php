@@ -127,6 +127,8 @@ it('lists several open orders found by phone and waits', function () {
     Order::factory()->create(['shipping_phone' => '+201001234567', 'order_number' => '1111']);
     Order::factory()->create(['shipping_phone' => '+201001234567', 'order_number' => '2222']);
     $c = stepsSay('اهلا');
+    // Her chat's own mobile (audit A4): only that one lists the orders on it.
+    $c->customer->update(['phone' => '01001234567']);
     app(FlowEngine::class)->start($c, 'order_tracking');
 
     stepsTurn('01001234567');
