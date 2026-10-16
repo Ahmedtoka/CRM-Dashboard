@@ -1,9 +1,13 @@
 <?php
 
+use App\Channels\Adapters\FakeChannelAdapter;
 use App\Confirmations\ConfirmationSettings;
 use App\Confirmations\Contracts\ConfirmationSender;
+use App\Confirmations\WhatsApp\TemplateParams;
+use App\Confirmations\WhatsApp\WhatsAppConfirmationSender;
 use App\Enums\Platform;
 use App\Models\ChannelAccount;
+use App\Models\CustomerIdentity;
 use App\Models\Order;
 use App\Models\OrderConfirmation;
 
@@ -176,3 +180,24 @@ it('says so when the sender has no test path', function () {
 
     expect(OrderConfirmation::count())->toBe(0);
 });
+
+it('sends the real template to the test phone on the fake channel, recording nothing on the order', function () {
+    app()->forgetInstance(ConfirmationSender::class);
+    FakeChannelAdapter::reset();
+    $order = Order::factory()->create(['order_number' => '#3001']);
+    $customerId = $order->customer_id;
+
+    $this->artisan('whatsapp:confirmation-test', ['phone' => '01001234567', '--order' => $order->id, '--force' => true])
+        ->expectsConfirmation('Send this test message now?', 'yes')
+        ->expectsOutputToContain('Sent.')
+        ->assertSuccessful();
+
+    $sent = FakeChannelAdapter::sent();
+    expect($sent)->toHaveCount(1)
+        ->and($sent[0]['to'])->toBe('201001234567')
+        ->and($sent[0]['options']['template']['name'])->toBe('order_confirm_ar')
+        ->and($sent[0]['options']['template']['params'])->toHaveCount(count(TemplateParams::BODY))
+        ->and(OrderConfirmation::count())->toBe(0)
+        // The test phone never joins the order's customer.
+        ->and(CustomerIdentity::where('external_id', '201001234567')->value('customer_id'))->not->toBe($customerId);
+})->skip(fn () => ! method_exists(WhatsAppConfirmationSender::class, 'sendTest'), 'waiting for W2 sendTest');
