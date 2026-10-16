@@ -24,8 +24,9 @@ class AttachmentResource extends JsonResource
             'duration_ms' => $this->duration_ms,
             'status' => $this->status?->value,
             'error' => StoredMessage::error($this->error),
-            'url' => $this->isStored() ? MediaUrls::show($this->resource) : null,
-            'thumb_url' => MediaUrls::thumb($this->resource),
+            // Web: relative session routes. api/*: absolute signed temporary URLs (mobile contract, "Media").
+            'url' => MediaUrls::forRequest($this->resource),
+            'thumb_url' => MediaUrls::thumbForRequest($this->resource),
         ];
     }
 }
