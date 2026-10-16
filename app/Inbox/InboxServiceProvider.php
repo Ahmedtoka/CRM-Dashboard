@@ -16,6 +16,7 @@ class InboxServiceProvider extends ServiceProvider
         $this->app->singleton(SoftLock::class);
         $this->app->singleton(InboxIngestor::class);
         $this->app->singleton(OutboundService::class);
+        $this->app->singleton(InboundInterceptors::class);
     }
 
     public function boot(): void
