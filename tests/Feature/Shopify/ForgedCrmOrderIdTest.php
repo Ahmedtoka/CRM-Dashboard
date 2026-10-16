@@ -1,13 +1,19 @@
 <?php
 
+use App\Analytics\ActivityLogger;
 use App\Commerce\Data\OrderPayload;
 use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
+use App\Enums\UserRole;
+use App\Events\UserNotified;
+use App\Models\ActivityLog;
 use App\Models\Order;
+use App\Models\User;
 use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Sync\Mappers\MapResult;
 use App\Shopify\Sync\Mappers\OrderMapper;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -149,12 +155,62 @@ it('confirms within a tiny rounding tolerance', function () {
     expect($order->fresh()->status)->toBe(OrderStatus::Confirmed);
 });
 
-it('does not let the draft conversion webhook confirm an underpaid draft either', function () {
+it('only links on draft completion; the orders/paid webhook alone confirms', function () {
+    // A draft completed with a manual/COD method converts to an order that is
+    // still pending: the draft webhook must not confirm it.
     $order = unpaidPaymentLink();
 
-    forgedPost($this, 'draft-orders-update', ['id' => 800123, 'order_id' => 9555, 'status' => 'completed', 'total_price' => '100.00'])->assertOk();
+    forgedPost($this, 'draft-orders-update', ['id' => 800123, 'order_id' => 9555, 'status' => 'completed', 'total_price' => '960.00'])->assertOk();
 
-    expect($order->fresh()->status)->toBe(OrderStatus::AwaitingPayment);
+    $fresh = $order->fresh();
+    expect($fresh->status)->toBe(OrderStatus::AwaitingPayment)
+        ->and($fresh->paid_at)->toBeNull()
+        ->and($fresh->shopify_order_id)->toBe('9555');
+
+    forgedPost($this, 'orders-paid', storefrontPayload($order, ['note_attributes' => []]))->assertOk();
+
+    expect($order->fresh()->status)->toBe(OrderStatus::Confirmed);
+});
+
+it('records a staff-visible activity and alerts supervisors when the paid total falls short', function () {
+    Event::fake([UserNotified::class]);
+    $supervisor = User::factory()->create(['role' => UserRole::Supervisor, 'is_active' => true]);
+    $order = unpaidPaymentLink();
+
+    forgedPost($this, 'orders-paid', storefrontPayload($order, [
+        'total_price' => '100.00',
+        'current_total_price' => '100.00',
+        'tags' => OrderPayload::tagFor($order->id),
+    ]))->assertOk();
+
+    $log = ActivityLog::where('action', ActivityLogger::ORDER_PAID_IGNORED)->where('subject_id', $order->id)->first();
+    expect($log)->not->toBeNull()
+        ->and($log->meta['reason'])->toBe('underpaid')
+        ->and((float) $log->meta['paid_total'])->toBe(100.0);
+
+    Event::assertDispatched(UserNotified::class, fn (UserNotified $e) => $e->userId === $supervisor->id && $e->type === 'order.paid_ignored');
+
+    // The same shortfall on a later orders/updated is not raised again.
+    forgedPost($this, 'orders-updated', storefrontPayload($order, [
+        'total_price' => '100.00',
+        'current_total_price' => '100.00',
+        'updated_at' => now()->addMinute()->toIso8601String(),
+        'tags' => OrderPayload::tagFor($order->id),
+    ]))->assertOk();
+
+    expect(ActivityLog::where('action', ActivityLogger::ORDER_PAID_IGNORED)->where('subject_id', $order->id)->count())->toBe(1);
+});
+
+it('does not confirm when the paid payload carries no total', function () {
+    $order = unpaidPaymentLink();
+    $payload = storefrontPayload($order, ['tags' => OrderPayload::tagFor($order->id)]);
+    unset($payload['total_price'], $payload['current_total_price']);
+
+    forgedPost($this, 'orders-paid', $payload)->assertOk();
+
+    $log = ActivityLog::where('action', ActivityLogger::ORDER_PAID_IGNORED)->where('subject_id', $order->id)->first();
+    expect($order->fresh()->status)->toBe(OrderStatus::AwaitingPayment)
+        ->and($log?->meta['reason'])->toBe('no_total');
 });
 
 it('OrderMapper ignores a crm_order_id on an unlinked payment-link order without proof', function () {

@@ -360,12 +360,13 @@ class ShopifyCommerceProvider implements CommerceProvider
             'draft_orders/update' => new OrderStatusUpdate(
                 shopifyOrderId: isset($payload['order_id']) ? (string) $payload['order_id'] : null,
                 draftOrderId: isset($payload['id']) ? (string) $payload['id'] : null,
-                financialStatus: ! empty($payload['order_id']) ? 'paid' : null,
+                // A completed draft says nothing about payment (it may have been
+                // completed as pending/COD): it only links the order (audit A1).
+                financialStatus: null,
                 fulfillmentStatus: null,
                 cancelled: false,
                 orderNumber: $payload['name'] ?? null,
                 crmOrderId: $this->crmOrderId($payload),
-                paidTotal: is_numeric($payload['total_price'] ?? null) ? (float) $payload['total_price'] : null,
             ),
             default => null,
         };
