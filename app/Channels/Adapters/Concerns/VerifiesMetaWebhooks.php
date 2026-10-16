@@ -2,6 +2,7 @@
 
 namespace App\Channels\Adapters\Concerns;
 
+use App\Channels\VerifyToken;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -20,7 +21,7 @@ trait VerifiesMetaWebhooks
         $expected = (string) config('crm.meta.verify_token');
 
         if ($mode === 'subscribe'
-            && $this->verifyTokenUsable($expected)
+            && VerifyToken::usable()
             && is_string($token)
             && hash_equals($expected, $token)
             && is_string($challenge)
@@ -33,16 +34,6 @@ trait VerifiesMetaWebhooks
         }
 
         return response('Forbidden', 403);
-    }
-
-    /** No token, or the old published default in production, verifies nobody. */
-    private function verifyTokenUsable(string $token): bool
-    {
-        if ($token === '') {
-            return false;
-        }
-
-        return ! ($token === 'crm-verify' && app()->environment('production'));
     }
 
     public function verifySignature(Request $request): bool
