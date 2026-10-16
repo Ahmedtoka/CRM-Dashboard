@@ -40,5 +40,12 @@ class ConfirmationsServiceProvider extends ServiceProvider
     private function bootFollowUp(): void {}
 
     /** Slice W5: template tooling commands. */
-    private function bootTooling(): void {}
+    private function bootTooling(): void
+    {
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                Commands\ConfirmationTemplatesCommand::class,
+            ]);
+        }
+    }
 }
