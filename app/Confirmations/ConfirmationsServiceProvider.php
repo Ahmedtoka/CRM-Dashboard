@@ -4,6 +4,8 @@ namespace App\Confirmations;
 
 use App\Confirmations\Contracts\ConfirmationSender;
 use App\Confirmations\Contracts\ShopifyOrderTagger;
+use App\Confirmations\Events\ShopifyOrderCreated;
+use App\Confirmations\Listeners\ScheduleOrderConfirmation;
 use App\Confirmations\Shopify\GraphqlOrderTagger;
 use App\Confirmations\WhatsApp\ConfirmationMessageWatcher;
 use App\Confirmations\WhatsApp\ConfirmationReplyHandler;
@@ -41,9 +43,9 @@ class ConfirmationsServiceProvider extends ServiceProvider
     private function bootTrigger(): void
     {
         // Fully qualified on purpose: keeps the shared import block free of merge conflicts between slices.
-        \Illuminate\Support\Facades\Event::listen(
-            \App\Confirmations\Events\ShopifyOrderCreated::class,
-            \App\Confirmations\Listeners\ScheduleOrderConfirmation::class,
+        Event::listen(
+            ShopifyOrderCreated::class,
+            ScheduleOrderConfirmation::class,
         );
     }
 

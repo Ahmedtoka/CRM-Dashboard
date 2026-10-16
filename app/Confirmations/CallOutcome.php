@@ -13,16 +13,20 @@ use InvalidArgumentException;
 /**
  * A staff member records how the call to a silent customer went (spec 2026-10-16):
  * confirmed | cancelled | unreachable. Sets the row, writes the Shopify tag, logs
- * the activity and dispatches OrderConfirmationCalled. The UI slice calls this.
+ * the activity and dispatches OrderConfirmationCalled. The UI slice calls this; it has
+ * no constructor so a test can swap in a subclass.
  */
-final class CallOutcome
+class CallOutcome
 {
     public const ACTION = 'order_confirmation.called';
 
-    public function __construct(
-        private readonly TagSync $tags,
-        private readonly ActivityLogger $activity,
-    ) {}
+    /** A call outcome can be recorded from these states (the call list, plus manual calls from the page). */
+    public const FROM = [
+        OrderConfirmationStatus::NoResponse,
+        OrderConfirmationStatus::Sent,
+        OrderConfirmationStatus::EditRequested,
+        OrderConfirmationStatus::Unreachable,
+    ];
 
     public static function statusFor(string $outcome): OrderConfirmationStatus
     {
@@ -38,16 +42,26 @@ final class CallOutcome
     {
         $status = self::statusFor($outcome);
 
-        $confirmation->update([
-            'status' => $status,
-            'call_outcome' => $outcome,
-            'called_by' => $user->id,
-            'called_at' => now(),
-        ]);
+        // Guarded: of two clicks on the same row only the first one writes, tags and logs.
+        $claimed = OrderConfirmation::whereKey($confirmation->id)
+            ->whereIn('status', array_map(fn ($s) => $s->value, self::FROM))
+            ->update([
+                'status' => $status->value,
+                'call_outcome' => $outcome,
+                'called_by' => $user->id,
+                'called_at' => now(),
+                'updated_at' => now(),
+            ]);
 
-        $this->tags->push($confirmation, $status->shopifyTag());
+        if ($claimed !== 1) {
+            return $confirmation->fresh() ?? $confirmation;
+        }
 
-        rescue(fn () => $this->activity->log(ActorType::User, $user, self::ACTION, $confirmation->order, $confirmation->conversation, [
+        $confirmation->refresh();
+
+        app(TagSync::class)->request($confirmation, $status->shopifyTag());
+
+        rescue(fn () => app(ActivityLogger::class)->log(ActorType::User, $user, self::ACTION, $confirmation->order, $confirmation->conversation, [
             'confirmation_id' => $confirmation->id,
             'outcome' => $outcome,
         ]));

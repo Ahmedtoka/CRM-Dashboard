@@ -5,6 +5,7 @@ use App\Confirmations\Contracts\ConfirmationSender;
 use App\Confirmations\Events\OrderConfirmationNoResponse;
 use App\Confirmations\TagSync;
 use App\Enums\OrderConfirmationStatus;
+use App\Enums\OrderStatus;
 use App\Models\Order;
 use App\Models\OrderConfirmation;
 use App\Shopify\Client\FakeShopifyTransport;
@@ -15,6 +16,7 @@ use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
     ShopifyIntegration::create(['shop_domain' => 'levoile-test.myshopify.com', 'access_token' => 't', 'api_secret' => 's', 'status' => 'connected']);
+    app(ConfirmationSettings::class)->save(['enabled' => true]);
 });
 
 /** A sender that records every call; $stamp mimics the real sender writing reminded_at, $throw a failing one. */
@@ -106,6 +108,7 @@ it('moves silent orders to the call list with the no-response tag, without a lat
         ->and($sender->calls)->toBe([])
         ->and(OrderConfirmation::needsCall()->count())->toBe(2)
         ->and(array_column(FakeShopifyTransport::tagsAdded(), 'tags'))->toBe([['wa-no-response'], ['wa-no-response']])
+        ->and(FakeShopifyTransport::tagsRemoved()[0]['tags'])->toContain('wa-confirmed')->not->toContain('wa-no-response')
         ->and($reminded->fresh()->tag_synced_at)->not->toBeNull();
 });
 
@@ -154,6 +157,36 @@ it('queues the send job again for a scheduled row whose job got lost, at most ev
     Queue::assertPushed('App\\Confirmations\\Jobs\\SendOrderConfirmation', 1);
     Queue::assertPushed('App\\Confirmations\\Jobs\\SendOrderConfirmation', fn ($job) => $job->confirmationId === $lost->id);
     expect($justDue->fresh()->status)->toBe(OrderConfirmationStatus::Scheduled);
+});
+
+it('does not remind or move orders to the call list while the feature is off, but still writes owed tags', function () {
+    $sender = sweepSender();
+    app(ConfirmationSettings::class)->save(['enabled' => false]);
+    $due = sentHoursAgo(7);
+    $silent = sentHoursAgo(25);
+    $pending = sentHoursAgo(1, ['status' => OrderConfirmationStatus::Confirmed, 'pending_tags' => ['tags' => ['wa-confirmed'], 'attempts' => 1]]);
+
+    $this->artisan('crm:order-confirmations:sweep')->assertSuccessful();
+
+    expect($sender->calls)->toBe([])
+        ->and($due->fresh()->reminded_at)->toBeNull()
+        ->and($silent->fresh()->status)->toBe(OrderConfirmationStatus::Sent)
+        ->and($pending->fresh()->tag_synced_at)->not->toBeNull();
+});
+
+it('closes a cancelled order as skipped instead of reminding or calling', function () {
+    $sender = sweepSender();
+    $remind = sentHoursAgo(7);
+    $remind->order->update(['cancelled_at' => now()]);
+    $silent = sentHoursAgo(25);
+    $silent->order->update(['status' => OrderStatus::Cancelled]);
+
+    $this->artisan('crm:order-confirmations:sweep')->assertSuccessful();
+
+    expect($sender->calls)->toBe([])
+        ->and($remind->fresh())->status->toBe(OrderConfirmationStatus::Skipped)->skip_reason->toBe('cancelled')
+        ->and($silent->fresh())->status->toBe(OrderConfirmationStatus::Skipped)->skip_reason->toBe('cancelled')
+        ->and(FakeShopifyTransport::tagsAdded())->toBe([]);
 });
 
 it('schedules the sweep every five minutes on one server without overlapping', function () {
