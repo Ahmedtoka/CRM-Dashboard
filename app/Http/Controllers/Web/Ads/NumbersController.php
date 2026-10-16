@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** «الأرقام» (D11, U 2.1): the old Overview report, the buyers compare and the old /reports/ads chat table. */
+/** «الأرقام» (D11, U 2.1): spend overview, the buyers compare and the chat → orders table by campaign. */
 class NumbersController extends Controller
 {
     use BuildsAdsPages;
@@ -51,7 +51,7 @@ class NumbersController extends Controller
         ]);
     }
 
-    /** Conversations → orders by campaign (old /reports/ads), spend from the synced metrics instead of a live Graph call. */
+    /** Conversations → orders by campaign, spend from the synced metrics instead of a live Graph call. */
     private function chat(AdsFilter $f, AdsReport $report, AdsQuery $q): array
     {
         $spend = $q->sums($f->allSpend(), ['campaign' => 'camp.name'], fn ($b) => $b->leftJoin('ad_campaigns as camp', 'camp.id', '=', 'ad.ad_campaign_id'))
