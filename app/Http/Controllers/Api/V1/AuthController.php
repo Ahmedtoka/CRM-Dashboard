@@ -64,16 +64,27 @@ class AuthController extends Controller
 
         abort_unless($current instanceof PersonalAccessToken, 401);
 
+        // Two refreshes racing with the same token (resume handler + interceptor, or a retry
+        // after a timeout): the row is locked and re-read, so only the first one rotates it;
+        // the second finds it gone and gets 401 (review 01, I2).
         $token = DB::transaction(function () use ($user, $current) {
-            $token = $this->issue($user, (string) $current->name);
+            $locked = PersonalAccessToken::query()->whereKey($current->getKey())->lockForUpdate()->first();
 
-            DeviceToken::query()->where('personal_access_token_id', $current->getKey())
+            if ($locked === null) {
+                return null;
+            }
+
+            $token = $this->issue($user, (string) $locked->name);
+
+            DeviceToken::query()->where('personal_access_token_id', $locked->getKey())
                 ->update(['personal_access_token_id' => $token->accessToken->getKey()]);
 
-            $current->delete();
+            $locked->delete();
 
             return $token;
         });
+
+        abort_if($token === null, 401);
 
         return response()->json($this->tokenPayload($request, $user, $token));
     }
@@ -81,8 +92,16 @@ class AuthController extends Controller
     /** Logging out of the app = «خروج» on the queue, the same as a web logout (spec D6). */
     public function logout(Request $request, ActivityLogger $logger, PresenceTracker $presence): JsonResponse
     {
+        // Optional: the phone's own push token, so its device row goes even when it is bound
+        // to an older token of the same phone or to none (review 01, I2/M3).
+        $data = $request->validate(['device_token' => ['nullable', 'string', 'max:4096']]);
         $user = $request->user();
         $current = $user->currentAccessToken();
+
+        if (! empty($data['device_token'])) {
+            DeviceToken::query()->where('user_id', $user->id)
+                ->where('token_hash', DeviceToken::hashToken($data['device_token']))->delete();
+        }
 
         if ($current instanceof PersonalAccessToken) {
             DeviceToken::query()->where('personal_access_token_id', $current->getKey())->delete();

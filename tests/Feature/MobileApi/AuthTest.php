@@ -180,3 +180,29 @@ it('reports and expires legacy tokens from the CLI', function () {
     $this->artisan('crm:mobile-tokens', ['--expire-legacy' => true])->assertSuccessful();
     expect(PersonalAccessToken::query()->whereNull('expires_at')->count())->toBe(0);
 });
+
+it('refuses the second of two racing refreshes of the same token, leaving one live token', function () {
+    $plain = mbLogin($this->user)['token'];
+    $stale = PersonalAccessToken::findToken($plain);
+
+    $this->withToken($plain)->postJson('/api/v1/auth/refresh')->assertOk();
+
+    // The second request authenticated with the same token before the first one deleted it.
+    $this->user->withAccessToken($stale);
+    $this->actingAs($this->user, 'sanctum')->postJson('/api/v1/auth/refresh')->assertUnauthorized();
+
+    expect($this->user->tokens()->count())->toBe(1);
+});
+
+it('also deletes the device named in the logout body, only if it is hers', function () {
+    $token = mbLogin($this->user)['token'];
+    $orphan = mbDevice($this->user, null, 'phone-fcm');
+    $foreign = mbDevice(User::factory()->create(), null, 'someone-else');
+
+    $this->withToken($token)->postJson('/api/v1/auth/logout', ['device_token' => 'phone-fcm'])->assertOk();
+    mbFresh();
+    $t2 = mbLogin($this->user)['token'];
+    $this->withToken($t2)->postJson('/api/v1/auth/logout', ['device_token' => 'someone-else'])->assertOk();
+
+    expect(DeviceToken::find($orphan->id))->toBeNull()->and(DeviceToken::find($foreign->id))->not->toBeNull();
+});
