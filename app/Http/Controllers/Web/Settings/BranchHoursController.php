@@ -1,0 +1,67 @@
+<?php
+
+namespace App\Http\Controllers\Web\Settings;
+
+use App\Analytics\ActivityLogger;
+use App\Enums\ActorType;
+use App\Http\Controllers\Concerns\RespondsWithData;
+use App\Http\Controllers\Controller;
+use App\Models\Branch;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
+
+/**
+ * «مواعيد الفروع» (audit 2026-10-16): the admin edits what App\Bot\Flows\BranchFinder shows a
+ * customer about each store — its hours, phone and whether it is listed at all. Branches are
+ * not created, deleted or moved between areas here: the full branches page stays removed
+ * (fresh-orders F4), new stores still come in by migration.
+ */
+class BranchHoursController extends Controller
+{
+    use RespondsWithData;
+
+    private const FIELDS = ['hours', 'phone', 'is_active'];
+
+    public function index(): Response
+    {
+        return Inertia::render('settings/BranchHours', [
+            'branches' => Branch::query()->orderBy('sort')->orderBy('id')->get()->map(fn (Branch $b) => $this->row($b))->all(),
+        ]);
+    }
+
+    public function update(Request $request, Branch $branch, ActivityLogger $logger): HttpResponse
+    {
+        $data = $request->validate([
+            'hours' => ['sometimes', 'nullable', 'string', 'max:200'],
+            // Digits (Latin or Arabic-Indic), spaces, dashes and a leading +: what OutboundCards::phone() can dial.
+            'phone' => ['sometimes', 'nullable', 'string', 'max:30', 'regex:/^\+?[0-9٠-٩][0-9٠-٩ \-]*$/u'],
+            'is_active' => ['sometimes', 'boolean'],
+        ]);
+
+        $branch->fill(array_intersect_key($data, array_flip(self::FIELDS)));
+        $changed = array_values(array_intersect(self::FIELDS, array_keys($branch->getDirty())));
+
+        if ($changed !== []) {
+            $branch->save();
+            $logger->log(ActorType::User, $request->user(), ActivityLogger::BRANCH_UPDATED, $branch, null, ['name' => $branch->name, 'changed' => $changed]);
+        }
+
+        return $this->done($request, $this->row($branch));
+    }
+
+    /** @return array{id:int, name:string, area_ar:string, area_en:?string, hours:?string, phone:?string, is_active:bool} */
+    private function row(Branch $b): array
+    {
+        return [
+            'id' => $b->id,
+            'name' => $b->name,
+            'area_ar' => $b->area_ar,
+            'area_en' => $b->area_en,
+            'hours' => $b->hours,
+            'phone' => $b->phone,
+            'is_active' => (bool) $b->is_active,
+        ];
+    }
+}
