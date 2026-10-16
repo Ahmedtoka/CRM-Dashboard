@@ -29,9 +29,6 @@ return [
 
         // branches
         'governorate' => 'governorate',
-        'area_key' => 'area',
-        'area_ar' => 'area name in Arabic',
-        'area_en' => 'area name in English',
         'address' => 'address',
         'phone' => 'phone',
         'map_url' => 'map link',
