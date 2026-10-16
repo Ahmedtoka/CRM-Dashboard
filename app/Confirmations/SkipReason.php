@@ -15,6 +15,6 @@ enum SkipReason: string
     case TestOrder = 'test_order';
     case Cancelled = 'cancelled';
     case ChatOrder = 'chat_order';
-    case NoWhatsAppChannel = 'no_whatsapp_channel';
+    case NoWhatsappChannel = 'no_whatsapp_channel';
     case Duplicate = 'duplicate';
 }
