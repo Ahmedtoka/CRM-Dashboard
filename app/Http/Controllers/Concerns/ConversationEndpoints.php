@@ -44,7 +44,9 @@ use App\Models\SupportCase;
 use App\Models\User;
 use App\Queue\QueueService;
 use App\Support\SafeBroadcast;
+use Closure;
 use DomainException;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -209,6 +211,8 @@ trait ConversationEndpoints
             'attachment_ids' => ['nullable', 'array', 'max:'.(int) config('crm.media.max_per_message', 10), 'prohibits:template'],
             'attachment_ids.*' => ['integer', 'distinct'],
             'quick_reply_id' => ['nullable', 'integer', 'exists:quick_replies,id'],
+            // Mobile outbox (contract: idempotent on client_id for 48 h): a retried send returns the stored message.
+            'client_id' => ['nullable', 'uuid'],
         ]);
 
         // A quick_reply_id the sender isn't allowed to use — someone else's
@@ -221,6 +225,33 @@ trait ConversationEndpoints
             Gate::authorize('useIn', [$quickReply, $conversation]);
         }
 
+        return $this->onceForClient('msg-client', $request, $conversation, $data['client_id'] ?? null,
+            replay: function (array $ids) use ($request) {
+                $messages = Message::query()->with(['user', 'mediaAttachments'])->whereKey($ids)->orderBy('id')->get();
+
+                if ($messages->isEmpty()) {
+                    return null;
+                }
+
+                $resource = new MessageResource($messages->first());
+
+                return ($messages->count() > 1
+                    ? $resource->additional(['messages' => MessageResource::collection($messages)->resolve($request)])
+                    : $resource)->response()->setStatusCode(200);
+            },
+            send: fn () => $this->dispatchSend($request, $conversation, $data, $quickReply, $outbound, $usage),
+        );
+    }
+
+    /**
+     * The send itself (unchanged web behaviour), returning the response and the ids of
+     * the messages it created so a client_id retry can find them again.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{0: JsonResponse, 1: list<int>}
+     */
+    private function dispatchSend(Request $request, Conversation $conversation, array $data, ?QuickReply $quickReply, OutboundService $outbound, QuickReplyUsageRecorder $usage): array
+    {
         $options = [];
 
         if (! empty($data['template'])) {
@@ -237,12 +268,14 @@ trait ConversationEndpoints
             $response = (new MessageResource($messages->first()))
                 ->additional(['messages' => MessageResource::collection($messages)->resolve($request)])
                 ->response()->setStatusCode(201);
+            $ids = $messages->pluck('id')->map(fn ($id) => (int) $id)->all();
         } else {
             $body = $data['body'] ?? ('[template] '.$data['template']['name']);
 
             $message = $outbound->sendHuman($conversation, $request->user(), $body, $options);
 
             $response = (new MessageResource($message))->response()->setStatusCode(201);
+            $ids = [(int) $message->id];
         }
 
         // Usage is only recorded once the send actually dispatched (never
@@ -254,7 +287,45 @@ trait ConversationEndpoints
             rescue(fn () => $usage->record($quickReply, $request->user(), $conversation), report: true);
         }
 
-        return $response;
+        return [$response, $ids];
+    }
+
+    /**
+     * Idempotent sends for the mobile outbox (API contract, POST messages / notes): with a
+     * client_id, the first send stores the created ids under
+     * `{prefix}:{user}:{conversation}:{client_id}` for crm.mobile.client_id_ttl_hours; a
+     * retry with the same key returns the stored resource with 200 instead of sending again.
+     * The send runs under a Cache::lock so two racing retries cannot both send. Without a
+     * client_id nothing changes. No schema change: the cache is the record.
+     *
+     * @param  Closure(list<int>): ?JsonResponse  $replay  null when the stored rows are gone (then it sends again)
+     * @param  Closure(): array{0: JsonResponse, 1: list<int>}  $send
+     */
+    private function onceForClient(string $prefix, Request $request, Conversation $conversation, ?string $clientId, Closure $replay, Closure $send): JsonResponse
+    {
+        if ($clientId === null || $clientId === '') {
+            return $send()[0];
+        }
+
+        $key = $prefix.':'.$request->user()->id.':'.$conversation->id.':'.strtolower($clientId);
+
+        try {
+            return Cache::lock($key.':lock', 30)->block(5, function () use ($key, $replay, $send) {
+                $ids = Cache::get($key);
+
+                if (is_array($ids) && $ids !== [] && ($stored = $replay(array_map('intval', $ids))) !== null) {
+                    return $stored;
+                }
+
+                [$response, $created] = $send();
+                Cache::put($key, $created, now()->addHours((int) config('crm.mobile.client_id_ttl_hours', 48)));
+
+                return $response;
+            });
+        } catch (LockTimeoutException) {
+            // The same client_id is still being sent by another request: ask the outbox to retry shortly.
+            return response()->json(['message' => __('Too Many Attempts.')], 429, ['Retry-After' => '2']);
+        }
     }
 
     /**
@@ -313,10 +384,21 @@ trait ConversationEndpoints
             'body' => ['required', 'string', 'max:5000'],
             'mentions' => ['nullable', 'array', 'max:20'],
             'mentions.*' => ['integer'],
+            'client_id' => ['nullable', 'uuid'],
         ]);
 
-        return (new NoteResource($actions->addNote($conversation, $request->user(), $data['body'], $data['mentions'] ?? [])))
-            ->response()->setStatusCode(201);
+        return $this->onceForClient('note-client', $request, $conversation, $data['client_id'] ?? null,
+            replay: function (array $ids) {
+                $note = ConversationNote::query()->with('user')->find($ids[0] ?? 0);
+
+                return $note ? (new NoteResource($note))->response()->setStatusCode(200) : null;
+            },
+            send: function () use ($request, $conversation, $actions, $data) {
+                $note = $actions->addNote($conversation, $request->user(), $data['body'], $data['mentions'] ?? []);
+
+                return [(new NoteResource($note))->response()->setStatusCode(201), [(int) $note->id]];
+            },
+        );
     }
 
     /**
