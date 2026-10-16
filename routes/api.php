@@ -26,7 +26,7 @@ use Illuminate\Support\Facades\Route;
 
 // Mobile API (spec §8). Everything except login requires a Sanctum token.
 Route::prefix('v1')->name('api.v1.')->group(function () {
-    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:10,1')->name('auth.login');
+    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:mobile-login')->name('auth.login');
 
     Route::middleware(['auth:sanctum', EnsureUserIsActive::class, RejectAdsRolesOnApi::class, SetLocale::class])->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
@@ -34,12 +34,12 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('heartbeat', [PresenceController::class, 'heartbeat'])->name('heartbeat');
 
         // Moderator mobile app (docs/mobile-app/API-CONTRACT.md in the outer repo).
-        Route::post('auth/refresh', [AuthController::class, 'refresh'])->middleware('throttle:10,1')->name('auth.refresh');
+        Route::post('auth/refresh', [AuthController::class, 'refresh'])->middleware('throttle:mobile-refresh')->name('auth.refresh');
         Route::post('devices', [DeviceController::class, 'store'])->name('devices.store');
         Route::delete('devices', [DeviceController::class, 'destroy'])->name('devices.destroy');
-        Route::post('devices/test', [DeviceController::class, 'test'])->middleware('throttle:5,1')->name('devices.test');
+        Route::post('devices/test', [DeviceController::class, 'test'])->middleware('throttle:mobile-devices-test')->name('devices.test');
 
-        Route::middleware('throttle:60,1')->group(function () {
+        Route::middleware('throttle:mobile-queue')->group(function () {
             Route::get('queue/me', [QueueDeskController::class, 'me'])->name('queue.me');
             Route::post('queue/me/check-in', [QueueDeskController::class, 'checkIn'])->name('queue.check-in');
             Route::post('queue/me/check-out', [QueueDeskController::class, 'checkOut'])->name('queue.check-out');
@@ -93,7 +93,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::get('products', [ProductController::class, 'search'])->name('products.index');
 
         // Global search (Dashboard Experience Task 13, spec §5.3): additive-only, mobile command palette data source.
-        Route::get('search', SearchController::class)->middleware('throttle:60,1')->name('search');
+        Route::get('search', SearchController::class)->middleware('throttle:mobile-search')->name('search');
 
         Route::get('shipping/provinces', [ShippingController::class, 'provinces'])->name('shipping.provinces');
         Route::get('shipping/quote', [ShippingController::class, 'quote'])->name('shipping.quote');

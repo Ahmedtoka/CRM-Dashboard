@@ -10,6 +10,7 @@ use App\Inbox\InboxServiceProvider;
 use App\Legal\LegalServiceProvider;
 use App\Media\MediaServiceProvider;
 use App\Providers\AppServiceProvider;
+use App\Providers\MobileApiServiceProvider;
 use App\Push\PushServiceProvider;
 use App\Queue\QueueServiceProvider;
 use App\Shopify\ShopifyServiceProvider;
@@ -30,4 +31,5 @@ return [
     QueueServiceProvider::class,
     AdsServiceProvider::class,
     PushServiceProvider::class,
+    MobileApiServiceProvider::class,
 ];

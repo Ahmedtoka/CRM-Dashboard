@@ -29,7 +29,7 @@ Route::get('/media/public/{attachment}', [MediaController::class, 'publicShow'])
 // Mobile app media (API contract, "Media"): absolute signed temporary URLs handed out on api/*
 // responses only. No `web` group — no session or cookies; the signature (checked in the
 // controller so `?download=1` can be appended after signing) is the only authorisation.
-Route::withoutMiddleware('web')->middleware('throttle:300,1')->whereNumber('attachment')->group(function () {
+Route::withoutMiddleware('web')->middleware('throttle:mobile-media')->whereNumber('attachment')->group(function () {
     Route::get('/media/s/{attachment}', [SignedMediaController::class, 'show'])->name('media.signed');
     Route::get('/media/s/{attachment}/thumb', [SignedMediaController::class, 'thumb'])->name('media.signed.thumb');
     Route::get('/quick-reply-attachments/s/{attachment}', [SignedMediaController::class, 'quickReply'])->name('quick-reply-attachments.signed');
