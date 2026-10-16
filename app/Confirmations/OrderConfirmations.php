@@ -23,8 +23,14 @@ final class OrderConfirmations
 {
     public function __construct(private readonly ConfirmationSettings $settings) {}
 
-    /** @param  bool  $shopifyTest  the webhook payload's `test` flag (a Shopify test checkout) */
-    public function onOrderCreated(Order $order, bool $shopifyTest = false): ?OrderConfirmation
+    /** Shopify `source_name` of an in-store (point of sale) sale: the customer paid at the till, nothing to confirm. */
+    public const POS_SOURCE = 'pos';
+
+    /**
+     * @param  bool  $shopifyTest  the webhook payload's `test` flag (a Shopify test checkout)
+     * @param  string|null  $sourceName  the webhook payload's `source_name` (not stored on the order)
+     */
+    public function onOrderCreated(Order $order, bool $shopifyTest = false, ?string $sourceName = null): ?OrderConfirmation
     {
         if (! $this->settings->enabled()) {
             return null;
@@ -36,7 +42,7 @@ final class OrderConfirmations
 
         $account = $this->whatsAppAccount();
         $phone = $this->phoneFor($order);
-        $reason = $this->skipReason($order, $shopifyTest, $phone, $account);
+        $reason = $this->skipReason($order, $shopifyTest, $sourceName, $phone, $account);
 
         $confirmation = OrderConfirmation::createOrFirst(['order_id' => $order->id], [
             'channel_account_id' => $account?->id,
@@ -57,8 +63,10 @@ final class OrderConfirmations
 
     /**
      * The WhatsApp number confirmations go out from: connected, never a team-test or load-test
-     * channel, and in production only a live one (a fake/demo account must never "send" there).
-     * A live account wins over a fake one kept on file.
+     * channel. In production only a live one (a fake/demo account must never "send" there);
+     * anywhere else never a live one unless crm.confirmations.allow_live_outside_production is on,
+     * so a local copy restored from production (real number on file) cannot message customers.
+     * Where both are allowed, a live account wins over a fake one kept on file.
      */
     public function whatsAppAccount(): ?ChannelAccount
     {
@@ -68,6 +76,7 @@ final class OrderConfirmations
             ->where('driver', '!=', TestScope::DRIVER)
             ->where('is_load_test', false)
             ->when(app()->isProduction(), fn ($q) => $q->where('driver', 'live'))
+            ->when(! app()->isProduction() && ! self::liveAllowedOutsideProduction(), fn ($q) => $q->where('driver', '!=', 'live'))
             ->orderByRaw("case when driver = 'live' then 0 else 1 end")
             ->orderBy('id')
             ->first();
@@ -80,7 +89,12 @@ final class OrderConfirmations
             && $account->status === 'connected'
             && $account->driver !== TestScope::DRIVER
             && ! $account->is_load_test
-            && (! app()->isProduction() || $account->isLive());
+            && (app()->isProduction() ? $account->isLive() : (! $account->isLive() || self::liveAllowedOutsideProduction()));
+    }
+
+    private static function liveAllowedOutsideProduction(): bool
+    {
+        return (bool) config('crm.confirmations.allow_live_outside_production', false);
     }
 
     /** The first usable Egyptian mobile: shipping, then billing, then the customer's own phone. */
@@ -97,13 +111,14 @@ final class OrderConfirmations
         return null;
     }
 
-    private function skipReason(Order $order, bool $shopifyTest, ?string $phone, ?ChannelAccount $account): ?SkipReason
+    private function skipReason(Order $order, bool $shopifyTest, ?string $sourceName, ?string $phone, ?ChannelAccount $account): ?SkipReason
     {
         $placedAt = $order->placed_at ?? $order->created_at;
 
         return match (true) {
             $shopifyTest || $order->is_load_test || $this->fromTestChannel($order) => SkipReason::TestOrder,
             $order->status === OrderStatus::Cancelled || $order->cancelled_at !== null => SkipReason::Cancelled,
+            strtolower(trim((string) $sourceName)) === self::POS_SOURCE => SkipReason::PosOrder,
             DataFloor::isBefore($placedAt) => SkipReason::BeforeFloor,
             $placedAt !== null && $placedAt->lt(now()->subMinutes($this->settings->maxOrderAgeMinutes())) => SkipReason::TooOld,
             $order->source === OrderSource::Chat && $this->settings->skipChatOrders() => SkipReason::ChatOrder,

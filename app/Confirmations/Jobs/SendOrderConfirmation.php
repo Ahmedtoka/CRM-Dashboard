@@ -27,6 +27,9 @@ final class SendOrderConfirmation implements ShouldQueue
 
     public int $tries = 3;
 
+    /** A send this late (a queue outage) is skipped: the customer may have ordered half a day ago. */
+    public const MAX_LATENESS_HOURS = 3;
+
     public function __construct(public readonly int $confirmationId)
     {
         $this->onQueue('outbound');
@@ -91,6 +94,7 @@ final class SendOrderConfirmation implements ShouldQueue
 
         return match (true) {
             ! $settings->enabled() => SkipReason::Disabled,
+            $confirmation->send_at !== null && $confirmation->send_at->lt(now()->subHours(self::MAX_LATENESS_HOURS)) => SkipReason::TooLate,
             $order === null => SkipReason::TestOrder, // a load-test order (hidden by Order's scope) or a deleted one
             $order->status === OrderStatus::Cancelled || $order->cancelled_at !== null => SkipReason::Cancelled,
             ! OrderConfirmations::accountUsable($confirmation->channelAccount) => SkipReason::NoWhatsAppChannel,

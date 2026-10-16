@@ -157,3 +157,21 @@ it('never sends twice when a sender forgets to record the send', function () {
 
     expect($this->sender->sent)->toHaveCount(1)->and($c->fresh()->status)->toBe(OrderConfirmationStatus::Failed);
 });
+
+it('skips instead of sending a confirmation that is hours late (queue outage)', function () {
+    $c = ocDue(['send_at' => now()->subHours(3)->subMinute()]);
+
+    ocRun($c);
+
+    expect($this->sender->sent)->toBe([])
+        ->and($c->fresh()->status)->toBe(OrderConfirmationStatus::Skipped)
+        ->and($c->fresh()->skip_reason)->toBe(SkipReason::TooLate->value);
+});
+
+it('still sends a confirmation that is a little late', function () {
+    $c = ocDue(['send_at' => now()->subHours(2)->subMinutes(50)]);
+
+    ocRun($c);
+
+    expect($this->sender->sent)->toBe([[$c->id, 'confirm']]);
+});

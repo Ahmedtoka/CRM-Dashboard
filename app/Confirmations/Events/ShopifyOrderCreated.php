@@ -12,6 +12,13 @@ final class ShopifyOrderCreated
 {
     use Dispatchable;
 
-    /** @param  bool  $test  the payload's `test` flag (a Shopify test checkout) */
-    public function __construct(public readonly int $orderId, public readonly bool $test = false) {}
+    /**
+     * @param  bool  $test  the payload's `test` flag (a Shopify test checkout)
+     * @param  string|null  $sourceName  the payload's `source_name` (web, pos, shopify_draft_order, …)
+     */
+    public function __construct(
+        public readonly int $orderId,
+        public readonly bool $test = false,
+        public readonly ?string $sourceName = null,
+    ) {}
 }

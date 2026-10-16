@@ -97,6 +97,12 @@ it('records a Shopify test checkout as skipped', function () {
     expect(OrderConfirmation::sole()->skip_reason)->toBe(SkipReason::TestOrder->value);
 });
 
+it('records a point-of-sale order as skipped', function () {
+    ocProcess('orders/create', ocPayload(['source_name' => 'pos']));
+
+    expect(OrderConfirmation::sole()->skip_reason)->toBe(SkipReason::PosOrder->value);
+});
+
 it('never starts a confirmation from orders/updated or orders/paid', function () {
     ocProcess('orders/updated', ocPayload());
     ocProcess('orders/paid', ocPayload(['financial_status' => 'paid', 'updated_at' => now()->addMinute()->toIso8601String()]));
