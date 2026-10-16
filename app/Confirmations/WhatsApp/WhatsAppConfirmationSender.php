@@ -44,7 +44,8 @@ final class WhatsAppConfirmationSender implements ConfirmationSender
     public function send(OrderConfirmation $confirmation, string $kind = 'confirm'): void
     {
         $kind = $kind === 'reminder' ? 'reminder' : 'confirm';
-        $claim = Cache::lock('order-confirmation-send:'.$confirmation->id, 60);
+        // Its own key: SendOrderConfirmation already holds `order-confirmation-send:{id}` while it calls us.
+        $claim = Cache::lock('order-confirmation-deliver:'.$confirmation->id.':'.$kind, 60);
 
         if (! $claim->get()) {
             return;
