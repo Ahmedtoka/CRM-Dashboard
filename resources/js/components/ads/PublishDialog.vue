@@ -55,7 +55,7 @@ const form = reactive({
     page_id: '',
     file_ids: [] as number[],
 });
-const captions = ref<PublishCaption[]>([]);
+const captionDrafts = ref<PublishCaption[]>([]);
 
 const files = computed(() => props.material.files ?? []);
 const campaign = computed(() => campaigns.value.find((c) => c.id === form.campaign_id) ?? null);
@@ -74,7 +74,7 @@ function typeFor(fileId: number): string {
     return files.value.find((f) => f.id === fileId)?.mime?.startsWith('video/') ? 'Reel' : 'Image';
 }
 const previewNames = computed(() =>
-    form.file_ids.flatMap((id, f) => captions.value.map((_, i) => `M${props.material.id} | ${typeFor(id)} | C${f * captions.value.length + i + 1}`)),
+    form.file_ids.flatMap((id, f) => captionDrafts.value.map((_, i) => `M${props.material.id} | ${typeFor(id)} | C${f * captionDrafts.value.length + i + 1}`)),
 );
 const urlTags = computed(() => {
     const p = accounts.value.find((a) => a.id === form.account_id)?.platform;
@@ -83,7 +83,7 @@ const urlTags = computed(() => {
         : 'utm_source=meta&utm_medium=paid&utm_campaign={{campaign.name}}&utm_content={{ad.id}}';
 });
 
-const captionsValid = computed(() => captions.value.length > 0 && captions.value.every((c) => c.headline.trim() && c.primary_text.trim()));
+const captionsValid = computed(() => captionDrafts.value.length > 0 && captionDrafts.value.every((c) => c.headline.trim() && c.primary_text.trim()));
 const canSubmit = computed(
     () =>
         !!form.account_id &&
@@ -147,7 +147,7 @@ watch(
         duplicateWarning.value = false;
         allowDuplicate.value = false;
         form.file_ids = props.fileIds?.length ? [...props.fileIds] : files.value.map((f) => f.id);
-        captions.value = defaultCaptions();
+        captionDrafts.value = defaultCaptions();
         if (!accounts.value.length) void loadAccounts();
     },
     { immediate: true },
@@ -161,12 +161,12 @@ watch(
 watch(
     () => props.captions,
     () => {
-        if (props.open) captions.value = defaultCaptions();
+        if (props.open) captionDrafts.value = defaultCaptions();
     },
 );
 // The override only applies to the exact request that was refused: any change to what is published clears it.
 watch(
-    [() => form.adset_id, () => form.file_ids, captions],
+    [() => form.adset_id, () => form.file_ids, captionDrafts],
     () => {
         allowDuplicate.value = false;
         duplicateWarning.value = false;
@@ -185,17 +185,18 @@ watch(
 );
 
 function addCaption(): void {
-    if (captions.value.length < MAX_CAPTIONS) captions.value.push({ headline: '', primary_text: '', cta: 'SHOP_NOW' });
+    if (captionDrafts.value.length < MAX_CAPTIONS) captionDrafts.value.push({ headline: '', primary_text: '', cta: 'SHOP_NOW' });
 }
 function removeCaption(i: number): void {
-    if (captions.value.length > 1) captions.value.splice(i, 1);
+    if (captionDrafts.value.length > 1) captionDrafts.value.splice(i, 1);
 }
 function toggleFile(id: number, on: boolean): void {
     form.file_ids = on ? [...form.file_ids, id] : form.file_ids.filter((x) => x !== id);
 }
 
 async function submit(): Promise<void> {
-    if (!canSubmit.value || !campaign.value || !adset.value || !identity.value) return;
+    // A10: a second click (or Enter) while the first request is in flight does nothing.
+    if (busy.value || !canSubmit.value || !campaign.value || !adset.value || !identity.value) return;
     busy.value = true;
     error.value = null;
     try {
@@ -209,7 +210,7 @@ async function submit(): Promise<void> {
                 adset_name: adset.value.name,
                 identity: { page_id: identity.value.page_id, page_name: identity.value.page_name, instagram_id: identity.value.instagram_id },
                 file_ids: form.file_ids,
-                captions: captions.value.map((c) => ({ headline: c.headline.trim(), primary_text: c.primary_text.trim(), cta: c.cta })),
+                captions: captionDrafts.value.map((c) => ({ headline: c.headline.trim(), primary_text: c.primary_text.trim(), cta: c.cta })),
                 ...(allowDuplicate.value ? { allow_duplicate: true } : {}),
             },
             { headers: { 'Idempotency-Key': idempotencyKey.value } },
@@ -237,7 +238,7 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
         :description="t('ads.publish.description')"
         :submit-label="t('ads.publish.submit')"
         :busy="busy"
-        :disabled="!canSubmit"
+        :disabled="!canSubmit || busy"
         :error="error"
         wide
         @update:open="emit('update:open', $event)"
@@ -314,11 +315,11 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
 
         <fieldset class="space-y-2">
             <legend class="text-xs font-medium">{{ t('ads.publish.captions') }}</legend>
-            <div v-for="(c, i) in captions" :key="i" class="space-y-2 rounded-md border border-border/70 p-2.5">
+            <div v-for="(c, i) in captionDrafts" :key="i" class="space-y-2 rounded-md border border-border/70 p-2.5">
                 <div class="flex items-center justify-between">
                     <p class="text-xs font-semibold">{{ t('ads.publish.caption_n', { n: i + 1 }) }}</p>
                     <button
-                        v-if="captions.length > 1"
+                        v-if="captionDrafts.length > 1"
                         type="button"
                         class="inline-flex size-6 items-center justify-center rounded hover:bg-muted hover:text-destructive"
                         :aria-label="t('ads.publish.remove_caption', { n: i + 1 })"
@@ -345,7 +346,7 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
                 </div>
             </div>
             <button
-                v-if="captions.length < MAX_CAPTIONS"
+                v-if="captionDrafts.length < MAX_CAPTIONS"
                 type="button"
                 :class="cn('inline-flex items-center gap-1 text-xs text-primary hover:underline')"
                 @click="addCaption"

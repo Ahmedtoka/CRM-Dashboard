@@ -12,7 +12,7 @@ use Carbon\CarbonImmutable;
 
 /**
  * R #6 sales.below_breakeven (daily): 14 mature days (ending today − 2) of a Sales ad; best-of value (Meta purchase value
- * vs real orders net, R 1.3); smoothed ROAS (500-EGP prior toward the account's Sales ROAS) and the plus-one test (one more
+ * vs placed orders net, returned included since F prices refusals in (A5), R 1.3); smoothed ROAS (500-EGP prior toward the account's Sales ROAS) and the plus-one test (one more
  * order of the measured AOV) both below the break-even floor F (BreakEven, D12) → high, Stop.
  */
 final class SalesBelowBreakeven implements Rule
@@ -71,7 +71,8 @@ final class SalesBelowBreakeven implements Rule
         $floor = (float) $be['floor'];
         $aov = (float) ($be['aov'] ?? 0);
         $minSpend = max(self::MIN_SPEND, 2 * (float) ($ctx->targets()['cpp'] ?? 0));
-        $orders = $ctx->data->realOrders($sales->keys()->all(), $from, $to);
+        // Placed orders, returned ones included: the floor already prices refusals in (A5, AlertData::placedOrders).
+        $orders = $ctx->data->placedOrders($sales->keys()->all(), $from, $to);
 
         $sumSpend = 0.0;
         $sumValue = 0.0;

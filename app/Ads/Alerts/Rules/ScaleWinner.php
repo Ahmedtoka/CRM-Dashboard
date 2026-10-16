@@ -70,8 +70,9 @@ final class ScaleWinner implements Rule
         }
         [$f14, $t] = [$ctx->day(-15), $ctx->day(-2)];
         $f7 = $ctx->day(-8);
-        $o14 = $ctx->data->realOrders($ads->keys()->all(), $f14, $t);
-        $o7 = $ctx->data->realOrders($ads->keys()->all(), $f7, $t);
+        // Measured against 2 × F, so the same placed-order revenue as F itself (A5, AlertData::placedOrders).
+        $o14 = $ctx->data->placedOrders($ads->keys()->all(), $f14, $t);
+        $o7 = $ctx->data->placedOrders($ads->keys()->all(), $f7, $t);
         $bar = self::MULTIPLE * (float) $be['floor'];
 
         $out = [];
