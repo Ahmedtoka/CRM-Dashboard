@@ -11,6 +11,8 @@ use App\Confirmations\WhatsApp\WhatsAppConfirmationSender;
 use App\Inbox\InboundInterceptors;
 use App\Models\Conversation;
 use App\Models\Message;
+use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -57,7 +59,24 @@ class ConfirmationsServiceProvider extends ServiceProvider
     }
 
     /** Slice W3: tags, cases, notifications, sweep schedule. */
-    private function bootFollowUp(): void {}
+    private function bootFollowUp(): void
+    {
+        // Listed one by one (not Event::subscribe): the listener and its Shopify client are only built when an event fires.
+        foreach (FollowUp\ConfirmationFollowUp::LISTENERS as $event => $method) {
+            Event::listen($event, [FollowUp\ConfirmationFollowUp::class, $method]);
+        }
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([Commands\SweepOrderConfirmationsCommand::class]);
+        }
+
+        $this->callAfterResolving(Schedule::class, function ($schedule) {
+            $schedule->command(Commands\SweepOrderConfirmationsCommand::class)
+                ->everyFiveMinutes()
+                ->withoutOverlapping()
+                ->onOneServer();
+        });
+    }
 
     /** Slice W5: template tooling commands. */
     private function bootTooling(): void {}

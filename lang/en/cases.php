@@ -100,6 +100,15 @@ return [
         'note_unknown' => 'Exchange request: :items → replacement not identified',
     ],
 
+    'confirmation' => [
+        'edit_note' => 'The change the customer sent on the order confirmation message: :note',
+        'request_changed' => 'The customer changed her request on the order confirmation message: :request',
+        'requests' => [
+            'cancel' => 'cancel the order',
+            'edit' => 'edit the order',
+        ],
+    ],
+
     'edit' => [
         'new_address' => 'New address: :address',
         'new_phone' => 'New phone number: :phone',
