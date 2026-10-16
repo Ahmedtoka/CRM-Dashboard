@@ -24,7 +24,14 @@ it('builds a Meta message_templates payload per template', function (string $nam
     preg_match_all('/\{\{(\d+)\}\}/', $body['text'], $m);
 
     // One numbered variable per TemplateParams::BODY entry, in order, each used once.
-    expect(array_map('intval', $m[1]))->toBe(range(1, count(TemplateParams::BODY)))
+    expect(TemplateParams::BODY)->toBe(['first_name', 'order_number', 'items', 'total', 'address', 'payment'])
+        ->and(array_map('intval', $m[1]))->toBe(range(1, count(TemplateParams::BODY)))
+        ->and($body['text'])->toContain('العنوان: {{5}}')
+        // Neutral about payment: the variable alone carries «الدفع عند الاستلام» / «اتأكدنا من الدفع».
+        ->and($body['text'])->toContain("\n{{6}}\n")
+        ->and($body['text'])->not->toContain('الدفع')
+        ->and($body['text'])->not->toContain('مدفوع')
+        ->and($body['example']['body_text'][0])->toBe(array_map(fn ($p) => TemplateParams::EXAMPLES[$p], TemplateParams::BODY))
         ->and($body['example']['body_text'][0])->toHaveCount(count(TemplateParams::BODY))
         // Meta rejects a body that starts or ends with a variable.
         ->and($body['text'])->not->toStartWith('{{')
