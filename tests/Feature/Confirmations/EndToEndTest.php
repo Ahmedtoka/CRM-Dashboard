@@ -9,6 +9,7 @@ use App\Confirmations\Jobs\SendOrderConfirmation;
 use App\Confirmations\OrderConfirmations;
 use App\Confirmations\Shopify\GraphqlOrderTagger;
 use App\Confirmations\WhatsApp\ConfirmationReplyHandler;
+use App\Confirmations\WhatsApp\TemplateParams;
 use App\Confirmations\WhatsApp\WhatsAppConfirmationSender;
 use App\Enums\OrderConfirmationStatus;
 use App\Enums\Platform;
@@ -202,7 +203,7 @@ it('confirms a new Shopify order on WhatsApp and turns a cancel tap into a tag, 
     expect($row->status)->toBe(OrderConfirmationStatus::Sent)
         ->and($templates)->toHaveCount(1)
         ->and($templates[0]['name'])->toBe('order_confirm_ar')
-        ->and($templates[0]['params'])->toHaveCount(5)
+        ->and($templates[0]['params'])->toHaveCount(count(TemplateParams::BODY))
         ->and($templates[0]['buttons'])->toBe([
             ConfirmationPayload::make($row->id, 'confirm'),
             ConfirmationPayload::make($row->id, 'edit'),

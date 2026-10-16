@@ -15,7 +15,7 @@ use App\Models\OrderItem;
 final class TemplateParams
 {
     /** Body variables, in {{n}} order. */
-    public const BODY = ['customer_name', 'order_number', 'items_summary', 'total', 'payment_line'];
+    public const BODY = ['first_name', 'order_number', 'items', 'total', 'address', 'payment'];
 
     /** Quick-reply buttons, in index order: the action each one's payload carries. */
     public const BUTTONS = ['confirm', 'edit', 'cancel'];
@@ -25,28 +25,36 @@ final class TemplateParams
 
     /** One example value per BODY variable, for the template submission. */
     public const EXAMPLES = [
-        'customer_name' => 'ليلى',
+        'first_name' => 'ليلى',
         'order_number' => '#1234',
-        'items_summary' => 'فستان سهرة ×2، طرحة',
+        'items' => 'فستان سهرة ×2، طرحة',
         'total' => '1,250 ج.م',
-        'payment_line' => self::COD,
+        'address' => 'القاهرة - مدينة نصر، 12 شارع مكرم عبيد',
+        'payment' => self::COD,
     ];
 
     public const COD = 'الدفع عند الاستلام';
 
-    public const PAID = 'مدفوع';
+    public const PAID = 'اتأكدنا من الدفع';
 
     public const ITEMS_MAX = 60;
+
+    /** How much of the street address follows the governorate. */
+    public const ADDRESS_LINE_MAX = 30;
+
+    /** When the order carries no address at all (a template variable can never be empty). */
+    public const NO_ADDRESS = 'العنوان المسجل في الأوردر';
 
     /** @return array<string, string> keyed by BODY name, in BODY order */
     public static function forOrder(Order $order): array
     {
         $values = [
-            'customer_name' => self::firstName($order),
+            'first_name' => self::firstName($order),
             'order_number' => self::orderNumber($order),
-            'items_summary' => self::itemsSummary($order),
+            'items' => self::itemsSummary($order),
             'total' => self::total($order),
-            'payment_line' => self::isPaid($order) ? self::PAID : self::COD,
+            'address' => self::address($order),
+            'payment' => self::isPaid($order) ? self::PAID : self::COD,
         ];
 
         // The Cloud API refuses a parameter with a newline, a tab or a long run of spaces, and an empty one.
@@ -59,9 +67,10 @@ final class TemplateParams
         $title = $kind === 'reminder' ? 'تذكير بتأكيد الأوردر' : 'تأكيد الأوردر';
 
         return implode("\n", [
-            $title.' '.$params['order_number'].' ('.$params['customer_name'].')',
-            $params['items_summary'],
-            'الإجمالي: '.$params['total'].' — '.$params['payment_line'],
+            $title.' '.$params['order_number'].' ('.$params['first_name'].')',
+            $params['items'],
+            'الإجمالي: '.$params['total'].' — '.$params['payment'],
+            'العنوان: '.$params['address'],
             '['.implode('] [', self::BUTTON_TITLES).']',
         ]);
     }
@@ -100,6 +109,22 @@ final class TemplateParams
         }
 
         return mb_strlen($summary) > self::ITEMS_MAX ? rtrim(mb_substr($summary, 0, self::ITEMS_MAX - 1)).'…' : $summary;
+    }
+
+    /** Governorate, then the start of the street address, so she can spot a wrong one. */
+    private static function address(Order $order): string
+    {
+        $squash = fn (?string $v) => trim(preg_replace('/\s+/u', ' ', (string) $v) ?? '');
+        $governorate = $squash($order->shipping_province) ?: $squash($order->shipping_city);
+        $line = $squash($order->shipping_address);
+
+        if ($line !== '' && mb_strlen($line) > self::ADDRESS_LINE_MAX) {
+            $line = rtrim(mb_substr($line, 0, self::ADDRESS_LINE_MAX - 1)).'…';
+        }
+
+        $parts = array_values(array_filter([$governorate, $line], fn (string $p) => $p !== ''));
+
+        return $parts === [] ? self::NO_ADDRESS : implode(' - ', $parts);
     }
 
     private static function total(Order $order): string
