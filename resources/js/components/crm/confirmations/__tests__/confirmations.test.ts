@@ -110,6 +110,12 @@ describe('CallOutcomeActions', () => {
         expect(push).toHaveBeenCalledWith('اتسجلت نتيجة المكالمة: مابتردش');
     });
 
+    it('folds the three outcomes into one row menu for an answer given in her own words', () => {
+        const w = mount(CallOutcomeActions, { props: { confirmationId: 9, menu: true } });
+        expect(w.find('[data-record-menu]').attributes('aria-label')).toBe('سجلي رد العميلة');
+        expect(w.find('[role="group"]').exists()).toBe(false);
+    });
+
     it('shows the server error and emits nothing when it fails', async () => {
         post.mockRejectedValue(new Error('422'));
         const w = mount(CallOutcomeActions, { props: { confirmationId: 9 } });

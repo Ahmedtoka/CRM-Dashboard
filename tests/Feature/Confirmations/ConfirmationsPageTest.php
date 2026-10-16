@@ -1,6 +1,5 @@
 <?php
 
-use App\Confirmations\CallOutcome;
 use App\Confirmations\Events\OrderConfirmationCalled;
 use App\Enums\OrderConfirmationStatus as S;
 use App\Enums\Platform;
@@ -112,34 +111,36 @@ it('records a call outcome through CallOutcome', function (string $outcome, S $s
     'unreachable' => ['unreachable', S::Unreachable],
 ]);
 
-it('resolves CallOutcome from the container', function () {
-    $c = confirmationAt('2026-10-15 10:00', S::NoResponse);
-    $spy = new class extends CallOutcome
-    {
-        public array $calls = [];
+it('records an answer the customer gave in her own words, from sent, edit_requested or a past unreachable', function (S $from) {
+    Event::fake([OrderConfirmationCalled::class]);
+    $c = confirmationAt('2026-10-16 09:00', $from, ['sent_at' => now()->subHour()]);
 
-        public function record(OrderConfirmation $confirmation, string $outcome, User $user): OrderConfirmation
-        {
-            $this->calls[] = [$confirmation->id, $outcome, $user->id];
+    $this->actingAs($this->admin)->get('/orders/confirmations')
+        ->assertInertia(fn (AssertableInertia $p) => $p->where('rows.data.0.can_record', true));
 
-            return $confirmation;
-        }
-    };
-    app()->instance(CallOutcome::class, $spy);
+    $this->actingAs($this->admin)->postJson("/orders/confirmations/{$c->id}/call", ['outcome' => 'confirmed'])
+        ->assertOk()
+        ->assertJsonPath('data.status', S::CalledConfirmed->value)
+        ->assertJsonPath('data.can_record', false);
 
-    $this->actingAs($this->admin)->postJson("/orders/confirmations/{$c->id}/call", ['outcome' => 'unreachable'])->assertOk();
+    expect($c->fresh())->status->toBe(S::CalledConfirmed)->called_by->toBe($this->admin->id);
+    Event::assertDispatched(OrderConfirmationCalled::class, fn ($e) => $e->confirmation->id === $c->id && $e->outcome === 'confirmed');
+})->with([
+    'sent' => [S::Sent],
+    'edit requested' => [S::EditRequested],
+    'unreachable (a later call)' => [S::Unreachable],
+]);
 
-    expect($spy->calls)->toBe([[$c->id, 'unreachable', $this->admin->id]]);
-});
-
-it('validates the outcome and refuses a confirmation that is not on the call list', function () {
+it('validates the outcome and refuses a confirmation whose answer is settled', function () {
     $c = confirmationAt('2026-10-15 10:00', S::NoResponse);
     $this->actingAs($this->admin)->postJson("/orders/confirmations/{$c->id}/call", ['outcome' => 'maybe'])->assertJsonValidationErrors('outcome');
     $this->actingAs($this->admin)->postJson("/orders/confirmations/{$c->id}/call", [])->assertJsonValidationErrors('outcome');
 
-    $done = confirmationAt('2026-10-15 10:00', S::Confirmed);
-    $this->actingAs($this->admin)->postJson("/orders/confirmations/{$done->id}/call", ['outcome' => 'confirmed'])->assertStatus(422);
-    expect($done->fresh()->status)->toBe(S::Confirmed);
+    foreach ([S::Scheduled, S::Confirmed, S::CancelRequested, S::Skipped, S::Failed, S::CalledConfirmed, S::CalledCancelled] as $settled) {
+        $done = confirmationAt('2026-10-15 10:00', $settled);
+        $this->actingAs($this->admin)->postJson("/orders/confirmations/{$done->id}/call", ['outcome' => 'confirmed'])->assertStatus(422);
+        expect($done->fresh()->status)->toBe($settled);
+    }
 });
 
 it('lets only staff who can see the order record its call', function () {

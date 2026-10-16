@@ -26,6 +26,8 @@ export const SKIP_REASONS = [
     'chat_order',
     'no_whatsapp_channel',
     'duplicate',
+    'pos_order',
+    'too_late',
 ] as const;
 export type SkipReason = (typeof SKIP_REASONS)[number];
 
@@ -55,6 +57,8 @@ export interface ConfirmationRow {
     case_id: number | null;
     conversation_id: number | null;
     needs_call: boolean;
+    /** Staff may record her answer (ConfirmationBoard::RECORDABLE). */
+    can_record: boolean;
     created_at: string | null;
 }
 

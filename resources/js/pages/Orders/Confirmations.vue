@@ -246,6 +246,7 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                     <template #cell-links="{ row }">
                         <span class="inline-flex items-center gap-0.5">
                             <CallOutcomeActions v-if="row.needs_call" :confirmation-id="row.id" @recorded="onRecorded" />
+                            <CallOutcomeActions v-else-if="row.can_record" menu :confirmation-id="row.id" @recorded="onRecorded" />
                             <IconAction
                                 v-if="row.case_id"
                                 :icon="ClipboardList"

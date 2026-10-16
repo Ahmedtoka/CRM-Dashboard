@@ -32,8 +32,10 @@ const { t } = useI18n();
             <p class="whitespace-pre-line [overflow-wrap:anywhere]" dir="auto">{{ confirmation.edit_note }}</p>
         </div>
 
-        <div v-if="confirmation.needs_call" class="flex items-center justify-between gap-2 border-t pt-2">
-            <span class="text-muted-foreground">{{ t('order_confirmations.call.group') }}</span>
+        <div v-if="confirmation.can_record" class="flex items-center justify-between gap-2 border-t pt-2">
+            <span class="text-muted-foreground">{{
+                t(confirmation.needs_call ? 'order_confirmations.call.group' : 'order_confirmations.call.record')
+            }}</span>
             <CallOutcomeActions :confirmation-id="confirmation.id" @recorded="router.reload({ only: ['confirmation'] })" />
         </div>
 
