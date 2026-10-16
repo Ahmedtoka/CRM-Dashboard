@@ -134,6 +134,8 @@ class OutboundService
                     'body' => $row['body'],
                     'status' => MessageStatus::Queued,
                     'is_template' => ! empty($options['template']),
+                    // Kept so a retry re-sends the same template (audit A9).
+                    'template' => ! empty($options['template']) ? $options['template'] : null,
                     // The moment the moderator pressed send (spec §11.3 outbound window start).
                     // messages.created_at is only second precision; this plain bigint column isn't.
                     'queued_at_ms' => $this->nowMs(),
@@ -369,8 +371,9 @@ class OutboundService
             throw new DomainException(__('errors.inbox.retry_only_failed'));
         }
 
-        // Template parameters are not persisted, so a retry is always sent as text.
-        $options = $this->applyWindow($c, SenderType::User, []);
+        // A template message is retried as the same template (audit A9), so it
+        // still goes out in a template-only window; anything else as text.
+        $options = $this->applyWindow($c, SenderType::User, $m->is_template && ! empty($m->template) ? ['template' => $m->template] : []);
 
         // Retrying re-queues the send, so the outbound latency window starts again now.
         $m->forceFill(['status' => MessageStatus::Queued, 'error' => null, 'queued_at_ms' => $this->nowMs()])->save();
