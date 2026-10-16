@@ -4,6 +4,9 @@ namespace App\Queue;
 
 use App\Models\User;
 use App\Queue\Commands\QueueTick;
+use App\Queue\Events\CloseReversed;
+use App\Queue\Events\WindowClosed;
+use App\Queue\Scoring\ScoreListener;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Event;
@@ -18,6 +21,10 @@ class QueueServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([QueueTick::class]);
         }
+
+        // Queue Part 2: what a window earns (the listener rescues itself, never failing the close).
+        Event::listen(WindowClosed::class, [ScoreListener::class, 'windowClosed']);
+        Event::listen(CloseReversed::class, [ScoreListener::class, 'closeReversed']);
 
         // Logging out of the CRM = «خروج» (attendance §3). A failure is reported and never breaks the logout.
         Event::listen(function (Logout $event) {
