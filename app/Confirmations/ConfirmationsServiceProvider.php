@@ -31,7 +31,14 @@ class ConfirmationsServiceProvider extends ServiceProvider
     }
 
     /** Slice W1: order-created trigger. */
-    private function bootTrigger(): void {}
+    private function bootTrigger(): void
+    {
+        // Fully qualified on purpose: keeps the shared import block free of merge conflicts between slices.
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Confirmations\Events\ShopifyOrderCreated::class,
+            \App\Confirmations\Listeners\ScheduleOrderConfirmation::class,
+        );
+    }
 
     /** Slice W2: button replies. */
     private function bootWhatsApp(): void {}
