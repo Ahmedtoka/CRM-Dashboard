@@ -135,3 +135,23 @@ it('also accepts client_id on the web inbox without changing its replies', funct
 
     expect(Message::count())->toBe(1);
 });
+
+it('refuses the same client_id reused for a different message or note with 409', function () {
+    $clientId = (string) Str::uuid();
+
+    mbSend($this->mod, $this->conv, ['body' => 'أولى', 'client_id' => $clientId])->assertCreated();
+    mbSend($this->mod, $this->conv, ['body' => 'تانية', 'client_id' => $clientId])->assertStatus(409);
+
+    $noteId = (string) Str::uuid();
+    $this->postJson("/api/v1/conversations/{$this->conv->id}/notes", ['body' => 'a', 'client_id' => $noteId])->assertCreated();
+    $this->postJson("/api/v1/conversations/{$this->conv->id}/notes", ['body' => 'b', 'client_id' => $noteId])->assertStatus(409);
+
+    expect(Message::count())->toBe(1)->and(ConversationNote::count())->toBe(1);
+});
+
+it('treats a message and a note with the same client_id as separate sends', function () {
+    $clientId = (string) Str::uuid();
+
+    mbSend($this->mod, $this->conv, ['body' => 'x', 'client_id' => $clientId])->assertCreated();
+    $this->postJson("/api/v1/conversations/{$this->conv->id}/notes", ['body' => 'x', 'client_id' => $clientId])->assertCreated();
+});

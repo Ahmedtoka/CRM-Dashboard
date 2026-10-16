@@ -225,7 +225,9 @@ trait ConversationEndpoints
             Gate::authorize('useIn', [$quickReply, $conversation]);
         }
 
-        return $this->onceForClient('msg-client', $request, $conversation, $data['client_id'] ?? null,
+        $fingerprint = [$data['body'] ?? null, $data['template'] ?? null, $data['attachment_ids'] ?? [], $data['quick_reply_id'] ?? null];
+
+        return $this->onceForClient('msg-client', $request, $conversation, $data['client_id'] ?? null, $fingerprint,
             replay: function (array $ids) use ($request) {
                 $messages = Message::query()->with(['user', 'mediaAttachments'])->whereKey($ids)->orderBy('id')->get();
 
@@ -296,12 +298,15 @@ trait ConversationEndpoints
      * `{prefix}:{user}:{conversation}:{client_id}` for crm.mobile.client_id_ttl_hours; a
      * retry with the same key returns the stored resource with 200 instead of sending again.
      * The send runs under a Cache::lock so two racing retries cannot both send. Without a
-     * client_id nothing changes. No schema change: the cache is the record.
+     * client_id nothing changes. No schema change: the cache is the record. The same
+     * client_id with a different request (body, attachments, …) is refused with 409, never
+     * silently answered with the old message (review 01, M6).
      *
+     * @param  array<int, mixed>  $fingerprint  what makes two requests "the same send"
      * @param  Closure(list<int>): ?JsonResponse  $replay  null when the stored rows are gone (then it sends again)
      * @param  Closure(): array{0: JsonResponse, 1: list<int>}  $send
      */
-    private function onceForClient(string $prefix, Request $request, Conversation $conversation, ?string $clientId, Closure $replay, Closure $send): JsonResponse
+    private function onceForClient(string $prefix, Request $request, Conversation $conversation, ?string $clientId, array $fingerprint, Closure $replay, Closure $send): JsonResponse
     {
         if ($clientId === null || $clientId === '') {
             return $send()[0];
@@ -310,15 +315,23 @@ trait ConversationEndpoints
         $key = $prefix.':'.$request->user()->id.':'.$conversation->id.':'.strtolower($clientId);
 
         try {
-            return Cache::lock($key.':lock', 30)->block(5, function () use ($key, $replay, $send) {
-                $ids = Cache::get($key);
+            $hash = sha1((string) json_encode($fingerprint));
 
-                if (is_array($ids) && $ids !== [] && ($stored = $replay(array_map('intval', $ids))) !== null) {
-                    return $stored;
+            // 60 s: longer than any synchronous send (the provider call itself is queued).
+            return Cache::lock($key.':lock', 60)->block(5, function () use ($key, $hash, $replay, $send) {
+                $stored = Cache::get($key);
+                $ids = is_array($stored) ? (array) ($stored['ids'] ?? []) : [];
+
+                if ($ids !== [] && ($stored['hash'] ?? null) !== $hash) {
+                    return response()->json(['message' => 'This client_id was already used for a different send.'], 409);
+                }
+
+                if ($ids !== [] && ($replayed = $replay(array_map('intval', $ids))) !== null) {
+                    return $replayed;
                 }
 
                 [$response, $created] = $send();
-                Cache::put($key, $created, now()->addHours((int) config('crm.mobile.client_id_ttl_hours', 48)));
+                Cache::put($key, ['ids' => $created, 'hash' => $hash], now()->addHours((int) config('crm.mobile.client_id_ttl_hours', 48)));
 
                 return $response;
             });
@@ -387,7 +400,7 @@ trait ConversationEndpoints
             'client_id' => ['nullable', 'uuid'],
         ]);
 
-        return $this->onceForClient('note-client', $request, $conversation, $data['client_id'] ?? null,
+        return $this->onceForClient('note-client', $request, $conversation, $data['client_id'] ?? null, [$data['body'], $data['mentions'] ?? []],
             replay: function (array $ids) {
                 $note = ConversationNote::query()->with('user')->find($ids[0] ?? 0);
 
