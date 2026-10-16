@@ -91,6 +91,33 @@ it('shows a case and updates its status, stamping closed_at', function () {
     $this->patchJson("/api/v1/cases/{$case->id}", ['status' => 'bogus'])->assertUnprocessable();
 });
 
+it('assigns a case only to active inbox staff who can see its platform, on the API and the web alike', function () {
+    $case = mcCase(Platform::Facebook);
+    $mod = mcModerator(Platform::Facebook);
+    $colleague = mcModerator(Platform::Facebook);
+    $supervisor = User::factory()->create(['role' => UserRole::Supervisor]);
+    $inactive = mcModerator(Platform::Facebook);
+    $inactive->forceFill(['is_active' => false])->save();
+    $buyer = User::factory()->create(['role' => UserRole::MediaBuyer]);
+    $waOnly = mcModerator(Platform::WhatsApp);
+
+    foreach ([$inactive, $buyer, $waOnly] as $bad) {
+        Sanctum::actingAs($mod);
+        $this->patchJson("/api/v1/cases/{$case->id}", ['assigned_to_id' => $bad->id])->assertUnprocessable()
+            ->assertJsonValidationErrors(['assigned_to_id']);
+        $this->actingAs($mod, 'web')->patchJson("/cases/{$case->id}", ['assigned_to_id' => $bad->id])->assertUnprocessable()
+            ->assertJsonValidationErrors(['assigned_to_id']);
+        app('auth')->forgetGuards();
+    }
+    expect($case->fresh()->assigned_to_id)->toBeNull();
+
+    Sanctum::actingAs($mod);
+    $this->patchJson("/api/v1/cases/{$case->id}", ['assigned_to_id' => $colleague->id])->assertOk()->assertJsonPath('data.assigned_to.id', $colleague->id);
+    $this->patchJson("/api/v1/cases/{$case->id}", ['assigned_to_id' => $supervisor->id])->assertOk()->assertJsonPath('data.assigned_to.id', $supervisor->id);
+    $this->patchJson("/api/v1/cases/{$case->id}", ['assigned_to_id' => null])->assertOk()->assertJsonPath('data.assigned_to', null);
+    $this->patchJson("/api/v1/cases/{$case->id}", ['assigned_to_id' => 999999])->assertUnprocessable()->assertJsonValidationErrors(['assigned_to_id']);
+});
+
 it('forbids a case on another platform and 404s a missing one', function () {
     $wa = mcCase(Platform::WhatsApp);
     Sanctum::actingAs(mcModerator(Platform::Facebook));

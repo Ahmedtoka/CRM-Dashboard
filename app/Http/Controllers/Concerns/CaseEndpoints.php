@@ -7,6 +7,8 @@ use App\Http\Support\DateRange;
 use App\Http\Support\ModeratorScope;
 use App\Http\Support\SortParam;
 use App\Models\SupportCase;
+use App\Models\User;
+use Closure;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -40,7 +42,15 @@ trait CaseEndpoints
 
         $data = $request->validate([
             'status' => ['sometimes', Rule::in(SupportCase::STATUSES)],
-            'assigned_to_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+            // Review 1 M11: only who the drawer offers (active inbox staff) and who can open this case.
+            'assigned_to_id' => ['sometimes', 'nullable', 'integer', function (string $attribute, mixed $value, Closure $fail) use ($supportCase) {
+                $assignee = User::query()->whereKey($value)->where('is_active', true)->inboxStaff()->first();
+                $platform = $supportCase->conversation?->platform;
+
+                if ($assignee === null || $platform === null || ! $assignee->canAccessPlatform($platform)) {
+                    $fail(__('validation.exists', ['attribute' => $attribute]));
+                }
+            }],
         ]);
 
         if (array_key_exists('status', $data)) {

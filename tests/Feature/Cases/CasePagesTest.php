@@ -108,6 +108,8 @@ it('closes a case, stamping closed_at/closed_by, then reopening clears them', fu
 it('assigns a case to a team member', function () {
     $sup = User::factory()->create(['role' => UserRole::Supervisor]);
     $agent = User::factory()->create(['role' => UserRole::Moderator]);
+    // Review 1 M11: the assignee must be able to see the case's platform.
+    $agent->userPlatforms()->create(['platform' => Platform::Facebook]);
     $case = SupportCase::factory()->create(['conversation_id' => caseConversation(Platform::Facebook)->id]);
 
     $this->actingAs($sup)->patchJson("/cases/{$case->id}", ['assigned_to_id' => $agent->id])
