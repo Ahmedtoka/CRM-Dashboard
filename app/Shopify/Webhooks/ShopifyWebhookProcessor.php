@@ -11,12 +11,15 @@ use App\Models\Order;
 use App\Models\User;
 use App\Shopify\Connection\IntegrationRepository;
 use App\Shopify\Connection\ShopifyIntegration;
+use App\Shopify\Sync\Mappers\CrmOrderClaim;
 use App\Shopify\Sync\Mappers\CustomerMapper;
 use App\Shopify\Sync\Mappers\InventoryMapper;
 use App\Shopify\Sync\Mappers\MapResult;
 use App\Shopify\Sync\Mappers\OrderMapper;
+use App\Shopify\Sync\Mappers\Payload;
 use App\Shopify\Sync\Mappers\ProductMapper;
 use App\Support\SafeBroadcast;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Routes a stored, verified Shopify webhook to its mapper (spec §4.2). One
@@ -25,6 +28,9 @@ use App\Support\SafeBroadcast;
  */
 final class ShopifyWebhookProcessor
 {
+    /** Rounding tolerance when comparing Shopify's paid total with the order total. */
+    private const PAID_TOTAL_TOLERANCE = 0.05;
+
     public function __construct(
         private readonly ProductMapper $products,
         private readonly InventoryMapper $inventory,
@@ -80,8 +86,8 @@ final class ShopifyWebhookProcessor
      * So after it runs, this drives the real transition itself:
      *  - a cancelled_at present on the payload goes through OrderService::cancel
      *    (no provider sync — the cancel came from Shopify);
-     *  - otherwise a paid/partially_paid financial status goes through
-     *    OrderService::markPaid.
+     *  - otherwise a `paid` financial status whose total covers the order total
+     *    goes through OrderService::markPaid (audit A1).
      * Both lock the row and re-check its status inside their own transaction
      * (idempotent under concurrent/duplicate delivery), and give the order the
      * side effects (shipment, customer stats, activity log, broadcast) that only
@@ -110,13 +116,40 @@ final class ShopifyWebhookProcessor
             return;
         }
 
-        $financial = strtolower((string) ($payload['financial_status'] ?? ''));
+        // Only a fully paid order confirms (audit A1): partially_paid is money
+        // still owed, and the paid total must cover the order's own total.
+        if (strtolower((string) ($payload['financial_status'] ?? '')) !== 'paid') {
+            return;
+        }
 
-        if (! in_array($financial, ['paid', 'partially_paid'], true)) {
+        if (! $this->coversTotal($order, $payload)) {
             return;
         }
 
         $this->orderService->markPaid($order);
+    }
+
+    /**
+     * Whether the payload's total (current_total_price, after order edits, else
+     * total_price) covers the local order total. A payload without a total, or a
+     * smaller one, is logged and left for staff instead of confirming the order.
+     */
+    private function coversTotal(Order $order, array $payload): bool
+    {
+        $paid = Payload::amount($payload['current_total_price'] ?? $payload['total_price'] ?? null);
+
+        if ($paid !== null && $paid + self::PAID_TOTAL_TOLERANCE >= (float) $order->total) {
+            return true;
+        }
+
+        Log::warning('Shopify paid total does not cover the CRM order total; not confirming it.', [
+            'order_id' => $order->id,
+            'order_total' => $order->total,
+            'paid_total' => $paid,
+            'shopify_order_id' => isset($payload['id']) ? (string) $payload['id'] : null,
+        ]);
+
+        return false;
     }
 
     private function routeOrderCancelled(array $payload): void
@@ -155,15 +188,10 @@ final class ShopifyWebhookProcessor
     {
         $shopifyId = isset($payload['id']) ? (string) $payload['id'] : null;
 
-        $crmOrderId = collect($payload['note_attributes'] ?? [])
-            ->first(fn ($attr) => ($attr['name'] ?? null) === 'crm_order_id')['value'] ?? null;
+        if (($crmOrderId = CrmOrderClaim::crmOrderId($payload)) !== null) {
+            $candidate = Order::find($crmOrderId);
 
-        if (is_numeric($crmOrderId) && (int) $crmOrderId > 0) {
-            $candidate = Order::find((int) $crmOrderId);
-
-            if ($candidate !== null
-                && $candidate->source === OrderSource::Chat
-                && ($candidate->shopify_order_id === null || $candidate->shopify_order_id === $shopifyId)) {
+            if (CrmOrderClaim::trusts($candidate, $payload, $shopifyId)) {
                 return $candidate;
             }
         }

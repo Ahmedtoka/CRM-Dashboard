@@ -1,5 +1,6 @@
 <?php
 
+use App\Commerce\Data\OrderPayload;
 use App\Enums\ConversationStatus;
 use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
@@ -80,6 +81,8 @@ it('links a webhook to the local chat order by crm_order_id without changing att
     $local = Order::factory()->create(['status' => OrderStatus::Submitting, 'source' => OrderSource::Chat, 'shopify_order_id' => null]);
     $o = fixture('webhook_order_chat');
     $o['note_attributes'] = [['name' => 'crm_order_id', 'value' => (string) $local->id]];
+    // The CRM's own per-order tag is what proves the attribute (audit A1).
+    $o['tags'] = 'social-crm, '.OrderPayload::tagFor($local->id);
     app(OrderMapper::class)->upsert($o);
     $fresh = $local->fresh();
     expect($fresh->shopify_order_id)->toBe((string) $o['id'])->and($fresh->created_by_id)->toBe($local->created_by_id)

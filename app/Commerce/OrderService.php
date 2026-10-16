@@ -41,6 +41,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -519,7 +520,16 @@ class OrderService
         }
 
         if ($update->financialStatus === 'paid' && $order->status !== OrderStatus::Confirmed) {
-            return $this->markPaid($order);
+            // Audit A1: a total smaller than the order's is left for staff, not confirmed.
+            if ($update->paidTotal !== null && $update->paidTotal + 0.05 < (float) $order->total) {
+                Log::warning('Shopify paid total does not cover the CRM order total; not confirming it.', [
+                    'order_id' => $order->id,
+                    'order_total' => $order->total,
+                    'paid_total' => $update->paidTotal,
+                ]);
+            } else {
+                return $this->markPaid($order);
+            }
         }
 
         SafeBroadcast::send(new OrderUpdated($order));
@@ -543,12 +553,12 @@ class OrderService
             return null;
         }
 
-        // Guard against a foreign/stale attribute pointing at an unrelated order.
-        if ($order->shopify_order_id !== null && $update->shopifyOrderId !== null && $order->shopify_order_id !== $update->shopifyOrderId) {
-            return null;
-        }
+        // Audit A1: the attribute is customer-settable, so it only counts when the
+        // payload also names this order's own draft or Shopify order.
+        $sameDraft = $update->draftOrderId !== null && $order->shopify_draft_order_id === $update->draftOrderId;
+        $sameOrder = $update->shopifyOrderId !== null && $order->shopify_order_id === $update->shopifyOrderId;
 
-        return $order;
+        return $sameDraft || $sameOrder ? $order : null;
     }
 
     private function findByShopifyIds(?string $shopifyOrderId, ?string $draftOrderId): ?Order

@@ -13,5 +13,7 @@ final readonly class OrderStatusUpdate
         public ?string $orderNumber = null,
         /** Our own order id from the `crm_order_id` note attribute, when present. */
         public ?string $crmOrderId = null,
+        /** The total the payload says was paid, when it carries one (audit A1). */
+        public ?float $paidTotal = null,
     ) {}
 }

@@ -365,6 +365,7 @@ class ShopifyCommerceProvider implements CommerceProvider
                 cancelled: false,
                 orderNumber: $payload['name'] ?? null,
                 crmOrderId: $this->crmOrderId($payload),
+                paidTotal: is_numeric($payload['total_price'] ?? null) ? (float) $payload['total_price'] : null,
             ),
             default => null,
         };
