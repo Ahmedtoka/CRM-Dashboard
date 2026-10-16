@@ -9,6 +9,8 @@ use App\Confirmations\Contracts\ConfirmationSender;
 use App\Confirmations\Events\OrderConfirmationAnswered;
 use App\Confirmations\Events\OrderConfirmationEditNote;
 use App\Confirmations\WhatsApp\ConfirmationReplyHandler;
+use App\Enums\ConversationStatus;
+use App\Enums\Handler;
 use App\Enums\MessageDirection;
 use App\Enums\OrderConfirmationStatus;
 use App\Enums\Platform;
@@ -21,6 +23,7 @@ use App\Models\Customer;
 use App\Models\Message;
 use App\Models\Order;
 use App\Models\OrderConfirmation;
+use App\Queue\QueueService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
@@ -263,7 +266,7 @@ it('leaves other button payloads and other channels alone', function () {
     customerSays('المقاسات', 'flow:sizes');
 
     $handler = app(ConfirmationReplyHandler::class);
-    $messenger = Conversation::factory()->create(['platform' => Platform::Facebook]);
+    $messenger = Conversation::factory()->for(ChannelAccount::factory()->create(['platform' => Platform::Facebook]), 'channelAccount')->create();
     $tap = Message::factory()->for($messenger, 'conversation')->create([
         'direction' => MessageDirection::In, 'sender_type' => SenderType::Customer, 'body' => 'تأكيد',
         'payload' => ConfirmationPayload::make($this->confirmation->id, 'confirm'),
@@ -271,4 +274,56 @@ it('leaves other button payloads and other channels alone', function () {
 
     expect($handler->handle($tap, $messenger))->toBeFalse()
         ->and($this->confirmation->fresh()->status)->toBe(OrderConfirmationStatus::Sent);
+});
+
+describe('inbox side effects of a handled answer', function () {
+    it('leaves no unread count for staff', function () {
+        customerSays('تأكيد الأوردر', ConfirmationPayload::make($this->confirmation->id, 'confirm'));
+        customerSays('تأكيد الأوردر', ConfirmationPayload::make($this->confirmation->id, 'confirm'));
+
+        expect($this->confirmation->fresh()->conversation->unread_count)->toBe(0);
+    });
+
+    it('does not reopen a resolved thread', function () {
+        $conversation = $this->confirmation->conversation;
+        $conversation->forceFill(['status' => ConversationStatus::Resolved, 'resolved_at' => now()->subMinute()])->save();
+
+        customerSays('إلغاء', ConfirmationPayload::make($this->confirmation->id, 'cancel'));
+
+        $conversation->refresh();
+        expect($this->confirmation->fresh()->status)->toBe(OrderConfirmationStatus::CancelRequested)
+            ->and($conversation->status)->toBe(ConversationStatus::Resolved)
+            ->and($conversation->resolved_at)->not->toBeNull()
+            ->and(Conversation::count())->toBe(1)
+            ->and($conversation->messages()->where('direction', MessageDirection::In->value)->count())->toBe(1);
+    });
+
+    it('never reaches the handover queue, even on a human-handled chat', function () {
+        $this->confirmation->conversation->forceFill(['handler' => Handler::Human])->save();
+        $queue = Mockery::mock(QueueService::class)->shouldIgnoreMissing();
+        $queue->shouldNotReceive('settles');
+        app()->instance(QueueService::class, $queue);
+
+        customerSays('تأكيد الأوردر', ConfirmationPayload::make($this->confirmation->id, 'confirm'));
+
+        expect($this->confirmation->fresh()->status)->toBe(OrderConfirmationStatus::Confirmed)
+            ->and($this->confirmation->conversation->fresh()->unread_count)->toBe(0);
+    });
+
+    it('still counts a message it does not take as unread', function () {
+        customerSays('عندي سؤال عن المقاسات');
+
+        expect($this->confirmation->fresh()->conversation->unread_count)->toBe(1);
+    });
+
+    it('hands a late tap it does not take to staff as unread, reopening the thread', function () {
+        $conversation = $this->confirmation->conversation;
+        $this->confirmation->forceFill(['status' => OrderConfirmationStatus::CancelRequested])->save();
+        $conversation->forceFill(['status' => ConversationStatus::Resolved])->save();
+
+        customerSays('تأكيد الأوردر', ConfirmationPayload::make($this->confirmation->id, 'confirm'));
+
+        $conversation->refresh();
+        expect($conversation->status)->toBe(ConversationStatus::Open)->and($conversation->unread_count)->toBe(1);
+    });
 });
