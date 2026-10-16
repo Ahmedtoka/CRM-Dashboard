@@ -158,3 +158,7 @@ it('routes echoes from the webhook job to the echo ingestor', function () {
     expect(Message::where('external_id', 'm_job_1')->value('sent_outside_crm'))->toBeTruthy()
         ->and($event->fresh()->status)->toBe('processed');
 });
+
+it('subscribes pages to message echoes, and the health check asks for a re-subscribe without them', function () {
+    expect(\App\Channels\MetaPageSubscriber::FIELDS)->toContain('message_echoes');
+});

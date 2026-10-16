@@ -16,8 +16,12 @@ use App\Models\ChannelAccount;
  */
 class MetaPageSubscriber
 {
-    /** `messaging_referrals` (2026-09-25): which ad or m.me link a conversation came through. */
-    public const FIELDS = 'messages,messaging_postbacks,messaging_referrals,message_deliveries,message_reads,feed';
+    /**
+     * `messaging_referrals` (2026-09-25): which ad or m.me link a conversation came through.
+     * `message_echoes` (2026-10-17): replies sent from Meta Business Suite or the phone app
+     * (App\Inbox\EchoIngestor); an existing page gets it when the owner subscribes again.
+     */
+    public const FIELDS = 'messages,messaging_postbacks,messaging_referrals,message_deliveries,message_reads,message_echoes,feed';
 
     public function __construct(private readonly MetaGraphClient $graph) {}
 

@@ -224,6 +224,11 @@ final class ConnectionHealthCheck
             return $this->check('webhooks', 'warning', 'missing_fields', missing: ['feed'], fix: 'resubscribe');
         }
 
+        // Replies sent from Business Suite / the phone app only reach the thread with echoes (2026-10-17).
+        if ($account->platform === Platform::Facebook && $fields !== [] && ! in_array('message_echoes', $fields, true)) {
+            return $this->check('webhooks', 'warning', 'missing_fields', missing: ['message_echoes'], fix: 'resubscribe');
+        }
+
         return $this->check('webhooks', 'ok', 'subscribed');
     }
 
