@@ -59,7 +59,7 @@ it('shows what it will send, asks, and sends the latest order to the given phone
         ->assertSuccessful();
 
     expect($this->sender->sent)->toHaveCount(1)
-        ->and($this->sender->sent[0])->toMatchArray(['kind' => 'test', 'phone' => '+201001234567', 'order_id' => $latest->id]);
+        ->and($this->sender->sent[0])->toMatchArray(['kind' => 'confirm', 'phone' => '+201001234567', 'order_id' => $latest->id]);
 
     // Buttons stay inert by default: the row is parked as skipped so a tap never tags the real order.
     $row = OrderConfirmation::sole();

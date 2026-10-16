@@ -228,19 +228,34 @@ it('sends no reminder while the feature is off', function () {
     expect($this->confirmation->fresh()->reminded_at)->toBeNull()->and(FakeChannelAdapter::sent())->toHaveCount(1);
 });
 
-it('sends a test even while the feature is off, without giving the phone to the order customer', function () {
-    app(ConfirmationSettings::class)->save(['enabled' => false]);
+describe('sendTest', function () {
+    it('sends the confirm template to any phone without a confirmation row, even while the feature is off', function () {
+        app(ConfirmationSettings::class)->save(['enabled' => false]);
+        $this->confirmation->delete();
 
-    app(ConfirmationSender::class)->send($this->confirmation, WhatsAppConfirmationSender::TEST);
+        $error = app(WhatsAppConfirmationSender::class)->sendTest($this->order, '+201009998887');
 
-    $row = $this->confirmation->fresh();
-    $identity = CustomerIdentity::where('platform', Platform::WhatsApp)->where('external_id', '201112223334')->first();
-    $message = Message::find($row->outbound_message_id);
+        $identity = CustomerIdentity::where('platform', Platform::WhatsApp)->where('external_id', '201009998887')->first();
+        $message = Message::where('is_template', true)->sole();
 
-    expect($row->status)->toBe(OrderConfirmationStatus::Sent)
-        ->and($identity->customer_id)->not->toBe($this->customer->id)
-        ->and($identity->customer->name)->not->toBe($this->customer->name)
-        ->and($row->customer_id)->toBe($identity->customer_id)
-        ->and($message->template['name'])->toBe('order_confirm_ar')
-        ->and(FakeChannelAdapter::sent()[0]['to'])->toBe('201112223334');
+        expect($error)->toBeNull()
+            ->and(OrderConfirmation::count())->toBe(0)
+            ->and($identity->customer_id)->not->toBe($this->customer->id)
+            ->and($message->conversation->customer_id)->toBe($identity->customer_id)
+            ->and($message->conversation->channel_account_id)->toBe($this->account->id)
+            ->and($message->template['name'])->toBe('order_confirm_ar')
+            ->and($message->template['params'])->toBe(array_values(TemplateParams::forOrder($this->order->fresh())))
+            ->and($message->template['buttons'])->toBe(['oc:0:confirm', 'oc:0:edit', 'oc:0:cancel'])
+            ->and(FakeChannelAdapter::sent()[0]['to'])->toBe('201009998887');
+    });
+
+    it('returns the error text when the send fails or nothing can send', function () {
+        FakeChannelAdapter::failNext('(132001) template does not exist');
+        expect(app(WhatsAppConfirmationSender::class)->sendTest($this->order, '+201009998887'))->toContain('template does not exist');
+
+        expect(app(WhatsAppConfirmationSender::class)->sendTest($this->order, 'not a phone'))->toBe('no_phone');
+
+        $this->account->forceFill(['status' => 'disconnected'])->save();
+        expect(app(WhatsAppConfirmationSender::class)->sendTest($this->order, '+201009998887'))->toBe('no_whatsapp_account');
+    });
 });

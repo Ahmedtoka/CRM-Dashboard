@@ -107,8 +107,7 @@ class ConfirmationTestCommand extends Command
             'send_at' => now(),
         ]);
 
-        // Kind 'test': sent even while the feature is off, and the phone never joins the order's customer.
-        $sender->send($confirmation, 'test');
+        $sender->send($confirmation, 'confirm');
         $confirmation->refresh();
 
         if ($confirmation->status !== OrderConfirmationStatus::Sent) {

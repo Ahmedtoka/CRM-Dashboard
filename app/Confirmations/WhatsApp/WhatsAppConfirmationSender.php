@@ -5,6 +5,7 @@ namespace App\Confirmations\WhatsApp;
 use App\Confirmations\ConfirmationPayload;
 use App\Confirmations\ConfirmationSettings;
 use App\Confirmations\Contracts\ConfirmationSender;
+use App\Confirmations\OrderConfirmations;
 use App\Confirmations\SkipReason;
 use App\Enums\MessageStatus;
 use App\Enums\OrderConfirmationStatus;
@@ -36,9 +37,6 @@ use Throwable;
  */
 final class WhatsAppConfirmationSender implements ConfirmationSender
 {
-    /** Kind for a test send to a phone the owner picks: the confirm template, even while the feature is off. */
-    public const TEST = 'test';
-
     public function __construct(
         private readonly ConfirmationSettings $settings,
         private readonly OutboundService $outbound,
@@ -48,7 +46,7 @@ final class WhatsAppConfirmationSender implements ConfirmationSender
 
     public function send(OrderConfirmation $confirmation, string $kind = 'confirm'): void
     {
-        $kind = in_array($kind, ['reminder', self::TEST], true) ? $kind : 'confirm';
+        $kind = $kind === 'reminder' ? 'reminder' : 'confirm';
         // Its own key: SendOrderConfirmation already holds `order-confirmation-send:{id}` while it calls us.
         $claim = Cache::lock('order-confirmation-deliver:'.$confirmation->id.':'.($kind === 'reminder' ? 'reminder' : 'confirm'), 60);
 
@@ -63,7 +61,7 @@ final class WhatsAppConfirmationSender implements ConfirmationSender
                 return;
             }
 
-            if ($kind !== self::TEST && ($reason = $this->blocked($confirmation)) !== null) {
+            if (($reason = $this->blocked($confirmation)) !== null) {
                 $this->skip($confirmation, $kind, $reason);
 
                 return;
@@ -77,7 +75,7 @@ final class WhatsAppConfirmationSender implements ConfirmationSender
 
     /**
      * Nothing goes to a customer while the feature is off, or for a cancelled or missing order
-     * (a load-test order is hidden by Order's scope). A test send (kind `test`) skips this check.
+     * (a load-test order is hidden by Order's scope). A test send (sendTest()) skips this check.
      */
     private function blocked(OrderConfirmation $c): ?SkipReason
     {
@@ -137,18 +135,8 @@ final class WhatsAppConfirmationSender implements ConfirmationSender
         }
 
         try {
-            $conversation = DB::transaction(fn () => $this->conversationFor($order, $account, $waId, (string) $c->phone_e164, $kind === self::TEST));
-
-            $templateKind = $kind === 'reminder' ? 'reminder' : 'confirm';
-            $params = TemplateParams::forOrder($order);
-            $template = [
-                'name' => $this->settings->template($templateKind),
-                'language' => $this->settings->templateLanguage(),
-                'params' => array_values($params),
-                'buttons' => array_map(fn (string $action) => ConfirmationPayload::make($c->id, $action), TemplateParams::BUTTONS),
-            ];
-
-            $message = $this->outbound->sendTemplate($conversation, TemplateParams::preview($templateKind, $params), $template);
+            $conversation = DB::transaction(fn () => $this->conversationFor($order, $account, $waId, (string) $c->phone_e164));
+            $message = $this->sendTemplate($conversation, $order, $kind, $c->id);
         } catch (Throwable $e) {
             Log::warning('order_confirmation.send_failed', ['confirmation_id' => $c->id, 'kind' => $kind, 'exception' => $e::class]);
             $this->fail($c, $kind, SendOutboundMessage::errorCode($e));
@@ -178,6 +166,56 @@ final class WhatsAppConfirmationSender implements ConfirmationSender
             'outbound_message_id' => $message->id,
             'last_error' => $failed ? $this->error($message) : null,
         ])->save();
+    }
+
+    /**
+     * A test of the confirm template for a real order to a phone the owner picks
+     * (whatsapp:confirmation-test). No OrderConfirmation row is made, so the order's real
+     * confirmation is never blocked; it goes out even while the feature is off; the phone gets
+     * its own customer (never the order's). The buttons carry confirmation id 0, which the reply
+     * handler ignores as a foreign payload.
+     *
+     * @return string|null null when sent, otherwise the error
+     */
+    public function sendTest(Order $order, string $phoneE164): ?string
+    {
+        $waId = preg_replace('/\D+/', '', $phoneE164) ?? '';
+        $account = app(OrderConfirmations::class)->whatsAppAccount();
+
+        if ($waId === '') {
+            return 'no_phone';
+        }
+
+        if (! OrderConfirmations::accountUsable($account)) {
+            return 'no_whatsapp_account';
+        }
+
+        try {
+            $conversation = DB::transaction(fn () => $this->conversationFor($order, $account, $waId, '+'.$waId, test: true));
+            $message = $this->sendTemplate($conversation, $order, 'confirm', 0);
+        } catch (Throwable $e) {
+            Log::warning('order_confirmation.test_send_failed', ['order_id' => $order->id, 'exception' => $e::class]);
+
+            return SendOutboundMessage::errorCode($e);
+        }
+
+        $message = Message::query()->find($message->id) ?? $message;
+
+        return $message->status === MessageStatus::Failed ? $this->error($message) : null;
+    }
+
+    /** The confirm or reminder template for this order, with button payloads for confirmation $id. */
+    private function sendTemplate(Conversation $conversation, Order $order, string $kind, int $id): Message
+    {
+        $params = TemplateParams::forOrder($order);
+        $template = [
+            'name' => $this->settings->template($kind),
+            'language' => $this->settings->templateLanguage(),
+            'params' => array_values($params),
+            'buttons' => array_map(fn (string $action) => ConfirmationPayload::make($id, $action), TemplateParams::BUTTONS),
+        ];
+
+        return $this->outbound->sendTemplate($conversation, TemplateParams::preview($kind, $params), $template);
     }
 
     /**
