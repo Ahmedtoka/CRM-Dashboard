@@ -4,6 +4,7 @@ import MentionTextarea from '@/components/crm/MentionTextarea.vue';
 import AttachmentTray from '@/components/crm/media/AttachmentTray.vue';
 import VoiceRecorderBar from '@/components/crm/media/VoiceRecorderBar.vue';
 import QuickReplyPicker from '@/components/crm/replies/QuickReplyPicker.vue';
+import SendProductPicker from '@/components/crm/SendProductPicker.vue';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useAttachmentUploads } from '@/composables/inbox/useAttachmentUploads';
 import { useChatSkin } from '@/composables/inbox/useChatSkin';
@@ -13,8 +14,8 @@ import { useI18n } from '@/composables/useI18n';
 import { shortcutHint } from '@/composables/useShortcuts';
 import { useVoiceRecorder } from '@/composables/useVoiceRecorder';
 import { cn } from '@/lib/utils';
-import type { Attachment, PlatformValue, QuickReply, QuickReplyCategory, RenderedQuickReply, UserRef } from '@/types/crm';
-import { MessageSquareText, Mic, NotebookPen, Paperclip, SendHorizontal } from 'lucide-vue-next';
+import type { Attachment, Message, PlatformValue, QuickReply, QuickReplyCategory, RenderedQuickReply, UserRef } from '@/types/crm';
+import { MessageSquareText, Mic, NotebookPen, Paperclip, SendHorizontal, Shirt } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue';
 
 const props = withDefaults(
@@ -44,7 +45,11 @@ const emit = defineEmits<{
     sendAndResolve: [body: string, attachments: Attachment[], quickReplyId: number | null];
     note: [body: string, mentions: number[], done: () => void];
     typing: [];
+    /** «ابعت منتج»: the product card the server queued (2026-10-17). */
+    productSent: [message: Message];
 }>();
+
+const productPickerOpen = ref(false);
 
 const { t } = useI18n();
 
@@ -321,6 +326,13 @@ defineExpose({
 
 <template>
     <div class="relative border-t bg-card px-3 py-2">
+        <SendProductPicker
+            v-if="productPickerOpen && mode === 'reply' && !disabled"
+            :conversation-id="conversationId"
+            @sent="emit('productSent', $event)"
+            @close="productPickerOpen = false"
+        />
+
         <QuickReplyPicker
             v-if="quickMenuOpen"
             ref="picker"
@@ -389,6 +401,19 @@ defineExpose({
                     @click="toggleFromButton()"
                 >
                     <MessageSquareText class="size-4" aria-hidden="true" />
+                </button>
+
+                <button
+                    type="button"
+                    :title="t('send_product.button')"
+                    :aria-label="t('send_product.button')"
+                    :aria-expanded="productPickerOpen"
+                    :class="cn(iconButtonClass, 'self-end disabled:pointer-events-none disabled:opacity-50')"
+                    :disabled="disabled || recording"
+                    data-testid="send-product-button"
+                    @click="productPickerOpen = !productPickerOpen"
+                >
+                    <Shirt class="size-4" aria-hidden="true" />
                 </button>
             </template>
 

@@ -323,6 +323,17 @@ const en: Messages = {
             history: 'Earlier ads',
         },
     },
+    // «Send product» in the composer (2026-10-17).
+    send_product: {
+        button: 'Send product',
+        title: 'Send a product to the customer',
+        search: 'Search by product name or SKU',
+        empty: 'No matching products',
+        out_of_stock: 'Out of stock',
+        out_of_stock_confirm: '"{name}" — this variant is out of stock. Send it anyway?',
+        send_anyway: 'Send anyway',
+        failed: 'The product was not sent',
+    },
     thread: {
         cards: 'Message cards',
         return_to_bot: 'Return to bot',

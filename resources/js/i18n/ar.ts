@@ -307,6 +307,17 @@ const ar = {
             history: 'إعلانات جت منها قبل كده',
         },
     },
+    // «ابعت منتج» in the composer (2026-10-17).
+    send_product: {
+        button: 'ابعت منتج',
+        title: 'ابعت منتج للعميل',
+        search: 'دوّر باسم المنتج أو الـ SKU',
+        empty: 'مفيش منتجات مطابقة',
+        out_of_stock: 'نفد',
+        out_of_stock_confirm: '«{name}» المقاس/اللون ده نفد. تبعته برضه؟',
+        send_anyway: 'ابعته برضه',
+        failed: 'المنتج ماتبعتش',
+    },
     thread: {
         cards: 'كروت الرسالة',
         return_to_bot: 'إرجاع للبوت',

@@ -101,11 +101,12 @@ class ProductCards
         $price = (float) $v->price > 0 ? rtrim(rtrim(number_format((float) $v->price, 2, '.', ''), '0'), '.').' جنيه' : '';
         $subtitle = implode(' · ', array_filter([$price, self::variantInStock($v) ? 'متوفر' : 'نفد حالياً']));
         $url = $this->url($p).($v->shopify_id ? '?variant='.$v->shopify_id : '');
+        $text = implode("\n", array_filter([$title, $subtitle, $url]));
 
         $cards = OutboundCards::generic([[
             'title' => $title,
             'subtitle' => $subtitle,
-            'text' => implode("\n", array_filter([$title, $subtitle, $url])),
+            'text' => $text,
             'image_url' => self::jpeg($v->image_url) ?? $this->image($p),
             'url' => $url,
             'buttons' => [OutboundCards::webUrl(self::VIEW_BUTTON, $url)],
@@ -113,7 +114,7 @@ class ProductCards
 
         return [
             'cards' => ['type' => 'generic', 'label' => self::WHATSAPP_LABEL, 'cards' => $cards['cards']],
-            'text' => implode("\n", array_filter([$title, $subtitle, $url])),
+            'text' => $text,
         ];
     }
 
