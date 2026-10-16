@@ -1,5 +1,6 @@
 <?php
 
+use App\Commerce\Data\OrderPayload;
 use App\Commerce\Jobs\ProcessShopifyWebhook;
 use App\Enums\{OrderStatus, OrderType};
 use App\Models\{Order, WebhookEvent};
@@ -73,6 +74,8 @@ it('confirms a payment link when orders/paid arrives before draft_orders/update'
         'id' => 9100,
         'name' => '#1100',
         'financial_status' => 'paid',
+        'total_price' => (string) $order->total,
+        'tags' => 'social-crm, '.OrderPayload::tagFor($order->id),
         'note_attributes' => [
             ['name' => 'crm_conversation_id', 'value' => '1'],
             ['name' => 'crm_order_id', 'value' => (string) $order->id],

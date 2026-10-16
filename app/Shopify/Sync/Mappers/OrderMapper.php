@@ -275,22 +275,16 @@ final class OrderMapper
 
     /**
      * A `crm_order_id` note attribute can be set by anyone (it rides on a public
-     * Shopify checkout/cart), so it only ever identifies a local order when that
-     * order is itself CRM-created (source chat) and either has no Shopify order
-     * yet or is already this exact one — never an unrelated chat order that
-     * happens to share the number, and never a store order.
+     * Shopify checkout/cart), so it only identifies a local order when
+     * CrmOrderClaim::trusts() finds proof the payload really is that order's
+     * Shopify order (audit A1) — never an unrelated chat order, never a store order.
      */
     private function findLocal(array $o, string $shopifyId, bool $lock = false): ?Order
     {
-        $crmOrderId = collect($o['note_attributes'] ?? [])
-            ->first(fn ($attr) => ($attr['name'] ?? null) === 'crm_order_id')['value'] ?? null;
+        if (($crmOrderId = CrmOrderClaim::crmOrderId($o)) !== null) {
+            $candidate = $this->query(Order::query()->whereKey($crmOrderId), $lock)->first();
 
-        if (is_numeric($crmOrderId) && (int) $crmOrderId > 0) {
-            $candidate = $this->query(Order::query()->whereKey((int) $crmOrderId), $lock)->first();
-
-            if ($candidate !== null
-                && $candidate->source === OrderSource::Chat
-                && ($candidate->shopify_order_id === null || $candidate->shopify_order_id === $shopifyId)) {
+            if (CrmOrderClaim::trusts($candidate, $o, $shopifyId)) {
                 return $candidate;
             }
         }

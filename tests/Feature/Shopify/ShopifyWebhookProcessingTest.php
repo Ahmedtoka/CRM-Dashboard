@@ -1,6 +1,7 @@
 <?php
 
 use App\Analytics\ActivityLogger;
+use App\Commerce\Data\OrderPayload;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Models\ActivityLog;
@@ -58,6 +59,8 @@ it('confirms an awaiting-payment chat order via markPaid when orders/paid arrive
         'id' => 9100,
         'name' => '#1100',
         'financial_status' => 'paid',
+        'total_price' => (string) $order->total,
+        'tags' => 'social-crm, '.OrderPayload::tagFor($order->id),
         'note_attributes' => [
             ['name' => 'crm_conversation_id', 'value' => '1'],
             ['name' => 'crm_order_id', 'value' => (string) $order->id],
@@ -74,7 +77,7 @@ it('confirms a chat order exactly once with one stats increment, whichever order
     // Case A: orders/create already carries the paid signal, before the dedicated orders/paid webhook.
     $orderA = Order::factory()->create(['type' => OrderType::Cod, 'status' => OrderStatus::AwaitingPayment, 'shopify_order_id' => null]);
     $orderA->customer->update(['orders_count' => 0, 'total_spent' => 0]);
-    $payloadA = ['id' => 9200, 'name' => '#9200', 'financial_status' => 'paid', 'note_attributes' => [['name' => 'crm_order_id', 'value' => (string) $orderA->id]]];
+    $payloadA = ['id' => 9200, 'name' => '#9200', 'financial_status' => 'paid', 'total_price' => (string) $orderA->total, 'tags' => OrderPayload::tagFor($orderA->id), 'note_attributes' => [['name' => 'crm_order_id', 'value' => (string) $orderA->id]]];
 
     signedPost($this, 'orders-create', $payloadA, 'sec', 'a-create')->assertOk();
     signedPost($this, 'orders-paid', $payloadA, 'sec', 'a-paid')->assertOk();
@@ -87,7 +90,7 @@ it('confirms a chat order exactly once with one stats increment, whichever order
     // Case B: orders/paid arrives first, then a later orders/updated for the same order.
     $orderB = Order::factory()->create(['type' => OrderType::Cod, 'status' => OrderStatus::AwaitingPayment, 'shopify_order_id' => null]);
     $orderB->customer->update(['orders_count' => 0, 'total_spent' => 0]);
-    $payloadB = ['id' => 9300, 'name' => '#9300', 'financial_status' => 'paid', 'note_attributes' => [['name' => 'crm_order_id', 'value' => (string) $orderB->id]]];
+    $payloadB = ['id' => 9300, 'name' => '#9300', 'financial_status' => 'paid', 'total_price' => (string) $orderB->total, 'tags' => OrderPayload::tagFor($orderB->id), 'note_attributes' => [['name' => 'crm_order_id', 'value' => (string) $orderB->id]]];
 
     signedPost($this, 'orders-paid', $payloadB, 'sec', 'b-paid')->assertOk();
     signedPost($this, 'orders-updated', $payloadB, 'sec', 'b-updated')->assertOk();
@@ -172,7 +175,7 @@ it('still marks paid from a newer orders/paid payload', function () {
     $order = Order::factory()->create(['type' => OrderType::PaymentLink, 'status' => OrderStatus::AwaitingPayment, 'shopify_order_id' => '9800']);
     $order->forceFill(['shopify_updated_at' => '2030-01-01 00:00:00'])->save();
 
-    signedPost($this, 'orders-paid', ['id' => 9800, 'name' => '#9800', 'financial_status' => 'paid', 'updated_at' => '2030-01-02T00:00:00Z'])->assertOk();
+    signedPost($this, 'orders-paid', ['id' => 9800, 'name' => '#9800', 'financial_status' => 'paid', 'total_price' => (string) $order->total, 'updated_at' => '2030-01-02T00:00:00Z'])->assertOk();
 
     expect($order->fresh()->status)->toBe(OrderStatus::Confirmed)
         ->and($order->fresh()->paid_at)->not->toBeNull();
