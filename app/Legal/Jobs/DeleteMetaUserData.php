@@ -2,6 +2,7 @@
 
 namespace App\Legal\Jobs;
 
+use App\Channels\Adapters\MetaGraphClient;
 use App\Legal\PersonalDataEraser;
 use App\Models\Conversation;
 use App\Models\CustomerIdentity;
@@ -21,6 +22,10 @@ use Illuminate\Support\Facades\Log;
  * conversations, messages, attachment files, comments, support cases, bot runs,
  * learning notes, activity rows, staff notifications, raw webhook payloads and the
  * CRM's copy of their orders / addresses. Other customers are never touched.
+ *
+ * Meta sends an APP-scoped user id while identities hold PAGE-scoped ids (audit A8):
+ * a direct match is tried first, then Meta's ids_for_pages mapping. When Meta cannot
+ * map the id the request waits as needs_manual_review — never a false "nothing found".
  * The row deletion itself is shared with crm:prune-retention (PersonalDataEraser).
  *
  * Logs counts only — never names, ids or message text.
@@ -36,36 +41,50 @@ class DeleteMetaUserData implements ShouldQueue
 
     public function __construct(public int $deletionRequestId) {}
 
-    public function handle(?PersonalDataEraser $eraser = null): void
+    public function handle(?PersonalDataEraser $eraser = null, ?MetaGraphClient $graph = null): void
     {
         $eraser ??= app(PersonalDataEraser::class);
+        $graph ??= app(MetaGraphClient::class);
         $request = DataDeletionRequest::find($this->deletionRequestId);
 
         if ($request === null || $request->status !== DataDeletionRequest::STATUS_PENDING) {
             return;
         }
 
-        $customerIds = CustomerIdentity::query()
-            ->where('platform', $request->platform)
-            ->where('external_id', $request->external_user_id)
-            ->pluck('customer_id')
-            ->unique()
-            ->values()
-            ->all();
+        $platformIds = [$request->external_user_id];
+        $customerIds = $this->customersFor($request->platform, $platformIds);
+
+        if ($customerIds === []) {
+            $pageIds = $graph->idsForPages($request->external_user_id);
+
+            if ($pageIds === null || $pageIds === []) {
+                $request->forceFill(['status' => DataDeletionRequest::STATUS_NEEDS_REVIEW])->save();
+                Log::warning('crm.data_deletion.needs_manual_review', ['request_id' => $request->id]);
+
+                return;
+            }
+
+            $platformIds = array_values(array_unique([...$platformIds, ...$pageIds]));
+            $customerIds = $this->customersFor($request->platform, $platformIds);
+        }
 
         /** @var list<array{disk: string, path: string}> $files */
         $files = [];
         $counts = [];
 
-        DB::transaction(function () use ($request, $customerIds, $eraser, &$files, &$counts) {
+        DB::transaction(function () use ($request, $customerIds, $platformIds, $eraser, &$files, &$counts) {
             $conversationIds = Conversation::whereIn('customer_id', $customerIds)->pluck('id')->all();
 
             ['counts' => $counts, 'files' => $files] = $eraser->eraseConversations($conversationIds, $customerIds);
 
             // Raw inbound payloads carry the sender's id and the message text.
-            $counts['webhook_events'] = WebhookEvent::where('provider', $request->platform)
-                ->where('payload', 'like', '%"'.$request->external_user_id.'"%')
-                ->delete();
+            $counts['webhook_events'] = 0;
+
+            foreach ($platformIds as $platformId) {
+                $counts['webhook_events'] += WebhookEvent::where('provider', $request->platform)
+                    ->where('payload', 'like', '%"'.$platformId.'"%')
+                    ->delete();
+            }
             $counts += $eraser->eraseCustomers($customerIds);
 
             $request->forceFill([
@@ -82,5 +101,20 @@ class DeleteMetaUserData implements ShouldQueue
             'status' => $request->status,
             'files' => count($files),
         ] + $counts);
+    }
+
+    /**
+     * @param  list<string>  $platformIds
+     * @return list<int>
+     */
+    private function customersFor(string $platform, array $platformIds): array
+    {
+        return CustomerIdentity::query()
+            ->where('platform', $platform)
+            ->whereIn('external_id', $platformIds)
+            ->pluck('customer_id')
+            ->unique()
+            ->values()
+            ->all();
     }
 }

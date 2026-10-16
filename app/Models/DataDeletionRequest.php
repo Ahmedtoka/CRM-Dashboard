@@ -17,6 +17,9 @@ class DataDeletionRequest extends Model
 
     public const STATUS_NOT_FOUND = 'not_found';
 
+    /** Meta could not map the app-scoped id to our page's ids: staff follow up by hand. */
+    public const STATUS_NEEDS_REVIEW = 'needs_manual_review';
+
     protected $fillable = [
         'confirmation_code',
         'platform',

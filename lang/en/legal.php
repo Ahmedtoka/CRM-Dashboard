@@ -44,11 +44,13 @@ return [
                 'pending' => 'Received — deletion is in progress. This normally finishes within minutes and always within 30 days.',
                 'completed' => 'Completed — the data linked to this request has been deleted from our support system.',
                 'not_found' => 'Completed — we found no data linked to this Facebook account in our support system, so there was nothing to delete.',
+                'needs_manual_review' => 'Received — Facebook did not let us match this request to our records automatically, so our team is reviewing it by hand. It will be completed within 30 days.',
             ],
             'badge' => [
                 'pending' => 'In progress',
                 'completed' => 'Deleted',
                 'not_found' => 'Nothing to delete',
+                'needs_manual_review' => 'Under review',
             ],
         ],
     ],
