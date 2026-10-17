@@ -2,10 +2,20 @@
 
 namespace Database\Seeders;
 
+use App\Enums\ConversationSource;
+use App\Enums\ConversationStatus;
+use App\Enums\Handler;
+use App\Enums\MessageDirection;
+use App\Enums\MessageStatus;
 use App\Enums\Platform;
 use App\Enums\QuickReplyScope;
+use App\Enums\SenderType;
 use App\Enums\UserRole;
+use App\Models\ChannelAccount;
 use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\CustomerIdentity;
+use App\Models\Message;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Models\QuickReply;
@@ -14,7 +24,6 @@ use App\Models\SupportCase;
 use App\Models\User;
 use App\Queue\Data\HandoverContext;
 use App\Queue\QueueService;
-use App\Simulator\Simulator;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -85,19 +94,37 @@ class MobileDemoSeeder extends Seeder
         ]);
     }
 
-    /** Two customers asking for a person on WhatsApp and Facebook, so check-in hands her windows. */
+    /**
+     * Two customers asking for a person on WhatsApp and Facebook, so check-in hands her windows.
+     * Built on DemoSeeder's normal demo channel accounts (`demo-<platform>`): the Simulator would put
+     * them on the load-test accounts, and the app would tag both windows «تيست».
+     */
     private function queueCustomers(): void
     {
-        $sim = app(Simulator::class);
         $queue = app(QueueService::class);
 
         foreach ([[Platform::WhatsApp, 'نور علي'], [Platform::Facebook, 'هبة محمود']] as $i => [$platform, $name]) {
-            $message = $sim->customerMessage($platform, 'mobile-demo-'.$platform->value.'-'.$i, $name, 'عايزة اكلم حد بشري لو سمحتي');
-            $conversation = $message->conversation()->first();
+            $account = ChannelAccount::query()->where('external_id', 'demo-'.$platform->value)->firstOrFail();
+            $customer = Customer::query()->create(['name' => $name, 'orders_count' => 0, 'total_spent' => 0]);
+            CustomerIdentity::query()->create([
+                'customer_id' => $customer->id, 'platform' => $platform->value,
+                'external_id' => 'mobile-demo-'.$platform->value.'-'.$i, 'display_name' => $name,
+            ]);
+            $at = now()->subMinutes(2 - $i);
+            $conversation = Conversation::query()->forceCreate([
+                'customer_id' => $customer->id, 'channel_account_id' => $account->id, 'platform' => $platform->value,
+                'status' => ConversationStatus::Open, 'handler' => Handler::Human, 'needs_human' => true,
+                'source' => ConversationSource::Direct, 'unread_count' => 1,
+                'last_customer_message_at' => $at, 'last_message_at' => $at,
+            ]);
+            Message::query()->forceCreate([
+                'conversation_id' => $conversation->id, 'platform' => $platform->value,
+                'direction' => MessageDirection::In, 'sender_type' => SenderType::Customer,
+                'body' => 'عايزة اكلم حد بشري لو سمحتي', 'status' => MessageStatus::Sent, 'is_template' => false,
+                'external_id' => 'mobile-demo-msg-'.$platform->value.'-'.$i, 'created_at' => $at, 'updated_at' => $at,
+            ]);
 
-            if ($queue->activeEntry($conversation) === null) {
-                $queue->enqueue($conversation, new HandoverContext('طلب موظفة', 'product_question', 'normal', 'سؤال عن مقاس', ['عايزة تكلم موظفة'], 'inquiry'));
-            }
+            $queue->enqueue($conversation, new HandoverContext('طلب موظفة', 'product_question', 'normal', 'سؤال عن مقاس', ['عايزة تكلم موظفة'], 'inquiry'));
         }
 
         if (QueueEntry::query()->where('status', 'waiting')->count() === 0) {
