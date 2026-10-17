@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { carryFilters, sectionTabs } from '@/lib/sectionTabs';
 import AdDrawer from '@/components/ads/AdDrawer.vue';
 import DateRangePicker from '@/components/crm/DateRangePicker.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -50,6 +52,8 @@ const props = withDefaults(
 );
 
 const { t, locale } = useI18n();
+/** The shared props the tab strip reads (role, the confirmations badge, the URL). */
+const inertiaPage = usePage<SharedData>();
 const page = usePage<SharedData>();
 const { loading, track } = useVisitLoading();
 const drawer = useAdDrawer();
@@ -185,23 +189,11 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
         <div class="mx-auto w-full min-w-0 max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('orders.title')" />
 
-            <div class="flex flex-wrap gap-1.5" role="tablist" :aria-label="t('orders.title')">
-                <button
-                    v-for="tab in TABS"
-                    :key="tab"
-                    type="button"
-                    role="tab"
-                    :aria-selected="activeTab === tab"
-                    class="inline-flex h-9 items-center rounded-full px-4 text-xs font-medium"
-                    :class="
-                        activeTab === tab ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground shadow-card hover:text-foreground'
-                    "
-                    :data-tab="tab"
-                    @click="set({ tab })"
-                >
-                    {{ t(`ordersHub.tabs.${tab}`) }}
-                </button>
-            </div>
+            <!-- D2: one strip for the order's life (كل الأوردرات · التأكيدات · التحليل · من الإعلانات); the filters ride along. -->
+            <SectionTabs
+                :tabs="carryFilters(sectionTabs.orders(t, inertiaPage.props.auth.user?.role, inertiaPage.props.navBadges?.confirmations), inertiaPage.url)"
+                :label="t('section_tabs.orders.label')"
+            />
 
             <div class="space-y-3 rounded-lg bg-card p-3 shadow-card">
                 <div class="min-w-0">

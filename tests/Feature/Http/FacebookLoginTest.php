@@ -175,7 +175,7 @@ it('saves the picked page on a new live messenger account and subscribes it', fu
     expect(session()->has('facebook_login.pages'))->toBeFalse();
     $this->post('/settings/channels/facebook/pages/111')->assertNotFound();
 
-    $channels = $this->get('/settings/channels')->assertOk();
+    $channels = $this->get('/settings/integrations?tab=webhooks')->assertOk();
     $channels->assertInertia(fn ($page) => $page->where('facebookLogin.redirect_uri', 'https://crm.example.com/settings/channels/facebook/callback'));
     expect($channels->getContent())->not->toContain('PAGE-TOKEN');
 });

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 /**
  * Reports → «تجربة الفريق» (design 2026-09-21 §4).
  *
@@ -36,11 +38,11 @@ const transcript = ref<TeamTestTranscriptLine[]>([]);
 const loading = ref(false);
 const loadError = ref<string | null>(null);
 
-const exportUrl = computed(() => `/reports/team-test/export${props.linkId ? `?link=${props.linkId}` : ''}`);
+const exportUrl = computed(() => `/bot/test-sessions/export${props.linkId ? `?link=${props.linkId}` : ''}`);
 
 function pickLink(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
-    router.get('/reports/team-test', value ? { link: Number(value) } : {}, { preserveScroll: true });
+    router.get('/bot/test-sessions', value ? { link: Number(value) } : {}, { preserveScroll: true });
 }
 
 async function show(row: TeamTestSessionRow): Promise<void> {
@@ -50,7 +52,7 @@ async function show(row: TeamTestSessionRow): Promise<void> {
     loadError.value = null;
 
     try {
-        const { data } = await api.get(`/reports/team-test/sessions/${row.id}`);
+        const { data } = await api.get(`/bot/test-sessions/${row.id}`);
         transcript.value = data.data.transcript;
     } catch (e) {
         loadError.value = apiErrorMessage(e, t('common.error'));
@@ -83,7 +85,7 @@ const columns = computed<Column[]>(() => [
     { key: 'handovers', label: t('reports.team_test.handovers'), align: 'center' },
 ]);
 
-const breadcrumbs = computed(() => [{ title: t('reports.team_test.title'), href: '/reports/team-test' }]);
+const breadcrumbs = computed(() => [{ title: t('nav.bot'), href: '/bot' }, { title: t('reports.team_test.title'), href: '/bot/test-sessions' }]);
 const select = 'h-8 rounded-md border border-input bg-background px-2 text-xs';
 </script>
 
@@ -101,6 +103,7 @@ const select = 'h-8 rounded-md border border-input bg-background px-2 text-xs';
                     <Download class="size-3.5" aria-hidden="true" />{{ t('reports.team_test.export') }}
                 </a>
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.botTesting(t)" :label="t('nav.bot_testing')" />
 
             <div class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
                 <StatCard :label="t('reports.team_test.totals.sessions')" :value="props.totals.sessions" />

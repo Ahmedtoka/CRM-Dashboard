@@ -71,7 +71,7 @@ describe('AlertsSection', () => {
     it('shows the shadow ribbon with the Setup link and the cap note', () => {
         const w = mount(AlertsSection, { props: { alerts: [card(1), card(2)], meta }, global: { stubs } });
         expect(w.get('[data-test="shadow-ribbon"]').text()).toContain('وضع تجربة');
-        expect(w.find('[data-test="shadow-toggle"]').attributes('href')).toBe('/ads/setup/rules');
+        expect(w.find('[data-test="shadow-toggle"]').attributes('href')).toBe('/settings/ads/rules');
         expect(w.find('[data-test="cap-note"]').exists()).toBe(true);
     });
 

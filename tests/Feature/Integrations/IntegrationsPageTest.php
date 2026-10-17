@@ -75,7 +75,7 @@ it('shows live accounts only, with meta setup details, and never a token', funct
 it('keeps the advanced channels page and the old channel flows reachable', function () {
     ChannelAccount::factory()->create(['platform' => 'facebook', 'driver' => 'fake', 'name' => 'Demo Messenger']);
 
-    $this->actingAs($this->admin)->get('/settings/channels')->assertOk()->assertSee('Demo Messenger');
+    $this->actingAs($this->admin)->get('/settings/integrations?tab=webhooks')->assertOk()->assertSee('Demo Messenger');
 });
 
 it('does not manage demo accounts from the integrations endpoints', function () {

@@ -60,7 +60,7 @@ const flowColumns = computed(() => [
     { key: 'cases', label: t('reports.flows.cases'), numeric: true },
 ]);
 
-const breadcrumbs = computed(() => [{ title: t('reports.bot_title'), href: '/reports/bot' }]);
+const breadcrumbs = computed(() => [{ title: t('nav.bot'), href: '/bot' }, { title: t('reports.bot_title'), href: '/bot/performance' }]);
 </script>
 
 <template>

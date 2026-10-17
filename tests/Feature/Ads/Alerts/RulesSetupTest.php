@@ -12,7 +12,7 @@ beforeEach(fn () => W::freeze());
 it('shows the rules tab with the 2.5 default floor and the shadow switch off', function () {
     W::account(['name' => 'LV-Main 2']);
 
-    $this->withoutVite()->actingAs(W::authority())->get('/ads/setup/rules')->assertOk()
+    $this->withoutVite()->actingAs(W::authority())->get('/settings/ads/rules')->assertOk()
         ->assertInertia(fn (Assert $p) => $p->component('Ads/SetupRules', false)
             ->has('settings.tax_rate')
             ->where('rules.notify_enabled', false)->where('rules.can_edit', true)->where('rules.default_floor', 2.5)
@@ -46,22 +46,22 @@ it('flips the notifications switch for Ads authority only', function () {
     $supervisor = User::factory()->create(['role' => UserRole::Supervisor]);
     $this->actingAs($supervisor)->put('/ads/setup/rules/notify', ['enabled' => false])->assertForbidden();
     $this->actingAs($supervisor)->put('/ads/setup/rules', ['margin_pct' => 40])->assertForbidden();
-    $this->withoutVite()->actingAs($supervisor)->get('/ads/setup/rules')->assertOk()
+    $this->withoutVite()->actingAs($supervisor)->get('/settings/ads/rules')->assertOk()
         ->assertInertia(fn (Assert $p) => $p->where('rules.can_edit', false));
 });
 
 it('keeps buyers, content and moderators out', function () {
     $buyer = W::buyer(W::account());
-    $this->actingAs($buyer)->get('/ads/setup/rules')->assertForbidden();
+    $this->actingAs($buyer)->get('/settings/ads/rules')->assertForbidden();
     $this->actingAs($buyer)->put('/ads/setup/rules/notify', ['enabled' => true])->assertForbidden();
-    $this->actingAs(User::factory()->create(['role' => UserRole::Moderator]))->get('/ads/setup/rules')->assertForbidden();
-    $this->actingAs(User::factory()->create(['role' => UserRole::Content]))->get('/ads/setup/rules')->assertRedirect();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Moderator]))->get('/settings/ads/rules')->assertForbidden();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Content]))->get('/settings/ads/rules')->assertRedirect();
 });
 
 it('caches the measured targets for the day and recomputes when the owner numbers change', function () {
     $acc = W::account();
     $admin = W::authority();
-    $page = fn () => $this->withoutVite()->actingAs($admin)->get('/ads/setup/rules')->assertOk();
+    $page = fn () => $this->withoutVite()->actingAs($admin)->get('/settings/ads/rules')->assertOk();
 
     $page()->assertInertia(fn (Assert $p) => $p->where('rules.accounts.0.targets.cpp_source', 'none'));
     foreach ([300, 600, 900] as $spend) {

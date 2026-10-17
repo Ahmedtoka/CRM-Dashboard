@@ -335,7 +335,7 @@ class DataHealth
         }
         usort($lines, fn (array $a, array $b) => HealthCheck::rank($b['status']) <=> HealthCheck::rank($a['status']));
 
-        $this->notifier->notifyAdmins('ads.data_health', $lines[0] + ['link' => '/ads/sync', 'more' => count($lines) - 1, 'lines' => $lines]);
+        $this->notifier->notifyAdmins('ads.data_health', $lines[0] + ['link' => '/settings/ads/sync', 'more' => count($lines) - 1, 'lines' => $lines]);
 
         $mail = array_values(array_filter($lines, fn (array $l) => ! $l['recovered'] && $this->emails($l)));
         if ($mail !== []) {

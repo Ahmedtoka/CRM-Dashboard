@@ -23,7 +23,7 @@ const props = {
     users: [],
     settings: { tax_rate: 0.14, tax_rate_percent: 14, winner_thresholds: { winner: 3, promising: 2, loser: 1, loser_min_spend: 500, min_spend: 300, min_days: 3 } },
 };
-const stubs = { AppLayout: { template: '<div><slot /></div>' }, PageHeader: { template: '<div><slot /></div>' }, AdsSetupTabs: true };
+const stubs = { AppLayout: { template: '<div><slot /></div>' }, PageHeader: { template: '<div><slot /></div>' }, SectionTabs: true };
 
 describe('Ads setup › buyers (F7 useless buttons)', () => {
     it('has no header «add user» link, and none at all for a supervisor (the users page is admin-only)', async () => {

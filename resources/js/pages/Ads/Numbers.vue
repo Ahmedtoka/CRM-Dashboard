@@ -77,7 +77,7 @@ const chatCols = computed<Column[]>(() => [
     { key: 'cost_per_order', label: t('ads.control.numbers.cost_per_order'), numeric: true },
     { key: 'roas', label: t('ads.control.numbers.roas'), numeric: true },
 ]);
-const crumbs = computed(() => [{ label: t('nav.ads'), href: '/ads' }, { label: t('ads.control.numbers.title') }]);
+const crumbs = computed(() => [{ label: t('nav.ads'), href: '/today/ads' }, { label: t('ads.control.numbers.title') }]);
 const appCrumbs = computed(() => crumbs.value.map((c) => ({ title: c.label, href: c.href ?? '/ads/numbers' })));
 
 onMounted(() => {

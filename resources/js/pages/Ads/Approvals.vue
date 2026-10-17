@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import type { SharedData } from '@/types';
+import { sectionTabs } from '@/lib/sectionTabs';
 /**
  * موافقات الإطلاق (spec 3.5, D3): every launch waiting for the manager, oldest first. Approve = live at once (re-auth 15 min, A6),
  * return to the buyer or reject with a reason, and «وافق على الآمن كله» with a progress bar. Filters live in the URL.
@@ -26,10 +29,12 @@ const props = defineProps<AdsApprovalsProps>();
 const api = useApi();
 const toast = useToast();
 const { t } = useI18n();
+/** The shared props the tab strip reads (role, the confirmations badge, the URL). */
+const inertiaPage = usePage<SharedData>();
 const me = computed(() => (usePage().props.auth as { user: { id: number } | null }).user?.id ?? null);
 
 const breadcrumbs = computed(() => [
-    { title: t('nav.ads'), href: '/ads' },
+    { title: t('nav.ads'), href: '/ads/decisions' },
     { title: t('ads.launch.approvals.title'), href: '/ads/approvals' },
 ]);
 
@@ -180,6 +185,7 @@ const field = 'h-9 rounded-md border border-input bg-background px-2 text-sm';
                     <ShieldCheck aria-hidden="true" />{{ t('ads.launch.approvals.bulk') }}
                 </Button>
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.decisions(t, inertiaPage.props.adsCounters?.awaiting_approval)" :label="t('section_tabs.decisions.label')" />
 
             <p v-if="!writesOn" role="alert" class="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
                 {{ t('ads.launch.approvals.writes_off') }}

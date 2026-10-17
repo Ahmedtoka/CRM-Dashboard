@@ -127,7 +127,7 @@ it('warns on draft save and show when a menu button opens an inactive flow', fun
         ->assertJsonPath('data.errors', [])
         ->assertJsonPath('data.warnings', fn ($w) => in_array($expected, $w, true));
 
-    $this->actingAs($this->sup)->getJson("/settings/bot-flows/{$menu->id}")
+    $this->actingAs($this->sup)->getJson("/bot/flows/{$menu->id}")
         ->assertOk()
         ->assertJsonPath('data.warnings', fn ($w) => in_array($expected, $w, true));
 

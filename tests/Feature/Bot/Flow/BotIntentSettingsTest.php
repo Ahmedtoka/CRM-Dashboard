@@ -10,8 +10,8 @@ it('lets supervisors list and update intents and blocks moderators', function ()
     $mod = User::factory()->create(['role' => UserRole::Moderator]);
     $intent = BotIntent::where('key', 'cancel_order')->firstOrFail();
 
-    $this->actingAs($mod)->get('/settings/bot-intents')->assertForbidden();
-    $this->actingAs($sup)->get('/settings/bot-intents')->assertOk()->assertInertia(fn ($p) => $p->component('settings/BotIntents')->has('intents'));
+    $this->actingAs($mod)->get('/bot/intents')->assertForbidden();
+    $this->actingAs($sup)->get('/bot/intents')->assertOk()->assertInertia(fn ($p) => $p->component('settings/BotIntents')->has('intents'));
 
     $this->actingAs($sup)->patch("/settings/bot-intents/{$intent->id}", ['priority' => 'high', 'queue' => 'senior', 'is_active' => true])->assertRedirect();
     expect($intent->fresh()->priority)->toBe('high');
@@ -22,7 +22,7 @@ it('lets supervisors list and update intents and blocks moderators', function ()
 it('shares only script.* knowledge entries as the scripts prop', function () {
     $sup = User::factory()->create(['role' => UserRole::Supervisor]);
 
-    $this->actingAs($sup)->get('/settings/bot-intents')->assertOk()->assertInertia(fn ($p) => $p
+    $this->actingAs($sup)->get('/bot/intents')->assertOk()->assertInertia(fn ($p) => $p
         ->component('settings/BotIntents')
         ->has('scripts')
         ->where('scripts', fn ($scripts) => collect($scripts)->isNotEmpty()
@@ -109,7 +109,7 @@ it('lets a supervisor save timing settings and shares them on the bot page', fun
 
     $this->actingAs($sup)->putJson('/settings/bot', ['typing_ms_per_char' => 0, 'burst_wait_seconds' => 0, 'burst_max_wait_seconds' => 0])->assertOk();
 
-    $this->actingAs($sup)->get('/settings/bot')->assertInertia(fn ($p) => $p
+    $this->actingAs($sup)->get('/bot')->assertInertia(fn ($p) => $p
         ->component('settings/Bot')
         ->where('settings.typing_ms_per_char', 0)
         ->where('settings.burst_max_wait_seconds', 0)
@@ -124,7 +124,7 @@ it('shares the flows and saves, clears or rejects an intent flow_key', function 
     $admin = User::factory()->create(['role' => UserRole::Admin]);
     $intent = BotIntent::where('key', 'price')->firstOrFail();
 
-    $this->actingAs($admin)->get('/settings/bot-intents')->assertOk()->assertInertia(fn ($p) => $p
+    $this->actingAs($admin)->get('/bot/intents')->assertOk()->assertInertia(fn ($p) => $p
         ->where('flows', fn ($flows) => collect($flows)->pluck('key')->contains('return_exchange')));
 
     $this->actingAs($admin)->patchJson("/settings/bot-intents/{$intent->id}", ['flow_key' => 'complaint'])->assertOk();

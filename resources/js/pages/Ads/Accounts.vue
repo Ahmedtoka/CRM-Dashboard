@@ -3,7 +3,8 @@
  * Ads setup › الحسابات (F6): summary tiles, one filter (range + accounts) applied by «اعرض», one «سنك» with an account
  * picker and one overall progress bar, the connections, then one accounts table whose row actions are icons.
  */
-import AdsSetupTabs from '@/components/ads/AdsSetupTabs.vue';
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import DateInput from '@/components/crm/DateInput.vue';
@@ -93,7 +94,7 @@ const loadingView = ref(false);
 function show(): void {
     const query: Record<string, string> = { from: range.value.from, to: range.value.to };
     if (pickedFilter.value.length) query.accounts = [...pickedFilter.value].sort((a, b) => a - b).join(',');
-    router.get('/ads/accounts', query, {
+    router.get('/settings/ads/accounts', query, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -412,10 +413,10 @@ const assigning = (a: AdAccountRow) => assignForm.processing && assigningId.valu
 const periodOwner = (name: string | null) => name ?? t('ads.accounts.unassigned');
 const openStart = (a: AdAccountRow) => drafts[a.id]?.baseDate ?? '';
 
-const crumbs = computed(() => [{ label: t('nav.ads_setup'), href: '/ads/setup' }, { label: t('ads.control.setup.accounts') }]);
+const crumbs = computed(() => [{ label: t('settings_hub.title'), href: '/settings' }, { label: t('ads.control.setup.accounts') }]);
 const appCrumbs = computed(() => [
-    { title: t('nav.ads_setup'), href: '/ads/setup' },
-    { title: t('ads.control.setup.accounts'), href: '/ads/accounts' },
+    { title: t('settings_hub.title'), href: '/settings' },
+    { title: t('ads.control.setup.accounts'), href: '/settings/ads/accounts' },
 ]);
 const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card px-2 text-xs';
 </script>
@@ -469,7 +470,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                     </PopoverContent>
                 </Popover>
             </PageHeader>
-            <AdsSetupTabs />
+            <SectionTabs :tabs="sectionTabs.adAccounts(t)" :label="t('section_tabs.ad_accounts.label')" />
 
             <!-- Filter: nothing loads until «اعرض». -->
             <section class="flex flex-wrap items-center gap-2 rounded-lg bg-card p-3 shadow-card" :aria-label="t('ads.accounts.filter_label')" data-test="filter">
@@ -515,7 +516,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
             <!-- Syncs the schedule or a colleague started: a note, never this user's bar. -->
             <p v-if="sync_resume.others && !syncRunning" class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-test="sync-others">
                 <LoaderCircle class="size-3.5 animate-spin" aria-hidden="true" />{{ t('ads.accounts.sync_others', { n: n(sync_resume.others) }) }}
-                <Link href="/ads/sync" class="text-primary hover:underline">{{ t('ads.accounts.sync_open_log') }}</Link>
+                <Link href="/settings/ads/sync" class="text-primary hover:underline">{{ t('ads.accounts.sync_open_log') }}</Link>
             </p>
 
             <!-- One overall progress for the «سنك» -->
@@ -532,7 +533,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                 <ProgressBar :value="progressDone" :max="progressTotal" :unit="t('ads.accounts.sync_unit')" />
                 <p v-if="stalled" class="text-xs text-muted-foreground" data-test="sync-stalled">
                     {{ t('ads.accounts.sync_stalled') }}
-                    <Link href="/ads/sync" class="text-primary hover:underline">{{ t('ads.accounts.sync_open_log') }}</Link>
+                    <Link href="/settings/ads/sync" class="text-primary hover:underline">{{ t('ads.accounts.sync_open_log') }}</Link>
                 </p>
                 <ul v-if="status" class="flex flex-wrap gap-1.5">
                     <li v-for="a in status.accounts" :key="a.id" :title="a.error ?? undefined" :data-test="`sync-chip-${a.id}`">
@@ -724,7 +725,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                                         <component :is="row.is_active ? Pause : Play" class="size-4" aria-hidden="true" />
                                         {{ row.is_active ? t('ads.accounts.stop_syncing') : t('ads.accounts.resume_syncing') }}
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem @select="router.visit(`/ads/sync?account=${row.id}`)">
+                                    <DropdownMenuItem @select="router.visit(`/settings/ads/sync?account=${row.id}`)">
                                         <History class="size-4" aria-hidden="true" />{{ t('ads.accounts.sync_log') }}
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>

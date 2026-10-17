@@ -102,9 +102,9 @@ it('shows the learning page to a supervisor and blocks a moderator', function ()
     BotKnowledgeEntry::updateOrCreate(['key' => 'script.return_policy'], ['title' => 'س', 'body' => 'نص قديم', 'is_active' => true, 'is_template' => false, 'sort' => 10]);
     pageSuggestion(pageReport());
 
-    $this->actingAs($mod)->get('/settings/bot-learning')->assertForbidden();
+    $this->actingAs($mod)->get('/bot/learning')->assertForbidden();
 
-    $this->actingAs($sup)->get('/settings/bot-learning')->assertOk()
+    $this->actingAs($sup)->get('/bot/learning')->assertOk()
         ->assertInertia(fn ($p) => $p->component('settings/BotLearning')
             ->has('reports', 1)
             ->has('report.suggestions', 1)
@@ -243,10 +243,10 @@ it('lists the latest 14 reports and selects one by id', function () {
 
     $oldest = BotLearningReport::query()->orderBy('report_date')->first();
 
-    $this->actingAs($sup)->get('/settings/bot-learning')->assertOk()
+    $this->actingAs($sup)->get('/bot/learning')->assertOk()
         ->assertInertia(fn ($p) => $p->has('reports', 14)->where('report.report_date', '2026-08-16'));
 
-    $this->actingAs($sup)->get("/settings/bot-learning?report={$oldest->id}")->assertOk()
+    $this->actingAs($sup)->get("/bot/learning?report={$oldest->id}")->assertOk()
         ->assertInertia(fn ($p) => $p->where('report.report_date', '2026-08-01'));
 });
 
@@ -273,9 +273,9 @@ it('shows the review chips and the notes of today, real conversations only', fun
     $old = $row($live, [['kind' => 'unanswered', 'summary' => 'امبارح', 'quote' => 'x']], 0.3);
     $old->forceFill(['created_at' => now()->subDays(2)])->save();
 
-    $this->actingAs($mod)->get('/settings/bot-learning')->assertForbidden();
+    $this->actingAs($mod)->get('/bot/learning')->assertForbidden();
 
-    $this->actingAs($sup)->get('/settings/bot-learning')->assertOk()
+    $this->actingAs($sup)->get('/bot/learning')->assertOk()
         ->assertInertia(fn ($p) => $p->component('settings/BotLearning')
             ->where('today.reviewed', 2)
             ->where('today.notes', 2)
@@ -298,7 +298,7 @@ it('passes the demo flag and the sources of a report to the page', function () {
         'stats' => ['demo' => true, 'sources' => [['channel_account_id' => 1, 'name' => 'Pro Max', 'count' => 3]], 'cost_usd' => 0.01],
     ]);
 
-    $this->actingAs($sup)->get('/settings/bot-learning')->assertOk()
+    $this->actingAs($sup)->get('/bot/learning')->assertOk()
         ->assertInertia(fn ($p) => $p->where('report.stats.demo', true)
             ->where('report.stats.sources.0.name', 'Pro Max')
             ->where('reports.0.stats.demo', true));
@@ -335,7 +335,7 @@ it('names suggestion targets and top intents in words instead of raw keys', func
 
     $priceLabel = BotIntent::where('key', 'price')->value('label_ar');
 
-    $this->actingAs($sup)->get('/settings/bot-learning')->assertOk()
+    $this->actingAs($sup)->get('/bot/learning')->assertOk()
         ->assertInertia(fn ($p) => $p
             ->where('report.suggestions.0.target_label', 'سياسة المرتجع')
             ->where('report.suggestions.1.target_label', $priceLabel)

@@ -13,13 +13,13 @@ it('lets supervisors reach the flow designer page and blocks moderators from eve
     $flow = BotFlow::where('key', 'complaint')->firstOrFail();
     $version = $flow->versions()->firstOrFail();
 
-    $this->actingAs($sup)->get('/settings/bot-flows')->assertOk()->assertInertia(fn ($p) => $p
+    $this->actingAs($sup)->get('/bot/flows')->assertOk()->assertInertia(fn ($p) => $p
         ->component('settings/BotFlows', false)
         ->has('flows', 7)
         ->has('stepTypes.photo'));
 
-    $this->actingAs($mod)->get('/settings/bot-flows')->assertForbidden();
-    $this->actingAs($mod)->getJson("/settings/bot-flows/{$flow->id}")->assertForbidden();
+    $this->actingAs($mod)->get('/bot/flows')->assertForbidden();
+    $this->actingAs($mod)->getJson("/bot/flows/{$flow->id}")->assertForbidden();
     $this->actingAs($mod)->postJson('/settings/bot-flows', ['key' => 'x', 'title_ar' => 'س'])->assertForbidden();
     $this->actingAs($mod)->putJson("/settings/bot-flows/{$flow->id}/draft", ['definition' => $flow->definition])->assertForbidden();
     $this->actingAs($mod)->deleteJson("/settings/bot-flows/{$flow->id}/draft")->assertForbidden();
@@ -41,7 +41,7 @@ it('saves a draft without blocking on validation and keeps it separate from the 
         ->assertOk()
         ->assertJsonPath('data.errors', []);
 
-    $this->actingAs($sup)->getJson("/settings/bot-flows/{$flow->id}")
+    $this->actingAs($sup)->getJson("/bot/flows/{$flow->id}")
         ->assertOk()
         ->assertJsonPath('data.draft.steps.description.text', 'نص جديد للمسودة')
         ->assertJsonPath('data.published.steps.description.text', $original);
@@ -178,7 +178,7 @@ it('passes script bodies and their active flag to the designer for the customer 
     \App\Models\BotKnowledgeEntry::query()->updateOrCreate(['key' => 'script.preview_on'], ['title' => 'شغال', 'body' => '{time_greeting} يا فندم', 'is_active' => true]);
     \App\Models\BotKnowledgeEntry::query()->updateOrCreate(['key' => 'script.preview_off'], ['title' => 'متوقف', 'body' => 'نص قديم', 'is_active' => false]);
 
-    $this->actingAs($sup)->get('/settings/bot-flows')->assertOk()->assertInertia(function ($page) {
+    $this->actingAs($sup)->get('/bot/flows')->assertOk()->assertInertia(function ($page) {
         $scripts = collect($page->toArray()['props']['scripts'])->keyBy('key');
 
         expect($scripts['preview_on'])->toMatchArray(['title' => 'شغال', 'body' => '{time_greeting} يا فندم', 'is_active' => true])

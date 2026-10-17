@@ -133,7 +133,7 @@ it('shows the rejections on Settings → Channels and Settings → Shopify', fun
     app(WebhookRejections::class)->record('facebook', 'webhooks/facebook', 'bad_signature');
     app(WebhookRejections::class)->record('shopify', 'webhooks/shopify/orders-paid', 'bad_hmac');
 
-    $this->actingAs($this->admin)->get('/settings/channels')->assertOk()
+    $this->actingAs($this->admin)->get('/settings/integrations?tab=webhooks')->assertOk()
         ->assertInertia(fn ($page) => $page->where('webhookRejections.facebook.count', 1)->where('webhookRejections.whatsapp.count', 0));
 
     $this->actingAs($this->admin)->get('/settings/shopify')->assertOk()

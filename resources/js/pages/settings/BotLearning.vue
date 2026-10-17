@@ -95,7 +95,7 @@ const tabs = ['reports', 'notes'] as const;
 const { loading: loadingReport, track } = useVisitLoading();
 
 function select(id: number): void {
-    router.get('/settings/bot-learning', { report: id }, track({ preserveScroll: true }));
+    router.get('/bot/learning', { report: id }, track({ preserveScroll: true }));
 }
 
 async function run(): Promise<void> {
@@ -176,7 +176,7 @@ function evidenceIds(s: BotSuggestionRow): number[] {
     return s.evidence?.conversation_ids ?? [];
 }
 
-const breadcrumbs = computed(() => [{ title: t('settings.bot_learning.title'), href: '/settings/bot-learning' }]);
+const breadcrumbs = computed(() => [{ title: t('nav.bot'), href: '/bot' }, { title: t('settings.bot_learning.title'), href: '/bot/learning' }]);
 const card = 'rounded-lg border border-border bg-card p-4 shadow-card';
 const badge = 'rounded-full px-2 py-0.5 text-2xs font-medium';
 </script>

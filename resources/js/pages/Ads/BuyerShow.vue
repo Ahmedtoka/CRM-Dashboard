@@ -133,7 +133,7 @@ const campaignHref = (row: CampaignRow) =>
     });
 
 const breadcrumbs = computed(() => [
-    { title: t('nav.ads'), href: '/ads' },
+    { title: t('nav.ads'), href: '/ads/decisions' },
     { title: t('nav.ads_numbers'), href: '/ads/numbers?section=buyers' },
     { title: props.buyer.name, href: `/ads/buyers/${props.buyer.id}` },
 ]);

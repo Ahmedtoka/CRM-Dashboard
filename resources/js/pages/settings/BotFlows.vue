@@ -178,7 +178,7 @@ async function loadFlow(id: number): Promise<boolean> {
     restoreLeftDraft.value = false;
     recoverable.value = null;
     try {
-        const { data } = await api.get<{ data: FlowShowPayload }>(`/settings/bot-flows/${id}`);
+        const { data } = await api.get<{ data: FlowShowPayload }>(`/bot/flows/${id}`);
         if (selectedFlowId.value !== id) return true;
         const payload = data.data;
         let definition = JSON.parse(JSON.stringify(payload.draft ?? payload.published)) as FlowDefinition;
@@ -457,7 +457,7 @@ async function onVersionsChanged(): Promise<void> {
     }
     // Local edits are kept; only the versions list is refreshed.
     try {
-        const { data } = await api.get<{ data: FlowShowPayload }>(`/settings/bot-flows/${id}`);
+        const { data } = await api.get<{ data: FlowShowPayload }>(`/bot/flows/${id}`);
         if (flow.value?.id !== id) return;
         versions.value = data.data.versions;
         if (data.data.draft !== null) restoreLeftDraft.value = true;
@@ -704,8 +704,8 @@ onBeforeUnmount(() => {
 });
 
 const breadcrumbs = computed(() => [
-    { title: t('settings.bot.title'), href: '/settings/bot' },
-    { title: t('flows.title'), href: '/settings/bot-flows' },
+    { title: t('nav.bot'), href: '/bot' },
+    { title: t('flows.title'), href: '/bot/flows' },
 ]);
 
 const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';

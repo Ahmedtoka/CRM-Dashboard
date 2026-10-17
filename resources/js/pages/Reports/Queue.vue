@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import DateRangePicker from '@/components/crm/DateRangePicker.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -89,6 +91,7 @@ const breadcrumbs = computed(() => [{ title: t('reports.queue.title'), href: '/r
                     {{ t('reports.queue.export') }}
                 </a>
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.team(t)" :label="t('section_tabs.team.label')" />
 
             <div class="rounded-lg bg-card p-3 shadow-card">
                 <DateRangePicker :model-value="range" @update:model-value="visit" />

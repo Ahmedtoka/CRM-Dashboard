@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 /**
  * Settings → «روابط التجربة» (design 2026-09-21 §1). One card per link: the address to
  * share, how often it was opened, how many runs it produced, and the runs themselves.
@@ -153,7 +155,7 @@ function status(row: TestLinkRow): { label: string; tone: string } {
     return { label: t('settings.test_links.active'), tone: 'bg-emerald-500/10 text-emerald-600' };
 }
 
-const breadcrumbs = computed(() => [{ title: t('settings.test_links.title'), href: '/settings/bot-test-links' }]);
+const breadcrumbs = computed(() => [{ title: t('nav.bot'), href: '/bot' }, { title: t('settings.test_links.title'), href: '/bot/test-links' }]);
 const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';
 </script>
 
@@ -163,13 +165,14 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-3xl space-y-5 p-3 md:p-6">
             <PageHeader :title="t('settings.test_links.title')" :description="t('settings.test_links.description')">
-                <a href="/reports/team-test" class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium hover:bg-muted">
+                <a href="/bot/test-sessions" class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium hover:bg-muted">
                     <BarChart3 class="size-3.5" aria-hidden="true" />{{ t('settings.test_links.report') }}
                 </a>
                 <button type="button" class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" @click="edit(null)">
                     <Plus class="size-3.5" aria-hidden="true" />{{ t('settings.test_links.add') }}
                 </button>
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.botTesting(t)" :label="t('nav.bot_testing')" />
 
             <p v-if="!props.links.length" class="rounded-lg bg-card p-6 text-center text-sm text-muted-foreground shadow-card">
                 {{ t('settings.test_links.empty') }}

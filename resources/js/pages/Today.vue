@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import DigestCard from '@/components/ads/DigestCard.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import SkeletonList from '@/components/crm/SkeletonList.vue';
@@ -31,6 +33,8 @@ const props = defineProps<{
 }>();
 
 const { t, locale } = useI18n();
+/** The shared props the tab strip reads (role, the confirmations badge, the URL). */
+const inertiaPage = usePage<SharedData>();
 const page = usePage<SharedData>();
 
 const title = computed(
@@ -53,6 +57,7 @@ const freshness = computed(() => oldestStamp([props.generated_at, props.cards_ge
             >
                 <DayToggle :mode="mode" />
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.today(t, inertiaPage.props.auth.user?.role)" :label="t('section_tabs.today.label')" />
 
             <UrgentStrip v-if="urgent !== null" :items="urgent" />
 

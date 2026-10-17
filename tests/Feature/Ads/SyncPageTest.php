@@ -28,14 +28,14 @@ it('shows running runs, the log with the user and the schedule', function () {
     $admin = User::factory()->create(['role' => 'admin', 'name' => 'Owner']);
     $acc = AdAccount::factory()->meta()->create(['name' => 'Cloting']);
     AdsSyncRun::create(['ad_account_id' => $acc->id, 'platform' => 'meta', 'kind' => 'backfill', 'status' => 'running', 'trigger' => 'manual', 'triggered_by_id' => $admin->id, 'started_at' => now()]);
-    $this->actingAs($admin)->get('/ads/sync')->assertInertia(fn (Assert $p) => $p->component('Ads/Sync')
+    $this->actingAs($admin)->get('/settings/ads/sync')->assertInertia(fn (Assert $p) => $p->component('Ads/Sync')
         ->has('now.running', 1)->where('now.running.0.account', 'Cloting')->where('now.running.0.user', 'Owner')
         ->has('runs', 1)->has('schedule')
         ->where('schedule', fn ($s) => collect($s)->contains(fn ($e) => str_contains($e['command'], 'ads:') && $e['next_due'] !== '')));
 });
 
 it('forbids the sync page to media buyers', function () {
-    $this->actingAs(User::factory()->create(['role' => 'media_buyer']))->get('/ads/sync')->assertForbidden();
+    $this->actingAs(User::factory()->create(['role' => 'media_buyer']))->get('/settings/ads/sync')->assertForbidden();
 });
 
 it('filters the log by status and trigger', function () {
@@ -43,13 +43,13 @@ it('filters the log by status and trigger', function () {
     $acc = AdAccount::factory()->meta()->create();
     AdsSyncRun::create(['ad_account_id' => $acc->id, 'platform' => 'meta', 'kind' => 'recent', 'status' => 'ok', 'trigger' => 'schedule', 'started_at' => now()]);
     AdsSyncRun::create(['ad_account_id' => $acc->id, 'platform' => 'meta', 'kind' => 'recent', 'status' => 'error', 'trigger' => 'manual', 'started_at' => now()]);
-    $this->actingAs($admin)->get('/ads/sync?status=error&trigger=manual')
+    $this->actingAs($admin)->get('/settings/ads/sync?status=error&trigger=manual')
         ->assertInertia(fn (Assert $p) => $p->has('runs', 1)->where('runs.0.status', 'error'));
 });
 
 it('reports the queue as unsupported when the queue is not redis', function () {
     $admin = User::factory()->create(['role' => 'admin']);
-    $this->actingAs($admin)->get('/ads/sync')
+    $this->actingAs($admin)->get('/settings/ads/sync')
         ->assertInertia(fn (Assert $p) => $p->where('now.supported', false)->where('now.waiting', []));
 });
 
@@ -88,7 +88,7 @@ it('scrubs token-like text in a run error before it reaches the page', function 
     $admin = User::factory()->create(['role' => 'admin']);
     $acc = AdAccount::factory()->meta()->create();
     AdsSyncRun::create(['ad_account_id' => $acc->id, 'platform' => 'meta', 'kind' => 'recent', 'status' => 'error', 'error' => 'Bad call access_token=EAAsecret123 failed', 'started_at' => now()]);
-    $this->actingAs($admin)->get('/ads/sync')->assertOk()->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/settings/ads/sync')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->where('runs.0.error', fn ($e) => str_contains($e, 'access_token=') && ! str_contains($e, 'EAAsecret123')));
 });
 
@@ -99,6 +99,6 @@ it('marks an account as syncing on the accounts page', function () {
     AdsSyncRun::create(['ad_account_id' => $busy->id, 'platform' => 'meta', 'kind' => 'recent', 'status' => 'running', 'trigger' => 'manual', 'triggered_by_id' => $admin->id, 'started_at' => now()]);
     AdsSyncRun::create(['ad_account_id' => $idle->id, 'platform' => 'meta', 'kind' => 'recent', 'status' => 'ok', 'trigger' => 'manual', 'started_at' => now()]);
 
-    $this->actingAs($admin)->get('/ads/accounts')->assertInertia(fn (Assert $p) => $p->component('Ads/Accounts')
+    $this->actingAs($admin)->get('/settings/ads/accounts')->assertInertia(fn (Assert $p) => $p->component('Ads/Accounts')
         ->where('sync_resume.accounts', [$busy->id])->where('sync_resume.others', 0));
 });

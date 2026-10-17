@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /** Ads Hub — المزامنة: what the ad syncs are doing now, what waits in the queue, the recent log and the schedule. */
-import AdsSetupTabs from '@/components/ads/AdsSetupTabs.vue';
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -40,7 +41,7 @@ const statusTone = { running: 'info', ok: 'positive', error: 'negative' } as con
 function setFilter(key: 'account' | 'status' | 'trigger', value: string): void {
     const next: Record<string, unknown> = { ...props.filters, [key]: value === '' ? null : value };
     const query = Object.fromEntries(Object.entries(next).filter(([, v]) => v !== null && v !== '')) as Record<string, string>;
-    router.get('/ads/sync', query, { preserveScroll: true, preserveState: true, replace: true });
+    router.get('/settings/ads/sync', query, { preserveScroll: true, preserveState: true, replace: true });
 }
 
 const columns = computed<Column[]>(() => [
@@ -58,10 +59,10 @@ const columns = computed<Column[]>(() => [
 
 const selectClass = 'h-8 min-w-32 rounded-md border border-input bg-card px-2 text-xs';
 const breadcrumbs = computed(() => [
-    { title: t('nav.ads_setup'), href: '/ads/setup' },
-    { title: t('ads.control.setup.sync'), href: '/ads/sync' },
+    { title: t('settings_hub.title'), href: '/settings' },
+    { title: t('ads.control.setup.sync'), href: '/settings/ads/sync' },
 ]);
-const crumbs = computed(() => [{ label: t('nav.ads_setup'), href: '/ads/setup' }, { label: t('ads.control.setup.sync') }]);
+const crumbs = computed(() => [{ label: t('settings_hub.title'), href: '/settings' }, { label: t('ads.control.setup.sync') }]);
 const count = (v: number | null) => (v === null ? '—' : formatCount(v, locale.value));
 </script>
 
@@ -70,7 +71,7 @@ const count = (v: number | null) => (v === null ? '—' : formatCount(v, locale.
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-6xl space-y-6 p-4">
             <PageHeader :title="t('ads.sync.title')" :description="t('ads.sync.hint')" :breadcrumbs="crumbs" />
-            <AdsSetupTabs />
+            <SectionTabs :tabs="sectionTabs.adAccounts(t)" :label="t('section_tabs.ad_accounts.label')" />
 
             <!-- Now: running + waiting -->
             <section class="space-y-2" aria-labelledby="sync-now">

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 /** Ads Hub — مكتبة مواد الإعلانات: what the content team uploaded, its status, stock and (for spend viewers) performance (spec §8.7). */
 import AdLinkPicker from '@/components/ads/AdLinkPicker.vue';
 import CaptionsDialog from '@/components/ads/CaptionsDialog.vue';
@@ -280,7 +282,7 @@ const fieldClass = 'h-9 w-full rounded-md border border-input bg-background px-2
 const iconBtn = 'inline-flex size-8 items-center justify-center rounded-md border transition-colors disabled:opacity-50';
 
 const breadcrumbs = computed(() => [
-    { title: t('nav.ads'), href: '/ads' },
+    { title: t('nav.ads'), href: '/ads/materials' },
     { title: t('nav.ads_materials'), href: '/ads/materials' },
 ]);
 </script>
@@ -310,6 +312,7 @@ const breadcrumbs = computed(() => [
                     <Plus aria-hidden="true" />{{ t('ads.materials.new') }}
                 </Link>
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.library(t)" :label="t('section_tabs.library.label')" />
 
             <!-- KPIs (whole library) -->
             <ul class="grid grid-cols-2 gap-3 sm:grid-cols-5" data-test="material-kpis">

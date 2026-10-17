@@ -8,13 +8,14 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Media buyers and content users live in /ads only (Ads Hub design §2): everywhere else a page
+ * Media buyers and content users live in /ads (and «النهارده» › الإعلانات, /today/ads) only (Ads Hub design §2,
+ * redesign 2026-10-17), plus their own account in Settings: everywhere else a page
  * visit sends them home, and any other request (json, writes) is a 403.
  */
 class RestrictAdsRoles
 {
     private const ALLOWED = [
-        'ads', 'ads/*', 'settings/profile', 'settings/password', 'settings/appearance',
+        'ads', 'ads/*', 'today/ads', 'settings/ads/*', 'settings', 'settings/profile', 'settings/password', 'settings/appearance', 'settings/notifications',
         'logout', 'notifications', 'notifications/*', 'broadcasting', 'broadcasting/*', 'up',
     ];
 

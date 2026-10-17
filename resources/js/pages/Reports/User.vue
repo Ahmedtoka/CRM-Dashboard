@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import ReportFilters from '@/components/crm/ReportFilters.vue';
 import UserReportView from '@/components/crm/UserReportView.vue';
@@ -28,6 +30,7 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="title" :description="t(`roles.${user.role}`)" :breadcrumbs="crumbs" />
+            <SectionTabs :tabs="sectionTabs.team(t)" :label="t('section_tabs.team.label')" />
 
             <div class="rounded-lg bg-card p-3 shadow-card">
                 <ReportFilters :range="range" :platform="platform" @change="visit" />

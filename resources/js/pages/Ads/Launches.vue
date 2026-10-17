@@ -58,7 +58,7 @@ function page(n: number): void {
 }
 
 const breadcrumbs = computed(() => [
-    { title: t('nav.ads'), href: '/ads' },
+    { title: t('nav.ads'), href: '/ads/materials' },
     { title: t('ads.launch.page.title'), href: '/ads/launches' },
 ]);
 

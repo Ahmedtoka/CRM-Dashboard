@@ -183,7 +183,7 @@ onBeforeUnmount(() => {
             data-test="shadow-ribbon"
         >
             <span>{{ t('ads.alerts.shadow') }}</span>
-            <Link v-if="showToggle" href="/ads/setup/rules" class="font-semibold underline" data-test="shadow-toggle">{{
+            <Link v-if="showToggle" href="/settings/ads/rules" class="font-semibold underline" data-test="shadow-toggle">{{
                 t('ads.alerts.shadow_toggle')
             }}</Link>
         </div>

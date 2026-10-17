@@ -10,6 +10,7 @@ import WhyList from '@/components/ads/WhyList.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import SectionTabs from '@/components/crm/SectionTabs.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useAdDrawer } from '@/composables/useAdDrawer';
 import { useI18n } from '@/composables/useI18n';
@@ -18,8 +19,9 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAdsMoney, reasonTexts, writeChangeKey } from '@/lib/ads';
 import { buildHref, readQuery, withParam } from '@/lib/adsFilters';
 import { formatCount, formatDateTime } from '@/lib/format';
+import { sectionTabs, type SectionTab } from '@/lib/sectionTabs';
 import type { AdActionLogRow, AdSuggestion, AdsDecisionsProps, DecisionsTab } from '@/types/ads';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { CheckCircle2, History } from 'lucide-vue-next';
 import { computed } from 'vue';
 
@@ -35,7 +37,18 @@ const tabHref = (tab: DecisionsTab) => {
     for (const k of ['who', 'level', 'result']) delete q[k];
     return buildHref('/ads/decisions', withParam(q, 'tab', tab, { tab: 'open' }));
 };
-const count = (tab: DecisionsTab) => (tab === 'log' ? null : props.counts[tab]);
+/** D12: one strip with the launch approvals between «مفتوح» and «مأجّل»; the open count is the waiting work. */
+const page = usePage();
+const decisionTabs = computed<SectionTab[]>(() => {
+    void page.url; // recompute the carried filters after every visit
+    const own: Record<string, DecisionsTab> = { '/ads/decisions': 'open', '/ads/decisions?tab=snoozed': 'snoozed', '/ads/decisions?tab=closed': 'closed', '/ads/decisions?tab=log': 'log' };
+    const awaiting = (page.props.adsCounters as { awaiting_approval?: number } | null | undefined)?.awaiting_approval ?? props.approvals?.count ?? null;
+
+    return sectionTabs.decisions(t, awaiting).map((tab) => {
+        const key = own[tab.href];
+        return key ? { ...tab, href: tabHref(key), badge: key === 'open' ? props.counts.open : null } : tab;
+    });
+});
 const setLog = (key: string, value: string | null) => router.get('/ads/decisions', withParam(readQuery(search()), key, value), { preserveState: true, preserveScroll: true, replace: true });
 const reasonLine = (s: AdSuggestion) =>
     reasonTexts(s.reasons, locale.value, props.currency)
@@ -50,7 +63,7 @@ const logColumns = computed<Column[]>(() => [
     { key: 'result', label: t('ads.control.decisions.log_result') },
 ]);
 const resultTone = (r: AdActionLogRow['result']) => (r === 'ok' ? 'positive' : r === 'pending' ? 'info' : 'negative');
-const crumbs = computed(() => [{ label: t('nav.ads'), href: '/ads' }, { label: t('ads.control.decisions.title') }]);
+const crumbs = computed(() => [{ label: t('nav.ads'), href: '/today/ads' }, { label: t('ads.control.decisions.title') }]);
 const appCrumbs = computed(() => crumbs.value.map((c) => ({ title: c.label, href: c.href ?? '/ads/decisions' })));
 const selectClass = 'h-9 rounded-md border border-input bg-background px-2 text-xs';
 </script>
@@ -72,20 +85,7 @@ const selectClass = 'h-9 rounded-md border border-input bg-background px-2 text-
             <!-- Dims while a filter visit to this page runs (M7). -->
             <div class="space-y-4 transition-opacity" :class="loading ? 'opacity-60' : ''" :aria-busy="loading" data-test="page-body">
 
-            <nav class="scrollbar-none flex gap-1 overflow-x-auto border-b border-border" :aria-label="t('ads.control.decisions.title')">
-                <Link
-                    v-for="tab in TABS"
-                    :key="tab"
-                    :data-test="`tab-${tab}`"
-                    :href="tabHref(tab)"
-                    class="-mb-px inline-flex h-10 shrink-0 items-center gap-1 border-b-2 px-3 text-xs font-medium"
-                    :class="filters.tab === tab ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
-                    :aria-current="filters.tab === tab ? 'page' : undefined"
-                >
-                    {{ t(`ads.control.decisions.tab_${tab}`) }}
-                    <span v-if="count(tab) !== null" class="tabular-nums">{{ formatCount(count(tab) ?? 0, locale) }}</span>
-                </Link>
-            </nav>
+            <SectionTabs :tabs="decisionTabs" :label="t('section_tabs.decisions.label')" />
 
             <template v-if="filters.tab === 'open'">
                 <section v-if="approvals && approvals.count > 0" data-test="approvals" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-accent p-4">

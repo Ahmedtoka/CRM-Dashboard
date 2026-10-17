@@ -28,7 +28,8 @@ describe('Decisions', () => {
         const w = mount(Decisions, { props: base as never, global: { stubs } });
         const html = w.html();
         expect(html.indexOf('data-test="approvals"')).toBeLessThan(html.indexOf('data-test="suggestions"'));
-        expect(w.find('[data-test="tab-open"]').text()).toContain('4');
+        expect(w.find('[data-tab="/ads/decisions"]').text()).toContain('4');
+        expect(w.find('[data-tab="/ads/approvals"]').text()).toContain('3');
         expect(w.text()).toContain('Eid Abaya');
     });
 

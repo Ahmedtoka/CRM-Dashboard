@@ -56,6 +56,6 @@ it('keeps the load-test channels out of Settings → Channels', function () {
     $real = ChannelAccount::factory()->create(['platform' => Platform::Facebook, 'driver' => 'live']);
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
-    $this->actingAs($admin)->get('/settings/channels')->assertOk()
+    $this->actingAs($admin)->get('/settings/integrations?tab=webhooks')->assertOk()
         ->assertInertia(fn ($page) => $page->has('accounts', 1)->where('accounts.0.id', $real->id));
 });

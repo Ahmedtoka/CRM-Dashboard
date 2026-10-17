@@ -10,6 +10,7 @@ use App\Http\Controllers\Web\CustomerController;
 use App\Http\Controllers\Web\InboxController;
 use App\Http\Controllers\Web\LocaleController;
 use App\Http\Controllers\Web\MediaController;
+use App\Http\Controllers\Web\MovedPageController;
 use App\Http\Controllers\Web\NotificationController;
 use App\Http\Controllers\Web\OnboardingController;
 use App\Http\Controllers\Web\OrderConfirmationController;
@@ -50,6 +51,7 @@ use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\RestrictAdsRoles;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\TrackPresence;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale::class, TrackPresence::class])->group(function () {
@@ -182,6 +184,8 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
     });
 
     // Reports
+    // «التقارير» opens on the first report the person may see (IA §3.3).
+    Route::get('/reports', fn (Request $request) => redirect($request->user()->isSupervisorOrAbove() ? '/reports/team' : '/reports/me'))->name('reports');
     Route::get('/reports/me', [ReportController::class, 'me'])->name('reports.me');
     Route::middleware('role:supervisor')->group(function () {
         Route::get('/reports/team', [ReportController::class, 'team'])->name('reports.team');
@@ -189,7 +193,7 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::get('/reports/queue', [QueueReportController::class, 'index'])->name('reports.queue');
         Route::get('/reports/queue/export', [QueueReportController::class, 'export'])->name('reports.queue.export');
         Route::get('/reports/users/{user}', [ReportController::class, 'user'])->name('reports.users.show');
-        Route::get('/reports/bot', [ReportController::class, 'bot'])->name('reports.bot');
+        Route::get('/reports/bot', MovedPageController::class)->defaults('to', '/bot/performance')->name('reports.bot');
         // D11: merged into «الأرقام» (/ads/numbers?section=chat).
         Route::get('/reports/ads', [LegacyAdsRedirectController::class, 'reportsAds'])->name('reports.ads');
         Route::get('/reports/activity', [ReportController::class, 'activity'])->name('reports.activity');
@@ -198,9 +202,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
 
         // Reports → «تجربة الفريق» (design 2026-09-21 §4): the team's own runs of the
         // public test links — sessions, funnels, transcripts and the CSV.
-        Route::get('/reports/team-test', [ReportController::class, 'teamTest'])->name('reports.team-test');
-        Route::get('/reports/team-test/export', [ReportController::class, 'teamTestExport'])->name('reports.team-test.export');
-        Route::get('/reports/team-test/sessions/{session}', [ReportController::class, 'teamTestSession'])->name('reports.team-test.session');
+        Route::get('/reports/team-test', MovedPageController::class)->defaults('to', '/bot/test-sessions')->name('reports.team-test');
+        Route::get('/reports/team-test/export', MovedPageController::class)->defaults('to', '/bot/test-sessions/export')->name('reports.team-test.export');
+        Route::get('/reports/team-test/sessions/{session}', MovedPageController::class)->defaults('to', '/bot/test-sessions/{session}')->name('reports.team-test.session');
     });
     Route::middleware(['dev-tools', 'role:admin'])->group(function () {
         Route::get('/reports/latency', [ReportController::class, 'latency'])->name('reports.latency');
@@ -220,9 +224,28 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::delete('quick-replies/{quickReply}/attachments/{attachment}', [QuickReplyController::class, 'destroyAttachment'])->name('quick-replies.attachments.destroy');
     });
 
+    // «البوت» (redesign 2026-10-17, A2): the bot's pages left Settings for their own section. Their old GET URLs
+    // answer 301 here (IA §5, MovedPageController); every write keeps its old /settings/bot-* URL.
+    Route::prefix('bot')->name('bot.')->middleware('role:supervisor')->group(function () {
+        Route::get('/', [BotController::class, 'index'])->name('index');
+        Route::get('flows', [BotFlowController::class, 'index'])->name('flows.index');
+        Route::get('flows/{flow}', [BotFlowController::class, 'show'])->name('flows.show');
+        Route::get('intents', [BotIntentController::class, 'index'])->name('intents.index');
+        Route::get('replies', [BotReplyController::class, 'index'])->name('replies.index');
+        Route::get('knowledge', [BotKnowledgeController::class, 'index'])->name('knowledge.index');
+        Route::get('translations', [BotTranslationController::class, 'index'])->name('translations.index');
+        Route::get('test-links', [BotTestLinkController::class, 'index'])->name('test-links.index');
+        Route::get('test-links/{testLink}/sessions', [BotTestLinkController::class, 'sessions'])->name('test-links.sessions');
+        Route::get('test-sessions', [ReportController::class, 'teamTest'])->name('test-sessions.index');
+        Route::get('test-sessions/export', [ReportController::class, 'teamTestExport'])->name('test-sessions.export');
+        Route::get('test-sessions/{session}', [ReportController::class, 'teamTestSession'])->name('test-sessions.show');
+        Route::get('learning', [BotLearningController::class, 'index'])->name('learning.index');
+        Route::get('performance', [ReportController::class, 'bot'])->name('performance');
+    });
+
     // Settings — supervisor+
     Route::prefix('settings')->name('settings.')->middleware('role:supervisor')->group(function () {
-        Route::get('bot', [BotController::class, 'index'])->name('bot.index');
+        Route::get('bot', MovedPageController::class)->defaults('to', '/bot')->name('bot.index');
         Route::put('bot', [BotController::class, 'update'])->name('bot.update');
 
         // Handover queue settings (queue routing design 2026-09-26): windows, timers, SLA,
@@ -231,15 +254,15 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::put('queue', [QueueSettingController::class, 'update'])->name('queue.update');
 
         // Intent catalog (human bot flow Task 5): routing/priority/queue/scripts per intent.
-        Route::get('bot-intents', [BotIntentController::class, 'index'])->name('bot-intents.index');
+        Route::get('bot-intents', MovedPageController::class)->defaults('to', '/bot/intents')->name('bot-intents.index');
         Route::patch('bot-intents/{intent}', [BotIntentController::class, 'update'])->name('bot-intents.update');
 
         // Every reply the bot can give, on one page (owner, 2026-09-22).
-        Route::get('bot-replies', [BotReplyController::class, 'index'])->name('bot-replies.index');
+        Route::get('bot-replies', MovedPageController::class)->defaults('to', '/bot/replies')->name('bot-replies.index');
         Route::put('bot-replies/text', [BotReplyController::class, 'updateText'])->name('bot-replies.text.update');
         Route::delete('bot-replies/text', [BotReplyController::class, 'resetText'])->name('bot-replies.text.reset');
 
-        Route::get('bot-knowledge', [BotKnowledgeController::class, 'index'])->name('bot-knowledge.index');
+        Route::get('bot-knowledge', MovedPageController::class)->defaults('to', '/bot/knowledge')->name('bot-knowledge.index');
         Route::post('bot-knowledge/entries', [BotKnowledgeController::class, 'storeEntry'])->name('bot-knowledge.entries.store');
         Route::put('bot-knowledge/entries/{entry}', [BotKnowledgeController::class, 'updateEntry'])->name('bot-knowledge.entries.update');
         Route::delete('bot-knowledge/entries/{entry}', [BotKnowledgeController::class, 'destroyEntry'])->name('bot-knowledge.entries.destroy');
@@ -263,9 +286,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
 
         // Flow designer (2026-09-17 Task 2): drafts, publish, versions, create, main menu.
         // Task 3: the sandbox simulator (one simulated turn, nothing sent or saved).
-        Route::get('bot-flows', [BotFlowController::class, 'index'])->name('bot-flows.index');
+        Route::get('bot-flows', MovedPageController::class)->defaults('to', '/bot/flows')->name('bot-flows.index');
         Route::post('bot-flows', [BotFlowController::class, 'store'])->name('bot-flows.store');
-        Route::get('bot-flows/{flow}', [BotFlowController::class, 'show'])->name('bot-flows.show');
+        Route::get('bot-flows/{flow}', MovedPageController::class)->defaults('to', '/bot/flows/{flow}')->name('bot-flows.show');
         Route::patch('bot-flows/{flow}', [BotFlowController::class, 'update'])->name('bot-flows.update');
         Route::put('bot-flows/{flow}/draft', [BotFlowController::class, 'saveDraft'])->name('bot-flows.draft.save');
         Route::delete('bot-flows/{flow}/draft', [BotFlowController::class, 'discardDraft'])->name('bot-flows.draft.discard');
@@ -275,20 +298,20 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('bot-flows/{flow}/simulate', BotFlowSandboxController::class)->middleware('throttle:60,1')->name('bot-flows.simulate');
 
         // Bilingual bot (design 2026-09-21 §2): what the bot says in English, and who wrote it.
-        Route::get('bot-translations', [BotTranslationController::class, 'index'])->name('bot-translations.index');
+        Route::get('bot-translations', MovedPageController::class)->defaults('to', '/bot/translations')->name('bot-translations.index');
         Route::put('bot-translations/{translation}', [BotTranslationController::class, 'update'])->name('bot-translations.update');
         Route::post('bot-translations/retranslate', [BotTranslationController::class, 'retranslate'])->middleware('throttle:30,1')->name('bot-translations.retranslate');
 
         // Public test links for the team (design 2026-09-21 §1): create, copy, stop, delete.
-        Route::get('bot-test-links', [BotTestLinkController::class, 'index'])->name('bot-test-links.index');
+        Route::get('bot-test-links', MovedPageController::class)->defaults('to', '/bot/test-links')->name('bot-test-links.index');
         Route::post('bot-test-links', [BotTestLinkController::class, 'store'])->name('bot-test-links.store');
         Route::patch('bot-test-links/{testLink}', [BotTestLinkController::class, 'update'])->name('bot-test-links.update');
         Route::delete('bot-test-links/{testLink}', [BotTestLinkController::class, 'destroy'])->name('bot-test-links.destroy');
-        Route::get('bot-test-links/{testLink}/sessions', [BotTestLinkController::class, 'sessions'])->name('bot-test-links.sessions');
+        Route::get('bot-test-links/{testLink}/sessions', MovedPageController::class)->defaults('to', '/bot/test-links/{testLink}/sessions')->name('bot-test-links.sessions');
 
         // Daily learning (design §6, Task 9): nightly reports and the suggestions
         // that change nothing until the owner approves them here.
-        Route::get('bot-learning', [BotLearningController::class, 'index'])->name('bot-learning.index');
+        Route::get('bot-learning', MovedPageController::class)->defaults('to', '/bot/learning')->name('bot-learning.index');
         Route::post('bot-learning/run', [BotLearningController::class, 'run'])->middleware('throttle:6,1')->name('bot-learning.run');
         Route::post('bot-suggestions/{suggestion}/approve', [BotLearningController::class, 'approve'])->name('bot-suggestions.approve');
         Route::post('bot-suggestions/{suggestion}/reject', [BotLearningController::class, 'reject'])->name('bot-suggestions.reject');
@@ -315,7 +338,8 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
             Route::delete('integrations/{channel}', [IntegrationController::class, 'destroy'])->name('integrations.destroy');
         });
 
-        Route::get('channels', [ChannelController::class, 'index'])->name('channels.index');
+        // D3: one «القنوات» page; the webhooks status is its second tab.
+        Route::get('channels', MovedPageController::class)->defaults('to', '/settings/integrations?tab=webhooks')->name('channels.index');
         Route::post('channels', [ChannelController::class, 'store'])->name('channels.store');
         Route::post('channels/webhook-events/{event}/reprocess', [ChannelController::class, 'reprocess'])->name('channels.webhook-events.reprocess');
         Route::put('channels/{channel}', [ChannelController::class, 'update'])->name('channels.update');

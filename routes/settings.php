@@ -3,6 +3,7 @@
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Web\Settings\NotificationSettingsController;
+use App\Http\Controllers\Web\Settings\SettingsHubController;
 use App\Http\Middleware\EnsureUserIsActive;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -10,7 +11,8 @@ use Inertia\Inertia;
 // Self-service account deletion is intentionally not offered: accounts are deactivated
 // by an admin so that attribution history (participants, orders, logs) stays intact.
 Route::middleware(['auth', EnsureUserIsActive::class])->group(function () {
-    Route::redirect('settings', 'settings/profile');
+    // A5 (redesign 2026-10-17): the settings hub, not a redirect to the profile.
+    Route::get('settings', SettingsHubController::class)->name('settings.hub');
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');

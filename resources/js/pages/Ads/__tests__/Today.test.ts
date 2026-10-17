@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@inertiajs/vue3', () => ({
     router: { get: vi.fn(), reload: vi.fn() },
-    usePage: () => ({ props: { ads: { canWrite: true, isBuyer: false, buyerId: null } }, url: '/ads' }),
+    usePage: () => ({ props: { ads: { canWrite: true, isBuyer: false, buyerId: null }, auth: { user: { role: 'admin' } } }, url: '/today/ads' }),
     Head: { template: '<div />' },
     Link: { props: ['href'], template: '<a :href="href"><slot /></a>' },
 }));

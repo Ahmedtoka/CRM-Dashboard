@@ -663,11 +663,11 @@ it('serves the new type and case types to the flow designer', function () {
     $admin = User::factory()->create(['role' => UserRole::Admin]);
     $flow = BotFlow::where('key', 'return_exchange')->firstOrFail();
 
-    $this->actingAs($admin)->get('/settings/bot-flows')
+    $this->actingAs($admin)->get('/bot/flows')
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('stepTypes.product_link.label_ar', 'لينك منتج للتبديل')->etc());
 
-    $this->actingAs($admin)->getJson("/settings/bot-flows/{$flow->id}")
+    $this->actingAs($admin)->getJson("/bot/flows/{$flow->id}")
         ->assertOk()
         ->assertJsonPath('data.published.steps.exchange_product.type', 'product_link')
         ->assertJsonPath('data.draft', null)

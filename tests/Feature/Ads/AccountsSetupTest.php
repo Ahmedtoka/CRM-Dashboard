@@ -46,7 +46,7 @@ it('defaults to this month and sums spend in the range only, with the summary ti
     fs4Spend($b, '2026-10-03', 20);
     AdsSyncRun::factory()->create(['ad_account_id' => $b->id, 'status' => 'error', 'error' => 'Rate limit hit', 'started_at' => now()->subHour(), 'finished_at' => now()->subHour()]);
 
-    $this->actingAs(fs4User())->get('/ads/accounts')->assertOk()->assertInertia(fn (Assert $p) => $p
+    $this->actingAs(fs4User())->get('/settings/ads/accounts')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->component('Ads/Accounts')
         ->where('filters', ['from' => '2026-10-01', 'to' => '2026-10-06', 'accounts' => []])
         ->where('connections.0.accounts.0.spend', 100)
@@ -67,7 +67,7 @@ it('narrows rows and summary to the picked accounts and a custom range', functio
     fs4Spend($a, '2026-09-20', 50);
     fs4Spend($b, '2026-09-20', 70);
 
-    $this->actingAs(fs4User())->get("/ads/accounts?from=2026-09-15&to=2026-09-30&accounts={$b->id}")
+    $this->actingAs(fs4User())->get("/settings/ads/accounts?from=2026-09-15&to=2026-09-30&accounts={$b->id}")
         ->assertInertia(fn (Assert $p) => $p
             ->where('filters', ['from' => '2026-09-15', 'to' => '2026-09-30', 'accounts' => [$b->id]])
             ->has('connections.0.accounts', 1)
@@ -78,7 +78,7 @@ it('narrows rows and summary to the picked accounts and a custom range', functio
 });
 
 it('falls back to the default range when the dates are invalid', function () {
-    $this->actingAs(fs4User())->get('/ads/accounts?from=2026-10-05&to=2026-10-01')
+    $this->actingAs(fs4User())->get('/settings/ads/accounts?from=2026-10-05&to=2026-10-01')
         ->assertInertia(fn (Assert $p) => $p->where('filters.from', '2026-10-01')->where('filters.to', '2026-10-06'));
 });
 
@@ -259,7 +259,7 @@ it('resumes only the syncs this user started, from the server clock (I1)', funct
     AdsSyncRun::factory()->create(['ad_account_id' => $b->id, 'status' => 'running', 'trigger' => 'schedule', 'triggered_by_id' => null, 'started_at' => now(), 'finished_at' => null]);
     fs4Queue([new SyncAdAccount($c->id, 3, 'recent', 'manual', $other->id)]);
 
-    $this->actingAs($me)->get('/ads/accounts')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($me)->get('/settings/ads/accounts')->assertInertia(fn (Assert $p) => $p
         ->where('sync_resume.accounts', [$a->id])
         ->where('sync_resume.others', 2)
         ->where('sync_resume.since', fn ($v) => CarbonImmutable::parse($v)->equalTo($started)));
@@ -272,12 +272,12 @@ it('offers only syncable accounts to the picker and counts connection problems o
     AdAccount::factory()->create(['connection_id' => $ok->id, 'name' => 'B', 'is_active' => false]);
     AdAccount::factory()->create(['connection_id' => $dead->id, 'name' => 'C']);
 
-    $this->actingAs(fs4User())->get('/ads/accounts')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs(fs4User())->get('/settings/ads/accounts')->assertInertia(fn (Assert $p) => $p
         ->where('account_options.0.can_sync', true)
         ->where('account_options.1.can_sync', false)
         ->where('account_options.2.can_sync', false)
         ->where('summary.errors', 1));
-    $this->actingAs(fs4User())->get("/ads/accounts?accounts={$a->id}")->assertInertia(fn (Assert $p) => $p->where('summary.errors', 0));
+    $this->actingAs(fs4User())->get("/settings/ads/accounts?accounts={$a->id}")->assertInertia(fn (Assert $p) => $p->where('summary.errors', 0));
 });
 
 it('has no per-connection or per-account sync routes any more', function () {

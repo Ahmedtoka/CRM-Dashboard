@@ -117,7 +117,7 @@ const sectionClass = 'space-y-4 rounded-lg bg-card p-4 shadow-card md:p-5';
 
 const pageTitle = computed(() => (editing.value ? t('ads.materials.form.edit_title') : t('ads.materials.form.create_title')));
 const breadcrumbs = computed(() => [
-    { title: t('nav.ads'), href: '/ads' },
+    { title: t('nav.ads'), href: '/ads/materials' },
     { title: t('nav.ads_materials'), href: '/ads/materials' },
     { title: pageTitle.value, href: props.material ? `/ads/materials/${props.material.id}/edit` : '/ads/materials/create' },
 ]);

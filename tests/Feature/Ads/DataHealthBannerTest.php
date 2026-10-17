@@ -46,7 +46,7 @@ function dbAdmin(): User
 /** @return list<string> every Ads report page that must carry the banner props */
 function dbPages(MediaBuyer $buyer): array
 {
-    return ['/ads', '/ads/numbers', "/ads/buyers/{$buyer->id}", '/ads/explorer', '/ads/explorer?view=tree', '/ads/explorer?view=cards', '/ads/decisions', '/ads/decisions?tab=log'];
+    return ['/today/ads', '/ads/numbers', "/ads/buyers/{$buyer->id}", '/ads/explorer', '/ads/explorer?view=tree', '/ads/explorer?view=cards', '/ads/decisions', '/ads/decisions?tab=log'];
 }
 
 it('puts the stale reason on every Ads report page and names the account', function () {
@@ -73,12 +73,12 @@ it('orders the reasons worst first and never names an account outside a buyer sc
     $other->connection->update(['status' => 'needs_reconnect']);
     app(AssignmentService::class)->assign($own, $buyer, CarbonImmutable::now('Africa/Cairo')->subDays(5));
 
-    $this->actingAs($user)->get('/ads')->assertOk()->assertInertia(function (AssertableInertia $p) {
+    $this->actingAs($user)->get('/today/ads')->assertOk()->assertInertia(function (AssertableInertia $p) {
         $p->where('data_health.reasons.0.reason', 'stale')->where('data_health.reasons.0.accounts', ['Own Shop'])->missing('data_health.reasons.1');
     });
 
     Cache::flush();
-    $this->actingAs(dbAdmin())->get('/ads')->assertInertia(fn (AssertableInertia $p) => $p
+    $this->actingAs(dbAdmin())->get('/today/ads')->assertInertia(fn (AssertableInertia $p) => $p
         ->where('data_health.reasons.0.reason', 'reconnect')->where('data_health.reasons.0.accounts', ['Other Shop'])
         ->where('data_health.reasons.1.reason', 'stale')->where('data_health.reasons.1.accounts', fn ($names) => collect($names)->sort()->values()->all() === ['Other Shop', 'Own Shop']));
 });
@@ -88,7 +88,7 @@ it('names at most three accounts and counts the rest', function () {
         dbAccount("Shop {$i}", 4 * 60);
     }
 
-    $this->actingAs(dbAdmin())->get('/ads')->assertInertia(fn (AssertableInertia $p) => $p
+    $this->actingAs(dbAdmin())->get('/today/ads')->assertInertia(fn (AssertableInertia $p) => $p
         ->where('data_health.reasons.0.reason', 'stale')->has('data_health.reasons.0.accounts', 3)->where('data_health.reasons.0.more', 2));
 });
 
@@ -100,7 +100,7 @@ it('reports a read-only connection and a spend gap over the range', function () 
     $ad = Ad::factory()->for($a, 'account')->create();
     AdDailyMetric::factory()->create(['ad_id' => $ad->id, 'ad_account_id' => $a->id, 'date' => $day, 'spend' => 900]);
 
-    $this->actingAs(dbAdmin())->get('/ads')->assertInertia(fn (AssertableInertia $p) => $p
+    $this->actingAs(dbAdmin())->get('/today/ads')->assertInertia(fn (AssertableInertia $p) => $p
         ->where('data_health.reasons.0.reason', 'read_only')->where('data_health.reasons.1.reason', 'gap')->where('data_health.reasons.1.accounts', ['Gap Shop']));
 });
 
@@ -108,34 +108,34 @@ it('reports incomplete history when the range starts before the account complete
     $a = dbAccount('Partial Shop');
     DB::table('ad_accounts')->where('id', $a->id)->update(['complete_from' => '2026-09-20']);
 
-    $this->actingAs(dbAdmin())->get('/ads?from=2026-09-05&to=2026-09-28')->assertInertia(fn (AssertableInertia $p) => $p
+    $this->actingAs(dbAdmin())->get('/today/ads?from=2026-09-05&to=2026-09-28')->assertInertia(fn (AssertableInertia $p) => $p
         ->where('data_health.reasons.0.reason', 'incomplete')->where('data_health.reasons.0.accounts', ['Partial Shop']));
 
     Cache::flush();
-    $this->actingAs(dbAdmin())->get('/ads?from=2026-09-21&to=2026-09-28')->assertInertia(fn (AssertableInertia $p) => $p->where('data_health.reasons', []));
+    $this->actingAs(dbAdmin())->get('/today/ads?from=2026-09-21&to=2026-09-28')->assertInertia(fn (AssertableInertia $p) => $p->where('data_health.reasons', []));
 });
 
 it('keeps the numbers under review until ads:gate --pass, audits it and reopens with --reopen', function () {
     $admin = dbAdmin();
 
-    $this->actingAs($admin)->get('/ads')->assertInertia(fn (AssertableInertia $p) => $p->where('numbers_under_review', true));
+    $this->actingAs($admin)->get('/today/ads')->assertInertia(fn (AssertableInertia $p) => $p->where('numbers_under_review', true));
 
     expect(Artisan::call('ads:gate', ['--pass' => true, '--note' => 'September matches Ads Manager']))->toBe(0);
     $row = AdsAuditLog::where('action', 'gate.passed')->first();
     expect($row)->not->toBeNull()->and($row->meta['note'])->toBe('September matches Ads Manager');
-    $this->actingAs($admin)->get('/ads')->assertInertia(fn (AssertableInertia $p) => $p->where('numbers_under_review', false));
+    $this->actingAs($admin)->get('/today/ads')->assertInertia(fn (AssertableInertia $p) => $p->where('numbers_under_review', false));
 
     expect(Artisan::call('ads:gate', ['--reopen' => true]))->toBe(0);
     expect(AdsAuditLog::where('action', 'gate.reopened')->count())->toBe(1);
-    $this->actingAs($admin)->get('/ads')->assertInertia(fn (AssertableInertia $p) => $p->where('numbers_under_review', true));
+    $this->actingAs($admin)->get('/today/ads')->assertInertia(fn (AssertableInertia $p) => $p->where('numbers_under_review', true));
 
     expect(Artisan::call('ads:gate'))->toBe(1); // neither flag: refuses
 });
 
 it('flags a range clamped to the history start', function () {
     config(['crm.ads.history_start' => '2026-09-01']);
-    $this->actingAs(dbAdmin())->get('/ads?from=2026-01-01&to=2026-09-10')->assertInertia(fn (AssertableInertia $p) => $p->where('clamped_to_history', true));
-    $this->actingAs(dbAdmin())->get('/ads?from=2026-09-02&to=2026-09-10')->assertInertia(fn (AssertableInertia $p) => $p->where('clamped_to_history', false));
+    $this->actingAs(dbAdmin())->get('/today/ads?from=2026-01-01&to=2026-09-10')->assertInertia(fn (AssertableInertia $p) => $p->where('clamped_to_history', true));
+    $this->actingAs(dbAdmin())->get('/today/ads?from=2026-09-02&to=2026-09-10')->assertInertia(fn (AssertableInertia $p) => $p->where('clamped_to_history', false));
 });
 
 it('gives /up/crm an ads block with no names and nothing token-like', function () {
@@ -161,7 +161,7 @@ it('shows the chat link rate with its definition on the accounts page', function
     }
     Order::factory()->create(['source' => OrderSource::Chat]);
 
-    $this->actingAs(dbAdmin())->get('/ads/accounts')->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
+    $this->actingAs(dbAdmin())->get('/settings/ads/accounts')->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
         ->where('link_rate.rate', 0.75)->where('link_rate.orders', 4)->where('link_rate.days', 14));
 });
 
@@ -179,7 +179,7 @@ it('flags an account never judged (complete_from null) as not verified yet, but 
     $c = AdPlatformConnection::factory()->meta()->create(['status' => 'connected']);
     AdAccount::factory()->meta()->create(['connection_id' => $c->id, 'name' => 'Brand New']);
 
-    $this->actingAs(dbAdmin())->get('/ads?from=2026-09-05&to=2026-09-28')->assertInertia(fn (AssertableInertia $p) => $p
+    $this->actingAs(dbAdmin())->get('/today/ads?from=2026-09-05&to=2026-09-28')->assertInertia(fn (AssertableInertia $p) => $p
         ->where('data_health.reasons.0.reason', 'incomplete')->where('data_health.reasons.0.accounts', [])
         ->where('data_health.reasons.0.unverified', ['Fresh Synced']));
 });

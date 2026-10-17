@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import type { SharedData } from '@/types';
+import { sectionTabs } from '@/lib/sectionTabs';
 import Callout from '@/components/crm/Callout.vue';
 import CallOutcomeActions from '@/components/crm/confirmations/CallOutcomeActions.vue';
 import ConfirmationStatusChip from '@/components/crm/confirmations/ConfirmationStatusChip.vue';
@@ -17,7 +20,7 @@ import { formatCount, formatDateTime, formatMoney } from '@/lib/format';
 import { formatShare } from '@/lib/today';
 import type { Paginated } from '@/types/admin';
 import { CONFIRMATION_TABS, type ConfirmationCounts, type ConfirmationRow, type ConfirmationTab } from '@/types/orderConfirmations';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { ClipboardList, ListChecks, MessagesSquare, Settings } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
@@ -40,6 +43,8 @@ const props = withDefaults(
 );
 
 const { t, locale } = useI18n();
+/** The shared props the tab strip reads (role, the confirmations badge, the URL). */
+const inertiaPage = usePage<SharedData>();
 const { loading, track } = useVisitLoading();
 
 const { filters, set } = useUrlFilters({ date: null as string | null, tab: 'all' });
@@ -133,6 +138,7 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                     :label="t('order_confirmations.settings.title')"
                 />
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.orders(t, inertiaPage.props.auth.user?.role, inertiaPage.props.navBadges?.confirmations)" :label="t('section_tabs.orders.label')" />
 
             <Callout v-if="!enabled" tone="warning" :title="t('order_confirmations.off.title')" data-confirmations-off>
                 {{ t('order_confirmations.off.body') }}

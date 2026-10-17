@@ -39,5 +39,6 @@ it('sends a media buyer to the ads hub, never to /today', function () {
     MediaBuyer::factory()->create(['user_id' => $u->id]);
 
     $location = $this->actingAs($u)->get('/dashboard')->headers->get('Location');
-    expect($location)->toContain('/ads')->not->toContain('/today');
+    // «النهارده» › الإعلانات (redesign 2026-10-17), never the managers' /today summary.
+    expect($location)->toEndWith('/today/ads');
 });

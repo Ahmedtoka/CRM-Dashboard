@@ -21,7 +21,7 @@ class AdsSystemAlert extends Mailable
     {
         return new Content(view: 'mail.ads-system-alert', with: [
             'lines' => $this->lines,
-            'link' => rtrim((string) config('app.url'), '/').'/ads/sync',
+            'link' => rtrim((string) config('app.url'), '/').'/settings/ads/sync',
         ]);
     }
 }

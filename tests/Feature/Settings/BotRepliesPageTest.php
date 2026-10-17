@@ -15,7 +15,7 @@ it('lists every reply with the moment it is given, and saves an edit through the
 
     $supervisor = User::factory()->create(['role' => 'supervisor']);
 
-    $this->actingAs($supervisor)->get('/settings/bot-replies')->assertOk()->assertInertia(
+    $this->actingAs($supervisor)->get('/bot/replies')->assertOk()->assertInertia(
         fn (AssertableInertia $page) => $page->component('settings/BotReplies')->has('sections')->where('agent.entry.key', 'agent_instructions')
     );
 

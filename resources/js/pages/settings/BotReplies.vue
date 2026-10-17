@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 /**
  * «كل ردود البوت» (owner, 2026-09-22): every reply next to the moment it is given, searchable,
  * with knowledge rows edited in place (the same endpoint as Settings → معلومات البوت).
@@ -42,7 +44,7 @@ const { t } = useI18n();
 const api = useApi();
 const toast = useToast();
 
-const breadcrumbs = computed(() => [{ title: t('settings.bot_replies.title'), href: '/settings/bot-replies' }]);
+const breadcrumbs = computed(() => [{ title: t('nav.bot'), href: '/bot' }, { title: t('settings.bot_replies.title'), href: '/bot/replies' }]);
 const query = ref('');
 const editingId = ref<string | null>(null);
 const draft = ref('');
@@ -111,6 +113,7 @@ async function save(entryId: number | null, original: string, source?: string): 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.bot_replies.title')" :description="t('settings.bot_replies.description')" />
+            <SectionTabs :tabs="sectionTabs.botCopy(t)" :label="t('nav.bot_copy')" />
 
             <!-- The agent: on/off, its model, and the owner's own instructions to it. -->
             <section class="space-y-2 rounded-lg border border-border bg-card p-4 shadow-card">

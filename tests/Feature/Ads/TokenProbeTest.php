@@ -161,7 +161,7 @@ it('keeps the accounts page and the sync alive when stored credentials cannot be
     config(['crm.ads.drivers.meta' => 'live']);
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
-    $this->actingAs($admin)->get('/ads/accounts')->assertOk()
+    $this->actingAs($admin)->get('/settings/ads/accounts')->assertOk()
         ->assertInertia(fn ($page) => $page->where('connections.0.credentials_unreadable', true)->where('connections.0.has_token', false));
 
     $run = app(AdsSyncService::class)->syncAccount($acc, now()->subDay()->toImmutable(), now()->toImmutable());

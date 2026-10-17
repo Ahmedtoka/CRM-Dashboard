@@ -98,8 +98,8 @@ class HandleInertiaRequests extends Middleware
             'onboarding' => fn () => $user?->isAdmin() ? collect(app(OnboardingProgress::class)->build())->only(['done', 'total', 'percent', 'complete', 'dismissed'])->all() : null,
             // «اللوحة الحية» in the menu: supervisors, admins and the leader of the open shift.
             'canSeeBoard' => fn () => BoardAccess::allows($user),
-            // Ads Hub pages only: what the viewer may see and do there (cheap, computed lazily).
-            'ads' => fn () => $request->routeIs('ads.*') ? $this->adsAccess($user) : null,
+            // Ads Hub pages only (and their new homes, /today/ads and /settings/ads/*): what the viewer may see and do there (cheap, computed lazily).
+            'ads' => fn () => $request->routeIs('ads.*', 'today.ads', 'settings.ads.*') ? $this->adsAccess($user) : null,
             // Launch approvals (S1): what waits for this person, on every page (the sidebar badges).
             'adsCounters' => fn () => $user !== null && ($user->isAdsRole() || $user->isSupervisorOrAbove()) ? LaunchCounters::for($user) : null,
             // «محتاج قرار» nav badge (S2): the cached count only, never computed here (a miss = no badge). Written by the
