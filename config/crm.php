@@ -168,6 +168,20 @@ return [
             'draft_orders/update',
             'app/uninstalled',
         ],
+
+        // Partners apps (round 2026-10-17, D1/D2): managed install + token exchange with expiring
+        // offline tokens. Keyed by a short name; an entry without client_id and client_secret is off.
+        // The public app later is a second entry (its own client id), never a change to this one.
+        'apps' => [
+            'levoile' => [
+                'client_id' => env('SHOPIFY_APP_CLIENT_ID'),
+                'client_secret' => env('SHOPIFY_APP_CLIENT_SECRET'),
+                // Kept for up to an hour after rotating the secret: Shopify keeps signing with the old one meanwhile.
+                'client_secret_previous' => env('SHOPIFY_APP_CLIENT_SECRET_PREVIOUS'),
+                // Comma-separated *.myshopify.com domains allowed to install (a custom-distribution app is for one store).
+                'allowed_shops' => env('SHOPIFY_APP_ALLOWED_SHOP'),
+            ],
+        ],
     ],
 
     // Egyptian governorates (ISO 3166-2:EG) -> Arabic name, for the order drawer's

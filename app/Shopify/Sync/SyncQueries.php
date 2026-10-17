@@ -201,6 +201,26 @@ final class SyncQueries
     }
 
     /**
+     * Orders created since a moment, oldest first (PollNewOrdersCommand, D4): the paged sync's
+     * order selection plus `test` and `sourceName`, which the WhatsApp confirmation reads the
+     * same way it reads them from the orders/create payload. Variables: cursor, query.
+     */
+    public static function pollNewOrders(): string
+    {
+        $nested = self::nested('orders');
+        $size = self::PAGE_SIZES['orders'];
+        $node = self::sized(self::node('orders'), true)
+            .' test sourceName'
+            ." {$nested['select']}(first: {$nested['page']}) { edges { node { {$nested['node']} } } pageInfo { hasNextPage endCursor } }";
+
+        return "query pollNewOrders(\$cursor: String, \$query: String) {\n"
+            ."  orders(first: {$size}, after: \$cursor, query: \$query, sortKey: CREATED_AT) {\n"
+            ."    edges { node { {$node} } }\n"
+            ."    pageInfo { hasNextPage endCursor }\n"
+            ."  }\n}";
+    }
+
+    /**
      * Orders by id (refresh, spec §3.2) with exactly the paged sync's selection;
      * variables: ids (gids, at most ORDERS_BY_IDS_BATCH). Response: data.nodes,
      * in the order of `ids`, null for an id Shopify no longer has.
@@ -243,6 +263,7 @@ final class SyncQueries
             'shipping' => self::shipping(),
             'shipping_zones' => self::shippingZones(),
             'orders_by_ids' => self::ordersByIds(),
+            'poll_new_orders' => self::pollNewOrders(),
         ];
 
         foreach (self::RESOURCES as $resource) {

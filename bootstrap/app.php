@@ -31,6 +31,8 @@ return Application::configure(basePath: dirname(__DIR__))
             // Webhooks are stateless: no session, cookies or CSRF (the `web` group would
             // start and write a session for every platform delivery).
             Route::group([], __DIR__.'/../routes/webhooks.php');
+            // The Shopify app's embedded page: stateless too, authenticated by Shopify ID tokens.
+            Route::group([], __DIR__.'/../routes/shopify.php');
             Route::middleware(['web', 'auth'])->group(__DIR__.'/../routes/crm.php');
             // Unknown addresses: the Error page, with a session only if the cookie is already there.
             require __DIR__.'/../routes/fallback.php';

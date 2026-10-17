@@ -2,10 +2,16 @@
 
 namespace App\Http\Controllers\Web\Settings;
 
+use App\Commerce\Http\ShopifyWebhookController;
 use App\Http\Controllers\Concerns\RespondsWithData;
 use App\Http\Controllers\Controller;
 use App\Models\ShopifySyncRun;
 use App\Models\ShopifyWebhookSubscription;
+use App\Shopify\App\RollbackToManualConnection;
+use App\Shopify\App\ShopifyAccessTokens;
+use App\Shopify\App\ShopifyApps;
+use App\Shopify\App\WebhookSignature;
+use App\Shopify\Client\ShopifyException;
 use App\Shopify\Connection\ConnectionTester;
 use App\Shopify\Connection\ConnectShopify;
 use App\Shopify\Connection\IntegrationRepository;
@@ -18,6 +24,7 @@ use App\Shopify\Webhooks\WebhookRegistrar;
 use App\Webhooks\WebhookRejections;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
@@ -61,6 +68,8 @@ class ShopifyIntegrationController extends Controller
             'lastWebhookAt' => ($last = ShopifyWebhookSubscription::query()->max('last_received_at')) !== null
                 ? Carbon::parse($last)->toIso8601String()
                 : null,
+            // The Partners app (round 2026-10-17): configured or not, and when each secret last verified a webhook.
+            'app' => $this->appPayload(),
         ]);
     }
 
@@ -207,6 +216,42 @@ class ShopifyIntegrationController extends Controller
         return $this->done($request, ['ok' => true]);
     }
 
+    /** «رجوع للاتصال اليدوي»: back to the kept manual token and secret (RollbackToManualConnection). */
+    public function rollbackToManual(Request $request, RollbackToManualConnection $rollback): HttpResponse
+    {
+        $result = $rollback->rollback();
+
+        if ($result !== RollbackToManualConnection::OK) {
+            $error = $result === RollbackToManualConnection::TOKEN_REFUSED ? 'legacy_token_refused' : 'no_legacy_credentials';
+
+            return $this->failure($request, ['ok' => false, 'error' => __("errors.shopify.{$error}")], 422);
+        }
+
+        return $this->done($request, ['ok' => true]);
+    }
+
+    /** «اسمح بالرجوع للأبلكيشن»: after a rollback, the next app open may move the store onto the app again. */
+    public function allowApp(Request $request, RollbackToManualConnection $rollback): HttpResponse
+    {
+        if (! $rollback->allowAppAgain()) {
+            return $this->failure($request, ['ok' => false, 'error' => __('errors.shopify.no_integration')], 422);
+        }
+
+        return $this->done($request, ['ok' => true]);
+    }
+
+    /** Runbook step 7: delete the old manual app's API webhook subscriptions with its own token. */
+    public function removeLegacyWebhooks(Request $request): HttpResponse
+    {
+        try {
+            $removed = $this->webhooks->removeLegacy();
+        } catch (ShopifyException $e) {
+            return $this->failure($request, ['ok' => false, 'error' => $e->getMessage()], 502);
+        }
+
+        return $this->done($request, ['ok' => true, 'removed' => $removed]);
+    }
+
     /**
      * Disconnects locally regardless of what Shopify says (Rulings): clears
      * secrets, flips to `disconnected`, keeps every imported record. Webhook
@@ -229,11 +274,15 @@ class ShopifyIntegrationController extends Controller
             $warning = $e->getMessage();
         }
 
-        $integration->forceFill([
+        // Under the token lock: a refresh in flight must not write live tokens back afterwards.
+        app(ShopifyAccessTokens::class)->locked((string) $integration->shop_domain, fn () => $integration->refresh()->forceFill([
             'access_token' => null,
             'api_secret' => null,
+            'access_token_expires_at' => null,
+            'refresh_token' => null,
+            'refresh_token_expires_at' => null,
             'status' => 'disconnected',
-        ])->save();
+        ])->save());
 
         return $this->done($request, ['ok' => true, 'warning' => $warning]);
     }
@@ -289,9 +338,33 @@ class ShopifyIntegrationController extends Controller
             'import_state' => $integration->import_state,
             'granted_scopes' => $granted,
             // Without a secret production rejects every Shopify webhook (HMAC), so nothing updates live.
-            'has_webhook_secret' => filled($integration->api_secret) || filled(config('crm.shopify.webhook_secret')),
+            'has_webhook_secret' => app(WebhookSignature::class)->hasAnySecret(),
             'missing_scopes' => array_values(array_diff($required, $granted)),
+            // The Partners app (round 2026-10-17); never a token or secret.
+            'auth_mode' => $integration->auth_mode ?? ShopifyIntegration::MODE_CUSTOM_TOKEN,
+            'access_token_expires_at' => $integration->access_token_expires_at?->toIso8601String(),
+            'refresh_token_expires_at' => $integration->refresh_token_expires_at?->toIso8601String(),
+            'installed_at' => $integration->installed_at?->toIso8601String(),
+            'has_legacy_credentials' => filled($integration->legacy_credentials['access_token'] ?? null),
         ];
+    }
+
+    /** @return array{configured: bool, last_verified: array<string, string>} */
+    private function appPayload(): array
+    {
+        $labels = [WebhookSignature::LEGACY, WebhookSignature::ENV];
+        foreach (app(ShopifyApps::class)->all() as $app) {
+            array_push($labels, ...array_keys($app->secrets()));
+        }
+
+        $lastVerified = [];
+        foreach ($labels as $label) {
+            if (is_string($at = Cache::get(ShopifyWebhookController::LAST_VERIFIED_KEY.$label))) {
+                $lastVerified[$label] = $at;
+            }
+        }
+
+        return ['configured' => app(ShopifyApps::class)->configured(), 'last_verified' => (object) $lastVerified];
     }
 
     private function webhooksPayload(): array

@@ -17,6 +17,8 @@ class ShopifyWebhookSubscription extends Model
         'callback_url',
         'last_received_at',
         'registered_at',
+        // 'api' (registered by WebhookRegistrar for the manual connection) | 'config' (shopify.app.toml).
+        'managed_by',
     ];
 
     protected function casts(): array

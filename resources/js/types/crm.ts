@@ -680,6 +680,7 @@ export interface AppNotification {
         | 'channel.problem'
         | 'webhook.rejected'
         | 'legal.deletion_review'
+        | 'shopify.app'
         | 'queue.assigned'
         | 'queue.escalation_waiting'
         | 'queue.mass_offline'

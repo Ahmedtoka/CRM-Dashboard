@@ -16,6 +16,12 @@ class ShopifyIntegration extends Model
      */
     public const DEMO_SHOP_DOMAIN = 'demo-store.myshopify.com';
 
+    /** Connected with the token pasted on Settings → Shopify (the store's own legacy custom app). */
+    public const MODE_CUSTOM_TOKEN = 'custom_token';
+
+    /** Connected through a Partners app (managed install + token exchange, expiring offline tokens). */
+    public const MODE_APP = 'app';
+
     protected $table = 'shopify_integrations';
 
     protected $fillable = [
@@ -31,6 +37,14 @@ class ShopifyIntegration extends Model
         'connected_at',
         'settings',
         'import_state',
+        'auth_mode',
+        'app_client_id',
+        'access_token_expires_at',
+        'refresh_token',
+        'refresh_token_expires_at',
+        'installed_at',
+        'uninstalled_at',
+        'legacy_credentials',
     ];
 
     /**
@@ -53,7 +67,19 @@ class ShopifyIntegration extends Model
             'settings' => 'array',
             'import_state' => 'array',
             'connected_at' => 'datetime',
+            'refresh_token' => 'encrypted',
+            // {access_token, api_secret} of the manual connection, kept for the one-click rollback.
+            'legacy_credentials' => 'encrypted:array',
+            'access_token_expires_at' => 'datetime',
+            'refresh_token_expires_at' => 'datetime',
+            'installed_at' => 'datetime',
+            'uninstalled_at' => 'datetime',
         ];
+    }
+
+    public function usesApp(): bool
+    {
+        return $this->auth_mode === self::MODE_APP;
     }
 
     public function settingsWithDefaults(): array

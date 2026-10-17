@@ -23,6 +23,8 @@ class WebhookEvent extends Model
         'attempts',
         'error',
         'processed_at',
+        // Shopify: which secret verified the delivery (App\Shopify\App\WebhookSignature).
+        'verified_with',
     ];
 
     protected function casts(): array

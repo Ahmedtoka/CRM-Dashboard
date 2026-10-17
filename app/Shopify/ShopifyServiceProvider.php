@@ -2,13 +2,19 @@
 
 namespace App\Shopify;
 
+use App\Shopify\App\FakeShopifyOAuth;
+use App\Shopify\App\HttpShopifyOAuth;
+use App\Shopify\App\ShopifyOAuth;
 use App\Shopify\Client\FakeShopifyTransport;
 use App\Shopify\Client\HttpShopifyTransport;
 use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Client\ShopifyTransport;
+use App\Shopify\Commands\CheckJourneyCommand;
+use App\Shopify\Commands\PollNewOrdersCommand;
 use App\Shopify\Commands\PurgeStoreDataCommand;
 use App\Shopify\Commands\ReconcileCommand;
 use App\Shopify\Commands\ReconcileCountsCommand;
+use App\Shopify\Commands\RefreshAppTokenCommand;
 use App\Shopify\Commands\RefreshOpenOrdersCommand;
 use App\Shopify\Commands\SyncShippingCommand;
 use App\Shopify\Commands\WebhooksCheckCommand;
@@ -27,6 +33,11 @@ class ShopifyServiceProvider extends ServiceProvider
                 : new FakeShopifyTransport;
         });
 
+        // Partners app token endpoint: live only for the exact driver value, like the transport.
+        $this->app->bind(ShopifyOAuth::class, fn ($app) => config('crm.shopify.driver', 'fake') === 'live'
+            ? $app->make(HttpShopifyOAuth::class)
+            : new FakeShopifyOAuth);
+
         // One client per request/job so every collaborator shares throttle state.
         $this->app->scoped(ShopifyClient::class);
     }
@@ -35,13 +46,15 @@ class ShopifyServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->commands([
-                \App\Shopify\Commands\CheckJourneyCommand::class,
+                CheckJourneyCommand::class,
                 ReconcileCommand::class,
                 ReconcileCountsCommand::class,
                 SyncShippingCommand::class,
                 PurgeStoreDataCommand::class,
                 WebhooksCheckCommand::class,
                 RefreshOpenOrdersCommand::class,
+                PollNewOrdersCommand::class,
+                RefreshAppTokenCommand::class,
             ]);
         }
 
@@ -62,6 +75,18 @@ class ShopifyServiceProvider extends ServiceProvider
             // Open orders read back from Shopify (R8); the command skips when not connected.
             $schedule->command(RefreshOpenOrdersCommand::class)
                 ->everyTenMinutes()
+                ->withoutOverlapping()
+                ->onOneServer();
+
+            // D4: orders whose orders/create webhook was lost still get their WhatsApp confirmation.
+            $schedule->command(PollNewOrdersCommand::class)
+                ->everyFiveMinutes()
+                ->withoutOverlapping()
+                ->onOneServer();
+
+            // The Partners app's hourly token is refreshed ahead of time; the refresh token keeps rotating.
+            $schedule->command(RefreshAppTokenCommand::class)
+                ->everyThirtyMinutes()
                 ->withoutOverlapping()
                 ->onOneServer();
 

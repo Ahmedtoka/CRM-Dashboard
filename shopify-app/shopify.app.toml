@@ -1,0 +1,94 @@
+# Le Voile CRM — Shopify app configuration (round 2026-10-17, docs/round-2026-10-17/shopify-app.md §1.3).
+# Deployed with the Shopify CLI from this folder:  shopify app config link  (once)  then  shopify app deploy
+# Every value marked TODO is checked/filled during the cutover (docs/round-2026-10-17/shopify-app-RUNBOOK.md).
+
+# TODO(runbook step 3): replaced by `shopify app config link` with the real Client ID from the Dev Dashboard.
+client_id = "REPLACE_WITH_CLIENT_ID"
+name = "Le Voile CRM"
+# The stateless embedded page (routes/shopify.php). The CRM itself always opens in its own tab.
+application_url = "https://crm.levoilestores.com/shopify/app"
+embedded = true
+
+[access_scopes]
+# The scopes the CRM uses today (config crm.shopify.required_scopes): nothing that works now stops working.
+scopes = "read_products,read_inventory,read_customers,write_customers,read_orders,write_orders,read_draft_orders,write_draft_orders,read_fulfillments,read_shipping"
+# Shopify managed installation + token exchange (no OAuth redirect flow).
+use_legacy_install_flow = false
+
+[auth]
+# Not used by managed installation; Shopify requires at least one. TODO(runbook): confirm the CLI accepts it.
+redirect_urls = ["https://crm.levoilestores.com/shopify/app"]
+
+[webhooks]
+# TODO(runbook, D8): keep equal to SHOPIFY_API_VERSION once the API version jump is done.
+api_version = "2026-10"
+
+# One subscription per topic so every topic keeps its own route: /webhooks/shopify/{topic with "/" -> "-"}.
+# Keep this list equal to config crm.shopify.webhook_topics (tests/Feature/Shopify/App/AppTomlTest.php checks it).
+  [[webhooks.subscriptions]]
+  topics = ["products/create"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/products-create"
+
+  [[webhooks.subscriptions]]
+  topics = ["products/update"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/products-update"
+
+  [[webhooks.subscriptions]]
+  topics = ["products/delete"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/products-delete"
+
+  [[webhooks.subscriptions]]
+  topics = ["inventory_levels/update"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/inventory_levels-update"
+
+  [[webhooks.subscriptions]]
+  topics = ["customers/create"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/customers-create"
+
+  [[webhooks.subscriptions]]
+  topics = ["customers/update"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/customers-update"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/create"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/orders-create"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/updated"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/orders-updated"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/paid"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/orders-paid"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/cancelled"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/orders-cancelled"
+
+  [[webhooks.subscriptions]]
+  topics = ["fulfillments/create"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/fulfillments-create"
+
+  [[webhooks.subscriptions]]
+  topics = ["fulfillments/update"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/fulfillments-update"
+
+  [[webhooks.subscriptions]]
+  topics = ["refunds/create"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/refunds-create"
+
+  [[webhooks.subscriptions]]
+  topics = ["draft_orders/update"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/draft_orders-update"
+
+  [[webhooks.subscriptions]]
+  topics = ["app/uninstalled"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/app-uninstalled"
+
+  # The three mandatory privacy webhooks (ShopifyComplianceWebhookController). shop/redact never deletes anything.
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/compliance"
+
+[build]
+automatically_update_urls_on_dev = false

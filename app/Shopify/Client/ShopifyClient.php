@@ -2,6 +2,7 @@
 
 namespace App\Shopify\Client;
 
+use App\Shopify\App\ShopifyAccessTokens;
 use App\Shopify\Connection\IntegrationRepository;
 use App\Shopify\Sync\SyncQueries;
 use Closure;
@@ -41,6 +42,7 @@ final class ShopifyClient
         private readonly ShopifyTransport $transport,
         private readonly IntegrationRepository $integrations,
         private readonly ?Closure $sleeper = null,
+        private readonly ?ShopifyAccessTokens $tokens = null,
     ) {}
 
     /**
@@ -70,6 +72,7 @@ final class ShopifyClient
             $this->transport instanceof HttpShopifyTransport ? $this->transport->withTimeout($seconds) : $this->transport,
             $this->integrations,
             $this->sleeper,
+            $this->tokens,
         );
         $client->useStoredIntegration = $this->useStoredIntegration;
         $client->domain = $this->domain;
@@ -157,6 +160,7 @@ final class ShopifyClient
         $this->paceIfNeeded();
 
         $attempt = 0;
+        $tokenRetried = false;
 
         while (true) {
             try {
@@ -176,6 +180,15 @@ final class ShopifyClient
 
             if (! $probe && $this->journeyRejected($query, $status, $json)) {
                 return $this->retryWithoutJourney($query, $variables, $isMutation);
+            }
+
+            // An app token Shopify no longer accepts (revoked early, clock skew): refresh it once and resend.
+            if ($status === 401 && ! $tokenRetried && $this->useStoredIntegration && ($integration = $this->integrations->current())?->usesApp()) {
+                $tokenRetried = true;
+                $token = $this->accessTokens()->token($integration, rejected: $token);
+                $headers['X-Shopify-Access-Token'] = $token;
+
+                continue;
             }
 
             if ($status === 401 || $status === 403 || $this->hasErrorCode($json, 'ACCESS_DENIED')) {
@@ -260,7 +273,13 @@ final class ShopifyClient
 
         $integration = $this->integrations->requireConnected();
 
-        return [$integration->shop_domain, $integration->access_token];
+        // An app installation's token expires hourly: ShopifyAccessTokens refreshes it under a lock.
+        return [$integration->shop_domain, $this->accessTokens()->token($integration)];
+    }
+
+    private function accessTokens(): ShopifyAccessTokens
+    {
+        return $this->tokens ?? app(ShopifyAccessTokens::class);
     }
 
     private function paceIfNeeded(float $estimatedCost = self::DEFAULT_ESTIMATED_COST): void
