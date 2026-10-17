@@ -11,6 +11,7 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -40,7 +41,7 @@ interface AgentInfo {
 
 const props = defineProps<{ sections: { key: string; rows: ReplyRow[] }[]; agent: AgentInfo }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const api = useApi();
 const toast = useToast();
 
@@ -167,7 +168,7 @@ async function save(entryId: number | null, original: string, source?: string): 
             <section v-for="section in visible" :key="section.key" class="overflow-hidden rounded-lg border border-border bg-card shadow-card">
                 <h2 class="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2 text-sm font-semibold text-foreground">
                     {{ t(`settings.bot_replies.sections.${section.key}`) }}
-                    <span class="text-2xs font-normal text-muted-foreground">{{ section.rows.length }}</span>
+                    <span class="text-2xs font-normal text-muted-foreground">{{ formatCount(section.rows.length, locale) }}</span>
                 </h2>
 
                 <div v-for="row in section.rows" :key="row.id" class="grid gap-2 border-b border-border px-4 py-3 last:border-b-0 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto]" :class="{ 'opacity-60': !row.active }">

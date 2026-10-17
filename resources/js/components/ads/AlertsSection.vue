@@ -10,6 +10,7 @@ import EmptyState from '@/components/crm/EmptyState.vue';
 import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import { useShortcuts } from '@/composables/useShortcuts';
 import { groupBySeverity, type DismissReason, type SnoozeOption } from '@/lib/adsAlerts';
 import type { AlertAdRef, AlertCardData, AlertsMeta } from '@/types/ads';
@@ -28,7 +29,7 @@ const ALERT_RELOAD = ['alerts', 'alertsMeta', 'counts'];
 /** Review mode: the drawer and the «seen» post wait for the key presses to settle (holding J never floods either). */
 const REVIEW_SETTLE_MS = 250;
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const api = useApi();
 
 const groups = computed(() => groupBySeverity(props.alerts));
@@ -216,9 +217,9 @@ onBeforeUnmount(() => {
                     data-test="info-toggle"
                     @click="showInfo = !showInfo"
                 >
-                    {{ t('ads.alerts.severity.info') }} ({{ g.cards.length }})
+                    {{ t('ads.alerts.severity.info') }} ({{ formatCount(g.cards.length, locale) }})
                 </button>
-                <template v-else>{{ t(`ads.alerts.severity.${g.severity}`) }} ({{ g.cards.length }})</template>
+                <template v-else>{{ t(`ads.alerts.severity.${g.severity}`) }} ({{ formatCount(g.cards.length, locale) }})</template>
             </h3>
             <template v-if="g.severity !== 'info' || showInfo">
                 <AlertCard

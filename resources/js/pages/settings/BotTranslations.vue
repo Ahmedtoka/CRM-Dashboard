@@ -15,6 +15,7 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import IconAction from '@/components/crm/IconAction.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BotTranslationRow, BotTranslationUsage } from '@/types/admin';
@@ -24,7 +25,7 @@ import { computed, ref } from 'vue';
 
 const props = defineProps<{ rows: BotTranslationRow[]; usage: BotTranslationUsage; engine: boolean }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const api = useApi();
 const toast = useToast();
 
@@ -139,7 +140,7 @@ function clearFilters(): void {
                             :aria-pressed="onlyMissing"
                             @click="onlyMissing = !onlyMissing"
                         >
-                            {{ t('settings.bot_translations.only_missing') }} ({{ missingCount }})
+                            {{ t('settings.bot_translations.only_missing') }} ({{ formatCount(missingCount, locale) }})
                         </button>
                     </template>
                 </FilterBar>

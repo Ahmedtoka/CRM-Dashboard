@@ -14,6 +14,7 @@ import ToggleSwitch from '@/components/crm/ToggleSwitch.vue';
 import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { launchErrorText, newIdempotencyKey } from '@/lib/launch';
@@ -26,7 +27,7 @@ const props = defineProps<AdsLaunchesProps>();
 
 const api = useApi();
 const toast = useToast();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 type Tab = AdsLaunchesProps['box'] | 'slots';
 const tab = ref<Tab>(props.filters.tab === 'slots' && props.canToggleSlots ? 'slots' : props.box);
@@ -205,7 +206,7 @@ onMounted(async () => {
                     @click="go(x.key)"
                 >
                     {{ t(`ads.launch.page.box.${x.key}`) }}
-                    <span v-if="x.count" class="ms-1 rounded-full bg-muted px-1.5 text-2xs tabular-nums">{{ x.count }}</span>
+                    <span v-if="x.count" class="ms-1 rounded-full bg-muted px-1.5 text-2xs tabular-nums">{{ formatCount(x.count, locale) }}</span>
                 </button>
             </nav>
 
@@ -236,7 +237,7 @@ onMounted(async () => {
                         @click="go('ready')"
                     >
                         {{ t('ads.launch.page.ready_all') }}
-                        <span class="rounded-full bg-muted px-1.5 tabular-nums">{{ counts.ready }}</span>
+                        <span class="rounded-full bg-muted px-1.5 tabular-nums">{{ formatCount(counts.ready, locale) }}</span>
                     </button>
                     <button
                         v-for="b in handoff"
@@ -248,7 +249,7 @@ onMounted(async () => {
                         @click="go('ready', { reviewer: b.buyer_id })"
                     >
                         <bdi>{{ b.buyer_name }}</bdi>
-                        <span class="rounded-full bg-muted px-1.5 tabular-nums">{{ b.count }}</span>
+                        <span class="rounded-full bg-muted px-1.5 tabular-nums">{{ formatCount(b.count, locale) }}</span>
                         <span v-if="b.oldest_at" class="text-muted-foreground">
                             · {{ t('ads.launch.page.ready_oldest') }} <RelativeTime :iso="b.oldest_at" />
                         </span>

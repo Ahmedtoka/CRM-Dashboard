@@ -29,7 +29,7 @@ import {
 } from '@/lib/flows/flowGraph';
 import type { InlineDraft } from '@/lib/flows/inlineEdit';
 import { PALETTE_CARDS } from '@/lib/flows/stepPalette';
-import { formatClock, formatDateTime } from '@/lib/format';
+import { formatClock, formatDateTime, formatCount } from '@/lib/format';
 import type {
     FlowDefinition,
     FlowListRow,
@@ -1016,7 +1016,7 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
             <label class="block">
                 <span class="mb-1 flex items-center justify-between text-xs font-medium">
                     {{ t('flows.menu_title') }}
-                    <span class="tabular-nums text-muted-foreground" dir="ltr">{{ menuTitle.length }}/{{ MAX_MENU_TITLE }}</span>
+                    <span class="tabular-nums text-muted-foreground" dir="ltr">{{ formatCount(menuTitle.length, locale) }}/{{ formatCount(MAX_MENU_TITLE, locale) }}</span>
                 </span>
                 <input v-model="menuTitle" :class="input" required :maxlength="MAX_MENU_TITLE" dir="auto" />
             </label>
