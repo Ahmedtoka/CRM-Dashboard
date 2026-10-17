@@ -80,6 +80,9 @@ class WindowLifecycle
      */
     public const APOLOGY_BEFORE_HANDOFF_SECONDS = 30;
 
+    /** The shift-end watchdog's own mass-offline wait, when no open shift is there to compare with (C1, H-07). */
+    public const STRANDED_OUTAGE_MINUTES = 15;
+
     public function __construct(
         private readonly ActivityLogger $logger,
         private readonly PresenceTracker $presence,
@@ -301,7 +304,8 @@ class WindowLifecycle
      *    «هنكمّل معاكي مع موظفة تانية» while a shift is open, else `overnight` with the night
      *    message (`queue_night`, when on) and no promise of a colleague.
      * Nothing at all while the open shift's heartbeats fail together (the mass-offline safeguard:
-     * a Reverb or network outage must not close or move everybody's windows).
+     * a Reverb or network outage must not close or move everybody's windows), nor while two or
+     * more of these moderators went dark together less than STRANDED_OUTAGE_MINUTES ago.
      */
     public function tickStranded(?QueueSetting $settings = null): void
     {
@@ -311,12 +315,21 @@ class WindowLifecycle
             return;
         }
 
-        $open = QueueEntry::query()->with('assignee')->whereIn('status', QueueEntry::OPEN_STATUSES)->whereNotNull('assigned_user_id')->orderBy('id')->get();
+        $stranded = QueueEntry::query()->with('assignee')->whereIn('status', QueueEntry::OPEN_STATUSES)->whereNotNull('assigned_user_id')
+            ->orderBy('id')->get()->filter(fn (QueueEntry $e) => self::stranded($e));
 
-        foreach ($open as $e) {
-            if (self::stranded($e)) {
-                rescue(fn () => $this->releaseStranded($e, $s), null, report: true);
-            }
+        // The same safeguard after the last shift (no open shift to compare with): two or more
+        // moderators finishing late who went dark together, for less than STRANDED_OUTAGE_MINUTES,
+        // is more likely the network than all of them leaving. Bounded: then they are gone.
+        $owners = $stranded->pluck('assignee')->filter()->unique('id');
+
+        if ($owners->count() >= 2 && $owners->every(fn (User $u) => $u->is_active && $u->last_seen_at !== null
+            && $u->last_seen_at->greaterThan(now()->subMinutes(self::STRANDED_OUTAGE_MINUTES)))) {
+            return;
+        }
+
+        foreach ($stranded as $e) {
+            rescue(fn () => $this->releaseStranded($e, $s), null, report: true);
         }
     }
 

@@ -24,7 +24,7 @@ beforeEach(function () {
 /** The morning shift (10:00–18:00) ended and was closed; `$u` left it (auto_out) and was last seen `$seenMinutesAgo` ago. */
 function swEndedShiftWindow(int $seenMinutesAgo = 20, string $memberStatus = 'left', array $attrs = []): array
 {
-    $shift = Shift::factory()->create(['status' => 'closed', 'closed_at' => now()->subMinutes(30)]);
+    $shift = Shift::query()->where('shift_key', 'morning')->first() ?? Shift::factory()->create(['status' => 'closed', 'closed_at' => now()->subMinutes(30)]);
     $u = User::factory()->create(['role' => 'moderator', 'last_seen_at' => now()->subMinutes($seenMinutesAgo)]);
     $m = ShiftMember::factory()->for($shift)->create(['user_id' => $u->id, 'status' => $memberStatus]);
     $e = QueueEntry::factory()->create($attrs + [
@@ -150,4 +150,17 @@ it('still apologises for a moderator on shift', function () {
     app(WindowLifecycle::class)->tickReplies();
 
     expect($e->fresh()->apology_sent_at)->not->toBeNull();
+});
+
+it('waits while two or more moderators finishing after their shift go dark together, at most 15 minutes', function () {
+    Bus::fake([SendQueueMessage::class]);
+    [$e1] = swEndedShiftWindow(seenMinutesAgo: 6);
+    [$e2] = swEndedShiftWindow(seenMinutesAgo: 6);
+
+    app(WindowLifecycle::class)->tickStranded();
+    expect($e1->fresh()->status)->toBe('active')->and($e2->fresh()->status)->toBe('active');
+
+    Carbon::setTestNow(now()->addMinutes(10)); // 16 minutes dark: they went home, not the network
+    app(WindowLifecycle::class)->tickStranded();
+    expect($e1->fresh()->status)->toBe('closed')->and($e2->fresh()->status)->toBe('closed');
 });
