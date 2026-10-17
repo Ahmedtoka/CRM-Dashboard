@@ -106,7 +106,7 @@ class RatingService
             ($e->is_test || (bool) $c->is_test) && ! $c->isLoadTest() => 'test',
             self::dueAt($e, $s)->copy()->addMinutes(self::LATE_AFTER_MINUTES)->isPast() => 'late',
             app(QueueService::class)->activeEntry($c) !== null || $this->wroteSince($c, $e->closed_at) => 'customer_back',
-            // Close-cycle hotfix C1 (D-02): a colleague (or she) took the word again from the CRM.
+            // Close-cycle hotfix C1 (D-02): a staff member took the word again from the CRM after the close.
             AfterCloseGuard::staffRepliedSince($e) => 'staff_replied',
             $this->askedRecently($e) => 'asked_today',
             ! app(WindowPolicy::class)->evaluate($c, SenderType::Bot)->canSendText() => 'window_closed',
