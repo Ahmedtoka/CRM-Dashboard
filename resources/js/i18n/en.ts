@@ -1307,6 +1307,14 @@ const en: Messages = {
         shift: { open: 'Shift opened' },
     },
     settings: {
+        // Webhooks refused for a bad signature (2026-10-17).
+        webhook_rejections: {
+            line: 'Last {hours} hours: {n} webhooks refused for a bad signature — check the {secret}',
+            last: 'Last refused: {at}',
+            app_secret: 'App Secret',
+            api_secret: 'API secret',
+            last_success: 'Last webhook accepted',
+        },
         test_links: {
             title: 'Test links',
             description:
@@ -2975,6 +2983,7 @@ const en: Messages = {
         handover_item: '{name} needs an agent',
         mention_item: '{name} mentioned you in a note',
         channel_problem_item: '{name} needs attention',
+        webhook_rejected_item: '{n} {provider} webhooks refused for a bad signature — check the {secret}',
         legal_deletion_review_item: 'A Facebook data deletion request needs manual review · {code}',
         queue_assigned_item: '{name} reached you · ticket #{ticket}',
         queue_escalation_waiting_item: 'Escalation waiting for a leader · {name} · ticket #{ticket}',
@@ -3020,6 +3029,7 @@ const en: Messages = {
             handover_urgent: 'Urgent handover',
             mention: 'Mention in a note',
             channel_problem: 'Connection problem',
+            webhook_rejected: 'Webhooks refused',
             legal_deletion_review: 'Data deletion to review',
             queue_assigned: 'A customer reached you',
             queue_escalation_waiting: 'Escalation waiting for a leader',

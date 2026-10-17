@@ -44,7 +44,7 @@ final class FreshStart
         // Owner ruling 2026-10-06 (wipe all data): comments before their posts, suggestions before their reports,
         // steps before their test sessions; logs and health state.
         'comments', 'posts', 'bot_suggestions', 'bot_learning_reports', 'bot_test_session_steps', 'bot_test_sessions',
-        'quick_reply_usages', 'webhook_events', 'shopify_sync_runs', 'ads_health_state',
+        'quick_reply_usages', 'webhook_events', 'webhook_rejections', 'shopify_sync_runs', 'ads_health_state',
         // The production load test's runs (2026-10-07); its «تيست» channels stay with the channel accounts.
         'load_test_runs',
     ];

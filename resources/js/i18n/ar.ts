@@ -1278,6 +1278,14 @@ const ar = {
         shift: { open: 'فتح شيفت' },
     },
     settings: {
+        // Webhooks refused for a bad signature (2026-10-17).
+        webhook_rejections: {
+            line: 'آخر {hours} ساعة: {n} رسالة اترفضت بسبب التوقيع — راجع {secret}',
+            last: 'آخر رفض: {at}',
+            app_secret: 'App Secret',
+            api_secret: 'API secret',
+            last_success: 'آخر Webhook وصل بنجاح',
+        },
         test_links: {
             title: 'روابط التجربة',
             description: 'ابعتي لينك لكل واحد في الفريق، يفتحه على موبايله ويكلّم البوت زي أي عميلة — وكل جلسة بتتسجل في تقرير «تجربة الفريق».',
@@ -2930,6 +2938,7 @@ const ar = {
         handover_item: '{name} محتاجة موظف',
         mention_item: '{name} ذكرك في ملاحظة',
         channel_problem_item: 'فيه مشكلة في ربط {name}',
+        webhook_rejected_item: '{n} Webhook من {provider} اترفضوا بسبب التوقيع — راجع {secret}',
         legal_deletion_review_item: 'طلب حذف بيانات من فيسبوك محتاج مراجعة يدوية · {code}',
         queue_assigned_item: 'وصلتك {name} · دور #{ticket}',
         queue_escalation_waiting_item: 'تصعيد مستني ليدر · {name} · دور #{ticket}',
@@ -2975,6 +2984,7 @@ const ar = {
             handover_urgent: 'تحويل عاجل',
             mention: 'إشارة في ملاحظة',
             channel_problem: 'مشكلة في الربط',
+            webhook_rejected: 'Webhooks مرفوضة',
             legal_deletion_review: 'طلب حذف محتاج مراجعة',
             queue_assigned: 'وصلتك عميلة',
             queue_escalation_waiting: 'تصعيد مستني ليدر',

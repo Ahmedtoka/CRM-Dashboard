@@ -14,6 +14,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ChannelAccount;
 use App\Models\WebhookEvent;
 use App\TestLinks\TestScope;
+use App\Webhooks\WebhookRejections;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -42,6 +43,8 @@ class ChannelController extends Controller
                 ->limit(50)
                 ->get(['id', 'provider', 'event_type', 'status', 'attempts', 'error', 'payload', 'created_at']),
             'facebookLogin' => FacebookLoginController::settings(),
+            // Webhooks refused for a bad signature in the last day, per platform (2026-10-17).
+            'webhookRejections' => app(WebhookRejections::class)->summaries(['facebook', 'instagram', 'whatsapp']),
         ]);
     }
 

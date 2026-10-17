@@ -667,6 +667,7 @@ export interface AppNotification {
         | 'conversation.handover_urgent'
         | 'note.mention'
         | 'channel.problem'
+        | 'webhook.rejected'
         | 'legal.deletion_review'
         | 'queue.assigned'
         | 'queue.escalation_waiting'

@@ -17,10 +17,12 @@ return new class extends Migration
             $t->id();
             $t->string('provider', 20);
             $t->dateTime('hour');
-            $t->unsignedInteger('count')->default(0);
+            $t->unsignedInteger('rejected')->default(0);
             $t->string('last_reason', 40)->nullable();
             $t->string('last_path', 120)->nullable();
             $t->dateTime('last_at')->nullable();
+            // The admins were told about this provider's rejections in this hour (at most once a day).
+            $t->boolean('notified')->default(false);
             $t->timestamps();
 
             $t->unique(['provider', 'hour']);

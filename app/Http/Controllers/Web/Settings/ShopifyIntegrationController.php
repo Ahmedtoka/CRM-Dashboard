@@ -15,6 +15,7 @@ use App\Shopify\Sync\BulkImporter;
 use App\Shopify\Sync\ImportAlreadyRunningException;
 use App\Shopify\Sync\SyncRunRecorder;
 use App\Shopify\Webhooks\WebhookRegistrar;
+use App\Webhooks\WebhookRejections;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -55,6 +56,11 @@ class ShopifyIntegrationController extends Controller
             'webhooks' => $this->webhooksPayload(),
             'runs' => $this->runsPayload(),
             'lastSync' => $this->lastSync(),
+            // Webhooks refused for a bad HMAC in the last day, and the last one accepted (2026-10-17).
+            'webhookRejections' => app(WebhookRejections::class)->summary('shopify'),
+            'lastWebhookAt' => ($last = ShopifyWebhookSubscription::query()->max('last_received_at')) !== null
+                ? Carbon::parse($last)->toIso8601String()
+                : null,
         ]);
     }
 

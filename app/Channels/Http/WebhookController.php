@@ -8,6 +8,7 @@ use App\Channels\Jobs\ProcessWebhookEvent;
 use App\Enums\Platform;
 use App\Http\Controllers\Controller;
 use App\Models\WebhookEvent;
+use App\Webhooks\WebhookRejections;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -30,6 +31,9 @@ class WebhookController extends Controller
         }
 
         if (! $adapter->verifySignature($request)) {
+            // Shown on Settings → Channels (2026-10-17): a wrong App Secret used to fail silently.
+            app(WebhookRejections::class)->record($platform, $request->path(), $this->rejectionReason($request));
+
             return response('Forbidden', 403);
         }
 
@@ -68,5 +72,14 @@ class WebhookController extends Controller
         ProcessWebhookEvent::dispatch($event->id)->onQueue('webhooks');
 
         return response('EVENT_RECEIVED', 200);
+    }
+
+    private function rejectionReason(Request $request): string
+    {
+        return match (true) {
+            ! $request->headers->has('X-Hub-Signature-256') => 'missing_signature',
+            blank(config('crm.meta.app_secret')) => 'no_app_secret',
+            default => 'bad_signature',
+        };
     }
 }

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ShopifyWebhookSubscription;
 use App\Models\WebhookEvent;
 use App\Shopify\Connection\IntegrationRepository;
+use App\Webhooks\WebhookRejections;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -38,6 +39,9 @@ class ShopifyWebhookController extends Controller
     public function handle(Request $request, string $topic): Response
     {
         if (! $this->authenticated($request)) {
+            // Shown on Settings → Shopify (2026-10-17): every webhook was once refused with nobody seeing it.
+            app(WebhookRejections::class)->record('shopify', $request->path(), $request->headers->has('X-Shopify-Hmac-Sha256') ? 'bad_hmac' : 'missing_hmac');
+
             return response('Unauthorized', 401);
         }
 
