@@ -68,6 +68,13 @@ class BotHoldNotice implements ShouldQueue
         return 'bot:turn:'.$conversationId;
     }
 
+    /** A bot, system or staff message went out after the turn started. */
+    private function answered(Conversation $c): bool
+    {
+        return Message::where('conversation_id', $c->id)->where('id', '>', $this->lastMessageId)
+            ->whereIn('sender_type', [SenderType::Bot->value, SenderType::System->value, SenderType::User->value])->exists();
+    }
+
     public function handle(): void
     {
         $after = (int) (1000 * (float) config('crm.bot.hold_notice.after_seconds', 2));
@@ -82,14 +89,16 @@ class BotHoldNotice implements ShouldQueue
             return;
         }
 
-        $answered = Message::where('conversation_id', $c->id)->where('id', '>', $this->lastMessageId)
-            ->whereIn('sender_type', [SenderType::Bot->value, SenderType::System->value, SenderType::User->value])->exists();
-
-        if ($answered || ! Cache::add('bot:hold-sent:'.$c->id, 1, now()->addMinutes((int) config('crm.bot.hold_notice.cooldown_minutes', 10)))) {
+        if ($this->answered($c) || ! Cache::add('bot:hold-sent:'.$c->id, 1, now()->addMinutes((int) config('crm.bot.hold_notice.cooldown_minutes', 10)))) {
             return;
         }
 
         $text = app(FlowPrompter::class)->script('hold_short') ?? 'ثانية واحدة يا فندم';
+
+        // Once more right before sending (review #17): the reply may have gone out meanwhile.
+        if (Cache::get(self::turnKey($this->conversationId)) !== $this->turn || $this->answered($c)) {
+            return;
+        }
 
         try {
             app(OutboundService::class)->sendBot($c, $text);

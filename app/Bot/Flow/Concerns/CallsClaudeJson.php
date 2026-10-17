@@ -30,8 +30,12 @@ trait CallsClaudeJson
 
         if ($effort !== null) {
             $body['system'] = [['type' => 'text', 'text' => $system, 'cache_control' => ['type' => 'ephemeral']]];
-            $body['thinking'] = ['type' => 'disabled'];
             $output = ['effort' => $effort] + $output;
+
+            // Thinking off only where the API takes it (Haiku 5.5 at effort ≤ high); Sonnet 5.5 rejects it (review #15).
+            if (str_starts_with($model, 'claude-haiku-5')) {
+                $body['thinking'] = ['type' => 'disabled'];
+            }
         }
 
         $headers = ['x-api-key' => (string) $apiKey, 'anthropic-version' => '2023-06-01'];

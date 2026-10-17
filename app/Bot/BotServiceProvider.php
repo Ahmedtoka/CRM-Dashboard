@@ -91,13 +91,12 @@ class BotServiceProvider extends ServiceProvider
         // Guided-flow answer interpreter (design §3): same rule as the turn understanding.
         $this->app->bind(FlowAnswerInterpreter::class, function ($app) {
             return config('crm.drivers.ai', 'fake') === 'claude' && filled(config('crm.anthropic.key'))
-                // Bot hybrid (bot-hybrid.md §3.7): Haiku 5.5, cached prompt, effort low.
-                ? new ClaudeFlowAnswerInterpreter(
-                    config('crm.anthropic.key'),
-                    (string) config('crm.anthropic.flow_model', 'claude-haiku-5-5'),
-                    (int) config('crm.anthropic.flow_timeout', 10),
-                    'low',
-                )
+                // Bot hybrid (bot-hybrid.md §3.7): Haiku 5.5, cached prompt, effort low — unless the owner
+                // picked a classifier model of their own in the bot settings (fix wave M1): that one, as before.
+                // The row's seeded default (crm.anthropic.classifier_model) is not a choice.
+                ? (filled(BotSetting::current()->ai_classifier_model) && BotSetting::current()->ai_classifier_model !== config('crm.anthropic.classifier_model')
+                    ? new ClaudeFlowAnswerInterpreter(config('crm.anthropic.key'), (string) BotSetting::current()->ai_classifier_model, (int) config('crm.anthropic.flow_timeout', 10))
+                    : new ClaudeFlowAnswerInterpreter(config('crm.anthropic.key'), (string) config('crm.anthropic.flow_model', 'claude-haiku-5-5'), (int) config('crm.anthropic.flow_timeout', 10), 'low'))
                 : $app->make(FakeFlowAnswerInterpreter::class);
         });
 

@@ -12,6 +12,7 @@ use App\Bot\Flows\Steps\StepOutcome;
 use App\Bot\Language\BotTranslator;
 use App\Bot\Language\ConversationLanguage;
 use App\Bot\Router\TaskOrchestrator;
+use App\Bot\Router\TaskQueue;
 use App\Channels\Cards\OutboundCards;
 use App\Enums\AttachmentType;
 use App\Enums\MessageDirection;
@@ -311,6 +312,12 @@ class FlowEngine
         }
 
         FlowState::setConfirm($c, null);
+
+        // A flow she opens herself (not the next task of her multi-request message) ends that queue.
+        if (! isset($prefill['task_id']) && ! SandboxMode::active()) {
+            TaskQueue::clear($c);
+        }
+
         FlowState::put($c, ['key' => $flowKey, 'step' => (string) $def['start'], 'data' => $prefill, 'retries' => 0, 'detours' => 0, 'started_at' => now()->toIso8601String()]);
         $this->run($c, (string) $def['start']);
 

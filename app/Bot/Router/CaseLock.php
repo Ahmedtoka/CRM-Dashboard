@@ -11,18 +11,27 @@ use App\Models\SupportCase;
  * same type, for the same order, and — when both name pieces — for overlapping pieces, opened in
  * this conversation in the last CASE_EXISTS_HOURS. A second return for a different order (or for
  * other pieces of the same order) is a new request, not a duplicate.
+ *
+ * Returns and exchanges are only judged when the pieces are known (at record time, by line item);
+ * a complaint is never a duplicate (a second complaint about the same order is new information).
  */
 final class CaseLock
 {
     public const CASE_EXISTS_HOURS = 24;
+
+    /** Flows whose request is judged by its pieces at record time, never at its start. */
+    private const NOT_AT_START = ['return_exchange', 'complaint'];
+
+    /** Case types the record-time check covers: the pieces say whether it repeats. */
+    private const PIECE_TYPES = ['return', 'exchange', 'return_exchange'];
 
     /** The open case a new request of $flowKey for $orderRef would repeat, or null. */
     public static function forFlow(Conversation $c, string $flowKey, ?string $orderRef): ?SupportCase
     {
         $orderRef = $orderRef !== null ? ltrim(trim($orderRef), '#') : null;
 
-        if ($orderRef === null || $orderRef === '') {
-            return null; // which order is not known yet: the flow asks, and RecordCaseStep checks again
+        if ($orderRef === null || $orderRef === '' || in_array($flowKey, self::NOT_AT_START, true)) {
+            return null; // not known yet (the order, or the pieces): RecordCaseStep decides at the end
         }
 
         $types = self::caseTypes($flowKey);
@@ -40,6 +49,10 @@ final class CaseLock
      */
     public static function duplicate(Conversation $c, string $type, array $data): ?SupportCase
     {
+        if (! in_array($type, self::PIECE_TYPES, true)) {
+            return null;
+        }
+
         $orderId = is_numeric($data['order_id'] ?? null) ? (int) $data['order_id'] : null;
         $orderNumber = filled($data['order_number'] ?? null) ? ltrim((string) $data['order_number'], '#') : null;
 
@@ -59,7 +72,8 @@ final class CaseLock
 
             $theirs = self::lineIds(is_array($case->data) ? $case->data : []);
 
-            return $mine === [] || $theirs === [] || array_intersect($mine, $theirs) !== [];
+            // Pieces unknown on either side: nothing proves it is the same request, so it is recorded.
+            return $mine !== [] && $theirs !== [] && array_intersect($mine, $theirs) !== [];
         });
     }
 

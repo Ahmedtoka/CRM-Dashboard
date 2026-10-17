@@ -34,6 +34,7 @@ final class FlowPrompter
         'request' => 'الطلب',
         'request_kind' => 'نوع الطلب',
         'exchange_product' => 'المنتج البديل',
+        'exchange_products' => 'البدائل',
         'product_photo' => 'صورة المنتج (تم)',
         'defect_photo' => 'صورة العيب (تم)',
         'complaint_type' => 'نوع الشكوى',
@@ -280,8 +281,20 @@ final class FlowPrompter
             }
 
             if ($key === 'exchange_product') {
-                if (is_array($value) && is_scalar($value['title'] ?? null)) {
+                // Several pieces: «البدائل» below lists one per piece instead.
+                if (is_array($value) && is_scalar($value['title'] ?? null) && count((array) ($data['exchange_products'] ?? [])) < 2) {
                     $lines[] = '• '.$label.': '.$value['title'];
+                }
+
+                continue;
+            }
+
+            if ($key === 'exchange_products') {
+                $pieces = array_filter(array_map(fn ($p) => is_array($p) && is_scalar($p['product']['title'] ?? null)
+                    ? ($p['item_title'] ?? '').' ← '.$p['product']['title'] : null, (array) $value));
+
+                if (count((array) $value) > 1 && $pieces !== []) {
+                    $lines[] = '• '.$label.': '.implode('، ', $pieces);
                 }
 
                 continue;

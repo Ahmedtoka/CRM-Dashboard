@@ -3,6 +3,7 @@
 namespace App\Bot\Router;
 
 use App\Bot\Flows\EntityExtractor;
+use App\Models\BotFlow;
 
 /**
  * One message as a list of tasks (bot-hybrid.md §3.3), from the TurnPlanner (Haiku) or the
@@ -38,7 +39,7 @@ final class TaskPlan
     /** @param  array<string, mixed>  $raw  the planner's JSON */
     public static function fromArray(array $raw, string $text, string $source = 'model'): self
     {
-        $theirs = EntityExtractor::orderRefs($text);
+        $theirs = EntityExtractor::orderRefsInContext($text);
         $tasks = [];
 
         foreach ((array) ($raw['tasks'] ?? []) as $t) {
@@ -86,16 +87,22 @@ final class TaskPlan
         return array_values(array_unique(array_column($this->tasks, 'kind')));
     }
 
-    /** @return list<array<string, mixed>> tasks a guided flow handles */
+    /** @return list<array<string, mixed>> tasks a guided flow handles (only flows the owner has switched on) */
     public function directed(): array
     {
-        return array_values(array_filter($this->tasks, fn ($t) => isset(self::FLOWS[$t['kind']])));
+        return array_values(array_filter($this->tasks, fn ($t) => self::hasFlow($t['kind'])));
     }
 
-    /** @return list<array<string, mixed>> tasks the reply answers (small talk aside) */
+    /** @return list<array<string, mixed>> tasks the reply answers (small talk aside; a switched-off flow's request too) */
     public function immediate(): array
     {
-        return array_values(array_filter($this->tasks, fn ($t) => ! isset(self::FLOWS[$t['kind']]) && ! in_array($t['kind'], ['smalltalk', 'human'], true)));
+        return array_values(array_filter($this->tasks, fn ($t) => ! self::hasFlow($t['kind']) && ! in_array($t['kind'], ['smalltalk', 'human'], true)));
+    }
+
+    /** The kind is handled by a guided flow that is active (review #8: never «start» a switched-off flow). */
+    public static function hasFlow(string $kind): bool
+    {
+        return isset(self::FLOWS[$kind]) && BotFlow::active(self::FLOWS[$kind]) !== null;
     }
 
     public function hasOrder(): bool
@@ -162,7 +169,13 @@ final class TaskPlan
                 // A return and an exchange of the same order: one request (owner B4).
                 $i = $returns[$key];
                 $out[$i]['items'] = [...$out[$i]['items'], ...$one['items']];
-                $out[$i]['kind'] = $out[$i]['kind'] === $one['kind'] ? $one['kind'] : 'mixed';
+                // «return_or_exchange» says nothing new next to a known one; mixed only for return + exchange (review #20).
+                $kinds = array_values(array_unique(array_diff([$out[$i]['kind'], $one['kind']], ['return_or_exchange'])));
+                $out[$i]['kind'] = match (count($kinds)) {
+                    0 => 'return_or_exchange',
+                    1 => $kinds[0],
+                    default => 'mixed',
+                };
                 $out[$i]['confidence'] = min($out[$i]['confidence'], $one['confidence']);
             }
         }

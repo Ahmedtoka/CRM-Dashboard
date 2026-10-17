@@ -3,6 +3,7 @@
 namespace App\Bot\Router;
 
 use App\Models\Conversation;
+use Illuminate\Support\Carbon;
 
 /**
  * Several requests in one message (bot-hybrid.md §3.7, R5): the turn's tasks live in
@@ -26,10 +27,19 @@ final class TaskQueue
 
     public const SKIPPED = 'skipped';
 
+    /** Tasks older than this are forgotten (she left them; review #11). */
+    public const TTL_HOURS = 6;
+
     /** @return list<array<string, mixed>> */
     public static function all(Conversation $c): array
     {
-        $items = ($c->bot_state ?? [])['tasks']['items'] ?? [];
+        $tasks = ($c->bot_state ?? [])['tasks'] ?? [];
+        $items = $tasks['items'] ?? [];
+        $at = is_string($tasks['at'] ?? null) ? rescue(fn () => Carbon::parse($tasks['at']), null, report: false) : null;
+
+        if ($at === null || $at->lt(now()->subHours(self::TTL_HOURS))) {
+            return [];
+        }
 
         return is_array($items) ? array_values(array_filter($items, 'is_array')) : [];
     }

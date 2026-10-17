@@ -151,6 +151,7 @@ function fsSeed(): array
     DB::table('conversation_ad_referrals')->insert(['conversation_id' => $conversation->id, 'ad_external_id' => 'x', 'referred_at' => $now]);
     DB::table('bot_learning_notes')->insert(['conversation_id' => $conversation->id, 'last_message_id' => $message->id, 'notes' => 'n']);
     BotRun::factory()->create(['conversation_id' => $conversation->id]);
+    DB::table('bot_shadow_plans')->insert(['conversation_id' => $conversation->id, 'tier' => '1', 'created_at' => $now, 'updated_at' => $now]);
     ActivityLog::factory()->create(['conversation_id' => $conversation->id]);
 
     $order = Order::factory()->create(['customer_id' => $customer->id, 'conversation_id' => $conversation->id, 'ad_id' => $ad->id]);

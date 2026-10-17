@@ -8,6 +8,7 @@ use App\Bot\Agent\TierProfile;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Router\HybridRouter;
+use App\Bot\Router\TaskOrchestrator;
 use App\Enums\Handler;
 use App\Enums\SenderType;
 use App\Inbox\OutboundService;
@@ -139,7 +140,8 @@ class ConversationRouter
     /** runPayload, plus the main menu after a "no" to an offer made outside a flow (never silence). */
     private function runPayload(Conversation $c, string $payload): bool
     {
-        $offerOutsideFlow = $payload === 'no' && FlowState::confirm($c) !== null && ! $this->flows->isActive($c);
+        // «بعدين» to the next request of her message has its own reply and summary (review #12).
+        $offerOutsideFlow = $payload === 'no' && ! in_array(FlowState::confirm($c), [null, TaskOrchestrator::CONFIRM], true) && ! $this->flows->isActive($c);
 
         if (! $this->flows->runPayload($c, $payload)) {
             return false;

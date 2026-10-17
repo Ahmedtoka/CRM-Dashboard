@@ -48,6 +48,9 @@ final class OrderStep extends BaseStep
 
     public const VERIFY_RETRY_TEXT = 'الأرقام دي مش مطابقة. جربي تاني، اكتبي آخر ٤ أرقام من الموبايل اللي طلبتي بيه';
 
+    /** A number from her first message that she could not confirm: asked for again, no handover (bot hybrid). */
+    public const HINT_RETRY_TEXT = 'تمام، ممكن تكتبيلي رقم الأوردر أو رقم الموبايل اللي اتعمل بيه الأوردر؟';
+
     // The handover reply that follows says she is with the team (flow 7, 2026-09-19).
     public const VERIFY_FAILED_TEXT = 'مش قادر أتأكد من الأوردر ده';
 
@@ -102,7 +105,7 @@ final class OrderStep extends BaseStep
         if (is_string($hint) && $hint !== '' && ! $this->verifying($state, $step)
             && in_array($this->lookup->find($c, ['order_ref' => $hint], self::MAX_ORDER_BUTTONS)['status'], ['found', 'multiple'], true)
             && ($outcome = $this->answer($c, $state, $step, $hint, collect())) !== null) {
-            return $outcome->withData(['order_ref_hint' => null]);
+            return $outcome->withData(['order_ref_hint' => null, 'order_from_hint' => isset($outcome->data['order_verify']) ? true : null]);
         }
 
         return parent::enter($c, $state, $step)->withData(['order_ref_hint' => null]);
@@ -292,6 +295,12 @@ final class OrderStep extends BaseStep
         $tries = (int) ($pending['tries'] ?? 0) + 1;
 
         if ($tries >= self::MAX_VERIFY_TRIES) {
+            // The number came from her first message, not from this question (bot hybrid, review #9):
+            // maybe not her order at all — ask for it the usual way instead of handing over.
+            if (($state['data']['order_from_hint'] ?? false) === true) {
+                return StepOutcome::wait([['text' => $this->prompter->renderText(self::HINT_RETRY_TEXT, [])]], 0, ['order_verify' => null, 'order_from_hint' => null]);
+            }
+
             return StepOutcome::handover('order_verification_failed', [['text' => self::VERIFY_FAILED_TEXT]]);
         }
 

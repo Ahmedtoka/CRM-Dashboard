@@ -149,14 +149,9 @@ class HybridRouter
      * @param  list<string>  $texts
      * @return array{0: TaskPlan, 1: float, 2: ?string} the plan, its cost and its model
      */
-    public function plan(Conversation $c, Collection $burst, array $texts): array
+    public function plan(Conversation $c, Collection $burst, array $texts, ?array $state = null): array
     {
-        $flow = FlowState::flow($c);
-        $state = [
-            'flow' => $flow['key'] ?? null,
-            'step' => $flow['step'] ?? null,
-            'last_question' => $c->messages()->where('sender_type', SenderType::Bot->value)->latest('id')->value('body'),
-        ];
+        $state ??= self::state($c);
 
         try {
             $plan = $this->planner->plan($this->history($c, $burst), $texts, $state);
@@ -168,6 +163,18 @@ class HybridRouter
 
             return [$this->keywords->plan([], $texts, $state), 0.0, null];
         }
+    }
+
+    /** @return array{flow:?string, step:?string, last_question:?string} where the chat is now, for the planner */
+    public static function state(Conversation $c): array
+    {
+        $flow = FlowState::flow($c);
+
+        return [
+            'flow' => $flow['key'] ?? null,
+            'step' => $flow['step'] ?? null,
+            'last_question' => $c->messages()->where('sender_type', SenderType::Bot->value)->latest('id')->value('body'),
+        ];
     }
 
     /**
@@ -183,8 +190,17 @@ class HybridRouter
         $profile = TierProfile::tier($tier);
         $first = $this->attempt($c, $messages, $language, $profile, $context);
 
+        // Tier 1 failed outright (a timeout, an API error): tier 2 gets the turn while time allows (review #7).
         if ($first === null) {
-            return null;
+            $second = TierProfile::tier('2');
+
+            if ($profile->tier !== '1' || $second->tier !== '2' || (hrtime(true) - $started) / 1e9 > self::RETRY_DEADLINE_SECONDS) {
+                return null;
+            }
+
+            $outcome = $this->attempt($c, $messages, $language, $second, $context);
+
+            return $outcome !== null && ! $outcome->refused && ! $outcome->truncated && $this->guards->failure($outcome, $texts) === null && $this->usable($outcome) ? $outcome : null;
         }
 
         $retry = match (true) {
@@ -298,7 +314,7 @@ class HybridRouter
         $lines = [];
 
         foreach ($plan->tasks as $i => $t) {
-            $flow = isset(TaskPlan::FLOWS[$t['kind']]);
+            $flow = TaskPlan::hasFlow($t['kind']);
             $details = array_filter([
                 $t['order_refs'] !== [] ? 'order #'.implode(', #', $t['order_refs']) : null,
                 $t['items'] !== [] ? 'pieces: '.implode('، ', array_column($t['items'], 'text')) : null,

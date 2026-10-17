@@ -37,7 +37,7 @@ final class ReturnPrefill
     public static function fromText(string $text): array
     {
         $norm = new ArabicNormalizer;
-        $refs = EntityExtractor::orderRefs($text);
+        $refs = EntityExtractor::orderRefsInContext($text);
         $tokens = preg_split('/\s+/u', trim((string) preg_replace('/[^\p{L}\p{N}#\s،,+]+/u', ' ', $norm->digitsToLatin($text)))) ?: [];
 
         $clauses = [];

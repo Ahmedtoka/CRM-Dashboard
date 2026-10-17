@@ -2,7 +2,6 @@
 
 namespace App\Bot\Router;
 
-use App\Models\BotRun;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Bus\Queueable;
@@ -11,13 +10,14 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SyncQueue;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Throwable;
 
 /**
  * Shadow mode (bot-hybrid.md §6.1, `crm.bot.router.mode = shadow`): after the live bot answered a
  * turn the old way, the planner reads the same messages on a queue and records what the hybrid
- * router would have done — the tasks, the tier and why — as a bot run with engine `shadow`.
+ * router would have done — the tasks, the tier and why — in `bot_shadow_plans`.
  * Nothing is sent and nothing in the chat changes. Run it 3–5 days before switching to hybrid.
  */
 class ShadowPlanTurn implements ShouldQueue
@@ -28,14 +28,21 @@ class ShadowPlanTurn implements ShouldQueue
 
     public int $timeout = 30;
 
-    /** @param  list<int>  $messageIds  the turn's customer messages */
-    public function __construct(public readonly int $conversationId, public readonly array $messageIds)
+    /**
+     * @param  list<int>  $messageIds  the turn's customer messages
+     * @param  array{flow:?string, step:?string, last_question:?string}|null  $state  where the chat was BEFORE the live reply
+     */
+    public function __construct(public readonly int $conversationId, public readonly array $messageIds, public readonly ?array $state = null)
     {
         $this->onQueue((string) config('crm.bot.router.shadow_queue', 'outbound'));
     }
 
-    /** Queues the shadow plan of a turn (never on a sync queue: it would slow the live reply). */
-    public static function for(Conversation $c, Collection $burst): void
+    /**
+     * Queues the shadow plan of a turn (never on a sync queue: it would slow the live reply).
+     *
+     * @param  array{flow:?string, step:?string, last_question:?string}  $state  taken before the live reply
+     */
+    public static function for(Conversation $c, Collection $burst, array $state): void
     {
         $ids = $burst->pluck('id')->filter()->map(fn ($id) => (int) $id)->values()->all();
 
@@ -43,7 +50,7 @@ class ShadowPlanTurn implements ShouldQueue
             return;
         }
 
-        rescue(fn () => self::dispatch($c->id, $ids), report: false);
+        rescue(fn () => self::dispatch($c->id, $ids, $state), report: false);
     }
 
     public function handle(): void
@@ -61,7 +68,7 @@ class ShadowPlanTurn implements ShouldQueue
         $started = hrtime(true);
 
         try {
-            [$plan, $cost, $model] = $router->plan($c, $burst, $texts);
+            [$plan, $cost, $model] = $router->plan($c, $burst, $texts, $this->state);
             $decision = app(EscalationPolicy::class)->decide($plan, $c, $text);
         } catch (Throwable $e) {
             report($e);
@@ -69,21 +76,21 @@ class ShadowPlanTurn implements ShouldQueue
             return;
         }
 
-        BotRun::create([
+        // Its own table: a shadow plan is not a bot turn (turn limit, metrics, learning — review #1).
+        DB::table('bot_shadow_plans')->insert([
             'conversation_id' => $c->id,
             'trigger_message' => $text,
-            'engine' => 'shadow',
             'model' => $model,
             'tier' => $decision['tier'],
-            'intent' => mb_substr(implode(',', $plan->kinds()).($decision['reason'] !== null ? '|'.$decision['reason'] : ''), 0, 190),
+            'reason' => $decision['reason'] !== null ? mb_substr($decision['reason'], 0, 40) : null,
+            'kinds' => mb_substr(implode(',', $plan->kinds()), 0, 190),
+            'directed' => min(255, count($plan->directed())),
             'confidence' => round($plan->confidence(), 2),
-            'decision' => 'shadow',
-            'reply_text' => json_encode($plan->toArray() + ['directed' => count($plan->directed())], JSON_UNESCAPED_UNICODE),
-            'input_tokens' => 0,
-            'output_tokens' => 0,
+            'plan' => json_encode($plan->toArray(), JSON_UNESCAPED_UNICODE),
             'cost_usd' => round($cost, 6),
-            'latency_ms' => (int) ((hrtime(true) - $started) / 1_000_000),
             'planner_ms' => (int) ((hrtime(true) - $started) / 1_000_000),
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
     }
 }

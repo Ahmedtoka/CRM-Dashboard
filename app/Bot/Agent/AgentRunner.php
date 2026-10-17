@@ -58,16 +58,26 @@ class AgentRunner
         // «ثانية واحدة» if the model is slow (owner B2): this path always calls a model.
         BotHoldNotice::arm($c);
 
-        try {
-            $outcome = $this->agent->answer($c, $this->messages($c, $burst, $texts), $this->language->of($c), $insideFlow, $profile);
-        } catch (Throwable $e) {
-            report($e);
+        $messages = $this->messages($c, $burst, $texts);
+        $outcome = $this->attempt($c, $messages, $insideFlow, $profile);
 
-            return null;
+        // Tier 1 asked for help (the `escalate` tool): one try on tier 2; a Sonnet profile that asks
+        // (the legacy agent, or past the Sonnet cap) hands her to a person instead (review #6).
+        if ($outcome?->escalate !== null) {
+            $tier2 = TierProfile::tier('2');
+            $reason = $outcome->escalate;
+            $outcome = ($profile?->tier === '1' && $tier2->tier === '2') ? $this->attempt($c, $messages, $insideFlow, $tier2) : null;
+
+            if ($outcome === null || $outcome->escalate !== null) {
+                $outcome ??= new AgentOutcome;
+                $outcome->reply = '';
+                $outcome->escalate = null;
+                $outcome->handover = ['reason' => 'escalated', 'summary' => $reason];
+            }
         }
 
-        // Refused or cut off, or tier 1 asked for help: the older path answers instead (legacy mode).
-        if ($outcome->refused || $outcome->truncated || $outcome->escalate !== null
+        // Failed, refused or cut off: the older path answers instead (legacy mode).
+        if ($outcome === null || $outcome->refused || $outcome->truncated
             || ($outcome->reply === '' && $outcome->flow === null && $outcome->handover === null)) {
             return null;
         }
@@ -79,6 +89,17 @@ class AgentRunner
         }
 
         return $this->complete($c, $texts, $outcome, $insideFlow, $started);
+    }
+
+    private function attempt(Conversation $c, array $messages, bool $insideFlow, ?TierProfile $profile): ?AgentOutcome
+    {
+        try {
+            return $this->agent->answer($c, $messages, $this->language->of($c), $insideFlow, $profile);
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
     }
 
     /**

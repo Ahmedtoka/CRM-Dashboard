@@ -44,7 +44,7 @@ class FakeTurnPlanner implements TurnPlanner
     {
         $text = implode("\n", $burst);
         $norm = $this->normalizer->normalize($this->normalizer->digitsToLatin($text));
-        $refs = EntityExtractor::orderRefs($text);
+        $refs = EntityExtractor::orderRefsInContext($text);
         $tasks = [];
 
         $return = ReturnPrefill::fromText($text);

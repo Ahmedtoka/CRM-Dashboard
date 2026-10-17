@@ -41,7 +41,7 @@ class SonnetBudget
         return $cap >= 0 && $this->spentToday() >= $cap;
     }
 
-    private function key(): string
+    public function key(): string
     {
         return 'bot:sonnet-spend:'.now('Africa/Cairo')->toDateString();
     }

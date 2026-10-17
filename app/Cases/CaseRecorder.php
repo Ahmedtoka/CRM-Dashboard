@@ -32,7 +32,7 @@ class CaseRecorder
     private const HIGH_COMPLAINTS = ['branch', 'delivery'];
 
     /** Flow-state bookkeeping that is not case data. */
-    private const INTERNAL_KEYS = ['case_id', 'order_verify', 'verified_order_ids', 'order_lookup_contact', 'items_pending', 'order_choices', 'contact_pending', 'changes_pending'];
+    private const INTERNAL_KEYS = ['case_id', 'order_verify', 'verified_order_ids', 'order_lookup_contact', 'items_pending', 'order_choices', 'contact_pending', 'changes_pending', 'order_ref_hint', 'order_from_hint', 'item_hints', 'exchange_product_index', 'task_id'];
 
     public function __construct(
         private readonly ReturnPolicyChecker $policy,
@@ -80,7 +80,7 @@ class CaseRecorder
             ]);
 
             // An exchange also gets a one-line note the team can act on (2026-09-19).
-            if ($type === 'exchange') {
+            if ($type === 'exchange' || ($type === 'return_exchange' && (isset($data['exchange_product']) || ! empty($data['exchange_products'])))) {
                 ConversationNote::create([
                     'conversation_id' => $c->id,
                     'user_id' => null,

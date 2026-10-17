@@ -73,7 +73,8 @@ class ClaudeTurnPlanner implements TurnPlanner
         ['response' => $response, 'ms' => $ms] = $this->claude->send([
             'model' => $this->model(),
             'max_tokens' => (int) config('crm.bot.router.planner.max_tokens', 1024),
-            'thinking' => ['type' => 'disabled'],
+            // Thinking off only on Haiku (a 400 on Sonnet 5.5; review #15).
+            'thinking' => str_starts_with($this->model(), 'claude-haiku-5') ? ['type' => 'disabled'] : ['type' => 'adaptive'],
             'output_config' => ['effort' => 'low', 'format' => ['type' => 'json_schema', 'schema' => self::schema()]],
             'system' => [['type' => 'text', 'text' => preg_replace('/^ {8}/m', '', self::SYSTEM) ?? self::SYSTEM, 'cache_control' => ['type' => 'ephemeral']]],
             'messages' => [['role' => 'user', 'content' => implode("\n", $lines)]],

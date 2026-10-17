@@ -117,6 +117,24 @@ final class ReturnFlowUpgrade
         ]];
     }
 
+    /**
+     * The version published on 2026-09-22 (before the bot-hybrid additions): the bot-hybrid migration
+     * replaces only this one, never a flow the owner has edited since.
+     */
+    public static function definitionBefore20261017(): array
+    {
+        $def = self::definition();
+
+        foreach (['kind', 'kind_unknown'] as $key) {
+            unset($def['steps'][$key]['skip_if_set']);
+            $def['steps'][$key]['options'] = array_values(array_filter($def['steps'][$key]['options'], fn ($o) => $o['value'] !== 'mixed'));
+        }
+
+        unset($def['steps']['exchange_product']['per_item'], $def['steps']['mixed_items'], $def['steps']['mixed_reason'], $def['steps']['mixed_photo'], $def['steps']['mixed_exchange_product'], $def['steps']['record_mixed']);
+
+        return $def;
+    }
+
     /** The first order-aware version (commit 009704c): order → order_items → reason → request → photos → summary. */
     public static function orderAwareDefinition(): array
     {

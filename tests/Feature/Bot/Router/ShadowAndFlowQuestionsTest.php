@@ -19,6 +19,7 @@ use App\Models\Message;
 use App\Models\Order;
 use App\Models\OrderItem;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -47,12 +48,14 @@ it('shadow mode: records what the planner would do, sends nothing, changes nothi
     $before = Message::where('sender_type', SenderType::Bot->value)->count();
     $state = $c->refresh()->bot_state;
 
+    $runs = BotRun::count();
     (new ShadowPlanTurn($c->id, Message::where('sender_type', SenderType::Customer->value)->pluck('id')->all()))->handle();
 
-    $run = BotRun::where('engine', 'shadow')->sole();
-    expect($run->decision)->toBe('shadow')
-        ->and($run->intent)->toStartWith('return')
-        ->and(json_decode($run->reply_text, true)['directed'])->toBe(2)
+    $plan = DB::table('bot_shadow_plans')->sole();
+    expect($plan->kinds)->toStartWith('return')
+        ->and($plan->directed)->toBe(2)
+        // Never a bot run: it would count toward the turn limit, the metrics and the learning (review #1).
+        ->and(BotRun::count())->toBe($runs)
         ->and(Message::where('sender_type', SenderType::Bot->value)->count())->toBe($before)
         ->and($c->refresh()->bot_state)->toBe($state);
 });
@@ -63,7 +66,7 @@ it('shadow mode queues the plan after the live reply, never on a sync queue', fu
 
     $c = Conversation::factory()->create();
     $m = Message::factory()->for($c, 'conversation')->create(['direction' => 'in', 'sender_type' => 'customer', 'body' => 'الشحن بكام']);
-    ShadowPlanTurn::for($c, collect([$m]));
+    ShadowPlanTurn::for($c, collect([$m]), ['flow' => null, 'step' => null, 'last_question' => null]);
 
     Queue::assertPushedOn('outbound', ShadowPlanTurn::class);
 });

@@ -43,6 +43,29 @@ final class EntityExtractor
         return array_values(array_unique($m[1]));
     }
 
+    /**
+     * Order numbers she clearly means as order numbers (bot hybrid, review #9) — «ارجع الفستان اللي
+     * ب 1250» is a price: a number counts with a «#», after «اوردر / الاوردر / طلب / رقم / order»
+     * (up to two words before), with 6+ digits (the store's numbers), or as the whole message.
+     *
+     * @return list<string>
+     */
+    public static function orderRefsInContext(string $text): array
+    {
+        $raw = (new ArabicNormalizer)->digitsToLatin($text);
+        $withoutPhones = preg_replace(self::PHONE, ' ', $raw) ?? $raw;
+
+        if (preg_match('/^\s*#?\s*\d{4,}\s*$/u', $withoutPhones) === 1) {
+            return self::orderRefs($text);
+        }
+
+        // Up to two words between the context word and the number, as few as possible («اوردر 1 واوردر 2»).
+        $context = '(?:#\s*|(?:اوردر|أوردر|طلب|رقم|order)\S*\s+(?:\S+\s+){0,2}?#?)';
+        preg_match_all('/(?:'.$context.')(?<!\d)(\d{4,})(?!\d)|(?<!\d)(\d{6,})(?!\d)/iu', $withoutPhones, $m);
+
+        return array_values(array_unique(array_filter([...$m[1], ...$m[2]], fn ($r) => $r !== '')));
+    }
+
     public static function email(string $text): ?string
     {
         return preg_match('/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/', $text, $m) ? $m[0] : null;

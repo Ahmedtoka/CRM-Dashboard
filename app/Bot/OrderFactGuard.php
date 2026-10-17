@@ -13,7 +13,7 @@ use App\Bot\Flows\EntityExtractor;
 class OrderFactGuard
 {
     /** Normalized status phrases that claim something about a specific order. */
-    private const STATUS_WORDS = ['اتشحن', 'اتسلم', 'خرج للتوصيل', 'في الطريق ليكي', 'في الطريق لحضرتك', 'مع المندوب', 'اتلغي', 'اتاكد', 'جاري تجهيزه', 'بيتجهز', 'وصل الفرع'];
+    private const STATUS_WORDS = ['اتشحن', 'اتسلم', 'خرج للتوصيل', 'في الطريق ليكي', 'في الطريق لحضرتك', 'مع المندوب', 'اتلغي', 'الاوردر اتاكد', 'اوردرك اتاكد', 'جاري تجهيزه', 'بيتجهز', 'وصل الفرع'];
 
     private const MONTHS = 'يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر';
 
@@ -37,7 +37,8 @@ class OrderFactGuard
         }
 
         $latin = $this->normalizer->digitsToLatin($reply);
-        preg_match_all('~(?<!\d)\d{1,2}[/.\-]\d{1,2}(?:[/.\-]\d{2,4})?(?!\d)|(?<!\d)\d{1,2}\s+(?:'.self::MONTHS.')~u', $latin, $dates);
+        // A date is «12/10» or «12 أكتوبر» — never «2-3 أيام» or «1.5» (review #10).
+        preg_match_all('~(?<![\d/])\d{1,2}/\d{1,2}(?:/\d{2,4})?(?![\d/])|(?<!\d)\d{1,2}\s+(?:'.self::MONTHS.')~u', $latin, $dates);
 
         foreach ($dates[0] as $date) {
             if (! str_contains($haystack, $date)) {

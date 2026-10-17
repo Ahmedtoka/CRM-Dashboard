@@ -92,6 +92,8 @@ return [
 
     'exchange' => [
         'replacement' => 'Replacement',
+        'replacement_for' => 'Replacement for «:item»',
+        'note_pieces' => 'Exchange request:',
         'link' => 'Link',
         'typed' => 'Replacement: not identified — the customer wrote «:text»',
         'photo' => 'Replacement: the customer sent a photo of the product',

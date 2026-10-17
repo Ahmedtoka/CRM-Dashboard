@@ -9,6 +9,7 @@ use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\FlowScripts;
 use App\Bot\Flows\FlowState;
 use App\Bot\Flows\Returns\ReturnPrefill;
+use App\Enums\Handler;
 use App\Inbox\OutboundService;
 use App\Inbox\WindowClosedException;
 use App\Models\Conversation;
@@ -53,7 +54,7 @@ class TaskOrchestrator
             ), $refs, array_keys($refs));
         }
 
-        $refs = EntityExtractor::orderRefs($text) ?: [null];
+        $refs = EntityExtractor::orderRefsInContext($text) ?: [null];
 
         return array_map(fn (?string $ref) => TaskQueue::task($flowKey, self::label($flowKey, null, $ref), $flowKey, array_filter(['order_ref_hint' => $ref])), $refs);
     }
@@ -94,9 +95,19 @@ class TaskOrchestrator
 
             if ($case === null) {
                 TaskQueue::update($c, $next['id'], ['status' => TaskQueue::RUNNING]);
-                app(FlowEngine::class)->start($c, (string) $next['flow'], (array) $next['data'], $delayMs);
+                app(FlowEngine::class)->start($c, (string) $next['flow'], ['task_id' => $next['id']] + (array) $next['data'], $delayMs);
 
-                return true;
+                // A flow that did not begin (switched off, broken): skip it, never sit silent (review #8).
+                $task = collect(TaskQueue::all($c->refresh()))->firstWhere('id', $next['id']);
+
+                // Still running, already finished by the flow's own end, or the chat moved on (a question, a person).
+                if (($task['status'] ?? null) !== TaskQueue::RUNNING || FlowState::flow($c) !== null || FlowState::confirm($c) !== null || $c->handler !== Handler::Bot) {
+                    return true;
+                }
+
+                TaskQueue::update($c, $next['id'], ['status' => TaskQueue::SKIPPED]);
+
+                continue;
             }
 
             $this->send($c, strtr($this->script('tasks_already_recorded', ['case_id' => $case->id]), [
@@ -116,7 +127,8 @@ class TaskOrchestrator
     {
         $running = TaskQueue::running($c);
 
-        if ($running === null || ($running['flow'] ?? null) !== ($ended['key'] ?? null)) {
+        // Only the flow this queue started (its task_id), never one she opened herself later (review #11).
+        if ($running === null || ($running['id'] ?? null) !== ($ended['data']['task_id'] ?? null)) {
             return;
         }
 

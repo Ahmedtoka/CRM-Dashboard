@@ -133,13 +133,14 @@ it('answers a question inside a flow and asks the waiting step again', function 
         ->and(Conversation::first()->handler)->toBe(Handler::Bot);
 });
 
-// Owner B6 (2026-10-17): «already recorded» means the same request for the same order; a return
-// without an order number (or for another order) starts the flow.
-it('offers a person instead of restarting the flow when a return case for the same order was recorded in the last 24 hours', function () {
+// Owner B6 (2026-10-17): «already recorded» means the same request for the same order. A return is
+// judged by its pieces when it is recorded, so its flow always starts; a cancellation of the same
+// order is offered a person instead.
+it('offers a person instead of restarting the flow when a cancellation of the same order was recorded in the last 24 hours', function () {
     $c = routerSay('التوصيل بياخد كام يوم؟');
-    $case = SupportCase::factory()->returnExchange()->create(['conversation_id' => $c->id, 'order_number' => '#1047']);
+    $case = SupportCase::factory()->create(['conversation_id' => $c->id, 'type' => 'cancel_edit', 'status' => 'new', 'order_number' => '#1047']);
 
-    routerSay('عايزة ارجع الاوردر 1047');
+    routerSay('عايزة الغي الاوردر 1047');
 
     $last = routerBotMessages()->last();
     $c->refresh();
@@ -185,19 +186,19 @@ it('seeds flow_key on the intents without touching an owner choice', function ()
     expect(BotIntent::where('key', 'defect')->value('flow_key'))->toBe('complaint');
 });
 
-it('starts a second return when the recorded one was for another order (owner B6)', function () {
+it('starts a second return, for the same order or another (owner B6: the pieces decide when it is recorded)', function () {
     $c = routerSay('التوصيل بياخد كام يوم؟');
     SupportCase::factory()->returnExchange()->create(['conversation_id' => $c->id, 'order_number' => '#1047']);
 
-    routerSay('عايزة ارجع الاوردر 2099');
+    routerSay('عايزة ارجع الاوردر 1047');
 
     expect(FlowState::flow(Conversation::first())['key'])->toBe('return_exchange');
 });
 
 it('sends the menu after a "no" to the case-exists offer', function () {
     $c = routerSay('التوصيل بياخد كام يوم؟');
-    SupportCase::factory()->returnExchange()->create(['conversation_id' => $c->id, 'order_number' => '#1047']);
-    routerSay('عايزة ارجع الاوردر 1047');
+    SupportCase::factory()->create(['conversation_id' => $c->id, 'type' => 'cancel_edit', 'status' => 'new', 'order_number' => '#1047']);
+    routerSay('عايزة الغي الاوردر 1047');
 
     routerSay('لأ', payload: 'no');
 

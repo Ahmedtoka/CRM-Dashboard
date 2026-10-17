@@ -151,15 +151,15 @@ it('#26 a second return for another order is a new request; the same order is «
     tqFinishReturn();
     $first = SupportCase::sole();
 
+    // Returns are judged by their pieces at the end, never at the start (other pieces = a new request).
     expect(CaseLock::forFlow($c, 'return_exchange', '209200'))->toBeNull()
-        ->and(CaseLock::forFlow($c, 'return_exchange', '209129')?->id)->toBe($first->id)
-        ->and(CaseLock::forFlow($c, 'return_exchange', null))->toBeNull();
+        ->and(CaseLock::forFlow($c, 'return_exchange', '209129'))->toBeNull();
 
-    // The same order again through the orchestrator: told, not restarted.
+    // The same order and the same piece again: the flow runs, but nothing is recorded twice.
     app(TaskOrchestrator::class)->start($c->refresh(), TaskOrchestrator::flowTasks('return_exchange', 'وكمان عايزة ارجع اوردر 209129'));
+    tqFinishReturn();
 
     expect(SupportCase::count())->toBe(1)
-        ->and(FlowState::flow($c->refresh()))->toBeNull()
         ->and(tqLast())->toContain("متسجل خلاص برقم #{$first->id}");
 });
 

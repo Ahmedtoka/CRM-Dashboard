@@ -36,7 +36,7 @@ final class FreshStart
         'fulfillments', 'refunds', 'order_items', 'orders',
         // Conversations and everything hanging off them.
         'message_attachments', 'messages', 'conversation_notes', 'conversation_tag', 'conversation_participants', 'conversation_ad_referrals',
-        'bot_learning_notes', 'bot_runs', 'activity_logs', 'conversations',
+        'bot_learning_notes', 'bot_runs', 'bot_shadow_plans', 'activity_logs', 'conversations',
         // Customers.
         'customer_merge_suggestions', 'customer_addresses', 'customer_identities', 'customers',
         // Ads structure (after orders/alerts that point at it).

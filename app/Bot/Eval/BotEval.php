@@ -2,6 +2,7 @@
 
 namespace App\Bot\Eval;
 
+use App\Bot\Ai\SonnetBudget;
 use App\Bot\BotEngine;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flows\FakeFlowAnswerInterpreter;
@@ -23,6 +24,12 @@ use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Enums\Platform;
 use App\Enums\SenderType;
+use App\Events\ConversationUpdated;
+use App\Events\CustomerUpdated;
+use App\Events\MessageCreated;
+use App\Events\MessageUpdated;
+use App\Events\OrderUpdated;
+use App\Events\UserNotified;
 use App\Inbox\OutboundService;
 use App\Models\BotRun;
 use App\Models\ChannelAccount;
@@ -33,7 +40,9 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\SupportCase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Symfony\Component\Yaml\Yaml;
@@ -64,6 +73,9 @@ class BotEval
     {
         $fixture = Yaml::parseFile($file);
         $results = [];
+        // An eval's Sonnet calls never use up the day's real cap (owner B3, review #18).
+        $budget = app(SonnetBudget::class);
+        $spent = Cache::get($budget->key());
 
         $this->isolate($live);
 
@@ -91,6 +103,8 @@ class BotEval
             ];
         }
 
+        $spent === null ? Cache::forget($budget->key()) : Cache::put($budget->key(), $spent, now()->addDays(2));
+
         return ['scenarios' => $results, 'summary' => $this->summary($results)];
     }
 
@@ -98,6 +112,8 @@ class BotEval
     private function isolate(bool $live): void
     {
         Queue::fake();
+        // Nothing real-time reaches the team's screens (review #18): the broadcasts are faked.
+        Event::fake([ConversationUpdated::class, MessageCreated::class, MessageUpdated::class, OrderUpdated::class, CustomerUpdated::class, UserNotified::class]);
         config(['broadcasting.default' => 'null', 'crm.bot.router.mode' => 'hybrid', 'crm.bot.router.legacy_fallback' => false, 'crm.bot.hold_notice.enabled' => false]);
 
         if (! $live) {
@@ -106,19 +122,22 @@ class BotEval
             app()->bind(FlowAnswerInterpreter::class, FakeFlowAnswerInterpreter::class);
         }
 
-        Http::fake([
-            'api.anthropic.com/*' => function (Request $request) use ($live) {
-                $body = $request->data();
-                $this->calls[] = ['kind' => isset($body['output_config']['format']) ? 'structured' : 'agent', 'model' => $body['model'] ?? null];
+        // One callback for every request (review #4: with several stubs Laravel takes the first non-null
+        // answer, so a catch-all would also answer the API). Live, the Messages API returns null here and
+        // goes out for real; everything else (Shopify, Meta…) always gets a 404.
+        Http::fake(function (Request $request) use ($live) {
+            if (! str_starts_with($request->url(), 'https://api.anthropic.com/')) {
+                return Http::response([], 404);
+            }
 
-                // Live: null lets the call go to the real API (the only request that leaves).
-                return $live ? null : Http::response([
-                    'stop_reason' => 'end_turn', 'model' => $body['model'] ?? null, 'usage' => ['input_tokens' => 0, 'output_tokens' => 0],
-                    'content' => [['type' => 'text', 'text' => isset($body['output_config']['format']) ? '{"kind":"unknown","value":null}' : self::OFFLINE_REPLY]],
-                ]);
-            },
-            '*' => Http::response([], 404),
-        ]);
+            $body = $request->data();
+            $this->calls[] = ['kind' => isset($body['output_config']['format']) ? 'structured' : 'agent', 'model' => $body['model'] ?? null];
+
+            return $live ? null : Http::response([
+                'stop_reason' => 'end_turn', 'model' => $body['model'] ?? null, 'usage' => ['input_tokens' => 0, 'output_tokens' => 0],
+                'content' => [['type' => 'text', 'text' => isset($body['output_config']['format']) ? '{"kind":"unknown","value":null}' : self::OFFLINE_REPLY]],
+            ]);
+        });
     }
 
     /** @param  list<array<string, mixed>>  $orders */
