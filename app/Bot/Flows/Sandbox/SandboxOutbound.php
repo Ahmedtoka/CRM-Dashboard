@@ -8,6 +8,7 @@ use App\Enums\SenderType;
 use App\Inbox\OutboundService;
 use App\Models\Conversation;
 use App\Models\Message;
+use Closure;
 
 /**
  * OutboundService stand-in for a sandbox run: records bot texts, buttons and cards
@@ -20,7 +21,7 @@ class SandboxOutbound extends OutboundService
 {
     public function __construct(private readonly SandboxLog $log) {}
 
-    public function sendBot(Conversation $c, string $body, int $delayMs = 0, bool $skipIfHumanTookOver = false, array $buttons = [], ?array $cards = null): Message
+    public function sendBot(Conversation $c, string $body, int $delayMs = 0, bool $skipIfHumanTookOver = false, array $buttons = [], ?array $cards = null, ?Closure $claim = null, ?int $afterCloseOf = null): Message
     {
         // The same language gate as the real send (design 2026-09-21 §1-2), so a
         // simulated English run says exactly what a real English customer would read.

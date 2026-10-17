@@ -319,3 +319,23 @@ it('never hands off in the tick that sent the apology: the apology alone, the ha
 
     expect($e->fresh()->close_reason)->toBe('no_reply')->and($sent('queue_agent_delay_apology'))->toBe(1);
 });
+
+// Close-cycle hotfix C1 #3 (D-20): any staff reply from the CRM answers her.
+it('stops the clock when a colleague or the leader replies in her window: no apology, no hand-off, no penalty', function () {
+    $shift = Shift::factory()->create();
+    $a = clockDesk($shift);
+    $leader = clockDesk($shift);
+    clockDesk($shift);   // a free colleague
+    $e = clockWindow($a);
+
+    clockAt(100);
+    app(OutboundService::class)->sendHuman($e->conversation->fresh(), $leader->user, 'أنا معاكي، المقاس متاح');
+
+    expect($e->fresh()->awaiting_reply_since)->toBeNull()->and($e->fresh()->first_reply_at)->toBeNull();
+
+    clockAt(400);
+    app(WindowLifecycle::class)->tickReplies();
+
+    expect($e->fresh()->status)->toBe('active')->and($e->fresh()->apology_sent_at)->toBeNull()
+        ->and(QueueEntry::where('conversation_id', $e->conversation_id)->count())->toBe(1);
+});

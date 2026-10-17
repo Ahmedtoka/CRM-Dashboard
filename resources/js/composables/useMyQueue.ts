@@ -66,7 +66,8 @@ export interface MyQueue {
     /** The strip is shown: she holds a desk or a window, or she may check in. */
     shown: ComputedRef<boolean>;
     entryOf: (conversationId: number) => QueueEntry | null;
-    closeEntry: (id: number, reason: QueueCloseReason, caseType?: SupportCaseType | null, outcome?: OutcomePayload) => Promise<boolean>;
+    /** `toBot`: «رجوع للبوت» — the close ends with no thanks and no rating (close-cycle hotfix C1, D-03). */
+    closeEntry: (id: number, reason: QueueCloseReason, caseType?: SupportCaseType | null, outcome?: OutcomePayload, toBot?: boolean) => Promise<boolean>;
     escalate: (id: number) => Promise<boolean>;
     setStatus: (status: MyStatus) => Promise<boolean>;
     checkIn: () => Promise<boolean>;
@@ -93,9 +94,9 @@ interface Options {
 
 const KEY: InjectionKey<MyQueue> = Symbol('my-queue');
 
-/** The close request body (control room S3 adds the outcome, D13). */
-export function closeBody(reason: QueueCloseReason, caseType: SupportCaseType | null, outcome: OutcomePayload): Record<string, unknown> {
-    return { reason, ...(reason === 'case' ? { case_type: caseType } : {}), ...outcome };
+/** The close request body (control room S3 adds the outcome, D13; `to_bot` on the way back to the bot, C1 / D-03). */
+export function closeBody(reason: QueueCloseReason, caseType: SupportCaseType | null, outcome: OutcomePayload, toBot = false): Record<string, unknown> {
+    return { reason, ...(reason === 'case' ? { case_type: caseType } : {}), ...outcome, ...(toBot ? { to_bot: true } : {}) };
 }
 
 /** The inbox's queue state for the components below it; null outside the inbox. */
@@ -368,10 +369,10 @@ export function useMyQueue(options: Options): MyQueue {
         options.onReleased?.(id);
     }
 
-    function closeEntry(id: number, reason: QueueCloseReason, caseType: SupportCaseType | null = null, outcome: OutcomePayload = {}): Promise<boolean> {
+    function closeEntry(id: number, reason: QueueCloseReason, caseType: SupportCaseType | null = null, outcome: OutcomePayload = {}, toBot = false): Promise<boolean> {
         return act(
             `close-${id}`,
-            () => api.post(`/queue/entries/${id}/close`, closeBody(reason, caseType, outcome)),
+            () => api.post(`/queue/entries/${id}/close`, closeBody(reason, caseType, outcome, toBot)),
             () => release(id),
         );
     }

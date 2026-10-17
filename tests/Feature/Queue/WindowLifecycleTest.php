@@ -385,11 +385,16 @@ it('auto-closes 300 seconds after the moderator last replied', function () {
         ->and($e->conversation->messages()->where('sender_type', 'bot')->latest('id')->first()->body)->toContain('اتقفلت المحادثة');
 });
 
-it('does not move the silence clock for a reply of someone who is not the assignee', function () {
+// Close-cycle hotfix C1 #3 (D-20): a colleague's (or the leader's) reply in her window answers the customer.
+it('lets a reply of someone who is not the assignee answer the window: silence clock on, reply clock off, no first reply', function () {
     [$e, $m, $u] = activeWindow();
+    $e->forceFill(['awaiting_reply_since' => now(), 'apology_sent_at' => now(), 'overdue_alerted_at' => now()])->save();
     Carbon::setTestNow(now()->addSeconds(10));
     app(WindowLifecycle::class)->agentReplied($e->conversation, User::factory()->create());
-    expect($e->fresh()->last_agent_message_at)->toBeNull();
+    $e->refresh();
+    expect($e->last_agent_message_at->equalTo(now()))->toBeTrue()
+        ->and($e->awaiting_reply_since)->toBeNull()->and($e->apology_sent_at)->toBeNull()->and($e->overdue_alerted_at)->toBeNull()
+        ->and($e->first_reply_at)->toBeNull();
 });
 
 // Addendum C2 (R1 override): replaces «reverses a close at most once, whatever happens to the

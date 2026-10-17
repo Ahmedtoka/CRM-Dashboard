@@ -3,6 +3,7 @@
 namespace App\Inbox;
 
 use App\Analytics\ActivityLogger;
+use App\Bot\BotEngine;
 use App\Bot\Learning\Jobs\ReviewConversation;
 use App\Enums\ActorType;
 use App\Enums\ConversationStatus;
@@ -20,9 +21,12 @@ use App\Models\User;
 use App\Queue\QueueService;
 use App\Queue\WindowLifecycle;
 use App\Support\SafeBroadcast;
+use Illuminate\Database\DetectsConcurrencyErrors;
+use Illuminate\Database\DetectsLostConnections;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Small human-driven conversation state changes shared by the web and API
@@ -30,39 +34,72 @@ use Illuminate\Support\Str;
  */
 class ConversationActions
 {
+    use DetectsConcurrencyErrors;
+    use DetectsLostConnections;
+
     public function __construct(private readonly ActivityLogger $logger, private readonly UserNotifier $notifier) {}
 
     public function resolve(Conversation $c, User $u, ?Outcome $outcome = null, ?string $note = null, EpisodeEnd $how = EpisodeEnd::Resolve): Conversation
     {
-        $entry = app(QueueService::class)->activeEntry($c);
+        $queue = app(QueueService::class);
 
-        // Handover queue: her window (or her place in the lounge) ends here.
-        if ($entry) {
-            app(WindowLifecycle::class)->close($entry, 'resolved_elsewhere', $u);
-            $c->refresh();
-        }
+        // Close-cycle hotfix C1 (D-08): while the queue is on, the close, the outcome and the reset
+        // to the bot happen in ONE transaction under the conversation lock (the queue's lock order),
+        // so her message never lands between them, and a resolved chat is the bot's again instead of
+        // a «human» chat nobody holds that opens a ticket for every message. Queue off: as before.
+        DB::transaction(function () use ($c, $u, $outcome, $note, $how, $queue) {
+            $toBot = $queue->settings()->enabled;
 
-        // Control room S3 (D13): the episode ends with its outcome before the routing fields are cleared
-        // (`service` reads the handover category). Never fails the resolve.
-        rescue(fn () => app(OutcomeRecorder::class)->endEpisode($c, $entry, $outcome, $note, $u, $how), null, report: true);
+            if ($toBot) {
+                Conversation::query()->whereKey($c->id)->lockForUpdate()->first(['id']);
+            }
 
-        // A resolved conversation has nobody "replying", whoever held the soft lock.
-        // The bot handover routing (priority_level/queue/handover_category) is done once
-        // resolved (Task 4 ruling 3); a human reply along the way does not clear it.
-        $c->forceFill([
-            'status' => ConversationStatus::Resolved,
-            'resolved_at' => now(),
-            'resolved_by_id' => $u->id,
-            'locked_by_id' => null,
-            'locked_until' => null,
-            'priority_level' => null,
-            'queue' => null,
-            'handover_category' => null,
-            'handover_topic' => null,
-            // Task 5 ruling 6a: forget the flow's memory (clarified/repeat_count/asks…)
-            // so a returning customer is not handed over as "repeated" or "unclear".
-            'bot_state' => $c->resetBotState(),
-        ])->save();
+            $entry = $queue->activeEntry($c);
+
+            // Handover queue: her window (or her place in the lounge) ends here.
+            if ($entry) {
+                app(WindowLifecycle::class)->close($entry, 'resolved_elsewhere', $u);
+                $c->refresh();
+            }
+
+            // Control room S3 (D13): the episode ends with its outcome before the routing fields are cleared
+            // (`service` reads the handover category). Never fails the resolve: a savepoint, so a failed
+            // outcome write is rolled back alone.
+            // A deadlock or a lost connection already rolled back the whole transaction on MariaDB: it
+            // propagates (and the resolve retries), never a silent half-resolve.
+            try {
+                DB::transaction(fn () => app(OutcomeRecorder::class)->endEpisode($c, $entry, $outcome, $note, $u, $how));
+            } catch (Throwable $outcomeError) {
+                if ($this->causedByConcurrencyError($outcomeError) || $this->causedByLostConnection($outcomeError)) {
+                    throw $outcomeError;
+                }
+                report($outcomeError);
+            }
+
+            // A resolved conversation has nobody "replying", whoever held the soft lock.
+            // The bot handover routing (priority_level/queue/handover_category) is done once
+            // resolved (Task 4 ruling 3); a human reply along the way does not clear it.
+            $c->forceFill([
+                'status' => ConversationStatus::Resolved,
+                'resolved_at' => now(),
+                'resolved_by_id' => $u->id,
+                'locked_by_id' => null,
+                'locked_until' => null,
+                'priority_level' => null,
+                'queue' => null,
+                'handover_category' => null,
+                'handover_topic' => null,
+                // Task 5 ruling 6a: forget the flow's memory (clarified/repeat_count/asks…)
+                // so a returning customer is not handed over as "repeated" or "unclear".
+                'bot_state' => $c->resetBotState(),
+            ])->save();
+
+            if ($toBot) {
+                // Resolved is final: an earlier auto-close's return window no longer sends her to a moderator.
+                $c->return_priority_until = null;
+                app(BotEngine::class)->resetToBot($c);
+            }
+        }, attempts: 3);
 
         $this->logger->log(ActorType::User, $u, ActivityLogger::CONVERSATION_RESOLVED, null, $c);
 

@@ -47,6 +47,7 @@ use App\Queue\WindowLifecycle;
 use App\Support\SafeBroadcast;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -270,13 +271,22 @@ class BotEngine
 
     public function returnToBot(Conversation $c, User $u): void
     {
-        // Handover queue: the bot takes her back, so her window (or lounge place) is cancelled.
-        if ($e = app(QueueService::class)->activeEntry($c)) {
-            app(WindowLifecycle::class)->close($e, 'cancelled', $u);
-            $c->refresh();
-        }
+        // Handover queue: the bot takes her back, so her window (or lounge place) is cancelled —
+        // the close and the reset in ONE transaction under the conversation lock (close-cycle
+        // hotfix C1, M-06): a message ingested in between would otherwise see a closed window on a
+        // still-human chat and open a new ticket the bot then answers.
+        DB::transaction(function () use ($c, $u) {
+            Conversation::query()->whereKey($c->id)->lockForUpdate()->first(['id']);
 
-        $this->resetToBot($c);
+            if ($e = app(QueueService::class)->activeEntry($c)) {
+                app(WindowLifecycle::class)->close($e, 'cancelled', $u);
+            }
+
+            $c->refresh();
+            // A staff decision: an earlier auto-close's return window no longer sends her to a moderator.
+            $c->return_priority_until = null;
+            $this->resetToBot($c);
+        }, attempts: 3);
 
         $this->logger->log(ActorType::User, $u, ActivityLogger::CONVERSATION_RETURN_TO_BOT, null, $c);
 

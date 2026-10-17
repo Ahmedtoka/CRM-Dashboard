@@ -14,6 +14,8 @@ use App\Enums\SenderType;
 use App\Events\MessageUpdated;
 use App\Models\CustomerIdentity;
 use App\Models\Message;
+use App\Models\QueueEntry;
+use App\Queue\AfterCloseGuard;
 use App\Support\SafeBroadcast;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
@@ -63,11 +65,21 @@ class SendOutboundMessage implements ShouldQueue
      * @param  array{tag?: string, template?: array}  $options
      * @param  bool  $skipIfHumanTookOver  a delayed part of a bot reply (final fix wave I10): not sent
      *                                     once a person has taken the conversation from the bot
+     * @param  int|null  $afterCloseOf  said after this queue entry's close (the closing message, the rating):
+     *                                  not sent once she wrote, a colleague replied or a newer entry exists
+     *                                  (`AfterCloseGuard`, close-cycle hotfix C1 / H-03)
      */
-    public function __construct(public readonly int $messageId, public readonly array $options = [], public readonly bool $skipIfHumanTookOver = false)
+    public function __construct(public readonly int $messageId, public readonly array $options = [], public readonly bool $skipIfHumanTookOver = false, ?int $afterCloseOf = null)
     {
+        $this->afterCloseOf = $afterCloseOf;
         $this->onQueue('outbound');
     }
+
+    /**
+     * Not promoted and not readonly, with a default: a job queued before this property existed
+     * (a delayed bot part, a retry in flight at deploy) unserializes with null instead of throwing.
+     */
+    public ?int $afterCloseOf = null;
 
     /** Seconds the send claim is held at most — above $timeout, so a killed worker's claim expires on its own. */
     public const CLAIM_SECONDS = 90;
@@ -139,6 +151,13 @@ class SendOutboundMessage implements ShouldQueue
         if ($this->skipIfHumanTookOver && $conversation->handler !== Handler::Bot) {
             // Kept as a failed bubble so the agent can still see (and retry) what the bot had queued.
             $this->markFailed($message, 'human_took_over', $logger);
+
+            return;
+        }
+
+        if ($this->afterCloseOf !== null && ($closed = QueueEntry::query()->find($this->afterCloseOf)) !== null && AfterCloseGuard::reason($closed) !== null) {
+            // Kept as a failed bubble: the team sees what was queued and why it never left.
+            $this->markFailed($message, 'stale_after_close', $logger);
 
             return;
         }

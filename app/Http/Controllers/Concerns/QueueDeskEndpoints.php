@@ -161,6 +161,8 @@ trait QueueDeskEndpoints
             'case_type' => ['nullable', 'required_if:reason,case', 'string', Rule::in(SupportCase::TYPES)],
             'outcome' => ['nullable', 'string', Rule::in(Outcome::agentValues())],
             'outcome_note' => ['nullable', 'required_if:outcome,other', 'string', 'max:120'],
+            // Close-cycle hotfix C1 (D-03): the web «رجوع للبوت» — no thanks, no rating. Optional: the app never sends it.
+            'to_bot' => ['sometimes', 'boolean'],
         ], [
             'reason.required' => __('errors.queue.reason_required'),
             'reason.in' => __('errors.queue.reason_required'),
@@ -182,6 +184,7 @@ trait QueueDeskEndpoints
 
         $closed = $windows->close($entry, $data['reason'], $request->user(), [
             'case_type' => $data['case_type'] ?? null, 'outcome' => $outcome, 'outcome_note' => $data['outcome_note'] ?? null,
+            'to_bot' => (bool) ($data['to_bot'] ?? false),
         ]);
 
         // Somebody (or the silence timer) closed it between our read and the lock: nothing was done here.

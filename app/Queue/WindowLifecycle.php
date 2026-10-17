@@ -16,6 +16,7 @@ use App\Inbox\UserNotifier;
 use App\Models\Conversation;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
+use App\Models\ShiftMember;
 use App\Models\SupportCase;
 use App\Models\User;
 use App\Queue\Events\CloseConfirmed;
@@ -50,17 +51,19 @@ use Throwable;
  * there is no transaction). A listener that throws is reported and never fails the close, the
  * customer's inbound message, `resolve()` or `returnToBot()`.
  *
- * The customer-silence clock (`silentSince()`) starts at the ASSIGNEE's last reply and runs only
- * while that reply is later than the customer's last message. No reply yet, or she wrote last:
+ * The customer-silence clock (`silentSince()`) starts at the last staff reply in the window (the
+ * assignee's, or a colleague's since C1 / D-20) and runs only while that reply is later than the
+ * customer's last message. No reply yet, or she wrote last:
  * no clock, no warning, no auto-close (a slow moderator is an SLA matter).
  *
- * An acknowledgement (thanks, emoji, a sticker — spec 2026-09-30 §1) starts neither clock again:
- * the customer-silence clock keeps running from the assignee's last reply (`last_ack_at`), so a
- * window she forgets to close still warns and auto-closes.
+ * An acknowledgement (thanks, emoji, a sticker — spec 2026-09-30 §1) starts no reply clock; the
+ * customer-silence clock starts again from it (`last_ack_at`, close-cycle hotfix C1 / D-06: «تمام»
+ * while the moderator prepares the order is not silence), so a window she forgets to close still
+ * warns and auto-closes, only later.
  *
  * The moderator-reply clock (flow revision §4, `awaiting_reply_since`) runs only while the
  * customer waits for the ASSIGNEE: from delivery, or from the customer's message after the
- * assignee had answered everything; every reply of the assignee stops it. The two clocks never
+ * assignee had answered everything; every staff reply from the CRM stops it (C1 / D-20). The two clocks never
  * run together. `tickReplies()` apologises, then hands the window off (`no_reply`) or alerts.
  * A moderator who is not logged in is never handed off (nor penalised) by this clock: her
  * windows follow the offline path of `ShiftService::tickMembers()`.
@@ -76,6 +79,9 @@ class WindowLifecycle
      * «دورك جه… الموظفة Y» (a tick gap after a deploy, or an apology close to the limit).
      */
     public const APOLOGY_BEFORE_HANDOFF_SECONDS = 30;
+
+    /** The shift-end watchdog's own mass-offline wait, when no open shift is there to compare with (C1, H-07). */
+    public const STRANDED_OUTAGE_MINUTES = 15;
 
     public function __construct(
         private readonly ActivityLogger $logger,
@@ -105,20 +111,24 @@ class WindowLifecycle
     }
 
     /**
-     * Every reply of the assignee in her open window: the customer-silence clock restarts here
-     * (a new silence period, so the warning may be sent again), the moderator-reply clock stops
-     * (a new waiting period for the apology and the leader alert), and the first one is the
-     * window's first reply. Called inside the send's transaction, which already holds the conversation.
+     * Every staff reply from the CRM in an open window (the assignee's, a colleague's, the leader's —
+     * close-cycle hotfix C1 / D-20): the customer-silence clock restarts here (a new silence
+     * period, so the warning may be sent again), the moderator-reply clock stops (a new waiting
+     * period for the apology, the leader alert and the `no_reply` hand-off), and the assignee's
+     * first one is the window's first reply. Echoes are not counted yet (H-05). Called inside the
+     * send's transaction, which already holds the conversation.
      */
     public function agentReplied(Conversation $c, User $u): void
     {
         $e = $c->queue_entry_id ? QueueEntry::query()->find($c->queue_entry_id) : null;
 
-        if (! $e || ! $e->isOpen() || (int) $e->assigned_user_id !== (int) $u->id) {
+        if (! $e || ! $e->isOpen()) {
             return;
         }
 
-        $first = $e->first_reply_at === null;
+        // Close-cycle hotfix C1 (D-20): the first reply (and its SLA) is the assignee's, but any
+        // staff member's reply from the CRM answers the customer — both clocks move the same way.
+        $first = $e->first_reply_at === null && (int) $e->assigned_user_id === (int) $u->id;
         QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)->update([
             'last_agent_message_at' => now(), 'silence_warned_at' => null,
             'awaiting_reply_since' => null, 'apology_sent_at' => null, 'overdue_alerted_at' => null, 'updated_at' => now(),
@@ -157,7 +167,8 @@ class WindowLifecycle
      * A still-waiting entry resolved / cancelled elsewhere leaves the lounge as `cancelled`.
      * Anything else that is no longer open is returned untouched.
      * `$opts['outcome']` (Outcome) and `$opts['outcome_note']` are the episode outcome a person picked
-     * (control room S3).
+     * (control room S3). `$opts['to_bot']`: «رجوع للبوت» — a final close with no thanks and no rating
+     * (close-cycle hotfix C1, D-03).
      */
     public function close(QueueEntry $e, string $reason, ?User $by = null, array $opts = []): QueueEntry
     {
@@ -282,6 +293,100 @@ class WindowLifecycle
     }
 
     /**
+     * Close-cycle hotfix C1 (D-12, with the H-07 rules), every tick: an open window whose moderator
+     * is on no open shift any more (her shift closed, or she left it) AND is gone (no heartbeat for
+     * `ShiftService::REASSIGN_AFTER_SECONDS`) is never left stranded. One still logged in after her
+     * shift is finishing her windows: the usual clocks apply to her. Re-checked under the locks:
+     *  - the customer has the turn (no reply clock, the moderator had answered): a SILENT `auto`
+     *    close — no «اتقفلت المحادثة» to a customer at night; the chat goes back to the bot with the
+     *    usual return window;
+     *  - we have the turn: `transfer` to the lounge keeping her ticket — `returning` with
+     *    «هنكمّل معاكي مع موظفة تانية» while a shift is open, else `overnight` with the night
+     *    message (`queue_night`, when on) and no promise of a colleague.
+     * Nothing at all while the open shift's heartbeats fail together (the mass-offline safeguard:
+     * a Reverb or network outage must not close or move everybody's windows), nor while two or
+     * more of these moderators went dark together less than STRANDED_OUTAGE_MINUTES ago.
+     */
+    public function tickStranded(?QueueSetting $settings = null): void
+    {
+        $s = $settings ?? QueueSetting::current();
+
+        if (! $s->enabled || app(ShiftService::class)->heartbeatsFailing()) {
+            return;
+        }
+
+        $stranded = QueueEntry::query()->with('assignee')->whereIn('status', QueueEntry::OPEN_STATUSES)->whereNotNull('assigned_user_id')
+            ->orderBy('id')->get()->filter(fn (QueueEntry $e) => self::stranded($e));
+
+        // The same safeguard after the last shift (no open shift to compare with): two or more
+        // moderators finishing late who went dark together, for less than STRANDED_OUTAGE_MINUTES,
+        // is more likely the network than all of them leaving. Bounded: then they are gone.
+        $owners = $stranded->pluck('assignee')->filter()->unique('id');
+
+        if ($owners->count() >= 2 && $owners->every(fn (User $u) => $u->is_active && $u->last_seen_at !== null
+            && $u->last_seen_at->greaterThan(now()->subMinutes(self::STRANDED_OUTAGE_MINUTES)))) {
+            return;
+        }
+
+        foreach ($stranded as $e) {
+            rescue(fn () => $this->releaseStranded($e, $s), null, report: true);
+        }
+    }
+
+    /** Her moderator is on no open shift and has sent no heartbeat for the hand-off delay. */
+    public static function stranded(QueueEntry $e): bool
+    {
+        $u = $e->assigned_user_id !== null ? ($e->assignee ?? User::query()->find($e->assigned_user_id)) : null;
+
+        if ($u === null || self::onOpenShift((int) $u->id)) {
+            return false;
+        }
+
+        return ! $u->is_active || $u->last_seen_at === null
+            || $u->last_seen_at->lessThanOrEqualTo(now()->subSeconds(ShiftService::REASSIGN_AFTER_SECONDS));
+    }
+
+    /** A desk of hers that has not left an open shift (`checking_out` included: she is still there). */
+    public static function onOpenShift(int $userId): bool
+    {
+        return ShiftMember::query()->where('user_id', $userId)->where('status', '!=', 'left')
+            ->whereHas('shift', fn ($q) => $q->where('status', 'open'))->exists();
+    }
+
+    private function releaseStranded(QueueEntry $e, QueueSetting $s): void
+    {
+        DB::transaction(function () use ($e, $s) {
+            $locked = self::lockBoth($e);
+
+            if ($locked === null || ! $locked->isOpen() || ! self::stranded($locked)) {
+                return;
+            }
+
+            $agent = $locked->assignee?->name ?? '';
+
+            if ($locked->awaiting_reply_since === null && $locked->first_reply_at !== null) {
+                $this->closeLocked($locked, 'auto', null, ['silent' => true], $s);
+
+                return;
+            }
+
+            $queue = app(QueueService::class);
+
+            if ($queue->openShift() !== null) {
+                $this->rerouteLocked($locked, 'transfer', null, 'returning', 'نهاية شيفت '.$agent);
+
+                return;
+            }
+
+            $new = $this->rerouteLocked($locked, 'transfer', null, 'overnight', 'نهاية شيفت '.$agent, ['tell_customer' => false]);
+
+            if ($s->night_message_enabled) {
+                SendQueueMessage::dispatch($new->id, 'queue_night', ['ticket' => $new->ticket_no, 'opening' => $queue->nextOpeningPhrase()]);
+            }
+        }, attempts: 3);
+    }
+
+    /**
      * Every open window whose customer is silent after the moderator's last reply: one warning
      * message per silence period at `silence_warn_seconds`, auto-close at `silence_close_seconds`.
      */
@@ -339,7 +444,13 @@ class WindowLifecycle
 
         $customer = collect([$conversation, $e->last_customer_message_at])->filter()->max();
 
-        return $customer !== null && $customer->greaterThanOrEqualTo($agent) ? null : $agent;
+        if ($customer !== null && $customer->greaterThanOrEqualTo($agent)) {
+            return null;
+        }
+
+        // Close-cycle hotfix C1 (D-06): her «تمام» after the reply asks for nothing, but she is
+        // there — the silence clock starts again from it.
+        return $e->last_ack_at !== null && $e->last_ack_at->greaterThan($agent) ? $e->last_ack_at : $agent;
     }
 
     /** Seconds the customer has been silent since the moderator's last reply; null when the clock is not running. */
@@ -492,7 +603,11 @@ class WindowLifecycle
             return;
         }
 
-        if ($waited >= (int) $s->agent_apology_seconds && $e->apology_sent_at === null) {
+        // C1 (D-12): never «زميلتنا X معاكي حالاً» for a moderator off shift and gone — the
+        // watchdog (`tickStranded()`) moves her window instead.
+        $gone = ! $this->loggedIn($e->assignee) && $e->assigned_user_id !== null && ! self::onOpenShift((int) $e->assigned_user_id);
+
+        if ($waited >= (int) $s->agent_apology_seconds && $e->apology_sent_at === null && ! $gone) {
             $this->apologise($e, $s);
         }
 
@@ -716,6 +831,18 @@ class WindowLifecycle
         return (int) $case->opened_by_id;
     }
 
+    /** Her support case that is neither closed nor resolved: the ticket's own, else her newest (QueueService::openCaseFor). */
+    private function stillOpenCaseOf(QueueEntry $e, Conversation $c): ?SupportCase
+    {
+        $case = $e->open_case_id !== null ? $e->openCase : null;
+
+        if ($case !== null && $case->status !== 'closed' && $case->resolved_at === null) {
+            return $case;
+        }
+
+        return app(QueueService::class)->openCaseFor($c);
+    }
+
     /** The close itself, on an entry the caller holds locked and knows to be open. */
     private function closeLocked(QueueEntry $e, string $reason, ?User $by, array $opts = [], ?QueueSetting $s = null, bool $route = true): void
     {
@@ -755,10 +882,23 @@ class WindowLifecycle
             $until = now()->addMinutes($s->return_priority_minutes);
             $c->forceFill(['return_priority_until' => $until])->save();
             $e->forceFill(['return_priority_until' => $until])->save();
-            SendQueueMessage::dispatch($e->id, 'queue_auto_closed', []);
+            if (! ($opts['silent'] ?? false)) {
+                SendQueueMessage::dispatch($e->id, 'queue_auto_closed', []);
+            }
+            // Close-cycle hotfix C1 (D-08): the chat goes back to the bot here, on the row this
+            // transaction holds; inside `return_priority_until` her real message still goes back to
+            // this moderator (QueueService::settles(), H-01), after it the bot answers — never a
+            // ticket for ever on a chat nobody holds.
+            app(BotEngine::class)->resetToBot($c);
         }
 
-        if ($reason === 'case' && $c) {
+        // Close-cycle hotfix C1 (D-21): her case still open (the bot's flow, or a colleague's) is the
+        // one this close is about — linked, never a second case for the same problem.
+        $linked = $reason === 'case' && $c ? $this->stillOpenCaseOf($e, $c) : null;
+
+        if ($linked !== null) {
+            $e->forceFill(['support_case_id' => $linked->id])->save();
+        } elseif ($reason === 'case' && $c) {
             $type = in_array($opts['case_type'] ?? null, SupportCase::TYPES, true) ? $opts['case_type'] : 'complaint';
             $case = SupportCase::create([
                 'conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'platform' => $c->platform, 'type' => $type, 'status' => 'new',
@@ -778,17 +918,28 @@ class WindowLifecycle
         // real message is the bot's; a human request is a new ticket (`returning` within
         // `return_priority_minutes`, see QueueService::enqueue()). The close is final: her return
         // never reverses it. No bot turn is started here.
+        // Close-cycle hotfix C1 (D-03): «رجوع للبوت» from the web (`to_bot`) is the same final close —
+        // reason, outcome, points, back to the bot — without the thanks and the rating.
+        $toBot = (bool) ($opts['to_bot'] ?? false);
+
         if (in_array($reason, QueueEntry::FINAL_CLOSE_REASONS, true) && $c) {
-            $messages = $reason === 'case' && $e->support_case_id !== null
+            // A linked case already has its number (she was told when it opened): only the thanks.
+            $messages = $reason === 'case' && $e->support_case_id !== null && $linked === null
                 ? [new SendQueueMessage($e->id, 'queue_case_opened', ['case_id' => $e->support_case_id])]
                 : [];
-            $messages[] = new SendQueueMessage($e->id, 'queue_closed_thanks', []);
-            Bus::chain($messages)->onQueue('outbound')->dispatch();
+            if (! $toBot) {
+                $messages[] = new SendQueueMessage($e->id, 'queue_closed_thanks', []);
+            }
+            // A few seconds first (close-cycle hotfix C1, H-03): a message of hers already on its way lands before
+            // the job decides; it is re-checked again right before the platform call.
+            if ($messages !== []) {
+                Bus::chain($messages)->onQueue('outbound')->delay(now()->addSeconds(SendQueueMessage::CLOSING_SETTLE_SECONDS))->dispatch();
+            }
 
             // §3: an inquiry / problem close is rated `review_delay_seconds` after the closing
             // message (not a case: Part 2 rates it when it is resolved). RatingService decides then;
             // the job is afterCommit and carries the close's token.
-            if (in_array($reason, QueueEntry::RATED_CLOSE_REASONS, true)) {
+            if (! $toBot && in_array($reason, QueueEntry::RATED_CLOSE_REASONS, true)) {
                 RequestRating::dispatch($e->id, $e->closed_at->toIso8601String())->delay(now()->addSeconds((int) $s->review_delay_seconds));
             }
 

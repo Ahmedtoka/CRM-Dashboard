@@ -591,8 +591,10 @@ class ShiftService
 
     /**
      * The shift is over: whoever is still checked in leaves (`auto_out`, attendance §3); her open
-     * windows stay with her (Part 1: she finishes them) and her unfinished reserved overnight
-     * customers go back to the pool. Claimed by a conditional update, like `open()`.
+     * windows stay with her while she is logged in (Part 1: she finishes them) — once she is gone,
+     * `WindowLifecycle::tickStranded()` moves them (close-cycle hotfix C1, D-12) — and her
+     * unfinished reserved overnight customers go back to the pool. Claimed by a conditional
+     * update, like `open()`.
      */
     private function close(Shift $shift): void
     {
@@ -721,20 +723,9 @@ class ShiftService
             return;
         }
 
-        $members = ShiftMember::query()->with(['user', 'shift'])->whereHas('shift', fn ($q) => $q->where('status', 'open'))
-            ->where('status', '!=', 'left')->get()
-            ->filter(fn (ShiftMember $m) => $m->user !== null);
-
-        // Never seen (no heartbeat ever) or deactivated mid-shift counts as offline from the start.
-        $offlineFor = fn (ShiftMember $m): int => ($m->user->last_seen_at && $m->user->is_active)
-            ? (int) $m->user->last_seen_at->diffInSeconds(now()) : PHP_INT_MAX;
-
-        // Only desks that were online at some point since joining can "go dark together".
-        $serving = $members->filter(fn (ShiftMember $m) => in_array($m->status, self::SERVING, true) && ! self::notArrived($m));
-        $goingDark = $serving->filter(fn (ShiftMember $m) => $offlineFor($m) >= self::OFFLINE_AFTER_SECONDS);
-        // A lone serving desk going quiet is the isolated case (nothing to compare her with).
-        $mass = $serving->count() >= 2 && $goingDark->isNotEmpty()
-            && ($goingDark->count() === $serving->count() || ($serving->count() >= 3 && $goingDark->count() * 2 > $serving->count()));
+        $members = $this->checkedInDesks();
+        $offlineFor = fn (ShiftMember $m): int => self::offlineSeconds($m);
+        [$mass, $goingDark, $serving] = $this->massOffline($members);
 
         if ($mass) {
             $this->alertMassOffline($goingDark->count(), $serving->count());
@@ -790,6 +781,47 @@ class ShiftService
                 $this->settle($m);
             }
         }
+    }
+
+    /**
+     * The mass-offline safeguard's verdict right now (see `tickMembers()`): the open shift's serving
+     * desks are going dark together, so the heartbeats failed, not the moderators. The shift-end
+     * watchdog (`WindowLifecycle::tickStranded()`, close-cycle hotfix C1 / H-07) waits while it holds.
+     */
+    public function heartbeatsFailing(): bool
+    {
+        return $this->massOffline($this->checkedInDesks())[0];
+    }
+
+    /** @return Collection<int, ShiftMember> every desk still checked in to an open shift, with its user */
+    private function checkedInDesks(): Collection
+    {
+        return ShiftMember::query()->with(['user', 'shift'])->whereHas('shift', fn ($q) => $q->where('status', 'open'))
+            ->where('status', '!=', 'left')->get()
+            ->filter(fn (ShiftMember $m) => $m->user !== null)->values();
+    }
+
+    /** Seconds since her last heartbeat; never seen (no heartbeat ever) or deactivated mid-shift counts as offline from the start. */
+    private static function offlineSeconds(ShiftMember $m): int
+    {
+        return ($m->user->last_seen_at && $m->user->is_active) ? (int) $m->user->last_seen_at->diffInSeconds(now()) : PHP_INT_MAX;
+    }
+
+    /**
+     * Only desks that were online at some point since joining can "go dark together"; a lone
+     * serving desk going quiet is the isolated case (nothing to compare her with).
+     *
+     * @param  Collection<int, ShiftMember>  $members
+     * @return array{0: bool, 1: Collection<int, ShiftMember>, 2: Collection<int, ShiftMember>} [mass, going dark, serving]
+     */
+    private function massOffline(Collection $members): array
+    {
+        $serving = $members->filter(fn (ShiftMember $m) => in_array($m->status, self::SERVING, true) && ! self::notArrived($m));
+        $goingDark = $serving->filter(fn (ShiftMember $m) => self::offlineSeconds($m) >= self::OFFLINE_AFTER_SECONDS);
+        $mass = $serving->count() >= 2 && $goingDark->isNotEmpty()
+            && ($goingDark->count() === $serving->count() || ($serving->count() >= 3 && $goingDark->count() * 2 > $serving->count()));
+
+        return [$mass, $goingDark, $serving];
     }
 
     /**

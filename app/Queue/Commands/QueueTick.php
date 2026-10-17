@@ -3,6 +3,7 @@
 namespace App\Queue\Commands;
 
 use App\Models\QueueDecision;
+use App\Models\QueueMessageSend;
 use App\Models\QueueSetting;
 use App\Queue\Cases\CaseSla;
 use App\Queue\QueueRouter;
@@ -81,6 +82,8 @@ TXT;
             $steps = [
                 'shifts' => fn () => $shifts->transition($settings),
                 'members' => fn () => $shifts->tickMembers($settings),
+                // Close-cycle hotfix C1 (D-12): windows left with a moderator whose shift is over.
+                'stranded' => fn () => $windows->tickStranded($settings),
                 'silence' => fn () => $windows->tickSilence($settings),
                 'replies' => fn () => $windows->tickReplies($settings),
                 'confirm' => fn () => $windows->confirmDue($settings),
@@ -104,6 +107,7 @@ TXT;
     {
         if (Cache::add('queue:decisions-pruned', true, now()->addHour())) {
             QueueDecision::query()->where('created_at', '<', now()->subDays(self::DECISIONS_KEPT_DAYS))->delete();
+            QueueMessageSend::query()->where('created_at', '<', now()->subDays(QueueMessageSend::KEPT_DAYS))->delete();
         }
     }
 }

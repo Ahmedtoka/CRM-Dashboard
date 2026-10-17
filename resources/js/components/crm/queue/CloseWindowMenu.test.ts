@@ -58,7 +58,7 @@ describe('CloseWindowMenu outcome row', () => {
 
         item('inquiry').click();
         await flushPromises();
-        expect(closeEntry).toHaveBeenCalledWith(41, 'inquiry', null, { outcome: 'size_out' });
+        expect(closeEntry).toHaveBeenCalledWith(41, 'inquiry', null, { outcome: 'size_out' }, false);
         w.unmount();
     });
 
@@ -78,7 +78,21 @@ describe('CloseWindowMenu outcome row', () => {
         await openMenu(w);
         item('problem').click();
         await flushPromises();
-        expect(closeEntry).toHaveBeenCalledWith(41, 'problem', null, {});
+        expect(closeEntry).toHaveBeenCalledWith(41, 'problem', null, {}, false);
+        w.unmount();
+    });
+});
+
+describe('CloseWindowMenu «رجوع للبوت» (close-cycle hotfix C1, D-03)', () => {
+    it('closes with its reason and outcome but asks the server for no thanks and no rating, then hands the chat to the bot', async () => {
+        const w = mountMenu({ auto: 'ordered' });
+        (w.vm as unknown as { open: (mode: 'close' | 'bot') => void }).open('bot');
+        await flushPromises();
+        item('inquiry').click();
+        await flushPromises();
+
+        expect(closeEntry).toHaveBeenCalledWith(41, 'inquiry', null, {}, true);
+        expect(w.emitted('closedForBot')).toHaveLength(1);
         w.unmount();
     });
 });

@@ -25,6 +25,7 @@ use App\Queue\WindowLifecycle;
 use App\Simulator\LoadTest\FollowUps;
 use App\Support\Emoji;
 use App\Support\SafeBroadcast;
+use Closure;
 use DomainException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Carbon;
@@ -239,10 +240,15 @@ class OutboundService
      * @param  bool  $skipIfHumanTookOver  at send time, drop it when the conversation is no longer the bot's
      * @param  list<array{title: string, payload: string}>  $buttons  quick-reply buttons offered with this message
      * @param  array|null  $cards  rich cards (App\Channels\Cards\OutboundCards); `$body` is their plain-text fallback
+     * @param  (Closure(): bool)|null  $claim  run first inside the transaction that creates the Message (the queue's
+     *                                         send-once claim, C1 / H-04); false → nothing is created, SendClaimRefused
+     * @param  int|null  $afterCloseOf  a message said after this queue entry's close: re-checked right before the
+     *                                  platform call (`AfterCloseGuard`, C1 / H-03)
      *
      * @throws WindowClosedException
+     * @throws SendClaimRefused
      */
-    public function sendBot(Conversation $c, string $body, int $delayMs = 0, bool $skipIfHumanTookOver = false, array $buttons = [], ?array $cards = null): Message
+    public function sendBot(Conversation $c, string $body, int $delayMs = 0, bool $skipIfHumanTookOver = false, array $buttons = [], ?array $cards = null, ?Closure $claim = null, ?int $afterCloseOf = null): Message
     {
         $state = $this->windows->evaluate($c, SenderType::Bot);
 
@@ -268,7 +274,11 @@ class OutboundService
             throw new EmptyBotMessageException;
         }
 
-        $message = DB::transaction(function () use ($c, $body, $buttons, $cards) {
+        $message = DB::transaction(function () use ($c, $body, $buttons, $cards, $claim) {
+            if ($claim !== null && ! $claim()) {
+                throw new SendClaimRefused;
+            }
+
             $message = $c->messages()->create([
                 'platform' => $c->platform,
                 'direction' => MessageDirection::Out,
@@ -288,7 +298,7 @@ class OutboundService
             return $message;
         });
 
-        $send = new SendOutboundMessage($message->id, [], $skipIfHumanTookOver);
+        $send = new SendOutboundMessage($message->id, [], $skipIfHumanTookOver, $afterCloseOf);
 
         dispatch($delayMs > 0 ? $send->delay(now()->addMilliseconds($delayMs)) : $send);
 
