@@ -55,24 +55,24 @@ useShortcuts([
         <template v-if="!adsOnly" #topbar-search>
             <button
                 type="button"
-                class="flex size-9 shrink-0 items-center justify-center gap-2 rounded-full bg-elevated px-0 text-sm text-muted-foreground hover:bg-muted sm:h-9 sm:w-full sm:max-w-md sm:justify-start sm:px-3"
+                class="flex size-9 shrink-0 items-center justify-center gap-2 rounded-md border border-transparent bg-sunken px-0 text-sm text-fg-3 transition-colors hover:border-line-strong sm:h-[38px] sm:w-full sm:max-w-[520px] sm:justify-start sm:px-3"
                 :aria-label="t('search.placeholder')"
                 @click="palette.show()"
             >
                 <Search class="size-4 shrink-0" aria-hidden="true" />
                 <span class="hidden truncate sm:inline">{{ t('search.placeholder') }}</span>
-                <kbd class="ms-auto hidden text-2xs sm:inline" dir="ltr">{{ formatKeys('mod+k') }}</kbd>
+                <kbd class="ms-auto hidden rounded-[5px] border border-b-2 border-line-strong bg-card px-1.5 text-2xs text-fg-2 sm:inline" dir="ltr">{{ formatKeys('mod+k') }}</kbd>
             </button>
         </template>
         <template #topbar-actions>
             <NotificationBell />
         </template>
 
-        <div v-if="alerts.length" role="alert" class="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-900">
+        <div v-if="alerts.length" role="alert" class="border-b border-line bg-warn-soft px-4 py-2 text-13 text-warn">
             <p v-for="alert in alerts" :key="alert.id" class="flex items-center gap-2">
                 <TriangleAlert class="size-3.5 shrink-0" />
                 <span class="min-w-0 flex-1">{{ t('alerts.channel_error', { name: alert.name, error: alert.last_error ?? '' }) }}</span>
-                <Link v-if="isAdmin" :href="alert.platform === 'shopify' ? '/settings/shopify' : '/settings/integrations'" class="shrink-0 font-semibold underline underline-offset-2">
+                <Link v-if="isAdmin" :href="alert.platform === 'shopify' ? '/settings/shopify' : '/settings/integrations'" class="shrink-0 font-semibold text-warn underline underline-offset-2">
                     {{ t('settings.integrations.title') }}
                 </Link>
             </p>

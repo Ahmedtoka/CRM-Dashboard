@@ -30,6 +30,12 @@ export interface NavItem {
     match?: string[];
     /** Path prefixes under this item that belong to another item (/orders/confirmations is not «الأوردرات»). */
     exclude?: string[];
+    /** The count is past its SLA: the badge turns red (DESIGN §3 Badge). */
+    badgeUrgent?: boolean;
+    /** A divider row in a flat menu (before «الإعدادات»); title/href unused. */
+    separator?: boolean;
+    /** «ابدأ من هنا ٣/٥»: the onboarding pill's progress. */
+    progress?: { done: number; total: number };
 }
 
 export interface SharedData {
@@ -45,6 +51,8 @@ export interface SharedData {
     canSeeBoard?: boolean;
     /** Launch approvals (S1): what waits for this person (ads roles and supervisor+), null otherwise. */
     adsCounters?: { content_returned: number; buyer_review: number; awaiting_approval: number } | null;
+    /** The menu's waiting-work badges (App\Navigation\NavBadges); null for guests. */
+    navBadges?: import('@/lib/navMenu').NavBadges | null;
     broadcasting: BroadcastingConfig | null;
     /** Ads Hub access, shared only on ads.* routes (null elsewhere). */
     ads?: AdsAccess | null;

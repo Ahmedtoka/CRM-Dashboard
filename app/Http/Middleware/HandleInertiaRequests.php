@@ -10,6 +10,7 @@ use App\Enums\Platform;
 use App\Enums\UserRole;
 use App\Models\ChannelAccount;
 use App\Models\User;
+use App\Navigation\NavBadges;
 use App\Onboarding\OnboardingProgress;
 use App\Queue\BoardAccess;
 use App\Shopify\Connection\IntegrationRepository;
@@ -106,6 +107,8 @@ class HandleInertiaRequests extends Middleware
             'adsDecisions' => fn () => DecisionCounter::eligible($user) ? DecisionCounter::cached($user) : null,
             // Developer-only nav entries (simulator, latency report) show only when this is on.
             'devTools' => (bool) config('crm.dev_tools'),
+            // The menu's waiting-work badges (redesign 2026-10-17): confirmations to call, open cases, the room, bot suggestions.
+            'navBadges' => fn () => $user !== null ? app(NavBadges::class)->for($user) : null,
         ]);
     }
 
