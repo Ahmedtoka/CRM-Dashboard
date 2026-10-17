@@ -14,8 +14,11 @@ use App\Models\SupportCase;
 use App\Models\User;
 use App\Queue\AttendanceRefused;
 use App\Queue\QueueService;
+use App\Queue\Reports\QueueDayView;
+use App\Queue\Scoring\ScoreKeeper;
 use App\Queue\ShiftService;
 use App\Queue\WindowLifecycle;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -134,8 +137,19 @@ class QueueWindowController extends Controller
                 'shift_name' => $open?->name ?? $covering['name'] ?? null,
                 'next_starts_at' => $next?->toIso8601String(),
             ],
+            // Queue Part 2: her points of the day for the strip.
+            'points_today' => app(ScoreKeeper::class)->summary((int) $user->id, $queue->businessDate()),
             'server_time' => now()->toIso8601String(),
         ];
+    }
+
+    /** Queue Part 2: her own points of a day (default today, at most 31 days back) — only ever her own. */
+    public function points(Request $request, QueueDayView $days, QueueService $queue): JsonResponse
+    {
+        $today = $queue->businessDate();
+        $data = $request->validate(['date' => ['sometimes', 'date_format:Y-m-d', 'before_or_equal:'.$today, 'after_or_equal:'.CarbonImmutable::parse($today)->subDays(31)->toDateString()]]);
+
+        return response()->json(['data' => $days->for($request->user(), $data['date'] ?? $today)]);
     }
 
     public function close(Request $request, QueueEntry $entry, WindowLifecycle $windows, OutcomeRecorder $outcomes): JsonResponse

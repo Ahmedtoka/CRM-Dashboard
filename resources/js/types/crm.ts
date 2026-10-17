@@ -194,6 +194,8 @@ export interface MyQueuePayload {
     leader_user_id: number | null;
     /** Null with the queue off. */
     attendance: MyAttendance | null;
+    /** Queue Part 2: her points of the business day (absent with the queue off). */
+    points_today?: { total: number; cap: number; capped: number };
     server_time: string;
 }
 

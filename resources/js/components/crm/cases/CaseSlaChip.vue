@@ -22,7 +22,10 @@ const chip = computed<{ label: string; tone: Tone } | null>(() => {
         case 'open':
             return { label: t('cases.sla.left', { time: formatUntil(sla.due_at, locale.value, now) ?? '' }), tone: 'info' };
         case 'overdue':
-            return { label: t('cases.sla.overdue', { time: formatAge((now - new Date(sla.due_at).getTime()) / 1000, locale.value) }), tone: 'negative' };
+            return {
+                label: t('cases.sla.overdue', { time: formatAge((now - new Date(sla.due_at).getTime()) / 1000, locale.value) }),
+                tone: 'negative',
+            };
         case 'in_time':
             return { label: t('cases.sla.in_time'), tone: 'positive' };
         case 'late':

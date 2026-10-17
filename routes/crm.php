@@ -92,6 +92,7 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('/queue/me/check-in', [QueueWindowController::class, 'checkIn'])->name('queue.me.check-in');
         Route::post('/queue/me/check-out', [QueueWindowController::class, 'checkOut'])->name('queue.me.check-out');
         Route::post('/queue/me/hand-back', [QueueWindowController::class, 'handBack'])->name('queue.me.hand-back');
+        Route::get('/queue/me/points', [QueueWindowController::class, 'points'])->name('queue.me.points');
         Route::post('/queue/entries/{entry}/close', [QueueWindowController::class, 'close'])->name('queue.close');
         Route::post('/queue/entries/{entry}/escalate', [QueueWindowController::class, 'escalate'])->name('queue.escalate');
     });
@@ -106,6 +107,8 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('members/{member}/check-out', [BoardController::class, 'checkOut'])->name('members.check-out');
         Route::post('members/{member}/hand-back', [BoardController::class, 'handBack'])->name('members.hand-back');
         Route::post('members/{member}/status', [BoardController::class, 'memberStatus'])->name('members.status');
+        Route::get('members/{member}/day', [BoardController::class, 'day'])->name('members.day');
+        Route::post('entries/{entry}/qa', [BoardController::class, 'qa'])->name('entries.qa');
         Route::post('entries/{entry}/assign', [BoardController::class, 'assign'])->name('entries.assign');
         Route::post('entries/{entry}/cancel', [BoardController::class, 'cancel'])->name('entries.cancel');
     });
