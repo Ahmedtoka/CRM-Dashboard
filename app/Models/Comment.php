@@ -30,6 +30,8 @@ class Comment extends Model
         'replied_by_id',
         'private_reply_sent_at',
         'conversation_id',
+        // Our own public reply's platform id (TikTok ad comments: a poll lists it back; it is never ingested).
+        'public_reply_external_id',
     ];
 
     protected function casts(): array

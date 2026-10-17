@@ -42,6 +42,14 @@ trait CommentEndpoints
         return new CommentResource($actions->hide($comment, $request->user())->load('repliedBy'));
     }
 
+    /** Web only for now (TikTok ad comments, E1); API v1 has no route for it. */
+    public function unhide(Request $request, Comment $comment, CommentActions $actions): CommentResource
+    {
+        Gate::authorize('reply', $comment);
+
+        return new CommentResource($actions->unhide($comment, $request->user())->load('repliedBy'));
+    }
+
     public function privateReply(Request $request, Comment $comment, CommentActions $actions): JsonResponse
     {
         Gate::authorize('reply', $comment);

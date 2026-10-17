@@ -29,6 +29,8 @@ class Post extends Model
         'ad_adset_name',
         'ad_campaign_name',
         'ad_checked_at',
+        // What a reply needs on the platform (TikTok ads: advertiser_id, ad_id, tiktok_item_id, identity_id/type).
+        'platform_meta',
     ];
 
     protected function casts(): array
@@ -37,6 +39,7 @@ class Post extends Model
             'platform' => Platform::class,
             'is_ad' => 'boolean',
             'ad_checked_at' => 'datetime',
+            'platform_meta' => 'array',
         ];
     }
 

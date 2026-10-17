@@ -40,6 +40,8 @@ class ActivityLogger
 
     public const COMMENT_HIDDEN = 'comment.hidden';
 
+    public const COMMENT_UNHIDDEN = 'comment.unhidden';
+
     public const COMMENT_PRIVATE_REPLY = 'comment.private_reply';
 
     public const COMMENT_FLAGGED = 'comment.flagged';

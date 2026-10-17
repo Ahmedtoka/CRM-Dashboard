@@ -71,6 +71,12 @@ class CommentBot
         }
 
         $platform = $c->post->platform;
+
+        // TikTok answers first-level comments only (E1): a reply in a thread is left to the team.
+        if ($platform === Platform::TikTok && $c->parent_external_id !== null) {
+            return null;
+        }
+
         $rule = $this->rules->match((string) $c->body, 'comment', $platform);
 
         if ($rule !== null) {

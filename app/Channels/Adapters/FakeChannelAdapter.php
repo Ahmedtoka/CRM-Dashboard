@@ -3,6 +3,7 @@
 namespace App\Channels\Adapters;
 
 use App\Channels\Contracts\ChannelAdapter;
+use App\Channels\Contracts\UnhidesComments;
 use App\Channels\Data\AdReferralData;
 use App\Channels\Data\ChannelCapabilities;
 use App\Channels\Data\DeliveryReceiptData;
@@ -24,7 +25,7 @@ use Symfony\Component\HttpFoundation\Response;
  * static log so tests can assert on what was "sent" without hitting a
  * real platform API.
  */
-final class FakeChannelAdapter implements ChannelAdapter
+final class FakeChannelAdapter implements ChannelAdapter, UnhidesComments
 {
     /** @var array<int, array<string, mixed>> */
     private static array $sent = [];
@@ -192,6 +193,14 @@ final class FakeChannelAdapter implements ChannelAdapter
     public function hideComment(ChannelAccount $account, string $commentExternalId): SendResult
     {
         return $this->record('hideComment', [
+            'account_id' => $account->id,
+            'comment_external_id' => $commentExternalId,
+        ]);
+    }
+
+    public function unhideComment(ChannelAccount $account, string $commentExternalId): SendResult
+    {
+        return $this->record('unhideComment', [
             'account_id' => $account->id,
             'comment_external_id' => $commentExternalId,
         ]);

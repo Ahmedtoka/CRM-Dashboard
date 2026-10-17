@@ -6,6 +6,7 @@ use App\Channels\Adapters\FakeChannelAdapter;
 use App\Channels\Adapters\InstagramAdapter;
 use App\Channels\Adapters\MessengerAdapter;
 use App\Channels\Adapters\TestChannelAdapter;
+use App\Channels\Adapters\TikTokAdapter;
 use App\Channels\Adapters\WhatsAppAdapter;
 use App\Channels\Contracts\ChannelAdapter;
 use App\Enums\Platform;
@@ -41,10 +42,6 @@ class ChannelRegistry
 
     public function adapter(Platform $platform): ChannelAdapter
     {
-        if ($platform === Platform::TikTok) {
-            return new FakeChannelAdapter($platform);
-        }
-
         if (config('crm.drivers.channels') === 'fake') {
             return new FakeChannelAdapter($platform);
         }
@@ -71,7 +68,8 @@ class ChannelRegistry
             Platform::Facebook => app(MessengerAdapter::class),
             Platform::Instagram => app(InstagramAdapter::class),
             Platform::WhatsApp => app(WhatsAppAdapter::class),
-            Platform::TikTok => new FakeChannelAdapter($platform),
+            // Phase 1 (E1): ad comments only, through the Marketing API; DMs and video comments wait for TikTok (E2).
+            Platform::TikTok => app(TikTokAdapter::class),
         };
     }
 
