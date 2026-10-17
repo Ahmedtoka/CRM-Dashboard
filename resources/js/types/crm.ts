@@ -194,6 +194,8 @@ export interface MyQueuePayload {
     leader_user_id: number | null;
     /** Null with the queue off. */
     attendance: MyAttendance | null;
+    /** Queue Part 2: her points of the business day (absent with the queue off). */
+    points_today?: { total: number; cap: number; capped: number };
     server_time: string;
 }
 
@@ -441,7 +443,14 @@ export interface Participant {
 
 /** spec §4: a case a guided bot flow recorded (return/exchange, complaint, cancel/edit, delivery follow-up). */
 export type CaseType = 'return' | 'exchange' | 'return_exchange' | 'complaint' | 'cancel_edit' | 'delivery_followup';
-export type CaseStatus = 'new' | 'in_progress' | 'closed';
+export type CaseStatus = 'new' | 'in_progress' | 'resolved' | 'closed';
+
+/** A queue case's SLA (queue Part 2): open / overdue while waiting, in_time / late once resolved. */
+export interface CaseSla {
+    state: 'open' | 'overdue' | 'in_time' | 'late' | null;
+    due_at: string | null;
+    resolved_at: string | null;
+}
 export type CasePriority = 'low' | 'normal' | 'medium' | 'high';
 
 export interface CasePhoto {
@@ -501,6 +510,8 @@ export interface SupportCase {
     customer: { id: number; name: string | null; phone: string | null } | null;
     created_at: string | null;
     closed_at: string | null;
+    sla?: CaseSla;
+    opened_by?: { id: number; name: string } | null;
 }
 
 export interface ConversationDetail {
@@ -675,6 +686,7 @@ export interface AppNotification {
         | 'queue.reply_overdue'
         | 'queue.reply_overdue_leader'
         | 'queue.member_not_arrived'
+        | 'cases.sla_overdue'
         | 'queue.break_overrun'
         | 'ads.need_stop'
         | 'ads.alerts'

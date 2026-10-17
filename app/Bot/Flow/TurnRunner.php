@@ -683,7 +683,7 @@ class TurnRunner
         $case = $types === [] ? null : SupportCase::query()
             ->where('conversation_id', $c->id)
             ->whereIn('type', $types)
-            ->where('status', '!=', 'closed')
+            ->whereIn('status', SupportCase::OPEN_STATUSES)
             ->where('created_at', '>=', now()->subHours(self::CASE_EXISTS_HOURS))
             ->latest('id')
             ->first();

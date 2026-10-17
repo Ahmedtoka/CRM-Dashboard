@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CaseSlaChip from '@/components/crm/cases/CaseSlaChip.vue';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
@@ -92,11 +93,16 @@ const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-
                 <div class="flex flex-wrap items-center gap-2">
                     <StatusChip :label="t(`cases.priority.${item.priority}`)" :tone="casePriorityTone[item.priority]" />
                     <StatusChip :label="t(`cases.tabs.${item.status}`)" :tone="caseStatusTone[item.status]" />
+                    <CaseSlaChip :sla="item.sla" />
                     <StatusChip v-if="item.request_kind" :label="t(`cases.types.${item.request_kind}`)" tone="info" />
                 </div>
 
                 <p v-if="item.request_kind && item.reason" class="text-xs">
                     <span class="font-semibold text-muted-foreground">{{ t('cases.reason') }}:</span> {{ item.reason }}
+                </p>
+
+                <p v-if="item.opened_by" class="text-xs text-muted-foreground">
+                    {{ t('cases.sla.opened_by', { name: item.opened_by.name }) }}
                 </p>
 
                 <p class="text-xs text-muted-foreground">
@@ -183,7 +189,7 @@ const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-
                 <label class="grid gap-1">
                     <span class="text-xs font-semibold">{{ t('cases.columns.status') }}</span>
                     <select :value="item.status" :disabled="saving" :class="selectClass" @change="onStatusChange">
-                        <option v-for="s in ['new', 'in_progress', 'closed']" :key="s" :value="s">{{ t(`cases.tabs.${s}`) }}</option>
+                        <option v-for="s in ['new', 'in_progress', 'resolved', 'closed']" :key="s" :value="s">{{ t(`cases.tabs.${s}`) }}</option>
                     </select>
                 </label>
 

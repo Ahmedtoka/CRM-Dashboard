@@ -18,4 +18,11 @@ describe('mergeMember', () => {
         expect(next?.[0].status).toBe('available');
         expect(next?.[0].rating).toEqual({ count: 2, avg: 3.5, low: 1 });
     });
+
+    it('keeps her points of the day across a QueueMemberUpdated broadcast (queue Part 2)', () => {
+        const before = { id: 1, shift_id: 3, status: 'busy', points_today: 26 } as unknown as BoardMember;
+        const payload = { id: 1, shift_id: 3, status: 'available' } as unknown as BoardMember;
+
+        expect(mergeMember([before], payload, 3)?.[0].points_today).toBe(26);
+    });
 });

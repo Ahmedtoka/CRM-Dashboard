@@ -7,6 +7,7 @@ import { useMyQueueContext } from '@/composables/useMyQueue';
 import { formatClock, formatCount, formatSeconds } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { QueueEntry, QueuePriority } from '@/types/crm';
+import { Link } from '@inertiajs/vue3';
 import {
     ArrowUpCircle,
     Coffee,
@@ -302,6 +303,16 @@ const silenceTone: Record<Card['tone'], string> = {
                     {{ t('queue.attendance.break_since', { time: breakSince }) }}
                 </span>
             </span>
+
+            <!-- Queue Part 2: her points today; every line with its reason on «تقاريري». -->
+            <Link
+                v-if="queue.pointsToday.value !== null"
+                href="/reports/me"
+                class="inline-flex h-7 items-center rounded-full bg-muted px-2.5 text-xs font-semibold tabular-nums text-foreground hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                :title="t('queue_points.mine_hint')"
+                data-my-points
+                >{{ t('queue_points.mine_today', { n: formatCount(queue.pointsToday.value, locale) }) }}</Link
+            >
 
             <template v-for="action in actions" :key="action.key">
                 <Popover v-if="action.key === 'hand-back'" :open="confirmingHandBack" @update:open="onHandBackOpen">

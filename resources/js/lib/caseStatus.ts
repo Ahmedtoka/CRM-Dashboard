@@ -4,7 +4,8 @@ import type { CasePriority, CaseStatus } from '@/types/crm';
 export const caseStatusTone: Record<CaseStatus, Tone> = {
     new: 'warning',
     in_progress: 'info',
-    closed: 'positive',
+    resolved: 'positive',
+    closed: 'neutral',
 };
 
 // `normal` / `low` exist on rows written outside the case recorder (older rows, demo data).

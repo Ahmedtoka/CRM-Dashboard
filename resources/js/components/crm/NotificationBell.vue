@@ -55,6 +55,10 @@ function itemText(n: AppNotification): string {
         });
     }
 
+    if (n.type === 'cases.sla_overdue') {
+        return t('notifications.cases_sla_overdue_item', { id: Number(n.data.case_id ?? 0), type: String(n.data.type ?? '') });
+    }
+
     if (n.type === 'queue.member_not_arrived') {
         return t('notifications.queue_member_not_arrived_item', { name: String(n.data.name ?? ''), shift: String(n.data.shift ?? '') });
     }

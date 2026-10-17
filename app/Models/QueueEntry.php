@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class QueueEntry extends Model
 {
@@ -85,6 +87,18 @@ class QueueEntry extends Model
     public function openCase(): BelongsTo
     {
         return $this->belongsTo(SupportCase::class, 'open_case_id');
+    }
+
+    /** Her points ledger lines for this window (queue Part 2). */
+    public function scoreEvents(): HasMany
+    {
+        return $this->hasMany(ScoreEvent::class, 'queue_entry_id');
+    }
+
+    /** The leader's quality check of this window. */
+    public function qaReview(): HasOne
+    {
+        return $this->hasOne(QaReview::class, 'queue_entry_id');
     }
 
     public function isOpen(): bool

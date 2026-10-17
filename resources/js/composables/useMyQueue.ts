@@ -61,6 +61,8 @@ export interface MyQueue {
     breakOver: ComputedRef<boolean>;
     /** «بدأت شغل»: may she check in, does a shift run; null until known or with the queue off. */
     attendance: Readonly<Ref<MyAttendance | null>>;
+    /** Queue Part 2: her points of the business day; null until known or with the queue off. */
+    pointsToday: Readonly<Ref<number | null>>;
     /** The strip is shown: she holds a desk or a window, or she may check in. */
     shown: ComputedRef<boolean>;
     entryOf: (conversationId: number) => QueueEntry | null;
@@ -129,6 +131,7 @@ export function useMyQueue(options: Options): MyQueue {
     const settings = ref<MyQueuePayload['settings']>(null);
     const leaderUserId = ref<number | null>(null);
     const attendance = ref<MyAttendance | null>(null);
+    const pointsToday = ref<number | null>(null);
     const busy = ref<string | null>(null);
     const tick = ref(Date.now());
     /** Until when (this machine's clock) her attendance buttons ignore clicks. */
@@ -210,6 +213,7 @@ export function useMyQueue(options: Options): MyQueue {
         settings.value = payload.settings;
         leaderUserId.value = payload.leader_user_id ?? null;
         attendance.value = payload.attendance ?? null;
+        pointsToday.value = payload.points_today?.total ?? null;
         stampedAt.clear();
         list.forEach((e) => stampedAt.set(e.id, at));
         entries.value = sort(list);
@@ -500,6 +504,7 @@ export function useMyQueue(options: Options): MyQueue {
         breakSince,
         breakOver,
         attendance,
+        pointsToday,
         shown,
         entryOf,
         closeEntry,

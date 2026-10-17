@@ -16,6 +16,7 @@ use App\Http\Controllers\Web\OrderConfirmationController;
 use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\PresenceController;
 use App\Http\Controllers\Web\ProductController;
+use App\Http\Controllers\Web\QueueReportController;
 use App\Http\Controllers\Web\QueueWindowController;
 use App\Http\Controllers\Web\QuickReplyAttachmentController;
 use App\Http\Controllers\Web\ReportController;
@@ -93,6 +94,7 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('/queue/me/check-in', [QueueWindowController::class, 'checkIn'])->name('queue.me.check-in');
         Route::post('/queue/me/check-out', [QueueWindowController::class, 'checkOut'])->name('queue.me.check-out');
         Route::post('/queue/me/hand-back', [QueueWindowController::class, 'handBack'])->name('queue.me.hand-back');
+        Route::get('/queue/me/points', [QueueWindowController::class, 'points'])->name('queue.me.points');
         Route::post('/queue/entries/{entry}/close', [QueueWindowController::class, 'close'])->name('queue.close');
         Route::post('/queue/entries/{entry}/escalate', [QueueWindowController::class, 'escalate'])->name('queue.escalate');
     });
@@ -107,6 +109,8 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('members/{member}/check-out', [BoardController::class, 'checkOut'])->name('members.check-out');
         Route::post('members/{member}/hand-back', [BoardController::class, 'handBack'])->name('members.hand-back');
         Route::post('members/{member}/status', [BoardController::class, 'memberStatus'])->name('members.status');
+        Route::get('members/{member}/day', [BoardController::class, 'day'])->name('members.day');
+        Route::post('entries/{entry}/qa', [BoardController::class, 'qa'])->name('entries.qa');
         Route::post('entries/{entry}/assign', [BoardController::class, 'assign'])->name('entries.assign');
         Route::post('entries/{entry}/cancel', [BoardController::class, 'cancel'])->name('entries.cancel');
     });
@@ -181,6 +185,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
     Route::get('/reports/me', [ReportController::class, 'me'])->name('reports.me');
     Route::middleware('role:supervisor')->group(function () {
         Route::get('/reports/team', [ReportController::class, 'team'])->name('reports.team');
+        // Queue Part 2: the queue's report for any range (≤ 92 days) and its CSV.
+        Route::get('/reports/queue', [QueueReportController::class, 'index'])->name('reports.queue');
+        Route::get('/reports/queue/export', [QueueReportController::class, 'export'])->name('reports.queue.export');
         Route::get('/reports/users/{user}', [ReportController::class, 'user'])->name('reports.users.show');
         Route::get('/reports/bot', [ReportController::class, 'bot'])->name('reports.bot');
         // D11: merged into «الأرقام» (/ads/numbers?section=chat).

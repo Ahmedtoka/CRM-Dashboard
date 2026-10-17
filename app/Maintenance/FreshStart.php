@@ -28,6 +28,8 @@ final class FreshStart
         'ad_material_ads', 'ad_daily_metrics', 'ad_account_daily', 'ad_spend_snapshots', 'ads_sync_runs', 'ads_api_usage', 'ads_audit_log',
         // WhatsApp order confirmations point at orders, messages and cases: they go first.
         'order_confirmations',
+        // The queue's points ledger and quality checks (Part 2) point at entries, cases and conversations.
+        'score_events', 'qa_reviews',
         // Conversation outcomes, cases and the queue (entries carry the ratings; days/shifts are the windows).
         'conversation_outcomes', 'support_cases', 'queue_decisions', 'queue_attendance_events', 'queue_entries', 'shift_members', 'shifts', 'queue_days',
         // Shopify orders (shipments/shipment_events were dropped by fresh-orders F4).
