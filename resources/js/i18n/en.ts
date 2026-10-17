@@ -130,6 +130,7 @@ const en: Messages = {
         bot_learning: 'Learning',
         bot_performance: 'Performance',
         main_menu: 'Main menu',
+        badge_late: 'some are late',
         onboarding_progress: 'Start here, {done} of {total} done',
         section: 'Operations',
         today: 'Today',

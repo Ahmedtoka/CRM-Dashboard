@@ -1,5 +1,5 @@
 import NavMain from '@/components/NavMain.vue';
-import { SidebarProvider } from '@/components/ui/sidebar';
+import { SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import { translate } from '@/i18n';
 import { buildNav, type NavContext } from '@/lib/navMenu';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -41,7 +41,7 @@ describe('NavMain', () => {
         const badges = w.findAll('[data-nav-badge]');
 
         expect(badges).toHaveLength(1);
-        expect(badges[0].text()).toBe('٦');
+        expect(badges[0].text()).toMatch(/^٦/);
         expect(badges[0].attributes('data-urgent')).toBe('true');
     });
 
@@ -64,6 +64,24 @@ describe('NavMain', () => {
             '/reports/me',
             '/settings',
         ]);
+    });
+
+    it('on the icon rail, a group click widens the sidebar with that group open, and the sum stays visible', async () => {
+        page.url = '/today';
+        const items = buildNav(ctx({ badges: { confirmations: 4 } }));
+        const Probe = defineComponent({ setup: () => { const sb = useSidebar(); return () => h('i', { 'data-probe': sb.state.value }); } });
+        const Host = defineComponent({ setup: () => () => h(SidebarProvider, { defaultOpen: false }, () => [h(NavMain, { items }), h(Probe)]) });
+        const w = mount(Host, { attachTo: document.body });
+        await flushPromises();
+
+        const orders = w.findAll('button').find((b) => b.text().includes('الأوردرات'))!;
+        expect(orders.find('[data-nav-badge]').text()).toBe('٤');
+        await orders.trigger('click');
+        await flushPromises();
+
+        expect(w.find('[data-probe]').attributes('data-probe')).toBe('expanded');
+        expect(w.findAll('a').map((a) => a.attributes('href'))).toContain('/cases');
+        w.unmount();
     });
 
     it('shows the onboarding pill with its progress', async () => {

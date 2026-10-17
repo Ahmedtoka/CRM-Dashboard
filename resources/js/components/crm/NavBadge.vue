@@ -8,7 +8,7 @@ import { formatCount } from '@/lib/format';
  */
 withDefaults(defineProps<{ count: number; urgent?: boolean; tone?: 'rail' | 'surface' }>(), { urgent: false, tone: 'surface' });
 
-const { locale } = useI18n();
+const { t, locale } = useI18n();
 </script>
 
 <template>
@@ -19,6 +19,6 @@ const { locale } = useI18n();
         class="inline-grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[11.5px] font-bold leading-none tabular-nums"
         :class="urgent ? 'bg-danger-solid text-white' : tone === 'rail' ? 'bg-rail-line text-rail-fg' : 'bg-sunken text-fg-2'"
     >
-        {{ formatCount(count, locale) }}
+        {{ formatCount(count, locale) }}<span v-if="urgent" class="sr-only"> {{ t('nav.badge_late') }}</span>
     </span>
 </template>

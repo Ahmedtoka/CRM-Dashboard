@@ -82,7 +82,7 @@ html {
         --success: 149.7 61.4% 28.4%;
         --success-foreground: 0 0% 100%;
         --warning: var(--warn-solid);
-        --warning-foreground: var(--fg);
+        --warning-foreground: 276 18.5% 10.6%; /* dark ink on amber in both themes */
         --info: 216.2 72% 42%; /* #1E5BB8 */
         --info-foreground: 0 0% 100%;
         --overdue: 17.5 88.3% 40.4%; /* #C2410C */
@@ -151,7 +151,7 @@ html {
         --warn-solid: 37.9 79.8% 55.3%;
         --danger: 2 100% 76.3%; /* #FF8A86 */
         --danger-soft: 356.7 43.9% 16.1%;
-        --danger-solid: 358.1 75.1% 59%; /* #E5484D */
+        --danger-solid: 358 64% 50%; /* white on it 4.9:1 */
         --info-soft: 215.7 50.5% 18.2%;
         --note-soft: 44 45.5% 12.9%;
         --note-ink: 46.2 76.3% 65.3%; /* #EACB63 */
@@ -168,7 +168,7 @@ html {
         --overdue: 27 96% 61%; /* #FB923C */
         --overdue-foreground: 0 0% 8%;
         --note: 46.2 76.3% 65.3%;
-        --destructive: 358.1 75.1% 59%;
+        --destructive: 358 64% 50%;
         --destructive-foreground: 0 0% 100%;
         --ring: 283.3 51.9% 79.6%; /* #D7B0E6 */
         --chart-1: 283.4 42.5% 70%; /* #C192D3 */

@@ -2,6 +2,7 @@
 import { useI18n } from '@/composables/useI18n';
 import { Link } from '@inertiajs/vue3';
 import { ChevronLeft, ChevronRight, CircleAlert, type LucideIcon } from 'lucide-vue-next';
+import { useId } from 'vue';
 
 export interface UrgentRow {
     key: string;
@@ -22,6 +23,7 @@ export interface UrgentRow {
 withDefaults(defineProps<{ title: string; rows: UrgentRow[]; empty?: string; aside?: string }>(), { empty: undefined, aside: undefined });
 
 const { dir } = useI18n();
+const titleId = useId();
 const tiles = {
     danger: 'bg-danger-soft text-danger',
     warn: 'bg-warn-soft text-warn',
@@ -31,9 +33,9 @@ const tiles = {
 </script>
 
 <template>
-    <section class="overflow-hidden rounded-lg border border-line bg-card" aria-labelledby="urgent-list-title">
+    <section class="overflow-hidden rounded-lg border border-line bg-card" :aria-labelledby="titleId">
         <header class="flex items-center gap-2 border-b border-line px-4 py-3">
-            <h2 id="urgent-list-title" class="text-base font-bold">{{ title }}</h2>
+            <h2 :id="titleId" class="text-base font-bold">{{ title }}</h2>
             <span v-if="aside" class="ms-auto text-xs text-fg-3">{{ aside }}</span>
         </header>
         <p v-if="rows.length === 0" class="px-4 py-3 text-sm text-fg-2">{{ empty }}</p>

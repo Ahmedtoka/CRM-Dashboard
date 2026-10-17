@@ -114,6 +114,7 @@ const ar = {
         bot_learning: 'التعلم',
         bot_performance: 'الأداء',
         main_menu: 'القائمة الرئيسية',
+        badge_late: 'فيه متأخر',
         onboarding_progress: 'ابدأ من هنا، خلصت {done} من {total}',
         section: 'التشغيل',
         today: 'النهارده',

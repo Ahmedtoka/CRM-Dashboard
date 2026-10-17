@@ -36,11 +36,11 @@ const look = (id: string) => LOOK[id] ?? { icon: LayoutGrid, tone: 'neutral' as 
 
             <div class="grid items-start gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
                 <nav class="sticky top-[4.5rem] hidden flex-col gap-3.5 lg:flex" :aria-label="t('settings_hub.groups_label')">
-                    <span class="flex items-center gap-2 rounded-md bg-card px-2.5 py-[7px] text-[13.5px] font-semibold text-brand-ink shadow-e1" aria-current="page">
+                    <span class="flex items-center gap-2 rounded-md bg-card px-2.5 py-[7px] text-[13.5px] font-semibold text-brand-ink shadow-e1">
                         <LayoutGrid class="size-4" aria-hidden="true" />{{ t('settings_hub.all') }}
                     </span>
                     <div v-for="group in groups" :key="group.id">
-                        <h2 class="mb-1 px-2.5 text-xs font-semibold text-fg-3">{{ t(`settings_hub.groups.${group.id}.title`) }}</h2>
+                        <p class="mb-1 px-2.5 text-xs font-semibold text-fg-3">{{ t(`settings_hub.groups.${group.id}.title`) }}</p>
                         <Link
                             v-for="item in group.items"
                             :key="item.id"

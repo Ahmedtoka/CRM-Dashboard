@@ -22,9 +22,9 @@ final class MovedPageController extends Controller
             $path = str_replace('{'.$name.'}', rawurlencode((string) $value), $path);
         }
 
-        parse_str($fixed, $query);
-        $query += $request->query();
+        // The visitor's query goes on untouched (never re-encoded: `accounts[]=5` must not become `accounts[0]=5`).
+        $query = implode('&', array_filter([$fixed, (string) $request->server('QUERY_STRING')], fn (string $q) => $q !== ''));
 
-        return redirect($path.($query === [] ? '' : '?'.http_build_query($query)), 301);
+        return redirect($path.($query === '' ? '' : '?'.$query), 301);
     }
 }

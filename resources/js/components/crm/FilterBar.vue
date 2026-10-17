@@ -53,7 +53,7 @@ onBeforeUnmount(() => window.clearTimeout(timer));
             <label v-if="searchPlaceholder" class="relative min-w-0 flex-1">
                 <span class="sr-only">{{ searchPlaceholder }}</span>
                 <Search class="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <input ref="input" v-model="term" type="search" dir="auto" :placeholder="searchPlaceholder" class="h-9 w-full rounded-md border border-line-strong bg-card pe-3 ps-9 text-sm placeholder:text-fg-3 focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand-soft focus-visible:ring-offset-0" />
+                <input ref="input" v-model="term" type="search" dir="auto" :placeholder="searchPlaceholder" class="h-9 w-full rounded-md border border-line-strong bg-card pe-3 ps-9 text-sm placeholder:text-fg-3 focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-0" />
             </label>
             <div v-if="wide && $slots.inline" class="flex items-center gap-2" :class="searchPlaceholder ? '' : 'flex-1'"><slot name="inline" /></div>
             <Popover v-if="$slots.more || ($slots.inline && !wide)" v-model:open="open">

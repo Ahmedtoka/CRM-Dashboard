@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import NavBadge from '@/components/crm/NavBadge.vue';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem } from '@/components/ui/sidebar';
+import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, useSidebar } from '@/components/ui/sidebar';
 import { useI18n } from '@/composables/useI18n';
 import { formatCount } from '@/lib/format';
 import { groupBadge, isGroupActive, isNavActive } from '@/lib/navMenu';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import { ChevronDown } from 'lucide-vue-next';
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 
 /**
  * The aubergine rail's menu (DESIGN §3 AppSidebar): groups that open (admin, supervisor) or a flat list with a divider
@@ -22,6 +22,19 @@ const { t, locale } = useI18n();
 /** User-toggled groups; untouched ones follow the current page. */
 const toggled = reactive<Record<string, boolean>>({});
 const isOpen = (item: NavItem) => toggled[item.href] ?? isGroupActive(item, page.url);
+const sidebar = useSidebar();
+/** On the icon rail a group's links are hidden: a click there widens the sidebar with that group open. */
+const railCollapsed = computed(() => sidebar.state.value === 'collapsed' && !sidebar.isMobile.value);
+function onGroupToggle(item: NavItem, open: boolean): void {
+    if (railCollapsed.value) {
+        sidebar.setOpen(true);
+        toggled[item.href] = true;
+        return;
+    }
+    toggled[item.href] = open;
+}
+/** The sum shows whenever the children are off screen: a closed group, or any group on the icon rail. */
+const showGroupBadge = (item: NavItem) => !isOpen(item) || railCollapsed.value;
 
 const row = 'relative group-data-[collapsible=icon]:overflow-visible h-10 gap-2.5 rounded-md px-2.5 font-medium text-rail-fg [&>svg]:size-[18px] [&>svg]:text-rail-fg-2 hover:bg-rail-2 hover:text-white';
 const current = 'data-[active=true]:bg-rail-active data-[active=true]:font-semibold data-[active=true]:text-white data-[active=true]:[&>svg]:text-white';
@@ -59,7 +72,7 @@ const current = 'data-[active=true]:bg-rail-active data-[active=true]:font-semib
                         as-child
                         :open="isOpen(item)"
                         class="group/collapsible"
-                        @update:open="(v: boolean) => (toggled[item.href] = v)"
+                        @update:open="(v: boolean) => onGroupToggle(item, v)"
                     >
                         <SidebarMenuItem>
                             <CollapsibleTrigger as-child>
@@ -68,7 +81,7 @@ const current = 'data-[active=true]:bg-rail-active data-[active=true]:font-semib
                                     <span class="flex-1 truncate group-data-[collapsible=icon]:hidden">{{ item.title }}</span>
                                     <!-- A closed group shows the sum of its children's waiting work. -->
                                     <NavBadge
-                                        v-if="!isOpen(item)"
+                                        v-if="showGroupBadge(item)"
                                         tone="rail"
                                         :count="groupBadge(item).count"
                                         :urgent="groupBadge(item).urgent"

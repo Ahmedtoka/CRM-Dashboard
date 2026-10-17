@@ -62,6 +62,12 @@ it('keeps the old route names on the redirects', function (string $name, string 
     ['settings.channels.index', '/settings/channels'],
 ]);
 
+it('keeps array filters exactly as sent (the ads filter bar reads accounts[])', function () {
+    $this->actingAs(mvAdmin())->get('/ads?accounts[]=5&accounts[]=6&range=7d')
+        ->assertStatus(301)
+        ->assertRedirect('/today/ads?accounts[]=5&accounts[]=6&range=7d');
+});
+
 it('carries route parameters into the new URL', function () {
     $admin = mvAdmin();
 

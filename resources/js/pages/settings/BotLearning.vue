@@ -53,7 +53,7 @@ function pickSource(value: BotLearningSource | null): void {
     const query = new URLSearchParams(window.location.search);
     if (value) query.set('source', value);
     else query.delete('source');
-    router.get(`/settings/bot-learning${query.toString() ? `?${query}` : ''}`, {}, { preserveScroll: true });
+    router.get(`/bot/learning${query.toString() ? `?${query}` : ''}`, {}, { preserveScroll: true });
 }
 
 function sourceLabel(value: BotLearningSource | null): string {

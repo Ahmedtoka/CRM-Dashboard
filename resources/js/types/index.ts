@@ -16,17 +16,14 @@ export interface NavItem {
     title: string;
     href: string;
     icon?: LucideIcon;
-    isActive?: boolean;
     children?: NavItem[];
-    /** Sub-section label: consecutive children sharing one render under a small heading. */
-    section?: string;
     /** Active only on this exact path (a parent-path child such as /ads would light up on every sub-page). */
     exact?: boolean;
     /** Count shown at the end of the item (open decisions, drafts to review). Hidden when 0 or missing. */
     badge?: number | null;
     /** Query string appended to the link only (carried filters); `isActive` still compares the path. */
     query?: string;
-    /** Other path prefixes that light this item up (setup tabs live under /ads/accounts and /ads/sync). */
+    /** Other path prefixes that light this item up (a merged page such as /ads/approvals under «محتاج قرار»). */
     match?: string[];
     /** Path prefixes under this item that belong to another item (/orders/confirmations is not «الأوردرات»). */
     exclude?: string[];

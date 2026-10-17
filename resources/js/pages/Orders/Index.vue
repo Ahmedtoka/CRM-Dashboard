@@ -334,7 +334,7 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                 </FilterBar>
             </div>
 
-            <div v-if="activeTab === 'list'" role="tabpanel" class="min-w-0">
+            <div v-if="activeTab === 'list'" class="min-w-0">
                 <OrdersListTable
                     table-id="orders"
                     :rows="rows"
@@ -354,11 +354,11 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                 </OrdersListTable>
                 <Pagination v-if="orders" :page="orders" />
             </div>
-            <div v-else-if="activeTab === 'analytics'" role="tabpanel" class="min-w-0">
+            <div v-else-if="activeTab === 'analytics'" class="min-w-0">
                 <SkeletonList v-if="loading || !analytics" variant="tiles" />
                 <OrdersAnalyticsTab v-else :data="analytics" />
             </div>
-            <div v-else role="tabpanel" class="min-w-0">
+            <div v-else class="min-w-0">
                 <SkeletonList v-if="loading || !adsBreakdown" variant="cards" />
                 <OrdersAdsTab v-else :rows="adsBreakdown" :can-open-ads="canOpenAds" :query="adQuery" @open-ad="drawer.open" />
             </div>

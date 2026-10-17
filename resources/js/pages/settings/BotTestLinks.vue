@@ -135,7 +135,7 @@ async function loadSessions(row: TestLinkRow): Promise<void> {
     sessions.value = [];
 
     try {
-        const { data } = await api.get(`/settings/bot-test-links/${row.id}/sessions`);
+        const { data } = await api.get(`/bot/test-links/${row.id}/sessions`);
         sessions.value = data.data.sessions;
     } catch (e) {
         sessionsError.value = apiErrorMessage(e, t('common.error'));

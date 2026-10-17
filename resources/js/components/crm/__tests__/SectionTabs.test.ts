@@ -52,7 +52,7 @@ describe('SectionTabs', () => {
         const w = render('/orders', [ORDERS[0], { ...ORDERS[1], urgent: true }]);
         const badge = w.find('[data-nav-badge]');
 
-        expect(badge.text()).toBe('٤');
+        expect(badge.text()).toMatch(/^٤/);
         expect(badge.attributes('data-urgent')).toBe('true');
     });
 
