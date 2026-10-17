@@ -41,6 +41,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
         Route::middleware('throttle:mobile-queue')->group(function () {
             Route::get('queue/me', [QueueDeskController::class, 'me'])->name('queue.me');
+            Route::get('queue/me/points', [QueueDeskController::class, 'points'])->name('queue.me.points');
             Route::post('queue/me/check-in', [QueueDeskController::class, 'checkIn'])->name('queue.check-in');
             Route::post('queue/me/check-out', [QueueDeskController::class, 'checkOut'])->name('queue.check-out');
             Route::post('queue/me/hand-back', [QueueDeskController::class, 'handBack'])->name('queue.hand-back');
@@ -63,6 +64,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::get('conversations/{conversation}/context', [ConversationController::class, 'context'])->name('conversations.context');
         Route::post('conversations/{conversation}/tags', [ConversationController::class, 'syncTags'])->name('conversations.tags');
         Route::post('conversations/{conversation}/quick-replies/{quickReply}/render', [ConversationController::class, 'renderQuickReply'])->name('conversations.quick-replies.render');
+        Route::post('conversations/{conversation}/product', [ConversationController::class, 'sendProduct'])->name('conversations.product.store');
 
         Route::get('conversations', [ConversationController::class, 'list'])->middleware('record-list-latency')->name('conversations.index');
         Route::get('conversations/{conversation}', [ConversationController::class, 'show'])->name('conversations.show');
