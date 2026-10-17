@@ -728,6 +728,18 @@ class WindowLifecycle
         return (int) $case->opened_by_id;
     }
 
+    /** Her support case that is neither closed nor resolved: the ticket's own, else her newest (QueueService::openCaseFor). */
+    private function stillOpenCaseOf(QueueEntry $e, Conversation $c): ?SupportCase
+    {
+        $case = $e->open_case_id !== null ? $e->openCase : null;
+
+        if ($case !== null && $case->status !== 'closed' && $case->resolved_at === null) {
+            return $case;
+        }
+
+        return app(QueueService::class)->openCaseFor($c);
+    }
+
     /** The close itself, on an entry the caller holds locked and knows to be open. */
     private function closeLocked(QueueEntry $e, string $reason, ?User $by, array $opts = [], ?QueueSetting $s = null, bool $route = true): void
     {
@@ -770,7 +782,13 @@ class WindowLifecycle
             SendQueueMessage::dispatch($e->id, 'queue_auto_closed', []);
         }
 
-        if ($reason === 'case' && $c) {
+        // Close-cycle hotfix C1 (D-21): her case still open (the bot's flow, or a colleague's) is the
+        // one this close is about — linked, never a second case for the same problem.
+        $linked = $reason === 'case' && $c ? $this->stillOpenCaseOf($e, $c) : null;
+
+        if ($linked !== null) {
+            $e->forceFill(['support_case_id' => $linked->id])->save();
+        } elseif ($reason === 'case' && $c) {
             $type = in_array($opts['case_type'] ?? null, SupportCase::TYPES, true) ? $opts['case_type'] : 'complaint';
             $case = SupportCase::create([
                 'conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'platform' => $c->platform, 'type' => $type, 'status' => 'new',
@@ -791,7 +809,8 @@ class WindowLifecycle
         // `return_priority_minutes`, see QueueService::enqueue()). The close is final: her return
         // never reverses it. No bot turn is started here.
         if (in_array($reason, QueueEntry::FINAL_CLOSE_REASONS, true) && $c) {
-            $messages = $reason === 'case' && $e->support_case_id !== null
+            // A linked case already has its number (she was told when it opened): only the thanks.
+            $messages = $reason === 'case' && $e->support_case_id !== null && $linked === null
                 ? [new SendQueueMessage($e->id, 'queue_case_opened', ['case_id' => $e->support_case_id])]
                 : [];
             $messages[] = new SendQueueMessage($e->id, 'queue_closed_thanks', []);
