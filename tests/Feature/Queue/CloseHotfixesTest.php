@@ -1,5 +1,7 @@
 <?php
 
+use App\Bot\BotEngine;
+use App\Models\ConversationOutcome;
 use App\Models\Message;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
@@ -7,8 +9,14 @@ use App\Models\Shift;
 use App\Models\ShiftMember;
 use App\Models\SupportCase;
 use App\Models\User;
+use App\Queue\Events\WindowClosed;
+use App\Queue\Jobs\RequestRating;
+use App\Queue\QueueService;
 use App\Queue\WindowLifecycle;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Event;
+use Laravel\Sanctum\Sanctum;
 
 // Close-cycle hotfixes C1 #4, #5, #7 (docs/round-2026-10-17/close-cycle.md §5.5).
 
@@ -74,4 +82,57 @@ it('still opens a new case when her earlier one is resolved or closed', function
     $new = SupportCase::query()->latest('id')->first();
     expect(SupportCase::count())->toBe(3)->and($e->fresh()->support_case_id)->toBe($new->id)
         ->and(chBotTexts($e)[0])->toContain('فتحنالك طلب رقم '.$new->id);
+});
+
+// ───── #5 (D-03): «رجوع للبوت» from the web sends no thanks and no rating ─────
+
+it('closes with its reason and outcome on the way back to the bot, with no thanks and no rating', function () {
+    Bus::fake([RequestRating::class]);
+    [$e, $u] = chWindow();
+
+    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'inquiry', 'outcome' => 'browsing', 'to_bot' => true])
+        ->assertOk()->assertJsonPath('data.close_reason', 'inquiry');
+
+    expect($e->fresh()->status)->toBe('closed')->and($e->fresh()->close_reason)->toBe('inquiry')
+        ->and(chBotTexts($e))->toBe([])
+        ->and($e->conversation->fresh()->handler->value)->toBe('bot')
+        ->and(ConversationOutcome::where('conversation_id', $e->conversation_id)->value('outcome'))->toBe('browsing');
+    Bus::assertNotDispatched(RequestRating::class);
+});
+
+it('still thanks and rates a plain «خلصت»', function () {
+    Bus::fake([RequestRating::class]);
+    [$e, $u] = chWindow();
+
+    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'inquiry', 'outcome' => 'browsing', 'to_bot' => false])->assertOk();
+
+    expect(chBotTexts($e))->toBe([CH_THANKS]);
+    Bus::assertDispatched(RequestRating::class);
+});
+
+it('takes to_bot on the mobile API too, with the same response shape', function () {
+    [$e, $u] = chWindow();
+    Sanctum::actingAs($u);
+
+    $this->postJson("/api/v1/queue/entries/{$e->id}/close", ['reason' => 'problem', 'outcome' => 'service', 'to_bot' => true])
+        ->assertOk()->assertJsonStructure(['data' => ['id', 'close_reason', 'support_case_id']]);
+
+    expect(chBotTexts($e))->toBe([]);
+});
+
+it('returns a window to the bot in one step: a message arriving meanwhile never lands in the lounge (M-06)', function () {
+    [$e, $u] = chWindow();
+    // Her message is ingested the moment the close committed (the listener runs after the commit).
+    Event::listen(WindowClosed::class, function () use ($e) {
+        $m = Message::factory()->create(['conversation_id' => $e->conversation_id, 'direction' => 'in', 'sender_type' => 'customer', 'body' => 'طب والمقاس؟', 'status' => 'received']);
+        app(QueueService::class)->settles($e->conversation->fresh(), $m);
+    });
+
+    app(BotEngine::class)->returnToBot($e->conversation->fresh(), $u);
+
+    // Nothing open, the bot has her: her next message is the bot's, never a new ticket.
+    $c = $e->conversation->fresh();
+    expect($e->fresh()->close_reason)->toBe('cancelled')->and($c->handler->value)->toBe('bot')
+        ->and(app(QueueService::class)->customerReturned($c))->toBeFalse()
+        ->and(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1);
 });

@@ -83,7 +83,8 @@ async function close(reason: QueueCloseReason, type: SupportCaseType | null = nu
 
     const bot = forBot.value;
 
-    if (await queue.closeEntry(props.entry.id, reason, type, outcomePayload(picked.value, note.value, auto.value))) {
+    // «رجوع للبوت» keeps the reason and the outcome but sends no thanks and no rating (close-cycle hotfix C1, D-03).
+    if (await queue.closeEntry(props.entry.id, reason, type, outcomePayload(picked.value, note.value, auto.value), bot)) {
         caseOpen.value = false;
         menuOpen.value = false;
         picked.value = null;

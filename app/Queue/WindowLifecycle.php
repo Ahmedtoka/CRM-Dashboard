@@ -163,7 +163,8 @@ class WindowLifecycle
      * A still-waiting entry resolved / cancelled elsewhere leaves the lounge as `cancelled`.
      * Anything else that is no longer open is returned untouched.
      * `$opts['outcome']` (Outcome) and `$opts['outcome_note']` are the episode outcome a person picked
-     * (control room S3).
+     * (control room S3). `$opts['to_bot']`: «رجوع للبوت» — a final close with no thanks and no rating
+     * (close-cycle hotfix C1, D-03).
      */
     public function close(QueueEntry $e, string $reason, ?User $by = null, array $opts = []): QueueEntry
     {
@@ -808,20 +809,28 @@ class WindowLifecycle
         // real message is the bot's; a human request is a new ticket (`returning` within
         // `return_priority_minutes`, see QueueService::enqueue()). The close is final: her return
         // never reverses it. No bot turn is started here.
+        // Close-cycle hotfix C1 (D-03): «رجوع للبوت» from the web (`to_bot`) is the same final close —
+        // reason, outcome, points, back to the bot — without the thanks and the rating.
+        $toBot = (bool) ($opts['to_bot'] ?? false);
+
         if (in_array($reason, QueueEntry::FINAL_CLOSE_REASONS, true) && $c) {
             // A linked case already has its number (she was told when it opened): only the thanks.
             $messages = $reason === 'case' && $e->support_case_id !== null && $linked === null
                 ? [new SendQueueMessage($e->id, 'queue_case_opened', ['case_id' => $e->support_case_id])]
                 : [];
-            $messages[] = new SendQueueMessage($e->id, 'queue_closed_thanks', []);
+            if (! $toBot) {
+                $messages[] = new SendQueueMessage($e->id, 'queue_closed_thanks', []);
+            }
             // A few seconds first (close-cycle hotfix C1, H-03): a message of hers already on its way lands before
             // the job decides; it is re-checked again right before the platform call.
-            Bus::chain($messages)->onQueue('outbound')->delay(now()->addSeconds(SendQueueMessage::CLOSING_SETTLE_SECONDS))->dispatch();
+            if ($messages !== []) {
+                Bus::chain($messages)->onQueue('outbound')->delay(now()->addSeconds(SendQueueMessage::CLOSING_SETTLE_SECONDS))->dispatch();
+            }
 
             // §3: an inquiry / problem close is rated `review_delay_seconds` after the closing
             // message (not a case: Part 2 rates it when it is resolved). RatingService decides then;
             // the job is afterCommit and carries the close's token.
-            if (in_array($reason, QueueEntry::RATED_CLOSE_REASONS, true)) {
+            if (! $toBot && in_array($reason, QueueEntry::RATED_CLOSE_REASONS, true)) {
                 RequestRating::dispatch($e->id, $e->closed_at->toIso8601String())->delay(now()->addSeconds((int) $s->review_delay_seconds));
             }
 
