@@ -219,3 +219,29 @@ it('a dead token marks the connection and holds the row without spending the att
     $x = AdWriteAction::where('type', PlatformArchive::TYPE)->sole();
     expect($x->error_code)->toBe('connection_needs_reconnect')->and($x->attempts)->toBe(0);
 });
+
+it('never re-queues an archive a person closed by hand, and audits each re-queue', function () {
+    $w = LaunchWorld::make();
+    rejectedLaunch($w);
+    $archive = app(PlatformArchive::class);
+    $archive->queue();
+    AdWriteAction::where('type', PlatformArchive::TYPE)->update(['state' => AdWriteAction::FAILED, 'error_code' => 'resolved_by_hand', 'outcome' => json_encode(['resolved_by_hand' => 'checked'])]);
+    expect($archive->requeueFailed())->toBe(0);
+
+    AdWriteAction::where('type', PlatformArchive::TYPE)->update(['error_code' => 'platform_error', 'error_message' => 'boom', 'outcome' => json_encode(['retry_exhausted' => true])]);
+    expect($archive->requeueFailed())->toBe(1);
+    $x = AdWriteAction::where('type', PlatformArchive::TYPE)->sole();
+    expect($x->state)->toBe(AdWriteAction::EXECUTING)->and($x->error_message)->toBeNull()->and($x->outcome)->toBeNull()
+        ->and(AdsAuditLog::where('action', 'write.requeued')->count())->toBe(1);
+});
+
+it('reports archives held for days (the Doctor row reads this)', function () {
+    $w = LaunchWorld::make();
+    rejectedLaunch($w);
+    $w['account']->forceFill(['write_enabled' => false])->save();
+    app(PlatformArchive::class)->run();
+    expect(PlatformArchive::heldLong())->toBe([]);
+
+    $this->travel(4)->days();
+    expect(PlatformArchive::heldLong())->toBe(['account_not_writable' => 1]);
+});

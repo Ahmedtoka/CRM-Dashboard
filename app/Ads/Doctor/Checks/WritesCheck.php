@@ -5,6 +5,7 @@ namespace App\Ads\Doctor\Checks;
 use App\Ads\Control\Write\WriteLimits;
 use App\Ads\Control\Write\WriteSwitch;
 use App\Ads\Doctor\DoctorRow;
+use App\Ads\Launch\PlatformArchive;
 use App\Ads\Sync\QueueInspector;
 use App\Models\AdAccount;
 use App\Models\AdWriteAction;
@@ -70,6 +71,12 @@ class WritesCheck extends DoctorCheck
             ->orWhere(fn ($w) => $w->where('state', AdWriteAction::EXECUTING)->whereNull('retry_at')->where('executing_at', '<', $stale)))->count();
         $rows[] = DoctorRow::by($unresolved === 0, 'fail', self::S, 'unresolved writes', (string) $unresolved,
             'Check Ads Manager, then ads:write-resolve <id> --succeeded|--failed --note="...".');
+
+        // Platform archives of dropped launch ads held for days (a lasting refusal holds them without an end).
+        $held = PlatformArchive::heldLong();
+        $rows[] = DoctorRow::by($held === [], 'warn', self::S, 'archives held > 3 days',
+            $held === [] ? '0' : collect($held)->map(fn ($n, $code) => "{$code} {$n}")->implode(', '),
+            'Fix the cause (reconnect the account, ads:writable, ads:writes --on), then wait for the next ads:launch-sweep.');
 
         if (Schema::hasTable('ad_actions')) {
             $old = DB::table('ad_actions')->count();

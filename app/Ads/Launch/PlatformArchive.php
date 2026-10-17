@@ -151,9 +151,38 @@ final class PlatformArchive
      */
     public function requeueFailed(): int
     {
-        return AdWriteAction::query()->where('type', self::TYPE)->where('state', AdWriteAction::FAILED)
-            ->where(fn ($q) => $q->whereNull('error_code')->orWhereNotIn('error_code', self::FINAL_CODES))
-            ->update(['state' => AdWriteAction::EXECUTING, 'attempts' => 0, 'retry_at' => now(), 'finished_at' => null, 'updated_at' => now()]);
+        $rows = AdWriteAction::query()->where('type', self::TYPE)->where('state', AdWriteAction::FAILED)
+            ->where(fn ($q) => $q->whereNull('error_code')->orWhereNotIn('error_code', self::FINAL_CODES))->get()
+            ->reject(fn (AdWriteAction $x) => isset($x->outcome['resolved_by_hand'])); // a human decision stays
+        $n = 0;
+        foreach ($rows as $x) {
+            $outcome = array_diff_key($x->outcome ?? [], array_flip(['retry_exhausted', 'deep_link']));
+            $changed = AdWriteAction::query()->whereKey($x->id)->where('state', AdWriteAction::FAILED)->update([
+                'state' => AdWriteAction::EXECUTING, 'attempts' => 0, 'retry_at' => now(), 'finished_at' => null,
+                'error_code' => null, 'error_message' => null, 'outcome' => $outcome !== [] ? json_encode($outcome) : null, 'updated_at' => now(),
+            ]) === 1;
+            if ($changed) {
+                AdsAudit::record('write.requeued', $x, ['state' => AdWriteAction::FAILED], ['state' => AdWriteAction::EXECUTING],
+                    ['public_id' => $x->public_id, 'type' => self::TYPE, 'error_code' => $x->error_code]);
+                $n++;
+            }
+        }
+
+        return $n;
+    }
+
+    /**
+     * Archives held for more than $days (switches off, account not writable, connection to fix, sandbox): the Doctor
+     * shows them so a lasting refusal never sits unseen.
+     *
+     * @return array<string, int> error_code => rows
+     */
+    public static function heldLong(int $days = 3): array
+    {
+        return AdWriteAction::query()->where('type', self::TYPE)->where('state', AdWriteAction::EXECUTING)
+            ->whereNotNull('retry_at')->where('created_at', '<', now()->subDays($days))
+            ->selectRaw("COALESCE(error_code, 'queued') as code, COUNT(*) as n")->groupBy('code')
+            ->pluck('n', 'code')->map(fn ($n) => (int) $n)->all();
     }
 
     private static function dueBy(): Carbon
@@ -204,7 +233,9 @@ final class PlatformArchive
             WriteGuard::check($account, $writer);
         } catch (WriteRefused $e) {
             return $this->hold($x, $e->reason);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            WriteExecutor::logUnexpected($e, $x); // never a silent hold: a code or config error shows in the log
+
             return $this->hold($x, 'platform_not_writable');
         }
 
