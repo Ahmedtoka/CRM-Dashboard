@@ -69,13 +69,14 @@ it('pages through ads using page_info.total_page and maps types', function () {
         ->and($ads[0]->campaignName)->toBe('Sales')
         ->and($ads[0]->adSetName)->toBe('Women 18-34')
         ->and($ads[0]->status)->toBe('ENABLE')
-        ->and($ads[0]->effectiveStatus)->toBe('AD_STATUS_DELIVERY_OK')
+        ->and($ads[0]->effectiveStatus)->toBe('ACTIVE')
         ->and($ads[0]->body)->toBe('New abayas are here')
         ->and($ads[0]->raw['landing_page_url'])->toBe('https://shop.test/abayas')
         ->and($ads[1]->type)->toBe('image')
         ->and($ads[1]->videoId)->toBeNull()
         ->and($ads[1]->status)->toBe('DISABLE');
-    Http::assertSentCount(2);
+    // two ad pages, then one campaign and one ad-group lookup (refused here: warnings, the list stays)
+    Http::assertSentCount(4);
 });
 
 it('maps tiktok daily metrics with the stat day trimmed to a date', function () {
