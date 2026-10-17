@@ -16,6 +16,7 @@ use App\Enums\Handler;
 use App\Enums\Platform;
 use App\Enums\SenderType;
 use App\Inbox\InboxIngestor;
+use App\Legal\PersonalDataEraser;
 use App\Models\BotFlow;
 use App\Models\BotRule;
 use App\Models\BotSetting;
@@ -24,6 +25,7 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\SupportCase;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 
@@ -151,4 +153,18 @@ it('#6 a legacy agent that asks for help hands her to a person instead of the ke
     $c = rvSay('انا اتحسب عليا الشحن مرتين في نفس الاوردر ومش هسكت');
 
     expect($c->refresh()->handler)->not->toBe(Handler::Bot);
+});
+
+it('re-check A: erasing her conversation erases its shadow plans (her text is in them)', function () {
+    $c = Conversation::factory()->create();
+    DB::table('bot_shadow_plans')->insert(['conversation_id' => $c->id, 'trigger_message' => 'رقمي 01001234567', 'tier' => '1', 'created_at' => now(), 'updated_at' => now()]);
+
+    app(PersonalDataEraser::class)->eraseConversations([$c->id]);
+
+    expect(DB::table('bot_shadow_plans')->count())->toBe(0);
+});
+
+it('re-check C: «طلبت … ب 1250» is a purchase and a price, not an order number', function () {
+    expect(EntityExtractor::orderRefsInContext('طلبت الفستان ب 1250 وعايزة ارجعه'))->toBe([])
+        ->and(EntityExtractor::orderRefsInContext('الطلب رقم 5544'))->toBe(['5544']);
 });

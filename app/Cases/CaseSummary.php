@@ -404,8 +404,8 @@ final class CaseSummary
                 $product !== null => $product['title'].($product['variant_title'] !== null ? ' — '.$product['variant_title'] : '')
                     .($product['price'] !== null ? ' — '.self::price($product['price']) : '').($product['url'] !== null ? ' — '.$product['url'] : ''),
                 self::str($p['text'] ?? null) !== null => '«'.self::str($p['text']).'»',
-                ! empty($p['photo']) => __('cases.exchange.photo'),
-                default => __('cases.exchange.unknown'),
+                ! empty($p['photo']) => __('cases.exchange.piece_photo'),
+                default => __('cases.exchange.piece_unknown'),
             };
 
             return $label.': '.$what;

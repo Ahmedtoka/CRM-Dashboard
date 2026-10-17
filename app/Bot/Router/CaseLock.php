@@ -13,14 +13,15 @@ use App\Models\SupportCase;
  * other pieces of the same order) is a new request, not a duplicate.
  *
  * Returns and exchanges are only judged when the pieces are known (at record time, by line item);
- * a complaint is never a duplicate (a second complaint about the same order is new information).
+ * a complaint is never a duplicate (a second complaint about the same order is new information),
+ * and a cancel/edit request is never refused at its start (an edit yesterday, a cancellation today).
  */
 final class CaseLock
 {
     public const CASE_EXISTS_HOURS = 24;
 
     /** Flows whose request is judged by its pieces at record time, never at its start. */
-    private const NOT_AT_START = ['return_exchange', 'complaint'];
+    private const NOT_AT_START = ['return_exchange', 'complaint', 'cancel_edit'];
 
     /** Case types the record-time check covers: the pieces say whether it repeats. */
     private const PIECE_TYPES = ['return', 'exchange', 'return_exchange'];

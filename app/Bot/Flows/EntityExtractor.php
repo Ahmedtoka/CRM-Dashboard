@@ -60,7 +60,7 @@ final class EntityExtractor
         }
 
         // Up to two words between the context word and the number, as few as possible («اوردر 1 واوردر 2»).
-        $context = '(?:#\s*|(?:اوردر|أوردر|طلب|رقم|order)\S*\s+(?:\S+\s+){0,2}?#?)';
+        $context = '(?:#\s*|(?:(?:ال)?اوردر\S*|(?:ال)?أوردر\S*|(?:ال)?طلب(?=\s)|رقم\S*|order\S*)\s+(?:\S+\s+){0,2}?#?)';
         preg_match_all('/(?:'.$context.')(?<!\d)(\d{4,})(?!\d)|(?<!\d)(\d{6,})(?!\d)/iu', $withoutPhones, $m);
 
         return array_values(array_unique(array_filter([...$m[1], ...$m[2]], fn ($r) => $r !== '')));

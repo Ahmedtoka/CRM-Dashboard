@@ -43,7 +43,7 @@ class AgentTools
     ) {}
 
     /** @return list<array<string, mixed>> Anthropic tool definitions */
-    public function definitions(bool $insideFlow): array
+    public function definitions(bool $insideFlow, bool $escalate = true): array
     {
         $tools = [
             [
@@ -94,13 +94,16 @@ class AgentTools
             ],
         ];
 
-        $tools[] = [
-            'name' => 'escalate',
-            'description' => 'Ask a more experienced colleague to take this turn instead of you: a policy exception, a dispute, an angry customer with an order problem, or anything you are not sure how to handle well. Write nothing to her in the same turn.',
-            'input_schema' => ['type' => 'object', 'properties' => [
-                'reason' => ['type' => 'string', 'description' => 'One short English sentence: why.'],
-            ], 'required' => ['reason']],
-        ];
+        // Not on the legacy agent: it already is the strongest model, and nothing above it takes the turn.
+        if ($escalate) {
+            $tools[] = [
+                'name' => 'escalate',
+                'description' => 'Ask a more experienced colleague to take this turn instead of you: a policy exception, a dispute, an angry customer with an order problem, or anything you are not sure how to handle well. Write nothing to her in the same turn.',
+                'input_schema' => ['type' => 'object', 'properties' => [
+                    'reason' => ['type' => 'string', 'description' => 'One short English sentence: why.'],
+                ], 'required' => ['reason']],
+            ];
+        }
 
         // Bot hybrid (bot-hybrid.md §3.4): the tool list never changes with the chat's state — a
         // tool that comes and goes changes the cached prefix. Inside a flow start_flow says no.

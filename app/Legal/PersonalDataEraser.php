@@ -16,6 +16,7 @@ use App\Models\MessageAttachment;
 use App\Models\Order;
 use App\Models\SupportCase;
 use App\Models\UserNotification;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -71,6 +72,8 @@ final class PersonalDataEraser
         ];
 
         Message::whereIn('id', $messageIds)->delete();
+        // Bot hybrid shadow plans carry her text too (also removed by the foreign key's cascade).
+        DB::table('bot_shadow_plans')->whereIn('conversation_id', $conversationIds)->delete();
         Conversation::whereIn('id', $conversationIds)->delete();
 
         return ['counts' => $counts, 'files' => $files];

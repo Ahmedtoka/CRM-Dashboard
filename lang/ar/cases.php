@@ -93,6 +93,8 @@ return [
     'exchange' => [
         'replacement' => 'البديل',
         'replacement_for' => 'البديل لـ «:item»',
+        'piece_photo' => 'العميلة بعتت صورة للمنتج',
+        'piece_unknown' => 'مش متحدد',
         'note_pieces' => 'طلب استبدال:',
         'link' => 'اللينك',
         'typed' => 'البديل: مش متحدد — العميلة كتبت «:text»',

@@ -40,7 +40,6 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\SupportCase;
 use Illuminate\Http\Client\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -73,10 +72,6 @@ class BotEval
     {
         $fixture = Yaml::parseFile($file);
         $results = [];
-        // An eval's Sonnet calls never use up the day's real cap (owner B3, review #18).
-        $budget = app(SonnetBudget::class);
-        $spent = Cache::get($budget->key());
-
         $this->isolate($live);
 
         foreach ((array) $fixture['scenarios'] as $scenario) {
@@ -103,8 +98,6 @@ class BotEval
             ];
         }
 
-        $spent === null ? Cache::forget($budget->key()) : Cache::put($budget->key(), $spent, now()->addDays(2));
-
         return ['scenarios' => $results, 'summary' => $this->summary($results)];
     }
 
@@ -112,6 +105,11 @@ class BotEval
     private function isolate(bool $live): void
     {
         Queue::fake();
+        // An eval's Sonnet calls never count toward the day's real cap (owner B3); the cap itself is still read.
+        app()->instance(SonnetBudget::class, new class extends SonnetBudget
+        {
+            public function charge(string $model, array $usage): void {}
+        });
         // Nothing real-time reaches the team's screens (review #18): the broadcasts are faked.
         Event::fake([ConversationUpdated::class, MessageCreated::class, MessageUpdated::class, OrderUpdated::class, CustomerUpdated::class, UserNotified::class]);
         config(['broadcasting.default' => 'null', 'crm.bot.router.mode' => 'hybrid', 'crm.bot.router.legacy_fallback' => false, 'crm.bot.hold_notice.enabled' => false]);

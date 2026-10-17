@@ -133,14 +133,14 @@ it('answers a question inside a flow and asks the waiting step again', function 
         ->and(Conversation::first()->handler)->toBe(Handler::Bot);
 });
 
-// Owner B6 (2026-10-17): «already recorded» means the same request for the same order. A return is
-// judged by its pieces when it is recorded, so its flow always starts; a cancellation of the same
-// order is offered a person instead.
-it('offers a person instead of restarting the flow when a cancellation of the same order was recorded in the last 24 hours', function () {
+// Owner B6 (2026-10-17): «already recorded» means the same request for the same order. Returns,
+// complaints and cancel/edit requests are judged when recorded, so their flows always start; an
+// order follow-up already open for the same order is offered a person instead.
+it('offers a person instead of restarting the follow-up when one for the same order was opened in the last 24 hours', function () {
     $c = routerSay('التوصيل بياخد كام يوم؟');
-    $case = SupportCase::factory()->create(['conversation_id' => $c->id, 'type' => 'cancel_edit', 'status' => 'new', 'order_number' => '#1047']);
+    $case = SupportCase::factory()->create(['conversation_id' => $c->id, 'type' => 'delivery_followup', 'status' => 'new', 'order_number' => '#1047']);
 
-    routerSay('عايزة الغي الاوردر 1047');
+    routerSay('مفيش جديد في الاوردر 1047');
 
     $last = routerBotMessages()->last();
     $c->refresh();
@@ -197,8 +197,8 @@ it('starts a second return, for the same order or another (owner B6: the pieces 
 
 it('sends the menu after a "no" to the case-exists offer', function () {
     $c = routerSay('التوصيل بياخد كام يوم؟');
-    SupportCase::factory()->create(['conversation_id' => $c->id, 'type' => 'cancel_edit', 'status' => 'new', 'order_number' => '#1047']);
-    routerSay('عايزة الغي الاوردر 1047');
+    SupportCase::factory()->create(['conversation_id' => $c->id, 'type' => 'delivery_followup', 'status' => 'new', 'order_number' => '#1047']);
+    routerSay('مفيش جديد في الاوردر 1047');
 
     routerSay('لأ', payload: 'no');
 

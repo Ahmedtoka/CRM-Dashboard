@@ -83,7 +83,7 @@ class StoreAgent
             'thinking' => ['type' => 'adaptive'],
             'output_config' => ['effort' => $profile->effort],
             'system' => $this->system(),
-            'tools' => $this->tools->definitions($insideFlow),
+            'tools' => $this->tools->definitions($insideFlow, $profile->tier !== 'legacy'),
         ];
         $deadline = microtime(true) + $profile->budgetSeconds;
 
