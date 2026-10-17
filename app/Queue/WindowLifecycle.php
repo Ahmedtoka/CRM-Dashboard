@@ -16,6 +16,7 @@ use App\Inbox\UserNotifier;
 use App\Models\Conversation;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
+use App\Models\ShiftMember;
 use App\Models\SupportCase;
 use App\Models\User;
 use App\Queue\Events\CloseConfirmed;
@@ -289,6 +290,90 @@ class WindowLifecycle
     }
 
     /**
+     * Close-cycle hotfix C1 (D-12, with the H-07 rules), every tick: an open window whose moderator
+     * is on no open shift any more (her shift closed, or she left it) AND is gone (no heartbeat for
+     * `ShiftService::REASSIGN_AFTER_SECONDS`) is never left stranded. One still logged in after her
+     * shift is finishing her windows: the usual clocks apply to her. Re-checked under the locks:
+     *  - the customer has the turn (no reply clock, the moderator had answered): a SILENT `auto`
+     *    close — no «اتقفلت المحادثة» to a customer at night; the chat goes back to the bot with the
+     *    usual return window;
+     *  - we have the turn: `transfer` to the lounge keeping her ticket — `returning` with
+     *    «هنكمّل معاكي مع موظفة تانية» while a shift is open, else `overnight` with the night
+     *    message (`queue_night`, when on) and no promise of a colleague.
+     * Nothing at all while the open shift's heartbeats fail together (the mass-offline safeguard:
+     * a Reverb or network outage must not close or move everybody's windows).
+     */
+    public function tickStranded(?QueueSetting $settings = null): void
+    {
+        $s = $settings ?? QueueSetting::current();
+
+        if (! $s->enabled || app(ShiftService::class)->heartbeatsFailing()) {
+            return;
+        }
+
+        $open = QueueEntry::query()->with('assignee')->whereIn('status', QueueEntry::OPEN_STATUSES)->whereNotNull('assigned_user_id')->orderBy('id')->get();
+
+        foreach ($open as $e) {
+            if (self::stranded($e)) {
+                rescue(fn () => $this->releaseStranded($e, $s), null, report: true);
+            }
+        }
+    }
+
+    /** Her moderator is on no open shift and has sent no heartbeat for the hand-off delay. */
+    public static function stranded(QueueEntry $e): bool
+    {
+        $u = $e->assigned_user_id !== null ? ($e->assignee ?? User::query()->find($e->assigned_user_id)) : null;
+
+        if ($u === null || self::onOpenShift((int) $u->id)) {
+            return false;
+        }
+
+        return ! $u->is_active || $u->last_seen_at === null
+            || $u->last_seen_at->lessThanOrEqualTo(now()->subSeconds(ShiftService::REASSIGN_AFTER_SECONDS));
+    }
+
+    /** A desk of hers that has not left an open shift (`checking_out` included: she is still there). */
+    public static function onOpenShift(int $userId): bool
+    {
+        return ShiftMember::query()->where('user_id', $userId)->where('status', '!=', 'left')
+            ->whereHas('shift', fn ($q) => $q->where('status', 'open'))->exists();
+    }
+
+    private function releaseStranded(QueueEntry $e, QueueSetting $s): void
+    {
+        DB::transaction(function () use ($e, $s) {
+            $locked = self::lockBoth($e);
+
+            if ($locked === null || ! $locked->isOpen() || ! self::stranded($locked)) {
+                return;
+            }
+
+            $agent = $locked->assignee?->name ?? '';
+
+            if ($locked->awaiting_reply_since === null && $locked->first_reply_at !== null) {
+                $this->closeLocked($locked, 'auto', null, ['silent' => true], $s);
+
+                return;
+            }
+
+            $queue = app(QueueService::class);
+
+            if ($queue->openShift() !== null) {
+                $this->rerouteLocked($locked, 'transfer', null, 'returning', 'نهاية شيفت '.$agent);
+
+                return;
+            }
+
+            $new = $this->rerouteLocked($locked, 'transfer', null, 'overnight', 'نهاية شيفت '.$agent, ['tell_customer' => false]);
+
+            if ($s->night_message_enabled) {
+                SendQueueMessage::dispatch($new->id, 'queue_night', ['ticket' => $new->ticket_no, 'opening' => $queue->nextOpeningPhrase()]);
+            }
+        }, attempts: 3);
+    }
+
+    /**
      * Every open window whose customer is silent after the moderator's last reply: one warning
      * message per silence period at `silence_warn_seconds`, auto-close at `silence_close_seconds`.
      */
@@ -505,7 +590,11 @@ class WindowLifecycle
             return;
         }
 
-        if ($waited >= (int) $s->agent_apology_seconds && $e->apology_sent_at === null) {
+        // C1 (D-12): never «زميلتنا X معاكي حالاً» for a moderator off shift and gone — the
+        // watchdog (`tickStranded()`) moves her window instead.
+        $gone = ! $this->loggedIn($e->assignee) && $e->assigned_user_id !== null && ! self::onOpenShift((int) $e->assigned_user_id);
+
+        if ($waited >= (int) $s->agent_apology_seconds && $e->apology_sent_at === null && ! $gone) {
             $this->apologise($e, $s);
         }
 
@@ -780,7 +869,9 @@ class WindowLifecycle
             $until = now()->addMinutes($s->return_priority_minutes);
             $c->forceFill(['return_priority_until' => $until])->save();
             $e->forceFill(['return_priority_until' => $until])->save();
-            SendQueueMessage::dispatch($e->id, 'queue_auto_closed', []);
+            if (! ($opts['silent'] ?? false)) {
+                SendQueueMessage::dispatch($e->id, 'queue_auto_closed', []);
+            }
             // Close-cycle hotfix C1 (D-08): the chat goes back to the bot here, on the row this
             // transaction holds; inside `return_priority_until` her real message still goes back to
             // this moderator (QueueService::settles(), H-01), after it the bot answers — never a

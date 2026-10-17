@@ -493,7 +493,7 @@ class QueueService
     }
 
     /** «10 الصبح»: the first shift template's start (the script itself says «الساعة {opening}»). */
-    private function nextOpeningPhrase(): string
+    public function nextOpeningPhrase(): string
     {
         $from = (string) ($this->settings()->shiftTemplates()[0]['from'] ?? '10:00');
 

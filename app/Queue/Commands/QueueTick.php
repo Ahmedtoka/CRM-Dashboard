@@ -82,6 +82,8 @@ TXT;
             $steps = [
                 'shifts' => fn () => $shifts->transition($settings),
                 'members' => fn () => $shifts->tickMembers($settings),
+                // Close-cycle hotfix C1 (D-12): windows left with a moderator whose shift is over.
+                'stranded' => fn () => $windows->tickStranded($settings),
                 'silence' => fn () => $windows->tickSilence($settings),
                 'replies' => fn () => $windows->tickReplies($settings),
                 'confirm' => fn () => $windows->confirmDue($settings),
