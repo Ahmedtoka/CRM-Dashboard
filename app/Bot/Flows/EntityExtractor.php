@@ -28,6 +28,21 @@ final class EntityExtractor
         return preg_match('/#?(?<!\d)(\d{4,})(?!\d)/', $withoutPhones, $m) ? $m[1] : null;
     }
 
+    /**
+     * Every order reference in the text, in order, without repeats (bot-hybrid.md R2): «اوردر
+     * 209129 واوردر 209200» is two orders. orderRef() stays the first one.
+     *
+     * @return list<string>
+     */
+    public static function orderRefs(string $text): array
+    {
+        $raw = (new ArabicNormalizer)->digitsToLatin($text);
+        $withoutPhones = preg_replace(self::PHONE, ' ', $raw) ?? $raw;
+        preg_match_all('/#?(?<!\d)(\d{4,})(?!\d)/', $withoutPhones, $m);
+
+        return array_values(array_unique($m[1]));
+    }
+
     public static function email(string $text): ?string
     {
         return preg_match('/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/', $text, $m) ? $m[0] : null;
