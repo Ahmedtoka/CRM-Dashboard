@@ -3,6 +3,7 @@
 namespace App\Queue;
 
 use App\Models\User;
+use App\Queue\Commands\QueueRollupCommand;
 use App\Queue\Commands\QueueTick;
 use App\Queue\Events\CloseReversed;
 use App\Queue\Events\WindowClosed;
@@ -19,7 +20,7 @@ class QueueServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([QueueTick::class]);
+            $this->commands([QueueTick::class, QueueRollupCommand::class]);
         }
 
         // Queue Part 2: what a window earns (the listener rescues itself, never failing the close).
@@ -40,6 +41,13 @@ class QueueServiceProvider extends ServiceProvider
             $schedule->command(QueueTick::class)
                 ->everyThirtySeconds()
                 ->withoutOverlapping(2)
+                ->onOneServer();
+
+            // Queue Part 2: repair and archive yesterday, after the analytics rollup's 00:10 run.
+            $schedule->command(QueueRollupCommand::class)
+                ->dailyAt('00:20')
+                ->timezone(QueueService::TZ)
+                ->withoutOverlapping()
                 ->onOneServer();
         });
     }
