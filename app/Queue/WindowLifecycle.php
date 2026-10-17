@@ -50,8 +50,9 @@ use Throwable;
  * there is no transaction). A listener that throws is reported and never fails the close, the
  * customer's inbound message, `resolve()` or `returnToBot()`.
  *
- * The customer-silence clock (`silentSince()`) starts at the ASSIGNEE's last reply and runs only
- * while that reply is later than the customer's last message. No reply yet, or she wrote last:
+ * The customer-silence clock (`silentSince()`) starts at the last staff reply in the window (the
+ * assignee's, or a colleague's since C1 / D-20) and runs only while that reply is later than the
+ * customer's last message. No reply yet, or she wrote last:
  * no clock, no warning, no auto-close (a slow moderator is an SLA matter).
  *
  * An acknowledgement (thanks, emoji, a sticker — spec 2026-09-30 §1) starts no reply clock; the
@@ -61,7 +62,7 @@ use Throwable;
  *
  * The moderator-reply clock (flow revision §4, `awaiting_reply_since`) runs only while the
  * customer waits for the ASSIGNEE: from delivery, or from the customer's message after the
- * assignee had answered everything; every reply of the assignee stops it. The two clocks never
+ * assignee had answered everything; every staff reply from the CRM stops it (C1 / D-20). The two clocks never
  * run together. `tickReplies()` apologises, then hands the window off (`no_reply`) or alerts.
  * A moderator who is not logged in is never handed off (nor penalised) by this clock: her
  * windows follow the offline path of `ShiftService::tickMembers()`.
@@ -106,20 +107,24 @@ class WindowLifecycle
     }
 
     /**
-     * Every reply of the assignee in her open window: the customer-silence clock restarts here
-     * (a new silence period, so the warning may be sent again), the moderator-reply clock stops
-     * (a new waiting period for the apology and the leader alert), and the first one is the
-     * window's first reply. Called inside the send's transaction, which already holds the conversation.
+     * Every staff reply from the CRM in an open window (the assignee's, a colleague's, the leader's —
+     * close-cycle hotfix C1 / D-20): the customer-silence clock restarts here (a new silence
+     * period, so the warning may be sent again), the moderator-reply clock stops (a new waiting
+     * period for the apology, the leader alert and the `no_reply` hand-off), and the assignee's
+     * first one is the window's first reply. Echoes are not counted yet (H-05). Called inside the
+     * send's transaction, which already holds the conversation.
      */
     public function agentReplied(Conversation $c, User $u): void
     {
         $e = $c->queue_entry_id ? QueueEntry::query()->find($c->queue_entry_id) : null;
 
-        if (! $e || ! $e->isOpen() || (int) $e->assigned_user_id !== (int) $u->id) {
+        if (! $e || ! $e->isOpen()) {
             return;
         }
 
-        $first = $e->first_reply_at === null;
+        // Close-cycle hotfix C1 (D-20): the first reply (and its SLA) is the assignee's, but any
+        // staff member's reply from the CRM answers the customer — both clocks move the same way.
+        $first = $e->first_reply_at === null && (int) $e->assigned_user_id === (int) $u->id;
         QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)->update([
             'last_agent_message_at' => now(), 'silence_warned_at' => null,
             'awaiting_reply_since' => null, 'apology_sent_at' => null, 'overdue_alerted_at' => null, 'updated_at' => now(),
