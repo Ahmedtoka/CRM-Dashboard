@@ -2,6 +2,9 @@
 
 namespace App\Shopify;
 
+use App\Shopify\App\FakeShopifyOAuth;
+use App\Shopify\App\HttpShopifyOAuth;
+use App\Shopify\App\ShopifyOAuth;
 use App\Shopify\Client\FakeShopifyTransport;
 use App\Shopify\Client\HttpShopifyTransport;
 use App\Shopify\Client\ShopifyClient;
@@ -28,6 +31,11 @@ class ShopifyServiceProvider extends ServiceProvider
                 ? $app->make(HttpShopifyTransport::class)
                 : new FakeShopifyTransport;
         });
+
+        // Partners app token endpoint: live only for the exact driver value, like the transport.
+        $this->app->bind(ShopifyOAuth::class, fn ($app) => config('crm.shopify.driver', 'fake') === 'live'
+            ? $app->make(HttpShopifyOAuth::class)
+            : new FakeShopifyOAuth);
 
         // One client per request/job so every collaborator shares throttle state.
         $this->app->scoped(ShopifyClient::class);
