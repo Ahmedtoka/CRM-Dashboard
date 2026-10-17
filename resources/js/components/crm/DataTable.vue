@@ -71,7 +71,7 @@ const selected = defineModel<RowId[]>('selected', { default: () => [] });
 const { t, locale } = useI18n();
 
 /** One comfortable spacing for every table (the مريح / مضغوط toggle is gone, F7). */
-const cellPad = 'px-3 py-2';
+const cellPad = 'px-3 py-2.5';
 
 const sortState = computed(() => parseSort(props.sort));
 const showSkeleton = computed(() => props.loading && props.rows.length === 0);
@@ -139,15 +139,15 @@ function defaultCell(row: T, key: string): unknown {
         <template v-if="mobile === 'cards'">
             <SkeletonList v-if="showSkeleton" variant="cards" :count="3" class="md:hidden" />
             <ul v-else class="space-y-2 md:hidden" :aria-label="caption">
-                <li v-if="!rows.length" class="rounded-lg bg-card shadow-card">
+                <li v-if="!rows.length" class="rounded-lg border border-line bg-card">
                     <slot name="empty"><EmptyState :icon="emptyIcon" :title="empty ?? t('ui.empty')" /></slot>
                 </li>
                 <li v-for="row in rows" :key="row.id">
                     <component
                         :is="clickable ? 'button' : 'div'"
                         :type="clickable ? 'button' : undefined"
-                        class="block w-full rounded-lg bg-card p-3 text-start shadow-card"
-                        :class="clickable ? 'hover:bg-muted focus-visible:bg-muted' : ''"
+                        class="block w-full rounded-lg border border-line bg-card p-3 text-start"
+                        :class="clickable ? 'hover:bg-surface-2 focus-visible:bg-surface-2' : ''"
                         @click="clickable && emit('rowClick', row)"
                     >
                         <div
@@ -156,7 +156,7 @@ function defaultCell(row: T, key: string): unknown {
                             class="flex min-w-0 items-baseline justify-between gap-3 py-0.5 text-xs"
                             :class="col.primary ? 'mb-1 text-sm font-semibold' : ''"
                         >
-                            <span v-if="!col.primary" class="shrink-0 text-2xs text-muted-foreground">{{ col.label }}</span>
+                            <span v-if="!col.primary" class="shrink-0 text-xs text-fg-2">{{ col.label }}</span>
                             <span class="min-w-0 truncate" :class="[col.primary ? 'text-start' : 'text-end', col.numeric ? 'tabular-nums' : '']" :dir="col.dir">
                                 <slot :name="`cell-${col.key}`" :row="row" :value="cell(row, col.key)">{{ defaultCell(row, col.key) ?? '—' }}</slot>
                             </span>
@@ -169,12 +169,12 @@ function defaultCell(row: T, key: string): unknown {
         <div
             data-table-box
             :data-table-id="tableId"
-            class="scrollbar-thin relative rounded-lg bg-card shadow-card"
+            class="scrollbar-thin relative rounded-lg border border-line bg-card"
             :class="[stickyHeader ? 'table-scroll-box' : 'overflow-x-auto', mobile === 'cards' ? 'hidden md:block' : '']"
         >
-            <table class="w-full text-xs" :aria-busy="loading">
+            <table class="w-full text-[13.5px]" :aria-busy="loading">
                 <caption v-if="caption" class="sr-only">{{ caption }}</caption>
-                <thead class="bg-card text-2xs font-semibold text-muted-foreground" :class="stickyHeader ? 'crm-sticky-head' : 'border-b border-border/60'">
+                <thead class="bg-surface-2 text-[12.5px] font-semibold text-fg-2" :class="stickyHeader ? 'crm-sticky-head' : 'border-b border-border/60'">
                     <tr>
                         <th v-if="selectable" scope="col" class="w-8" :class="[cellPad, stickyFirstColumn ? 'crm-sticky-first' : '']">
                             <input
@@ -228,8 +228,8 @@ function defaultCell(row: T, key: string): unknown {
                         <tr
                             v-for="row in rows"
                             :key="row.id"
-                            class="border-t border-border/60 first:border-t-0 hover:bg-muted/50"
-                            :class="[clickable ? 'cursor-pointer hover:bg-muted focus-visible:bg-muted' : '', rowClass?.(row)]"
+                            class="border-t border-line first:border-t-0 hover:bg-surface-2"
+                            :class="[clickable ? 'cursor-pointer focus-visible:bg-surface-2' : '', rowClass?.(row)]"
                             :tabindex="clickable ? 0 : undefined"
                             @click="clickable && emit('rowClick', row)"
                             @keydown="onKey($event, row)"

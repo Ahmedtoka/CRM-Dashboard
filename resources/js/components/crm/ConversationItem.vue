@@ -112,7 +112,7 @@ const dotColor = (color: string | null) => (color && /^#[0-9a-f]{6}$/i.test(colo
                 >
                     {{ state.label }}
                 </span>
-                <StatusChip v-else-if="state" :label="state.label" :tone="state.tone" />
+                <StatusChip v-else-if="state" size="sm" :label="state.label" :tone="state.tone" />
                 <span
                     v-if="conversation.is_load_test"
                     class="inline-flex h-5 shrink-0 items-center rounded-full bg-orange-500/15 px-2 text-2xs font-semibold text-orange-800 dark:bg-orange-400/20 dark:text-orange-200"

@@ -52,9 +52,9 @@ onBeforeUnmount(() => {
         class="mb-1 space-y-1"
         :class="sticky ? 'sticky top-14 z-20 -mx-3 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:-mx-6 md:px-6' : ''"
     >
-        <nav v-if="parents.length" class="flex min-w-0 items-center gap-1 text-2xs text-muted-foreground sm:hidden" :aria-label="t('ui.breadcrumbs')">
+        <nav v-if="parents.length" class="flex min-w-0 items-center gap-1 text-13 text-fg-2 sm:hidden" :aria-label="t('ui.breadcrumbs')">
             <template v-for="(crumb, index) in parents" :key="index">
-                <Link v-if="crumb.href" :href="crumb.href" class="truncate hover:text-foreground hover:underline">{{ crumb.label }}</Link>
+                <Link v-if="crumb.href" :href="crumb.href" class="truncate font-semibold text-brand-ink hover:underline">{{ crumb.label }}</Link>
                 <span v-else class="truncate">{{ crumb.label }}</span>
                 <ChevronRight class="rtl-flip size-3 shrink-0" aria-hidden="true" />
             </template>
@@ -63,9 +63,10 @@ onBeforeUnmount(() => {
             <div class="min-w-[min(100%,9rem)] flex-1">
                 <div class="flex min-w-0 flex-wrap items-center gap-2">
                     <h1 class="truncate text-xl font-bold text-foreground">{{ title }}</h1>
+                    <slot name="extra" />
                     <FreshnessChip :at="freshness" />
                 </div>
-                <p v-if="description" class="text-xs text-muted-foreground">{{ description }}</p>
+                <p v-if="description" class="mt-0.5 text-13 text-fg-2">{{ description }}</p>
             </div>
             <div v-if="$slots.default" class="flex flex-wrap items-center gap-2">
                 <slot />
