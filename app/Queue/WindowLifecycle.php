@@ -54,9 +54,10 @@ use Throwable;
  * while that reply is later than the customer's last message. No reply yet, or she wrote last:
  * no clock, no warning, no auto-close (a slow moderator is an SLA matter).
  *
- * An acknowledgement (thanks, emoji, a sticker — spec 2026-09-30 §1) starts neither clock again:
- * the customer-silence clock keeps running from the assignee's last reply (`last_ack_at`), so a
- * window she forgets to close still warns and auto-closes.
+ * An acknowledgement (thanks, emoji, a sticker — spec 2026-09-30 §1) starts no reply clock; the
+ * customer-silence clock starts again from it (`last_ack_at`, close-cycle hotfix C1 / D-06: «تمام»
+ * while the moderator prepares the order is not silence), so a window she forgets to close still
+ * warns and auto-closes, only later.
  *
  * The moderator-reply clock (flow revision §4, `awaiting_reply_since`) runs only while the
  * customer waits for the ASSIGNEE: from delivery, or from the customer's message after the
@@ -339,7 +340,13 @@ class WindowLifecycle
 
         $customer = collect([$conversation, $e->last_customer_message_at])->filter()->max();
 
-        return $customer !== null && $customer->greaterThanOrEqualTo($agent) ? null : $agent;
+        if ($customer !== null && $customer->greaterThanOrEqualTo($agent)) {
+            return null;
+        }
+
+        // Close-cycle hotfix C1 (D-06): her «تمام» after the reply asks for nothing, but she is
+        // there — the silence clock starts again from it.
+        return $e->last_ack_at !== null && $e->last_ack_at->greaterThan($agent) ? $e->last_ack_at : $agent;
     }
 
     /** Seconds the customer has been silent since the moderator's last reply; null when the clock is not running. */

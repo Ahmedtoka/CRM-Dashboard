@@ -231,8 +231,8 @@ class QueueService
      * on, asks for nothing:
      *  - no reply clock, so no apology and no hand-off;
      *  - no position reply in the lounge;
-     *  - in an open window it only stamps `last_ack_at`, so the customer-silence clock keeps
-     *    running from the moderator's last reply (`WindowLifecycle::silentSince()`).
+     *  - in an open window it only stamps `last_ack_at` (and clears the warning mark): the
+     *    customer-silence clock starts again from it (`WindowLifecycle::silentSince()`, C1 / D-06).
      *
      * The board and the moderator's strip are told once the inbound message is committed (a
      * rolled-back ingest pushes nothing), for a waiting entry and for an open window alike.
@@ -246,7 +246,8 @@ class QueueService
         }
 
         if ($acknowledgement && $this->settings()->enabled) {
-            QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)->update(['last_ack_at' => now()]);
+            // C1 / D-06: the silence clock starts again from her thanks (a new silence period, so a new warning).
+            QueueEntry::query()->whereKey($e->id)->whereIn('status', QueueEntry::OPEN_STATUSES)->update(['last_ack_at' => now(), 'silence_warned_at' => null]);
         } else {
             $e->forceFill(['last_customer_message_at' => now(), 'silence_warned_at' => null])->save();
 

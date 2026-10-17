@@ -121,12 +121,12 @@ it('reads its words from the config, so the list can grow', function () {
 
 // ───── In an open window ─────
 
-it('starts no reply clock for a thanks after her answer, and the silence clock keeps running from the answer', function () {
+it('starts no reply clock for a thanks after her answer, and the silence clock starts again from the thanks (D-06)', function () {
     [$e, $u, $c] = ackWindow();
     ackReply($e, $u);                                   // 12:00:10
     expect($e->fresh()->awaiting_reply_since)->toBeNull();
 
-    Carbon::setTestNow(now()->addSeconds(20));          // 12:00:30
+    Carbon::setTestNow(now()->addSeconds(170));         // 12:03:00: warned at 180 s? not yet
     $unread = $c->fresh()->unread_count;
     ackIngest('thanks', 'شكراً ❤️');
 
@@ -134,16 +134,33 @@ it('starts no reply clock for a thanks after her answer, and the silence clock k
     expect($e->awaiting_reply_since)->toBeNull()
         ->and($e->last_ack_at->equalTo(now()))->toBeTrue()
         ->and($c->fresh()->unread_count)->toBe($unread + 1)   // in an open window the moderator still sees it
-        ->and(WindowLifecycle::idleSeconds($e))->toBe(20);    // counted from her answer at 12:00:10
+        ->and(WindowLifecycle::idleSeconds($e))->toBe(0);     // counted from her thanks at 12:03:00
 
-    Carbon::setTestNow(now()->addSeconds(161));         // 12:03:11: 181 s after her answer
+    Carbon::setTestNow(now()->addSeconds(170));         // 12:05:50: 340 s after the answer, 170 s after the thanks
     app(WindowLifecycle::class)->tickReplies();
     app(WindowLifecycle::class)->tickSilence();
-    expect($e->fresh()->apology_sent_at)->toBeNull()->and($e->fresh()->silence_warned_at)->not->toBeNull();
+    expect($e->fresh()->apology_sent_at)->toBeNull()->and($e->fresh()->silence_warned_at)->toBeNull()
+        ->and($e->fresh()->status)->toBe('active');
 
-    Carbon::setTestNow(now()->addSeconds(120));         // 12:05:11: 301 s
+    Carbon::setTestNow(now()->addSeconds(11));          // 181 s after the thanks: the warning
+    app(WindowLifecycle::class)->tickSilence();
+    expect($e->fresh()->silence_warned_at)->not->toBeNull();
+
+    Carbon::setTestNow(now()->addSeconds(120));         // 301 s after the thanks
     app(WindowLifecycle::class)->tickSilence();
     expect($e->fresh()->close_reason)->toBe('auto');
+});
+
+it('lets a thanks after the warning start a new silence period, so the warning may come again', function () {
+    [$e, $u] = ackWindow();
+    ackReply($e, $u);
+    Carbon::setTestNow(now()->addSeconds(181));
+    app(WindowLifecycle::class)->tickSilence();
+    expect($e->fresh()->silence_warned_at)->not->toBeNull();
+
+    ackIngest('thanks-late', 'تمام');
+
+    expect($e->fresh()->silence_warned_at)->toBeNull()->and(WindowLifecycle::idleSeconds($e->fresh()))->toBe(0);
 });
 
 it('starts the reply clock for a real message, also one that begins with thanks', function () {
