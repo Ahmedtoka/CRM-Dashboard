@@ -9,6 +9,8 @@ use App\Enums\MessageStatus;
 use App\Enums\SenderType;
 use App\Events\ConversationUpdated;
 use App\Events\MessageCreated;
+use App\Events\MessageUpdated;
+use App\Inbox\Jobs\SendOutboundMessage;
 use App\Media\InboundAttachmentRecorder;
 use App\Media\Jobs\DownloadInboundMedia;
 use App\Models\Conversation;
@@ -26,7 +28,7 @@ use Illuminate\Support\Facades\DB;
  *  - by mid: the send job stored the message id Meta returned (Instagram echoes carry no app id);
  *  - by a twin: the echo can overtake the send job saving that mid, and a caption or a card's
  *    text fallback goes out as a second message whose mid is never stored, so an echo matching
- *    one of our recent sends in the thread (hasCrmTwin()) is skipped too. If an echo still slips
+ *    one of our recent sends in the thread (crmTwin()) is skipped too. If an echo still slips
  *    in first, the send job's save drops it (SendOutboundMessage::recordSent()), so a message
  *    is never shown twice.
  *
@@ -42,6 +44,9 @@ class EchoIngestor
 {
     /** How long one of our sends may sit queued and still be taken for the echo's twin. */
     private const TWIN_MINUTES = 10;
+
+    /** Attachment kinds InboundAttachmentRecorder stores (a `template` or `fallback` is not one). */
+    private const MEDIA_TYPES = ['image', 'audio', 'voice', 'video', 'file', 'document', 'sticker'];
 
     public function __construct(
         private readonly ChannelRegistry $registry,
@@ -73,7 +78,27 @@ class EchoIngestor
 
         // Staff can only write first inside a window the customer opened, so a thread exists;
         // an echo without one (a customer we never stored) is left out rather than invented.
-        if ($conversation === null || $this->hasCrmTwin($conversation, $d)) {
+        if ($conversation === null) {
+            return null;
+        }
+
+        $twin = $this->crmTwin($conversation, $d);
+
+        if ($twin !== null) {
+            // One of ours the send job gave up on, though Meta did deliver it (a timeout): the echo
+            // proves it went out, so it is marked sent instead of shown twice (failed + outside).
+            if ($twin->status === MessageStatus::Failed && $twin->external_id === null) {
+                rescue(function () use ($twin, $d) {
+                    SendOutboundMessage::recordSent($twin, $d->externalMessageId);
+                    SafeBroadcast::send(new MessageUpdated($twin));
+                }, report: true);
+            }
+
+            return null;
+        }
+
+        // A template or card from another tool that carried no readable text: nothing to show.
+        if (trim($d->body) === '' && ! $this->hasRecordableAttachment($d->attachments)) {
             return null;
         }
 
@@ -117,25 +142,39 @@ class EchoIngestor
         return $message;
     }
 
+    /** @param  array<int, array<string, mixed>>  $attachments */
+    private function hasRecordableAttachment(array $attachments): bool
+    {
+        foreach ($attachments as $a) {
+            if (in_array($a['type'] ?? null, self::MEDIA_TYPES, true) && filled($a['url'] ?? null)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * One of our own sends this echo mirrors, still without its mid (queued), or a part of one
      * Meta delivers as a separate message: an attachment's caption follows as its own text, and
      * a card send refused as a template falls back to the text with its link lines appended.
+     * Any outbound status counts: the media can be delivered, read (Instagram `messaging_seen`)
+     * or given up on (a timed-out send Meta did deliver) before its caption's echo is processed.
      */
-    private function hasCrmTwin(Conversation $conversation, OutboundEchoData $d): bool
+    private function crmTwin(Conversation $conversation, OutboundEchoData $d): ?Message
     {
         $recent = $conversation->messages()
             ->where('direction', MessageDirection::Out->value)
             ->whereIn('sender_type', [SenderType::User->value, SenderType::Bot->value])
             ->where('sent_outside_crm', false)
-            ->whereIn('status', [MessageStatus::Queued->value, MessageStatus::Sent->value])
             ->where('created_at', '>=', now()->subMinutes(self::TWIN_MINUTES))
             ->withCount('mediaAttachments')
-            ->get(['id', 'body', 'cards', 'status', 'external_id']);
+            ->orderByDesc('id')
+            ->get(['id', 'conversation_id', 'platform', 'body', 'cards', 'status', 'external_id']);
 
         $text = trim($d->body);
 
-        return $recent->contains(function (Message $m) use ($text) {
+        return $recent->first(function (Message $m) use ($text) {
             $body = trim((string) $m->body);
 
             if ($text !== '') {

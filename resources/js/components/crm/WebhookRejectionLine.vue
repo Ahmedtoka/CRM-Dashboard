@@ -29,6 +29,7 @@ const { t, locale } = useI18n();
             {{ t('settings.webhook_rejections.line', { hours: summary.hours, n: summary.count, secret: t(`settings.webhook_rejections.${secret}`) }) }}
             <span v-if="summary.last_at" class="block font-normal opacity-90">
                 {{ t('settings.webhook_rejections.last', { at: formatDateTime(summary.last_at, locale) }) }}
+                <template v-if="summary.last_reason"> · {{ t(`settings.webhook_rejections.reasons.${summary.last_reason}`) }}</template>
             </span>
         </span>
     </p>

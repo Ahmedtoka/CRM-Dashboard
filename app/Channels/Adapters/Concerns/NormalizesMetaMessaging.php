@@ -41,7 +41,7 @@ trait NormalizesMetaMessaging
                         channelExternalId: $channelExternalId,
                         customerExternalId: (string) ($item['recipient']['id'] ?? ''),
                         externalMessageId: (string) $item['message']['mid'],
-                        body: (string) ($item['message']['text'] ?? ''),
+                        body: (string) ($item['message']['text'] ?? $this->templateText($item['message']) ?? ''),
                         occurredAt: $this->fromMsTimestamp($item['timestamp'] ?? 0),
                         attachments: $this->mapAttachments($item['message']),
                         appId: isset($item['message']['app_id']) ? (string) $item['message']['app_id'] : null,
@@ -144,6 +144,29 @@ trait NormalizesMetaMessaging
         }
 
         return $events;
+    }
+
+    /**
+     * The readable part of a template another tool sent (an echo of a button or generic template
+     * has no `text`): the button template's text, or the first card's title.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    protected function templateText(array $message): ?string
+    {
+        foreach ($message['attachments'] ?? [] as $a) {
+            if (($a['type'] ?? null) !== 'template') {
+                continue;
+            }
+
+            $text = $a['payload']['text'] ?? $a['payload']['elements'][0]['title'] ?? null;
+
+            if (is_string($text) && trim($text) !== '') {
+                return $text;
+            }
+        }
+
+        return null;
     }
 
     protected function referralOf(mixed $referral): ?AdReferralData

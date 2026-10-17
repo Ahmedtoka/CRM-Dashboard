@@ -32,7 +32,7 @@ class WebhookController extends Controller
 
         if (! $adapter->verifySignature($request)) {
             // Shown on Settings → Channels (2026-10-17): a wrong App Secret used to fail silently.
-            app(WebhookRejections::class)->record($platform, $request->path(), $this->rejectionReason($request));
+            app(WebhookRejections::class)->record($platform, $request->path(), $this->rejectionReason($request), $request->ip());
 
             return response('Forbidden', 403);
         }

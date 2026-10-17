@@ -1285,6 +1285,14 @@ const ar = {
             app_secret: 'App Secret',
             api_secret: 'API secret',
             last_success: 'آخر Webhook وصل بنجاح',
+            reasons: {
+                bad_signature: 'التوقيع مش مطابق',
+                missing_signature: 'من غير توقيع',
+                no_app_secret: 'الـ App Secret مش متسجل على السيرفر',
+                bad_hmac: 'التوقيع مش مطابق',
+                missing_hmac: 'من غير توقيع',
+                no_secret: 'الـ API secret مش متسجل',
+            },
         },
         test_links: {
             title: 'روابط التجربة',

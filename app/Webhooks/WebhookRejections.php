@@ -9,6 +9,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
 /**
@@ -36,8 +37,15 @@ class WebhookRejections
 
     public function __construct(private readonly UserNotifier $notifier) {}
 
-    public function record(string $provider, string $path, string $reason): void
+    /** Rejections one address may add to the counter per minute: a flood of forged posts stays a cache hit. */
+    private const PER_IP_PER_MINUTE = 30;
+
+    public function record(string $provider, string $path, string $reason, ?string $ip = null): void
     {
+        if ($ip !== null && ! RateLimiter::attempt("webhook-rejections:{$provider}:{$ip}", self::PER_IP_PER_MINUTE, fn () => true, 60)) {
+            return;
+        }
+
         rescue(fn () => $this->store($provider, Str::limit($path, 120, ''), Str::limit($reason, 40, '')), report: true);
     }
 

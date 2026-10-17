@@ -162,3 +162,44 @@ it('routes echoes from the webhook job to the echo ingestor', function () {
 it('subscribes pages to message echoes, and the health check asks for a re-subscribe without them', function () {
     expect(\App\Channels\MetaPageSubscriber::FIELDS)->toContain('message_echoes');
 });
+
+it('skips the caption echo of our picture even after the picture was read', function () {
+    Message::factory()->create([
+        'conversation_id' => $this->conversation->id, 'platform' => Platform::Facebook,
+        'direction' => MessageDirection::Out, 'sender_type' => SenderType::User, 'body' => 'ده الموديل',
+        'external_id' => 'm_media', 'status' => MessageStatus::Read,
+    ]);
+
+    expect(app(EchoIngestor::class)->ingest(echoOf('m_caption', 'ده الموديل', null)))->toBeNull()
+        ->and(Message::where('sent_outside_crm', true)->count())->toBe(0);
+});
+
+it('marks a send we gave up on as sent when its echo proves Meta delivered it', function () {
+    $failed = Message::factory()->create([
+        'conversation_id' => $this->conversation->id, 'platform' => Platform::Facebook,
+        'direction' => MessageDirection::Out, 'sender_type' => SenderType::User, 'body' => 'متاح مقاس L',
+        'external_id' => null, 'status' => MessageStatus::Failed, 'error' => 'timeout',
+    ]);
+
+    expect(app(EchoIngestor::class)->ingest(echoOf('m_late_ok', 'متاح مقاس L', null)))->toBeNull();
+
+    $fresh = $failed->fresh();
+    expect($fresh->status)->toBe(MessageStatus::Sent)
+        ->and($fresh->external_id)->toBe('m_late_ok')
+        ->and(Message::where('sent_outside_crm', true)->count())->toBe(0);
+});
+
+it('skips an echo with nothing to show (another tool\'s template without text)', function () {
+    expect(app(EchoIngestor::class)->ingest(echoOf('m_tpl', '', '111', [['type' => 'template', 'url' => null]])))->toBeNull();
+});
+
+it('reads the text of another tool\'s template echo', function () {
+    $events = app(\App\Channels\Adapters\MessengerAdapter::class)->normalize(['object' => 'page', 'entry' => [['id' => 'PAGE1', 'time' => 1757671320000, 'messaging' => [[
+        'sender' => ['id' => 'PAGE1'], 'recipient' => ['id' => 'cust-1'], 'timestamp' => 1757671320000,
+        'message' => ['is_echo' => true, 'mid' => 'm_tpl2', 'app_id' => 999, 'attachments' => [['type' => 'template', 'payload' => ['template_type' => 'button', 'text' => 'اختاري المقاس']]]],
+    ]]]]]);
+
+    expect($events[0])->toBeInstanceOf(OutboundEchoData::class)
+        ->and($events[0]->body)->toBe('اختاري المقاس')
+        ->and($events[0]->appId)->toBe('999');
+});

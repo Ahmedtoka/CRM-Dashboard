@@ -1314,6 +1314,14 @@ const en: Messages = {
             app_secret: 'App Secret',
             api_secret: 'API secret',
             last_success: 'Last webhook accepted',
+            reasons: {
+                bad_signature: 'signature does not match',
+                missing_signature: 'no signature',
+                no_app_secret: 'App Secret not set on the server',
+                bad_hmac: 'signature does not match',
+                missing_hmac: 'no signature',
+                no_secret: 'API secret not set',
+            },
         },
         test_links: {
             title: 'Test links',

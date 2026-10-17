@@ -139,3 +139,23 @@ it('shows the rejections on Settings → Channels and Settings → Shopify', fun
     $this->actingAs($this->admin)->get('/settings/shopify')->assertOk()
         ->assertInertia(fn ($page) => $page->where('webhookRejections.count', 1)->has('lastWebhookAt'));
 });
+
+it('names a missing Shopify secret as the reason', function () {
+    config(['crm.shopify.webhook_secret' => '']);
+    app()->detectEnvironment(fn () => 'production');
+
+    badShopifyPost($this);
+
+    expect(WebhookRejection::where('provider', 'shopify')->value('last_reason'))->toBe('no_secret');
+});
+
+it('caps how many rejections one address adds per minute', function () {
+    $rejections = app(WebhookRejections::class);
+
+    foreach (range(1, 40) as $i) {
+        $rejections->record('facebook', 'webhooks/facebook', 'bad_signature', '203.0.113.9');
+    }
+    $rejections->record('facebook', 'webhooks/facebook', 'bad_signature', '203.0.113.10');
+
+    expect(WebhookRejection::where('provider', 'facebook')->value('rejected'))->toBe(31);
+});
