@@ -6,7 +6,7 @@ import type { CommentFilters, CommentItem, CommentPatch } from '@/types/admin';
 import type { CursorPage } from '@/types/crm';
 import { onBeforeUnmount, ref, watch, type Ref } from 'vue';
 
-type Action = 'reply' | 'hide' | 'private-reply';
+type Action = 'reply' | 'hide' | 'unhide' | 'private-reply';
 
 /**
  * Comment feed state: cursor paging over /comments/feed, live CommentUpdated merges on
@@ -101,7 +101,7 @@ export function useCommentFeed(page: () => CursorPage<CommentItem>, filters: Ref
         try {
             const { data } = await api.post(`/comments/${id}/${action}`, text !== undefined ? { text } : {});
             replace(action === 'private-reply' ? data.data.comment : data.data);
-            const done = { reply: 'comments.replied_done', hide: 'comments.hidden_done', 'private-reply': 'comments.private_done' }[action];
+            const done = { reply: 'comments.replied_done', hide: 'comments.hidden_done', unhide: 'comments.unhidden_done', 'private-reply': 'comments.private_done' }[action];
             const conversationId = action === 'private-reply' ? data.data.conversation?.id : null;
             toast.push(t(done), 'success', conversationId ? { href: `/inbox?c=${conversationId}`, label: t('ui.open_conversation') } : undefined);
             return true;
