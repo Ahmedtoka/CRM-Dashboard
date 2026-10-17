@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import BarChart from '@/components/crm/BarChart.vue';
 import Leaderboard from '@/components/crm/Leaderboard.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -80,6 +82,7 @@ const breadcrumbs = computed(() => [{ title: t('reports.team_title'), href: '/re
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('reports.team_title')" />
+            <SectionTabs :tabs="sectionTabs.team(t)" :label="t('section_tabs.team.label')" />
 
             <div class="rounded-lg bg-card p-3 shadow-card">
                 <ReportFilters :range="range" :platform="platform" @change="visit" />

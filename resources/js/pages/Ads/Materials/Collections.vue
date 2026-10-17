@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 /** Ads Hub — مجموعات المواد: collections with their material counts; content and supervisors manage them (spec §8.7). */
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -102,7 +104,7 @@ const columns = computed<Column[]>(() => [
     { key: 'actions', label: t('ads.materials.col.actions'), align: 'end' },
 ]);
 const breadcrumbs = computed(() => [
-    { title: t('nav.ads'), href: '/ads' },
+    { title: t('nav.ads'), href: '/ads/materials' },
     { title: t('nav.ads_collections'), href: '/ads/collections' },
 ]);
 </script>
@@ -122,6 +124,7 @@ const breadcrumbs = computed(() => [
                     <Plus aria-hidden="true" />{{ t('ads.materials.collections.add') }}
                 </button>
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.library(t)" :label="t('section_tabs.library.label')" />
 
             <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 <li v-for="tile in tiles" :key="tile.key" class="rounded-lg border-t-4 bg-card px-3 py-3 shadow-card" :class="tile.border">

@@ -13,7 +13,7 @@ final class HomeRoute
         if ($user?->isAdsRole()) {
             return $user->role === UserRole::Content
                 ? route('ads.materials.index', absolute: false)
-                : route('ads.today', absolute: false);
+                : route('today.ads', absolute: false);
         }
 
         if (app(OnboardingProgress::class)->shouldRedirect($user)) {

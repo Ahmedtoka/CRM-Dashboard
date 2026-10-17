@@ -13,7 +13,7 @@ use Laravel\Sanctum\Sanctum;
 
 it('sends a media buyer away from the inbox to the ads area', function () {
     $buyer = User::factory()->create(['role' => UserRole::MediaBuyer]);
-    $this->actingAs($buyer)->get('/inbox')->assertRedirect('/ads');
+    $this->actingAs($buyer)->get('/inbox')->assertRedirect('/today/ads');
 });
 
 it('sends a content user to the materials library', function () {
@@ -23,7 +23,7 @@ it('sends a content user to the materials library', function () {
 
 it('lets ads roles into their own area', function () {
     $buyer = User::factory()->create(['role' => UserRole::MediaBuyer]);
-    $this->withoutVite()->actingAs($buyer)->get('/ads')->assertOk();
+    $this->withoutVite()->actingAs($buyer)->get('/today/ads')->assertOk();
     $this->actingAs($buyer)->get('/ads/materials')->assertOk();
 });
 

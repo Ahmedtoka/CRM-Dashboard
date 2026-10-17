@@ -14,7 +14,7 @@ defineProps<{ settings: BotSettings; canEditAi: boolean }>();
 
 const { t } = useI18n();
 
-const breadcrumbs = computed(() => [{ title: t('settings.bot.title'), href: '/settings/bot' }]);
+const breadcrumbs = computed(() => [{ title: t('nav.bot'), href: '/bot' }]);
 const linkClass =
     'inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-muted';
 </script>
@@ -25,10 +25,10 @@ const linkClass =
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-4xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.bot.title')" :description="t('settings.bot.page_hint')">
-                <Link href="/settings/bot-intents" :class="linkClass">
+                <Link href="/bot/intents" :class="linkClass">
                     <ListTree class="size-3.5 text-primary" aria-hidden="true" />{{ t('settings.bot.intents_link') }}
                 </Link>
-                <Link href="/settings/bot-flows" :class="linkClass">
+                <Link href="/bot/flows" :class="linkClass">
                     <Workflow class="size-3.5 text-primary" aria-hidden="true" />{{ t('settings.bot.flows_link') }}
                 </Link>
             </PageHeader>

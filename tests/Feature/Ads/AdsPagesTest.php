@@ -50,7 +50,7 @@ it('renders every report page for an admin with the documented props', function 
     $buyer = MediaBuyer::factory()->create();
 
     // S2: /ads is «النهارده» (Today); the old Overview props live on /ads/numbers.
-    $this->actingAs($admin)->get('/ads')->assertOk()->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/today/ads')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->component('Ads/Today', false) // the Vue page lands with the S2 frontend tasks
         ->has('filters.from')->has('filters.to')->has('filters.platform')->has('filters.buyer')
         ->has('today.last7.totals.spend')->has('today.last7.daily')
@@ -85,12 +85,12 @@ it('lets a media buyer see the report pages but not the setup pages', function (
     $w = adsPgBuyerWorld();
     $this->actingAs($w['user']);
 
-    foreach (['/ads', '/ads/numbers', '/ads/explorer', '/ads/explorer?view=cards', '/ads/explorer?view=tree', '/ads/decisions'] as $url) {
+    foreach (['/today/ads', '/ads/numbers', '/ads/explorer', '/ads/explorer?view=cards', '/ads/explorer?view=tree', '/ads/decisions'] as $url) {
         $this->get($url)->assertOk();
     }
     $this->get('/ads/buyers/'.$w['buyer']->id)->assertOk();
-    $this->get('/ads/accounts')->assertForbidden();
-    $this->get('/ads/setup/buyers')->assertForbidden();
+    $this->get('/settings/ads/accounts')->assertForbidden();
+    $this->get('/settings/ads/buyers')->assertForbidden();
     $this->put('/ads/setup/settings', ['tax_rate_percent' => 5])->assertForbidden();
     $this->post('/ads/accounts/'.$w['account']->id.'/assign', ['media_buyer_id' => $w['other']->id, 'starts_on' => '2026-09-30'])->assertForbidden();
 });
@@ -103,12 +103,12 @@ it('refuses a media buyer another buyers page', function () {
 it('gives a buyer no buyer filter and shares the ads access flags', function () {
     $w = adsPgBuyerWorld();
 
-    $this->actingAs($w['user'])->get('/ads')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($w['user'])->get('/today/ads')->assertInertia(fn (Assert $p) => $p
         ->has('buyers', 0)
         ->where('ads.isBuyer', true)->where('ads.canManage', false)->where('ads.canSeeSpend', true)
         ->where('ads.buyerId', $w['buyer']->id));
 
-    $this->actingAs(adsPgUser(UserRole::Admin))->get('/ads')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs(adsPgUser(UserRole::Admin))->get('/today/ads')->assertInertia(fn (Assert $p) => $p
         ->where('ads.canManage', true)->where('ads.isBuyer', false)->where('ads.buyerId', null));
 });
 
@@ -128,10 +128,10 @@ it('hides a buyers out-of-scope creative detail and serves in-scope ones as json
 });
 
 it('sends content users to the materials library and refuses moderators', function () {
-    $this->actingAs(adsPgUser(UserRole::Content))->get('/ads')->assertRedirect('/ads/materials');
-    $this->actingAs(adsPgUser(UserRole::Content))->get('/ads/accounts')->assertRedirect('/ads/materials');
-    $this->actingAs(adsPgUser(UserRole::Moderator))->get('/ads')->assertForbidden();
-    $this->actingAs(adsPgUser(UserRole::Supervisor))->get('/ads/accounts')->assertOk();
+    $this->actingAs(adsPgUser(UserRole::Content))->get('/today/ads')->assertRedirect('/ads/materials');
+    $this->actingAs(adsPgUser(UserRole::Content))->get('/settings/ads/accounts')->assertRedirect('/ads/materials');
+    $this->actingAs(adsPgUser(UserRole::Moderator))->get('/today/ads')->assertForbidden();
+    $this->actingAs(adsPgUser(UserRole::Supervisor))->get('/settings/ads/accounts')->assertOk();
 });
 
 it('assigns an account to a buyer and keeps the history', function () {
@@ -146,7 +146,7 @@ it('assigns an account to a buyer and keeps the history', function () {
     expect(AdAccountAssignment::where('ad_account_id', $account->id)->count())->toBe(2)
         ->and(AdAccountAssignment::where('media_buyer_id', $a->id)->first()->ends_on->toDateString())->toBe('2026-09-15');
 
-    $this->actingAs($admin)->get('/ads/accounts')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/settings/ads/accounts')->assertInertia(fn (Assert $p) => $p
         ->where('connections.0.accounts.0.buyer.name', 'B')
         ->has('connections.0.accounts.0.history', 2));
 
@@ -173,7 +173,7 @@ it('corrects the start date for the same owner and lists only active buyers plus
     app(AssignmentService::class)->assign($other, $archivedHolder, CarbonImmutable::parse('2026-09-01'));
     $archivedHolder->update(['is_active' => false]);
 
-    $this->actingAs($admin)->get('/ads/accounts')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/settings/ads/accounts')->assertInertia(fn (Assert $p) => $p
         ->where('buyers', [
             ['id' => $a->id, 'name' => 'A', 'is_active' => true],
             ['id' => $archivedHolder->id, 'name' => 'Archived holder', 'is_active' => false],
@@ -196,7 +196,7 @@ it('stores connection credentials encrypted, syncs the accounts and queues a 90 
     Queue::assertPushed(SyncAdAccount::class, 3);
     Queue::assertPushed(SyncAdAccount::class, fn (SyncAdAccount $j) => $j->days === 90 && $j->kind === 'backfill');
 
-    $page = $this->actingAs($admin)->get('/ads/accounts');
+    $page = $this->actingAs($admin)->get('/settings/ads/accounts');
     $page->assertInertia(fn (Assert $p) => $p
         ->component('Ads/Accounts')
         ->where('connections.0.has_token', true)->where('connections.0.driver', 'fake')
@@ -367,7 +367,7 @@ it('manages buyers, targets and settings', function () {
     $this->actingAs($admin)->put('/ads/setup/settings', ['tax_rate_percent' => 101])->assertSessionHasErrors('tax_rate_percent');
     $this->actingAs($admin)->put('/ads/setup/settings', ['tax_rate_percent' => 10, 'winner_thresholds' => ['winner' => -1]])->assertSessionHasErrors('winner_thresholds.winner');
 
-    $this->actingAs($admin)->get('/ads/setup/buyers')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/settings/ads/buyers')->assertInertia(fn (Assert $p) => $p
         ->component('Ads/BuyersSetup')
         ->where('buyers.0.user.id', $u->id)->where('buyers.0.targets.0.month', '2026-09')->where('buyers.0.targets.0.budget', 60000)
         ->where('buyers.0.targets.0.target_roas', null)
@@ -375,7 +375,7 @@ it('manages buyers, targets and settings', function () {
         ->missing('settings'));
 
     // S2: the settings moved to the «القواعد» setup tab.
-    $this->actingAs($admin)->get('/ads/setup/rules')->assertInertia(fn (Assert $p) => $p
+    $this->actingAs($admin)->get('/settings/ads/rules')->assertInertia(fn (Assert $p) => $p
         ->component('Ads/SetupRules', false)
         ->where('settings.tax_rate', 0.125)->where('settings.tax_rate_percent', 12.5)
         ->where('settings.winner_thresholds.winner', 3)->where('settings.winner_thresholds.min_days', 4)->where('settings.winner_thresholds.promising', 1.3));

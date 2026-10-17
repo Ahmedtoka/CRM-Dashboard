@@ -9,7 +9,7 @@ const { router, apiPost, apiGet } = vi.hoisted(() => ({
 
 vi.mock('@inertiajs/vue3', () => ({
     router,
-    usePage: () => ({ props: { errors: {} }, url: '/ads/accounts' }),
+    usePage: () => ({ props: { errors: {} }, url: '/settings/ads/accounts' }),
     useForm: (data: Record<string, unknown>) => {
         const form: Record<string, unknown> = {
             ...data,
@@ -83,7 +83,7 @@ const props = (extra: Record<string, unknown> = {}) => ({
     ...extra,
 });
 
-const stubs = { AppLayout: { template: '<div><slot /></div>' }, PageHeader: { template: '<div><slot /></div>' }, AdsSetupTabs: true };
+const stubs = { AppLayout: { template: '<div><slot /></div>' }, PageHeader: { template: '<div><slot /></div>' }, SectionTabs: true };
 
 function render(extra: Record<string, unknown> = {}) {
     return mount(Accounts, { props: props(extra) as never, global: { stubs }, attachTo: document.body });
@@ -111,7 +111,7 @@ describe('Ads setup › accounts (F6)', { timeout: 20_000 }, () => {
         const w = render();
         expect(router.get).not.toHaveBeenCalled();
         await w.get('[data-test="show"]').trigger('click');
-        expect(router.get).toHaveBeenCalledWith('/ads/accounts', { from: '2026-10-01', to: '2026-10-06' }, expect.objectContaining({ preserveState: true }));
+        expect(router.get).toHaveBeenCalledWith('/settings/ads/accounts', { from: '2026-10-01', to: '2026-10-06' }, expect.objectContaining({ preserveState: true }));
     });
 
     it('renders row actions as labelled icon buttons', () => {
@@ -215,7 +215,7 @@ describe('Ads setup › accounts (F6)', { timeout: 20_000 }, () => {
         await poll();
         await flushPromises();
         expect(w.get('[data-test="sync-stalled"]').text()).toContain('لسه في الطابور');
-        expect(w.get('[data-test="sync-stalled"] a').attributes('href')).toBe('/ads/sync');
+        expect(w.get('[data-test="sync-stalled"] a').attributes('href')).toBe('/settings/ads/sync');
         expect(w.get('[data-test="sync-open"]').attributes('disabled')).toBeUndefined();
         const calls = apiGet.mock.calls.length;
         await poll();

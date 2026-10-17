@@ -101,7 +101,7 @@ it('shares crm props with inertia pages', function () {
     $sup = User::factory()->create(['role'=>UserRole::Supervisor, 'locale'=>'en']);
     $admin = User::factory()->create(['role'=>UserRole::Admin]);
 
-    $this->actingAs($sup)->get('/reports/bot')->assertOk()
+    $this->actingAs($sup)->get('/bot/performance')->assertOk()
         ->assertInertia(fn ($page) => $page->component('Reports/Bot')
             ->where('auth.user.id', $sup->id)->where('auth.user.platforms', [])
             ->where('locale', 'en')
@@ -109,6 +109,6 @@ it('shares crm props with inertia pages', function () {
             ->where('channelAlerts', [])
             ->has('metrics.handovers'));
 
-    $this->actingAs($admin)->get('/reports/bot')->assertOk()
+    $this->actingAs($admin)->get('/bot/performance')->assertOk()
         ->assertInertia(fn ($page) => $page->where('channelAlerts.0.last_error', 'Token expired'));
 });

@@ -134,6 +134,6 @@ it('gives the settings link only to people who may open the rules page', functio
 
     expect($forBuyer['items'][0]['primary'])->toMatchArray(['verb' => 'open_settings', 'href' => null])
         ->and($forBuyer['meta']['can_open_settings'])->toBeFalse()
-        ->and($forSupervisor['items'][0]['primary'])->toMatchArray(['verb' => 'open_settings', 'href' => '/ads/setup/rules'])
+        ->and($forSupervisor['items'][0]['primary'])->toMatchArray(['verb' => 'open_settings', 'href' => '/settings/ads/rules'])
         ->and($forSupervisor['meta']['can_open_settings'])->toBeTrue();
 });

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 /** «الإعداد › القواعد»: tax rate and winner/loser thresholds (moved from BuyersSetup), then the S5 break-even inputs and the notifications switch. */
-import AdsSetupTabs from '@/components/ads/AdsSetupTabs.vue';
 import BreakEvenRules from '@/components/ads/BreakEvenRules.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import { Button } from '@/components/ui/button';
@@ -25,10 +24,10 @@ const err = (key: string) => (form.errors as Record<string, string | undefined>)
 const step = (key: keyof AdsWinnerThresholds) => (key === 'min_days' || key.endsWith('spend') ? '1' : '0.01');
 const input = 'flex h-11 w-full rounded-md border border-input bg-card px-3 text-sm md:h-9';
 const save = () => form.put('/ads/setup/settings', { preserveScroll: true, onSuccess: () => toast.push(t('ads.setup.saved')) });
-const crumbs = computed(() => [{ label: t('nav.ads_setup'), href: '/ads/setup' }, { label: t('ads.control.setup.rules') }]);
+const crumbs = computed(() => [{ label: t('settings_hub.title'), href: '/settings' }, { label: t('ads.control.setup.rules') }]);
 const appCrumbs = computed(() => [
-    { title: t('nav.ads_setup'), href: '/ads/setup' },
-    { title: t('ads.control.setup.rules'), href: '/ads/setup/rules' },
+    { title: t('settings_hub.title'), href: '/settings' },
+    { title: t('ads.control.setup.rules'), href: '/settings/ads/rules' },
 ]);
 </script>
 
@@ -37,7 +36,6 @@ const appCrumbs = computed(() => [
     <AppLayout :breadcrumbs="appCrumbs">
         <div class="mx-auto w-full min-w-0 max-w-5xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('ads.control.setup.rules_title')" :description="t('ads.control.setup.rules_description')" :breadcrumbs="crumbs" />
-            <AdsSetupTabs />
             <form class="space-y-5 rounded-lg bg-card p-4 shadow-card" :aria-label="t('ads.control.setup.rules_title')" @submit.prevent="save">
                 <div class="max-w-xs space-y-1">
                     <label class="text-xs font-medium" for="tax-rate">{{ t('ads.setup.tax_rate') }} (%)</label>

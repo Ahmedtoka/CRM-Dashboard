@@ -20,7 +20,7 @@ const rules = {
     default_floor: 2.5,
     accounts: [],
 };
-const stubs = { AppLayout: { template: '<div><slot /></div>' }, PageHeader: true, AdsSetupTabs: true };
+const stubs = { AppLayout: { template: '<div><slot /></div>' }, PageHeader: true, SectionTabs: true };
 
 describe('SetupRules', () => {
     it('renders the break-even rules from the rules prop', () => {

@@ -9,7 +9,7 @@ it('shows the webhook url on APP_URL, not the host the page was opened on', func
     $admin = User::factory()->create(['role' => UserRole::Admin]);
     ChannelAccount::factory()->create(['platform' => 'facebook', 'driver' => 'fake']);
 
-    $this->actingAs($admin)->get('http://127.0.0.1:8000/settings/channels')->assertOk()
+    $this->actingAs($admin)->get('http://127.0.0.1:8000/settings/integrations?tab=webhooks')->assertOk()
         ->assertInertia(fn ($page) => $page
             ->where('accounts.0.webhook_url', 'https://crm.example.com/webhooks/facebook')
             ->where('accounts.0.driver', 'fake'));

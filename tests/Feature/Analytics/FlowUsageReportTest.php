@@ -91,6 +91,6 @@ it('filters the flows table by platform', function () {
 it('shares the flows table on the bot report page', function () {
     $sup = User::factory()->create(['role' => UserRole::Supervisor]);
 
-    $this->actingAs($sup)->get('/reports/bot?from=2026-09-10&to=2026-09-10')->assertOk()
+    $this->actingAs($sup)->get('/bot/performance?from=2026-09-10&to=2026-09-10')->assertOk()
         ->assertInertia(fn ($page) => $page->component('Reports/Bot')->has('metrics.flows'));
 });

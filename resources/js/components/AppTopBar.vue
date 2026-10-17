@@ -20,7 +20,7 @@ const { getInitials } = useInitials();
 </script>
 
 <template>
-    <header class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b bg-card px-3 shadow-card md:px-4">
+    <header class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-card px-3 md:px-4">
         <SidebarTrigger class="-ms-1" />
         <Breadcrumb v-if="breadcrumbs.length" class="hidden min-w-0 sm:block">
             <BreadcrumbList class="flex-nowrap">
@@ -37,7 +37,7 @@ const { getInitials } = useInitials();
         <div class="flex shrink-0 items-center gap-1"><slot name="actions" /></div>
         <!-- One-click interface language (ع / EN); the choice is saved per user. -->
         <div
-            class="flex shrink-0 items-center rounded-full border border-border bg-background p-0.5 text-xs font-semibold"
+            class="flex shrink-0 items-center rounded-md bg-sunken p-0.5 text-xs font-semibold"
             role="group"
             :aria-label="t('nav.language_switcher')"
         >
@@ -45,8 +45,8 @@ const { getInitials } = useInitials();
                 v-for="option in languageOptions"
                 :key="option.value"
                 type="button"
-                class="rounded-full px-2.5 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                :class="locale === option.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
+                class="rounded-[6px] px-2.5 py-1 transition-colors"
+                :class="locale === option.value ? 'bg-card text-foreground shadow-e1' : 'text-fg-2 hover:text-foreground'"
                 :aria-pressed="locale === option.value"
                 :lang="option.value"
                 @click="setLocale(option.value)"
@@ -62,7 +62,7 @@ const { getInitials } = useInitials();
             >
                 {{ getInitials(page.props.auth.user.name) }}
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" class="w-64">
+            <DropdownMenuContent align="end" class="w-72">
                 <UserMenuContent :user="page.props.auth.user" />
             </DropdownMenuContent>
         </DropdownMenu>

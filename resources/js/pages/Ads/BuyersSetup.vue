@@ -1,6 +1,5 @@
 <script setup lang="ts">
 /** Ads Hub — إعداد الميديا باير: buyers, monthly targets, tax rate and winner thresholds (spec §8.6). */
-import AdsSetupTabs from '@/components/ads/AdsSetupTabs.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import IconAction from '@/components/crm/IconAction.vue';
@@ -196,10 +195,10 @@ function saveTarget(month: string): void {
     });
 }
 
-const crumbs = computed(() => [{ label: t('nav.ads_setup'), href: '/ads/setup' }, { label: t('ads.control.setup.buyers') }]);
+const crumbs = computed(() => [{ label: t('settings_hub.title'), href: '/settings' }, { label: t('ads.control.setup.buyers') }]);
 const appCrumbs = computed(() => [
-    { title: t('nav.ads_setup'), href: '/ads/setup' },
-    { title: t('ads.control.setup.buyers'), href: '/ads/setup/buyers' },
+    { title: t('settings_hub.title'), href: '/settings' },
+    { title: t('ads.control.setup.buyers'), href: '/settings/ads/buyers' },
 ]);
 </script>
 
@@ -209,7 +208,6 @@ const appCrumbs = computed(() => [
     <AppLayout :breadcrumbs="appCrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-8 p-4 md:p-6">
             <PageHeader :title="t('ads.setup.title')" :description="t('ads.setup.description')" :breadcrumbs="crumbs" />
-            <AdsSetupTabs />
 
             <!-- Buyers -->
             <section class="space-y-3" :aria-label="t('ads.setup.buyers_title')">

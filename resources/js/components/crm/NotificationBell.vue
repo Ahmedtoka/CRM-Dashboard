@@ -169,7 +169,7 @@ function open(n: AppNotification): void {
         return;
     }
     if (n.type === 'ads.data_health') {
-        router.visit('/ads/sync');
+        router.visit('/settings/ads/sync');
         return;
     }
     if (n.type === 'ads.stop_failed' || n.type === 'ads.stop_unknown') {
@@ -177,7 +177,7 @@ function open(n: AppNotification): void {
         return;
     }
     if (n.type === 'ads.token_invalid' || n.type === 'ads.token_scope_missing' || n.type === 'ads.token_expiring') {
-        router.visit('/ads/accounts');
+        router.visit('/settings/ads/accounts');
         return;
     }
     if (n.type === 'shopify.app') {
@@ -185,7 +185,7 @@ function open(n: AppNotification): void {
         return;
     }
     if (n.type === 'webhook.rejected') {
-        router.visit(n.data.provider === 'shopify' ? '/settings/shopify' : '/settings/channels');
+        router.visit(n.data.provider === 'shopify' ? '/settings/shopify' : '/settings/integrations?tab=webhooks');
         return;
     }
     if (n.type === 'channel.problem') {

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import { Button } from '@/components/ui/button';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import DateInput from '@/components/crm/DateInput.vue';
@@ -139,6 +141,7 @@ const breadcrumbs = computed(() => [
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto grid w-full max-w-7xl gap-4 p-3 md:p-6">
             <PageHeader :title="t('settings.shopify.reconcile.title')" :description="t('settings.shopify.reconcile.description')" :freshness="result?.checked_at ?? null" />
+            <SectionTabs :tabs="sectionTabs.shopify(t)" :label="t('section_tabs.shopify.label')" />
 
             <p v-if="!connected" class="rounded-lg bg-warning/10 p-3 text-xs">
                 {{ t('settings.shopify.reconcile.not_connected') }}

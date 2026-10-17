@@ -62,7 +62,7 @@ describe('DataTable', () => {
         expect(w.find('[data-density-option]').exists()).toBe(false);
         expect(w.find('table').attributes('data-density')).toBeUndefined();
         expect(w.find('[data-table-box]').attributes('data-table-id')).toBe('orders');
-        expect(w.find('td').classes()).toEqual(expect.arrayContaining(['px-3', 'py-2']));
+        expect(w.find('td').classes()).toEqual(expect.arrayContaining(['px-3', 'py-2.5']));
     });
 
     it('selects rows and all rows', async () => {

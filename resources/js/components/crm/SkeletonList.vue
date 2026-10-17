@@ -3,11 +3,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useI18n } from '@/composables/useI18n';
 import { computed } from 'vue';
 
-/** Content-shaped placeholders for partial reloads and deferred props; never a blank area or a lone spinner. */
-const props = withDefaults(defineProps<{ variant: 'table' | 'cards' | 'tiles'; count?: number }>(), { count: undefined });
+/** Content-shaped placeholders for partial reloads and deferred props; never a blank area or a lone spinner. `conversation` is the inbox row (72px). */
+const props = withDefaults(defineProps<{ variant: 'table' | 'cards' | 'tiles' | 'conversation'; count?: number }>(), { count: undefined });
 
 const { t } = useI18n();
-const DEFAULTS = { table: 8, cards: 3, tiles: 4 } as const;
+const DEFAULTS = { table: 8, cards: 3, tiles: 4, conversation: 8 } as const;
 const n = computed(() => props.count ?? DEFAULTS[props.variant]);
 </script>
 
@@ -28,6 +28,16 @@ const n = computed(() => props.count ?? DEFAULTS[props.variant]);
                 <Skeleton class="h-4 w-1/2" />
                 <Skeleton class="h-3 w-full" />
                 <Skeleton class="h-3 w-2/3" />
+            </div>
+        </div>
+        <div v-else-if="variant === 'conversation'">
+            <div v-for="i in n" :key="i" data-skeleton-item class="flex h-[72px] items-center gap-2.5 border-b border-line px-3">
+                <Skeleton class="size-8 shrink-0 rounded-full" />
+                <div class="min-w-0 flex-1 space-y-2">
+                    <Skeleton class="h-3 w-2/5" />
+                    <Skeleton class="h-2.5 w-4/5" />
+                </div>
+                <Skeleton class="h-2.5 w-8" />
             </div>
         </div>
         <div v-else class="grid grid-cols-2 gap-3 lg:grid-cols-4">

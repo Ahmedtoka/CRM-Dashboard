@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
@@ -80,6 +82,7 @@ const breadcrumbs = computed(() => [{ title: t('reports.quick_replies.title'), h
                     {{ t('reports.quick_replies.export') }}
                 </a>
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.team(t)" :label="t('section_tabs.team.label')" />
 
             <div class="rounded-lg bg-card p-3 shadow-card">
                 <ReportFilters :range="range" :platform="platform" @change="visit" />

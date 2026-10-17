@@ -48,9 +48,9 @@ class OnboardingProgress
             $this->step('instagram', $instagram !== null, '/settings/integrations#instagram', detail: $instagram?->name, blockedBy: $facebook === null ? 'facebook' : null),
             $this->step('whatsapp', $whatsapp !== null, '/settings/integrations#whatsapp', detail: $whatsapp?->name),
             $this->step('shopify', $shopify !== null && $shopify->status === 'connected', '/settings/shopify', detail: $shopify?->shop_domain),
-            $this->step('store_info', filled($settings->store_url) && $templatesLeft === 0, '/settings/bot-replies', detail: $templatesLeft > 0 ? (string) $templatesLeft : null),
-            $this->step('bot', (bool) $settings->enabled, '/settings/bot'),
-            $this->step('test_link', BotTestLink::query()->where('is_active', true)->exists(), '/settings/bot-test-links'),
+            $this->step('store_info', filled($settings->store_url) && $templatesLeft === 0, '/bot/replies', detail: $templatesLeft > 0 ? (string) $templatesLeft : null),
+            $this->step('bot', (bool) $settings->enabled, '/bot'),
+            $this->step('test_link', BotTestLink::query()->where('is_active', true)->exists(), '/bot/test-links'),
         ];
 
         $done = count(array_filter($steps, fn (array $s) => $s['done']));

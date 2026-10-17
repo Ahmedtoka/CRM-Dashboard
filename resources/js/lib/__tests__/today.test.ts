@@ -1,5 +1,5 @@
 import { translate } from '@/i18n';
-import { adsRows, chatsRows, formatAge, formatRatio, formatShare, logoHref, oldestStamp, ordersRows, todayNavItem, urgentText, whyRows } from '@/lib/today';
+import { adsRows, chatsRows, formatAge, formatRatio, formatShare, logoHref, oldestStamp, ordersRows, urgentText, whyRows } from '@/lib/today';
 import type { AdsCard, ChatsCard, OrdersCard, WhyCard } from '@/types/today';
 import { describe, expect, it } from 'vitest';
 
@@ -106,12 +106,6 @@ describe('lib/today', () => {
         expect(whyRows(why, t, 'en')[0]).toMatchObject({ label: 'Price', value: '34%', href: '/n#why' });
     });
 
-    it('gives the nav item to admins and supervisors only', () => {
-        expect(todayNavItem('admin', 'Today')?.href).toBe('/today');
-        expect(todayNavItem('supervisor', 'Today')).not.toBeNull();
-        expect(todayNavItem('moderator', 'Today')).toBeNull();
-        expect(todayNavItem('media_buyer', 'Today')).toBeNull();
-    });
 
     it('shows the oldest of the cache stamps', () => {
         expect(oldestStamp(['2026-10-06T09:01:00+00:00', '2026-10-06T09:00:30+00:00'])).toBe('2026-10-06T09:00:30+00:00');

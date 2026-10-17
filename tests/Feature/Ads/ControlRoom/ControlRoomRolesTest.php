@@ -10,7 +10,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(fn () => crSetup($this));
 
-dataset('control_room_pages', ['/ads', '/ads/decisions', '/ads/decisions?tab=log', '/ads/explorer', '/ads/explorer?view=cards', '/ads/explorer?view=tree', '/ads/numbers']);
+dataset('control_room_pages', ['/today/ads', '/ads/decisions', '/ads/decisions?tab=log', '/ads/explorer', '/ads/explorer?view=cards', '/ads/explorer?view=tree', '/ads/numbers']);
 
 it('opens every control-room page for admin, supervisor and media buyer', function (string $url) {
     foreach ([crAdmin(), crUser(UserRole::Supervisor), crBuyer()['user']] as $user) {

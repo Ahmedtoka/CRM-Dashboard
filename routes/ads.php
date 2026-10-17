@@ -26,12 +26,15 @@ use App\Http\Controllers\Web\Ads\SlotController;
 use App\Http\Controllers\Web\Ads\SyncController;
 use App\Http\Controllers\Web\Ads\TodayController;
 use App\Http\Controllers\Web\Ads\WriteActionController;
+use App\Http\Controllers\Web\MovedPageController;
 use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
 
 // Ads Hub. Required from routes/crm.php inside the authenticated group (see EnsureAdsAccess for the `ads:*` areas).
 Route::middleware('ads:report')->group(function () {
-    Route::get('/ads', TodayController::class)->name('ads.today');
+    // A3 (redesign 2026-10-17): «نهارده الإعلانات» is now the «الإعلانات» tab of «النهارده»; /ads answers 301 there.
+    Route::get('/today/ads', TodayController::class)->name('today.ads');
+    Route::get('/ads', MovedPageController::class)->defaults('to', '/today/ads')->name('ads.today');
     Route::get('/ads/decisions', DecisionsController::class)->name('ads.decisions');
     // Decisions feed card actions (S5).
     Route::post('/ads/alerts/seen', [AlertController::class, 'seen'])->middleware('throttle:60,1')->name('ads.alerts.seen');
@@ -76,8 +79,13 @@ Route::middleware('ads:report')->group(function () {
 });
 
 Route::middleware('ads:manage')->group(function () {
-    Route::get('/ads/sync', [SyncController::class, 'index'])->name('ads.sync');
-    Route::get('/ads/accounts', [AccountController::class, 'index'])->name('ads.accounts.index');
+    // D13 (redesign 2026-10-17): the ads setup pages live in Settings › الإعلانات; the old GET URLs answer 301.
+    Route::get('/settings/ads/accounts', [AccountController::class, 'index'])->name('settings.ads.accounts');
+    Route::get('/settings/ads/sync', [SyncController::class, 'index'])->name('settings.ads.sync');
+    Route::get('/settings/ads/buyers', [BuyerSetupController::class, 'index'])->name('settings.ads.buyers');
+    Route::get('/settings/ads/rules', [BuyerSetupController::class, 'rules'])->name('settings.ads.rules');
+    Route::get('/ads/sync', MovedPageController::class)->defaults('to', '/settings/ads/sync')->name('ads.sync');
+    Route::get('/ads/accounts', MovedPageController::class)->defaults('to', '/settings/ads/accounts')->name('ads.accounts.index');
     Route::post('/ads/connections', [AccountController::class, 'store'])->name('ads.connections.store');
     Route::put('/ads/connections/{connection}', [AccountController::class, 'update'])->name('ads.connections.update');
     Route::post('/ads/connections/{connection}/test', [AccountController::class, 'test'])->name('ads.connections.test');
@@ -88,10 +96,9 @@ Route::middleware('ads:manage')->group(function () {
     Route::post('/ads/accounts/{account}/assign', [AccountController::class, 'assign'])->name('ads.accounts.assign');
     Route::patch('/ads/accounts/{account}', [AccountController::class, 'updateAccount'])->name('ads.accounts.update');
 
-    // «الإعداد» tabs: الحسابات (/ads/accounts), المزامنة (/ads/sync), الميديا باير, القواعد.
-    Route::redirect('/ads/setup', '/ads/accounts')->name('ads.setup');
-    Route::get('/ads/setup/rules', [BuyerSetupController::class, 'rules'])->name('ads.setup.rules');
-    Route::get('/ads/setup/buyers', [BuyerSetupController::class, 'index'])->name('ads.setup.buyers');
+    Route::get('/ads/setup', MovedPageController::class)->defaults('to', '/settings/ads/accounts')->name('ads.setup');
+    Route::get('/ads/setup/rules', MovedPageController::class)->defaults('to', '/settings/ads/rules')->name('ads.setup.rules');
+    Route::get('/ads/setup/buyers', MovedPageController::class)->defaults('to', '/settings/ads/buyers')->name('ads.setup.buyers');
     Route::post('/ads/setup/buyers', [BuyerSetupController::class, 'store'])->name('ads.setup.buyers.store');
     Route::put('/ads/setup/buyers/{buyer}', [BuyerSetupController::class, 'update'])->name('ads.setup.buyers.update');
     Route::delete('/ads/setup/buyers/{buyer}', [BuyerSetupController::class, 'destroy'])->name('ads.setup.buyers.destroy');

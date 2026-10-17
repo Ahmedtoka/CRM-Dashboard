@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import ChannelCard from '@/components/crm/ChannelCard.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import IconAction from '@/components/crm/IconAction.vue';
@@ -164,7 +166,7 @@ const columns = computed<Column[]>(() => [
     { key: 'actions', label: t('ui.actions'), align: 'end' },
 ]);
 
-const breadcrumbs = computed(() => [{ title: t('settings.channels.title'), href: '/settings/channels' }]);
+const breadcrumbs = computed(() => [{ title: t('settings_hub.title'), href: '/settings' }, { title: t('settings.channels.title'), href: '/settings/integrations?tab=webhooks' }]);
 </script>
 
 <template>
@@ -173,6 +175,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.channels.title'), href:
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.channels.title')" :description="t('settings.channels.description')" />
+            <SectionTabs :tabs="sectionTabs.channels(t)" :label="t('section_tabs.channels.label')" />
 
             <div v-if="facebookFlash" role="status" class="flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm" :class="flashClasses[facebookFlash.tone]">
                 <component :is="flashIcons[facebookFlash.tone]" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />

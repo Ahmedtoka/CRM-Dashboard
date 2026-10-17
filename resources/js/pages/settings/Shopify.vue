@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import { Button } from '@/components/ui/button';
 import AppConnectionCard from '@/components/crm/shopify/AppConnectionCard.vue';
 import ConnectForm from '@/components/crm/shopify/ConnectForm.vue';
@@ -286,6 +288,7 @@ const syncResources: ShopifySyncResource[] = ['shipping', 'products', 'customers
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto grid w-full max-w-7xl gap-4 p-3 md:p-6">
             <PageHeader :title="t('settings.shopify.title')" :description="t('settings.shopify.description')" :freshness="freshness" />
+            <SectionTabs :tabs="sectionTabs.shopify(t)" :label="t('section_tabs.shopify.label')" />
 
             <StatusCard v-if="integration" :integration="integration" :disconnecting="disconnecting" @disconnect="disconnect" />
 

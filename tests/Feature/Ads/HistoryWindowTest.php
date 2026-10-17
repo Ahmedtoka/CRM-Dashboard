@@ -121,7 +121,7 @@ it('clamps ads:backfill --from and warns', function () {
 it('clamps the report filter from date', function () {
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
-    $this->actingAs($admin)->get('/ads?from=2026-07-01&to=2026-09-10')->assertOk()
+    $this->actingAs($admin)->get('/today/ads?from=2026-07-01&to=2026-09-10')->assertOk()
         ->assertInertia(fn (Assert $p) => $p->where('filters.from', '2026-09-01'));
 });
 

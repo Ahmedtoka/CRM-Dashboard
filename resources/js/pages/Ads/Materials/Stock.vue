@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 /** Ads Hub — مخزون الإعلانات: materials against their product's inventory, with the manual availability override (spec §8.7). */
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -125,7 +127,7 @@ function setAvailability(r: AdStockRow, value: string): void {
 
 const fieldClass = 'h-9 rounded-md border border-input bg-background px-2 text-xs';
 const breadcrumbs = computed(() => [
-    { title: t('nav.ads'), href: '/ads' },
+    { title: t('nav.ads'), href: '/ads/materials' },
     { title: t('nav.ads_stock'), href: '/ads/stock' },
 ]);
 </script>
@@ -140,6 +142,7 @@ const breadcrumbs = computed(() => [
                     <Download aria-hidden="true" />{{ t('ads.materials.stock_page.export') }}
                 </a>
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.library(t)" :label="t('section_tabs.library.label')" />
 
             <form class="flex flex-wrap items-end gap-3 rounded-lg bg-card p-3 shadow-card" @submit.prevent="go()">
                 <div class="space-y-1">

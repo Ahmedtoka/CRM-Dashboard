@@ -9,55 +9,106 @@ html {
 }
 
 @layer base {
-    /* Business-Suite-inspired surfaces: light grey app background, white cards, blue action accent. */
+    /*
+     * Le Voile tokens (redesign 2026-10-17, DESIGN.md §2): a deep aubergine rail, a calm linen work surface and the
+     * Le Voile mauve for the one primary action. Every value is an HSL triplet so `hsl(var(--x) / α)` keeps working;
+     * the shadcn names below point at them, so every existing page takes the new look without edits. Contrast is
+     * measured in DESIGN.md §2.1 (fg/surface 17.7, fg-3/surface 5.2, white on brand 10.3; dark fg 14.7).
+     */
     :root {
         --page-header-h: 3.5rem; /* the app top bar; a sticky PageHeader overrides it */
-        --background: 216 20% 95.1%; /* #F0F2F5 */
-        --foreground: 0 0% 2%; /* #050505 */
-        --card: 0 0% 100%; /* #FFFFFF */
-        --card-foreground: 0 0% 2%; /* #050505 */
-        --popover: 0 0% 100%; /* #FFFFFF */
-        --popover-foreground: 0 0% 2%; /* #050505 */
-        --elevated: 216 20% 95.1%; /* #F0F2F5 */
-        --primary: 214 89.3% 52.2%; /* #1877F2 */
-        --primary-hover: 214 82.5% 49.2%; /* #166FE5 */
-        --primary-foreground: 0 0% 100%;
-        --secondary: 216 20% 95.1%; /* #F0F2F5 */
-        --secondary-foreground: 0 0% 2%; /* #050505 */
-        --muted: 216 20% 95.1%; /* #F0F2F5 */
-        --muted-foreground: 220 2.9% 40.8%; /* #65676B */
-        --accent: 210 100% 95.3%; /* #E7F3FF */
-        --accent-foreground: 0 0% 2%; /* #050505 */
-        --surface-accent: 210 100% 95.3%; /* #E7F3FF */
-        --success: 134 53.6% 41.4%; /* #31A24C */
+
+        /* surfaces (plum-biased neutrals) */
+        --bg: 280 14.3% 95.9%; /* #F5F3F6 */
+        --surface: 0 0% 100%; /* #FFFFFF */
+        --surface-2: 280 27.3% 97.8%; /* #FAF8FB hover, table head */
+        --sunken: 280 17.6% 93.3%; /* #EFEBF1 search, tracks, segmented */
+        --line: 280 15.8% 88.8%; /* #E4DEE7 dividers */
+        --line-strong: 278.6 13.7% 80%; /* #CEC5D3 field borders */
+        /* ink */
+        --fg: 276 18.5% 10.6%; /* #1C1620 */
+        --fg-2: 271.6 11% 33.9%; /* #574D60 secondary text, column heads */
+        --fg-3: 266.1 9.9% 45.7%; /* #736980 placeholder, time */
+        /* brand: Le Voile mauve */
+        --brand: 285.7 43.8% 30%; /* #5E2B6E */
+        --brand-hover: 286.3 47.1% 23.7%; /* #4C2059 */
+        --on-brand: 0 0% 100%;
+        --brand-soft: 285 37.5% 93.7%; /* #F2E9F5 selected row, active filter */
+        --brand-ink: 285.7 43.8% 30%; /* #5E2B6E text on brand-soft */
+        /* rail (the sidebar) */
+        --rail: 284.4 38% 13.9%; /* #2A1631 */
+        --rail-2: 285.5 37.1% 17.5%; /* #351C3D hover */
+        --rail-active: 285 22% 21.5%; /* white 10% over the rail */
+        --rail-fg: 284 26.3% 88.8%; /* #E6DBEA */
+        --rail-fg-2: 281.5 16% 68.2%; /* #B3A1BB icons, sub items */
+        --rail-line: 285 17% 20.8%; /* white 8% over the rail */
+        /* semantic: the colour always comes with a word */
+        --ok: 149.7 61.4% 28.4%; /* #1C7548 */
+        --ok-soft: 144 36.6% 92%; /* #E3F2E9 */
+        --warn: 36.1 100% 28%; /* #8F5600 */
+        --warn-soft: 40 80.5% 92%; /* #FBF0DA */
+        --warn-solid: 38.4 78.7% 49.8%; /* #E39B1B */
+        --danger: 356.8 68% 42.9%; /* #B8232B */
+        --danger-soft: 0 72.4% 94.3%; /* #FBE6E6 */
+        --danger-solid: 357 63.7% 51.4%; /* #D2343C SLA badge */
+        --info-soft: 217.1 67.7% 93.9%; /* #E5EDFA */
+        --note-soft: 46.4 100% 91.4%; /* #FFF5D3 */
+        --note-ink: 46.2 100% 23.9%; /* #7A5E00 */
+        --chart-soft: 284.7 33.3% 74.7%; /* #C9A9D4 forecast part */
+        /* elevation: a panel has a border or a shadow, never both */
+        --e1: 0 1px 2px rgba(42, 22, 49, 0.06);
+        --e2: 0 10px 28px -10px rgba(42, 22, 49, 0.28), 0 2px 8px -2px rgba(42, 22, 49, 0.1);
+        --e3: 0 24px 60px -16px rgba(42, 22, 49, 0.38), 0 4px 14px -4px rgba(42, 22, 49, 0.14);
+        --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+        /* shadcn names → the tokens above */
+        --background: var(--bg);
+        --foreground: var(--fg);
+        --card: var(--surface);
+        --card-foreground: var(--fg);
+        --popover: var(--surface);
+        --popover-foreground: var(--fg);
+        --elevated: var(--sunken);
+        --primary: 285.7 43.8% 30%;
+        --primary-hover: var(--brand-hover);
+        --primary-foreground: var(--on-brand);
+        --secondary: var(--sunken);
+        --secondary-foreground: var(--fg);
+        --muted: var(--sunken);
+        --muted-foreground: var(--fg-2);
+        --accent: var(--brand-soft);
+        --accent-foreground: var(--brand-ink);
+        --surface-accent: var(--brand-soft);
+        --success: 149.7 61.4% 28.4%;
         --success-foreground: 0 0% 100%;
-        --warning: 42 92.8% 56.3%; /* #F7B928 */
-        --warning-foreground: 0 0% 2%;
-        --info: 214 89.3% 52.2%;
+        --warning: var(--warn-solid);
+        --warning-foreground: 276 18.5% 10.6%; /* dark ink on amber in both themes */
+        --info: 216.2 72% 42%; /* #1E5BB8 */
         --info-foreground: 0 0% 100%;
-        --overdue: 24 94% 50%; /* orange #F97316 */
+        --overdue: 17.5 88.3% 40.4%; /* #C2410C */
         --overdue-foreground: 0 0% 100%;
-        --note: 42 92.8% 56.3%; /* tint base; notes use it at 10-14% alpha */
-        --destructive: 350 78.6% 50.6%; /* #E41E3F */
+        --note: 46.2 100% 23.9%; /* notes tint from it at 10-14% */
+        --destructive: 357 63.7% 51.4%;
         --destructive-foreground: 0 0% 100%;
-        --border: 220 6.5% 82%; /* #CED0D4 */
-        --input: 220 6.5% 82%; /* #CED0D4 */
-        --ring: 214 89.3% 52.2%; /* #1877F2 */
-        --chart-1: 214 89.3% 52.2%; /* #1877F2 */
-        --chart-2: 173 58% 39%;
-        --chart-3: 199 89% 48%;
-        --chart-4: 38 92% 50%;
-        --chart-5: 330 81% 60%;
+        --border: var(--line);
+        --input: var(--line-strong);
+        --ring: 283 37% 46.7%; /* #8A4BA3 */
+        --chart-1: 285 38.8% 40.4%; /* #7B3F8F one series */
+        --chart-2: 173 58% 33%;
+        --chart-3: 216 72% 47%;
+        --chart-4: 38 85% 45%;
+        --chart-5: 330 62% 50%;
         --radius: 0.5rem;
-        --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.1);
-        --sidebar-background: 0 0% 100%; /* #FFFFFF */
-        --sidebar-foreground: 220 2.9% 40.8%; /* #65676B */
-        --sidebar-primary: 214 89.3% 52.2%; /* #1877F2 */
-        --sidebar-primary-foreground: 0 0% 100%;
-        --sidebar-accent: 210 100% 95.3%; /* #E7F3FF */
-        --sidebar-accent-foreground: 214 89.3% 52.2%; /* #1877F2 */
-        --sidebar-border: 220 6.5% 82%; /* #CED0D4 */
-        --sidebar-ring: 214 89.3% 52.2%; /* #1877F2 */
+        /* Panels: a 1px line, no shadow (DESIGN §2.5 e0). Drawn as a ring so nothing moves. */
+        --shadow-card: 0 0 0 1px hsl(var(--line));
+        --sidebar-background: 284.4 38% 13.9%;
+        --sidebar-foreground: var(--rail-fg);
+        --sidebar-primary: var(--brand);
+        --sidebar-primary-foreground: var(--on-brand);
+        --sidebar-accent: var(--rail-2);
+        --sidebar-accent-foreground: 0 0% 100%;
+        --sidebar-border: var(--rail-line);
+        --sidebar-ring: var(--ring);
 
         /* Raw chat-skin variables (spec §3.2), used by Task 8 chat skins. */
         --wa-wallpaper: #efeae2;
@@ -65,57 +116,67 @@ html {
         --wa-in: #ffffff;
         --wa-header: #f0f2f5;
         --wa-read-tick: #53bdeb;
-        --suite-in: #e4e6eb;
-        --note-bg: #fff4cc;
-        --note-border: #f7b928;
+        --suite-in: #eeeaf0;
+        --note-bg: #fff5d3;
+        --note-border: #e39b1b;
+        color-scheme: light;
     }
 
+    /* Dark: designed, not inverted (DESIGN §2.1). */
     .dark {
-        --background: 210 4% 9.8%; /* #18191A */
-        --foreground: 223 14.9% 90.8%; /* #E4E6EB */
-        --card: 210 2.7% 14.5%; /* #242526 */
-        --card-foreground: 223 14.9% 90.8%; /* #E4E6EB */
-        --popover: 210 2.7% 14.5%; /* #242526 */
-        --popover-foreground: 223 14.9% 90.8%; /* #E4E6EB */
-        --elevated: 210 1.7% 23.1%; /* #3A3B3C */
-        --primary: 214 100% 58.8%; /* #2D88FF */
-        --primary-hover: 214 100% 58.8%; /* #2D88FF */
-        --primary-foreground: 0 0% 100%;
-        --secondary: 210 1.7% 23.1%; /* #3A3B3C */
-        --secondary-foreground: 223 14.9% 90.8%; /* #E4E6EB */
-        --muted: 210 1.7% 23.1%; /* #3A3B3C */
-        --muted-foreground: 218 5.3% 70.6%; /* #B0B3B8 */
-        --accent: 214 36.1% 23.3%; /* #263951 */
-        --accent-foreground: 223 14.9% 90.8%; /* #E4E6EB */
-        --surface-accent: 214 36.1% 23.3%; /* #263951 */
-        --success: 134 53.6% 41.4%; /* #31A24C */
-        --success-foreground: 0 0% 100%;
-        --warning: 42 92.8% 56.3%; /* #F7B928 */
-        --warning-foreground: 0 0% 2%;
-        --info: 214 100% 64%;
-        --info-foreground: 0 0% 100%;
-        --overdue: 24 95% 58%;
+        --bg: 270 15.8% 7.5%; /* #131016 */
+        --surface: 270 14.8% 10.6%; /* #1B171F */
+        --surface-2: 270 15.2% 12.9%; /* #211C26 */
+        --sunken: 276 16.1% 6.1%; /* #100D12 */
+        --line: 270 13% 18%; /* #2E2834 */
+        --line-strong: 272 12% 24.5%; /* #3F3746 */
+        --fg: 280 24.3% 92.7%; /* #EEE8F1 */
+        --fg-2: 276.7 13% 72.9%; /* #BCB1C3 */
+        --fg-3: 273 9.3% 58%; /* #958A9E */
+        --brand: 283 47.6% 75.3%; /* #CDA2DE */
+        --brand-hover: 283.4 50.5% 81.8%; /* #DBB9E8 */
+        --on-brand: 279.2 44.8% 11.4%; /* #21102A */
+        --brand-soft: 279.2 27.7% 18.4%; /* #33223C */
+        --brand-ink: 282.4 51.9% 84.5%; /* #E0C3EC */
+        --rail: 280 23.1% 5.1%; /* #0E0A10 */
+        --rail-2: 274.3 28% 9.8%; /* #1A1220 */
+        --rail-active: 280 10% 12.5%;
+        --rail-fg: 284 26.3% 88.8%;
+        --rail-fg-2: 281.5 13.8% 63.1%; /* #A694AE */
+        --rail-line: 280 9% 11.5%;
+        --ok: 148.5 47.4% 58.2%; /* #62C792 */
+        --ok-soft: 140.8 37.1% 13.7%;
+        --warn: 37.7 85% 63.3%; /* #F1B652 */
+        --warn-soft: 36.7 51.4% 13.7%;
+        --warn-solid: 37.9 79.8% 55.3%;
+        --danger: 2 100% 76.3%; /* #FF8A86 */
+        --danger-soft: 356.7 43.9% 16.1%;
+        --danger-solid: 358 64% 50%; /* white on it 4.9:1 */
+        --info-soft: 215.7 50.5% 18.2%;
+        --note-soft: 44 45.5% 12.9%;
+        --note-ink: 46.2 76.3% 65.3%; /* #EACB63 */
+        --chart-soft: 282.4 24.8% 32.4%;
+        --e1: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --e2: 0 12px 30px -10px rgba(0, 0, 0, 0.7), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
+        --e3: 0 24px 60px -16px rgba(0, 0, 0, 0.8), 0 4px 14px -4px rgba(0, 0, 0, 0.5);
+
+        --primary: 283 47.6% 75.3%;
+        --success: 148.5 47.4% 58.2%;
+        --success-foreground: 140 40% 8%;
+        --info: 217.2 100% 76.3%; /* #86B4FF */
+        --info-foreground: 216 50% 10%;
+        --overdue: 27 96% 61%; /* #FB923C */
         --overdue-foreground: 0 0% 8%;
-        --note: 42 85% 60%;
-        --destructive: 350 78.6% 50.6%; /* #E41E3F */
+        --note: 46.2 76.3% 65.3%;
+        --destructive: 358 64% 50%;
         --destructive-foreground: 0 0% 100%;
-        --border: 210 3.1% 25.1%; /* #3E4042 */
-        --input: 210 3.1% 25.1%; /* #3E4042 */
-        --ring: 214 100% 58.8%; /* #2D88FF */
-        --chart-1: 214 100% 58.8%; /* #2D88FF */
-        --chart-2: 160 60% 45%;
-        --chart-3: 199 89% 60%;
-        --chart-4: 38 92% 60%;
-        --chart-5: 330 81% 65%;
-        --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
-        --sidebar-background: 210 2.7% 14.5%; /* #242526 */
-        --sidebar-foreground: 218 5.3% 70.6%; /* #B0B3B8 */
-        --sidebar-primary: 214 100% 58.8%; /* #2D88FF */
-        --sidebar-primary-foreground: 0 0% 100%;
-        --sidebar-accent: 214 36.1% 23.3%; /* #263951 */
-        --sidebar-accent-foreground: 214 100% 58.8%; /* #2D88FF */
-        --sidebar-border: 210 3.1% 25.1%; /* #3E4042 */
-        --sidebar-ring: 214 100% 58.8%; /* #2D88FF */
+        --ring: 283.3 51.9% 79.6%; /* #D7B0E6 */
+        --chart-1: 283.4 42.5% 70%; /* #C192D3 */
+        --chart-2: 160 50% 50%;
+        --chart-3: 217 90% 70%;
+        --chart-4: 38 85% 62%;
+        --chart-5: 330 70% 68%;
+        --sidebar-background: 280 23.1% 5.1%;
 
         /* Raw chat-skin variables (spec §3.2), used by Task 8 chat skins. */
         --wa-wallpaper: #0b141a;
@@ -123,9 +184,10 @@ html {
         --wa-in: #202c33;
         --wa-header: #202c33;
         --wa-read-tick: #53bdeb;
-        --suite-in: #3a3b3c;
-        --note-bg: #3d3522;
-        --note-border: #f7b928;
+        --suite-in: #2a2430;
+        --note-bg: #302812;
+        --note-border: #e8a532;
+        color-scheme: dark;
     }
 }
 
@@ -135,12 +197,18 @@ html {
     }
 
     ::selection {
-        background: hsl(var(--primary) / 0.22);
+        background: hsl(var(--brand));
+        color: hsl(var(--on-brand));
     }
 
     input,
     textarea {
-        caret-color: hsl(var(--primary));
+        caret-color: hsl(var(--brand));
+    }
+
+    html {
+        scrollbar-width: thin;
+        scrollbar-color: hsl(var(--line-strong)) transparent;
     }
 
     .tabular {
@@ -148,11 +216,32 @@ html {
     }
 
     body {
-        @apply bg-background text-sm text-foreground;
+        @apply bg-background text-sm text-foreground antialiased;
     }
 
+    h1,
+    h2,
+    h3 {
+        text-wrap: balance;
+    }
+
+    a {
+        text-underline-offset: 3px;
+    }
+
+    /* DESIGN §2.1: a 2px ring with a 2px offset, in the brand's lighter mauve. */
     :focus-visible {
-        @apply outline-none ring-2 ring-ring ring-offset-1 ring-offset-background;
+        @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.001ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.001ms !important;
+        }
     }
 }
 
@@ -174,8 +263,8 @@ html {
         position: sticky;
         top: 0;
         z-index: 2;
-        background: hsl(var(--card));
-        box-shadow: inset 0 -1px 0 hsl(var(--border) / 0.6);
+        background: hsl(var(--surface-2));
+        box-shadow: inset 0 -1px 0 hsl(var(--line));
     }
     .crm-sticky-first {
         position: sticky;

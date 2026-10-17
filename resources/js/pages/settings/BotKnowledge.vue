@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import AskBotBox from '@/components/crm/bot/AskBotBox.vue';
 import KnowledgeEntryCard from '@/components/crm/bot/KnowledgeEntryCard.vue';
 import SizeChartEditor from '@/components/crm/bot/SizeChartEditor.vue';
@@ -26,7 +28,7 @@ const api = useApi();
 const toast = useToast();
 const crud = useCrud('/settings/bot-knowledge/entries', 'entries');
 
-const breadcrumbs = computed(() => [{ title: t('settings.bot_knowledge.title'), href: '/settings/bot-knowledge' }]);
+const breadcrumbs = computed(() => [{ title: t('nav.bot'), href: '/bot' }, { title: t('settings.bot_knowledge.title'), href: '/bot/knowledge' }]);
 
 // New-entry dialog (edits happen inline in each KnowledgeEntryCard instead).
 const open = ref(false);
@@ -93,6 +95,7 @@ async function removeImage(): Promise<void> {
                     <Plus class="size-3.5" aria-hidden="true" />{{ t('settings.bot_knowledge.add_entry') }}
                 </button>
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.botCopy(t)" :label="t('nav.bot_copy')" />
 
             <AskBotBox />
 

@@ -76,7 +76,7 @@ function setOpen(keys: string[]): void {
     syncInertiaUrl(url, 'replace');
 }
 
-const crumbs = computed(() => [{ label: t('nav.ads'), href: '/ads' }, { label: t('ads.control.explorer.title') }]);
+const crumbs = computed(() => [{ label: t('nav.ads'), href: '/today/ads' }, { label: t('ads.control.explorer.title') }]);
 const appCrumbs = computed(() => crumbs.value.map((c) => ({ title: c.label, href: c.href ?? '/ads/explorer' })));
 const isPart = (k: string): k is AdPart => (AD_PARTS as readonly string[]).includes(k);
 const selectClass = 'h-8 rounded-md border border-input bg-background px-2';

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 /**
  * Settings → «الترجمات» (design 2026-09-21 §2). Every Arabic text the bot can say with
  * its English next to it: search, filter to the ones that have no English yet, edit one
@@ -13,6 +15,7 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import IconAction from '@/components/crm/IconAction.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BotTranslationRow, BotTranslationUsage } from '@/types/admin';
@@ -22,7 +25,7 @@ import { computed, ref } from 'vue';
 
 const props = defineProps<{ rows: BotTranslationRow[]; usage: BotTranslationUsage; engine: boolean }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const api = useApi();
 const toast = useToast();
 
@@ -94,7 +97,7 @@ async function retranslate(row: BotTranslationRow): Promise<void> {
     }
 }
 
-const breadcrumbs = computed(() => [{ title: t('settings.bot_translations.title'), href: '/settings/bot-translations' }]);
+const breadcrumbs = computed(() => [{ title: t('nav.bot'), href: '/bot' }, { title: t('settings.bot_translations.title'), href: '/bot/translations' }]);
 const chip = 'inline-flex h-7 items-center rounded-full border px-2.5 text-xs';
 
 /** DataTable keys rows by `id`; a translation row is one Arabic source string. */
@@ -118,6 +121,7 @@ function clearFilters(): void {
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.bot_translations.title')" :description="t('settings.bot_translations.description')" />
+            <SectionTabs :tabs="sectionTabs.botCopy(t)" :label="t('nav.bot_copy')" />
 
             <div class="rounded-lg bg-card p-3 shadow-card">
                 <FilterBar
@@ -136,7 +140,7 @@ function clearFilters(): void {
                             :aria-pressed="onlyMissing"
                             @click="onlyMissing = !onlyMissing"
                         >
-                            {{ t('settings.bot_translations.only_missing') }} ({{ missingCount }})
+                            {{ t('settings.bot_translations.only_missing') }} ({{ formatCount(missingCount, locale) }})
                         </button>
                     </template>
                 </FilterBar>

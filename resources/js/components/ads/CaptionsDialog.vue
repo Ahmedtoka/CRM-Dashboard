@@ -8,6 +8,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import { useToast } from '@/composables/useToast';
 import type { MaterialCaption, MaterialRow, PublishCaption } from '@/types/ads';
 import { Rocket, Sparkles } from 'lucide-vue-next';
@@ -18,7 +19,7 @@ const emit = defineEmits<{ 'update:open': [open: boolean]; create: [captions: Pu
 
 const api = useApi();
 const toast = useToast();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const CTAS = ['SHOP_NOW', 'LEARN_MORE', 'ORDER_NOW', 'SEND_MESSAGE'] as const;
 const MAX_HEADLINE = 40;
@@ -157,7 +158,7 @@ const area = 'min-h-24 w-full rounded-md border border-input bg-background px-2 
                     <div class="grid gap-2 sm:grid-cols-[1fr_10rem]">
                         <div class="space-y-1">
                             <label class="flex justify-between text-2xs text-muted-foreground" :for="`cap-h-${c.id}`">
-                                <span>{{ t('ads.publish.headline') }}</span><span>{{ c.headline.length }}/{{ MAX_HEADLINE }}</span>
+                                <span>{{ t('ads.publish.headline') }}</span><span>{{ formatCount(c.headline.length, locale) }}/{{ formatCount(MAX_HEADLINE, locale) }}</span>
                             </label>
                             <input :id="`cap-h-${c.id}`" v-model="c.headline" type="text" :maxlength="MAX_HEADLINE" dir="auto" :class="field" />
                         </div>
@@ -170,7 +171,7 @@ const area = 'min-h-24 w-full rounded-md border border-input bg-background px-2 
                     </div>
                     <div class="space-y-1">
                         <label class="flex justify-between text-2xs text-muted-foreground" :for="`cap-t-${c.id}`">
-                            <span>{{ t('ads.publish.primary_text') }}</span><span>{{ c.primary_text.length }}/{{ MAX_TEXT }}</span>
+                            <span>{{ t('ads.publish.primary_text') }}</span><span>{{ formatCount(c.primary_text.length, locale) }}/{{ formatCount(MAX_TEXT, locale) }}</span>
                         </label>
                         <textarea :id="`cap-t-${c.id}`" v-model="c.primary_text" :maxlength="MAX_TEXT" dir="auto" :class="area" />
                     </div>

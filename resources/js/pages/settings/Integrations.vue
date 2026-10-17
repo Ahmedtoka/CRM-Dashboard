@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import InlineError from '@/components/crm/InlineError.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -290,7 +292,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.integrations.title'), h
         <div class="mx-auto w-full max-w-4xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.integrations.title')" :description="t('settings.integrations.description')">
                 <Link
-                    href="/settings/channels"
+                    href="/settings/integrations?tab=webhooks"
                     :class="buttonVariants({ variant: 'outline', size: 'sm' })"
                     :title="t('settings.integrations.advanced_hint')"
                 >
@@ -298,6 +300,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.integrations.title'), h
                     {{ t('settings.integrations.advanced') }}
                 </Link>
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.channels(t)" :label="t('section_tabs.channels.label')" />
 
             <p v-if="!appReady" role="alert" class="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/15 px-3 py-2.5 text-sm">
                 <TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />

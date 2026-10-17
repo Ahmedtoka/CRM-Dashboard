@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FilterBar from '@/components/crm/FilterBar.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -200,8 +202,8 @@ function refresh(): void {
 }
 
 const breadcrumbs = computed(() => [
-    { title: t('settings.bot.title'), href: '/settings/bot' },
-    { title: t('settings.bot_intents.title'), href: '/settings/bot-intents' },
+    { title: t('nav.bot'), href: '/bot' },
+    { title: t('settings.bot_intents.title'), href: '/bot/intents' },
 ]);
 
 const selectClass = 'h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50';
@@ -215,10 +217,11 @@ const priorityDot: Record<(typeof PRIORITIES)[number], string> = { high: 'bg-des
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.bot_intents.title')" :description="t('settings.bot_intents.description')">
-                <Link href="/settings/bot-knowledge" :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-8 gap-1.5 text-xs')">
+                <Link href="/bot/knowledge" :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-8 gap-1.5 text-xs')">
                     <FileText class="size-3.5" aria-hidden="true" />{{ t('settings.bot_intents.edit_scripts') }}
                 </Link>
             </PageHeader>
+            <SectionTabs :tabs="sectionTabs.botFlows(t)" :label="t('nav.bot_flows')" />
 
             <div class="rounded-lg bg-card p-3 shadow-card">
                 <FilterBar

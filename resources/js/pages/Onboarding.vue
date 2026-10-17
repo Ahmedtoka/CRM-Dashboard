@@ -3,6 +3,8 @@
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
+import { formatNumber } from '@/i18n';
+import { formatCount } from '@/lib/format';
 import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { cn } from '@/lib/utils';
@@ -31,7 +33,7 @@ interface Progress {
 
 const props = defineProps<{ progress: Progress }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const page = usePage();
 const appName = computed(() => (page.props.name as string) || 'CRM');
 
@@ -73,7 +75,7 @@ const breadcrumbs = computed(() => [{ title: t('onboarding.title'), href: '/onbo
                 <div class="space-y-1.5">
                     <div class="flex items-center justify-between text-xs text-muted-foreground">
                         <span>{{ t('onboarding.progress', { done: progress.done, total: progress.total }) }}</span>
-                        <span class="tabular-nums">{{ progress.percent }}%</span>
+                        <span class="tabular-nums">{{ formatNumber(locale, progress.percent / 100, { style: 'percent' }) }}</span>
                     </div>
                     <div class="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" :aria-valuenow="progress.percent" aria-valuemin="0" aria-valuemax="100">
                         <div class="h-full rounded-full bg-primary transition-all" :style="{ width: `${progress.percent}%` }" />

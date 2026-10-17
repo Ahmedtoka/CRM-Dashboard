@@ -59,5 +59,5 @@ it('gives no real ROAS on a non-EGP account and keeps it out of the Today best f
     $row = collect(rcBuild()['data'])->firstWhere('id', $ad->id);
     expect($row['real_roas'])->toBeNull()->and($row['currency'])->toBe('USD')->and($row['real_revenue'])->toBe(1000.0);
 
-    $this->actingAs(crAdmin())->get('/ads')->assertInertia(fn ($p) => $p->where('today.best', []));
+    $this->actingAs(crAdmin())->get('/today/ads')->assertInertia(fn ($p) => $p->where('today.best', []));
 });

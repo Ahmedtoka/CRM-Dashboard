@@ -68,10 +68,10 @@ it('lets a supervisor create, stop and delete a link, and keeps a moderator out'
     $sup = User::factory()->create(['role' => UserRole::Supervisor]);
     $mod = User::factory()->create(['role' => UserRole::Moderator]);
 
-    $this->actingAs($mod)->get('/settings/bot-test-links')->assertForbidden();
+    $this->actingAs($mod)->get('/bot/test-links')->assertForbidden();
     $this->actingAs($mod)->postJson('/settings/bot-test-links', ['label' => 'تجربة'])->assertForbidden();
 
-    $this->actingAs($sup)->get('/settings/bot-test-links')
+    $this->actingAs($sup)->get('/bot/test-links')
         ->assertOk()
         ->assertInertia(fn ($p) => $p->component('settings/BotTestLinks')->has('links', 0));
 
@@ -97,7 +97,7 @@ it('lets a supervisor create, stop and delete a link, and keeps a moderator out'
     expect($link->fresh()->is_active)->toBeFalse()
         ->and($session->fresh()->ended_reason)->toBe(BotTestSession::ENDED_LINK_STOPPED);
 
-    $this->actingAs($sup)->getJson("/settings/bot-test-links/{$link->id}/sessions")
+    $this->actingAs($sup)->getJson("/bot/test-links/{$link->id}/sessions")
         ->assertOk()
         ->assertJsonPath('data.sessions.0.name', 'سارة');
 
@@ -128,7 +128,7 @@ it('never shows a test account on the channels screen and refuses to manage it t
     $admin = User::factory()->create(['role' => UserRole::Admin]);
     $testAccount = ChannelAccount::firstWhere('driver', TestScope::DRIVER);
 
-    $this->actingAs($admin)->get('/settings/channels')
+    $this->actingAs($admin)->get('/settings/integrations?tab=webhooks')
         ->assertOk()
         ->assertInertia(fn ($p) => $p->component('settings/Channels')
             ->where('accounts', fn ($accounts) => collect($accounts)->pluck('id')->doesntContain($testAccount->id))
@@ -193,7 +193,7 @@ it('builds the team test report, its funnel and its CSV', function () {
 
     $sup = User::factory()->create(['role' => UserRole::Supervisor]);
 
-    $this->actingAs($sup)->get("/reports/team-test?link={$link->id}")
+    $this->actingAs($sup)->get("/bot/test-sessions?link={$link->id}")
         ->assertOk()
         ->assertInertia(fn ($p) => $p->component('Reports/TeamTest')
             ->has('sessions', 2)
@@ -201,12 +201,12 @@ it('builds the team test report, its funnel and its CSV', function () {
             ->where('totals.sessions', 2)
             ->etc());
 
-    $this->actingAs($sup)->getJson("/reports/team-test/sessions/{$first->id}")
+    $this->actingAs($sup)->getJson("/bot/test-sessions/{$first->id}")
         ->assertOk()
         ->assertJsonPath('data.label', 'سارة')
         ->assertJsonPath('data.transcript.0.body', 'شكوى');
 
-    $csv = $this->actingAs($sup)->get("/reports/team-test/export?link={$link->id}");
+    $csv = $this->actingAs($sup)->get("/bot/test-sessions/export?link={$link->id}");
     $csv->assertOk()->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
 
     $body = $csv->streamedContent();
@@ -217,7 +217,7 @@ it('builds the team test report, its funnel and its CSV', function () {
         ->and($body)->toContain('سارة')
         ->and($body)->toContain('iPhone');
 
-    $this->actingAs(User::factory()->create(['role' => UserRole::Moderator]))->get('/reports/team-test')->assertForbidden();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Moderator]))->get('/bot/test-sessions')->assertForbidden();
 });
 
 it('lets the bot learn from a test run and tags the note as test', function () {
@@ -244,7 +244,7 @@ it('lets the bot learn from a test run and tags the note as test', function () {
 
     $sup = User::factory()->create(['role' => UserRole::Supervisor]);
 
-    $this->actingAs($sup)->get('/settings/bot-learning?source=test')
+    $this->actingAs($sup)->get('/bot/learning?source=test')
         ->assertOk()
         ->assertInertia(fn ($p) => $p->component('settings/BotLearning')
             ->where('source', 'test')

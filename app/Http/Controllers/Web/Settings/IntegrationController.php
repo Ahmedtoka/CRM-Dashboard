@@ -47,8 +47,13 @@ class IntegrationController extends Controller
         private readonly IntegrationRepository $shopify,
     ) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        // D3 (redesign 2026-10-17): «القنوات» is one page; its «حالة الـ Webhooks» tab is the former /settings/channels.
+        if ($request->query('tab') === 'webhooks') {
+            return app(ChannelController::class)->index();
+        }
+
         return Inertia::render('settings/Integrations', [
             'accounts' => $this->accountsPayload(),
             'shopify' => $this->shopifyPayload(),

@@ -12,10 +12,10 @@ const { t } = useI18n();
 </script>
 
 <template>
-    <div class="flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+    <div class="flex aspect-square size-8 items-center justify-center rounded-md bg-brand-soft text-brand-ink">
         <AppLogoIcon class="size-5" />
     </div>
     <div class="ms-1 grid flex-1 text-start text-sm">
-        <span class="mb-0.5 truncate font-semibold leading-none">{{ t('app.name') }}</span>
+        <span class="mb-0.5 truncate text-base font-bold leading-none text-rail-fg">{{ t('app.name') }}</span>
     </div>
 </template>

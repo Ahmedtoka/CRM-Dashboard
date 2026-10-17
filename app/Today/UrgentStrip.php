@@ -93,7 +93,7 @@ final class UrgentStrip
         return [
             'key' => 'ads_sync', 'tone' => 'warn', 'count' => $stale->count(),
             'age_minutes' => $stale->isEmpty() ? null : (int) $stale->max(fn ($c) => (int) ($c->detail['age_minutes'] ?? 0)),
-            'href' => route('ads.sync', absolute: false),
+            'href' => route('settings.ads.sync', absolute: false),
         ];
     }
 }

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { sectionTabs } from '@/lib/sectionTabs';
 /**
  * «كل ردود البوت» (owner, 2026-09-22): every reply next to the moment it is given, searchable,
  * with knowledge rows edited in place (the same endpoint as Settings → معلومات البوت).
@@ -9,6 +11,7 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -38,11 +41,11 @@ interface AgentInfo {
 
 const props = defineProps<{ sections: { key: string; rows: ReplyRow[] }[]; agent: AgentInfo }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const api = useApi();
 const toast = useToast();
 
-const breadcrumbs = computed(() => [{ title: t('settings.bot_replies.title'), href: '/settings/bot-replies' }]);
+const breadcrumbs = computed(() => [{ title: t('nav.bot'), href: '/bot' }, { title: t('settings.bot_replies.title'), href: '/bot/replies' }]);
 const query = ref('');
 const editingId = ref<string | null>(null);
 const draft = ref('');
@@ -111,6 +114,7 @@ async function save(entryId: number | null, original: string, source?: string): 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('settings.bot_replies.title')" :description="t('settings.bot_replies.description')" />
+            <SectionTabs :tabs="sectionTabs.botCopy(t)" :label="t('nav.bot_copy')" />
 
             <!-- The agent: on/off, its model, and the owner's own instructions to it. -->
             <section class="space-y-2 rounded-lg border border-border bg-card p-4 shadow-card">
@@ -164,7 +168,7 @@ async function save(entryId: number | null, original: string, source?: string): 
             <section v-for="section in visible" :key="section.key" class="overflow-hidden rounded-lg border border-border bg-card shadow-card">
                 <h2 class="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2 text-sm font-semibold text-foreground">
                     {{ t(`settings.bot_replies.sections.${section.key}`) }}
-                    <span class="text-2xs font-normal text-muted-foreground">{{ section.rows.length }}</span>
+                    <span class="text-2xs font-normal text-muted-foreground">{{ formatCount(section.rows.length, locale) }}</span>
                 </h2>
 
                 <div v-for="row in section.rows" :key="row.id" class="grid gap-2 border-b border-border px-4 py-3 last:border-b-0 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto]" :class="{ 'opacity-60': !row.active }">

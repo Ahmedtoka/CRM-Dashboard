@@ -205,7 +205,7 @@ final class AlertFeed
             'look' => '/ads/explorer?accounts='.$a->ad_account_id,
             'edit_ad', 'add_replacement' => '/ads/materials',
             'open_queue' => '/board',
-            'open_settings' => self::canOpenSettings($u) ? '/ads/setup/rules' : null,
+            'open_settings' => self::canOpenSettings($u) ? '/settings/ads/rules' : null,
             default => null,
         };
     }

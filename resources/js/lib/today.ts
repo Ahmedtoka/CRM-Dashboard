@@ -1,9 +1,7 @@
 import { formatNumber, type Locale } from '@/i18n';
 import { formatAvgSeconds, formatCount, formatMoney, formatSeconds } from '@/lib/format';
-import type { NavItem } from '@/types';
 import type { Role } from '@/types/crm';
 import type { AdsCard, ChatsCard, OrdersCard, UrgentItem, WhyCard } from '@/types/today';
-import type { LucideIcon } from 'lucide-vue-next';
 
 export interface CardRow {
     key: string;
@@ -184,10 +182,6 @@ export function logoHref(role: Role | undefined): string {
     return role === 'admin' || role === 'supervisor' ? '/today' : '/';
 }
 
-/** «النهارده» first in the menu, for admins and supervisors only (spec §6). */
-export function todayNavItem(role: Role | undefined, title: string, icon?: LucideIcon): NavItem | null {
-    return role === 'admin' || role === 'supervisor' ? { title, href: '/today', icon, exact: true } : null;
-}
 
 /** The oldest of the blocks' cache stamps (ISO): the page's data is as fresh as its stalest block. */
 export function oldestStamp(stamps: (string | null | undefined)[]): string | null {

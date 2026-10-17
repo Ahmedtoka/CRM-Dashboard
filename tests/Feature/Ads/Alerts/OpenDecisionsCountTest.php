@@ -43,7 +43,7 @@ it('shows the same open-decisions number on the badge, the Today block, the dige
     $expected = app(DecisionCounter::class)->breakdown($owner)['total'];
     Cache::flush();
 
-    $this->withoutVite()->actingAs($owner)->get('/ads')->assertOk()
+    $this->withoutVite()->actingAs($owner)->get('/today/ads')->assertOk()
         ->assertInertia(fn (Assert $p) => $p->where('today.decisions.total', $expected));
     expect(DecisionCounter::cached($owner))->toBe($expected);
 
@@ -57,7 +57,7 @@ it('shows the same open-decisions number on the badge, the Today block, the dige
 it('puts the top open alert cards in the Today decisions block and counts them (final fix 3)', function () {
     $w = odWorld();
 
-    $this->withoutVite()->actingAs(W::authority())->get('/ads')->assertOk()
+    $this->withoutVite()->actingAs(W::authority())->get('/today/ads')->assertOk()
         ->assertInertia(fn (Assert $p) => $p
             ->has('today.decisions.alerts', 2)
             ->where('today.decisions.alerts.0.key', 'ad:'.$w['b']->id)
@@ -69,6 +69,6 @@ it('scopes the Today alert cards to the buyer', function () {
     $w = odWorld();
     $buyer = W::buyer(W::account());
 
-    $this->withoutVite()->actingAs($buyer)->get('/ads')->assertOk()
+    $this->withoutVite()->actingAs($buyer)->get('/today/ads')->assertOk()
         ->assertInertia(fn (Assert $p) => $p->has('today.decisions.alerts', 0)->where('today.decisions.alerts_total', 0));
 });

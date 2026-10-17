@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import type { SharedData } from '@/types';
+import { sectionTabs } from '@/lib/sectionTabs';
 /** «النهارده» (U 2.3, spec 4.2): decisions first, money today vs usual by this hour, last 7 complete days, buyers, best/worst. */
 import AdDrawer from '@/components/ads/AdDrawer.vue';
 import AdRow from '@/components/ads/AdRow.vue';
@@ -20,13 +23,15 @@ import { alertSentence } from '@/lib/adsAlerts';
 import { buildHref, carryQuery, readQuery } from '@/lib/adsFilters';
 import { formatCount } from '@/lib/format';
 import type { AdSuggestion, AdsTodayProps, AlertCardData, AlertSeverity } from '@/types/ads';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { CheckCircle2 } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps<AdsTodayProps>();
 const { t, locale } = useI18n();
-const loading = usePathVisitLoading('/ads');
+/** The shared props the tab strip reads (role, the confirmations badge, the URL). */
+const inertiaPage = usePage<SharedData>();
+const loading = usePathVisitLoading('/today/ads');
 const drawer = useAdDrawer();
 const money = (v: number | null) => formatAdsMoney(v, locale.value, props.currency);
 const n = (v: number) => formatCount(v, locale.value);
@@ -65,8 +70,8 @@ const reasonLine = (s: AdSuggestion) =>
         .map((r) => r.text)
         .join(' · ');
 const thumb = (s: AdSuggestion) => ({ name: s.name, thumbnail_url: s.thumbnail_url, image_url: null, type: null, effective_status: s.status, created_time: null });
-const crumbs = computed(() => [{ label: t('nav.ads'), href: '/ads' }, { label: t('ads.control.today.title') }]);
-const appCrumbs = computed(() => [{ title: t('nav.ads'), href: '/ads' }]);
+const crumbs = computed(() => [{ label: t('nav.today'), href: '/today' }, { label: t('ads.control.today.title') }]);
+const appCrumbs = computed(() => [{ title: t('nav.today'), href: '/today' }, { title: t('section_tabs.today.ads'), href: '/today/ads' }]);
 const LISTS = ['best', 'worst'] as const;
 const listHref = (list: (typeof LISTS)[number]) =>
     href('/ads/explorer', list === 'best' ? { range: 'last7', health: 'winning', sort: '-roas' } : { range: 'last7', health: 'losing', sort: '-spend' });
@@ -77,9 +82,10 @@ const listHref = (list: (typeof LISTS)[number]) =>
     <AppLayout :breadcrumbs="appCrumbs">
         <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-4 p-3 md:p-6">
             <PageHeader :title="t('ads.control.today.title')" :description="t('ads.control.today.description')" :breadcrumbs="crumbs" :freshness="freshness" />
+            <SectionTabs :tabs="sectionTabs.today(t, inertiaPage.props.auth.user?.role)" :label="t('section_tabs.today.label')" />
             <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
             <AdsFilterBar
-                path="/ads"
+                path="/today/ads"
                 :filters="filters"
                 :account-options="account_options"
                 :buyers="buyers"

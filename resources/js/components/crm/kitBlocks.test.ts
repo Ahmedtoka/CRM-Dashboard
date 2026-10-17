@@ -10,6 +10,7 @@ describe('SkeletonList', () => {
         ['table', 8],
         ['cards', 3],
         ['tiles', 4],
+        ['conversation', 8],
     ] as const)('%s renders %i placeholders by default', (variant, n) => {
         const w = mount(SkeletonList, { props: { variant } });
         expect(w.findAll('[data-skeleton-item]')).toHaveLength(n);

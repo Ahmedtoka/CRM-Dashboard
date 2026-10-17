@@ -142,7 +142,7 @@ const buyerRows = computed<(DigestBuyerRow & { id: number })[]>(() => (data.valu
                     }}</Link>
                 </li>
                 <li v-if="data.stale_accounts > 0">
-                    <Link href="/ads/sync" class="text-primary hover:underline">{{ t('ads.digest.stale', { n: data.stale_accounts }) }}</Link>
+                    <Link href="/settings/ads/sync" class="text-primary hover:underline">{{ t('ads.digest.stale', { n: data.stale_accounts }) }}</Link>
                 </li>
                 <li v-if="data.approvals > 0">
                     <Link href="/ads/approvals" class="text-primary hover:underline">{{ t('ads.digest.approvals', { n: data.approvals }) }}</Link>

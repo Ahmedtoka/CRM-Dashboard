@@ -121,7 +121,7 @@ final class TodayCards
             'links' => [
                 'new' => self::link('/reports/team', $day),
                 'ads' => self::link('/inbox', ['flags' => 'ad'] + $day),
-                'bot' => self::link('/reports/bot', $day),
+                'bot' => self::link('/bot/performance', $day),
                 'first_reply' => self::link('/reports/team', $day),
                 'rating' => self::link('/reports/team', $day, 'ratings'),
                 'queue' => '/board',

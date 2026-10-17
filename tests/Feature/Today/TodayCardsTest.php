@@ -41,7 +41,7 @@ it('builds the chats card from the same definitions as the reports', function ()
         ->and($c['rating'])->toBe(['count' => 0, 'avg' => null, 'low' => 0])
         ->and($c['links'])->toMatchArray([
             'new' => '/reports/team?from=2026-10-06&to=2026-10-06', 'ads' => '/inbox?flags=ad&from=2026-10-06&to=2026-10-06',
-            'bot' => '/reports/bot?from=2026-10-06&to=2026-10-06', 'rating' => '/reports/team?from=2026-10-06&to=2026-10-06#ratings',
+            'bot' => '/bot/performance?from=2026-10-06&to=2026-10-06', 'rating' => '/reports/team?from=2026-10-06&to=2026-10-06#ratings',
         ]);
 });
 
