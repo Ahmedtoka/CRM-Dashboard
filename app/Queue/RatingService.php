@@ -31,6 +31,8 @@ use Throwable;
  * (`WhatsAppAdapter::STYLE_LIST`); elsewhere the text goes alone. The last message of the
  * conversation is then ours. It is not asked when:
  *  - she wrote a real message since the close (an acknowledgement does not count);
+ *  - a staff member replied from the CRM since the close (close-cycle hotfix C1, D-02); the same
+ *    checks run again right before the platform call (`AfterCloseGuard`);
  *  - the conversation is a test;
  *  - the platform's reply window closed;
  *  - the job is more than an hour late;
@@ -104,6 +106,8 @@ class RatingService
             ($e->is_test || (bool) $c->is_test) && ! $c->isLoadTest() => 'test',
             self::dueAt($e, $s)->copy()->addMinutes(self::LATE_AFTER_MINUTES)->isPast() => 'late',
             app(QueueService::class)->activeEntry($c) !== null || $this->wroteSince($c, $e->closed_at) => 'customer_back',
+            // Close-cycle hotfix C1 (D-02): a colleague (or she) took the word again from the CRM.
+            AfterCloseGuard::staffRepliedSince($e) => 'staff_replied',
             $this->askedRecently($e) => 'asked_today',
             ! app(WindowPolicy::class)->evaluate($c, SenderType::Bot)->canSendText() => 'window_closed',
             default => null,
@@ -133,7 +137,8 @@ class RatingService
 
         try {
             // Plan ruling 12: the one queue text sent with buttons, so not through SendQueueMessage.
-            $ask = app(OutboundService::class)->sendBot($e->conversation, $text, 0, false, self::buttons($e));
+            // Re-checked right before the platform call (close-cycle hotfix C1, H-03).
+            $ask = app(OutboundService::class)->sendBot($e->conversation, $text, 0, false, self::buttons($e), afterCloseOf: $e->id);
         } catch (WindowClosedException) {
             // Also an EmptyBotMessageException (a text that was nothing but emoji): no mark is left.
             QueueEntry::query()->whereKey($e->id)->update(['review_requested_at' => null]);

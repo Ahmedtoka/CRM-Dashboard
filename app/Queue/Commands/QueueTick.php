@@ -3,6 +3,7 @@
 namespace App\Queue\Commands;
 
 use App\Models\QueueDecision;
+use App\Models\QueueMessageSend;
 use App\Models\QueueSetting;
 use App\Queue\Cases\CaseSla;
 use App\Queue\QueueRouter;
@@ -104,6 +105,7 @@ TXT;
     {
         if (Cache::add('queue:decisions-pruned', true, now()->addHour())) {
             QueueDecision::query()->where('created_at', '<', now()->subDays(self::DECISIONS_KEPT_DAYS))->delete();
+            QueueMessageSend::query()->where('created_at', '<', now()->subDays(QueueMessageSend::KEPT_DAYS))->delete();
         }
     }
 }

@@ -783,7 +783,9 @@ class WindowLifecycle
                 ? [new SendQueueMessage($e->id, 'queue_case_opened', ['case_id' => $e->support_case_id])]
                 : [];
             $messages[] = new SendQueueMessage($e->id, 'queue_closed_thanks', []);
-            Bus::chain($messages)->onQueue('outbound')->dispatch();
+            // A few seconds first (close-cycle hotfix C1, H-03): a message of hers already on its way lands before
+            // the job decides; it is re-checked again right before the platform call.
+            Bus::chain($messages)->onQueue('outbound')->delay(now()->addSeconds(SendQueueMessage::CLOSING_SETTLE_SECONDS))->dispatch();
 
             // §3: an inquiry / problem close is rated `review_delay_seconds` after the closing
             // message (not a case: Part 2 rates it when it is resolved). RatingService decides then;

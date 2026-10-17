@@ -31,7 +31,7 @@ final class FreshStart
         // The queue's points ledger and quality checks (Part 2) point at entries, cases and conversations.
         'score_events', 'qa_reviews',
         // Conversation outcomes, cases and the queue (entries carry the ratings; days/shifts are the windows).
-        'conversation_outcomes', 'support_cases', 'queue_decisions', 'queue_attendance_events', 'queue_entries', 'shift_members', 'shifts', 'queue_days',
+        'conversation_outcomes', 'support_cases', 'queue_decisions', 'queue_attendance_events', 'queue_message_sends', 'queue_entries', 'shift_members', 'shifts', 'queue_days',
         // Shopify orders (shipments/shipment_events were dropped by fresh-orders F4).
         'fulfillments', 'refunds', 'order_items', 'orders',
         // Conversations and everything hanging off them.
