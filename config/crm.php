@@ -36,7 +36,7 @@ return [
         'timeout' => 8,
     ],
 
-    // Fake-driver webhooks (and TikTok, which is always fake for now) carry no
+    // Fake-driver webhooks carry no
     // signature. They are accepted automatically only in local/testing; set this
     // to true to accept them on another environment (e.g. a public demo server).
     'allow_fake_webhooks' => (bool) env('CRM_ALLOW_FAKE_WEBHOOKS', false),
@@ -345,6 +345,19 @@ return [
     'comment_bot_delay' => [5, 30],
 
     'private_reply_days' => 7,
+
+    // TikTok ad comments (E1, 2026-10-17): polled from the Marketing API (/comment/list/, no webhook exists) for
+    // every live TikTok ad account, per active ad group, today and yesterday. Off switch: CRM_TIKTOK_AD_COMMENTS=false.
+    // Nothing is called unless crm.ads.drivers.tiktok is live.
+    'tiktok_ad_comments' => [
+        'enabled' => (bool) env('CRM_TIKTOK_AD_COMMENTS', true),
+        // Ad groups read per account per run (the rest wait for the next run, oldest-polled first). The quota is
+        // shared with the ads sync and Stop writes (Basic tier: 600 calls/min): 20 every 3 minutes is ~400 calls/hour.
+        'max_adgroups_per_run' => (int) env('CRM_TIKTOK_AD_COMMENTS_MAX_ADGROUPS', 20),
+        'every_minutes' => 3,
+        // The comment bot answers only comments younger than this (the first poll reads two days of history).
+        'bot_max_age_minutes' => 120,
+    ],
 
     // Control room S3 (D13): conversation episode outcomes.
     'outcomes' => [

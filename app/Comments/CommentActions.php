@@ -5,7 +5,9 @@ namespace App\Comments;
 use App\Analytics\ActivityLogger;
 use App\Analytics\AttributionRecorder;
 use App\Channels\ChannelRegistry;
+use App\Channels\Adapters\TikTokAdapter;
 use App\Channels\Contracts\ChannelAdapter;
+use App\Channels\Contracts\UnhidesComments;
 use App\Enums\ActorType;
 use App\Enums\CommentStatus;
 use App\Enums\ConversationSource;
@@ -70,10 +72,19 @@ class CommentActions
         $c->forceFill([
             'status' => CommentStatus::Replied,
             'public_reply' => $text,
+            // A poll that lists our own reply back (TikTok ad comments) must never ingest it as a customer comment.
+            'public_reply_external_id' => filled($result->externalId) ? $result->externalId : $c->public_reply_external_id,
             'public_replied_at' => now(),
             'replied_by_type' => $by !== null ? ActorType::User : ActorType::Bot,
             'replied_by_id' => $by?->id,
         ])->save();
+
+        // Every reply id on a TikTok post is kept (a second reply overwrites the comment's column; the poller checks both).
+        if ($post->platform === Platform::TikTok && filled($result->externalId)) {
+            $meta = $post->platform_meta ?? [];
+            $ids = array_values(array_unique(array_merge((array) ($meta['own_reply_ids'] ?? []), [(string) $result->externalId])));
+            $post->forceFill(['platform_meta' => array_merge($meta, ['own_reply_ids' => array_slice($ids, -500)])])->save();
+        }
 
         $this->logger->log(
             $by !== null ? ActorType::User : ActorType::Bot,
@@ -121,6 +132,44 @@ class CommentActions
     }
 
     /**
+     * Show a hidden comment again (TikTok ad comments, E1): only on adapters that can; back to replied or new.
+     *
+     * @throws AuthorizationException
+     * @throws CommentActionFailedException
+     */
+    public function unhide(Comment $c, ?User $by): Comment
+    {
+        $post = $c->post;
+        $this->authorize($post->platform, $by);
+
+        $adapter = $this->adapterFor($post);
+        if (! $adapter instanceof UnhidesComments) {
+            throw new CommentActionFailedException($post->platform->label().' does not support showing a hidden comment again from the CRM.');
+        }
+
+        $result = $adapter->unhideComment($post->channelAccount, $c->external_id);
+
+        if (! $result->success) {
+            throw new CommentActionFailedException((string) $result->error);
+        }
+
+        $c->forceFill(['status' => $c->public_replied_at !== null ? CommentStatus::Replied : CommentStatus::New])->save();
+
+        $this->logger->log(
+            $by !== null ? ActorType::User : ActorType::Bot,
+            $by,
+            ActivityLogger::COMMENT_UNHIDDEN,
+            $c,
+            $c->conversation,
+            ['comment_id' => $c->id],
+        );
+
+        SafeBroadcast::send(new CommentUpdated($c));
+
+        return $c;
+    }
+
+    /**
      * @throws AuthorizationException
      * @throws PrivateReplyNotAllowedException
      * @throws CommentActionFailedException
@@ -133,7 +182,9 @@ class CommentActions
         $adapter = $this->adapterFor($post);
 
         if (! $adapter->capabilities()->privateReply) {
-            throw new PrivateReplyNotAllowedException($post->platform->label().' does not support private replies.');
+            throw new PrivateReplyNotAllowedException($post->platform === Platform::TikTok
+                ? TikTokAdapter::PRIVATE_REPLY_REFUSED
+                : $post->platform->label().' does not support private replies.');
         }
 
         $days = (int) config('crm.private_reply_days', 7);

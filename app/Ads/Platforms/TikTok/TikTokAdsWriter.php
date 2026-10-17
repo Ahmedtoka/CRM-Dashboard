@@ -10,10 +10,10 @@ use App\Ads\Platforms\Data\CampaignNode;
 use App\Ads\Platforms\Data\Identity;
 use App\Ads\Platforms\Data\MediaRef;
 use App\Ads\Platforms\Data\ObjectState;
-use App\Ads\Platforms\ReadUnsupported;
 use App\Ads\Platforms\WriteRefused;
 use App\Models\AdAccount;
 use App\Models\AdMaterialFile;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -226,10 +226,116 @@ class TikTokAdsWriter implements AdPlatformWriter
         ]);
     }
 
-    /** Not built yet: the Run guard refuses a TikTok Run with budget_unreadable, a Stop reads nothing. */
+    /**
+     * Live status and budgets of one object and its parents (A1): ad/get, then adgroup/get, then campaign/get, each
+     * filtered by id with STATUS_ALL so a deleted object is seen (and reported DELETED). Statuses come back in the
+     * shared spelling (ENABLE → ACTIVE, DISABLE → PAUSED) that the Run guard and the launch checks compare.
+     *
+     * ASSUMPTIONS (owner check at the first real read): budgets are decimals in the account currency's major unit
+     * (×100 for minor); BUDGET_MODE_DAY / BUDGET_MODE_DYNAMIC_DAILY_BUDGET are daily, BUDGET_MODE_TOTAL lifetime,
+     * BUDGET_MODE_INFINITE (or 0) none; schedule_end_time is UTC+0 and counts only when schedule_type is
+     * SCHEDULE_START_END (SCHEDULE_FROM_NOW runs without an end).
+     */
     public function readObject(AdAccount $a, string $level, string $externalId): ObjectState
     {
-        throw new ReadUnsupported('TikTok live reads are not supported yet.');
+        if (! isset(self::LEVELS[$level])) {
+            throw new AdsApiException('Unknown ad level: '.$level);
+        }
+        $id = $this->numericId($externalId);
+        $token = $this->token($a);
+        $advertiser = $this->advertiserId($a);
+
+        $ad = null;
+        $group = null;
+        $groupId = $level === 'adset' ? $id : null;
+        $campaignId = $level === 'campaign' ? $id : null;
+        if ($level === 'ad') {
+            $ad = $this->readOne($token, $advertiser, 'ad', $id);
+            $groupId = isset($ad['adgroup_id']) ? (string) $ad['adgroup_id'] : null;
+            $campaignId = isset($ad['campaign_id']) ? (string) $ad['campaign_id'] : null;
+        }
+        if ($groupId !== null && $groupId !== '') {
+            $group = $this->readOne($token, $advertiser, 'adset', $this->numericId($groupId));
+            $campaignId ??= isset($group['campaign_id']) ? (string) $group['campaign_id'] : null;
+        }
+        $campaign = $campaignId !== null && $campaignId !== '' ? $this->readOne($token, $advertiser, 'campaign', $this->numericId($campaignId)) : null;
+
+        $self = match ($level) {
+            'ad' => $ad,
+            'adset' => $group,
+            default => $campaign,
+        };
+        $parents = [];
+        foreach (['adset' => $group, 'campaign' => $campaign] as $parentLevel => $row) {
+            if ($parentLevel === $level || $row === null) {
+                continue;
+            }
+            $parents[] = ['level' => $parentLevel, 'status' => $this->liveStatus($row)] + $this->budgets($row);
+        }
+        $own = $this->budgets($self);
+
+        return new ObjectState(
+            status: $this->liveStatus($self),
+            effectiveStatus: isset($self['secondary_status']) ? (string) $self['secondary_status'] : null,
+            dailyBudgetMinor: $own['dailyBudgetMinor'],
+            lifetimeBudgetMinor: $own['lifetimeBudgetMinor'],
+            endsAt: $own['endsAt'],
+            currency: (string) ($a->currency ?: 'EGP'),
+            parents: $parents,
+        );
+    }
+
+    /** Fields of one live read per level. */
+    private const READ = [
+        'ad' => ['ad/get/', 'ad_ids', 'ad_id', ['ad_id', 'operation_status', 'secondary_status', 'adgroup_id', 'campaign_id']],
+        'adset' => ['adgroup/get/', 'adgroup_ids', 'adgroup_id', ['adgroup_id', 'campaign_id', 'operation_status', 'secondary_status', 'budget', 'budget_mode', 'schedule_type', 'schedule_end_time']],
+        'campaign' => ['campaign/get/', 'campaign_ids', 'campaign_id', ['campaign_id', 'operation_status', 'secondary_status', 'budget', 'budget_mode']],
+    ];
+
+    /** @return array<string, mixed> the one row; throws when TikTok does not return it */
+    private function readOne(string $token, string $advertiser, string $level, string $id): array
+    {
+        [$path, $filter, $key, $fields] = self::READ[$level];
+        $data = $this->api->get($token, $path, [
+            'advertiser_id' => $advertiser,
+            'fields' => json_encode($fields),
+            'filtering' => json_encode([$filter => [$id], 'primary_status' => 'STATUS_ALL']),
+        ]);
+        foreach ($data['list'] ?? [] as $row) {
+            if (is_array($row) && (string) ($row[$key] ?? '') === $id) {
+                return $row;
+            }
+        }
+
+        throw new AdsApiException("TikTok did not return {$level} {$id}.");
+    }
+
+    private function liveStatus(array $row): ?string
+    {
+        if (str_ends_with((string) ($row['secondary_status'] ?? ''), '_DELETE')) {
+            return 'DELETED';
+        }
+
+        return $this->status(isset($row['operation_status']) ? (string) $row['operation_status'] : null);
+    }
+
+    /** @return array{dailyBudgetMinor: ?int, lifetimeBudgetMinor: ?int, endsAt: ?CarbonImmutable} */
+    private function budgets(array $row): array
+    {
+        $minor = is_numeric($row['budget'] ?? null) && (float) $row['budget'] > 0 ? (int) round((float) $row['budget'] * 100) : null;
+        $mode = (string) ($row['budget_mode'] ?? '');
+        $daily = in_array($mode, ['BUDGET_MODE_DAY', 'BUDGET_MODE_DYNAMIC_DAILY_BUDGET'], true) ? $minor : null;
+        $lifetime = $mode === 'BUDGET_MODE_TOTAL' ? $minor : null;
+        $endsAt = null;
+        if (($row['schedule_type'] ?? null) === 'SCHEDULE_START_END' && is_string($row['schedule_end_time'] ?? null) && trim($row['schedule_end_time']) !== '') {
+            try {
+                $endsAt = CarbonImmutable::parse($row['schedule_end_time'], 'UTC')->utc();
+            } catch (Throwable) {
+                $endsAt = null;
+            }
+        }
+
+        return ['dailyBudgetMinor' => $daily, 'lifetimeBudgetMinor' => $lifetime, 'endsAt' => $endsAt];
     }
 
     /**

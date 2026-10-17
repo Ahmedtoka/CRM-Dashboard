@@ -160,19 +160,20 @@ it('never stores a control row before the history start', function () {
     expect(AdAccountDaily::pluck('date')->map(fn ($d) => $d->toDateString())->all())->toBe(['2026-09-02']);
 });
 
-it('asks tiktok for no control and stores no rows', function () {
+it('asks tiktok for an advertiser-level control next to the ad-level report', function () {
     Http::fake([
         'business-api.tiktok.com/open_api/v1.3/*' => Http::response(['code' => 0, 'message' => 'OK', 'data' => ['list' => [], 'page_info' => ['page' => 1, 'total_page' => 1]]]),
     ]);
     $conn = AdPlatformConnection::factory()->tiktok()->create(['credentials' => ['access_token' => 'TT', 'advertiser_ids' => ['7000000000001']]]);
     $acc = AdAccount::factory()->tiktok()->create(['external_id' => '7000000000001', 'connection_id' => $conn->id]);
 
-    expect(app(TikTokAdsDriver::class)->accountDaily($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-03')))->toBeNull();
-    Http::assertNothingSent();
+    // [] = the control answered and no day had delivery (not null = no control).
+    expect(app(TikTokAdsDriver::class)->accountDaily($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-03')))->toBe([]);
 
     $run = app(AdsSyncService::class)->syncAccount($acc, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-03'));
 
     expect($run->status)->toBe('ok')->and(AdAccountDaily::count())->toBe(0);
-    $reports = collect(Http::recorded())->map(fn ($p) => $p[0])->filter(fn ($r) => str_contains($r->url(), 'report/integrated/get'));
-    expect($reports)->toHaveCount(1)->and($reports->first()->data()['data_level'] ?? null)->toBe('AUCTION_AD');
+    $levels = collect(Http::recorded())->map(fn ($p) => $p[0])->filter(fn ($r) => str_contains($r->url(), 'report/integrated/get'))
+        ->map(fn ($r) => $r->data()['data_level'] ?? null)->values()->all();
+    expect($levels)->toBe(['AUCTION_ADVERTISER', 'AUCTION_AD', 'AUCTION_ADVERTISER']);
 });

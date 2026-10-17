@@ -6,6 +6,7 @@ use App\Channels\Adapters\FakeChannelAdapter;
 use App\Channels\Adapters\InstagramAdapter;
 use App\Channels\Adapters\MessengerAdapter;
 use App\Channels\Adapters\TestChannelAdapter;
+use App\Channels\Adapters\TikTokAdapter;
 use App\Channels\Adapters\WhatsAppAdapter;
 use App\Channels\Contracts\ChannelAdapter;
 use App\Enums\Platform;
@@ -36,15 +37,19 @@ class ChannelRegistry
             return new FakeChannelAdapter($account->platform);
         }
 
+        // TikTok (E1) is routed per account: a demo/fake TikTok channel stays fake next to the live ad-comments channel,
+        // and the live one never falls back to the fake adapter (TikTokAdapter refuses when it is disconnected).
+        if ($account->platform === Platform::TikTok) {
+            return $account->driver === 'live' && config('crm.drivers.channels') !== 'fake'
+                ? app(TikTokAdapter::class)
+                : new FakeChannelAdapter(Platform::TikTok);
+        }
+
         return $this->adapter($account->platform);
     }
 
     public function adapter(Platform $platform): ChannelAdapter
     {
-        if ($platform === Platform::TikTok) {
-            return new FakeChannelAdapter($platform);
-        }
-
         if (config('crm.drivers.channels') === 'fake') {
             return new FakeChannelAdapter($platform);
         }
@@ -71,7 +76,8 @@ class ChannelRegistry
             Platform::Facebook => app(MessengerAdapter::class),
             Platform::Instagram => app(InstagramAdapter::class),
             Platform::WhatsApp => app(WhatsAppAdapter::class),
-            Platform::TikTok => new FakeChannelAdapter($platform),
+            // Phase 1 (E1): ad comments only, through the Marketing API; DMs and video comments wait for TikTok (E2).
+            Platform::TikTok => app(TikTokAdapter::class),
         };
     }
 

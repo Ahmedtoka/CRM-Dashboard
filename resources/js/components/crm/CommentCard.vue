@@ -8,11 +8,11 @@ import { formatDateTime } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { Capabilities, CommentItem } from '@/types/admin';
 import { Link, usePage } from '@inertiajs/vue3';
-import { Bot, EyeOff, Lock, MessageSquareReply, MessagesSquare } from 'lucide-vue-next';
+import { Bot, Eye, EyeOff, Lock, MessageSquareReply, MessagesSquare } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
-const props = defineProps<{ comment: CommentItem; capabilities: Capabilities; busy?: 'reply' | 'hide' | 'private-reply' }>();
-const emit = defineEmits<{ action: [action: 'reply' | 'hide' | 'private-reply', text: string | undefined, done: () => void] }>();
+const props = defineProps<{ comment: CommentItem; capabilities: Capabilities; busy?: 'reply' | 'hide' | 'unhide' | 'private-reply' }>();
+const emit = defineEmits<{ action: [action: 'reply' | 'hide' | 'unhide' | 'private-reply', text: string | undefined, done: () => void] }>();
 
 const { t, locale } = useI18n();
 const { getInitials } = useInitials();
@@ -28,13 +28,19 @@ const statusTone = { new: 'warning', replied: 'positive', hidden: 'neutral', ign
 // Why "Private reply" is unavailable (null = allowed). Mirrors CommentActions::privateReply.
 const privateBlock = computed<string | null>(() => {
     if (props.comment.private_reply_sent_at) return t('comments.private_disabled.sent');
-    if (!caps.value?.private_reply) return t('comments.private_disabled.unsupported');
+    if (!caps.value?.private_reply) return t(props.comment.post?.platform === 'tiktok' ? 'comments.private_disabled.tiktok' : 'comments.private_disabled.unsupported');
     const created = Date.parse(props.comment.created_at ?? '');
     if (!Number.isNaN(created) && Date.now() - created > PRIVATE_REPLY_DAYS * 86400000) return t('comments.private_disabled.expired');
     return null;
 });
 
 const hideBlock = computed<string | null>(() => (caps.value?.hide_comment ? null : t('comments.hide_unsupported')));
+
+// TikTok answers first-level comments only (E1): a reply inside a thread cannot be answered from the CRM.
+const replyBlock = computed<string | null>(() =>
+    props.comment.post?.platform === 'tiktok' && props.comment.parent_external_id ? t('comments.reply_top_level_only') : null,
+);
+const canUnhide = computed(() => props.comment.status === 'hidden' && !!caps.value?.unhide_comment);
 
 const repliedBy = computed(() => {
     const c = props.comment;
@@ -88,11 +94,27 @@ const btn = 'inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-mut
 
             <TooltipProvider :delay-duration="150">
                 <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                    <button type="button" :class="btn" :aria-expanded="open === 'reply'" :disabled="comment.status === 'hidden'" @click="open = open === 'reply' ? null : 'reply'">
-                        <MessageSquareReply class="size-3.5" aria-hidden="true" />{{ t('comments.reply') }}
-                    </button>
+                    <Tooltip :disabled="!replyBlock">
+                        <TooltipTrigger as-child>
+                            <span :tabindex="replyBlock ? 0 : undefined">
+                                <button
+                                    type="button"
+                                    :class="btn"
+                                    :aria-expanded="open === 'reply'"
+                                    :disabled="comment.status === 'hidden' || !!replyBlock"
+                                    @click="open = open === 'reply' ? null : 'reply'"
+                                >
+                                    <MessageSquareReply class="size-3.5" aria-hidden="true" />{{ t('comments.reply') }}
+                                </button>
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent v-if="replyBlock">{{ replyBlock }}</TooltipContent>
+                    </Tooltip>
 
-                    <Tooltip :disabled="!hideBlock">
+                    <button v-if="canUnhide" type="button" :class="btn" :disabled="busy === 'unhide'" @click="emit('action', 'unhide', undefined, () => undefined)">
+                        <Eye class="size-3.5" aria-hidden="true" />{{ t('comments.unhide') }}
+                    </button>
+                    <Tooltip v-else :disabled="!hideBlock">
                         <TooltipTrigger as-child>
                             <span :tabindex="hideBlock ? 0 : undefined">
                                 <button type="button" :class="btn" :disabled="!!hideBlock || comment.status === 'hidden' || busy === 'hide'" @click="emit('action', 'hide', undefined, () => undefined)">

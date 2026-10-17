@@ -29,9 +29,10 @@ class CommentIngestor
     ) {}
 
     /**
+     * @param  bool  $runBot  false: store and broadcast only (a polled comment too old for an automatic answer)
      * @return Comment|null null when the external comment id was already ingested
      */
-    public function ingest(InboundCommentData $d): ?Comment
+    public function ingest(InboundCommentData $d, bool $runBot = true): ?Comment
     {
         if ($this->isDuplicate($d)) {
             return null;
@@ -82,7 +83,9 @@ class CommentIngestor
         $comment->setRelation('post', $post);
 
         // Schedule the comment bot before broadcasting (broadcasts are best-effort).
-        $this->maybeRunBot($comment);
+        if ($runBot) {
+            $this->maybeRunBot($comment);
+        }
 
         SafeBroadcast::send(new CommentUpdated($comment));
 

@@ -145,6 +145,7 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
     Route::get('/comments/feed', [CommentController::class, 'feed'])->name('comments.feed');
     Route::post('/comments/{comment}/reply', [CommentController::class, 'reply'])->name('comments.reply');
     Route::post('/comments/{comment}/hide', [CommentController::class, 'hide'])->name('comments.hide');
+    Route::post('/comments/{comment}/unhide', [CommentController::class, 'unhide'])->name('comments.unhide');
     Route::post('/comments/{comment}/private-reply', [CommentController::class, 'privateReply'])->name('comments.private-reply');
 
     // Orders

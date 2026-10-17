@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Channels\ChannelRegistry;
+use App\Channels\Contracts\UnhidesComments;
 use App\Enums\Platform;
 use App\Http\Controllers\Concerns\CommentEndpoints;
 use App\Http\Controllers\Controller;
@@ -21,8 +22,14 @@ class CommentController extends Controller
 
         $capabilities = [];
         foreach (Platform::cases() as $platform) {
-            $caps = $registry->adapter($platform)->capabilities();
-            $capabilities[$platform->value] = ['private_reply' => $caps->privateReply, 'hide_comment' => $caps->hideComment];
+            $adapter = $registry->adapter($platform);
+            $caps = $adapter->capabilities();
+            $capabilities[$platform->value] = [
+                'private_reply' => $caps->privateReply,
+                'hide_comment' => $caps->hideComment,
+                // Unhide is offered on TikTok ad comments only (E1); Meta keeps hide-only here.
+                'unhide_comment' => $adapter instanceof UnhidesComments && $platform === Platform::TikTok,
+            ];
         }
 
         return Inertia::render('Comments/Index', [

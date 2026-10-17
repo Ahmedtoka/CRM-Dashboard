@@ -63,7 +63,7 @@ const groups = computed<Group[]>(() => {
     return [...map.values()];
 });
 
-async function onAction(id: number, action: 'reply' | 'hide' | 'private-reply', text: string | undefined, done: () => void): Promise<void> {
+async function onAction(id: number, action: 'reply' | 'hide' | 'unhide' | 'private-reply', text: string | undefined, done: () => void): Promise<void> {
     if (await run(id, action, text)) done();
 }
 

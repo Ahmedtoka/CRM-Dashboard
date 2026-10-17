@@ -43,7 +43,7 @@ export interface CommentFilters {
     post_id: number | null;
 }
 
-export type Capabilities = Record<PlatformValue, { private_reply: boolean; hide_comment: boolean }>;
+export type Capabilities = Record<PlatformValue, { private_reply: boolean; hide_comment: boolean; unhide_comment?: boolean }>;
 
 /** Laravel length-aware paginator as serialized by a resource collection. */
 export interface Paginated<T> {
