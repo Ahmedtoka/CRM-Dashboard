@@ -570,6 +570,19 @@ export interface ShopifyIntegrationRow {
     granted_scopes: string[];
     missing_scopes: string[];
     has_webhook_secret: boolean;
+    /** How the store is connected (round 2026-10-17): the pasted manual token, or the Partners app. */
+    auth_mode?: 'custom_token' | 'app';
+    access_token_expires_at?: string | null;
+    refresh_token_expires_at?: string | null;
+    installed_at?: string | null;
+    has_legacy_credentials?: boolean;
+}
+
+/** Settings → Shopify `app` prop: the Partners app is configured, and when each secret last verified a webhook. */
+export interface ShopifyAppInfo {
+    configured: boolean;
+    /** WebhookSignature label (`app:levoile`, `app_prev:levoile`, `legacy`, `env`) → ISO time. */
+    last_verified: Record<string, string>;
 }
 
 export interface ShopifyWebhookRow {

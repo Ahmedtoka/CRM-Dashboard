@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
+import AppConnectionCard from '@/components/crm/shopify/AppConnectionCard.vue';
 import ConnectForm from '@/components/crm/shopify/ConnectForm.vue';
 import ConnectGuide from '@/components/crm/shopify/ConnectGuide.vue';
 import ImportProgress from '@/components/crm/shopify/ImportProgress.vue';
@@ -18,6 +19,7 @@ import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatDateTime } from '@/lib/format';
 import type {
+    ShopifyAppInfo,
     ShopifyImportState,
     ShopifyIntegrationRow,
     ShopifyLastSync,
@@ -41,6 +43,8 @@ const props = defineProps<{
     /** Webhooks refused for a bad HMAC in the last day, and the last one accepted (2026-10-17). */
     webhookRejections?: WebhookRejectionSummary | null;
     lastWebhookAt?: string | null;
+    /** The Partners app (round 2026-10-17). */
+    app?: ShopifyAppInfo;
 }>();
 
 const { t, locale } = useI18n();
@@ -55,7 +59,11 @@ const lastSync = ref<ShopifyLastSync>(props.lastSync);
 /** The store's most recent sync of any resource: the page's freshness chip. */
 const freshness = computed(() => (Object.values(lastSync.value).filter(Boolean) as string[]).sort().at(-1) ?? null);
 
-const needsCredentials = computed(() => integration.value === null || integration.value.status !== 'connected');
+// On the Partners app a lost connection comes back by opening the app in Shopify admin, never by pasting a token.
+const needsCredentials = computed(
+    () => (integration.value === null || integration.value.status !== 'connected') && integration.value?.auth_mode !== 'app',
+);
+const showAppCard = computed(() => integration.value !== null && (integration.value.auth_mode === 'app' || props.app?.configured === true));
 
 async function refreshStatus(): Promise<void> {
     const { data } = await api.get<ShopifyStatusResponse>('/settings/shopify/status', { silent: true });
@@ -123,6 +131,36 @@ async function disconnect(): Promise<void> {
         toast.push(apiErrorMessage(error, t('common.error')), 'error');
     } finally {
         disconnecting.value = false;
+    }
+}
+
+// --- Shopify app cutover: remove the old app's webhooks / roll back to the manual connection ---
+const removingLegacy = ref(false);
+const rollingBack = ref(false);
+
+async function removeLegacyWebhooks(): Promise<void> {
+    removingLegacy.value = true;
+    try {
+        const { data } = await api.post<{ data: { removed: number } }>('/settings/shopify/app/remove-legacy-webhooks');
+        toast.push(t('settings.shopify.app_conn.removed', { n: data?.data?.removed ?? 0 }));
+        await refreshStatus();
+    } catch (error) {
+        toast.push(apiErrorMessage(error, t('common.error')), 'error');
+    } finally {
+        removingLegacy.value = false;
+    }
+}
+
+async function rollbackToManual(): Promise<void> {
+    rollingBack.value = true;
+    try {
+        await api.post('/settings/shopify/app/rollback');
+        toast.push(t('settings.shopify.app_conn.rolled_back'));
+        await refreshStatus();
+    } catch (error) {
+        toast.push(apiErrorMessage(error, t('common.error')), 'error');
+    } finally {
+        rollingBack.value = false;
     }
 }
 
@@ -236,6 +274,16 @@ const syncResources: ShopifySyncResource[] = ['shipping', 'products', 'customers
             <PageHeader :title="t('settings.shopify.title')" :description="t('settings.shopify.description')" :freshness="freshness" />
 
             <StatusCard v-if="integration" :integration="integration" :disconnecting="disconnecting" @disconnect="disconnect" />
+
+            <AppConnectionCard
+                v-if="showAppCard"
+                :integration="integration"
+                :app="app ?? { configured: false, last_verified: {} }"
+                :removing="removingLegacy"
+                :rolling-back="rollingBack"
+                @remove-legacy="removeLegacyWebhooks"
+                @rollback="rollbackToManual"
+            />
 
             <template v-if="needsCredentials">
                 <ConnectGuide :required-scopes="requiredScopes" />

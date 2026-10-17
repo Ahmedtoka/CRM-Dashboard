@@ -15,6 +15,7 @@ export const TYPE_KEY = {
     'channel.problem': 'channel_problem',
     'webhook.rejected': 'webhook_rejected',
     'legal.deletion_review': 'legal_deletion_review',
+    'shopify.app': 'shopify_app',
     'queue.assigned': 'queue_assigned',
     'queue.escalation_waiting': 'queue_escalation_waiting',
     'queue.mass_offline': 'queue_mass_offline',

@@ -121,6 +121,10 @@ function itemText(n: AppNotification): string {
         return t('notifications.legal_deletion_review_item', { code: String(n.data.code ?? '') });
     }
 
+    if (n.type === 'shopify.app') {
+        return t(`notifications.shopify_app_items.${String(n.data.event ?? 'token_refresh_failed')}`, { request: String(n.data.request_id ?? '') });
+    }
+
     if (n.type === 'webhook.rejected') {
         const provider = String(n.data.provider ?? '');
         const names: Record<string, string> = { shopify: 'Shopify', instagram: 'Instagram', whatsapp: 'WhatsApp', facebook: 'Messenger' };
@@ -174,6 +178,10 @@ function open(n: AppNotification): void {
     }
     if (n.type === 'ads.token_invalid' || n.type === 'ads.token_scope_missing' || n.type === 'ads.token_expiring') {
         router.visit('/ads/accounts');
+        return;
+    }
+    if (n.type === 'shopify.app') {
+        router.visit('/settings/shopify');
         return;
     }
     if (n.type === 'webhook.rejected') {
