@@ -226,6 +226,8 @@ final class CaseSummary
                 'qty' => max(1, (int) ($i['qty'] ?? 1)),
                 'price' => is_numeric($i['price'] ?? null) ? (float) $i['price'] : null,
                 'exchange_only' => ($i['exchange_only'] ?? false) === true,
+                'action' => in_array($i['action'] ?? null, ['return', 'exchange'], true) ? $i['action'] : null,
+                'exchange_to' => self::str($i['exchange_to'] ?? null),
             ];
         }
 
@@ -239,7 +241,9 @@ final class CaseSummary
             .($r['variant'] !== null ? ' — '.$r['variant'] : '')
             .' × '.LocalizedNumbers::integer($r['qty'])
             .($r['price'] !== null ? ' — '.self::price($r['price']) : '')
-            .($r['exchange_only'] ? ' '.__('cases.items.exchange_only') : ''), self::selectedItems($data));
+            .($r['exchange_only'] ? ' '.__('cases.items.exchange_only') : '')
+            // Bot hybrid (owner B4): a return and an exchange in one request say which piece is which.
+            .($r['action'] !== null ? ' — '.__('cases.items.action_'.$r['action']).($r['exchange_to'] !== null ? ' '.__('cases.items.exchange_to', ['to' => $r['exchange_to']]) : '') : ''), self::selectedItems($data));
     }
 
     /** @return list<string> */
@@ -259,6 +263,8 @@ final class CaseSummary
             'return_exchange' => [
                 self::labelled(__('cases.fields.reason'), self::optionTitle($flow, 'reason', $data)),
                 self::labelled(__('cases.fields.request'), self::optionTitle($flow, 'request', $data)),
+                // Bot hybrid (owner B4): a return and an exchange in one request carry the replacements.
+                ...(isset($data['exchange_product']) || ! empty($data['exchange_products']) || isset($data['exchange_product_text']) ? self::exchangeLines($data) : []),
             ],
             'complaint' => [
                 self::labelled(__('cases.fields.complaint_type'), self::optionTitle($flow, 'complaint_type', $data)),
@@ -312,6 +318,10 @@ final class CaseSummary
     public static function exchangeNote(array $data): string
     {
         return self::asRecorded(function () use ($data) {
+            if (($pieces = self::pieceLines($data)) !== []) {
+                return __('cases.exchange.note_pieces')."\n".implode("\n", $pieces);
+            }
+
             $items = FlowPrompter::itemsText($data['selected_items'] ?? []);
             $items = $items !== '' ? $items : __('cases.exchange.note_item');
             $product = self::exchangeProduct($data);
@@ -372,9 +382,43 @@ final class CaseSummary
         });
     }
 
+    /**
+     * One replacement per exchanged piece (bot hybrid R2, the `per_item` product step), each as
+     * «البديل لـ «الجيبة»: فستان … — 950 ج.م — link» (or what she typed / a photo). Empty when the
+     * request had a single replacement.
+     *
+     * @return list<string>
+     */
+    private static function pieceLines(array $data): array
+    {
+        $pieces = array_values(array_filter((array) ($data['exchange_products'] ?? []), 'is_array'));
+
+        if (count($pieces) < 2) {
+            return [];
+        }
+
+        return array_map(function (array $p) {
+            $product = self::exchangeProduct(['exchange_product' => $p['product'] ?? null]);
+            $label = __('cases.exchange.replacement_for', ['item' => (string) ($p['item_title'] ?? __('cases.exchange.note_item'))]);
+            $what = match (true) {
+                $product !== null => $product['title'].($product['variant_title'] !== null ? ' — '.$product['variant_title'] : '')
+                    .($product['price'] !== null ? ' — '.self::price($product['price']) : '').($product['url'] !== null ? ' — '.$product['url'] : ''),
+                self::str($p['text'] ?? null) !== null => '«'.self::str($p['text']).'»',
+                ! empty($p['photo']) => __('cases.exchange.piece_photo'),
+                default => __('cases.exchange.piece_unknown'),
+            };
+
+            return $label.': '.$what;
+        }, $pieces);
+    }
+
     /** @return list<string> */
     private static function exchangeLines(array $data): array
     {
+        if (($pieces = self::pieceLines($data)) !== []) {
+            return $pieces;
+        }
+
         $product = self::exchangeProduct($data);
 
         if ($product !== null) {

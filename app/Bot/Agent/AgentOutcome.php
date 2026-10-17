@@ -2,6 +2,7 @@
 
 namespace App\Bot\Agent;
 
+use App\Bot\Ai\ModelPricing;
 use App\Models\Product;
 use Illuminate\Support\Collection;
 
@@ -36,6 +37,32 @@ final class AgentOutcome
     public float $billedInputTokens = 0;
 
     public int $outputTokens = 0;
+
+    /** Bot hybrid: the tier that answered ('1', '2' or 'legacy'). */
+    public string $tier = 'legacy';
+
+    /** The reason when tier 1 asked for tier 2 (the `escalate` tool, E5). */
+    public ?string $escalate = null;
+
+    /** stop_reason was `refusal` (nothing may be sent). */
+    public bool $refused = false;
+
+    /** stop_reason was `max_tokens` (the answer was cut off; nothing may be sent). */
+    public bool $truncated = false;
+
+    /** USD of every round, cache reads and writes at their own price. */
+    public float $costUsd = 0;
+
+    /** Adds one round's `usage` (also keeps the older token counts used by the bot run). */
+    public function addUsage(string $model, array $usage): void
+    {
+        $read = (int) ($usage['cache_read_input_tokens'] ?? 0);
+        $write = (int) ($usage['cache_creation_input_tokens'] ?? 0);
+        $this->inputTokens += (int) ($usage['input_tokens'] ?? 0) + $read + $write;
+        $this->billedInputTokens += (int) ($usage['input_tokens'] ?? 0) + 0.1 * $read + 1.25 * $write;
+        $this->outputTokens += (int) ($usage['output_tokens'] ?? 0);
+        $this->costUsd += ModelPricing::ofUsage($model, $usage);
+    }
 
     public function __construct()
     {

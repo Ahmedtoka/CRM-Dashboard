@@ -76,6 +76,37 @@ final class FlowAnswerResolver
     }
 
     /**
+     * Every option her words name (bot-hybrid.md R4): «ارجع البلوزة وابدل الجيبة» names both
+     * «إرجاع» and «استبدال». One entry per option, in the options' order.
+     *
+     * @param  list<array<string, mixed>>  $options
+     * @return list<array<string, mixed>>
+     */
+    public function matchingOptions(array $options, string $text): array
+    {
+        $clean = $this->clean($text);
+        $found = [];
+
+        if ($clean === '') {
+            return [];
+        }
+
+        foreach ($options as $o) {
+            foreach ([(string) ($o['title'] ?? ''), ...array_map('strval', $o['synonyms'] ?? [])] as $needle) {
+                $n = $this->clean($needle);
+
+                if ($n !== '' && $this->containsNeedle($clean, $n)) {
+                    $found[] = $o;
+
+                    break;
+                }
+            }
+        }
+
+        return $found;
+    }
+
+    /**
      * Design 2026-09-21 §3 step 2: when nothing matched exactly, the closest option title
      * or synonym — a typo, a plural, a different word order («exchang», «track order»,
      * «المقاسات» for «المقاس»). Deliberately strict: a wrong guess is worse than a re-ask,

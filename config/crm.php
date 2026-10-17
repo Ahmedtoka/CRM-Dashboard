@@ -228,8 +228,8 @@ return [
 
     'bot' => [
         // Defaults for new bot_settings rows; phpunit.xml pins them to 0 so synchronous tests stay synchronous.
-        'burst_wait_seconds' => (int) env('CRM_BOT_BURST_WAIT_SECONDS', 8),
-        'burst_max_wait_seconds' => (int) env('CRM_BOT_MAX_WAIT_SECONDS', 25),
+        'burst_wait_seconds' => (int) env('CRM_BOT_BURST_WAIT_SECONDS', 3),
+        'burst_max_wait_seconds' => (int) env('CRM_BOT_MAX_WAIT_SECONDS', 12),
         'typing_ms_per_char' => (int) env('CRM_BOT_TYPING_MS_PER_CHAR', 35),
 
         // Bilingual bot (design 2026-09-21 §2): at most this many NEW automatic
@@ -262,13 +262,53 @@ return [
         // a loop happens in one sitting, not across days of an unanswered conversation.
         'turn_limit_minutes' => (int) env('CRM_BOT_TURN_LIMIT_MINUTES', 120),
 
+        // «ثانية واحدة يا فندم» (owner B2, 2026-10-17): sent once per turn when a model answer takes
+        // longer than after_seconds, at most once per cooldown_minutes per chat. Its queue must not be
+        // `bot` (the turn itself keeps those workers busy); `outbound` already has workers.
+        'hold_notice' => [
+            'enabled' => (bool) env('CRM_BOT_HOLD_NOTICE', true),
+            'after_seconds' => (float) env('CRM_BOT_HOLD_NOTICE_AFTER', 2),
+            'cooldown_minutes' => (int) env('CRM_BOT_HOLD_NOTICE_COOLDOWN', 10),
+            'queue' => env('CRM_BOT_NOTICE_QUEUE', 'outbound'),
+        ],
+
         // The store agent (2026-09-22): free text outside the flows is answered by one Claude
         // conversation with tools (catalog, orders, branches, shipping) over the owner's knowledge.
         'agent' => [
             'enabled' => (bool) env('CRM_BOT_AGENT', true),
-            'model' => env('CRM_BOT_AGENT_MODEL', 'claude-sonnet-5'),
+            // Owner B9 (2026-10-17): Sonnet 5.5 (same price as Sonnet 5), at effort medium.
+            'model' => env('CRM_BOT_AGENT_MODEL', 'claude-sonnet-5-5'),
+            'effort' => env('CRM_BOT_AGENT_EFFORT', 'medium'),
             'timeout' => (int) env('CRM_BOT_AGENT_TIMEOUT', 25),
             'budget_seconds' => (int) env('CRM_BOT_AGENT_BUDGET', 40),
+        ],
+
+        // The hybrid router (bot-hybrid.md §3, owner B1–B10, 2026-10-17).
+        //   legacy: the store agent, then TurnRunner as its safety net (as before);
+        //   shadow: legacy answers, and the planner runs afterwards on a queue and only records
+        //           what it would have done (bot_runs.engine = shadow) — run it 3–5 days first;
+        //   hybrid: tier 0 (no model) → TurnPlanner (Haiku) → tier 1 (Haiku + tools) / tier 2
+        //           (Sonnet + tools) → guards; TurnRunner leaves the fast path unless legacy_fallback.
+        'router' => [
+            'mode' => env('CRM_BOT_ROUTER', 'shadow'),
+            'legacy_fallback' => (bool) env('CRM_BOT_LEGACY_FALLBACK', false),
+            'shadow_queue' => env('CRM_BOT_SHADOW_QUEUE', 'outbound'),
+            // Owner B5: more requests than this in one message go to a person.
+            'max_tasks' => (int) env('CRM_BOT_MAX_TASKS', 4),
+            // Owner B3: Sonnet spend per Cairo day; past it every turn runs on Haiku.
+            'daily_sonnet_cap_usd' => (float) env('CRM_BOT_SONNET_DAILY_CAP', 5),
+            'planner' => [
+                'model' => env('CRM_BOT_PLANNER_MODEL', 'claude-haiku-5-5'),
+                'timeout' => (int) env('CRM_BOT_PLANNER_TIMEOUT', 3),
+                'max_tokens' => 1024,
+            ],
+            'tiers' => [
+                '1' => ['model' => env('CRM_BOT_TIER1_MODEL', 'claude-haiku-5-5'), 'effort' => 'low', 'max_tokens' => 1500, 'rounds' => 3, 'timeout' => 6, 'budget_seconds' => 8],
+                '2' => ['model' => env('CRM_BOT_TIER2_MODEL', 'claude-sonnet-5-5'), 'effort' => 'medium', 'max_tokens' => 2000, 'rounds' => 4, 'timeout' => 12, 'budget_seconds' => 15],
+            ],
+            // Tier 0 FAQ: one answer intent, a short message, nothing else asked.
+            'faq_max_words' => 12,
+            'faq_intents' => ['branches_hours', 'payment_info', 'return_policy', 'delivery_time', 'international_shipping', 'inspection_on_delivery', 'wholesale', 'careers', 'events', 'b2b_service_offer'],
         ],
     ],
 
@@ -314,12 +354,21 @@ return [
         'translate_timeout' => 20,
         // Mapping a typed answer to a step's options. 6 s timed out in real use («Pant size»
         // never reached the model), and a slower right answer beats a fast «I didn't catch that».
-        'flow_timeout' => (int) env('CRM_FLOW_TIMEOUT', 12),
+        // Bot hybrid (2026-10-17): the interpreter runs on Haiku 5.5 (effort low, thinking off), which
+        // answers far below this; the cap stays at 10 s because 6 s once timed out in real use (the
+        // plan's 4 s is left to CRM_FLOW_TIMEOUT once live timings are in bot_runs).
+        'flow_timeout' => (int) env('CRM_FLOW_TIMEOUT', 10),
+        'flow_model' => env('CRM_FLOW_MODEL', 'claude-haiku-5-5'),
         // Per-million-token USD prices, keyed by model, used to compute
         // BotRun.cost_usd from the classifier/reply token counts.
+        // Prices from the claude-api skill (2026-10-06); cache_read / cache_write (5-minute) are per
+        // million tokens too. Haiku 5.5's are for prompts up to 100K tokens (ours are far below).
         'prices' => [
-            'claude-haiku-4-5-20251001' => ['input' => 1, 'output' => 5],
-            'claude-sonnet-5' => ['input' => 3, 'output' => 15],
+            'claude-haiku-4-5-20251001' => ['input' => 1, 'output' => 5, 'cache_read' => 0.10, 'cache_write' => 1.25],
+            'claude-haiku-4-5' => ['input' => 1, 'output' => 5, 'cache_read' => 0.10, 'cache_write' => 1.25],
+            'claude-haiku-5-5' => ['input' => 0.10, 'output' => 0.50, 'cache_read' => 0.01, 'cache_write' => 0.125],
+            'claude-sonnet-5' => ['input' => 2, 'output' => 10, 'cache_read' => 0.20, 'cache_write' => 2.50],
+            'claude-sonnet-5-5' => ['input' => 2, 'output' => 10, 'cache_read' => 0.20, 'cache_write' => 2.50],
         ],
     ],
 

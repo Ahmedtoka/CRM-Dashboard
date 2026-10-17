@@ -69,6 +69,9 @@ return [
 
     'items' => [
         'exchange_only' => '(استبدال بس)',
+        'action_return' => 'مرتجع',
+        'action_exchange' => 'استبدال',
+        'exchange_to' => 'بـ :to',
     ],
 
     'fields' => [
@@ -89,6 +92,10 @@ return [
 
     'exchange' => [
         'replacement' => 'البديل',
+        'replacement_for' => 'البديل لـ «:item»',
+        'piece_photo' => 'العميلة بعتت صورة للمنتج',
+        'piece_unknown' => 'مش متحدد',
+        'note_pieces' => 'طلب استبدال:',
         'link' => 'اللينك',
         'typed' => 'البديل: مش متحدد — العميلة كتبت «:text»',
         'photo' => 'البديل: العميلة بعتت صورة للمنتج',

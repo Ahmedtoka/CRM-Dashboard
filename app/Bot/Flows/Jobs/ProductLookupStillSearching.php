@@ -27,7 +27,8 @@ class ProductLookupStillSearching implements ShouldQueue
 
     public function __construct(public readonly int $conversationId, public readonly string $marker)
     {
-        $this->onQueue('bot');
+        // Not `bot` (bot-hybrid.md §1.5): those workers are busy with the turn it is waiting for.
+        $this->onQueue((string) config('crm.bot.hold_notice.queue', 'outbound'));
     }
 
     public function handle(): void

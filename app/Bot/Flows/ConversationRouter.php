@@ -4,8 +4,11 @@ namespace App\Bot\Flows;
 
 use App\Bot\Agent\AgentRunner;
 use App\Bot\Agent\StoreAgent;
+use App\Bot\Agent\TierProfile;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
+use App\Bot\Router\HybridRouter;
+use App\Bot\Router\TaskOrchestrator;
 use App\Enums\Handler;
 use App\Enums\SenderType;
 use App\Inbox\OutboundService;
@@ -71,7 +74,10 @@ class ConversationRouter
             if ($result->question !== null) {
                 $runner = app(TurnRunner::class);
                 // The store agent answers a question asked mid-flow too (2026-09-22); the turn runner is its safety net.
-                $run = app(AgentRunner::class)->run($c, $burst, insideFlow: true) ?? $runner->run($c, $burst, flowContext: true);
+                // Hybrid mode (owner B8): tier 1 answers, and the old turn runner only behind its switch.
+                $hybrid = HybridRouter::mode() === 'hybrid';
+                $run = app(AgentRunner::class)->run($c, $burst, insideFlow: true, profile: $hybrid ? TierProfile::tier('1') : null)
+                    ?? (! $hybrid || config('crm.bot.router.legacy_fallback', false) ? $runner->run($c, $burst, flowContext: true) : null);
 
                 if ($c->refresh()->handler === Handler::Bot && $this->flows->isActive($c)) {
                     // §6.1: the answer, then «نرجع لطلب المرتجع» with the step's question
@@ -81,7 +87,8 @@ class ConversationRouter
                     FlowState::clear($c);
                 }
 
-                return $run;
+                // Hybrid mode with no answer: the flow's question came back, and nothing else runs this turn.
+                return $run ?? $this->record($c, $texts, $started, 'flow');
             }
 
             if ($result->handled) {
@@ -133,7 +140,8 @@ class ConversationRouter
     /** runPayload, plus the main menu after a "no" to an offer made outside a flow (never silence). */
     private function runPayload(Conversation $c, string $payload): bool
     {
-        $offerOutsideFlow = $payload === 'no' && FlowState::confirm($c) !== null && ! $this->flows->isActive($c);
+        // «بعدين» to the next request of her message has its own reply and summary (review #12).
+        $offerOutsideFlow = $payload === 'no' && ! in_array(FlowState::confirm($c), [null, TaskOrchestrator::CONFIRM], true) && ! $this->flows->isActive($c);
 
         if (! $this->flows->runPayload($c, $payload)) {
             return false;

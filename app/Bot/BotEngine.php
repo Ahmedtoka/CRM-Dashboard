@@ -4,12 +4,15 @@ namespace App\Bot;
 
 use App\Analytics\ActivityLogger;
 use App\Bot\Agent\AgentRunner;
+use App\Bot\Agent\StoreAgent;
 use App\Bot\Ai\AiResponder;
 use App\Bot\Ai\MessageClassifier;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Flows\ConversationRouter;
+use App\Bot\Flows\EntityExtractor;
 use App\Bot\Flows\GreetingMirror;
 use App\Bot\Flows\HumanHandover;
+use App\Bot\Flows\Returns\ReturnPrefill;
 use App\Bot\Grounding\BotContext;
 use App\Bot\Grounding\BotContextBuilder;
 use App\Bot\Knowledge\KnowledgeBase;
@@ -17,6 +20,8 @@ use App\Bot\Knowledge\SizeChart;
 use App\Bot\Language\ConversationLanguage;
 use App\Bot\Language\KeptNames;
 use App\Bot\Learning\Jobs\ReviewConversation;
+use App\Bot\Router\HybridRouter;
+use App\Bot\Router\ShadowPlanTurn;
 use App\Enums\ActorType;
 use App\Enums\AttachmentType;
 use App\Enums\BotIntent;
@@ -133,6 +138,13 @@ class BotEngine
             return $run;
         }
 
+        // Bot hybrid (bot-hybrid.md §3.2): an owner rule answers only a message that is just that
+        // question — «ارجع البلوزة وابدل الجيبة» is a request for the flow, not the exchange policy.
+        // Only when the router will really answer it (AI on, a key): otherwise the rule is all there is (review #14).
+        if ($peeked !== null && HybridRouter::mode() === 'hybrid' && $settings->ai_enabled && StoreAgent::enabled() && ! $this->ruleOnlyMessage($text)) {
+            $peeked = null;
+        }
+
         if ($peeked !== null) {
             $rule = $this->rules->match($text, 'message', $c->platform) ?? $peeked;
 
@@ -145,8 +157,31 @@ class BotEngine
             return $this->recordRun($c, $last, engine: 'none', decision: 'handover');
         }
 
+        // Bot hybrid (bot-hybrid.md §3, 2026-10-17): the planner and the tiers, behind a switch.
+        if (HybridRouter::mode() === 'hybrid') {
+            return app(HybridRouter::class)->route($c, $burst);
+        }
+
+        // Shadow mode: where the chat is now, before the live reply moves it (review #13).
+        $shadow = HybridRouter::mode() === 'shadow' ? HybridRouter::state($c) : null;
+
         // The store agent answers free text (2026-09-22); the older turn runner is its safety net.
-        return app(AgentRunner::class)->run($c, $burst) ?? app(TurnRunner::class)->run($c, $burst);
+        $run = app(AgentRunner::class)->run($c, $burst) ?? app(TurnRunner::class)->run($c, $burst);
+
+        // Shadow mode: the planner reads the same turn afterwards and only records what it would do.
+        if ($shadow !== null) {
+            ShadowPlanTurn::for($c, $burst, $shadow);
+        }
+
+        return $run;
+    }
+
+    /** No order number, no return/exchange request, at most a few words: a rule may answer it all. */
+    private function ruleOnlyMessage(string $text): bool
+    {
+        return EntityExtractor::orderRefs($text) === []
+            && ReturnPrefill::fromText($text)['request_kind'] === null
+            && count(preg_split('/\s+/u', trim($text)) ?: []) <= 6;
     }
 
     public function handleInbound(Message $m): ?BotRun

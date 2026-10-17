@@ -80,13 +80,10 @@ final class ProductLinkStep extends BaseStep
     public function enter(Conversation $c, array $state, array $step): StepOutcome
     {
         $field = $this->field($step);
+        $state['data'][$field.'_index'] = 0;
+        [$ask, $mode] = $this->firstAsk($state, $step);
 
-        // No catalog synced: nothing to browse, so straight to the link question as before.
-        if ($this->cards->featured(1)->isEmpty()) {
-            return StepOutcome::wait([parent::prompt($state, $step)], 0, [$field.'_pending' => ['mode' => 'link']]);
-        }
-
-        return StepOutcome::wait([$this->askMessage($state)], 0, [$field.'_pending' => ['mode' => 'ask']]);
+        return StepOutcome::wait([$ask], 0, [$field.'_pending' => ['mode' => $mode]] + ($this->pieces($state, $step) !== [] ? [$field.'_index' => 0, $field.'s' => null] : []));
     }
 
     public function prompt(array $state, array $step): array
@@ -94,7 +91,7 @@ final class ProductLinkStep extends BaseStep
         $pending = $this->pending($state, $step);
 
         return match ($pending['mode']) {
-            'ask' => $this->askMessage($state),
+            'ask' => $this->askMessage($state, $step),
             'browse' => ['text' => self::BROWSE_TEXT, 'buttons' => [$this->stepButton($state, self::SEND_BUTTON, 'send')]],
             'confirm' => ['text' => self::CONFIRM_TEXT, 'buttons' => $this->confirmButtons($state)],
             default => parent::prompt($state, $step),
@@ -115,18 +112,18 @@ final class ProductLinkStep extends BaseStep
         }
 
         if ($value === 'yes' && $pending['mode'] === 'confirm' && is_array($pending['product'] ?? null)) {
-            return $this->chosen($step, $pending['product']);
+            return $this->chosen($state, $step, $pending['product']);
         }
 
         if ($value === 'no' && $pending['mode'] === 'confirm') {
-            return StepOutcome::wait([$this->askMessage($state)], null, [$field.'_pending' => ['mode' => 'ask']]);
+            return StepOutcome::wait([$this->askMessage($state, $step)], null, [$field.'_pending' => ['mode' => 'ask']]);
         }
 
         if (str_starts_with($value, 'product:') && ctype_digit(substr($value, 8))) {
             $product = Product::query()->with('variants')->find((int) substr($value, 8));
 
             // Tapped on its own card: she has just seen it, so no second confirmation.
-            return $product !== null ? $this->chosen($step, $this->productData($product), [['text' => sprintf(self::CONFIRMED_TEXT, KeptNames::keep($product->title))]]) : null;
+            return $product !== null ? $this->chosen($state, $step, $this->productData($product), [['text' => sprintf(self::CONFIRMED_TEXT, KeptNames::keep($product->title))]]) : null;
         }
 
         return null;
@@ -151,7 +148,7 @@ final class ProductLinkStep extends BaseStep
         }
 
         if ($photos !== []) {
-            return StepOutcome::continue([
+            return $this->done($state, $step, [
                 $field => null,
                 $field.'_photo' => $photos,
                 $field.'_text' => trim($text) !== '' ? mb_substr(trim($text), 0, 500) : null,
@@ -189,9 +186,11 @@ final class ProductLinkStep extends BaseStep
         return 'flow:product-lookup:'.$conversationId;
     }
 
-    private function askMessage(array $state): array
+    private function askMessage(array $state, array $step = []): array
     {
-        $items = FlowPrompter::itemsText($state['data']['selected_items'] ?? []);
+        // Per piece (bot hybrid): «تمام، هنبدل «الجيبة». تحبي تبدلي بإيه؟», then the next piece.
+        $piece = $this->pieces($state, $step)[$this->pieceIndex($state, $step)] ?? null;
+        $items = FlowPrompter::itemsText($piece !== null ? [$piece] : ($state['data']['selected_items'] ?? []));
         $text = ($items !== '' ? sprintf(self::ASK_LEAD, '«'.$items.'»')."\n" : '').self::ASK_TEXT;
 
         return ['text' => $text, 'buttons' => [$this->stepButton($state, self::BROWSE_BUTTON, 'browse'), $this->stepButton($state, self::SEND_BUTTON, 'send')]];
@@ -250,18 +249,109 @@ final class ProductLinkStep extends BaseStep
         return [$this->stepButton($state, self::CONFIRM_YES, 'yes'), $this->stepButton($state, self::CONFIRM_NO, 'no')];
     }
 
-    private function chosen(array $step, array $product, array $messages = []): StepOutcome
+    private function chosen(array $state, array $step, array $product, array $messages = []): StepOutcome
     {
         $field = $this->field($step);
         $photos = $product['photos'] ?? [];
         unset($product['photos']);
 
-        return StepOutcome::continue([
+        return $this->done($state, $step, [
             $field => $product,
             $field.'_text' => null,
             $field.'_photo' => $photos !== [] ? $photos : null,
             $field.'_pending' => null,
         ], $messages);
+    }
+
+    /**
+     * One replacement is settled. With `per_item: true` and more than one exchanged piece (bot hybrid
+     * R2, 2026-10-17) it is kept in `{field}s` (one row per piece) and the next piece is asked; after
+     * the last one the flow goes on, `{field}` holding the first replacement for the closing text.
+     *
+     * @param  array<string, mixed>  $values  the field, its _text, _photo and _pending for this piece
+     */
+    private function done(array $state, array $step, array $values, array $messages = []): StepOutcome
+    {
+        $field = $this->field($step);
+        $pieces = $this->pieces($state, $step);
+
+        if ($pieces === []) {
+            return StepOutcome::continue($values, $messages);
+        }
+
+        $index = $this->pieceIndex($state, $step);
+        $all = array_values(array_filter((array) ($state['data'][$field.'s'] ?? []), 'is_array'));
+        $all[$index] = [
+            'line_item_id' => $pieces[$index]['line_item_id'] ?? null,
+            'item_title' => (string) ($pieces[$index]['title'] ?? ''),
+            'product' => $values[$field] ?? null,
+            'text' => $values[$field.'_text'] ?? null,
+            'photo' => $values[$field.'_photo'] ?? null,
+        ];
+
+        if ($index + 1 < count($pieces)) {
+            $state['data'][$field.'_index'] = $index + 1;
+            [$ask, $mode] = $this->firstAsk($state, $step);
+
+            return StepOutcome::wait([...$messages, $ask], 0, [
+                $field.'s' => array_values($all), $field.'_index' => $index + 1, $field.'_pending' => ['mode' => $mode], $field.'_text' => null,
+            ]);
+        }
+
+        $first = collect($all)->pluck('product')->first(fn ($p) => is_array($p));
+
+        return StepOutcome::continue([
+            $field => $first,
+            $field.'s' => array_values($all),
+            $field.'_index' => null,
+            $field.'_text' => $values[$field.'_text'] ?? null,
+            $field.'_photo' => $values[$field.'_photo'] ?? null,
+            $field.'_pending' => null,
+        ], $messages);
+    }
+
+    /**
+     * The exchanged pieces when this step asks per piece: rows with `action: exchange`, or every row of
+     * an exchange request. Empty (one question for the whole request) for a single piece.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function pieces(array $state, array $step): array
+    {
+        if (($step['per_item'] ?? false) !== true) {
+            return [];
+        }
+
+        $rows = array_values(array_filter((array) ($state['data']['selected_items'] ?? []), 'is_array'));
+        $tagged = collect($rows)->contains(fn ($r) => array_key_exists('action', $r));
+        $pieces = $tagged
+            ? array_values(array_filter($rows, fn ($r) => ($r['action'] ?? null) === 'exchange'))
+            : (($state['data']['request_kind'] ?? null) === 'exchange' ? $rows : []);
+
+        return count($pieces) > 1 ? $pieces : [];
+    }
+
+    private function pieceIndex(array $state, array $step): int
+    {
+        return max(0, (int) ($state['data'][$this->field($step).'_index'] ?? 0));
+    }
+
+    /** @return array{0: array{text:string, buttons:list<array>}, 1: string} the first question for the current piece, and its mode */
+    private function firstAsk(array $state, array $step): array
+    {
+        // No catalog synced: nothing to browse, so straight to the link question as before.
+        if ($this->cards->featured(1)->isEmpty()) {
+            $prompt = parent::prompt($state, $step);
+            $piece = $this->pieces($state, $step)[$this->pieceIndex($state, $step)] ?? null;
+
+            if ($piece !== null) {
+                $prompt['text'] = sprintf(self::ASK_LEAD, '«'.FlowPrompter::itemsText([$piece]).'»')."\n".$prompt['text'];
+            }
+
+            return [$prompt, 'link'];
+        }
+
+        return [$this->askMessage($state, $step), 'ask'];
     }
 
     /** The same shape ExchangeProducts::resolve() returns, for a catalog product. */
@@ -325,7 +415,7 @@ final class ProductLinkStep extends BaseStep
         $typed = $typed !== '' ? mb_substr($typed, 0, 500) : null;
 
         if ($state['retries'] >= 1) {
-            return StepOutcome::continue([$field => null, $field.'_text' => $typed, $field.'_pending' => null]);
+            return $this->done($state, $step, [$field => null, $field.'_text' => $typed, $field.'_pending' => null]);
         }
 
         $isLink = $this->products->parse($text) !== null;

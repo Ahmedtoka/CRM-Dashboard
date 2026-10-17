@@ -152,6 +152,7 @@ class ConversationActions
             $c->notes()->delete();
             ConversationParticipant::where('conversation_id', $c->id)->delete();
             BotRun::where('conversation_id', $c->id)->delete();
+            DB::table('bot_shadow_plans')->where('conversation_id', $c->id)->delete();
             SupportCase::where('conversation_id', $c->id)->delete();
             $c->tags()->detach();
 

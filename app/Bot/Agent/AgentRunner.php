@@ -5,17 +5,15 @@ namespace App\Bot\Agent;
 use App\Bot\Catalog\ProductBrowser;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
-use App\Bot\Flows\FlowEngine;
 use App\Bot\Flows\HumanHandover;
+use App\Bot\Jobs\BotHoldNotice;
 use App\Bot\Language\ConversationLanguage;
-use App\Bot\PriceGuard;
+use App\Bot\Router\TaskOrchestrator;
 use App\Enums\Handler;
 use App\Enums\SenderType;
 use App\Inbox\OutboundService;
 use App\Inbox\WindowClosedException;
-use App\Models\BotKnowledgeEntry;
 use App\Models\BotRun;
-use App\Models\BotSetting;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Support\Collection;
@@ -34,13 +32,12 @@ class AgentRunner
     public function __construct(
         private readonly StoreAgent $agent,
         private readonly OutboundService $outbound,
-        private readonly PriceGuard $prices,
         private readonly ProductBrowser $products,
         private readonly ConversationLanguage $language,
     ) {}
 
     /** @param  bool  $insideFlow  a question asked in the middle of a guided flow: answer only, the flow resumes after */
-    public function run(Conversation $c, Collection $burst, bool $insideFlow = false): ?BotRun
+    public function run(Conversation $c, Collection $burst, bool $insideFlow = false, ?TierProfile $profile = null): ?BotRun
     {
         if (! StoreAgent::enabled()) {
             return null;
@@ -58,48 +55,92 @@ class AgentRunner
         }
 
         $started = hrtime(true);
+        // «ثانية واحدة» if the model is slow (owner B2): this path always calls a model.
+        BotHoldNotice::arm($c);
 
+        $messages = $this->messages($c, $burst, $texts);
+        $outcome = $this->attempt($c, $messages, $insideFlow, $profile);
+
+        // Tier 1 asked for help (the `escalate` tool): one try on tier 2; a Sonnet profile that asks
+        // (the legacy agent, or past the Sonnet cap) hands her to a person instead (review #6).
+        if ($outcome?->escalate !== null) {
+            $tier2 = TierProfile::tier('2');
+            $reason = $outcome->escalate;
+            $outcome = ($profile?->tier === '1' && $tier2->tier === '2') ? $this->attempt($c, $messages, $insideFlow, $tier2) : null;
+
+            if ($outcome === null || $outcome->escalate !== null) {
+                $outcome ??= new AgentOutcome;
+                $outcome->reply = '';
+                $outcome->escalate = null;
+                $outcome->handover = ['reason' => 'escalated', 'summary' => $reason];
+            }
+        }
+
+        // Failed, refused or cut off: the older path answers instead (legacy mode).
+        if ($outcome === null || $outcome->refused || $outcome->truncated
+            || ($outcome->reply === '' && $outcome->flow === null && $outcome->handover === null)) {
+            return null;
+        }
+
+        if (($failed = app(ReplyGuards::class)->failure($outcome, $texts)) !== null) {
+            Log::warning('agent.ungrounded_reply', ['conversation_id' => $c->id, 'guard' => $failed, 'reply' => $outcome->reply]);
+
+            return null;
+        }
+
+        return $this->complete($c, $texts, $outcome, $insideFlow, $started);
+    }
+
+    private function attempt(Conversation $c, array $messages, bool $insideFlow, ?TierProfile $profile): ?AgentOutcome
+    {
         try {
-            $outcome = $this->agent->answer($c, $this->messages($c, $burst, $texts), $this->language->of($c), $insideFlow);
+            return $this->agent->answer($c, $messages, $this->language->of($c), $insideFlow, $profile);
         } catch (Throwable $e) {
             report($e);
 
             return null;
         }
+    }
 
-        if ($outcome->reply === '' && $outcome->flow === null && $outcome->handover === null) {
-            return null;
-        }
-
-        if ($outcome->reply !== '' && ! $this->grounded($outcome)) {
-            Log::warning('agent.ungrounded_reply', ['conversation_id' => $c->id, 'reply' => $outcome->reply]);
-
-            return null;
-        }
-
+    /**
+     * Sends a checked outcome and does what its tools asked: a handover, or the guided flows —
+     * the ones the agent picked (one task per order she named) and the $tasks the router planned.
+     *
+     * @param  list<string>  $texts
+     * @param  list<array<string, mixed>>  $tasks  directed tasks planned by the router (bot hybrid)
+     * @param  list<array<string, mixed>>  $answered  tasks this reply answered (they count for the summary)
+     */
+    public function complete(Conversation $c, array $texts, AgentOutcome $outcome, bool $insideFlow, int $started, string $engine = 'agent', array $tasks = [], array $answered = [], ?string $plan = null): BotRun
+    {
         if ($c->refresh()->handler !== Handler::Bot) {
-            return $this->record($c, $texts, $outcome, 'human_took_over', false, $started);
+            return $this->record($c, $texts, $outcome, 'human_took_over', false, $started, $engine, $plan);
         }
 
-        $sent = $this->deliver($c, $outcome, $insideFlow);
+        if ($outcome->flow !== null && ! $insideFlow && $tasks === []) {
+            // Bot hybrid R1/R6: filled from her words, one task per order she named.
+            $tasks = TaskOrchestrator::flowTasks($outcome->flow, implode("\n", $texts));
+        }
+
+        $flows = ! $insideFlow && $outcome->handover === null && $tasks !== [];
+        $sent = $this->deliver($c, $outcome, $insideFlow, $flows);
 
         if ($outcome->handover !== null) {
             app(HumanHandover::class)->handover($c, null, implode("\n", $texts), $outcome->handover['reason'], 'agent', array_filter([$outcome->handover['summary']]));
-        } elseif ($outcome->flow !== null && ! $insideFlow) {
-            app(FlowEngine::class)->start($c, $outcome->flow, delayMs: $sent ? 800 : 0);
+        } elseif ($flows) {
+            app(TaskOrchestrator::class)->start($c, $tasks, $sent ? 800 : 0, $answered);
         }
 
         return $this->record($c, $texts, $outcome, match (true) {
             $outcome->handover !== null => $sent ? 'reply_and_handover' : 'handover',
-            $outcome->flow !== null && ! $insideFlow => 'flow_started',
+            $flows => 'flow_started',
             default => 'reply',
-        }, $sent, $started);
+        }, $sent, $started, $engine, $plan);
     }
 
-    private function deliver(Conversation $c, AgentOutcome $o, bool $insideFlow): bool
+    private function deliver(Conversation $c, AgentOutcome $o, bool $insideFlow, bool $flows = false): bool
     {
         // «القائمة» rides a plain answer only: a flow prompt or the transfer sentence follows the others.
-        $menu = ! $insideFlow && $o->handover === null && $o->flow === null;
+        $menu = ! $insideFlow && $o->handover === null && $o->flow === null && ! $flows;
         $buttons = $menu ? [TurnRunner::MENU_BUTTON] : [];
 
         try {
@@ -126,35 +167,13 @@ class AgentRunner
         }
     }
 
-    /** Every price-like number and every link in the reply must come from a tool result or the owner's knowledge. */
-    private function grounded(AgentOutcome $o): bool
-    {
-        $knowledge = BotKnowledgeEntry::query()->where('is_active', true)->pluck('body')->all();
-        $evidence = [...$o->evidence, ...$knowledge, BotSetting::current()->storeUrl()];
-
-        if (! $this->prices->isSafe($o->reply, $evidence)) {
-            return false;
-        }
-
-        preg_match_all('~https?://[^\s<>"«»]+~u', $o->reply, $m);
-        $haystack = implode("\n", $evidence);
-
-        foreach ($m[0] as $url) {
-            if (! str_contains($haystack, rtrim($url, '.,،؛)'))) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     /**
      * The conversation as alternating user/assistant turns; the burst is the last user turn.
      *
      * @param  list<string>  $texts
      * @return list<array{role:'user'|'assistant', content:string}>
      */
-    private function messages(Conversation $c, Collection $burst, array $texts): array
+    public function messages(Conversation $c, Collection $burst, array $texts): array
     {
         $history = $c->messages()
             ->when($burst->first()?->id, fn ($q, $id) => $q->where('id', '<', $id))
@@ -181,22 +200,24 @@ class AgentRunner
     }
 
     /** @param  list<string>  $texts */
-    private function record(Conversation $c, array $texts, AgentOutcome $o, string $decision, bool $sent, int $started): BotRun
+    /** @param  string|null  $plan  the router's «kinds|reason» (bot hybrid): kept before the tools used */
+    private function record(Conversation $c, array $texts, AgentOutcome $o, string $decision, bool $sent, int $started, string $engine = 'agent', ?string $plan = null): BotRun
     {
-        $price = config('crm.anthropic.prices', [])[$o->model] ?? null;
+        $tools = $o->toolsUsed !== [] ? implode(',', array_unique($o->toolsUsed)) : null;
 
         return BotRun::create([
             'conversation_id' => $c->id,
             'trigger_message' => implode("\n", $texts),
-            'engine' => 'agent',
+            'engine' => $engine,
             'model' => $o->model,
-            'intent' => $o->toolsUsed !== [] ? mb_substr(implode(',', array_unique($o->toolsUsed)), 0, 190) : null,
+            'tier' => $o->tier,
+            'intent' => ($intent = $plan !== null ? $plan.($tools !== null ? '|tools:'.$tools : '') : $tools) !== null ? mb_substr($intent, 0, 190) : null,
             'confidence' => null,
             'decision' => $decision,
             'reply_text' => $sent ? $o->reply : null,
             'input_tokens' => $o->inputTokens,
             'output_tokens' => $o->outputTokens,
-            'cost_usd' => $price === null ? 0 : round(($o->billedInputTokens / 1_000_000) * $price['input'] + ($o->outputTokens / 1_000_000) * $price['output'], 4),
+            'cost_usd' => round($o->costUsd, 6),
             'latency_ms' => (int) ((hrtime(true) - $started) / 1_000_000),
         ]);
     }

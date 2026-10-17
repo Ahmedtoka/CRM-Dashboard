@@ -45,6 +45,8 @@ final class ItemSelection
         'عايزه', 'عاوزه', 'عايز', 'عاوز', 'ارجع', 'ارجاع', 'استرجاع', 'ارجعها', 'ارجعه', 'ابدل', 'ابدلها', 'استبدال', 'تبديل',
         'القطعه', 'قطعه', 'القطع', 'دي', 'ده', 'دول', 'اللي', 'من', 'في', 'لو', 'سمحت', 'بس', 'كمان', 'رقم', 'المنتج', 'منتج',
         'الاوردر', 'اوردر', 'لون', 'مقاس', 'و', 'يا', 'انا', 'هي', 'هو', 'على', 'علي', 'مع',
+        // «both», «all», a count: they say how many, never which piece (matchTitles).
+        'الاتنين', 'اتنين', 'الاثنين', 'اثنين', 'الكل', 'كل', 'كله', 'كلها', 'كلهم', 'الجميع', 'حته', 'حتت', 'قطعات',
     ];
 
     public function __construct(private readonly ArabicNormalizer $normalizer) {}
@@ -178,10 +180,54 @@ final class ItemSelection
         return $best;
     }
 
-    /** @return list<int> digits and number words in reading order */
+    /**
+     * Every piece she names (bot-hybrid.md R3): «الفستان الاسود والطرحة» is split on «و / ، /
+     * and / +» and each part is matched on its own. A part that names nothing in the order comes
+     * back in `unmatched` so she can be asked about it by name; a part with no item words at all
+     * («2 قطع», «الاتنين») is neither.
+     *
+     * @param  array<int, string>  $titles  item key → "title variant"
+     * @return array{matched: list<int>, unmatched: list<string>}
+     */
+    public function matchTitles(string $text, array $titles): array
+    {
+        $matched = [];
+        $unmatched = [];
+
+        foreach ($this->parts($text) as $part) {
+            if ($this->words($part) === []) {
+                continue;
+            }
+
+            $key = $this->matchTitle($part, $titles);
+
+            if ($key === null) {
+                $unmatched[] = $part;
+            } elseif (! in_array($key, $matched, true)) {
+                $matched[] = $key;
+            }
+        }
+
+        return ['matched' => $matched, 'unmatched' => $unmatched];
+    }
+
+    /** @return list<string> «الفستان الاسود والطرحة» → «الفستان الاسود», «الطرحة» (her own spelling kept) */
+    private function parts(string $text): array
+    {
+        $text = (string) preg_replace('/\s+(?:and|&)\s+/iu', '،', $text);
+        // «والطرحة»: a word glued to «و» that then starts with «ال» begins a new part.
+        $text = (string) preg_replace('/(^|\s)و\s*(?=ال\p{L}{2,})/u', '$1،', $text);
+        $text = (string) preg_replace('/(^|\s)و\s+/u', '$1،', $text);
+
+        return array_values(array_filter(array_map('trim', preg_split('/[،,+؛;\n]+/u', $text) ?: []), fn ($p) => $p !== ''));
+    }
+
+    /** @return list<int> digits and number words in reading order (a count — «2 قطع» — is not a position) */
     private function numbers(string $clean): array
     {
         $found = [];
+        // R7: a number followed by «قطع / قطعة / حتة / pcs» says how many, not which.
+        $clean = (string) preg_replace('/\d+\s*(?:قطع\p{L}*|حت\p{L}*|pcs|pieces?)(?![\p{L}])/u', ' ', $clean);
 
         foreach (preg_split('/\s+/u', $clean) ?: [] as $token) {
             if (preg_match_all('/\d+/', $token, $m)) {

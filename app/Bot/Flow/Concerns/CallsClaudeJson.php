@@ -21,15 +21,29 @@ trait CallsClaudeJson
      * @param  array<string, mixed>  $schema
      * @return array{json: ?array, input_tokens: int, output_tokens: int, latency_ms: int, stop_reason: ?string}
      */
-    private function claudeJson(?string $apiKey, string $model, int $timeout, int $maxTokens, string $system, array $messages, array $schema): array
+    private function claudeJson(?string $apiKey, string $model, int $timeout, int $maxTokens, string $system, array $messages, array $schema, ?string $effort = null): array
     {
+        // Bot hybrid (2026-10-17): with an effort (Haiku 5.5 and later) the system prompt is a cached
+        // block and thinking is off — a short mapping needs no reasoning, and effort ≤ high allows it.
         $body = ['model' => $model, 'max_tokens' => $maxTokens, 'system' => $system, 'messages' => $messages];
+        $output = ['format' => ['type' => 'json_schema', 'schema' => $schema]];
+
+        if ($effort !== null) {
+            $body['system'] = [['type' => 'text', 'text' => $system, 'cache_control' => ['type' => 'ephemeral']]];
+            $output = ['effort' => $effort] + $output;
+
+            // Thinking off only where the API takes it (Haiku 5.5 at effort ≤ high); Sonnet 5.5 rejects it (review #15).
+            if (str_starts_with($model, 'claude-haiku-5')) {
+                $body['thinking'] = ['type' => 'disabled'];
+            }
+        }
+
         $headers = ['x-api-key' => (string) $apiKey, 'anthropic-version' => '2023-06-01'];
         $start = microtime(true);
 
         try {
             $response = Http::withHeaders($headers)->timeout($timeout)
-                ->post(self::ANTHROPIC_ENDPOINT, $body + ['output_config' => ['format' => ['type' => 'json_schema', 'schema' => $schema]]])
+                ->post(self::ANTHROPIC_ENDPOINT, $body + ['output_config' => $output])
                 ->throw();
         } catch (RequestException $e) {
             if ($e->response->status() !== 400) {

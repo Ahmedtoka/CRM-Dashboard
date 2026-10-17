@@ -54,6 +54,11 @@ final class BurstPolicy
         $bare = trim((string) preg_replace('/\s+/u', ' ', (string) preg_replace('/[^\p{L}\p{N}\s]+/u', '', $norm)));
         $words = preg_split('/\s/u', $bare, -1, PREG_SPLIT_NO_EMPTY);
 
+        // «مساء الفل يا قمر»: a trailing «يا …» is how she addresses us, not more words (bot hybrid #2).
+        if (count($words) > 2 && $words[count($words) - 2] === 'يا') {
+            $words = array_slice($words, 0, -2);
+        }
+
         if ($words === [] || count($words) > $maxWords) {
             return null;
         }
