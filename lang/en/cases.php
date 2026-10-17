@@ -69,6 +69,9 @@ return [
 
     'items' => [
         'exchange_only' => '(exchange only)',
+        'action_return' => 'return',
+        'action_exchange' => 'exchange',
+        'exchange_to' => 'for :to',
     ],
 
     'fields' => [

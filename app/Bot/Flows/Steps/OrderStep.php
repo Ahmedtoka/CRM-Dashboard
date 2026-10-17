@@ -94,7 +94,18 @@ final class OrderStep extends BaseStep
             return StepOutcome::continue();
         }
 
-        return parent::enter($c, $state, $step);
+        // Bot hybrid R1 (2026-10-17): the number she wrote in the message that started the flow is
+        // looked up at once — never asked again. Ownership is still proven the usual way (the last
+        // 4 digits); a number that finds nothing falls back to the question.
+        $hint = $state['data']['order_ref_hint'] ?? null;
+
+        if (is_string($hint) && $hint !== '' && ! $this->verifying($state, $step)
+            && in_array($this->lookup->find($c, ['order_ref' => $hint], self::MAX_ORDER_BUTTONS)['status'], ['found', 'multiple'], true)
+            && ($outcome = $this->answer($c, $state, $step, $hint, collect())) !== null) {
+            return $outcome->withData(['order_ref_hint' => null]);
+        }
+
+        return parent::enter($c, $state, $step)->withData(['order_ref_hint' => null]);
     }
 
     /** A tap on one of the listed orders (`pick:<order id>`): only an order that was offered to her. */

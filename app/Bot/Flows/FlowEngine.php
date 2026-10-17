@@ -11,6 +11,7 @@ use App\Bot\Flows\Steps\OrderStep;
 use App\Bot\Flows\Steps\StepOutcome;
 use App\Bot\Language\BotTranslator;
 use App\Bot\Language\ConversationLanguage;
+use App\Bot\Router\TaskOrchestrator;
 use App\Channels\Cards\OutboundCards;
 use App\Enums\AttachmentType;
 use App\Enums\MessageDirection;
@@ -326,6 +327,10 @@ class FlowEngine
             if ($step === null) {
                 FlowState::clear($c);
 
+                if ($stepKey === 'end' && $state !== null) {
+                    $this->ended($c, $state);
+                }
+
                 return;
             }
 
@@ -369,9 +374,15 @@ class FlowEngine
                 return null;
             case 'end':
                 FlowState::clear($c);
+                $this->ended($c, $state);
 
                 return null;
             default:
+                // Bot hybrid (2026-10-17): her first message already answered this choice.
+                if (($next = $this->prefilledChoice($c, $state, $step)) !== null) {
+                    return $next;
+                }
+
                 // menu, choice, text, name, phone, summary: send the prompt and wait.
                 $this->sendPrompt($c, $state, $step);
 
@@ -399,7 +410,7 @@ class FlowEngine
             return new FlowResult($this->runPayload($c, (string) $o['action']));
         }
 
-        if (! $isQuestion && $type === 'choice' && ($o = $this->matchOption($c, $this->prompter->choiceOptions($step, $state['data']), $text)) !== null) {
+        if (! $isQuestion && $type === 'choice' && ($o = $this->matchChoice($c, $this->prompter->choiceOptions($step, $state['data']), $text)) !== null) {
             $this->answer($c, $state, $step, (string) $o['value'], (string) $o['title'], $o);
 
             return new FlowResult(true);
@@ -889,6 +900,11 @@ class FlowEngine
     {
         $confirm = FlowState::confirm($c);
 
+        // Bot hybrid: «نكمل في الطلب اللي بعده؟» after a flow of a multi-request message ended.
+        if ($confirm === TaskOrchestrator::CONFIRM) {
+            return app(TaskOrchestrator::class)->answerNext($c, $answer === 'yes');
+        }
+
         // «نكمل» / «ابدأ من جديد» typed as "أيوه" / "لأ" (§6.5).
         if ($confirm === 'resume') {
             return $this->answerResume($c, $answer === 'no' ? 'restart' : 'continue');
@@ -1032,6 +1048,16 @@ class FlowEngine
         $this->handoverToHuman($c);
     }
 
+    /** A flow reached its end: the next task of a multi-request message (bot hybrid) goes on. */
+    private function ended(Conversation $c, array $state): void
+    {
+        if (SandboxMode::active()) {
+            return;
+        }
+
+        app(TaskOrchestrator::class)->flowEnded($c, $state);
+    }
+
     /** Every flow handover: the working-hours reply, then the team (HumanHandover). */
     private function handover(Conversation $c, string $reason, array $data, string $category = 'human_request'): void
     {
@@ -1118,6 +1144,62 @@ class FlowEngine
         }
 
         return $options;
+    }
+
+    /**
+     * A `skip_if_set` choice whose field the flow was started with (ReturnPrefill: «عايزة ارجع…»):
+     * the option is taken as if she had tapped it, so she is never asked what she already said.
+     */
+    private function prefilledChoice(Conversation $c, array $state, array $step): ?string
+    {
+        $field = (string) ($step['field'] ?? '');
+        $value = $state['data'][$field] ?? null;
+
+        if (($step['type'] ?? null) !== 'choice' || ($step['skip_if_set'] ?? false) !== true || $field === '' || ! is_string($value)) {
+            return null;
+        }
+
+        $option = collect($this->prompter->choiceOptions($step, $state['data']))->first(fn ($o) => (string) ($o['value'] ?? '') === $value);
+
+        if ($option === null) {
+            return null;
+        }
+
+        $state['data'][$field.'_title'] = (string) $option['title'];
+        FlowState::put($c, $state);
+
+        return is_string($option['next'] ?? null) && $option['next'] !== '' ? $option['next'] : $this->nextFor($step, $state['data']);
+    }
+
+    /**
+     * A typed answer to a choice (bot-hybrid.md R4): one option named → that option; several →
+     * the option that `combines` exactly those values («ارجع… وابدل…» → «إرجاع واستبدال»), else
+     * nothing, so the interpreter reads it instead of the first synonym winning; none → fuzzy.
+     *
+     * @param  list<array<string, mixed>>  $options
+     * @return array<string, mixed>|null
+     */
+    private function matchChoice(Conversation $c, array $options, string $text): ?array
+    {
+        $options = $this->withEnglishTitles($c, $options);
+        $named = collect($this->resolver->matchingOptions($options, $text))->reject(fn ($o) => ($o['hidden'] ?? false) === true)->values();
+
+        if ($named->count() === 1) {
+            return $named->first();
+        }
+
+        if ($named->count() > 1) {
+            $values = $named->pluck('value')->map(fn ($v) => (string) $v)->sort()->values()->all();
+
+            return collect($options)->first(function ($o) use ($values) {
+                $combines = array_map('strval', (array) ($o['combines'] ?? []));
+                sort($combines);
+
+                return $combines !== [] && $combines === $values;
+            });
+        }
+
+        return $this->resolver->fuzzyOption($options, $text);
     }
 
     /**

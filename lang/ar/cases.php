@@ -69,6 +69,9 @@ return [
 
     'items' => [
         'exchange_only' => '(استبدال بس)',
+        'action_return' => 'مرتجع',
+        'action_exchange' => 'استبدال',
+        'exchange_to' => 'بـ :to',
     ],
 
     'fields' => [

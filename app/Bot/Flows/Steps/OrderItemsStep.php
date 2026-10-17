@@ -9,6 +9,7 @@ use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\OwnerFlowsUpgrade;
 use App\Bot\Flows\Returns\ItemSelection;
 use App\Bot\Flows\Returns\ReturnItems;
+use App\Bot\Flows\Returns\ReturnPrefill;
 use App\Bot\Language\KeptNames;
 use App\Channels\Cards\OutboundCards;
 use App\Models\Conversation;
@@ -104,6 +105,16 @@ final class OrderItemsStep extends BaseStep
 
     public const EXCHANGE_TITLE = 'استبدال';
 
+    /** Bot hybrid R3: a piece she named that the order does not have. */
+    public const UNMATCHED_TEXT = 'مش لاقية «%s» في الأوردر ده';
+
+    /** `per_item_action` (bot hybrid, owner B4): a piece picked without saying what she wants for it. */
+    public const ACTION_QUESTION = '«%s» ترجعيها ولا تبدليها؟';
+
+    public const ACTION_RETURN_BUTTON = 'ترجيع';
+
+    public const ACTION_EXCHANGE_BUTTON = 'تبديل';
+
     /** Typed "switch to exchange" after a discounted item was refused for a return. */
     private const SWITCH_PATTERN = '/بدل|استبدال|تبديل|exchange/u';
 
@@ -126,6 +137,9 @@ final class OrderItemsStep extends BaseStep
 
     /** `pick_button`: the card button's own words («الشكوى عن دي»). */
     private ?string $pickButton = null;
+
+    /** `per_item_action: true`: every piece carries its own return/exchange action (one mixed request). */
+    private bool $perItem = false;
 
     public function __construct(
         FlowPrompter $prompter,
@@ -150,7 +164,98 @@ final class OrderItemsStep extends BaseStep
             return StepOutcome::wait([['text' => $this->fallbackText()]], 0, ['items_pending' => ['mode' => 'fallback'], 'selected_items' => null]);
         }
 
+        // Bot hybrid R1/R3: the pieces named in the message that started the flow are picked at once.
+        $hints = array_values(array_filter((array) ($state['data']['item_hints'] ?? []), 'is_array'));
+
+        if ($hints !== [] && ! $this->plain) {
+            return $this->pickHints($state, $step, $order, $hints)->withData(['item_hints' => null]);
+        }
+
         return StepOutcome::wait($this->listMessages($state, $step, $order, [], $this->kind($state) === null && ! $this->plain), 0, ['items_pending' => ['mode' => 'pick'], 'selected_items' => null]);
+    }
+
+    /**
+     * Each hint is read like a typed reply — «الكل», «التانية», or piece names split on «و» — and
+     * what it finds is picked with the hint's own action. A name the order does not have is said
+     * by name; when nothing is found the list goes out as usual.
+     *
+     * @param  list<array{text?:string, action?:?string, exchange_to?:?string}>  $hints
+     */
+    private function pickHints(array $state, array $step, Order $order, array $hints): StepOutcome
+    {
+        $titles = $order->items->mapWithKeys(fn (OrderItem $i) => [$i->id => trim($i->title.' '.($this->items->variantOf($i) ?? ''))])->all();
+        $ids = [];
+        $actions = [];
+        $unmatched = [];
+
+        foreach ($hints as $hint) {
+            $text = trim((string) ($hint['text'] ?? ''));
+            $picked = $text !== '' ? $this->selection->positions($text, $order->items->count()) : null;
+
+            if ($picked === ItemSelection::ALL) {
+                // Every piece, so the ones that cannot go back are named and refused (scenario 25).
+                $found = $order->items->pluck('id')->map(fn ($id) => (int) $id)->all();
+            } elseif (is_array($picked)) {
+                $found = array_map(fn (int $n) => (int) $order->items[$n - 1]->id, $picked);
+            } else {
+                $match = $this->selection->matchTitles($text, $titles);
+                $found = $match['matched'];
+                array_push($unmatched, ...$match['unmatched']);
+            }
+
+            foreach ($found as $id) {
+                if (! in_array($id, $ids, true)) {
+                    $ids[] = $id;
+                    $actions[$id] = ['action' => $this->actionValue($hint['action'] ?? null), 'exchange_to' => is_string($hint['exchange_to'] ?? null) ? $hint['exchange_to'] : null];
+                }
+            }
+        }
+
+        $messages = $unmatched !== [] ? [['text' => sprintf(self::UNMATCHED_TEXT, implode('»، «', $unmatched))]] : [];
+
+        if ($ids === []) {
+            return StepOutcome::wait([...$messages, ...$this->listMessages($state, $step, $order, [], $this->kind($state) === null)], 0, ['items_pending' => ['mode' => 'pick'], 'selected_items' => null]);
+        }
+
+        $state['data']['items_pending'] = ['mode' => 'pick', 'actions' => $actions];
+
+        return $this->pick($state, $order, $ids, $messages);
+    }
+
+    private function actionValue(mixed $action): ?string
+    {
+        return in_array($action, ['return', 'exchange'], true) ? $action : null;
+    }
+
+    /** @return array<int, array{action:?string, exchange_to:?string}> the per-piece actions known so far (by order item id) */
+    private function actions(array $state): array
+    {
+        return array_filter((array) ($this->pending($state['data'])['actions'] ?? []), 'is_array');
+    }
+
+    private function actionMessage(array $state, OrderItem $item): array
+    {
+        return ['text' => sprintf(self::ACTION_QUESTION, $this->shortTitle($item)), 'buttons' => [
+            $this->stepButton($state, self::ACTION_RETURN_BUTTON, 'act:return'),
+            $this->stepButton($state, self::ACTION_EXCHANGE_BUTTON, 'act:exchange'),
+        ]];
+    }
+
+    /** Her answer to «ترجعيها ولا تبدليها؟»: the piece gets it and the picking goes on. */
+    private function withAction(array $state, Order $order, string $action): ?StepOutcome
+    {
+        $pending = $this->pending($state['data']);
+        $id = (int) ($pending['action_for'] ?? 0);
+
+        if ($id === 0 || ! $order->items->contains('id', $id)) {
+            return null;
+        }
+
+        $actions = $this->actions($state);
+        $actions[$id] = ['action' => $action, 'exchange_to' => $actions[$id]['exchange_to'] ?? null];
+        $state['data']['items_pending'] = ['mode' => 'pick', 'actions' => $actions];
+
+        return $this->pick($state, $order, [$id, ...array_map('intval', (array) ($pending['queue'] ?? []))]);
     }
 
     /** `return_rules: false`: a plain picker without the return rules (cancel/edit). */
@@ -165,6 +270,7 @@ final class OrderItemsStep extends BaseStep
         $this->plain = self::isPlain($step);
         $this->optional = ($step['optional'] ?? false) === true;
         $this->pickButton = is_string($step['pick_button'] ?? null) && trim($step['pick_button']) !== '' ? trim($step['pick_button']) : null;
+        $this->perItem = ($step['per_item_action'] ?? false) === true;
     }
 
     private function fallbackText(): string
@@ -187,6 +293,7 @@ final class OrderItemsStep extends BaseStep
                 ? ['text' => self::SWITCH_QUESTION, 'buttons' => [$this->stepButton($state, self::SWITCH_BUTTON, 'switch'), $this->stepButton($state, self::DONE_BUTTON, 'done')]]
                 : $this->moreMessage($state),
             'qty' => $this->qtyMessage($state, $order->items->firstWhere('id', (int) ($pending['qty_for'] ?? 0))),
+            'action' => ($item = $order->items->firstWhere('id', (int) ($pending['action_for'] ?? 0))) !== null ? $this->actionMessage($state, $item) : $this->moreMessage($state),
             default => $this->listMessage($state, $step, $order, $this->selected($state['data']), false),
         };
     }
@@ -211,6 +318,12 @@ final class OrderItemsStep extends BaseStep
             $qty = $item !== null ? $this->selection->quantity($text, (int) $item->qty) : null;
 
             return $qty !== null ? $this->withQuantity($state, $order, $item, $qty) : null;
+        }
+
+        if ($pending['mode'] === 'action') {
+            $action = ReturnPrefill::actionOf($text);
+
+            return $action !== null ? $this->withAction($state, $order, $action) : null;
         }
 
         $selected = $this->selected($state['data']);
@@ -269,6 +382,10 @@ final class OrderItemsStep extends BaseStep
 
         if ($value === 'switch') {
             return $this->switchToExchange($state, $order);
+        }
+
+        if (in_array($value, ['act:return', 'act:exchange'], true) && $pending['mode'] === 'action') {
+            return $this->withAction($state, $order, substr($value, 4));
         }
 
         if ($value === 'multi') {
@@ -349,6 +466,7 @@ final class OrderItemsStep extends BaseStep
         $late = false;
         $lateText = null;
         $discounted = [];
+        $actions = $this->actions($state);
 
         while ($queue !== []) {
             $id = (int) array_shift($queue);
@@ -380,6 +498,26 @@ final class OrderItemsStep extends BaseStep
                 continue;
             }
 
+            // One request, a return and an exchange (owner B4): each piece says which.
+            if ($this->perItem && ! $this->plain) {
+                if (($actions[$id]['action'] ?? null) === null) {
+                    if ($added !== []) {
+                        $messages[] = ['text' => $this->addedText($added)];
+                    }
+
+                    return StepOutcome::wait(
+                        [...$messages, $this->actionMessage($state, $item)],
+                        0,
+                        ['selected_items' => $selected, 'items_pending' => ['mode' => 'action', 'action_for' => $id, 'queue' => array_values($queue), 'actions' => $actions]],
+                    );
+                }
+
+                // A discounted piece can only be exchanged: the «exchange only» line below says so.
+                if ($actions[$id]['action'] === 'return' && $this->items->isDiscounted($item)) {
+                    $actions[$id]['action'] = 'exchange';
+                }
+            }
+
             // A return: a discounted piece can only be exchanged (she is offered to switch).
             if ($this->kind($state) === 'return' && $this->items->isDiscounted($item)) {
                 $messages[] = ['text' => $this->discountReturnText($title)];
@@ -396,15 +534,15 @@ final class OrderItemsStep extends BaseStep
                 return StepOutcome::wait(
                     [...$messages, $this->qtyMessage($state, $item)],
                     0,
-                    ['selected_items' => $selected, 'items_pending' => ['mode' => 'qty', 'qty_for' => $id, 'queue' => array_values($queue)]],
+                    ['selected_items' => $selected, 'items_pending' => ['mode' => 'qty', 'qty_for' => $id, 'queue' => array_values($queue), 'actions' => $actions]],
                 );
             }
 
-            $row = $this->row($item, 1);
+            $row = $this->row($item, 1, $actions[$id] ?? null, $state);
             $selected[] = $row;
             $added[] = $row;
 
-            if ($row['exchange_only'] && $this->kind($state) === null) {
+            if ($row['exchange_only'] && $this->kind($state) === null && ($row['action'] ?? null) !== 'exchange') {
                 $messages[] = ['text' => $this->discountText($title)];
             }
         }
@@ -415,7 +553,7 @@ final class OrderItemsStep extends BaseStep
     private function withQuantity(array $state, Order $order, OrderItem $item, int $qty): StepOutcome
     {
         $selected = $this->selected($state['data']);
-        $row = $this->row($item, $qty);
+        $row = $this->row($item, $qty, $this->actions($state)[(int) $item->id] ?? null, $state);
         $selected[] = $row;
         $messages = $row['exchange_only'] && $this->kind($state) === null ? [['text' => $this->discountText($this->shortTitle($item))]] : [];
         $queue = array_map('intval', (array) ($this->pending($state['data'])['queue'] ?? []));
@@ -557,10 +695,17 @@ final class OrderItemsStep extends BaseStep
         ]);
     }
 
-    /** @return array{line_item_id:int, title:string, variant:?string, qty:int, price:?float, exchange_only:bool} */
-    private function row(OrderItem $item, int $qty): array
+    /**
+     * A picked piece. With a known action (a hint from her message, or `per_item_action`) the row
+     * also says `action` (return / exchange) and `exchange_to` («مقاس اكبر»); other rows keep the
+     * older shape.
+     *
+     * @param  array{action:?string, exchange_to:?string}|null  $action
+     * @return array{line_item_id:int, title:string, variant:?string, qty:int, price:?float, exchange_only:bool, action?:?string, exchange_to?:?string}
+     */
+    private function row(OrderItem $item, int $qty, ?array $action = null, array $state = []): array
     {
-        return [
+        $row = [
             'line_item_id' => (int) $item->id,
             'title' => (string) $item->title,
             'variant' => $this->items->variantOf($item),
@@ -568,6 +713,15 @@ final class OrderItemsStep extends BaseStep
             'price' => $item->price !== null ? (float) $item->price : null,
             'exchange_only' => ! $this->plain && $this->items->isDiscounted($item),
         ];
+
+        if (($action['action'] ?? null) !== null || $this->perItem) {
+            $kind = $this->kind($state);
+            // In a plain return/exchange the request's kind wins (a discounted piece switched to an exchange).
+            $row['action'] = $kind ?? ($action['action'] ?? null);
+            $row['exchange_to'] = $row['action'] === 'exchange' ? ($action['exchange_to'] ?? null) : null;
+        }
+
+        return $row;
     }
 
     /**

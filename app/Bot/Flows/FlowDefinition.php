@@ -36,6 +36,12 @@ final class FlowDefinition
         'optional' => ['order_items'],
         'allow_text' => ['choice'],
         'photos' => ['text'],
+        // Bot hybrid (2026-10-17): every picked piece carries its own return/exchange action.
+        'per_item_action' => ['order_items'],
+        // A replacement asked for each exchanged piece in turn.
+        'per_item' => ['product_link'],
+        // The question is skipped when the field is already filled (from her first message).
+        'skip_if_set' => ['choice'],
     ];
 
     /** Step types that must carry a non-empty `field`. */

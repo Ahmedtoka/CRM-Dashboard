@@ -226,6 +226,8 @@ final class CaseSummary
                 'qty' => max(1, (int) ($i['qty'] ?? 1)),
                 'price' => is_numeric($i['price'] ?? null) ? (float) $i['price'] : null,
                 'exchange_only' => ($i['exchange_only'] ?? false) === true,
+                'action' => in_array($i['action'] ?? null, ['return', 'exchange'], true) ? $i['action'] : null,
+                'exchange_to' => self::str($i['exchange_to'] ?? null),
             ];
         }
 
@@ -239,7 +241,9 @@ final class CaseSummary
             .($r['variant'] !== null ? ' — '.$r['variant'] : '')
             .' × '.LocalizedNumbers::integer($r['qty'])
             .($r['price'] !== null ? ' — '.self::price($r['price']) : '')
-            .($r['exchange_only'] ? ' '.__('cases.items.exchange_only') : ''), self::selectedItems($data));
+            .($r['exchange_only'] ? ' '.__('cases.items.exchange_only') : '')
+            // Bot hybrid (owner B4): a return and an exchange in one request say which piece is which.
+            .($r['action'] !== null ? ' — '.__('cases.items.action_'.$r['action']).($r['exchange_to'] !== null ? ' '.__('cases.items.exchange_to', ['to' => $r['exchange_to']]) : '') : ''), self::selectedItems($data));
     }
 
     /** @return list<string> */

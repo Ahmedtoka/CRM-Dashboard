@@ -367,7 +367,8 @@ final class FlowPrompter
     /** @return list<array{title:string, payload:string}> */
     private function choiceButtons(string $flowKey, string $stepKey, array $step): array
     {
-        $options = $step['options'] ?? [];
+        // A `hidden` option (bot hybrid: «إرجاع واستبدال») is understood when typed, never offered.
+        $options = array_values(array_filter($step['options'] ?? [], fn ($o) => is_array($o) && ($o['hidden'] ?? false) !== true));
         $buttons = array_map(
             fn (array $o) => ['title' => (string) $o['title'], 'payload' => "step:{$flowKey}:{$stepKey}:{$o['value']}"],
             array_values($options),

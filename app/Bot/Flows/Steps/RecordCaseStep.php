@@ -2,8 +2,10 @@
 
 namespace App\Bot\Flows\Steps;
 
+use App\Bot\Flows\FlowLabels;
 use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\FlowScripts;
+use App\Bot\Router\CaseLock;
 use App\Cases\CaseRecorder;
 use App\Models\Conversation;
 use Illuminate\Support\Facades\Log;
@@ -26,6 +28,18 @@ final class RecordCaseStep extends BaseStep
 
     public function enter(Conversation $c, array $state, array $step): StepOutcome
     {
+        // Owner B6 (2026-10-17): the same request for the same order and pieces is not recorded twice;
+        // another order, or other pieces, is a new request.
+        if ($step['case_type'] !== 'delivery_followup' && ($existing = CaseLock::duplicate($c, (string) $step['case_type'], $state['data'])) !== null) {
+            $text = strtr($this->prompter->script('tasks_already_recorded', ['case_id' => $existing->id])
+                ?? str_replace('{case_id}', (string) $existing->id, (string) (FlowScripts::all()['tasks_already_recorded']['body'] ?? '')), [
+                    '{flow_label}' => FlowLabels::of($state['key'] ?? null),
+                    '{order_number}' => ltrim((string) ($state['data']['order_number'] ?? ''), '#'),
+                ]);
+
+            return StepOutcome::continue(['case_id' => $existing->id], [['text' => $text]]);
+        }
+
         try {
             $case = $this->recorder->record($c, (string) $step['case_type'], $state['data']);
         } catch (Throwable $e) {

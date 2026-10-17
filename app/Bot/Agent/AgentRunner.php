@@ -5,12 +5,12 @@ namespace App\Bot\Agent;
 use App\Bot\Catalog\ProductBrowser;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
-use App\Bot\Flows\FlowEngine;
 use App\Bot\Flows\HumanHandover;
 use App\Bot\Jobs\BotHoldNotice;
 use App\Bot\Language\ConversationLanguage;
 use App\Bot\PriceGuard;
 use App\Bot\PromiseGuard;
+use App\Bot\Router\TaskOrchestrator;
 use App\Enums\Handler;
 use App\Enums\SenderType;
 use App\Inbox\OutboundService;
@@ -90,7 +90,8 @@ class AgentRunner
         if ($outcome->handover !== null) {
             app(HumanHandover::class)->handover($c, null, implode("\n", $texts), $outcome->handover['reason'], 'agent', array_filter([$outcome->handover['summary']]));
         } elseif ($outcome->flow !== null && ! $insideFlow) {
-            app(FlowEngine::class)->start($c, $outcome->flow, delayMs: $sent ? 800 : 0);
+            // Bot hybrid R1/R6: filled from her words, one task per order she named.
+            app(TaskOrchestrator::class)->start($c, TaskOrchestrator::flowTasks($outcome->flow, implode("\n", $texts)), $sent ? 800 : 0);
         }
 
         return $this->record($c, $texts, $outcome, match (true) {

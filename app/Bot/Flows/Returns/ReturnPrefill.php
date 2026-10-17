@@ -108,6 +108,21 @@ final class ReturnPrefill
         ], fn ($v) => $v !== null);
     }
 
+    /** «ابدلها» → exchange, «ترجيع» → return; null when she says neither, or both. */
+    public static function actionOf(string $text): ?string
+    {
+        $norm = new ArabicNormalizer;
+        $found = [];
+
+        foreach (preg_split('/[\s،,]+/u', trim($text)) ?: [] as $token) {
+            if ($token !== '' && ($action = self::verb($norm, $token)) !== null) {
+                $found[$action] = true;
+            }
+        }
+
+        return count($found) === 1 ? array_key_first($found) : null;
+    }
+
     private static function verb(ArabicNormalizer $norm, string $token): ?string
     {
         $t = mb_strtolower($norm->normalize($token));

@@ -39,12 +39,32 @@ final class ReturnFlowUpgrade
 
     public const LATE_TEXT = "الأوردر ده عدّى على استلامه أكتر من 14 يوم، والمرتجع والاستبدال عندنا خلال 14 يوم من الاستلام بس.\nلو تحبي، أحوّلك لحد من الفريق يساعدك.";
 
-    /** The owner's flow (the seeded `return_exchange` definition since 2026-09-19). */
+    public const NOTE_2026_10_17 = 'فلو المرتجع والاستبدال: من غير ما يسأل تاني اللي قالته، ومرتجع واستبدال في نفس الأوردر طلب واحد، ولينك بديل لكل قطعة';
+
+    public const MIXED_DONE_TEXT = 'تمام، اتسجل طلب المرتجع والاستبدال لأوردر #{order_number} في طلب واحد. هنتواصل معاكي لتأكيد الاستبدال واستلام المرتجع';
+
+    /**
+     * The owner's flow (the seeded `return_exchange` definition since 2026-09-19), with the bot-hybrid
+     * additions of 2026-10-17 (bot-hybrid.md §3.7, owner B4): the kind question is skipped when her
+     * message already said it (`skip_if_set`), and «ارجع البلوزة وابدل الجيبة» is one request — the
+     * hidden `mixed` option leads to a picker where every piece carries its own action, then one
+     * reason, one photo, a replacement for each exchanged piece and one `return_exchange` case.
+     * Every older step key is kept, so a chat already inside the flow carries on.
+     */
     public static function definition(): array
     {
         $kindOptions = [
             ['value' => 'return', 'title' => 'إرجاع', 'synonyms' => ['ارجاع', 'ارجع', 'مرتجع', 'استرجاع', 'رجوع', 'return', 'refund'], 'next' => 'return_items'],
             ['value' => 'exchange', 'title' => 'استبدال', 'synonyms' => ['استبدال', 'ابدل', 'تبديل', 'بدل', 'exchange'], 'next' => 'exchange_items'],
+            ['value' => 'mixed', 'title' => 'إرجاع واستبدال', 'synonyms' => [], 'hidden' => true, 'combines' => ['return', 'exchange'], 'next' => 'mixed_items'],
+        ];
+
+        $returnReasons = [
+            ['value' => 'defective', 'title' => 'بايظ / فيه عيب', 'synonyms' => ['بايظ', 'عيب', 'مقطوع', 'ديفوه', 'تالف', 'شايط']],
+            ['value' => 'wrong_item', 'title' => 'غلط في الأوردر', 'synonyms' => ['غلط', 'مش اللي طلبته', 'لون تاني']],
+            ['value' => 'missing_item', 'title' => 'قطعة ناقصة', 'synonyms' => ['ناقص', 'ناقصة', 'ناقصه']],
+            ['value' => 'size', 'title' => 'المقاس مش مظبوط', 'synonyms' => ['مقاس', 'كبير', 'صغير', 'واسع', 'ضيق']],
+            ['value' => 'not_liked', 'title' => 'مش عاجبني', 'synonyms' => ['مش عاجبني', 'معجبنيش', 'مش حلو']],
         ];
 
         return ['start' => 'policy', 'steps' => [
@@ -53,8 +73,14 @@ final class ReturnFlowUpgrade
                 ['field' => 'order_window', 'in' => ['closed'], 'next' => 'late'],
                 ['field' => 'order_window', 'in' => ['open'], 'next' => 'kind'],
             ], 'next' => 'kind_unknown'],
-            'kind' => ['type' => 'choice', 'field' => 'request_kind', 'text' => self::GREETING_TEXT, 'options' => $kindOptions],
-            'kind_unknown' => ['type' => 'choice', 'field' => 'request_kind', 'text' => 'تحبي ترجعي ولا تبدلي؟', 'options' => $kindOptions],
+            'kind' => ['type' => 'choice', 'field' => 'request_kind', 'text' => self::GREETING_TEXT, 'skip_if_set' => true, 'options' => $kindOptions],
+            'kind_unknown' => ['type' => 'choice', 'field' => 'request_kind', 'text' => 'تحبي ترجعي ولا تبدلي؟', 'skip_if_set' => true, 'options' => $kindOptions],
+
+            'mixed_items' => ['type' => 'order_items', 'text' => 'اختاري القطع، وكل قطعة هسألك ترجعيها ولا تبدليها', 'per_item_action' => true, 'next' => 'mixed_reason'],
+            'mixed_reason' => ['type' => 'choice', 'field' => 'reason', 'text' => 'إيه السبب؟', 'options' => $returnReasons, 'next' => 'mixed_photo'],
+            'mixed_photo' => ['type' => 'photo', 'field' => 'product_photo', 'text' => 'ابعتيلي صورة للقطع', 'next' => 'mixed_exchange_product'],
+            'mixed_exchange_product' => ['type' => 'product_link', 'field' => 'exchange_product', 'per_item' => true, 'text' => 'ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع (من levoilestores.com)', 'next' => 'record_mixed'],
+            'record_mixed' => ['type' => 'record_case', 'case_type' => 'return_exchange', 'text' => self::MIXED_DONE_TEXT, 'next' => 'end'],
             'late' => ['type' => 'choice', 'field' => 'late_choice', 'text' => self::LATE_TEXT, 'options' => [
                 ['value' => 'agent', 'title' => 'كلم موظف', 'synonyms' => ['موظف', 'ايوه', 'اه', 'حوليني'], 'next' => 'agent'],
             ]],
@@ -86,7 +112,7 @@ final class ReturnFlowUpgrade
                 ['field' => 'reason', 'in' => ['defective'], 'next' => 'exchange_photo'],
             ], 'next' => 'exchange_product'],
             'exchange_photo' => ['type' => 'photo', 'field' => 'product_photo', 'text' => self::EXCHANGE_PHOTO_TEXT, 'next' => 'exchange_product'],
-            'exchange_product' => ['type' => 'product_link', 'field' => 'exchange_product', 'text' => 'ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع (من levoilestores.com)', 'next' => 'record_exchange'],
+            'exchange_product' => ['type' => 'product_link', 'field' => 'exchange_product', 'per_item' => true, 'text' => 'ابعتيلي لينك المنتج اللي عايزة تبدلي بيه من الموقع (من levoilestores.com)', 'next' => 'record_exchange'],
             'record_exchange' => ['type' => 'record_case', 'case_type' => 'exchange', 'text' => self::EXCHANGE_DONE_TEXT, 'next' => 'end'],
         ]];
     }

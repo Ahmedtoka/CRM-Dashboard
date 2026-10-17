@@ -16,6 +16,8 @@ use App\Bot\Flows\HumanHandover;
 use App\Bot\Grounding\ShippingFeeAnswer;
 use App\Bot\HandoverSignals;
 use App\Bot\Knowledge\KnowledgeBase;
+use App\Bot\Router\CaseLock;
+use App\Bot\Router\TaskOrchestrator;
 use App\Enums\AttachmentType;
 use App\Enums\Handler;
 use App\Enums\SenderType;
@@ -28,7 +30,6 @@ use App\Models\BotRun;
 use App\Models\BotSetting;
 use App\Models\Conversation;
 use App\Models\Message;
-use App\Models\SupportCase;
 use App\Queue\QueueService;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -52,7 +53,7 @@ class TurnRunner
     public const MENU_BUTTON = ['title' => 'القائمة', 'payload' => 'menu:main_menu'];
 
     /** A case of the same flow younger than this is offered to a person instead of restarting the flow. */
-    public const CASE_EXISTS_HOURS = 24;
+    public const CASE_EXISTS_HOURS = CaseLock::CASE_EXISTS_HOURS;
 
     /** A flow prompt that follows a delayed reply part is queued this long after that part. */
     public const FOLLOW_UP_GAP_MS = 1000;
@@ -672,24 +673,19 @@ class TurnRunner
     }
 
     /**
-     * Starts the flow, or, when this conversation has an open case of that flow younger than
-     * CASE_EXISTS_HOURS, says the request is already recorded and offers a person (yes/no) instead.
+     * Starts the flow filled from her words (bot hybrid R1: the order number, the kind, the pieces —
+     * one task per order she named), or, when the same request for the same order is already an open
+     * case (CaseLock, owner B6), says it is recorded and offers a person (yes/no) instead.
      *
      * @return bool true when the case-exists offer was sent instead of starting the flow
      */
     private function startFlow(Conversation $c, string $flowKey, int $delayMs = 0): bool
     {
-        $types = $this->flowCaseTypes($flowKey);
-        $case = $types === [] ? null : SupportCase::query()
-            ->where('conversation_id', $c->id)
-            ->whereIn('type', $types)
-            ->whereIn('status', SupportCase::OPEN_STATUSES)
-            ->where('created_at', '>=', now()->subHours(self::CASE_EXISTS_HOURS))
-            ->latest('id')
-            ->first();
+        $tasks = TaskOrchestrator::flowTasks($flowKey, implode("\n", $this->currentBurstTexts));
+        $case = count($tasks) === 1 ? CaseLock::forFlow($c, $flowKey, $tasks[0]['data']['order_ref_hint'] ?? null) : null;
 
         if ($case === null) {
-            app(FlowEngine::class)->start($c, $flowKey, delayMs: $delayMs);
+            app(TaskOrchestrator::class)->start($c, $tasks, $delayMs);
 
             return false;
         }
@@ -705,22 +701,6 @@ class TurnRunner
         }
 
         return true;
-    }
-
-    /** @return list<string> the case types a flow records: its record_case steps, and a status step's follow-up */
-    private function flowCaseTypes(string $flowKey): array
-    {
-        $types = [];
-
-        foreach ((array) (BotFlow::active($flowKey)?->definition['steps'] ?? []) as $step) {
-            if (($step['type'] ?? null) === 'record_case') {
-                $types[] = (string) ($step['case_type'] ?? '');
-            } elseif (($step['type'] ?? null) === 'status') {
-                $types[] = 'delivery_followup';
-            }
-        }
-
-        return array_values(array_unique(array_filter($types)));
     }
 
     /** A phone number (understood or matched) or a written address (spec §4.1 HandoverSignals). */
