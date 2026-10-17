@@ -154,6 +154,38 @@ class TaskOrchestrator
     }
 
     /**
+     * A person takes the chat in the middle of the tasks: what was done and what is still waiting,
+     * as lines for the team's handover note; the queue is cleared (the person carries on).
+     *
+     * @return list<string>
+     */
+    public function handedOver(Conversation $c): array
+    {
+        $tasks = TaskQueue::all($c);
+
+        if (count($tasks) < 2) {
+            TaskQueue::clear($c);
+
+            return [];
+        }
+
+        $lines = ['طلباتها في نفس الرسالة:'];
+
+        foreach ($tasks as $t) {
+            $lines[] = '- '.$t['label'].match ($t['status']) {
+                TaskQueue::DONE => $t['case_id'] !== null ? ' — اتسجل طلب #'.$t['case_id'] : ' — اتسجل',
+                TaskQueue::ANSWERED => ' — اتجاوب',
+                TaskQueue::RUNNING => ' — كانت شغالة فيه وقت التحويل',
+                default => ' — لسه',
+            };
+        }
+
+        TaskQueue::clear($c);
+
+        return $lines;
+    }
+
+    /**
      * «ملخص طلبات حضرتك:» with one line per task — only with two tasks or more (owner B7). No emoji
      * (spec 2026-10-01 §6).
      *

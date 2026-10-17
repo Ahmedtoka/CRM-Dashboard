@@ -1061,7 +1061,10 @@ class FlowEngine
     /** Every flow handover: the working-hours reply, then the team (HumanHandover). */
     private function handover(Conversation $c, string $reason, array $data, string $category = 'human_request'): void
     {
-        $this->human->handover($c, null, $this->customerText($c), $reason, $category, $this->prompter->summaryLines($data));
+        // Bot hybrid §3.6: the other requests of her message still waiting go to the team too.
+        $waiting = app(TaskOrchestrator::class)->handedOver($c);
+
+        $this->human->handover($c, null, $this->customerText($c), $reason, $category, [...$this->prompter->summaryLines($data), ...$waiting]);
 
         FlowState::clear($c);
     }

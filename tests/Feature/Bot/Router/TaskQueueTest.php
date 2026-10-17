@@ -16,6 +16,7 @@ use App\Inbox\InboxIngestor;
 use App\Models\BotSetting;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
+use App\Models\ConversationNote;
 use App\Models\Fulfillment;
 use App\Models\Message;
 use App\Models\MessageAttachment;
@@ -187,4 +188,20 @@ it('never records the same pieces of the same order twice, even through the menu
 
 it('sums up nothing for a single request (owner B7)', function () {
     expect(app(TaskOrchestrator::class)->summaryText([TaskQueue::task('return', 'مرتجع')]))->toBeNull();
+});
+
+it('tells the team about the requests still waiting when a flow hands her over', function () {
+    $late = tqOrder('209129', 'فستان ستان');
+    $late->fulfillments()->update(['delivered_at' => now()->subDays(20)]);
+    tqOrder('209200', 'عباية كتان');
+    $c = tqSay('عايزة ارجع اوردر 209129 واوردر 209200');
+    app(TaskOrchestrator::class)->start($c, TaskOrchestrator::flowTasks('return_exchange', 'عايزة ارجع اوردر 209129 واوردر 209200'));
+    tqTurn('4567');
+    expect(FlowState::flow($c->refresh())['step'])->toBe('late');
+
+    tqTurn('x', 'step:return_exchange:late:agent');
+
+    expect(ConversationNote::where('conversation_id', $c->id)->pluck('body')->implode("\n"))
+        ->toContain('مرتجع أوردر #209200 — لسه')
+        ->and(TaskQueue::all($c->refresh()))->toBe([]);
 });
