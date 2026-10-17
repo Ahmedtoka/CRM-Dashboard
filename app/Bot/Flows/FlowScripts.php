@@ -95,6 +95,18 @@ final class FlowScripts
             'queue_agent_delay_apology' => ['title' => 'الطابور: اعتذار عن تأخير الموظفة', 'body' => 'معلش على التأخير، زميلتنا {agent} معاكي حالاً'],
             // Spec 2026-09-30 §2: «خلصت» — the closing message of every manual close (the last word is ours).
             'queue_closed_thanks' => ['title' => 'الطابور: رسالة القفل', 'body' => 'سعدنا بخدمتك يا فندم، لو احتجتي أي حاجة تانية ابعتيلنا في أي وقت.'],
+            // Bot hybrid (owner B2, 2026-10-17): the answer needs a model and is taking more than 2 s.
+            'hold_short' => ['title' => 'البوت: ثانية واحدة', 'body' => 'ثانية واحدة يا فندم'],
+            // Several requests in one message (bot-hybrid.md §3.7): the next one after a flow ends.
+            'tasks_next_offer' => ['title' => 'البوت: نكمل الطلب اللي بعده', 'body' => 'تمام، نكمل في {next_label}؟'],
+            'tasks_later' => ['title' => 'البوت: الطلب اللي بعده بعدين', 'body' => 'تمام، لما تحبي نكمل ابعتيلي في أي وقت'],
+            'tasks_summary_title' => ['title' => 'البوت: ملخص الطلبات', 'body' => 'ملخص طلبات حضرتك:'],
+            // Owner B5: more than 4 requests in one message go to a person.
+            'tasks_too_many' => ['title' => 'البوت: طلبات كتير في رسالة واحدة', 'body' => 'عشان نخلص كل طلبات حضرتك صح، هوصّلك بحد من الفريق'],
+            // Owner B6: the same request for the same order is already recorded.
+            'tasks_already_recorded' => ['title' => 'البوت: الطلب ده متسجل', 'body' => 'طلب {flow_label} لأوردر #{order_number} متسجل خلاص برقم #{case_id}'],
+            // A model reply failed its checks twice: never a made-up answer.
+            'bot_safe_fallback' => ['title' => 'البوت: مش متأكدة من الإجابة', 'body' => 'خليني أتأكد من المعلومة دي مع الفريق، تحبي أوصّلك بحد منهم؟'],
         ];
     }
 }

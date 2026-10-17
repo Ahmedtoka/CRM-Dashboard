@@ -7,8 +7,10 @@ use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Flows\FlowEngine;
 use App\Bot\Flows\HumanHandover;
+use App\Bot\Jobs\BotHoldNotice;
 use App\Bot\Language\ConversationLanguage;
 use App\Bot\PriceGuard;
+use App\Bot\PromiseGuard;
 use App\Enums\Handler;
 use App\Enums\SenderType;
 use App\Inbox\OutboundService;
@@ -58,6 +60,8 @@ class AgentRunner
         }
 
         $started = hrtime(true);
+        // «ثانية واحدة» if the model is slow (owner B2): this path always calls a model.
+        BotHoldNotice::arm($c);
 
         try {
             $outcome = $this->agent->answer($c, $this->messages($c, $burst, $texts), $this->language->of($c), $insideFlow);
@@ -133,6 +137,11 @@ class AgentRunner
         $evidence = [...$o->evidence, ...$knowledge, BotSetting::current()->storeUrl()];
 
         if (! $this->prices->isSafe($o->reply, $evidence)) {
+            return false;
+        }
+
+        // Bot hybrid P0 (bot-hybrid.md §1.5): a gift, a discount or a guarantee needs a source too.
+        if (! app(PromiseGuard::class)->isSafe($o->reply, $evidence)) {
             return false;
         }
 

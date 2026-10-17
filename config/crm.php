@@ -214,8 +214,8 @@ return [
 
     'bot' => [
         // Defaults for new bot_settings rows; phpunit.xml pins them to 0 so synchronous tests stay synchronous.
-        'burst_wait_seconds' => (int) env('CRM_BOT_BURST_WAIT_SECONDS', 8),
-        'burst_max_wait_seconds' => (int) env('CRM_BOT_MAX_WAIT_SECONDS', 25),
+        'burst_wait_seconds' => (int) env('CRM_BOT_BURST_WAIT_SECONDS', 3),
+        'burst_max_wait_seconds' => (int) env('CRM_BOT_MAX_WAIT_SECONDS', 12),
         'typing_ms_per_char' => (int) env('CRM_BOT_TYPING_MS_PER_CHAR', 35),
 
         // Bilingual bot (design 2026-09-21 §2): at most this many NEW automatic
@@ -247,6 +247,16 @@ return [
         // The turn limit (bot_settings.max_bot_turns) counts bot turns within this many minutes only:
         // a loop happens in one sitting, not across days of an unanswered conversation.
         'turn_limit_minutes' => (int) env('CRM_BOT_TURN_LIMIT_MINUTES', 120),
+
+        // «ثانية واحدة يا فندم» (owner B2, 2026-10-17): sent once per turn when a model answer takes
+        // longer than after_seconds, at most once per cooldown_minutes per chat. Its queue must not be
+        // `bot` (the turn itself keeps those workers busy); `outbound` already has workers.
+        'hold_notice' => [
+            'enabled' => (bool) env('CRM_BOT_HOLD_NOTICE', true),
+            'after_seconds' => (float) env('CRM_BOT_HOLD_NOTICE_AFTER', 2),
+            'cooldown_minutes' => (int) env('CRM_BOT_HOLD_NOTICE_COOLDOWN', 10),
+            'queue' => env('CRM_BOT_NOTICE_QUEUE', 'outbound'),
+        ],
 
         // The store agent (2026-09-22): free text outside the flows is answered by one Claude
         // conversation with tools (catalog, orders, branches, shipping) over the owner's knowledge.
@@ -303,9 +313,14 @@ return [
         'flow_timeout' => (int) env('CRM_FLOW_TIMEOUT', 12),
         // Per-million-token USD prices, keyed by model, used to compute
         // BotRun.cost_usd from the classifier/reply token counts.
+        // Prices from the claude-api skill (2026-10-06); cache_read / cache_write (5-minute) are per
+        // million tokens too. Haiku 5.5's are for prompts up to 100K tokens (ours are far below).
         'prices' => [
-            'claude-haiku-4-5-20251001' => ['input' => 1, 'output' => 5],
-            'claude-sonnet-5' => ['input' => 3, 'output' => 15],
+            'claude-haiku-4-5-20251001' => ['input' => 1, 'output' => 5, 'cache_read' => 0.10, 'cache_write' => 1.25],
+            'claude-haiku-4-5' => ['input' => 1, 'output' => 5, 'cache_read' => 0.10, 'cache_write' => 1.25],
+            'claude-haiku-5-5' => ['input' => 0.10, 'output' => 0.50, 'cache_read' => 0.01, 'cache_write' => 0.125],
+            'claude-sonnet-5' => ['input' => 2, 'output' => 10, 'cache_read' => 0.20, 'cache_write' => 2.50],
+            'claude-sonnet-5-5' => ['input' => 2, 'output' => 10, 'cache_read' => 0.20, 'cache_write' => 2.50],
         ],
     ],
 

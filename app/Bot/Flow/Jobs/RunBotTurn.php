@@ -5,6 +5,8 @@ namespace App\Bot\Flow\Jobs;
 use App\Bot\BotEngine;
 use App\Bot\Flow\ReplyScheduler;
 use App\Bot\Flows\WaitingReply;
+use App\Bot\Jobs\BotHoldNotice;
+use App\Bot\Router\TurnMetrics;
 use App\Enums\Handler;
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
@@ -15,6 +17,9 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Throwable;
 
 class RunBotTurn implements ShouldQueue
@@ -73,10 +78,13 @@ class RunBotTurn implements ShouldQueue
         $c->forceFill(['bot_state' => array_merge($c->bot_state ?? [], ['last_turn_message_id' => $lastId])])->save();
 
         $beforeMaxId = (int) $c->messages()->max('id');
+        $this->startMetrics($c, $burst, $beforeMaxId);
 
         try {
             app(BotEngine::class)->handleTurn($c, $burst);
         } catch (Throwable $e) {
+            Cache::forget(BotHoldNotice::turnKey($c->id));
+
             $replied = Message::where('conversation_id', $c->id)
                 ->where('id', '>', $beforeMaxId)
                 ->whereIn('sender_type', [SenderType::Bot->value, SenderType::System->value])
@@ -89,7 +97,22 @@ class RunBotTurn implements ShouldQueue
             throw $e;
         }
 
+        Cache::forget(BotHoldNotice::turnKey($c->id));
         $this->scheduleMessagesThatArrivedDuringTheTurn($c, $lastId);
+    }
+
+    /** Bot hybrid P0: the turn's clock (how long she waited for the burst) and its «ثانية واحدة» marker. */
+    private function startMetrics(Conversation $c, Collection $burst, int $lastMessageId): void
+    {
+        $metrics = app(TurnMetrics::class);
+        $metrics->reset();
+        $metrics->startedAtMs = (int) floor(microtime(true) * 1000);
+        $metrics->lastMessageId = $lastMessageId;
+        $metrics->turn = (string) Str::uuid();
+        $first = $burst->first()?->created_at;
+        $metrics->burstWaitMs = $first !== null ? max(0, (int) ($metrics->startedAtMs - $first->getTimestampMs())) : null;
+
+        Cache::put(BotHoldNotice::turnKey($c->id), $metrics->turn, now()->addMinutes(3));
     }
 
     /** A customer message stored while this turn ran gets its own turn (final fix wave I4). */

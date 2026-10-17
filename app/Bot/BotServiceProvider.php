@@ -31,6 +31,7 @@ use App\Bot\Learning\FakeConversationReviewer;
 use App\Bot\Learning\FakeLearningAnalyst;
 use App\Bot\Learning\LearnCommand;
 use App\Bot\Learning\LearningAnalyst;
+use App\Bot\Router\TurnMetrics;
 use App\Models\BotSetting;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
@@ -39,6 +40,9 @@ class BotServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // Bot hybrid P0: one per job (scoped), so a worker never carries a turn's timings into the next.
+        $this->app->scoped(TurnMetrics::class);
+
         // Final fix wave M1: the models picked in the bot settings, config when left blank.
         $model = fn (string $column, string $config) => filled($chosen = BotSetting::current()->{$column})
             ? (string) $chosen

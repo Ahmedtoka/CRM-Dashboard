@@ -124,3 +124,14 @@ it('starts the guided flow the agent picked', function () {
     expect(FlowState::flow($c->refresh())['key'] ?? null)->toBe('return_exchange')
         ->and(BotRun::latest('id')->first()->decision)->toBe('flow_started');
 });
+
+it('never sends a promise (a gift, a discount) the tools and the knowledge did not give', function () {
+    Http::fake([
+        'api.anthropic.com/*' => Http::sequence()->push(agentText('ولو طلبتي النهارده ليكي هدية مع الأوردر يا فندم'))->whenEmpty(Http::response([], 500)),
+    ]);
+
+    agentSay('لو طلبت دلوقتي فيه حاجة زيادة؟');
+
+    expect(agentBotMessages()->pluck('body')->implode(' '))->not->toContain('هدية')
+        ->and(BotRun::where('engine', 'agent')->count())->toBe(0);
+});
