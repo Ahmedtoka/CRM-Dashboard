@@ -18,8 +18,11 @@ class MobileApiServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Login: per email + IP, so one moderator's typos never block a colleague on the same Wi-Fi.
-        RateLimiter::for('mobile-login', fn (Request $r) => Limit::perMinute(10)
-            ->by(mb_strtolower((string) $r->input('email')).'|'.$r->ip()));
+        // Plus a per-IP cap so one address cannot spray many accounts (review 03, R1).
+        RateLimiter::for('mobile-login', fn (Request $r) => [
+            Limit::perMinute(10)->by('e:'.mb_strtolower((string) $r->input('email')).'|'.$r->ip()),
+            Limit::perMinute(30)->by('ip:'.$r->ip()),
+        ]);
 
         RateLimiter::for('mobile-refresh', fn (Request $r) => Limit::perMinute(10)->by(self::who($r)));
         RateLimiter::for('mobile-devices-test', fn (Request $r) => Limit::perMinute(5)->by(self::who($r)));

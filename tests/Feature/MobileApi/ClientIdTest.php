@@ -155,3 +155,16 @@ it('treats a message and a note with the same client_id as separate sends', func
     mbSend($this->mod, $this->conv, ['body' => 'x', 'client_id' => $clientId])->assertCreated();
     $this->postJson("/api/v1/conversations/{$this->conv->id}/notes", ['body' => 'x', 'client_id' => $clientId])->assertCreated();
 });
+
+it('explains a reused client_id in the moderator language', function () {
+    $clientId = (string) Str::uuid();
+    $this->mod->forceFill(['locale' => 'ar'])->save();
+
+    mbSend($this->mod, $this->conv, ['body' => 'أولى', 'client_id' => $clientId])->assertCreated();
+    mbSend($this->mod, $this->conv, ['body' => 'تانية', 'client_id' => $clientId])->assertStatus(409)
+        ->assertJsonPath('message', __('errors.send.client_id_reused', [], 'ar'));
+
+    $this->mod->forceFill(['locale' => 'en'])->save();
+    mbSend($this->mod->fresh(), $this->conv, ['body' => 'تالتة', 'client_id' => $clientId])->assertStatus(409)
+        ->assertJsonPath('message', __('errors.send.client_id_reused', [], 'en'));
+});

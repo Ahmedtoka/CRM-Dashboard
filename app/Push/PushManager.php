@@ -73,6 +73,15 @@ class PushManager
             if ($result->transient) {
                 $retry[] = (int) $device->id;
             }
+
+            if (str_starts_with((string) $result->error, 'fcm_config')) {
+                $configError ??= (string) $result->error;
+            }
+        }
+
+        // A configuration problem (no credentials, wrong Firebase project) is loud, once per send.
+        if (isset($configError)) {
+            Log::error('push.config_error', ['driver' => $this->driverName(), 'user_id' => $user->id, 'error' => $configError]);
         }
 
         return ['devices' => $devices->count(), 'sent' => $sent, 'failed' => $failed, 'retry' => $retry];

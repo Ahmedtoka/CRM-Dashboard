@@ -20,8 +20,9 @@ use RuntimeException;
  * `crm.push.fcm.credentials` (FCM_CREDENTIALS) may be a path to the JSON key file
  * (relative paths resolve from the project root), the JSON itself, or the JSON base64-encoded.
  *
- * Only token-attributable answers are device faults (review 01, I3): 404 / UNREGISTERED,
- * SENDER_ID_MISMATCH, and INVALID_ARGUMENT whose message is about the registration token.
+ * Only token-attributable answers are device faults (review 01, I3): 404 / UNREGISTERED and
+ * INVALID_ARGUMENT whose message is about the registration token. SENDER_ID_MISMATCH is a
+ * project/configuration error (review 03, R2).
  * Auth, connection, 429 and 5xx are transient (the job retries); anything else is an error
  * that leaves the device alone.
  */
@@ -72,7 +73,13 @@ final class FcmPushSender implements PushSender
         $code = $this->errorCode($response);
         $error = 'fcm_'.$status.($code !== null ? ':'.$code : '');
 
-        if ($status === 404 || $code === 'UNREGISTERED' || $code === 'SENDER_ID_MISMATCH') {
+        // The token belongs to another Firebase project: our configuration is wrong, not the
+        // phone — never count it against the device (review 03, R2).
+        if ($code === 'SENDER_ID_MISMATCH') {
+            return PushResult::failed('fcm_config: '.$error);
+        }
+
+        if ($status === 404 || $code === 'UNREGISTERED') {
             return PushResult::deviceFault($error, invalidToken: true);
         }
 

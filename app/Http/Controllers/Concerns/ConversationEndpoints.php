@@ -323,7 +323,7 @@ trait ConversationEndpoints
                 $ids = is_array($stored) ? (array) ($stored['ids'] ?? []) : [];
 
                 if ($ids !== [] && ($stored['hash'] ?? null) !== $hash) {
-                    return response()->json(['message' => 'This client_id was already used for a different send.'], 409);
+                    return response()->json(['message' => __('errors.send.client_id_reused')], 409);
                 }
 
                 if ($ids !== [] && ($replayed = $replay(array_map('intval', $ids))) !== null) {

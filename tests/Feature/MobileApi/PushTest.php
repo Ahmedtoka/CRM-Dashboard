@@ -14,6 +14,7 @@ use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 beforeEach(function () {
     config(['crm.push.driver' => 'fake']);
@@ -277,8 +278,29 @@ it('disables a device FCM reports as unregistered or invalid', function (int $st
 })->with([
     'unregistered' => [404, ['code' => 404, 'status' => 'NOT_FOUND', 'details' => [['@type' => 'type.googleapis.com/google.firebase.fcm.v1.FcmError', 'errorCode' => 'UNREGISTERED']]]],
     'invalid token' => [400, ['code' => 400, 'status' => 'INVALID_ARGUMENT', 'message' => 'The registration token is not a valid FCM registration token', 'details' => [['@type' => 'type.googleapis.com/google.firebase.fcm.v1.FcmError', 'errorCode' => 'INVALID_ARGUMENT']]]],
-    'sender id mismatch' => [403, ['code' => 403, 'status' => 'PERMISSION_DENIED', 'details' => [['@type' => 'type.googleapis.com/google.firebase.fcm.v1.FcmError', 'errorCode' => 'SENDER_ID_MISMATCH']]]],
 ]);
+
+it('treats SENDER_ID_MISMATCH as a configuration error: logged once per job, device untouched', function () {
+    Cache::flush();
+    mbFcmCredentials();
+    $second = DeviceToken::factory()->create(['user_id' => $this->user->id]);
+    Http::fake([
+        'oauth2.googleapis.com/token' => Http::response(['access_token' => 'ya29.x']),
+        'fcm.googleapis.com/*' => Http::response(['error' => ['code' => 403, 'status' => 'PERMISSION_DENIED',
+            'details' => [['@type' => 'type.googleapis.com/google.firebase.fcm.v1.FcmError', 'errorCode' => 'SENDER_ID_MISMATCH']]]], 403),
+    ]);
+    Log::spy();
+    Bus::fake([SendPushNotification::class]);
+    $n = UserNotification::create(['user_id' => $this->user->id, 'type' => 'queue.assigned', 'data' => ['ticket' => 3]]);
+
+    (new SendPushNotification($n->id))->handle(app(PushManager::class), app(PushMessageFactory::class));
+
+    Log::shouldHaveReceived('error')->withArgs(fn (string $msg) => $msg === 'push.config_error')->once();
+    Bus::assertNotDispatched(SendPushNotification::class);
+    foreach ([$this->device, $second] as $d) {
+        expect($d->fresh()->failure_count)->toBe(0)->and($d->fresh()->disabled_at)->toBeNull();
+    }
+});
 
 it('leaves the device alone when FCM rejects the payload, not the token', function () {
     Cache::flush();

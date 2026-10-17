@@ -62,3 +62,13 @@ it('does not lock refresh or the test push after queue polling', function () {
     mbFreshGuard();
     $this->withToken($token)->postJson('/api/v1/auth/refresh')->assertOk();
 });
+
+it('caps login attempts per address across many accounts', function () {
+    foreach (range(1, 30) as $i) {
+        $this->postJson('/api/v1/auth/login', ['email' => "spray{$i}@example.test", 'password' => 'x', 'device_name' => 'p'])->assertUnprocessable();
+    }
+
+    $this->postJson('/api/v1/auth/login', ['email' => 'spray31@example.test', 'password' => 'x', 'device_name' => 'p'])->assertTooManyRequests();
+    $this->withServerVariables(['REMOTE_ADDR' => '10.9.9.9'])
+        ->postJson('/api/v1/auth/login', ['email' => 'spray31@example.test', 'password' => 'x', 'device_name' => 'p'])->assertUnprocessable();
+});

@@ -33,6 +33,7 @@ return [
         'facebook_not_connected' => 'No Facebook Page is connected.',
         'no_identity' => 'This customer has no identity on that platform.',
         'send_failed' => 'The message was not sent.',
+        'client_id_reused' => 'This send was already made with different content — send it again as a new message.',
     ],
 
     'inbox' => [
