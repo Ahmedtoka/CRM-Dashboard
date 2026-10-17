@@ -54,3 +54,14 @@ it('pages with a caller page size', function () {
     expect(array_column($rows, 'comment_id'))->toBe(['1', '2']);
     Http::assertSent(fn ($r) => str_contains($r->url(), 'page_size=100') && str_contains($r->url(), 'page=2'));
 });
+
+it('records a shared throttle so background polling stays off the quota', function () {
+    Http::preventStrayRequests();
+    Http::fake([TTAPI.'*' => Http::response(['code' => 40100, 'message' => 'Too many requests', 'data' => []])]);
+
+    ttRateError(fn () => app(TikTokApi::class)->get('tok', 'ad/get/', []));
+
+    expect(TikTokApi::throttledUntil())->toBe(now()->getTimestamp() + 300);
+    $this->travel(301)->seconds();
+    expect(TikTokApi::throttledUntil())->toBeNull();
+});

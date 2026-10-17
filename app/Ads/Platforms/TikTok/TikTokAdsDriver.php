@@ -156,17 +156,28 @@ class TikTokAdsDriver implements AdPlatformDriver
 
         try {
             $ads = [];
+            $unexpected = 0;
             foreach ($this->paginate($token, 'ad/get/', [
                 'advertiser_id' => $a->external_id,
                 'fields' => json_encode(['ad_id', 'operation_status', 'secondary_status']),
                 'filtering' => json_encode(['primary_status' => 'STATUS_DELETE']),
             ]) as $r) {
-                if (! empty($r['ad_id'])) {
-                    $ads[(string) $r['ad_id']] = ['status' => $r['operation_status'] ?? null, 'effective_status' => 'DELETED'];
+                if (empty($r['ad_id'])) {
+                    continue;
                 }
+                // Never trust the filter alone: a row that does not say it is deleted is not written as deleted.
+                if (! self::isDeleted($r)) {
+                    $unexpected++;
+
+                    continue;
+                }
+                $ads[(string) $r['ad_id']] = ['status' => 'DELETED', 'effective_status' => 'DELETED'];
             }
             $out['ads'] = $ads;
-            $out['ads_complete'] = true;
+            $out['ads_complete'] = $unexpected === 0;
+            if ($unexpected > 0) {
+                $out['warnings'][] = "deleted ads list: {$unexpected} rows were not deleted ads (filter ignored?); nothing is marked GONE this run";
+            }
         } catch (TokenInvalid|RateLimited $e) {
             throw $e;
         } catch (AdsApiException $e) {
@@ -182,7 +193,7 @@ class TikTokAdsDriver implements AdPlatformDriver
             ]) as $r) {
                 if (! empty($r['campaign_id'])) {
                     $campaigns[(string) $r['campaign_id']] = [
-                        'name' => $r['campaign_name'] ?? null, 'status' => $r['operation_status'] ?? null,
+                        'name' => $r['campaign_name'] ?? null, 'status' => self::ownStatus($r),
                         'effective_status' => self::effective($r['secondary_status'] ?? null), 'objective' => $r['objective_type'] ?? null,
                     ];
                 }
@@ -217,7 +228,7 @@ class TikTokAdsDriver implements AdPlatformDriver
             'filtering' => json_encode(['primary_status' => 'STATUS_NOT_DELETE']),
         ]) as $r) {
             if (! empty($r['campaign_id'])) {
-                $out[(string) $r['campaign_id']] = ['status' => $r['operation_status'] ?? null, 'effective_status' => self::effective($r['secondary_status'] ?? null)];
+                $out[(string) $r['campaign_id']] = ['status' => self::ownStatus($r), 'effective_status' => self::effective($r['secondary_status'] ?? null)];
             }
         }
 
@@ -225,16 +236,43 @@ class TikTokAdsDriver implements AdPlatformDriver
     }
 
     /**
-     * TikTok's delivering secondary statuses in the Ads Hub's spelling (the screens count effective_status = ACTIVE);
-     * every other value is kept as TikTok sends it (AD_STATUS_AUDIT, ..._DISABLE, ...).
+     * TikTok's secondary statuses in the Ads Hub's (Meta) spelling where the screens and checks look for one: delivering
+     * = ACTIVE, deleted = DELETED, review rejected = DISAPPROVED, in review = PENDING_REVIEW (ASSUMPTION: the
+     * documented AD_STATUS_AUDIT_DENY / AD_STATUS_AUDIT / AD_STATUS_REAUDIT names). Every other value is kept as sent.
      */
     public static function effective(mixed $secondary): ?string
     {
         if (! is_string($secondary) || $secondary === '') {
             return null;
         }
+        if (str_ends_with($secondary, '_DELETE')) {
+            return 'DELETED';
+        }
 
-        return in_array($secondary, ['AD_STATUS_DELIVERY_OK', 'ADGROUP_STATUS_DELIVERY_OK', 'CAMPAIGN_STATUS_ENABLE'], true) ? 'ACTIVE' : $secondary;
+        return match ($secondary) {
+            'AD_STATUS_DELIVERY_OK', 'ADGROUP_STATUS_DELIVERY_OK', 'CAMPAIGN_STATUS_ENABLE' => 'ACTIVE',
+            'AD_STATUS_AUDIT_DENY' => 'DISAPPROVED',
+            'AD_STATUS_AUDIT', 'AD_STATUS_REAUDIT' => 'PENDING_REVIEW',
+            default => $secondary,
+        };
+    }
+
+    /**
+     * The object's own status as stored: TikTok's ENABLE / DISABLE, or DELETED when the secondary status says so (TikTok
+     * keeps ENABLE/DISABLE on a deleted object, which would count it in the active-campaign scope).
+     */
+    public static function ownStatus(array $row): ?string
+    {
+        if (self::isDeleted($row)) {
+            return 'DELETED';
+        }
+
+        return isset($row['operation_status']) ? (string) $row['operation_status'] : null;
+    }
+
+    private static function isDeleted(array $row): bool
+    {
+        return str_ends_with((string) ($row['secondary_status'] ?? ''), '_DELETE');
     }
 
     public function creativeMedia(AdAccount $a, array $adExternalIds): array
@@ -401,15 +439,15 @@ class TikTokAdsDriver implements AdPlatformDriver
         return new AdRow(
             externalId: (string) $r['ad_id'],
             name: (string) ($r['ad_name'] ?? $r['ad_id']),
-            status: $r['operation_status'] ?? null,
+            status: self::ownStatus($r),
             effectiveStatus: self::effective($r['secondary_status'] ?? null),
             campaignId: isset($r['campaign_id']) ? (string) $r['campaign_id'] : null,
             campaignName: $r['campaign_name'] ?? null,
-            campaignStatus: $campaign['operation_status'] ?? null,
+            campaignStatus: $campaign === [] ? null : self::ownStatus($campaign),
             objective: $campaign['objective_type'] ?? null,
             adSetId: isset($r['adgroup_id']) ? (string) $r['adgroup_id'] : null,
             adSetName: $r['adgroup_name'] ?? null,
-            adSetStatus: $group['operation_status'] ?? null,
+            adSetStatus: $group === [] ? null : self::ownStatus($group),
             type: $video ? 'video' : 'image',
             // TikTok ads have no headline; the identity name is the line shown above the text (ASSUMPTION).
             headline: $r['display_name'] ?? null,

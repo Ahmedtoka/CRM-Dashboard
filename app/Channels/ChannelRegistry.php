@@ -37,6 +37,14 @@ class ChannelRegistry
             return new FakeChannelAdapter($account->platform);
         }
 
+        // TikTok (E1) is routed per account: a demo/fake TikTok channel stays fake next to the live ad-comments channel,
+        // and the live one never falls back to the fake adapter (TikTokAdapter refuses when it is disconnected).
+        if ($account->platform === Platform::TikTok) {
+            return $account->driver === 'live' && config('crm.drivers.channels') !== 'fake'
+                ? app(TikTokAdapter::class)
+                : new FakeChannelAdapter(Platform::TikTok);
+        }
+
         return $this->adapter($account->platform);
     }
 

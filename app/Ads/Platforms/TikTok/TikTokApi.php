@@ -8,6 +8,7 @@ use App\Ads\Platforms\RateLimited;
 use App\Ads\Platforms\SecretScrubber;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -80,6 +81,28 @@ class TikTokApi
         }
     }
 
+    /** Cache key: until when TikTok asked this app to slow down (any caller); background polling waits for it. */
+    public const THROTTLED_UNTIL_KEY = 'tiktok-api:throttled-until';
+
+    /** Unix time until which the last throttle asks to wait, or null when none is pending. */
+    public static function throttledUntil(): ?int
+    {
+        $until = (int) Cache::get(self::THROTTLED_UNTIL_KEY, 0);
+
+        return $until > now()->getTimestamp() ? $until : null;
+    }
+
+    /** Records the wait so the comment poller stays off the shared quota that Stops and syncs also need. */
+    private static function throttled(RateLimited $e): RateLimited
+    {
+        $until = now()->getTimestamp() + (int) $e->retryAfterSeconds;
+        if ($until > (int) Cache::get(self::THROTTLED_UNTIL_KEY, 0)) {
+            Cache::put(self::THROTTLED_UNTIL_KEY, $until, now()->addSeconds((int) $e->retryAfterSeconds + 60));
+        }
+
+        return $e;
+    }
+
     /** Seconds to wait: until 00:00 UTC when the message names the daily quota, else the 5-minute throttle wait. */
     private static function waitFor(string $message): int
     {
@@ -108,7 +131,7 @@ class TikTokApi
 
         $code = $response->json('code');
         if ($response->status() === 429) {
-            throw new RateLimited('TikTok rate limit reached; retry later.', self::THROTTLE_WAIT_SECONDS);
+            throw self::throttled(new RateLimited('TikTok rate limit reached; retry later.', self::THROTTLE_WAIT_SECONDS));
         }
         if ($code === null) {
             throw new AdsApiException('TikTok API error: unexpected response (HTTP '.$response->status().')');
@@ -116,7 +139,7 @@ class TikTokApi
         if ((int) $code !== 0) {
             $message = SecretScrubber::scrub((string) ($response->json('message') ?: 'TikTok API error (code '.$code.')'), [$token]);
             if (in_array((int) $code, self::RATE_CODES, true)) {
-                throw new RateLimited($message, self::waitFor($message));
+                throw self::throttled(new RateLimited($message, self::waitFor($message)));
             }
             // The platform's own text, no claim about which permission: TikTok reuses these codes for scope problems.
             throw in_array((int) $code, self::PERMISSION_CODES, true) ? new MissingPermission($message) : new AdsApiException($message);

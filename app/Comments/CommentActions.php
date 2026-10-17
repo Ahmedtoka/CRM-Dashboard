@@ -79,6 +79,13 @@ class CommentActions
             'replied_by_id' => $by?->id,
         ])->save();
 
+        // Every reply id on a TikTok post is kept (a second reply overwrites the comment's column; the poller checks both).
+        if ($post->platform === Platform::TikTok && filled($result->externalId)) {
+            $meta = $post->platform_meta ?? [];
+            $ids = array_values(array_unique(array_merge((array) ($meta['own_reply_ids'] ?? []), [(string) $result->externalId])));
+            $post->forceFill(['platform_meta' => array_merge($meta, ['own_reply_ids' => array_slice($ids, -500)])])->save();
+        }
+
         $this->logger->log(
             $by !== null ? ActorType::User : ActorType::Bot,
             $by,

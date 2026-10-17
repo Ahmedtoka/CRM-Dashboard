@@ -302,3 +302,96 @@ it('ingests a comment on an ad the Ads Hub has not synced yet (ad id from TikTok
     $post = Comment::sole()->post;
     expect($post->external_id)->toBe('ad-4499')->and($post->ad_id)->toBe('4499')->and($post->is_ad)->toBeTrue()->and($post->ad_title)->toBeNull();
 });
+
+it('never ingests an earlier reply of ours after a second reply, nor one TikTok named no id for', function () {
+    config(['crm.drivers.channels' => 'live']);
+    Queue::fake();
+    $a = ttcAccount();
+    ttcFakeList([ttcRow()]);
+    app(TikTokAdCommentPoller::class)->poll($a);
+    $c = Comment::sole();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    app(CommentActions::class)->reply($c, 'أول رد', $admin);
+    // Second reply: TikTok gives another id (the fake always answers ...999, so simulate the column moving on).
+    app(CommentActions::class)->reply($c->fresh(), 'تاني رد', $admin);
+    $c->forceFill(['public_reply_external_id' => '7300000000000000777'])->save();
+
+    $GLOBALS['ttc_rows'] = [
+        ttcRow(),
+        ttcRow(['comment_id' => '7300000000000000999', 'comment_type' => 'REPLY', 'original_comment_id' => '7300000000000000001', 'content' => 'أول رد']),
+        ttcRow(['comment_id' => '7300000000000000888', 'comment_type' => 'REPLY', 'original_comment_id' => '7300000000000000001', 'content' => 'تاني رد']),
+    ];
+    $this->travel(5)->minutes();
+    app(TikTokAdCommentPoller::class)->poll($a);
+
+    expect(Comment::count())->toBe(1);
+});
+
+it('keeps a CRM hide when the row has no status field or TikTok still lists it public right after', function () {
+    config(['crm.drivers.channels' => 'live']);
+    Queue::fake();
+    $a = ttcAccount();
+    ttcFakeList([ttcRow()]);
+    app(TikTokAdCommentPoller::class)->poll($a);
+    $c = Comment::sole();
+    app(CommentActions::class)->hide($c, null);
+
+    $row = ttcRow();
+    unset($row['comment_status']);
+    $GLOBALS['ttc_rows'] = [$row];
+    $this->travel(3)->minutes();
+    app(TikTokAdCommentPoller::class)->poll($a);
+    expect($c->fresh()->status)->toBe(CommentStatus::Hidden);
+
+    $GLOBALS['ttc_rows'] = [ttcRow()]; // PUBLIC, but within 10 minutes of our hide
+    $this->travel(3)->minutes();
+    app(TikTokAdCommentPoller::class)->poll($a);
+    expect($c->fresh()->status)->toBe(CommentStatus::Hidden);
+});
+
+it('stays off TikTok while any caller is throttled, and stops a run on an unknown error', function () {
+    $a = ttcAccount();
+    ttcFakeList([]);
+    Cache::put(\App\Ads\Platforms\TikTok\TikTokApi::THROTTLED_UNTIL_KEY, now()->addMinutes(5)->getTimestamp(), 600);
+
+    expect(app(TikTokAdCommentPoller::class)->poll($a)['skipped'])->toBe('throttled');
+    Http::assertNothingSent();
+
+    Cache::forget(\App\Ads\Platforms\TikTok\TikTokApi::THROTTLED_UNTIL_KEY);
+    AdSet::factory()->create(['ad_campaign_id' => AdCampaign::where('external_id', '501')->value('id'), 'external_id' => '9003', 'status' => 'ENABLE']);
+    $GLOBALS['ttc_list_code'] = 40105;
+    expect(app(TikTokAdCommentPoller::class)->poll($a)['skipped'])->toBe('error');
+    Http::assertSentCount(1);
+});
+
+it('does not run the bot when TikTok sends no readable time', function () {
+    Queue::fake();
+    BotSetting::current()->update(['enabled' => true]);
+    $a = ttcAccount();
+    ttcFakeList([ttcRow(['create_time' => 'not a time'])]);
+
+    app(TikTokAdCommentPoller::class)->poll($a);
+
+    expect(Comment::count())->toBe(1);
+    Queue::assertNotPushed(RunCommentBot::class);
+});
+
+it('a demo fake TikTok channel stays on the fake adapter next to the live one, and a disconnected live channel sends nothing', function () {
+    config(['crm.drivers.channels' => 'live']);
+    Queue::fake();
+    $fake = ChannelAccount::factory()->create(['platform' => Platform::TikTok, 'driver' => 'fake', 'external_id' => 'demo-tt']);
+    $a = ttcAccount();
+    ttcFakeList([ttcRow()]);
+    app(TikTokAdCommentPoller::class)->poll($a);
+    $registry = app(ChannelRegistry::class);
+    $live = ChannelAccount::where('external_id', '7001')->sole();
+
+    expect($registry->adapterFor($fake))->toBeInstanceOf(FakeChannelAdapter::class)
+        ->and($registry->adapterFor($live))->toBeInstanceOf(TikTokAdapter::class);
+
+    $live->update(['status' => 'disconnected']);
+    expect($registry->adapterFor($live->fresh()))->toBeInstanceOf(TikTokAdapter::class);
+    $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))
+        ->postJson('/comments/'.Comment::sole()->id.'/hide')->assertStatus(502);
+    Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'comment/status/update/'));
+});

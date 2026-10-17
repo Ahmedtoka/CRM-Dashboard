@@ -337,8 +337,9 @@ return [
     // Nothing is called unless crm.ads.drivers.tiktok is live.
     'tiktok_ad_comments' => [
         'enabled' => (bool) env('CRM_TIKTOK_AD_COMMENTS', true),
-        // Ad groups read per account per run (the rest wait for the next run, oldest-polled first).
-        'max_adgroups_per_run' => (int) env('CRM_TIKTOK_AD_COMMENTS_MAX_ADGROUPS', 40),
+        // Ad groups read per account per run (the rest wait for the next run, oldest-polled first). The quota is
+        // shared with the ads sync and Stop writes (Basic tier: 600 calls/min): 20 every 3 minutes is ~400 calls/hour.
+        'max_adgroups_per_run' => (int) env('CRM_TIKTOK_AD_COMMENTS_MAX_ADGROUPS', 20),
         'every_minutes' => 3,
         // The comment bot answers only comments younger than this (the first poll reads two days of history).
         'bot_max_age_minutes' => 120,

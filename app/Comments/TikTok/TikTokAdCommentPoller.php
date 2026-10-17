@@ -57,6 +57,10 @@ class TikTokAdCommentPoller
         if (Cache::has(self::cooldownKey($a))) {
             return ['skipped' => 'cooldown'] + $result;
         }
+        // Any TikTok throttle (a sync, a Stop, another poll) parks the poller: Stops and syncs share the same quota.
+        if (TikTokApi::throttledUntil() !== null) {
+            return ['skipped' => 'throttled'] + $result;
+        }
         $channel = $this->channelFor($a);
         if ($channel->status === 'disconnected') {
             return ['skipped' => 'channel_disconnected'] + $result;
@@ -71,6 +75,8 @@ class TikTokAdCommentPoller
         [$from, $to] = [$today->subDay()->toDateString(), $today->toDateString()];
 
         foreach ($this->adGroups($a) as $adgroupId) {
+            // Marked before the call, so an ad group that keeps failing goes to the back of the rotation.
+            Cache::put($this->polledKey($a, $adgroupId), now()->getTimestamp(), now()->addDays(2));
             try {
                 $rows = $this->api->list($a, $adgroupId, $from, $to);
             } catch (RateLimited $e) {
@@ -82,11 +88,11 @@ class TikTokAdCommentPoller
 
                 return ['skipped' => 'missing_permission'] + $result;
             } catch (AdsApiException $e) {
+                // A dead token or an unknown error would fail for every ad group: one call and one log line per run.
                 Log::warning('tiktok.ad_comments.list_failed', ['ad_account_id' => $a->id, 'adgroup_id' => $adgroupId, 'error' => SecretScrubber::scrub($e->getMessage())]);
 
-                continue;
+                return ['skipped' => 'error'] + $result;
             }
-            Cache::put($this->polledKey($a, $adgroupId), now()->getTimestamp(), now()->addDays(2));
             $result['adgroups']++;
 
             foreach ($rows as $row) {
@@ -145,18 +151,24 @@ class TikTokAdCommentPoller
     private function take(AdAccount $a, ChannelAccount $channel, array $row): ?string
     {
         $id = (string) ($row['comment_id'] ?? '');
-        if ($id === '' || Comment::where('public_reply_external_id', $id)->exists()) {
-            return null; // nothing to key on, or our own reply listed back
+        if ($id === '') {
+            return null;
         }
+        $onTikTok = fn ($q) => $q->where('platform', Platform::TikTok);
         $hidden = strtoupper((string) ($row['comment_status'] ?? '')) === 'HIDDEN';
 
-        $known = Comment::where('external_id', $id)->first();
+        $known = Comment::where('external_id', $id)->whereHas('post', $onTikTok)->first();
         if ($known !== null) {
-            return $this->followVisibility($known, $hidden) ? 'updated' : null;
+            // Only a status TikTok actually sent is followed: a missing field must not undo a hide made in the CRM.
+            return array_key_exists('comment_status', $row) && $this->followVisibility($known, $hidden) ? 'updated' : null;
+        }
+
+        $post = $this->post($a, $channel, $row);
+        if ($this->isOwnReply($post, $id, $row)) {
+            return null;
         }
 
         $occurred = $this->time($row['create_time'] ?? null);
-        $post = $this->post($a, $channel, $row);
         $customerId = (string) ($row['user_id'] ?? '');
         $isReply = strtoupper((string) ($row['comment_type'] ?? '')) === 'REPLY';
         $maxAge = (int) config('crm.tiktok_ad_comments.bot_max_age_minutes', 120);
@@ -169,12 +181,12 @@ class TikTokAdCommentPoller
             customerExternalId: $customerId !== '' ? $customerId : 'tiktok-anon-'.$id,
             customerName: trim((string) ($row['user_name'] ?? '')) ?: 'TikTok',
             body: (string) ($row['content'] ?? ''),
-            occurredAt: $occurred,
+            occurredAt: $occurred ?? CarbonImmutable::now(),
             parentExternalId: $isReply && ! empty($row['original_comment_id']) ? (string) $row['original_comment_id'] : null,
             isAd: true,
             adId: $post->ad_id,
             adTitle: $post->ad_title,
-        ), runBot: ! $hidden && $occurred->gt(now()->subMinutes($maxAge)));
+        ), runBot: ! $hidden && $occurred !== null && $occurred->gt(now()->subMinutes($maxAge)) && $occurred->lte(now()->addMinutes(5)));
         if ($comment === null) {
             return null;
         }
@@ -185,11 +197,35 @@ class TikTokAdCommentPoller
         return 'ingested';
     }
 
+    /**
+     * Our own reply listed back: its id is one the CRM posted (every reply id is kept on the post, and the latest on the
+     * comment), or it is a thread reply whose text is the public reply the CRM posted under that parent (TikTok named
+     * no id for it).
+     */
+    private function isOwnReply(Post $post, string $id, array $row): bool
+    {
+        if (in_array($id, array_map('strval', (array) ($post->platform_meta['own_reply_ids'] ?? [])), true)
+            || Comment::where('public_reply_external_id', $id)->whereHas('post', fn ($q) => $q->where('platform', Platform::TikTok))->exists()) {
+            return true;
+        }
+        $parent = (string) ($row['original_comment_id'] ?? '');
+        if (strtoupper((string) ($row['comment_type'] ?? '')) !== 'REPLY' || $parent === '') {
+            return false;
+        }
+        $parentReply = Comment::where('external_id', $parent)->where('post_id', $post->id)->value('public_reply');
+
+        return $parentReply !== null && trim((string) $parentReply) === trim((string) ($row['content'] ?? ''));
+    }
+
     /** A hide or unhide made in TikTok itself; true when our row changed. */
     private function followVisibility(Comment $c, bool $hidden): bool
     {
         $isHidden = $c->status === CommentStatus::Hidden;
         if ($hidden === $isHidden) {
+            return false;
+        }
+        // TikTok's list may lag a hide just made in the CRM: a PUBLIC right after it is not an unhide.
+        if (! $hidden && $c->updated_at !== null && $c->updated_at->gt(now()->subMinutes(10))) {
             return false;
         }
         $c->forceFill(['status' => $hidden ? CommentStatus::Hidden : ($c->public_replied_at !== null ? CommentStatus::Replied : CommentStatus::New)])->save();
@@ -237,8 +273,8 @@ class TikTokAdCommentPoller
         return $post;
     }
 
-    /** TikTok's create_time: a 'Y-m-d H:i:s' UTC+0 string or a unix timestamp (ASSUMPTION: UTC). */
-    private function time(mixed $v): CarbonImmutable
+    /** TikTok's create_time: a 'Y-m-d H:i:s' UTC+0 string or a unix timestamp (ASSUMPTION: UTC); null when unreadable. */
+    private function time(mixed $v): ?CarbonImmutable
     {
         try {
             if (is_numeric($v)) {
@@ -251,6 +287,6 @@ class TikTokAdCommentPoller
             // fall through
         }
 
-        return CarbonImmutable::now();
+        return null;
     }
 }

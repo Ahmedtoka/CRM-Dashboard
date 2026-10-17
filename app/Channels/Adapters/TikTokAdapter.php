@@ -117,7 +117,7 @@ final class TikTokAdapter implements ChannelAdapter, UnhidesComments
      */
     private function call(string $commentExternalId, callable $fn): SendResult
     {
-        $comment = Comment::with('post')->where('external_id', $commentExternalId)
+        $comment = Comment::with('post.channelAccount')->where('external_id', $commentExternalId)
             ->whereHas('post', fn ($q) => $q->where('platform', Platform::TikTok))->first();
         $meta = $comment?->post?->platform_meta ?? [];
         $account = null;
@@ -129,6 +129,9 @@ final class TikTokAdapter implements ChannelAdapter, UnhidesComments
         }
         if ($comment === null || $account === null) {
             return SendResult::fail('This TikTok comment is not linked to a TikTok ad account in the CRM.');
+        }
+        if ($comment->post?->channelAccount?->status === 'disconnected') {
+            return SendResult::fail('This TikTok channel is disconnected in Settings; nothing was sent to TikTok.');
         }
         if (config('crm.ads.drivers.tiktok') !== 'live') {
             return SendResult::fail('TikTok is not live on this server.');

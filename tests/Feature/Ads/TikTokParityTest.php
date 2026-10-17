@@ -85,7 +85,7 @@ it('lists the deleted ads and every campaign for the nightly sweep', function ()
 
     $lists = app(TikTokAdsDriver::class)->statuses(ttpAccount());
 
-    expect($lists['ads'])->toBe(['1809' => ['status' => 'DISABLE', 'effective_status' => 'DELETED']])
+    expect($lists['ads'])->toBe(['1809' => ['status' => 'DELETED', 'effective_status' => 'DELETED']])
         ->and($lists['ads_complete'])->toBeTrue()
         ->and($lists['campaigns'])->toBe(['501' => ['name' => 'Sales', 'status' => 'ENABLE', 'effective_status' => 'ACTIVE', 'objective' => 'WEB_CONVERSIONS']]);
     Http::assertSent(fn (Request $r) => str_contains($r->url(), '/ad/get/') && ttpFilter($r) === ['primary_status' => 'STATUS_DELETE']);
@@ -173,4 +173,34 @@ it('a nightly TikTok sync stores campaign statuses, the control totals and marks
         ->and(AdAccountDaily::where('ad_account_id', $acc->id)->where('date', '2026-09-10')->value('spend'))->toEqual(10)
         ->and($gone->fresh()->effective_status)->toBe('GONE')
         ->and(Ad::where('external_id', '1801')->value('effective_status'))->toBe('ACTIVE');
+});
+
+it('never marks a live ad deleted when the deleted-ads filter is ignored (and no GONE that night)', function () {
+    Http::fake([
+        TTP.'ad/get/*' => Http::response(ttpList([
+            ['ad_id' => '1809', 'operation_status' => 'DISABLE', 'secondary_status' => 'AD_STATUS_DELETE'],
+            ['ad_id' => '1801', 'operation_status' => 'ENABLE', 'secondary_status' => 'AD_STATUS_DELIVERY_OK'],
+        ])),
+        TTP.'campaign/get/*' => Http::response(ttpList([])),
+    ]);
+
+    $lists = app(TikTokAdsDriver::class)->statuses(ttpAccount());
+
+    expect($lists['ads'])->toHaveKeys(['1809'])->not->toHaveKey('1801')
+        ->and($lists['ads_complete'])->toBeFalse()->and($lists['warnings'][0])->toContain('not deleted ads');
+});
+
+it('stores a deleted campaign as DELETED so the active-only scope drops it', function () {
+    Http::fake([
+        TTP.'ad/get/*' => Http::response(ttpList([])),
+        TTP.'campaign/get/*' => Http::response(ttpList([['campaign_id' => '503', 'operation_status' => 'ENABLE', 'secondary_status' => 'CAMPAIGN_STATUS_DELETE']])),
+    ]);
+
+    expect(app(TikTokAdsDriver::class)->statuses(ttpAccount())['campaigns']['503'])->toMatchArray(['status' => 'DELETED', 'effective_status' => 'DELETED']);
+});
+
+it('maps TikTok review states to the spellings the launch checks know', function () {
+    expect(TikTokAdsDriver::effective('AD_STATUS_AUDIT_DENY'))->toBe('DISAPPROVED')
+        ->and(TikTokAdsDriver::effective('AD_STATUS_AUDIT'))->toBe('PENDING_REVIEW')
+        ->and(TikTokAdsDriver::effective('AD_STATUS_DISABLE'))->toBe('AD_STATUS_DISABLE');
 });

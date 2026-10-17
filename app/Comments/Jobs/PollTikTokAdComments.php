@@ -2,6 +2,7 @@
 
 namespace App\Comments\Jobs;
 
+use App\Comments\Commands\PollTikTokAdCommentsCommand;
 use App\Comments\TikTok\TikTokAdCommentPoller;
 use App\Models\AdAccount;
 use Illuminate\Bus\Queueable;
@@ -30,6 +31,10 @@ class PollTikTokAdComments implements ShouldBeUnique, ShouldQueue
 
     public function handle(TikTokAdCommentPoller $poller): void
     {
+        // Re-checked here: a job queued before the driver or the switch was turned off must not call TikTok.
+        if (! PollTikTokAdCommentsCommand::enabled()) {
+            return;
+        }
         $account = AdAccount::with('connection')->find($this->adAccountId);
         if ($account !== null) {
             $poller->poll($account);
