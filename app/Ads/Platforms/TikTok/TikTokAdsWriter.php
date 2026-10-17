@@ -11,6 +11,7 @@ use App\Ads\Platforms\Data\Identity;
 use App\Ads\Platforms\Data\MediaRef;
 use App\Ads\Platforms\Data\ObjectState;
 use App\Ads\Platforms\ReadUnsupported;
+use App\Ads\Platforms\WriteRefused;
 use App\Models\AdAccount;
 use App\Models\AdMaterialFile;
 use Illuminate\Support\Facades\Storage;
@@ -212,6 +213,9 @@ class TikTokAdsWriter implements AdPlatformWriter
     {
         if (! isset(self::LEVELS[$level])) {
             throw new AdsApiException('Unknown ad level: '.$level);
+        }
+        if (strtolower($status) === 'archived') {
+            throw new WriteRefused('archive_unsupported'); // TikTok has DELETE only; the CRM never deletes
         }
         [$path, $key] = self::LEVELS[$level];
 

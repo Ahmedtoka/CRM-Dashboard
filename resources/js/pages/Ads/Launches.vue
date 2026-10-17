@@ -33,6 +33,7 @@ const tab = ref<Tab>(props.filters.tab === 'slots' && props.canToggleSlots ? 'sl
 const tabs = computed<{ key: Tab; count: number | null }[]>(() => [
     { key: 'mine', count: props.counts.mine },
     ...(props.canReview ? [{ key: 'review' as Tab, count: props.counts.review }] : []),
+    ...(props.canSeeReady ? [{ key: 'ready' as Tab, count: props.counts.ready }] : []),
     { key: 'live', count: props.counts.live },
     ...(props.canToggleSlots ? [{ key: 'slots' as Tab, count: null }] : []),
 ]);
@@ -52,6 +53,7 @@ function go(box: Tab, extra: Record<string, string | number | null> = {}): void 
 function page(n: number): void {
     const query: Record<string, string | number> = { box: props.box, page: n };
     if (props.filters.material !== null) query.material = props.filters.material;
+    if (props.filters.reviewer) query.reviewer = props.filters.reviewer;
     router.get('/ads/launches', query, { preserveScroll: true, preserveState: true });
 }
 
@@ -221,6 +223,38 @@ onMounted(async () => {
             >
                 {{ t('ads.launch.page.stop_banner') }}
             </p>
+
+            <!-- «جاهزة للنشر» (F4): per-buyer counts of the drafts waiting for a buyer -->
+            <section v-if="tab === 'ready' && handoff.length" class="space-y-2" data-test="handoff">
+                <p class="text-xs text-muted-foreground">{{ t('ads.launch.page.ready_hint') }}</p>
+                <div class="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        class="inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs"
+                        :class="!filters.reviewer ? 'border-primary bg-primary/5 font-semibold text-primary' : 'hover:bg-muted'"
+                        :aria-pressed="!filters.reviewer"
+                        @click="go('ready')"
+                    >
+                        {{ t('ads.launch.page.ready_all') }}
+                        <span class="rounded-full bg-muted px-1.5 tabular-nums">{{ counts.ready }}</span>
+                    </button>
+                    <button
+                        v-for="b in handoff"
+                        :key="b.buyer_id"
+                        type="button"
+                        class="inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs"
+                        :class="filters.reviewer === b.buyer_id ? 'border-primary bg-primary/5 font-semibold text-primary' : 'hover:bg-muted'"
+                        :aria-pressed="filters.reviewer === b.buyer_id"
+                        @click="go('ready', { reviewer: b.buyer_id })"
+                    >
+                        <bdi>{{ b.buyer_name }}</bdi>
+                        <span class="rounded-full bg-muted px-1.5 tabular-nums">{{ b.count }}</span>
+                        <span v-if="b.oldest_at" class="text-muted-foreground">
+                            · {{ t('ads.launch.page.ready_oldest') }} <RelativeTime :iso="b.oldest_at" />
+                        </span>
+                    </button>
+                </div>
+            </section>
 
             <!-- open slots -->
             <section v-if="tab === 'slots'" class="space-y-2">

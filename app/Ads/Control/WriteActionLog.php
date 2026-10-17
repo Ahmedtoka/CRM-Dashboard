@@ -4,6 +4,7 @@ namespace App\Ads\Control;
 
 use App\Ads\Access\AdsScope;
 use App\Ads\Control\Write\WriteDenied;
+use App\Ads\Launch\PlatformArchive;
 use App\Ads\Platforms\SecretScrubber;
 use App\Http\Controllers\Web\Ads\WriteActionController;
 use App\Models\AdWriteAction;
@@ -24,6 +25,9 @@ final class WriteActionLog
         $actions = AdWriteAction::query()->with(['confirmer:id,name', 'proposer:id,name', 'account:id,name'])
             ->whereNotIn('state', [AdWriteAction::PROPOSED, AdWriteAction::EXPIRED, AdWriteAction::CANCELLED, AdWriteAction::SUPERSEDED])
             ->when($allowed !== null, fn ($q) => $q->whereIn('ad_account_id', $allowed))
+            // System archives of dropped launch ads (PlatformArchive) would bury the people's Stop/Run log: shown in
+            // the ad's own history (drawer) only.
+            ->when(! isset($filters['ad']), fn ($q) => $q->where('source', '<>', PlatformArchive::SOURCE))
             ->when(is_int($filters['user'] ?? null), fn ($q) => $q->where(fn ($w) => $w->where('confirmed_by_id', $filters['user'])->orWhere(fn ($p) => $p->whereNull('confirmed_by_id')->where('proposed_by_id', $filters['user']))))
             ->when(in_array($filters['level'] ?? null, AdWriteService::LEVELS, true), fn ($q) => $q->where('target_level', $filters['level']))
             ->when($result === 'ok', fn ($q) => $q->whereIn('state', [AdWriteAction::SUCCEEDED, AdWriteAction::ROLLED_BACK]))
@@ -41,7 +45,7 @@ final class WriteActionLog
             'user' => ($a->confirmer ?? $a->proposer)?->name, 'user_id' => $a->confirmed_by_id ?? $a->proposed_by_id,
             'platform' => $a->platform, 'account' => (string) ($a->account?->name ?? $a->account_name ?? ''), 'account_id' => (int) $a->ad_account_id,
             'level' => $a->target_level, 'name' => (string) $a->target_name, 'external_id' => (string) $a->target_external_id,
-            'from_status' => $a->from_status, 'to_status' => $a->to_status === 'active' ? 'ACTIVE' : 'PAUSED',
+            'from_status' => $a->from_status, 'to_status' => match ($a->to_status) { 'active' => 'ACTIVE', 'archived' => 'ARCHIVED', default => 'PAUSED' },
             'reason' => $a->reason, 'result' => self::result($a->state), 'error' => self::error($a), 'source' => (string) $a->source,
         ])->all();
     }

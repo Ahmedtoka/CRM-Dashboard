@@ -169,6 +169,30 @@ const listHref = (list: (typeof LISTS)[number]) =>
                 <EmptyState v-if="decisionsCount === 0" :icon="CheckCircle2" :title="t('ads.control.today.empty_decisions')" />
             </section>
 
+            <!-- «جاهزة للنشر» (F4): drafts content prepared that wait for a buyer -->
+            <section v-if="handoff && handoff.total > 0" class="space-y-2 rounded-lg bg-card p-4 shadow-card" data-test="handoff">
+                <div class="flex items-center justify-between gap-2">
+                    <h2 class="text-sm font-semibold">{{ t('ads.control.today.handoff') }}</h2>
+                    <Link
+                        :href="`/ads/launches?box=${handoff.box}`"
+                        class="inline-flex h-9 items-center text-xs text-primary hover:underline"
+                    >
+                        {{ t(handoff.buyers.length ? 'ads.control.today.handoff_total' : 'ads.control.today.handoff_mine', { n: n(handoff.total) }) }}
+                    </Link>
+                </div>
+                <ul v-if="handoff.buyers.length" class="flex flex-wrap gap-2">
+                    <li v-for="b in handoff.buyers" :key="b.buyer_id">
+                        <Link
+                            :href="`/ads/launches?box=ready&reviewer=${b.buyer_id}`"
+                            class="inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs hover:bg-muted"
+                        >
+                            <bdi>{{ b.buyer_name }}</bdi>
+                            <span class="rounded-full bg-muted px-1.5 tabular-nums">{{ n(b.count) }}</span>
+                        </Link>
+                    </li>
+                </ul>
+            </section>
+
             <div class="grid gap-4 lg:grid-cols-2">
                 <!-- Money today -->
                 <section class="min-w-0 space-y-3 rounded-lg bg-card p-4 shadow-card">

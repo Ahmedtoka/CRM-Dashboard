@@ -114,3 +114,22 @@ it('final review B2: page totals count a multi-touch chat once and a customer-ma
         'chats' => 2, 'to_agent' => 1, 'orders' => 1, 'delivered' => 1, 'returned' => 0, 'reasons' => ['price' => 1],
     ]);
 });
+
+it('bounds the page-totals orders query by the start of the range (same numbers)', function () {
+    $a = Ad::factory()->create();
+    $c = s3Touch($a);
+    Order::factory()->create(['conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'status' => 'confirmed', 'placed_at' => now()->subDay()]);
+    // an old order of the same customer, before the range: never counted, and no longer scanned
+    Order::factory()->create(['conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'status' => 'confirmed', 'placed_at' => now()->subDays(30)]);
+
+    $sql = [];
+    DB::listen(function ($q) use (&$sql) {
+        if (str_contains($q->sql, 'from "orders" as "o"') || str_contains($q->sql, 'from `orders` as `o`')) {
+            $sql[] = $q->sql;
+        }
+    });
+    $filter = new AdsFilter(CarbonImmutable::now()->subDays(7), CarbonImmutable::now(), accountIds: [$a->ad_account_id]);
+
+    expect(app(ChatFunnel::class)->forFilter($filter)['orders'])->toBe(1)
+        ->and($sql)->toHaveCount(1)->and($sql[0])->toMatch('/placed_at["`] > \?/');
+});

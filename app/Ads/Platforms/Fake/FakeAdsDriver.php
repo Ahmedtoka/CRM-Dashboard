@@ -277,7 +277,7 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
         $status = null;
         foreach (array_reverse($state['statuses']) as $s) {
             if ($s['level'] === $level && $s['id'] === $externalId) {
-                $status = strtolower($s['status']) === 'active' ? 'ACTIVE' : 'PAUSED';
+                $status = match (strtolower($s['status'])) { 'active' => 'ACTIVE', 'archived' => 'ARCHIVED', default => 'PAUSED' };
                 break;
             }
         }

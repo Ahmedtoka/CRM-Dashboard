@@ -117,7 +117,8 @@ final class LaunchPresenter
     /** @return list<array{action: string, at: ?string, actor: ?string, code: ?string, reason: ?string}> */
     private function history(AdLaunch $l): array
     {
-        $rows = AdsAuditLog::query()->where('subject_type', 'AdLaunch')->where('subject_id', $l->id)->orderBy('id')->limit(100)->get();
+        // The newest 100, oldest first (a launch with many ads writes one archive line per ad).
+        $rows = AdsAuditLog::query()->where('subject_type', 'AdLaunch')->where('subject_id', $l->id)->orderByDesc('id')->limit(100)->get()->reverse()->values();
         $names = User::query()->whereIn('id', $rows->pluck('actor_user_id')->filter()->unique()->all())->pluck('name', 'id');
 
         return $rows->map(fn (AdsAuditLog $r) => [
