@@ -21,7 +21,10 @@ use App\Models\Tag;
 use App\Models\User;
 use App\Push\Drivers\FakePushSender;
 use App\Queue\QueueRouter;
+use Illuminate\Broadcasting\Broadcasters\NullBroadcaster;
+use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -81,6 +84,10 @@ function mobileContractWorld(): array
         'broadcasting.connections.reverb.options.scheme' => 'http',
         'crm.mobile.reverb' => ['host' => '10.0.2.2', 'port' => 8090, 'scheme' => 'http'],
     ]);
+    // `realtime` needs reverb as the default connection, but nothing listens in tests: without this
+    // every broadcast of the walk waits for the HTTP timeout (and logs a Pusher error).
+    Broadcast::extend('reverb', fn () => new NullBroadcaster);
+    app(BroadcastManager::class)->purge('reverb');
     QueueSetting::factory()->create(['id' => 1, 'enabled' => true]);
     $shift = Shift::factory()->create();
 
