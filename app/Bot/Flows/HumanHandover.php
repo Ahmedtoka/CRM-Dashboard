@@ -204,7 +204,7 @@ class HumanHandover
      *
      * @param  list<string>  $summaryExtra  extra lines for the handover note (a flow's collected data)
      */
-    public function handover(Conversation $c, ?string $topic, ?string $customerText, string $reason = 'human_request', string $category = 'human_request', array $summaryExtra = []): void
+    public function handover(Conversation $c, ?string $topic, ?string $customerText, string $reason = 'human_request', string $category = 'human_request', array $summaryExtra = [], string $priority = 'medium'): void
     {
         $this->clearPending($c);
 
@@ -220,7 +220,7 @@ class HumanHandover
         }
 
         $this->handovers->handover($c, $reason, $customerText, [
-            'priority' => 'medium',
+            'priority' => $priority,
             'queue' => 'agents',
             'category' => $category,
             'summary_extra' => $summaryExtra,

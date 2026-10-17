@@ -31,7 +31,10 @@ use App\Bot\Learning\FakeConversationReviewer;
 use App\Bot\Learning\FakeLearningAnalyst;
 use App\Bot\Learning\LearnCommand;
 use App\Bot\Learning\LearningAnalyst;
+use App\Bot\Router\ClaudeTurnPlanner;
+use App\Bot\Router\FakeTurnPlanner;
 use App\Bot\Router\TurnMetrics;
+use App\Bot\Router\TurnPlanner;
 use App\Models\BotSetting;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
@@ -42,6 +45,11 @@ class BotServiceProvider extends ServiceProvider
     {
         // Bot hybrid P0: one per job (scoped), so a worker never carries a turn's timings into the next.
         $this->app->scoped(TurnMetrics::class);
+
+        // Bot hybrid: the Haiku planner with a key, the keyword planner without one (and in tests).
+        $this->app->bind(TurnPlanner::class, fn ($app) => config('crm.drivers.ai') === 'claude' && filled(config('crm.anthropic.key'))
+            ? $app->make(ClaudeTurnPlanner::class)
+            : $app->make(FakeTurnPlanner::class));
 
         // Final fix wave M1: the models picked in the bot settings, config when left blank.
         $model = fn (string $column, string $config) => filled($chosen = BotSetting::current()->{$column})
@@ -81,12 +89,14 @@ class BotServiceProvider extends ServiceProvider
         $this->app->bind(RemoteProductLookup::class, ShopifyRemoteProductLookup::class);
 
         // Guided-flow answer interpreter (design §3): same rule as the turn understanding.
-        $this->app->bind(FlowAnswerInterpreter::class, function ($app) use ($model) {
+        $this->app->bind(FlowAnswerInterpreter::class, function ($app) {
             return config('crm.drivers.ai', 'fake') === 'claude' && filled(config('crm.anthropic.key'))
+                // Bot hybrid (bot-hybrid.md §3.7): Haiku 5.5, cached prompt, effort low.
                 ? new ClaudeFlowAnswerInterpreter(
                     config('crm.anthropic.key'),
-                    $model('ai_classifier_model', 'classifier_model'),
-                    (int) config('crm.anthropic.flow_timeout', 6),
+                    (string) config('crm.anthropic.flow_model', 'claude-haiku-5-5'),
+                    (int) config('crm.anthropic.flow_timeout', 10),
+                    'low',
                 )
                 : $app->make(FakeFlowAnswerInterpreter::class);
         });

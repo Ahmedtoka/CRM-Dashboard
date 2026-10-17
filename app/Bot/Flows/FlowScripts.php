@@ -106,6 +106,8 @@ final class FlowScripts
             // Owner B6: the same request for the same order is already recorded.
             'tasks_already_recorded' => ['title' => 'البوت: الطلب ده متسجل', 'body' => 'طلب {flow_label} لأوردر #{order_number} متسجل خلاص برقم #{case_id}'],
             // A model reply failed its checks twice: never a made-up answer.
+            // Angry with a threat (bot-hybrid.md §3.6): an apology, then a person at high priority.
+            'bot_sorry_handover' => ['title' => 'البوت: اعتذار قبل التحويل', 'body' => 'معلش يا فندم على اللي حصل، وحقك علينا. هوصّلك بحد من الفريق يتابع معاكي'],
             'bot_safe_fallback' => ['title' => 'البوت: مش متأكدة من الإجابة', 'body' => 'خليني أتأكد من المعلومة دي مع الفريق، تحبي أوصّلك بحد منهم؟'],
         ];
     }

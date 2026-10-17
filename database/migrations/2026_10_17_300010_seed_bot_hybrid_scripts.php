@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
-    private const NEW_KEYS = ['hold_short', 'tasks_next_offer', 'tasks_later', 'tasks_summary_title', 'tasks_too_many', 'tasks_already_recorded', 'bot_safe_fallback'];
+    private const NEW_KEYS = ['hold_short', 'tasks_next_offer', 'tasks_later', 'tasks_summary_title', 'tasks_too_many', 'tasks_already_recorded', 'bot_sorry_handover', 'bot_safe_fallback'];
 
     public function up(): void
     {

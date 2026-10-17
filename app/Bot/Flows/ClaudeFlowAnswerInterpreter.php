@@ -32,6 +32,7 @@ class ClaudeFlowAnswerInterpreter implements FlowAnswerInterpreter
         private readonly ?string $apiKey,
         private readonly string $model,
         private readonly int $timeout = 6,
+        private readonly ?string $effort = null,
     ) {}
 
     public function interpret(array $step, string $text, array $history): FlowAnswer
@@ -46,6 +47,7 @@ class ClaudeFlowAnswerInterpreter implements FlowAnswerInterpreter
             self::SYSTEM_PROMPT,
             [['role' => 'user', 'content' => $this->userContent($step, $text, $history, $allowed)]],
             self::schema(),
+            $this->effort,
         );
 
         return self::parse($result['json'], $allowed);

@@ -38,16 +38,21 @@ class BotRun extends Model
         'cache_write_tokens',
     ];
 
-    /** Bot hybrid P0: a run created during a turn carries where the turn's time went (TurnMetrics). */
-    protected static function booted(): void
+    /**
+     * Bot hybrid P0: a run created during a turn carries where the turn's time went (TurnMetrics).
+     * Done in save() rather than a `creating` listener so it holds even where model events are faked.
+     */
+    public function save(array $options = []): bool
     {
-        static::creating(function (BotRun $run) {
+        if (! $this->exists) {
             foreach (app(TurnMetrics::class)->columns() as $column => $value) {
-                if ($run->getAttribute($column) === null) {
-                    $run->setAttribute($column, $value);
+                if ($this->getAttribute($column) === null) {
+                    $this->setAttribute($column, $value);
                 }
             }
-        });
+        }
+
+        return parent::save($options);
     }
 
     protected function casts(): array

@@ -17,6 +17,8 @@ use App\Bot\Knowledge\SizeChart;
 use App\Bot\Language\ConversationLanguage;
 use App\Bot\Language\KeptNames;
 use App\Bot\Learning\Jobs\ReviewConversation;
+use App\Bot\Router\HybridRouter;
+use App\Bot\Router\ShadowPlanTurn;
 use App\Enums\ActorType;
 use App\Enums\AttachmentType;
 use App\Enums\BotIntent;
@@ -144,8 +146,20 @@ class BotEngine
             return $this->recordRun($c, $last, engine: 'none', decision: 'handover');
         }
 
+        // Bot hybrid (bot-hybrid.md §3, 2026-10-17): the planner and the tiers, behind a switch.
+        if (HybridRouter::mode() === 'hybrid') {
+            return app(HybridRouter::class)->route($c, $burst);
+        }
+
         // The store agent answers free text (2026-09-22); the older turn runner is its safety net.
-        return app(AgentRunner::class)->run($c, $burst) ?? app(TurnRunner::class)->run($c, $burst);
+        $run = app(AgentRunner::class)->run($c, $burst) ?? app(TurnRunner::class)->run($c, $burst);
+
+        // Shadow mode: the planner reads the same turn afterwards and only records what it would do.
+        if (HybridRouter::mode() === 'shadow') {
+            ShadowPlanTurn::for($c, $burst);
+        }
+
+        return $run;
     }
 
     public function handleInbound(Message $m): ?BotRun

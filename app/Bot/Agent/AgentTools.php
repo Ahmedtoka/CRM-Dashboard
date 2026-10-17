@@ -10,6 +10,8 @@ use App\Bot\Flows\BranchFinder;
 use App\Bot\Grounding\ShippingFeeAnswer;
 use App\Models\BotFlow;
 use App\Models\Conversation;
+use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Product;
 
 /**
@@ -27,6 +29,9 @@ class AgentTools
         'cancel_edit' => 'cancel or change an order she placed',
         'branches' => 'find a branch by area',
     ];
+
+    /** Set by definitions(): this turn is a question in the middle of a guided flow. */
+    private bool $insideFlow = false;
 
     public function __construct(
         private readonly ProductCards $cards,
@@ -73,6 +78,13 @@ class AgentTools
                 ], 'required' => ['governorate']],
             ],
             [
+                'name' => 'get_order_items',
+                'description' => "The pieces of the customer's order (title, colour/size, quantity, price), by order number. Only for an order she has proven is hers; use it when she asks about the pieces of an order.",
+                'input_schema' => ['type' => 'object', 'properties' => [
+                    'order_number' => ['type' => 'string'],
+                ], 'required' => ['order_number']],
+            ],
+            [
                 'name' => 'handover_to_human',
                 'description' => 'Pass the conversation to a human agent. Use when she is angry, when the request needs a decision or an action only the team can take (refund status, payment problem, placing an order by chat, wholesale…), or when you cannot answer from KNOWLEDGE and the tools. Write your short message to her in the same turn.',
                 'input_schema' => ['type' => 'object', 'properties' => [
@@ -82,9 +94,20 @@ class AgentTools
             ],
         ];
 
+        $tools[] = [
+            'name' => 'escalate',
+            'description' => 'Ask a more experienced colleague to take this turn instead of you: a policy exception, a dispute, an angry customer with an order problem, or anything you are not sure how to handle well. Write nothing to her in the same turn.',
+            'input_schema' => ['type' => 'object', 'properties' => [
+                'reason' => ['type' => 'string', 'description' => 'One short English sentence: why.'],
+            ], 'required' => ['reason']],
+        ];
+
+        // Bot hybrid (bot-hybrid.md §3.4): the tool list never changes with the chat's state — a
+        // tool that comes and goes changes the cached prefix. Inside a flow start_flow says no.
+        $this->insideFlow = $insideFlow;
         $flows = array_filter(self::FLOWS, fn (string $key) => BotFlow::active($key) !== null, ARRAY_FILTER_USE_KEY);
 
-        if (! $insideFlow && $flows !== []) {
+        if ($flows !== []) {
             $tools[] = [
                 'name' => 'start_flow',
                 'description' => 'Start a guided step-by-step flow that collects what the team needs and records the request. Use it as soon as she clearly wants one of these: '
@@ -110,6 +133,8 @@ class AgentTools
             'get_shipping_fee' => $this->shippingFee($input),
             'handover_to_human' => $this->handover($input, $outcome),
             'start_flow' => $this->startFlow($input, $outcome),
+            'get_order_items' => $this->orderItems($input, $c),
+            'escalate' => $this->escalate($input, $outcome),
             default => 'Unknown tool.',
         };
 
@@ -203,6 +228,10 @@ class AgentTools
     {
         $flow = (string) ($input['flow'] ?? '');
 
+        if ($this->insideFlow) {
+            return 'Not now: she is already in a guided flow, which goes on right after your answer. Just answer her question.';
+        }
+
         if (! array_key_exists($flow, self::FLOWS) || BotFlow::active($flow) === null) {
             return 'That flow is not available.';
         }
@@ -210,5 +239,36 @@ class AgentTools
         $outcome->flow = $flow;
 
         return 'Done: the flow starts right after your message and asks its own first question. Reply with at most one short sentence, or nothing.';
+    }
+
+    /** Her order's pieces — only for an order she proved is hers (spec 2026-09-19, audit A4). */
+    private function orderItems(array $input, Conversation $c): string
+    {
+        $found = $this->orders->find($c, ['order_ref' => $input['order_number'] ?? null]);
+
+        if ($found['status'] !== 'found') {
+            return 'NO ORDER FOUND with this number that she owns. Ask her to check the number.';
+        }
+
+        $snapshot = $found['snapshots'][0];
+
+        if (! $snapshot->ownerVerified) {
+            return 'This order is not on the mobile or email of her chat, so its pieces may not be shared. If she wants to return or exchange, call start_flow: the flow checks it is hers.';
+        }
+
+        $order = Order::withLoadTest()->with('items')->find($snapshot->orderId);
+
+        if ($order === null || $order->items->isEmpty()) {
+            return 'The pieces of this order are not available.';
+        }
+
+        return 'Order '.$snapshot->number." pieces:\n".$order->items->map(fn (OrderItem $i) => '- '.trim($i->title.' '.($i->variant_title ?? '')).' x'.(int) $i->qty.($i->price !== null ? ' | '.(float) $i->price.' EGP' : ''))->implode("\n");
+    }
+
+    private function escalate(array $input, AgentOutcome $outcome): string
+    {
+        $outcome->escalate = mb_substr(trim((string) ($input['reason'] ?? 'escalate')), 0, 190) ?: 'escalate';
+
+        return 'Done: a colleague takes this turn. Write nothing more.';
     }
 }
