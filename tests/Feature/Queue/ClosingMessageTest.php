@@ -142,7 +142,17 @@ it('keeps a person on the conversation after the other closes', function (string
     app(WindowLifecycle::class)->close($e, $reason, $reason === 'auto' ? null : $u);
 
     expect($e->conversation->fresh()->handler->value)->toBe('human');
-})->with(['auto', 'escalation', 'transfer', 'no_reply', 'resolved_elsewhere']);
+})->with(['escalation', 'transfer', 'no_reply', 'resolved_elsewhere']);
+
+// Close-cycle hotfix C1 (D-08): the silence auto-close also gives the chat back to the bot (its
+// return window still sends her real message back to the moderator, QueueService::settles()).
+it('hands the conversation back to the bot on the silence auto-close too', function () {
+    [$e] = cmWindow();
+
+    app(WindowLifecycle::class)->close($e, 'auto');
+
+    expect($e->conversation->fresh()->handler->value)->toBe('bot')->and($e->conversation->fresh()->return_priority_until->isFuture())->toBeTrue();
+});
 
 it('never starts a bot turn by closing', function () {
     Bus::fake([RunBotTurn::class]);

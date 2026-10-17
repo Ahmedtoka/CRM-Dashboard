@@ -781,6 +781,11 @@ class WindowLifecycle
             $c->forceFill(['return_priority_until' => $until])->save();
             $e->forceFill(['return_priority_until' => $until])->save();
             SendQueueMessage::dispatch($e->id, 'queue_auto_closed', []);
+            // Close-cycle hotfix C1 (D-08): the chat goes back to the bot here, on the row this
+            // transaction holds; inside `return_priority_until` her real message still goes back to
+            // this moderator (QueueService::settles(), H-01), after it the bot answers — never a
+            // ticket for ever on a chat nobody holds.
+            app(BotEngine::class)->resetToBot($c);
         }
 
         // Close-cycle hotfix C1 (D-21): her case still open (the bot's flow, or a colleague's) is the

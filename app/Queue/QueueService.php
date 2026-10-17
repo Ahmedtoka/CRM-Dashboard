@@ -293,6 +293,8 @@ class QueueService
      *
      * Otherwise it runs the queue hook as before: `customerReturned()` (she came back inside the
      * return window of an auto-close, or after it on a human-handled chat), else `customerMessage()`.
+     * Since close-cycle hotfix C1 (D-08) the auto-close hands the chat to the bot; inside its
+     * return window her real message still reaches `customerReturned()` (H-01), after it the bot's.
      *
      * The decision is taken under the CONVERSATION lock with a locking read of her latest entry,
      * so a close («خلصت» or the tick's auto-close) that commits while the message is being
@@ -315,8 +317,9 @@ class QueueService
             $acknowledgement = false;
         }
 
-        // A bot-handled chat's real message: nothing for the queue (no query, the common case).
-        if ($c->handler !== Handler::Human && ! $acknowledgement) {
+        // A bot-handled chat's real message: nothing for the queue (no query, the common case) —
+        // except inside an auto-close's return window (close-cycle hotfix C1, H-01), decided below.
+        if ($c->handler !== Handler::Human && ! $acknowledgement && ! self::inReturnWindow($c)) {
             return false;
         }
 
@@ -329,14 +332,15 @@ class QueueService
         }
 
         return DB::transaction(function () use ($c, $acknowledgement) {
-            $row = Conversation::query()->whereKey($c->id)->lockForUpdate()->first(['id', 'handler', 'needs_human']);
+            $row = Conversation::query()->whereKey($c->id)->lockForUpdate()->first(['id', 'handler', 'needs_human', 'return_priority_until']);
             $handler = $row?->handler;
 
             // The caller read `$c` without a lock: a «خلصت» that committed since then handed the chat
             // to the bot. The ingest follows the committed state (its bot gate reads `$c->handler`),
             // so her real message is not left unanswered on a stale «human».
             if ($row !== null) {
-                $c->forceFill(['handler' => $row->handler, 'needs_human' => $row->needs_human])->syncOriginalAttributes(['handler', 'needs_human']);
+                $c->forceFill(['handler' => $row->handler, 'needs_human' => $row->needs_human, 'return_priority_until' => $row->return_priority_until])
+                    ->syncOriginalAttributes(['handler', 'needs_human', 'return_priority_until']);
             }
             $last = QueueEntry::query()->where('conversation_id', $c->id)->latest('id')->lockForUpdate()->first(['id', 'status', 'closed_at']);
             $ended = $last !== null && in_array($last->status, QueueEntry::TERMINAL_STATUSES, true);
@@ -349,8 +353,21 @@ class QueueService
                 $this->customerMessage($c, $acknowledgement);
             }
 
+            // H-01: the auto-close gave the chat to the bot, but inside its return window her real
+            // message is her moderator's again (`returning`, reserved for her); customerReturned()
+            // hands the chat to a person, so the ingest's bot gate leaves it alone.
+            if ($handler !== Handler::Human && ! $acknowledgement && $ended && self::inReturnWindow($c)) {
+                $this->customerReturned($c);
+            }
+
             return false;
         }, attempts: 3);
+    }
+
+    /** Inside an auto-close's return window (`return_priority_until`, C1 / H-01). */
+    private static function inReturnWindow(Conversation $c): bool
+    {
+        return $c->return_priority_until !== null && $c->return_priority_until->isFuture();
     }
 
     /**

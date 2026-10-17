@@ -1,6 +1,15 @@
 <?php
 
 use App\Bot\BotEngine;
+use App\Bot\Flow\Jobs\RunBotTurn;
+use App\Channels\Data\InboundMessageData;
+use App\Enums\Platform;
+use App\Inbox\ConversationActions;
+use App\Inbox\InboxIngestor;
+use App\Inbox\OutboundService;
+use App\Inbox\Outcomes\Outcome;
+use App\Models\BotSetting;
+use App\Models\ChannelAccount;
 use App\Models\ConversationOutcome;
 use App\Models\Message;
 use App\Models\QueueEntry;
@@ -13,6 +22,7 @@ use App\Queue\Events\WindowClosed;
 use App\Queue\Jobs\RequestRating;
 use App\Queue\QueueService;
 use App\Queue\WindowLifecycle;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
@@ -134,5 +144,137 @@ it('returns a window to the bot in one step: a message arriving meanwhile never 
     $c = $e->conversation->fresh();
     expect($e->fresh()->close_reason)->toBe('cancelled')->and($c->handler->value)->toBe('bot')
         ->and(app(QueueService::class)->customerReturned($c))->toBeFalse()
+        ->and(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1);
+});
+
+// ───── #7 (D-08 + H-01): auto-close and «حل» give the chat back to the bot; inside the return window she still goes back to her moderator ─────
+
+/** Her conversation through the real ingest (page PAGE-CH, customer PSID-CH) in an open window of a logged-in moderator. */
+function chIngestWindow(): array
+{
+    ChannelAccount::query()->firstWhere('external_id', 'PAGE-CH') ?? ChannelAccount::factory()->create(['platform' => Platform::Facebook, 'external_id' => 'PAGE-CH']);
+    BotSetting::current()->update(['enabled' => false]);
+    $c = chIngest('first', 'عايزة أسأل عن المقاس')->conversation;
+    [$e, $u] = chWindow();
+    $e->forceFill(['conversation_id' => $c->id, 'customer_id' => $c->customer_id])->save();
+    $c->forceFill(['assignee_id' => $u->id, 'queue_entry_id' => $e->id, 'handler' => 'human', 'needs_human' => true])->save();
+
+    return [$e->fresh(), $u, $c->fresh()];
+}
+
+function chIngest(string $id, string $text): ?Message
+{
+    return app(InboxIngestor::class)->ingestMessage(new InboundMessageData(Platform::Facebook, 'PAGE-CH', 'PSID-CH', 'Mona', $id, $text, CarbonImmutable::now()));
+}
+
+/** The moderator answered at 12:00:10 and the customer stayed silent: the tick auto-closes at 12:05:11. */
+function chAutoClose(QueueEntry $e, User $u): void
+{
+    Carbon::setTestNow(now()->addSeconds(10));
+    app(OutboundService::class)->sendHuman($e->conversation->fresh(), $u, 'المقاس متاح');
+    Carbon::setTestNow(now()->addSeconds(301));
+    User::query()->update(['last_seen_at' => now()]);
+    app(WindowLifecycle::class)->tickSilence();
+    expect($e->fresh()->close_reason)->toBe('auto');
+}
+
+it('gives the chat back to the bot on the silence auto-close, inside the close (D-08)', function () {
+    [$e, $u, $c] = chIngestWindow();
+
+    chAutoClose($e, $u);
+
+    $c->refresh();
+    expect($c->handler->value)->toBe('bot')->and($c->needs_human)->toBeFalse()
+        ->and($c->return_priority_until->isFuture())->toBeTrue();
+});
+
+it('sends her real message inside the return window back to the same moderator, not to the bot (H-01)', function () {
+    [$e, $u, $c] = chIngestWindow();
+    Bus::fake([RunBotTurn::class]);
+    BotSetting::current()->update(['enabled' => true]);
+    chAutoClose($e, $u);
+    Carbon::setTestNow(now()->addMinutes(2));
+    User::query()->update(['last_seen_at' => now()]);
+
+    chIngest('back', 'أنا رجعت، طب الألوان؟');
+
+    $new = QueueEntry::where('conversation_id', $c->id)->latest('id')->first();
+    expect($new->id)->not->toBe($e->id)->and($new->priority)->toBe('returning')
+        ->and($new->reopened_from_entry_id)->toBe($e->id)
+        ->and($c->fresh()->handler->value)->toBe('human');
+    expect(in_array($new->fresh()->status, ['waiting', 'active'], true))->toBeTrue()
+        ->and((int) ($new->fresh()->reserved_user_id ?? $new->fresh()->assigned_user_id))->toBe($u->id);
+    Bus::assertNotDispatched(RunBotTurn::class);
+});
+
+it('lets the bot answer once the return window is over: no ticket for ever (D-08)', function () {
+    [$e, $u, $c] = chIngestWindow();
+    Bus::fake([RunBotTurn::class]);
+    BotSetting::current()->update(['enabled' => true]);
+    chAutoClose($e, $u);
+    Carbon::setTestNow(now()->addDays(7));
+
+    chIngest('week-later', 'عندكم فساتين سواريه؟');
+
+    expect(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1)->and($c->fresh()->handler->value)->toBe('bot');
+    Bus::assertDispatched(RunBotTurn::class);
+});
+
+it('keeps a thanks inside the return window quiet: no ticket, no bot turn', function () {
+    [$e, $u, $c] = chIngestWindow();
+    Bus::fake([RunBotTurn::class]);
+    BotSetting::current()->update(['enabled' => true]);
+    chAutoClose($e, $u);
+    Carbon::setTestNow(now()->addMinutes(1));
+
+    chIngest('thanks', 'شكراً');
+
+    expect(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1);
+    Bus::assertNotDispatched(RunBotTurn::class);
+});
+
+it('gives the chat back to the bot on «حل» while the queue is on, under the conversation lock (D-08)', function () {
+    [$e, $u, $c] = chIngestWindow();
+    Bus::fake([RunBotTurn::class]);
+    BotSetting::current()->update(['enabled' => true]);
+    $boss = User::factory()->create(['role' => 'supervisor']);
+
+    app(ConversationActions::class)->resolve($c->fresh(), $boss, Outcome::Browsing);
+
+    $c->refresh();
+    expect($e->fresh()->close_reason)->toBe('resolved_elsewhere')->and($c->status->value)->toBe('resolved')
+        ->and($c->handler->value)->toBe('bot')->and($c->needs_human)->toBeFalse();
+
+    Carbon::setTestNow(now()->addHour());
+    chIngest('after-resolve', 'عندكم توصيل لإسكندرية؟');
+    expect(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1);
+    Bus::assertDispatched(RunBotTurn::class);
+});
+
+it('keeps «حل» as it was while the queue is off (a legacy human chat stays human)', function () {
+    QueueSetting::query()->update(['enabled' => false]);
+    [$e, $u, $c] = chIngestWindow();
+
+    app(ConversationActions::class)->resolve($c->fresh(), User::factory()->create(['role' => 'supervisor']), Outcome::Browsing);
+
+    expect($c->fresh()->handler->value)->toBe('human');
+});
+
+// ───── race: the timer against the staff ─────
+
+it('lets exactly one of the tick and «خلصت» close the window, whoever commits first', function () {
+    [$e, $u, $c] = chIngestWindow();
+    Carbon::setTestNow(now()->addSeconds(10));
+    app(OutboundService::class)->sendHuman($c->fresh(), $u, 'المقاس متاح');
+    Carbon::setTestNow(now()->addSeconds(301));
+    User::query()->update(['last_seen_at' => now()]);
+
+    // «خلصت» commits while the tick is between its read and its lock.
+    $staleRead = QueueEntry::with('conversation')->find($e->id);
+    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'inquiry', 'outcome' => 'browsing'])->assertOk();
+    (fn () => $this->closeIfSilent($staleRead, QueueSetting::current()))->call(app(WindowLifecycle::class));
+
+    expect($e->fresh()->close_reason)->toBe('inquiry')
+        ->and(chBotTexts($e))->toBe([CH_THANKS])
         ->and(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1);
 });
