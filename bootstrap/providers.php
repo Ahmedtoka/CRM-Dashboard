@@ -6,6 +6,7 @@ use App\Bot\BotServiceProvider;
 use App\Channels\ChannelsServiceProvider;
 use App\Comments\CommentsServiceProvider;
 use App\Commerce\CommerceServiceProvider;
+use App\Confirmations\ConfirmationsServiceProvider;
 use App\Inbox\InboxServiceProvider;
 use App\Legal\LegalServiceProvider;
 use App\Media\MediaServiceProvider;
@@ -30,6 +31,7 @@ return [
     LegalServiceProvider::class,
     QueueServiceProvider::class,
     AdsServiceProvider::class,
+    ConfirmationsServiceProvider::class,
     PushServiceProvider::class,
     MobileApiServiceProvider::class,
 ];

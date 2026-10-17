@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CaseDrawer from '@/components/crm/cases/CaseDrawer.vue';
+import CaseSlaChip from '@/components/crm/cases/CaseSlaChip.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import DateRangePicker from '@/components/crm/DateRangePicker.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -17,10 +18,10 @@ import type { Paginated } from '@/types/admin';
 import type { CaseStatus, CaseType, SupportCase } from '@/types/crm';
 import { Head, router } from '@inertiajs/vue3';
 import { ClipboardList } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const TYPES: CaseType[] = ['return', 'exchange', 'return_exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
-const TABS: Array<CaseStatus | 'all'> = ['all', 'new', 'in_progress', 'closed'];
+const TABS: Array<CaseStatus | 'all'> = ['all', 'new', 'in_progress', 'resolved', 'closed'];
 
 // The server still shares `filters`; the page reads the same values from the URL (useUrlFilters).
 defineOptions({ inheritAttrs: false });
@@ -50,7 +51,7 @@ const { filters, set, clear, query } = useUrlFilters(
         overdue: false,
         sort: '',
     },
-    { replaceKeys: ['q'] },
+    { replaceKeys: ['q'], keep: ['open'] },
 );
 watch(query, (q) => {
     router.get('/cases', q, track({ only: ['cases', 'counts', 'filters'], preserveState: true, preserveScroll: true, replace: true }));
@@ -86,6 +87,12 @@ function openCase(row: SupportCase): void {
     selectedCaseId.value = row.id;
     drawerOpen.value = true;
 }
+
+// A link from another screen («تأكيدات الأوردرات», the order page): /cases?open=ID opens that case's drawer.
+onMounted(() => {
+    const id = Number(new URLSearchParams(window.location.search).get('open'));
+    if (Number.isInteger(id) && id > 0) openCase({ id } as SupportCase);
+});
 
 function reload(): void {
     router.reload({ only: ['cases', 'counts'] });
@@ -197,7 +204,10 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                         <StatusChip :label="t(`cases.priority.${row.priority}`)" :tone="casePriorityTone[row.priority]" />
                     </template>
                     <template #cell-status="{ row }">
-                        <StatusChip :label="t(`cases.tabs.${row.status}`)" :tone="caseStatusTone[row.status]" />
+                        <span class="flex flex-wrap items-center gap-1">
+                            <StatusChip :label="t(`cases.tabs.${row.status}`)" :tone="caseStatusTone[row.status]" />
+                            <CaseSlaChip :sla="row.sla" />
+                        </span>
                     </template>
                     <template #cell-date="{ row }"><span class="whitespace-nowrap tabular-nums text-muted-foreground">{{ formatDateTime(row.created_at, locale) }}</span></template>
                 </DataTable>

@@ -65,7 +65,7 @@ final class UrgentStrip
 
         $items[] = [
             'key' => 'cases_overdue', 'tone' => 'danger',
-            'count' => SupportCase::query()->where('status', '!=', 'closed')->whereNotNull('sla_due_at')->where('sla_due_at', '<', $now)->count(),
+            'count' => SupportCase::query()->whereIn('status', SupportCase::OPEN_STATUSES)->whereNotNull('sla_due_at')->where('sla_due_at', '<', $now)->count(),
             'href' => '/cases?overdue=1',
         ];
 

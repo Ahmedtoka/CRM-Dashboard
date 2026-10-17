@@ -23,7 +23,7 @@ beforeEach(function () {
     ]);
     $this->healthy = [
         'GET debug_token' => ['data' => ['is_valid' => true, 'expires_at' => 0, 'scopes' => ['pages_messaging', 'pages_manage_metadata', 'pages_read_engagement', 'pages_manage_engagement', 'pages_read_user_content']]],
-        'GET 4590/subscribed_apps' => ['data' => [['id' => '111222', 'subscribed_fields' => ['messages', 'messaging_postbacks', 'feed']]]],
+        'GET 4590/subscribed_apps' => ['data' => [['id' => '111222', 'subscribed_fields' => ['messages', 'messaging_postbacks', 'message_echoes', 'feed']]]],
     ];
 });
 
@@ -196,4 +196,16 @@ it('runs daily over live connected accounts only', function () {
 
     $event = collect(app(Schedule::class)->events())->first(fn ($e) => str_contains((string) $e->command, 'channels:health'));
     expect($event)->not->toBeNull()->and($event->expression)->toBe('0 8 * * *')->and($event->timezone)->toBe('Africa/Cairo');
+});
+
+it('warns a page subscribed before message echoes to subscribe again', function () {
+    fakeMetaGraph(array_merge($this->healthy, [
+        'GET 4590/subscribed_apps' => ['data' => [['id' => '111222', 'subscribed_fields' => ['messages', 'messaging_postbacks', 'feed']]]],
+    ]));
+    Conversation::factory()->create(['channel_account_id' => $this->fb->id, 'last_customer_message_at' => now()->subHours(2)]);
+
+    $result = app(ConnectionHealthCheck::class)->run($this->fb);
+
+    expect(healthCheckCode($result, 'webhooks'))->toBe('missing_fields')
+        ->and(collect($result['checks'])->firstWhere('key', 'webhooks')['missing'] ?? null)->toBe(['message_echoes']);
 });

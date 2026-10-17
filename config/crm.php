@@ -5,6 +5,12 @@ return [
     // day and Shopify import/sync never stores an order created before it.
     'data_floor' => env('CRM_DATA_FLOOR', '2026-10-01'),
 
+    // WhatsApp order confirmation (spec 2026-10-16). Outside production a connected live WhatsApp
+    // number is never used unless this is on, so a local copy restored from production can't message customers.
+    'confirmations' => [
+        'allow_live_outside_production' => (bool) env('CRM_CONFIRMATIONS_ALLOW_LIVE_LOCAL', false),
+    ],
+
     // crm:fresh-start (F1): where the backup goes and how it is taken. backup_driver: auto | mysqldump | sqlite.
     'fresh_start' => [
         'mysqldump_binary' => env('CRM_MYSQLDUMP_PATH', 'mysqldump'),

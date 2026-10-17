@@ -122,13 +122,17 @@ class MetaAdsWriter implements AdPlatformWriter
         }
         $externalId = $this->numericId($externalId);
         $token = $this->token($a);
-        $activate = strtolower($status) === 'active';
+        $status = strtolower($status);
+        if ($status === 'archived' && $level !== 'ad') {
+            throw new AdsApiException('Only an ad is archived by the CRM.');
+        }
+        $activate = $status === 'active';
         // A pause stops spend, so it never waits on our own usage back-off: if Meta really is
         // throttling, it answers with a rate code and the action is logged as an error.
         if ($activate) {
             $this->api->backOffIfBusy($token);
         }
-        $this->api->post($token, $externalId, ['status' => $activate ? 'ACTIVE' : 'PAUSED'], $this->writeTimeout());
+        $this->api->post($token, $externalId, ['status' => match ($status) { 'active' => 'ACTIVE', 'archived' => 'ARCHIVED', default => 'PAUSED' }], $this->writeTimeout());
     }
 
     /** Fields of one live read per level: the object's own status and budgets plus its parents'. */

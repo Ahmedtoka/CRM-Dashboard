@@ -12,8 +12,11 @@ use App\Queue\BoardAccess;
 use App\Queue\BoardState;
 use App\Queue\Events\QueueMemberUpdated;
 use App\Queue\Events\RouterDecided;
+use App\Queue\Quality\QaRefused;
+use App\Queue\Quality\QaService;
 use App\Queue\QueueRouter;
 use App\Queue\QueueService;
+use App\Queue\Reports\QueueDayView;
 use App\Queue\ShiftService;
 use App\Queue\WindowLifecycle;
 use App\Support\SafeBroadcast;
@@ -189,6 +192,37 @@ class BoardController extends Controller
         ]);
 
         return $this->fresh($board);
+    }
+
+    /** Queue Part 2: one desk's day — her points, ledger and the windows she closed (the drill-in). */
+    public function day(Request $request, ShiftMember $member, QueueDayView $days, QueueService $queue): JsonResponse
+    {
+        $this->authorizeBoard($request);
+        $user = $member->user ?? abort(404);
+
+        return response()->json(['data' => $days->for($user, $queue->businessDate(), $request->user())]);
+    }
+
+    /** Queue Part 2: the leader's quality check of a closed window; answers with that moderator's fresh day. */
+    public function qa(Request $request, QueueEntry $entry, QaService $qa, QueueDayView $days, QueueService $queue): JsonResponse
+    {
+        $this->authorizeBoard($request);
+        $data = $request->validate([
+            'score' => ['required', 'integer', 'min:1', 'max:5'],
+            'checklist' => ['sometimes', 'array'],
+            'checklist.*' => ['boolean'],
+            'notes' => ['sometimes', 'nullable', 'string', 'max:1000'],
+        ]);
+
+        try {
+            $qa->save($entry, $request->user(), (int) $data['score'], $data['checklist'] ?? null, array_key_exists('notes', $data) ? (string) $data['notes'] : null);
+        } catch (QaRefused $e) {
+            return response()->json(['message' => __('errors.queue.'.$e->key)], 422);
+        }
+
+        $user = $entry->assignee ?? abort(404);
+
+        return response()->json(['data' => $days->for($user, $entry->business_date->toDateString(), $request->user())]);
     }
 
     private function authorizeBoard(Request $request): void

@@ -70,4 +70,16 @@ describe('Today', () => {
         expect(w.find('[data-test="more-alerts"]').text()).toContain('5');
         expect(w.text()).not.toContain('Nothing needs a decision');
     });
+
+    it('shows «Ready to publish» per buyer for managers, linking to each buyer queue, and hides it when empty', () => {
+        const handoff = { total: 3, box: 'ready', buyers: [{ buyer_id: 7, buyer_name: 'Ali', count: 2, oldest_at: null }, { buyer_id: 9, buyer_name: 'Omar', count: 1, oldest_at: null }] };
+        const w = mount(Today, { props: { ...base, handoff } as never, global: { stubs } });
+        const card = w.find('[data-test="handoff"]');
+        expect(card.text()).toContain('3 drafts wait for a buyer');
+        expect(card.findAll('a').map((a) => a.attributes('href'))).toEqual(['/ads/launches?box=ready', '/ads/launches?box=ready&reviewer=7', '/ads/launches?box=ready&reviewer=9']);
+
+        const mine = mount(Today, { props: { ...base, handoff: { total: 1, buyers: [], box: 'review' } } as never, global: { stubs } });
+        expect(mine.find('[data-test="handoff"] a').attributes('href')).toBe('/ads/launches?box=review');
+        expect(mount(Today, { props: { ...base, handoff: { total: 0, buyers: [], box: 'review' } } as never, global: { stubs } }).find('[data-test="handoff"]').exists()).toBe(false);
+    });
 });

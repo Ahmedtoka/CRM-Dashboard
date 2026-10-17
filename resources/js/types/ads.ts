@@ -1069,11 +1069,20 @@ export interface LaunchAnswer {
     message: string;
     launch: LaunchRow;
 }
+/** «جاهزة للنشر» (F4): drafts waiting for one buyer. */
+export interface LaunchHandoffRow {
+    buyer_id: number;
+    buyer_name: string;
+    count: number;
+    oldest_at: string | null;
+}
 export interface AdsLaunchesProps {
-    box: 'mine' | 'review' | 'live' | 'all';
-    filters: { material: number | null; launch: string | null; stop: boolean; tab?: 'slots' | null };
+    box: 'mine' | 'review' | 'ready' | 'live' | 'all';
+    filters: { material: number | null; launch: string | null; stop: boolean; tab?: 'slots' | null; reviewer?: number | null };
     launches: LaravelPage<LaunchRow>;
-    counts: { mine: number; review: number; live: number };
+    counts: { mine: number; review: number; ready: number; live: number };
+    canSeeReady: boolean;
+    handoff: LaunchHandoffRow[];
     canReview: boolean;
     canToggleSlots: boolean;
     reasons: string[];
@@ -1181,6 +1190,8 @@ export interface AdsTodayData {
 export interface AdsTodayProps extends AdsPageBase {
     filters: AdsControlFilters;
     today: AdsTodayData;
+    /** «جاهزة للنشر» (F4): total in the viewer's scope; per buyer for managers only. */
+    handoff?: { total: number; buyers: LaunchHandoffRow[]; box: 'ready' | 'review' };
 }
 
 export interface AdsExplorerFilters extends AdsControlFilters {

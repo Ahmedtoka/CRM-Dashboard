@@ -76,6 +76,7 @@ const emit = defineEmits<{
     sendAndResolve: [body: string, attachments: Attachment[], quickReplyId: number | null];
     note: [body: string, mentions: number[], done: () => void];
     sendTemplate: [template: TemplatePayload];
+    productSent: [message: Message];
     retry: [message: Message];
     retryAttachment: [attachment: Attachment];
     typing: [];
@@ -464,6 +465,7 @@ defineExpose({ composer, header, viewState: list.viewState, moveNote });
             @send-and-resolve="(...args) => emit('sendAndResolve', ...args)"
             @note="(...args) => emit('note', ...args)"
             @typing="emit('typing')"
+            @product-sent="emit('productSent', $event)"
         />
     </section>
 </template>

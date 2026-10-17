@@ -30,6 +30,8 @@ class MessageResource extends JsonResource
             'status' => $this->status?->value,
             'error' => StoredMessage::error($this->error),
             'is_template' => (bool) $this->is_template,
+            // Sent from Meta Business Suite or the phone app, recorded from its echo (2026-10-17).
+            'sent_outside_crm' => (bool) $this->sent_outside_crm,
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

@@ -15,7 +15,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { useAdFunnel } from '@/composables/useAdFunnel';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
-import { adsManagerUrl, allowedPreviewUrl, formatAdsMoney, formatRoas, previewSrcFromHtml } from '@/lib/ads';
+import { adsManagerUrl, allowedPreviewUrl, formatAdsMoney, formatRoas, previewSrcFromHtml, writeChangeKey } from '@/lib/ads';
 import { formatCount, formatDateTime } from '@/lib/format';
 import type { AdDrawerData, AdsFilters, ChatFunnel } from '@/types/ads';
 import { router } from '@inertiajs/vue3';
@@ -176,7 +176,7 @@ const resultTone = (r: 'ok' | 'error' | 'pending') => (r === 'ok' ? 'positive' :
                         <h3 class="text-sm font-semibold">{{ t('ads.control.drawer.history') }}</h3>
                         <ul v-if="data?.history.length" class="divide-y divide-border text-xs">
                             <li v-for="h in data.history" :key="h.id" class="flex flex-wrap items-center justify-between gap-2 py-1.5">
-                                <span>{{ h.to_status === 'PAUSED' ? t('ads.control.write.done_stop') : t('ads.control.write.done_run') }} · <bdi>{{ h.user ?? '—' }}</bdi></span>
+                                <span>{{ t(writeChangeKey(h.to_status)) }} · <bdi>{{ h.user ?? '—' }}</bdi></span>
                                 <span class="inline-flex items-center gap-2 text-2xs text-muted-foreground">
                                     <span class="tabular-nums">{{ h.at ? formatDateTime(h.at, locale) : '—' }}</span>
                                     <StatusChip :label="t(`ads.control.decisions.result_${h.result}`)" :tone="resultTone(h.result)" />

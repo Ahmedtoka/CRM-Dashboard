@@ -7,7 +7,22 @@ import { logoHref, todayNavItem } from '@/lib/today';
 import { type NavItem, type SharedData } from '@/types';
 import type { Role } from '@/types/crm';
 import { Link, usePage } from '@inertiajs/vue3';
-import { BarChart3, ClipboardList, FlaskConical, Gauge, Images, Inbox, LayoutGrid, Megaphone, MessagesSquare, Package, Rocket, Settings, Users } from 'lucide-vue-next';
+import {
+    BarChart3,
+    ClipboardList,
+    FlaskConical,
+    Gauge,
+    Images,
+    Inbox,
+    LayoutGrid,
+    Megaphone,
+    ListChecks,
+    MessagesSquare,
+    Package,
+    Rocket,
+    Settings,
+    Users,
+} from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -76,6 +91,7 @@ const mainNavItems = computed<NavItem[]>(() => {
     if (allows('supervisor')) {
         reports.push(
             { title: t('nav.reports_team'), href: '/reports/team' },
+            { title: t('nav.reports_queue'), href: '/reports/queue' },
             { title: t('nav.reports_bot'), href: '/reports/bot' },
             { title: t('nav.reports_activity'), href: '/reports/activity' },
             { title: t('nav.reports_quick_replies'), href: '/reports/quick-replies' },
@@ -96,6 +112,7 @@ const mainNavItems = computed<NavItem[]>(() => {
             settings.push(
                 { title: t('nav.settings_cities'), href: '/settings/cities', section: store },
                 { title: t('nav.settings_branch_hours'), href: '/settings/branch-hours', section: store },
+                { title: t('order_confirmations.settings.nav'), href: '/settings/order-confirmations', section: store },
                 { title: t('nav.settings_shopify'), href: '/settings/shopify', section: store },
             );
         }
@@ -125,7 +142,9 @@ const mainNavItems = computed<NavItem[]>(() => {
         ...(page.props.canSeeBoard === true ? [{ title: t('nav.board'), href: '/board', icon: LayoutGrid }] : []),
         { title: t('nav.cases'), href: '/cases', icon: ClipboardList },
         { title: t('nav.comments'), href: '/comments', icon: MessagesSquare },
-        { title: t('nav.orders'), href: '/orders', icon: Package },
+        { title: t('nav.orders'), href: '/orders', icon: Package, exclude: ['/orders/confirmations'] },
+        // WhatsApp order confirmation (spec 2026-10-16): the day's confirmations and the call list.
+        { title: t('order_confirmations.nav'), href: '/orders/confirmations', icon: ListChecks },
         { title: t('nav.customers'), href: '/customers', icon: Users },
         ...(adsGroup.value ? [adsGroup.value] : []),
         { title: t('nav.reports'), href: '/reports', icon: BarChart3, children: reports },

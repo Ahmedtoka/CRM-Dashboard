@@ -123,7 +123,7 @@ class CaseRecorder
         return SupportCase::query()
             ->where('conversation_id', $c->id)
             ->where('type', 'delivery_followup')
-            ->where('status', '!=', 'closed')
+            ->whereIn('status', SupportCase::OPEN_STATUSES)
             ->when($order !== null,
                 fn ($q) => $q->where('order_id', $order->id),
                 fn ($q) => $q->whereNull('order_id')->where('order_number', $number))

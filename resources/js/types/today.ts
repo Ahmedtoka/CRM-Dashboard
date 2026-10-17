@@ -1,4 +1,5 @@
 // «النهارده» (control room S4): the props of /today, /reports/team ratings and the board's rating numbers.
+import type { ConfirmationsCard } from '@/types/orderConfirmations';
 
 export type TodayMode = 'today' | 'yesterday';
 
@@ -85,6 +86,8 @@ export interface TodayCardsData {
     orders: OrdersCard;
     ads: AdsCard | null;
     why: WhyCard;
+    /** WhatsApp order confirmation (spec 2026-10-16); null while it is off and the day has none. */
+    confirmations?: ConfirmationsCard | null;
 }
 
 export interface TeamRow {

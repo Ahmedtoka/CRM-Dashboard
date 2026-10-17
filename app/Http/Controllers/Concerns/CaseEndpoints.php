@@ -8,6 +8,7 @@ use App\Http\Support\ModeratorScope;
 use App\Http\Support\SortParam;
 use App\Models\SupportCase;
 use App\Models\User;
+use App\Queue\Cases\CaseResolution;
 use Closure;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -23,6 +24,9 @@ use Illuminate\Validation\Rule;
  */
 trait CaseEndpoints
 {
+    /** What the list, show and update responses load (Queue Part 2 adds the opener and the queue entry). */
+    private const CASE_RELATIONS = ['customer', 'assignedTo', 'openedBy:id,name', 'queueEntry:id,assigned_user_id,is_test', 'order.items.variant'];
+
     /**
      * `SupportCaseResource` has its own `data` field (the flow payload), which defeats
      * Laravel's automatic `{"data": ...}` envelope (it only wraps when the resolved
@@ -33,7 +37,7 @@ trait CaseEndpoints
     {
         Gate::authorize('view', $supportCase);
 
-        return response()->json(['data' => (new SupportCaseResource($supportCase->loadMissing(['customer', 'assignedTo', 'order.items.variant'])))->resolve($request)]);
+        return response()->json(['data' => (new SupportCaseResource($supportCase->loadMissing(self::CASE_RELATIONS)))->resolve($request)]);
     }
 
     public function update(Request $request, SupportCase $supportCase): JsonResponse
@@ -53,25 +57,17 @@ trait CaseEndpoints
             }],
         ]);
 
+        // Queue Part 2: `resolved` pays the opener and tells the customer; leaving it takes the points back.
         if (array_key_exists('status', $data)) {
-            $supportCase->status = $data['status'];
-
-            if ($data['status'] === 'closed') {
-                $supportCase->closed_at = now();
-                $supportCase->closed_by_id = $request->user()->id;
-            } else {
-                $supportCase->closed_at = null;
-                $supportCase->closed_by_id = null;
-            }
+            $supportCase = app(CaseResolution::class)->setStatus($supportCase, $data['status'], $request->user());
         }
 
         if (array_key_exists('assigned_to_id', $data)) {
             $supportCase->assigned_to_id = $data['assigned_to_id'];
+            $supportCase->save();
         }
 
-        $supportCase->save();
-
-        return response()->json(['data' => (new SupportCaseResource($supportCase->fresh(['customer', 'assignedTo', 'order.items.variant'])))->resolve($request)]);
+        return response()->json(['data' => (new SupportCaseResource($supportCase->fresh(self::CASE_RELATIONS)))->resolve($request)]);
     }
 
     /**
@@ -84,7 +80,7 @@ trait CaseEndpoints
     {
         $filters = $this->caseFilters($request);
 
-        $query = $this->caseQuery($request, $filters)->with(['customer', 'assignedTo', 'order.items.variant']);
+        $query = $this->caseQuery($request, $filters)->with(self::CASE_RELATIONS);
         $sort = SortParam::parse($request->query('sort'), ['date' => 'created_at', 'id' => 'id']);
         $sort?->apply($query);
 
@@ -124,7 +120,7 @@ trait CaseEndpoints
             ->when($filters['from'] ?? null, fn ($q, $v) => $q->where('created_at', '>=', DateRange::startOfCairoDay($v)))
             ->when($filters['to'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', DateRange::endOfCairoDay($v)))
             // «النهارده» urgent strip (control room S4): open cases whose SLA time passed.
-            ->when(! empty($filters['overdue']), fn ($q) => $q->where('status', '!=', 'closed')->whereNotNull('sla_due_at')->where('sla_due_at', '<', now()))
+            ->when(! empty($filters['overdue']), fn ($q) => $q->whereIn('status', SupportCase::OPEN_STATUSES)->whereNotNull('sla_due_at')->where('sla_due_at', '<', now()))
             ->when(trim((string) ($filters['q'] ?? '')), fn ($q, $term) => $q->where(fn (Builder $w) => $w
                 ->where('order_number', 'like', "%{$term}%")
                 ->orWhereHas('customer', fn (Builder $c) => $c->where('name', 'like', "%{$term}%")->orWhere('phone', 'like', "%{$term}%"))))

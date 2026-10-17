@@ -26,6 +26,10 @@ final class FreshStart
         // Ads data: write actions/steps, alerts, launches, publications, material links, metrics, sync logs, audit.
         'ad_write_steps', 'ads_alert_events', 'ads_alerts', 'ad_publications', 'ad_launches', 'ad_write_actions', 'ad_actions',
         'ad_material_ads', 'ad_daily_metrics', 'ad_account_daily', 'ad_spend_snapshots', 'ads_sync_runs', 'ads_api_usage', 'ads_audit_log',
+        // WhatsApp order confirmations point at orders, messages and cases: they go first.
+        'order_confirmations',
+        // The queue's points ledger and quality checks (Part 2) point at entries, cases and conversations.
+        'score_events', 'qa_reviews',
         // Conversation outcomes, cases and the queue (entries carry the ratings; days/shifts are the windows).
         'conversation_outcomes', 'support_cases', 'queue_decisions', 'queue_attendance_events', 'queue_entries', 'shift_members', 'shifts', 'queue_days',
         // Shopify orders (shipments/shipment_events were dropped by fresh-orders F4).
@@ -44,7 +48,7 @@ final class FreshStart
         // Owner ruling 2026-10-06 (wipe all data): comments before their posts, suggestions before their reports,
         // steps before their test sessions; logs and health state.
         'comments', 'posts', 'bot_suggestions', 'bot_learning_reports', 'bot_test_session_steps', 'bot_test_sessions',
-        'quick_reply_usages', 'webhook_events', 'shopify_sync_runs', 'ads_health_state',
+        'quick_reply_usages', 'webhook_events', 'webhook_rejections', 'shopify_sync_runs', 'ads_health_state',
         // The production load test's runs (2026-10-07); its «تيست» channels stay with the channel accounts.
         'load_test_runs',
     ];
@@ -56,7 +60,7 @@ final class FreshStart
      */
     public const KEEP = [
         'users', 'user_platforms', 'password_reset_tokens', 'personal_access_tokens',
-        'bot_settings', 'queue_settings', 'ads_settings', 'shopify_integrations', 'shopify_webhook_subscriptions',
+        'bot_settings', 'queue_settings', 'ads_settings', 'order_confirmation_settings', 'shopify_integrations', 'shopify_webhook_subscriptions',
         'bot_flows', 'bot_flow_versions', 'bot_intents', 'bot_rules', 'bot_knowledge_entries', 'bot_translations', 'bot_test_links',
         'channel_accounts',
         'ad_platform_connections', 'ad_accounts', 'media_buyers', 'ad_account_assignments', 'buyer_targets',

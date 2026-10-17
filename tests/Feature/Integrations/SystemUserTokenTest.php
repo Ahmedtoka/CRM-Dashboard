@@ -22,7 +22,7 @@ beforeEach(function () {
     $this->admin = User::factory()->create(['role' => UserRole::Admin]);
     $this->healthRoutes = [
         'GET debug_token' => ['data' => ['is_valid' => true, 'expires_at' => 0, 'scopes' => ['pages_messaging', 'pages_manage_metadata', 'pages_read_engagement', 'pages_manage_engagement', 'pages_read_user_content']]],
-        'GET 459028320806456/subscribed_apps' => ['data' => [['id' => '111222', 'name' => 'ARENA', 'subscribed_fields' => ['messages', 'messaging_postbacks', 'feed']]]],
+        'GET 459028320806456/subscribed_apps' => ['data' => [['id' => '111222', 'name' => 'ARENA', 'subscribed_fields' => ['messages', 'messaging_postbacks', 'message_echoes', 'feed']]]],
     ];
 });
 

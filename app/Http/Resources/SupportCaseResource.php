@@ -6,6 +6,7 @@ use App\Cases\CaseSummary;
 use App\Media\MediaUrls;
 use App\Models\MessageAttachment;
 use App\Models\SupportCase;
+use App\Queue\Cases\CaseSla;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -44,6 +45,9 @@ class SupportCaseResource extends JsonResource
             'customer' => $customer ? ['id' => $customer->id, 'name' => $customer->name, 'phone' => $customer->phone] : null,
             'created_at' => $this->created_at?->toIso8601String(),
             'closed_at' => $this->closed_at?->toIso8601String(),
+            // Queue Part 2: the SLA of a case opened from a window, and who opened it.
+            'sla' => CaseSla::of($this->resource),
+            'opened_by' => $this->opened_by_id !== null && $this->openedBy ? ['id' => $this->openedBy->id, 'name' => $this->openedBy->name] : null,
         ];
     }
 }

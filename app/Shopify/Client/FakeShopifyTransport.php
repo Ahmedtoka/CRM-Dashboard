@@ -59,6 +59,12 @@ final class FakeShopifyTransport implements ShopifyTransport
     /** @var array<int, array{kind: string, tags: array<int, string>, node: array<string, mixed>}> orders/drafts created via orderCreate()/draftOrderCreate(). */
     private static array $storeOrders = [];
 
+    /** @var list<array{id: string, tags: list<string>}> tagsAdd() calls (WhatsApp order confirmation tags), in order. */
+    private static array $tagsAdded = [];
+
+    /** @var list<array{id: string, tags: list<string>}> tagsRemove() calls, in order. */
+    private static array $tagsRemoved = [];
+
     /** Clears every static in-memory store; called from Tests\TestCase::setUp(). */
     public static function reset(): void
     {
@@ -68,6 +74,20 @@ final class FakeShopifyTransport implements ShopifyTransport
         self::$draftSeq = 0;
         self::$webhooks = [];
         self::$storeOrders = [];
+        self::$tagsAdded = [];
+        self::$tagsRemoved = [];
+    }
+
+    /** @return list<array{id: string, tags: list<string>}> every tagsRemove() call since the last reset() */
+    public static function tagsRemoved(): array
+    {
+        return self::$tagsRemoved;
+    }
+
+    /** @return list<array{id: string, tags: list<string>}> every tagsAdd() call since the last reset() */
+    public static function tagsAdded(): array
+    {
+        return self::$tagsAdded;
     }
 
     public function post(string $url, array $headers, array $body): array
@@ -195,6 +215,25 @@ final class FakeShopifyTransport implements ShopifyTransport
 
         if (str_contains($query, 'mutation orderCancel(')) {
             return $this->ok(['orderCancel' => ['job' => ['id' => 'gid://shopify/Job/fake-cancel'], 'orderCancelUserErrors' => []]]);
+        }
+
+        // WhatsApp confirmation tags: one document with an aliased tagsAdd (`added`, $add)
+        // and/or tagsRemove (`removed`, $remove); a plain tagsAdd($tags) is accepted too.
+        if (str_contains($query, 'tagsAdd(') || str_contains($query, 'tagsRemove(')) {
+            $id = (string) ($variables['id'] ?? '');
+            $data = [];
+
+            if (str_contains($query, 'tagsAdd(')) {
+                self::$tagsAdded[] = ['id' => $id, 'tags' => array_values(array_map('strval', (array) ($variables['add'] ?? $variables['tags'] ?? [])))];
+                $data['added'] = $data['tagsAdd'] = ['node' => ['id' => $id], 'userErrors' => []];
+            }
+
+            if (str_contains($query, 'tagsRemove(')) {
+                self::$tagsRemoved[] = ['id' => $id, 'tags' => array_values(array_map('strval', (array) ($variables['remove'] ?? [])))];
+                $data['removed'] = ['node' => ['id' => $id], 'userErrors' => []];
+            }
+
+            return $this->ok($data);
         }
 
         if (str_contains($query, 'webhookSubscriptionCreate(')) {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BoardDeskDay from '@/components/board/BoardDeskDay.vue';
 import BoardPanel from '@/components/board/BoardPanel.vue';
 import BoardPlatforms from '@/components/board/BoardPlatforms.vue';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,8 @@ import { Coffee, ExternalLink, LogOut, Undo2, UserRoundCheck } from 'lucide-vue-
 import { computed, ref, watch } from 'vue';
 
 // A desk: her day so far, her open windows (each a link to the conversation), her break, her
-// number of windows, and «خروج» / «رجّعي شبابيكها للصالة» on her behalf. Part 2 adds points, reviews and QA.
+// number of windows, and «خروج» / «رجّعي شبابيكها للصالة» on her behalf. Queue Part 2: her day
+// (points, ledger, the windows she closed, the leader's quality check) in BoardDeskDay.
 const props = defineProps<{ memberId: number; canManage: boolean }>();
 const emit = defineEmits<{ close: []; entry: [entryId: number] }>();
 
@@ -210,6 +212,8 @@ async function handBack(): Promise<void> {
                     </li>
                 </ul>
             </div>
+
+            <BoardDeskDay :member-id="member.id" :points-today="member.points_today" />
 
             <template v-if="canManage">
                 <div v-if="!closing" class="space-y-1 border-t border-border pt-3">

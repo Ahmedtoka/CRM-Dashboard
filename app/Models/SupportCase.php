@@ -21,7 +21,14 @@ class SupportCase extends Model
 
     public const TYPES = ['return_exchange', 'return', 'exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
 
-    public const STATUSES = ['new', 'in_progress', 'closed'];
+    /**
+     * `resolved` (queue Part 2): staff solved it; it pays the moderator who opened it. `closed` = ended
+     * without a solution (or a legacy row), never paid.
+     */
+    public const STATUSES = ['new', 'in_progress', 'resolved', 'closed'];
+
+    /** Still waiting for staff: the SLA runs. */
+    public const OPEN_STATUSES = ['new', 'in_progress'];
 
     public const PRIORITIES = ['medium', 'high'];
 
@@ -59,6 +66,8 @@ class SupportCase extends Model
         'sla_due_at',
         'resolved_at',
         'resolved_by_id',
+        'sla_breached_at',
+        'resolved_notified_at',
     ];
 
     protected function casts(): array
@@ -70,6 +79,8 @@ class SupportCase extends Model
             'closed_at' => 'datetime',
             'sla_due_at' => 'datetime',
             'resolved_at' => 'datetime',
+            'sla_breached_at' => 'datetime',
+            'resolved_notified_at' => 'datetime',
         ];
     }
 
@@ -140,6 +151,12 @@ class SupportCase extends Model
     public function closedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'closed_by_id');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function resolvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'resolved_by_id');
     }
 
     /** @return BelongsTo<User, $this> */

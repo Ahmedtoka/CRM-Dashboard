@@ -12,9 +12,11 @@ use App\Http\Controllers\Web\LocaleController;
 use App\Http\Controllers\Web\MediaController;
 use App\Http\Controllers\Web\NotificationController;
 use App\Http\Controllers\Web\OnboardingController;
+use App\Http\Controllers\Web\OrderConfirmationController;
 use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\PresenceController;
 use App\Http\Controllers\Web\ProductController;
+use App\Http\Controllers\Web\QueueReportController;
 use App\Http\Controllers\Web\QueueWindowController;
 use App\Http\Controllers\Web\QuickReplyAttachmentController;
 use App\Http\Controllers\Web\ReportController;
@@ -33,6 +35,7 @@ use App\Http\Controllers\Web\Settings\ChannelController;
 use App\Http\Controllers\Web\Settings\CityController;
 use App\Http\Controllers\Web\Settings\FacebookLoginController;
 use App\Http\Controllers\Web\Settings\IntegrationController;
+use App\Http\Controllers\Web\Settings\OrderConfirmationSettingsController;
 use App\Http\Controllers\Web\Settings\QueueSettingController;
 use App\Http\Controllers\Web\Settings\QuickReplyCategoryController;
 use App\Http\Controllers\Web\Settings\QuickReplyController;
@@ -63,6 +66,7 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::get('conversations/{conversation}/context', [InboxController::class, 'context'])->name('conversations.context');
         Route::get('conversations/{conversation}/messages', [InboxController::class, 'messages'])->name('conversations.messages.index');
         Route::post('conversations/{conversation}/messages', [InboxController::class, 'sendMessage'])->name('conversations.messages.store');
+        Route::post('conversations/{conversation}/product', [InboxController::class, 'sendProduct'])->name('conversations.product.store');
         Route::get('conversations/{conversation}/media', [InboxController::class, 'media'])->name('conversations.media.index');
         Route::post('conversations/{conversation}/attachments', [InboxController::class, 'uploadAttachment'])->name('conversations.attachments.store');
         Route::post('messages/{message}/retry', [InboxController::class, 'retryMessage'])->name('messages.retry');
@@ -90,6 +94,7 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('/queue/me/check-in', [QueueWindowController::class, 'checkIn'])->name('queue.me.check-in');
         Route::post('/queue/me/check-out', [QueueWindowController::class, 'checkOut'])->name('queue.me.check-out');
         Route::post('/queue/me/hand-back', [QueueWindowController::class, 'handBack'])->name('queue.me.hand-back');
+        Route::get('/queue/me/points', [QueueWindowController::class, 'points'])->name('queue.me.points');
         Route::post('/queue/entries/{entry}/close', [QueueWindowController::class, 'close'])->name('queue.close');
         Route::post('/queue/entries/{entry}/escalate', [QueueWindowController::class, 'escalate'])->name('queue.escalate');
     });
@@ -104,6 +109,8 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('members/{member}/check-out', [BoardController::class, 'checkOut'])->name('members.check-out');
         Route::post('members/{member}/hand-back', [BoardController::class, 'handBack'])->name('members.hand-back');
         Route::post('members/{member}/status', [BoardController::class, 'memberStatus'])->name('members.status');
+        Route::get('members/{member}/day', [BoardController::class, 'day'])->name('members.day');
+        Route::post('entries/{entry}/qa', [BoardController::class, 'qa'])->name('entries.qa');
         Route::post('entries/{entry}/assign', [BoardController::class, 'assign'])->name('entries.assign');
         Route::post('entries/{entry}/cancel', [BoardController::class, 'cancel'])->name('entries.cancel');
     });
@@ -143,6 +150,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
     // Orders
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::post('/orders/refresh-stale', [OrderController::class, 'refreshStale'])->middleware('throttle:30,1')->name('orders.refresh-stale');
+    // WhatsApp order confirmation (spec 2026-10-16, W4): the day's confirmations and the call list (before /orders/{order}).
+    Route::get('/orders/confirmations', [OrderConfirmationController::class, 'index'])->name('orders.confirmations.index');
+    Route::post('/orders/confirmations/{confirmation}/call', [OrderConfirmationController::class, 'call'])->middleware('throttle:60,1')->name('orders.confirmations.call');
     // Fresh-orders F5: one ad's orders (before /orders/{order}).
     Route::get('/orders/ads/{ad}', [OrderController::class, 'ad'])->name('orders.ads.show');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
@@ -175,6 +185,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
     Route::get('/reports/me', [ReportController::class, 'me'])->name('reports.me');
     Route::middleware('role:supervisor')->group(function () {
         Route::get('/reports/team', [ReportController::class, 'team'])->name('reports.team');
+        // Queue Part 2: the queue's report for any range (≤ 92 days) and its CSV.
+        Route::get('/reports/queue', [QueueReportController::class, 'index'])->name('reports.queue');
+        Route::get('/reports/queue/export', [QueueReportController::class, 'export'])->name('reports.queue.export');
         Route::get('/reports/users/{user}', [ReportController::class, 'user'])->name('reports.users.show');
         Route::get('/reports/bot', [ReportController::class, 'bot'])->name('reports.bot');
         // D11: merged into «الأرقام» (/ads/numbers?section=chat).
@@ -322,6 +335,10 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         // «مواعيد الفروع» (audit 2026-10-16): hours, phone and active flag of the bot's branches only.
         Route::get('branch-hours', [BranchHoursController::class, 'index'])->name('branch-hours.index');
         Route::put('branch-hours/{branch}', [BranchHoursController::class, 'update'])->name('branch-hours.update');
+
+        // «تأكيد الأوردرات على الواتساب» (spec 2026-10-16): ConfirmationSettings and the WhatsApp number's state.
+        Route::get('order-confirmations', [OrderConfirmationSettingsController::class, 'index'])->name('order-confirmations.index');
+        Route::put('order-confirmations', [OrderConfirmationSettingsController::class, 'update'])->name('order-confirmations.update');
 
         Route::get('shopify', [ShopifyIntegrationController::class, 'index'])->name('shopify.index');
         Route::get('shopify/status', [ShopifyIntegrationController::class, 'status'])->name('shopify.status');

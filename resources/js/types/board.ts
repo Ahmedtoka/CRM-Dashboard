@@ -38,6 +38,8 @@ export interface BoardMember extends ShiftMember {
     attendance?: AttendanceFigures;
     /** Board state only; kept across QueueMemberUpdated. Today's customer ratings (G11). */
     rating?: RatingSummary;
+    /** Board state only; kept across QueueMemberUpdated. Her points of the business day (queue Part 2). */
+    points_today?: number;
 }
 
 export interface BoardShift {

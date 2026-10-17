@@ -18,6 +18,7 @@ use App\Models\BotTestSession;
 use App\Models\QueueEntry;
 use App\Models\User;
 use App\Queue\RatingStats;
+use App\Queue\Scoring\ScoreKeeper;
 use App\TestLinks\TestLinkReport;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -72,9 +73,16 @@ class ReportController extends Controller
         return Inertia::render('Reports/User', $this->userReport($request, $metrics, $user));
     }
 
-    public function me(Request $request, MetricsService $metrics): Response
+    public function me(Request $request, MetricsService $metrics, ScoreKeeper $scores): Response
     {
-        return Inertia::render('Reports/Me', $this->userReport($request, $metrics, $request->user()));
+        // Queue Part 2: her own points of the range (only ever her own), with the ledger lines.
+        $range = DateRange::fromRequest($request);
+        $user = $request->user();
+
+        return Inertia::render('Reports/Me', $this->userReport($request, $metrics, $user) + [
+            'queue_points' => $scores->summary($user->id, $range->fromDate, $range->toDate)
+                + ['ledger' => $scores->ledger($user->id, $range->fromDate, $range->toDate, 200)],
+        ]);
     }
 
     public function bot(Request $request, MetricsService $metrics): Response

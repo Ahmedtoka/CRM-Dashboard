@@ -51,7 +51,7 @@ const selectClass = 'h-7 rounded-md border border-input bg-background px-1.5 tex
                 :aria-label="t('cases.columns.status')"
                 @change="onStatusChange"
             >
-                <option v-for="s in ['new', 'in_progress', 'closed']" :key="s" :value="s">{{ t(`cases.tabs.${s}`) }}</option>
+                <option v-for="s in ['new', 'in_progress', 'resolved', 'closed']" :key="s" :value="s">{{ t(`cases.tabs.${s}`) }}</option>
             </select>
         </div>
 

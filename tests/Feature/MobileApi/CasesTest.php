@@ -39,7 +39,7 @@ it('lists only the cases on her platforms, with meta and counts', function () {
         ->assertJsonCount(2, 'data')
         ->assertJsonPath('meta.current_page', 1)->assertJsonPath('meta.last_page', 1)
         ->assertJsonPath('meta.per_page', 25)->assertJsonPath('meta.total', 2)
-        ->assertJsonPath('counts', ['all' => 2, 'new' => 1, 'in_progress' => 0, 'closed' => 1]);
+        ->assertJsonPath('counts', ['all' => 2, 'new' => 1, 'in_progress' => 0, 'resolved' => 0, 'closed' => 1]);
 
     expect($res->json('data.1.id'))->toBe($fb->id) // newest first
         ->and(array_keys($res->json('data.0')))->toContain('type_label', 'summary_header', 'photos', 'customer', 'data');

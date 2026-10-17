@@ -120,3 +120,40 @@ it('final review B-m5: the remap migration sets the status default to new, and d
     expect($default())->toBe('not_started');
     $migration->up();
 });
+
+it('approved, handed back unrun, then rejected: the material is new again, never «واقفة»', function () {
+    $w = LaunchWorld::make();
+    $l = LaunchWorld::launch($w, LaunchState::AwaitingApproval);
+    $svc = app(LaunchService::class);
+    $svc->transition($l, [LaunchState::AwaitingApproval], LaunchState::Launching, ['approved_at' => now()]);
+    expect($w['material']->fresh()->status)->toBe('live'); // launching shows as live while the Runs go out
+
+    // the Runs never went through: back to awaiting approval, then rejected
+    $svc->transition($l->fresh(), [LaunchState::Launching], LaunchState::AwaitingApproval, ['approved_at' => null]);
+    $svc->reject($w['manager'], $l->fresh(), 'off_brand', null);
+
+    expect($w['material']->fresh()->status)->toBe('new')->and($w['material']->fresh()->activated_at)->toBeNull();
+});
+
+it('a material whose ad really ran stays «واقفة» after its launch ends', function () {
+    $w = LaunchWorld::make();
+    $l = LaunchWorld::launch($w, LaunchState::Live);
+    app(MaterialStatus::class)->refresh($w['material']->fresh());
+    expect($w['material']->fresh()->activated_at)->not->toBeNull();
+
+    Ad::query()->update(['status' => 'PAUSED']);
+    $l->forceFill(['state' => LaunchState::Retired])->save();
+    expect(app(MaterialStatus::class)->refresh($w['material']->fresh()))->toBe('retired');
+});
+
+it('stamps activated_at on the normal path: awaiting, launching, then live', function () {
+    $w = LaunchWorld::make();
+    $l = LaunchWorld::launch($w, LaunchState::AwaitingApproval);
+    $svc = app(LaunchService::class);
+    $svc->transition($l, [LaunchState::AwaitingApproval], LaunchState::Launching, ['approved_at' => now()]);
+    expect($w['material']->fresh()->activated_at)->toBeNull();
+
+    Ad::query()->update(['status' => 'ACTIVE']);
+    $svc->transition($l->fresh(), [LaunchState::Launching], LaunchState::Live, ['live_at' => now()]);
+    expect($w['material']->fresh()->status)->toBe('live')->and($w['material']->fresh()->activated_at)->not->toBeNull();
+});

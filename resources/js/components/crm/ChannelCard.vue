@@ -2,10 +2,11 @@
 import { Button } from '@/components/ui/button';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
+import WebhookRejectionLine from '@/components/crm/WebhookRejectionLine.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import { formatDateTime } from '@/lib/format';
-import type { ChannelAccount, ChannelTestResult, FacebookLoginSettings } from '@/types/admin';
+import type { ChannelAccount, ChannelTestResult, FacebookLoginSettings, WebhookRejectionSummary } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
 import { ChevronDown, CircleCheck, Copy, Facebook } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
@@ -21,6 +22,8 @@ const props = defineProps<{
     facebookAccounts: { id: number; name: string }[];
     /** "Connect with Facebook" settings — only used on the Messenger card. */
     facebookLogin?: FacebookLoginSettings | null;
+    /** This platform's webhooks refused for a bad signature in the last day (2026-10-17). */
+    rejections?: WebhookRejectionSummary | null;
 }>();
 const emit = defineEmits<{
     driver: [account: ChannelAccount, driver: 'fake' | 'live'];
@@ -166,6 +169,7 @@ async function copy(value: string | null): Promise<void> {
                     <dt class="text-muted-foreground">{{ t('settings.channels.last_webhook') }}</dt>
                     <dd class="tabular-nums">{{ formatDateTime(account.last_webhook_at, locale) || t('ui.never') }}</dd>
                 </div>
+                <WebhookRejectionLine :summary="rejections" secret="app_secret" />
                 <div v-if="account.last_error">
                     <dt class="text-muted-foreground">{{ t('settings.channels.last_error') }}</dt>
                     <dd class="mt-0.5 break-words rounded bg-destructive/10 px-2 py-1 text-foreground" dir="ltr">{{ account.last_error }}</dd>

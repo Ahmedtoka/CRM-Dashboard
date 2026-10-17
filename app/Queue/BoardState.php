@@ -15,6 +15,7 @@ use App\Models\QueueSetting;
 use App\Models\Shift;
 use App\Models\ShiftMember;
 use App\Models\User;
+use App\Queue\Scoring\ScoreKeeper;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -43,6 +44,7 @@ class BoardState
         private readonly ShiftService $shifts,
         private readonly Attendance $attendance,
         private readonly RatingStats $ratings,
+        private readonly ScoreKeeper $scores,
     ) {}
 
     /** The board with the queue switched off: nothing but the fact. Reads the settings row only. */
@@ -161,7 +163,10 @@ class BoardState
             (int) $s->break_minutes,
         );
 
-        return $desks->map(function (ShiftMember $m) use ($counts, $byUser, $open, $s, $attendance, $ratingsByUser) {
+        // Queue Part 2: her points of the business day, one grouped query for every desk.
+        $points = $this->scores->dayTotals($desks->pluck('user_id')->map(fn ($id) => (int) $id)->unique()->values()->all(), $this->queue->businessDate());
+
+        return $desks->map(function (ShiftMember $m) use ($counts, $byUser, $open, $s, $attendance, $ratingsByUser, $points) {
             $rows = $counts->get($m->id, collect());
             $mine = $byUser->get($m->user_id, collect())
                 ->map(fn (QueueEntry $e) => ShiftMemberResource::window($e, $s))->values()->all();
@@ -177,6 +182,7 @@ class BoardState
                 'platforms' => $user ? $this->platformsOf($user) : [],
                 'attendance' => $attendance[(int) $m->user_id] ?? Attendance::EMPTY,
                 'rating' => $ratingsByUser[(int) $m->user_id] ?? RatingStats::EMPTY,
+                'points_today' => $points[(int) $m->user_id] ?? 0,
             ];
         })->values()->all();
     }

@@ -15,7 +15,7 @@ import { useAdDrawer } from '@/composables/useAdDrawer';
 import { useI18n } from '@/composables/useI18n';
 import { usePathVisitLoading } from '@/composables/usePathVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatAdsMoney, reasonTexts } from '@/lib/ads';
+import { formatAdsMoney, reasonTexts, writeChangeKey } from '@/lib/ads';
 import { buildHref, readQuery, withParam } from '@/lib/adsFilters';
 import { formatCount, formatDateTime } from '@/lib/format';
 import type { AdActionLogRow, AdSuggestion, AdsDecisionsProps, DecisionsTab } from '@/types/ads';
@@ -178,7 +178,7 @@ const selectClass = 'h-9 rounded-md border border-input bg-background px-2 text-
                         <span v-else dir="auto">{{ row.name }}</span>
                         <span class="block text-2xs text-muted-foreground">{{ t(`ads.campaigns.level_${row.level}`) }} · <span dir="auto">{{ row.account }}</span></span>
                     </template>
-                    <template #cell-change="{ row }">{{ row.to_status === 'PAUSED' ? t('ads.control.write.done_stop') : t('ads.control.write.done_run') }}</template>
+                    <template #cell-change="{ row }">{{ t(writeChangeKey(row.to_status)) }}</template>
                     <template #cell-result="{ row }">
                         <StatusChip :label="t(`ads.control.decisions.result_${row.result}`)" :tone="resultTone(row.result)" />
                         <span v-if="row.error" class="block text-2xs text-destructive">{{ row.error }}</span>

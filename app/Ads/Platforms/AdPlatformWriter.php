@@ -28,7 +28,7 @@ interface AdPlatformWriter
 
     /**
      * @param  'campaign'|'adset'|'ad'  $level
-     * @param  'active'|'paused'  $status
+     * @param  'active'|'paused'|'archived'  $status  archived: ads only (PlatformArchive); TikTok refuses it
      */
     public function setStatus(AdAccount $a, string $level, string $externalId, string $status): void;
 

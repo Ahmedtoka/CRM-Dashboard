@@ -42,6 +42,8 @@ return [
         'nothing_to_send' => 'The bot message is empty once its emoji are removed, so it was not sent.',
         'window_other' => 'The message cannot be sent in the current reply window (window mode: :mode).',
         'retry_only_failed' => 'Only failed outbound messages can be retried.',
+        'product_unavailable' => 'This product is not available in the store.',
+        'product_out_of_stock' => 'This variant is out of stock. Confirm to send it anyway.',
         'platform_not_allowed' => 'You are not allowed to reply on :platform.',
     ],
 
@@ -102,6 +104,11 @@ return [
         'already_with_leader' => 'This chat is already with the shift leader.',
         'reason_required' => 'Choose why you are closing: inquiry, problem or case.',
         'case_type_required' => 'Choose the case type.',
+        'qa_not_closed' => 'Quality checks are for windows a moderator closed by hand.',
+        'qa_test' => 'Test chats are not scored.',
+        'qa_own' => 'You cannot score your own window.',
+        'qa_too_old' => 'Quality checks are for today and yesterday only.',
+        'report_range' => 'The queue report covers at most :n days.',
         'board_forbidden' => 'The live board is for supervisors and the shift leader only.',
         'roster_empty' => 'Pick at least one moderator before you start the day.',
         'user_unavailable' => 'This moderator does not exist or her account is deactivated.',
@@ -160,5 +167,9 @@ return [
 
     'bot_replies' => [
         'values_missing' => 'The new sentence must keep the numbers, names and links of the original',
+    ],
+
+    'order_confirmations' => [
+        'not_on_call_list' => "The customer's answer for this order is already recorded.",
     ],
 ];

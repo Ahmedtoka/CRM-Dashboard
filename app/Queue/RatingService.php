@@ -15,8 +15,10 @@ use App\Models\Message;
 use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Queue\Jobs\SendQueueMessage;
+use App\Queue\Scoring\ScoreListener;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -249,6 +251,9 @@ class RatingService
 
         if ($done === 1) {
             SendQueueMessage::dispatch($e->id, 'queue_review_thanks', []);
+            // Queue Part 2: the rating's points, once the answer committed.
+            $id = $e->id;
+            DB::afterCommit(fn () => rescue(fn () => app(ScoreListener::class)->rated(QueueEntry::query()->find($id)), null, true));
         }
     }
 

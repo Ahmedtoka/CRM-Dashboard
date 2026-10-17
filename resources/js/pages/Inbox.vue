@@ -648,6 +648,7 @@ onBeforeUnmount(() => {
                     @resolve="resolveWith"
                     @note="onNote"
                     @send-template="sendTemplate"
+                    @product-sent="thread.mergeMessage($event)"
                     @retry="thread.retry"
                     @retry-attachment="thread.retryAttachment"
                     @typing="thread.typing"

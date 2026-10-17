@@ -26,6 +26,7 @@ use App\Queue\Events\WindowClosed;
 use App\Queue\Jobs\ConfirmClose;
 use App\Queue\Jobs\RequestRating;
 use App\Queue\Jobs\SendQueueMessage;
+use App\Queue\Scoring\ScoreListener;
 use App\Support\SafeBroadcast;
 use Carbon\CarbonInterface;
 use Illuminate\Database\DetectsConcurrencyErrors;
@@ -451,6 +452,10 @@ class WindowLifecycle
             DB::afterCommit(fn () => rescue(fn () => $c !== null ? app(OutboundService::class)->sendSystem($c->fresh(), $line) : null, null, true));
 
             $new = $this->rerouteLocked($locked, 'no_reply', null, 'returning', 'ما ردّتش '.$agentName, ['excluded_user_id' => $agentId, 'tell_customer' => false]);
+
+            // Queue Part 2: − points.no_reply to her, once the hand-off committed.
+            $closedId = $locked->id;
+            DB::afterCommit(fn () => rescue(fn () => app(ScoreListener::class)->noReply(QueueEntry::query()->find($closedId)), null, true));
 
             $this->logger->log(ActorType::System, null, ActivityLogger::QUEUE_NO_REPLY, null, $c, [
                 'ticket' => $ticket, 'entry_id' => $locked->id, 'user_id' => $agentId, 'minutes' => $minutes, 'points' => -$s->point('no_reply'),
