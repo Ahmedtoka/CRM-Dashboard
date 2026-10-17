@@ -140,7 +140,7 @@ class HybridRouter
         $outcome->costUsd += $planCost;
         $metrics->tier = $outcome->tier;
 
-        return $this->runner->complete($c, $texts, $outcome, false, $started, 'hybrid', $directed, $answered);
+        return $this->runner->complete($c, $texts, $outcome, false, $started, 'hybrid', $directed, $answered, $intent);
     }
 
     /**

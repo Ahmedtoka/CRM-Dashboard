@@ -89,10 +89,10 @@ class AgentRunner
      * @param  list<array<string, mixed>>  $tasks  directed tasks planned by the router (bot hybrid)
      * @param  list<array<string, mixed>>  $answered  tasks this reply answered (they count for the summary)
      */
-    public function complete(Conversation $c, array $texts, AgentOutcome $outcome, bool $insideFlow, int $started, string $engine = 'agent', array $tasks = [], array $answered = []): BotRun
+    public function complete(Conversation $c, array $texts, AgentOutcome $outcome, bool $insideFlow, int $started, string $engine = 'agent', array $tasks = [], array $answered = [], ?string $plan = null): BotRun
     {
         if ($c->refresh()->handler !== Handler::Bot) {
-            return $this->record($c, $texts, $outcome, 'human_took_over', false, $started, $engine);
+            return $this->record($c, $texts, $outcome, 'human_took_over', false, $started, $engine, $plan);
         }
 
         if ($outcome->flow !== null && ! $insideFlow && $tasks === []) {
@@ -113,7 +113,7 @@ class AgentRunner
             $outcome->handover !== null => $sent ? 'reply_and_handover' : 'handover',
             $flows => 'flow_started',
             default => 'reply',
-        }, $sent, $started, $engine);
+        }, $sent, $started, $engine, $plan);
     }
 
     private function deliver(Conversation $c, AgentOutcome $o, bool $insideFlow, bool $flows = false): bool
@@ -179,15 +179,18 @@ class AgentRunner
     }
 
     /** @param  list<string>  $texts */
-    private function record(Conversation $c, array $texts, AgentOutcome $o, string $decision, bool $sent, int $started, string $engine = 'agent'): BotRun
+    /** @param  string|null  $plan  the router's «kinds|reason» (bot hybrid): kept before the tools used */
+    private function record(Conversation $c, array $texts, AgentOutcome $o, string $decision, bool $sent, int $started, string $engine = 'agent', ?string $plan = null): BotRun
     {
+        $tools = $o->toolsUsed !== [] ? implode(',', array_unique($o->toolsUsed)) : null;
+
         return BotRun::create([
             'conversation_id' => $c->id,
             'trigger_message' => implode("\n", $texts),
             'engine' => $engine,
             'model' => $o->model,
             'tier' => $o->tier,
-            'intent' => $o->toolsUsed !== [] ? mb_substr(implode(',', array_unique($o->toolsUsed)), 0, 190) : null,
+            'intent' => ($intent = $plan !== null ? $plan.($tools !== null ? '|tools:'.$tools : '') : $tools) !== null ? mb_substr($intent, 0, 190) : null,
             'confidence' => null,
             'decision' => $decision,
             'reply_text' => $sent ? $o->reply : null,

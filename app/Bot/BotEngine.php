@@ -8,8 +8,10 @@ use App\Bot\Ai\AiResponder;
 use App\Bot\Ai\MessageClassifier;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Flows\ConversationRouter;
+use App\Bot\Flows\EntityExtractor;
 use App\Bot\Flows\GreetingMirror;
 use App\Bot\Flows\HumanHandover;
+use App\Bot\Flows\Returns\ReturnPrefill;
 use App\Bot\Grounding\BotContext;
 use App\Bot\Grounding\BotContextBuilder;
 use App\Bot\Knowledge\KnowledgeBase;
@@ -134,6 +136,12 @@ class BotEngine
             return $run;
         }
 
+        // Bot hybrid (bot-hybrid.md §3.2): an owner rule answers only a message that is just that
+        // question — «ارجع البلوزة وابدل الجيبة» is a request for the flow, not the exchange policy.
+        if ($peeked !== null && HybridRouter::mode() === 'hybrid' && ! $this->ruleOnlyMessage($text)) {
+            $peeked = null;
+        }
+
         if ($peeked !== null) {
             $rule = $this->rules->match($text, 'message', $c->platform) ?? $peeked;
 
@@ -160,6 +168,14 @@ class BotEngine
         }
 
         return $run;
+    }
+
+    /** No order number, no return/exchange request, at most a few words: a rule may answer it all. */
+    private function ruleOnlyMessage(string $text): bool
+    {
+        return EntityExtractor::orderRefs($text) === []
+            && ReturnPrefill::fromText($text)['request_kind'] === null
+            && count(preg_split('/\s+/u', trim($text)) ?: []) <= 6;
     }
 
     public function handleInbound(Message $m): ?BotRun
