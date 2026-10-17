@@ -135,3 +135,13 @@ it('pays the rating to the rated window on its day', function () {
 
     expect(wpLines($m->user_id))->toBe([['base', 8], ['review', -10]]);
 });
+
+it('never repays a close that was reversed', function () {
+    $m = wpDesk(Shift::factory()->create());
+    $e = wpWindow($m);
+    $e->forceFill(['status' => 'closed', 'close_reason' => 'inquiry', 'closed_at' => now(), 'reversed_at' => now()])->save();
+
+    app(ScoreListener::class)->forEntry($e->fresh());
+
+    expect(wpLines($m->user_id))->toBe([]);
+});

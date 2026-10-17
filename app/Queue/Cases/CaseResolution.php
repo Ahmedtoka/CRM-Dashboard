@@ -12,12 +12,14 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * A case's status change from the Cases page (queue Part 2, ruling N6). `resolved` = staff solved
- * it: `resolved_at/by` are stamped, the moderator who opened it from her window earns
- * `case_resolved_in_time` (resolved by `sla_due_at`) or `case_resolved_late` on the Cairo day of
- * the resolution, and the customer gets `queue_case_resolved` (only while her reply window is
- * open; SendQueueMessage logs a closed one). Leaving `resolved` takes those points back; resolving
- * again pays again with the timing of then. `closed` (no solution) is never paid. Flow-collected
- * cases (no opener) and test chats pay nobody.
+ * it: `resolved_at/by` are stamped and the moderator whose window opened it (the window's
+ * assignee, also when a supervisor pressed «خلصت → طلب» for her) earns `case_resolved_in_time`
+ * (resolved by `sla_due_at`) or `case_resolved_late` on the Cairo day of the resolution — unless
+ * she resolved it herself (then nobody is paid: a case must be solved by somebody else's check).
+ * The customer gets `queue_case_resolved` once per case, at the first resolution (only while her
+ * reply window is open; SendQueueMessage logs a closed one). Leaving `resolved` takes the points
+ * back; resolving again pays again with the timing of then. `closed` (no solution) is never paid.
+ * Flow-collected cases (no queue window) and test chats pay nobody.
  */
 class CaseResolution
 {
@@ -48,29 +50,46 @@ class CaseResolution
             }
 
             if ($status === 'resolved') {
-                $this->pay($locked);
+                $this->resolved($locked, $by);
             }
 
             return $locked;
         }, attempts: 3);
     }
 
-    private function pay(SupportCase $case): void
+    /** The moderator a queue case pays: its window's assignee, else whoever opened it. */
+    public static function payeeOf(SupportCase $case): ?int
+    {
+        $entry = $case->queue_entry_id !== null ? $case->queueEntry : null;
+        $id = $entry?->assigned_user_id ?? $case->opened_by_id;
+
+        return $id !== null ? (int) $id : null;
+    }
+
+    private function resolved(SupportCase $case, User $by): void
     {
         $entry = $case->queue_entry_id !== null ? $case->queueEntry : null;
 
-        if ($entry === null || $entry->is_test || $case->opened_by_id === null) {
+        if ($entry === null || $entry->is_test) {
             return;
         }
 
-        SendQueueMessage::dispatch($entry->id, 'queue_case_resolved', ['case_id' => $case->id]);
+        if ($case->resolved_notified_at === null) {
+            $case->forceFill(['resolved_notified_at' => now()])->save();
+            SendQueueMessage::dispatch($entry->id, 'queue_case_resolved', ['case_id' => $case->id]);
+        }
+
+        $payee = self::payeeOf($case);
+
+        if ($payee === null || $payee === (int) $by->id) {
+            return;
+        }
 
         $id = $case->id;
-        $opener = (int) $case->opened_by_id;
         $inTime = $case->sla_due_at === null || $case->resolved_at->lte($case->sla_due_at);
         $refs = ['support_case_id' => $id, 'conversation_id' => $case->conversation_id, 'queue_entry_id' => $entry->id];
 
-        DB::afterCommit(fn () => rescue(function () use ($id, $opener, $inTime, $refs) {
+        DB::afterCommit(fn () => rescue(function () use ($id, $payee, $inTime, $refs) {
             $points = app(QueueService::class)->settings()->point($inTime ? 'case_resolved_in_time' : 'case_resolved_late');
 
             if ($points === 0) {
@@ -79,7 +98,7 @@ class CaseResolution
 
             // One key per resolution: a reopened case resolved again is a new award.
             $n = ScoreEvent::query()->where('support_case_id', $id)->where('kind', 'case')->whereNull('reverses_id')->count() + 1;
-            $this->keeper->award($opener, 'case', $points, $inTime ? 'case_in_time' : 'case_late', ['case' => $id], "case:{$id}:{$n}", $refs);
+            $this->keeper->award($payee, 'case', $points, $inTime ? 'case_in_time' : 'case_late', ['case' => $id], "case:{$id}:{$n}", $refs);
         }, null, true));
     }
 }

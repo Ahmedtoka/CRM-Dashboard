@@ -67,6 +67,7 @@ class SupportCase extends Model
         'resolved_at',
         'resolved_by_id',
         'sla_breached_at',
+        'resolved_notified_at',
     ];
 
     protected function casts(): array
@@ -79,6 +80,7 @@ class SupportCase extends Model
             'sla_due_at' => 'datetime',
             'resolved_at' => 'datetime',
             'sla_breached_at' => 'datetime',
+            'resolved_notified_at' => 'datetime',
         ];
     }
 

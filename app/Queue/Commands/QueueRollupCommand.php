@@ -28,13 +28,20 @@ class QueueRollupCommand extends Command
 
     public function handle(ScoreListener $scores, QueueReport $report): int
     {
-        $date = $this->argument('date')
-            ? CarbonImmutable::createFromFormat('!Y-m-d', (string) $this->argument('date'), QueueService::TZ)->toDateString()
-            : CarbonImmutable::now(QueueService::TZ)->subDay()->toDateString();
+        $arg = $this->argument('date');
+        $parsed = $arg ? CarbonImmutable::createFromFormat('!Y-m-d', (string) $arg, QueueService::TZ) : CarbonImmutable::now(QueueService::TZ)->subDay();
+
+        if ($parsed === false || ($arg && $parsed->toDateString() !== $arg)) {
+            $this->error('The date must be a real day as Y-m-d, e.g. 2026-10-05.');
+
+            return self::FAILURE;
+        }
+
+        $date = $parsed->toDateString();
 
         $repaired = 0;
         QueueEntry::query()->where('status', 'closed')->where('is_test', false)->whereNotNull('assigned_user_id')
-            ->whereDate('business_date', $date)->orderBy('id')
+            ->whereBetween('business_date', QueueReport::storedBounds($date, $date))->orderBy('id')
             ->chunkById(500, function ($entries) use ($scores, &$repaired) {
                 foreach ($entries as $e) {
                     rescue(function () use ($scores, $e) {

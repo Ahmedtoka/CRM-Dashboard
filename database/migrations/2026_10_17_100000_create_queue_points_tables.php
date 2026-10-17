@@ -51,12 +51,13 @@ return new class extends Migration
 
         Schema::table('support_cases', function (Blueprint $t) {
             $t->timestamp('sla_breached_at')->nullable();
+            $t->timestamp('resolved_notified_at')->nullable(); // «تم حل طلبك» went out once
         });
     }
 
     public function down(): void
     {
-        Schema::table('support_cases', fn (Blueprint $t) => $t->dropColumn('sla_breached_at'));
+        Schema::table('support_cases', fn (Blueprint $t) => $t->dropColumn(['sla_breached_at', 'resolved_notified_at']));
         Schema::dropIfExists('score_events');
         Schema::dropIfExists('qa_reviews');
     }

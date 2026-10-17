@@ -29,6 +29,7 @@ class ScoreKeeper
      */
     public function award(int $userId, string $kind, int $points, string $reasonKey, array $vars, string $key, array $refs = [], ?string $date = null): ScoreEvent
     {
+        $key = mb_substr($key, 0, 100);
         if ($existing = ScoreEvent::query()->where('unique_key', $key)->first()) {
             return $existing;
         }
@@ -54,7 +55,7 @@ class ScoreKeeper
 
                 return ScoreEvent::query()->create(array_intersect_key($refs, array_flip(['queue_entry_id', 'conversation_id', 'support_case_id', 'qa_review_id'])) + [
                     'user_id' => $userId, 'business_date' => $date, 'kind' => $kind, 'points' => $paid, 'requested' => $points,
-                    'reason_key' => $reasonKey, 'reason_vars' => $vars, 'unique_key' => mb_substr($key, 0, 100),
+                    'reason_key' => $reasonKey, 'reason_vars' => $vars, 'unique_key' => $key,
                 ]);
             }, attempts: 3);
         } catch (UniqueConstraintViolationException) {
@@ -68,6 +69,8 @@ class ScoreKeeper
      */
     public function reverse(ScoreEvent $line, string $reasonKey, array $vars = []): ?ScoreEvent
     {
+        // Not serialised on the users row like award(): a reversal is never capped, and an award
+        // running beside it can at worst read the sum before the reversal (it then pays less, never more).
         return DB::transaction(function () use ($line, $reasonKey, $vars) {
             $locked = ScoreEvent::query()->whereKey($line->id)->lockForUpdate()->first();
 

@@ -106,3 +106,14 @@ it('puts her own points of the report range on /reports/me', function () {
     expect($props['queue_points']['total'])->toBe(12)
         ->and($props['queue_points']['ledger'][0]['kind'])->toBe('base');
 });
+
+it('pays a saved score whose points were lost, when the same score is saved again', function () {
+    [$m, $u, $e] = ddDesk();
+    $sup = ddSupervisor();
+    QaReview::factory()->create(['user_id' => $u->id, 'reviewer_id' => $sup->id, 'queue_entry_id' => $e->id, 'conversation_id' => $e->conversation_id, 'score' => 5]);
+
+    $this->actingAs($sup)->postJson("/board/entries/{$e->id}/qa", ['score' => 5])->assertOk()->assertJsonPath('data.points.by_kind.qa', 10);
+    $this->actingAs($sup)->postJson("/board/entries/{$e->id}/qa", ['score' => 5])->assertOk()->assertJsonPath('data.points.by_kind.qa', 10);
+
+    expect(ScoreEvent::query()->where('kind', 'qa')->count())->toBe(1);
+});

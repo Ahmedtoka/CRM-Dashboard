@@ -3,6 +3,7 @@
 namespace App\Queue\Cases;
 
 use App\Inbox\UserNotifier;
+use App\Models\QueueEntry;
 use App\Models\SupportCase;
 use App\Models\User;
 use Carbon\CarbonInterface;
@@ -34,12 +35,13 @@ class CaseSla
 
     /**
      * Once per case: a still-open queue case whose due time passed is stamped `sla_breached_at` and
-     * its opener and assignee are told (`cases.sla_overdue`). Called by the queue tick.
+     * its window's moderator and the case assignee are told (`cases.sla_overdue`). Called by the queue tick.
      */
     public function sweep(): int
     {
         $n = 0;
-        $due = SupportCase::query()->whereIn('status', SupportCase::OPEN_STATUSES)->whereNotNull('opened_by_id')
+        $due = SupportCase::query()->with('queueEntry:id,assigned_user_id,is_test')->whereIn('status', SupportCase::OPEN_STATUSES)->whereNotNull('queue_entry_id')
+            ->whereNotIn('queue_entry_id', QueueEntry::query()->where('is_test', true)->select('id'))
             ->whereNotNull('sla_due_at')->where('sla_due_at', '<', now())->whereNull('sla_breached_at')->orderBy('id')->limit(200)->get();
 
         foreach ($due as $case) {
@@ -50,7 +52,7 @@ class CaseSla
 
             $n++;
             $data = ['case_id' => $case->id, 'type' => $case->typeLabel(), 'conversation_id' => $case->conversation_id];
-            $ids = array_values(array_filter(array_unique([(int) $case->opened_by_id, (int) $case->assigned_to_id])));
+            $ids = array_values(array_filter(array_unique([(int) CaseResolution::payeeOf($case), (int) $case->assigned_to_id])));
             User::query()->where('is_active', true)->whereIn('id', $ids)->orderBy('id')->get()
                 ->each(fn (User $u) => app(UserNotifier::class)->notify($u, 'cases.sla_overdue', $data));
         }

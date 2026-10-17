@@ -32,7 +32,7 @@ class CaseController extends Controller
     {
         $filters = $this->filters($request);
 
-        $query = $this->query($request, $filters)->with(['customer', 'assignedTo', 'order.items.variant']);
+        $query = $this->query($request, $filters)->with(['customer', 'assignedTo', 'openedBy:id,name', 'queueEntry:id,assigned_user_id,is_test', 'order.items.variant']);
         $sort = SortParam::parse($request->query('sort'), self::SORTS);
         $sort?->apply($query);
         $cases = SupportCaseResource::collection($query->paginate(25)->withQueryString());
@@ -59,7 +59,7 @@ class CaseController extends Controller
     {
         Gate::authorize('view', $supportCase);
 
-        return response()->json(['data' => (new SupportCaseResource($supportCase->loadMissing(['customer', 'assignedTo', 'order.items.variant'])))->resolve($request)]);
+        return response()->json(['data' => (new SupportCaseResource($supportCase->loadMissing(['customer', 'assignedTo', 'openedBy:id,name', 'queueEntry:id,assigned_user_id,is_test', 'order.items.variant'])))->resolve($request)]);
     }
 
     public function update(Request $request, SupportCase $supportCase): JsonResponse
@@ -81,7 +81,7 @@ class CaseController extends Controller
             $supportCase->save();
         }
 
-        return response()->json(['data' => (new SupportCaseResource($supportCase->fresh(['customer', 'assignedTo', 'order.items.variant'])))->resolve($request)]);
+        return response()->json(['data' => (new SupportCaseResource($supportCase->fresh(['customer', 'assignedTo', 'openedBy:id,name', 'queueEntry:id,assigned_user_id,is_test', 'order.items.variant'])))->resolve($request)]);
     }
 
     /**

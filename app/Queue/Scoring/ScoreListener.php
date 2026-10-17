@@ -49,7 +49,7 @@ class ScoreListener
     /** Base + speed of a closed window; idempotent (also the rollup's repair). */
     public function forEntry(?QueueEntry $e): void
     {
-        if (! $this->earns($e) || $e->status !== 'closed') {
+        if (! $this->earns($e) || $e->status !== 'closed' || $e->reversed_at !== null) {
             return;
         }
 

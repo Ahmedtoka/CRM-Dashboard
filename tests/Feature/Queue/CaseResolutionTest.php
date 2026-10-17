@@ -110,3 +110,28 @@ it('tells the opener and the assignee once when an open queue case goes overdue'
         ->and($fresh->fresh()->sla_breached_at)->toBeNull()
         ->and(UserNotification::query()->where('type', 'cases.sla_overdue')->orderBy('user_id')->pluck('user_id')->all())->toBe([$opener->id, $assignee->id]);
 });
+
+it('pays nothing when the moderator resolves her own case, and tells the customer only the first time', function () {
+    Bus::fake([SendQueueMessage::class]);
+    $opener = User::factory()->create();
+    $case = crCase($opener);
+    $opener->userPlatforms()->create(['platform' => $case->conversation->platform->value]); // she may work this platform
+
+    $this->actingAs($opener)->patchJson("/cases/{$case->id}", ['status' => 'resolved'])->assertOk();
+    $this->actingAs($opener)->patchJson("/cases/{$case->id}", ['status' => 'in_progress'])->assertOk();
+    $this->actingAs(crSupervisor())->patchJson("/cases/{$case->id}", ['status' => 'resolved'])->assertOk();
+
+    expect(crLines($opener->id))->toBe([['case', 14]]);
+    Bus::assertDispatchedTimes(SendQueueMessage::class, 1);
+});
+
+it('pays the window moderator, not the supervisor who closed the window as a case for her', function () {
+    $mod = User::factory()->create();
+    $sup = crSupervisor();
+    $case = crCase($mod);
+    $case->update(['opened_by_id' => $sup->id]); // the supervisor pressed «خلصت → طلب» on her window
+
+    $this->actingAs(User::factory()->create(['role' => 'admin']))->patchJson("/cases/{$case->id}", ['status' => 'resolved'])->assertOk();
+
+    expect(crLines($mod->id))->toBe([['case', 14]])->and(crLines($sup->id))->toBe([]);
+});

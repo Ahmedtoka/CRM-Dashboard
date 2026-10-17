@@ -24,7 +24,7 @@ class QueueDayView
     {
         $entries = QueueEntry::query()->with(['conversation.customer:id,name', 'qaReview.reviewer:id,name'])
             ->where('assigned_user_id', $user->id)->where('status', 'closed')->where('is_test', false)
-            ->whereDate('business_date', $date)
+            ->whereBetween('business_date', QueueReport::storedBounds($date, $date))
             ->orderByDesc('closed_at')->orderByDesc('id')->limit(self::WINDOWS_LIMIT)->get();
 
         return [

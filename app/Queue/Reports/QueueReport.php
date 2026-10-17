@@ -34,7 +34,7 @@ class QueueReport
             'reply_sum' => 0, 'reply_n' => 0, 'handle_sum' => 0, 'handle_n' => 0, 'sla_met' => 0, 'sla_n' => 0, 'stars_sum' => 0, 'stars_n' => 0];
 
         $entries = DB::table('queue_entries')->where('is_test', false)
-            ->whereDate('business_date', '>=', $from)->whereDate('business_date', '<=', $to)
+            ->whereBetween('business_date', self::storedBounds($from, $to))
             ->select(['id', 'assigned_user_id', 'status', 'close_reason', 'ticket_no', 'delivered_at', 'first_reply_at', 'handle_seconds', 'sla_met', 'review_stars']);
 
         foreach ($entries->lazyById(2000, 'id') as $e) {
@@ -103,14 +103,17 @@ class QueueReport
         }
 
         [$start, $end] = self::utcBounds($from, $to);
-        $resolved = SupportCase::query()->toBase()->whereNotNull('opened_by_id')->whereNotNull('queue_entry_id')
-            ->where('status', 'resolved')->whereBetween('resolved_at', [$start, $end])
-            ->whereNotIn('queue_entry_id', DB::table('queue_entries')->where('is_test', true)->select('id'))
-            ->selectRaw('opened_by_id, COUNT(*) as n, SUM(CASE WHEN sla_due_at IS NULL OR resolved_at <= sla_due_at THEN 1 ELSE 0 END) as in_time')
-            ->groupBy('opened_by_id')->get();
+        // A resolved case belongs to its window's moderator (CaseResolution::payeeOf), on the day it was resolved.
+        $resolved = DB::table('support_cases as c')->join('queue_entries as e', 'e.id', '=', 'c.queue_entry_id')
+            ->where('e.is_test', false)->where('c.status', 'resolved')->whereBetween('c.resolved_at', [$start, $end])
+            ->selectRaw('COALESCE(e.assigned_user_id, c.opened_by_id) as payee, COUNT(*) as n, SUM(CASE WHEN c.sla_due_at IS NULL OR c.resolved_at <= c.sla_due_at THEN 1 ELSE 0 END) as in_time')
+            ->groupBy(DB::raw('COALESCE(e.assigned_user_id, c.opened_by_id)'))->get();
         foreach ($resolved as $c) {
-            $acc[(int) $c->opened_by_id] ??= self::blank();
-            $acc[(int) $c->opened_by_id]['cases_resolved'] = (int) $c->n;
+            if ($c->payee === null) {
+                continue;
+            }
+            $acc[(int) $c->payee] ??= self::blank();
+            $acc[(int) $c->payee]['cases_resolved'] = (int) $c->n;
         }
 
         $users = User::query()->whereIn('id', array_keys($acc))->get(['id', 'name', 'color'])->keyBy('id');
@@ -139,7 +142,9 @@ class QueueReport
                 'cases_opened' => $kpi['closed']['case'] ?? 0,
                 'cases_resolved' => (int) $resolved->sum('n'),
                 'cases_resolved_in_time' => (int) $resolved->sum('in_time'),
-                'cases_overdue' => SupportCase::query()->whereIn('status', SupportCase::OPEN_STATUSES)->whereNotNull('opened_by_id')
+                // A live count (now), whatever the range: open queue cases past their due time, tests left out.
+                'cases_overdue' => SupportCase::query()->whereIn('status', SupportCase::OPEN_STATUSES)->whereNotNull('queue_entry_id')
+                    ->whereNotIn('queue_entry_id', QueueEntry::query()->where('is_test', true)->select('id'))
                     ->whereNotNull('sla_due_at')->where('sla_due_at', '<', now())->count(),
                 'points_total' => (int) $points->sum('total'),
             ],
@@ -169,7 +174,7 @@ class QueueReport
 
         $out = [$header];
         foreach ($report['rows'] as $row) {
-            $line = [$row['user']['name'], $row['received']];
+            $line = [self::cell($row['user']['name']), $row['received']];
             foreach ($reasons as $r) {
                 $line[] = $row['closed'][$r] ?? 0;
             }
@@ -220,6 +225,12 @@ class QueueReport
         ];
     }
 
+    /** A text cell Excel would read as a formula (=, +, -, @) is written as text. */
+    private static function cell(string $text): string
+    {
+        return preg_match('/^[=+\-@\t\r]/u', $text) === 1 ? "'".$text : $text;
+    }
+
     private static function avg(int $sum, int $n): ?int
     {
         return $n > 0 ? (int) round($sum / $n) : null;
@@ -228,6 +239,17 @@ class QueueReport
     private static function ts(string $value): int
     {
         return CarbonImmutable::parse($value, (string) config('app.timezone'))->getTimestamp();
+    }
+
+    /**
+     * `queue_entries.business_date` is a DATE on MariaDB and 'Y-m-d 00:00:00' text on sqlite: these
+     * bounds match both and keep the column's index usable (no DATE() around it).
+     *
+     * @return array{0: string, 1: string}
+     */
+    public static function storedBounds(string $from, string $to): array
+    {
+        return [$from.' 00:00:00', $to.' 23:59:59'];
     }
 
     /** @return array{0: CarbonImmutable, 1: CarbonImmutable} */
