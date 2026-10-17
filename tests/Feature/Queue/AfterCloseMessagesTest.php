@@ -202,3 +202,34 @@ it('sends the rating question with the second-hop check', function () {
 
     Bus::assertDispatched(SendOutboundMessage::class, fn (SendOutboundMessage $job) => $job->afterCloseOf === $e->id);
 });
+
+/** The job as it sat in Redis before this deploy: serialized without `$property`. */
+function acLegacyPayload(object $job, string $property): object
+{
+    $raw = serialize($job);
+    $pattern = '/s:'.strlen($property).':"'.preg_quote($property, '/').'";(?:N;|s:\d+:"[^"]*";|i:\d+;)/';
+    // SerializesModels already leaves a property at its default out of the payload.
+    if (preg_match($pattern, $raw) !== 1) {
+        return unserialize($raw);
+    }
+    $raw = preg_replace($pattern, '', $raw);
+    $raw = preg_replace_callback('/^O:(\d+):"([^"]+)":(\d+):/', fn ($m) => 'O:'.$m[1].':"'.$m[2].'":'.((int) $m[3] - 1).':', $raw);
+
+    return unserialize($raw);
+}
+
+it('runs jobs queued before the deploy (no send key, no after-close id) instead of crashing', function () {
+    [$e] = acClosed();
+
+    $legacy = acLegacyPayload(new SendQueueMessage($e->id, 'queue_closed_thanks', []), 'sendKey');
+    expect($legacy->sendKey)->toBeNull();
+    acRun($legacy);
+    expect(acBotTexts($e))->toBe([AC_THANKS]);
+
+    $m = Message::query()->where('conversation_id', $e->conversation_id)->where('sender_type', 'bot')->sole();
+    $m->forceFill(['status' => MessageStatus::Queued])->save();
+    $send = acLegacyPayload(new SendOutboundMessage($m->id), 'afterCloseOf');
+    expect($send->afterCloseOf)->toBeNull();
+    app()->call([$send, 'handle']);
+    expect($m->fresh()->status)->not->toBe(MessageStatus::Queued);
+});

@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Schema;
  *   job's retries), written in the transaction that creates the Message — a retry after the
  *   Message exists finds the row and sends nothing.
  * - `queue_entries.closing_claimed_at`: the closing message («سعدنا بخدمتك») of this close was
- *   claimed; never sent twice for one close, cleared only when the platform refused it.
+ *   claimed; never sent twice for one close. A closed reply window or an empty text is decided
+ *   before the claim, so it never claims.
  */
 return new class extends Migration
 {

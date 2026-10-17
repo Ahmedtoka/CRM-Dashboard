@@ -69,10 +69,17 @@ class SendOutboundMessage implements ShouldQueue
      *                                  not sent once she wrote, a colleague replied or a newer entry exists
      *                                  (`AfterCloseGuard`, close-cycle hotfix C1 / H-03)
      */
-    public function __construct(public readonly int $messageId, public readonly array $options = [], public readonly bool $skipIfHumanTookOver = false, public readonly ?int $afterCloseOf = null)
+    public function __construct(public readonly int $messageId, public readonly array $options = [], public readonly bool $skipIfHumanTookOver = false, ?int $afterCloseOf = null)
     {
+        $this->afterCloseOf = $afterCloseOf;
         $this->onQueue('outbound');
     }
+
+    /**
+     * Not promoted and not readonly, with a default: a job queued before this property existed
+     * (a delayed bot part, a retry in flight at deploy) unserializes with null instead of throwing.
+     */
+    public ?int $afterCloseOf = null;
 
     /** Seconds the send claim is held at most — above $timeout, so a killed worker's claim expires on its own. */
     public const CLAIM_SECONDS = 90;

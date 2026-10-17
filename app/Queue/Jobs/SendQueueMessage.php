@@ -56,8 +56,11 @@ class SendQueueMessage implements ShouldQueue
 
     public int $tries = 2;
 
-    /** This job's send-once key, serialized with it: the same on every retry. */
-    public readonly string $sendKey;
+    /**
+     * This job's send-once key, serialized with it: the same on every retry. Null on a job queued
+     * before the key existed (in flight at deploy): it sends as before, without the claim.
+     */
+    public ?string $sendKey = null;
 
     public function __construct(public readonly int $entryId, public readonly string $scriptKey, public readonly array $vars)
     {
@@ -103,6 +106,10 @@ class SendQueueMessage implements ShouldQueue
                 || QueueEntry::query()->whereKey($e->id)->whereNull('closing_claimed_at')->update(['closing_claimed_at' => now()]) !== 1) {
                 return false;
             }
+        }
+
+        if ($this->sendKey === null) {
+            return true;
         }
 
         if (QueueMessageSend::query()->where('send_key', $this->sendKey)->exists()) {
