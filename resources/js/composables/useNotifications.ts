@@ -13,6 +13,7 @@ export const TYPE_KEY = {
     'conversation.handover_urgent': 'handover_urgent',
     'note.mention': 'mention',
     'channel.problem': 'channel_problem',
+    'webhook.rejected': 'webhook_rejected',
     'legal.deletion_review': 'legal_deletion_review',
     'queue.assigned': 'queue_assigned',
     'queue.escalation_waiting': 'queue_escalation_waiting',

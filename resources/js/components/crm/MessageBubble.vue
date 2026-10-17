@@ -136,10 +136,18 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
                     :class="skin === 'whatsapp' ? 'rounded px-1.5 py-px text-white' : ''"
                     :style="skin === 'whatsapp' ? { backgroundColor: message?.user?.color || '#64748b' } : undefined"
                 >
-                    {{ message?.user?.name }}
+                    {{ message?.user?.name ?? (message?.sent_outside_crm ? t('thread.team') : '') }}
                 </span>
                 <span v-else class="inline-flex items-center gap-1"><Bot class="size-3.5 shrink-0" aria-hidden="true" />{{ t('thread.bot') }}</span>
                 <span v-if="message?.is_template" class="rounded bg-black/10 px-1 opacity-90 dark:bg-white/10">{{ t('thread.template') }}</span>
+                <!-- A reply sent from Meta Business Suite or the phone app, recorded from its echo (2026-10-17). -->
+                <span
+                    v-if="message?.sent_outside_crm"
+                    class="rounded bg-black/10 px-1 font-normal opacity-90 dark:bg-white/10"
+                    :title="t('thread.sent_outside_crm_hint')"
+                    data-testid="sent-outside-crm"
+                    >{{ t('thread.sent_outside_crm') }}</span
+                >
             </header>
 
             <p v-if="body" class="whitespace-pre-wrap break-words leading-relaxed" dir="auto">

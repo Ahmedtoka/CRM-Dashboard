@@ -36,6 +36,7 @@ class Message extends Model
         'error',
         'is_template',
         'template',
+        'sent_outside_crm',
         'is_spam',
         'is_low_value',
         'queued_at_ms',
@@ -63,6 +64,7 @@ class Message extends Model
             'delivered_at' => 'datetime',
             'read_at' => 'datetime',
             'is_test' => 'boolean',
+            'sent_outside_crm' => 'boolean',
         ];
     }
 

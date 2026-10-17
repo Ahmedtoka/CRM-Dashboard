@@ -7,6 +7,7 @@ use App\Bot\Grounding\VariantOptions;
 use App\Channels\Cards\OutboundCards;
 use App\Models\BotSetting;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Support\Collection;
 
 /**
@@ -81,6 +82,46 @@ class ProductCards
         ])->all());
 
         return ['type' => 'generic', 'label' => self::WHATSAPP_LABEL, 'cards' => $cards['cards']];
+    }
+
+    /**
+     * One variant a moderator picked in the inbox («ابعت منتج», 2026-10-17), as the same picture
+     * card: that colour/size in the title, its picture and price, and the product page opened on it.
+     * No «التفاصيل» postback: that button is answered by the bot, and a staff-sent card belongs to
+     * a thread the bot has handed over.
+     *
+     * @return array{cards: array{type:'generic', label:string, cards:list<array<string, mixed>>}, text: string}
+     */
+    public function variantCard(ProductVariant $v): array
+    {
+        $p = $v->product;
+        $p->loadMissing('variants');
+        $isDefault = $v->title === null || in_array($v->title, ['', 'Default', 'Default Title'], true);
+        $title = $isDefault ? (string) $p->title : $p->title.' — '.$v->title;
+        $price = (float) $v->price > 0 ? rtrim(rtrim(number_format((float) $v->price, 2, '.', ''), '0'), '.').' جنيه' : '';
+        $subtitle = implode(' · ', array_filter([$price, self::variantInStock($v) ? 'متوفر' : 'نفد حالياً']));
+        $url = $this->url($p).($v->shopify_id ? '?variant='.$v->shopify_id : '');
+        $text = implode("\n", array_filter([$title, $subtitle, $url]));
+
+        $cards = OutboundCards::generic([[
+            'title' => $title,
+            'subtitle' => $subtitle,
+            'text' => $text,
+            'image_url' => self::jpeg($v->image_url) ?? $this->image($p),
+            'url' => $url,
+            'buttons' => [OutboundCards::webUrl(self::VIEW_BUTTON, $url)],
+        ]]);
+
+        return [
+            'cards' => ['type' => 'generic', 'label' => self::WHATSAPP_LABEL, 'cards' => $cards['cards']],
+            'text' => $text,
+        ];
+    }
+
+    /** In stock, or Shopify keeps selling it at zero (`inventory_policy: continue`). */
+    public static function variantInStock(ProductVariant $v): bool
+    {
+        return (int) $v->inventory_quantity > 0 || $v->inventory_policy === 'continue';
     }
 
     /** The plain list that rides in the message body (the fallback where cards cannot be drawn). */

@@ -53,11 +53,10 @@ it('turns an instagram messaging_seen event into a read receipt for that message
         ->and($events[0]->occurredAt->getTimestamp())->toBe(1757671700);
 });
 
-it('ignores unsent (deleted) messages, echoes and reactions', function () {
+it('ignores unsent (deleted) messages and reactions', function () {
     $adapter = app(InstagramAdapter::class);
 
     expect($adapter->normalize(igMessaging(['message' => ['mid' => 'mid.del', 'is_deleted' => true]])))->toBe([])
-        ->and($adapter->normalize(igMessaging(['message' => ['mid' => 'mid.echo', 'text' => 'hi', 'is_echo' => true]])))->toBe([])
         ->and($adapter->normalize(igMessaging(['reaction' => ['mid' => 'mid.1', 'action' => 'react', 'reaction' => 'love', 'emoji' => '❤']])))->toBe([]);
 });
 

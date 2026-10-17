@@ -332,6 +332,14 @@ export interface RuleTestResult {
     ai_classification: { intent?: string; confidence?: number; needs_human?: boolean; model?: string; error?: string };
 }
 
+/** Webhooks refused for a bad signature in the last day (App\Webhooks\WebhookRejections::summary). */
+export interface WebhookRejectionSummary {
+    count: number;
+    last_at: string | null;
+    last_reason: string | null;
+    hours: number;
+}
+
 export interface ChannelAccount {
     id: number;
     platform: PlatformValue;

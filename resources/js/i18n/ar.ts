@@ -307,6 +307,17 @@ const ar = {
             history: 'إعلانات جت منها قبل كده',
         },
     },
+    // «ابعت منتج» in the composer (2026-10-17).
+    send_product: {
+        button: 'ابعت منتج',
+        title: 'ابعت منتج للعميل',
+        search: 'دوّر باسم المنتج أو الـ SKU',
+        empty: 'مفيش منتجات مطابقة',
+        out_of_stock: 'نفد',
+        out_of_stock_confirm: '«{name}» المقاس/اللون ده نفد. تبعته برضه؟',
+        send_anyway: 'ابعته برضه',
+        failed: 'المنتج ماتبعتش',
+    },
     thread: {
         cards: 'كروت الرسالة',
         return_to_bot: 'إرجاع للبوت',
@@ -339,6 +350,9 @@ const ar = {
         note: 'ملاحظة داخلية',
         tapped_button: 'ضغطت على زرار',
         template: 'قالب',
+        team: 'الفريق',
+        sent_outside_crm: 'اتبعتت من برة الـ CRM',
+        sent_outside_crm_hint: 'رد اتبعت من Meta Business Suite أو من أبلكيشن الموبايل',
         failed: 'فشل الإرسال',
         empty: 'لا توجد رسائل بعد',
         status: { queued: 'في الانتظار', sent: 'تم الإرسال', delivered: 'تم التوصيل', read: 'تمت القراءة', failed: 'فشل' },
@@ -1264,6 +1278,22 @@ const ar = {
         shift: { open: 'فتح شيفت' },
     },
     settings: {
+        // Webhooks refused for a bad signature (2026-10-17).
+        webhook_rejections: {
+            line: 'آخر {hours} ساعة: {n} رسالة اترفضت بسبب التوقيع — راجع {secret}',
+            last: 'آخر رفض: {at}',
+            app_secret: 'App Secret',
+            api_secret: 'API secret',
+            last_success: 'آخر Webhook وصل بنجاح',
+            reasons: {
+                bad_signature: 'التوقيع مش مطابق',
+                missing_signature: 'من غير توقيع',
+                no_app_secret: 'الـ App Secret مش متسجل على السيرفر',
+                bad_hmac: 'التوقيع مش مطابق',
+                missing_hmac: 'من غير توقيع',
+                no_secret: 'الـ API secret مش متسجل',
+            },
+        },
         test_links: {
             title: 'روابط التجربة',
             description: 'ابعتي لينك لكل واحد في الفريق، يفتحه على موبايله ويكلّم البوت زي أي عميلة — وكل جلسة بتتسجل في تقرير «تجربة الفريق».',
@@ -2916,6 +2946,7 @@ const ar = {
         handover_item: '{name} محتاجة موظف',
         mention_item: '{name} ذكرك في ملاحظة',
         channel_problem_item: 'فيه مشكلة في ربط {name}',
+        webhook_rejected_item: '{n} Webhook من {provider} اترفضوا بسبب التوقيع — راجع {secret}',
         legal_deletion_review_item: 'طلب حذف بيانات من فيسبوك محتاج مراجعة يدوية · {code}',
         queue_assigned_item: 'وصلتك {name} · دور #{ticket}',
         queue_escalation_waiting_item: 'تصعيد مستني ليدر · {name} · دور #{ticket}',
@@ -2961,6 +2992,7 @@ const ar = {
             handover_urgent: 'تحويل عاجل',
             mention: 'إشارة في ملاحظة',
             channel_problem: 'مشكلة في الربط',
+            webhook_rejected: 'Webhooks مرفوضة',
             legal_deletion_review: 'طلب حذف محتاج مراجعة',
             queue_assigned: 'وصلتك عميلة',
             queue_escalation_waiting: 'تصعيد مستني ليدر',

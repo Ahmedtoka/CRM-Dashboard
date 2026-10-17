@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Bot\BotEngine;
+use App\Bot\Catalog\ProductCards;
 use App\Commerce\OrderService;
 use App\Enums\AttachmentStatus;
 use App\Enums\ConversationPriority;
@@ -37,6 +38,7 @@ use App\Models\ConversationNote;
 use App\Models\ConversationParticipant;
 use App\Models\Message;
 use App\Models\MessageAttachment;
+use App\Models\ProductVariant;
 use App\Models\QueueSetting;
 use App\Models\QuickReply;
 use App\Models\QuickReplyAttachment;
@@ -255,6 +257,37 @@ trait ConversationEndpoints
         }
 
         return $response;
+    }
+
+    /**
+     * «ابعت منتج» (2026-10-17): the picked variant as the bot's product card. A variant that is
+     * out of stock is refused until the moderator confirms (`confirm_out_of_stock`).
+     */
+    public function sendProduct(Request $request, Conversation $conversation, OutboundService $outbound, ProductCards $productCards): JsonResponse
+    {
+        Gate::authorize('reply', $conversation);
+
+        $data = $request->validate([
+            'variant_id' => ['required', 'integer'],
+            'confirm_out_of_stock' => ['nullable', 'boolean'],
+        ]);
+
+        $variant = ProductVariant::query()->with('product')->whereKey($data['variant_id'])
+            ->whereHas('product', fn ($p) => $p->where('status', 'active'))
+            ->first();
+
+        if ($variant === null) {
+            throw ValidationException::withMessages(['variant_id' => __('errors.inbox.product_unavailable')]);
+        }
+
+        if (! ProductCards::variantInStock($variant) && ! ($data['confirm_out_of_stock'] ?? false)) {
+            return response()->json(['message' => __('errors.inbox.product_out_of_stock'), 'code' => 'out_of_stock'], 409);
+        }
+
+        $card = $productCards->variantCard($variant);
+        $message = $outbound->sendHumanCards($conversation, $request->user(), $card['text'], $card['cards']);
+
+        return (new MessageResource($message))->response()->setStatusCode(201);
     }
 
     /**

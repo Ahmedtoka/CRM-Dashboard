@@ -117,6 +117,16 @@ function itemText(n: AppNotification): string {
         return t('notifications.legal_deletion_review_item', { code: String(n.data.code ?? '') });
     }
 
+    if (n.type === 'webhook.rejected') {
+        const provider = String(n.data.provider ?? '');
+        const names: Record<string, string> = { shopify: 'Shopify', instagram: 'Instagram', whatsapp: 'WhatsApp', facebook: 'Messenger' };
+        return t('notifications.webhook_rejected_item', {
+            n: Number(n.data.count ?? 0),
+            provider: names[provider] ?? provider,
+            secret: t(`settings.webhook_rejections.${provider === 'shopify' ? 'api_secret' : 'app_secret'}`),
+        });
+    }
+
     if (n.type === 'channel.problem') {
         const title = t('notifications.channel_problem_item', { name: String(n.data.name ?? '') });
         // The health check writes the notification from the scheduler, so its `excerpt` is
@@ -160,6 +170,10 @@ function open(n: AppNotification): void {
     }
     if (n.type === 'ads.token_invalid' || n.type === 'ads.token_scope_missing' || n.type === 'ads.token_expiring') {
         router.visit('/ads/accounts');
+        return;
+    }
+    if (n.type === 'webhook.rejected') {
+        router.visit(n.data.provider === 'shopify' ? '/settings/shopify' : '/settings/channels');
         return;
     }
     if (n.type === 'channel.problem') {

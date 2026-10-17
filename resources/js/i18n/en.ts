@@ -323,6 +323,17 @@ const en: Messages = {
             history: 'Earlier ads',
         },
     },
+    // «Send product» in the composer (2026-10-17).
+    send_product: {
+        button: 'Send product',
+        title: 'Send a product to the customer',
+        search: 'Search by product name or SKU',
+        empty: 'No matching products',
+        out_of_stock: 'Out of stock',
+        out_of_stock_confirm: '"{name}" — this variant is out of stock. Send it anyway?',
+        send_anyway: 'Send anyway',
+        failed: 'The product was not sent',
+    },
     thread: {
         cards: 'Message cards',
         return_to_bot: 'Return to bot',
@@ -356,6 +367,9 @@ const en: Messages = {
         note: 'Internal note',
         tapped_button: 'Tapped a button',
         template: 'Template',
+        team: 'Team',
+        sent_outside_crm: 'Sent outside the CRM',
+        sent_outside_crm_hint: 'Sent from Meta Business Suite or the phone app',
         failed: 'Failed to send',
         empty: 'No messages yet',
         status: { queued: 'Queued', sent: 'Sent', delivered: 'Delivered', read: 'Read', failed: 'Failed' },
@@ -1293,6 +1307,22 @@ const en: Messages = {
         shift: { open: 'Shift opened' },
     },
     settings: {
+        // Webhooks refused for a bad signature (2026-10-17).
+        webhook_rejections: {
+            line: 'Last {hours} hours: {n} webhooks refused for a bad signature — check the {secret}',
+            last: 'Last refused: {at}',
+            app_secret: 'App Secret',
+            api_secret: 'API secret',
+            last_success: 'Last webhook accepted',
+            reasons: {
+                bad_signature: 'signature does not match',
+                missing_signature: 'no signature',
+                no_app_secret: 'App Secret not set on the server',
+                bad_hmac: 'signature does not match',
+                missing_hmac: 'no signature',
+                no_secret: 'API secret not set',
+            },
+        },
         test_links: {
             title: 'Test links',
             description:
@@ -2961,6 +2991,7 @@ const en: Messages = {
         handover_item: '{name} needs an agent',
         mention_item: '{name} mentioned you in a note',
         channel_problem_item: '{name} needs attention',
+        webhook_rejected_item: '{n} {provider} webhooks refused for a bad signature — check the {secret}',
         legal_deletion_review_item: 'A Facebook data deletion request needs manual review · {code}',
         queue_assigned_item: '{name} reached you · ticket #{ticket}',
         queue_escalation_waiting_item: 'Escalation waiting for a leader · {name} · ticket #{ticket}',
@@ -3006,6 +3037,7 @@ const en: Messages = {
             handover_urgent: 'Urgent handover',
             mention: 'Mention in a note',
             channel_problem: 'Connection problem',
+            webhook_rejected: 'Webhooks refused',
             legal_deletion_review: 'Data deletion to review',
             queue_assigned: 'A customer reached you',
             queue_escalation_waiting: 'Escalation waiting for a leader',

@@ -10,6 +10,7 @@ import SyncLog from '@/components/crm/shopify/SyncLog.vue';
 import WebhookTable from '@/components/crm/shopify/WebhookTable.vue';
 import DateInput from '@/components/crm/DateInput.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import WebhookRejectionLine from '@/components/crm/WebhookRejectionLine.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useEcho } from '@/composables/useEcho';
 import { useI18n } from '@/composables/useI18n';
@@ -25,6 +26,7 @@ import type {
     ShopifySyncRunRow,
     ShopifyTestResult,
     ShopifyWebhookRow,
+    WebhookRejectionSummary,
 } from '@/types/admin';
 import { Head } from '@inertiajs/vue3';
 import { ArrowRight } from 'lucide-vue-next';
@@ -36,6 +38,9 @@ const props = defineProps<{
     webhooks: ShopifyWebhookRow[];
     runs: ShopifySyncRunRow[];
     lastSync: ShopifyLastSync;
+    /** Webhooks refused for a bad HMAC in the last day, and the last one accepted (2026-10-17). */
+    webhookRejections?: WebhookRejectionSummary | null;
+    lastWebhookAt?: string | null;
 }>();
 
 const { t, locale } = useI18n();
@@ -238,6 +243,14 @@ const syncResources: ShopifySyncResource[] = ['shipping', 'products', 'customers
             </template>
 
             <template v-else-if="integration">
+                <section v-if="webhookRejections?.count" class="grid gap-1.5 rounded-lg bg-card p-4 text-xs shadow-card" data-testid="shopify-webhook-health">
+                    <WebhookRejectionLine :summary="webhookRejections" secret="api_secret" />
+                    <p class="text-muted-foreground">
+                        {{ t('settings.webhook_rejections.last_success') }}:
+                        <span class="tabular-nums text-foreground">{{ formatDateTime(lastWebhookAt ?? null, locale) || t('ui.never') }}</span>
+                    </p>
+                </section>
+
                 <LiveUpdatesCard :has-secret="integration.has_webhook_secret" :webhooks="webhooks" :saving="savingSecret" @save-secret="saveSecret" />
 
                 <ImportProgress :import-state="integration.import_state" :live="live" :resuming="resuming" @resume="resumeImport" />

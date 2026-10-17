@@ -9,12 +9,19 @@ import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatDateTime } from '@/lib/format';
 import type { SharedData } from '@/types';
-import type { ChannelAccount, ChannelTestResult, FacebookLoginSettings, FailedWebhookEvent } from '@/types/admin';
+import type { ChannelAccount, ChannelTestResult, FacebookLoginSettings, FailedWebhookEvent, WebhookRejectionSummary } from '@/types/admin';
+import type { PlatformValue } from '@/types/crm';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { CircleAlert, CircleCheck, Info, RotateCw, TriangleAlert, X } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 
-const props = defineProps<{ accounts: ChannelAccount[]; failedEvents: FailedWebhookEvent[]; facebookLogin: FacebookLoginSettings }>();
+const props = defineProps<{
+    accounts: ChannelAccount[];
+    failedEvents: FailedWebhookEvent[];
+    facebookLogin: FacebookLoginSettings;
+    /** Per platform: webhooks refused for a bad signature in the last day (2026-10-17). */
+    webhookRejections?: Partial<Record<PlatformValue, WebhookRejectionSummary>>;
+}>();
 
 const { t, locale } = useI18n();
 const page = usePage<SharedData>();
@@ -190,6 +197,7 @@ const breadcrumbs = computed(() => [{ title: t('settings.channels.title'), href:
                     :test-result="card.account ? (testResults[card.account.id] ?? null) : null"
                     :facebook-accounts="facebookAccounts"
                     :facebook-login="facebookLogin"
+                    :rejections="webhookRejections?.[card.platform] ?? null"
                     @driver="changeDriver"
                     @save-live="saveLive"
                     @test="testAccount"

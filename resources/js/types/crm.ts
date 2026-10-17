@@ -261,6 +261,8 @@ export interface Message {
     status: MessageStatus | null;
     error: string | null;
     is_template?: boolean;
+    /** Sent from Meta Business Suite or the phone app, recorded from its webhook echo (no `user`). */
+    sent_outside_crm?: boolean;
     created_at: string | null;
     /** Client-only: optimistic bubble key until the server id arrives. */
     client_key?: string;
@@ -665,6 +667,7 @@ export interface AppNotification {
         | 'conversation.handover_urgent'
         | 'note.mention'
         | 'channel.problem'
+        | 'webhook.rejected'
         | 'legal.deletion_review'
         | 'queue.assigned'
         | 'queue.escalation_waiting'

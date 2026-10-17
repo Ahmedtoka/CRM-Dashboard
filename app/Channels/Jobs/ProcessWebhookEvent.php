@@ -7,8 +7,10 @@ use App\Channels\ChannelRegistry;
 use App\Channels\Data\DeliveryReceiptData;
 use App\Channels\Data\InboundCommentData;
 use App\Channels\Data\InboundMessageData;
+use App\Channels\Data\OutboundEchoData;
 use App\Channels\UnknownChannelAccount;
 use App\Enums\Platform;
+use App\Inbox\EchoIngestor;
 use App\Models\WebhookEvent;
 use App\Simulator\LoadTest\LoadTest;
 use App\Simulator\LoadTest\LoadTestChannels;
@@ -77,6 +79,7 @@ class ProcessWebhookEvent implements ShouldQueue
                             ? LoadTestTagger::tag($inboxIngestor->ingestMessage($dto, $event), $event->payload['load_test'] ?? null)
                             : $inboxIngestor->ingestMessage($dto, $event),
                         $dto instanceof DeliveryReceiptData => $inboxIngestor->ingestReceipt($dto),
+                        $dto instanceof OutboundEchoData => app(EchoIngestor::class)->ingest($dto),
                         $dto instanceof InboundCommentData => $commentIngestor->ingest($dto),
                         default => null,
                     };

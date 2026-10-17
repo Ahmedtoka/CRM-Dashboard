@@ -18,12 +18,14 @@ use App\Support\SafeBroadcast;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -196,12 +198,7 @@ class SendOutboundMessage implements ShouldQueue
         }
 
         if ($result->success) {
-            $message->forceFill([
-                'status' => MessageStatus::Sent,
-                'external_id' => $result->externalId,
-                'sent_at' => now(),
-                'error' => null,
-            ])->save();
+            self::recordSent($message, $result->externalId);
 
             SafeBroadcast::send(new MessageUpdated($message));
 
@@ -218,6 +215,41 @@ class SendOutboundMessage implements ShouldQueue
         }
 
         $this->markFailed($message, $result->error ?? 'Unknown platform error', $logger);
+    }
+
+    /**
+     * Marks the message sent with the id Meta returned. Its webhook echo (2026-10-17) can be
+     * recorded first as a reply "sent outside the CRM" carrying that same id: that row is the
+     * duplicate, so it is dropped and the save made again (never a failed job, which would
+     * re-send the message to the customer).
+     */
+    public static function recordSent(Message $message, ?string $externalId): void
+    {
+        $fill = fn () => $message->forceFill([
+            'status' => MessageStatus::Sent,
+            'external_id' => $externalId,
+            'sent_at' => now(),
+            'error' => null,
+        ])->save();
+
+        try {
+            $fill();
+        } catch (UniqueConstraintViolationException $e) {
+            $echo = $externalId === null || $externalId === '' ? null : Message::query()
+                ->where('platform', $message->platform)
+                ->where('external_id', $externalId)
+                ->where('sent_outside_crm', true)
+                ->first();
+
+            if ($echo === null) {
+                throw $e;
+            }
+
+            DB::transaction(function () use ($echo, $fill) {
+                $echo->delete();
+                $fill();
+            });
+        }
     }
 
     public function failed(?Throwable $e): void
