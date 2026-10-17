@@ -3503,7 +3503,7 @@ const en: Messages = {
                 retired: 'Retired',
                 reassigned: 'Moved to another buyer',
                 platform_archived: 'An ad was archived on the platform',
-                platform_archive_skipped: 'An ad was not archived on the platform because it ran before',
+                platform_archive_skipped: 'An ad was left unarchived on the platform to be safe (the launch was approved or the ad ran)',
                 platform_archive_failed: 'Archiving an ad on the platform failed; open it in Ads Manager',
                 reauth: 'Password confirmed',
                 draft: 'Draft',

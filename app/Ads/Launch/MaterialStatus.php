@@ -35,12 +35,13 @@ final class MaterialStatus
     public function refresh(AdMaterial $m): string
     {
         $status = self::derive($m);
-        if ($status !== $m->status) {
+        // Stamped only once an ad really ran (a launch merely launching may come back unrun, then be rejected, and must
+        // not leave the material «واقفة», MORNING-REPORT 6-a); checked even when the status stays live.
+        $stamp = $status === 'live' && $m->activated_at === null && self::ran($m);
+        if ($status !== $m->status || $stamp) {
             $m->forceFill(array_merge(
                 ['status' => $status],
-                // Stamped only when an ad really ran: a launch that is merely launching (and may come back unrun,
-                // then be rejected) must not make the material «واقفة» forever (MORNING-REPORT 6-a).
-                $status === 'live' && $m->activated_at === null && self::ran($m) ? ['activated_at' => now()] : [],
+                $stamp ? ['activated_at' => now()] : [],
                 $status !== 'live' ? ['need_stop_at' => null] : [],
             ))->save();
         }

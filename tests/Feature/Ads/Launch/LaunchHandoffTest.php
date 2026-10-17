@@ -80,5 +80,6 @@ it('puts the per-buyer waiting counts on Ads Today', function () {
     $this->actingAs($w['manager'])->get('/ads')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->where('handoff.total', 1)->where('handoff.buyers.0.buyer_name', 'Ali')->where('handoff.buyers.0.count', 1));
     $this->actingAs($w['buyerUser'])->get('/ads')->assertOk()->assertInertia(fn (Assert $p) => $p
-        ->where('handoff.total', 1)->where('handoff.buyers', []));
+        ->where('handoff.total', 1)->where('handoff.buyers', [])->where('handoff.box', 'review'));
+    expect(LaunchHandoff::summary($w['content'])['box'])->toBe('ready'); // content opens its own «جاهزة للنشر»
 });

@@ -120,7 +120,7 @@ it('retries with back-off after a platform error, then fails for good with the A
     expect($archive->run())->toMatchArray(['archived' => 0, 'waiting' => 1]);
     $x = AdWriteAction::where('type', PlatformArchive::TYPE)->sole();
     expect($x->state)->toBe(AdWriteAction::EXECUTING)->and($x->attempts)->toBe(1)
-        ->and($x->retry_at->between(now()->addMinutes(59), now()->addMinutes(61)))->toBeTrue();
+        ->and($x->retry_at->between(now()->addMinutes(54), now()->addMinutes(56)))->toBeTrue();
 
     // not due yet: nothing happens
     expect($archive->run()['waiting'])->toBe(1)->and(AdWriteAction::find($x->id)->attempts)->toBe(1);
@@ -150,14 +150,72 @@ it('keeps refusing live writers outside the production sandbox (WriteGuard)', fu
     config(['crm.ads.drivers.meta' => 'live']);
 
     expect(app(PlatformArchive::class)->run())->toMatchArray(['archived' => 0, 'waiting' => 1])
-        ->and(AdWriteAction::where('type', PlatformArchive::TYPE)->value('error_code'))->toBe('sandbox_only');
+        ->and(AdWriteAction::where('type', PlatformArchive::TYPE)->value('error_code'))->toBe('sandbox_only')
+        ->and(AdWriteAction::where('type', PlatformArchive::TYPE)->value('attempts'))->toBe(0);
 });
 
-it('lists the archive in the write log as ARCHIVED, never as a Stop', function () {
+it('lists the archive in the ad history as ARCHIVED, never as a Stop, and keeps it out of the main log', function () {
     $w = LaunchWorld::make();
     rejectedLaunch($w);
     app(PlatformArchive::class)->run();
 
-    $rows = app(WriteActionLog::class)->rows($w['manager']);
+    expect(app(WriteActionLog::class)->rows($w['manager']))->toBe([]); // the people's Stop/Run log stays theirs
+    $ext = AdWriteAction::where('type', PlatformArchive::TYPE)->value('target_external_id');
+    $rows = app(WriteActionLog::class)->rows($w['manager'], ['ad' => ['account_id' => $w['account']->id, 'external_id' => $ext]]);
     expect($rows)->toHaveCount(1)->and($rows[0]['to_status'])->toBe('ARCHIVED')->and($rows[0]['source'])->toBe('launch_archive');
+});
+
+it('the per-account write switch holds the archive, no attempt spent', function () {
+    $w = LaunchWorld::make();
+    rejectedLaunch($w);
+    $w['account']->forceFill(['write_enabled' => false])->save();
+
+    expect(app(PlatformArchive::class)->run())->toMatchArray(['archived' => 0, 'waiting' => 1])->and(fakeAdCalls())->toBe([]);
+    $x = AdWriteAction::where('type', PlatformArchive::TYPE)->sole();
+    expect($x->error_code)->toBe('account_not_writable')->and($x->attempts)->toBe(0);
+
+    $w['account']->forceFill(['write_enabled' => true])->save();
+    $this->travelTo($x->retry_at->addSecond());
+    expect(app(PlatformArchive::class)->run()['archived'])->toBe(1);
+});
+
+it('a skipped launch-level approval says launch_approved, and requeue never revives a final end', function () {
+    $w = LaunchWorld::make();
+    $l = LaunchWorld::launch($w, LaunchState::Stopped);
+    AdPublication::where('ad_launch_id', $l->id)->update(['archived_at' => now()]);
+    $archive = app(PlatformArchive::class);
+    $archive->run();
+
+    expect(AdWriteAction::where('type', PlatformArchive::TYPE)->value('error_code'))->toBe('launch_approved')
+        ->and($archive->requeueFailed())->toBe(0);
+});
+
+it('requeues an archive that ran out of attempts, from the sweep option', function () {
+    $w = LaunchWorld::make();
+    rejectedLaunch($w);
+    app(PlatformArchive::class)->queue();
+    AdWriteAction::where('type', PlatformArchive::TYPE)->update(['state' => AdWriteAction::FAILED, 'error_code' => 'platform_error', 'attempts' => 6, 'retry_at' => null]);
+
+    $this->artisan('ads:launch-sweep --requeue-archives')->expectsOutput('Archives re-queued: 1.')
+        ->expectsOutput('Archived on the platform 1, waiting 0, failed 0, skipped 0.')->assertSuccessful();
+});
+
+it('gives a row that died mid-attempt back to the queue', function () {
+    $w = LaunchWorld::make();
+    rejectedLaunch($w);
+    $archive = app(PlatformArchive::class);
+    $archive->queue();
+    AdWriteAction::where('type', PlatformArchive::TYPE)->update(['retry_at' => null, 'updated_at' => now()->subHour()]);
+
+    expect($archive->run()['archived'])->toBe(1);
+});
+
+it('a dead token marks the connection and holds the row without spending the attempt', function () {
+    $w = LaunchWorld::make();
+    rejectedLaunch($w);
+    FakeAdsDriver::failNext('readObject', 'token');
+
+    expect(app(PlatformArchive::class)->run()['waiting'])->toBe(1);
+    $x = AdWriteAction::where('type', PlatformArchive::TYPE)->sole();
+    expect($x->error_code)->toBe('connection_needs_reconnect')->and($x->attempts)->toBe(0);
 });

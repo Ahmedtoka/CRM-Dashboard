@@ -140,7 +140,7 @@ class ExplorerController extends Controller
 
         return DB::table('ad_write_actions as w')
             ->join('ads as ad', fn ($j) => $j->on('ad.ad_account_id', '=', 'w.ad_account_id')->on('ad.external_id', '=', 'w.target_external_id'))
-            ->where('w.target_level', 'ad')->where('w.state', AdWriteAction::SUCCEEDED)->where('w.confirmed_at', '>=', $start)
+            ->where('w.target_level', 'ad')->where('w.type', 'set_status')->where('w.state', AdWriteAction::SUCCEEDED)->where('w.confirmed_at', '>=', $start)
             ->when($f->accountIds !== null, fn ($q) => $q->whereIn('w.ad_account_id', $f->accountIds))
             ->distinct()->pluck('ad.id')->map(fn ($id) => (int) $id)->values()->all();
     }

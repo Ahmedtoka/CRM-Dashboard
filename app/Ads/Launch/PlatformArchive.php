@@ -3,6 +3,7 @@
 namespace App\Ads\Launch;
 
 use App\Ads\Audit\AdsAudit;
+use App\Ads\Control\WritableAccounts;
 use App\Ads\Control\Write\Canonical;
 use App\Ads\Control\Write\Types\SetStatusType;
 use App\Ads\Control\Write\WriteExecutor;
@@ -11,8 +12,10 @@ use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdPlatformWriter;
 use App\Ads\Platforms\DriverFactory;
 use App\Ads\Platforms\SecretScrubber;
+use App\Ads\Platforms\TokenInvalid;
 use App\Ads\Platforms\WriteGuard;
 use App\Ads\Platforms\WriteRefused;
+use App\Ads\Sync\ConnectionHealth;
 use App\Models\Ad;
 use App\Models\AdAccount;
 use App\Models\AdDailyMetric;
@@ -21,6 +24,7 @@ use App\Models\AdPublication;
 use App\Models\AdWriteAction;
 use App\Models\AdWriteStep;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Carbon;
 use Throwable;
 
 /**
@@ -30,11 +34,12 @@ use Throwable;
  * ARCHIVED, not DELETE: Meta keeps an archived ad readable (insights, audit, the CRM's own sync), an archived ad can
  * never be switched back on by mistake, and nothing is destroyed if the CRM ever picked the wrong ad. A system write,
  * not a human Stop/Run: one ad_write_actions row per ad (type archive_ad, actor system, its own permanent business
- * key so an ad is archived at most once), its steps, the kill switch, WriteGuard and the audit log; retried with
- * back-off; every outcome is written on the launch's history. Driven by the hourly ads:launch-sweep.
+ * key so an ad is archived at most once), its steps, the kill switch, the per-account write switch, WriteGuard and the
+ * audit log; platform errors retried with back-off; every outcome is written on the launch's history. Driven by the
+ * hourly ads:launch-sweep.
  *
- * Never an ad that ever ran: the launch was never approved or live, no Run of the ad was ever confirmed, the metrics
- * show no delivery, the local row is not ACTIVE, and a live read just before the call says PAUSED.
+ * Never an ad that may have run: the launch was never approved or live, no Run of the ad was ever confirmed, the
+ * metrics show no delivery, the local row is not ACTIVE, and a live read just before the call says PAUSED.
  */
 final class PlatformArchive
 {
@@ -50,6 +55,18 @@ final class PlatformArchive
     /** Rows queued per pass (the first deploy backfills the old piles in a few hours). */
     public const QUEUE_LIMIT = 200;
 
+    /** The sweep runs hourly at :05: a retry due a few minutes after a tick is taken at that tick. */
+    public const DUE_GRACE_MINUTES = 5;
+
+    /** How long a lasting refusal (switches, WriteGuard, reconnect) holds the row; no attempt is spent. */
+    public const HOLD_MINUTES = 60;
+
+    /** A claimed row older than this with no outcome died mid-attempt (crash): it goes back to the queue. */
+    public const STUCK_MINUTES = 30;
+
+    /** Final ends on purpose: never re-queued by --requeue-archives. */
+    public const FINAL_CODES = ['ever_active', 'launch_approved', 'archive_unsupported', 'not_found'];
+
     /** Set_status Run states that mean the ad was (or may have been) switched on. */
     private const RAN_STATES = [AdWriteAction::EXECUTING, AdWriteAction::SUCCEEDED, AdWriteAction::UNKNOWN, AdWriteAction::ROLLED_BACK, AdWriteAction::SUPERSEDED_BY_STOP];
 
@@ -59,10 +76,11 @@ final class PlatformArchive
     public function run(): array
     {
         $this->queue();
+        $this->recoverStuck();
         $out = ['archived' => 0, 'waiting' => 0, 'failed' => 0, 'skipped' => 0];
 
         $due = AdWriteAction::query()->where('type', self::TYPE)->where('state', AdWriteAction::EXECUTING)
-            ->whereNotNull('retry_at')->where('retry_at', '<=', now())->orderBy('id')->get();
+            ->whereNotNull('retry_at')->where('retry_at', '<=', self::dueBy())->orderBy('id')->get();
         if (! WriteSwitch::enabled()) {
             // The kill switch holds the queue (an archive is not a Stop): the rows stay due, no attempt spent.
             AdWriteAction::query()->whereIn('id', $due->pluck('id')->all())->where('state', AdWriteAction::EXECUTING)
@@ -70,7 +88,13 @@ final class PlatformArchive
             $due = collect();
         }
         foreach ($due as $x) {
-            $result = $this->attempt($x);
+            try {
+                $result = $this->attempt($x);
+            } catch (Throwable $e) {
+                // One bad row never stops the pass; recoverStuck() gives it back to the queue later.
+                WriteExecutor::logUnexpected($e, $x);
+                $result = null;
+            }
             if ($result !== null) {
                 $out[$result]++;
             }
@@ -108,7 +132,7 @@ final class PlatformArchive
                     'diff_hash' => Canonical::hash(['type' => self::TYPE, 'account_id' => $p->account->id, 'external_id' => $ext, 'diff' => $diff]),
                     'source' => self::SOURCE, 'source_ref' => $p->launch?->public_id, 'actor_type' => 'system',
                     'idempotency_key' => 'archive:'.$targetKey,
-                    // Never released: one archive per ad, ever (a twin insert fails on it).
+                    // Never released: one archive row per ad, ever (a twin insert fails on it).
                     'open_business_key' => 'archive:'.$targetKey,
                     'confirmed_at' => now(), 'executing_at' => now(), 'retry_at' => now(),
                 ]);
@@ -121,12 +145,36 @@ final class PlatformArchive
         return $n;
     }
 
-    /** @return 'archived'|'failed'|'skipped'|null null = still waiting (a retry is scheduled) */
+    /**
+     * Gives failed archives another full round (after a reconnect or a long outage); never the final ends (the ad may
+     * have run, the platform has no archive). `ads:launch-sweep --requeue-archives`.
+     */
+    public function requeueFailed(): int
+    {
+        return AdWriteAction::query()->where('type', self::TYPE)->where('state', AdWriteAction::FAILED)
+            ->where(fn ($q) => $q->whereNull('error_code')->orWhereNotIn('error_code', self::FINAL_CODES))
+            ->update(['state' => AdWriteAction::EXECUTING, 'attempts' => 0, 'retry_at' => now(), 'finished_at' => null, 'updated_at' => now()]);
+    }
+
+    private static function dueBy(): Carbon
+    {
+        return now()->addMinutes(self::DUE_GRACE_MINUTES);
+    }
+
+    /** Rows claimed by a pass that died before an outcome: back to the queue. */
+    private function recoverStuck(): int
+    {
+        return AdWriteAction::query()->where('type', self::TYPE)->where('state', AdWriteAction::EXECUTING)
+            ->whereNull('retry_at')->where('updated_at', '<', now()->subMinutes(self::STUCK_MINUTES))
+            ->update(['retry_at' => now(), 'updated_at' => now()]);
+    }
+
+    /** @return 'archived'|'failed'|'skipped'|null null = still waiting (held, or a retry is scheduled) */
     private function attempt(AdWriteAction $x): ?string
     {
         // The claim: CAS on (state, retry_at, attempts), so a parallel pass never sends a second call for one attempt.
         $claimed = AdWriteAction::query()->whereKey($x->id)->where('state', AdWriteAction::EXECUTING)
-            ->where('attempts', $x->attempts)->whereNotNull('retry_at')->where('retry_at', '<=', now())
+            ->where('attempts', $x->attempts)->whereNotNull('retry_at')->where('retry_at', '<=', self::dueBy())
             ->update(['retry_at' => null, 'updated_at' => now()]) === 1;
         if (! $claimed) {
             return null;
@@ -138,24 +186,38 @@ final class PlatformArchive
         if ($account === null) {
             return $this->end($x, $launch, AdWriteAction::FAILED, 'not_found', null);
         }
-        if ($this->ran($x, $account, $launch)) {
-            return $this->end($x, $launch, AdWriteAction::FAILED, 'ever_active', null);
+        $ran = $this->ran($x, $account, $launch);
+        if ($ran !== null) {
+            return $this->end($x, $launch, AdWriteAction::FAILED, $ran, null);
         }
 
-        AdWriteAction::query()->whereKey($x->id)->increment('attempts');
-        $x->refresh();
+        // Lasting refusals hold the row (no attempt spent, never a final failure): the kill switch (re-read for each
+        // row), the owner's per-account write switch, and WriteGuard (reconnect, read only, sandbox, fake in production).
+        if (! WriteSwitch::enabled()) {
+            return $this->hold($x, WriteSwitch::CODE);
+        }
+        if (! WritableAccounts::allows($account)) {
+            return $this->hold($x, 'account_not_writable');
+        }
         try {
             $writer = $this->drivers->writer(AdPlatform::from($account->platform));
             WriteGuard::check($account, $writer);
         } catch (WriteRefused $e) {
-            return $this->retryOrFail($x, $launch, $e->reason, null);
-        } catch (Throwable $e) {
-            return $this->retryOrFail($x, $launch, 'platform_not_writable', SecretScrubber::scrub($e->getMessage()));
+            return $this->hold($x, $e->reason);
+        } catch (Throwable) {
+            return $this->hold($x, 'platform_not_writable');
         }
+
+        AdWriteAction::query()->whereKey($x->id)->increment('attempts');
+        $x->refresh();
 
         // The live read right before the call: only a PAUSED ad is archived; already archived or deleted is done.
         try {
             $live = strtoupper((string) $writer->readObject($account, 'ad', $x->target_external_id)->status);
+        } catch (TokenInvalid $e) {
+            $this->reconnect($account, $e);
+
+            return $this->hold($x, 'connection_needs_reconnect', true);
         } catch (Throwable $e) {
             return $this->retryOrFail($x, $launch, 'read_failed', SecretScrubber::scrub($e->getMessage()));
         }
@@ -175,6 +237,11 @@ final class PlatformArchive
             return $e->reason === 'archive_unsupported'
                 ? $this->end($x, $launch, AdWriteAction::FAILED, $e->reason, null)
                 : $this->retryOrFail($x, $launch, $e->reason, null);
+        } catch (TokenInvalid $e) {
+            $this->closeStep($step, AdWriteStep::FAILED, 'connection_needs_reconnect', SecretScrubber::scrub($e->getMessage()));
+            $this->reconnect($account, $e);
+
+            return $this->hold($x, 'connection_needs_reconnect', true);
         } catch (Throwable $e) {
             $message = SecretScrubber::scrub($e->getMessage());
             if ($this->readBackArchived($writer, $account, $x)) {
@@ -191,26 +258,51 @@ final class PlatformArchive
         return $this->succeed($x, $launch, []);
     }
 
-    /** Was the ad ever switched on, by the launch, by a Run, or by delivery? */
-    private function ran(AdWriteAction $x, AdAccount $account, ?AdLaunch $launch): bool
+    /**
+     * Why the ad may have run, or null: the launch was approved or went live (launch_approved), or a Run of the ad was
+     * confirmed, the local row is ACTIVE, or the metrics show delivery (ever_active). Either is a final skip.
+     */
+    private function ran(AdWriteAction $x, AdAccount $account, ?AdLaunch $launch): ?string
     {
         if ($launch !== null && ($launch->approved_at !== null || $launch->live_at !== null)) {
-            return true;
+            return 'launch_approved';
         }
         $runs = AdWriteAction::query()->where('type', SetStatusType::TYPE)->where('target_key', $x->target_key)
             ->where('to_status', 'active')->whereIn('state', self::RAN_STATES)->exists();
         if ($runs) {
-            return true;
+            return 'ever_active';
         }
         $ad = Ad::query()->where('ad_account_id', $account->id)->where('external_id', $x->target_external_id)->first(['id', 'status', 'effective_status']);
         if ($ad === null) {
-            return false;
+            return null;
         }
         if (strtoupper((string) $ad->status) === 'ACTIVE') {
-            return true;
+            return 'ever_active';
         }
 
-        return AdDailyMetric::query()->where('ad_id', $ad->id)->where(fn ($q) => $q->where('impressions', '>', 0)->orWhere('spend', '>', 0))->exists();
+        return AdDailyMetric::query()->where('ad_id', $ad->id)->where(fn ($q) => $q->where('impressions', '>', 0)->orWhere('spend', '>', 0))->exists()
+            ? 'ever_active' : null;
+    }
+
+    /**
+     * Postpones the row without an end; $refund gives back the attempt already counted for this pass.
+     *
+     * @return null still waiting
+     */
+    private function hold(AdWriteAction $x, string $code, bool $refund = false): ?string
+    {
+        AdWriteAction::query()->whereKey($x->id)->where('state', AdWriteAction::EXECUTING)->update(array_merge([
+            'retry_at' => now()->addMinutes(self::HOLD_MINUTES - self::DUE_GRACE_MINUTES), 'error_code' => $code, 'updated_at' => now(),
+        ], $refund && $x->attempts > 0 ? ['attempts' => $x->attempts - 1] : []));
+
+        return null;
+    }
+
+    private function reconnect(AdAccount $account, Throwable $e): void
+    {
+        if ($account->connection !== null) {
+            ConnectionHealth::markNeedsReconnect($account->connection, SecretScrubber::scrub($e->getMessage()));
+        }
     }
 
     private function readBackArchived(AdPlatformWriter $writer, AdAccount $account, AdWriteAction $x): bool
@@ -230,7 +322,8 @@ final class PlatformArchive
         }
         $delay = self::BACKOFF_MINUTES[max(0, $x->attempts - 1)] ?? self::BACKOFF_MINUTES[count(self::BACKOFF_MINUTES) - 1];
         AdWriteAction::query()->whereKey($x->id)->where('state', AdWriteAction::EXECUTING)->update([
-            'retry_at' => now()->addMinutes($delay), 'error_code' => $code,
+            // Minus the grace so the hourly tick after the delay takes it (not the one after that).
+            'retry_at' => now()->addMinutes($delay - self::DUE_GRACE_MINUTES), 'error_code' => $code,
             'error_message' => $message !== null ? mb_substr($message, 0, 2000) : null, 'updated_at' => now(),
         ]);
 
@@ -253,7 +346,7 @@ final class PlatformArchive
 
     /**
      * The end state (CAS on executing; the business key stays so the ad is never queued again) and its line on the
-     * launch history: platform_archived / platform_archive_skipped (it ran once) / platform_archive_failed.
+     * launch history: platform_archived / platform_archive_skipped (it may have run) / platform_archive_failed.
      *
      * @return 'archived'|'failed'|'skipped'
      */
@@ -268,7 +361,7 @@ final class PlatformArchive
         $x->refresh();
         $result = match (true) {
             $state === AdWriteAction::SUCCEEDED => 'archived',
-            $code === 'ever_active' => 'skipped',
+            in_array($code, ['ever_active', 'launch_approved'], true) => 'skipped',
             default => 'failed',
         };
         if (! $changed) {

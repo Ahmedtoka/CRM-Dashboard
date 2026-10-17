@@ -3458,7 +3458,7 @@ const ar = {
                 retired: 'اتقفلت',
                 reassigned: 'اتحولت لباير تاني',
                 platform_archived: 'إعلان اتأرشف على المنصة',
-                platform_archive_skipped: 'إعلان ما اتأرشفش على المنصة لأنه اشتغل قبل كده',
+                platform_archive_skipped: 'إعلان ما اتأرشفش على المنصة للأمان (الإطلاق اتوافق عليه أو الإعلان اشتغل قبل كده)',
                 platform_archive_failed: 'أرشفة إعلان على المنصة فشلت، افتحيه من Ads Manager',
                 reauth: 'أكد كلمة المرور',
                 draft: 'مسودة',

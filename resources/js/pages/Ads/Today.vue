@@ -174,7 +174,7 @@ const listHref = (list: (typeof LISTS)[number]) =>
                 <div class="flex items-center justify-between gap-2">
                     <h2 class="text-sm font-semibold">{{ t('ads.control.today.handoff') }}</h2>
                     <Link
-                        :href="handoff.buyers.length ? '/ads/launches?box=ready' : '/ads/launches?box=review'"
+                        :href="`/ads/launches?box=${handoff.box}`"
                         class="inline-flex h-9 items-center text-xs text-primary hover:underline"
                     >
                         {{ t(handoff.buyers.length ? 'ads.control.today.handoff_total' : 'ads.control.today.handoff_mine', { n: n(handoff.total) }) }}

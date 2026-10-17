@@ -34,12 +34,25 @@ final class LaunchHandoff
             ->when($buyer !== null, fn (Builder $x) => $x->orWhere('ad_launches.reviewer_buyer_id', $buyer->id)));
     }
 
-    /** The Today block: managers get the per-buyer list, everyone the total of their own view. @return array{total: int, buyers: list<array<string, mixed>>} */
+    /** Content and managers get the «جاهزة للنشر» box; a plain buyer's queue is «مستنية مراجعتك». */
+    public static function seesReadyBox(User $u): bool
+    {
+        return LaunchPolicy::canPrepare($u) && (app(AdsScope::class)->buyerFor($u) === null || $u->hasAdsAuthority());
+    }
+
+    /**
+     * The Today block: managers get the per-buyer list, everyone the total of their own view and the box it opens.
+     *
+     * @return array{total: int, buyers: list<array<string, mixed>>, box: 'ready'|'review'}
+     */
     public static function summary(User $u): array
     {
         $buyers = $u->isSupervisorOrAbove() || $u->hasAdsAuthority() ? self::byBuyer($u) : [];
 
-        return ['total' => $buyers !== [] ? array_sum(array_column($buyers, 'count')) : self::total($u), 'buyers' => $buyers];
+        return [
+            'total' => $buyers !== [] ? array_sum(array_column($buyers, 'count')) : self::total($u), 'buyers' => $buyers,
+            'box' => self::seesReadyBox($u) ? 'ready' : 'review',
+        ];
     }
 
     public static function total(User $u): int
@@ -48,9 +61,9 @@ final class LaunchHandoff
     }
 
     /** @return list<array{buyer_id: int, buyer_name: string, count: int, oldest_at: ?string}> most waiting first */
-    public static function byBuyer(User $u): array
+    public static function byBuyer(User $u, ?int $materialId = null): array
     {
-        $rows = self::scope(AdLaunch::query(), $u)
+        $rows = self::scope(AdLaunch::query(), $u)->when($materialId !== null, fn ($q) => $q->where('ad_launches.ad_material_id', $materialId))
             ->selectRaw('ad_launches.reviewer_buyer_id as buyer_id, COUNT(*) as n, MIN(COALESCE(ad_launches.submitted_at, ad_launches.updated_at)) as oldest')
             ->groupBy('ad_launches.reviewer_buyer_id')->get();
         $names = MediaBuyer::query()->whereIn('id', $rows->pluck('buyer_id')->all())->pluck('name', 'id');

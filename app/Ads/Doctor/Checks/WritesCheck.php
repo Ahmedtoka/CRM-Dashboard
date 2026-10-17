@@ -60,7 +60,8 @@ class WritesCheck extends DoctorCheck
 
         // Phase B exit: every platform change that succeeded was confirmed by a person.
         $exit = (int) DB::table('ad_write_actions as a')->join('ad_write_steps as s', 's.ad_write_action_id', '=', 'a.id')
-            ->where('s.state', 'succeeded')->whereNull('a.confirmed_by_id')->where('a.source', '<>', 'legacy')->count();
+            ->where('s.state', 'succeeded')->whereNull('a.confirmed_by_id')->where('a.source', '<>', 'legacy')
+            ->where('a.actor_type', '<>', 'system')->count(); // system writes (PlatformArchive) have no confirmer by design
         $rows[] = DoctorRow::by($exit === 0, 'fail', self::S, 'exit query: succeeded steps without confirmed_by_id', (string) $exit,
             'A platform change has no confirming user: investigate before closing Phase B.');
 

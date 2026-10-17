@@ -1191,7 +1191,7 @@ export interface AdsTodayProps extends AdsPageBase {
     filters: AdsControlFilters;
     today: AdsTodayData;
     /** «جاهزة للنشر» (F4): total in the viewer's scope; per buyer for managers only. */
-    handoff?: { total: number; buyers: LaunchHandoffRow[] };
+    handoff?: { total: number; buyers: LaunchHandoffRow[]; box: 'ready' | 'review' };
 }
 
 export interface AdsExplorerFilters extends AdsControlFilters {

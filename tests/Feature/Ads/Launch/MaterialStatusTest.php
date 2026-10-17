@@ -145,3 +145,15 @@ it('a material whose ad really ran stays «واقفة» after its launch ends', 
     $l->forceFill(['state' => LaunchState::Retired])->save();
     expect(app(MaterialStatus::class)->refresh($w['material']->fresh()))->toBe('retired');
 });
+
+it('stamps activated_at on the normal path: awaiting, launching, then live', function () {
+    $w = LaunchWorld::make();
+    $l = LaunchWorld::launch($w, LaunchState::AwaitingApproval);
+    $svc = app(LaunchService::class);
+    $svc->transition($l, [LaunchState::AwaitingApproval], LaunchState::Launching, ['approved_at' => now()]);
+    expect($w['material']->fresh()->activated_at)->toBeNull();
+
+    Ad::query()->update(['status' => 'ACTIVE']);
+    $svc->transition($l->fresh(), [LaunchState::Launching], LaunchState::Live, ['live_at' => now()]);
+    expect($w['material']->fresh()->status)->toBe('live')->and($w['material']->fresh()->activated_at)->not->toBeNull();
+});

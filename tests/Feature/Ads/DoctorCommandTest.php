@@ -227,3 +227,13 @@ it('lists active accounts switched off for writes and warns on an overdue Stop r
     expect(doctorRow($out, 'Writes', 'accounts not writable'))->toContain('Locked')
         ->and(doctorRow($out, 'Writes', 'retry queue'))->toContain('| warn |');
 });
+
+it('keeps the exit query green for system platform archives (no confirmer by design)', function () {
+    User::factory()->adsAuthority()->create(['role' => UserRole::Admin]);
+    $x = AdWriteAction::factory()->succeeded()->create(['confirmed_by_id' => null, 'type' => 'archive_ad', 'source' => 'launch_archive', 'actor_type' => 'system', 'to_status' => 'archived']);
+    AdWriteStep::create(['ad_write_action_id' => $x->id, 'seq' => 1, 'op' => 'archive_ad', 'level' => 'ad', 'target_external_id' => '1', 'state' => 'succeeded']);
+
+    [, $out] = doctor(['--no-network' => true]);
+
+    expect(doctorRow($out, 'Writes', 'exit query'))->toContain('| ok |');
+});

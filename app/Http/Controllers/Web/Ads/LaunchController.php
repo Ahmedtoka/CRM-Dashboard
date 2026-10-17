@@ -34,7 +34,7 @@ class LaunchController extends Controller
         $buyer = $scope->buyerFor($user);
         $boxes = ['mine', 'review', 'ready', 'live', 'all'];
         // «جاهزة للنشر» (F4) for content and managers; a buyer's own queue is already «مستنية مراجعتك».
-        $canSeeReady = LaunchPolicy::canPrepare($user) && ($buyer === null || $user->hasAdsAuthority());
+        $canSeeReady = LaunchHandoff::seesReadyBox($user);
         $reviewer = is_numeric($request->query('reviewer')) ? (int) $request->query('reviewer') : null;
         $box = in_array($request->query('box'), $boxes, true) ? (string) $request->query('box') : ($user->role === UserRole::MediaBuyer ? 'review' : 'mine');
         if ($box === 'ready' && ! $canSeeReady) {
@@ -71,7 +71,7 @@ class LaunchController extends Controller
             'counts' => ['mine' => $inBox($base(), 'mine')->count(), 'review' => $inBox($base(), 'review')->count(), 'live' => $inBox($base(), 'live')->count(),
                 'ready' => $canSeeReady ? LaunchHandoff::scope($base(), $user)->count() : 0],
             'canSeeReady' => $canSeeReady,
-            'handoff' => $canSeeReady && $box === 'ready' ? LaunchHandoff::byBuyer($user) : [],
+            'handoff' => $canSeeReady && $box === 'ready' ? LaunchHandoff::byBuyer($user, $material) : [],
             'canReview' => $user->hasAdsAuthority() || $buyer !== null,
             'canToggleSlots' => $canToggleSlots,
             'reasons' => LaunchService::REASONS,

@@ -51,6 +51,7 @@ return [
         'out_of_scope' => 'You cannot change ads on this account.',
         'account_not_writable' => 'This account is not enabled for changes from the CRM. Make the change in Ads Manager, or ask an admin to enable the account (ads:writable).',
         'fake_writer_in_production' => 'A fake ad writer cannot run in production: nothing would reach the platform. Check the ads driver setting.',
+        'launch_approved' => 'This launch was approved before, so the CRM will not archive its ads on the platform.',
         'ever_active' => 'This ad ran before, so the CRM will not archive it on the platform.',
         'archive_unsupported' => 'This platform has no archive, and the CRM never deletes ads.',
         'read_failed' => 'Could not read the ad status from the platform; it will be tried again.',

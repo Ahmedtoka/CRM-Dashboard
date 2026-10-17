@@ -186,3 +186,15 @@ it('lets a worse tier through a dismissal mute too, never a lower or equal one',
         ->and($store->sync($ad->ad_account_id, [stRule()], [stFinding($ad, 'high')], [$ad->id], W::freeze('2026-10-07 11:00:00'))['opened'])->toBe([])
         ->and($store->sync($ad->ad_account_id, [stRule()], [stFinding($ad, 'critical')], [$ad->id], W::freeze('2026-10-07 12:00:00'))['opened'])->toHaveCount(1);
 });
+
+it('remembers the peak tier: an alert that eased back before it closed does not re-fire at the same tier', function () {
+    $ad = W::ad(W::account());
+    $store = app(AlertStore::class);
+    $store->sync($ad->ad_account_id, [stRule()], [stFinding($ad, 'medium')], [$ad->id], W::freeze());
+    $store->sync($ad->ad_account_id, [stRule()], [], [$ad->id], W::freeze('2026-10-06 11:00:00'));
+    expect($store->sync($ad->ad_account_id, [stRule()], [stFinding($ad, 'high')], [$ad->id], W::freeze('2026-10-06 12:00:00'))['opened'])->toHaveCount(1);
+    $store->sync($ad->ad_account_id, [stRule()], [stFinding($ad, 'medium')], [$ad->id], W::freeze('2026-10-06 13:00:00')); // eases back
+    $store->sync($ad->ad_account_id, [stRule()], [], [$ad->id], W::freeze('2026-10-06 14:00:00'));
+
+    expect($store->sync($ad->ad_account_id, [stRule()], [stFinding($ad, 'high')], [$ad->id], W::freeze('2026-10-06 15:00:00'))['opened'])->toBe([]);
+});
