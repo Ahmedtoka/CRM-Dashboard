@@ -1,6 +1,7 @@
 <?php
 
 use App\Shopify\App\FakeShopifyOAuth;
+use App\Shopify\App\IdTokenVerifier;
 use App\Shopify\Client\ShopifyException;
 use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Jobs\RunBulkImportStage;
@@ -112,7 +113,35 @@ it('frames only for admin.shopify.com when the shop parameter is not an allowed 
     $this->get('/shopify/app?shop='.urlencode($shop))
         ->assertOk()
         ->assertHeader('Content-Security-Policy', 'frame-ancestors https://admin.shopify.com;');
-})->with(['other.myshopify.com', 'evil.com', 'x.myshopify.com.evil.com', '']);
+})->with(['other.myshopify.com', 'evil.com', 'x.myshopify.com.evil.com', '', 'levoile-test.myshopify.com.evil.com']);
+
+it('accepts only a bare store domain, never one with a trailing newline', function () {
+    expect(IdTokenVerifier::isShopDomain('levoile-test.myshopify.com'))->toBeTrue()
+        ->and(IdTokenVerifier::isShopDomain("levoile-test.myshopify.com\n"))->toBeFalse();
+});
+
+it('never frames for an unverified shop parameter while the app has no allowlist', function () {
+    config(['crm.shopify.apps.levoile.allowed_shops' => null]);
+
+    $this->get('/shopify/app?shop=anyone.myshopify.com')
+        ->assertOk()
+        ->assertHeader('Content-Security-Policy', 'frame-ancestors https://admin.shopify.com;');
+});
+
+it('does not move a store rolled back on purpose until the admin allows it again', function () {
+    manualIntegration(['legacy_credentials' => ['access_token' => 'shpat_old', 'api_secret' => 'old']]);
+
+    $this->postJson('/shopify/app/session', [], ['Authorization' => 'Bearer '.embIdToken()])->assertStatus(409)->assertJsonPath('error', 'manual_connection');
+    expect(ShopifyIntegration::sole()->auth_mode)->toBe('custom_token')
+        ->and(FakeShopifyOAuth::calls())->toBe([]);
+
+    // Allowed again (Settings): the next open moves it and keeps the CURRENT manual token aside.
+    ShopifyIntegration::sole()->forceFill(['legacy_credentials' => null])->save();
+    $this->postJson('/shopify/app/session', [], ['Authorization' => 'Bearer '.embIdToken()])->assertOk();
+
+    expect(ShopifyIntegration::sole()->auth_mode)->toBe('app')
+        ->and(ShopifyIntegration::sole()->legacy_credentials['access_token'])->toBe('shpat_manual');
+});
 
 it('answers 401 to a bad ID token and changes nothing', function () {
     manualIntegration();

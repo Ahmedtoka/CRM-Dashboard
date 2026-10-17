@@ -4,6 +4,7 @@ use App\Confirmations\ConfirmationSettings;
 use App\Confirmations\Events\ShopifyOrderCreated;
 use App\Models\Order;
 use App\Models\OrderConfirmation;
+use App\Models\OrderConfirmationSetting;
 use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Client\ShopifyTransport;
 use App\Shopify\Commands\PollNewOrdersCommand;
@@ -143,8 +144,14 @@ it('announces an order that exists without a confirmation only while confirmatio
     $this->artisan('crm:shopify:poll-new-orders')->assertSuccessful();
     Event::assertDispatchedTimes(ShopifyOrderCreated::class, 1);
 
-    // Feature on and still no row (orders/create lost, orders/updated imported it): announced.
+    // Switched on AFTER the order was placed: still not announced (review M3, the webhook never would).
     app(ConfirmationSettings::class)->save(['enabled' => true]);
+    Cache::forget(PollNewOrdersCommand::CURSOR_KEY);
+    $this->artisan('crm:shopify:poll-new-orders')->assertSuccessful();
+    Event::assertDispatchedTimes(ShopifyOrderCreated::class, 1);
+
+    // On since before the order and still no row (orders/create lost, orders/updated imported it): announced.
+    OrderConfirmationSetting::where('key', 'enabled')->update(['updated_at' => now()->subHour()]);
     Cache::forget(PollNewOrdersCommand::CURSOR_KEY);
     $this->artisan('crm:shopify:poll-new-orders')->assertSuccessful();
     Event::assertDispatchedTimes(ShopifyOrderCreated::class, 2);
@@ -201,7 +208,20 @@ it('walks every page and keeps the cursor at the last order read when it stops a
 
     expect(Order::whereBetween('shopify_order_id', ['9200000', '9299999'])->count())->toBe(PollNewOrdersCommand::MAX_PAGES);
     $lastRead = $pages[PollNewOrdersCommand::MAX_PAGES - 1][0]['createdAt'];
-    expect(Carbon::parse(Cache::get(PollNewOrdersCommand::CURSOR_KEY))->eq(Carbon::parse($lastRead)))->toBeTrue();
+    // Stored with the overlap added back, so the next run starts exactly at the last order read (review H3).
+    expect(Carbon::parse(Cache::get(PollNewOrdersCommand::CURSOR_KEY))->eq(Carbon::parse($lastRead)->addMinutes(PollNewOrdersCommand::OVERLAP_MINUTES)))->toBeTrue();
+});
+
+it('gets past a burst bigger than one run instead of re-reading the same first pages', function () {
+    pollConnect();
+    $transport = pollTransport([[]]);
+    $lastRead = now()->subMinutes(2)->startOfSecond();
+    Cache::forever(PollNewOrdersCommand::CURSOR_KEY, $lastRead->copy()->addMinutes(PollNewOrdersCommand::OVERLAP_MINUTES)->toIso8601String());
+
+    $this->artisan('crm:shopify:poll-new-orders')->assertSuccessful();
+
+    expect(collect($transport->calls)->last()['variables']['query'])
+        ->toBe("created_at:>='".$lastRead->copy()->utc()->format('Y-m-d\TH:i:s\Z')."'");
 });
 
 it('treats a load-test order with the same Shopify id as already known', function () {

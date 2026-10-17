@@ -15,12 +15,15 @@ const props = defineProps<{
     app: ShopifyAppInfo;
     removing: boolean;
     rollingBack: boolean;
+    allowing?: boolean;
 }>();
-const emit = defineEmits<{ removeLegacy: []; rollback: [] }>();
+const emit = defineEmits<{ removeLegacy: []; rollback: []; allowApp: [] }>();
 
 const { t, locale } = useI18n();
 
 const onApp = computed(() => props.integration?.auth_mode === 'app');
+/** Rolled back on purpose: opening the app in Shopify admin will not move the store until allowed again. */
+const rolledBack = computed(() => !onApp.value && props.integration?.has_legacy_credentials === true);
 
 /** One line per secret family (all apps' `app:*` labels share one line, the newest wins). */
 const verified = computed(() => {
@@ -68,6 +71,19 @@ function confirmThen(message: string, action: () => void): void {
         <p v-if="onApp && integration?.status !== 'connected'" class="rounded bg-warning/10 px-2 py-1.5" data-testid="shopify-app-reopen">
             {{ t('settings.shopify.app_conn.not_connected') }}
         </p>
+        <div v-else-if="rolledBack" class="flex flex-wrap items-center gap-2" data-testid="shopify-rolled-back">
+            <p class="basis-full text-muted-foreground">{{ t('settings.shopify.app_conn.rolled_back_note') }}</p>
+            <Button
+                variant="outline"
+                class="h-8 rounded-md px-2.5 text-[length:inherit]"
+                type="button"
+                :loading="allowing"
+                data-testid="shopify-allow-app"
+                @click="confirmThen(t('settings.shopify.app_conn.allow_app_confirm'), () => emit('allowApp'))"
+            >
+                {{ t('settings.shopify.app_conn.allow_app') }}
+            </Button>
+        </div>
         <p v-else-if="!onApp && app.configured" class="text-muted-foreground">{{ t('settings.shopify.app_conn.ready') }}</p>
 
         <div class="grid gap-1">

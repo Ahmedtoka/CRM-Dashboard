@@ -65,7 +65,10 @@ class ShopifyWebhookController extends Controller
         $dedupeKey = (string) ($request->header('X-Shopify-Webhook-Id') ?: sha1($shopifyTopic."\n".$raw));
 
         // Settings → Shopify shows when each secret last verified a delivery (when did the old app's stop?).
-        Cache::put(self::LAST_VERIFIED_KEY.$verifiedWith, now()->toIso8601String(), now()->addDays(60));
+        // At most one write per secret per minute on this hot path (review L4).
+        if (Cache::add(self::LAST_VERIFIED_KEY.'throttle.'.$verifiedWith, 1, 60)) {
+            Cache::put(self::LAST_VERIFIED_KEY.$verifiedWith, now()->toIso8601String(), now()->addDays(60));
+        }
 
         // Best-effort health signal for the connection screen; a topic with no
         // local subscription row (e.g. an unregistered/unknown topic) is a no-op.

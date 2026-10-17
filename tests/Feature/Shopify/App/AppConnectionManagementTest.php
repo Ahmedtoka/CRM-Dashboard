@@ -5,6 +5,7 @@ use App\Models\ShopifySyncRun;
 use App\Models\ShopifyWebhookSubscription;
 use App\Models\User;
 use App\Shopify\App\FakeShopifyOAuth;
+use App\Shopify\App\ShopifyAccessTokens;
 use App\Shopify\Connection\ConnectShopify;
 use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Webhooks\WebhookRegistrar;
@@ -29,6 +30,14 @@ function onApp(array $attributes = []): ShopifyIntegration
         'refresh_token' => 'refresh-1', 'refresh_token_expires_at' => now()->addDays(80),
         'legacy_credentials' => ['access_token' => 'shpat_manual', 'api_secret' => 'manual-secret'],
     ]);
+}
+
+/** The connection test's answer for the kept manual token. */
+function mgmtShopAnswer()
+{
+    $scopes = collect(config('crm.shopify.required_scopes'))->map(fn ($h) => ['handle' => $h])->all();
+
+    return Http::response(['data' => ['shop' => ['name' => 'Le Voile', 'currencyCode' => 'EGP'], 'currentAppInstallation' => ['accessScopes' => $scopes]]]);
 }
 
 beforeEach(function () {
@@ -87,6 +96,9 @@ describe('rollback to the manual connection', function () {
     it('puts the kept token and secret back and registers the API webhooks again', function () {
         onApp();
         Http::fake([MGMT_SHOP.'/*' => function (HttpRequest $request) {
+            if (str_contains($request['query'] ?? '', 'currentAppInstallation')) {
+                return mgmtShopAnswer();
+            }
             if (str_contains($request['query'] ?? '', 'query webhookSubscriptions')) {
                 return Http::response(['data' => ['webhookSubscriptions' => ['nodes' => []]]]);
             }
@@ -106,6 +118,37 @@ describe('rollback to the manual connection', function () {
             ->and(ShopifyWebhookSubscription::where('managed_by', 'api')->count())->toBe(count(config('crm.shopify.webhook_topics')));
         Http::assertSent(fn (HttpRequest $r) => $r->header('X-Shopify-Access-Token')[0] === 'shpat_manual'
             && str_contains($r['query'] ?? '', 'webhookSubscriptionCreate'));
+    });
+
+    it('changes nothing when Shopify refuses the kept manual token', function () {
+        onApp();
+        Http::fake([MGMT_SHOP.'/*' => Http::response(['errors' => 'Invalid API key or access token'], 401)]);
+
+        $this->actingAs($this->admin)->postJson('/settings/shopify/app/rollback')->assertStatus(422);
+
+        expect(ShopifyIntegration::sole()->auth_mode)->toBe('app')
+            ->and(ShopifyIntegration::sole()->access_token)->toBe('app-token');
+    });
+
+    it('a refresh that waited for the lock does not put an app token back after a rollback', function () {
+        config(['crm.shopify.driver' => 'fake']);
+        $stale = onApp(['access_token_expires_at' => now()->addMinutes(2)]); // read before the rollback
+        ShopifyIntegration::whereKey($stale->id)->first()->forceFill(['auth_mode' => 'custom_token', 'access_token' => 'shpat_manual'])->save();
+
+        $token = app(ShopifyAccessTokens::class)->token($stale);
+
+        expect($token)->toBe('shpat_manual')
+            ->and(FakeShopifyOAuth::calls())->toBe([])
+            ->and(ShopifyIntegration::sole()->auth_mode)->toBe('custom_token');
+    });
+
+    it('lets the admin allow the app again after a rollback', function () {
+        onApp(['auth_mode' => 'custom_token', 'access_token' => 'shpat_manual', 'access_token_expires_at' => null]);
+
+        $this->actingAs($this->admin)->postJson('/settings/shopify/app/allow')->assertOk();
+
+        expect(ShopifyIntegration::sole()->legacy_credentials)->toBeNull()
+            ->and(ShopifyIntegration::sole()->access_token)->toBe('shpat_manual');
     });
 
     it('refuses without kept credentials, and for anyone but an admin', function () {

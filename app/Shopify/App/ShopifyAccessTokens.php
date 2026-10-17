@@ -72,6 +72,13 @@ final class ShopifyAccessTokens
             $fresh = $integration->fresh() ?? $integration;
             $replaced = $rejected !== null && $fresh->access_token !== $rejected;
 
+            // Rolled back or disconnected while this process waited: whatever is stored now is what to use.
+            if (! $fresh->usesApp()) {
+                $integration->setRawAttributes($fresh->getAttributes(), true);
+
+                return $this->present($fresh);
+            }
+
             if (filled($fresh->access_token) && ($replaced || ($rejected === null && ! $this->expiresSoon($fresh)))) {
                 $integration->setRawAttributes($fresh->getAttributes(), true);
 
@@ -96,7 +103,8 @@ final class ShopifyAccessTokens
         return $this->locked($integration->shop_domain, function () use ($integration, $seconds) {
             $fresh = $integration->fresh() ?? $integration;
 
-            if ($fresh->access_token_expires_at !== null && $fresh->access_token_expires_at->greaterThan(now()->addSeconds($seconds))) {
+            if (! $fresh->usesApp() || $fresh->status !== 'connected'
+                || ($fresh->access_token_expires_at !== null && $fresh->access_token_expires_at->greaterThan(now()->addSeconds($seconds)))) {
                 return false;
             }
 
@@ -107,22 +115,33 @@ final class ShopifyAccessTokens
     }
 
     /**
-     * Token exchange under the store's lock (InstallShopifyApp stores the result).
+     * Token exchange and storing its result in ONE hold of the store's lock (review M1): a refresh
+     * can never read the row between the exchange and the save, and two exchanges never save out
+     * of order. $store persists the token set (InstallShopifyApp).
+     *
+     * @template T
+     *
+     * @param  callable(TokenSet): T  $store
+     * @return T
      *
      * @throws ShopifyException
      */
-    public function exchange(VerifiedIdToken $token, string $idToken): TokenSet
+    public function exchangeAndStore(VerifiedIdToken $token, string $idToken, callable $store): mixed
     {
-        return $this->locked($token->shop, fn () => $this->oauth->exchange($token->app, $token->shop, $idToken));
+        return $this->locked($token->shop, fn () => $store($this->oauth->exchange($token->app, $token->shop, $idToken)));
     }
 
     /**
      * @template T
      *
+     * Runs $callback holding the store's token lock. Anything else that rewrites the token columns
+     * (rollback, disconnect) goes through here so a refresh in flight cannot overwrite it (review H1).
+     * The lock is not re-entrant: never call token()/refresh from inside $callback.
+     *
      * @param  callable(): T  $callback
      * @return T
      */
-    private function locked(string $shop, callable $callback): mixed
+    public function locked(string $shop, callable $callback): mixed
     {
         try {
             return Cache::lock(self::lockKey($shop), self::LOCK_SECONDS)->block($this->lockWaitSeconds, $callback);

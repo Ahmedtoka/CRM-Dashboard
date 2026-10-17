@@ -352,6 +352,7 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::get('shopify/reconcile', [ShopifyReconcileController::class, 'index'])->name('shopify.reconcile');
         Route::post('shopify/reconcile', [ShopifyReconcileController::class, 'run'])->name('shopify.reconcile.run');
         Route::post('shopify/app/rollback', [ShopifyIntegrationController::class, 'rollbackToManual'])->name('shopify.app.rollback');
+        Route::post('shopify/app/allow', [ShopifyIntegrationController::class, 'allowApp'])->name('shopify.app.allow');
         Route::post('shopify/app/remove-legacy-webhooks', [ShopifyIntegrationController::class, 'removeLegacyWebhooks'])->name('shopify.app.remove-legacy-webhooks');
         Route::delete('shopify', [ShopifyIntegrationController::class, 'destroy'])->name('shopify.destroy');
     });

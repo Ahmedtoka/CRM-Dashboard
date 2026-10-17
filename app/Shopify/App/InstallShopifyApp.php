@@ -27,8 +27,13 @@ final class InstallShopifyApp
         private readonly BulkImporter $importer,
     ) {}
 
-    /** @throws ShopNotAllowed when the CRM is connected to another store */
-    public function install(ShopifyApp $app, string $shop, TokenSet $tokens): ShopifyIntegration
+    /**
+     * Whether opening the app may (re)connect this store, checked before any token exchange.
+     *
+     * @throws ShopNotAllowed when the CRM is connected to another store
+     * @throws ManualConnectionActive after a rollback, until the owner allows the app again (Settings)
+     */
+    public function assertCanInstall(string $shop): ?ShopifyIntegration
     {
         $integration = $this->integrations->current();
 
@@ -36,12 +41,30 @@ final class InstallShopifyApp
             throw new ShopNotAllowed($shop);
         }
 
+        // legacy_credentials on a manual-mode row = it was on the app once and was rolled back on purpose.
+        if ($integration !== null && ! $integration->usesApp() && $integration->legacy_credentials !== null) {
+            throw new ManualConnectionActive;
+        }
+
+        return $integration;
+    }
+
+    /**
+     * Call while holding ShopifyAccessTokens::locked() for the shop (ShopifyAccessTokens::exchangeAndStore).
+     *
+     * @throws ShopNotAllowed|ManualConnectionActive see assertCanInstall()
+     */
+    public function install(ShopifyApp $app, string $shop, TokenSet $tokens): ShopifyIntegration
+    {
+        $integration = $this->assertCanInstall($shop);
+
         $isNew = $integration === null;
         $integration ??= new ShopifyIntegration(['shop_domain' => $shop]);
 
         DB::transaction(function () use ($integration, $app, $shop, $tokens) {
-            // The first move from the manual connection keeps its credentials aside (never overwritten later).
-            if (! $integration->usesApp() && filled($integration->access_token) && $integration->legacy_credentials === null) {
+            // Every move from the manual connection keeps its current credentials aside (a token rotated
+            // after a rollback is the one kept; assertCanInstall() cleared the way for this move).
+            if (! $integration->usesApp() && filled($integration->access_token)) {
                 $integration->legacy_credentials = [
                     'access_token' => (string) $integration->access_token,
                     'api_secret' => filled($integration->api_secret) ? (string) $integration->api_secret : null,

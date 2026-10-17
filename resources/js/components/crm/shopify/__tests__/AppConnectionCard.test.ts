@@ -65,6 +65,16 @@ describe('AppConnectionCard', () => {
         expect(card().find('[data-testid="shopify-app-reopen"]').exists()).toBe(false);
     });
 
+    it('offers to allow the app again after a rollback', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const wrapper = card({ auth_mode: 'custom_token', has_legacy_credentials: true });
+
+        await wrapper.get('[data-testid="shopify-allow-app"]').trigger('click');
+
+        expect(wrapper.emitted('allowApp')).toHaveLength(1);
+        expect(card({ auth_mode: 'custom_token', has_legacy_credentials: false }).find('[data-testid="shopify-allow-app"]').exists()).toBe(false);
+    });
+
     it('lists when the app and the old secret last verified a webhook', () => {
         const wrapper = card();
 

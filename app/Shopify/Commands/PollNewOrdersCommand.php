@@ -6,6 +6,7 @@ use App\Confirmations\ConfirmationSettings;
 use App\Confirmations\Events\ShopifyOrderCreated;
 use App\Models\Order;
 use App\Models\OrderConfirmation;
+use App\Models\OrderConfirmationSetting;
 use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Connection\IntegrationRepository;
 use App\Shopify\Connection\ShopifyIntegration;
@@ -45,6 +46,9 @@ class PollNewOrdersCommand extends Command
 
     protected $signature = 'crm:shopify:poll-new-orders';
 
+    /** When confirmations were last switched on (the `enabled` setting row's updated_at), read once per run. */
+    private ?CarbonImmutable $enabledSince = null;
+
     protected $description = 'Import Shopify orders whose orders/create webhook never arrived, and start their WhatsApp confirmation';
 
     public function handle(
@@ -64,6 +68,7 @@ class PollNewOrdersCommand extends Command
         }
 
         $startedAt = CarbonImmutable::now();
+        $this->enabledSince = null;
         $since = $this->since($settings);
         $filter = "created_at:>='".$since->utc()->format('Y-m-d\TH:i:s\Z')."'";
         $cursor = null;
@@ -95,8 +100,12 @@ class PollNewOrdersCommand extends Command
             return self::FAILURE;
         }
 
-        // Stopped at the page cap: continue from the last order read; otherwise from this run's start.
-        $next = $cursor !== null && $lastCreatedAt !== null ? CarbonImmutable::parse($lastCreatedAt) : $startedAt;
+        // Stopped at the page cap: the next run must start AT the last order read, so the overlap it
+        // subtracts is added back here (review H3: else a burst of more than MAX_PAGES pages within
+        // OVERLAP_MINUTES would re-read the same first pages forever). Otherwise: this run's start.
+        $next = $cursor !== null && $lastCreatedAt !== null
+            ? CarbonImmutable::parse($lastCreatedAt)->addMinutes(self::OVERLAP_MINUTES)
+            : $startedAt;
         Cache::forever(self::CURSOR_KEY, $next->toIso8601String());
 
         if ($imported > 0 || $announced > 0) {
@@ -140,14 +149,17 @@ class PollNewOrdersCommand extends Command
         }
 
         // withLoadTest: a load-test row holding this id is "known"; it is never imported twice or announced.
-        $existing = Order::withLoadTest()->where('shopify_order_id', $shopifyId)->first(['id', 'is_load_test']);
+        $existing = Order::withLoadTest()->where('shopify_order_id', $shopifyId)->first(['id', 'is_load_test', 'placed_at', 'created_at']);
 
         if ($existing?->is_load_test) {
             return [false, false];
         }
 
         if ($existing !== null) {
-            if (! $settings->enabled() || OrderConfirmation::where('order_id', $existing->id)->exists()) {
+            // Only orders placed after confirmations were switched on (review M3): turning the feature
+            // on must not message customers who ordered while it was off (the webhook never would).
+            if (! $settings->enabled() || OrderConfirmation::where('order_id', $existing->id)->exists()
+                || ! $this->placedSinceEnabled($existing)) {
                 return [false, false];
             }
 
@@ -170,6 +182,16 @@ class PollNewOrdersCommand extends Command
         }
 
         return [true, $this->announce((int) $orderId, $node)];
+    }
+
+    private function placedSinceEnabled(Order $order): bool
+    {
+        $this->enabledSince ??= ($at = OrderConfirmationSetting::where('key', 'enabled')->value('updated_at')) !== null
+            ? CarbonImmutable::parse($at)
+            : CarbonImmutable::now();
+        $placedAt = $order->placed_at ?? $order->created_at;
+
+        return $placedAt !== null && $placedAt->greaterThanOrEqualTo($this->enabledSince);
     }
 
     /** The same event the orders/create webhook raises (ShopifyWebhookProcessor::routeOrderCreate). */

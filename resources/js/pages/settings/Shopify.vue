@@ -137,6 +137,20 @@ async function disconnect(): Promise<void> {
 // --- Shopify app cutover: remove the old app's webhooks / roll back to the manual connection ---
 const removingLegacy = ref(false);
 const rollingBack = ref(false);
+const allowingApp = ref(false);
+
+async function allowApp(): Promise<void> {
+    allowingApp.value = true;
+    try {
+        await api.post('/settings/shopify/app/allow');
+        toast.push(t('settings.shopify.app_conn.allowed'));
+        await refreshStatus();
+    } catch (error) {
+        toast.push(apiErrorMessage(error, t('common.error')), 'error');
+    } finally {
+        allowingApp.value = false;
+    }
+}
 
 async function removeLegacyWebhooks(): Promise<void> {
     removingLegacy.value = true;
@@ -281,8 +295,10 @@ const syncResources: ShopifySyncResource[] = ['shipping', 'products', 'customers
                 :app="app ?? { configured: false, last_verified: {} }"
                 :removing="removingLegacy"
                 :rolling-back="rollingBack"
+                :allowing="allowingApp"
                 @remove-legacy="removeLegacyWebhooks"
                 @rollback="rollbackToManual"
+                @allow-app="allowApp"
             />
 
             <template v-if="needsCredentials">

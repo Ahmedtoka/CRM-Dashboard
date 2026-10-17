@@ -1,5 +1,8 @@
 <?php
 
+use App\Models\WebhookEvent;
+use Illuminate\Support\Facades\Queue;
+
 /*
  * shopify-app/shopify.app.toml declares the app's webhooks (round 2026-10-17): one subscription per
  * topic in crm.shopify.webhook_topics, each to its existing /webhooks/shopify/{topic} route, plus
@@ -53,13 +56,13 @@ it('asks for exactly the scopes the CRM uses today', function (string $file) {
 })->with(['shopify.app.toml', 'shopify.app.no-webhooks.toml']);
 
 it('maps every topic route back to its Shopify topic', function () {
-    \Illuminate\Support\Facades\Queue::fake();
+    Queue::fake();
     foreach (config('crm.shopify.webhook_topics') as $topic) {
-        \App\Models\WebhookEvent::query()->delete();
+        WebhookEvent::query()->delete();
         $body = json_encode(['id' => 1]);
 
         $this->call('POST', '/webhooks/shopify/'.str_replace('/', '-', $topic), [], [], [], ['CONTENT_TYPE' => 'application/json'], $body)->assertOk();
 
-        expect(\App\Models\WebhookEvent::value('event_type'))->toBe($topic);
+        expect(WebhookEvent::value('event_type'))->toBe($topic);
     }
 });

@@ -2213,6 +2213,10 @@ const en: Messages = {
                 rollback_confirm: 'This switches back to the old manual token and registers its webhooks again. The new app stays installed. Continue?',
                 rolled_back: 'Back on the manual connection',
                 no_legacy: 'No manual connection credentials were kept, so rolling back is not available.',
+                rolled_back_note: 'The store was moved back to the manual connection on purpose; opening the app in Shopify admin will not change that by itself.',
+                allow_app: 'Allow the app again',
+                allow_app_confirm: 'From now on, the next time someone opens the app in Shopify admin the store moves onto it again. Continue?',
+                allowed: 'Done: open the app from Shopify admin to move the store onto it',
             },
             reconcile: {
                 title: 'Order reconciliation',

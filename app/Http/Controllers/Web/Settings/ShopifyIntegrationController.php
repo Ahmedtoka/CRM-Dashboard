@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ShopifySyncRun;
 use App\Models\ShopifyWebhookSubscription;
 use App\Shopify\App\RollbackToManualConnection;
+use App\Shopify\App\ShopifyAccessTokens;
 use App\Shopify\App\ShopifyApps;
 use App\Shopify\App\WebhookSignature;
 use App\Shopify\Client\ShopifyException;
@@ -218,8 +219,22 @@ class ShopifyIntegrationController extends Controller
     /** «رجوع للاتصال اليدوي»: back to the kept manual token and secret (RollbackToManualConnection). */
     public function rollbackToManual(Request $request, RollbackToManualConnection $rollback): HttpResponse
     {
-        if (! $rollback->rollback()) {
-            return $this->failure($request, ['ok' => false, 'error' => __('errors.shopify.no_legacy_credentials')], 422);
+        $result = $rollback->rollback();
+
+        if ($result !== RollbackToManualConnection::OK) {
+            $error = $result === RollbackToManualConnection::TOKEN_REFUSED ? 'legacy_token_refused' : 'no_legacy_credentials';
+
+            return $this->failure($request, ['ok' => false, 'error' => __("errors.shopify.{$error}")], 422);
+        }
+
+        return $this->done($request, ['ok' => true]);
+    }
+
+    /** «اسمح بالرجوع للأبلكيشن»: after a rollback, the next app open may move the store onto the app again. */
+    public function allowApp(Request $request, RollbackToManualConnection $rollback): HttpResponse
+    {
+        if (! $rollback->allowAppAgain()) {
+            return $this->failure($request, ['ok' => false, 'error' => __('errors.shopify.no_integration')], 422);
         }
 
         return $this->done($request, ['ok' => true]);
@@ -259,14 +274,15 @@ class ShopifyIntegrationController extends Controller
             $warning = $e->getMessage();
         }
 
-        $integration->forceFill([
+        // Under the token lock: a refresh in flight must not write live tokens back afterwards.
+        app(ShopifyAccessTokens::class)->locked((string) $integration->shop_domain, fn () => $integration->refresh()->forceFill([
             'access_token' => null,
             'api_secret' => null,
             'access_token_expires_at' => null,
             'refresh_token' => null,
             'refresh_token_expires_at' => null,
             'status' => 'disconnected',
-        ])->save();
+        ])->save());
 
         return $this->done($request, ['ok' => true, 'warning' => $warning]);
     }

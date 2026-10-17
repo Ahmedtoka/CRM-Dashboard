@@ -22,6 +22,7 @@ return [
         'shop_not_allowed' => 'This app is not for this store.',
         'other_store' => 'The CRM is connected to another store. It cannot connect two stores.',
         'exchange_failed' => 'Shopify did not answer the token request. Try again in a minute.',
+        'manual_connection' => 'The store was moved back to the manual connection on purpose. To use the app again: Settings → Shopify → «Allow the app again», then open the app again.',
         'generic' => 'Something went wrong. Try again in a minute.',
     ],
 ];

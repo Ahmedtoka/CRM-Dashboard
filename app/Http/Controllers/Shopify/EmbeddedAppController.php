@@ -8,9 +8,11 @@ use App\Models\ShopifyWebhookSubscription;
 use App\Shopify\App\IdTokenVerifier;
 use App\Shopify\App\InstallShopifyApp;
 use App\Shopify\App\InvalidIdToken;
+use App\Shopify\App\ManualConnectionActive;
 use App\Shopify\App\ShopifyAccessTokens;
 use App\Shopify\App\ShopifyApps;
 use App\Shopify\App\ShopNotAllowed;
+use App\Shopify\App\TokenSet;
 use App\Shopify\Client\ShopifyException;
 use App\Shopify\Connection\IntegrationRepository;
 use Carbon\Carbon;
@@ -81,15 +83,17 @@ class EmbeddedAppController extends Controller
         $request->attributes->set(ShopifyFrameAncestors::SHOP_ATTRIBUTE, $token->shop);
 
         try {
-            $current = $this->integrations->current();
-            if ($current !== null && filled($current->shop_domain) && strcasecmp((string) $current->shop_domain, $token->shop) !== 0) {
-                throw new ShopNotAllowed($token->shop);
-            }
+            $this->installer->assertCanInstall($token->shop);
 
-            $set = $this->tokens->exchange($token, $idToken);
-            $integration = $this->installer->install($token->app, $token->shop, $set);
+            $integration = $this->tokens->exchangeAndStore(
+                $token,
+                $idToken,
+                fn (TokenSet $set) => $this->installer->install($token->app, $token->shop, $set),
+            );
         } catch (ShopNotAllowed) {
             return $this->error($request, 403, 'other_store');
+        } catch (ManualConnectionActive) {
+            return $this->error($request, 409, 'manual_connection');
         } catch (ShopifyException $e) {
             Log::warning('shopify.app.exchange_failed', ['shop' => $token->shop, 'kind' => $e->kind, 'error' => $e->getMessage()]);
 

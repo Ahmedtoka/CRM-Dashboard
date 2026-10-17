@@ -11,8 +11,8 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Shopify iframe protection (shopify.dev "set up iframe protection"): the embedded page may only be
  * framed by Shopify admin and by the store it was opened for. The store comes from a verified ID
- * token when the controller has one, else from the `shop` query parameter, and only when it is a
- * bare *.myshopify.com domain this app serves; otherwise only admin.shopify.com may frame it.
+ * token when the controller has one, else from the `shop` query parameter when the app has an
+ * allowlist (SHOPIFY_APP_ALLOWED_SHOP) that names it; otherwise only admin.shopify.com may frame it.
  */
 class ShopifyFrameAncestors
 {
@@ -24,8 +24,11 @@ class ShopifyFrameAncestors
     {
         $response = $next($request);
 
-        $shop = (string) ($request->attributes->get(self::SHOP_ATTRIBUTE) ?? $request->query('shop', ''));
+        $verified = $request->attributes->get(self::SHOP_ATTRIBUTE);
         $app = $this->apps->primary();
+        // The unverified `shop` parameter only counts against an explicit allowlist (review L2).
+        $param = $request->query('shop');
+        $shop = is_string($verified) ? $verified : ($app !== null && $app->allowedShops !== [] && is_string($param) ? $param : '');
         $ancestors = $shop !== '' && IdTokenVerifier::isShopDomain($shop) && $app?->allowsShop($shop)
             ? 'https://'.strtolower($shop).' https://admin.shopify.com'
             : 'https://admin.shopify.com';

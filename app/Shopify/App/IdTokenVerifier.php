@@ -89,7 +89,7 @@ final class IdTokenVerifier
     /** A bare `{name}.myshopify.com` host (what Shopify sends as `shop`), nothing else. */
     public static function isShopDomain(string $shop): bool
     {
-        return preg_match('/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i', $shop) === 1;
+        return preg_match('/\A[a-z0-9][a-z0-9-]*\.myshopify\.com\z/i', $shop) === 1;
     }
 
     private static function decodePart(string $part): ?string
