@@ -224,8 +224,9 @@ class TikTokAdCommentPoller
         if ($hidden === $isHidden) {
             return false;
         }
-        // TikTok's list may lag a hide just made in the CRM: a PUBLIC right after it is not an unhide.
-        if (! $hidden && $c->updated_at !== null && $c->updated_at->gt(now()->subMinutes(10))) {
+        // TikTok's list may lag a hide or unhide just made in the CRM: a contrary status right after it is not a change
+        // made in TikTok (a real one is followed by the first poll after the window).
+        if ($c->updated_at !== null && $c->updated_at->gt(now()->subMinutes(10))) {
             return false;
         }
         $c->forceFill(['status' => $hidden ? CommentStatus::Hidden : ($c->public_replied_at !== null ? CommentStatus::Replied : CommentStatus::New)])->save();
@@ -265,9 +266,11 @@ class TikTokAdCommentPoller
             'identity_id' => isset($row['identity_id']) ? (string) $row['identity_id'] : null,
             'identity_type' => isset($row['identity_type']) ? (string) $row['identity_type'] : null,
         ], fn ($v) => $v !== null && $v !== '');
-        $merged = array_merge($post->platform_meta ?? [], $meta);
-        if ($merged !== ($post->platform_meta ?? [])) {
-            $post->forceFill(['platform_meta' => $merged])->save();
+        $current = $post->platform_meta ?? [];
+        if (array_merge($current, $meta) !== $current) {
+            // Merged onto the stored value read just now, so a reply id CommentActions added meanwhile is not dropped.
+            $post->refresh();
+            $post->forceFill(['platform_meta' => array_merge($post->platform_meta ?? [], $meta)])->save();
         }
 
         return $post;

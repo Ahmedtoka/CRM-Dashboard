@@ -122,6 +122,7 @@ it('ingests a comment once across polls and follows a hide made in TikTok', func
     app(TikTokAdCommentPoller::class)->poll($a);
 
     $GLOBALS['ttc_rows'] = [ttcRow(['comment_status' => 'HIDDEN'])];
+    $this->travel(11)->minutes(); // past the window that absorbs list lag after a CRM change
     $r = app(TikTokAdCommentPoller::class)->poll($a);
 
     expect(Comment::count())->toBe(1)->and($r['ingested'])->toBe(0)->and($r['updated'])->toBe(1)
@@ -394,4 +395,21 @@ it('a demo fake TikTok channel stays on the fake adapter next to the live one, a
     $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))
         ->postJson('/comments/'.Comment::sole()->id.'/hide')->assertStatus(502);
     Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'comment/status/update/'));
+});
+
+it('keeps a CRM unhide when TikTok still lists the comment hidden right after', function () {
+    config(['crm.drivers.channels' => 'live']);
+    Queue::fake();
+    $a = ttcAccount();
+    ttcFakeList([ttcRow(['comment_status' => 'HIDDEN'])]);
+    app(TikTokAdCommentPoller::class)->poll($a);
+    $c = Comment::sole();
+    expect($c->status)->toBe(CommentStatus::Hidden);
+    $this->travel(11)->minutes();
+    app(CommentActions::class)->unhide($c, null);
+
+    $this->travel(3)->minutes();
+    app(TikTokAdCommentPoller::class)->poll($a);
+
+    expect($c->fresh()->status)->toBe(CommentStatus::New);
 });
