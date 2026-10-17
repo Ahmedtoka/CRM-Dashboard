@@ -59,7 +59,7 @@ class ProcessShopifyWebhook implements ShouldQueue
         }
 
         try {
-            $processor->process($topic, $event->payload ?? []);
+            $processor->process($topic, $event->payload ?? [], $event->verified_with);
 
             $event->update([
                 'status' => 'processed',

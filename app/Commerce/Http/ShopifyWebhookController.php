@@ -6,6 +6,7 @@ use App\Commerce\Jobs\ProcessShopifyWebhook;
 use App\Http\Controllers\Controller;
 use App\Models\ShopifyWebhookSubscription;
 use App\Models\WebhookEvent;
+use App\Shopify\App\WebhookSignature;
 use App\Shopify\Connection\IntegrationRepository;
 use App\Webhooks\WebhookRejections;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -34,13 +35,19 @@ class ShopifyWebhookController extends Controller
         'draft-orders-update' => 'draft_orders/update',
     ];
 
-    public function __construct(private readonly IntegrationRepository $integrations) {}
+    public function __construct(
+        private readonly IntegrationRepository $integrations,
+        private readonly WebhookSignature $signature,
+    ) {}
 
     public function handle(Request $request, string $topic): Response
     {
-        if (! $this->authenticated($request)) {
+        $verifiedWith = $this->signature->verify($request);
+        $wrongShop = $verifiedWith !== null && ! $this->fromConnectedShop($request);
+
+        if ($verifiedWith === null || $wrongShop) {
             // Shown on Settings → Shopify (2026-10-17): every webhook was once refused with nobody seeing it.
-            app(WebhookRejections::class)->record('shopify', $request->path(), $this->rejectionReason($request), $request->ip());
+            app(WebhookRejections::class)->record('shopify', $request->path(), $wrongShop ? 'wrong_shop' : $this->rejectionReason($request), $request->ip());
 
             return response('Unauthorized', 401);
         }
@@ -65,6 +72,7 @@ class ShopifyWebhookController extends Controller
                     'payload' => json_decode($raw, true) ?? [],
                     'signature_valid' => true,
                     'status' => 'received',
+                    'verified_with' => $verifiedWith,
                 ],
             );
         } catch (UniqueConstraintViolationException) {
@@ -81,30 +89,22 @@ class ShopifyWebhookController extends Controller
     private function rejectionReason(Request $request): string
     {
         return match (true) {
-            blank($this->integrations->current()?->api_secret) && blank(config('crm.shopify.webhook_secret')) => 'no_secret',
+            ! $this->signature->hasAnySecret() => 'no_secret',
             ! $request->headers->has('X-Shopify-Hmac-Sha256') => 'missing_hmac',
             default => 'bad_hmac',
         };
     }
 
     /**
-     * `X-Shopify-Hmac-Sha256` = base64 HMAC-SHA256 of the raw body. Key order:
-     * the integration's api_secret (whatever its status) → crm.shopify.webhook_secret.
-     * With no secret at all, unsigned deliveries are accepted only in
-     * local/testing or when crm.allow_fake_webhooks is set (demo/simulator).
+     * `X-Shopify-Shop-Domain` must be the connected store (round 2026-10-17): an app secret signs
+     * for every store the app is installed on. A delivery without the header (the simulator, old
+     * tests) is judged by its signature alone; with no integration row there is nothing to compare.
      */
-    private function authenticated(Request $request): bool
+    private function fromConnectedShop(Request $request): bool
     {
-        $integrationSecret = $this->integrations->current()?->api_secret;
-        $secret = filled($integrationSecret) ? (string) $integrationSecret : (string) config('crm.shopify.webhook_secret', '');
+        $header = trim((string) $request->header('X-Shopify-Shop-Domain', ''));
+        $shop = $this->integrations->current()?->shop_domain;
 
-        if ($secret === '') {
-            return app()->environment('local', 'testing') || (bool) config('crm.allow_fake_webhooks', false);
-        }
-
-        $header = (string) $request->header('X-Shopify-Hmac-Sha256', '');
-        $computed = base64_encode(hash_hmac('sha256', $request->getContent(), $secret, true));
-
-        return $header !== '' && hash_equals($computed, $header);
+        return $header === '' || blank($shop) || strcasecmp($header, (string) $shop) === 0;
     }
 }

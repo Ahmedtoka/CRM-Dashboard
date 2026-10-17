@@ -11,6 +11,7 @@ use App\Enums\UserRole;
 use App\Events\UserNotified;
 use App\Models\Order;
 use App\Models\User;
+use App\Shopify\App\WebhookSignature;
 use App\Shopify\Connection\IntegrationRepository;
 use App\Shopify\Connection\ShopifyIntegration;
 use App\Shopify\Sync\Mappers\CrmOrderClaim;
@@ -21,6 +22,7 @@ use App\Shopify\Sync\Mappers\OrderMapper;
 use App\Shopify\Sync\Mappers\Payload;
 use App\Shopify\Sync\Mappers\ProductMapper;
 use App\Support\SafeBroadcast;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Routes a stored, verified Shopify webhook to its mapper (spec §4.2). One
@@ -40,9 +42,13 @@ final class ShopifyWebhookProcessor
         private readonly OrderService $orderService,
         private readonly CommerceProvider $provider,
         private readonly IntegrationRepository $integrations,
+        private readonly WebhookSignature $signature,
     ) {}
 
-    public function process(string $topic, array $payload): void
+    /**
+     * @param  string|null  $verifiedWith  the secret that verified the delivery (WebhookSignature label)
+     */
+    public function process(string $topic, array $payload, ?string $verifiedWith = null): void
     {
         match ($topic) {
             'products/create', 'products/update' => $this->products->upsert($payload),
@@ -55,7 +61,7 @@ final class ShopifyWebhookProcessor
             'fulfillments/create', 'fulfillments/update' => $this->requireParent($payload) && $this->orders->applyFulfillment($payload),
             'refunds/create' => $this->requireParent($payload) && $this->orders->applyRefund($payload),
             'draft_orders/update' => $this->routeDraftOrderUpdate($payload),
-            'app/uninstalled' => $this->handleUninstalled(),
+            'app/uninstalled' => $this->handleUninstalled($verifiedWith),
             default => null,
         };
     }
@@ -246,7 +252,14 @@ final class ShopifyWebhookProcessor
      * Idempotent (spec §4.2 point 7): a re-delivered app/uninstalled just
      * re-confirms `disconnected`. Admins are notified only on the transition.
      */
-    private function handleUninstalled(): void
+    /**
+     * Only the app the store is connected through can disconnect it (round 2026-10-17): during the
+     * move to the Partners app both apps are installed, and removing the old one must not cut the
+     * new one off (nor the reverse after a rollback). A delivery with no recorded secret (older
+     * rows, unsigned local/simulator posts) keeps the old behaviour. When the Partners app goes,
+     * its tokens go with it (Shopify revoked them); the manual credentials and all data stay.
+     */
+    private function handleUninstalled(?string $verifiedWith): void
     {
         $integration = $this->integrations->current();
 
@@ -254,9 +267,32 @@ final class ShopifyWebhookProcessor
             return;
         }
 
+        if ($verifiedWith !== null && $verifiedWith !== WebhookSignature::UNSIGNED) {
+            $app = $this->signature->appFor($verifiedWith);
+            $fromConnectedApp = $integration->usesApp()
+                ? $app !== null && $app->clientId === $integration->app_client_id
+                : $app === null;
+
+            if (! $fromConnectedApp) {
+                Log::info('shopify.uninstall_ignored', ['verified_with' => $verifiedWith, 'auth_mode' => $integration->auth_mode]);
+
+                return;
+            }
+        }
+
         $alreadyDisconnected = $integration->status === 'disconnected';
 
         $integration->forceFill(['status' => 'disconnected'])->save();
+
+        if ($integration->usesApp()) {
+            $integration->forceFill([
+                'access_token' => null,
+                'access_token_expires_at' => null,
+                'refresh_token' => null,
+                'refresh_token_expires_at' => null,
+                'uninstalled_at' => now(),
+            ])->save();
+        }
 
         if (! $alreadyDisconnected) {
             $this->notifyAdminsOfUninstall($integration);
