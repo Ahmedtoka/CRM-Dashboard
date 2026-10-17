@@ -3,7 +3,7 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import SettingsHubCard from '@/components/crm/SettingsHubCard.vue';
 import { useI18n } from '@/composables/useI18n';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { HubGroup } from '@/lib/settingsHub';
+import { hubItemLabel, type HubGroup } from '@/lib/settingsHub';
 import { Head, Link } from '@inertiajs/vue3';
 import { LayoutGrid, Link2, Megaphone, Rocket, Store, UserRound, Users, Wrench, type LucideIcon } from 'lucide-vue-next';
 
@@ -47,7 +47,7 @@ const look = (id: string) => LOOK[id] ?? { icon: LayoutGrid, tone: 'neutral' as 
                             :href="item.href"
                             class="flex w-full items-center rounded-md px-2.5 py-[7px] text-[13.5px] font-medium text-fg-2 transition-colors hover:bg-card hover:text-foreground"
                         >
-                            {{ t(`settings_hub.items.${item.id}`) }}
+                            {{ t(hubItemLabel(item)) }}
                         </Link>
                     </div>
                 </nav>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from '@/composables/useI18n';
-import { hubItemState, type HubGroup } from '@/lib/settingsHub';
+import { hubItemLabel, hubItemState, type HubGroup } from '@/lib/settingsHub';
 import { Link } from '@inertiajs/vue3';
 import { ChevronLeft, ChevronRight, type LucideIcon } from 'lucide-vue-next';
 
@@ -30,7 +30,7 @@ const dots = { ok: 'bg-ok', warn: 'bg-warn-solid', danger: 'bg-danger-solid', of
                     class="-mx-2.5 flex items-center gap-2.5 rounded-md px-2.5 py-2 text-start transition-colors hover:bg-surface-2"
                     :data-hub-item="item.id"
                 >
-                    <span class="flex-1 text-[13.5px] font-semibold">{{ t(`settings_hub.items.${item.id}`) }}</span>
+                    <span class="flex-1 text-[13.5px] font-semibold">{{ t(hubItemLabel(item)) }}</span>
                     <span v-if="hubItemState(item, t)" class="flex min-w-0 items-center gap-1.5 truncate text-xs text-fg-2">
                         <i v-if="hubItemState(item, t)?.tone" class="size-[7px] shrink-0 rounded-full" :class="dots[hubItemState(item, t)!.tone!]" aria-hidden="true" />
                         <bdi class="truncate">{{ hubItemState(item, t)?.text }}</bdi>

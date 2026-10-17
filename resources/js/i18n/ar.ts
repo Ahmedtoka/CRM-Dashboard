@@ -246,6 +246,7 @@ const ar = {
         items: {
             profile: 'حسابي',
             quick_replies: 'الردود الجاهزة',
+            my_quick_replies: 'ردودي الجاهزة',
             users: 'المستخدمين',
             queue: 'الطابور والشيفتات',
             tags: 'الوسوم',
@@ -263,7 +264,7 @@ const ar = {
         },
         state: {
             replies: '{shared} مشتركة · {mine} بتاعتي',
-            my_replies: '{mine} ردود بتاعتي',
+            my_replies: '{mine} من ردودي',
             users: '{n} نشط',
             queue_on: 'الطابور شغال',
             queue_off: 'الطابور مقفول',

@@ -10,6 +10,8 @@ export interface HubItem {
     state?: 'on' | 'off' | 'connected' | 'error';
     text?: string | null;
     tone?: 'ok' | 'warn' | 'danger' | 'off';
+    /** Saved replies of one person only («ردودي الجاهزة»). */
+    personal?: boolean;
 }
 
 export interface HubGroup {
@@ -18,6 +20,11 @@ export interface HubGroup {
 }
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+/** The item's label key: a moderator's saved replies are «ردودي الجاهزة». */
+export function hubItemLabel(item: HubItem): string {
+    return item.personal ? 'settings_hub.items.my_quick_replies' : `settings_hub.items.${item.id}`;
+}
 
 /** The item's one-line state («٣ وسم», «متصل», «خلصت ٣ من ٥») and the dot beside it; null when it has none. */
 export function hubItemState(item: HubItem, t: Translate): { text: string; tone?: HubItem['tone'] } | null {
@@ -28,7 +35,7 @@ export function hubItemState(item: HubItem, t: Translate): { text: string; tone?
         case 'profile':
             return item.text ? { text: item.text } : null;
         case 'quick_replies':
-            return item.shared === undefined ? null : { text: s('replies', { shared: item.shared, mine: item.mine ?? 0 }) };
+            return item.personal ? { text: s('my_replies', { mine: item.mine ?? 0 }) } : { text: s('replies', { shared: item.shared ?? 0, mine: item.mine ?? 0 }) };
         case 'users':
             return { text: s('users', { n }) };
         case 'queue':

@@ -1,5 +1,5 @@
 import { translate } from '@/i18n';
-import { hubItemState } from '@/lib/settingsHub';
+import { hubItemLabel, hubItemState } from '@/lib/settingsHub';
 import { describe, expect, it } from 'vitest';
 
 const t = (key: string, params?: Record<string, string | number>) => translate('ar', key, params);
@@ -23,6 +23,13 @@ describe('hubItemState', () => {
         expect(hubItemState({ id: 'shopify', href: '/settings/shopify', state: 'connected', text: 'levoile.myshopify.com', tone: 'ok' }, t)?.text).toBe(
             'levoile.myshopify.com',
         );
+    });
+
+    it('calls a moderator\'s replies hers', () => {
+        const item = { id: 'quick_replies', href: '/settings/quick-replies', mine: 8, personal: true };
+        expect(hubItemLabel(item)).toBe('settings_hub.items.my_quick_replies');
+        expect(hubItemState(item, t)?.text).toBe('٨ من ردودي');
+        expect(hubItemLabel({ id: 'tags', href: '/settings/tags' })).toBe('settings_hub.items.tags');
     });
 
     it('has no line for an item without state', () => {

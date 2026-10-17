@@ -90,8 +90,10 @@ final class SettingsHub
     {
         $mine = QuickReply::query()->where('scope', QuickReplyScope::Personal->value)->where('user_id', $user->id)->count();
 
-        return ['id' => 'quick_replies', 'href' => '/settings/quick-replies', 'mine' => $mine,
-            'shared' => QuickReply::query()->where('scope', QuickReplyScope::Shared->value)->count()];
+        // A moderator manages only her own replies: «ردودي الجاهزة» with her count (IA §3.3).
+        return $user->isSupervisorOrAbove()
+            ? ['id' => 'quick_replies', 'href' => '/settings/quick-replies', 'mine' => $mine, 'shared' => QuickReply::query()->where('scope', QuickReplyScope::Shared->value)->count()]
+            : ['id' => 'quick_replies', 'href' => '/settings/quick-replies', 'mine' => $mine, 'personal' => true];
     }
 
     /** @return array<string, mixed> */

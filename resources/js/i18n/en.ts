@@ -262,6 +262,7 @@ const en: Messages = {
         items: {
             profile: 'My account',
             quick_replies: 'Saved replies',
+            my_quick_replies: 'My saved replies',
             users: 'Users',
             queue: 'Queue and shifts',
             tags: 'Tags',
