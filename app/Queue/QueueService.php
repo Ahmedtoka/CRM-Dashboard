@@ -342,7 +342,7 @@ class QueueService
                 $c->forceFill(['handler' => $row->handler, 'needs_human' => $row->needs_human, 'return_priority_until' => $row->return_priority_until])
                     ->syncOriginalAttributes(['handler', 'needs_human', 'return_priority_until']);
             }
-            $last = QueueEntry::query()->where('conversation_id', $c->id)->latest('id')->lockForUpdate()->first(['id', 'status', 'closed_at']);
+            $last = QueueEntry::query()->where('conversation_id', $c->id)->latest('id')->lockForUpdate()->first(['id', 'status', 'closed_at', 'close_reason']);
             $ended = $last !== null && in_array($last->status, QueueEntry::TERMINAL_STATUSES, true);
 
             if ($acknowledgement && $ended && $this->quietAfter($last, $handler)) {
@@ -356,7 +356,8 @@ class QueueService
             // H-01: the auto-close gave the chat to the bot, but inside its return window her real
             // message is her moderator's again (`returning`, reserved for her); customerReturned()
             // hands the chat to a person, so the ingest's bot gate leaves it alone.
-            if ($handler !== Handler::Human && ! $acknowledgement && $ended && self::inReturnWindow($c)) {
+            // Only while that auto-close is still her latest story: a later «خلصت» hands her to the bot for good.
+            if ($handler !== Handler::Human && ! $acknowledgement && $ended && $last->close_reason === 'auto' && self::inReturnWindow($c)) {
                 $this->customerReturned($c);
             }
 

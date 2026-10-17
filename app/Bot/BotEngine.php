@@ -283,6 +283,8 @@ class BotEngine
             }
 
             $c->refresh();
+            // A staff decision: an earlier auto-close's return window no longer sends her to a moderator.
+            $c->return_priority_until = null;
             $this->resetToBot($c);
         }, attempts: 3);
 

@@ -21,9 +21,12 @@ use App\Models\User;
 use App\Queue\QueueService;
 use App\Queue\WindowLifecycle;
 use App\Support\SafeBroadcast;
+use Illuminate\Database\DetectsConcurrencyErrors;
+use Illuminate\Database\DetectsLostConnections;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Small human-driven conversation state changes shared by the web and API
@@ -31,6 +34,9 @@ use Illuminate\Support\Str;
  */
 class ConversationActions
 {
+    use DetectsConcurrencyErrors;
+    use DetectsLostConnections;
+
     public function __construct(private readonly ActivityLogger $logger, private readonly UserNotifier $notifier) {}
 
     public function resolve(Conversation $c, User $u, ?Outcome $outcome = null, ?string $note = null, EpisodeEnd $how = EpisodeEnd::Resolve): Conversation
@@ -59,7 +65,16 @@ class ConversationActions
             // Control room S3 (D13): the episode ends with its outcome before the routing fields are cleared
             // (`service` reads the handover category). Never fails the resolve: a savepoint, so a failed
             // outcome write is rolled back alone.
-            rescue(fn () => DB::transaction(fn () => app(OutcomeRecorder::class)->endEpisode($c, $entry, $outcome, $note, $u, $how)), null, report: true);
+            // A deadlock or a lost connection already rolled back the whole transaction on MariaDB: it
+            // propagates (and the resolve retries), never a silent half-resolve.
+            try {
+                DB::transaction(fn () => app(OutcomeRecorder::class)->endEpisode($c, $entry, $outcome, $note, $u, $how));
+            } catch (Throwable $outcomeError) {
+                if ($this->causedByConcurrencyError($outcomeError) || $this->causedByLostConnection($outcomeError)) {
+                    throw $outcomeError;
+                }
+                report($outcomeError);
+            }
 
             // A resolved conversation has nobody "replying", whoever held the soft lock.
             // The bot handover routing (priority_level/queue/handover_category) is done once
@@ -80,6 +95,8 @@ class ConversationActions
             ])->save();
 
             if ($toBot) {
+                // Resolved is final: an earlier auto-close's return window no longer sends her to a moderator.
+                $c->return_priority_until = null;
                 app(BotEngine::class)->resetToBot($c);
             }
         }, attempts: 3);

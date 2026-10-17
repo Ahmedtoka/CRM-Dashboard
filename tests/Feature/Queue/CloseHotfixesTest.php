@@ -278,3 +278,34 @@ it('lets exactly one of the tick and «خلصت» close the window, whoever comm
         ->and(chBotTexts($e))->toBe([CH_THANKS])
         ->and(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1);
 });
+
+it('gives her message to the bot after a later «خلصت», even inside an earlier auto-close\'s return window', function () {
+    [$e, $u, $c] = chIngestWindow();
+    chAutoClose($e, $u);
+    Carbon::setTestNow(now()->addMinutes(2));
+    User::query()->update(['last_seen_at' => now()]);
+    chIngest('back', 'أنا رجعت');
+    $second = QueueEntry::where('conversation_id', $c->id)->latest('id')->first();
+    $second->forceFill(['status' => 'active', 'assigned_user_id' => $u->id, 'delivered_at' => now(), 'shift_member_id' => $e->shift_member_id])->save();
+    $c->fresh()->forceFill(['queue_entry_id' => $second->id])->save();
+    app(WindowLifecycle::class)->close($second->fresh(), 'inquiry', $u);
+    Bus::fake([RunBotTurn::class]);
+    BotSetting::current()->update(['enabled' => true]);
+    Carbon::setTestNow(now()->addMinutes(5));
+
+    chIngest('later', 'طب عندكم مقاس XL؟');
+
+    expect(QueueEntry::where('conversation_id', $c->id)->count())->toBe(2)->and($c->fresh()->handler->value)->toBe('bot');
+    Bus::assertDispatched(RunBotTurn::class);
+});
+
+it('ends the return window when staff send the chat back to the bot or resolve it', function (string $how) {
+    [$e, $u, $c] = chIngestWindow();
+    chAutoClose($e, $u);
+
+    $how === 'bot'
+        ? app(BotEngine::class)->returnToBot($c->fresh(), $u)
+        : app(ConversationActions::class)->resolve($c->fresh(), $u, Outcome::Browsing);
+
+    expect($c->fresh()->return_priority_until)->toBeNull()->and($c->fresh()->handler->value)->toBe('bot');
+})->with(['bot', 'resolve']);
