@@ -313,7 +313,7 @@ const ar = {
     inbox: {
         test_badge: 'تجربة',
         load_test_badge: 'تيست',
-        title: 'صندوق الرسائل',
+        title: 'الرسايل',
         search: 'دوري بالاسم أو رقم الموبايل',
         search_truncated: 'في نتايج كتير، دققي البحث',
         list_title: 'المحادثات',
@@ -764,7 +764,7 @@ const ar = {
         date_year: 'سنة',
     },
     comments: {
-        title: 'التعليقات',
+        title: 'الكومنتات',
         filters: 'تصفية التعليقات',
         status_label: 'الحالة',
         intent_label: 'النية',
@@ -804,7 +804,7 @@ const ar = {
         empty: 'لا توجد تعليقات تطابق الفلتر',
     },
     orders: {
-        title: 'أوردرات شوبيفاي',
+        title: 'الأوردرات',
         presets: { awaiting_payment: 'مستنية الدفع', mismatch: 'فرق مع شوبيفاي', stuck: 'واقفة' },
         search: 'رقم الأوردر أو اسم/موبايل العميل',
         status_all: 'كل الحالات',
@@ -954,7 +954,7 @@ const ar = {
         },
     },
     cases: {
-        title: 'الطلبات',
+        title: 'ما بعد البيع',
         search: 'رقم الأوردر أو اسم/موبايل العميل',
         type_all: 'كل الأنواع',
         empty: 'لا توجد طلبات',
@@ -2836,7 +2836,7 @@ const ar = {
         mine_hint: 'كل نقطة بسببها. النقط بتتحسب لوحدها من شغلك ومحدش بيعدّلها بإيده.',
     },
     board: {
-        title: 'اللوحة الحية',
+        title: 'الصالة',
         description: 'الصالة والشبابيك والموظفات لحظة بلحظة',
         loading: 'بنجهّز الصالة…',
         failed: {
@@ -4532,7 +4532,7 @@ const ar = {
     },
     // WhatsApp order confirmation (spec 2026-10-16, W4).
     order_confirmations: {
-        title: 'تأكيدات الأوردرات',
+        title: 'التأكيدات',
         nav: 'تأكيدات الأوردرات',
         description: 'رسالة الواتساب اللي بتروح لكل أوردر جديد: مين أكد ومين طلب إلغاء أو تعديل ومين محتاج مكالمة',
         day: 'اليوم',

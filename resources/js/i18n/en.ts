@@ -329,7 +329,7 @@ const en: Messages = {
     inbox: {
         test_badge: 'Test',
         load_test_badge: 'Load test',
-        title: 'Inbox',
+        title: 'Messages',
         search: 'Search by name or phone',
         search_truncated: 'Too many results, narrow the search',
         list_title: 'Conversations',
@@ -827,7 +827,7 @@ const en: Messages = {
         empty: 'No comments match the filters',
     },
     orders: {
-        title: 'Shopify orders',
+        title: 'Orders',
         presets: { awaiting_payment: 'Awaiting payment', mismatch: 'Shopify mismatch', stuck: 'Stuck' },
         search: 'Order number or customer name/phone',
         status_all: 'All statuses',
@@ -983,7 +983,7 @@ const en: Messages = {
         },
     },
     cases: {
-        title: 'Requests',
+        title: 'After-sale',
         search: 'Order number or customer name/phone',
         type_all: 'All types',
         empty: 'No requests',
@@ -2881,7 +2881,7 @@ const en: Messages = {
         mine_hint: 'Every point with its reason. Points come from your work only; nobody edits them by hand.',
     },
     board: {
-        title: 'Live board',
+        title: 'Room',
         description: 'The lounge, the windows and the team, as it happens',
         loading: 'Setting up the room…',
         failed: {
@@ -4577,7 +4577,7 @@ const en: Messages = {
     },
     // WhatsApp order confirmation (spec 2026-10-16, W4).
     order_confirmations: {
-        title: 'Order confirmations',
+        title: 'Confirmations',
         nav: 'Order confirmations',
         description: 'The WhatsApp message every new order gets: who confirmed, who asked to cancel or edit, and who needs a call',
         day: 'Day',
