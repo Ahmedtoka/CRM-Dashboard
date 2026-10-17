@@ -99,10 +99,15 @@ it('turns a transport failure into PlatformUnreachable (still an AdsApiException
     }
 });
 
-it('says TikTok cannot read objects yet', function () {
-    $acc = AdAccount::factory()->tiktok()->create();
+it('TikTok reads objects live (no ReadUnsupported any more)', function () {
+    $conn = AdPlatformConnection::factory()->tiktok()->create(['credentials' => ['access_token' => 'tt', 'advertiser_ids' => ['7001']]]);
+    $acc = AdAccount::factory()->tiktok()->create(['external_id' => '7001', 'connection_id' => $conn->id]);
+    Http::fake(['business-api.tiktok.com/open_api/v1.3/campaign/get/*' => Http::response(['code' => 0, 'data' => ['list' => [
+        ['campaign_id' => '123', 'operation_status' => 'ENABLE', 'budget' => 10, 'budget_mode' => 'BUDGET_MODE_DAY'],
+    ]]])]);
 
-    expect(fn () => app(TikTokAdsWriter::class)->readObject($acc, 'ad', '123'))->toThrow(ReadUnsupported::class);
+    expect(app(TikTokAdsWriter::class)->readObject($acc, 'campaign', '123'))->not->toBeInstanceOf(ReadUnsupported::class)
+        ->and(app(TikTokAdsWriter::class)->readObject($acc, 'campaign', '123')->dailyBudgetMinor)->toBe(1000);
 });
 
 it('fake: reads the last fake status, else the local row, else PAUSED', function () {

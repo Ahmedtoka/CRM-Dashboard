@@ -162,22 +162,49 @@ it('an unreadable object at a stale confirm fails the Run closed', function () {
     expect($x->fresh()->state)->toBe('failed')->and($x->fresh()->error_code)->toBe('budget_unreadable')->and(rpStatuses())->toBe([]);
 });
 
-it('refuses a TikTok Run (no live read yet) but lets a TikTok Stop through', function () {
+it('checks a TikTok Run against the live budget like Meta and lets a TikTok Stop through', function () {
     config(['crm.ads.drivers.tiktok' => 'live']);
     $conn = AdPlatformConnection::factory()->tiktok()->create(['credentials' => ['access_token' => 'tt-secret', 'advertiser_ids' => ['7001']]]);
-    $acc = AdAccount::factory()->tiktok()->create(['external_id' => '7001', 'connection_id' => $conn->id]);
+    $acc = AdAccount::factory()->tiktok()->create(['external_id' => '7001', 'connection_id' => $conn->id, 'currency' => 'EGP']);
     config(['crm.ads.write_sandbox_accounts' => ['7001']]);
-    $paused = Ad::factory()->for($acc, 'account')->create(['status' => 'PAUSED', 'external_id' => '4401']);
-    $active = Ad::factory()->for($acc, 'account')->create(['status' => 'ACTIVE', 'external_id' => '4402']);
+    $paused = Ad::factory()->for($acc, 'account')->create(['status' => 'DISABLE', 'external_id' => '4401']);
+    $active = Ad::factory()->for($acc, 'account')->create(['status' => 'ENABLE', 'external_id' => '4402']);
     $buyer = rpBuyer($acc);
-    Http::fake(['business-api.tiktok.com/open_api/v1.3/ad/status/update/' => Http::response(['code' => 0, 'message' => 'OK', 'data' => []])]);
+    $list = fn (array $row) => Http::response(['code' => 0, 'message' => 'OK', 'data' => ['list' => [$row], 'page_info' => ['total_page' => 1]]]);
+    Http::fake([
+        'business-api.tiktok.com/open_api/v1.3/ad/get/*' => $list(['ad_id' => '4401', 'operation_status' => 'DISABLE', 'adgroup_id' => '9001', 'campaign_id' => '501']),
+        'business-api.tiktok.com/open_api/v1.3/adgroup/get/*' => $list(['adgroup_id' => '9001', 'campaign_id' => '501', 'operation_status' => 'ENABLE', 'budget' => 300000, 'budget_mode' => 'BUDGET_MODE_DAY']),
+        'business-api.tiktok.com/open_api/v1.3/campaign/get/*' => $list(['campaign_id' => '501', 'operation_status' => 'ENABLE', 'budget_mode' => 'BUDGET_MODE_INFINITE']),
+        'business-api.tiktok.com/open_api/v1.3/ad/status/update/' => Http::response(['code' => 0, 'message' => 'OK', 'data' => []]),
+    ]);
 
-    rpPropose($this, $buyer, $acc, 'ad', $paused->external_id, 'active')->assertStatus(422)->assertJsonPath('code', 'budget_unreadable');
+    // 300,000 EGP a day is over the 20,000 EGP default cap: refused by the same guard as Meta, not «read unsupported».
+    rpPropose($this, $buyer, $acc, 'ad', $paused->external_id, 'active')->assertStatus(422)->assertJsonPath('code', 'budget_over_cap');
     expect(AdWriteAction::count())->toBe(0);
 
     $stop = rpAction(rpPropose($this, $buyer, $acc, 'ad', $active->external_id, 'paused'));
     rpConfirm($this, $buyer, $stop)->assertOk()->assertJsonPath('action.state', 'succeeded');
-    Http::assertSentCount(1);
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'ad/status/update/'));
+});
+
+it('runs a TikTok ad within the cap', function () {
+    config(['crm.ads.drivers.tiktok' => 'live']);
+    $conn = AdPlatformConnection::factory()->tiktok()->create(['credentials' => ['access_token' => 'tt-secret', 'advertiser_ids' => ['7001']]]);
+    $acc = AdAccount::factory()->tiktok()->create(['external_id' => '7001', 'connection_id' => $conn->id, 'currency' => 'EGP']);
+    config(['crm.ads.write_sandbox_accounts' => ['7001']]);
+    $paused = Ad::factory()->for($acc, 'account')->create(['status' => 'DISABLE', 'external_id' => '4401']);
+    $buyer = rpBuyer($acc);
+    $list = fn (array $row) => Http::response(['code' => 0, 'message' => 'OK', 'data' => ['list' => [$row], 'page_info' => ['total_page' => 1]]]);
+    Http::fake([
+        'business-api.tiktok.com/open_api/v1.3/ad/get/*' => $list(['ad_id' => '4401', 'operation_status' => 'DISABLE', 'adgroup_id' => '9001', 'campaign_id' => '501']),
+        'business-api.tiktok.com/open_api/v1.3/adgroup/get/*' => $list(['adgroup_id' => '9001', 'campaign_id' => '501', 'operation_status' => 'ENABLE', 'budget' => 500, 'budget_mode' => 'BUDGET_MODE_DAY']),
+        'business-api.tiktok.com/open_api/v1.3/campaign/get/*' => $list(['campaign_id' => '501', 'operation_status' => 'ENABLE', 'budget_mode' => 'BUDGET_MODE_INFINITE']),
+        'business-api.tiktok.com/open_api/v1.3/ad/status/update/' => Http::response(['code' => 0, 'message' => 'OK', 'data' => []]),
+    ]);
+
+    $x = rpAction(rpPropose($this, $buyer, $acc, 'ad', $paused->external_id, 'active'));
+    rpConfirm($this, $buyer, $x)->assertOk()->assertJsonPath('action.state', 'succeeded');
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'ad/status/update/') && ($r->data()['operation_status'] ?? null) === 'ENABLE');
 });
 
 it('a Stop never pre-reads', function () {

@@ -329,7 +329,7 @@ class RunGuard
     }
 
     /**
-     * One live read of the target. ReadUnsupported (TikTok tonight) and every other failure refuse the Run.
+     * One live read of the target. ReadUnsupported (a platform without a live read) and every other failure refuse the Run.
      *
      * @throws WriteDenied 422 budget_unreadable, 429 rate_limited
      */
@@ -352,7 +352,7 @@ class RunGuard
             throw WriteDenied::make('rate_limited', array_filter(['retry_after' => $retry], fn ($v) => $v !== null),
                 $retry !== null ? ['Retry-After' => (string) $retry] : []);
         } catch (ReadUnsupported) {
-            // No live read on this platform yet (TikTok): the Run cannot be checked, so it is made in the platform's own manager.
+            // No live read on this platform: the Run cannot be checked, so it is made in the platform's own manager.
             throw WriteDenied::make('budget_unreadable', ['read_error' => 'ReadUnsupported', 'reason' => 'read_unsupported']);
         } catch (Throwable $e) {
             if (! $e instanceof AdsApiException) {
