@@ -85,7 +85,7 @@ it('flags an ads account whose last good sync is older than the stale threshold'
 
     $item = collect(app(UrgentStrip::class)->for(usAdmin()))->firstWhere('key', 'ads_sync');
 
-    expect($item)->toMatchArray(['count' => 1, 'age_minutes' => 240, 'tone' => 'warn', 'href' => route('ads.sync', absolute: false)]);
+    expect($item)->toMatchArray(['count' => 1, 'age_minutes' => 240, 'tone' => 'warn', 'href' => route('settings.ads.sync', absolute: false)]);
 });
 
 it('shows the launches awaiting the viewer\'s approval from LaunchCounters', function () {
