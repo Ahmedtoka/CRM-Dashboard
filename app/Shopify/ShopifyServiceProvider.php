@@ -6,6 +6,8 @@ use App\Shopify\Client\FakeShopifyTransport;
 use App\Shopify\Client\HttpShopifyTransport;
 use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Client\ShopifyTransport;
+use App\Shopify\Commands\CheckJourneyCommand;
+use App\Shopify\Commands\PollNewOrdersCommand;
 use App\Shopify\Commands\PurgeStoreDataCommand;
 use App\Shopify\Commands\ReconcileCommand;
 use App\Shopify\Commands\ReconcileCountsCommand;
@@ -35,13 +37,14 @@ class ShopifyServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->commands([
-                \App\Shopify\Commands\CheckJourneyCommand::class,
+                CheckJourneyCommand::class,
                 ReconcileCommand::class,
                 ReconcileCountsCommand::class,
                 SyncShippingCommand::class,
                 PurgeStoreDataCommand::class,
                 WebhooksCheckCommand::class,
                 RefreshOpenOrdersCommand::class,
+                PollNewOrdersCommand::class,
             ]);
         }
 
@@ -62,6 +65,12 @@ class ShopifyServiceProvider extends ServiceProvider
             // Open orders read back from Shopify (R8); the command skips when not connected.
             $schedule->command(RefreshOpenOrdersCommand::class)
                 ->everyTenMinutes()
+                ->withoutOverlapping()
+                ->onOneServer();
+
+            // D4: orders whose orders/create webhook was lost still get their WhatsApp confirmation.
+            $schedule->command(PollNewOrdersCommand::class)
+                ->everyFiveMinutes()
                 ->withoutOverlapping()
                 ->onOneServer();
 
