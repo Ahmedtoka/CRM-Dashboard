@@ -6,6 +6,7 @@ use App\Models\ShopifySyncRun;
 use App\Models\ShopifyWebhookSubscription;
 use App\Shopify\Client\ShopifyClient;
 use App\Shopify\Client\ShopifyException;
+use App\Shopify\Connection\IntegrationRepository;
 
 /**
  * Registers/audits/tears down the Shopify webhook subscriptions this app
@@ -38,7 +39,20 @@ final class WebhookRegistrar
      */
     private const URI_FIELD_API_VERSION = '2025-10';
 
-    public function __construct(private readonly ShopifyClient $client) {}
+    public function __construct(
+        private readonly ShopifyClient $client,
+        private readonly IntegrationRepository $integrations,
+    ) {}
+
+    /**
+     * On the Partners app the subscriptions are declared in shopify.app.toml (app-specific: Shopify
+     * never deletes them after failed deliveries, and the API cannot list them), so nothing is
+     * registered here: only one `config` row per topic is kept for the health screen.
+     */
+    private function appManaged(): bool
+    {
+        return (bool) $this->integrations->current()?->usesApp();
+    }
 
     /**
      * Creates a subscription for every configured topic that isn't already
@@ -50,6 +64,12 @@ final class WebhookRegistrar
      */
     public function register(): array
     {
+        if ($this->appManaged()) {
+            $this->keepConfigRows();
+
+            return [];
+        }
+
         return $this->reconcile()['topics'];
     }
 
@@ -62,7 +82,13 @@ final class WebhookRegistrar
     public function check(): array
     {
         $startedAt = now();
-        $result = $this->reconcile();
+
+        if ($this->appManaged()) {
+            $this->keepConfigRows();
+            $result = ['topics' => [], 'errors' => [], 'status' => 'ok'];
+        } else {
+            $result = $this->reconcile();
+        }
 
         ShopifySyncRun::create([
             'type' => 'webhook_health',
@@ -81,14 +107,80 @@ final class WebhookRegistrar
     /**
      * Deletes every stored subscription on Shopify (best-effort — a failure for
      * one topic never blocks the rest) and clears the local rows regardless.
+     * On the Partners app the stored ids belong to the old manual app, so they
+     * are deleted with its token (removeLegacy) instead.
      */
     public function removeAll(): void
     {
+        if ($this->appManaged()) {
+            rescue(fn () => $this->removeLegacy(), report: true);
+            ShopifyWebhookSubscription::query()->delete();
+
+            return;
+        }
+
         ShopifyWebhookSubscription::whereNotNull('shopify_subscription_id')
             ->get()
             ->each(fn (ShopifyWebhookSubscription $subscription) => $this->deleteRemote($subscription->shopify_subscription_id));
 
         ShopifyWebhookSubscription::query()->delete();
+    }
+
+    /**
+     * Runbook step 7: once the Partners app's own webhooks arrive, the old manual app's API
+     * subscriptions are deleted with the old app's token (a subscription can only be seen and
+     * deleted by the app that created it). Only subscriptions pointing at this CRM's callback URLs
+     * are touched. The local rows stay, as config-managed, with their last-received times.
+     *
+     * @return int how many subscriptions Shopify deleted
+     *
+     * @throws ShopifyException when the old token cannot list the subscriptions
+     */
+    public function removeLegacy(): int
+    {
+        $integration = $this->integrations->current();
+        $token = $integration?->legacy_credentials['access_token'] ?? null;
+
+        if ($integration === null || blank($token)) {
+            return 0;
+        }
+
+        $legacy = new self($this->client->forCredentials((string) $integration->shop_domain, (string) $token), $this->integrations);
+        $ours = array_map(fn (string $topic) => $this->callbackUrl($topic), $this->topics());
+        $removed = 0;
+
+        foreach ($legacy->remoteSubscriptionList() as $subscription) {
+            if (in_array($subscription['uri'], $ours, true) && $legacy->deleteRemoteChecked($subscription['id'])) {
+                $removed++;
+            }
+        }
+
+        $this->keepConfigRows();
+
+        return $removed;
+    }
+
+    /** One `config` row per configured topic (no Shopify id), keeping last_received_at. */
+    private function keepConfigRows(): void
+    {
+        foreach ($this->topics() as $topic) {
+            ShopifyWebhookSubscription::updateOrCreate(['topic' => $topic], [
+                'shopify_subscription_id' => null,
+                'callback_url' => $this->callbackUrl($topic),
+                'managed_by' => 'config',
+            ]);
+        }
+    }
+
+    private function deleteRemoteChecked(string $subscriptionId): bool
+    {
+        try {
+            $this->client->mutate(self::DELETE_MUTATION, ['id' => $subscriptionId], 'webhookSubscriptionDelete');
+
+            return true;
+        } catch (ShopifyException) {
+            return false;
+        }
     }
 
     /**
@@ -216,6 +308,7 @@ final class WebhookRegistrar
                 'shopify_subscription_id' => $subscriptionId,
                 'callback_url' => $callbackUrl,
                 'registered_at' => now(),
+                'managed_by' => 'api',
             ],
         );
     }
@@ -251,6 +344,22 @@ final class WebhookRegistrar
     private function remoteSubscriptions(): array
     {
         $subscriptions = [];
+
+        foreach ($this->remoteSubscriptionList() as $subscription) {
+            $subscriptions[$subscription['topic']] = ['id' => $subscription['id'], 'uri' => $subscription['uri']];
+        }
+
+        return $subscriptions;
+    }
+
+    /**
+     * Every remote subscription, also several for one topic (another destination).
+     *
+     * @return list<array{id: string, topic: string, uri: ?string}>
+     */
+    private function remoteSubscriptionList(): array
+    {
+        $subscriptions = [];
         $cursor = null;
 
         do {
@@ -266,8 +375,9 @@ final class WebhookRegistrar
                     continue;
                 }
 
-                $subscriptions[$node['topic']] = [
+                $subscriptions[] = [
                     'id' => $node['id'],
+                    'topic' => $node['topic'],
                     'uri' => $this->usesUriField() ? ($node['uri'] ?? null) : ($node['endpoint']['callbackUrl'] ?? null),
                 ];
             }

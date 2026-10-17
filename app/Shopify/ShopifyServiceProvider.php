@@ -14,6 +14,7 @@ use App\Shopify\Commands\PollNewOrdersCommand;
 use App\Shopify\Commands\PurgeStoreDataCommand;
 use App\Shopify\Commands\ReconcileCommand;
 use App\Shopify\Commands\ReconcileCountsCommand;
+use App\Shopify\Commands\RefreshAppTokenCommand;
 use App\Shopify\Commands\RefreshOpenOrdersCommand;
 use App\Shopify\Commands\SyncShippingCommand;
 use App\Shopify\Commands\WebhooksCheckCommand;
@@ -53,6 +54,7 @@ class ShopifyServiceProvider extends ServiceProvider
                 WebhooksCheckCommand::class,
                 RefreshOpenOrdersCommand::class,
                 PollNewOrdersCommand::class,
+                RefreshAppTokenCommand::class,
             ]);
         }
 
@@ -79,6 +81,12 @@ class ShopifyServiceProvider extends ServiceProvider
             // D4: orders whose orders/create webhook was lost still get their WhatsApp confirmation.
             $schedule->command(PollNewOrdersCommand::class)
                 ->everyFiveMinutes()
+                ->withoutOverlapping()
+                ->onOneServer();
+
+            // The Partners app's hourly token is refreshed ahead of time; the refresh token keeps rotating.
+            $schedule->command(RefreshAppTokenCommand::class)
+                ->everyThirtyMinutes()
                 ->withoutOverlapping()
                 ->onOneServer();
 

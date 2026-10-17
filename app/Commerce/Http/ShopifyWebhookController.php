@@ -11,6 +11,7 @@ use App\Shopify\Connection\IntegrationRepository;
 use App\Webhooks\WebhookRejections;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -34,6 +35,9 @@ class ShopifyWebhookController extends Controller
         'orders-cancelled' => 'orders/cancelled',
         'draft-orders-update' => 'draft_orders/update',
     ];
+
+    /** Cache key prefix + WebhookSignature label => ISO time of the last delivery it verified. */
+    public const LAST_VERIFIED_KEY = 'shopify.webhooks.last_verified.';
 
     public function __construct(
         private readonly IntegrationRepository $integrations,
@@ -59,6 +63,9 @@ class ShopifyWebhookController extends Controller
         // to the body hash (scoped by topic, since orders/paid and orders/updated can
         // carry identical bodies).
         $dedupeKey = (string) ($request->header('X-Shopify-Webhook-Id') ?: sha1($shopifyTopic."\n".$raw));
+
+        // Settings → Shopify shows when each secret last verified a delivery (when did the old app's stop?).
+        Cache::put(self::LAST_VERIFIED_KEY.$verifiedWith, now()->toIso8601String(), now()->addDays(60));
 
         // Best-effort health signal for the connection screen; a topic with no
         // local subscription row (e.g. an unregistered/unknown topic) is a no-op.

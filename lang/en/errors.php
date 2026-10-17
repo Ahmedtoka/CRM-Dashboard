@@ -77,6 +77,8 @@ return [
     ],
 
     'shopify' => [
+        'app_mode' => 'The store is connected through the Shopify app. Use «Back to the manual connection» first.',
+        'no_legacy_credentials' => 'No manual connection credentials were kept: connect the store again by hand.',
         'import_running' => 'An import is already running — wait for it to finish.',
         'no_integration' => 'No Shopify integration on file.',
         'orders_range_required' => 'Syncing orders needs a from and a to date.',

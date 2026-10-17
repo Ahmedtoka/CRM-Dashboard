@@ -25,6 +25,11 @@ final class ConnectShopify
      */
     public function connect(string $domain, string $token, ?string $secret = null): array
     {
+        // On the Partners app a pasted token would silently replace the app token: roll back first.
+        if ($this->integrations->current()?->usesApp()) {
+            return ['ok' => false, 'missing_scopes' => [], 'error' => __('errors.shopify.app_mode')];
+        }
+
         $result = $this->tester->test($domain, $token);
 
         if (! $result->ok) {
@@ -43,7 +48,7 @@ final class ConnectShopify
             $integration->forceFill(['import_state' => null])->save();
         }
         $resuming = $sameStore && $this->hasCompletedStage($integration);
-        $integration ??= new ShopifyIntegration();
+        $integration ??= new ShopifyIntegration;
 
         $integration->forceFill([
             'shop_domain' => $domain,
