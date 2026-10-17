@@ -3,6 +3,7 @@
 namespace App\Events;
 
 use App\Http\Resources\AttachmentResource;
+use App\Media\MediaUrls;
 use App\Models\Message;
 use App\Support\InboxChannels;
 use Illuminate\Broadcasting\Channel;
@@ -52,7 +53,8 @@ class MessageCreated implements ShouldBroadcastNow
             'body' => $m->body,
             'buttons' => $m->buttons ?? [],
             'cards' => $m->cards,
-            'attachments' => AttachmentResource::collection($m->loadMissing('mediaAttachments')->mediaAttachments)->resolve(),
+            // Session URLs: a broadcast is shared by web and app clients; the app refetches messages for signed URLs.
+            'attachments' => MediaUrls::sessionUrls(fn () => AttachmentResource::collection($m->loadMissing('mediaAttachments')->mediaAttachments)->resolve()),
             'status' => $m->status?->value,
             'error' => $m->error,
             'created_at' => $m->created_at?->toIso8601String(),

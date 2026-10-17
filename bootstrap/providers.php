@@ -5,12 +5,14 @@ use App\Analytics\AnalyticsServiceProvider;
 use App\Bot\BotServiceProvider;
 use App\Channels\ChannelsServiceProvider;
 use App\Comments\CommentsServiceProvider;
-use App\Confirmations\ConfirmationsServiceProvider;
 use App\Commerce\CommerceServiceProvider;
+use App\Confirmations\ConfirmationsServiceProvider;
 use App\Inbox\InboxServiceProvider;
 use App\Legal\LegalServiceProvider;
 use App\Media\MediaServiceProvider;
 use App\Providers\AppServiceProvider;
+use App\Providers\MobileApiServiceProvider;
+use App\Push\PushServiceProvider;
 use App\Queue\QueueServiceProvider;
 use App\Shopify\ShopifyServiceProvider;
 use App\Simulator\SimulatorServiceProvider;
@@ -30,4 +32,6 @@ return [
     QueueServiceProvider::class,
     AdsServiceProvider::class,
     ConfirmationsServiceProvider::class,
+    PushServiceProvider::class,
+    MobileApiServiceProvider::class,
 ];

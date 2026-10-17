@@ -2,143 +2,37 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Http\Controllers\Concerns\CaseEndpoints;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SupportCaseResource;
-use App\Http\Support\DateRange;
-use App\Http\Support\ModeratorScope;
-use App\Http\Support\SortParam;
-use App\Models\SupportCase;
 use App\Models\User;
-use App\Queue\Cases\CaseResolution;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
  * Support cases dashboard (spec §4): a case list with filters/status tabs and a
  * status/assignment PATCH. Moderators only see cases on the platforms they can
- * access, same as the inbox and the orders list.
+ * access, same as the inbox and the orders list. `show`/`update` and the list query
+ * live in `CaseEndpoints`, shared with the mobile app's `Api\V1\CaseController`.
  */
 class CaseController extends Controller
 {
-    /** Sortable columns of the web list (DataTable key => column). */
-    private const SORTS = ['date' => 'created_at', 'id' => 'id'];
+    use CaseEndpoints;
 
     public function index(Request $request): Response
     {
-        $filters = $this->filters($request);
-
-        $query = $this->query($request, $filters)->with(['customer', 'assignedTo', 'openedBy:id,name', 'queueEntry:id,assigned_user_id,is_test', 'order.items.variant']);
-        $sort = SortParam::parse($request->query('sort'), self::SORTS);
-        $sort?->apply($query);
-        $cases = SupportCaseResource::collection($query->paginate(25)->withQueryString());
+        ['filters' => $filters, 'sort' => $sort, 'cases' => $page, 'counts' => $counts] = $this->casesPage($request);
 
         return Inertia::render('Cases', [
-            'cases' => $cases,
+            'cases' => SupportCaseResource::collection($page),
             'filters' => array_merge(['type' => null, 'status' => null, 'q' => null, 'from' => null, 'to' => null, 'overdue' => null], $filters, [
                 'overdue' => ! empty($filters['overdue']) ? true : null,
                 'sort' => $sort?->value(),
             ]),
-            'counts' => $this->counts($request, $filters),
+            'counts' => $counts,
             // Options for the drawer's "assigned to" select.
             'team' => User::query()->where('is_active', true)->inboxStaff()->orderBy('name')->get(['id', 'name']),
         ]);
-    }
-
-    /**
-     * `SupportCaseResource` has its own `data` field (the flow payload), which defeats
-     * Laravel's automatic `{"data": ...}` envelope (it only wraps when the resolved
-     * array has no `data` key of its own) — so single-case responses wrap explicitly
-     * here to still match every other endpoint's `{"data": {...}}` shape.
-     */
-    public function show(Request $request, SupportCase $supportCase): JsonResponse
-    {
-        Gate::authorize('view', $supportCase);
-
-        return response()->json(['data' => (new SupportCaseResource($supportCase->loadMissing(['customer', 'assignedTo', 'openedBy:id,name', 'queueEntry:id,assigned_user_id,is_test', 'order.items.variant'])))->resolve($request)]);
-    }
-
-    public function update(Request $request, SupportCase $supportCase): JsonResponse
-    {
-        Gate::authorize('update', $supportCase);
-
-        $data = $request->validate([
-            'status' => ['sometimes', Rule::in(SupportCase::STATUSES)],
-            'assigned_to_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
-        ]);
-
-        // Queue Part 2: `resolved` pays the opener and tells the customer; leaving it takes the points back.
-        if (array_key_exists('status', $data)) {
-            $supportCase = app(CaseResolution::class)->setStatus($supportCase, $data['status'], $request->user());
-        }
-
-        if (array_key_exists('assigned_to_id', $data)) {
-            $supportCase->assigned_to_id = $data['assigned_to_id'];
-            $supportCase->save();
-        }
-
-        return response()->json(['data' => (new SupportCaseResource($supportCase->fresh(['customer', 'assignedTo', 'openedBy:id,name', 'queueEntry:id,assigned_user_id,is_test', 'order.items.variant'])))->resolve($request)]);
-    }
-
-    /**
-     * @return array{type?: ?string, status?: ?string, q?: ?string, from?: ?string, to?: ?string, overdue?: ?bool}
-     */
-    private function filters(Request $request): array
-    {
-        return $request->validate([
-            'type' => ['nullable', Rule::in(SupportCase::TYPES)],
-            'status' => ['nullable', Rule::in(SupportCase::STATUSES)],
-            'q' => ['nullable', 'string', 'max:100'],
-            'from' => ['nullable', 'date_format:Y-m-d'],
-            'to' => ['nullable', 'date_format:Y-m-d'],
-            'overdue' => ['nullable', 'boolean'],
-        ]);
-    }
-
-    /**
-     * @param  array{type?: ?string, status?: ?string, q?: ?string, from?: ?string, to?: ?string, overdue?: ?bool}  $filters
-     * @return Builder<SupportCase>
-     */
-    private function query(Request $request, array $filters, bool $withStatus = true): Builder
-    {
-        return SupportCase::query()
-            ->tap(fn (Builder $q) => ModeratorScope::cases($q, $request->user()))
-            ->when($withStatus, fn ($q) => $q->when($filters['status'] ?? null, fn ($q, $v) => $q->where('status', $v)))
-            ->when($filters['type'] ?? null, fn ($q, $v) => $q->where('type', $v))
-            ->when($filters['from'] ?? null, fn ($q, $v) => $q->where('created_at', '>=', DateRange::startOfCairoDay($v)))
-            ->when($filters['to'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', DateRange::endOfCairoDay($v)))
-            // «النهارده» urgent strip (control room S4): open cases whose SLA time passed.
-            ->when(! empty($filters['overdue']), fn ($q) => $q->whereIn('status', SupportCase::OPEN_STATUSES)->whereNotNull('sla_due_at')->where('sla_due_at', '<', now()))
-            ->when(trim((string) ($filters['q'] ?? '')), fn ($q, $term) => $q->where(fn (Builder $w) => $w
-                ->where('order_number', 'like', "%{$term}%")
-                ->orWhereHas('customer', fn (Builder $c) => $c->where('name', 'like', "%{$term}%")->orWhere('phone', 'like', "%{$term}%"))))
-            ->orderByDesc('id');
-    }
-
-    /**
-     * Status tab counts (spec: "status tabs with counts") — computed with every filter
-     * except `status` itself, so switching tabs never changes the other counts.
-     *
-     * @param  array{type?: ?string, status?: ?string, q?: ?string, from?: ?string, to?: ?string, overdue?: ?bool}  $filters
-     * @return array<string, int>
-     */
-    private function counts(Request $request, array $filters): array
-    {
-        $rows = $this->query($request, $filters, withStatus: false)
-            ->selectRaw('status, count(*) as aggregate')
-            ->groupBy('status')
-            ->pluck('aggregate', 'status');
-
-        $counts = ['all' => 0];
-        foreach (SupportCase::STATUSES as $status) {
-            $counts[$status] = (int) ($rows[$status] ?? 0);
-            $counts['all'] += $counts[$status];
-        }
-
-        return $counts;
     }
 }

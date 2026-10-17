@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\SignedMediaController;
 use App\Http\Controllers\Web\LegalController;
 use App\Http\Controllers\Web\LocaleController;
 use App\Http\Controllers\Web\MediaController;
@@ -24,6 +25,15 @@ Route::get('/up/crm', HealthController::class)->name('health.crm');
 // send (Task 2). `MediaController::publicShow()` additionally refuses any attachment
 // that isn't yet linked to a message.
 Route::get('/media/public/{attachment}', [MediaController::class, 'publicShow'])->middleware('signed')->name('media.public');
+
+// Mobile app media (API contract, "Media"): absolute signed temporary URLs handed out on api/*
+// responses only. No `web` group — no session or cookies; the signature (checked in the
+// controller so `?download=1` can be appended after signing) is the only authorisation.
+Route::withoutMiddleware('web')->middleware('throttle:mobile-media')->whereNumber('attachment')->group(function () {
+    Route::get('/media/s/{attachment}', [SignedMediaController::class, 'show'])->name('media.signed');
+    Route::get('/media/s/{attachment}/thumb', [SignedMediaController::class, 'thumb'])->name('media.signed.thumb');
+    Route::get('/quick-reply-attachments/s/{attachment}', [SignedMediaController::class, 'quickReply'])->name('quick-reply-attachments.signed');
+});
 
 // Public legal pages (Meta App Review): open to guests and signed-in users alike.
 Route::get('/privacy', [LegalController::class, 'privacy'])->name('legal.privacy');

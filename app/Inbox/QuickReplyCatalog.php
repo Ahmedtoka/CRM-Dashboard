@@ -2,8 +2,8 @@
 
 namespace App\Inbox;
 
-use App\Enums\AttachmentType;
 use App\Enums\Platform;
+use App\Media\MediaUrls;
 use App\Models\QuickReply;
 use App\Models\QuickReplyAttachment;
 use App\Models\User;
@@ -64,7 +64,7 @@ class QuickReplyCatalog
             'use_count' => (int) $qr->use_count,
             'attachments' => $qr->attachments->map(fn (QuickReplyAttachment $a) => [
                 'id' => $a->id, 'type' => $a->type->value, 'original_name' => $a->original_name,
-                'thumb_url' => $a->type === AttachmentType::Image ? route('quick-reply-attachments.show', $a, false) : null,
+                'thumb_url' => MediaUrls::quickReplyThumbForRequest($a),
             ])->all(),
         ])->all();
     }

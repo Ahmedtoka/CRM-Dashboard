@@ -85,13 +85,14 @@ it('serves the ad block with the latest referral first and a link only for ads r
     expect($this->actingAs($admin)->getJson("/inbox/conversations/{$c->id}/context")->json('data.ad.can_open'))->toBeTrue();
 });
 
-it('is web only and keeps the API thread payload unchanged', function () {
+// Mobile app (2026-10-16 contract): the API serves the same context; the thread payload stays as it was.
+it('is served to the mobile API too and keeps the API thread payload unchanged', function () {
     $c = s3CtxChat();
     $mod = User::factory()->create(['role' => UserRole::Moderator]);
     $mod->userPlatforms()->create(['platform' => Platform::Facebook]);
     Sanctum::actingAs($mod);
 
-    $this->getJson("/api/v1/conversations/{$c->id}/context")->assertNotFound();
+    $this->getJson("/api/v1/conversations/{$c->id}/context")->assertOk()->assertJsonStructure(['data' => ['outcome' => ['current', 'source', 'auto'], 'handover', 'ad']]);
     expect(array_keys($this->getJson("/api/v1/conversations/{$c->id}")->assertOk()->json()))
         ->toBe(['conversation', 'messages', 'notes', 'customer', 'participants', 'cases', 'window', 'lock']);
 });

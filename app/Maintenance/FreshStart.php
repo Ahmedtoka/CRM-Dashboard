@@ -43,6 +43,8 @@ final class FreshStart
         'ads', 'ad_sets', 'ad_campaigns',
         // Reports and notifications.
         'user_notifications', 'analytics_daily', 'latency_samples',
+        // Mobile app push registrations (2026-10-16): the phones register again on their next login.
+        'device_tokens',
         // Owner ruling 2026-10-06 (wipe all data): comments before their posts, suggestions before their reports,
         // steps before their test sessions; logs and health state.
         'comments', 'posts', 'bot_suggestions', 'bot_learning_reports', 'bot_test_session_steps', 'bot_test_sessions',
