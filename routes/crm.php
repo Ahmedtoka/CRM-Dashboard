@@ -16,6 +16,7 @@ use App\Http\Controllers\Web\OrderConfirmationController;
 use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\PresenceController;
 use App\Http\Controllers\Web\ProductController;
+use App\Http\Controllers\Web\QueueReportController;
 use App\Http\Controllers\Web\QueueWindowController;
 use App\Http\Controllers\Web\QuickReplyAttachmentController;
 use App\Http\Controllers\Web\ReportController;
@@ -183,6 +184,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
     Route::get('/reports/me', [ReportController::class, 'me'])->name('reports.me');
     Route::middleware('role:supervisor')->group(function () {
         Route::get('/reports/team', [ReportController::class, 'team'])->name('reports.team');
+        // Queue Part 2: the queue's report for any range (≤ 92 days) and its CSV.
+        Route::get('/reports/queue', [QueueReportController::class, 'index'])->name('reports.queue');
+        Route::get('/reports/queue/export', [QueueReportController::class, 'export'])->name('reports.queue.export');
         Route::get('/reports/users/{user}', [ReportController::class, 'user'])->name('reports.users.show');
         Route::get('/reports/bot', [ReportController::class, 'bot'])->name('reports.bot');
         // D11: merged into «الأرقام» (/ads/numbers?section=chat).

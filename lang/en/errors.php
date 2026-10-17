@@ -105,6 +105,7 @@ return [
         'qa_test' => 'Test chats are not scored.',
         'qa_own' => 'You cannot score your own window.',
         'qa_too_old' => 'Quality checks are for today and yesterday only.',
+        'report_range' => 'The queue report covers at most :n days.',
         'board_forbidden' => 'The live board is for supervisors and the shift leader only.',
         'roster_empty' => 'Pick at least one moderator before you start the day.',
         'user_unavailable' => 'This moderator does not exist or her account is deactivated.',

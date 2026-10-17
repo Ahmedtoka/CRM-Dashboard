@@ -27,4 +27,20 @@ return [
         'reversed' => 'اتلغت',
         'capped' => '(فوق السقف :cap)',
     ],
+    // The queue report's CSV header (queue Part 2).
+    'report' => [
+        'moderator' => 'الموظفة',
+        'received' => 'استلمت',
+        'closed' => ['inquiry' => 'استفسار', 'problem' => 'مشكلة', 'case' => 'طلب', 'auto' => 'تلقائي', 'escalation' => 'تصعيد', 'no_reply' => 'ما ردّتش', 'other' => 'تاني'],
+        'first_reply_avg' => 'متوسط أول رد (ثانية)',
+        'handle_avg' => 'متوسط مدة الشباك (ثانية)',
+        'sla_pct' => 'نسبة الـ SLA',
+        'rating_avg' => 'متوسط التقييم',
+        'rating_count' => 'عدد التقييمات',
+        'qa_avg' => 'متوسط الجودة',
+        'qa_count' => 'عدد تقييمات الجودة',
+        'cases_resolved' => 'طلبات اتحلّت',
+        'points' => ['base' => 'نقط الشبابيك', 'speed' => 'نقط السرعة', 'case' => 'نقط الطلبات', 'review' => 'نقط التقييم', 'qa' => 'نقط الجودة', 'no_reply' => 'خصم عدم الرد'],
+        'total' => 'إجمالي النقط',
+    ],
 ];

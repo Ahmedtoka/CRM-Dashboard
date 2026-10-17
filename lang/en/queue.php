@@ -26,4 +26,20 @@ return [
         'reversed' => 'Reversed',
         'capped' => '(over the cap :cap)',
     ],
+    // The queue report's CSV header (queue Part 2).
+    'report' => [
+        'moderator' => 'Moderator',
+        'received' => 'Received',
+        'closed' => ['inquiry' => 'Inquiry', 'problem' => 'Problem', 'case' => 'Case', 'auto' => 'Auto', 'escalation' => 'Escalation', 'no_reply' => 'No reply', 'other' => 'Other'],
+        'first_reply_avg' => 'Avg first reply (s)',
+        'handle_avg' => 'Avg window time (s)',
+        'sla_pct' => 'SLA %',
+        'rating_avg' => 'Avg rating',
+        'rating_count' => 'Ratings',
+        'qa_avg' => 'Avg quality',
+        'qa_count' => 'Quality checks',
+        'cases_resolved' => 'Cases resolved',
+        'points' => ['base' => 'Window points', 'speed' => 'Speed points', 'case' => 'Case points', 'review' => 'Rating points', 'qa' => 'Quality points', 'no_reply' => 'No-reply deductions'],
+        'total' => 'Total points',
+    ],
 ];

@@ -91,6 +91,7 @@ const mainNavItems = computed<NavItem[]>(() => {
     if (allows('supervisor')) {
         reports.push(
             { title: t('nav.reports_team'), href: '/reports/team' },
+            { title: t('nav.reports_queue'), href: '/reports/queue' },
             { title: t('nav.reports_bot'), href: '/reports/bot' },
             { title: t('nav.reports_activity'), href: '/reports/activity' },
             { title: t('nav.reports_quick_replies'), href: '/reports/quick-replies' },
