@@ -10,7 +10,8 @@ import { alertSentence, DISMISS_REASONS, SNOOZE_OPTIONS, type DismissReason, typ
 import { formatDateTime } from '@/lib/format';
 import type { AlertAdRef, AlertCardData, AlertReason } from '@/types/ads';
 import { router } from '@inertiajs/vue3';
-import { ChevronDown } from 'lucide-vue-next';
+import { ADS_TONE } from '@/lib/adsUi';
+import { CheckCircle2, ChevronDown, Megaphone, PackageX } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = withDefaults(
@@ -51,10 +52,10 @@ const subtitle = computed(() => {
 const tone = computed(
     () =>
         ({
-            critical: 'text-destructive',
-            high: 'text-orange-700 dark:text-orange-400',
-            medium: 'text-amber-700 dark:text-amber-400',
-            info: 'text-sky-700 dark:text-sky-400',
+            critical: 'text-danger',
+            high: 'text-danger',
+            medium: 'text-warn',
+            info: 'text-info',
         })[props.card.severity],
 );
 const writeVerb = computed(() => props.card.primary.verb === 'stop' || props.card.primary.verb === 'run');
@@ -109,49 +110,54 @@ function sendDisagree(): void {
 
 <template>
     <article
-        :class="['rounded-lg bg-card p-3 shadow-card', focused ? 'ring-2 ring-primary' : '']"
+        class="border-b border-line px-4 py-3.5 last:border-b-0 focus:outline-none"
+        :class="focused ? 'bg-brand-soft/60 outline outline-2 -outline-offset-2 outline-ring' : ''"
         :data-card="card.key"
         :aria-current="focused ? 'true' : undefined"
         :tabindex="focused ? -1 : undefined"
     >
-        <p v-if="actedLine" class="text-xs text-muted-foreground" role="status" data-test="acted">{{ actedLine }}</p>
+        <p v-if="actedLine" class="flex items-center gap-2 text-[13px] text-fg-2" role="status" data-test="acted"><CheckCircle2 class="size-4 text-ok" aria-hidden="true" />{{ actedLine }}</p>
         <template v-else>
-            <header class="flex items-start gap-3">
-                <img v-if="card.ad?.thumbnail_url" :src="card.ad.thumbnail_url" alt="" loading="lazy" class="size-14 shrink-0 rounded object-cover" />
+            <header class="flex items-start gap-3.5">
+                <span class="h-16 w-[52px] shrink-0 overflow-hidden rounded-md bg-sunken">
+                    <img v-if="card.ad?.thumbnail_url" :src="card.ad.thumbnail_url" alt="" loading="lazy" class="size-full object-cover" />
+                    <component :is="card.kind === 'product' ? PackageX : Megaphone" v-else class="m-auto mt-5 size-5 text-fg-3" aria-hidden="true" />
+                </span>
                 <div class="min-w-0 flex-1">
                     <p class="flex items-center gap-2 text-xs">
                         <span :class="['inline-flex items-center gap-1 font-semibold', tone]">
                             <span class="size-2 rounded-full bg-current" aria-hidden="true" />{{ t(`ads.alerts.severity.${card.severity}`) }}
                         </span>
-                        <span v-if="unseen" class="text-muted-foreground">{{ t('ads.alerts.new') }}</span>
+                        <span v-if="unseen" class="rounded-full bg-brand-soft px-1.5 py-px text-[11px] font-semibold text-brand-ink">{{ t('ads.alerts.new') }}</span>
                     </p>
-                    <h3 class="truncate text-sm font-bold" dir="auto">
+                    <h3 class="mt-0.5 truncate text-sm font-semibold text-foreground" dir="auto">
                         <bdi>{{ title }}</bdi>
                     </h3>
-                    <p class="truncate text-xs text-muted-foreground" dir="auto">{{ subtitle }}</p>
+                    <p class="truncate text-[12.5px] text-fg-2" dir="auto">{{ subtitle }}</p>
                 </div>
-                <p v-if="money > 0 && mode !== 'closed'" class="shrink-0 text-xs tabular-nums" data-test="money">
+                <p v-if="money > 0 && mode !== 'closed'" class="shrink-0 rounded-full bg-danger-soft px-2 py-0.5 text-xs font-semibold tabular-nums text-danger" data-test="money">
                     {{ t('ads.alerts.money_at_risk', { money }) }}
                 </p>
             </header>
 
-            <ul class="mt-2 space-y-1 text-sm leading-relaxed">
+            <ul class="mt-2 space-y-1 ps-[66px] text-[13.5px] leading-relaxed text-foreground max-sm:ps-0">
                 <li v-for="s in sentences" :key="s.id">
                     {{ s.text }}
-                    <span v-if="s.state" class="block text-2xs text-muted-foreground" data-test="state">{{ s.state }}</span>
+                    <span v-if="s.state" class="block text-xs text-fg-3" data-test="state">{{ s.state }}</span>
                 </li>
             </ul>
-            <p v-if="askManager" class="mt-1 text-xs font-medium" data-test="ask-manager">{{ t('ads.alerts.ask_manager') }}</p>
+            <p v-if="askManager" class="mt-1 ps-[66px] text-xs font-medium text-fg-2 max-sm:ps-0" data-test="ask-manager">{{ t('ads.alerts.ask_manager') }}</p>
 
-            <ul v-if="card.kind === 'product'" class="mt-2 divide-y divide-border text-xs">
-                <li v-for="a in card.ads" :key="a.id" class="flex items-center justify-between gap-2 py-1.5">
+            <ul v-if="card.kind === 'product'" class="mt-2 divide-y divide-line rounded-md border border-line text-[13px] sm:ms-[66px]">
+                <li v-for="a in card.ads" :key="a.id" class="flex items-center justify-between gap-2 px-3 py-1.5">
                     <button type="button" class="min-w-0 truncate text-start hover:underline" dir="auto" @click="emit('open-ad', a.id)">
                         <bdi>{{ a.name }}</bdi> · {{ a.account }}
                     </button>
                     <Button
                         v-if="perAdStops && mode !== 'closed' && a.action === 'stop'"
                         size="sm"
-                        variant="destructive"
+                        variant="ghost"
+                        :class="['h-11 md:h-[30px]', ADS_TONE.danger]"
                         :disabled="!a.can_write"
                         :data-test="`stop-${a.id}`"
                         @click="emit('stop', a.alert_id, a, reasonText)"
@@ -161,24 +167,26 @@ function sendDisagree(): void {
                 </li>
             </ul>
 
-            <footer v-if="mode !== 'closed'" class="mt-3 flex flex-wrap items-center gap-2">
+            <footer v-if="mode !== 'closed'" class="mt-3 flex flex-wrap items-center gap-1.5 sm:ps-[66px]">
                 <Button
                     v-if="showPrimary"
                     size="sm"
-                    :variant="card.primary.verb === 'stop' ? 'destructive' : 'default'"
+                    variant="ghost"
+                    :class="['h-11 md:h-[30px]', card.primary.verb === 'stop' ? ADS_TONE.danger : ADS_TONE.ok]"
                     :disabled="primaryDisabled"
                     data-test="primary"
                     @click="primary"
                 >
                     {{ t(`ads.alerts.verbs.${card.primary.verb}`) }}
                 </Button>
-                <Button v-if="card.ad" size="sm" variant="ghost" data-test="why" @click="emit('open-ad', card.ad.id)">{{
+                <Button v-if="card.ad" size="sm" variant="ghost" :class="['h-11 md:h-[30px]', ADS_TONE.quiet]" data-test="why" @click="emit('open-ad', card.ad.id)">{{
                     t('ads.alerts.verbs.why')
                 }}</Button>
                 <div v-if="mode === 'open'" class="relative">
                     <Button
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
+                        :class="['h-11 md:h-[30px]', ADS_TONE.quiet]"
                         data-test="later"
                         :disabled="busy"
                         :aria-expanded="laterOpen"
@@ -190,7 +198,7 @@ function sendDisagree(): void {
                     <div
                         v-if="laterOpen"
                         role="menu"
-                        class="absolute start-0 z-10 mt-1 min-w-36 rounded-md border border-border bg-popover p-1 shadow-md"
+                        class="absolute start-0 z-10 mt-1 min-w-40 rounded-lg border border-line bg-popover p-1 shadow-e2"
                     >
                         <button
                             v-for="o in SNOOZE_OPTIONS"
@@ -198,7 +206,7 @@ function sendDisagree(): void {
                             type="button"
                             role="menuitem"
                             :data-test="`later-${o}`"
-                            class="block w-full rounded px-2 py-1.5 text-start text-xs hover:bg-muted"
+                            class="block w-full rounded-md px-2.5 py-2 text-start text-[13px] hover:bg-sunken focus-visible:bg-sunken focus-visible:outline-none"
                             @click="later(o)"
                         >
                             {{ t(`ads.alerts.later.${o}`) }}
@@ -209,6 +217,7 @@ function sendDisagree(): void {
                     v-if="canDismiss"
                     size="sm"
                     variant="ghost"
+                    :class="['h-11 md:h-[30px]', ADS_TONE.quiet]"
                     data-test="disagree"
                     :aria-expanded="disagreeOpen"
                     @click="disagreeOpen = !disagreeOpen"
@@ -217,7 +226,7 @@ function sendDisagree(): void {
                 </Button>
             </footer>
 
-            <div v-if="disagreeOpen && mode !== 'closed'" class="mt-2 space-y-2 rounded-md bg-muted/50 p-2">
+            <div v-if="disagreeOpen && mode !== 'closed'" class="mt-2 space-y-2 rounded-md bg-sunken p-3 sm:ms-[66px]">
                 <div class="flex flex-wrap gap-1" role="group" :aria-label="t('ads.alerts.disagree.label')">
                     <button
                         v-for="r in DISMISS_REASONS"
@@ -225,7 +234,7 @@ function sendDisagree(): void {
                         type="button"
                         :data-test="`reason-${r}`"
                         :aria-pressed="chosen === r"
-                        :class="['rounded-full border px-2 py-1 text-xs', chosen === r ? 'border-primary bg-primary/10' : 'border-border bg-card']"
+                        :class="['h-8 rounded-full border px-3 text-xs font-medium', chosen === r ? 'border-brand bg-brand-soft text-brand-ink' : 'border-line-strong bg-card text-fg-2 hover:text-foreground']"
                         @click="chosen = r"
                     >
                         {{ t(`ads.alerts.disagree.reasons.${r}`) }}
@@ -235,7 +244,7 @@ function sendDisagree(): void {
                     v-model="note"
                     maxlength="500"
                     rows="2"
-                    class="w-full rounded-md border border-input bg-background p-2 text-xs"
+                    class="w-full rounded-md border border-line-strong bg-card p-2 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     :aria-label="t('ads.alerts.disagree.note')"
                     :placeholder="t('ads.alerts.disagree.note')"
                 />

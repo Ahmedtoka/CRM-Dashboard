@@ -179,7 +179,7 @@ onBeforeUnmount(() => {
     <section class="space-y-3" aria-labelledby="alerts-title" data-test="alerts">
         <div
             v-if="meta.shadow && mode === 'open'"
-            class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+            class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-warn-soft px-4 py-2.5 text-[13px] text-warn"
             role="status"
             data-test="shadow-ribbon"
         >
@@ -190,11 +190,12 @@ onBeforeUnmount(() => {
         </div>
 
         <header v-if="alerts.length" class="flex flex-wrap items-center justify-between gap-2">
-            <h2 id="alerts-title" class="text-sm font-semibold">{{ t('ads.alerts.section') }}</h2>
+            <h2 id="alerts-title" class="text-base font-bold text-foreground">{{ t('ads.alerts.section') }}</h2>
             <Button
                 v-if="mode === 'open' && alerts.length > 1"
                 size="sm"
                 variant="outline"
+                class="h-11 md:h-8"
                 data-test="review"
                 :aria-pressed="reviewing"
                 @click="toggleReview"
@@ -203,16 +204,16 @@ onBeforeUnmount(() => {
             </Button>
         </header>
         <h2 v-else id="alerts-title" class="sr-only">{{ t('ads.alerts.section') }}</h2>
-        <p v-if="reviewing" class="text-2xs text-muted-foreground" data-test="review-hint">{{ t('ads.alerts.review_hint') }}</p>
-        <p v-if="error" class="text-xs text-destructive" role="alert">{{ error }}</p>
+        <p v-if="reviewing" class="text-xs text-fg-3" data-test="review-hint">{{ t('ads.alerts.review_hint') }}</p>
+        <p v-if="error" class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger" role="alert">{{ error }}</p>
 
         <EmptyState v-if="!alerts.length && mode !== 'open'" :icon="CheckCircle2" :title="emptyText" />
-        <div v-for="g in groups" :key="g.severity" class="space-y-2" :data-test="`group-${g.severity}`">
-            <h3 class="text-xs font-semibold text-muted-foreground">
+        <div v-for="g in groups" :key="g.severity" class="overflow-hidden rounded-lg border border-line bg-card" :data-test="`group-${g.severity}`">
+            <h3 class="flex items-center gap-2 border-b border-line bg-surface-2 px-4 py-2 text-[13px] font-semibold text-fg-2" :class="g.severity === 'info' && !showInfo ? 'border-b-0' : ''">
                 <button
                     v-if="g.severity === 'info'"
                     type="button"
-                    class="hover:underline"
+                    class="inline-flex items-center gap-1 hover:text-foreground"
                     :aria-expanded="showInfo"
                     data-test="info-toggle"
                     @click="showInfo = !showInfo"
@@ -238,7 +239,7 @@ onBeforeUnmount(() => {
                 />
             </template>
         </div>
-        <p v-if="mode === 'open' && meta.hidden_by_cap > 0" class="text-xs text-muted-foreground" data-test="cap-note">
+        <p v-if="mode === 'open' && meta.hidden_by_cap > 0" class="text-xs text-fg-3" data-test="cap-note">
             {{ t('ads.alerts.cap_note', { n: meta.hidden_by_cap }) }}
         </p>
 

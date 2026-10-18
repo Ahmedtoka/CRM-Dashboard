@@ -21,7 +21,8 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import type { AdsApprovalsProps, ApproveResult, LaunchRow } from '@/types/ads';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { isAxiosError } from 'axios';
-import { ShieldCheck } from 'lucide-vue-next';
+import { ADS_FIELD } from '@/lib/adsUi';
+import { LockKeyhole, OctagonPause, ShieldCheck } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 
 const props = defineProps<AdsApprovalsProps>();
@@ -169,28 +170,36 @@ onMounted(async () => {
 });
 
 const selfOf = (l: LaunchRow) => props.isAdmin && me.value !== null && (l.people.preparer?.id === me.value || l.people.forwarder?.id === me.value);
-const field = 'h-9 rounded-md border border-input bg-background px-2 text-sm';
+const field = ADS_FIELD;
 </script>
 
 <template>
     <Head :title="t('ads.launch.approvals.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-[1100px] space-y-4 p-3 md:p-6">
+        <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-5 p-4 md:p-6">
             <PageHeader :title="t('ads.launch.approvals.title')" :description="t('ads.launch.approvals.description')">
-                <span v-if="canApprove" class="text-xs tabular-nums text-muted-foreground">{{
+                <span v-if="canApprove" class="text-[13px] tabular-nums text-fg-2">{{
                     t('ads.launch.approvals.left_today', { n: approvalsLeft })
                 }}</span>
-                <Button v-if="canApprove" size="sm" :disabled="!writesOn || !launches.length" @click="bulkOpen = true">
+                <Button v-if="canApprove" :disabled="!writesOn || !launches.length" @click="bulkOpen = true">
                     <ShieldCheck aria-hidden="true" />{{ t('ads.launch.approvals.bulk') }}
                 </Button>
             </PageHeader>
             <SectionTabs :tabs="sectionTabs.decisions(t, inertiaPage.props.adsCounters?.awaiting_approval)" :label="t('section_tabs.decisions.label')" />
 
-            <p v-if="!writesOn" role="alert" class="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            <p v-if="!writesOn" role="alert" class="flex items-center gap-2 rounded-lg bg-danger-soft px-4 py-2.5 text-[13px] font-medium text-danger">
+                <OctagonPause class="size-4 shrink-0" aria-hidden="true" />
                 {{ t('ads.launch.approvals.writes_off') }}
             </p>
-            <p v-if="!canApprove" class="rounded-md bg-muted px-3 py-2 text-xs">{{ t('ads.launch.approvals.read_only') }}</p>
+            <p v-if="!canApprove" class="rounded-lg bg-sunken px-4 py-2.5 text-[13px] text-fg-2">{{ t('ads.launch.approvals.read_only') }}</p>
+            <div v-else-if="writesOn && launches.length" class="flex items-start gap-2.5 rounded-lg bg-brand-soft px-4 py-3" data-test="reauth-note">
+                <LockKeyhole class="mt-0.5 size-4 shrink-0 text-brand-ink" aria-hidden="true" />
+                <p class="min-w-0 text-[13px]">
+                    <b class="block font-semibold text-foreground">{{ t('ads.launch.reauth.title') }}</b>
+                    <span class="text-fg-2">{{ t('ads.launch.reauth.description') }}</span>
+                </p>
+            </div>
 
             <FilterBar :chips="chips" :more-count="moreCount" @remove="removeFilter" @clear="clearFilters">
                 <template #inline>
@@ -234,7 +243,7 @@ const field = 'h-9 rounded-md border border-input bg-background px-2 text-sm';
                 :title="t('ads.launch.approvals.empty')"
                 :body="t('ads.launch.approvals.empty_body')"
             />
-            <div v-else class="space-y-4">
+            <div v-else class="space-y-3">
                 <ApprovalCard
                     v-for="l in launches"
                     :key="l.id"
