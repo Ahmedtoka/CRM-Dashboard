@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import SectionTabs from '@/components/crm/SectionTabs.vue';
-import { carryFilters, sectionTabs } from '@/lib/sectionTabs';
 import AdDrawer from '@/components/ads/AdDrawer.vue';
 import DateRangePicker from '@/components/crm/DateRangePicker.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -10,6 +8,7 @@ import OrdersAnalyticsTab from '@/components/crm/orders/OrdersAnalyticsTab.vue';
 import OrdersListTable from '@/components/crm/orders/OrdersListTable.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import Pagination from '@/components/crm/Pagination.vue';
+import SectionTabs from '@/components/crm/SectionTabs.vue';
 import SkeletonList from '@/components/crm/SkeletonList.vue';
 import { Button } from '@/components/ui/button';
 import { useAdDrawer } from '@/composables/useAdDrawer';
@@ -20,10 +19,12 @@ import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatMinutes } from '@/lib/format';
 import { drawerRange } from '@/lib/ordersHub';
+import { carryFilters, sectionTabs } from '@/lib/sectionTabs';
 import type { SharedData } from '@/types';
 import type { OrderRow, Paginated, ReportRange } from '@/types/admin';
 import type { OrdersAnalytics, OrdersByAdRow, OrdersRange, OrdersTab } from '@/types/orders';
 import { Head, router, usePage } from '@inertiajs/vue3';
+import { useMediaQuery } from '@vueuse/core';
 import { SearchX } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
@@ -107,7 +108,7 @@ watch(
 useStaleOrderRefresh(rows);
 
 // The «فلاتر» badge counts what the popover holds.
-const MORE_KEYS = ['financial_status', 'source', 'type', 'created_by', 'platform', 'fulfillment_status', 'mismatch', 'stuck'];
+const MORE_KEYS = ['ad_platform', 'financial_status', 'source', 'type', 'created_by', 'platform', 'fulfillment_status', 'mismatch', 'stuck'];
 const moreCount = computed(() => activeKeys.value.filter((k) => MORE_KEYS.includes(k as string)).length);
 
 const governorateLabel = (v: string) => props.governorates.find((g) => g.value === v)?.label ?? v;
@@ -149,6 +150,8 @@ function clearAll(): void {
 
 // Empty on a triage view without dates (all matching orders, any period).
 const range = computed<ReportRange>(() => ({ from: filters.value.from ?? props.range.from ?? '', to: filters.value.to ?? props.range.to ?? '' }));
+/** From sm up the range sits in the bar and speaks for itself; inside the phone's «فلاتر» popover it gets a label. */
+const wide = useMediaQuery('(min-width: 640px)');
 const selectValue = (event: Event) => (event.target as HTMLSelectElement).value || null;
 
 // One-click saved views: each preset is a plain filtered address, so the chip, the URL and the list agree.
@@ -187,152 +190,155 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full min-w-0 max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('orders.title')" />
+            <PageHeader :title="t('orders.title')" :description="t('orders.description')" />
 
             <!-- D2: one strip for the order's life (كل الأوردرات · التأكيدات · التحليل · من الإعلانات); the filters ride along. -->
             <SectionTabs
-                :tabs="carryFilters(sectionTabs.orders(t, inertiaPage.props.auth.user?.role, inertiaPage.props.navBadges?.confirmations), inertiaPage.url)"
+                :tabs="
+                    carryFilters(
+                        sectionTabs.orders(t, inertiaPage.props.auth.user?.role, inertiaPage.props.navBadges?.confirmations),
+                        inertiaPage.url,
+                    )
+                "
                 :label="t('section_tabs.orders.label')"
             />
 
-            <div class="space-y-3 rounded-lg bg-card p-3 shadow-card">
-                <div class="min-w-0">
-                    <span :class="fieldLabel">{{ t('ordersHub.filters.range') }}</span>
-                    <DateRangePicker :model-value="range" month @update:model-value="set({ from: $event.from || null, to: $event.to || null })" />
-                </div>
-                <FilterBar
-                    :search="filters.q"
-                    :search-placeholder="t('orders.search')"
-                    :chips="chips"
-                    :more-count="moreCount"
-                    :presets="presets"
-                    :summary="summary"
-                    @update:search="set({ q: $event })"
-                    @remove="removeChip"
-                    @clear="clearAll()"
-                >
-                    <template #inline>
-                        <select
-                            :value="filters.status ?? ''"
-                            :class="selectClass"
-                            :aria-label="t('orders.status_all')"
-                            @change="set({ status: selectValue($event) })"
-                        >
-                            <option value="">{{ t('orders.status_all') }}</option>
-                            <option v-for="s in STATUSES" :key="s" :value="s">{{ t(`orders.statuses.${s}`) }}</option>
-                        </select>
-                        <select
-                            :value="filters.governorate ?? ''"
-                            :class="selectClass"
-                            :aria-label="t('ordersHub.filters.governorate')"
-                            data-filter="governorate"
-                            @change="set({ governorate: selectValue($event) })"
-                        >
-                            <option value="">{{ t('ordersHub.filters.governorate_all') }}</option>
-                            <option v-for="g in governorates" :key="g.value" :value="g.value">{{ g.label }}</option>
-                        </select>
-                        <select
-                            :value="filters.ad_platform ?? ''"
-                            :class="selectClass"
-                            :aria-label="t('ordersHub.filters.ad_platform')"
-                            data-filter="ad_platform"
-                            @change="set({ ad_platform: selectValue($event) })"
-                        >
-                            <option value="">{{ t('ordersHub.filters.ad_platform_all') }}</option>
-                            <option v-for="p in AD_PLATFORMS" :key="p" :value="p">{{ adPlatformLabel(p) }}</option>
-                            <option value="direct">{{ t('ordersHub.filters.direct') }}</option>
-                        </select>
-                    </template>
-                    <template #more>
-                        <div class="grid grid-cols-2 gap-3">
-                            <label class="min-w-0">
-                                <span :class="fieldLabel">{{ t('orders.financial_all') }}</span>
-                                <select
-                                    :value="filters.financial_status ?? ''"
-                                    :class="[selectClass, 'sm:w-full']"
-                                    @change="set({ financial_status: selectValue($event) })"
-                                >
-                                    <option value="">{{ t('orders.financial_all') }}</option>
-                                    <option v-for="s in FINANCIAL_STATUSES" :key="s" :value="s">{{ t(`orders.payment_status.${s}`) }}</option>
-                                </select>
-                            </label>
-                            <label class="min-w-0">
-                                <span :class="fieldLabel">{{ t('orders.list.filter_source') }}</span>
-                                <select
-                                    :value="filters.source ?? ''"
-                                    :class="[selectClass, 'sm:w-full']"
-                                    @change="set({ source: selectValue($event) })"
-                                >
-                                    <option value="">{{ t('orders.source_all') }}</option>
-                                    <option value="chat">{{ t('orders.source.chat') }}</option>
-                                    <option value="store">{{ t('orders.source.store') }}</option>
-                                </select>
-                            </label>
-                            <label class="min-w-0">
-                                <span :class="fieldLabel">{{ t('orders.list.filter_type') }}</span>
-                                <select :value="filters.type ?? ''" :class="[selectClass, 'sm:w-full']" @change="set({ type: selectValue($event) })">
-                                    <option value="">{{ t('orders.type_all') }}</option>
-                                    <option value="cod">{{ t('order.cod') }}</option>
-                                    <option value="payment_link">{{ t('order.payment_link') }}</option>
-                                </select>
-                            </label>
-                            <label class="min-w-0">
-                                <span :class="fieldLabel">{{ t('orders.list.filter_team') }}</span>
-                                <select
-                                    :value="filters.created_by ?? ''"
-                                    :class="[selectClass, 'sm:w-full']"
-                                    @change="set({ created_by: selectValue($event) })"
-                                >
-                                    <option value="">{{ t('orders.created_by_all') }}</option>
-                                    <option v-for="member in team" :key="member.id" :value="String(member.id)">{{ member.name }}</option>
-                                </select>
-                            </label>
-                            <label class="min-w-0">
-                                <span :class="fieldLabel">{{ t('orders.list.filter_platform') }}</span>
-                                <select
-                                    :value="filters.platform ?? ''"
-                                    :class="[selectClass, 'sm:w-full']"
-                                    @change="set({ platform: selectValue($event) })"
-                                >
-                                    <option value="">{{ t('ui.all_platforms') }}</option>
-                                    <option v-for="p in page.props.platforms" :key="p.value" :value="p.value">{{ p.label }}</option>
-                                </select>
-                            </label>
-                            <label class="min-w-0">
-                                <span :class="fieldLabel">{{ t('orders.list.filter_fulfillment') }}</span>
-                                <select
-                                    :value="filters.fulfillment_status ?? ''"
-                                    :class="[selectClass, 'sm:w-full']"
-                                    @change="set({ fulfillment_status: selectValue($event) })"
-                                >
-                                    <option value="">{{ t('orders.fulfillment_all') }}</option>
-                                    <option v-for="s in FULFILLMENT_STATUSES" :key="s" :value="s">{{ t(`orders.fulfillment_status.${s}`) }}</option>
-                                </select>
-                            </label>
+            <!-- The list template (DESIGN §4.1): search + up to three inline filters, the rest in «فلاتر», chips under it. -->
+            <FilterBar
+                :search="filters.q"
+                :search-placeholder="t('orders.search')"
+                :chips="chips"
+                :more-count="moreCount"
+                :presets="presets"
+                :summary="summary"
+                @update:search="set({ q: $event })"
+                @remove="removeChip"
+                @clear="clearAll()"
+            >
+                <template #inline>
+                    <div class="min-w-0" data-filter="range">
+                        <span v-if="!wide" :class="fieldLabel">{{ t('ordersHub.filters.range') }}</span>
+                        <DateRangePicker :model-value="range" month @update:model-value="set({ from: $event.from || null, to: $event.to || null })" />
+                    </div>
+                    <select
+                        :value="filters.status ?? ''"
+                        :class="selectClass"
+                        :aria-label="t('orders.status_all')"
+                        data-filter="status"
+                        @change="set({ status: selectValue($event) })"
+                    >
+                        <option value="">{{ t('orders.status_all') }}</option>
+                        <option v-for="s in STATUSES" :key="s" :value="s">{{ t(`orders.statuses.${s}`) }}</option>
+                    </select>
+                    <select
+                        :value="filters.governorate ?? ''"
+                        :class="selectClass"
+                        :aria-label="t('ordersHub.filters.governorate')"
+                        data-filter="governorate"
+                        @change="set({ governorate: selectValue($event) })"
+                    >
+                        <option value="">{{ t('ordersHub.filters.governorate_all') }}</option>
+                        <option v-for="g in governorates" :key="g.value" :value="g.value">{{ g.label }}</option>
+                    </select>
+                </template>
+                <template #more>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="min-w-0">
+                            <span :class="fieldLabel">{{ t('ordersHub.filters.ad_platform') }}</span>
+                            <select
+                                :value="filters.ad_platform ?? ''"
+                                :class="[selectClass, 'sm:w-full']"
+                                data-filter="ad_platform"
+                                @change="set({ ad_platform: selectValue($event) })"
+                            >
+                                <option value="">{{ t('ordersHub.filters.ad_platform_all') }}</option>
+                                <option v-for="p in AD_PLATFORMS" :key="p" :value="p">{{ adPlatformLabel(p) }}</option>
+                                <option value="direct">{{ t('ordersHub.filters.direct') }}</option>
+                            </select>
+                        </label>
+                        <label class="min-w-0">
+                            <span :class="fieldLabel">{{ t('orders.financial_all') }}</span>
+                            <select
+                                :value="filters.financial_status ?? ''"
+                                :class="[selectClass, 'sm:w-full']"
+                                @change="set({ financial_status: selectValue($event) })"
+                            >
+                                <option value="">{{ t('orders.financial_all') }}</option>
+                                <option v-for="s in FINANCIAL_STATUSES" :key="s" :value="s">{{ t(`orders.payment_status.${s}`) }}</option>
+                            </select>
+                        </label>
+                        <label class="min-w-0">
+                            <span :class="fieldLabel">{{ t('orders.list.filter_source') }}</span>
+                            <select :value="filters.source ?? ''" :class="[selectClass, 'sm:w-full']" @change="set({ source: selectValue($event) })">
+                                <option value="">{{ t('orders.source_all') }}</option>
+                                <option value="chat">{{ t('orders.source.chat') }}</option>
+                                <option value="store">{{ t('orders.source.store') }}</option>
+                            </select>
+                        </label>
+                        <label class="min-w-0">
+                            <span :class="fieldLabel">{{ t('orders.list.filter_type') }}</span>
+                            <select :value="filters.type ?? ''" :class="[selectClass, 'sm:w-full']" @change="set({ type: selectValue($event) })">
+                                <option value="">{{ t('orders.type_all') }}</option>
+                                <option value="cod">{{ t('order.cod') }}</option>
+                                <option value="payment_link">{{ t('order.payment_link') }}</option>
+                            </select>
+                        </label>
+                        <label class="min-w-0">
+                            <span :class="fieldLabel">{{ t('orders.list.filter_team') }}</span>
+                            <select
+                                :value="filters.created_by ?? ''"
+                                :class="[selectClass, 'sm:w-full']"
+                                @change="set({ created_by: selectValue($event) })"
+                            >
+                                <option value="">{{ t('orders.created_by_all') }}</option>
+                                <option v-for="member in team" :key="member.id" :value="String(member.id)">{{ member.name }}</option>
+                            </select>
+                        </label>
+                        <label class="min-w-0">
+                            <span :class="fieldLabel">{{ t('orders.list.filter_platform') }}</span>
+                            <select
+                                :value="filters.platform ?? ''"
+                                :class="[selectClass, 'sm:w-full']"
+                                @change="set({ platform: selectValue($event) })"
+                            >
+                                <option value="">{{ t('ui.all_platforms') }}</option>
+                                <option v-for="p in page.props.platforms" :key="p.value" :value="p.value">{{ p.label }}</option>
+                            </select>
+                        </label>
+                        <label class="min-w-0">
+                            <span :class="fieldLabel">{{ t('orders.list.filter_fulfillment') }}</span>
+                            <select
+                                :value="filters.fulfillment_status ?? ''"
+                                :class="[selectClass, 'sm:w-full']"
+                                @change="set({ fulfillment_status: selectValue($event) })"
+                            >
+                                <option value="">{{ t('orders.fulfillment_all') }}</option>
+                                <option v-for="s in FULFILLMENT_STATUSES" :key="s" :value="s">{{ t(`orders.fulfillment_status.${s}`) }}</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div>
+                        <span :class="fieldLabel">{{ t('orders.list.filter_flags') }}</span>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                v-for="flag in ['mismatch', 'stuck'] as const"
+                                :key="flag"
+                                type="button"
+                                class="h-8 rounded-full border px-3 text-xs font-medium"
+                                :class="
+                                    filters[flag]
+                                        ? 'border-warning bg-warning/15 text-foreground'
+                                        : 'border-input bg-background text-muted-foreground hover:text-foreground'
+                                "
+                                :aria-pressed="filters[flag]"
+                                @click="set({ [flag]: !filters[flag] })"
+                            >
+                                {{ t(flag === 'mismatch' ? 'orders.mismatch_only' : 'orders.stuck_only') }}
+                            </button>
                         </div>
-                        <div>
-                            <span :class="fieldLabel">{{ t('orders.list.filter_flags') }}</span>
-                            <div class="flex flex-wrap gap-2">
-                                <button
-                                    v-for="flag in ['mismatch', 'stuck'] as const"
-                                    :key="flag"
-                                    type="button"
-                                    class="h-8 rounded-full border px-3 text-xs font-medium"
-                                    :class="
-                                        filters[flag]
-                                            ? 'border-warning bg-warning/15 text-foreground'
-                                            : 'border-input bg-background text-muted-foreground hover:text-foreground'
-                                    "
-                                    :aria-pressed="filters[flag]"
-                                    @click="set({ [flag]: !filters[flag] })"
-                                >
-                                    {{ t(flag === 'mismatch' ? 'orders.mismatch_only' : 'orders.stuck_only') }}
-                                </button>
-                            </div>
-                        </div>
-                    </template>
-                </FilterBar>
-            </div>
+                    </div>
+                </template>
+            </FilterBar>
 
             <div v-if="activeTab === 'list'" class="min-w-0">
                 <OrdersListTable

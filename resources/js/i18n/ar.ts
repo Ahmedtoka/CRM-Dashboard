@@ -586,6 +586,11 @@ const ar = {
         },
     },
     customer: {
+        profile: 'بيانات العميلة',
+        totals: 'مشترياتها',
+        contact: 'التواصل',
+        copy_phone: 'انسخي الرقم',
+        phone_copied: 'الرقم اتنسخ',
         phone: 'الموبايل',
         email: 'البريد',
         city: 'المدينة',
@@ -613,6 +618,15 @@ const ar = {
         ads: 'جت من إعلانات',
     },
     order: {
+        fulfillments: {
+            title: 'الشحنات',
+            no_update: 'لسه مفيش تحديث من شركة الشحن',
+            shipment: {
+                in_transit: 'في الطريق', out_for_delivery: 'خرج للتوصيل', attempted_delivery: 'محاولة توصيل', delivered: 'اتسلّم',
+                failure: 'فشل التوصيل', not_delivered: 'ماتسلمش', confirmed: 'شركة الشحن أكدت', label_printed: 'البوليصة اتطبعت',
+                label_purchased: 'البوليصة اتشترت', ready_for_pickup: 'جاهز للاستلام', picked_up: 'اتسلم من الفرع', carrier_picked_up: 'شركة الشحن استلمت',
+            },
+        },
         create_title: 'طلب جديد',
         search: 'ابحث عن منتج أو SKU',
         no_products: 'لا توجد منتجات',
@@ -810,6 +824,8 @@ const ar = {
         empty: 'لا توجد تعليقات تطابق الفلتر',
     },
     orders: {
+        description: 'كل أوردرات شوبيفاي، من الشات والموقع. الأوردر الجديد بيتعمل من المحادثة.',
+        cancel_question: 'تلغي الأوردر ده؟',
         title: 'الأوردرات',
         presets: { awaiting_payment: 'مستنية الدفع', mismatch: 'فرق مع شوبيفاي', stuck: 'واقفة' },
         search: 'رقم الأوردر أو اسم/موبايل العميل',
@@ -960,6 +976,8 @@ const ar = {
         },
     },
     cases: {
+        description: 'المرتجع والاستبدال والشكاوى ومتابعة الشحن. البوت بيسجّلها، والفريق بيتابعها لحد ما تتقفل.',
+        load_error: 'مقدرناش نفتح الحالة دي',
         title: 'ما بعد البيع',
         search: 'رقم الأوردر أو اسم/موبايل العميل',
         type_all: 'كل الأنواع',
@@ -1017,10 +1035,14 @@ const ar = {
         },
     },
     customers: {
+        description: 'ملف كل عميلة: أوردراتها ومحادثاتها. أسرع طريق لعميلة هو البحث (Ctrl K).',
+        empty_search: 'مفيش عملاء بالبحث ده',
+        empty_search_body: 'جرّبي رقم الموبايل من غير الصفر الأولاني، أو جزء من الاسم.',
         title: 'العملاء',
         search: 'ابحث بالاسم أو الموبايل أو البريد',
         clear_search: 'مسح البحث',
         columns: {
+            city: 'المكان',
             name: 'الاسم',
             phone: 'الموبايل',
             platforms: 'المنصات',
@@ -4558,6 +4580,7 @@ const ar = {
         open_meta: 'افتح في ميتا',
         open_ad: 'تفاصيل الإعلان',
         analytics: {
+            summary: 'ملخص الفترة',
             orders: 'الأوردرات', revenue: 'المبيعات', aov: 'متوسط الأوردر', customers: 'العملاء', new_customers: 'عملاء جداد', repeat_customers: 'عملاء راجعين',
             real_hint: 'من غير الملغي والفاشل',
             by_governorate: 'حسب المحافظة', by_district: 'حسب المنطقة', rest: 'الباقي ({n})', unknown: 'مش محدد',
@@ -4648,6 +4671,8 @@ const ar = {
         answers: { confirm: 'أكدت', edit: 'طلبت تعديل', cancel: 'طلبت إلغاء' },
         call_outcomes: { confirmed: 'أكدت', cancelled: 'لغت', unreachable: 'مابتردش' },
         call: {
+            dial: 'اتصلي بـ {phone}',
+            dial_short: 'اتصلي',
             record: 'سجلي رد العميلة',
             group: 'نتيجة المكالمة',
             confirmed: 'أكدت في المكالمة',

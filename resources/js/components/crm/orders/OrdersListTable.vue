@@ -7,7 +7,7 @@ import { formatDateTime, formatMoney } from '@/lib/format';
 import { notOnShopifyText, orderLabel } from '@/lib/orderStatus';
 import type { OrderRow } from '@/types/admin';
 import { router } from '@inertiajs/vue3';
-import { AlertTriangle } from 'lucide-vue-next';
+import { AlertTriangle, MessageCircle, StickyNote, Store } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 /** One order row for /orders and /orders/ads/{ad} (fresh-orders F5). */
@@ -51,6 +51,11 @@ const columns = computed<Column[]>(() => [
         <template v-if="$slots.empty" #empty><slot name="empty" /></template>
         <template #cell-order="{ row }">
             <span class="inline-flex max-w-full items-center gap-1.5 align-middle">
+                <!-- Where it came from (chat or the store), as an icon with its name for screen readers (mockup). -->
+                <span v-if="row.source" class="inline-flex shrink-0 text-fg-3" :title="t(`orders.source.${row.source}`)" data-order-source>
+                    <component :is="row.source === 'store' ? Store : MessageCircle" class="size-3.5" aria-hidden="true" />
+                    <span class="sr-only">{{ t(`orders.source.${row.source}`) }}</span>
+                </span>
                 <span
                     v-if="orderLabel(row, t).draft"
                     class="truncate font-medium text-muted-foreground"
@@ -65,6 +70,11 @@ const columns = computed<Column[]>(() => [
                     :title="t('order.mismatch.title')"
                 >
                     <AlertTriangle class="size-3" :aria-label="t('order.mismatch.title')" />
+                </span>
+                <!-- The order note («تغليف هدية…»): a marker here, the text on hover and for screen readers. -->
+                <span v-if="row.note" class="inline-flex shrink-0 text-note" :title="row.note" data-order-note>
+                    <StickyNote class="size-3.5" aria-hidden="true" />
+                    <span class="sr-only">{{ t('orders.note_card.title') }}: {{ row.note }}</span>
                 </span>
             </span>
         </template>
