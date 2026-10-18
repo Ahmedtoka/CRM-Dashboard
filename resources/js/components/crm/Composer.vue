@@ -70,7 +70,10 @@ const { skin, classes: skinClasses } = useChatSkin(() => props.platform);
 // name built from a JS variable.
 const sendButtonClass = computed(() => (skin.value === 'whatsapp' ? 'text-white hover:opacity-90' : ''));
 const sendButtonStyle = computed(() => (skin.value === 'whatsapp' ? { backgroundColor: skinClasses.value.accent } : undefined));
-const iconButtonClass = cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'rounded-full text-muted-foreground hover:text-primary');
+const iconButtonClass = cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'size-8 rounded-md text-fg-2 hover:bg-sunken hover:text-foreground');
+/** The labelled tools of the mockup's composer («ردود جاهزة», «ابعت منتج»): icon + word from sm, icon only on a phone. */
+const toolClass =
+    'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-[13px] font-semibold text-fg-2 transition-colors hover:bg-sunken hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-brand-soft aria-expanded:text-brand-ink';
 
 const {
     picker,
@@ -325,7 +328,10 @@ defineExpose({
 </script>
 
 <template>
-    <div class="relative border-t bg-card px-3 py-2">
+    <div
+        class="relative flex flex-col gap-2 border-t border-line px-3 py-2.5 transition-colors"
+        :class="mode === 'note' ? 'bg-note-soft' : 'bg-card'"
+    >
         <SendProductPicker
             v-if="productPickerOpen && mode === 'reply' && !disabled"
             :conversation-id="conversationId"
@@ -359,8 +365,6 @@ defineExpose({
             <button type="button" :class="cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'h-7')" @click="onCancelConfirm">{{ t('common.cancel') }}</button>
         </div>
 
-        <ComposerModeToggle class="mb-1.5 md:hidden" :mode="mode" @update:mode="setMode" />
-
         <p v-if="recorder.state.value === 'denied'" role="alert" class="mb-1.5 px-1 text-2xs text-warning">{{ t('media.mic_denied') }}</p>
         <p v-if="recorder.state.value === 'unsupported'" role="alert" class="mb-1.5 px-1 text-2xs text-warning">{{ t('media.mic_unsupported') }}</p>
         <p v-if="autoStopNotice" role="status" class="mb-1.5 px-1 text-2xs text-warning">{{ t('media.max_duration') }}</p>
@@ -368,22 +372,42 @@ defineExpose({
         <p v-if="quickError" role="alert" class="mb-1.5 px-1 text-2xs text-destructive">{{ quickError }}</p>
         <p v-if="quickMissing.length" role="status" class="mb-1.5 px-1 text-2xs text-warning">{{ missingMessage }}</p>
 
-        <AttachmentTray v-if="mode === 'reply' && uploads.items.value.length" :items="uploads.items.value" @remove="uploads.remove" @retry="uploads.retry" />
-
-        <div
-            class="flex items-end gap-2 rounded-2xl px-2 py-1.5 transition-colors focus-within:ring-2 focus-within:ring-ring"
-            :class="[mode === 'note' ? 'bg-note/10 ring-1 ring-note/40 dark:bg-note/[0.12]' : 'bg-elevated', { 'opacity-60': disabled && mode === 'reply' }]"
-            :data-composer-note="mode === 'note' ? '' : undefined"
-            @focusin="focused = ($event.target as HTMLElement).tagName === 'TEXTAREA'"
-            @focusout="focused = false"
-        >
-            <ComposerModeToggle class="hidden self-end md:inline-flex" :mode="mode" @update:mode="setMode" />
+        <!-- Tools row (mockup composer): reply / note, the saved replies and «ابعت منتج» with their words, attach and voice,
+             and the shortcuts hint at the end, laid out always and only shown with the focus (no jump under the pointer). -->
+        <div class="flex min-w-0 items-center gap-0.5" data-composer-tools>
+            <ComposerModeToggle class="me-1.5" :mode="mode" @update:mode="setMode" />
             <template v-if="mode === 'reply'">
+                <button
+                    type="button"
+                    :title="`${t('replies.picker_button')} (/)`"
+                    :aria-label="t('replies.picker_button')"
+                    :aria-expanded="pickerFromButton && quickMenuOpen"
+                    :class="toolClass"
+                    :disabled="disabled || recording"
+                    data-quick-replies-button
+                    @click="toggleFromButton()"
+                >
+                    <MessageSquareText class="size-4" aria-hidden="true" /><span class="hidden sm:inline">{{ t('replies.picker_button') }}</span>
+                </button>
+
+                <button
+                    type="button"
+                    :title="t('send_product.button')"
+                    :aria-label="t('send_product.button')"
+                    :aria-expanded="productPickerOpen"
+                    :class="toolClass"
+                    :disabled="disabled || recording"
+                    data-testid="send-product-button"
+                    @click="productPickerOpen = !productPickerOpen"
+                >
+                    <Shirt class="size-4" aria-hidden="true" /><span class="hidden sm:inline">{{ t('send_product.button') }}</span>
+                </button>
+
                 <button
                     type="button"
                     :title="`${t('media.attach')}${hint('inbox.attach')}`"
                     :aria-label="t('media.attach')"
-                    :class="cn(iconButtonClass, 'self-end disabled:pointer-events-none disabled:opacity-50')"
+                    :class="cn(iconButtonClass, 'disabled:pointer-events-none disabled:opacity-50')"
                     :disabled="disabled || recording"
                     @click="fileInput?.click()"
                 >
@@ -392,31 +416,36 @@ defineExpose({
                 <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
 
                 <button
+                    v-if="!recording"
                     type="button"
-                    :title="t('replies.picker_button')"
-                    :aria-label="t('replies.picker_button')"
-                    :aria-expanded="pickerFromButton && quickMenuOpen"
-                    :class="cn(iconButtonClass, 'self-end disabled:pointer-events-none disabled:opacity-50')"
-                    :disabled="disabled || recording"
-                    @click="toggleFromButton()"
+                    :title="t('media.record')"
+                    :aria-label="t('media.record')"
+                    :class="cn(iconButtonClass, 'disabled:pointer-events-none disabled:opacity-50')"
+                    :disabled="disabled || recorder.starting.value"
+                    @click="recorder.start()"
                 >
-                    <MessageSquareText class="size-4" aria-hidden="true" />
-                </button>
-
-                <button
-                    type="button"
-                    :title="t('send_product.button')"
-                    :aria-label="t('send_product.button')"
-                    :aria-expanded="productPickerOpen"
-                    :class="cn(iconButtonClass, 'self-end disabled:pointer-events-none disabled:opacity-50')"
-                    :disabled="disabled || recording"
-                    data-testid="send-product-button"
-                    @click="productPickerOpen = !productPickerOpen"
-                >
-                    <Shirt class="size-4" aria-hidden="true" />
+                    <Mic class="size-4" aria-hidden="true" />
                 </button>
             </template>
+            <p
+                class="ms-auto hidden min-w-0 truncate ps-2 text-[11.5px] text-fg-3 transition-opacity md:block"
+                :class="focused ? 'opacity-100' : 'invisible opacity-0'"
+                :aria-hidden="!focused"
+                data-composer-hint
+            >
+                {{ mode === 'note' ? `${t('notes.mention_hint')} · ${t('notes.newline_hint')}` : t('composer.hint') }}
+            </p>
+        </div>
 
+        <AttachmentTray v-if="mode === 'reply' && uploads.items.value.length" :items="uploads.items.value" @remove="uploads.remove" @retry="uploads.retry" />
+
+        <div
+            class="flex items-end gap-1.5"
+            :class="{ 'opacity-60': disabled && mode === 'reply' }"
+            :data-composer-note="mode === 'note' ? '' : undefined"
+            @focusin="focused = ($event.target as HTMLElement).tagName === 'TEXTAREA'"
+            @focusout="focused = false"
+        >
             <VoiceRecorderBar v-if="recording" :elapsed="recorder.elapsed.value" :max="300" @cancel="onCancelRecording" @send="sendVoice" />
             <MentionTextarea
                 v-else-if="mode === 'note'"
@@ -429,7 +458,7 @@ defineExpose({
                 :me-id="meId"
                 size="sm"
                 :placeholder="t('composer.note_placeholder')"
-                class="min-h-8 flex-1 px-1 py-1.5 [&_textarea]:ring-0 [&_textarea]:ring-offset-0"
+                class="min-h-10 flex-1 rounded-md border border-note/40 bg-card focus-within:border-note focus-within:ring-[3px] focus-within:ring-note/20 [&_textarea]:ring-0 [&_textarea]:ring-offset-0"
                 @submit="submit"
             />
             <textarea
@@ -444,7 +473,7 @@ defineExpose({
                 aria-autocomplete="list"
                 :aria-expanded="quickMenuOpen"
                 :aria-controls="quickMenuOpen ? 'quick-reply-menu' : undefined"
-                class="max-h-40 min-h-8 flex-1 resize-none bg-transparent px-1 py-1.5 text-sm leading-5 outline-none placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed"
+                class="max-h-36 min-h-10 flex-1 resize-none rounded-md border border-line-strong bg-card px-3 py-2 text-sm leading-6 outline-none transition-[border-color,box-shadow] placeholder:text-fg-3 focus:border-brand focus:ring-[3px] focus:ring-brand-soft focus-visible:ring-offset-0 disabled:cursor-not-allowed"
                 @input="onInput"
                 @keydown="onKeydown"
                 @paste="onPaste"
@@ -453,22 +482,11 @@ defineExpose({
             <button
                 v-if="!recording && mode === 'reply'"
                 type="button"
-                :title="t('media.record')"
-                :aria-label="t('media.record')"
-                :class="cn(iconButtonClass, 'self-end disabled:pointer-events-none disabled:opacity-50')"
-                :disabled="disabled || recorder.starting.value"
-                @click="recorder.start()"
-            >
-                <Mic class="size-4" aria-hidden="true" />
-            </button>
-
-            <button
-                v-if="!recording && mode === 'reply'"
-                type="button"
-                :class="cn(buttonVariants({ size: 'icon' }), 'shrink-0 self-end rounded-full', sendButtonClass)"
+                :class="cn(buttonVariants({ size: 'icon' }), 'size-10 shrink-0 rounded-md', sendButtonClass)"
                 :style="sendButtonStyle"
                 :disabled="!canSend"
                 :aria-label="t('composer.send')"
+                :title="t('composer.send')"
                 @click="submit"
             >
                 <SendHorizontal class="rtl-flip" />
@@ -477,7 +495,7 @@ defineExpose({
                 v-if="mode === 'note'"
                 variant="outline"
                 size="sm"
-                class="shrink-0 self-end gap-1"
+                class="h-10 shrink-0 gap-1 border-note/50 bg-card"
                 type="button"
                 :disabled="!canSendNote || addingNote"
                 @click="submit"
@@ -486,10 +504,5 @@ defineExpose({
                 <NotebookPen class="size-3.5" aria-hidden="true" />{{ t('composer.add_note') }}
             </Button>
         </div>
-        <!-- Always laid out on md+ (only made invisible): a hint that appeared / vanished on focus moved the
-             bottom-anchored box between mousedown and mouseup, and the click on Send / attach was lost. -->
-        <p class="mt-1 hidden px-1 text-2xs text-muted-foreground transition-opacity md:block" :class="focused ? 'opacity-100' : 'invisible opacity-0'" :aria-hidden="!focused" data-composer-hint>
-            {{ mode === 'note' ? `${t('notes.mention_hint')} · ${t('notes.newline_hint')}` : t('composer.hint') }}
-        </p>
     </div>
 </template>
