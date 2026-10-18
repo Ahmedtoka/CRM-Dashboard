@@ -206,7 +206,7 @@ const area =
                     >
                         <input
                             type="checkbox"
-                            class="rounded border-line-strong"
+                            class="rounded border-line-strong accent-brand"
                             :checked="form.days.includes(day)"
                             @change="toggleDay(day, ($event.target as HTMLInputElement).checked)"
                         />{{ name }}

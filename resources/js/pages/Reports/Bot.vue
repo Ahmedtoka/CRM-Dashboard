@@ -86,7 +86,7 @@ const breadcrumbs = computed(() => [
     <Head :title="t('nav.bot_performance')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
+        <div class="mx-auto w-full max-w-6xl space-y-4 p-3 md:p-6">
             <PageHeader
                 :title="t('nav.bot_performance')"
                 :description="t('reports.bot.page_hint')"

@@ -800,7 +800,7 @@ async function loadChains(): Promise<void> {
 
     <AppLayout :breadcrumbs="breadcrumbs" :fill="mode === 'editor'">
         <!-- The list (/bot/flows): one card row per flow, its main path as a chain, «افتحي» opens the designer. -->
-        <div v-if="mode === 'list'" class="mx-auto w-full max-w-5xl space-y-4 p-3 md:p-6">
+        <div v-if="mode === 'list'" class="mx-auto w-full max-w-6xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('nav.bot_flows')" :description="t('flows.section_description')">
                 <Button type="button" @click="openCreate"><Plus class="size-4" aria-hidden="true" />{{ t('flows.new_flow') }}</Button>
             </PageHeader>

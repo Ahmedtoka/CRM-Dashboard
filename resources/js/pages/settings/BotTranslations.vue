@@ -120,7 +120,7 @@ function clearFilters(): void {
     <Head :title="t('settings.bot_translations.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-5xl space-y-4 p-3 md:p-6">
+        <div class="mx-auto w-full max-w-6xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('nav.bot_copy')" :description="t('settings.bot_replies.copy_description')" />
             <SectionTabs :tabs="sectionTabs.botCopy(t)" :label="t('nav.bot_copy')" />
 

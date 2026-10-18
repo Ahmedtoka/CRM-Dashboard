@@ -65,13 +65,13 @@ function submit(): void {
         </label>
 
         <label class="flex items-center gap-2">
-            <input v-model="mismatchAlerts" type="checkbox" class="size-4 rounded border-line-strong" />
+            <input v-model="mismatchAlerts" type="checkbox" class="size-4 rounded border-line-strong accent-brand" />
             <span>{{ t('settings.shopify.settings_form.mismatch_alerts') }}</span>
         </label>
 
         <label class="grid gap-1">
             <span class="flex items-center gap-2">
-                <input v-model="orderCreationEnabled" type="checkbox" class="size-4 rounded border-line-strong" />
+                <input v-model="orderCreationEnabled" type="checkbox" class="size-4 rounded border-line-strong accent-brand" />
                 <span>{{ t('settings.shopify.settings_form.order_creation_enabled') }}</span>
             </span>
             <span class="text-fg-2">{{ t('settings.shopify.settings_form.order_creation_enabled_help') }}</span>

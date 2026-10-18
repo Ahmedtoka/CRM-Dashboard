@@ -81,7 +81,7 @@ const todayChips = computed(() => [
     t('settings.bot_learning.today_reviewed', { count: props.today.reviewed }),
     t('settings.bot_learning.today_notes', { count: props.today.notes }),
     t('settings.bot_learning.today_cost', { cost: money(props.today.cost_usd) }),
-    `${t('settings.bot_learning.source.live')} ${props.today.live} · ${t('settings.bot_learning.source.test')} ${props.today.test}`,
+    `${t('settings.bot_learning.source.live')} ${formatCount(props.today.live, locale.value)} · ${t('settings.bot_learning.source.test')} ${formatCount(props.today.test, locale.value)}`,
 ]);
 
 /** The kinds in a fixed order, most useful first, so the tab never reshuffles. */
@@ -205,7 +205,7 @@ const panel = 'rounded-lg border border-line bg-card';
     <Head :title="t('nav.bot_learning')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-5xl space-y-4 p-3 md:p-6" :dir="dir">
+        <div class="mx-auto w-full max-w-6xl space-y-4 p-3 md:p-6" :dir="dir">
             <PageHeader
                 :title="t('nav.bot_learning')"
                 :description="t('settings.bot_learning.description')"

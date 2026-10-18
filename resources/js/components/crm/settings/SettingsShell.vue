@@ -21,7 +21,7 @@ const props = withDefaults(
         description?: string;
         tabs?: SectionTab[];
         tabsLabel?: string;
-        /** The content column's reading width: a form reads best narrow, a table wants the room. */
+        /** Kept for callers: every settings page now shares one column width (960px) so the header never jumps between tabs; a form narrows its own panels. */
         width?: 'form' | 'wide';
         freshness?: string | null;
     }>(),
@@ -40,7 +40,7 @@ const crumbs = computed(() => settingsCrumbs(t, here.value?.group.id ?? null, pr
         <div class="grid items-start gap-6 lg:grid-cols-[232px_minmax(0,1fr)]">
             <SettingsHubNav :groups="groups" :current="here?.item.id ?? null" class="sticky top-[4.5rem] hidden lg:flex" />
 
-            <div class="min-w-0 space-y-5" :class="width === 'form' ? 'max-w-3xl' : ''" data-settings-shell>
+            <div class="min-w-0 max-w-[960px] space-y-5" :data-width="width" data-settings-shell>
                 <PageHeader :title="title" :description="description" :breadcrumbs="crumbs" :freshness="freshness">
                     <template v-if="$slots.extra" #extra><slot name="extra" /></template>
                     <slot name="actions" />

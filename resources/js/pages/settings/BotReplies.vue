@@ -116,13 +116,21 @@ async function save(entryId: number | null, original: string, source?: string): 
         busy.value = false;
     }
 }
+
+/** A reply with its `{placeholder}` / `#{order}` tokens isolated, so they read left-to-right inside Arabic text. */
+function replyParts(text: string): { text: string; token: boolean }[] {
+    return text
+        .split(/(#?{[a-z_]+})/)
+        .filter((part) => part !== '')
+        .map((part) => ({ text: part, token: /^#?{[a-z_]+}$/.test(part) }));
+}
 </script>
 
 <template>
     <Head :title="t('settings.bot_replies.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-5xl space-y-4 p-3 md:p-6">
+        <div class="mx-auto w-full max-w-6xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('nav.bot_copy')" :description="t('settings.bot_replies.copy_description')" />
             <SectionTabs :tabs="sectionTabs.botCopy(t)" :label="t('nav.bot_copy')" />
 
@@ -259,7 +267,12 @@ async function save(entryId: number | null, original: string, source?: string): 
                         </div>
                     </template>
                     <template v-else>
-                        <p class="whitespace-pre-line break-words text-[13.5px] leading-[1.75] text-foreground" dir="auto">{{ row.reply }}</p>
+                        <p class="whitespace-pre-line break-words text-[13.5px] leading-[1.75] text-foreground" dir="auto">
+                            <template v-for="(part, i) in replyParts(row.reply)" :key="i"
+                                ><bdi v-if="part.token" dir="ltr" class="rounded-sm bg-sunken px-1 text-xs text-fg-2">{{ part.text }}</bdi
+                                ><template v-else>{{ part.text }}</template></template
+                            >
+                        </p>
                         <p v-if="row.original" class="text-xs text-fg-3" dir="auto">{{ t('settings.bot_replies.original') }}: {{ row.original }}</p>
                         <p v-if="row.buttons.length" class="flex flex-wrap gap-1" :aria-label="t('settings.bot_replies.buttons')">
                             <span

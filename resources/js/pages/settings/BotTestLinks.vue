@@ -170,7 +170,7 @@ const input =
     <Head :title="t('nav.bot_testing')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-4xl space-y-4 p-3 md:p-6">
+        <div class="mx-auto w-full max-w-6xl space-y-4 p-3 md:p-6">
             <PageHeader
                 :title="t('nav.bot_testing')"
                 :description="t('settings.test_links.section_hint')"

@@ -93,7 +93,7 @@ async function removeImage(): Promise<void> {
     <Head :title="t('settings.bot_knowledge.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-5xl space-y-4 p-3 md:p-6">
+        <div class="mx-auto w-full max-w-6xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('nav.bot_copy')" :description="t('settings.bot_replies.copy_description')">
                 <Button type="button" @click="addEntry"><Plus class="size-4" aria-hidden="true" />{{ t('settings.bot_knowledge.add_entry') }}</Button>
             </PageHeader>

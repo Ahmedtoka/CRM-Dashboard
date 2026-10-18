@@ -71,7 +71,7 @@ const error = 'mt-1 text-xs text-danger';
                     </template>
                     <StatusChip
                         :label="t(whatsapp?.connected ? 'order_confirmations.settings.connected' : 'order_confirmations.settings.not_connected')"
-                        :tone="whatsapp?.connected ? 'ok' : 'danger'"
+                        :tone="whatsapp?.connected ? 'ok' : 'warn'"
                         dot
                     />
                 </SettingsRow>
