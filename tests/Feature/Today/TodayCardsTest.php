@@ -120,3 +120,17 @@ it('counts orders by the same order date the /orders list filters on (placed in 
         $this->actingAs($admin)->getJson($o['links'][$key])->assertOk()->assertJsonPath('meta.total', $o[$key]);
     }
 });
+
+it('counts the day\'s new chats per Cairo hour for the hourly chart (redesign p1)', function () {
+    Conversation::factory()->count(2)->create(['created_at' => Carbon::parse('2026-10-06 09:10', 'Africa/Cairo')->utc()]);
+    Conversation::factory()->create(['created_at' => Carbon::parse('2026-10-06 11:59', 'Africa/Cairo')->utc()]);
+    Conversation::factory()->create(['created_at' => Carbon::parse('2026-10-06 11:05', 'Africa/Cairo')->utc(), 'is_test' => true]);
+    Conversation::factory()->create(['created_at' => Carbon::parse('2026-10-05 23:30', 'Africa/Cairo')->utc()]); // yesterday
+
+    $c = app(TodayCards::class)->chats(TodayWindow::for('today'), User::factory()->create(['role' => UserRole::Admin]));
+
+    expect($c['by_hour'])->toHaveCount(24)
+        ->and($c['by_hour'][9])->toBe(2)
+        ->and($c['by_hour'][11])->toBe(1)
+        ->and(array_sum($c['by_hour']))->toBe($c['new']);
+});

@@ -116,6 +116,7 @@ final class TodayCards
             'bot_alone' => $botAlone,
             'to_agent' => $toAgent,
             'first_reply_avg_sec' => (int) $team['avg_first_response_sec'],
+            'by_hour' => $this->newChatsByHour($w),
             'queue' => QueueSetting::current()->enabled ? $this->queueDay->for($w->date) : null,
             'rating' => $this->ratings->summary($w->from, $w->to),
             'links' => [
@@ -261,6 +262,25 @@ final class TodayCards
         $qs = http_build_query(array_filter($query, fn ($v) => $v !== null && $v !== ''), '', '&', PHP_QUERY_RFC3986);
 
         return $path.($qs !== '' ? '?'.$qs : '').($fragment !== null && $fragment !== '' ? '#'.$fragment : '');
+    }
+
+    /**
+     * The hourly chart on «النهارده» (redesign p1): the window's new chats per Cairo hour, 0–23, on the same
+     * definition as `new` (no test chats). Bucketed in PHP: a day is a few hundred rows, and no SQL date function
+     * differs between MySQL and SQLite this way.
+     *
+     * @return list<int>
+     */
+    private function newChatsByHour(TodayWindow $w): array
+    {
+        $hours = array_fill(0, 24, 0);
+        Conversation::query()->where('is_test', false)->whereBetween('created_at', [$w->from, $w->to])
+            ->pluck('created_at')
+            ->each(function ($at) use (&$hours) {
+                $hours[(int) CarbonImmutable::parse($at)->setTimezone(TodayWindow::TZ)->format('G')]++;
+            });
+
+        return $hours;
     }
 
     private function teamMetrics(TodayWindow $w): array
