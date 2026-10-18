@@ -23,6 +23,8 @@ export interface Column {
     sortable?: boolean;
     /** Money and counts: tabular digits, end-aligned unless `align` says otherwise. */
     numeric?: boolean;
+    /** With `cardGrid`: the value takes the whole card width (a summary, product thumbs). */
+    wide?: boolean;
 }
 
 type RowId = number | string;
@@ -47,6 +49,8 @@ const props = withDefaults(
         selectable?: boolean;
         /** Extra classes for one row (a mismatched day, an over-budget account). */
         rowClass?: (row: T) => string | undefined;
+        /** Phone cards as a two-column grid, the label above each value (mockup `table.rt`); off keeps label … value rows. */
+        cardGrid?: boolean;
     }>(),
     {
         clickable: false,
@@ -62,6 +66,7 @@ const props = withDefaults(
         skeletonRows: 8,
         selectable: false,
         rowClass: undefined,
+        cardGrid: false,
     },
 );
 
@@ -84,7 +89,12 @@ function alignClass(col: Column): string {
 }
 
 function colClasses(col: Column, index: number): unknown[] {
-    return [alignClass(col), col.numeric ? 'tabular-nums' : '', col.class, props.stickyFirstColumn && !props.selectable && index === 0 ? 'crm-sticky-first' : ''];
+    return [
+        alignClass(col),
+        col.numeric ? 'tabular-nums' : '',
+        col.class,
+        props.stickyFirstColumn && !props.selectable && index === 0 ? 'crm-sticky-first' : '',
+    ];
 }
 
 function ariaSort(col: Column): 'ascending' | 'descending' | 'none' | undefined {
@@ -103,7 +113,9 @@ const allSelected = computed(() => ids.value.length > 0 && ids.value.every((id) 
 const someSelected = computed(() => !allSelected.value && ids.value.some((id) => selected.value.includes(id)));
 
 function toggleAll(): void {
-    selected.value = allSelected.value ? selected.value.filter((id) => !ids.value.includes(id)) : [...ids.value, ...selected.value.filter((id) => !ids.value.includes(id))];
+    selected.value = allSelected.value
+        ? selected.value.filter((id) => !ids.value.includes(id))
+        : [...ids.value, ...selected.value.filter((id) => !ids.value.includes(id))];
 }
 
 function toggleRow(row: T): void {
@@ -146,21 +158,52 @@ function defaultCell(row: T, key: string): unknown {
                     <component
                         :is="clickable ? 'button' : 'div'"
                         :type="clickable ? 'button' : undefined"
-                        class="block w-full rounded-lg border border-line bg-card p-3 text-start"
-                        :class="clickable ? 'hover:bg-surface-2 focus-visible:bg-surface-2' : ''"
+                        class="w-full rounded-lg border border-line bg-card p-3 text-start"
+                        :class="[
+                            clickable ? 'hover:bg-surface-2 focus-visible:bg-surface-2' : '',
+                            cardGrid ? 'grid grid-cols-2 gap-x-3 gap-y-2' : 'block',
+                        ]"
+                        :data-card-grid="cardGrid || undefined"
                         @click="clickable && emit('rowClick', row)"
                     >
-                        <div
-                            v-for="col in columns.filter((c) => !c.hideOnMobile)"
-                            :key="col.key"
-                            class="flex min-w-0 items-baseline justify-between gap-3 py-0.5 text-xs"
-                            :class="col.primary ? 'mb-1 text-sm font-semibold' : ''"
-                        >
-                            <span v-if="!col.primary" class="shrink-0 text-xs text-fg-2">{{ col.label }}</span>
-                            <span class="min-w-0 truncate" :class="[col.primary ? 'text-start' : 'text-end', col.numeric ? 'tabular-nums' : '']" :dir="col.dir">
-                                <slot :name="`cell-${col.key}`" :row="row" :value="cell(row, col.key)">{{ defaultCell(row, col.key) ?? '—' }}</slot>
-                            </span>
-                        </div>
+                        <template v-if="cardGrid">
+                            <div
+                                v-for="col in columns.filter((c) => !c.hideOnMobile)"
+                                :key="col.key"
+                                class="flex min-w-0 flex-col items-start gap-px text-13"
+                                :class="col.primary || col.wide ? 'col-span-2' : ''"
+                            >
+                                <span v-if="!col.primary" class="text-xs font-semibold text-fg-3">{{ col.label }}</span>
+                                <span
+                                    class="min-w-0 max-w-full"
+                                    :class="[col.primary ? 'text-sm font-semibold' : '', col.numeric ? 'tabular-nums' : '']"
+                                    :dir="col.dir"
+                                >
+                                    <slot :name="`cell-${col.key}`" :row="row" :value="cell(row, col.key)">{{
+                                        defaultCell(row, col.key) ?? '—'
+                                    }}</slot>
+                                </span>
+                            </div>
+                        </template>
+                        <template v-else>
+                            <div
+                                v-for="col in columns.filter((c) => !c.hideOnMobile)"
+                                :key="col.key"
+                                class="flex min-w-0 items-baseline justify-between gap-3 py-0.5 text-xs"
+                                :class="col.primary ? 'mb-1 text-sm font-semibold' : ''"
+                            >
+                                <span v-if="!col.primary" class="shrink-0 text-xs text-fg-2">{{ col.label }}</span>
+                                <span
+                                    class="min-w-0 truncate"
+                                    :class="[col.primary ? 'text-start' : 'text-end', col.numeric ? 'tabular-nums' : '']"
+                                    :dir="col.dir"
+                                >
+                                    <slot :name="`cell-${col.key}`" :row="row" :value="cell(row, col.key)">{{
+                                        defaultCell(row, col.key) ?? '—'
+                                    }}</slot>
+                                </span>
+                            </div>
+                        </template>
                     </component>
                 </li>
             </ul>
@@ -173,8 +216,15 @@ function defaultCell(row: T, key: string): unknown {
             :class="[stickyHeader ? 'table-scroll-box' : 'overflow-x-auto', mobile === 'cards' ? 'hidden md:block' : '']"
         >
             <table class="w-full text-[13.5px]" :aria-busy="loading">
-                <caption v-if="caption" class="sr-only">{{ caption }}</caption>
-                <thead class="bg-surface-2 text-[12.5px] font-semibold text-fg-2" :class="stickyHeader ? 'crm-sticky-head' : 'border-b border-border/60'">
+                <caption v-if="caption" class="sr-only">
+                    {{
+                        caption
+                    }}
+                </caption>
+                <thead
+                    class="bg-surface-2 text-[12.5px] font-semibold text-fg-2"
+                    :class="stickyHeader ? 'crm-sticky-head' : 'border-b border-border/60'"
+                >
                     <tr>
                         <th v-if="selectable" scope="col" class="w-8" :class="[cellPad, stickyFirstColumn ? 'crm-sticky-first' : '']">
                             <input
@@ -243,7 +293,13 @@ function defaultCell(row: T, key: string): unknown {
                                     @change="toggleRow(row)"
                                 />
                             </td>
-                            <td v-for="(col, index) in columns" :key="col.key" class="align-middle" :dir="col.dir" :class="[cellPad, ...colClasses(col, index)]">
+                            <td
+                                v-for="(col, index) in columns"
+                                :key="col.key"
+                                class="align-middle"
+                                :dir="col.dir"
+                                :class="[cellPad, ...colClasses(col, index)]"
+                            >
                                 <slot :name="`cell-${col.key}`" :row="row" :value="cell(row, col.key)">{{ defaultCell(row, col.key) ?? '—' }}</slot>
                             </td>
                         </tr>
