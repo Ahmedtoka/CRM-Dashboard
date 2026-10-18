@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import PageHeader from '@/components/crm/PageHeader.vue';
+import IconAction from '@/components/crm/IconAction.vue';
 import StickySaveBar from '@/components/crm/StickySaveBar.vue';
 import ToggleSwitch from '@/components/crm/ToggleSwitch.vue';
+import SettingsPanel from '@/components/crm/settings/SettingsPanel.vue';
+import SettingsRow from '@/components/crm/settings/SettingsRow.vue';
+import SettingsShell from '@/components/crm/settings/SettingsShell.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useI18n } from '@/composables/useI18n';
+import { useSettingsBreadcrumbs } from '@/composables/useSettingsBreadcrumbs';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { QueueSettings, QueueShiftTemplate } from '@/types/admin';
 import { Head, useForm } from '@inertiajs/vue3';
-import { Plus, Trash2 } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { ChevronDown, Plus, Trash2 } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 const props = defineProps<{
     settings: QueueSettings;
@@ -20,7 +23,8 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-const breadcrumbs = computed(() => [{ title: t('settings.queue.title'), href: '/settings/queue' }]);
+const title = computed(() => t('settings_hub.items.queue'));
+const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
 
 const pointKeys = [
     'inquiry',
@@ -104,12 +108,33 @@ const form = useForm<QueueForm>({
     shifts: (props.settings.shifts ?? []).map((s) => ({ ...s })),
 });
 
+// Each shift reads as one row (name, hours, place, leader); «عدّلي» opens its fields under it. A new shift, or one
+// the server rejected, opens by itself.
+const openShifts = ref<Set<number>>(new Set());
+
+function shiftOpen(index: number): boolean {
+    return openShifts.value.has(index) || Object.keys(form.errors).some((key) => key.startsWith(`shifts.${index}.`));
+}
+
+function toggleShift(index: number): void {
+    const next = new Set(openShifts.value);
+    if (next.has(index)) next.delete(index);
+    else next.add(index);
+    openShifts.value = next;
+}
+
 function addShift(): void {
     form.shifts.push(emptyShift());
+    openShifts.value = new Set([...openShifts.value, form.shifts.length - 1]);
 }
 
 function removeShift(index: number): void {
     form.shifts.splice(index, 1);
+    openShifts.value = new Set([...openShifts.value].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+}
+
+function leaderName(id: number | null): string {
+    return props.supervisors.find((s) => s.id === id)?.name ?? t('settings.queue.no_leader');
 }
 
 // The wrapped <Input> component's own v-model never sees a `.number` modifier applied at the call site
@@ -135,159 +160,192 @@ function submit(): void {
     }).put('/settings/queue', { preserveScroll: true });
 }
 
-const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm tabular-nums';
-const card = 'space-y-4 rounded-lg bg-card p-4 shadow-card';
-const grid = 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3';
-const hint = 'text-2xs text-muted-foreground';
+type NumericKey = (typeof NUMERIC_KEYS)[number];
+type NumericField = { key: NumericKey; min: number; max: number };
+
+/** The timers and targets as SettingsRow runs: one label, the number at the far end, the same bounds as before. */
+const replyFields: NumericField[] = [
+    { key: 'agent_apology_seconds', min: 30, max: 3600 },
+    { key: 'agent_reassign_first_seconds', min: 120, max: 3600 },
+    { key: 'agent_reassign_seconds', min: 120, max: 3600 },
+];
+const timerFields: NumericField[] = [
+    { key: 'silence_warn_seconds', min: 30, max: 3600 },
+    { key: 'silence_close_seconds', min: 60, max: 7200 },
+    { key: 'return_priority_minutes', min: 0, max: 1440 },
+    { key: 'close_confirm_minutes', min: 0, max: 1440 },
+    { key: 'review_delay_seconds', min: 0, max: 3600 },
+    { key: 'case_sla_hours', min: 1, max: 168 },
+    { key: 'waiting_update_seconds', min: 30, max: 900 },
+];
+const slaFields: NumericField[] = [
+    { key: 'sla_first_reply_seconds', min: 30, max: 7200 },
+    { key: 'sla_target_pct', min: 1, max: 100 },
+    { key: 'occupancy_cap_pct', min: 10, max: 100 },
+    { key: 'break_minutes', min: 1, max: 120 },
+    { key: 'review_sample_pct', min: 0, max: 100 },
+    { key: 'speed_fast_seconds', min: 10, max: 3600 },
+    { key: 'speed_ok_seconds', min: 10, max: 3600 },
+    { key: 'eta_default_handle_seconds', min: 30, max: 3600 },
+];
+
+const num = 'h-10 w-28 tabular-nums';
+const field =
+    'h-10 w-full rounded-md border border-line-strong bg-card px-3 text-sm focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:cursor-not-allowed disabled:opacity-50';
+const fieldLabel = 'text-13 font-semibold text-fg-2';
+const error = 'mt-1 text-xs text-danger';
 </script>
 
 <template>
-    <Head :title="t('settings.queue.title')" />
+    <Head :title="title" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-4xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('settings.queue.title')" :description="t('settings.queue.description')" />
-
-            <form class="space-y-4" @submit.prevent="submit">
+        <SettingsShell :title="title" :description="t('settings.queue.description')" width="form">
+            <form class="space-y-5" @submit.prevent="submit">
                 <!-- Running -->
-                <section :class="card">
-                    <div class="flex items-center justify-between gap-3">
-                        <Label for="queue-enabled">{{ t('settings.queue.enabled') }}</Label>
+                <SettingsPanel>
+                    <SettingsRow for="queue-enabled" :title="t('settings.queue.enabled')" :description="t('settings.queue.enabled_hint')">
                         <ToggleSwitch id="queue-enabled" v-model="form.enabled" :label="t('settings.queue.enabled')" />
-                    </div>
-                    <div class="flex items-center justify-between gap-3">
-                        <Label for="queue-night-message">{{ t('settings.queue.night_message_enabled') }}</Label>
-                        <ToggleSwitch id="queue-night-message" v-model="form.night_message_enabled" :label="t('settings.queue.night_message_enabled')" />
-                    </div>
-                    <div class="flex items-center justify-between gap-3">
-                        <Label for="queue-case-follow">{{ t('settings.queue.case_follow_owner') }}</Label>
+                    </SettingsRow>
+                    <SettingsRow
+                        for="queue-windows"
+                        :title="t('settings.queue.windows_per_moderator')"
+                        :description="t('settings.queue.windows_hint')"
+                    >
+                        <template v-if="form.errors.windows_per_moderator" #below>
+                            <p :class="error">{{ form.errors.windows_per_moderator }}</p>
+                        </template>
+                        <Input id="queue-windows" v-model="form.windows_per_moderator" type="number" min="1" max="10" dir="ltr" :class="num" />
+                    </SettingsRow>
+                    <SettingsRow for="queue-night-message" :title="t('settings.queue.night_message_enabled')">
+                        <ToggleSwitch
+                            id="queue-night-message"
+                            v-model="form.night_message_enabled"
+                            :label="t('settings.queue.night_message_enabled')"
+                        />
+                    </SettingsRow>
+                    <SettingsRow for="queue-case-follow" :title="t('settings.queue.case_follow_owner')">
                         <ToggleSwitch id="queue-case-follow" v-model="form.case_follow_owner" :label="t('settings.queue.case_follow_owner')" />
-                    </div>
+                    </SettingsRow>
+                </SettingsPanel>
 
-                    <div :class="grid">
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.windows_per_moderator') }}</Label>
-                            <Input v-model="form.windows_per_moderator" type="number" min="1" max="10" dir="ltr" :class="input" />
-                        </label>
-                    </div>
-                </section>
+                <!-- Moderator reply (flow revision §4): the re-route timeouts -->
+                <SettingsPanel :title="t('settings.queue.reply_section')" :description="t('settings.queue.reply_section_hint')">
+                    <SettingsRow v-for="f in replyFields" :key="f.key" :for="`queue-${f.key}`" :title="t(`settings.queue.${f.key}`)">
+                        <template v-if="form.errors[f.key]" #below>
+                            <p :class="error">{{ form.errors[f.key] }}</p>
+                        </template>
+                        <Input :id="`queue-${f.key}`" v-model="form[f.key]" type="number" :min="f.min" :max="f.max" dir="ltr" :class="num" />
+                    </SettingsRow>
+                </SettingsPanel>
+
+                <!-- Shifts -->
+                <SettingsPanel
+                    :title="t('settings.queue.shifts')"
+                    :description="canEditAdmin ? undefined : t('settings.queue.points_admin_only')"
+                    data-queue-shifts
+                >
+                    <template #actions>
+                        <Button type="button" variant="outline" size="sm" :disabled="!canEditAdmin" @click="addShift">
+                            <Plus aria-hidden="true" />{{ t('settings.queue.add_shift') }}
+                        </Button>
+                    </template>
+
+                    <p v-if="form.errors.shifts" :class="error" class="pt-3">{{ form.errors.shifts }}</p>
+                    <p v-if="!form.shifts.length" class="py-4 text-13 text-fg-2">{{ t('settings.queue.no_shifts') }}</p>
+
+                    <SettingsRow v-for="(shift, index) in form.shifts" :key="index" :title="shift.name || t('settings.queue.shift_new')">
+                        <template #below>
+                            <p class="mt-0.5 text-13 text-fg-2">
+                                <bdi class="tabular-nums" dir="ltr">{{ shift.from }}–{{ shift.to }}</bdi>
+                                · {{ t(`settings.queue.${shift.location}`) }} · {{ t('settings.queue.shift_leader') }}:
+                                {{ leaderName(shift.leader_user_id) }}
+                            </p>
+                            <div
+                                v-if="shiftOpen(index)"
+                                class="mt-3 grid gap-3 rounded-md bg-surface-2 p-3 sm:grid-cols-2 lg:grid-cols-3"
+                                :data-shift-editor="index"
+                            >
+                                <label class="grid content-start gap-1">
+                                    <span :class="fieldLabel">{{ t('settings.queue.shift_key') }}</span>
+                                    <Input v-model="shift.key" type="text" maxlength="40" dir="ltr" :disabled="!canEditAdmin" class="h-10" />
+                                </label>
+                                <label class="grid content-start gap-1">
+                                    <span :class="fieldLabel">{{ t('settings.queue.shift_name') }}</span>
+                                    <Input v-model="shift.name" type="text" maxlength="60" dir="auto" :disabled="!canEditAdmin" class="h-10" />
+                                </label>
+                                <label class="grid content-start gap-1">
+                                    <span :class="fieldLabel">{{ t('settings.queue.shift_location') }}</span>
+                                    <select v-model="shift.location" :disabled="!canEditAdmin" :class="field">
+                                        <option value="office">{{ t('settings.queue.office') }}</option>
+                                        <option value="home">{{ t('settings.queue.home') }}</option>
+                                    </select>
+                                </label>
+                                <label class="grid content-start gap-1">
+                                    <span :class="fieldLabel">{{ t('settings.queue.shift_from') }}</span>
+                                    <Input v-model="shift.from" type="time" dir="ltr" :disabled="!canEditAdmin" class="h-10 tabular-nums" />
+                                </label>
+                                <label class="grid content-start gap-1">
+                                    <span :class="fieldLabel">{{ t('settings.queue.shift_to') }}</span>
+                                    <Input v-model="shift.to" type="time" dir="ltr" :disabled="!canEditAdmin" class="h-10 tabular-nums" />
+                                </label>
+                                <label class="grid content-start gap-1">
+                                    <span :class="fieldLabel">{{ t('settings.queue.shift_leader') }}</span>
+                                    <select v-model="shift.leader_user_id" :disabled="!canEditAdmin" :class="field">
+                                        <option :value="null">—</option>
+                                        <option v-for="sup in supervisors" :key="sup.id" :value="sup.id">{{ sup.name }}</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </template>
+                        <Button type="button" variant="secondary" size="sm" :aria-expanded="shiftOpen(index)" @click="toggleShift(index)">
+                            {{
+                                shiftOpen(index)
+                                    ? t('settings.queue.close_shift')
+                                    : t(canEditAdmin ? 'settings.queue.edit_shift' : 'settings.queue.view_shift')
+                            }}
+                            <ChevronDown
+                                class="transition-transform motion-reduce:transition-none"
+                                :class="shiftOpen(index) ? 'rotate-180' : ''"
+                                aria-hidden="true"
+                            />
+                        </Button>
+                        <IconAction
+                            v-if="canEditAdmin"
+                            :icon="Trash2"
+                            size="sm"
+                            variant="destructive"
+                            :label="`${t('settings.queue.remove')} ${shift.name}`"
+                            @click="removeShift(index)"
+                        />
+                    </SettingsRow>
+                </SettingsPanel>
 
                 <!-- Timers -->
-                <section :class="card">
-                    <h2 class="text-sm font-semibold">
-                        {{ t('settings.queue.silence_warn_seconds') }} / {{ t('settings.queue.silence_close_seconds') }}
-                    </h2>
-                    <div :class="grid">
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.silence_warn_seconds') }}</Label>
-                            <Input v-model="form.silence_warn_seconds" type="number" min="30" max="3600" dir="ltr" :class="input" />
-                            <span v-if="form.errors.silence_warn_seconds" class="text-2xs text-destructive">{{
-                                form.errors.silence_warn_seconds
-                            }}</span>
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.silence_close_seconds') }}</Label>
-                            <Input v-model="form.silence_close_seconds" type="number" min="60" max="7200" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.return_priority_minutes') }}</Label>
-                            <Input v-model="form.return_priority_minutes" type="number" min="0" max="1440" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.close_confirm_minutes') }}</Label>
-                            <Input v-model="form.close_confirm_minutes" type="number" min="0" max="1440" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.review_delay_seconds') }}</Label>
-                            <Input v-model="form.review_delay_seconds" type="number" min="0" max="3600" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.case_sla_hours') }}</Label>
-                            <Input v-model="form.case_sla_hours" type="number" min="1" max="168" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.waiting_update_seconds') }}</Label>
-                            <Input v-model="form.waiting_update_seconds" type="number" min="30" max="900" dir="ltr" :class="input" />
-                            <span v-if="form.errors.waiting_update_seconds" class="text-2xs text-destructive">{{ form.errors.waiting_update_seconds }}</span>
-                        </label>
-                    </div>
-                </section>
-
-                <!-- Moderator reply (flow revision §4) -->
-                <section :class="card">
-                    <header>
-                        <h2 class="text-sm font-semibold">{{ t('settings.queue.reply_section') }}</h2>
-                        <p :class="hint">{{ t('settings.queue.reply_section_hint') }}</p>
-                    </header>
-                    <div :class="grid">
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.agent_apology_seconds') }}</Label>
-                            <Input v-model="form.agent_apology_seconds" type="number" min="30" max="3600" dir="ltr" :class="input" />
-                            <span v-if="form.errors.agent_apology_seconds" class="text-2xs text-destructive">{{ form.errors.agent_apology_seconds }}</span>
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.agent_reassign_first_seconds') }}</Label>
-                            <Input v-model="form.agent_reassign_first_seconds" type="number" min="120" max="3600" dir="ltr" :class="input" />
-                            <span v-if="form.errors.agent_reassign_first_seconds" class="text-2xs text-destructive">{{
-                                form.errors.agent_reassign_first_seconds
-                            }}</span>
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.agent_reassign_seconds') }}</Label>
-                            <Input v-model="form.agent_reassign_seconds" type="number" min="120" max="3600" dir="ltr" :class="input" />
-                            <span v-if="form.errors.agent_reassign_seconds" class="text-2xs text-destructive">{{ form.errors.agent_reassign_seconds }}</span>
-                        </label>
-                    </div>
-                </section>
+                <SettingsPanel :title="t('settings.queue.timers_section')">
+                    <SettingsRow v-for="f in timerFields" :key="f.key" :for="`queue-${f.key}`" :title="t(`settings.queue.${f.key}`)">
+                        <template v-if="form.errors[f.key]" #below>
+                            <p :class="error">{{ form.errors[f.key] }}</p>
+                        </template>
+                        <Input :id="`queue-${f.key}`" v-model="form[f.key]" type="number" :min="f.min" :max="f.max" dir="ltr" :class="num" />
+                    </SettingsRow>
+                </SettingsPanel>
 
                 <!-- SLA & occupancy -->
-                <section :class="card">
-                    <h2 class="text-sm font-semibold">{{ t('settings.queue.sla_first_reply_seconds') }}</h2>
-                    <div :class="grid">
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.sla_first_reply_seconds') }}</Label>
-                            <Input v-model="form.sla_first_reply_seconds" type="number" min="30" max="7200" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.sla_target_pct') }}</Label>
-                            <Input v-model="form.sla_target_pct" type="number" min="1" max="100" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.occupancy_cap_pct') }}</Label>
-                            <Input v-model="form.occupancy_cap_pct" type="number" min="10" max="100" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.break_minutes') }}</Label>
-                            <Input v-model="form.break_minutes" type="number" min="1" max="120" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.review_sample_pct') }}</Label>
-                            <Input v-model="form.review_sample_pct" type="number" min="0" max="100" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.speed_fast_seconds') }}</Label>
-                            <Input v-model="form.speed_fast_seconds" type="number" min="10" max="3600" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.speed_ok_seconds') }}</Label>
-                            <Input v-model="form.speed_ok_seconds" type="number" min="10" max="3600" dir="ltr" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.eta_default_handle_seconds') }}</Label>
-                            <Input v-model="form.eta_default_handle_seconds" type="number" min="30" max="3600" dir="ltr" :class="input" />
-                        </label>
-                    </div>
-                </section>
+                <SettingsPanel :title="t('settings.queue.sla_section')">
+                    <SettingsRow v-for="f in slaFields" :key="f.key" :for="`queue-${f.key}`" :title="t(`settings.queue.${f.key}`)">
+                        <template v-if="form.errors[f.key]" #below>
+                            <p :class="error">{{ form.errors[f.key] }}</p>
+                        </template>
+                        <Input :id="`queue-${f.key}`" v-model="form[f.key]" type="number" :min="f.min" :max="f.max" dir="ltr" :class="num" />
+                    </SettingsRow>
+                </SettingsPanel>
 
                 <!-- Points -->
-                <section :class="card">
-                    <header>
-                        <h2 class="text-sm font-semibold">{{ t('settings.queue.points') }}</h2>
-                        <p v-if="!canEditAdmin" :class="hint">{{ t('settings.queue.points_admin_only') }}</p>
-                    </header>
-                    <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                        <label v-for="key in pointKeys" :key="key" class="grid content-start gap-1">
-                            <Label>{{ t(`settings.queue.point_keys.${key}`) }}</Label>
+                <SettingsPanel :title="t('settings.queue.points')" :description="canEditAdmin ? undefined : t('settings.queue.points_admin_only')">
+                    <div class="grid gap-x-6 sm:grid-cols-2">
+                        <label v-for="key in pointKeys" :key="key" class="flex min-h-14 items-center justify-between gap-3 border-b border-line py-2">
+                            <span class="text-sm font-semibold">{{ t(`settings.queue.point_keys.${key}`) }}</span>
                             <Input
                                 v-model="form.points[key]"
                                 type="number"
@@ -295,74 +353,14 @@ const hint = 'text-2xs text-muted-foreground';
                                 max="1000"
                                 dir="ltr"
                                 :disabled="!canEditAdmin"
-                                :class="input"
+                                class="h-10 w-24 shrink-0 tabular-nums"
                             />
                         </label>
                     </div>
-                </section>
+                </SettingsPanel>
 
-                <!-- Shifts -->
-                <section :class="card">
-                    <header class="flex items-center justify-between">
-                        <div>
-                            <h2 class="text-sm font-semibold">{{ t('settings.queue.shifts') }}</h2>
-                            <p v-if="!canEditAdmin" :class="hint">{{ t('settings.queue.points_admin_only') }}</p>
-                        </div>
-                        <Button type="button" variant="outline" size="sm" :disabled="!canEditAdmin" @click="addShift">
-                            <Plus class="size-3.5" aria-hidden="true" />{{ t('settings.queue.add_shift') }}
-                        </Button>
-                    </header>
-
-                    <p v-if="form.errors.shifts" class="text-2xs text-destructive">{{ form.errors.shifts }}</p>
-
-                    <div v-for="(shift, index) in form.shifts" :key="index" class="grid gap-2 rounded-md bg-elevated p-3 sm:grid-cols-6">
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.shift_key') }}</Label>
-                            <Input v-model="shift.key" type="text" maxlength="40" dir="ltr" :disabled="!canEditAdmin" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.shift_name') }}</Label>
-                            <Input v-model="shift.name" type="text" maxlength="60" dir="auto" :disabled="!canEditAdmin" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.shift_from') }}</Label>
-                            <Input v-model="shift.from" type="time" dir="ltr" :disabled="!canEditAdmin" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.shift_to') }}</Label>
-                            <Input v-model="shift.to" type="time" dir="ltr" :disabled="!canEditAdmin" :class="input" />
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.shift_location') }}</Label>
-                            <select v-model="shift.location" :disabled="!canEditAdmin" :class="input">
-                                <option value="office">{{ t('settings.queue.office') }}</option>
-                                <option value="home">{{ t('settings.queue.home') }}</option>
-                            </select>
-                        </label>
-                        <label class="grid content-start gap-1">
-                            <Label>{{ t('settings.queue.shift_leader') }}</Label>
-                            <div class="flex items-center gap-1.5">
-                                <select v-model="shift.leader_user_id" :disabled="!canEditAdmin" :class="input">
-                                    <option :value="null">—</option>
-                                    <option v-for="sup in supervisors" :key="sup.id" :value="sup.id">{{ sup.name }}</option>
-                                </select>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    :disabled="!canEditAdmin"
-                                    :aria-label="t('settings.queue.remove')"
-                                    @click="removeShift(index)"
-                                >
-                                    <Trash2 class="size-3.5 text-destructive" aria-hidden="true" />
-                                </Button>
-                            </div>
-                        </label>
-                    </div>
-                </section>
-
-                <StickySaveBar :busy="form.processing" :dirty="form.isDirty" :label="t('settings.queue.save')" submit />
+                <StickySaveBar :bleed="false" :busy="form.processing" :dirty="form.isDirty" :label="t('settings.queue.save')" submit />
             </form>
-        </div>
+        </SettingsShell>
     </AppLayout>
 </template>

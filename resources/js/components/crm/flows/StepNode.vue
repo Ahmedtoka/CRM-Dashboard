@@ -142,9 +142,9 @@ onBeforeUnmount(() => {
     <div
         class="flow-step relative w-[260px] rounded-xl border bg-card text-card-foreground shadow-card transition-shadow"
         :class="[
-            errorCount ? 'border-destructive ring-2 ring-destructive/25' : data.isStart ? 'border-emerald-600/60' : 'border-border',
-            selected ? 'ring-2 ring-primary/60' : '',
-            data.highlighted ? 'ring-4 ring-amber-400/70' : '',
+            errorCount ? 'border-danger ring-2 ring-destructive/25' : data.isStart ? 'border-ok/60' : 'border-line',
+            selected ? 'ring-2 ring-brand/60' : '',
+            data.highlighted ? 'ring-4 ring-warn/70' : '',
         ]"
         dir="rtl"
     >
@@ -153,7 +153,7 @@ onBeforeUnmount(() => {
         <!-- Start marker: a pill sitting on the top edge, and the node's border turns green. -->
         <span
             v-if="data.isStart"
-            class="absolute -top-3 start-4 z-10 inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-0.5 text-2xs font-semibold text-white shadow-card"
+            class="absolute -top-3 start-4 z-10 inline-flex items-center gap-1 rounded-full bg-ok px-2.5 py-0.5 text-xs font-semibold text-white shadow-card"
         >
             <Flag class="size-3" aria-hidden="true" />{{ t('flows.start') }}
         </span>
@@ -179,8 +179,8 @@ onBeforeUnmount(() => {
                     <input
                         :ref="setEditor"
                         v-model="value"
-                        class="nodrag nopan nowheel block h-5 w-full rounded border bg-background px-1 text-2xs"
-                        :class="renameError ? 'border-destructive' : 'border-primary'"
+                        class="nodrag nopan nowheel block h-5 w-full rounded border bg-background px-1 text-xs"
+                        :class="renameError ? 'border-danger' : 'border-brand'"
                         dir="ltr"
                         maxlength="40"
                         :aria-label="t('flows.rename_step')"
@@ -188,12 +188,12 @@ onBeforeUnmount(() => {
                         @keydown="onKeydown"
                         @blur="commit(true)"
                     />
-                    <span v-if="renameError" class="mt-0.5 block text-2xs leading-4 text-destructive" role="alert">{{ renameError }}</span>
+                    <span v-if="renameError" class="mt-0.5 block text-xs leading-4 text-danger" role="alert">{{ renameError }}</span>
                 </template>
             </span>
             <span
                 v-if="errorCount"
-                class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-destructive px-1.5 py-0.5 text-2xs font-semibold text-destructive-foreground"
+                class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-destructive px-1.5 py-0.5 text-xs font-semibold text-destructive-foreground"
                 :title="t('flows.errors_count', { n: errorCount })"
             >
                 <CircleAlert class="size-3" aria-hidden="true" />{{ errorCount }}
@@ -207,13 +207,13 @@ onBeforeUnmount(() => {
                     v-model="value"
                     rows="2"
                     dir="auto"
-                    class="nodrag nopan nowheel block max-h-60 w-full resize-none rounded-md border border-primary bg-background px-2 py-1 text-xs leading-5"
+                    class="nodrag nopan nowheel block max-h-60 w-full resize-none rounded-md border border-brand bg-background px-2 py-1 text-xs leading-5"
                     :aria-label="t('flows.text')"
                     @input="onInput"
                     @keydown="onKeydown"
                     @blur="commit(true)"
                 />
-                <span class="mt-0.5 block text-2xs text-muted-foreground">{{ t('flows.inline.text_keys') }}</span>
+                <span class="mt-0.5 block text-xs text-fg-2">{{ t('flows.inline.text_keys') }}</span>
             </template>
             <p
                 v-else-if="bodyText"
@@ -223,33 +223,37 @@ onBeforeUnmount(() => {
                 :title="canEditText ? t('flows.inline.dblclick_edit') : undefined"
                 @dblclick.stop="startText"
             >
-                <FileText v-if="!step.text && (step.type === 'script' || step.type === 'record_case')" class="me-1 inline size-3.5 align-[-2px]" aria-hidden="true" />{{ bodyText }}
+                <FileText
+                    v-if="!step.text && (step.type === 'script' || step.type === 'record_case')"
+                    class="me-1 inline size-3.5 align-[-2px]"
+                    aria-hidden="true"
+                />{{ bodyText }}
             </p>
             <p
                 v-else
-                class="text-xs italic text-muted-foreground"
+                class="text-xs italic text-fg-2"
                 :class="canEditText ? 'cursor-text' : ''"
                 :title="canEditText ? t('flows.inline.dblclick_edit') : undefined"
                 @dblclick.stop="startText"
             >
                 {{ t('flows.empty_text') }}
             </p>
-            <p v-if="caseType" class="mt-1 inline-flex rounded bg-rose-500/10 px-1.5 py-0.5 text-2xs text-rose-700 dark:text-rose-300">
+            <p v-if="caseType" class="mt-1 inline-flex rounded bg-danger-soft px-1.5 py-0.5 text-xs text-danger">
                 {{ caseType }}
             </p>
         </div>
 
-        <ul v-if="step.options?.length" class="space-y-1 border-t border-border/60 px-2 py-1.5">
+        <ul v-if="step.options?.length" class="space-y-1 border-t border-line/60 px-2 py-1.5">
             <li
                 v-for="(option, index) in step.options"
                 :key="index"
-                class="relative flex h-6 items-center gap-1.5 rounded-md bg-muted/70 px-2 text-2xs"
+                class="relative flex h-6 items-center gap-1.5 rounded-md bg-muted/70 px-2 text-xs"
             >
                 <template v-if="editing?.kind === 'option' && editing.index === index">
                     <input
                         :ref="setEditor"
                         v-model="value"
-                        class="nodrag nopan nowheel h-5 min-w-0 flex-1 rounded border border-primary bg-background px-1 text-2xs"
+                        class="nodrag nopan nowheel h-5 min-w-0 flex-1 rounded border border-brand bg-background px-1 text-xs"
                         dir="auto"
                         :maxlength="MAX_OPTION_TITLE"
                         :aria-label="t('flows.option_title')"
@@ -257,10 +261,7 @@ onBeforeUnmount(() => {
                         @keydown="onKeydown"
                         @blur="commit(true)"
                     />
-                    <span
-                        class="shrink-0 tabular-nums"
-                        :class="titleLength >= MAX_OPTION_TITLE ? 'font-semibold text-destructive' : 'text-muted-foreground'"
-                        dir="ltr"
+                    <span class="shrink-0 tabular-nums" :class="titleLength >= MAX_OPTION_TITLE ? 'font-semibold text-danger' : 'text-fg-2'" dir="ltr"
                         >{{ titleLength }}/{{ MAX_OPTION_TITLE }}</span
                     >
                 </template>
@@ -274,7 +275,7 @@ onBeforeUnmount(() => {
                 >
                 <span
                     v-if="option.value && !(editing?.kind === 'option' && editing.index === index)"
-                    class="max-w-[70px] shrink-0 truncate text-muted-foreground"
+                    class="max-w-[70px] shrink-0 truncate text-fg-2"
                     dir="ltr"
                     >{{ option.value }}</span
                 >
@@ -282,13 +283,13 @@ onBeforeUnmount(() => {
             </li>
         </ul>
 
-        <ul v-if="step.branches?.length" class="space-y-1 border-t border-dashed border-border px-2 py-1.5">
+        <ul v-if="step.branches?.length" class="space-y-1 border-t border-dashed border-line px-2 py-1.5">
             <li
                 v-for="(branch, index) in step.branches"
                 :key="index"
-                class="relative flex h-6 items-center gap-1.5 rounded-md border border-dashed border-amber-500/50 bg-amber-500/5 px-2 text-2xs"
+                class="relative flex h-6 items-center gap-1.5 rounded-md border border-dashed border-warn/50 bg-warn-soft px-2 text-xs"
             >
-                <GitBranch class="size-3 shrink-0 text-amber-600" aria-hidden="true" />
+                <GitBranch class="size-3 shrink-0 text-warn" aria-hidden="true" />
                 <span class="min-w-0 flex-1 truncate" dir="auto">{{ data.branchLabels[index] ?? branch.field }}</span>
                 <Handle :id="`branch:${index}`" type="source" :position="Position.Left" class="flow-handle flow-handle--branch" />
             </li>

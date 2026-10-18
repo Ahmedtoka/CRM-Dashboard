@@ -38,17 +38,17 @@ function onDragStart(event: DragEvent, type: string): void {
 
 <template>
     <aside
-        class="relative z-10 flex shrink-0 flex-col border-e border-border bg-card transition-[width] duration-200 ease-out motion-reduce:transition-none"
+        class="relative z-10 flex shrink-0 flex-col border-e border-line bg-card transition-[width] duration-200 ease-out motion-reduce:transition-none"
         :class="open ? 'w-60' : 'w-14'"
         :aria-label="t('flows.palette.title')"
     >
-        <div class="flex h-11 items-center gap-1.5 border-b border-border px-2" :class="open ? '' : 'justify-center'">
+        <div class="flex h-11 items-center gap-1.5 border-b border-line px-2" :class="open ? '' : 'justify-center'">
             <span v-if="open" class="flex-1 truncate ps-1 text-xs font-semibold">{{ t('flows.palette.title') }}</span>
             <Tooltip>
                 <TooltipTrigger as-child>
                     <button
                         type="button"
-                        class="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                        class="inline-flex size-9 items-center justify-center rounded-md text-fg-2 outline-none transition-colors hover:bg-sunken hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                         :aria-label="open ? t('flows.palette.collapse') : t('flows.workspace.palette_expand')"
                         :aria-expanded="open"
                         @click="open = !open"
@@ -63,7 +63,7 @@ function onDragStart(event: DragEvent, type: string): void {
             </Tooltip>
         </div>
 
-        <p v-if="open" class="border-b border-border px-3 py-2 text-2xs leading-4 text-muted-foreground">{{ hint }}</p>
+        <p v-if="open" class="border-b border-line px-3 py-2 text-xs leading-4 text-fg-2">{{ hint }}</p>
 
         <ul
             class="scrollbar-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden p-1.5"
@@ -75,7 +75,7 @@ function onDragStart(event: DragEvent, type: string): void {
                         <button
                             type="button"
                             draggable="true"
-                            class="group flex w-full cursor-grab items-center gap-2.5 rounded-lg p-1.5 text-start outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+                            class="group flex w-full cursor-grab items-center gap-2.5 rounded-lg p-1.5 text-start outline-none transition-colors hover:bg-sunken focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
                             :class="open ? '' : 'justify-center'"
                             :aria-label="open ? undefined : t(`flows.palette.cards.${card.key}.name`)"
                             :disabled="disabled"
@@ -90,13 +90,13 @@ function onDragStart(event: DragEvent, type: string): void {
                             </span>
                             <span v-if="open" class="min-w-0 flex-1">
                                 <span class="block truncate text-xs font-semibold">{{ t(`flows.palette.cards.${card.key}.name`) }}</span>
-                                <span class="block truncate text-2xs text-muted-foreground">{{ t(`flows.palette.cards.${card.key}.desc`) }}</span>
+                                <span class="block truncate text-xs text-fg-2">{{ t(`flows.palette.cards.${card.key}.desc`) }}</span>
                             </span>
                         </button>
                     </TooltipTrigger>
                     <TooltipContent :side="side" class="max-w-56 text-xs">
                         <p class="font-semibold">{{ t(`flows.palette.cards.${card.key}.name`) }}</p>
-                        <p class="text-muted-foreground">{{ t(`flows.palette.cards.${card.key}.desc`) }}</p>
+                        <p class="text-fg-2">{{ t(`flows.palette.cards.${card.key}.desc`) }}</p>
                     </TooltipContent>
                 </Tooltip>
             </li>

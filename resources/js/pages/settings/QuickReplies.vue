@@ -1,19 +1,23 @@
 <script setup lang="ts">
-import DataTable, { type Column } from '@/components/crm/DataTable.vue';
+import EmptyState from '@/components/crm/EmptyState.vue';
+import FilterBar from '@/components/crm/FilterBar.vue';
 import IconAction from '@/components/crm/IconAction.vue';
-import PageHeader from '@/components/crm/PageHeader.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import StarterEmptyState from '@/components/crm/StarterEmptyState.vue';
 import CategoryManager from '@/components/crm/replies/CategoryManager.vue';
 import QuickReplyEditor from '@/components/crm/replies/QuickReplyEditor.vue';
+import SettingsPanel from '@/components/crm/settings/SettingsPanel.vue';
+import SettingsShell from '@/components/crm/settings/SettingsShell.vue';
+import { Button } from '@/components/ui/button';
 import { useCrud } from '@/composables/useCrud';
 import { useI18n } from '@/composables/useI18n';
-import { formatCount, slashShortcut } from '@/lib/format';
+import { useSettingsBreadcrumbs } from '@/composables/useSettingsBreadcrumbs';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatCount, slashShortcut } from '@/lib/format';
 import type { QuickReplyRow, QuickReplyVariable } from '@/types/admin';
 import type { QuickReplyCategory } from '@/types/crm';
 import { Head } from '@inertiajs/vue3';
-import { MessageSquareText, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { MessageSquareText, Pencil, Plus, SearchX, Trash2 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -29,6 +33,11 @@ const { t, locale } = useI18n();
 
 type TabKey = 'shared' | 'mine' | 'categories';
 const tab = ref<TabKey>(props.canManageShared ? 'shared' : 'mine');
+const tabs = computed<{ key: TabKey; label: string }[]>(() => [
+    { key: 'shared', label: t('replies.tab_shared') },
+    { key: 'mine', label: t('replies.tab_mine') },
+    ...(props.canManageShared ? [{ key: 'categories' as const, label: t('replies.tab_categories') }] : []),
+]);
 
 const sharedCrud = useCrud('/settings/quick-replies', 'shared');
 const personalCrud = useCrud('/settings/quick-replies', 'personal');
@@ -63,146 +72,147 @@ function remove(scope: 'shared' | 'personal', row: QuickReplyRow): void {
     void (scope === 'shared' ? sharedCrud : personalCrud).remove(row.id, t('ui.confirm_delete', { name: row.title }));
 }
 
-function columnsFor(scope: 'shared' | 'personal', manageable: boolean): Column[] {
-    const cols: Column[] = [
-        { key: 'shortcut', label: t('settings.quick_replies.shortcut') },
-        { key: 'title', label: t('settings.quick_replies.title_label') },
-        { key: 'body', label: t('settings.quick_replies.body') },
-        { key: 'category', label: t('replies.category') },
-        { key: 'platforms', label: t('ui.platforms') },
-        { key: 'use_count', label: t('replies.uses_column') },
-        { key: 'creator', label: t('settings.quick_replies.creator') },
-    ];
-    if (manageable) cols.push({ key: 'actions', label: t('ui.actions'), align: 'end' });
+// The one primary action follows the open list: a shared reply on «المشتركة» (when she may add one), her own otherwise.
+const addScope = computed<'shared' | 'personal'>(() => (tab.value === 'shared' && props.canManageShared ? 'shared' : 'personal'));
+const addLabel = computed(() => (addScope.value === 'shared' ? t('settings.quick_replies.add') : t('settings.quick_replies.add_personal')));
 
-    return cols;
+// Search in the browser: both lists arrive whole.
+const search = ref('');
+/** «أحمد» finds «احمد», «ة» finds «ه» (same folding as the intents search). */
+function fold(value: string): string {
+    return value.toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').trim();
 }
 
-const sharedColumns = computed(() => columnsFor('shared', props.canManageShared));
-const personalColumns = computed(() => columnsFor('personal', true));
+function matches(row: QuickReplyRow): boolean {
+    const q = fold(search.value);
+    if (!q) return true;
+    return [row.title, row.shortcut, row.body].some((v) => fold(v ?? '').includes(q));
+}
 
-const breadcrumbs = computed(() => [{ title: t('settings.quick_replies.title'), href: '/settings/quick-replies' }]);
+const list = computed(() => {
+    if (tab.value === 'categories') return null;
+    const scope = tab.value === 'shared' ? 'shared' : 'personal';
+    const all = scope === 'shared' ? props.shared : props.personal;
+
+    return { scope, all, rows: all.filter(matches), manageable: scope === 'personal' || props.canManageShared } as const;
+});
+
+const title = computed(() => (props.canManageShared ? t('settings_hub.items.quick_replies') : t('settings_hub.items.my_quick_replies')));
+const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
 </script>
 
 <template>
-    <Head :title="t('settings.quick_replies.title')" />
+    <Head :title="title" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('settings.quick_replies.title')" />
+        <SettingsShell :title="title" :description="t('settings.quick_replies.description')" width="form">
+            <template v-if="tab !== 'categories'" #actions>
+                <Button @click="openAdd(addScope)"><Plus aria-hidden="true" />{{ addLabel }}</Button>
+            </template>
 
-            <div role="tablist" class="flex gap-1 border-b border-border">
+            <div role="tablist" :aria-label="title" class="scrollbar-none -mt-1 flex gap-0.5 overflow-x-auto border-b border-line">
                 <button
+                    v-for="item in tabs"
+                    :key="item.key"
                     type="button"
                     role="tab"
-                    :aria-selected="tab === 'shared'"
-                    class="border-b-2 px-3 py-2 text-sm font-medium"
-                    :class="tab === 'shared' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
-                    @click="tab = 'shared'"
+                    :aria-selected="tab === item.key"
+                    class="relative inline-flex min-h-10 shrink-0 items-center whitespace-nowrap rounded-t-md px-3 pb-[11px] pt-2.5 text-sm font-semibold transition-colors"
+                    :class="
+                        tab === item.key
+                            ? 'text-brand-ink after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-brand'
+                            : 'text-fg-2 hover:bg-surface-2 hover:text-foreground'
+                    "
+                    @click="tab = item.key"
                 >
-                    {{ t('replies.tab_shared') }}
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    :aria-selected="tab === 'mine'"
-                    class="border-b-2 px-3 py-2 text-sm font-medium"
-                    :class="tab === 'mine' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
-                    @click="tab = 'mine'"
-                >
-                    {{ t('replies.tab_mine') }}
-                </button>
-                <button
-                    v-if="canManageShared"
-                    type="button"
-                    role="tab"
-                    :aria-selected="tab === 'categories'"
-                    class="border-b-2 px-3 py-2 text-sm font-medium"
-                    :class="tab === 'categories' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
-                    @click="tab = 'categories'"
-                >
-                    {{ t('replies.tab_categories') }}
+                    {{ item.label }}
                 </button>
             </div>
 
-            <div v-if="tab === 'shared'" class="space-y-3">
-                <StarterEmptyState
-                    v-if="!shared.length"
-                    :icon="MessageSquareText"
-                    :title="t('settings.starter.replies_title')"
-                    :body="t('settings.starter.replies_body')"
-                    :preview="starterExamples"
-                    :endpoint="canManageShared ? '/settings/quick-replies/examples' : undefined"
-                    reload-prop="shared"
-                >
-                    <button v-if="canManageShared" type="button" class="text-xs font-medium text-primary hover:underline" @click="openAdd('shared')">
-                        {{ t('settings.starter.or_create') }}
-                    </button>
-                </StarterEmptyState>
-                <div v-if="canManageShared && shared.length" class="flex justify-end">
-                    <button type="button" class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" @click="openAdd('shared')">
-                        <Plus class="size-3.5" aria-hidden="true" />{{ t('settings.quick_replies.add') }}
-                    </button>
-                </div>
-                <DataTable table-id="settings-qr-shared" v-if="shared.length" :columns="sharedColumns" :rows="shared" :empty="t('settings.quick_replies.empty')" :caption="t('replies.tab_shared')">
-                    <template #cell-shortcut="{ row }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">{{ slashShortcut(row.shortcut) }}</code></template>
-                    <template #cell-body="{ row }"><span class="line-clamp-2 max-w-md" dir="auto">{{ row.body }}</span></template>
-                    <template #cell-category="{ row }">{{ categoryName(row.category_id) }}</template>
-                    <template #cell-use_count="{ row }">{{ formatCount(row.use_count, locale) }}</template>
-                    <template #cell-platforms="{ row }">
-                        <span v-if="!row.platforms?.length" class="text-muted-foreground">{{ t('ui.all_platforms') }}</span>
-                        <span v-else class="flex gap-1"><PlatformBadge v-for="p in row.platforms" :key="p" :platform="p" size="xs" /></span>
-                    </template>
-                    <template #cell-creator="{ row }">{{ row.creator?.name ?? '—' }}</template>
-                    <template v-if="canManageShared" #cell-actions="{ row }">
-                        <span class="inline-flex gap-0.5">
-                            <IconAction :icon="Pencil" size="sm" :label="`${t('ui.edit')} ${row.title}`" @click="openEdit('shared', row)" />
-                            <IconAction :icon="Trash2" size="sm" variant="destructive" :label="`${t('ui.delete')} ${row.title}`" @click="remove('shared', row)" />
-                        </span>
-                    </template>
-                </DataTable>
-            </div>
+            <template v-if="list">
+                <SettingsPanel v-if="!list.all.length">
+                    <StarterEmptyState
+                        v-if="list.scope === 'shared'"
+                        :icon="MessageSquareText"
+                        :title="t('settings.starter.replies_title')"
+                        :body="t('settings.starter.replies_body')"
+                        :preview="starterExamples"
+                        :endpoint="canManageShared ? '/settings/quick-replies/examples' : undefined"
+                        reload-prop="shared"
+                    >
+                        <button
+                            v-if="canManageShared"
+                            type="button"
+                            class="min-h-10 px-2 text-13 font-semibold text-brand-ink hover:underline"
+                            @click="openAdd('shared')"
+                        >
+                            {{ t('settings.starter.or_create') }}
+                        </button>
+                    </StarterEmptyState>
+                    <StarterEmptyState
+                        v-else
+                        :icon="MessageSquareText"
+                        :title="t('settings.starter.replies_title')"
+                        :body="t('settings.starter.replies_personal_body')"
+                        reload-prop="personal"
+                    >
+                        <Button @click="openAdd('personal')"><Plus aria-hidden="true" />{{ t('settings.quick_replies.add_personal') }}</Button>
+                    </StarterEmptyState>
+                </SettingsPanel>
 
-            <div v-else-if="tab === 'mine'" class="space-y-3">
-                <StarterEmptyState
-                    v-if="!personal.length"
-                    :icon="MessageSquareText"
-                    :title="t('settings.starter.replies_title')"
-                    :body="t('settings.starter.replies_personal_body')"
-                    reload-prop="personal"
-                >
-                    <button type="button" class="inline-flex h-10 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground" @click="openAdd('personal')">
-                        <Plus class="size-4" aria-hidden="true" />{{ t('settings.quick_replies.add_personal') }}
-                    </button>
-                </StarterEmptyState>
-                <div v-if="personal.length" class="flex justify-end">
-                    <button type="button" class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" @click="openAdd('personal')">
-                        <Plus class="size-3.5" aria-hidden="true" />{{ t('settings.quick_replies.add_personal') }}
-                    </button>
-                </div>
-                <DataTable table-id="settings-qr-mine" v-if="personal.length" :columns="personalColumns" :rows="personal" :empty="t('settings.quick_replies.empty')" :caption="t('replies.tab_mine')">
-                    <template #cell-shortcut="{ row }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">{{ slashShortcut(row.shortcut) }}</code></template>
-                    <template #cell-body="{ row }"><span class="line-clamp-2 max-w-md" dir="auto">{{ row.body }}</span></template>
-                    <template #cell-category="{ row }">{{ categoryName(row.category_id) }}</template>
-                    <template #cell-use_count="{ row }">{{ formatCount(row.use_count, locale) }}</template>
-                    <template #cell-platforms="{ row }">
-                        <span v-if="!row.platforms?.length" class="text-muted-foreground">{{ t('ui.all_platforms') }}</span>
-                        <span v-else class="flex gap-1"><PlatformBadge v-for="p in row.platforms" :key="p" :platform="p" size="xs" /></span>
-                    </template>
-                    <template #cell-creator="{ row }">{{ row.creator?.name ?? '—' }}</template>
-                    <template #cell-actions="{ row }">
-                        <span class="inline-flex gap-0.5">
-                            <IconAction :icon="Pencil" size="sm" :label="`${t('ui.edit')} ${row.title}`" @click="openEdit('personal', row)" />
-                            <IconAction :icon="Trash2" size="sm" variant="destructive" :label="`${t('ui.delete')} ${row.title}`" @click="remove('personal', row)" />
-                        </span>
-                    </template>
-                </DataTable>
-            </div>
+                <template v-else>
+                    <FilterBar :search="search" :search-placeholder="t('replies.search')" :chips="[]" @update:search="search = $event" />
 
-            <div v-else-if="tab === 'categories' && canManageShared">
-                <CategoryManager :categories="categories" />
-            </div>
-        </div>
+                    <SettingsPanel flush :data-reply-list="list.scope">
+                        <EmptyState v-if="!list.rows.length" :icon="SearchX" :title="t('replies.empty')" />
+                        <ul v-else class="divide-y divide-line">
+                            <li v-for="row in list.rows" :key="row.id" class="space-y-1.5 px-4 py-3.5" :data-reply="row.id">
+                                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                                    <span class="min-w-0 font-semibold" dir="auto">{{ row.title }}</span>
+                                    <kbd
+                                        class="rounded-sm border border-line-strong bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-fg-2"
+                                        dir="ltr"
+                                        >{{ slashShortcut(row.shortcut) }}</kbd
+                                    >
+                                    <span v-if="list.manageable" class="ms-auto inline-flex gap-0.5">
+                                        <IconAction
+                                            :icon="Pencil"
+                                            size="sm"
+                                            :label="`${t('ui.edit')} ${row.title}`"
+                                            @click="openEdit(list.scope, row)"
+                                        />
+                                        <IconAction
+                                            :icon="Trash2"
+                                            size="sm"
+                                            variant="destructive"
+                                            :label="`${t('ui.delete')} ${row.title}`"
+                                            @click="remove(list.scope, row)"
+                                        />
+                                    </span>
+                                </div>
+                                <p class="line-clamp-2 whitespace-pre-line text-13 text-fg-2" dir="auto">{{ row.body }}</p>
+                                <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-3">
+                                    <span>{{ categoryName(row.category_id) }}</span>
+                                    <span aria-hidden="true">·</span>
+                                    <span v-if="!row.platforms?.length">{{ t('ui.all_platforms') }}</span>
+                                    <span v-else class="inline-flex gap-1"
+                                        ><PlatformBadge v-for="p in row.platforms" :key="p" :platform="p" size="xs"
+                                    /></span>
+                                    <span aria-hidden="true">·</span>
+                                    <span class="tabular-nums">{{ t('replies.uses', { n: formatCount(row.use_count, locale) }) }}</span>
+                                    <template v-if="row.creator && list.scope === 'shared'">
+                                        <span aria-hidden="true">·</span>
+                                        <span>{{ t('settings.quick_replies.creator') }} {{ row.creator.name }}</span>
+                                    </template>
+                                </p>
+                            </li>
+                        </ul>
+                    </SettingsPanel>
+                </template>
+            </template>
+
+            <CategoryManager v-else-if="canManageShared" :categories="categories" />
+        </SettingsShell>
 
         <QuickReplyEditor v-model:open="editorOpen" :row="editingRow" :scope="editingScope" :categories="categories" :variables="variables" />
     </AppLayout>

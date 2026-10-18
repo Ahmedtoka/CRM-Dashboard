@@ -1,15 +1,16 @@
 <script setup lang="ts">
 /** «ابدأ من هنا» (owner, 2026-09-26): the admin's connect-everything checklist, read from what is really connected. */
 import StatusChip from '@/components/crm/StatusChip.vue';
+import SettingsShell from '@/components/crm/settings/SettingsShell.vue';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
-import { formatNumber } from '@/i18n';
-import { formatCount } from '@/lib/format';
+import { useSettingsBreadcrumbs } from '@/composables/useSettingsBreadcrumbs';
 import { useVisitLoading } from '@/composables/useVisitLoading';
+import { formatNumber } from '@/i18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { cn } from '@/lib/utils';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { Bot, CircleCheck, Facebook, Instagram, Link2, MessageCircle, ShoppingBag, Store } from 'lucide-vue-next';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { Check, CircleCheck } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 interface Step {
@@ -34,16 +35,15 @@ interface Progress {
 const props = defineProps<{ progress: Progress }>();
 
 const { t, locale } = useI18n();
-const page = usePage();
-const appName = computed(() => (page.props.name as string) || 'CRM');
-
-const icons = { facebook: Facebook, instagram: Instagram, whatsapp: MessageCircle, shopify: ShoppingBag, store_info: Store, bot: Bot, test_link: Link2 } as const;
-const colors = { facebook: '#0866FF', instagram: '#E1306C', whatsapp: '#25D366', shopify: '#96BF48', store_info: '#7C3AED', bot: '#0EA5E9', test_link: '#F59E0B' } as const;
 
 const next = computed(() => props.progress.steps.find((s) => !s.done && !s.blocked_by) ?? null);
 const allDone = computed(() => props.progress.done === props.progress.total);
 const connectKeys = ['facebook', 'instagram', 'whatsapp', 'shopify'];
-const ctaLabel = (step: Step) => (step.done ? t('onboarding.open') : connectKeys.includes(step.key) ? t('onboarding.connect') : t('onboarding.start'));
+const ctaLabel = (step: Step) =>
+    step.done ? t('onboarding.open') : connectKeys.includes(step.key) ? t('onboarding.connect') : t('onboarding.start');
+/** One primary per area: the next step to do is mauve, the later ones outlined. */
+const ctaVariant = (step: Step) => (step.done ? 'ghost' : next.value?.key === step.key ? 'default' : 'outline');
+const num = (n: number) => formatNumber(locale.value, n);
 
 function detailOf(step: Step): string | null {
     if (!step.detail) return null;
@@ -61,81 +61,111 @@ function resume(): void {
     router.delete('/onboarding/dismiss', track());
 }
 
-const breadcrumbs = computed(() => [{ title: t('onboarding.title'), href: '/onboarding' }]);
+const breadcrumbs = useSettingsBreadcrumbs(() => t('onboarding.title'));
 </script>
 
 <template>
     <Head :title="t('onboarding.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-3xl space-y-5 p-3 md:p-6">
-            <header class="space-y-3 rounded-xl border border-border bg-card p-5 shadow-card">
-                <h1 class="text-xl font-semibold text-foreground">{{ t('onboarding.welcome', { name: appName }) }}</h1>
-                <p class="text-sm text-muted-foreground">{{ t('onboarding.intro') }}</p>
-                <div class="space-y-1.5">
-                    <div class="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>{{ t('onboarding.progress', { done: progress.done, total: progress.total }) }}</span>
-                        <span class="tabular-nums">{{ formatNumber(locale, progress.percent / 100, { style: 'percent' }) }}</span>
+        <SettingsShell :title="t('onboarding.title')" :description="t('onboarding.intro')" width="form">
+            <section class="rounded-lg border border-line bg-card" :aria-label="t('onboarding.title')" data-onboarding-steps>
+                <header class="space-y-2 border-b border-line px-4 pb-3 pt-3.5">
+                    <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <h2 class="text-base font-bold">{{ t('onboarding.progress', { done: num(progress.done), total: num(progress.total) }) }}</h2>
+                        <span class="text-13 tabular-nums text-fg-2">{{ formatNumber(locale, progress.percent / 100, { style: 'percent' }) }}</span>
                     </div>
-                    <div class="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" :aria-valuenow="progress.percent" aria-valuemin="0" aria-valuemax="100">
-                        <div class="h-full rounded-full bg-primary transition-all" :style="{ width: `${progress.percent}%` }" />
+                    <div
+                        class="h-1.5 overflow-hidden rounded-full bg-sunken"
+                        role="progressbar"
+                        :aria-valuenow="progress.percent"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        :aria-label="t('onboarding.progress', { done: num(progress.done), total: num(progress.total) })"
+                    >
+                        <div
+                            class="h-full rounded-full bg-brand transition-all motion-reduce:transition-none"
+                            :style="{ width: `${progress.percent}%` }"
+                        />
                     </div>
-                </div>
-                <p v-if="allDone" class="rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">{{ t('onboarding.all_done') }}</p>
-                <p v-else-if="progress.complete" class="rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">{{ t('onboarding.required_done') }}</p>
-            </header>
+                    <p v-if="allDone" class="flex items-start gap-2 rounded-md bg-ok-soft px-3 py-2 text-13 text-ok" role="status">
+                        <CircleCheck class="mt-0.5 size-4 shrink-0" aria-hidden="true" />{{ t('onboarding.all_done') }}
+                    </p>
+                    <p v-else-if="progress.complete" class="flex items-start gap-2 rounded-md bg-ok-soft px-3 py-2 text-13 text-ok" role="status">
+                        <CircleCheck class="mt-0.5 size-4 shrink-0" aria-hidden="true" />{{ t('onboarding.required_done') }}
+                    </p>
+                </header>
 
-            <ol class="space-y-3">
-                <li
-                    v-for="(step, i) in progress.steps"
-                    :key="step.key"
-                    class="flex gap-3 rounded-xl border bg-card p-4 shadow-card"
-                    :class="[step.done ? 'border-emerald-500/30' : next?.key === step.key ? 'border-primary/50 ring-1 ring-primary/20' : 'border-border', { 'opacity-70': step.blocked_by }]"
-                >
-                    <!-- Status is a badge on the step's icon, not a lone circle that reads like a radio button;
-                         «لسه» / «تمام» beside the title says it in words. -->
-                    <div class="relative size-10 shrink-0" aria-hidden="true">
-                        <span class="flex size-10 items-center justify-center rounded-full text-white" :style="{ background: colors[step.key] }">
-                            <component :is="icons[step.key]" class="size-5" />
+                <ol>
+                    <li
+                        v-for="(step, i) in progress.steps"
+                        :key="step.key"
+                        class="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-b border-line px-4 py-3.5 last:border-b-0"
+                        :class="{ 'bg-brand-soft/40': next?.key === step.key }"
+                        :data-step="step.key"
+                        :data-done="step.done ? 'true' : 'false'"
+                    >
+                        <span
+                            class="grid size-7 shrink-0 place-items-center rounded-full text-13 font-bold tabular-nums"
+                            :class="step.done ? 'bg-ok-soft text-ok' : 'bg-sunken text-fg-2'"
+                            aria-hidden="true"
+                        >
+                            <Check v-if="step.done" class="size-4" />
+                            <template v-else>{{ num(i + 1) }}</template>
                         </span>
-                        <span v-if="step.done" class="absolute -bottom-1 -end-1 flex size-5 items-center justify-center rounded-full bg-card">
-                            <CircleCheck class="size-5 fill-success text-card" />
-                        </span>
-                    </div>
 
-                    <div class="min-w-0 flex-1 space-y-1.5">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <span class="text-2xs tabular-nums text-muted-foreground">{{ i + 1 }}</span>
-                            <h2 class="text-sm font-semibold text-foreground">{{ t(`onboarding.steps.${step.key}.title`) }}</h2>
-                            <StatusChip :label="step.done ? t('onboarding.done') : t('onboarding.todo')" :tone="step.done ? 'positive' : 'neutral'" />
-                            <StatusChip v-if="step.required" :label="t('onboarding.required')" tone="info" />
+                        <div class="min-w-[min(100%,14rem)] flex-1 space-y-0.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h3 class="text-sm font-semibold text-foreground">{{ t(`onboarding.steps.${step.key}.title`) }}</h3>
+                                <StatusChip v-if="step.required" :label="t('onboarding.required')" tone="brand" size="sm" />
+                            </div>
+                            <p class="text-13 text-fg-2">{{ t(`onboarding.steps.${step.key}.text`) }}</p>
+                            <p v-if="detailOf(step)" class="text-13 font-medium text-foreground" dir="auto">{{ detailOf(step) }}</p>
+                            <p v-if="step.blocked_by" class="text-13 text-warn">{{ t('onboarding.blocked_by_facebook') }}</p>
                         </div>
-                        <p class="text-xs text-muted-foreground">{{ t(`onboarding.steps.${step.key}.text`) }}</p>
-                        <p v-if="detailOf(step)" class="text-xs font-medium text-foreground" dir="auto">{{ detailOf(step) }}</p>
-                        <p v-if="step.blocked_by" class="text-xs text-amber-700 dark:text-amber-300">{{ t('onboarding.blocked_by_facebook') }}</p>
 
-                        <div class="pt-1">
-                            <a v-if="step.external && !step.done && !step.blocked_by" :href="step.href" :class="cn(buttonVariants({ size: 'sm' }))">
+                        <div class="ms-auto flex shrink-0 items-center gap-2">
+                            <StatusChip v-if="step.done" :label="t('onboarding.done')" tone="ok" :icon="Check" />
+                            <StatusChip v-else-if="step.blocked_by" :label="t('onboarding.todo')" tone="neutral" />
+                            <a
+                                v-if="step.external && !step.done && !step.blocked_by"
+                                :href="step.href"
+                                :class="cn(buttonVariants({ variant: ctaVariant(step), size: 'sm' }))"
+                            >
                                 {{ t('onboarding.connect') }}
                             </a>
-                            <Link v-else-if="!step.blocked_by" :href="step.href" :class="cn(buttonVariants({ variant: step.done ? 'outline' : 'default', size: 'sm' }))">
+                            <Link
+                                v-else-if="!step.blocked_by"
+                                :href="step.href"
+                                :class="cn(buttonVariants({ variant: ctaVariant(step), size: 'sm' }))"
+                            >
                                 {{ ctaLabel(step) }}
                             </Link>
                         </div>
-                    </div>
-                </li>
-            </ol>
+                    </li>
+                </ol>
+            </section>
 
-            <footer class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 shadow-card">
-                <div class="text-xs text-muted-foreground">
+            <footer class="flex flex-wrap items-center justify-between gap-3">
+                <p class="text-13 text-fg-2">
                     <template v-if="!progress.dismissed">{{ t('onboarding.skip_hint') }}</template>
-                </div>
-                <div class="flex gap-2">
-                    <Button v-if="!progress.dismissed && !allDone" type="button" variant="ghost" size="sm" :loading="dismissing" @click="skip">{{ t('onboarding.skip') }}</Button>
-                    <Button v-else-if="progress.dismissed && !allDone" type="button" variant="ghost" size="sm" :loading="dismissing" @click="resume">{{ t('onboarding.resume') }}</Button>
-                    <Link href="/inbox" :class="cn(buttonVariants({ size: 'sm' }))">{{ t('onboarding.go_inbox') }}</Link>
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    <Button v-if="!progress.dismissed && !allDone" type="button" variant="ghost" size="sm" :loading="dismissing" @click="skip">{{
+                        t('onboarding.skip')
+                    }}</Button>
+                    <Button
+                        v-else-if="progress.dismissed && !allDone"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        :loading="dismissing"
+                        @click="resume"
+                        >{{ t('onboarding.resume') }}</Button
+                    >
+                    <Link href="/inbox" :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }))">{{ t('onboarding.go_inbox') }}</Link>
                 </div>
             </footer>
-        </div>
+        </SettingsShell>
     </AppLayout>
 </template>

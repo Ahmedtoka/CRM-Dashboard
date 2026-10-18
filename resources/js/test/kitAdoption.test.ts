@@ -81,7 +81,9 @@ describe('S0 kit adoption', () => {
             expect(source, `${name}: raw table without .crm-sticky-head`).toContain('crm-sticky-head');
         }
         // R2 one PageHeader.
-        if (!NO_PAGE_HEADER.has(name)) expect(source, `${name}: no PageHeader`).toContain('<PageHeader');
+        // A settings page gets its PageHeader through SettingsShell (DESIGN §4 Hub + details).
+        const header = /<PageHeader\b|<SettingsShell\b/.test(source);
+        if (!NO_PAGE_HEADER.has(name)) expect(header, `${name}: no PageHeader`).toBe(true);
         // R3 every DataTable is identifiable (`data-table-id` hook for tests and screenshots): `table-id` is its first attribute.
         const tables = source.match(/<DataTable\b/g)?.length ?? 0;
         const withId = source.match(/<DataTable\s+table-id="/g)?.length ?? 0;

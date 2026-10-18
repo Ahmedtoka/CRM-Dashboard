@@ -32,34 +32,49 @@ const columns = computed<Column[]>(() => [
 ]);
 
 // Text stays `text-foreground` for contrast; the icon (when present) carries the status color.
-const statusTone: Record<string, string> = { running: 'text-primary' };
+const statusTone: Record<string, string> = { running: 'text-brand-ink' };
 const statusIcon: Record<string, typeof CheckCircle2> = { completed: CheckCircle2, ok: CheckCircle2, failed: XCircle, partial: AlertTriangle };
-const statusIconTone: Record<string, string> = { completed: 'text-success', ok: 'text-success', failed: 'text-destructive', partial: 'text-warning' };
+const statusIconTone: Record<string, string> = { completed: 'text-ok', ok: 'text-ok', failed: 'text-danger', partial: 'text-warn' };
 </script>
 
 <template>
     <section class="grid gap-2">
-        <h2 class="text-sm font-semibold">{{ t('settings.shopify.log.title') }}</h2>
+        <h2 class="text-base font-bold">{{ t('settings.shopify.log.title') }}</h2>
 
-        <DataTable table-id="shopify-sync-log" :columns="columns" :rows="runs" mobile="scroll" :empty="t('settings.shopify.log.empty')" :caption="t('settings.shopify.log.title')">
+        <DataTable
+            table-id="shopify-sync-log"
+            :columns="columns"
+            :rows="runs"
+            mobile="scroll"
+            :empty="t('settings.shopify.log.empty')"
+            :caption="t('settings.shopify.log.title')"
+        >
             <template #cell-type="{ row }">{{ label('types', row.type) }}</template>
             <template #cell-resource="{ row }">{{ label('resources', row.resource) }}</template>
             <template #cell-status="{ row }">
                 <span class="inline-flex items-center gap-1 font-medium" :class="statusTone[row.status] ?? 'text-foreground'">
-                    <component :is="statusIcon[row.status]" v-if="statusIcon[row.status]" class="size-3.5" :class="statusIconTone[row.status]" aria-hidden="true" />
+                    <component
+                        :is="statusIcon[row.status]"
+                        v-if="statusIcon[row.status]"
+                        class="size-3.5"
+                        :class="statusIconTone[row.status]"
+                        aria-hidden="true"
+                    />
                     {{ t(`settings.shopify.log.run_status.${row.status}`, {}) || row.status }}
                 </span>
             </template>
             <template #cell-failed="{ row }">
-                <span :class="row.failed > 0 ? 'rounded bg-destructive/10 px-1 font-semibold text-foreground' : ''">{{ formatCount(row.failed, locale) }}</span>
+                <span :class="row.failed > 0 ? 'rounded bg-danger-soft px-1 font-semibold text-foreground' : ''">{{
+                    formatCount(row.failed, locale)
+                }}</span>
             </template>
             <template #cell-finished_at="{ row }">
-                <span class="whitespace-nowrap tabular-nums text-muted-foreground">{{ formatDateTime(row.finished_at, locale) || '—' }}</span>
+                <span class="whitespace-nowrap tabular-nums text-fg-2">{{ formatDateTime(row.finished_at, locale) || '—' }}</span>
             </template>
             <template #cell-errors="{ row }">
                 <Popover v-if="row.errors.length">
                     <PopoverTrigger
-                        class="inline-flex items-center gap-1 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        class="inline-flex items-center gap-1 rounded p-1 text-fg-2 hover:bg-sunken hover:text-foreground"
                         :aria-label="t('settings.shopify.log.errors')"
                     >
                         {{ formatCount(row.errors.length, locale) }}
@@ -68,15 +83,15 @@ const statusIconTone: Record<string, string> = { completed: 'text-success', ok: 
                     <PopoverContent class="w-96 max-w-[calc(100vw-2rem)] p-3" :collision-padding="16">
                         <ul class="grid gap-1 text-xs">
                             <li v-for="(error, i) in row.errors" :key="i" class="flex flex-wrap items-start gap-2">
-                                <code class="text-2xs text-muted-foreground" dir="ltr">{{ error.ref }}</code>
+                                <code class="text-2xs text-fg-2" dir="ltr">{{ error.ref }}</code>
                                 <span class="flex items-start gap-1 break-words text-foreground" dir="ltr">
-                                    <XCircle class="mt-0.5 size-3 shrink-0 text-destructive" aria-hidden="true" />{{ error.message }}
+                                    <XCircle class="mt-0.5 size-3 shrink-0 text-danger" aria-hidden="true" />{{ error.message }}
                                 </span>
                             </li>
                         </ul>
                     </PopoverContent>
                 </Popover>
-                <span v-else class="text-muted-foreground">—</span>
+                <span v-else class="text-fg-2">—</span>
             </template>
         </DataTable>
     </section>

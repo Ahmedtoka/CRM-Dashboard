@@ -19,10 +19,10 @@ async function copy(value: string): Promise<void> {
 </script>
 
 <template>
-    <section class="grid gap-3 rounded-lg bg-card p-4 text-xs shadow-card">
-        <h2 class="text-sm font-semibold">{{ t('settings.shopify.guide.title') }}</h2>
+    <section class="grid gap-3 rounded-lg border border-line bg-card p-4 text-13">
+        <h2 class="text-base font-bold">{{ t('settings.shopify.guide.title') }}</h2>
 
-        <ol class="grid list-inside list-decimal gap-2 text-muted-foreground">
+        <ol class="grid list-inside list-decimal gap-2 text-fg-2">
             <li>{{ t('settings.shopify.guide.step1') }}</li>
             <li>
                 {{ t('settings.shopify.guide.step2') }}
@@ -31,7 +31,7 @@ async function copy(value: string): Promise<void> {
                         v-for="scope in requiredScopes"
                         :key="scope"
                         type="button"
-                        class="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 font-mono text-2xs hover:bg-muted"
+                        class="inline-flex items-center gap-1 rounded-full border border-line bg-card px-2 py-0.5 font-mono text-2xs hover:bg-sunken"
                         :title="t('ui.copy')"
                         @click="copy(scope)"
                     >
@@ -44,7 +44,7 @@ async function copy(value: string): Promise<void> {
             <li>{{ t('settings.shopify.guide.step4') }}</li>
         </ol>
 
-        <p class="rounded bg-warning/15 px-2 py-1.5 text-foreground">
+        <p class="rounded bg-warn-soft px-2 py-1.5 text-foreground">
             {{ t('settings.shopify.guide.token_once_note') }}
         </p>
     </section>

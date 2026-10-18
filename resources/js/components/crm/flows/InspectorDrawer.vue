@@ -50,12 +50,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
             class="z-30 flex flex-col bg-card"
             :class="
                 mobile
-                    ? 'fixed inset-x-0 bottom-0 h-[70svh] rounded-t-2xl border-t border-border shadow-[0_-8px_30px_rgb(0_0_0/0.18)]'
-                    : 'absolute inset-y-0 end-0 w-[400px] max-w-[calc(100%-4rem)] border-s border-border shadow-[0_0_32px_rgb(0_0_0/0.12)] dark:shadow-[0_0_32px_rgb(0_0_0/0.5)] xl:w-[420px]'
+                    ? 'fixed inset-x-0 bottom-0 h-[70svh] rounded-t-2xl border-t border-line shadow-[0_-8px_30px_rgb(0_0_0/0.18)]'
+                    : 'absolute inset-y-0 end-0 w-[400px] max-w-[calc(100%-4rem)] border-s border-line shadow-[0_0_32px_rgb(0_0_0/0.12)] dark:shadow-[0_0_32px_rgb(0_0_0/0.5)] xl:w-[420px]'
             "
             :aria-label="t('flows.workspace.drawer_label')"
         >
-            <div class="flex items-center gap-1 border-b border-border px-2 pt-1.5" role="tablist">
+            <div class="flex items-center gap-1 border-b border-line px-2 pt-1.5" role="tablist">
                 <button
                     v-for="item in tabs"
                     :key="item.id"
@@ -63,14 +63,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
                     role="tab"
                     :aria-selected="shown === item.id"
                     class="-mb-px inline-flex items-center gap-1.5 rounded-t-md border-b-2 px-3 py-2.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                    :class="shown === item.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
+                    :class="shown === item.id ? 'border-brand text-brand-ink' : 'border-transparent text-fg-2 hover:text-foreground'"
                     @click="tab = item.id"
                 >
                     <component :is="item.icon" class="size-3.5" aria-hidden="true" />{{ t(item.key) }}
                 </button>
                 <button
                     type="button"
-                    class="ms-auto inline-flex size-9 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    class="ms-auto inline-flex size-9 items-center justify-center rounded-md text-fg-2 outline-none transition-colors hover:bg-sunken hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                     :aria-label="t('flows.close_panel')"
                     :title="`${t('flows.close_panel')} (Esc)`"
                     @click="emit('close')"

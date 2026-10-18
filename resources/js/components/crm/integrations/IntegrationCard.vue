@@ -1,15 +1,15 @@
 <script setup lang="ts">
+import StatusChip from '@/components/crm/StatusChip.vue';
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import type { CardState } from '@/lib/integrations';
-import StatusChip from '@/components/crm/StatusChip.vue';
-import { CircleAlert, CircleCheck, CircleSlash, Clock, LoaderCircle, type LucideIcon } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { ChevronDown, CircleAlert, CircleCheck, Clock, LoaderCircle, type LucideIcon } from 'lucide-vue-next';
+import { computed, ref, useId, watch } from 'vue';
 
 /**
- * One connection on Settings → Integrations. The coloured rail on the start edge
- * is the card's state at a glance (grey: not connected, blue: connecting, green:
- * connected, red: needs attention); the chip repeats it in words and an icon so
- * the state never depends on colour alone.
+ * One connection on Settings › القنوات › الربط (mockup `.setrow`): the account in one line, what it is under it, and at
+ * the far end its state in words (متوصل / فيه مشكلة) or «اربطي». The connect form, the health check and the actions
+ * fold under the row and open on demand (or by themselves when something needs attention).
  */
 const props = withDefaults(
     defineProps<{
@@ -17,40 +17,34 @@ const props = withDefaults(
         description: string;
         state: CardState;
         icon: LucideIcon;
-        /** Brand colour for the platform mark. */
-        color: string;
-        /** Account line shown instead of the description once connected. */
+        /** Account line shown instead of the platform title once connected. */
         accountName?: string | null;
         accountDetail?: string | null;
         picture?: string | null;
-        compact?: boolean;
+        /** Whether the row has a body to unfold (Shopify links away, TikTok has nothing yet). */
+        toggleable?: boolean;
     }>(),
-    { accountName: null, accountDetail: null, picture: null, compact: false },
+    { accountName: null, accountDetail: null, picture: null, toggleable: true },
 );
+
+const open = defineModel<boolean>('open', { default: false });
 
 const { t } = useI18n();
+const bodyId = `integration-${useId()}`;
 
-const rail = computed(
-    () =>
-        ({
-            not_connected: 'bg-border',
-            soon: 'bg-border',
-            connecting: 'bg-primary motion-safe:animate-pulse',
-            connected: 'bg-success',
-            problem: 'bg-destructive',
-        })[props.state],
-);
-
-// «مش متوصل» is a calm grey chip with a slashed circle (the dashed circle read as a spinner);
-// only «جاري الربط…» spins.
 const CHIPS = {
-    not_connected: { icon: CircleSlash, tone: 'neutral' },
+    not_connected: { icon: undefined, tone: 'neutral' },
     soon: { icon: Clock, tone: 'neutral' },
     connecting: { icon: LoaderCircle, tone: 'info' },
-    connected: { icon: CircleCheck, tone: 'positive' },
-    problem: { icon: CircleAlert, tone: 'negative' },
+    connected: { icon: CircleCheck, tone: 'ok' },
+    problem: { icon: CircleAlert, tone: 'danger' },
 } as const;
 const chip = computed(() => CHIPS[props.state]);
+
+const toggleLabel = computed(() => {
+    if (open.value) return t('settings.integrations.row.hide');
+    return props.state === 'not_connected' ? t('settings.integrations.row.connect') : t('settings.integrations.row.manage');
+});
 
 // Instagram CDN picture URLs expire: fall back to the platform mark when one fails.
 const pictureFailed = ref(false);
@@ -61,53 +55,62 @@ watch(
 </script>
 
 <template>
-    <section class="relative overflow-hidden rounded-lg bg-card shadow-card" :class="state === 'soon' ? 'opacity-75' : ''" :aria-label="title">
-        <span class="absolute inset-y-0 start-0 w-1 transition-colors duration-300" :class="rail" aria-hidden="true" />
-        <div class="grid gap-3 pe-4 ps-5" :class="compact ? 'py-3' : 'py-4'">
-            <header class="flex items-start gap-3">
-                <div
-                    class="grid shrink-0 place-items-center overflow-hidden rounded-lg"
-                    :class="compact ? 'size-9' : 'size-11'"
-                    :style="{ backgroundColor: `${color}14`, color }"
-                >
-                    <img
-                        v-if="picture && !pictureFailed"
-                        :src="picture"
-                        alt=""
-                        class="size-full object-cover"
-                        referrerpolicy="no-referrer"
-                        loading="lazy"
-                        @error="pictureFailed = true"
-                    />
-                    <component :is="icon" v-else :class="compact ? 'size-4' : 'size-5'" aria-hidden="true" />
-                </div>
+    <section class="border-b border-line last:border-b-0" :aria-label="title" :data-integration-state="state">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5" :class="state === 'soon' ? 'opacity-70' : ''">
+            <div class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md bg-sunken text-fg-2">
+                <img
+                    v-if="picture && !pictureFailed"
+                    :src="picture"
+                    alt=""
+                    class="size-full object-cover"
+                    referrerpolicy="no-referrer"
+                    loading="lazy"
+                    @error="pictureFailed = true"
+                />
+                <component :is="icon" v-else class="size-5" aria-hidden="true" />
+            </div>
 
-                <div class="min-w-0 flex-1">
-                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <h2 class="text-sm font-semibold text-foreground">{{ title }}</h2>
-                        <span
-                            v-if="state === 'connecting'"
-                            class="inline-flex h-5 items-center gap-1 rounded-full bg-info/10 px-2 text-2xs font-medium text-blue-800 dark:bg-info/25 dark:text-blue-100"
-                        >
-                            <LoaderCircle class="size-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                            {{ t(`settings.integrations.state.${state}`) }}
-                        </span>
-                        <StatusChip v-else :label="t(`settings.integrations.state.${state}`)" :tone="chip.tone" :icon="chip.icon" />
-                    </div>
-                    <p v-if="accountName" class="mt-0.5 truncate text-sm font-medium text-foreground">
+            <div class="min-w-[min(100%,12rem)] flex-1">
+                <h2 class="truncate text-sm font-semibold text-foreground">
+                    <template v-if="accountName">
                         <bdi>{{ accountName }}</bdi>
-                    </p>
-                    <p v-if="accountName && accountDetail" class="truncate text-xs text-muted-foreground">
-                        <bdi>{{ accountDetail }}</bdi>
-                    </p>
-                    <p v-else-if="!accountName" class="mt-0.5 text-xs leading-relaxed text-muted-foreground">{{ description }}</p>
-                </div>
+                        <span class="font-normal text-fg-3"> · {{ title }}</span>
+                    </template>
+                    <template v-else>{{ title }}</template>
+                </h2>
+                <p class="mt-0.5 text-13 text-fg-2" :class="accountName ? 'truncate' : ''">
+                    <bdi v-if="accountName && accountDetail">{{ accountDetail }}</bdi>
+                    <template v-else>{{ description }}</template>
+                </p>
+            </div>
 
-                <div v-if="$slots.aside" class="flex shrink-0 items-center gap-2">
-                    <slot name="aside" />
-                </div>
-            </header>
+            <div class="flex shrink-0 flex-wrap items-center gap-2">
+                <StatusChip
+                    v-if="state !== 'not_connected'"
+                    :label="t(`settings.integrations.state.${state}`)"
+                    :tone="chip.tone"
+                    :icon="chip.icon"
+                    :class="state === 'connecting' ? '[&_svg]:animate-spin [&_svg]:motion-reduce:animate-none' : ''"
+                />
+                <slot name="action">
+                    <Button
+                        v-if="toggleable"
+                        type="button"
+                        :variant="state === 'not_connected' && !open ? 'secondary' : 'ghost'"
+                        size="sm"
+                        class="max-sm:h-10"
+                        :aria-expanded="open"
+                        :aria-controls="bodyId"
+                        @click="open = !open"
+                    >
+                        {{ toggleLabel }}
+                        <ChevronDown class="transition-transform duration-200" :class="open ? 'rotate-180' : ''" aria-hidden="true" />
+                    </Button>
+                </slot>
+            </div>
+        </div>
 
+        <div v-if="$slots.default" v-show="open" :id="bodyId" class="grid gap-3 border-t border-line bg-surface-2 px-4 py-4">
             <slot />
         </div>
     </section>

@@ -1,20 +1,21 @@
 <script setup lang="ts">
-import SectionTabs from '@/components/crm/SectionTabs.vue';
-import { sectionTabs } from '@/lib/sectionTabs';
-import { Button } from '@/components/ui/button';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import DateInput from '@/components/crm/DateInput.vue';
-import PageHeader from '@/components/crm/PageHeader.vue';
-import StatCard from '@/components/crm/StatCard.vue';
+import EmptyState from '@/components/crm/EmptyState.vue';
+import SettingsShell from '@/components/crm/settings/SettingsShell.vue';
+import Ledger, { type LedgerFigure } from '@/components/today/Ledger.vue';
+import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
+import { useSettingsBreadcrumbs } from '@/composables/useSettingsBreadcrumbs';
 import { useToast } from '@/composables/useToast';
 import { useUrlFilters } from '@/composables/useUrlFilters';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatDate, formatDateTime } from '@/lib/format';
+import { sectionTabs } from '@/lib/sectionTabs';
 import type { ShopifyImportState, ShopifyReconcileResult } from '@/types/admin';
 import { Head, Link } from '@inertiajs/vue3';
-import { Check, CheckCircle2, CircleAlert, Download, LoaderCircle, RefreshCw } from 'lucide-vue-next';
+import { Check, CheckCircle2, CircleAlert, Download, LoaderCircle, ScanSearch } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref } from 'vue';
 
 const props = defineProps<{
@@ -44,7 +45,10 @@ const importRunning = computed(() => ordersStage.value?.status === 'running');
 async function check(): Promise<void> {
     checking.value = true;
     try {
-        const { data } = await api.post<{ ok: boolean; result: ShopifyReconcileResult }>('/settings/shopify/reconcile', { from: from.value, to: to.value });
+        const { data } = await api.post<{ ok: boolean; result: ShopifyReconcileResult }>('/settings/shopify/reconcile', {
+            from: from.value,
+            to: to.value,
+        });
         result.value = data.result;
     } catch (error) {
         toast.push(apiErrorMessage(error, t('common.error')), 'error');
@@ -73,7 +77,9 @@ let timer: ReturnType<typeof setInterval> | null = null;
 function watchImport(): void {
     if (timer) return;
     timer = setInterval(async () => {
-        const { data } = await api.get<{ integration: { import_state: ShopifyImportState | null } | null }>('/settings/shopify/status', { silent: true });
+        const { data } = await api.get<{ integration: { import_state: ShopifyImportState | null } | null }>('/settings/shopify/status', {
+            silent: true,
+        });
         importState.value = data.integration?.import_state ?? null;
         if (!importRunning.value && timer) {
             clearInterval(timer);
@@ -110,8 +116,18 @@ function shipmentLabel(key: string | null): string {
 }
 
 const breakdowns = computed(() => [
-    { key: 'payment_gateway', title: t('settings.shopify.reconcile.by_gateway'), rows: result.value?.breakdown.payment_gateway ?? [], label: (k: string | null) => k ?? t('settings.shopify.reconcile.unknown') },
-    { key: 'province', title: t('settings.shopify.reconcile.by_province'), rows: result.value?.breakdown.province ?? [], label: (k: string | null) => k ?? t('settings.shopify.reconcile.unknown') },
+    {
+        key: 'payment_gateway',
+        title: t('settings.shopify.reconcile.by_gateway'),
+        rows: result.value?.breakdown.payment_gateway ?? [],
+        label: (k: string | null) => k ?? t('settings.shopify.reconcile.unknown'),
+    },
+    {
+        key: 'province',
+        title: t('settings.shopify.reconcile.by_province'),
+        rows: result.value?.breakdown.province ?? [],
+        label: (k: string | null) => k ?? t('settings.shopify.reconcile.unknown'),
+    },
     { key: 'shipment', title: t('settings.shopify.reconcile.by_shipment'), rows: result.value?.breakdown.shipment ?? [], label: shipmentLabel },
 ]);
 
@@ -129,123 +145,152 @@ const statusColumns = computed<Column[]>(() => [
     { key: 'diff', label: t('settings.shopify.reconcile.diff'), numeric: true },
 ]);
 
-const breadcrumbs = computed(() => [
-    { title: t('settings.shopify.title'), href: '/settings/shopify' },
-    { title: t('settings.shopify.reconcile.title'), href: '/settings/shopify/reconcile' },
-]);
+/** Shopify / ours / the difference: 0 reads «متطابق» in green, anything else says which side is short, in red. */
+const figures = computed<LedgerFigure[]>(() => {
+    if (!result.value) return [];
+    const { shopify, crm, diff } = result.value.totals;
+    return [
+        { key: 'shopify', label: t('settings.shopify.reconcile.in_shopify'), value: formatCount(shopify, locale.value) },
+        { key: 'crm', label: t('settings.shopify.reconcile.in_crm'), value: formatCount(crm, locale.value) },
+        {
+            key: 'diff',
+            label: t('settings.shopify.reconcile.difference'),
+            value: formatCount(Math.abs(diff), locale.value),
+            note:
+                diff === 0
+                    ? t('settings.shopify.reconcile.same')
+                    : diff < 0
+                      ? t('settings.shopify.reconcile.short_here')
+                      : t('settings.shopify.reconcile.extra_here'),
+            tone: diff === 0 ? 'up' : 'down',
+        },
+    ];
+});
+
+const title = computed(() => t('settings.shopify.reconcile.title'));
+const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
 </script>
 
 <template>
-    <Head :title="t('settings.shopify.reconcile.title')" />
+    <Head :title="title" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto grid w-full max-w-7xl gap-4 p-3 md:p-6">
-            <PageHeader :title="t('settings.shopify.reconcile.title')" :description="t('settings.shopify.reconcile.description')" :freshness="result?.checked_at ?? null" />
-            <SectionTabs :tabs="sectionTabs.shopify(t)" :label="t('section_tabs.shopify.label')" />
-
-            <p v-if="!connected" class="rounded-lg bg-warning/10 p-3 text-xs">
+        <SettingsShell
+            :title="title"
+            :description="t('settings.shopify.reconcile.description')"
+            :tabs="sectionTabs.shopify(t)"
+            :tabs-label="t('section_tabs.shopify.label')"
+            :freshness="result?.checked_at ?? null"
+        >
+            <p v-if="!connected" role="alert" class="rounded-lg border border-warn/40 bg-warn-soft px-4 py-3 text-13">
                 {{ t('settings.shopify.reconcile.not_connected') }}
-                <Link href="/settings/shopify" class="font-medium underline">{{ t('settings.shopify.title') }}</Link>
+                <Link href="/settings/shopify" class="font-semibold underline underline-offset-2">{{ t('settings.shopify.title') }}</Link>
             </p>
 
-            <section class="flex flex-wrap items-end gap-2 rounded-lg bg-card p-4 text-xs shadow-card">
-                <label class="grid gap-1">
-                    <span class="text-muted-foreground">{{ t('settings.shopify.sync.from') }}</span>
-                    <DateInput v-model="from" class="h-9 rounded-md border border-input bg-background px-2" :max="to" />
-                </label>
-                <label class="grid gap-1">
-                    <span class="text-muted-foreground">{{ t('settings.shopify.sync.to') }}</span>
-                    <DateInput v-model="to" class="h-9 rounded-md border border-input bg-background px-2" :min="from" />
-                </label>
-                <Button
-                    class="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 text-[length:inherit]"
-                    type="button"
-                    :disabled="checking || !connected || !from || !to"
-                    @click="check"
-                    :loading="checking"
-                >
-                    <RefreshCw class="size-4" aria-hidden="true" />
-                    {{ checking ? t('settings.shopify.reconcile.checking') : t('settings.shopify.reconcile.check') }}
-                </Button>
-                <p class="basis-full text-muted-foreground">{{ t('settings.shopify.reconcile.hint') }}</p>
+            <Ledger v-if="result" :figures="figures" :label="t('settings.shopify.reconcile.title')" />
+
+            <section class="grid gap-3 rounded-lg border border-line bg-card p-4" :aria-label="t('settings.shopify.reconcile.check')">
+                <div class="flex flex-wrap items-end gap-3">
+                    <label class="grid gap-1 text-13">
+                        <span class="font-semibold">{{ t('settings.shopify.sync.from') }}</span>
+                        <DateInput v-model="from" class="h-10 rounded-md border border-line-strong bg-card px-2 sm:h-9" :max="to" />
+                    </label>
+                    <label class="grid gap-1 text-13">
+                        <span class="font-semibold">{{ t('settings.shopify.sync.to') }}</span>
+                        <DateInput v-model="to" class="h-10 rounded-md border border-line-strong bg-card px-2 sm:h-9" :min="from" />
+                    </label>
+                    <Button type="button" class="max-sm:h-10" :disabled="checking || !connected || !from || !to" :loading="checking" @click="check">
+                        <ScanSearch aria-hidden="true" />
+                        {{ checking ? t('settings.shopify.reconcile.checking') : t('settings.shopify.reconcile.check') }}
+                    </Button>
+                    <span v-if="result" class="text-xs text-fg-3">{{
+                        t('settings.shopify.reconcile.checked_at', { at: formatDateTime(result.checked_at, locale) })
+                    }}</span>
+                </div>
+                <p class="text-13 text-fg-2">{{ t('settings.shopify.reconcile.hint') }}</p>
             </section>
 
-            <section v-if="importRunning" class="flex items-center gap-2 rounded-lg bg-primary/10 p-3 text-xs" role="status">
-                <LoaderCircle class="size-4 animate-spin" aria-hidden="true" />
-                {{
-                    t('settings.shopify.reconcile.importing', {
-                        processed: formatCount(ordersStage?.processed ?? 0, locale),
-                    })
-                }}
+            <section v-if="importRunning" class="flex items-center gap-2 rounded-lg bg-info-soft px-4 py-3 text-13 text-info" role="status">
+                <LoaderCircle class="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                {{ t('settings.shopify.reconcile.importing', { processed: formatCount(ordersStage?.processed ?? 0, locale) }) }}
             </section>
 
             <template v-if="result">
                 <section
-                    class="flex flex-wrap items-center gap-2 rounded-lg p-3 text-sm font-medium"
-                    :class="result.matched ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'"
+                    class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg px-4 py-3 text-sm font-semibold"
+                    :class="result.matched ? 'bg-ok-soft text-ok' : 'bg-danger-soft text-danger'"
                     role="status"
                 >
-                    <CheckCircle2 v-if="result.matched" class="size-5" aria-hidden="true" />
-                    <CircleAlert v-else class="size-5" aria-hidden="true" />
-                    <span v-if="result.matched">{{ t('settings.shopify.reconcile.matched', { n: formatCount(result.totals.shopify, locale) }) }}</span>
-                    <span v-else-if="mismatchedDays > 0">{{ t('settings.shopify.reconcile.not_matched', { days: formatCount(mismatchedDays, locale) }) }}</span>
-                    <span v-else>{{ t('settings.shopify.reconcile.statuses_only', { n: formatCount(result.totals.shopify, locale) }) }}</span>
-                    <span class="ms-auto text-2xs font-normal text-muted-foreground">
-                        {{ t('settings.shopify.reconcile.checked_at', { at: formatDateTime(result.checked_at, locale) }) }}
+                    <CheckCircle2 v-if="result.matched" class="size-5 shrink-0" aria-hidden="true" />
+                    <CircleAlert v-else class="size-5 shrink-0" aria-hidden="true" />
+                    <span class="min-w-0 flex-1">
+                        <template v-if="result.matched">{{
+                            t('settings.shopify.reconcile.matched', { n: formatCount(result.totals.shopify, locale) })
+                        }}</template>
+                        <template v-else-if="mismatchedDays > 0">{{
+                            t('settings.shopify.reconcile.not_matched', { days: formatCount(mismatchedDays, locale) })
+                        }}</template>
+                        <template v-else>{{
+                            t('settings.shopify.reconcile.statuses_only', { n: formatCount(result.totals.shopify, locale) })
+                        }}</template>
                     </span>
                     <Button
                         v-if="!result.matched"
-                        class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                        size="sm"
+                        variant="outline"
+                        class="max-sm:h-10"
                         type="button"
                         :disabled="importing || importRunning"
-                        @click="importRange"
                         :loading="importing"
+                        @click="importRange"
                     >
-                        <Download class="size-3.5" aria-hidden="true" />
+                        <Download aria-hidden="true" />
                         {{ t('settings.shopify.reconcile.bring', { from: formatDate(result.from, locale), to: formatDate(result.to, locale) }) }}
                     </Button>
                 </section>
 
-                <div class="grid gap-3 sm:grid-cols-3">
-                    <StatCard :label="t('settings.shopify.reconcile.in_shopify')" :value="result.totals.shopify" />
-                    <StatCard :label="t('settings.shopify.reconcile.in_crm')" :value="result.totals.crm" :tone="result.totals.diff === 0 ? 'positive' : 'warning'" />
-                    <StatCard :label="t('settings.shopify.reconcile.difference')" :value="diffLabel(result.totals.diff)" :tone="result.totals.diff === 0 ? 'positive' : 'negative'" />
-                </div>
-
-                <div class="grid gap-4 lg:grid-cols-2">
-                    <section class="grid content-start gap-2 rounded-lg bg-card p-4 text-xs shadow-card">
-                        <h2 class="text-sm font-semibold">{{ t('settings.shopify.reconcile.per_day') }}</h2>
+                <div class="grid items-start gap-5 lg:grid-cols-2">
+                    <section class="grid gap-2">
+                        <h2 class="text-base font-bold">{{ t('settings.shopify.reconcile.per_day') }}</h2>
                         <DataTable
                             table-id="reconcile-days"
                             :columns="dayColumns"
                             :rows="dayRows"
-                            :row-class="(day) => (day.diff !== 0 ? 'bg-destructive/5' : undefined)"
+                            :row-class="(day) => (day.diff !== 0 ? 'bg-danger-soft/50' : undefined)"
                             mobile="scroll"
                             :caption="t('settings.shopify.reconcile.per_day')"
                         >
                             <template #cell-date="{ row }">{{ formatDate(row.date, locale) }}</template>
                             <template #cell-diff="{ row }">
-                                <span class="font-medium" :class="row.diff === 0 ? 'text-success' : 'text-destructive'">
-                                    <template v-if="row.diff === 0"><Check class="inline size-3.5" aria-hidden="true" /><span class="sr-only">{{ t('settings.shopify.reconcile.same') }}</span></template>
+                                <span class="font-semibold tabular-nums" :class="row.diff === 0 ? 'text-ok' : 'text-danger'">
+                                    <template v-if="row.diff === 0"
+                                        ><Check class="inline size-3.5" aria-hidden="true" /><span class="sr-only">{{
+                                            t('settings.shopify.reconcile.same')
+                                        }}</span></template
+                                    >
                                     <template v-else>{{ diffLabel(row.diff) }}</template>
                                 </span>
                             </template>
                             <template #totals>
                                 <tr>
                                     <td class="px-3 py-2">{{ t('table.totals') }}</td>
-                                    <td class="px-3 py-2 text-end">{{ formatCount(result.totals.shopify, locale) }}</td>
-                                    <td class="px-3 py-2 text-end">{{ formatCount(result.totals.crm, locale) }}</td>
-                                    <td class="px-3 py-2 text-end" :class="result.totals.diff === 0 ? 'text-success' : 'text-destructive'">{{ diffLabel(result.totals.diff) }}</td>
+                                    <td class="px-3 py-2 text-end tabular-nums">{{ formatCount(result.totals.shopify, locale) }}</td>
+                                    <td class="px-3 py-2 text-end tabular-nums">{{ formatCount(result.totals.crm, locale) }}</td>
+                                    <td class="px-3 py-2 text-end tabular-nums" :class="result.totals.diff === 0 ? 'text-ok' : 'text-danger'">
+                                        {{ diffLabel(result.totals.diff) }}
+                                    </td>
                                 </tr>
                             </template>
                         </DataTable>
                     </section>
 
-                    <section class="grid content-start gap-3 rounded-lg bg-card p-4 text-xs shadow-card">
-                        <h2 class="text-sm font-semibold">{{ t('settings.shopify.reconcile.per_status') }}</h2>
-                        <p class="text-muted-foreground">{{ t('settings.shopify.reconcile.per_status_hint') }}</p>
-                        <div v-for="(rows, group) in statusGroups" :key="group" class="grid gap-1">
-                            <h3 class="font-medium">{{ t(`settings.shopify.reconcile.groups.${group}`) }}</h3>
+                    <section class="grid gap-3">
+                        <div>
+                            <h2 class="text-base font-bold">{{ t('settings.shopify.reconcile.per_status') }}</h2>
+                            <p class="text-13 text-fg-2">{{ t('settings.shopify.reconcile.per_status_hint') }}</p>
+                        </div>
+                        <div v-for="(rows, group) in statusGroups" :key="group" class="grid gap-1.5">
+                            <h3 class="text-sm font-semibold">{{ t(`settings.shopify.reconcile.groups.${group}`) }}</h3>
                             <DataTable
                                 table-id="reconcile-status"
                                 :columns="statusColumns"
@@ -255,47 +300,66 @@ const breadcrumbs = computed(() => [
                             >
                                 <template #cell-key="{ row }">{{ statusLabel(row.group, row.key) }}</template>
                                 <template #cell-diff="{ row }">
-                                    <span class="font-medium" :class="row.diff === 0 ? 'text-success' : 'text-destructive'">
-                                        <template v-if="row.diff === 0"><Check class="inline size-3.5" aria-hidden="true" /><span class="sr-only">{{ t('settings.shopify.reconcile.same') }}</span></template>
+                                    <span class="font-semibold tabular-nums" :class="row.diff === 0 ? 'text-ok' : 'text-danger'">
+                                        <template v-if="row.diff === 0"
+                                            ><Check class="inline size-3.5" aria-hidden="true" /><span class="sr-only">{{
+                                                t('settings.shopify.reconcile.same')
+                                            }}</span></template
+                                        >
                                         <template v-else>{{ diffLabel(row.diff) }}</template>
                                     </span>
                                 </template>
                             </DataTable>
                         </div>
 
-                        <div v-if="result.missing.length" class="grid gap-1">
-                            <h3 class="font-medium text-destructive">
+                        <div v-if="result.missing.length" class="grid gap-1.5 rounded-lg border border-line bg-card p-4">
+                            <h3 class="text-sm font-semibold text-danger">
                                 {{ t('settings.shopify.reconcile.missing_title', { n: formatCount(result.missing.length, locale) }) }}
                             </h3>
                             <p class="flex flex-wrap gap-1" dir="ltr">
-                                <code v-for="m in result.missing" :key="m.id" class="rounded bg-muted px-1.5 py-0.5">{{ m.name ?? m.id }}</code>
+                                <code v-for="m in result.missing" :key="m.id" class="rounded-sm bg-sunken px-1.5 py-0.5 text-xs">{{
+                                    m.name ?? m.id
+                                }}</code>
                             </p>
                         </div>
-                        <div v-if="result.extra.length" class="grid gap-1">
-                            <h3 class="font-medium">{{ t('settings.shopify.reconcile.extra_title', { n: formatCount(result.extra.length, locale) }) }}</h3>
+                        <div v-if="result.extra.length" class="grid gap-1.5 rounded-lg border border-line bg-card p-4">
+                            <h3 class="text-sm font-semibold">
+                                {{ t('settings.shopify.reconcile.extra_title', { n: formatCount(result.extra.length, locale) }) }}
+                            </h3>
                             <p class="flex flex-wrap gap-1" dir="ltr">
-                                <code v-for="m in result.extra" :key="m.id" class="rounded bg-muted px-1.5 py-0.5">{{ m.name ?? m.id }}</code>
+                                <code v-for="m in result.extra" :key="m.id" class="rounded-sm bg-sunken px-1.5 py-0.5 text-xs">{{
+                                    m.name ?? m.id
+                                }}</code>
                             </p>
                         </div>
                     </section>
                 </div>
 
-                <section class="grid gap-3 lg:grid-cols-3">
-                    <div v-for="b in breakdowns" :key="b.key" class="grid content-start gap-2 rounded-lg bg-card p-4 text-xs shadow-card">
-                        <h2 class="text-sm font-semibold">{{ b.title }}</h2>
-                        <ul class="grid max-h-80 gap-1 overflow-auto">
-                            <li v-for="row in b.rows" :key="row.key ?? '—'" class="flex justify-between gap-2 border-t border-border py-1.5">
+                <div class="grid items-start gap-5 lg:grid-cols-3">
+                    <section
+                        v-for="b in breakdowns"
+                        :key="b.key"
+                        class="grid content-start gap-2 rounded-lg border border-line bg-card p-4"
+                        :aria-label="b.title"
+                    >
+                        <h2 class="text-base font-bold">{{ b.title }}</h2>
+                        <ul class="grid max-h-80 overflow-auto text-13">
+                            <li
+                                v-for="row in b.rows"
+                                :key="row.key ?? '—'"
+                                class="flex justify-between gap-2 border-t border-line py-2 first:border-t-0"
+                            >
                                 <span class="truncate">{{ b.label(row.key) }}</span>
-                                <span class="tabular-nums font-medium">{{ formatCount(row.count, locale) }}</span>
+                                <span class="font-semibold tabular-nums">{{ formatCount(row.count, locale) }}</span>
                             </li>
                         </ul>
-                    </div>
-                </section>
+                    </section>
+                </div>
             </template>
 
-            <p v-else-if="connected" class="rounded-lg bg-card p-6 text-center text-xs text-muted-foreground shadow-card">
-                {{ t('settings.shopify.reconcile.empty') }}
-            </p>
-        </div>
+            <div v-else-if="connected" class="rounded-lg border border-line bg-card">
+                <EmptyState :icon="ScanSearch" :title="t('settings.shopify.reconcile.empty')" />
+            </div>
+        </SettingsShell>
     </AppLayout>
 </template>

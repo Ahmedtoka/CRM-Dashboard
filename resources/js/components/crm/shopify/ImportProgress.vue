@@ -16,7 +16,9 @@ const STAGES: ShopifyStage[] = ['shipping', 'products', 'customers', 'orders'];
 const stages = computed(() =>
     STAGES.map((stage) => ({
         stage,
-        state: props.importState?.stages?.[stage] ?? ({ status: 'pending', total: null, processed: 0, failed: 0, bulk_operation_id: null } as ShopifyStageState),
+        state:
+            props.importState?.stages?.[stage] ??
+            ({ status: 'pending', total: null, processed: 0, failed: 0, bulk_operation_id: null } as ShopifyStageState),
     })),
 );
 
@@ -32,22 +34,22 @@ function percent(state: ShopifyStageState): number {
 }
 
 const barTone: Record<ShopifyStageState['status'], string> = {
-    pending: 'bg-muted-foreground/30',
-    running: 'bg-primary',
-    completed: 'bg-success',
-    failed: 'bg-destructive',
+    pending: 'bg-fg-3/30',
+    running: 'bg-brand',
+    completed: 'bg-ok',
+    failed: 'bg-danger',
 };
 </script>
 
 <template>
-    <section class="grid gap-3 rounded-lg bg-card p-4 text-xs shadow-card">
+    <section class="grid gap-3 rounded-lg border border-line bg-card p-4 text-13">
         <header class="flex items-center gap-2">
-            <h2 class="text-sm font-semibold">{{ t('settings.shopify.import.title') }}</h2>
+            <h2 class="text-base font-bold">{{ t('settings.shopify.import.title') }}</h2>
             <span
                 class="ms-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs"
-                :class="live ? 'bg-success/10 text-foreground' : 'bg-muted text-muted-foreground'"
+                :class="live ? 'bg-ok-soft text-foreground' : 'bg-sunken text-fg-2'"
             >
-                <span class="size-1.5 rounded-full" :class="live ? 'bg-success' : 'bg-muted-foreground'" aria-hidden="true" />
+                <span class="size-1.5 rounded-full" :class="live ? 'bg-ok' : 'bg-fg-3'" aria-hidden="true" />
                 {{ live ? t('settings.shopify.import.live') : t('settings.shopify.import.polling') }}
             </span>
         </header>
@@ -56,7 +58,7 @@ const barTone: Record<ShopifyStageState['status'], string> = {
             <li v-for="{ stage, state } in stages" :key="stage" class="grid gap-1">
                 <div class="flex items-center justify-between gap-2">
                     <span class="font-medium">{{ t(`settings.shopify.import.stage.${stage}`) }}</span>
-                    <span class="text-muted-foreground">
+                    <span class="text-fg-2">
                         <template v-if="state.skipped">{{ t('settings.shopify.import.skipped_with_orders') }}</template>
                         <template v-else>{{ t(`settings.shopify.import.stage_status.${state.status}`) }}</template>
                         <!-- A running stage with a known total shows «n من m» on its ProgressBar below. -->
@@ -66,25 +68,27 @@ const barTone: Record<ShopifyStageState['status'], string> = {
                         </template>
                         <span v-if="state.failed > 0" class="inline-flex items-center gap-1 text-foreground">
                             ·
-                            <AlertTriangle class="size-3 text-destructive" aria-hidden="true" />{{ t('settings.shopify.import.failed_count', { n: state.failed }) }}
+                            <AlertTriangle class="size-3 text-danger" aria-hidden="true" />{{
+                                t('settings.shopify.import.failed_count', { n: state.failed })
+                            }}
                         </span>
                     </span>
                 </div>
                 <ProgressBar v-if="state.status === 'running' && state.total" :value="state.processed" :max="state.total" />
-                <div v-else class="h-1.5 overflow-hidden rounded-full bg-elevated" role="progressbar" :aria-valuenow="percent(state)" aria-valuemin="0" aria-valuemax="100">
+                <div
+                    v-else
+                    class="h-1.5 overflow-hidden rounded-full bg-sunken"
+                    role="progressbar"
+                    :aria-valuenow="percent(state)"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                >
                     <div class="h-full rounded-full transition-all" :class="barTone[state.status]" :style="{ width: percent(state) + '%' }" />
                 </div>
             </li>
         </ul>
 
-        <Button
-            v-if="hasFailure"
-            variant="outline"
-            class="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-border px-2.5 font-medium hover:bg-muted disabled:opacity-50 text-[length:inherit]"
-            type="button"
-            @click="emit('resume')"
-            :loading="resuming"
-        >
+        <Button v-if="hasFailure" variant="outline" size="sm" class="w-fit" type="button" @click="emit('resume')" :loading="resuming">
             {{ t('settings.shopify.import.resume') }}
         </Button>
     </section>

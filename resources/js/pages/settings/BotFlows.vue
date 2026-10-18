@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
+import PageHeader from '@/components/crm/PageHeader.vue';
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import StatusChip from '@/components/crm/StatusChip.vue';
 import FlowCanvas from '@/components/crm/flows/FlowCanvas.vue';
 import FlowSandboxChat from '@/components/crm/flows/FlowSandboxChat.vue';
 import FlowToolbar, { type DrawerTab } from '@/components/crm/flows/FlowToolbar.vue';
@@ -10,6 +13,8 @@ import SidebarAutoCollapse from '@/components/crm/flows/SidebarAutoCollapse.vue'
 import StepEditor from '@/components/crm/flows/StepEditor.vue';
 import StepPalette from '@/components/crm/flows/StepPalette.vue';
 import StepPreview from '@/components/crm/flows/StepPreview.vue';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
@@ -29,7 +34,8 @@ import {
 } from '@/lib/flows/flowGraph';
 import type { InlineDraft } from '@/lib/flows/inlineEdit';
 import { PALETTE_CARDS } from '@/lib/flows/stepPalette';
-import { formatClock, formatDateTime, formatCount } from '@/lib/format';
+import { formatClock, formatCount, formatDateTime } from '@/lib/format';
+import { sectionTabs } from '@/lib/sectionTabs';
 import type {
     FlowDefinition,
     FlowListRow,
@@ -41,13 +47,26 @@ import type {
     SourceHandle,
     StepTypeCatalog,
 } from '@/types/flows';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
 import '@vue-flow/minimap/dist/style.css';
 import { useMediaQuery } from '@vueuse/core';
 import { AxiosError } from 'axios';
-import { CircleAlert, LoaderCircle, PanelBottomOpen, Plus, RotateCcw, SquarePen, TriangleAlert, Undo2, Workflow } from 'lucide-vue-next';
+import {
+    Check,
+    ChevronRight,
+    CircleAlert,
+    LoaderCircle,
+    PanelBottomOpen,
+    Play,
+    Plus,
+    RotateCcw,
+    SquarePen,
+    TriangleAlert,
+    Undo2,
+    Workflow,
+} from 'lucide-vue-next';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
 const props = defineProps<{ flows: FlowListRow[]; stepTypes: StepTypeCatalog; scripts: FlowScriptOption[]; flowKeys: string[] }>();
@@ -61,6 +80,14 @@ const MAIN_MENU_KEY = 'main_menu';
 const MAX_MENU_TITLE = 20;
 
 // ---- flow list -------------------------------------------------------------
+/**
+ * /bot/flows is the list of flows (cards with their step chain); /bot/flows?flow=<key> opens the designer on that
+ * flow. «افتحي» is a real visit, so the browser's back button returns to the list.
+ */
+const page = usePage();
+const wantedKey = new URLSearchParams(page.url.split('?')[1] ?? '').get('flow');
+const mode = ref<'list' | 'editor'>(wantedKey && props.flows.some((row) => row.key === wantedKey) ? 'editor' : 'list');
+
 const flowRows = ref<FlowListRow[]>(props.flows.map((f) => ({ ...f })));
 watch(
     () => props.flows,
@@ -544,7 +571,10 @@ async function create(): Promise<void> {
         toast.push(t('flows.created'));
         const newId = data.data.flow.id;
         savedJson.value = def.value ? JSON.stringify(def.value) : '';
-        reloadFlows(() => selectFlow(newId, true));
+        reloadFlows(() => {
+            mode.value = 'editor';
+            selectFlow(newId, true);
+        });
     } catch (e) {
         createError.value = apiErrorMessage(e, t('common.error'));
     } finally {
@@ -692,6 +722,10 @@ onMounted(() => {
         else if (flow.value) forgetUnsaved(flow.value.id);
     });
 
+    if (mode.value === 'list') {
+        loadChains();
+        return;
+    }
     const wanted = new URLSearchParams(window.location.search).get('flow');
     const initial = flowRows.value.find((row) => row.key === wanted) ?? flowRows.value[0];
     if (initial) selectFlow(initial.id, true);
@@ -708,15 +742,139 @@ const breadcrumbs = computed(() => [
     { title: t('flows.title'), href: '/bot/flows' },
 ]);
 
-const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';
+const input = 'h-9 w-full rounded-md border border-line-strong bg-card px-3 text-sm';
+
+// ---- the list's step chains --------------------------------------------------
+/** Per flow: the step labels from the start along the main path, null while loading, false when it failed. */
+const chains = reactive<Record<number, { steps: string[]; more: number } | null | false>>({});
+const CHAIN_MAX = 6;
+
+/** A step's type in the reader's language, the same way the editor's node names it (StepNode). */
+function stepLabel(type: string): string {
+    const ar = props.stepTypes[type]?.label_ar;
+    if (locale.value === 'ar' && ar) return ar;
+    const key = `flows.types.${type}`;
+    const text = t(key);
+
+    return text === key ? (ar ?? type) : text;
+}
+
+/** Walks start → next (a choice's first jump, a branch's first target) and names each step by its type. */
+function chainOf(definition: FlowDefinition): { steps: string[]; more: number } {
+    const seen = new Set<string>();
+    const steps: string[] = [];
+    let id: string | undefined = definition.start;
+    while (id && definition.steps[id] && !seen.has(id)) {
+        seen.add(id);
+        const step: FlowStep = definition.steps[id];
+        steps.push(stepLabel(step.type));
+        id = step.next ?? step.options?.find((o) => o.next)?.next ?? step.branches?.[0]?.next;
+    }
+
+    return { steps: steps.slice(0, CHAIN_MAX), more: Math.max(0, steps.length - CHAIN_MAX) };
+}
+
+/** Three at a time: each GET validates the draft and loads the versions, so a long list must not hit the server at once. */
+const CHAIN_CONCURRENCY = 3;
+
+async function loadChains(): Promise<void> {
+    const queue = [...flowRows.value];
+    for (const row of queue) chains[row.id] = null;
+    const worker = async (): Promise<void> => {
+        for (let row = queue.shift(); row; row = queue.shift()) {
+            try {
+                const { data } = await api.get<{ data: FlowShowPayload }>(`/bot/flows/${row.id}`);
+                // The live path first: an unpublished draft is not what customers see yet.
+                chains[row.id] = chainOf(data.data.published ?? data.data.draft);
+            } catch {
+                chains[row.id] = false;
+            }
+        }
+    };
+    await Promise.all(Array.from({ length: CHAIN_CONCURRENCY }, worker));
+}
 </script>
 
 <template>
     <Head :title="t('flows.title')" />
 
-    <AppLayout :breadcrumbs="breadcrumbs" fill>
-        <SidebarAutoCollapse />
-        <TooltipProvider :delay-duration="150">
+    <AppLayout :breadcrumbs="breadcrumbs" :fill="mode === 'editor'">
+        <!-- The list (/bot/flows): one card row per flow, its main path as a chain, «افتحي» opens the designer. -->
+        <div v-if="mode === 'list'" class="mx-auto w-full max-w-6xl space-y-4 p-3 md:p-6">
+            <PageHeader :title="t('nav.bot_flows')" :description="t('flows.section_description')">
+                <Button type="button" @click="openCreate"><Plus class="size-4" aria-hidden="true" />{{ t('flows.new_flow') }}</Button>
+            </PageHeader>
+            <SectionTabs :tabs="sectionTabs.botFlows(t)" :label="t('nav.bot_flows')" />
+
+            <section v-if="flowRows.length" class="rounded-lg border border-line bg-card" data-flow-list>
+                <article
+                    v-for="row in flowRows"
+                    :key="row.id"
+                    class="flex flex-col gap-2 border-b border-line px-4 py-3.5 last:border-b-0"
+                    :data-flow-row="row.key"
+                >
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h2 class="min-w-0 break-words text-[15px] font-bold text-foreground" dir="auto">{{ row.title_ar }}</h2>
+                        <StatusChip
+                            :label="row.is_active ? t('flows.active') : t('flows.inactive')"
+                            :tone="row.is_active ? 'ok' : 'neutral'"
+                            size="sm"
+                        />
+                        <StatusChip v-if="row.has_draft" :label="t('flows.has_draft')" tone="warn" size="sm" />
+                        <StatusChip v-if="row.in_main_menu" :label="t('flows.in_main_menu')" tone="outline" size="sm" />
+                        <span class="ms-auto flex items-center gap-2">
+                            <span v-if="row.published_version" class="text-xs tabular-nums text-fg-3">{{
+                                t('flows.version', { n: formatCount(row.published_version, locale) })
+                            }}</span>
+                            <Link
+                                :href="`/bot/flows?flow=${encodeURIComponent(row.key)}`"
+                                class="inline-flex h-9 items-center gap-1 rounded-md bg-sunken px-3 text-13 font-semibold text-foreground hover:bg-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                :aria-label="`${t('flows.open')}: ${row.title_ar}`"
+                            >
+                                {{ t('flows.open') }}<ChevronRight class="rtl-flip size-4" aria-hidden="true" />
+                            </Link>
+                        </span>
+                    </div>
+
+                    <div v-if="chains[row.id] === null" class="flex gap-1.5" aria-hidden="true">
+                        <Skeleton v-for="i in 4" :key="i" class="h-[26px] w-16 rounded-sm" />
+                    </div>
+                    <p v-else-if="chains[row.id] === false" class="text-13 text-fg-2">{{ t('flows.chain_failed') }}</p>
+                    <ol v-else-if="chains[row.id]" class="flex flex-wrap items-center gap-1.5" :aria-label="t('flows.chain')">
+                        <li class="inline-flex h-[26px] items-center gap-1 rounded-sm bg-brand-soft px-2 text-xs font-semibold text-brand-ink">
+                            <Play class="size-3.5" aria-hidden="true" />{{ t('flows.start') }}
+                        </li>
+                        <template v-for="(label, i) in (chains[row.id] || { steps: [] }).steps" :key="i">
+                            <ChevronRight class="rtl-flip size-3.5 text-fg-3" aria-hidden="true" />
+                            <li class="inline-flex h-[26px] items-center rounded-sm bg-sunken px-2 text-xs font-semibold text-fg-2" dir="auto">
+                                {{ label }}
+                            </li>
+                        </template>
+                        <template v-if="(chains[row.id] || { more: 0 }).more">
+                            <ChevronRight class="rtl-flip size-3.5 text-fg-3" aria-hidden="true" />
+                            <li class="inline-flex h-[26px] items-center rounded-sm bg-sunken px-2 text-xs font-semibold tabular-nums text-fg-3">
+                                {{ t('flows.chain_more', { n: formatCount((chains[row.id] || { more: 0 }).more, locale) }) }}
+                            </li>
+                        </template>
+                        <ChevronRight class="rtl-flip size-3.5 text-fg-3" aria-hidden="true" />
+                        <li class="inline-flex h-[26px] items-center gap-1 rounded-sm bg-ok-soft px-2 text-xs font-semibold text-ok">
+                            <Check class="size-3.5" aria-hidden="true" />{{ t('flows.chain_end') }}
+                        </li>
+                    </ol>
+                </article>
+            </section>
+
+            <div v-else class="rounded-lg border border-line bg-card">
+                <EmptyState :icon="Workflow" :title="t('flows.no_flows')" :body="t('flows.no_flows_body')">
+                    <Button type="button" class="mt-2" @click="openCreate"
+                        ><Plus class="size-4" aria-hidden="true" />{{ t('flows.new_flow') }}</Button
+                    >
+                </EmptyState>
+            </div>
+        </div>
+
+        <SidebarAutoCollapse v-if="mode === 'editor'" />
+        <TooltipProvider v-if="mode === 'editor'" :delay-duration="150">
             <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
                 <FlowToolbar
                     v-model:active="isActive"
@@ -749,8 +907,8 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
                 />
 
                 <!-- Banners that need a decision before editing goes on. -->
-                <div v-if="stale || recoverable || (restoreLeftDraft && hasDraft)" class="space-y-px border-b border-border">
-                    <div v-if="stale" role="alert" class="flex flex-wrap items-center gap-2 bg-destructive/10 px-4 py-2 text-xs text-destructive">
+                <div v-if="stale || recoverable || (restoreLeftDraft && hasDraft)" class="space-y-px border-b border-line">
+                    <div v-if="stale" role="alert" class="flex flex-wrap items-center gap-2 bg-danger-soft px-4 py-2 text-xs text-danger">
                         <CircleAlert class="size-4 shrink-0" aria-hidden="true" />
                         <span class="flex-1">{{ t('flows.stale_draft') }}</span>
                         <button
@@ -762,23 +920,19 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
                         </button>
                     </div>
 
-                    <div
-                        v-if="recoverable"
-                        role="alert"
-                        class="flex flex-wrap items-center gap-2 bg-amber-500/15 px-4 py-2 text-xs text-amber-900 dark:text-amber-100"
-                    >
+                    <div v-if="recoverable" role="alert" class="flex flex-wrap items-center gap-2 bg-warn-soft px-4 py-2 text-xs text-warn">
                         <TriangleAlert class="size-4 shrink-0" aria-hidden="true" />
                         <span class="flex-1">{{ t('flows.recover_prompt') }}</span>
                         <button
                             type="button"
-                            class="inline-flex h-8 items-center gap-1 rounded-md bg-amber-600 px-3 font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            class="inline-flex h-8 items-center gap-1 rounded-md bg-warn-solid px-3 font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             @click="recoverUnsaved"
                         >
                             <RotateCcw class="size-3.5" aria-hidden="true" />{{ t('flows.recover') }}
                         </button>
                         <button
                             type="button"
-                            class="inline-flex h-8 items-center rounded-md border border-amber-600/40 px-3 font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            class="inline-flex h-8 items-center rounded-md border border-warn/40 px-3 font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             @click="ignoreUnsaved"
                         >
                             {{ t('flows.recover_ignore') }}
@@ -788,20 +942,20 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
                     <div
                         v-if="restoreLeftDraft && hasDraft"
                         role="alert"
-                        class="flex flex-wrap items-center gap-2 bg-amber-500/15 px-4 py-2 text-xs text-amber-900 dark:text-amber-100"
+                        class="flex flex-wrap items-center gap-2 bg-warn-soft px-4 py-2 text-xs text-warn"
                     >
                         <TriangleAlert class="size-4 shrink-0" aria-hidden="true" />
                         <span class="flex-1">{{ t('flows.restore_left_draft') }}</span>
                         <button
                             type="button"
-                            class="inline-flex h-8 items-center gap-1 rounded-md bg-amber-600 px-3 font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            class="inline-flex h-8 items-center gap-1 rounded-md bg-warn-solid px-3 font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             @click="discardDraft"
                         >
                             <Undo2 class="size-3.5" aria-hidden="true" />{{ t('flows.discard_draft') }}
                         </button>
                         <button
                             type="button"
-                            class="inline-flex h-8 items-center rounded-md border border-amber-600/40 px-3 font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            class="inline-flex h-8 items-center rounded-md border border-warn/40 px-3 font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             @click="restoreLeftDraft = false"
                         >
                             {{ t('flows.recover_ignore') }}
@@ -830,7 +984,7 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
                         >
                             <button
                                 type="button"
-                                class="mt-2 inline-flex h-10 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground outline-none hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                class="mt-2 inline-flex h-10 items-center gap-1.5 rounded-md bg-brand px-4 text-sm font-semibold text-brand-on outline-none hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                 @click="openCreate"
                             >
                                 <Plus class="size-4" aria-hidden="true" />{{ t('flows.new_flow') }}
@@ -863,14 +1017,14 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
                             aria-busy="true"
                         >
                             <span class="flex items-center gap-2 rounded-full bg-card px-4 py-2 text-sm shadow-card">
-                                <LoaderCircle class="size-4 animate-spin text-primary" aria-hidden="true" />{{ t('common.loading') }}
+                                <LoaderCircle class="size-4 animate-spin text-brand-ink" aria-hidden="true" />{{ t('common.loading') }}
                             </span>
                         </div>
 
                         <button
                             v-if="!isDesktop && def && drawer === null"
                             type="button"
-                            class="absolute bottom-4 end-4 z-20 inline-flex h-11 items-center gap-1.5 rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            class="absolute bottom-4 end-4 z-20 inline-flex h-11 items-center gap-1.5 rounded-full bg-brand px-4 text-sm font-semibold text-brand-on shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                             @click="drawer = drawerTab"
                         >
                             <PanelBottomOpen class="size-4" aria-hidden="true" />{{ t('flows.open_panel') }}
@@ -897,17 +1051,13 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
                             />
                             <div v-else-if="def" class="space-y-3 p-4">
                                 <EmptyState :icon="SquarePen" :title="t('flows.select_step')" :body="t('flows.select_step_hint')" class="p-4" />
-                                <p v-if="!problems.length" class="text-center text-xs text-muted-foreground">{{ t('flows.no_problems') }}</p>
+                                <p v-if="!problems.length" class="text-center text-xs text-fg-2">{{ t('flows.no_problems') }}</p>
                                 <ul v-else class="space-y-1.5">
                                     <li v-for="(problem, i) in problems" :key="i">
                                         <button
                                             type="button"
                                             class="flex w-full gap-1.5 rounded-md px-2.5 py-1.5 text-start text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
-                                            :class="
-                                                problem.tone === 'error'
-                                                    ? 'bg-destructive/10 text-destructive'
-                                                    : 'bg-amber-500/10 text-amber-800 dark:text-amber-200'
-                                            "
+                                            :class="problem.tone === 'error' ? 'bg-danger-soft text-danger' : 'bg-warn-soft text-warn'"
                                             :disabled="!problem.stepId"
                                             @click="problem.stepId && focusProblem(problem.stepId)"
                                         >
@@ -960,7 +1110,7 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
             <label class="block">
                 <span class="mb-1 block text-xs font-medium">{{ t('flows.key') }}</span>
                 <input v-model="createForm.key" :class="input" required dir="ltr" pattern="[a-z][a-z0-9_]{2,40}" maxlength="41" />
-                <span class="mt-1 block text-2xs text-muted-foreground">{{ t('flows.key_hint') }}</span>
+                <span class="mt-1 block text-xs text-fg-2">{{ t('flows.key_hint') }}</span>
             </label>
             <label class="block">
                 <span class="mb-1 block text-xs font-medium">{{ t('flows.copy_from') }}</span>
@@ -986,7 +1136,7 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
                     rows="3"
                     maxlength="200"
                     dir="auto"
-                    class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    class="w-full rounded-md border border-line-strong bg-background px-3 py-2 text-sm"
                 />
             </label>
         </FormDialog>
@@ -1016,7 +1166,9 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
             <label class="block">
                 <span class="mb-1 flex items-center justify-between text-xs font-medium">
                     {{ t('flows.menu_title') }}
-                    <span class="tabular-nums text-muted-foreground" dir="ltr">{{ formatCount(menuTitle.length, locale) }}/{{ formatCount(MAX_MENU_TITLE, locale) }}</span>
+                    <span class="tabular-nums text-fg-2" dir="ltr"
+                        >{{ formatCount(menuTitle.length, locale) }}/{{ formatCount(MAX_MENU_TITLE, locale) }}</span
+                    >
                 </span>
                 <input v-model="menuTitle" :class="input" required :maxlength="MAX_MENU_TITLE" dir="auto" />
             </label>

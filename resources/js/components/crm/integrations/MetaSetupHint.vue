@@ -26,39 +26,39 @@ const { t } = useI18n();
         <p
             v-if="verifyTokenProblem"
             role="alert"
-            class="flex items-start gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-2 text-xs leading-relaxed"
+            class="flex items-start gap-1.5 rounded-md border border-warn/40 bg-warn-soft px-2.5 py-2 text-xs leading-relaxed"
         >
-            <TriangleAlert class="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden="true" />
+            <TriangleAlert class="mt-0.5 size-3.5 shrink-0 text-warn" aria-hidden="true" />
             <span>{{ t(`settings.integrations.meta_setup.verify_token_problem.${verifyTokenProblem}`) }}</span>
         </p>
         <details class="group rounded-md text-xs">
             <summary
-                class="flex w-fit cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden"
+                class="flex w-fit cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-fg-2 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden"
             >
                 <Wrench class="size-3.5" aria-hidden="true" />
                 {{ t('settings.integrations.meta_setup.title') }}
                 <ChevronDown class="size-3.5 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
             </summary>
-            <div class="mt-2 grid gap-3 rounded-md border border-dashed border-border p-3">
-                <p class="leading-relaxed text-muted-foreground">{{ t('settings.integrations.meta_setup.intro') }}</p>
+            <div class="mt-2 grid gap-3 rounded-md border border-dashed border-line p-3">
+                <p class="leading-relaxed text-fg-2">{{ t('settings.integrations.meta_setup.intro') }}</p>
                 <div class="grid gap-3 sm:grid-cols-2">
                     <div class="grid gap-1">
-                        <span class="text-2xs font-semibold text-muted-foreground">{{ t('settings.integrations.meta_setup.object') }}</span>
-                        <code class="w-fit rounded bg-muted px-2 py-1.5 text-2xs" dir="ltr">{{ object }}</code>
+                        <span class="text-2xs font-semibold text-fg-2">{{ t('settings.integrations.meta_setup.object') }}</span>
+                        <code class="w-fit rounded bg-sunken px-2 py-1.5 text-2xs" dir="ltr">{{ object }}</code>
                     </div>
                     <div class="grid gap-1">
-                        <span class="text-2xs font-semibold text-muted-foreground">{{ t('settings.integrations.meta_setup.fields') }}</span>
+                        <span class="text-2xs font-semibold text-fg-2">{{ t('settings.integrations.meta_setup.fields') }}</span>
                         <div class="flex flex-wrap gap-1" dir="ltr">
-                            <code v-for="field in fields" :key="field" class="rounded bg-muted px-1.5 py-1 text-2xs">{{ field }}</code>
+                            <code v-for="field in fields" :key="field" class="rounded bg-sunken px-1.5 py-1 text-2xs">{{ field }}</code>
                         </div>
                     </div>
                     <CopyField :label="t('settings.integrations.meta_setup.callback_url')" :value="callbackUrl" />
                     <CopyField :label="t('settings.integrations.meta_setup.verify_token')" :value="verifyToken" />
                 </div>
                 <div class="grid gap-1">
-                    <span class="text-2xs font-semibold text-muted-foreground">{{ t('settings.integrations.meta_setup.permissions') }}</span>
+                    <span class="text-2xs font-semibold text-fg-2">{{ t('settings.integrations.meta_setup.permissions') }}</span>
                     <div class="flex flex-wrap gap-1" dir="ltr">
-                        <code v-for="permission in permissions" :key="permission" class="rounded bg-muted px-1.5 py-1 text-2xs">{{
+                        <code v-for="permission in permissions" :key="permission" class="rounded bg-sunken px-1.5 py-1 text-2xs">{{
                             permission
                         }}</code>
                     </div>

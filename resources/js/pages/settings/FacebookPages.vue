@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import EmptyState from '@/components/crm/EmptyState.vue';
-import PageHeader from '@/components/crm/PageHeader.vue';
-import { Button } from '@/components/ui/button';
+import SettingsPanel from '@/components/crm/settings/SettingsPanel.vue';
+import SettingsShell from '@/components/crm/settings/SettingsShell.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
+import { useSettingsBreadcrumbs } from '@/composables/useSettingsBreadcrumbs';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { cn } from '@/lib/utils';
 import type { FacebookPageOption } from '@/types/admin';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, ArrowRight, Facebook, ShieldAlert, ShieldCheck } from 'lucide-vue-next';
+import { ArrowLeft, Facebook, ShieldAlert, ShieldCheck } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{ pages: FacebookPageOption[] }>();
@@ -18,7 +21,9 @@ const busyPage = ref<string | null>(null);
 
 // Connected page first, then connectable ones, then the ones lacking access.
 const sortedPages = computed(() =>
-    [...props.pages].sort((a, b) => Number(b.connected) - Number(a.connected) || a.missing_tasks.length - b.missing_tasks.length || a.name.localeCompare(b.name)),
+    [...props.pages].sort(
+        (a, b) => Number(b.connected) - Number(a.connected) || a.missing_tasks.length - b.missing_tasks.length || a.name.localeCompare(b.name),
+    ),
 );
 
 function initials(name: string): string {
@@ -35,89 +40,96 @@ function connect(page: FacebookPageOption): void {
     router.post(`/settings/channels/facebook/pages/${page.id}`, {}, { onFinish: () => (busyPage.value = null) });
 }
 
-const breadcrumbs = computed(() => [
-    { title: t('settings.integrations.title'), href: '/settings/integrations' },
-    { title: t('settings.channels.facebook.pages_title'), href: '/settings/channels/facebook/pages' },
-]);
+const title = computed(() => t('settings.channels.facebook.pages_title'));
+const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
 </script>
 
 <template>
-    <Head :title="t('settings.channels.facebook.pages_title')" />
+    <Head :title="title" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-5xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('settings.channels.facebook.pages_title')" :description="t('settings.channels.facebook.pages_description')">
-                <Link href="/settings/integrations" class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium hover:bg-muted">
-                    <component :is="dir === 'rtl' ? ArrowRight : ArrowLeft" class="size-3.5" aria-hidden="true" />
+        <SettingsShell :title="title" :description="t('settings.channels.facebook.pages_description')" width="form">
+            <template #actions>
+                <Link href="/settings/integrations" :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'max-sm:h-10')">
+                    <ArrowLeft class="rtl-flip" aria-hidden="true" />
                     {{ t('settings.channels.facebook.back') }}
                 </Link>
-            </PageHeader>
+            </template>
 
-            <div class="flex flex-wrap items-center gap-2 rounded-lg border border-[#0866FF]/25 bg-[#0866FF]/5 px-3 py-2 text-xs">
-                <Facebook class="size-4 shrink-0 text-[#0866FF]" aria-hidden="true" />
-                <span class="min-w-0 flex-1">{{ t('settings.channels.facebook.pages_note') }}</span>
-                <span class="font-medium text-muted-foreground tabular-nums">{{ t('settings.channels.facebook.pages_count', { count: pages.length }) }}</span>
-            </div>
+            <SettingsPanel flush>
+                <p class="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3 text-13 text-fg-2">
+                    <Facebook class="size-4 shrink-0" aria-hidden="true" />
+                    <span class="min-w-0 flex-1">{{ t('settings.channels.facebook.pages_note') }}</span>
+                    <span class="font-semibold tabular-nums">{{ t('settings.channels.facebook.pages_count', { count: pages.length }) }}</span>
+                </p>
 
-            <div v-if="!pages.length" class="rounded-lg bg-card shadow-card">
-                <EmptyState :icon="Facebook" :title="t('settings.channels.facebook.flash.no_pages')">
+                <EmptyState v-if="!pages.length" :icon="Facebook" :title="t('settings.channels.facebook.flash.no_pages')">
                     <template #action>
-                        <Link href="/settings/integrations" class="text-xs font-medium text-primary hover:underline">{{ t('settings.channels.facebook.back') }}</Link>
+                        <Link href="/settings/integrations" :class="buttonVariants({ variant: 'outline', size: 'sm' })">{{
+                            t('settings.channels.facebook.back')
+                        }}</Link>
                     </template>
                 </EmptyState>
-            </div>
-            <ul v-else class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <li
-                    v-for="fbPage in sortedPages"
-                    :key="fbPage.id"
-                    class="flex min-w-0 flex-col gap-3 rounded-lg bg-card p-4 text-xs shadow-card"
-                    :class="fbPage.connected ? 'ring-2 ring-[#0866FF]/60' : ''"
-                >
-                    <div class="flex min-w-0 items-center gap-3">
+
+                <ul v-else>
+                    <li
+                        v-for="fbPage in sortedPages"
+                        :key="fbPage.id"
+                        class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-3.5 last:border-b-0"
+                        :class="fbPage.connected ? 'bg-brand-soft/40' : ''"
+                        :data-page-id="fbPage.id"
+                    >
                         <img
                             v-if="fbPage.picture"
                             :src="fbPage.picture"
-                            :alt="fbPage.name"
-                            class="size-12 shrink-0 rounded-full border border-border object-cover"
+                            alt=""
+                            class="size-10 shrink-0 rounded-full border border-line object-cover"
                             referrerpolicy="no-referrer"
                         />
-                        <span v-else class="flex size-12 shrink-0 items-center justify-center rounded-full bg-[#0866FF]/10 text-lg font-bold text-[#0866FF]" aria-hidden="true">
+                        <span
+                            v-else
+                            class="grid size-10 shrink-0 place-items-center rounded-full bg-sunken text-base font-bold text-fg-2"
+                            aria-hidden="true"
+                        >
                             {{ initials(fbPage.name) }}
                         </span>
-                        <div class="min-w-0 flex-1">
-                            <p class="truncate text-sm font-semibold text-foreground" :title="fbPage.name">{{ fbPage.name }}</p>
-                            <p v-if="fbPage.category" class="truncate text-muted-foreground">{{ fbPage.category }}</p>
-                            <p class="truncate text-2xs text-muted-foreground" dir="ltr">ID {{ fbPage.id }}</p>
+
+                        <div class="min-w-[min(100%,12rem)] flex-1">
+                            <p class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <bdi class="truncate text-sm font-semibold text-foreground" :title="fbPage.name">{{ fbPage.name }}</bdi>
+                                <StatusChip v-if="fbPage.connected" :label="t('settings.channels.facebook.connected_badge')" tone="ok" size="sm" />
+                            </p>
+                            <p class="mt-0.5 truncate text-13 text-fg-2">
+                                <template v-if="fbPage.category">{{ fbPage.category }} · </template
+                                ><bdi dir="ltr" class="tabular-nums">ID {{ fbPage.id }}</bdi>
+                            </p>
+                            <p
+                                v-if="fbPage.missing_tasks.length"
+                                class="mt-1.5 flex items-start gap-1.5 rounded-md bg-warn-soft px-2.5 py-1.5 text-xs leading-relaxed"
+                            >
+                                <ShieldAlert class="mt-px size-3.5 shrink-0 text-warn" aria-hidden="true" />
+                                <span>{{ t('settings.channels.facebook.missing_tasks', { tasks: missingLabel(fbPage) }) }}</span>
+                            </p>
+                            <p v-else class="mt-1 flex items-center gap-1 text-xs text-fg-3">
+                                <ShieldCheck class="size-3.5" aria-hidden="true" />
+                                {{ t('settings.channels.facebook.task.MESSAGING') }} · {{ t('settings.channels.facebook.task.MODERATE') }}
+                            </p>
                         </div>
-                    </div>
 
-                    <div class="flex flex-wrap gap-1.5">
-                        <StatusChip v-if="fbPage.connected" :label="t('settings.channels.facebook.connected_badge')" tone="positive" />
-                        <span v-if="!fbPage.missing_tasks.length" class="inline-flex h-5 items-center gap-1 rounded-full bg-muted px-2 text-2xs text-muted-foreground">
-                            <ShieldCheck class="size-3" aria-hidden="true" />
-                            {{ t('settings.channels.facebook.task.MESSAGING') }} · {{ t('settings.channels.facebook.task.MODERATE') }}
-                        </span>
-                    </div>
-
-                    <p v-if="fbPage.missing_tasks.length" class="flex items-start gap-1.5 rounded-md bg-warning/15 px-2 py-1.5 text-2xs leading-relaxed">
-                        <ShieldAlert class="mt-px size-3.5 shrink-0" aria-hidden="true" />
-                        <span>{{ t('settings.channels.facebook.missing_tasks', { tasks: missingLabel(fbPage) }) }}</span>
-                    </p>
-
-                    <Button
-                        type="button"
-                        variant="outline"
-                        class="mt-auto h-9 gap-2 px-3 text-sm font-semibold transition disabled:cursor-not-allowed"
-                        :class="fbPage.connected ? 'border-[#0866FF]/40 text-[#0866FF] hover:bg-[#0866FF]/5' : 'border-0 bg-[#0866FF] text-white shadow-sm hover:bg-[#0759E0]'"
-                        :loading="busyPage === fbPage.id"
-                        :disabled="busyPage !== null || fbPage.missing_tasks.length > 0"
-                        @click="connect(fbPage)"
-                    >
-                        <Facebook class="size-4" aria-hidden="true" />
-                        {{ fbPage.connected ? t('settings.channels.facebook.reconnect_page') : t('settings.channels.facebook.connect_page') }}
-                    </Button>
-                </li>
-            </ul>
-        </div>
+                        <Button
+                            type="button"
+                            :variant="fbPage.connected ? 'outline' : 'default'"
+                            class="h-10 shrink-0 sm:h-9"
+                            :loading="busyPage === fbPage.id"
+                            :disabled="busyPage !== null || fbPage.missing_tasks.length > 0"
+                            @click="connect(fbPage)"
+                        >
+                            <Facebook aria-hidden="true" />
+                            {{ fbPage.connected ? t('settings.channels.facebook.reconnect_page') : t('settings.channels.facebook.connect_page') }}
+                        </Button>
+                    </li>
+                </ul>
+            </SettingsPanel>
+        </SettingsShell>
     </AppLayout>
 </template>

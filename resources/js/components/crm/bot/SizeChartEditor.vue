@@ -72,22 +72,22 @@ async function save(): Promise<void> {
     <div class="space-y-3">
         <div class="grid grid-cols-2 gap-2 sm:max-w-xs">
             <label class="grid gap-1">
-                <span class="text-xs font-medium text-muted-foreground">{{ t('settings.bot_knowledge.unit') }}</span>
-                <input v-model="model.unit" dir="ltr" maxlength="10" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
+                <span class="text-xs font-medium text-fg-2">{{ t('settings.bot_knowledge.unit') }}</span>
+                <input v-model="model.unit" dir="ltr" maxlength="10" class="h-9 w-full rounded-md border border-line-strong bg-card px-3 text-sm" />
             </label>
         </div>
 
-        <div class="overflow-x-auto rounded-md border border-border">
+        <div class="overflow-x-auto rounded-md border border-line">
             <table class="w-full border-collapse text-sm">
                 <thead>
-                    <tr class="bg-surface-accent">
+                    <tr class="bg-surface-2">
                         <th v-for="(column, colIndex) in model.columns" :key="colIndex" class="p-1.5 text-start">
                             <div class="flex items-center gap-1">
                                 <input
                                     :value="column"
                                     dir="auto"
                                     maxlength="40"
-                                    class="h-8 w-full min-w-20 rounded-md border border-input bg-background px-2 text-xs font-semibold"
+                                    class="h-8 w-full min-w-20 rounded-md border border-line-strong bg-card px-2 text-xs font-semibold"
                                     @input="setColumn(colIndex, ($event.target as HTMLInputElement).value)"
                                 />
                                 <button
@@ -95,7 +95,7 @@ async function save(): Promise<void> {
                                     type="button"
                                     :title="t('settings.bot_knowledge.remove_column')"
                                     :aria-label="t('settings.bot_knowledge.remove_column')"
-                                    class="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                    class="rounded p-1 text-fg-2 hover:bg-danger-soft hover:text-danger"
                                     @click="removeColumn(colIndex)"
                                 >
                                     <Trash2 class="size-3.5" aria-hidden="true" />
@@ -106,13 +106,13 @@ async function save(): Promise<void> {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="(row, rowIndex) in model.rows" :key="rowIndex" class="border-t border-border">
+                    <tr v-for="(row, rowIndex) in model.rows" :key="rowIndex" class="border-t border-line">
                         <td v-for="(cell, colIndex) in row" :key="colIndex" class="p-1.5">
                             <input
                                 :value="cell"
                                 dir="auto"
                                 maxlength="40"
-                                class="h-8 w-full min-w-20 rounded-md border border-input bg-background px-2 text-xs"
+                                class="h-8 w-full min-w-20 rounded-md border border-line-strong bg-card px-2 text-xs"
                                 @input="setCell(rowIndex, colIndex, ($event.target as HTMLInputElement).value)"
                             />
                         </td>
@@ -122,7 +122,7 @@ async function save(): Promise<void> {
                                 type="button"
                                 :title="t('settings.bot_knowledge.remove_row')"
                                 :aria-label="t('settings.bot_knowledge.remove_row')"
-                                class="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                class="rounded p-1 text-fg-2 hover:bg-danger-soft hover:text-danger"
                                 @click="removeRow(rowIndex)"
                             >
                                 <Trash2 class="size-3.5" aria-hidden="true" />
@@ -136,7 +136,7 @@ async function save(): Promise<void> {
         <div class="flex flex-wrap gap-2">
             <button
                 type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-md border border-input px-2.5 text-xs disabled:pointer-events-none disabled:opacity-50"
+                class="inline-flex h-8 items-center gap-1 rounded-md border border-line-strong px-2.5 text-xs disabled:pointer-events-none disabled:opacity-50"
                 :disabled="model.rows.length >= 20"
                 @click="addRow"
             >
@@ -144,7 +144,7 @@ async function save(): Promise<void> {
             </button>
             <button
                 type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-md border border-input px-2.5 text-xs disabled:pointer-events-none disabled:opacity-50"
+                class="inline-flex h-8 items-center gap-1 rounded-md border border-line-strong px-2.5 text-xs disabled:pointer-events-none disabled:opacity-50"
                 :disabled="model.columns.length >= 8"
                 @click="addColumn"
             >
@@ -153,12 +153,17 @@ async function save(): Promise<void> {
         </div>
 
         <label class="grid gap-1">
-            <span class="text-xs font-medium text-muted-foreground">{{ t('settings.bot_knowledge.note') }}</span>
-            <input v-model="model.note" dir="auto" maxlength="200" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
+            <span class="text-xs font-medium text-fg-2">{{ t('settings.bot_knowledge.note') }}</span>
+            <input v-model="model.note" dir="auto" maxlength="200" class="h-9 w-full rounded-md border border-line-strong bg-card px-3 text-sm" />
         </label>
 
-        <p v-if="error" role="alert" class="text-xs text-destructive">{{ error }}</p>
-        <button type="button" class="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50" :disabled="busy" @click="save">
+        <p v-if="error" role="alert" class="text-xs text-danger">{{ error }}</p>
+        <button
+            type="button"
+            class="h-8 rounded-md bg-brand px-3 text-xs font-medium text-brand-on disabled:opacity-50"
+            :disabled="busy"
+            @click="save"
+        >
             {{ t('common.save') }}
         </button>
     </div>

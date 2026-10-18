@@ -14,29 +14,39 @@ const tableRows = computed(() => props.rows.map((row) => ({ ...row, id: row.user
 const rankOf = (userId: number) => props.rows.findIndex((row) => row.user.id === userId) + 1;
 
 const columns = computed<Column[]>(() => [
-    { key: 'moderator', label: t('reports.lb.moderator') },
-    { key: 'messages_sent', label: t('reports.lb.messages'), align: 'end' },
-    { key: 'conversations_handled', label: t('reports.lb.conversations'), align: 'end' },
-    { key: 'first_responses', label: t('reports.lb.first'), align: 'end' },
-    { key: 'continued', label: t('reports.lb.continued'), align: 'end' },
-    { key: 'follow_ups', label: t('reports.lb.follow_ups'), align: 'end' },
-    { key: 'avg_first_response_sec', label: t('reports.lb.avg_first_response'), align: 'end' },
-    { key: 'orders_count', label: t('reports.lb.orders'), align: 'end' },
-    { key: 'orders_total', label: t('reports.lb.revenue'), align: 'end' },
-    { key: 'online_minutes', label: t('reports.lb.online'), align: 'end' },
+    { key: 'moderator', label: t('reports.lb.moderator'), primary: true },
+    { key: 'messages_sent', label: t('reports.lb.messages'), numeric: true },
+    { key: 'conversations_handled', label: t('reports.lb.conversations'), numeric: true },
+    { key: 'first_responses', label: t('reports.lb.first'), numeric: true },
+    { key: 'continued', label: t('reports.lb.continued'), numeric: true },
+    { key: 'follow_ups', label: t('reports.lb.follow_ups'), numeric: true },
+    { key: 'avg_first_response_sec', label: t('reports.lb.avg_first_response'), numeric: true },
+    { key: 'orders_count', label: t('reports.lb.orders'), numeric: true },
+    { key: 'orders_total', label: t('reports.lb.revenue'), numeric: true },
+    { key: 'online_minutes', label: t('reports.lb.online'), numeric: true },
 ]);
 
 const COUNT_KEYS = ['messages_sent', 'conversations_handled', 'first_responses', 'continued', 'follow_ups', 'orders_count'] as const;
 </script>
 
 <template>
-    <DataTable :columns="columns" :rows="tableRows" clickable :caption="t('reports.leaderboard')" @row-click="emit('open', $event.user.id)">
+    <DataTable
+        table-id="team-leaderboard"
+        :columns="columns"
+        :rows="tableRows"
+        clickable
+        :caption="t('reports.leaderboard')"
+        @row-click="emit('open', $event.user.id)"
+    >
         <template #cell-moderator="{ row }">
             <span class="inline-flex items-center gap-2 whitespace-nowrap font-medium">
-                <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-elevated text-2xs font-semibold text-muted-foreground">{{ formatCount(rankOf(row.user.id), locale) }}</span>
-                <span class="size-2.5 rounded-full" :style="{ backgroundColor: row.user.color ?? '#94a3b8' }" aria-hidden="true" />
-                {{ row.user.name }}
-                <span v-if="onlineUserIds.includes(row.user.id)" class="size-1.5 rounded-full bg-success" :title="t('reports.online_now')">
+                <span
+                    class="flex size-5 shrink-0 items-center justify-center rounded-full bg-sunken text-[11px] font-semibold tabular-nums text-fg-2"
+                    >{{ formatCount(rankOf(row.user.id), locale) }}</span
+                >
+                <span class="size-2.5 shrink-0 rounded-full" :style="{ backgroundColor: row.user.color ?? 'hsl(var(--fg-3))' }" aria-hidden="true" />
+                <span class="text-brand-ink">{{ row.user.name }}</span>
+                <span v-if="onlineUserIds.includes(row.user.id)" class="size-2 rounded-full bg-ok" :title="t('reports.online_now')">
                     <span class="sr-only">{{ t('reports.online_now') }}</span>
                 </span>
             </span>

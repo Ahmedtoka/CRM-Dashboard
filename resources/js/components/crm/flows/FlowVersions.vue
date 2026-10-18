@@ -60,11 +60,11 @@ async function restore(): Promise<void> {
 }
 
 const BADGES: Record<string, { label: string; tone: string }> = {
-    published: { label: 'flows.status_published', tone: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-200' },
-    draft: { label: 'flows.status_draft', tone: 'bg-amber-500/15 text-amber-800 dark:text-amber-200' },
-    archived: { label: 'flows.status_archived', tone: 'bg-muted text-muted-foreground' },
+    published: { label: 'flows.status_published', tone: 'bg-ok-soft text-ok' },
+    draft: { label: 'flows.status_draft', tone: 'bg-warn-soft text-warn' },
+    archived: { label: 'flows.status_archived', tone: 'bg-sunken text-fg-2' },
 };
-const badge = (status: string) => BADGES[status] ?? { label: status, tone: 'bg-muted text-muted-foreground' };
+const badge = (status: string) => BADGES[status] ?? { label: status, tone: 'bg-sunken text-fg-2' };
 const badgeLabel = (status: string): string => (BADGES[status] ? t(BADGES[status].label) : status);
 
 const stamp = (row: FlowVersionRow): string => formatDateTime(row.published_at ?? row.created_at, locale.value);
@@ -73,11 +73,11 @@ const stamp = (row: FlowVersionRow): string => formatDateTime(row.published_at ?
 <template>
     <div class="space-y-3 p-3">
         <div class="flex items-start gap-2">
-            <p class="flex-1 text-2xs leading-relaxed text-muted-foreground">{{ t('flows.versions_hint') }}</p>
+            <p class="flex-1 text-xs leading-relaxed text-fg-2">{{ t('flows.versions_hint') }}</p>
             <button
                 v-if="canPublish"
                 type="button"
-                class="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-primary px-2.5 text-2xs font-semibold text-primary-foreground hover:bg-primary-hover"
+                class="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-brand px-2.5 text-xs font-semibold text-brand-on hover:bg-brand-hover"
                 @click="emit('publish')"
             >
                 <Send class="size-3.5" aria-hidden="true" />{{ t('flows.publish') }}
@@ -91,22 +91,22 @@ const stamp = (row: FlowVersionRow): string => formatDateTime(row.published_at ?
                 v-for="row in versions"
                 :key="row.id"
                 class="rounded-lg border bg-card p-3 transition-colors"
-                :class="row.status === 'published' ? 'border-emerald-500/40 ring-1 ring-emerald-500/20' : 'border-border'"
+                :class="row.status === 'published' ? 'border-ok/40 ring-1 ring-ok/20' : 'border-line'"
             >
                 <div class="flex items-center gap-2">
                     <span class="text-sm font-bold tabular-nums">{{ t('flows.version', { n: row.version }) }}</span>
-                    <span class="rounded-full px-2 py-0.5 text-2xs font-semibold" :class="badge(row.status).tone">{{ badgeLabel(row.status) }}</span>
+                    <span class="rounded-full px-2 py-0.5 text-xs font-semibold" :class="badge(row.status).tone">{{ badgeLabel(row.status) }}</span>
                     <button
                         v-if="row.status === 'archived'"
                         type="button"
-                        class="ms-auto inline-flex h-7 items-center gap-1 rounded-md border border-input bg-card px-2 text-2xs font-medium hover:bg-muted"
+                        class="ms-auto inline-flex h-7 items-center gap-1 rounded-md border border-line-strong bg-card px-2 text-xs font-medium hover:bg-sunken"
                         @click="askRestore(row)"
                     >
                         <ArchiveRestore class="size-3.5" aria-hidden="true" />{{ t('flows.restore') }}
                     </button>
                 </div>
                 <p v-if="row.note" dir="auto" class="mt-1.5 whitespace-pre-line break-words text-xs text-foreground/90">{{ row.note }}</p>
-                <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted-foreground">
+                <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-2">
                     <span class="inline-flex items-center gap-1">
                         <UserRound class="size-3" aria-hidden="true" />{{ row.created_by ?? t('flows.version_unknown_author') }}
                     </span>

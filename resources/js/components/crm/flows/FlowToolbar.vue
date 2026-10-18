@@ -91,11 +91,11 @@ const status = computed(() => {
 const warningCount = computed(() => props.problems.length - props.errorCount);
 
 const iconBtn =
-    'inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-foreground/80 outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50';
+    'inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-foreground/80 outline-none transition-colors hover:bg-sunken hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50';
 </script>
 
 <template>
-    <header class="flex min-h-14 flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-border bg-card px-2 py-2 md:flex-nowrap md:px-3">
+    <header class="flex min-h-14 flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-line bg-card px-2 py-2 md:flex-nowrap md:px-3">
         <!-- Start: which flow, is it live, is it saved. -->
         <div class="flex min-w-0 basis-full items-center gap-2 md:basis-auto">
             <FlowSwitcher :flows="flows" :selected-id="selectedId" @select="emit('select', $event)" @create="emit('create')" />
@@ -104,7 +104,7 @@ const iconBtn =
                 <span class="h-6 w-px shrink-0 bg-border" aria-hidden="true" />
                 <span class="flex shrink-0 items-center gap-2 px-1.5 py-1 text-xs font-medium">
                     <ToggleSwitch v-model="active" :label="t('flows.active_toggle')" :disabled="activeDisabled" />
-                    <span class="hidden sm:inline" :class="active ? 'text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground'">
+                    <span class="hidden sm:inline" :class="active ? 'text-ok' : 'text-fg-2'">
                         {{ active ? t('flows.active') : t('flows.inactive') }}
                     </span>
                 </span>
@@ -117,19 +117,19 @@ const iconBtn =
                     <p
                         class="hidden min-w-0 shrink items-center gap-1.5 truncate rounded-full px-2.5 py-1 text-xs lg:flex"
                         :class="{
-                            'text-muted-foreground': status.tone === 'clean' || status.tone === 'busy',
-                            'bg-amber-500/10 font-medium text-amber-800 dark:text-amber-200': status.tone === 'dirty',
-                            'bg-surface-accent font-medium text-primary': status.tone === 'draft',
+                            'text-fg-2': status.tone === 'clean' || status.tone === 'busy',
+                            'bg-warn-soft font-medium text-warn': status.tone === 'dirty',
+                            'bg-surface-2 font-medium text-brand-ink': status.tone === 'draft',
                         }"
                         tabindex="0"
                         aria-live="polite"
                     >
                         <LoaderCircle v-if="status.tone === 'busy'" class="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
-                        <CircleCheck v-else-if="status.tone === 'clean'" class="size-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
+                        <CircleCheck v-else-if="status.tone === 'clean'" class="size-3.5 shrink-0 text-ok" aria-hidden="true" />
                         <span
                             v-else
                             class="size-2 shrink-0 rounded-full"
-                            :class="status.tone === 'dirty' ? 'bg-amber-500' : 'bg-primary'"
+                            :class="status.tone === 'dirty' ? 'bg-warn-solid' : 'bg-brand'"
                             aria-hidden="true"
                         />
                         <span class="truncate">{{ status.text }}</span>
@@ -143,21 +143,15 @@ const iconBtn =
                 <DropdownMenu v-if="problems.length">
                     <DropdownMenuTrigger
                         class="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring"
-                        :class="
-                            errorCount
-                                ? 'bg-destructive/10 text-destructive hover:bg-destructive/15'
-                                : 'bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 dark:text-amber-200'
-                        "
+                        :class="errorCount ? 'bg-danger-soft text-danger hover:bg-danger-soft' : 'bg-warn-soft text-warn hover:bg-warn-soft'"
                         :title="t('flows.workspace.problems_title')"
                     >
                         <template v-if="errorCount">
                             <CircleAlert class="size-3.5" aria-hidden="true" />{{ t('flows.errors_count', { n: errorCount }) }}
                         </template>
                         <template v-if="warningCount">
-                            <TriangleAlert class="size-3.5" :class="errorCount ? 'ms-1 text-amber-600' : ''" aria-hidden="true" />
-                            <span :class="errorCount ? 'text-amber-700 dark:text-amber-300' : ''">{{
-                                t('flows.warnings_count', { n: warningCount })
-                            }}</span>
+                            <TriangleAlert class="size-3.5" :class="errorCount ? 'ms-1 text-warn' : ''" aria-hidden="true" />
+                            <span :class="errorCount ? 'text-warn' : ''">{{ t('flows.warnings_count', { n: warningCount }) }}</span>
                         </template>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" class="w-80 p-1.5">
@@ -171,15 +165,15 @@ const iconBtn =
                                 class="cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-xs"
                                 :class="
                                     problem.tone === 'error'
-                                        ? 'text-destructive focus:bg-destructive/10 focus:text-destructive'
-                                        : 'text-amber-800 focus:bg-amber-500/10 focus:text-amber-900 dark:text-amber-200 dark:focus:text-amber-100'
+                                        ? 'text-danger focus:bg-danger-soft focus:text-danger'
+                                        : 'text-warn focus:bg-warn-soft focus:text-warn'
                                 "
                                 :disabled="!problem.stepId"
                                 @select="problem.stepId && emit('focusProblem', problem.stepId)"
                             >
                                 <component :is="problem.tone === 'error' ? CircleAlert : TriangleAlert" class="mt-0.5 !size-3.5" aria-hidden="true" />
                                 <span class="min-w-0 flex-1 leading-5">{{ problem.text }}</span>
-                                <span v-if="problem.stepId" class="shrink-0 rounded bg-muted px-1 text-2xs text-muted-foreground" dir="ltr">{{
+                                <span v-if="problem.stepId" class="shrink-0 rounded bg-sunken px-1 text-xs text-fg-2" dir="ltr">{{
                                     problem.stepId
                                 }}</span>
                             </DropdownMenuItem>
@@ -196,7 +190,7 @@ const iconBtn =
                     ] as const"
                     :key="tab.id"
                     type="button"
-                    :class="[iconBtn, drawer === tab.id ? 'bg-surface-accent text-primary hover:bg-surface-accent hover:text-primary' : '']"
+                    :class="[iconBtn, drawer === tab.id ? 'bg-surface-2 text-brand-ink hover:bg-surface-2 hover:text-brand-ink' : '']"
                     :aria-pressed="drawer === tab.id"
                     :title="tab.label"
                     @click="emit('toggleDrawer', tab.id)"
@@ -208,7 +202,7 @@ const iconBtn =
 
                 <DropdownMenu>
                     <DropdownMenuTrigger
-                        :class="[iconBtn, 'data-[state=open]:bg-muted']"
+                        :class="[iconBtn, 'data-[state=open]:bg-sunken']"
                         :aria-label="t('flows.workspace.more_actions')"
                         :title="t('flows.workspace.more_actions')"
                     >
@@ -226,7 +220,7 @@ const iconBtn =
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
-                            class="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
+                            class="cursor-pointer text-danger focus:bg-danger-soft focus:text-danger"
                             :disabled="!hasDraft && !dirty"
                             @select="emit('discard')"
                         >
@@ -238,7 +232,7 @@ const iconBtn =
                 <Button
                     v-if="dirty || saving"
                     variant="outline"
-                    class="ms-1 inline-flex h-9 items-center gap-1.5 rounded-md border border-input bg-card px-3 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                    class="ms-1 inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 text-sm font-medium outline-none transition-colors hover:bg-sunken focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
                     type="button"
                     :disabled="saving || stale"
                     @click="emit('save')"
@@ -253,7 +247,7 @@ const iconBtn =
                     <TooltipTrigger as-child>
                         <span class="ms-1 inline-flex" :tabindex="canPublish ? undefined : 0">
                             <Button
-                                class="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-card outline-none transition-colors hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:pointer-events-none disabled:opacity-50"
+                                class="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand px-4 text-sm font-semibold text-brand-on shadow-card outline-none transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:pointer-events-none disabled:opacity-50"
                                 type="button"
                                 :disabled="!canPublish || publishing"
                                 @click="emit('publish')"

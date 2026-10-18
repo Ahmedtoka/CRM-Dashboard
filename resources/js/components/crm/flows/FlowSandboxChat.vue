@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import MessageCards from '@/components/crm/MessageCards.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
-import MessageCards from '@/components/crm/MessageCards.vue';
 import type { OutboundCards } from '@/types/crm';
 import type { SandboxButton, SandboxEvent, SandboxResponse, SandboxSource } from '@/types/flows';
 import { AxiosError } from 'axios';
@@ -164,10 +164,10 @@ const EVENT_ICONS: Record<string, Component> = {
 const eventIcon = (type: string): Component => EVENT_ICONS[type] ?? Flag;
 
 function eventTone(type: string): string {
-    if (type === 'invalid') return 'bg-amber-500/15 text-amber-800 dark:text-amber-200';
-    if (type === 'case') return 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-200';
-    if (type === 'handover') return 'bg-sky-500/10 text-sky-800 dark:text-sky-200';
-    return 'bg-muted text-muted-foreground';
+    if (type === 'invalid') return 'bg-warn-soft text-warn';
+    if (type === 'case') return 'bg-ok-soft text-ok';
+    if (type === 'handover') return 'bg-info-soft text-info';
+    return 'bg-sunken text-fg-2';
 }
 
 function setSource(source: SandboxSource): void {
@@ -187,9 +187,9 @@ defineExpose({ reset });
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <!-- Toolbar: source toggle + start over -->
-        <div class="flex items-center gap-2 border-b border-border px-3 py-2">
-            <span class="text-2xs text-muted-foreground">{{ t('flows.test_source') }}</span>
-            <div class="inline-flex rounded-md bg-muted p-0.5 text-2xs font-semibold" role="radiogroup" :aria-label="t('flows.test_source')">
+        <div class="flex items-center gap-2 border-b border-line px-3 py-2">
+            <span class="text-xs text-fg-2">{{ t('flows.test_source') }}</span>
+            <div class="inline-flex rounded-md bg-sunken p-0.5 text-xs font-semibold" role="radiogroup" :aria-label="t('flows.test_source')">
                 <button
                     v-for="option in ['draft', 'published'] as const"
                     :key="option"
@@ -197,7 +197,7 @@ defineExpose({ reset });
                     role="radio"
                     :aria-checked="source === option"
                     class="rounded px-2.5 py-1 transition-colors"
-                    :class="source === option ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                    :class="source === option ? 'bg-card text-foreground shadow-sm' : 'text-fg-2 hover:text-foreground'"
                     @click="setSource(option)"
                 >
                     {{ option === 'draft' ? t('flows.test_source_draft') : t('flows.test_source_published') }}
@@ -205,7 +205,7 @@ defineExpose({ reset });
             </div>
             <button
                 type="button"
-                class="ms-auto inline-flex h-7 items-center gap-1 rounded-md border border-input bg-card px-2 text-2xs font-medium hover:bg-muted"
+                class="ms-auto inline-flex h-7 items-center gap-1 rounded-md border border-line-strong bg-card px-2 text-xs font-medium hover:bg-sunken"
                 @click="reset"
             >
                 <RotateCcw class="size-3.5" aria-hidden="true" />{{ t('flows.test_reset') }}
@@ -215,24 +215,20 @@ defineExpose({ reset });
         <p
             v-if="dirty && source === 'draft'"
             role="status"
-            class="flex items-center gap-1.5 border-b border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-2xs font-medium text-amber-800 dark:text-amber-200"
+            class="flex items-center gap-1.5 border-b border-warn/20 bg-warn-soft px-3 py-1.5 text-xs font-medium text-warn"
         >
             <TriangleAlert class="size-3.5 shrink-0" aria-hidden="true" />{{ t('flows.test_unsaved') }}
         </p>
 
         <!-- Conversation -->
         <div ref="scroller" class="scrollbar-thin min-h-0 flex-1 space-y-2 overflow-y-auto bg-muted/30 px-3 py-3" aria-live="polite">
-            <p class="mx-auto flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 text-center text-2xs text-muted-foreground">
+            <p class="mx-auto flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 text-center text-xs text-fg-2">
                 <FlaskConical class="size-3" aria-hidden="true" />{{ t('flows.test_intro') }}
             </p>
 
             <template v-for="(item, index) in items" :key="item.id">
                 <!-- Bot: start side (right in RTL); customer: end side -->
-                <MessengerBubble
-                    v-if="item.kind === 'bot'"
-                    :text="item.cards?.type === 'generic' ? '' : item.text"
-                    :show-avatar="showAvatar(index)"
-                >
+                <MessengerBubble v-if="item.kind === 'bot'" :text="item.cards?.type === 'generic' ? '' : item.text" :show-avatar="showAvatar(index)">
                     <!-- Branch cards / the store link, as Messenger shows them (a carousel's text is only its fallback). -->
                     <MessageCards v-if="item.cards" :cards="item.cards" variant="messenger" class="max-w-full" />
                     <div v-if="chipsFor === item.id" class="flex flex-wrap gap-1.5">
@@ -241,7 +237,7 @@ defineExpose({ reset });
                             :key="b"
                             type="button"
                             dir="auto"
-                            :class="[MESSENGER_CHIP_CLASS, 'hover:bg-primary hover:text-primary-foreground']"
+                            :class="[MESSENGER_CHIP_CLASS, 'hover:bg-brand hover:text-brand-on']"
                             @click="tap(button)"
                         >
                             {{ button.title }}
@@ -254,7 +250,7 @@ defineExpose({ reset });
                 <!-- Engine events: centred pills -->
                 <div v-else-if="item.kind === 'event'" class="flex justify-center py-0.5">
                     <span
-                        class="inline-flex max-w-[92%] items-center gap-1.5 rounded-full px-3 py-1 text-center text-2xs font-medium"
+                        class="inline-flex max-w-[92%] items-center gap-1.5 rounded-full px-3 py-1 text-center text-xs font-medium"
                         :class="eventTone(item.event.type)"
                     >
                         <component :is="eventIcon(item.event.type)" class="size-3.5 shrink-0" aria-hidden="true" />
@@ -264,7 +260,7 @@ defineExpose({ reset });
 
                 <div v-else-if="item.kind === 'error'" class="flex justify-center py-0.5" role="alert">
                     <span
-                        class="inline-flex max-w-[92%] items-center gap-1.5 rounded-full bg-destructive/10 px-3 py-1 text-center text-2xs font-medium text-destructive"
+                        class="inline-flex max-w-[92%] items-center gap-1.5 rounded-full bg-danger-soft px-3 py-1 text-center text-xs font-medium text-danger"
                     >
                         <CircleAlert class="size-3.5 shrink-0" aria-hidden="true" />{{ item.text }}
                     </span>
@@ -272,7 +268,7 @@ defineExpose({ reset });
 
                 <div v-else class="flex justify-center py-1">
                     <span
-                        class="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border bg-card px-3 py-1 text-2xs font-medium text-muted-foreground"
+                        class="inline-flex items-center gap-1.5 rounded-full border border-dashed border-line bg-card px-3 py-1 text-xs font-medium text-fg-2"
                     >
                         <Flag class="size-3.5 shrink-0" aria-hidden="true" />{{ t('flows.test_ended') }}
                     </span>
@@ -280,7 +276,7 @@ defineExpose({ reset });
             </template>
 
             <div v-if="busy" class="flex items-end gap-1.5" :aria-label="t('flows.test_typing')" role="status">
-                <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink">
                     <Bot class="size-3.5" aria-hidden="true" />
                 </span>
                 <span class="flex items-center gap-1 rounded-2xl rounded-es-md bg-card px-3 py-2.5 shadow-sm ring-1 ring-border">
@@ -295,10 +291,10 @@ defineExpose({ reset });
         </div>
 
         <!-- Composer -->
-        <form class="flex items-center gap-1.5 border-t border-border bg-card p-2" @submit.prevent="sendText">
+        <form class="flex items-center gap-1.5 border-t border-line bg-card p-2" @submit.prevent="sendText">
             <button
                 type="button"
-                class="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-input px-2.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
+                class="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-line-strong px-2.5 text-xs font-medium hover:bg-sunken disabled:opacity-50"
                 :disabled="busy"
                 :aria-label="t('flows.test_photo')"
                 @click="sendPhoto"
@@ -310,13 +306,13 @@ defineExpose({ reset });
                 v-model="text"
                 dir="auto"
                 maxlength="1000"
-                class="h-9 min-w-0 flex-1 rounded-full border border-input bg-background px-3.5 text-sm"
+                class="h-9 min-w-0 flex-1 rounded-full border border-line-strong bg-background px-3.5 text-sm"
                 :placeholder="t('flows.test_placeholder')"
                 :aria-label="t('flows.test_placeholder')"
             />
             <button
                 type="submit"
-                class="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-40"
+                class="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-brand text-brand-on transition-opacity disabled:opacity-40"
                 :disabled="busy || !text.trim()"
                 :aria-label="t('flows.test_send')"
             >
