@@ -249,7 +249,7 @@ const cardTone: Record<Card['tone'], string> = {
     calm: 'border-line-strong bg-card hover:bg-surface-2',
     warning: 'border-warn-solid bg-warn-soft/50 hover:bg-warn-soft',
     last: 'border-danger-solid bg-danger-soft/50 hover:bg-danger-soft',
-    overdue: 'border-danger-solid bg-danger-soft/50 hover:bg-danger-soft',
+    overdue: 'border-overdue bg-overdue/10 hover:bg-overdue/15',
 };
 
 /**
@@ -299,8 +299,7 @@ const silenceTone: Record<Card['tone'], string> = {
                 <span class="size-2 shrink-0 rounded-full bg-current" aria-hidden="true" />
                 <!-- Announced when the status changes; the break clock stays out of the live region (no reading every second). -->
                 <span role="status">
-                    <span class="hidden sm:inline">{{ statusLabel }}</span>
-                    <span class="sr-only sm:hidden">{{ statusLabel }}</span>
+                    <span>{{ statusLabel }}</span>
                 </span>
                 <span v-if="breakSince !== null" class="tabular-nums" :class="breakOver ? 'font-bold' : 'font-medium opacity-80'">
                     {{ t('queue.attendance.break_since', { time: breakSince }) }}
@@ -311,7 +310,7 @@ const silenceTone: Record<Card['tone'], string> = {
             <Link
                 v-if="queue.pointsToday.value !== null"
                 href="/reports/me"
-                class="inline-flex h-8 items-center whitespace-nowrap rounded-full bg-sunken px-2.5 text-[13px] font-semibold tabular-nums text-foreground hover:bg-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                class="hidden h-8 items-center whitespace-nowrap rounded-full bg-sunken px-2.5 text-[13px] font-semibold tabular-nums text-foreground hover:bg-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
                 :title="t('queue_points.mine_hint')"
                 data-my-points
                 >{{ t('queue_points.mine_today', { n: formatCount(queue.pointsToday.value, locale) }) }}</Link

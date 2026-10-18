@@ -92,7 +92,7 @@ const whyShares = computed(() => Object.fromEntries((c.value?.why.reasons ?? [])
                             <SkeletonList variant="cards" :count="1" />
                         </template>
                         <TodayCard
-                            v-if="c && hours.length"
+                            v-if="c && hours.some((h) => h.value > 0)"
                             :title="t('today.chart.title')"
                             :hint="mode === 'today' ? t('today.chart.hint_today') : t('today.chart.hint_yesterday')"
                             :rows="[]"
@@ -100,6 +100,7 @@ const whyShares = computed(() => Object.fromEntries((c.value?.why.reasons ?? [])
                         >
                             <HourBars :bars="hours" :label="t('today.chart.title')" :unit="t('today.chart.unit')" />
                         </TodayCard>
+                        <TodayCard v-if="c" :title="t('today.cards.chats')" :rows="chatsRows(c.chats, t, locale)" data-today-chats />
                     </Deferred>
                 </div>
             </div>
@@ -108,7 +109,7 @@ const whyShares = computed(() => Object.fromEntries((c.value?.why.reasons ?? [])
                 <template #fallback>
                     <SkeletonList variant="cards" :count="3" />
                 </template>
-                <div v-if="c" class="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
+                <div v-if="c" class="grid items-start gap-4 md:grid-cols-2 [&>*]:min-w-0" :class="c.confirmations ? 'xl:grid-cols-4' : 'xl:grid-cols-3'">
                     <TodayCard
                         :title="t('today.cards.orders')"
                         :hint="t('today.cards.orders_hint')"
@@ -132,7 +133,6 @@ const whyShares = computed(() => Object.fromEntries((c.value?.why.reasons ?? [])
                         :bars="whyShares"
                         :empty="t('today.cards.why_empty')"
                     />
-                    <TodayCard :title="t('today.cards.chats')" :rows="chatsRows(c.chats, t, locale)" />
                     <TodayCard
                         :title="t('today.cards.ads')"
                         :hint="mode === 'today' ? t('today.cards.ads_window_today') : t('today.cards.ads_window_yesterday')"

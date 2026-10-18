@@ -52,9 +52,11 @@ const width = (bars: Record<string, number>, key: string) => {
             <dl v-else-if="bars">
                 <div v-for="r in rows" :key="r.key" class="grid grid-cols-[minmax(84px,132px)_minmax(0,1fr)_auto] items-center gap-2.5 py-[5px] text-[13px]">
                     <dt class="min-w-0 truncate text-foreground">{{ r.label }}</dt>
-                    <span class="h-2.5 overflow-hidden rounded-[5px] bg-sunken" aria-hidden="true">
+                    <!-- A row outside the shares (a count such as the top size-out ad) gets no bar. -->
+                    <span v-if="r.key in bars" class="h-2.5 overflow-hidden rounded-[5px] bg-sunken" aria-hidden="true">
                         <i class="block h-full rounded-[5px] bg-chart-1" :style="{ width: width(bars, r.key) }" />
                     </span>
+                    <span v-else aria-hidden="true" />
                     <dd class="text-end font-semibold tabular-nums">
                         <Link v-if="r.href" :href="r.href" class="rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" :class="tone(r)">{{
                             r.value

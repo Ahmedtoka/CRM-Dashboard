@@ -46,9 +46,9 @@ const href = (path: string, extra: Record<string, string> = {}) => buildHref(pat
 const decisionsCount = computed(() => d.value.total);
 const severityTone: Record<AlertSeverity, string> = {
     critical: 'text-destructive',
-    high: 'text-orange-700 dark:text-orange-400',
-    medium: 'text-amber-700 dark:text-amber-400',
-    info: 'text-sky-700 dark:text-sky-400',
+    high: 'text-danger',
+    medium: 'text-warn',
+    info: 'text-info',
 };
 const alertTitle = (c: AlertCardData) => c.ad?.name ?? c.product?.title ?? c.account?.name ?? '';
 const alertLine = (c: AlertCardData) => (c.reasons[0] ? alertSentence(c.reasons[0], locale.value) : '');
@@ -145,12 +145,14 @@ const listHref = (list: (typeof LISTS)[number]) =>
             <!-- Decisions block: what needs me now comes first -->
             <section :class="panel" class="self-start overflow-hidden" aria-labelledby="today-decisions">
                 <div :class="panelHead" class="border-b border-line">
-                    <h2 id="today-decisions" :class="panelTitle">{{ t('ads.control.today.decisions') }}</h2>
-                    <span
-                        v-if="decisionsCount > 0"
-                        class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-sunken px-1.5 text-[11px] font-bold tabular-nums text-fg-2"
-                        >{{ n(decisionsCount) }}</span
-                    >
+                    <h2 id="today-decisions" :class="panelTitle" class="inline-flex items-center gap-2">
+                        {{ t('ads.control.today.decisions') }}
+                        <span
+                            v-if="decisionsCount > 0"
+                            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-sunken px-1.5 text-[11px] font-bold tabular-nums text-fg-2"
+                            >{{ n(decisionsCount) }}</span
+                        >
+                    </h2>
                     <Link :href="href('/ads/decisions')" :class="panelLink">{{ t('ads.control.today.open_all') }}</Link>
                 </div>
                 <Link

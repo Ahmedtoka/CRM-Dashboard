@@ -22,7 +22,8 @@ const emit = defineEmits<{ sent: [message: Message]; close: [] }>();
 
 const api = useApi();
 const { t, locale, dir } = useI18n();
-const phone = useMediaQuery('(max-width: 759px)');
+// The inbox's own phone layout ends at md (768 px): the sheet comes from below up to there.
+const phone = useMediaQuery('(max-width: 767px)');
 /** Under this many left the card says «فاضل ٧ بس» in amber. */
 const LOW_STOCK = 10;
 const selected = ref<ProductVariant | null>(null);
@@ -49,6 +50,11 @@ async function search(term: string): Promise<void> {
         if (current === seq) loading.value = false;
     }
 }
+
+// A pick never outlives the list it was made in: a new search clears it (the button must name what is on screen).
+watch(results, (list) => {
+    if (selected.value && !list.some((v) => v.id === selected.value!.id)) selected.value = null;
+});
 
 watch(query, (value) => {
     window.clearTimeout(timer);
@@ -112,7 +118,8 @@ async function send(variant: ProductVariant, confirmOutOfStock: boolean): Promis
 <template>
     <!-- «ابعت منتج» as a sheet (DESIGN §3 ProductPicker): the side of the end on a desk, a bottom sheet on a phone. A card
          picks the product, the one wide button says what goes out; a double click sends at once (the old one-step way). -->
-    <Sheet :open="true" @update:open="(open) => !open && emit('close')">
+    <!-- Not dismissed while a send is in flight: the sent card must reach the thread. -->
+    <Sheet :open="true" @update:open="(open) => !open && sending === null && emit('close')">
         <SheetContent
             :side="phone ? 'bottom' : dir === 'rtl' ? 'left' : 'right'"
             class="flex flex-col gap-0 p-0 sm:max-w-none"
@@ -171,7 +178,7 @@ async function send(variant: ProductVariant, confirmOutOfStock: boolean): Promis
                         >
                             <span class="relative block aspect-[4/5] w-full bg-sunken" :class="isOutOfStock(variant) ? 'opacity-60' : ''">
                                 <img v-if="variant.image_url" :src="variant.image_url" alt="" class="size-full object-cover" loading="lazy" />
-                                <Shirt v-else class="absolute left-1/2 top-1/2 size-8 -translate-x-1/2 -translate-y-1/2 text-fg-3" aria-hidden="true" />
+                                <Shirt v-else class="absolute inset-0 m-auto size-8 text-fg-3" aria-hidden="true" />
                                 <LoaderCircle
                                     v-if="sending === variant.id"
                                     class="absolute end-2 top-2 size-4 animate-spin text-brand"
