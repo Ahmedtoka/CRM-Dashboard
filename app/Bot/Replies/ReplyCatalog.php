@@ -177,7 +177,7 @@ class ReplyCatalog
                     'entry_id' => null,
                     'key' => (string) $flow->key,
                     'active' => true,
-                    'edit_url' => '/settings/bot-flows/'.$flow->id,
+                    'edit_url' => '/bot/flows?flow='.urlencode($flow->key),
                 ]);
             }
         }
@@ -200,7 +200,7 @@ class ReplyCatalog
                 'entry_id' => null,
                 'key' => 'rule',
                 'active' => (bool) $rule->is_active,
-                'edit_url' => '/settings/bot',
+                'edit_url' => '/bot',
             ]);
         }
 
