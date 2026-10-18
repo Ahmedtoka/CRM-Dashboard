@@ -309,8 +309,9 @@ final class OutcomeRecorder
     {
         $row = $this->rowOf($e);
 
+        // Null: nothing was written (no row, an ordered episode keeps its order, not a person's pick).
         if ($row === null || $row->outcome === Outcome::Ordered->value || in_array($outcome, [Outcome::Ordered, Outcome::Unknown], true)) {
-            return $row;
+            return null;
         }
 
         $row->forceFill([

@@ -362,7 +362,7 @@ class WindowLifecycle
         }
 
         foreach ($stranded as $e) {
-            rescue(fn () => $this->releaseStranded($e, $s), null, report: true);
+            rescue(fn () => $this->releaseStranded($e, $s, $draining), null, report: true);
         }
     }
 
@@ -386,9 +386,9 @@ class WindowLifecycle
             ->whereHas('shift', fn ($q) => $q->where('status', 'open'))->exists();
     }
 
-    private function releaseStranded(QueueEntry $e, QueueSetting $s): void
+    private function releaseStranded(QueueEntry $e, QueueSetting $s, bool $draining = false): void
     {
-        DB::transaction(function () use ($e, $s) {
+        DB::transaction(function () use ($e, $s, $draining) {
             $locked = self::lockBoth($e);
 
             if ($locked === null || ! $locked->isOpen() || ! self::stranded($locked)) {
@@ -397,8 +397,10 @@ class WindowLifecycle
 
             $agent = $locked->assignee?->name ?? '';
 
-            if ($locked->awaiting_reply_since === null && $locked->first_reply_at !== null) {
-                $this->closeLocked($locked, 'auto', null, ['silent' => true], $s);
+            // Close cycle (review #1): the queue switched off routes nobody — her window closes silently
+            // and the bot has her, whoever has the turn (no lounge nobody serves, no «موظفة تانية»).
+            if ($draining || ($locked->awaiting_reply_since === null && $locked->first_reply_at !== null)) {
+                $this->closeLocked($locked, 'auto', null, ['silent' => true], $s, route: ! $draining);
 
                 return;
             }
@@ -978,7 +980,7 @@ class WindowLifecycle
             $thanks = ! $toBot && ($opts['closing'] ?? true) !== false;
 
             if ($thanks || $caseOpened) {
-                SendClosingMessage::dispatch($e->id, $c->id, $e->closed_at->toIso8601String(), $caseOpened, $thanks)
+                SendClosingMessage::dispatch($e->id, $c->id, $e->closed_at->toIso8601String(), $caseOpened, $thanks, (int) $e->close_seq)
                     ->delay(now()->addSeconds(SendClosingMessage::DELAY_SECONDS));
             }
 

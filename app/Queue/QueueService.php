@@ -324,10 +324,16 @@ class QueueService
         // A bot-handled chat's real message: nothing for the queue (no query, the common case) —
         // except inside an auto-close's return window (close-cycle hotfix C1, H-01), decided below.
         if ($c->handler !== Handler::Human && ! $acknowledgement && ! self::inReturnWindow($c)) {
+            self::markCustomerBack($c);
+
             return false;
         }
 
         if (! $this->settings()->enabled) {
+            if (! $acknowledgement) {
+                self::markCustomerBack($c);
+            }
+
             if ($c->handler === Handler::Human && ! $this->customerReturned($c)) {
                 $this->customerMessage($c);
             }
@@ -385,6 +391,16 @@ class QueueService
 
             return false;
         }, attempts: 3);
+    }
+
+    /**
+     * Close cycle RC-6 / review #7: her real message on a chat whose window closed moments ago — the
+     * closing message sees it whatever the second it was stored in. One indexed update.
+     */
+    private static function markCustomerBack(Conversation $c): void
+    {
+        QueueEntry::query()->where('conversation_id', $c->id)->where('status', 'closed')->whereNull('customer_back_at')
+            ->whereNull('closing_claimed_at')->where('closed_at', '>=', now()->subMinutes(10))->update(['customer_back_at' => now()]);
     }
 
     /** Inside an auto-close's return window (`return_priority_until`, C1 / H-01). */

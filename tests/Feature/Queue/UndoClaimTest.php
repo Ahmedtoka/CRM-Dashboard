@@ -172,3 +172,77 @@ it('gives a waiting customer to the moderator who answered her, with no «دور
     expect($w->status)->toBe('active')->and($w->assigned_user_id)->toBe($u->id)->and($w->awaiting_reply_since)->toBeNull()
         ->and(Message::where('conversation_id', $w->conversation_id)->where('sender_type', 'bot')->count())->toBe(0);
 });
+
+// ───── code review fixes ─────
+
+it('takes no window when a supervisor answers a bot chat, and reopens the claimed chat for a moderator (review #3)', function () {
+    [$e, $u, $m] = ucWindow();
+    $e->forceFill(['status' => 'closed', 'close_reason' => 'inquiry', 'end_mode' => 'thanks', 'closed_at' => now()->subHours(3)])->save();
+    $c = $e->conversation;
+    $c->update(['handler' => 'bot', 'status' => 'resolved', 'assignee_id' => null, 'last_customer_message_at' => now()->subMinute()]);
+    $boss = User::factory()->create(['role' => 'supervisor', 'last_seen_at' => now()]);
+    ShiftMember::factory()->for($m->shift)->create(['user_id' => $boss->id, 'status' => 'available']);
+
+    app(OutboundService::class)->sendHuman($c->fresh(), $boss, 'أهلاً');
+    expect(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1)->and($c->fresh()->assignee_id)->toBe($boss->id);
+
+    $c->fresh()->forceFill(['handler' => 'bot', 'assignee_id' => null, 'status' => 'resolved'])->save();
+    app(OutboundService::class)->sendHuman($c->fresh(), $u, 'أهلاً بيكي');
+    expect(QueueEntry::where('conversation_id', $c->id)->count())->toBe(2)->and($c->fresh()->status->value)->toBe('open');
+});
+
+it('closes, never deletes, the case a close opened when it is undone (review #5)', function () {
+    Bus::fake([SendClosingMessage::class]);
+    [$e, $u] = ucWindow();
+    ucFinish($e, $u, ['outcome' => 'service', 'open_case' => 'complaint'])->assertOk();
+    $case = \App\Models\SupportCase::query()->latest('id')->first();
+
+    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/finish/undo")->assertOk();
+
+    expect($case->fresh())->not->toBeNull()->and($case->fresh()->status)->toBe('closed');
+});
+
+it('drops the first closing job after an undo and a re-close in the same second (review #7)', function () {
+    Bus::fake([SendClosingMessage::class]);
+    [$e, $u] = ucWindow();
+    ucFinish($e, $u)->assertOk();
+    $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/finish/undo")->assertOk();
+    ucFinish($e, $u, ['after' => 'bot'])->assertOk();
+
+    $jobs = Bus::dispatched(SendClosingMessage::class);
+    expect($jobs)->toHaveCount(1);
+    $jobs->first()->handle(app(OutboundService::class), app(\App\Queue\QueueScripts::class), app(\App\Queue\RatingService::class));
+    expect(Message::where('conversation_id', $e->conversation_id)->where('sender_type', 'bot')->count())->toBe(0);
+});
+
+it('stops the closing message when a colleague replies in the same second as the close (review #7)', function () {
+    Bus::fake([SendClosingMessage::class]);
+    [$e, $u] = ucWindow();
+    ucFinish($e, $u)->assertOk();
+    $other = User::factory()->create(['role' => 'supervisor']);
+
+    app(OutboundService::class)->sendHuman($e->conversation->fresh(), $other, 'نسيت أقولك الشحن ٣ أيام');
+    Bus::dispatched(SendClosingMessage::class)->first()->handle(app(OutboundService::class), app(\App\Queue\QueueScripts::class), app(\App\Queue\RatingService::class));
+
+    expect(Message::where('conversation_id', $e->conversation_id)->where('sender_type', 'bot')->count())->toBe(0)
+        ->and($e->fresh()->closing_skipped_reason)->toBe('staff_replied');
+});
+
+it('keeps the old app\'s 422 on outcome for the close wrapper (review #4)', function () {
+    [$e, $u] = ucWindow();
+    \Laravel\Sanctum\Sanctum::actingAs($u);
+
+    $this->postJson("/api/v1/queue/entries/{$e->id}/close", ['reason' => 'inquiry'])->assertUnprocessable()->assertJsonValidationErrors('outcome');
+});
+
+it('refuses a colleague\'s human chat with no window to a moderator (review #11)', function () {
+    QueueSetting::query()->update(['enabled' => false]);
+    [$e, $u] = ucWindow();
+    $c = $e->conversation;
+    $e->delete();
+    $c->update(['queue_entry_id' => null, 'handler' => 'human', 'assignee_id' => $u->id]);
+    $other = User::factory()->create(['role' => 'moderator']);
+    $other->userPlatforms()->create(['platform' => 'facebook']);
+
+    $this->actingAs($other)->postJson("/inbox/conversations/{$c->id}/finish", ['entry_id' => null, 'outcome' => 'price'])->assertForbidden();
+});

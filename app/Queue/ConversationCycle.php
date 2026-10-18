@@ -217,10 +217,15 @@ class ConversationCycle
     /** @return array<string, mixed> */
     private function finishNoWindow(Conversation $c, User $by, array $r): array
     {
+        // Review #11: a colleague's chat (she holds it by `assignee_id`) is hers, or a supervisor's, to end.
+        if ($c->assignee_id !== null && (int) $c->assignee_id !== (int) $by->id && ! $by->isSupervisorOrAbove()) {
+            throw new FinishRefused('not_your_window', 403);
+        }
+
         $outcome = $this->outcomeOf($c, null, $r);
         $waiting = $this->customerWaiting($c);
 
-        if ($waiting && ! ($r['confirm_waiting'] ?? false)) {
+        if ($waiting && ($r['after'] ?? 'thanks') !== 'bot' && ! ($r['confirm_waiting'] ?? false)) {
             throw new FinishRefused('customer_waiting', 409, ['last_message' => $this->lastWords($c)]);
         }
 
@@ -264,7 +269,9 @@ class ConversationCycle
             return null;
         }
 
-        $this->outcomes->amend($last, $outcome, $r['outcome_note'] ?? null, $by);
+        if ($this->outcomes->amend($last, $outcome, $r['outcome_note'] ?? null, $by) === null) {
+            throw new FinishRefused('not_amendable', 409);
+        }
         DB::afterCommit(fn () => SafeBroadcast::send(new ConversationUpdated($c->fresh())));
 
         return ['path' => 'amend', 'entry' => $last, 'end_mode' => $last->end_mode, 'closing' => 'skipped', 'skipped_reason' => 'auto_closed', 'support_case_id' => null, 'undo_until' => null];
@@ -294,7 +301,9 @@ class ConversationCycle
                 throw new FinishRefused('not_amendable', 409);
             }
 
-            $this->outcomes->amend($last, $outcome, $note, $by);
+            if ($this->outcomes->amend($last, $outcome, $note, $by) === null) {
+                throw new FinishRefused('not_amendable', 409);
+            }
 
             return $last;
         }, attempts: 3);
@@ -372,8 +381,9 @@ class ConversationCycle
             'support_case_id' => $newCase ? null : $e->support_case_id,
         ])->save();
 
+        // Review #5: the case this close opened is closed (kept for the audit trail), never deleted.
         if ($newCase) {
-            $case->delete();
+            $case->forceFill(['status' => 'closed', 'closed_at' => now()])->save();
         }
 
         $c?->forceFill([
@@ -439,6 +449,17 @@ class ConversationCycle
      */
     public function onStaffReply(Conversation $c, User $u): void
     {
+        // The common case first, with one query: a reply inside the open window it belongs to.
+        if ($c->queue_entry_id !== null && $c->handler === Handler::Human
+            && QueueEntry::query()->whereKey($c->queue_entry_id)->whereIn('status', QueueEntry::OPEN_STATUSES)->exists()) {
+            return;
+        }
+
+        // Review #7: a staff reply moments after a close (whatever the second) stops its closing message.
+        QueueEntry::query()->where('conversation_id', $c->id)->where('status', 'closed')->whereNull('closing_claimed_at')
+            ->where('closed_at', '>=', now()->subMinutes(10))
+            ->update(['closing_claimed_at' => now(), 'closing_skipped_reason' => 'staff_replied']);
+
         $s = QueueSetting::current();
 
         if (! $s->enabled) {
@@ -479,7 +500,9 @@ class ConversationCycle
             return;
         }
 
-        if ($desk === null || ! in_array($desk->status, ['available', 'busy'], true)) {
+        // Review #3: only a moderator on the shift claims a real chat (a supervisor or a leader answering
+        // a bot chat, or a test chat, takes no window — she holds it by `assignee_id`).
+        if ($desk === null || ! in_array($desk->status, ['available', 'busy'], true) || $u->role?->value !== 'moderator' || (bool) $c->is_test) {
             $c->assignee_id = $u->id;
             $c->assigned_at = now();
 
@@ -504,7 +527,8 @@ class ConversationCycle
             'waiting_messages' => [], 'open_case_id' => $queue->openCaseFor($c)?->id,
         ]);
 
-        $c->forceFill(['queue_entry_id' => $e->id, 'assignee_id' => $u->id, 'assigned_at' => now(), 'return_priority_until' => null])->save();
+        $c->forceFill(['queue_entry_id' => $e->id, 'assignee_id' => $u->id, 'assigned_at' => now(), 'return_priority_until' => null,
+            'status' => ConversationStatus::Open, 'resolved_at' => null, 'resolved_by_id' => null])->save();
 
         if ($desk->status === 'available') {
             $desk->update(['status' => 'busy']);
@@ -580,7 +604,7 @@ class ConversationCycle
 
     private function resolveCase(int $caseId, Conversation $c, User $by): void
     {
-        $case = SupportCase::query()->whereKey($caseId)->where(fn ($q) => $q->where('conversation_id', $c->id)->orWhere('customer_id', $c->customer_id))->first();
+        $case = SupportCase::query()->whereKey($caseId)->where('conversation_id', $c->id)->first(); // review #10: this chat's own case
 
         if ($case !== null && $case->status !== 'resolved') {
             app(Cases\CaseResolution::class)->setStatus($case, 'resolved', $by, notify: false);

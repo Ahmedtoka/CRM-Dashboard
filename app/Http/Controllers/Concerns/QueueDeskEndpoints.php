@@ -129,6 +129,8 @@ trait QueueDeskEndpoints
                 'silence_close_seconds' => (int) $s->silence_close_seconds,
                 'windows_per_moderator' => (int) $s->windows_per_moderator,
                 'break_minutes' => (int) $s->break_minutes,
+                // Close cycle §5.3 (additive): the reopen window after «خلصت» (Q8).
+                'reopen_after_done_minutes' => (int) $s->reopen_after_done_minutes,
             ],
             // The leader of the open shift: nobody above her to escalate to (the menu hides it).
             'leader_user_id' => $open?->leader_user_id,
@@ -196,6 +198,10 @@ trait QueueDeskEndpoints
                 'after' => ($data['to_bot'] ?? false) ? 'bot' : 'thanks', 'confirm_waiting' => true, 'no_amend' => true,
             ]);
         } catch (FinishRefused $x) {
+            if ($x->key === 'outcome_required') {
+                throw ValidationException::withMessages(['outcome' => __('errors.outcome.required')]);
+            }
+
             return $x->status === 403 ? response()->json(['message' => __('errors.queue.not_your_window')], 403) : $this->notOpen();
         }
 

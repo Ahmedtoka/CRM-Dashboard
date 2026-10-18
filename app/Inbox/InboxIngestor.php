@@ -82,7 +82,7 @@ class InboxIngestor
                 // An answer a handler takes (an order-confirmation tap, 2026-10-16) goes into her latest
                 // thread as it is: never reopened, not unread, no queue ticket, no bot (InboundInterceptors).
                 $claim = $this->claimFor($d, $identity, $account);
-                $conversation = $claim !== null ? $claim[1] : $this->openConversationFor($identity, $account);
+                $conversation = $claim !== null ? $claim[1] : $this->openConversationFor($identity, $account, reopen: false);
                 $claim = $claim[0] ?? null;
                 $opened = $conversation->wasRecentlyCreated;
 
@@ -131,7 +131,7 @@ class InboxIngestor
                     $conversation->increment('unread_count');
                 }
 
-                if ($claim === null && ! $settled && $conversation->status !== ConversationStatus::Open) {
+                if (! $settled && $conversation->status !== ConversationStatus::Open) {
                     $reopened = $conversation->status === ConversationStatus::Resolved;
                     $conversation->forceFill(['status' => ConversationStatus::Open, 'resolved_at' => null, 'resolved_by_id' => null])->save();
 
@@ -253,7 +253,7 @@ class InboxIngestor
      * webhooks for the same customer (e.g. a message and a comment private reply, or
      * Meta retries) serialize here instead of both creating a new conversation.
      */
-    public function openConversationFor(CustomerIdentity $i, ChannelAccount $a, ConversationSource $src = ConversationSource::Direct, ?int $sourceCommentId = null): Conversation
+    public function openConversationFor(CustomerIdentity $i, ChannelAccount $a, ConversationSource $src = ConversationSource::Direct, ?int $sourceCommentId = null, bool $reopen = true): Conversation
     {
         Customer::query()->whereKey($i->customer_id)->lockForUpdate()->first();
 
@@ -268,9 +268,22 @@ class InboxIngestor
 
         $resolved = $query()->where('status', ConversationStatus::Resolved->value)->latest('id')->first();
 
-        // Close cycle M-09: she wrote on her resolved thread — it is opened once the ingest knows the
-        // message asks for something (a thanks or a rating answer leaves it resolved): see ingest.
+        // Close cycle M-09: for her inbound message (`reopen: false`) the ingest opens it once it knows the
+        // message asks for something (a thanks or a rating answer leaves it resolved). Every other
+        // caller (a comment's private reply, a confirmation, a test link, the load test) opens it here.
+        if ($resolved !== null && ! $reopen) {
+            return $resolved;
+        }
+
         if ($resolved !== null) {
+            $resolved->forceFill([
+                'status' => ConversationStatus::Open,
+                'resolved_at' => null,
+                'resolved_by_id' => null,
+            ])->save();
+
+            $this->logger->log(ActorType::System, null, ActivityLogger::CONVERSATION_REOPENED, $resolved, $resolved);
+
             return $resolved;
         }
 

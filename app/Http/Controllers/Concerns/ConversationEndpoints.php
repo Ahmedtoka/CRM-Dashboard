@@ -575,6 +575,10 @@ trait ConversationEndpoints
             if ($x->key === 'outcome_required') {
                 throw ValidationException::withMessages(['outcome' => __('errors.outcome.required')]);
             }
+            // The window closed or changed between our read and the lock: the old endpoint does what it always did.
+            if (in_array($x->key, ['stale_state', 'already_closed'], true)) {
+                return false;
+            }
             abort(response()->json(['message' => __('errors.queue.'.$x->key), 'code' => $x->key], $x->status));
         }
 

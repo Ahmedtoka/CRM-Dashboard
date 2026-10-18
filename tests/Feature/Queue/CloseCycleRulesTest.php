@@ -188,3 +188,17 @@ it('lists human chats nobody holds and hands them back to the bot only with --ap
     $this->artisan('queue:orphans', ['--apply' => true])->assertSuccessful();
     expect($c->fresh()->handler->value)->toBe('bot');
 });
+
+it('closes a stranded window silently with the queue off instead of a lounge nobody serves (review #1)', function () {
+    [$e, $u, $c] = ccWindow();
+    $e->forceFill(['awaiting_reply_since' => now()->subMinutes(2)])->save();
+    \App\Models\Shift::query()->update(['ends_at' => now()->subMinute()]);
+    User::query()->whereKey($u->id)->update(['last_seen_at' => now()->subHour()]);
+    QueueSetting::query()->update(['enabled' => false]);
+
+    $this->artisan('queue:tick')->assertSuccessful();
+
+    expect($e->fresh()->close_reason)->toBe('auto')->and(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1)
+        ->and($c->fresh()->handler->value)->toBe('bot')
+        ->and(Message::where('conversation_id', $c->id)->where('sender_type', 'bot')->count())->toBe(0);
+});

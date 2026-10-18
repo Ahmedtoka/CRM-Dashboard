@@ -52,6 +52,8 @@ class SendClosingMessage implements ShouldQueue
         public readonly string $closedAt,
         public readonly bool $caseOpened = false,
         public readonly bool $withThanks = true,
+        /** Review #7: the close this job belongs to (`close_seq`); null for a close with no entry. */
+        public readonly ?int $closeSeq = null,
     ) {
         $this->sendKey = (string) Str::uuid();
         $this->onQueue('outbound');
@@ -121,7 +123,7 @@ class SendClosingMessage implements ShouldQueue
             return 'undone';
         }
 
-        if ($e->closed_at->toIso8601String() !== $this->closedAt) {
+        if ($e->closed_at->toIso8601String() !== $this->closedAt || ($this->closeSeq !== null && (int) $e->close_seq !== $this->closeSeq)) {
             return 'superseded';
         }
 
