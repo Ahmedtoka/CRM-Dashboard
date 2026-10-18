@@ -7,6 +7,7 @@
 import AdStatusButton from '@/components/ads/AdStatusButton.vue';
 import ChatFunnelBlock from '@/components/ads/ChatFunnelBlock.vue';
 import CreativeThumb from '@/components/ads/CreativeThumb.vue';
+import PlatformChip from '@/components/ads/PlatformChip.vue';
 import HealthBadge from '@/components/ads/HealthBadge.vue';
 import Sparkline from '@/components/ads/Sparkline.vue';
 import WhyList from '@/components/ads/WhyList.vue';
@@ -83,61 +84,61 @@ const resultTone = (r: 'ok' | 'error' | 'pending') => (r === 'ok' ? 'positive' :
 
 <template>
     <Sheet :open="adId !== null" @update:open="(o: boolean) => !o && emit('close')">
-        <SheetContent :side="dir === 'rtl' ? 'left' : 'right'" class="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-xl">
-            <div class="space-y-1 border-b border-border p-4 pe-12">
-                <SheetTitle class="truncate text-base" dir="auto">{{ ad?.name ?? t('ads.control.drawer.title') }}</SheetTitle>
-                <SheetDescription class="text-2xs">
-                    <template v-if="ad"><span dir="auto">{{ ad.account }}</span> · {{ t(`ads.control.objective.${ad.objective}`) }}</template>
+        <SheetContent :side="dir === 'rtl' ? 'left' : 'right'" class="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[480px]">
+            <div class="space-y-1 border-b border-line px-5 pb-3.5 pt-5 pe-12">
+                <SheetTitle class="truncate text-lg font-bold" dir="auto">{{ ad?.name ?? t('ads.control.drawer.title') }}</SheetTitle>
+                <SheetDescription class="flex min-w-0 items-center gap-1.5 text-[13px] text-fg-2">
+                    <template v-if="ad"><PlatformChip :platform="ad.platform" size="xs" icon-only /><span dir="auto" class="truncate">{{ ad.account }}</span> · {{ t(`ads.control.objective.${ad.objective}`) }}</template>
                     <template v-else>{{ t('ads.control.drawer.title') }}</template>
                 </SheetDescription>
             </div>
 
-            <div v-if="error" class="space-y-2 p-6 text-center text-sm" role="alert">
+            <div v-if="error" class="m-5 space-y-2 rounded-lg bg-danger-soft p-5 text-center text-[13.5px] text-danger" role="alert">
                 <p>{{ error }}</p>
-                <button type="button" class="h-11 rounded-md px-4 text-primary underline" @click="adId && load(adId)">{{ t('ads.control.drawer.retry') }}</button>
+                <button type="button" class="h-11 rounded-md bg-card px-4 font-semibold text-foreground hover:bg-surface-2" @click="adId && load(adId)">{{ t('ads.control.drawer.retry') }}</button>
             </div>
-            <div v-else-if="!ad" class="space-y-3 p-4" aria-busy="true">
-                <div class="aspect-[4/5] w-full animate-pulse rounded-lg bg-muted" />
-                <div class="h-4 w-2/3 animate-pulse rounded bg-muted" />
-                <div class="h-4 w-1/2 animate-pulse rounded bg-muted" />
+            <div v-else-if="!ad" class="space-y-3 p-5" aria-busy="true">
+                <div class="mx-auto aspect-[4/5] w-full max-w-[320px] animate-pulse rounded-lg bg-sunken" />
+                <div class="h-16 w-full animate-pulse rounded-lg bg-sunken" />
+                <div class="h-4 w-2/3 animate-pulse rounded bg-sunken" />
             </div>
 
             <template v-else>
-                <div class="flex-1 space-y-5 p-4">
+                <div class="flex-1 space-y-5 p-5">
                     <section :aria-label="t('ads.control.row.preview')">
                         <iframe
                             v-if="previewSrc"
                             :src="previewSrc"
                             :title="t('ads.control.row.preview')"
-                            class="aspect-[4/5] w-full rounded-lg bg-muted"
+                            class="mx-auto aspect-[4/5] w-full max-w-[360px] rounded-lg bg-sunken"
                             loading="lazy"
                             sandbox="allow-scripts allow-same-origin allow-popups"
                         />
-                        <CreativeThumb v-else :ad="ad" size="fill" :show-pills="false" />
+                        <div v-else class="mx-auto max-w-[320px] overflow-hidden rounded-lg"><CreativeThumb :ad="ad" size="fill" square :show-pills="false" class="!aspect-[4/5]" /></div>
                         <div v-if="ad.health.length" class="mt-2 flex flex-wrap gap-1"><HealthBadge v-for="h in ad.health" :key="h" :kind="h" /></div>
                     </section>
 
                     <section class="space-y-2">
-                        <h3 class="text-sm font-semibold">{{ t('ads.control.drawer.numbers') }}</h3>
-                        <dl class="grid grid-cols-2 gap-2 text-xs tabular-nums">
+                        <h3 class="text-[13px] font-semibold text-fg-2">{{ t('ads.control.drawer.numbers') }}</h3>
+                        <dl class="grid grid-cols-2 overflow-hidden rounded-lg border border-line tabular-nums [&>div:nth-child(odd)]:border-e [&>div]:border-b [&>div]:border-line [&>div]:px-3 [&>div]:py-2.5">
                             <div>
-                                <dt class="text-muted-foreground">{{ t('ads.control.col.spend') }}</dt>
-                                <dd class="font-medium">{{ money(ad.spend_tax) }}</dd>
+                                <dt class="text-xs text-fg-3">{{ t('ads.control.col.spend') }}</dt>
+                                <dd class="text-base font-bold">{{ money(ad.spend_tax) }}</dd>
                             </div>
                             <div>
-                                <dt class="text-muted-foreground">{{ t('ads.control.write.today_spend') }}</dt>
-                                <dd class="font-medium">{{ money(ad.spend_today) }}</dd>
+                                <dt class="text-xs text-fg-3">{{ t('ads.control.write.today_spend') }}</dt>
+                                <dd class="text-base font-bold">{{ money(ad.spend_today) }}</dd>
                             </div>
                             <div>
-                                <dt class="text-muted-foreground">{{ t('ads.control.today.real_roas') }}</dt>
-                                <dd class="text-base font-semibold">{{ formatRoas(ad.real_roas, locale) }}</dd>
+                                <dt class="text-xs text-fg-3">{{ t('ads.control.today.real_roas') }}</dt>
+                                <dd class="text-base font-bold">{{ formatRoas(ad.real_roas, locale) }}</dd>
                             </div>
                             <div>
-                                <dt class="text-muted-foreground">{{ t('ads.control.today.meta_roas') }}</dt>
-                                <dd>{{ ad.objective === 'messages' ? '—' : formatRoas(ad.roas, locale) }}</dd>
+                                <dt class="text-xs text-fg-3">{{ t('ads.control.today.meta_roas') }}</dt>
+                                <dd class="text-base font-semibold text-fg-2">{{ ad.objective === 'messages' ? '—' : formatRoas(ad.roas, locale) }}</dd>
                             </div>
-                            <div class="col-span-2">
-                                <dt class="text-muted-foreground">{{ t('ads.control.col.result') }}</dt>
+                            <div class="col-span-2 !border-b-0 !border-e-0 text-[13px]">
+                                <dt class="text-xs text-fg-3">{{ t('ads.control.col.result') }}</dt>
                                 <dd v-if="ad.objective === 'messages'">
                                     {{ t('ads.control.row.chats_orders', { chats: formatCount(ad.conversations, locale), orders: formatCount(ad.real_orders, locale) }) }}
                                 </dd>
@@ -149,45 +150,45 @@ const resultTone = (r: 'ok' | 'error' | 'pending') => (r === 'ok' ? 'positive' :
                     </section>
 
                     <section class="space-y-1">
-                        <h3 class="text-sm font-semibold">{{ t('ads.control.drawer.why') }}</h3>
+                        <h3 class="text-[13px] font-semibold text-fg-2">{{ t('ads.control.drawer.why') }}</h3>
                         <WhyList v-if="data?.reasons.length" :reasons="data.reasons" :currency="cur" />
-                        <p v-else class="text-2xs text-muted-foreground">{{ t('ads.control.drawer.no_reasons') }}</p>
+                        <p v-else class="text-[13px] text-fg-3">{{ t('ads.control.drawer.no_reasons') }}</p>
                     </section>
 
                     <section class="space-y-1">
-                        <h3 class="text-sm font-semibold">{{ t('ads.control.drawer.decisions') }}</h3>
+                        <h3 class="text-[13px] font-semibold text-fg-2">{{ t('ads.control.drawer.decisions') }}</h3>
                         <ul v-if="data?.decisions.length" class="space-y-2">
-                            <li v-for="(d, i) in data.decisions" :key="i" class="rounded-md bg-muted/60 p-2">
-                                <p class="text-xs font-medium">{{ t('ads.control.drawer.stop_suggestion') }}</p>
+                            <li v-for="(d, i) in data.decisions" :key="i" class="rounded-md bg-danger-soft/60 p-2.5">
+                                <p class="text-[13px] font-semibold text-danger">{{ t('ads.control.drawer.stop_suggestion') }}</p>
                                 <WhyList :reasons="d.reasons" :currency="cur" />
                             </li>
                         </ul>
-                        <p v-else class="text-2xs text-muted-foreground">{{ t('ads.control.drawer.no_decisions') }}</p>
+                        <p v-else class="text-[13px] text-fg-3">{{ t('ads.control.drawer.no_decisions') }}</p>
                     </section>
 
                     <section data-test="funnel" class="space-y-1">
-                        <h3 class="text-sm font-semibold" :title="t('ads.funnel.multi_touch')">{{ t('ads.control.drawer.funnel') }}</h3>
+                        <h3 class="text-[13px] font-semibold text-fg-2" :title="t('ads.funnel.multi_touch')">{{ t('ads.control.drawer.funnel') }}</h3>
                         <slot name="funnel" :funnel="funnel">
                             <ChatFunnelBlock :funnel="funnel" :loading="own.loading.value" :error="own.error.value" :heading="false" @retry="own.retry" />
                         </slot>
                     </section>
 
                     <section class="space-y-1">
-                        <h3 class="text-sm font-semibold">{{ t('ads.control.drawer.history') }}</h3>
-                        <ul v-if="data?.history.length" class="divide-y divide-border text-xs">
+                        <h3 class="text-[13px] font-semibold text-fg-2">{{ t('ads.control.drawer.history') }}</h3>
+                        <ul v-if="data?.history.length" class="divide-y divide-line text-[13px]">
                             <li v-for="h in data.history" :key="h.id" class="flex flex-wrap items-center justify-between gap-2 py-1.5">
                                 <span>{{ t(writeChangeKey(h.to_status)) }} · <bdi>{{ h.user ?? '—' }}</bdi></span>
-                                <span class="inline-flex items-center gap-2 text-2xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-2 text-xs text-fg-3">
                                     <span class="tabular-nums">{{ h.at ? formatDateTime(h.at, locale) : '—' }}</span>
-                                    <StatusChip :label="t(`ads.control.decisions.result_${h.result}`)" :tone="resultTone(h.result)" />
+                                    <StatusChip :label="t(`ads.control.decisions.result_${h.result}`)" :tone="resultTone(h.result)" size="sm" />
                                 </span>
                             </li>
                         </ul>
-                        <p v-else class="text-2xs text-muted-foreground">{{ t('ads.control.drawer.no_history') }}</p>
+                        <p v-else class="text-[13px] text-fg-3">{{ t('ads.control.drawer.no_history') }}</p>
                     </section>
                 </div>
 
-                <div class="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-border bg-card p-4">
+                <div class="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-line bg-card px-5 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
                     <AdStatusButton
                         size="md"
                         :account-id="ad.account_id"
@@ -205,7 +206,7 @@ const resultTone = (r: 'ok' | 'error' | 'pending') => (r === 'ok' ? 'positive' :
                         no-reload
                         @done="afterWrite"
                     />
-                    <a v-if="adsManager" :href="adsManager" target="_blank" rel="noopener noreferrer" class="inline-flex h-11 items-center px-2 text-xs text-primary underline">
+                    <a v-if="adsManager" :href="adsManager" target="_blank" rel="noopener noreferrer" class="ms-auto inline-flex h-11 items-center gap-1 rounded-md px-3 text-[13px] font-semibold text-brand-ink hover:bg-brand-soft md:h-9">
                         {{ t('ads.control.row.open_ads_manager') }}
                     </a>
                 </div>

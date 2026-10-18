@@ -3,7 +3,9 @@
 import AdStatusButton from '@/components/ads/AdStatusButton.vue';
 import CreativeThumb from '@/components/ads/CreativeThumb.vue';
 import HealthBadge from '@/components/ads/HealthBadge.vue';
+import PlatformChip from '@/components/ads/PlatformChip.vue';
 import Sparkline from '@/components/ads/Sparkline.vue';
+import StatusChip from '@/components/crm/StatusChip.vue';
 import { useI18n } from '@/composables/useI18n';
 import { formatAdsMoney, formatRoas, isAdActive } from '@/lib/ads';
 import { formatCount } from '@/lib/format';
@@ -26,27 +28,21 @@ const result = computed(() =>
 </script>
 
 <template>
-    <article class="flex min-w-0 flex-col overflow-hidden rounded-lg bg-card shadow-card">
+    <article class="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-card transition-colors duration-150 hover:border-line-strong">
         <!-- Phones: the preview is capped (15rem, cropped to fill) so two cards fit a screen; md+ keeps the 4:5 frame. -->
         <button
             type="button"
             data-test="card-media"
-            class="aspect-[4/5] max-h-60 w-full overflow-hidden bg-muted md:max-h-none"
+            class="relative aspect-[4/5] max-h-60 w-full overflow-hidden bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:max-h-none"
             :aria-label="t('ads.control.row.preview')"
             @click="emit('open', row.id)"
         >
             <CreativeThumb :ad="row" size="fill" :show-pills="false" square class="max-md:aspect-auto max-md:h-full" />
+            <span class="absolute start-2 top-2"><PlatformChip :platform="row.platform" size="xs" icon-only /></span>
         </button>
-        <div class="flex flex-1 flex-col gap-2 p-3">
-            <div class="flex items-center justify-between gap-2">
-                <div class="flex flex-wrap gap-1"><HealthBadge v-for="h in row.health.slice(0, 2)" :key="h" :kind="h" /></div>
-                <span class="inline-flex shrink-0 items-center gap-1 text-2xs">
-                    <span class="size-1.5 rounded-full" :class="active ? 'bg-success' : 'bg-muted-foreground'" aria-hidden="true" />
-                    {{ active ? t('ads.control.row.running') : t('ads.control.row.stopped') }}
-                </span>
-            </div>
-            <h3 class="truncate text-sm font-semibold" dir="auto" :title="row.name">{{ row.name }}</h3>
-            <p class="truncate text-2xs text-muted-foreground">
+        <div class="flex flex-1 flex-col gap-1.5 px-3 pb-2 pt-2.5">
+            <h3 class="truncate text-[13.5px] font-semibold text-foreground" dir="auto" :title="row.name">{{ row.name }}</h3>
+            <p class="truncate text-xs text-fg-2">
                 <span dir="auto">{{ row.account }}</span
                 ><template v-if="row.buyer">
                     · <span dir="auto">{{ row.buyer }}</span></template
@@ -54,22 +50,30 @@ const result = computed(() =>
                 ·
                 {{ t(`ads.control.objective.${row.objective}`) }}
             </p>
-            <button type="button" class="block w-full space-y-1 text-start hover:underline" @click="emit('open', row.id)">
+            <div class="flex flex-wrap items-center gap-1">
+                <StatusChip :label="active ? t('ads.control.row.running') : t('ads.control.row.stopped')" :tone="active ? 'ok' : 'neutral'" size="sm" dot />
+                <HealthBadge v-for="h in row.health.slice(0, 2)" :key="h" :kind="h" />
+            </div>
+            <button type="button" class="mt-1 block w-full space-y-1 rounded-md text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" @click="emit('open', row.id)">
                 <span class="grid grid-cols-2 gap-1 text-xs tabular-nums">
                     <span>
-                        <span class="block text-2xs text-muted-foreground">{{ t('ads.control.col.spend') }}</span>
-                        <span class="block font-medium">{{ formatAdsMoney(row.spend_tax, locale, cur) }}</span>
+                        <span class="block text-xs text-fg-3">{{ t('ads.control.col.spend') }}</span>
+                        <span class="block text-sm font-semibold text-foreground">{{ formatAdsMoney(row.spend_tax, locale, cur) }}</span>
                     </span>
                     <span>
-                        <span class="block text-2xs text-muted-foreground">{{ t('ads.control.today.real_roas') }}</span>
-                        <span class="block font-semibold">{{ formatRoas(row.real_roas, locale) }}</span>
+                        <span class="block text-xs text-fg-3">{{ t('ads.control.today.real_roas') }}</span>
+                        <span class="block text-sm font-bold text-foreground">{{ formatRoas(row.real_roas, locale) }}</span>
                     </span>
                 </span>
-                <span class="block text-xs">{{ result }}</span>
+                <span class="block text-xs text-fg-2">{{ result }}</span>
             </button>
             <Sparkline :points="row.series" :currency="cur" :width="200" />
-            <div class="mt-auto flex items-center justify-between gap-2 pt-1">
-                <button type="button" class="h-11 rounded-md px-3 text-xs text-primary hover:bg-muted" @click="emit('open', row.id)">
+            <div class="mt-auto flex items-center justify-between gap-2 border-t border-line pt-2">
+                <button
+                    type="button"
+                    class="h-11 rounded-md px-3 text-xs font-semibold text-brand-ink hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9"
+                    @click="emit('open', row.id)"
+                >
                     {{ t('ads.control.row.why') }}
                 </button>
                 <AdStatusButton
