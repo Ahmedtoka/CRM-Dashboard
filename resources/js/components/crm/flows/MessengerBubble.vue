@@ -1,7 +1,7 @@
 <script lang="ts">
 /** Messenger quick-reply chip look, shared by the sandbox chat and the step preview. */
 export const MESSENGER_CHIP_CLASS =
-    'rounded-full border border-primary/40 bg-card px-3 py-1 text-xs font-medium text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';
+    'rounded-full border border-brand/40 bg-card px-3 py-1 text-xs font-medium text-brand-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand';
 </script>
 
 <script setup lang="ts">
@@ -26,7 +26,7 @@ const { t } = useI18n();
 <template>
     <div v-if="side === 'bot'" class="flex items-end gap-1.5">
         <span
-            class="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+            class="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink"
             :class="showAvatar ? '' : 'invisible'"
             :aria-label="t('flows.test_bot')"
         >
@@ -48,7 +48,7 @@ const { t } = useI18n();
         <p
             dir="auto"
             class="max-w-[82%] whitespace-pre-line break-words rounded-2xl rounded-ee-md px-3 py-2 text-sm leading-relaxed"
-            :class="dashed ? 'border border-dashed border-primary/50 bg-primary/5 text-primary' : 'bg-primary text-primary-foreground shadow-sm'"
+            :class="dashed ? 'border border-dashed border-brand/50 bg-brand/5 text-brand-ink' : 'bg-brand text-brand-on shadow-sm'"
         >
             {{ text }}
         </p>

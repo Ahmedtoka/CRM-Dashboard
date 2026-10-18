@@ -225,9 +225,11 @@ function focusStep(id: string): void {
 
 watch(() => props.flowKey, fit);
 
+/** A theme token as a colour string: the minimap paints SVG `fill` attributes, where `var()` does not resolve. */
+const tokenColor = (name: string): string => `hsl(${getComputedStyle(document.documentElement).getPropertyValue(name).trim()})`;
 const minimapColor = (node: Node): string => {
-    if (node.type === 'terminal') return (node.data as TerminalNodeData).kind === 'end' ? '#334155' : '#cbd5e1';
-    return (node.data as StepNodeData).errors.length ? '#ef4444' : '#94a3b8';
+    if (node.type === 'terminal') return tokenColor((node.data as TerminalNodeData).kind === 'end' ? '--fg' : '--line-strong');
+    return tokenColor((node.data as StepNodeData).errors.length ? '--danger' : '--fg-3');
 };
 
 defineExpose({ fit, focusStep });
@@ -274,7 +276,7 @@ defineExpose({ fit, focusStep });
                     :aria-label="t('flows.workspace.minimap_show')"
                 />
                 <div
-                    class="flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-card"
+                    class="flex flex-col overflow-hidden rounded-lg border border-line bg-card shadow-card"
                     role="toolbar"
                     aria-orientation="vertical"
                     :aria-label="t('flows.workspace.canvas_controls')"
@@ -283,8 +285,8 @@ defineExpose({ fit, focusStep });
                         <TooltipTrigger as-child>
                             <button
                                 type="button"
-                                class="flex size-9 items-center justify-center text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&:not(:first-child)]:border-t [&:not(:first-child)]:border-border"
-                                :class="[control.id === 'map' ? 'hidden md:flex' : '', control.pressed ? 'bg-surface-accent text-primary' : '']"
+                                class="flex size-9 items-center justify-center text-fg-2 outline-none transition-colors hover:bg-sunken hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&:not(:first-child)]:border-t [&:not(:first-child)]:border-line"
+                                :class="[control.id === 'map' ? 'hidden md:flex' : '', control.pressed ? 'bg-surface-2 text-brand-ink' : '']"
                                 :aria-label="control.label"
                                 :aria-pressed="control.pressed"
                                 @click="control.run"
@@ -301,13 +303,13 @@ defineExpose({ fit, focusStep });
         <!-- A flow with no steps yet: point at the rail. -->
         <div v-if="isEmpty" class="pointer-events-none absolute inset-0 flex items-center justify-center p-6" dir="auto">
             <div
-                class="flex max-w-sm flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card/80 px-8 py-10 text-center backdrop-blur-sm"
+                class="flex max-w-sm flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-line bg-card/80 px-8 py-10 text-center backdrop-blur-sm"
             >
-                <span class="flex size-12 items-center justify-center rounded-full bg-surface-accent text-primary">
+                <span class="flex size-12 items-center justify-center rounded-full bg-surface-2 text-brand-ink">
                     <Blocks class="size-5" aria-hidden="true" />
                 </span>
                 <p class="text-base font-semibold">{{ t('flows.workspace.empty_canvas') }}</p>
-                <p class="text-xs leading-5 text-muted-foreground">{{ t('flows.workspace.empty_canvas_hint') }}</p>
+                <p class="text-xs leading-5 text-fg-2">{{ t('flows.workspace.empty_canvas_hint') }}</p>
             </div>
         </div>
     </div>

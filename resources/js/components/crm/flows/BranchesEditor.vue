@@ -46,22 +46,18 @@ function remove(index: number): void {
     );
 }
 
-const input = 'h-8 w-full rounded-md border border-input bg-background px-2 text-xs';
+const input = 'h-8 w-full rounded-md border border-line-strong bg-background px-2 text-xs';
 </script>
 
 <template>
     <div class="space-y-2">
-        <p class="text-2xs text-muted-foreground">{{ t('flows.branches_hint') }}</p>
+        <p class="text-12 text-fg-2">{{ t('flows.branches_hint') }}</p>
 
-        <div
-            v-for="(branch, index) in modelValue"
-            :key="index"
-            class="space-y-2 rounded-lg border border-dashed border-amber-500/50 bg-amber-500/5 p-2"
-        >
+        <div v-for="(branch, index) in modelValue" :key="index" class="space-y-2 rounded-lg border border-dashed border-warn/50 bg-warn-soft p-2">
             <div class="flex items-center gap-1.5">
-                <GitBranch class="size-3.5 text-amber-600" aria-hidden="true" />
+                <GitBranch class="size-3.5 text-warn" aria-hidden="true" />
                 <label class="flex min-w-0 flex-1 items-center gap-1.5">
-                    <span class="shrink-0 text-2xs text-muted-foreground">{{ t('flows.branch_field') }}</span>
+                    <span class="text-12 shrink-0 text-fg-2">{{ t('flows.branch_field') }}</span>
                     <select :value="branch.field" :class="input" dir="ltr" @change="setField(index, ($event.target as HTMLSelectElement).value)">
                         <option value="" disabled>—</option>
                         <option v-for="f in fields" :key="f" :value="f">{{ f }}</option>
@@ -70,7 +66,7 @@ const input = 'h-8 w-full rounded-md border border-input bg-background px-2 text
                 </label>
                 <button
                     type="button"
-                    class="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    class="rounded p-1 text-fg-2 hover:bg-danger-soft hover:text-danger"
                     :aria-label="t('flows.remove_branch')"
                     :title="t('flows.remove_branch')"
                     @click="remove(index)"
@@ -80,17 +76,17 @@ const input = 'h-8 w-full rounded-md border border-input bg-background px-2 text
             </div>
 
             <div>
-                <span class="mb-1 block text-2xs text-muted-foreground">{{ t('flows.branch_values') }}</span>
+                <span class="text-12 mb-1 block text-fg-2">{{ t('flows.branch_values') }}</span>
                 <div v-if="choiceValues(def, branch.field).length" class="flex flex-wrap gap-1">
                     <button
                         v-for="choice in choiceValues(def, branch.field)"
                         :key="choice.value"
                         type="button"
-                        class="rounded-full border px-2 py-0.5 text-2xs transition-colors"
+                        class="text-12 rounded-full border px-2 py-0.5 transition-colors"
                         :class="
                             branch.in?.includes(choice.value)
-                                ? 'border-amber-600 bg-amber-500 text-white'
-                                : 'border-input bg-background hover:border-amber-500'
+                                ? 'border-warn bg-warn-solid text-white'
+                                : 'border-line-strong bg-background hover:border-warn'
                         "
                         :aria-pressed="branch.in?.includes(choice.value)"
                         @click="toggleValue(index, choice.value)"
@@ -108,7 +104,7 @@ const input = 'h-8 w-full rounded-md border border-input bg-background px-2 text
             </div>
 
             <label class="flex items-center gap-1.5">
-                <span class="shrink-0 text-2xs text-muted-foreground">{{ t('flows.branch_next') }}</span>
+                <span class="text-12 shrink-0 text-fg-2">{{ t('flows.branch_next') }}</span>
                 <select :value="branch.next" :class="input" @change="update(index, { next: ($event.target as HTMLSelectElement).value })">
                     <option value="">{{ t('flows.not_connected') }}</option>
                     <option v-for="id in stepIds" :key="id" :value="id">{{ id }}</option>
@@ -119,7 +115,7 @@ const input = 'h-8 w-full rounded-md border border-input bg-background px-2 text
 
         <button
             type="button"
-            class="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-input text-xs text-muted-foreground hover:border-amber-500 hover:text-amber-700"
+            class="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-line-strong text-xs text-fg-2 hover:border-warn hover:text-warn"
             @click="add"
         >
             <Plus class="size-3.5" aria-hidden="true" />{{ t('flows.add_branch') }}

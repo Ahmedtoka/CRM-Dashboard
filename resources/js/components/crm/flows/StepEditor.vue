@@ -144,8 +144,8 @@ function applyRename(): void {
 const typeLabel = (type: string): string => stepTypeLabel(type, props.catalog, locale.value, t);
 const scriptKnown = computed(() => !step.value?.script || props.scripts.some((s) => s.key === step.value.script));
 
-const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';
-const label = 'mb-1 block text-xs font-medium text-muted-foreground';
+const input = 'h-9 w-full rounded-md border border-line-strong bg-background px-3 text-sm';
+const label = 'mb-1 block text-xs font-medium text-fg-2';
 </script>
 
 <template>
@@ -156,15 +156,15 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
             </span>
             <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-semibold">{{ typeLabel(step.type) }}</p>
-                <p class="truncate text-2xs text-muted-foreground" dir="ltr">{{ stepId }}</p>
+                <p class="text-12 truncate text-fg-2" dir="ltr">{{ stepId }}</p>
             </div>
-            <span v-if="isStart" class="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-2xs font-semibold text-white">
+            <span v-if="isStart" class="text-12 inline-flex items-center gap-1 rounded-full bg-ok px-2 py-0.5 font-semibold text-white">
                 <Flag class="size-3" aria-hidden="true" />{{ t('flows.start') }}
             </span>
             <button
                 v-else
                 type="button"
-                class="inline-flex h-7 items-center gap-1 rounded-full border border-input px-2.5 text-2xs font-medium hover:border-emerald-600 hover:text-emerald-700"
+                class="text-12 inline-flex h-7 items-center gap-1 rounded-full border border-line-strong px-2.5 font-medium hover:border-ok hover:text-ok"
                 @click="makeStart"
             >
                 <Flag class="size-3" aria-hidden="true" />{{ t('flows.make_start') }}
@@ -175,16 +175,12 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
             <p
                 v-for="(message, i) in errors"
                 :key="`e${i}`"
-                class="flex gap-1.5 rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive"
+                class="flex gap-1.5 rounded-md bg-danger-soft px-2.5 py-1.5 text-xs text-danger"
                 role="alert"
             >
                 <CircleAlert class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />{{ message }}
             </p>
-            <p
-                v-for="(message, i) in warnings"
-                :key="`w${i}`"
-                class="flex gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-200"
-            >
+            <p v-for="(message, i) in warnings" :key="`w${i}`" class="flex gap-1.5 rounded-md bg-warn-soft px-2.5 py-1.5 text-xs text-warn">
                 <TriangleAlert class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />{{ message }}
             </p>
         </div>
@@ -202,7 +198,7 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
                     {{ t('flows.apply') }}
                 </button>
             </div>
-            <p v-if="renameError" class="mt-1 text-2xs text-destructive">{{ renameError }}</p>
+            <p v-if="renameError" class="text-12 mt-1 text-danger">{{ renameError }}</p>
         </div>
 
         <div>
@@ -219,12 +215,12 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
                 :value="step.text ?? ''"
                 rows="4"
                 dir="auto"
-                class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm leading-6"
+                class="w-full rounded-md border border-line-strong bg-background px-3 py-2 text-sm leading-6"
                 @input="setText('text', ($event.target as HTMLTextAreaElement).value)"
             />
-            <p v-if="step.type === 'record_case'" class="mt-1 text-2xs text-muted-foreground">{{ t('flows.record_case_text_hint') }}</p>
-            <p v-if="step.type === 'script'" class="mt-1 text-2xs text-muted-foreground">{{ t('flows.script_text_hint') }}</p>
-            <details class="mt-1.5 rounded-md bg-muted/60 px-2.5 py-1.5 text-2xs text-muted-foreground">
+            <p v-if="step.type === 'record_case'" class="text-12 mt-1 text-fg-2">{{ t('flows.record_case_text_hint') }}</p>
+            <p v-if="step.type === 'script'" class="text-12 mt-1 text-fg-2">{{ t('flows.script_text_hint') }}</p>
+            <details class="text-12 mt-1.5 rounded-md bg-muted/60 px-2.5 py-1.5 text-fg-2">
                 <summary class="cursor-pointer select-none font-medium">{{ t('flows.placeholders_title') }}</summary>
                 <ul class="mt-1 space-y-0.5">
                     <li v-for="p in PLACEHOLDERS" :key="p" class="flex flex-wrap gap-x-1.5">
@@ -234,18 +230,18 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
                 </ul>
             </details>
         </div>
-        <p v-if="step.type === 'summary'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{{ t('flows.summary_hint') }}</p>
-        <p v-if="step.type === 'status'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{{ t('flows.status_hint') }}</p>
-        <p v-if="step.type === 'order_items'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+        <p v-if="step.type === 'summary'" class="rounded-md bg-sunken px-3 py-2 text-xs text-fg-2">{{ t('flows.summary_hint') }}</p>
+        <p v-if="step.type === 'status'" class="rounded-md bg-sunken px-3 py-2 text-xs text-fg-2">{{ t('flows.status_hint') }}</p>
+        <p v-if="step.type === 'order_items'" class="rounded-md bg-sunken px-3 py-2 text-xs text-fg-2">
             {{ t('flows.order_items_hint') }}
         </p>
-        <p v-if="step.type === 'product_link'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+        <p v-if="step.type === 'product_link'" class="rounded-md bg-sunken px-3 py-2 text-xs text-fg-2">
             {{ t('flows.product_link_hint') }}
         </p>
-        <p v-if="step.type === 'contact'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+        <p v-if="step.type === 'contact'" class="rounded-md bg-sunken px-3 py-2 text-xs text-fg-2">
             {{ t('flows.contact_hint') }}
         </p>
-        <p v-if="step.type === 'item_changes'" class="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+        <p v-if="step.type === 'item_changes'" class="rounded-md bg-sunken px-3 py-2 text-xs text-fg-2">
             {{ t('flows.item_changes_hint') }}
         </p>
 
@@ -258,7 +254,7 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
             />
             <span class="grid gap-0.5">
                 <span class="text-xs font-semibold">{{ t(`flows.${flag}`) }}</span>
-                <span class="text-2xs text-muted-foreground">{{ t(`flows.${flag}_hint`) }}</span>
+                <span class="text-12 text-fg-2">{{ t(`flows.${flag}_hint`) }}</span>
             </span>
         </label>
 
@@ -271,7 +267,7 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
             />
             <span class="grid gap-0.5">
                 <span class="text-xs font-semibold">{{ t('flows.verify_owner') }}</span>
-                <span class="text-2xs text-muted-foreground">{{ t('flows.verify_owner_hint') }}</span>
+                <span class="text-12 text-fg-2">{{ t('flows.verify_owner_hint') }}</span>
             </span>
         </label>
 
@@ -288,7 +284,7 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
             <datalist id="flow-step-fields">
                 <option v-for="f in knownFields" :key="f" :value="f" />
             </datalist>
-            <p class="mt-1 text-2xs text-muted-foreground">{{ t('flows.field_hint') }}</p>
+            <p class="text-12 mt-1 text-fg-2">{{ t('flows.field_hint') }}</p>
         </div>
 
         <div v-if="hasField('case_type')">
@@ -346,17 +342,17 @@ const label = 'mb-1 block text-xs font-medium text-muted-foreground';
             <BranchesEditor :model-value="step.branches ?? []" :def="def" :step-ids="otherStepIds" @update:model-value="setBranches" />
         </section>
 
-        <div class="border-t border-border pt-3">
+        <div class="border-t border-line pt-3">
             <button
                 type="button"
-                class="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-destructive/40 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+                class="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-danger/40 text-sm font-medium text-danger hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="isStart"
                 :title="isStart ? t('flows.start_cannot_delete') : undefined"
                 @click="emit('delete')"
             >
                 <Trash2 class="size-4" aria-hidden="true" />{{ t('flows.delete_step') }}
             </button>
-            <p v-if="isStart" class="mt-1 text-center text-2xs text-muted-foreground">{{ t('flows.start_cannot_delete') }}</p>
+            <p v-if="isStart" class="text-12 mt-1 text-center text-fg-2">{{ t('flows.start_cannot_delete') }}</p>
         </div>
     </div>
 </template>
