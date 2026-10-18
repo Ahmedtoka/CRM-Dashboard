@@ -39,7 +39,8 @@ it('lists the slots a buyer may manage and the open slots content may pick', fun
     $closed = AdSet::factory()->create(['ad_campaign_id' => $w['campaign']->id, 'name' => 'Retarget | EG | 30d']);
 
     $this->actingAs($w['buyerUser'])->getJson('/ads/slots')->assertOk()
-        ->assertJsonCount(2, 'data')->assertJsonFragment(['id' => $closed->id, 'open' => false])->assertJsonFragment(['id' => $w['adset']->id, 'open' => true]);
+        ->assertJsonCount(2, 'data')->assertJsonFragment(['id' => $closed->id, 'open' => false])->assertJsonFragment(['id' => $w['adset']->id, 'open' => true])
+        ->assertJsonPath('data.0.account.platform', 'meta'); // the slots board shows the platform tile
 
     $open = app(SlotService::class)->openSlots();
     expect($open)->toHaveCount(1)->and($open[0]['id'])->toBe($w['adset']->id)->and($open[0]['buyer']['name'])->toBe('Ali')

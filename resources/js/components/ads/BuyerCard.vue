@@ -26,37 +26,36 @@ const dot = computed(() => props.card.color ?? 'hsl(var(--muted-foreground))');
     <component
         :is="href ? Link : 'article'"
         :href="href ?? undefined"
-        class="flex flex-col gap-3 rounded-lg border-t-4 bg-card p-4 text-start shadow-card transition-shadow"
-        :class="href ? 'hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring' : ''"
-        :style="{ borderTopColor: dot }"
+        class="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 text-start transition-colors duration-150"
+        :class="href ? 'hover:border-line-strong hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring' : ''"
     >
         <header class="flex items-start justify-between gap-2">
             <div class="flex min-w-0 items-center gap-2">
-                <span class="size-2.5 shrink-0 rounded-full" :style="{ backgroundColor: dot }" aria-hidden="true" />
-                <h3 class="truncate text-sm font-bold text-foreground">{{ card.name }}</h3>
+                <span class="grid size-8 shrink-0 place-items-center rounded-full text-[13px] font-bold text-white" :style="{ backgroundColor: dot }" aria-hidden="true">{{ card.name.slice(0, 1) }}</span>
+                <h3 class="truncate text-[15px] font-bold text-foreground">{{ card.name }}</h3>
             </div>
             <MoneyCell :amount="card.spend" :with-tax="card.spend_tax" :currency="currency" />
         </header>
 
         <div v-if="card.accounts.length" class="flex flex-wrap gap-1">
             <PlatformChip v-for="a in card.accounts.slice(0, 4)" :key="a.id" :platform="a.platform" size="xs">
-                <span class="max-w-32 truncate text-muted-foreground" dir="auto">{{ a.name }}</span>
+                <span class="max-w-32 truncate text-fg-2" dir="auto">{{ a.name }}</span>
             </PlatformChip>
-            <span v-if="card.accounts.length > 4" class="inline-flex h-5 items-center rounded-full bg-muted px-1.5 text-2xs text-muted-foreground">
+            <span v-if="card.accounts.length > 4" class="inline-flex h-6 items-center rounded-full bg-sunken px-2 text-xs text-fg-2">
                 +{{ formatCount(card.accounts.length - 4, locale) }}
             </span>
         </div>
 
         <div>
-            <div class="mb-1 flex items-baseline justify-between gap-2 text-2xs text-muted-foreground">
+            <div class="mb-1.5 flex items-baseline justify-between gap-2 text-xs text-fg-2">
                 <span>{{ t('ads.buyers.budget') }}</span>
-                <span v-if="card.budget !== null" class="tabular-nums" :class="overBudget ? 'font-semibold text-destructive' : ''">
+                <span v-if="card.budget !== null" class="tabular-nums" :class="overBudget ? 'font-semibold text-danger' : ''">
                     {{ formatPct((budgetPct ?? 0) / 100, locale, 0) }} · {{ t('ads.buyers.remaining', { amount: money(remaining) }) }}
                 </span>
                 <span v-else>{{ t('ads.buyers.no_budget') }}</span>
             </div>
             <div
-                class="h-2 overflow-hidden rounded-full bg-muted"
+                class="h-1.5 overflow-hidden rounded-full bg-sunken"
                 role="progressbar"
                 :aria-label="t('ads.buyers.budget')"
                 aria-valuemin="0"
@@ -65,53 +64,53 @@ const dot = computed(() => props.card.color ?? 'hsl(var(--muted-foreground))');
             >
                 <div
                     class="h-full rounded-full"
-                    :class="overBudget ? 'bg-destructive' : 'bg-primary'"
+                    :class="overBudget ? 'bg-danger-solid' : 'bg-chart-1'"
                     :style="{ width: `${Math.min(100, budgetPct ?? 0)}%` }"
                 />
             </div>
         </div>
 
-        <dl class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+        <dl class="grid grid-cols-2 gap-x-3 gap-y-2.5 border-t border-line pt-3 text-[13px]">
             <div>
-                <dt class="text-2xs text-muted-foreground">{{ t('ads.kpi.roas') }}</dt>
+                <dt class="text-xs text-fg-3">{{ t('ads.kpi.roas') }}</dt>
                 <dd
                     class="font-bold tabular-nums"
                     :class="
-                        card.target_roas === null ? 'text-foreground' : meetsTarget ? 'text-emerald-700 dark:text-emerald-300' : 'text-destructive'
+                        card.target_roas === null ? 'text-foreground' : meetsTarget ? 'text-ok' : 'text-danger'
                     "
                 >
                     {{ formatRoas(card.roas, locale) }}
-                    <span v-if="card.target_roas !== null" class="text-2xs font-normal text-muted-foreground"
+                    <span v-if="card.target_roas !== null" class="text-xs font-normal text-fg-3"
                         >/ {{ formatRoas(card.target_roas, locale) }}</span
                     >
                 </dd>
             </div>
             <div>
-                <dt class="text-2xs text-muted-foreground">{{ t('ads.kpi.meta_orders') }}</dt>
+                <dt class="text-xs text-fg-3">{{ t('ads.kpi.meta_orders') }}</dt>
                 <dd class="font-bold tabular-nums">{{ formatQty(card.purchases, locale) }}</dd>
             </div>
             <div>
-                <dt class="text-2xs text-muted-foreground">{{ t('ads.kpi.real_orders') }}</dt>
+                <dt class="text-xs text-fg-3">{{ t('ads.kpi.real_orders') }}</dt>
                 <dd class="font-bold tabular-nums">
                     {{ formatCount(card.real_orders, locale) }}
-                    <span class="block text-2xs font-normal text-muted-foreground">{{ money(card.real_revenue) }}</span>
+                    <span class="block text-xs font-normal text-fg-3">{{ money(card.real_revenue) }}</span>
                 </dd>
             </div>
             <div>
-                <dt class="text-2xs text-muted-foreground">{{ t('ads.kpi.conversations') }}</dt>
+                <dt class="text-xs text-fg-3">{{ t('ads.kpi.conversations') }}</dt>
                 <dd class="font-bold tabular-nums">
                     {{ formatCount(card.conversations, locale) }} {{ flowArrow(locale) }} {{ formatCount(card.conversations_ordered, locale) }}
-                    <span class="block text-2xs font-normal text-muted-foreground">{{
+                    <span class="block text-xs font-normal text-fg-3">{{
                         t('ads.buyers.conversion', { pct: formatPct(convRate, locale, 1) })
                     }}</span>
                 </dd>
             </div>
             <div>
-                <dt class="text-2xs text-muted-foreground">{{ t('ads.kpi.cpa') }}</dt>
+                <dt class="text-xs text-fg-3">{{ t('ads.kpi.cpa') }}</dt>
                 <dd class="font-bold tabular-nums">{{ money(card.cpa) }}</dd>
             </div>
             <div>
-                <dt class="text-2xs text-muted-foreground">{{ t('ads.kpi.ctr') }}</dt>
+                <dt class="text-xs text-fg-3">{{ t('ads.kpi.ctr') }}</dt>
                 <dd class="font-bold tabular-nums">{{ formatPct(card.ctr, locale) }}</dd>
             </div>
         </dl>

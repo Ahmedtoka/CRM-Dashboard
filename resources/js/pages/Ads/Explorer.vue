@@ -22,7 +22,9 @@ import { formatCount } from '@/lib/format';
 import type { AdRowData, AdsExplorerProps, AdsView, WinnerTierFilter } from '@/types/ads';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { useEventListener, useMediaQuery } from '@vueuse/core';
-import { Megaphone } from 'lucide-vue-next';
+import ViewSwitch from '@/components/ads/ui/ViewSwitch.vue';
+import { ADS_FIELD } from '@/lib/adsUi';
+import { ChevronLeft, ChevronRight, LayoutGrid, Megaphone, Network, Table2 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<AdsExplorerProps>();
@@ -79,44 +81,37 @@ function setOpen(keys: string[]): void {
 const crumbs = computed(() => [{ label: t('nav.ads'), href: '/today/ads' }, { label: t('ads.control.explorer.title') }]);
 const appCrumbs = computed(() => crumbs.value.map((c) => ({ title: c.label, href: c.href ?? '/ads/explorer' })));
 const isPart = (k: string): k is AdPart => (AD_PARTS as readonly string[]).includes(k);
-const selectClass = 'h-8 rounded-md border border-input bg-background px-2';
+const selectClass = ADS_FIELD;
+const viewOptions = computed(() => [
+    { key: 'table', label: t('ads.control.view.table'), icon: Table2, href: viewHref('table') },
+    { key: 'cards', label: t('ads.control.view.cards'), icon: LayoutGrid, href: viewHref('cards') },
+    { key: 'tree', label: t('ads.control.view.tree'), icon: Network, href: viewHref('tree') },
+]);
 </script>
 
 <template>
     <Head :title="t('ads.control.explorer.title')" />
     <AppLayout :breadcrumbs="appCrumbs">
-        <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('ads.control.explorer.title')" :description="t('ads.control.explorer.description')" :breadcrumbs="crumbs" :freshness="freshness" />
+        <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-4 p-4 md:p-6">
+            <PageHeader :title="t('ads.control.explorer.title')" :description="t('ads.control.explorer.description')" :breadcrumbs="crumbs" :freshness="freshness">
+                <ViewSwitch :options="viewOptions" :current="view" :label="t('ads.control.view.label')" />
+            </PageHeader>
 
             <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
 
-            <nav class="inline-flex rounded-md border border-input p-0.5" :aria-label="t('ads.control.view.label')">
-                <Link
-                    v-for="v in ['table', 'cards', 'tree'] as const"
-                    :key="v"
-                    :href="viewHref(v)"
-                    preserve-scroll
-                    class="inline-flex h-8 items-center rounded px-3 text-xs"
-                    :class="filters.view === v ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'"
-                    :aria-current="filters.view === v ? 'page' : undefined"
-                >
-                    {{ t(`ads.control.view.${v}`) }}
-                </Link>
-            </nav>
-
             <AdsFilterBar path="/ads/explorer" :filters="filters" :account-options="account_options" :buyers="buyers" :platforms="platforms" :defaults="EXPLORER_DEFAULTS" />
 
-            <div v-if="view !== 'tree'" class="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div v-if="view !== 'tree'" class="flex flex-wrap items-center justify-between gap-2 text-[13px]">
                 <label class="inline-flex items-center gap-2">
-                    <span class="text-muted-foreground">{{ t('ads.control.sort.label') }}</span>
+                    <span class="text-fg-2">{{ t('ads.control.sort.label') }}</span>
                     <select :value="filters.sort" :class="selectClass" @change="setParam('sort', ($event.target as HTMLSelectElement).value)">
                         <option v-for="s in SORTS" :key="s" :value="`-${s}`">{{ t(`ads.control.sort.${s}`) }}</option>
                         <option v-if="!filters.sort.startsWith('-')" :value="filters.sort">{{ t(`ads.control.sort.${filters.sort}`) }}</option>
                     </select>
                 </label>
-                <span v-if="result" class="tabular-nums text-muted-foreground">{{ formatCount(result.meta.total, locale) }}</span>
+                <span v-if="result" class="tabular-nums text-fg-3">{{ t('ads.control.explorer.shown', { n: formatCount(rows.length, locale), total: formatCount(result.meta.total, locale) }) }}</span>
                 <label class="inline-flex items-center gap-2">
-                    <span class="text-muted-foreground">{{ t('ads.control.explorer.per_page') }}</span>
+                    <span class="text-fg-2">{{ t('ads.control.explorer.per_page') }}</span>
                     <select :value="filters.per_page" :class="selectClass" @change="setParam('per_page', ($event.target as HTMLSelectElement).value === '25' ? null : ($event.target as HTMLSelectElement).value)">
                         <option v-for="n in [25, 50, 100]" :key="n" :value="n">{{ formatCount(n, locale) }}</option>
                     </select>
@@ -124,7 +119,7 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2';
             </div>
 
             <template v-if="view === 'tree'">
-                <p class="rounded-md bg-muted px-3 py-2 text-xs md:hidden">{{ t('ads.control.view.tree_desktop_only') }}</p>
+                <p class="rounded-lg bg-sunken px-4 py-2.5 text-[13px] text-fg-2 md:hidden">{{ t('ads.control.view.tree_desktop_only') }}</p>
                 <div class="hidden md:block">
                     <EmptyState v-if="!tree?.length" :icon="Megaphone" :title="t('ads.control.explorer.empty')" />
                     <CampaignTreeView v-else :nodes="tree" :currency="currency" :open="open" :data-at="freshness" @update:open="setOpen" @open-ad="drawer.open" />
@@ -138,8 +133,8 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2';
                         :key="c.key"
                         :href="c.href"
                         preserve-scroll
-                        class="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border px-3 text-xs font-medium"
-                        :class="c.active ? 'border-primary bg-primary/10 text-primary' : 'border-input bg-card text-muted-foreground hover:text-foreground'"
+                        class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium"
+                        :class="c.active ? 'border-foreground bg-foreground text-background' : 'border-line-strong bg-card text-fg-2 hover:text-foreground'"
                         :aria-current="c.active ? 'true' : undefined"
                     >
                         {{ c.label }} <span class="tabular-nums">{{ formatCount(c.count, locale) }}</span>
@@ -147,7 +142,7 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2';
                 </div>
                 <SkeletonList v-if="loading && !rows.length" variant="cards" :count="4" />
                 <EmptyState v-else-if="!rows.length" :icon="Megaphone" :title="t('ads.control.explorer.empty')" />
-                <div v-else class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" :class="loading ? 'opacity-60 transition-opacity' : ''">
+                <div v-else class="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))]" :class="loading ? 'opacity-60 transition-opacity' : ''">
                     <AdCard v-for="r in rows" :key="r.id" :row="r" :currency="currency" :data-at="freshness" @open="drawer.open" />
                 </div>
             </template>
@@ -169,20 +164,20 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2';
                 </template>
                 <template v-if="result && rows.length" #totals>
                     <tr>
-                        <td v-for="c in columns" :key="c.key" class="px-3 py-2 text-xs" :class="c.numeric ? 'text-end tabular-nums' : ''">
+                        <td v-for="c in columns" :key="c.key" class="px-3 py-2.5 text-[13px] font-semibold" :class="c.numeric ? 'text-end tabular-nums' : ''">
                             <template v-if="c.key === 'creative'">{{ t('ads.control.explorer.totals') }}</template>
                             <template v-else-if="c.key === 'spend'">{{ money(result.totals.spend_tax) }}</template>
                             <template v-else-if="c.key === 'return'">
                                 <span data-test="totals-real-roas" class="block text-sm font-semibold">{{ formatRoas(result.totals.real_roas, locale) }}</span>
-                                <span class="block text-2xs font-normal text-muted-foreground">{{ t('ads.control.row.meta') }} {{ formatRoas(result.totals.roas, locale) }}</span>
+                                <span class="block text-xs font-normal text-fg-3">{{ t('ads.control.row.meta') }} {{ formatRoas(result.totals.roas, locale) }}</span>
                             </template>
                         </td>
                     </tr>
                 </template>
             </DataTable>
 
-            <nav v-if="view !== 'tree' && result && result.meta.last_page > 1" class="flex items-center justify-between text-xs" :aria-label="t('ui.pagination')">
-                <span class="tabular-nums text-muted-foreground">
+            <nav v-if="view !== 'tree' && result && result.meta.last_page > 1" class="flex items-center justify-between text-[13px]" :aria-label="t('ui.pagination')">
+                <span class="tabular-nums text-fg-2">
                     {{ t('ads.control.explorer.page', { n: formatCount(result.meta.current_page, locale), total: formatCount(result.meta.last_page, locale) }) }}
                 </span>
                 <div class="flex gap-2">
@@ -190,17 +185,17 @@ const selectClass = 'h-8 rounded-md border border-input bg-background px-2';
                         v-if="result.meta.current_page > 1"
                         :href="pageHref(result.meta.current_page - 1)"
                         preserve-scroll
-                        class="inline-flex h-9 items-center rounded-md border border-border px-3 hover:bg-muted"
+                        class="inline-flex h-11 items-center gap-1 rounded-md border border-line-strong bg-card px-3 font-medium hover:bg-surface-2 md:h-9"
                     >
-                        {{ t('ads.control.explorer.prev') }}
+                        <ChevronLeft class="rtl-flip size-4" aria-hidden="true" />{{ t('ads.control.explorer.prev') }}
                     </Link>
                     <Link
                         v-if="result.meta.current_page < result.meta.last_page"
                         :href="pageHref(result.meta.current_page + 1)"
                         preserve-scroll
-                        class="inline-flex h-9 items-center rounded-md border border-border px-3 hover:bg-muted"
+                        class="inline-flex h-11 items-center gap-1 rounded-md border border-line-strong bg-card px-3 font-medium hover:bg-surface-2 md:h-9"
                     >
-                        {{ t('ads.control.explorer.next') }}
+                        {{ t('ads.control.explorer.next') }}<ChevronRight class="rtl-flip size-4" aria-hidden="true" />
                     </Link>
                 </div>
             </nav>

@@ -3610,6 +3610,7 @@ const ar = {
                 slot_open: 'مفتوحة',
                 slot_closed: 'مقفولة',
                 slots_empty: 'مفيش مجموعات على حساباتك',
+                slots_open_n: '{n} مفتوحة من {total}',
                 stop_banner: 'المنتج خلص والإعلانات دي لسه شغالة: وقّفيها من هنا.',
             },
             approvals: {
@@ -4339,6 +4340,7 @@ const ar = {
             ads_n: '{n} إعلان مربوط',
             no_ads: 'مفيش إعلانات مربوطة',
             showing: 'عرض {from} لـ {to} من {total}',
+            files_n: '{n} ملفات',
             deleted: 'المادة اتمسحت',
             delete_title: 'تمسح المادة؟',
             delete_body: 'هتتمسح «{title}» بكل ملفاتها، ومش هينفع ترجع.',
@@ -4423,6 +4425,7 @@ const ar = {
                 has_errors: 'في بيانات محتاجة تتصلح',
             },
             collections: {
+                materials_n: '{n} مادة',
                 title: 'مجموعات المواد',
                 description: 'كل مجموعة وعدد موادها حسب الحالة.',
                 add: 'مجموعة جديدة',
@@ -4529,7 +4532,7 @@ const ar = {
                 spend_days: 'اتصرف {amount} في آخر ١٤ يوم', empty_open: 'مفيش قرارات مفتوحة دلوقتي', empty_snoozed: 'مفيش حاجة مأجّلة', empty_closed: 'مفيش حاجة اتقفلت لسه',
                 empty_log: 'مفيش تغييرات في السجل', log_at: 'الوقت', log_who: 'مين', log_level: 'المستوى', log_result: 'النتيجة', any: 'الكل', result_ok: 'تم', result_error: 'فشل', result_pending: 'لسه',
             },
-            explorer: { title: 'الإعلانات', description: 'كل الإعلانات في مكان واحد: جدول أو كروت أو شجرة الحملات', empty: 'مفيش إعلانات بالفلاتر دي', totals: 'الإجمالي', per_page: 'في الصفحة', page: 'صفحة {n} من {total}', prev: 'السابق', next: 'التالي', naming_bad: 'الاسم مش على النظام', naming_hint: 'اسم الحملة مش ماشي على نظام التسمية المتفق عليه', tiers: 'التصنيف', tier_top: 'الكسبان والواعد', tier_all: 'كل اللي اتقيّموا', expand: 'افتح {name}', collapse: 'اقفل {name}' },
+            explorer: { title: 'كل الإعلانات', description: 'كل الإعلانات في كل الحسابات، بأرقامنا احنا (الأوردرات الحقيقية من شوبيفاي) مش أرقام المنصة بس.', empty: 'مفيش إعلانات بالفلاتر دي', totals: 'الإجمالي', per_page: 'في الصفحة', shown: 'بيعرض {n} من {total}', page: 'صفحة {n} من {total}', prev: 'السابق', next: 'التالي', naming_bad: 'الاسم مش على النظام', naming_hint: 'اسم الحملة مش ماشي على نظام التسمية المتفق عليه', tiers: 'التصنيف', tier_top: 'الكسبان والواعد', tier_all: 'كل اللي اتقيّموا', expand: 'افتح {name}', collapse: 'اقفل {name}' },
             numbers: {
                 title: 'الأرقام', description: 'تقرير الفترة: الصرف والأوردرات والعائد', hero_spend: 'اتصرف', hero_real_orders: 'أوردرات حقيقية', hero_real_roas: 'عائد حقيقي',
                 hero_meta_roas: 'عائد ميتا', hero_losers: 'على إعلانات خسرانة', more: 'باقي الأرقام', less: 'خبّي باقي الأرقام', daily: 'يوم بيوم', accounts: 'الحسابات',

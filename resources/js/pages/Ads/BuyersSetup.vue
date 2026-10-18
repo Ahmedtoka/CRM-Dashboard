@@ -26,8 +26,8 @@ const page = usePage<SharedData>();
 const isAdmin = computed(() => (page.props.auth?.user as { role?: string } | undefined)?.role === 'admin');
 
 const inputClass =
-    'flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50';
-const smallInput = 'h-8 w-28 rounded-md border border-input bg-card px-2 text-xs';
+    'flex h-9 w-full rounded-md border border-line-strong bg-card px-3 text-sm placeholder:text-fg-3 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50';
+const smallInput = 'h-8 w-28 rounded-md border border-line-strong bg-card px-2 text-xs';
 const DEFAULT_COLOR = '#1877F2';
 
 const num = (value: number | string | null | undefined): string => (value === null || value === undefined ? '' : String(value));
@@ -227,7 +227,7 @@ const appCrumbs = computed(() => [
                     <template #cell-name="{ row }">
                         <span class="inline-flex items-center gap-2 font-medium">
                             <span
-                                class="size-3 rounded-full border border-border"
+                                class="size-3 rounded-full border border-line"
                                 :style="{ backgroundColor: row.color || 'transparent' }"
                                 aria-hidden="true"
                             />
@@ -253,11 +253,11 @@ const appCrumbs = computed(() => [
             </section>
 
             <!-- Targets -->
-            <section v-if="buyers.length" class="space-y-3 rounded-lg bg-card p-4 shadow-card" :aria-label="t('ads.setup.targets_title')">
+            <section v-if="buyers.length" class="space-y-3 rounded-lg border border-line bg-card p-4" :aria-label="t('ads.setup.targets_title')">
                 <div class="flex flex-wrap items-end gap-3">
                     <div class="min-w-0 flex-1">
                         <h2 class="text-sm font-semibold">{{ t('ads.setup.targets_title') }}</h2>
-                        <p class="text-xs text-muted-foreground">{{ t('ads.setup.targets_note') }}</p>
+                        <p class="text-xs text-fg-2">{{ t('ads.setup.targets_note') }}</p>
                     </div>
                     <div class="space-y-1">
                         <label class="text-xs font-medium" for="target-buyer">{{ t('ads.setup.pick_buyer') }}</label>
@@ -267,15 +267,15 @@ const appCrumbs = computed(() => [
                     </div>
                 </div>
 
-                <ul class="divide-y divide-border/60">
+                <ul class="divide-y divide-line">
                     <li v-for="row in monthRows" :key="row.month" class="flex flex-wrap items-end gap-3 py-3">
                         <div class="min-w-36 flex-1">
                             <p class="text-xs font-medium">{{ row.label }}</p>
-                            <p class="text-2xs text-muted-foreground">{{ monthLabel(row.month) }}</p>
+                            <p class="text-xs text-fg-3">{{ monthLabel(row.month) }}</p>
                         </div>
                         <div v-if="drafts[draftKey(row.month)]" class="flex flex-wrap items-end gap-3">
                             <div class="space-y-1">
-                                <label class="text-2xs text-muted-foreground" :for="`budget-${row.month}`"
+                                <label class="text-xs text-fg-3" :for="`budget-${row.month}`"
                                     >{{ t('ads.setup.budget') }} ({{ t('common.currency') }})</label
                                 >
                                 <input
@@ -290,7 +290,7 @@ const appCrumbs = computed(() => [
                                 />
                             </div>
                             <div class="space-y-1">
-                                <label class="text-2xs text-muted-foreground" :for="`roas-${row.month}`">{{ t('ads.setup.target_roas') }}</label>
+                                <label class="text-xs text-fg-3" :for="`roas-${row.month}`">{{ t('ads.setup.target_roas') }}</label>
                                 <input
                                     :id="`roas-${row.month}`"
                                     v-model="drafts[draftKey(row.month)].roas"
@@ -310,7 +310,7 @@ const appCrumbs = computed(() => [
                                 {{ t('ads.setup.save_row') }}
                             </Button>
                         </div>
-                        <p v-if="targetError(row.month)" role="alert" class="basis-full text-2xs text-destructive">{{ targetError(row.month) }}</p>
+                        <p v-if="targetError(row.month)" role="alert" class="basis-full text-xs text-danger">{{ targetError(row.month) }}</p>
                     </li>
                 </ul>
             </section>
@@ -326,7 +326,7 @@ const appCrumbs = computed(() => [
             <div class="space-y-1">
                 <label class="text-xs font-medium" for="buyer-name">{{ t('ads.setup.buyer_name') }}</label>
                 <input id="buyer-name" v-model="buyerForm.name" type="text" maxlength="120" required :class="inputClass" />
-                <p v-if="buyerForm.errors.name" class="text-2xs text-destructive">{{ buyerForm.errors.name }}</p>
+                <p v-if="buyerForm.errors.name" class="text-xs text-danger">{{ buyerForm.errors.name }}</p>
             </div>
             <div class="space-y-1">
                 <label class="text-xs font-medium" for="buyer-color">{{ t('ads.setup.color') }}</label>
@@ -334,9 +334,9 @@ const appCrumbs = computed(() => [
                     id="buyer-color"
                     v-model="buyerForm.color"
                     type="color"
-                    class="h-9 w-16 cursor-pointer rounded-md border border-input bg-card p-1"
+                    class="h-9 w-16 cursor-pointer rounded-md border border-line-strong bg-card p-1"
                 />
-                <p v-if="buyerForm.errors.color" class="text-2xs text-destructive">{{ buyerForm.errors.color }}</p>
+                <p v-if="buyerForm.errors.color" class="text-xs text-danger">{{ buyerForm.errors.color }}</p>
             </div>
             <div class="space-y-1">
                 <label class="text-xs font-medium" for="buyer-user">{{ t('ads.setup.linked_user') }}</label>
@@ -344,11 +344,11 @@ const appCrumbs = computed(() => [
                     <option value="">{{ t('ads.setup.no_user') }}</option>
                     <option v-for="u in freeUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
                 </select>
-                <p class="text-2xs text-muted-foreground">
+                <p class="text-xs text-fg-3">
                     {{ t('ads.setup.add_user_hint') }}
                     <Link v-if="isAdmin" href="/settings/users" class="text-primary underline-offset-2 hover:underline">{{ t('ads.setup.add_user') }}</Link>
                 </p>
-                <p v-if="buyerForm.errors.user_id" class="text-2xs text-destructive">{{ buyerForm.errors.user_id }}</p>
+                <p v-if="buyerForm.errors.user_id" class="text-xs text-danger">{{ buyerForm.errors.user_id }}</p>
             </div>
             <div class="flex items-center gap-2">
                 <ToggleSwitch v-model="buyerForm.is_active" :label="t('ads.setup.col_active')" />

@@ -402,8 +402,8 @@ it('lists collections with their counts and totals, and manages them', function 
 
     $this->actingAs($content)->get('/ads/collections')->assertInertia(fn (Assert $p) => $p
         ->component('Ads/Materials/Collections')
-        ->where('collections.0', ['id' => $a->id, 'name' => 'A', 'is_active' => true, 'materials' => 3, 'activated' => 1, 'not_started' => 1, 'need_stop' => 1, 'done' => 1])
-        ->where('collections.1', ['id' => $b->id, 'name' => 'B', 'is_active' => false, 'materials' => 1, 'activated' => 1, 'not_started' => 0, 'need_stop' => 1, 'done' => 0])
+        ->where('collections.0', ['id' => $a->id, 'name' => 'A', 'is_active' => true, 'materials' => 3, 'activated' => 1, 'not_started' => 1, 'need_stop' => 1, 'done' => 1, 'covers' => []])
+        ->where('collections.1', ['id' => $b->id, 'name' => 'B', 'is_active' => false, 'materials' => 1, 'activated' => 1, 'not_started' => 0, 'need_stop' => 1, 'done' => 0, 'covers' => []])
         ->where('totals', ['collections' => 2, 'materials' => 4, 'activated' => 1, 'not_started' => 2, 'need_stop' => 1, 'done' => 1]));
 
     $this->actingAs($content)->post('/ads/collections', ['name' => 'New'])->assertRedirect();
@@ -572,4 +572,16 @@ it('neutralises spreadsheet formulas in both CSV exports', function () {
     $srow = collect($stock)->first(fn ($r) => str_contains($r[0], 'HYPERLINK'));
     expect($srow[0])->toBe('\'=HYPERLINK("http://evil")')->and($srow[1])->toBe("'@SUM(A1)")->and($srow[5])->toBe("'+cmd")
         ->and($srow[3])->toBe('100'); // numbers untouched
+});
+
+it('gives each collection up to three cover pictures from its newest materials', function () {
+    $content = matUser(UserRole::Content);
+    $c = AdMaterialCollection::factory()->create(['name' => 'Covers']);
+    $withPicture = AdMaterial::factory()->create();
+    $file = AdMaterialFile::factory()->create(['ad_material_id' => $withPicture->id, 'mime' => 'image/jpeg']);
+    $noFiles = AdMaterial::factory()->create();
+    $c->materials()->attach([$withPicture->id, $noFiles->id]);
+
+    $this->actingAs($content)->get('/ads/collections')->assertInertia(fn (Assert $p) => $p
+        ->where('collections.0.covers', [route('ads.materials.files.show', $file->id, false)]));
 });

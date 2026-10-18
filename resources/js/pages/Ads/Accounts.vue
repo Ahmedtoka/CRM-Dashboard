@@ -278,7 +278,7 @@ const platformOf = (value: string): AdPlatformDefinition | undefined => props.pl
 const formPlatform = computed(() => platformOf(connForm.platform));
 const errorOf = (key: string): string | undefined => (connForm.errors as Record<string, string | undefined>)[key];
 const inputClass =
-    'flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50';
+    'flex h-9 w-full rounded-md border border-line-strong bg-card px-3 text-sm placeholder:text-fg-3 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50';
 
 function openConnect(): void {
     editing.value = null;
@@ -418,7 +418,7 @@ const appCrumbs = computed(() => [
     { title: t('settings_hub.title'), href: '/settings' },
     { title: t('ads.control.setup.accounts'), href: '/settings/ads/accounts' },
 ]);
-const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card px-2 text-xs';
+const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-line-strong bg-card px-2 text-xs';
 </script>
 
 <template>
@@ -451,7 +451,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                         </fieldset>
                         <ul v-if="syncScope === 'some'" class="scrollbar-thin max-h-56 space-y-1 overflow-y-auto">
                             <li v-for="o in syncOptions" :key="o.id">
-                                <label class="flex items-center gap-2 rounded px-1 py-1 text-xs hover:bg-muted">
+                                <label class="flex items-center gap-2 rounded px-1 py-1 text-xs hover:bg-sunken">
                                     <input
                                         type="checkbox"
                                         :checked="syncPicked.includes(o.id)"
@@ -463,7 +463,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                                 </label>
                             </li>
                         </ul>
-                        <p v-if="syncScope === 'all'" class="text-2xs text-muted-foreground">{{ t('ads.accounts.sync_all_hint') }}</p>
+                        <p v-if="syncScope === 'all'" class="text-xs text-fg-3">{{ t('ads.accounts.sync_all_hint') }}</p>
                         <Button type="button" size="sm" class="w-full" data-test="sync-start" :disabled="!canStart" :loading="starting" @click="startPicked">
                             {{ t('ads.accounts.sync_start') }}
                         </Button>
@@ -473,11 +473,11 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
             <SectionTabs :tabs="sectionTabs.adAccounts(t)" :label="t('section_tabs.ad_accounts.label')" />
 
             <!-- Filter: nothing loads until «اعرض». -->
-            <section class="flex flex-wrap items-center gap-2 rounded-lg bg-card p-3 shadow-card" :aria-label="t('ads.accounts.filter_label')" data-test="filter">
+            <section class="flex flex-wrap items-center gap-2 rounded-lg bg-card p-3 border border-line" :aria-label="t('ads.accounts.filter_label')" data-test="filter">
                 <DateRangePicker v-model="range" month />
                 <Popover v-if="account_options.length > 1">
                     <PopoverTrigger
-                        class="inline-flex h-9 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-xs"
+                        class="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 text-xs"
                         data-test="filter-accounts"
                     >
                         <ListChecks class="size-4" aria-hidden="true" />{{ accountsLabel }}<ChevronDown class="size-3.5 opacity-60" aria-hidden="true" />
@@ -488,7 +488,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                         </button>
                         <ul class="scrollbar-thin max-h-64 space-y-1 overflow-y-auto">
                             <li v-for="o in account_options" :key="o.id">
-                                <label class="flex items-center gap-2 rounded px-1 py-1 text-xs hover:bg-muted">
+                                <label class="flex items-center gap-2 rounded px-1 py-1 text-xs hover:bg-sunken">
                                     <input type="checkbox" :checked="pickedFilter.includes(o.id)" :data-test="`filter-pick-${o.id}`" @change="toggleFilterAccount(o.id)" />
                                     <span class="min-w-0 flex-1 truncate" dir="auto">{{ o.name }}</span>
                                     <PlatformChip :platform="o.platform" size="xs" />
@@ -500,7 +500,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                 <Button type="button" size="sm" class="h-9 ms-auto" data-test="show" :variant="filterDirty ? 'default' : 'outline'" :loading="loadingView" @click="show">
                     {{ t('ads.accounts.show') }}
                 </Button>
-                <p class="basis-full text-2xs text-muted-foreground">{{ rangeLabel }} · {{ filters.accounts.length ? t('ads.accounts.filter_accounts_n', { n: n(filters.accounts.length), total: n(account_options.length) }) : t('ads.accounts.filter_accounts_all') }}</p>
+                <p class="basis-full text-xs text-fg-3">{{ rangeLabel }} · {{ filters.accounts.length ? t('ads.accounts.filter_accounts_n', { n: n(filters.accounts.length), total: n(account_options.length) }) : t('ads.accounts.filter_accounts_all') }}</p>
             </section>
 
             <!-- Summary -->
@@ -514,24 +514,24 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
             </section>
 
             <!-- Syncs the schedule or a colleague started: a note, never this user's bar. -->
-            <p v-if="sync_resume.others && !syncRunning" class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-test="sync-others">
+            <p v-if="sync_resume.others && !syncRunning" class="flex flex-wrap items-center gap-1.5 text-xs text-fg-2" data-test="sync-others">
                 <LoaderCircle class="size-3.5 animate-spin" aria-hidden="true" />{{ t('ads.accounts.sync_others', { n: n(sync_resume.others) }) }}
                 <Link href="/settings/ads/sync" class="text-primary hover:underline">{{ t('ads.accounts.sync_open_log') }}</Link>
             </p>
 
             <!-- One overall progress for the «سنك» -->
-            <section v-if="tracked" class="space-y-3 rounded-lg bg-card p-4 shadow-card" role="status" data-test="sync-progress">
+            <section v-if="tracked" class="space-y-3 rounded-lg border border-line bg-card p-4" role="status" data-test="sync-progress">
                 <div class="flex items-center gap-2">
                     <LoaderCircle v-if="syncRunning" class="size-4 animate-spin text-primary" aria-hidden="true" />
-                    <Hourglass v-else-if="stalled" class="size-4 text-warning" aria-hidden="true" />
-                    <Check v-else class="size-4 text-success" aria-hidden="true" />
+                    <Hourglass v-else-if="stalled" class="size-4 text-warn" aria-hidden="true" />
+                    <Check v-else class="size-4 text-ok" aria-hidden="true" />
                     <p class="flex-1 text-sm font-semibold">
                         {{ syncRunning ? t('ads.accounts.sync_progress') : stalled ? t('ads.accounts.sync_stalled_title') : t('ads.accounts.sync_finished') }}
                     </p>
                     <IconAction :icon="X" :label="t('ads.accounts.sync_hide')" size="sm" data-test="sync-hide" @click="dismissProgress" />
                 </div>
                 <ProgressBar :value="progressDone" :max="progressTotal" :unit="t('ads.accounts.sync_unit')" />
-                <p v-if="stalled" class="text-xs text-muted-foreground" data-test="sync-stalled">
+                <p v-if="stalled" class="text-xs text-fg-2" data-test="sync-stalled">
                     {{ t('ads.accounts.sync_stalled') }}
                     <Link href="/settings/ads/sync" class="text-primary hover:underline">{{ t('ads.accounts.sync_open_log') }}</Link>
                 </p>
@@ -541,7 +541,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                     </li>
                 </ul>
                 <ul v-if="connectionErrors.length" class="space-y-1">
-                    <li v-for="e in connectionErrors" :key="e.connection" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    <li v-for="e in connectionErrors" :key="e.connection" role="alert" class="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">
                         {{ t('ads.accounts.sync_connection_error', { connection: e.connection, message: e.message }) }}
                     </li>
                 </ul>
@@ -550,11 +550,11 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
             <!-- Connections -->
             <section class="space-y-3" :aria-label="t('ads.accounts.connections_title')">
                 <h2 class="text-sm font-semibold">{{ t('ads.accounts.connections_title') }}</h2>
-                <div v-if="!connections.length" class="rounded-lg bg-card shadow-card">
+                <div v-if="!connections.length" class="rounded-lg bg-card border border-line">
                     <EmptyState :icon="Plug" :title="t('ads.accounts.no_connections')" :body="t('ads.accounts.no_connections_body')" />
                 </div>
                 <ul v-else class="grid gap-3 md:grid-cols-2">
-                    <li v-for="c in connections" :key="c.id" class="space-y-2 rounded-lg bg-card p-4 shadow-card" :data-test="`connection-${c.id}`">
+                    <li v-for="c in connections" :key="c.id" class="space-y-2 rounded-lg border border-line bg-card p-4" :data-test="`connection-${c.id}`">
                         <div class="flex flex-wrap items-center gap-2">
                             <PlatformChip :platform="c.platform" size="xs" />
                             <h3 class="min-w-0 flex-1 truncate text-sm font-semibold" dir="auto">{{ c.name }}</h3>
@@ -568,26 +568,26 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                                         <IconAction :icon="MoreHorizontal" :label="t('ads.accounts.more')" />
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
-                                        <DropdownMenuItem class="text-destructive" @select="deleting = c">
+                                        <DropdownMenuItem class="text-danger" @select="deleting = c">
                                             <Trash2 class="size-4" aria-hidden="true" />{{ t('ads.accounts.delete') }}
                                         </DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </div>
                         </div>
-                        <p class="text-xs text-muted-foreground">
+                        <p class="text-xs text-fg-2">
                             {{ t('ads.accounts.last_sync') }}:
                             <RelativeTime v-if="c.last_synced_at" :iso="c.last_synced_at" />
                             <span v-else>{{ t('ads.accounts.never_synced') }}</span>
                             · {{ t('ads.accounts.accounts_n', { n: n(c.accounts.length) }) }}
                         </p>
-                        <p v-if="c.credentials_unreadable" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        <p v-if="c.credentials_unreadable" role="alert" class="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">
                             {{ t('ads.accounts.credentials_unreadable') }}
                         </p>
-                        <p v-if="c.read_only" class="rounded-md bg-muted px-3 py-2 text-xs">
+                        <p v-if="c.read_only" class="rounded-md bg-sunken px-3 py-2 text-xs">
                             <StatusChip :label="t('ads.accounts.read_only')" tone="warning" class="me-1" />{{ t('ads.accounts.read_only_hint') }}
                         </p>
-                        <p v-if="c.platform === 'meta' && !c.credentials_unreadable" class="text-2xs text-muted-foreground">
+                        <p v-if="c.platform === 'meta' && !c.credentials_unreadable" class="text-xs text-fg-3">
                             {{ t('ads.accounts.token_health') }}:
                             <template v-if="c.token_health.checked_at">
                                 {{
@@ -603,7 +603,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                             </template>
                             <template v-else>{{ t('ads.accounts.token_unchecked') }}</template>
                         </p>
-                        <p v-if="c.last_error" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{{ c.last_error }}</p>
+                        <p v-if="c.last_error" role="alert" class="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">{{ c.last_error }}</p>
                     </li>
                 </ul>
             </section>
@@ -624,7 +624,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                     <template #cell-name="{ row }">
                         <div class="min-w-40">
                             <p class="font-medium" dir="auto">{{ row.name }}</p>
-                            <p class="text-2xs text-muted-foreground">
+                            <p class="text-xs text-fg-3">
                                 <span dir="ltr" class="tabular-nums">{{ row.external_id }}</span> · <span dir="auto">{{ row.connection }}</span>
                             </p>
                         </div>
@@ -638,7 +638,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                             </select>
                             <div v-if="editingAssignment(row)" class="flex items-center gap-1">
                                 <label class="sr-only" :for="`from-${row.id}`">{{ t('ads.accounts.from_date') }}</label>
-                                <DateInput :id="`from-${row.id}`" v-model="drafts[row.id].date" class="h-8 w-36 rounded-md border border-input bg-card px-2 text-xs" />
+                                <DateInput :id="`from-${row.id}`" v-model="drafts[row.id].date" class="h-8 w-36 rounded-md border border-line-strong bg-card px-2 text-xs" />
                                 <IconAction
                                     :icon="Check"
                                     variant="primary"
@@ -654,13 +654,13 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                             <button
                                 v-else-if="openStart(row)"
                                 type="button"
-                                class="text-2xs text-muted-foreground hover:text-foreground hover:underline"
+                                class="text-xs text-fg-3 hover:text-foreground hover:underline"
                                 :title="t('ads.accounts.change_start')"
                                 @click="dateOpen[row.id] = true"
                             >
                                 {{ t('ads.accounts.since', { date: formatDayLong(openStart(row), locale) }) }}
                             </button>
-                            <p v-if="assignError(row)" role="alert" class="text-2xs text-destructive">{{ assignError(row) }}</p>
+                            <p v-if="assignError(row)" role="alert" class="text-xs text-danger">{{ assignError(row) }}</p>
                         </div>
                     </template>
                     <template #cell-status="{ row }">
@@ -698,11 +698,11 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                                 </PopoverTrigger>
                                 <PopoverContent class="w-80">
                                     <p class="mb-2 text-xs font-semibold">{{ t('ads.accounts.history_title') }}</p>
-                                    <p v-if="!row.history.length" class="text-xs text-muted-foreground">{{ t('ads.accounts.history_empty') }}</p>
+                                    <p v-if="!row.history.length" class="text-xs text-fg-2">{{ t('ads.accounts.history_empty') }}</p>
                                     <ol v-else class="space-y-1.5">
                                         <li v-for="(p, i) in row.history" :key="i" class="flex flex-wrap items-baseline justify-between gap-2 text-xs">
                                             <span class="font-medium">{{ periodOwner(p.buyer) }}</span>
-                                            <span class="text-muted-foreground">
+                                            <span class="text-fg-2">
                                                 {{ formatDayLong(p.starts_on, locale) }} –
                                                 {{ p.ends_on ? formatDayLong(p.ends_on, locale) : t('ads.accounts.history_open') }}
                                             </span>
@@ -767,7 +767,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                     :placeholder="t('ads.accounts.name_placeholder')"
                     :class="inputClass"
                 />
-                <p v-if="connForm.errors.name" class="text-2xs text-destructive">{{ connForm.errors.name }}</p>
+                <p v-if="connForm.errors.name" class="text-xs text-danger">{{ connForm.errors.name }}</p>
             </div>
             <div v-for="field in formPlatform?.fields ?? []" :key="`${connForm.platform}-${field.key}`" class="space-y-1">
                 <label class="text-xs font-medium" :for="`cred-${field.key}`">{{ field.label }}</label>
@@ -780,7 +780,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-input bg-card 
                     dir="ltr"
                     :class="inputClass"
                 />
-                <p v-if="errorOf(`credentials.${field.key}`)" class="text-2xs text-destructive">{{ errorOf(`credentials.${field.key}`) }}</p>
+                <p v-if="errorOf(`credentials.${field.key}`)" class="text-xs text-danger">{{ errorOf(`credentials.${field.key}`) }}</p>
             </div>
         </FormDialog>
 

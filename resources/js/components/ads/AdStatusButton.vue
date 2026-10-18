@@ -24,9 +24,11 @@ const props = withDefaults(
         reason?: string;
         parentPaused?: boolean;
         size?: 'sm' | 'md';
+        /** Table rows: the Stop/Run outline without the tint (red stays for the flagged rows and the decision cards). */
+        quiet?: boolean;
         noReload?: boolean;
     }>(),
-    { spendToday: null, dataAt: null, currency: 'EGP', reason: '', parentPaused: false, size: 'sm', noReload: false },
+    { spendToday: null, dataAt: null, currency: 'EGP', reason: '', parentPaused: false, size: 'sm', quiet: false, noReload: false },
 );
 const emit = defineEmits<{ done: [status: 'active' | 'paused'] }>();
 const { t } = useI18n();
@@ -46,11 +48,11 @@ function done(status: 'active' | 'paused'): void {
     <span v-if="target && allowed" class="inline-flex">
         <button
             type="button"
-            class="inline-flex shrink-0 items-center gap-1 rounded-md border font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+            class="inline-flex shrink-0 items-center gap-1.5 rounded-md font-semibold transition-[filter,background-color] duration-150 hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:hover:brightness-125"
             :class="[
                 // sm is compact on desktop only: phones always get a 44 px target (Stop always reachable).
-                size === 'md' ? 'h-11 px-4 text-sm' : 'h-11 px-3 text-xs md:h-7 md:px-2 md:text-2xs',
-                stopping ? 'border-destructive/40 text-destructive hover:bg-destructive/10' : 'border-border text-foreground hover:bg-muted',
+                size === 'md' ? 'h-11 px-4 text-sm md:h-9 md:px-3 md:text-[13px]' : 'h-11 px-3 text-xs md:h-[30px] md:px-2.5',
+                quiet ? (stopping ? 'text-danger hover:bg-danger-soft' : 'text-ok hover:bg-ok-soft') : stopping ? 'bg-danger-soft text-danger' : 'bg-ok-soft text-ok',
             ]"
             :aria-label="t(stopping ? 'ads.actions.stop_aria' : 'ads.actions.run_aria', { name })"
             @click.stop="open = true"

@@ -22,7 +22,7 @@ const form = useForm({
 });
 const err = (key: string) => (form.errors as Record<string, string | undefined>)[key];
 const step = (key: keyof AdsWinnerThresholds) => (key === 'min_days' || key.endsWith('spend') ? '1' : '0.01');
-const input = 'flex h-11 w-full rounded-md border border-input bg-card px-3 text-sm md:h-9';
+const input = 'flex h-11 w-full rounded-md border border-line-strong bg-card px-3 text-sm md:h-9';
 const save = () => form.put('/ads/setup/settings', { preserveScroll: true, onSuccess: () => toast.push(t('ads.setup.saved')) });
 const crumbs = computed(() => [{ label: t('settings_hub.title'), href: '/settings' }, { label: t('ads.control.setup.rules') }]);
 const appCrumbs = computed(() => [
@@ -34,20 +34,20 @@ const appCrumbs = computed(() => [
 <template>
     <Head :title="t('ads.control.setup.rules_title')" />
     <AppLayout :breadcrumbs="appCrumbs">
-        <div class="mx-auto w-full min-w-0 max-w-5xl space-y-4 p-3 md:p-6">
+        <div class="mx-auto w-full min-w-0 max-w-[1200px] space-y-5 p-4 md:p-6">
             <PageHeader :title="t('ads.control.setup.rules_title')" :description="t('ads.control.setup.rules_description')" :breadcrumbs="crumbs" />
-            <form class="space-y-5 rounded-lg bg-card p-4 shadow-card" :aria-label="t('ads.control.setup.rules_title')" @submit.prevent="save">
+            <form class="space-y-5 rounded-lg border border-line bg-card p-4" :aria-label="t('ads.control.setup.rules_title')" @submit.prevent="save">
                 <div class="max-w-xs space-y-1">
                     <label class="text-xs font-medium" for="tax-rate">{{ t('ads.setup.tax_rate') }} (%)</label>
                     <input id="tax-rate" v-model="form.tax_rate_percent" type="number" min="0" max="100" step="0.01" inputmode="decimal" dir="ltr" :class="input" />
-                    <p class="text-2xs text-muted-foreground">{{ t('ads.setup.tax_help') }}</p>
-                    <p v-if="err('tax_rate_percent')" class="text-2xs text-destructive">{{ err('tax_rate_percent') }}</p>
+                    <p class="text-xs text-fg-3">{{ t('ads.setup.tax_help') }}</p>
+                    <p v-if="err('tax_rate_percent')" class="text-xs text-danger">{{ err('tax_rate_percent') }}</p>
                 </div>
                 <div class="max-w-xs space-y-1">
                     <label class="text-xs font-medium" for="launch-expiry">{{ t('ads.setup.launch_expiry_days') }}</label>
                     <input id="launch-expiry" v-model="form.launch_expiry_days" type="number" min="1" max="30" step="1" inputmode="numeric" dir="ltr" :class="input" />
-                    <p class="text-2xs text-muted-foreground">{{ t('ads.setup.launch_expiry_hint') }}</p>
-                    <p v-if="err('launch_expiry_days')" class="text-2xs text-destructive">{{ err('launch_expiry_days') }}</p>
+                    <p class="text-xs text-fg-3">{{ t('ads.setup.launch_expiry_hint') }}</p>
+                    <p v-if="err('launch_expiry_days')" class="text-xs text-danger">{{ err('launch_expiry_days') }}</p>
                 </div>
                 <div class="space-y-3">
                     <h2 class="text-xs font-semibold">{{ t('ads.setup.thresholds_title') }}</h2>
@@ -65,8 +65,8 @@ const appCrumbs = computed(() => [
                                 dir="ltr"
                                 :class="input"
                             />
-                            <p class="text-2xs text-muted-foreground">{{ t(`ads.setup.${key}_help`) }}</p>
-                            <p v-if="err(`winner_thresholds.${key}`)" class="text-2xs text-destructive">{{ err(`winner_thresholds.${key}`) }}</p>
+                            <p class="text-xs text-fg-3">{{ t(`ads.setup.${key}_help`) }}</p>
+                            <p v-if="err(`winner_thresholds.${key}`)" class="text-xs text-danger">{{ err(`winner_thresholds.${key}`) }}</p>
                         </div>
                     </div>
                 </div>

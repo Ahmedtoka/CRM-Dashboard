@@ -59,7 +59,7 @@ async function submit(): Promise<void> {
                 dir="ltr"
                 autocomplete="current-password"
                 required
-                class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                class="w-full rounded-md border border-line-strong bg-card px-3 py-2 text-sm"
             />
         </label>
     </FormDialog>

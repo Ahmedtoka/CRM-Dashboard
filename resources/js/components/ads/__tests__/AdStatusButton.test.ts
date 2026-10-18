@@ -11,7 +11,7 @@ describe('AdStatusButton', () => {
     it('is a 44 px target on phones even in the compact size (Stop always reachable)', () => {
         const cls = mount(AdStatusButton, { props: base as never, global: { stubs: { WriteActionDialog: true } } }).find('button').classes();
         expect(cls).toContain('h-11');
-        expect(cls).toContain('md:h-7');
+        expect(cls).toContain('md:h-[30px]');
     });
 
     it('is hidden for Google and without write access', () => {

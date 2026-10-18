@@ -3654,6 +3654,7 @@ const en: Messages = {
                 slot_open: 'Open',
                 slot_closed: 'Closed',
                 slots_empty: 'No ad sets on your accounts',
+                slots_open_n: '{n} open of {total}',
                 stop_banner: 'The product ran out and these ads still run: stop them here.',
             },
             approvals: {
@@ -4383,6 +4384,7 @@ const en: Messages = {
             ads_n: '{n} linked ads',
             no_ads: 'No linked ads',
             showing: 'Showing {from} to {to} of {total}',
+            files_n: '{n} files',
             deleted: 'Material deleted',
             delete_title: 'Delete material?',
             delete_body: '«{title}» and all its files will be deleted. This cannot be undone.',
@@ -4467,6 +4469,7 @@ const en: Messages = {
                 has_errors: 'Some fields need fixing',
             },
             collections: {
+                materials_n: '{n} materials',
                 title: 'Material collections',
                 description: 'Each collection and its materials by status.',
                 add: 'New collection',
@@ -4573,7 +4576,7 @@ const en: Messages = {
                 spend_days: 'Spent {amount} in the last 14 days', empty_open: 'No open decisions right now', empty_snoozed: 'Nothing snoozed', empty_closed: 'Nothing closed yet',
                 empty_log: 'No changes in the log', log_at: 'Time', log_who: 'Who', log_level: 'Level', log_result: 'Result', any: 'All', result_ok: 'Done', result_error: 'Failed', result_pending: 'Pending',
             },
-            explorer: { title: 'Ads', description: 'Every ad in one place: table, cards or campaign tree', empty: 'No ads match these filters', totals: 'Total', per_page: 'Per page', page: 'Page {n} of {total}', prev: 'Previous', next: 'Next', naming_bad: 'Name breaks the convention', naming_hint: 'The campaign name does not follow the agreed naming convention', tiers: 'Tier', tier_top: 'Winners and promising', tier_all: 'All scored', expand: 'Expand {name}', collapse: 'Collapse {name}' },
+            explorer: { title: 'All ads', description: 'Every ad on every account, with our own numbers (real Shopify orders), not only the platform figures.', empty: 'No ads match these filters', totals: 'Total', per_page: 'Per page', shown: 'Showing {n} of {total}', page: 'Page {n} of {total}', prev: 'Previous', next: 'Next', naming_bad: 'Name breaks the convention', naming_hint: 'The campaign name does not follow the agreed naming convention', tiers: 'Tier', tier_top: 'Winners and promising', tier_all: 'All scored', expand: 'Expand {name}', collapse: 'Collapse {name}' },
             numbers: {
                 title: 'Numbers', description: 'Range report: spend, orders and return', hero_spend: 'Spent', hero_real_orders: 'Real orders', hero_real_roas: 'Real ROAS',
                 hero_meta_roas: 'Meta ROAS', hero_losers: 'On losing ads', more: 'More numbers', less: 'Hide more numbers', daily: 'Day by day', accounts: 'Accounts',

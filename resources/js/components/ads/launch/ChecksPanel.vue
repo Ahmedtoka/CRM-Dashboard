@@ -29,27 +29,27 @@ function toggle(key: string, on: boolean): void {
 
 <template>
     <section :aria-label="t('ads.launch.checks.title')" class="space-y-2 text-sm">
-        <p v-if="loading" role="status" class="flex items-center gap-2 text-xs text-muted-foreground">
+        <p v-if="loading" role="status" class="flex items-center gap-2 text-xs text-fg-2">
             <LoaderCircle class="size-4 animate-spin" aria-hidden="true" />{{ t('ads.launch.editor.checks_loading') }}
         </p>
-        <p v-else-if="!checks || !checks.length" class="text-xs text-muted-foreground">{{ t('ads.launch.checks.none') }}</p>
+        <p v-else-if="!checks || !checks.length" class="text-xs text-fg-2">{{ t('ads.launch.checks.none') }}</p>
         <template v-else>
-            <div v-if="blocking.length" class="rounded-md border border-destructive/40 bg-destructive/5 p-2">
-                <p class="mb-1 text-xs font-semibold text-destructive">{{ t('ads.launch.checks.blocking', { n: blocking.length }) }}</p>
+            <div v-if="blocking.length" class="rounded-md border border-danger/30 bg-danger-soft p-2">
+                <p class="mb-1 text-xs font-semibold text-danger">{{ t('ads.launch.checks.blocking', { n: blocking.length }) }}</p>
                 <ul class="space-y-1">
                     <li v-for="c in blocking" :key="c.key" class="flex items-start gap-2">
-                        <CircleX class="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
+                        <CircleX class="mt-0.5 size-4 shrink-0 text-danger" aria-hidden="true" />
                         <span>{{ checkMessage(c, locale) }}</span>
                     </li>
                 </ul>
             </div>
             <div v-if="warnings.length" class="rounded-md border border-warning/50 bg-warning/10 p-2">
-                <p class="mb-1 text-xs font-semibold text-amber-900 dark:text-amber-100">
+                <p class="mb-1 text-xs font-semibold text-warn">
                     {{ t('ads.launch.checks.warnings', { n: warnings.length }) }}
                 </p>
                 <ul class="space-y-1">
                     <li v-for="c in warnings" :key="c.key" class="flex items-start gap-2">
-                        <CircleAlert class="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden="true" />
+                        <CircleAlert class="mt-0.5 size-4 shrink-0 text-warn" aria-hidden="true" />
                         <span class="flex-1">{{ checkMessage(c, locale) }}</span>
                         <label v-if="ackable" class="flex shrink-0 cursor-pointer items-center gap-1 text-xs font-medium">
                             <input
@@ -62,21 +62,21 @@ function toggle(key: string, on: boolean): void {
                     </li>
                 </ul>
             </div>
-            <p v-if="!blocking.length && !warnings.length" class="flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+            <p v-if="!blocking.length && !warnings.length" class="flex items-center gap-2 text-xs font-medium text-ok">
                 <CircleCheck class="size-4" aria-hidden="true" />{{ t('ads.launch.checks.all_passed') }}
             </p>
             <button
                 v-if="passed.length"
                 type="button"
-                class="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                class="text-xs text-fg-2 underline-offset-2 hover:underline"
                 :aria-expanded="showPassed"
                 @click="showPassed = !showPassed"
             >
                 {{ t('ads.launch.checks.passed', { n: passed.length }) }}
             </button>
             <ul v-if="showPassed" class="space-y-1">
-                <li v-for="c in passed" :key="c.key" class="flex items-start gap-2 text-muted-foreground">
-                    <CircleCheck class="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                <li v-for="c in passed" :key="c.key" class="flex items-start gap-2 text-fg-2">
+                    <CircleCheck class="mt-0.5 size-4 shrink-0 text-ok" aria-hidden="true" />
                     <span>{{ checkMessage(c, locale) }}</span>
                 </li>
             </ul>

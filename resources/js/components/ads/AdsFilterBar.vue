@@ -161,7 +161,7 @@ const summary = computed(() => {
 });
 
 
-const select = 'h-9 rounded-md border border-input bg-background px-2 text-xs';
+const select = 'h-9 rounded-md border border-line-strong bg-card px-2 text-xs';
 </script>
 
 <template>
@@ -189,9 +189,9 @@ const select = 'h-9 rounded-md border border-input bg-background px-2 text-xs';
                 </select>
                 <form v-if="custom" class="flex flex-wrap items-center gap-1.5" @submit.prevent="applyDates">
                     <label class="sr-only" for="ads-range-from">{{ t('range.from') }}</label>
-                    <DateInput id="ads-range-from" v-model="from" class="h-9 rounded-md border border-input bg-background px-2 text-xs" :max="to" />
+                    <DateInput id="ads-range-from" v-model="from" class="h-9 rounded-md border border-line-strong bg-card px-2 text-xs" :max="to" />
                     <label class="sr-only" for="ads-range-to">{{ t('range.to') }}</label>
-                    <DateInput id="ads-range-to" v-model="to" class="h-9 rounded-md border border-input bg-background px-2 text-xs" :min="from" />
+                    <DateInput id="ads-range-to" v-model="to" class="h-9 rounded-md border border-line-strong bg-card px-2 text-xs" :min="from" />
                     <button type="submit" class="h-9 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50" :disabled="datesInvalid">
                         {{ t('range.apply') }}
                     </button>
@@ -200,7 +200,7 @@ const select = 'h-9 rounded-md border border-input bg-background px-2 text-xs';
             <Popover v-if="accountOptions.length > 1">
                 <PopoverTrigger :class="[select, 'inline-flex items-center gap-1']" :aria-label="t('ads.control.filter.accounts')">
                     <span class="max-w-40 truncate">{{ accountsLabel }}</span>
-                    <ChevronDown class="size-3.5 text-muted-foreground" aria-hidden="true" />
+                    <ChevronDown class="size-3.5 text-fg-2" aria-hidden="true" />
                 </PopoverTrigger>
                 <PopoverContent class="w-72 max-w-[calc(100vw-2rem)] space-y-2" :collision-padding="16">
                     <label class="block">
@@ -209,7 +209,7 @@ const select = 'h-9 rounded-md border border-input bg-background px-2 text-xs';
                             v-model="accountSearch"
                             type="text"
                             :placeholder="t('ads.control.filter.accounts_search')"
-                            class="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                            class="h-8 w-full rounded-md border border-line-strong bg-card px-2 text-xs"
                         />
                     </label>
                     <ul class="max-h-64 space-y-1 overflow-y-auto">
@@ -233,7 +233,7 @@ const select = 'h-9 rounded-md border border-input bg-background px-2 text-xs';
                 <option value="">{{ t('ads.control.filter.buyer_all') }}</option>
                 <option v-for="b in buyers" :key="b.id" :value="b.id">{{ b.name }}</option>
             </select>
-            <div v-if="can('status') && filters.status" class="inline-flex rounded-md border border-input p-0.5" role="radiogroup" :aria-label="t('ads.control.status.label')">
+            <div v-if="can('status') && filters.status" class="inline-flex rounded-md border border-line-strong p-0.5" role="radiogroup" :aria-label="t('ads.control.status.label')">
                 <button
                     v-for="s in ['running', 'paused', 'all'] as const"
                     :key="s"
@@ -241,7 +241,7 @@ const select = 'h-9 rounded-md border border-input bg-background px-2 text-xs';
                     role="radio"
                     :aria-checked="filters.status === s"
                     class="h-8 rounded px-2 text-xs"
-                    :class="filters.status === s ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'"
+                    :class="filters.status === s ? 'bg-primary text-primary-foreground' : 'hover:bg-sunken'"
                     @click="set('status', s)"
                 >
                     {{ t(`ads.control.status.${s}`) }}

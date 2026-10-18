@@ -14,6 +14,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAdsMoney } from '@/lib/ads';
 import { cleanQuery, pageList, queryString, useMaterialPermissions } from '@/lib/adsMaterials';
 import { formatCount } from '@/lib/format';
+import { ADS_FIELD } from '@/lib/adsUi';
 import { cn } from '@/lib/utils';
 import type { AdStockRow, AdsStockProps } from '@/types/ads';
 import { Head, router } from '@inertiajs/vue3';
@@ -82,7 +83,7 @@ const pages = computed(() => pageList(page.value.current_page, page.value.last_p
 const tableRows = computed(() => page.value.data.map((r) => ({ ...r, id: r.material_id })));
 const columns = computed<Column[]>(() => [
     { key: 'image', label: t('ads.materials.col.image') },
-    { key: 'title', label: t('ads.materials.col.title') },
+    { key: 'title', label: t('ads.materials.col.title'), primary: true },
     { key: 'product', label: t('ads.materials.col.product') },
     { key: 'variants', label: t('ads.materials.stock_page.variants') },
     { key: 'price', label: t('ads.materials.stock_page.price'), numeric: true },
@@ -125,7 +126,7 @@ function setAvailability(r: AdStockRow, value: string): void {
     );
 }
 
-const fieldClass = 'h-9 rounded-md border border-input bg-background px-2 text-xs';
+const fieldClass = ADS_FIELD;
 const breadcrumbs = computed(() => [
     { title: t('nav.ads'), href: '/ads/materials' },
     { title: t('nav.ads_stock'), href: '/ads/stock' },
@@ -136,7 +137,7 @@ const breadcrumbs = computed(() => [
     <Head :title="t('ads.materials.stock_page.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-6xl space-y-4 p-3 md:p-6">
+        <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-5 p-4 md:p-6">
             <PageHeader :title="t('ads.materials.stock_page.title')" :description="t('ads.materials.stock_page.description')">
                 <a :href="exportUrl" :class="cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')">
                     <Download aria-hidden="true" />{{ t('ads.materials.stock_page.export') }}
@@ -144,15 +145,15 @@ const breadcrumbs = computed(() => [
             </PageHeader>
             <SectionTabs :tabs="sectionTabs.library(t)" :label="t('section_tabs.library.label')" />
 
-            <form class="flex flex-wrap items-end gap-3 rounded-lg bg-card p-3 shadow-card" @submit.prevent="go()">
+            <form class="flex flex-wrap items-end gap-3" @submit.prevent="go()">
                 <div class="space-y-1">
-                    <label class="block text-2xs font-medium text-muted-foreground" for="stock-min">{{
+                    <label class="block text-xs font-medium text-fg-2" for="stock-min">{{
                         t('ads.materials.stock_page.min_qty')
                     }}</label>
                     <input id="stock-min" v-model="minQty" type="number" min="0" inputmode="numeric" dir="ltr" :class="[fieldClass, 'w-32']" />
                 </div>
                 <div class="space-y-1">
-                    <label class="block text-2xs font-medium text-muted-foreground" for="stock-availability">{{
+                    <label class="block text-xs font-medium text-fg-2" for="stock-availability">{{
                         t('ads.materials.stock_page.availability')
                     }}</label>
                     <select id="stock-availability" v-model="availability" :class="[fieldClass, 'w-40']" @change="go()">
@@ -164,7 +165,7 @@ const breadcrumbs = computed(() => [
                 <button
                     v-if="filtered"
                     type="button"
-                    class="inline-flex h-9 items-center gap-1 rounded-md border border-border bg-background px-3 text-xs hover:bg-muted"
+                    class="inline-flex h-9 items-center gap-1 rounded-md px-2.5 text-[13px] font-medium text-fg-2 hover:bg-sunken hover:text-foreground"
                     @click="reset"
                 >
                     <RotateCcw class="size-3.5" aria-hidden="true" />{{ t('ads.materials.stock_page.reset') }}
@@ -175,35 +176,33 @@ const breadcrumbs = computed(() => [
                 table-id="ads-stock"
                 :columns="columns"
                 :rows="tableRows"
-                mobile="scroll"
-                sticky-first-column
                 :caption="t('ads.materials.stock_page.title')"
             >
                 <template #empty>
                     <EmptyState :icon="Package" :title="t('ads.materials.stock_page.empty')" :body="t('ads.materials.stock_page.empty_body')" />
                 </template>
                 <template #cell-image="{ row: r }">
-                    <span class="block size-12 overflow-hidden rounded-md bg-muted">
+                    <span class="block h-[52px] w-[42px] overflow-hidden rounded-md bg-sunken">
                         <img v-if="r.thumb_url" :src="r.thumb_url" alt="" loading="lazy" class="size-full object-cover" />
-                        <span v-else class="flex size-full items-center justify-center"><ImageOff class="size-4 text-muted-foreground" aria-hidden="true" /></span>
+                        <span v-else class="flex size-full items-center justify-center"><ImageOff class="size-4 text-fg-3" aria-hidden="true" /></span>
                     </span>
                 </template>
                 <template #cell-title="{ row: r }">
-                    <p class="line-clamp-2 max-w-56 whitespace-normal font-bold" dir="auto">{{ r.title }}</p>
+                    <p class="line-clamp-2 max-w-56 whitespace-normal font-semibold" dir="auto">{{ r.title }}</p>
                 </template>
                 <template #cell-product="{ row: r }">
-                    <p class="line-clamp-2 max-w-56 whitespace-normal font-medium text-primary" dir="auto">{{ r.product.title }}</p>
+                    <p class="line-clamp-2 max-w-56 whitespace-normal text-fg-2" dir="auto">{{ r.product.title }}</p>
                 </template>
                 <template #cell-variants="{ row: r }">
                     <Popover v-if="r.variants.length">
                         <PopoverTrigger as-child>
-                            <button type="button" class="text-primary hover:underline">
+                            <button type="button" class="font-medium text-brand-ink underline-offset-2 hover:underline">
                                 {{ t('ads.materials.stock_page.variants_n', { n: n(r.variants.length) }) }}
                             </button>
                         </PopoverTrigger>
                         <PopoverContent class="w-80 p-2">
                             <table class="w-full text-2xs">
-                                <thead class="text-muted-foreground">
+                                <thead class="text-fg-3">
                                     <tr>
                                         <th scope="col" class="px-1.5 py-1 text-start">{{ t('ads.materials.stock_page.variant') }}</th>
                                         <th scope="col" class="px-1.5 py-1 text-end">{{ t('ads.materials.stock_page.price') }}</th>
@@ -211,12 +210,12 @@ const breadcrumbs = computed(() => [
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="v in r.variants" :key="v.id" class="border-t border-border/60">
+                                    <tr v-for="v in r.variants" :key="v.id" class="border-t border-line">
                                         <td class="px-1.5 py-1" dir="auto">{{ v.title ?? v.sku ?? '—' }}</td>
                                         <td class="whitespace-nowrap px-1.5 py-1 text-end tabular-nums">
                                             {{ formatAdsMoney(v.price, locale) }}
                                         </td>
-                                        <td class="px-1.5 py-1 text-end tabular-nums" :class="v.quantity > 0 ? '' : 'text-destructive'">
+                                        <td class="px-1.5 py-1 text-end tabular-nums" :class="v.quantity > 0 ? '' : 'font-semibold text-danger'">
                                             {{ n(v.quantity) }}
                                         </td>
                                     </tr>
@@ -228,14 +227,14 @@ const breadcrumbs = computed(() => [
                 </template>
                 <template #cell-price="{ row: r }"><span class="whitespace-nowrap">{{ price(r) }}</span></template>
                 <template #cell-quantity="{ row: r }">
-                    <span class="font-semibold" :class="r.quantity > 0 ? '' : 'text-destructive'">{{ n(r.quantity) }}</span>
+                    <span class="font-semibold tabular-nums" :class="r.quantity <= 0 ? 'text-danger' : r.quantity < 10 ? 'text-warn' : ''">{{ n(r.quantity) }}</span>
                 </template>
                 <template #cell-collections="{ row: r }">
                     <div class="flex max-w-44 flex-wrap gap-1">
                         <span
                             v-for="c in r.collections"
                             :key="c.id"
-                            class="inline-flex h-5 items-center rounded-full bg-primary/10 px-2 text-2xs font-medium text-primary"
+                            class="inline-flex h-6 items-center rounded-full bg-brand-soft px-2 text-xs font-medium text-brand-ink"
                             dir="auto"
                             >{{ c.name }}</span
                         >
@@ -250,13 +249,13 @@ const breadcrumbs = computed(() => [
                             :key="`avail-${r.material_id}-${selectsKey}`"
                             :value="selectValue(r)"
                             :disabled="busyId === r.material_id"
-                            class="h-8 rounded-md border px-2 text-xs font-medium"
+                            class="h-9 rounded-md border px-2 text-[13px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             :class="
                                 r.override === null
-                                    ? 'border-input bg-background text-foreground'
+                                    ? 'border-line-strong bg-card text-foreground'
                                     : r.availability
-                                      ? 'border-success/40 bg-success/10 text-emerald-800 dark:text-emerald-200'
-                                      : 'border-destructive/30 bg-destructive/10 text-destructive'
+                                      ? 'border-transparent bg-ok-soft text-ok'
+                                      : 'border-transparent bg-danger-soft text-danger'
                             "
                             @change="setAvailability(r, ($event.target as HTMLSelectElement).value)"
                         >
@@ -273,7 +272,7 @@ const breadcrumbs = computed(() => [
                     />
                     <span
                         v-if="r.override !== null"
-                        class="ms-1.5 inline-flex h-5 items-center rounded-full bg-violet-500/15 px-2 text-2xs font-medium text-violet-800 dark:bg-violet-500/25 dark:text-violet-100"
+                        class="ms-1.5 inline-flex h-6 items-center rounded-full bg-brand-soft px-2 text-xs font-medium text-brand-ink"
                         :title="t('ads.materials.stock_page.manual_hint')"
                         >{{ t('ads.materials.stock_page.manual') }}</span
                     >
@@ -282,14 +281,14 @@ const breadcrumbs = computed(() => [
 
             <nav
                 v-if="page.total > 0"
-                class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
+                class="flex flex-wrap items-center justify-between gap-2 text-[13px] text-fg-2"
                 :aria-label="t('ui.pagination')"
             >
                 <span class="tabular-nums">{{ t('ads.materials.showing', { from: page.from ?? 0, to: page.to ?? 0, total: page.total }) }}</span>
                 <div v-if="page.last_page > 1" class="flex flex-wrap items-center gap-1">
                     <button
                         type="button"
-                        class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50"
+                        class="inline-flex size-8 items-center justify-center rounded-md border border-line-strong bg-card hover:bg-surface-2 disabled:opacity-50"
                         :disabled="page.current_page <= 1"
                         :aria-label="t('ui.prev')"
                         @click="go(page.current_page - 1)"
@@ -304,8 +303,8 @@ const breadcrumbs = computed(() => [
                             class="inline-flex h-8 min-w-8 items-center justify-center rounded-md border px-2 tabular-nums"
                             :class="
                                 p === page.current_page
-                                    ? 'border-primary bg-primary text-primary-foreground'
-                                    : 'border-border bg-background hover:bg-muted'
+                                    ? 'border-brand bg-brand text-brand-on'
+                                    : 'border-line-strong bg-card hover:bg-surface-2'
                             "
                             :aria-current="p === page.current_page ? 'page' : undefined"
                             @click="go(p)"
@@ -315,7 +314,7 @@ const breadcrumbs = computed(() => [
                     </template>
                     <button
                         type="button"
-                        class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50"
+                        class="inline-flex size-8 items-center justify-center rounded-md border border-line-strong bg-card hover:bg-surface-2 disabled:opacity-50"
                         :disabled="page.current_page >= page.last_page"
                         :aria-label="t('ui.next')"
                         @click="go(page.current_page + 1)"

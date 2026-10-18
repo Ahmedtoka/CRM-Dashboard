@@ -110,11 +110,11 @@ const targetHint = (a: RulesSetupAccount, kind: 'cpp' | 'cpo') => {
 
 <template>
     <div class="space-y-4" data-test="breakeven-rules">
-        <p v-if="!can_edit" class="text-xs text-muted-foreground" data-test="read-only">{{ t('ads.rules_setup.read_only') }}</p>
+        <p v-if="!can_edit" class="text-xs text-fg-2" data-test="read-only">{{ t('ads.rules_setup.read_only') }}</p>
 
-        <section class="space-y-2 rounded-lg bg-card p-4 shadow-card" aria-labelledby="notify-title">
+        <section class="space-y-2 rounded-lg border border-line bg-card p-4" aria-labelledby="notify-title">
             <h2 id="notify-title" class="text-sm font-bold">{{ t('ads.rules_setup.notify') }}</h2>
-            <p class="text-xs text-muted-foreground">{{ notify_enabled ? t('ads.rules_setup.notify_on') : t('ads.rules_setup.notify_off') }}</p>
+            <p class="text-xs text-fg-2">{{ notify_enabled ? t('ads.rules_setup.notify_on') : t('ads.rules_setup.notify_off') }}</p>
             <Button
                 v-if="can_edit"
                 size="sm"
@@ -129,11 +129,11 @@ const targetHint = (a: RulesSetupAccount, kind: 'cpp' | 'cpo') => {
             </Button>
         </section>
 
-        <section class="space-y-3 rounded-lg bg-card p-4 shadow-card" aria-labelledby="global-title">
+        <section class="space-y-3 rounded-lg border border-line bg-card p-4" aria-labelledby="global-title">
             <h2 id="global-title" class="text-sm font-bold">{{ t('ads.rules_setup.global') }}</h2>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <label v-for="f in FIELDS" :key="f" class="space-y-1 text-xs">
-                    <span class="block text-muted-foreground">{{ t(`ads.rules_setup.fields.${f}`) }}</span>
+                    <span class="block text-fg-2">{{ t(`ads.rules_setup.fields.${f}`) }}</span>
                     <Input
                         v-model="globalDraft[f]"
                         inputmode="decimal"
@@ -143,7 +143,7 @@ const targetHint = (a: RulesSetupAccount, kind: 'cpp' | 'cpo') => {
                         :data-test="`global-${f}`"
                         :aria-invalid="errorFor('global', f) ? 'true' : undefined"
                     />
-                    <p v-if="errorFor('global', f)" class="text-2xs text-destructive" role="alert" :data-test="`error-global-${f}`">
+                    <p v-if="errorFor('global', f)" class="text-xs text-danger" role="alert" :data-test="`error-global-${f}`">
                         {{ errorFor('global', f) }}
                     </p>
                 </label>
@@ -153,10 +153,10 @@ const targetHint = (a: RulesSetupAccount, kind: 'cpp' | 'cpo') => {
             }}</Button>
         </section>
 
-        <section class="space-y-3 rounded-lg bg-card p-4 shadow-card" aria-labelledby="accounts-title">
+        <section class="space-y-3 rounded-lg border border-line bg-card p-4" aria-labelledby="accounts-title">
             <div>
                 <h2 id="accounts-title" class="text-sm font-bold">{{ t('ads.rules_setup.accounts') }}</h2>
-                <p class="text-xs text-muted-foreground">{{ t('ads.rules_setup.account_hint') }}</p>
+                <p class="text-xs text-fg-2">{{ t('ads.rules_setup.account_hint') }}</p>
             </div>
             <article v-for="a in accounts" :key="a.id" class="space-y-2 border-t pt-3 first:border-t-0 first:pt-0" :data-test="`account-${a.id}`">
                 <header class="flex flex-wrap items-center justify-between gap-2">
@@ -166,17 +166,17 @@ const targetHint = (a: RulesSetupAccount, kind: 'cpp' | 'cpo') => {
                     <p class="flex items-center gap-2 text-xs">
                         <span>{{ t('ads.rules_setup.floor') }}</span>
                         <strong class="tabular-nums" data-test="floor">{{ a.effective.floor.toFixed(2) }}</strong>
-                        <span v-if="a.effective.is_default" class="rounded-full bg-muted px-2 py-0.5" data-test="floor-default">{{
+                        <span v-if="a.effective.is_default" class="rounded-full bg-sunken px-2 py-0.5" data-test="floor-default">{{
                             t('ads.rules_setup.floor_default')
                         }}</span>
-                        <span v-if="a.effective.unprofitable" class="text-destructive">{{ t('ads.rules_setup.floor_unprofitable') }}</span>
+                        <span v-if="a.effective.unprofitable" class="text-danger">{{ t('ads.rules_setup.floor_unprofitable') }}</span>
                     </p>
                 </header>
                 <!-- The full D12 sentence, the same one the alert cards stand on. -->
-                <p v-if="a.effective.is_default" class="text-2xs text-muted-foreground" data-test="floor-default-sentence">
+                <p v-if="a.effective.is_default" class="text-xs text-fg-3" data-test="floor-default-sentence">
                     {{ t('ads.alerts.floor_default', { floor: default_floor }) }}
                 </p>
-                <p class="text-2xs text-muted-foreground">
+                <p class="text-xs text-fg-3">
                     {{
                         t('ads.rules_setup.measured', {
                             aov: a.effective.aov === null ? '-' : Math.round(a.effective.aov),
@@ -188,7 +188,7 @@ const targetHint = (a: RulesSetupAccount, kind: 'cpp' | 'cpo') => {
                 </p>
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                     <label v-for="f in FIELDS" :key="f" class="space-y-1 text-xs">
-                        <span class="block text-muted-foreground">{{ t(`ads.rules_setup.fields.${f}`) }}</span>
+                        <span class="block text-fg-2">{{ t(`ads.rules_setup.fields.${f}`) }}</span>
                         <Input
                             v-model="accountDrafts[a.id][f]"
                             inputmode="decimal"
@@ -197,7 +197,7 @@ const targetHint = (a: RulesSetupAccount, kind: 'cpp' | 'cpo') => {
                             :disabled="!can_edit"
                             :aria-invalid="errorFor(`account-${a.id}`, f) ? 'true' : undefined"
                         />
-                        <p v-if="errorFor(`account-${a.id}`, f)" class="text-2xs text-destructive" role="alert">
+                        <p v-if="errorFor(`account-${a.id}`, f)" class="text-xs text-danger" role="alert">
                             {{ errorFor(`account-${a.id}`, f) }}
                         </p>
                     </label>
@@ -208,20 +208,20 @@ const targetHint = (a: RulesSetupAccount, kind: 'cpp' | 'cpo') => {
             </article>
         </section>
 
-        <section class="space-y-3 rounded-lg bg-card p-4 shadow-card" aria-labelledby="general-title">
+        <section class="space-y-3 rounded-lg border border-line bg-card p-4" aria-labelledby="general-title">
             <h2 id="general-title" class="text-sm font-bold">{{ t('ads.rules_setup.general') }}</h2>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label class="space-y-1 text-xs">
-                    <span class="block text-muted-foreground">{{ t('ads.rules_setup.fields.low_stock_units') }}</span>
+                    <span class="block text-fg-2">{{ t('ads.rules_setup.fields.low_stock_units') }}</span>
                     <Input v-model="general.low_stock_units" inputmode="numeric" dir="ltr" :disabled="!can_edit" />
-                    <p v-if="errorFor('general', 'low_stock_units')" class="text-2xs text-destructive" role="alert">
+                    <p v-if="errorFor('general', 'low_stock_units')" class="text-xs text-danger" role="alert">
                         {{ errorFor('general', 'low_stock_units') }}
                     </p>
                 </label>
                 <label class="space-y-1 text-xs">
-                    <span class="block text-muted-foreground">{{ t('ads.rules_setup.fields.spike_min_amount') }}</span>
+                    <span class="block text-fg-2">{{ t('ads.rules_setup.fields.spike_min_amount') }}</span>
                     <Input v-model="general.spike_min_amount" inputmode="decimal" dir="ltr" :disabled="!can_edit" />
-                    <p v-if="errorFor('general', 'spike_min_amount')" class="text-2xs text-destructive" role="alert">
+                    <p v-if="errorFor('general', 'spike_min_amount')" class="text-xs text-danger" role="alert">
                         {{ errorFor('general', 'spike_min_amount') }}
                     </p>
                 </label>

@@ -25,6 +25,6 @@ const pre = computed(() => formatAdsMoney(props.amount, locale.value, props.curr
         <span class="whitespace-nowrap font-semibold tabular-nums text-foreground" :class="size === 'lg' ? 'text-xl font-bold' : 'text-xs'">{{
             main
         }}</span>
-        <span class="whitespace-nowrap text-2xs tabular-nums text-muted-foreground">{{ t('ads.money.pre_tax', { amount: pre }) }}</span>
+        <span class="whitespace-nowrap text-xs tabular-nums text-fg-3">{{ t('ads.money.pre_tax', { amount: pre }) }}</span>
     </span>
 </template>

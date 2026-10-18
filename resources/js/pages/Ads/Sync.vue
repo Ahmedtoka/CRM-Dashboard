@@ -57,7 +57,7 @@ const columns = computed<Column[]>(() => [
     { key: 'error', label: t('ads.sync.col_error'), hideOnMobile: true },
 ]);
 
-const selectClass = 'h-8 min-w-32 rounded-md border border-input bg-card px-2 text-xs';
+const selectClass = 'h-8 min-w-32 rounded-md border border-line-strong bg-card px-2 text-xs';
 const breadcrumbs = computed(() => [
     { title: t('settings_hub.title'), href: '/settings' },
     { title: t('ads.control.setup.sync'), href: '/settings/ads/sync' },
@@ -69,45 +69,45 @@ const count = (v: number | null) => (v === null ? '—' : formatCount(v, locale.
 <template>
     <Head :title="t('ads.sync.title')" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-6xl space-y-6 p-4">
+        <div class="mx-auto w-full min-w-0 max-w-[1200px] space-y-6 p-4 md:p-6">
             <PageHeader :title="t('ads.sync.title')" :description="t('ads.sync.hint')" :breadcrumbs="crumbs" />
             <SectionTabs :tabs="sectionTabs.adAccounts(t)" :label="t('section_tabs.ad_accounts.label')" />
 
             <!-- Now: running + waiting -->
             <section class="space-y-2" aria-labelledby="sync-now">
-                <h2 id="sync-now" class="text-sm font-semibold">{{ t('ads.sync.now') }}</h2>
-                <ul v-if="now.running.length || now.waiting.length" class="divide-y divide-border rounded-lg border border-border bg-card">
+                <h2 id="sync-now" class="text-base font-bold">{{ t('ads.sync.now') }}</h2>
+                <ul v-if="now.running.length || now.waiting.length" class="divide-y divide-line rounded-lg border border-line bg-card">
                     <li v-for="r in now.running" :key="`run-${r.id}`" class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-sm">
                         <LoaderCircle class="size-4 shrink-0 animate-spin text-primary" aria-hidden="true" />
                         <span class="font-medium">{{ r.account ?? '—' }}</span>
                         <PlatformChip :platform="r.platform" size="xs" />
-                        <span class="text-xs text-muted-foreground">{{ kindLabel(r.kind) }}</span>
+                        <span class="text-xs text-fg-2">{{ kindLabel(r.kind) }}</span>
                         <StatusChip :label="triggerLabel(r.trigger)" :tone="triggerTone(r.trigger)" />
-                        <span v-if="r.user" class="text-xs text-muted-foreground">{{ r.user }}</span>
-                        <span class="ms-auto text-xs tabular-nums text-muted-foreground">{{ t('ads.sync.elapsed', { time: elapsed(r) }) }}</span>
+                        <span v-if="r.user" class="text-xs text-fg-2">{{ r.user }}</span>
+                        <span class="ms-auto text-xs tabular-nums text-fg-2">{{ t('ads.sync.elapsed', { time: elapsed(r) }) }}</span>
                     </li>
                     <li v-for="(w, i) in now.waiting" :key="`wait-${i}`" class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-sm">
-                        <Hourglass class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                        <Hourglass class="size-4 shrink-0 text-fg-2" aria-hidden="true" />
                         <span class="font-medium">{{ w.account ?? w.job }}</span>
-                        <span class="text-xs text-muted-foreground">{{ kindLabel(w.kind) }}</span>
+                        <span class="text-xs text-fg-2">{{ kindLabel(w.kind) }}</span>
                         <StatusChip :label="triggerLabel(w.trigger)" :tone="triggerTone(w.trigger)" />
                         <StatusChip v-if="w.attempts > 0" :label="t('ads.sync.attempt', { n: formatCount(w.attempts, locale) })" tone="warning" />
-                        <span class="ms-auto flex items-center gap-1 text-xs text-muted-foreground">
+                        <span class="ms-auto flex items-center gap-1 text-xs text-fg-2">
                             <template v-if="w.available_at">{{ t('ads.sync.available') }} <RelativeTime :iso="w.available_at" /></template>
                             <template v-else>{{ t('ads.sync.ready') }}</template>
                         </span>
                     </li>
                 </ul>
-                <div v-else class="flex rounded-lg border border-border bg-card">
+                <div v-else class="flex rounded-lg border border-line bg-card">
                     <EmptyState :icon="RefreshCw" :title="t('ads.sync.idle_title')" :body="t('ads.sync.idle_body')" />
                 </div>
-                <p v-if="!now.supported" class="text-2xs text-muted-foreground">{{ t('ads.sync.queue_unsupported') }}</p>
+                <p v-if="!now.supported" class="text-xs text-fg-3">{{ t('ads.sync.queue_unsupported') }}</p>
             </section>
 
             <!-- Log -->
             <section class="space-y-2" aria-labelledby="sync-log">
                 <div class="flex flex-wrap items-center gap-2">
-                    <h2 id="sync-log" class="me-auto text-sm font-semibold">{{ t('ads.sync.log') }}</h2>
+                    <h2 id="sync-log" class="me-auto text-base font-bold">{{ t('ads.sync.log') }}</h2>
                     <label class="sr-only" for="f-account">{{ t('ads.sync.col_account') }}</label>
                     <select id="f-account" :class="selectClass" :value="filters.account ?? ''" @change="setFilter('account', ($event.target as HTMLSelectElement).value)">
                         <option value="">{{ t('ads.sync.all_accounts') }}</option>
@@ -139,22 +139,22 @@ const count = (v: number | null) => (v === null ? '—' : formatCount(v, locale.
                     <template #cell-counts="{ row }"><span class="tabular-nums">{{ count(row.ads_count) }} / {{ count(row.rows_count) }}</span></template>
                     <template #cell-seconds="{ row }">{{ duration(row) }}</template>
                     <template #cell-error="{ row }">
-                        <span v-if="row.error" class="line-clamp-2 max-w-xs text-xs text-destructive" :title="row.error">{{ row.error }}</span><span v-else>—</span>
+                        <span v-if="row.error" class="line-clamp-2 max-w-xs text-xs text-danger" :title="row.error">{{ row.error }}</span><span v-else>—</span>
                     </template>
                 </DataTable>
             </section>
 
             <!-- Schedule -->
             <section class="space-y-2" aria-labelledby="sync-schedule">
-                <h2 id="sync-schedule" class="text-sm font-semibold">{{ t('ads.sync.schedule') }}</h2>
-                <ul v-if="schedule.length" class="divide-y divide-border rounded-lg border border-border bg-card">
+                <h2 id="sync-schedule" class="text-base font-bold">{{ t('ads.sync.schedule') }}</h2>
+                <ul v-if="schedule.length" class="divide-y divide-line rounded-lg border border-line bg-card">
                     <li v-for="s in schedule" :key="s.command" class="flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm">
-                        <CalendarClock class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                        <CalendarClock class="size-4 shrink-0 text-fg-2" aria-hidden="true" />
                         <code class="text-xs" dir="ltr">{{ s.command }}</code>
-                        <span class="ms-auto flex items-center gap-1 text-xs text-muted-foreground">{{ t('ads.sync.next_due') }} <RelativeTime :iso="s.next_due" mode="datetime" /></span>
+                        <span class="ms-auto flex items-center gap-1 text-xs text-fg-2">{{ t('ads.sync.next_due') }} <RelativeTime :iso="s.next_due" mode="datetime" /></span>
                     </li>
                 </ul>
-                <div v-else class="flex rounded-lg border border-border bg-card">
+                <div v-else class="flex rounded-lg border border-line bg-card">
                     <EmptyState :icon="CalendarClock" :title="t('ads.sync.schedule_empty')" />
                 </div>
             </section>

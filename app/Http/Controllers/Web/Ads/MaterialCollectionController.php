@@ -6,6 +6,7 @@ use App\Ads\Materials\MaterialService;
 use App\Http\Controllers\Controller;
 use App\Models\AdMaterial;
 use App\Models\AdMaterialCollection;
+use App\Models\AdMaterialFile;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -24,11 +25,16 @@ class MaterialCollectionController extends Controller
                 'materials as done' => fn ($q) => $q->where('ad_materials.status', 'retired'),
                 'materials as need_stop' => fn ($q) => $q->whereNotNull('ad_materials.need_stop_at'),
             ])
+            // The three newest materials with a picture are the collection's cover (round 2026-10-17, the library grid).
+            ->with(['materials' => fn ($q) => $q->whereHas('files', self::pictured(...))
+                ->with(['files' => fn ($f) => self::pictured($f)->orderBy('sort')->orderBy('id')])
+                ->latest('ad_materials.id')->limit(3)])
             ->orderBy('sort')->orderBy('name')->get()
             ->map(fn (AdMaterialCollection $c) => [
                 'id' => $c->id, 'name' => $c->name, 'is_active' => $c->is_active,
                 'materials' => (int) $c->materials_count, 'activated' => (int) $c->activated, 'not_started' => (int) $c->not_started,
                 'need_stop' => (int) $c->need_stop, 'done' => (int) $c->done,
+                'covers' => $c->materials->map(fn (AdMaterial $m) => self::cover($m->files->first()))->filter()->values()->all(),
             ])->all();
 
         $all = AdMaterial::query()->toBase()->selectRaw(
@@ -46,6 +52,25 @@ class MaterialCollectionController extends Controller
                 'not_started' => (int) $all->not_started, 'need_stop' => (int) $all->need_stop, 'done' => (int) $all->done,
             ],
         ]);
+    }
+
+    /** Files that have a picture: a thumbnail, or an image. */
+    private static function pictured($q)
+    {
+        return $q->where(fn ($w) => $w->whereNotNull('thumb_path')->orWhere('mime', 'like', 'image/%'));
+    }
+
+    /** The picture of one material file: its thumbnail, or the image itself (videos without a thumbnail have none). */
+    private static function cover(?AdMaterialFile $f): ?string
+    {
+        if ($f === null) {
+            return null;
+        }
+        if ($f->thumb_path !== null) {
+            return route('ads.materials.files.thumb', $f->id, false);
+        }
+
+        return str_starts_with((string) $f->mime, 'image/') ? route('ads.materials.files.show', $f->id, false) : null;
     }
 
     public function store(Request $request): RedirectResponse

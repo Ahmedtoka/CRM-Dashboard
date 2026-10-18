@@ -91,7 +91,7 @@ final class SlotService
                 'id' => $s->id, 'name' => $s->name, 'status' => $s->status, 'open' => $s->open_for_drafts_at !== null,
                 'opened_at' => $s->open_for_drafts_at?->toIso8601String(),
                 'campaign' => ['name' => $s->campaign->name, 'status' => $s->campaign->status],
-                'account' => ['id' => $s->campaign->account->id, 'name' => $s->campaign->account->name],
+                'account' => ['id' => $s->campaign->account->id, 'name' => $s->campaign->account->name, 'platform' => $s->campaign->account->platform],
             ])->values()->all();
     }
 }

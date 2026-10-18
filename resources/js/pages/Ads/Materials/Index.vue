@@ -11,6 +11,7 @@ import MaterialStatusChip from '@/components/ads/MaterialStatusChip.vue';
 import MoneyCell from '@/components/ads/MoneyCell.vue';
 import PublicationsList from '@/components/ads/PublicationsList.vue';
 import PublishDialog from '@/components/ads/PublishDialog.vue';
+import ViewSwitch from '@/components/ads/ui/ViewSwitch.vue';
 import WinnerBadge from '@/components/ads/WinnerBadge.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
@@ -23,12 +24,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatRoas, roasTone, safeUrl } from '@/lib/ads';
+import { formatAdsMoney, formatRoas, roasTone, safeUrl } from '@/lib/ads';
+import { ADS_FIELD } from '@/lib/adsUi';
 import { cleanQuery, links, MATERIAL_STATUSES, pageList, queryString, reviewQueueLink, statusCounts, useMaterialPermissions } from '@/lib/adsMaterials';
 import { formatClock, formatCount, formatDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AdsMaterialsIndexProps, MaterialRow, MaterialStatus, PublishCaption } from '@/types/ads';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { useMediaQuery, useStorage } from '@vueuse/core';
 import {
     ArrowUp,
     ChevronLeft,
@@ -60,6 +63,7 @@ import {
     Send,
     Sparkles,
     Square,
+    Table2,
     Trash2,
     X,
 } from 'lucide-vue-next';
@@ -155,14 +159,14 @@ interface Kpi {
 }
 /** Status tiles carry the filter's status names (جديدة / في المراجعة / شغالة / واقفة / خلصت), in its order. */
 const STATUS_TILE: Record<MaterialStatus, Pick<Kpi, 'icon' | 'border' | 'tint'>> = {
-    new: { icon: Hourglass, border: 'border-t-warning', tint: 'bg-warning/20 text-amber-800 dark:text-amber-200' },
-    in_review: { icon: SearchCheck, border: 'border-t-info', tint: 'bg-info/10 text-blue-700 dark:text-blue-200' },
-    live: { icon: CirclePlay, border: 'border-t-success', tint: 'bg-success/15 text-emerald-700 dark:text-emerald-300' },
-    paused: { icon: CirclePause, border: 'border-t-muted-foreground', tint: 'bg-muted text-muted-foreground' },
-    retired: { icon: CircleCheckBig, border: 'border-t-info', tint: 'bg-info/10 text-blue-700 dark:text-blue-200' },
+    new: { icon: Hourglass, border: 'border-t-warning', tint: 'text-warn' },
+    in_review: { icon: SearchCheck, border: 'border-t-info', tint: 'text-info' },
+    live: { icon: CirclePlay, border: 'border-t-success', tint: 'text-ok' },
+    paused: { icon: CirclePause, border: 'border-t-muted-foreground', tint: 'text-fg-3' },
+    retired: { icon: CircleCheckBig, border: 'border-t-info', tint: 'text-info' },
 };
 const kpis = computed<Kpi[]>(() => [
-    { key: 'total', value: props.stats.total, icon: Layers, border: 'border-t-primary', tint: 'bg-primary/10 text-primary' },
+    { key: 'total', value: props.stats.total, icon: Layers, border: 'border-t-primary', tint: 'text-brand-ink' },
     ...statusCounts(props.stats).map((c) => ({
         key: `status-${c.status}`,
         label: t(`ads.materials.status.${c.status}`),
@@ -174,14 +178,14 @@ const kpis = computed<Kpi[]>(() => [
         value: props.stats.reels,
         icon: Clapperboard,
         border: 'border-t-fuchsia-500',
-        tint: 'bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300',
+        tint: 'text-brand-ink',
     },
     {
         key: 'posts',
         value: props.stats.posts,
         icon: LayoutGrid,
         border: 'border-t-violet-500',
-        tint: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
+        tint: 'text-brand-ink',
         hint: t('ads.materials.kpi.carousels_hint', { n: n(props.stats.carousels) }),
     },
     {
@@ -189,14 +193,14 @@ const kpis = computed<Kpi[]>(() => [
         value: props.stats.in_stock,
         icon: PackageCheck,
         border: 'border-t-cyan-500',
-        tint: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
+        tint: 'text-ok',
     },
     {
         key: 'out_of_stock',
         value: props.stats.out_of_stock,
         icon: PackageX,
         border: 'border-t-destructive',
-        tint: 'bg-destructive/10 text-destructive',
+        tint: 'text-danger',
         hint: t('ads.materials.kpi.need_stop_hint', { n: n(props.stats.need_stop) }),
     },
 ]);
@@ -209,10 +213,11 @@ const created = (iso: string | null) => ({ day: formatDate(iso, locale.value), t
 
 const stockChip = (m: MaterialRow) =>
     m.stock === 'in'
-        ? { label: t('ads.materials.stock.in'), cls: 'bg-cyan-500/15 text-cyan-800 dark:bg-cyan-500/25 dark:text-cyan-100' }
+        ? { label: t('ads.materials.stock.in'), tone: 'ok' as const }
         : m.stock === 'out'
-          ? { label: t('ads.materials.stock.out'), cls: 'bg-muted text-muted-foreground' }
-          : { label: t('ads.materials.stock.none'), cls: 'bg-muted text-muted-foreground' };
+          ? { label: t('ads.materials.stock.out'), tone: 'danger' as const }
+          : { label: t('ads.materials.stock.none'), tone: 'neutral' as const };
+const STOCK_TONE = { ok: 'bg-ok-soft text-ok', danger: 'bg-danger-soft text-danger', neutral: 'bg-sunken text-fg-2' } as const;
 
 const typeLabel = (type: string) => (TYPES.includes(type as (typeof TYPES)[number]) ? t(`ads.materials.type.${type}`) : type);
 
@@ -278,7 +283,16 @@ function confirmDelete(): void {
 }
 
 const showPerf = computed(() => props.canSeeSpend);
-const fieldClass = 'h-9 w-full rounded-md border border-input bg-background px-2 text-xs';
+
+/* ---- view: cards (the mockup's library) or the full table; a per-viewer choice, phones always get cards ---- */
+const view = useStorage<'cards' | 'table'>('ads.materials.view', 'cards');
+const phone = useMediaQuery('(max-width: 767px)');
+const shownView = computed(() => (phone.value ? 'cards' : view.value));
+const viewOptions = computed(() => [
+    { key: 'cards', label: t('ads.control.view.cards'), icon: LayoutGrid },
+    { key: 'table', label: t('ads.control.view.table'), icon: Table2 },
+]);
+const fieldClass = ADS_FIELD;
 const iconBtn = 'inline-flex size-8 items-center justify-center rounded-md border transition-colors disabled:opacity-50';
 
 const breadcrumbs = computed(() => [
@@ -291,7 +305,7 @@ const breadcrumbs = computed(() => [
     <Head :title="t('ads.materials.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-[1400px] space-y-4 p-3 md:p-6">
+        <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-5 p-4 md:p-6">
             <PageHeader :title="t('ads.materials.title')" :description="t('ads.materials.description')">
                 <Link
                     v-if="reviewQueue"
@@ -314,96 +328,140 @@ const breadcrumbs = computed(() => [
             </PageHeader>
             <SectionTabs :tabs="sectionTabs.library(t)" :label="t('section_tabs.library.label')" />
 
-            <!-- KPIs (whole library) -->
-            <ul class="grid grid-cols-2 gap-3 sm:grid-cols-5" data-test="material-kpis">
-                <li v-for="k in kpis" :key="k.key" class="rounded-lg border-t-4 bg-card px-3 py-3 shadow-card" :class="k.border">
-                    <div class="flex items-start justify-between gap-2">
-                        <p class="text-2xs font-medium text-muted-foreground">{{ k.label ?? t(`ads.materials.kpi.${k.key}`) }}</p>
-                        <span class="flex size-7 shrink-0 items-center justify-center rounded-md" :class="k.tint">
-                            <component :is="k.icon" class="size-3.5" aria-hidden="true" />
-                        </span>
-                    </div>
-                    <p class="mt-1 text-xl font-bold tabular-nums">{{ n(k.value) }}</p>
-                    <p v-if="k.hint" class="text-2xs text-muted-foreground">{{ k.hint }}</p>
+            <!-- KPIs (whole library): one ledger panel, hairline dividers -->
+            <ul class="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-5" data-test="material-kpis">
+                <li v-for="k in kpis" :key="k.key" class="min-w-0 bg-card px-3.5 py-3">
+                    <p class="flex items-center gap-1.5 text-[12.5px] font-medium text-fg-2">
+                        <component :is="k.icon" class="size-3.5 shrink-0" :class="k.tint" aria-hidden="true" />
+                        <span class="truncate">{{ k.label ?? t(`ads.materials.kpi.${k.key}`) }}</span>
+                    </p>
+                    <p class="mt-0.5 text-xl font-bold leading-snug tabular-nums">{{ n(k.value) }}</p>
+                    <p v-if="k.hint" class="truncate text-xs text-fg-3">{{ k.hint }}</p>
                 </li>
             </ul>
 
-            <!-- Filters -->
-            <form
-                class="grid grid-cols-2 gap-2 rounded-lg bg-card p-3 shadow-card md:grid-cols-4 xl:grid-cols-8"
-                role="search"
-                @submit.prevent="go()"
-            >
-                <div class="relative col-span-2">
-                    <Search
-                        class="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                        aria-hidden="true"
-                    />
+            <!-- Filters (DESIGN §3 FilterBar): search + the selects inline, the dates after them -->
+            <form class="flex flex-wrap items-center gap-2" role="search" @submit.prevent="go()">
+                <div class="relative w-full sm:w-64">
+                    <Search class="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-fg-3" aria-hidden="true" />
                     <label class="sr-only" for="mat-q">{{ t('ads.materials.filters.search') }}</label>
-                    <input id="mat-q" v-model="f.q" type="search" :placeholder="t('ads.materials.filters.search')" :class="cn(fieldClass, 'ps-8')" />
+                    <input id="mat-q" v-model="f.q" type="search" :placeholder="t('ads.materials.filters.search')" :class="cn(fieldClass, 'w-full ps-8')" />
                 </div>
-                <div>
-                    <label class="sr-only" for="mat-status">{{ t('ads.materials.filters.status') }}</label>
-                    <select id="mat-status" v-model="f.status" :class="fieldClass" @change="go()">
-                        <option value="">{{ t('ads.materials.filters.all_status') }}</option>
-                        <option v-for="s in STATUSES" :key="s" :value="s">{{ t(`ads.materials.status.${s}`) }}</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="sr-only" for="mat-stock">{{ t('ads.materials.filters.stock') }}</label>
-                    <select id="mat-stock" v-model="f.stock" :class="fieldClass" @change="go()">
-                        <option value="">{{ t('ads.materials.filters.all_stock') }}</option>
-                        <option v-for="s in STOCKS" :key="s" :value="s">{{ t(`ads.materials.stock.${s}`) }}</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="sr-only" for="mat-collection">{{ t('ads.materials.filters.collection') }}</label>
-                    <select id="mat-collection" v-model="f.collection" :class="fieldClass" @change="go()">
-                        <option value="">{{ t('ads.materials.filters.all_collections') }}</option>
-                        <option v-for="c in collections" :key="c.id" :value="String(c.id)">{{ c.name }}</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="sr-only" for="mat-type">{{ t('ads.materials.filters.type') }}</label>
-                    <select id="mat-type" v-model="f.type" :class="fieldClass" @change="go()">
-                        <option value="">{{ t('ads.materials.filters.all_types') }}</option>
-                        <option v-for="ty in TYPES" :key="ty" :value="ty">{{ t(`ads.materials.type.${ty}`) }}</option>
-                    </select>
-                </div>
-                <div class="flex items-center gap-1">
-                    <label class="shrink-0 text-2xs text-muted-foreground" for="mat-from">{{ t('ads.materials.filters.from') }}</label>
+                <label class="sr-only" for="mat-status">{{ t('ads.materials.filters.status') }}</label>
+                <select id="mat-status" v-model="f.status" :class="cn(fieldClass, f.status && 'border-brand bg-brand-soft text-brand-ink')" @change="go()">
+                    <option value="">{{ t('ads.materials.filters.all_status') }}</option>
+                    <option v-for="s in STATUSES" :key="s" :value="s">{{ t(`ads.materials.status.${s}`) }}</option>
+                </select>
+                <label class="sr-only" for="mat-stock">{{ t('ads.materials.filters.stock') }}</label>
+                <select id="mat-stock" v-model="f.stock" :class="cn(fieldClass, f.stock && 'border-brand bg-brand-soft text-brand-ink')" @change="go()">
+                    <option value="">{{ t('ads.materials.filters.all_stock') }}</option>
+                    <option v-for="s in STOCKS" :key="s" :value="s">{{ t(`ads.materials.stock.${s}`) }}</option>
+                </select>
+                <label class="sr-only" for="mat-collection">{{ t('ads.materials.filters.collection') }}</label>
+                <select id="mat-collection" v-model="f.collection" :class="cn(fieldClass, f.collection && 'border-brand bg-brand-soft text-brand-ink')" @change="go()">
+                    <option value="">{{ t('ads.materials.filters.all_collections') }}</option>
+                    <option v-for="c in collections" :key="c.id" :value="String(c.id)">{{ c.name }}</option>
+                </select>
+                <label class="sr-only" for="mat-type">{{ t('ads.materials.filters.type') }}</label>
+                <select id="mat-type" v-model="f.type" :class="cn(fieldClass, f.type && 'border-brand bg-brand-soft text-brand-ink')" @change="go()">
+                    <option value="">{{ t('ads.materials.filters.all_types') }}</option>
+                    <option v-for="ty in TYPES" :key="ty" :value="ty">{{ t(`ads.materials.type.${ty}`) }}</option>
+                </select>
+                <span class="flex items-center gap-1.5">
+                    <label class="shrink-0 text-xs text-fg-2" for="mat-from">{{ t('ads.materials.filters.from') }}</label>
                     <input id="mat-from" v-model="f.from" type="date" dir="ltr" :class="fieldClass" @change="go()" />
-                </div>
-                <div class="flex items-center gap-1">
-                    <label class="shrink-0 text-2xs text-muted-foreground" for="mat-to">{{ t('ads.materials.filters.to') }}</label>
+                </span>
+                <span class="flex items-center gap-1.5">
+                    <label class="shrink-0 text-xs text-fg-2" for="mat-to">{{ t('ads.materials.filters.to') }}</label>
                     <input id="mat-to" v-model="f.to" type="date" dir="ltr" :class="fieldClass" @change="go()" />
-                </div>
-                <div v-if="hasFilters" class="col-span-2 flex items-center md:col-span-4 xl:col-span-8">
-                    <button
-                        type="button"
-                        class="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                        @click="clearFilters"
-                    >
-                        <X class="size-3.5" aria-hidden="true" />{{ t('ads.materials.filters.clear') }}
-                    </button>
-                </div>
+                </span>
+                <button
+                    v-if="hasFilters"
+                    type="button"
+                    class="inline-flex h-9 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-fg-2 hover:bg-sunken hover:text-foreground"
+                    @click="clearFilters"
+                >
+                    <X class="size-3.5" aria-hidden="true" />{{ t('ads.materials.filters.clear') }}
+                </button>
+                <span class="ms-auto max-md:hidden">
+                    <ViewSwitch :options="viewOptions" :current="view" :label="t('ads.control.view.label')" @select="(v) => (view = v as 'cards' | 'table')" />
+                </span>
             </form>
 
+            <EmptyState
+                v-if="!page.data.length"
+                :icon="ImageOff"
+                :title="hasFilters ? t('ads.materials.empty_filtered') : t('ads.materials.empty')"
+                :body="perms.canAuthor.value && !hasFilters ? t('ads.materials.empty_body') : undefined"
+            />
+
+            <!-- Cards (DESIGN mgrid): the picture at 4:5 like the clothes, the state and the actions under it -->
+            <ul v-else-if="shownView === 'cards'" class="grid grid-cols-2 gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]" data-test="material-cards">
+                <li v-for="m in page.data" :key="m.id" class="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-card">
+                    <button
+                        type="button"
+                        class="relative block aspect-[4/5] w-full overflow-hidden bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default"
+                        :disabled="!m.files?.length"
+                        :aria-label="t('ads.materials.gallery.open_for', { title: m.title })"
+                        @click="gallery = m"
+                    >
+                        <img v-if="m.thumb_url" :src="m.thumb_url" alt="" loading="lazy" class="size-full object-cover" />
+                        <span v-else class="flex size-full items-center justify-center">
+                            <Play v-if="m.files_count" class="size-6 text-fg-3" aria-hidden="true" />
+                            <ImageOff v-else class="size-6 text-fg-3" aria-hidden="true" />
+                        </span>
+                        <span class="absolute start-2 top-2 flex flex-wrap gap-1">
+                            <span v-for="ty in m.types.slice(0, 2)" :key="ty" class="rounded-full bg-card/90 px-2 py-0.5 text-[11.5px] font-semibold text-foreground">{{ typeLabel(ty) }}</span>
+                        </span>
+                        <span v-if="m.files_count > 1" class="absolute bottom-2 end-2 rounded-full bg-black/70 px-2 py-0.5 text-[11.5px] font-semibold tabular-nums text-white">{{
+                            t('ads.materials.files_n', { n: n(m.files_count) })
+                        }}</span>
+                    </button>
+                    <div class="flex flex-1 flex-col gap-1.5 px-3 pb-2 pt-2.5">
+                        <p class="line-clamp-2 text-[13.5px] font-semibold text-foreground" dir="auto">{{ m.title }}</p>
+                        <p class="truncate text-xs text-fg-2" dir="auto">{{ m.product?.title ?? t('ads.materials.product.none') }}</p>
+                        <div class="flex flex-wrap items-center gap-1">
+                            <MaterialStatusChip :status="m.status" />
+                            <StatusChip :label="stockChip(m).label" :tone="stockChip(m).tone" size="sm" />
+                            <StatusChip v-if="m.need_stop" :label="t('ads.materials.need_stop')" tone="danger" size="sm" dot />
+                        </div>
+                        <ul v-if="m.launches?.length" class="space-y-0.5">
+                            <li v-for="l in m.launches.slice(0, 2)" :key="l.id">
+                                <Link :href="`/ads/launches?material=${m.id}&box=all&launch=${l.id}`" class="inline-flex max-w-full items-center gap-1 text-xs hover:underline">
+                                    <LaunchStateChip :state="l.state" /><span class="truncate text-fg-3">{{ l.adset }}</span>
+                                </Link>
+                            </li>
+                        </ul>
+                        <p v-if="showPerf && m.performance && m.ads.length" class="flex items-center justify-between gap-2 text-xs tabular-nums text-fg-2">
+                            <span>{{ formatAdsMoney(m.performance.spend_tax, locale) }}</span>
+                            <StatusChip :label="formatRoas(m.performance.roas, locale)" :tone="roasTone(m.performance.roas)" size="sm" />
+                        </p>
+                        <p class="mt-auto flex items-center justify-between gap-2 pt-1 text-xs text-fg-3">
+                            <span v-if="m.creator" class="truncate">{{ m.creator.name }}</span>
+                            <span class="shrink-0 tabular-nums">{{ created(m.created_at).day }}</span>
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center justify-end gap-0.5 border-t border-line px-1.5 py-1">
+                        <IconAction v-if="m.files?.some((f) => f.mime?.startsWith('video/'))" :icon="Sparkles" variant="primary" :label="t('ads.captions.button')" @click="captioning = m" />
+                        <IconAction v-if="perms.canPrepare.value" :icon="Rocket" variant="primary" :label="t('ads.launch.prepare')" :disabled="!m.files?.length || !m.product" @click="preparing = m" />
+                        <IconAction v-if="perms.canDirectPublish.value" :icon="Send" variant="primary" :label="t('ads.publish.button')" :disabled="!m.files?.length" @click="publishing = m" />
+                        <IconAction v-if="perms.canOperate.value" :icon="ListChecks" :label="t('ads.publish.publications')" @click="publications = m" />
+                        <IconAction v-if="perms.canOperate.value" :icon="Link2" variant="primary" :label="t('ads.materials.actions.link')" @click="linking = m" />
+                        <IconAction v-if="perms.canAuthor.value" :icon="Pencil" :href="`/ads/materials/${m.id}/edit`" :label="t('ads.materials.actions.edit')" />
+                        <IconAction v-if="perms.canDelete(m)" :icon="Trash2" variant="destructive" :label="t('ads.materials.actions.delete')" @click="deleting = m" />
+                    </div>
+                </li>
+            </ul>
+
             <!-- Table -->
-            <div class="scrollbar-thin table-scroll-box relative rounded-lg bg-card shadow-card [contain:inline-size]">
-                <EmptyState
-                    v-if="!page.data.length"
-                    :icon="ImageOff"
-                    :title="hasFilters ? t('ads.materials.empty_filtered') : t('ads.materials.empty')"
-                    :body="perms.canAuthor.value && !hasFilters ? t('ads.materials.empty_body') : undefined"
-                />
-                <table v-else class="w-full min-w-[1200px] text-xs">
+            <div v-else class="scrollbar-thin table-scroll-box relative rounded-lg border border-line bg-card [contain:inline-size]">
+                <table class="w-full min-w-[1200px] text-[13px]">
                     <caption class="sr-only">
                         {{
                             t('ads.materials.title')
                         }}
                     </caption>
-                    <thead class="crm-sticky-head border-b border-border/60 text-2xs font-semibold text-muted-foreground">
+                    <thead class="crm-sticky-head border-b border-line bg-surface-2 text-[13px] font-semibold text-fg-2">
                         <tr>
                             <th scope="col" class="px-3 py-2 text-start">{{ t('ads.materials.col.created') }}</th>
                             <th scope="col" class="px-2 py-2 text-start">{{ t('ads.materials.col.image') }}</th>
@@ -420,7 +478,7 @@ const breadcrumbs = computed(() => [
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="m in page.data" :key="m.id" class="border-t border-border/60 align-top first:border-t-0 hover:bg-muted/40">
+                        <tr v-for="m in page.data" :key="m.id" class="border-t border-line align-top first:border-t-0 hover:bg-surface-2">
                             <td class="whitespace-nowrap px-3 py-2.5">
                                 <p class="font-medium">{{ created(m.created_at).day }}</p>
                                 <p class="text-2xs text-muted-foreground">{{ created(m.created_at).time }}</p>
@@ -529,7 +587,7 @@ const breadcrumbs = computed(() => [
                                     <span
                                         v-for="c in m.collections"
                                         :key="c.id"
-                                        class="inline-flex h-5 items-center rounded-full bg-primary/10 px-2 text-2xs font-medium text-primary"
+                                        class="inline-flex h-6 items-center rounded-full bg-brand-soft px-2 text-xs font-medium text-brand-ink"
                                         dir="auto"
                                         >{{ c.name }}</span
                                     >
@@ -587,7 +645,7 @@ const breadcrumbs = computed(() => [
                                 <div class="flex flex-col items-start gap-1">
                                     <span
                                         class="inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-2xs font-medium"
-                                        :class="stockChip(m).cls"
+                                        :class="STOCK_TONE[stockChip(m).tone]"
                                         >{{ stockChip(m).label }}</span
                                     >
                                     <StatusChip v-if="m.need_stop" :label="t('ads.materials.need_stop')" tone="negative" dot />
@@ -596,7 +654,7 @@ const breadcrumbs = computed(() => [
                             <td class="whitespace-nowrap px-2 py-2.5 text-2xs">
                                 <p
                                     v-if="m.activated_at"
-                                    class="flex items-center gap-1 text-emerald-700 dark:text-emerald-300"
+                                    class="flex items-center gap-1 text-ok"
                                     :title="t('ads.materials.activated_on')"
                                 >
                                     <ArrowUp class="size-3" aria-hidden="true" />{{ formatDate(m.activated_at, locale) }}
@@ -640,14 +698,14 @@ const breadcrumbs = computed(() => [
 
             <nav
                 v-if="page.total > 0"
-                class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
+                class="flex flex-wrap items-center justify-between gap-2 text-[13px] text-fg-2"
                 :aria-label="t('ui.pagination')"
             >
                 <span class="tabular-nums">{{ t('ads.materials.showing', { from: page.from ?? 0, to: page.to ?? 0, total: page.total }) }}</span>
                 <div v-if="page.last_page > 1" class="flex flex-wrap items-center gap-1">
                     <button
                         type="button"
-                        class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50"
+                        class="inline-flex size-8 items-center justify-center rounded-md border border-line-strong bg-card hover:bg-surface-2 disabled:opacity-50"
                         :disabled="page.current_page <= 1"
                         :aria-label="t('ui.prev')"
                         @click="go(page.current_page - 1)"
@@ -662,8 +720,8 @@ const breadcrumbs = computed(() => [
                             class="inline-flex h-8 min-w-8 items-center justify-center rounded-md border px-2 tabular-nums"
                             :class="
                                 p === page.current_page
-                                    ? 'border-primary bg-primary text-primary-foreground'
-                                    : 'border-border bg-background hover:bg-muted'
+                                    ? 'border-brand bg-brand text-brand-on'
+                                    : 'border-line-strong bg-card hover:bg-surface-2'
                             "
                             :aria-current="p === page.current_page ? 'page' : undefined"
                             @click="go(p)"
@@ -673,7 +731,7 @@ const breadcrumbs = computed(() => [
                     </template>
                     <button
                         type="button"
-                        class="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50"
+                        class="inline-flex size-8 items-center justify-center rounded-md border border-line-strong bg-card hover:bg-surface-2 disabled:opacity-50"
                         :disabled="page.current_page >= page.last_page"
                         :aria-label="t('ui.next')"
                         @click="go(page.current_page + 1)"
