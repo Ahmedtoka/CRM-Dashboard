@@ -2,16 +2,16 @@
 import { TransitionRoot } from '@headlessui/vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 
-import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
+import SettingsPanel from '@/components/crm/settings/SettingsPanel.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useI18n } from '@/composables/useI18n';
+import { useSettingsBreadcrumbs } from '@/composables/useSettingsBreadcrumbs';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
-import { type BreadcrumbItem, type SharedData, type User } from '@/types';
-import { computed } from 'vue';
+import { type SharedData, type User } from '@/types';
 
 interface Props {
     mustVerifyEmail: boolean;
@@ -23,7 +23,7 @@ defineProps<Props>();
 
 const { t } = useI18n();
 
-const breadcrumbs = computed<BreadcrumbItem[]>(() => [{ title: t('nav.settings_layout.profile'), href: '/settings/profile' }]);
+const breadcrumbs = useSettingsBreadcrumbs(() => t('section_tabs.account.profile'));
 
 const page = usePage<SharedData>();
 const user = page.props.auth.user as User;
@@ -45,56 +45,56 @@ const submit = () => {
         <Head :title="t('nav.settings_layout.profile')" />
 
         <SettingsLayout>
-            <div class="flex flex-col space-y-6">
-                <HeadingSmall :title="t('nav.settings_layout.profile_heading')" :description="t('nav.settings_layout.profile_hint')" />
-
-                <form @submit.prevent="submit" class="space-y-6 rounded-lg bg-card p-4 shadow-card">
-                    <div class="grid gap-2">
-                        <Label for="name">{{ t('nav.settings_layout.name') }}</Label>
+            <SettingsPanel :title="t('nav.settings_layout.profile_heading')" :description="t('nav.settings_layout.profile_hint')">
+                <form class="grid max-w-[520px] gap-3.5 py-3" @submit.prevent="submit">
+                    <div class="grid gap-1.5">
+                        <Label for="name" class="text-13 font-semibold">{{ t('nav.settings_layout.name') }}</Label>
                         <Input
                             id="name"
-                            class="mt-1 block w-full"
                             v-model="form.name"
+                            class="w-full"
                             required
                             autocomplete="name"
                             :placeholder="t('nav.settings_layout.name_placeholder')"
                         />
-                        <InputError class="mt-2" :message="form.errors.name" />
+                        <InputError :message="form.errors.name" />
                     </div>
 
-                    <div class="grid gap-2">
-                        <Label for="email">{{ t('nav.settings_layout.email') }}</Label>
+                    <div class="grid gap-1.5">
+                        <Label for="email" class="text-13 font-semibold">{{ t('nav.settings_layout.email') }}</Label>
                         <Input
                             id="email"
-                            type="email"
-                            class="mt-1 block w-full"
                             v-model="form.email"
+                            type="email"
+                            dir="ltr"
+                            class="w-full text-start"
                             required
                             autocomplete="username"
                             :placeholder="t('nav.settings_layout.email_placeholder')"
                         />
-                        <InputError class="mt-2" :message="form.errors.email" />
+                        <InputError :message="form.errors.email" />
                     </div>
 
-                    <div v-if="mustVerifyEmail && !user.email_verified_at">
-                        <p class="mt-2 text-sm text-foreground">
+                    <div v-if="mustVerifyEmail && !user.email_verified_at" class="rounded-md bg-warn-soft px-3 py-2 text-13 text-warn">
+                        <p>
                             {{ t('nav.settings_layout.unverified') }}
                             <Link
                                 :href="route('verification.send')"
                                 method="post"
                                 as="button"
-                                class="focus:outline-hidden rounded-md text-sm text-muted-foreground underline hover:text-foreground focus:ring-2 focus:ring-offset-2"
+                                class="rounded-sm font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
                                 {{ t('nav.settings_layout.resend_verification') }}
                             </Link>
                         </p>
 
-                        <div v-if="status === 'verification-link-sent'" class="mt-2 text-sm font-medium text-success">
+                        <p v-if="status === 'verification-link-sent'" class="mt-1 font-medium text-ok">
                             {{ t('nav.settings_layout.verification_sent') }}
-                        </div>
+                        </p>
                     </div>
 
-                    <div class="flex items-center justify-end gap-4">
+                    <div class="flex flex-wrap items-center gap-3 pt-1">
+                        <Button :loading="form.processing">{{ t('nav.settings_layout.save') }}</Button>
                         <TransitionRoot
                             :show="form.recentlySuccessful"
                             enter="transition ease-in-out"
@@ -102,12 +102,11 @@ const submit = () => {
                             leave="transition ease-in-out"
                             leave-to="opacity-0"
                         >
-                            <p class="text-sm text-muted-foreground">{{ t('nav.settings_layout.saved') }}</p>
+                            <p class="text-13 text-ok" role="status">{{ t('nav.settings_layout.saved') }}</p>
                         </TransitionRoot>
-                        <Button :loading="form.processing">{{ t('nav.settings_layout.save') }}</Button>
                     </div>
                 </form>
-            </div>
+            </SettingsPanel>
         </SettingsLayout>
     </AppLayout>
 </template>
