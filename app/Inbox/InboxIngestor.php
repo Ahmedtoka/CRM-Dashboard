@@ -82,7 +82,7 @@ class InboxIngestor
                 // An answer a handler takes (an order-confirmation tap, 2026-10-16) goes into her latest
                 // thread as it is: never reopened, not unread, no queue ticket, no bot (InboundInterceptors).
                 $claim = $this->claimFor($d, $identity, $account);
-                $conversation = $claim !== null ? $claim[1] : $this->openConversationFor($identity, $account, reopen: false);
+                $conversation = $claim !== null ? $claim[1] : $this->conversationFor($identity, $account, ConversationSource::Direct, null, reopen: false);
                 $claim = $claim[0] ?? null;
                 $opened = $conversation->wasRecentlyCreated;
 
@@ -253,7 +253,13 @@ class InboxIngestor
      * webhooks for the same customer (e.g. a message and a comment private reply, or
      * Meta retries) serialize here instead of both creating a new conversation.
      */
-    public function openConversationFor(CustomerIdentity $i, ChannelAccount $a, ConversationSource $src = ConversationSource::Direct, ?int $sourceCommentId = null, bool $reopen = true): Conversation
+    public function openConversationFor(CustomerIdentity $i, ChannelAccount $a, ConversationSource $src = ConversationSource::Direct, ?int $sourceCommentId = null): Conversation
+    {
+        return $this->conversationFor($i, $a, $src, $sourceCommentId, reopen: true);
+    }
+
+    /** Close cycle M-09: `reopen: false` for her inbound message (the ingest opens it after `settles()`). */
+    private function conversationFor(CustomerIdentity $i, ChannelAccount $a, ConversationSource $src, ?int $sourceCommentId, bool $reopen): Conversation
     {
         Customer::query()->whereKey($i->customer_id)->lockForUpdate()->first();
 
