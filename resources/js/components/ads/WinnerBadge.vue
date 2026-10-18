@@ -11,16 +11,16 @@ const { t } = useI18n();
 const look = computed(
     () =>
         ({
-            winner: { icon: Trophy, cls: 'bg-success text-white' },
-            promising: { icon: TrendingUp, cls: 'bg-warning text-amber-950' },
-            loser: { icon: TrendingDown, cls: 'bg-destructive text-white' },
-            neutral: { icon: Sparkles, cls: 'bg-muted text-muted-foreground' },
+            winner: { icon: Trophy, cls: 'bg-ok-soft text-ok' },
+            promising: { icon: TrendingUp, cls: 'bg-warn-soft text-warn' },
+            loser: { icon: TrendingDown, cls: 'bg-danger-soft text-danger' },
+            neutral: { icon: Sparkles, cls: 'bg-sunken text-fg-2' },
         })[props.tier],
 );
 </script>
 
 <template>
-    <span class="inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full px-2 text-2xs font-bold shadow-sm" :class="look.cls">
+    <span class="inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full px-2 text-xs font-semibold" :class="look.cls">
         <component :is="look.icon" class="size-3" aria-hidden="true" />
         {{ t(`ads.tier.${tier}`) }}
     </span>
