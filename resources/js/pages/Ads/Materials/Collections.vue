@@ -143,7 +143,8 @@ const breadcrumbs = computed(() => [
                     <Link
                         :href="`/ads/materials?collection=${c.id}`"
                         class="grid aspect-[4/3] grid-cols-[2fr_1fr] grid-rows-2 gap-0.5 bg-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                        :aria-label="t('ads.materials.collections.view', { name: c.name })"
+                        tabindex="-1"
+                        aria-hidden="true"
                     >
                         <span
                             v-for="i in 3"

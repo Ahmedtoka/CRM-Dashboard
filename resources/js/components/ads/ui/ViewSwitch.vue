@@ -12,12 +12,12 @@ defineProps<{ options: { key: string; label: string; icon: Component; href?: str
 const emit = defineEmits<{ select: [key: string] }>();
 
 const base =
-    'inline-grid h-8 w-9 place-items-center rounded-[6px] text-fg-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+    'inline-grid size-11 place-items-center md:h-8 md:w-9 rounded-[6px] text-fg-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 </script>
 
 <template>
     <TooltipProvider :delay-duration="300">
-        <component :is="options.some((o) => o.href) ? 'nav' : 'div'" :role="options.some((o) => o.href) ? undefined : 'group'" class="inline-flex h-9 shrink-0 items-center gap-0.5 rounded-md bg-sunken p-0.5" :aria-label="label">
+        <component :is="options.some((o) => o.href) ? 'nav' : 'div'" :role="options.some((o) => o.href) ? undefined : 'group'" class="inline-flex h-12 shrink-0 items-center gap-0.5 rounded-md bg-sunken p-0.5 md:h-9" :aria-label="label">
             <Tooltip v-for="o in options" :key="o.key">
                 <TooltipTrigger as-child>
                     <Link

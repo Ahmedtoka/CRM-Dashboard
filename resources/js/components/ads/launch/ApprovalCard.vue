@@ -145,7 +145,7 @@ const status = (s: string | null) =>
 
             <details v-if="launch.publications?.length || launch.history?.length" class="group text-[13px]">
                 <summary class="inline-flex cursor-pointer items-center gap-1 rounded font-medium text-fg-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    <ChevronRight class="rtl-flip size-4 transition-transform duration-150 group-open:rotate-90 rtl:group-open:-rotate-90" aria-hidden="true" />{{
+                    <ChevronRight class="rtl-flip size-4 transition-transform duration-150 group-open:rotate-90" aria-hidden="true" />{{
                         t('ads.launch.approvals.card.history')
                     }}
                 </summary>

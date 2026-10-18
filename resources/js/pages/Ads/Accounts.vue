@@ -616,6 +616,7 @@ const smallSelect = 'h-8 w-full min-w-32 rounded-md border border-line-strong bg
                     :columns="columns"
                     :rows="rows"
                     :loading="loadingView"
+                    mobile="scroll"
                     :caption="t('ads.accounts.accounts_section')"
                     :empty="t('ads.accounts.no_accounts')"
                     :row-class="(r) => (r.is_active ? undefined : 'opacity-70')"

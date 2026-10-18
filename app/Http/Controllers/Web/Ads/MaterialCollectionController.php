@@ -26,7 +26,9 @@ class MaterialCollectionController extends Controller
                 'materials as need_stop' => fn ($q) => $q->whereNotNull('ad_materials.need_stop_at'),
             ])
             // The three newest materials with a picture are the collection's cover (round 2026-10-17, the library grid).
-            ->with(['materials' => fn ($q) => $q->whereHas('files')->with('files')->latest('ad_materials.id')->limit(3)])
+            ->with(['materials' => fn ($q) => $q->whereHas('files', self::pictured(...))
+                ->with(['files' => fn ($f) => self::pictured($f)->orderBy('sort')->orderBy('id')])
+                ->latest('ad_materials.id')->limit(3)])
             ->orderBy('sort')->orderBy('name')->get()
             ->map(fn (AdMaterialCollection $c) => [
                 'id' => $c->id, 'name' => $c->name, 'is_active' => $c->is_active,
@@ -50,6 +52,12 @@ class MaterialCollectionController extends Controller
                 'not_started' => (int) $all->not_started, 'need_stop' => (int) $all->need_stop, 'done' => (int) $all->done,
             ],
         ]);
+    }
+
+    /** Files that have a picture: a thumbnail, or an image. */
+    private static function pictured($q)
+    {
+        return $q->where(fn ($w) => $w->whereNotNull('thumb_path')->orWhere('mime', 'like', 'image/%'));
     }
 
     /** The picture of one material file: its thumbnail, or the image itself (videos without a thumbnail have none). */

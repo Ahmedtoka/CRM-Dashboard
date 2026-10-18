@@ -24,7 +24,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { useEventListener, useMediaQuery } from '@vueuse/core';
 import ViewSwitch from '@/components/ads/ui/ViewSwitch.vue';
 import { ADS_FIELD } from '@/lib/adsUi';
-import { ChevronRight, LayoutGrid, Megaphone, Network, Table2 } from 'lucide-vue-next';
+import { ChevronLeft, ChevronRight, LayoutGrid, Megaphone, Network, Table2 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<AdsExplorerProps>();
@@ -187,7 +187,7 @@ const viewOptions = computed(() => [
                         preserve-scroll
                         class="inline-flex h-11 items-center gap-1 rounded-md border border-line-strong bg-card px-3 font-medium hover:bg-surface-2 md:h-9"
                     >
-                        <ChevronRight class="rtl-flip size-4 rotate-180" aria-hidden="true" />{{ t('ads.control.explorer.prev') }}
+                        <ChevronLeft class="rtl-flip size-4" aria-hidden="true" />{{ t('ads.control.explorer.prev') }}
                     </Link>
                     <Link
                         v-if="result.meta.current_page < result.meta.last_page"

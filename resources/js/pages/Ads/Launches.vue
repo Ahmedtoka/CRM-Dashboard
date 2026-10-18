@@ -25,8 +25,8 @@ import { ADS_META, ADS_TONE } from '@/lib/adsUi';
 import { launchErrorText, newIdempotencyKey } from '@/lib/launch';
 import type { AdsLaunchesProps, LaunchAnswer, LaunchRow, SlotRow } from '@/types/ads';
 import { Head, router } from '@inertiajs/vue3';
-import { ChevronRight, MessageSquareText, PackageX, Pause, Plus, Rocket } from 'lucide-vue-next';
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { ChevronLeft, ChevronRight, MessageSquareText, PackageX, Pause, Plus, Rocket } from 'lucide-vue-next';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 const props = defineProps<AdsLaunchesProps>();
 
@@ -37,6 +37,10 @@ const { t, locale } = useI18n();
 /** The stage boxes (DESIGN §3 StageBoxes); the open slots are a panel of their own beside the list, not a stage. */
 type Tab = AdsLaunchesProps['box'];
 const tab = ref<Tab>(props.box);
+watch(
+    () => props.box,
+    (b) => (tab.value = b),
+);
 const boxes = computed<StageBox[]>(() => [
     ...(props.canReview ? [{ key: 'review', label: t('ads.launch.page.box.review'), count: props.counts.review, mine: true }] : []),
     { key: 'mine', label: t('ads.launch.page.box.mine'), count: props.counts.mine, mine: !props.canReview },
@@ -50,7 +54,8 @@ function go(box: Tab, extra: Record<string, string | number | null> = {}): void 
     const query: Record<string, string | number> = { box };
     if (props.filters.material !== null) query.material = props.filters.material;
     for (const [k, v] of Object.entries(extra)) if (v !== null) query[k] = v;
-    router.get('/ads/launches', query, { preserveScroll: true, replace: true });
+    // preserveState: the open-slots panel keeps its list (no refetch, no skeleton flash) across stage switches.
+    router.get('/ads/launches', query, { preserveScroll: true, preserveState: true, replace: true });
 }
 
 function page(n: number): void {
@@ -333,7 +338,7 @@ onMounted(async () => {
                                     :disabled="launches.current_page <= 1"
                                     :aria-label="t('ui.prev')"
                                     @click="page(launches.current_page - 1)"
-                                    ><ChevronRight class="rtl-flip rotate-180" aria-hidden="true"
+                                    ><ChevronLeft class="rtl-flip" aria-hidden="true"
                                 /></Button>
                                 <Button
                                     size="sm"

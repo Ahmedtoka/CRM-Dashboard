@@ -129,7 +129,7 @@ onMounted(() => {
             </section>
             <details data-test="more" class="group rounded-lg border border-line bg-card">
                 <summary class="flex cursor-pointer list-none items-center gap-1.5 px-4 py-3 text-[13px] font-semibold text-fg-2 hover:text-foreground [&::-webkit-details-marker]:hidden">
-                    <ChevronRight class="rtl-flip size-4 transition-transform duration-150 group-open:rotate-90 rtl:group-open:-rotate-90" aria-hidden="true" />{{ t('ads.control.numbers.more') }}
+                    <ChevronRight class="rtl-flip size-4 transition-transform duration-150 group-open:rotate-90" aria-hidden="true" />{{ t('ads.control.numbers.more') }}
                 </summary>
                 <div class="grid grid-cols-2 border-t border-line md:grid-cols-4 xl:grid-cols-7">
                     <Link

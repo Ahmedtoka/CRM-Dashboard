@@ -54,7 +54,7 @@ const tone = computed(
     () =>
         ({
             critical: 'text-danger',
-            high: 'text-danger',
+            high: 'text-warn',
             medium: 'text-warn',
             info: 'text-info',
         })[props.card.severity],
@@ -111,7 +111,7 @@ function sendDisagree(): void {
 
 <template>
     <article
-        class="border-b border-line px-4 py-3.5 last:border-b-0 focus:outline-none"
+        class="border-b border-line px-4 py-3.5 last:border-b-0"
         :class="focused ? 'bg-brand-soft/60 outline outline-2 -outline-offset-2 outline-ring' : ''"
         :data-card="card.key"
         :aria-current="focused ? 'true' : undefined"
