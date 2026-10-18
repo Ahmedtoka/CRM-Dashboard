@@ -47,7 +47,8 @@ const subtitle = computed(() => {
     const ad = props.card.ad;
     if (ad) return [ad.account, ad.buyer].filter(Boolean).join(' · ');
     if (props.card.kind === 'product') return t('ads.alerts.product_ads', { n: props.card.ads.length });
-    return props.card.account?.name ?? '';
+    const name = props.card.account?.name ?? '';
+    return name === title.value ? '' : name;
 });
 const tone = computed(
     () =>
@@ -133,7 +134,7 @@ function sendDisagree(): void {
                     <h3 class="mt-0.5 truncate text-sm font-semibold text-foreground" dir="auto">
                         <bdi>{{ title }}</bdi>
                     </h3>
-                    <p class="truncate text-[12.5px] text-fg-2" dir="auto">{{ subtitle }}</p>
+                    <p v-if="subtitle" class="truncate text-[12.5px] text-fg-2" dir="auto">{{ subtitle }}</p>
                 </div>
                 <p v-if="money > 0 && mode !== 'closed'" class="shrink-0 rounded-full bg-danger-soft px-2 py-0.5 text-xs font-semibold tabular-nums text-danger" data-test="money">
                     {{ t('ads.alerts.money_at_risk', { money }) }}

@@ -329,7 +329,7 @@ const breadcrumbs = computed(() => [
             <SectionTabs :tabs="sectionTabs.library(t)" :label="t('section_tabs.library.label')" />
 
             <!-- KPIs (whole library): one ledger panel, hairline dividers -->
-            <ul class="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-5 xl:grid-cols-10" data-test="material-kpis">
+            <ul class="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-5" data-test="material-kpis">
                 <li v-for="k in kpis" :key="k.key" class="min-w-0 bg-card px-3.5 py-3">
                     <p class="flex items-center gap-1.5 text-[12.5px] font-medium text-fg-2">
                         <component :is="k.icon" class="size-3.5 shrink-0" :class="k.tint" aria-hidden="true" />

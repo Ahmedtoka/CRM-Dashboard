@@ -32,7 +32,7 @@ const { locale } = useI18n();
             @click="emit('select', b.key)"
         >
             <span class="text-[12.5px] font-semibold text-fg-2">{{ b.label }}</span>
-            <span class="text-2xl font-bold leading-tight tabular-nums" :class="b.mine && (b.count ?? 0) > 0 ? 'text-brand-ink' : 'text-foreground'">{{
+            <span class="text-2xl font-bold leading-tight tabular-nums" :class="!b.count ? 'text-fg-3' : b.mine ? 'text-brand-ink' : 'text-foreground'">{{
                 b.count === null ? '—' : formatCount(b.count, locale)
             }}</span>
         </button>

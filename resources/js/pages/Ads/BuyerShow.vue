@@ -163,7 +163,7 @@ const crumbs = computed(() => [{ label: t('nav.ads_numbers'), href: '/ads/number
                     <p class="truncate text-[12.5px] font-medium text-fg-2">{{ t('ads.kpi.spend_tax') }}</p>
                     <MoneyCell :amount="d.spend" :with-tax="d.spend_tax" size="lg" align="start" class="mt-0.5" :currency="currency" />
                 </div>
-                <div v-for="k in kpis" :key="k.key" class="min-w-0 bg-card px-4 py-3.5" :title="k.tip" :data-kpi="k.key">
+                <div v-for="k in kpis" :key="k.key" class="min-w-0 bg-card px-4 py-3.5 max-md:last:col-span-2 xl:last:col-span-2" :title="k.tip" :data-kpi="k.key">
                     <p class="truncate text-[12.5px] font-medium text-fg-2">{{ k.label }}</p>
                     <p class="truncate text-xl font-bold leading-snug tabular-nums" :class="TONE[k.tone ?? 'default']">{{ k.value }}</p>
                     <p v-if="k.hint" class="truncate text-xs text-fg-3">{{ k.hint }}</p>

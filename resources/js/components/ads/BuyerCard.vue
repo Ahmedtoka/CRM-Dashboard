@@ -39,7 +39,7 @@ const dot = computed(() => props.card.color ?? 'hsl(var(--muted-foreground))');
 
         <div v-if="card.accounts.length" class="flex flex-wrap gap-1">
             <PlatformChip v-for="a in card.accounts.slice(0, 4)" :key="a.id" :platform="a.platform" size="xs">
-                <span class="max-w-32 truncate text-fg-2" dir="auto">— {{ a.name }}</span>
+                <span class="max-w-32 truncate text-fg-2" dir="auto">{{ a.name }}</span>
             </PlatformChip>
             <span v-if="card.accounts.length > 4" class="inline-flex h-6 items-center rounded-full bg-sunken px-2 text-xs text-fg-2">
                 +{{ formatCount(card.accounts.length - 4, locale) }}

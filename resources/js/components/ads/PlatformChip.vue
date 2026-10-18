@@ -18,7 +18,7 @@ const label = computed(() => (known.value ? AD_PLATFORM_LABELS[known.value] : (p
 const TILE: Record<AdPlatformValue, string> = {
     meta: 'bg-[#0866FF] text-white',
     tiktok: 'bg-[#111014] text-white ring-1 ring-inset ring-white/25',
-    google: 'bg-white text-[#1A73E8] ring-1 ring-inset ring-line-strong',
+    google: 'bg-[#1A73E8] text-white',
 };
 </script>
 
@@ -35,7 +35,7 @@ const TILE: Record<AdPlatformValue, string> = {
     >
         <span
             class="inline-grid shrink-0 place-items-center rounded-full"
-            :class="[known ? TILE[known] : 'bg-sunken text-fg-2', size === 'xs' ? 'size-4' : 'size-5']"
+            :class="[known ? TILE[known] : 'bg-sunken text-fg-2', size === 'xs' ? 'size-4' : 'size-5', iconOnly ? 'outline outline-2 outline-card' : '']"
             aria-hidden="true"
         >
             <!-- Meta: the loop -->

@@ -94,7 +94,7 @@ const viewOptions = computed(() => [
     <AppLayout :breadcrumbs="appCrumbs">
         <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-4 p-4 md:p-6">
             <PageHeader :title="t('ads.control.explorer.title')" :description="t('ads.control.explorer.description')" :breadcrumbs="crumbs" :freshness="freshness">
-                <ViewSwitch :options="viewOptions" :current="filters.view" :label="t('ads.control.view.label')" />
+                <ViewSwitch :options="viewOptions" :current="view" :label="t('ads.control.view.label')" />
             </PageHeader>
 
             <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
@@ -142,7 +142,7 @@ const viewOptions = computed(() => [
                 </div>
                 <SkeletonList v-if="loading && !rows.length" variant="cards" :count="4" />
                 <EmptyState v-else-if="!rows.length" :icon="Megaphone" :title="t('ads.control.explorer.empty')" />
-                <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3.5 max-sm:grid-cols-2" :class="loading ? 'opacity-60 transition-opacity' : ''">
+                <div v-else class="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))]" :class="loading ? 'opacity-60 transition-opacity' : ''">
                     <AdCard v-for="r in rows" :key="r.id" :row="r" :currency="currency" :data-at="freshness" @open="drawer.open" />
                 </div>
             </template>

@@ -103,6 +103,7 @@ function toggle(key: string): void {
                                 :data-at="dataAt"
                                 :currency="currency"
                                 :parent-paused="r.node.parent_paused"
+                                quiet
                             />
                         </div>
                     </td>

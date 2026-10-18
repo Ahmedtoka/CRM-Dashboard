@@ -118,7 +118,7 @@ onMounted(() => {
                     :class="i === hero.length - 1 ? 'max-md:col-span-2' : ''"
                 >
                     <div class="truncate text-[12.5px] font-medium text-fg-2">{{ h.label }}</div>
-                    <div class="whitespace-nowrap text-2xl font-bold leading-snug tabular-nums" :class="h.key === 'losers' ? 'text-danger' : 'text-foreground'">{{ h.value }}</div>
+                    <div class="whitespace-nowrap text-2xl font-bold leading-snug tabular-nums" :class="h.key === 'losers' && (tot.losers_spend_share ?? 0) > 0 ? 'text-danger' : 'text-foreground'">{{ h.value }}</div>
                     <Link
                         :data-test="h.key === 'losers' ? 'losers-link' : `hero-link-${h.key}`"
                         :href="h.href"

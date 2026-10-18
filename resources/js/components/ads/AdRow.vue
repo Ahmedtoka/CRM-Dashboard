@@ -100,6 +100,7 @@ async function copyId(): Promise<void> {
             :data-at="dataAt"
             :currency="cur"
             :parent-paused="row.parent_paused"
+            :quiet="!row.health.some((h) => h === 'losing' || h === 'out_of_stock')"
             @done="emit('done', $event)"
         />
         <button type="button" data-test="why" class="h-11 whitespace-nowrap rounded-md px-3 text-xs font-semibold text-brand-ink hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-[30px] md:px-2.5" @click="emit('open', row.id)">
