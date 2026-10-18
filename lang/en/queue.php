@@ -24,6 +24,8 @@ return [
         'qa' => 'Quality check :score of 5 · ticket #:ticket',
         'qa_replaced' => 'Quality check changed · ticket #:ticket',
         'reversed' => 'Reversed',
+        'undone' => 'Undone · ticket #:ticket',
+        'revived' => 'Window reopened · ticket #:ticket',
         'capped' => '(over the cap :cap)',
     ],
     // The queue report's CSV header (queue Part 2).

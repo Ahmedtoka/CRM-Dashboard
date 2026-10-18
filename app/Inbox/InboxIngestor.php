@@ -132,7 +132,12 @@ class InboxIngestor
                 }
 
                 if ($claim === null && ! $settled && $conversation->status !== ConversationStatus::Open) {
-                    $conversation->forceFill(['status' => ConversationStatus::Open])->save();
+                    $reopened = $conversation->status === ConversationStatus::Resolved;
+                    $conversation->forceFill(['status' => ConversationStatus::Open, 'resolved_at' => null, 'resolved_by_id' => null])->save();
+
+                    if ($reopened) {
+                        $this->logger->log(ActorType::System, null, ActivityLogger::CONVERSATION_REOPENED, $conversation, $conversation);
+                    }
                 }
 
                 $this->logger->log(ActorType::System, null, ActivityLogger::MESSAGE_RECEIVED, $message, $conversation);
@@ -263,15 +268,9 @@ class InboxIngestor
 
         $resolved = $query()->where('status', ConversationStatus::Resolved->value)->latest('id')->first();
 
+        // Close cycle M-09: she wrote on her resolved thread — it is opened once the ingest knows the
+        // message asks for something (a thanks or a rating answer leaves it resolved): see ingest.
         if ($resolved !== null) {
-            $resolved->forceFill([
-                'status' => ConversationStatus::Open,
-                'resolved_at' => null,
-                'resolved_by_id' => null,
-            ])->save();
-
-            $this->logger->log(ActorType::System, null, ActivityLogger::CONVERSATION_REOPENED, $resolved, $resolved);
-
             return $resolved;
         }
 
