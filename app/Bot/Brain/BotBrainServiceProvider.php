@@ -3,10 +3,12 @@
 namespace App\Bot\Brain;
 
 use App\Bot\Agent\ReplyGuards;
+use App\Bot\Brain\Costs\CostWatchCommand;
 use App\Bot\Brain\Trace\TracedReplyGuards;
 use App\Bot\Brain\Trace\TurnTrace;
 use App\Enums\SenderType;
 use App\Models\Message;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Client\Events\ResponseReceived;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -26,6 +28,9 @@ class BotBrainServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->commands([CostWatchCommand::class]);
+        $this->callAfterResolving(Schedule::class, fn (Schedule $schedule) => $schedule->command('bot:cost-watch')->hourly()->withoutOverlapping());
+
         Event::listen(ResponseReceived::class, function (ResponseReceived $event) {
             if (! str_starts_with($event->request->url(), 'https://api.anthropic.com/v1/messages')) {
                 return;

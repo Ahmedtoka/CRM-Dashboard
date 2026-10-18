@@ -2,6 +2,7 @@
 
 namespace App\Bot\Learning;
 
+use App\Bot\Brain\Feedback\FeedbackSuggestionTypes;
 use App\Bot\Flows\FlowDrafts;
 use App\Models\BotFlow;
 use App\Models\BotIntent;
@@ -26,6 +27,7 @@ final class LearningCurrentState
             'script_text' => self::script($target),
             'intent_keywords' => self::intent($target),
             'flow_step' => self::flowStep($target),
+            'agent_instruction' => FeedbackSuggestionTypes::currentInstructions(),
             default => null,
         };
     }

@@ -4,6 +4,7 @@ namespace App\Bot\Eval;
 
 use App\Bot\Ai\SonnetBudget;
 use App\Bot\BotEngine;
+use App\Bot\Brain\Feedback\FeedbackEvalCases;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flows\FakeFlowAnswerInterpreter;
 use App\Bot\Flows\FlowAnswerInterpreter;
@@ -71,6 +72,8 @@ class BotEval
     public function run(string $file, bool $live = false, int $repeat = 1, ?array $only = null): array
     {
         $fixture = Yaml::parseFile($file);
+        // b2: the scenarios approved from staff feedback run after the file's own.
+        $fixture['scenarios'] = [...(array) ($fixture['scenarios'] ?? []), ...FeedbackEvalCases::scenarios()];
         $results = [];
         $this->isolate($live);
 

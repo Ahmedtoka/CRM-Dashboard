@@ -384,7 +384,7 @@ class LearnCommand extends Command
     {
         return DB::transaction(function () use ($report, $suggestions, $validator, $sourceByConversation) {
             // A re-run of the same day replaces its pending ideas; decided ones stay.
-            $report->suggestions()->where('status', 'pending')->delete();
+            $report->suggestions()->where('status', 'pending')->where('source', '!=', BotSuggestion::SOURCE_FEEDBACK)->delete();
 
             $stored = 0;
             $seen = [];

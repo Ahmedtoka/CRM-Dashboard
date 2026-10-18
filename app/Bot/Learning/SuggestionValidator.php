@@ -2,10 +2,12 @@
 
 namespace App\Bot\Learning;
 
+use App\Bot\Brain\Feedback\FeedbackSuggestionTypes;
 use App\Bot\Flows\FlowDrafts;
 use App\Models\BotFlow;
 use App\Models\BotIntent;
 use App\Models\BotKnowledgeEntry;
+use App\Models\BotSuggestion;
 
 /**
  * The gate every suggestion passes twice (design §6): once when `bot:learn`
@@ -40,7 +42,7 @@ class SuggestionValidator
         $target = is_string($suggestion['target'] ?? null) ? trim($suggestion['target']) : null;
         $proposed = $suggestion['proposed'] ?? null;
 
-        if (! is_string($type) || ! in_array($type, ['script_text', 'new_faq', 'intent_keywords', 'flow_step'], true)) {
+        if (! is_string($type) || ! in_array($type, BotSuggestion::TYPES, true)) {
             return 'نوع اقتراح غير معروف.';
         }
 
@@ -53,6 +55,8 @@ class SuggestionValidator
             'new_faq' => $this->validateNewFaq($proposed),
             'intent_keywords' => $this->validateIntentKeywords($target, $proposed),
             'flow_step' => $this->validateFlowStep($target, $proposed),
+            // From staff feedback (b2): an instruction line or an eval scenario.
+            'agent_instruction', 'eval_case' => app(FeedbackSuggestionTypes::class)->validate($type, $target, $proposed),
         };
     }
 

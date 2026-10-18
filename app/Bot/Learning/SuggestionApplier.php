@@ -2,6 +2,7 @@
 
 namespace App\Bot\Learning;
 
+use App\Bot\Brain\Feedback\FeedbackSuggestionTypes;
 use App\Bot\Flows\FlowDefinition;
 use App\Bot\Flows\FlowDrafts;
 use App\Models\BotFlow;
@@ -59,6 +60,7 @@ final class SuggestionApplier
                     'new_faq' => $this->applyNewFaq($suggestion),
                     'intent_keywords' => $this->applyIntentKeywords($suggestion),
                     'flow_step' => $this->applyFlowStep($suggestion, $by),
+                    'agent_instruction', 'eval_case' => app(FeedbackSuggestionTypes::class)->apply($suggestion, $by),
                 };
 
                 $suggestion->forceFill([

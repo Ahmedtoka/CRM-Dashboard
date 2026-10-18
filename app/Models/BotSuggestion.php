@@ -13,7 +13,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class BotSuggestion extends Model
 {
-    public const TYPES = ['script_text', 'new_faq', 'intent_keywords', 'flow_step'];
+    public const TYPES = ['script_text', 'new_faq', 'intent_keywords', 'flow_step', 'agent_instruction', 'eval_case'];
+
+    /** Suggestions made by an admin from staff feedback (b2): a re-run of `bot:learn` keeps them. */
+    public const SOURCE_FEEDBACK = 'feedback';
 
     public const STATUSES = ['pending', 'approved', 'rejected'];
 

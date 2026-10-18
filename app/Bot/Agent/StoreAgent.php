@@ -207,7 +207,8 @@ class StoreAgent
         return [['type' => 'text', 'text' => $text, 'cache_control' => ['type' => 'ephemeral']]];
     }
 
-    private function systemText(): string
+    /** Public for «عقل البوت» (b2), which shows the exact text the agent is sent. */
+    public function systemText(): string
     {
         $entries = BotKnowledgeEntry::query()->where('is_active', true)->orderBy('sort')->orderBy('id')->get(['key', 'title', 'body']);
 

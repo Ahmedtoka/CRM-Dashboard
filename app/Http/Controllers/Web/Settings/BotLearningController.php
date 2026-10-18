@@ -190,7 +190,7 @@ class BotLearningController extends Controller
     {
         return array_merge($report->toArray(), [
             'suggestions' => $report->suggestions()
-                ->when($source !== null, fn ($q) => $q->where('source', $source))
+                ->when($source !== null, fn ($q) => $q->whereIn('source', $source === BotLearningNote::SOURCE_LIVE ? [$source, BotSuggestion::SOURCE_FEEDBACK] : [$source]))
                 ->with('decidedBy:id,name')
                 ->orderByRaw("case when status = 'pending' then 0 else 1 end")
                 ->orderBy('id')
@@ -222,6 +222,7 @@ class BotLearningController extends Controller
             'flow_step' => ($parts = SuggestionValidator::splitFlowTarget($target)) !== null
                 ? (($title = BotFlow::query()->where('key', $parts[0])->value('title_ar')) !== null ? $title.' › '.$parts[1] : null)
                 : null,
+            'agent_instruction' => 'تعليمات البوت',
             default => null,
         };
     }
