@@ -86,7 +86,7 @@ const resultTone = (r: 'ok' | 'error' | 'pending') => (r === 'ok' ? 'positive' :
     <Sheet :open="adId !== null" @update:open="(o: boolean) => !o && emit('close')">
         <SheetContent :side="dir === 'rtl' ? 'left' : 'right'" class="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[480px]">
             <div class="space-y-1 border-b border-line px-5 pb-3.5 pt-5 pe-12">
-                <SheetTitle class="truncate text-lg font-bold" dir="auto">{{ ad?.name ?? t('ads.control.drawer.title') }}</SheetTitle>
+                <SheetTitle class="truncate text-start text-lg font-bold"><bdi>{{ ad?.name ?? t('ads.control.drawer.title') }}</bdi></SheetTitle>
                 <SheetDescription class="flex min-w-0 items-center gap-1.5 text-[13px] text-fg-2">
                     <template v-if="ad"><PlatformChip :platform="ad.platform" size="xs" icon-only /><span dir="auto" class="truncate">{{ ad.account }}</span> · {{ t(`ads.control.objective.${ad.objective}`) }}</template>
                     <template v-else>{{ t('ads.control.drawer.title') }}</template>
