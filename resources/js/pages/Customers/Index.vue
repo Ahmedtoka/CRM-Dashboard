@@ -67,8 +67,8 @@ const breadcrumbs = computed(() => [{ title: t('customers.title'), href: '/custo
 
             <div class="min-w-0">
                 <DataTable
-                    card-grid
                     table-id="customers"
+                    card-grid
                     :columns="columns"
                     :rows="customers.data"
                     clickable

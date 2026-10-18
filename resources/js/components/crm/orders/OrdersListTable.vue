@@ -38,8 +38,8 @@ const columns = computed<Column[]>(() => [
 
 <template>
     <DataTable
-        card-grid
         :table-id="tableId"
+        card-grid
         :columns="columns"
         :rows="rows"
         clickable

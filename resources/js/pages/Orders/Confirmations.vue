@@ -200,8 +200,8 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
 
             <div role="tabpanel" class="min-w-0">
                 <DataTable
-                    card-grid
                     table-id="order-confirmations"
+                    card-grid
                     :columns="columns"
                     :rows="rows"
                     :loading="loading"

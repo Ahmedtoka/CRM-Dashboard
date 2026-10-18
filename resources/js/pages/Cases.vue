@@ -190,8 +190,8 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
 
             <div class="min-w-0">
                 <DataTable
-                    card-grid
                     table-id="cases"
+                    card-grid
                     :columns="columns"
                     :rows="cases.data"
                     clickable
