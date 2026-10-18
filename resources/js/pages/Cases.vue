@@ -18,7 +18,6 @@ import { formatCount, formatDateTime, formatListStamp } from '@/lib/format';
 import type { Paginated } from '@/types/admin';
 import type { CaseStatus, CaseType, SupportCase } from '@/types/crm';
 import { Head, router } from '@inertiajs/vue3';
-import { useMediaQuery } from '@vueuse/core';
 import { ClipboardList } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
 
@@ -64,7 +63,7 @@ const selectValue = (event: Event) => (event.target as HTMLSelectElement).value 
 
 // The type and the date range show as removable chips; on a phone both live in the «فلاتر» popover (with a label).
 const range = computed(() => ({ from: filters.value.from ?? '', to: filters.value.to ?? '' }));
-const wide = useMediaQuery('(min-width: 640px)');
+const moreCount = computed(() => (filters.value.from || filters.value.to ? 1 : 0));
 const currentTab = computed(() => filters.value.status ?? 'all');
 const now = Date.now();
 const chips = computed(() => {
@@ -163,6 +162,7 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                 :search="filters.q"
                 :search-placeholder="t('cases.search')"
                 :chips="chips"
+                :more-count="moreCount"
                 :summary="summary"
                 @update:search="set({ q: $event })"
                 @remove="removeChip"
@@ -179,8 +179,10 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                         <option value="">{{ t('cases.type_all') }}</option>
                         <option v-for="ty in TYPES" :key="ty" :value="ty">{{ t(`cases.types.${ty}`) }}</option>
                     </select>
-                    <div class="min-w-0" data-filter="date">
-                        <span v-if="!wide" :class="fieldLabel">{{ t('cases.filter_date') }}</span>
+                </template>
+                <template #more>
+                    <div data-filter="date">
+                        <span :class="fieldLabel">{{ t('cases.filter_date') }}</span>
                         <DateRangePicker :model-value="range" @update:model-value="apply({ from: $event.from || null, to: $event.to || null })" />
                     </div>
                 </template>

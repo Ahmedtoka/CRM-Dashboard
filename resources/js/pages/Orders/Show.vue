@@ -286,9 +286,9 @@ const fulfillmentTone = (status: string | null) =>
                                     "
                                     :tone="fulfillmentTone(f.shipment_status)"
                                 />
-                                <span class="min-w-0 flex-1">
+                                <span class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
                                     <span v-if="f.tracking_company" class="font-semibold" dir="auto">{{ f.tracking_company }}</span>
-                                    <span v-if="f.tracking_number" class="ms-2 tabular-nums text-fg-2" dir="ltr">{{ f.tracking_number }}</span>
+                                    <bdi v-if="f.tracking_number" class="tabular-nums text-fg-2" dir="ltr">{{ f.tracking_number }}</bdi>
                                 </span>
                                 <span class="whitespace-nowrap text-xs tabular-nums text-fg-3">{{
                                     formatDateTime(f.updated_at ?? f.created_at, locale)

@@ -24,7 +24,6 @@ import type { SharedData } from '@/types';
 import type { OrderRow, Paginated, ReportRange } from '@/types/admin';
 import type { OrdersAnalytics, OrdersByAdRow, OrdersRange, OrdersTab } from '@/types/orders';
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { useMediaQuery } from '@vueuse/core';
 import { SearchX } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
@@ -150,8 +149,6 @@ function clearAll(): void {
 
 // Empty on a triage view without dates (all matching orders, any period).
 const range = computed<ReportRange>(() => ({ from: filters.value.from ?? props.range.from ?? '', to: filters.value.to ?? props.range.to ?? '' }));
-/** From sm up the range sits in the bar and speaks for itself; inside the phone's «فلاتر» popover it gets a label. */
-const wide = useMediaQuery('(min-width: 640px)');
 const selectValue = (event: Event) => (event.target as HTMLSelectElement).value || null;
 
 // One-click saved views: each preset is a plain filtered address, so the chip, the URL and the list agree.
@@ -203,6 +200,12 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                 :label="t('section_tabs.orders.label')"
             />
 
+            <!-- The period first, on its own row: «مخصص» opens two date fields that would crowd the filter bar. -->
+            <div class="flex min-w-0 flex-wrap items-center gap-2" data-filter="range">
+                <span class="text-13 font-semibold text-fg-2">{{ t('ordersHub.filters.range') }}</span>
+                <DateRangePicker :model-value="range" month @update:model-value="set({ from: $event.from || null, to: $event.to || null })" />
+            </div>
+
             <!-- The list template (DESIGN §4.1): search + up to three inline filters, the rest in «فلاتر», chips under it. -->
             <FilterBar
                 :search="filters.q"
@@ -216,10 +219,6 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                 @clear="clearAll()"
             >
                 <template #inline>
-                    <div class="min-w-0" data-filter="range">
-                        <span v-if="!wide" :class="fieldLabel">{{ t('ordersHub.filters.range') }}</span>
-                        <DateRangePicker :model-value="range" month @update:model-value="set({ from: $event.from || null, to: $event.to || null })" />
-                    </div>
                     <select
                         :value="filters.status ?? ''"
                         :class="selectClass"

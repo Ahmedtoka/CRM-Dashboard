@@ -24,7 +24,8 @@ const columns = computed<Column[]>(() => [
     { key: 'order', label: t('orders.list.order'), primary: true },
     { key: 'customer', label: t('ordersHub.columns.customer') },
     { key: 'governorate', label: t('ordersHub.columns.governorate') },
-    { key: 'district', label: t('ordersHub.columns.district'), hideOnMobile: true },
+    // Only on very wide screens: at 1440 the products thumbs need the room (the governorate stays).
+    { key: 'district', label: t('ordersHub.columns.district'), hideOnMobile: true, class: 'hidden 2xl:table-cell' },
     { key: 'total', label: t('ordersHub.columns.total'), numeric: true, sortable: true },
     { key: 'status', label: t('ordersHub.columns.status') },
     // Kept on the phone card (thumbs + «+n»): what was ordered is the first thing staff look for.
