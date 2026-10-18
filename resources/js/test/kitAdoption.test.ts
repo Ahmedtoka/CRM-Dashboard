@@ -8,87 +8,36 @@ const pages: Record<string, string> = Object.fromEntries(
 /** Pages already moved to the S0 kit. Each sweep task (13-20) appends its group; the test fails until they comply. */
 const SWEPT: string[] = [
     // Task 13
-    'Orders/Index',
-    'Orders/Show',
-    'Orders/AdOrders',
-    'Customers/Index',
-    'Customers/Show',
+    'Orders/Index', 'Orders/Show', 'Orders/AdOrders', 'Customers/Index', 'Customers/Show',
     // Task 14
-    'Inbox',
-    'Board',
-    'Comments/Index',
-    'Cases',
+    'Inbox', 'Board', 'Comments/Index', 'Cases',
     // Task 15
-    'Reports/Activity',
-    'Reports/Bot',
-    'Reports/Latency',
-    'Reports/Me',
-    'Reports/QuickReplies',
-    'Reports/Queue',
-    'Reports/Team',
-    'Reports/TeamTest',
-    'Reports/User',
+    'Reports/Activity', 'Reports/Bot', 'Reports/Latency', 'Reports/Me', 'Reports/QuickReplies', 'Reports/Queue', 'Reports/Team', 'Reports/TeamTest', 'Reports/User',
     // Task 16
-    'Ads/Accounts',
-    'Ads/BuyerShow',
-    'Ads/BuyersSetup',
-    'Ads/Materials/Collections',
-    'Ads/Materials/Form',
-    'Ads/Materials/Index',
-    'Ads/Materials/Stock',
-    'Ads/Sync',
+    'Ads/Accounts', 'Ads/BuyerShow', 'Ads/BuyersSetup',
+    'Ads/Materials/Collections', 'Ads/Materials/Form', 'Ads/Materials/Index', 'Ads/Materials/Stock', 'Ads/Sync',
     // Task 17
-    'settings/Users',
-    'settings/Tags',
-    'settings/Cities',
-    'settings/QuickReplies',
-    'settings/Queue',
+    'settings/Users', 'settings/Tags', 'settings/Cities', 'settings/QuickReplies', 'settings/Queue',
     // Audit wave 1: «مواعيد الفروع»
     'settings/BranchHours',
-    'settings/Notifications',
-    'settings/Profile',
-    'settings/Password',
-    'settings/Appearance',
+    'settings/Notifications', 'settings/Profile', 'settings/Password', 'settings/Appearance',
     // S1 launch approvals
-    'Ads/Launches',
-    'Ads/Approvals',
+    'Ads/Launches', 'Ads/Approvals',
     // Redesign 2026-10-17: the settings hub (A5)
     'settings/Index',
     // S2 control room
-    'Ads/Explorer',
-    'Ads/Today',
-    'Ads/Decisions',
-    'Ads/Numbers',
-    'Ads/SetupRules',
+    'Ads/Explorer', 'Ads/Today', 'Ads/Decisions', 'Ads/Numbers', 'Ads/SetupRules',
     // Task 18
-    'settings/Integrations',
-    'settings/Channels',
-    'settings/FacebookPages',
-    'settings/Shopify',
-    'settings/ShopifyReconcile',
+    'settings/Integrations', 'settings/Channels', 'settings/FacebookPages', 'settings/Shopify', 'settings/ShopifyReconcile',
     // Task 19
-    'settings/Bot',
-    'settings/BotFlows',
-    'settings/BotIntents',
-    'settings/BotKnowledge',
-    'settings/BotLearning',
-    'settings/BotReplies',
-    'settings/BotTestLinks',
-    'settings/BotTranslations',
-    'Simulator',
+    'settings/Bot', 'settings/BotFlows', 'settings/BotIntents', 'settings/BotKnowledge', 'settings/BotLearning', 'settings/BotReplies',
+    'settings/BotTestLinks', 'settings/BotTranslations', 'Simulator',
     // Task 20
-    'auth/ConfirmPassword',
-    'auth/ForgotPassword',
-    'auth/Login',
-    'auth/ResetPassword',
-    'auth/VerifyEmail',
-    'Error',
-    'Onboarding',
+    'auth/ConfirmPassword', 'auth/ForgotPassword', 'auth/Login', 'auth/ResetPassword', 'auth/VerifyEmail', 'Error', 'Onboarding',
     // S4 manager today
     'Today',
     // WhatsApp order confirmation (W4)
-    'Orders/Confirmations',
-    'settings/OrderConfirmations',
+    'Orders/Confirmations', 'settings/OrderConfirmations',
 ];
 
 /**
@@ -106,20 +55,9 @@ const POPOVER_TABLE = /<PopoverContent\b(?:(?!<\/PopoverContent>)[\s\S])*?<table
 
 /** No PageHeader by design (workspace layouts, auth cards, the settings layout renders its own). */
 const NO_PAGE_HEADER = new Set([
-    'Inbox',
-    'Board',
-    'Error',
-    'Onboarding',
-    'settings/BotFlows',
-    'auth/ConfirmPassword',
-    'auth/ForgotPassword',
-    'auth/Login',
-    'auth/ResetPassword',
-    'auth/VerifyEmail',
-    'settings/Appearance',
-    'settings/Notifications',
-    'settings/Password',
-    'settings/Profile',
+    'Inbox', 'Board', 'Error', 'Onboarding', 'settings/BotFlows',
+    'auth/ConfirmPassword', 'auth/ForgotPassword', 'auth/Login', 'auth/ResetPassword', 'auth/VerifyEmail',
+    'settings/Appearance', 'settings/Notifications', 'settings/Password', 'settings/Profile',
 ]);
 
 describe('S0 kit adoption', () => {
@@ -144,7 +82,8 @@ describe('S0 kit adoption', () => {
         }
         // R2 one PageHeader.
         // A settings page gets its PageHeader through SettingsShell (DESIGN §4 Hub + details).
-        if (!NO_PAGE_HEADER.has(name)) expect(/<PageHeader\b|<SettingsShell\b/.test(source), `${name}: no PageHeader`).toBe(true);
+        const header = /<PageHeader\b|<SettingsShell\b/.test(source);
+        if (!NO_PAGE_HEADER.has(name)) expect(header, `${name}: no PageHeader`).toBe(true);
         // R3 every DataTable is identifiable (`data-table-id` hook for tests and screenshots): `table-id` is its first attribute.
         const tables = source.match(/<DataTable\b/g)?.length ?? 0;
         const withId = source.match(/<DataTable\s+table-id="/g)?.length ?? 0;
