@@ -14,6 +14,7 @@ import DigestCard from '@/components/ads/DigestCard.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import ProgressBar from '@/components/crm/ProgressBar.vue';
+import Ledger, { type LedgerFigure } from '@/components/today/Ledger.vue';
 import { useAdDrawer } from '@/composables/useAdDrawer';
 import { useI18n } from '@/composables/useI18n';
 import { usePathVisitLoading } from '@/composables/usePathVisitLoading';
@@ -70,6 +71,50 @@ const reasonLine = (s: AdSuggestion) =>
         .map((r) => r.text)
         .join(' · ');
 const thumb = (s: AdSuggestion) => ({ name: s.name, thumbnail_url: s.thumbnail_url, image_url: null, type: null, effective_status: s.status, created_time: null });
+/** The money of the day in one ledger (DESIGN §3 Ledger, mockup «النهارده › الإعلانات»), each figure opening its list. */
+const figures = computed<LedgerFigure[]>(() => [
+    {
+        key: 'spend_today',
+        label: t('ads.control.today.ledger.spend_today'),
+        value: money(m.value.spend_so_far),
+        note: m.value.usual_by_now === null ? null : `${usualLabel.value} ${money(m.value.usual_by_now)}`,
+        tone: m.value.ratio !== null && m.value.ratio >= 2 ? 'down' : 'neutral',
+        href: href('/ads/explorer', { range: 'today', sort: '-spend' }),
+    },
+    {
+        key: 'orders_today',
+        label: t('ads.control.today.ledger.orders_today'),
+        value: n(m.value.orders),
+        note: t('ads.control.today.ledger.chats_today', { n: n(m.value.conversations) }),
+        href: href('/ads/explorer', { range: 'today', sort: '-conversations', objective: 'messages' }),
+    },
+    {
+        key: 'real_roas',
+        label: t('ads.control.today.ledger.real_roas_7'),
+        value: formatRoas(w.value.real_roas, locale.value),
+        note: `${t('ads.control.today.meta_roas')} ${formatRoas(w.value.roas, locale.value)}`,
+        href: href('/ads/numbers', { range: 'last7' }),
+    },
+    {
+        key: 'spend_7',
+        label: t('ads.control.today.ledger.spend_7'),
+        value: money(w.value.spend_tax),
+        note: t('ads.control.today.ledger.orders_7', { n: n(w.value.real_orders) }),
+        href: href('/ads/numbers', { range: 'last7' }),
+    },
+    {
+        key: 'decisions',
+        label: t('ads.control.today.ledger.decisions'),
+        value: n(decisionsCount.value),
+        note: d.value.approvals > 0 ? t('ads.control.today.ledger.approvals', { n: n(d.value.approvals) }) : null,
+        tone: decisionsCount.value > 0 ? 'down' : 'neutral',
+        href: href('/ads/decisions'),
+    },
+]);
+const panel = 'min-w-0 rounded-lg border border-line bg-card';
+const panelHead = 'flex flex-wrap items-center gap-x-2.5 gap-y-1 px-4 pb-2.5 pt-3.5';
+const panelTitle = 'text-base font-bold leading-snug';
+const panelLink = 'ms-auto inline-flex h-9 items-center rounded text-[13px] font-semibold text-brand-ink hover:underline md:h-auto';
 const crumbs = computed(() => [{ label: t('nav.today'), href: '/today' }, { label: t('ads.control.today.title') }]);
 const appCrumbs = computed(() => [{ title: t('nav.today'), href: '/today' }, { title: t('section_tabs.today.ads'), href: '/today/ads' }]);
 const LISTS = ['best', 'worst'] as const;
@@ -80,7 +125,7 @@ const listHref = (list: (typeof LISTS)[number]) =>
 <template>
     <Head :title="t('ads.control.today.title')" />
     <AppLayout :breadcrumbs="appCrumbs">
-        <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-4 p-3 md:p-6">
+        <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-4 p-4 md:space-y-5 md:p-6">
             <PageHeader :title="t('ads.control.today.title')" :description="t('ads.control.today.description')" :breadcrumbs="crumbs" :freshness="freshness" />
             <SectionTabs :tabs="sectionTabs.today(t, inertiaPage.props.auth.user?.role)" :label="t('section_tabs.today.label')" />
             <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
@@ -94,28 +139,36 @@ const listHref = (list: (typeof LISTS)[number]) =>
             />
             <!-- Dims while a filter visit to this page runs (M7). -->
             <div class="space-y-4 transition-opacity" :class="loading ? 'opacity-60' : ''" :aria-busy="loading" data-test="page-body">
-            <!-- 09:00 digest (S5, D14): owner or buyer variant, fetched on its own so the page does not wait for it -->
-            <DigestCard />
+            <Ledger :figures="figures" :label="t('ads.control.today.ledger.label')" data-test="ads-ledger" />
 
+            <div class="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] [&>*]:min-w-0">
             <!-- Decisions block: what needs me now comes first -->
-            <section class="space-y-3 rounded-lg bg-card p-4 shadow-card" aria-labelledby="today-decisions">
-                <div class="flex items-center justify-between gap-2">
-                    <h2 id="today-decisions" class="text-sm font-semibold">
-                        {{ t('ads.control.today.decisions') }} <span class="tabular-nums text-muted-foreground">({{ n(decisionsCount) }})</span>
-                    </h2>
-                    <Link :href="href('/ads/decisions')" class="inline-flex h-9 items-center text-xs text-primary hover:underline">{{ t('ads.control.today.open_all') }}</Link>
+            <section :class="panel" class="self-start overflow-hidden" aria-labelledby="today-decisions">
+                <div :class="panelHead" class="border-b border-line">
+                    <h2 id="today-decisions" :class="panelTitle">{{ t('ads.control.today.decisions') }}</h2>
+                    <span
+                        v-if="decisionsCount > 0"
+                        class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-sunken px-1.5 text-[11px] font-bold tabular-nums text-fg-2"
+                        >{{ n(decisionsCount) }}</span
+                    >
+                    <Link :href="href('/ads/decisions')" :class="panelLink">{{ t('ads.control.today.open_all') }}</Link>
                 </div>
-                <Link v-if="d.approvals > 0" data-test="approvals-link" href="/ads/approvals" class="block rounded-md bg-surface-accent px-3 py-2 text-xs font-medium hover:underline">
+                <Link
+                    v-if="d.approvals > 0"
+                    data-test="approvals-link"
+                    href="/ads/approvals"
+                    class="mx-4 mt-3 block rounded-md bg-brand-soft px-3 py-2 text-[13px] font-semibold text-brand-ink hover:underline"
+                >
                     {{ t('ads.control.today.approvals', { n: n(d.approvals) }) }}
                 </Link>
-                <ul v-if="d.suggestions.length" class="divide-y divide-border">
-                    <li v-for="s in d.suggestions" :key="s.ad_id" class="flex flex-wrap items-center gap-3 py-2">
-                        <button type="button" class="shrink-0" :aria-label="t('ads.control.row.preview')" @click="drawer.open(s.ad_id)">
-                            <CreativeThumb :ad="thumb(s)" :size="40" :show-pills="false" />
+                <ul v-if="d.suggestions.length" class="divide-y divide-line">
+                    <li v-for="s in d.suggestions" :key="s.ad_id" class="flex flex-wrap items-center gap-3 px-4 py-3">
+                        <button type="button" class="shrink-0 rounded-md" :aria-label="t('ads.control.row.preview')" @click="drawer.open(s.ad_id)">
+                            <CreativeThumb :ad="thumb(s)" :size="48" :show-pills="false" />
                         </button>
                         <div class="min-w-0 flex-1">
-                            <button type="button" class="block max-w-full truncate text-start text-xs font-medium hover:underline" dir="auto" @click="drawer.open(s.ad_id)">{{ s.name }}</button>
-                            <p class="truncate text-2xs text-muted-foreground">{{ reasonLine(s) }}</p>
+                            <button type="button" class="block max-w-full truncate text-start text-sm font-semibold hover:underline" dir="auto" @click="drawer.open(s.ad_id)">{{ s.name }}</button>
+                            <p class="line-clamp-2 text-[12.5px] text-fg-2">{{ reasonLine(s) }}</p>
                         </div>
                         <div class="flex items-center gap-1.5">
                             <AdStatusButton
@@ -132,16 +185,16 @@ const listHref = (list: (typeof LISTS)[number]) =>
                                 :data-at="freshness"
                                 :currency="currency"
                             />
-                            <button type="button" data-test="why" class="h-11 rounded-md px-3 text-xs text-primary hover:bg-muted md:h-7 md:px-2 md:text-2xs" @click="drawer.open(s.ad_id)">
+                            <button type="button" data-test="why" class="h-11 rounded-md px-3 text-[13px] font-semibold text-brand-ink hover:bg-sunken md:h-8 md:px-2.5" @click="drawer.open(s.ad_id)">
                                 {{ t('ads.control.row.why') }}
                             </button>
                         </div>
                     </li>
                 </ul>
                 <!-- The top open alert cards (S5), same cards as «محتاج قرار»; the actions live there. -->
-                <ul v-if="d.alerts.length" class="divide-y divide-border" data-test="today-alerts">
-                    <li v-for="c in d.alerts" :key="c.key" class="flex items-start gap-3 py-2" :data-alert-card="c.key">
-                        <span :class="['mt-1 inline-flex shrink-0 items-center gap-1 text-2xs font-semibold', severityTone[c.severity]]">
+                <ul v-if="d.alerts.length" class="divide-y divide-line border-t border-line" data-test="today-alerts">
+                    <li v-for="c in d.alerts" :key="c.key" class="flex items-start gap-3 px-4 py-2.5" :data-alert-card="c.key">
+                        <span :class="['mt-1 inline-flex shrink-0 items-center gap-1 text-xs font-semibold', severityTone[c.severity]]">
                             <span class="size-2 rounded-full bg-current" aria-hidden="true" />{{ t(`ads.alerts.severity.${c.severity}`) }}
                         </span>
                         <div class="min-w-0 flex-1">
@@ -157,9 +210,9 @@ const listHref = (list: (typeof LISTS)[number]) =>
                             <Link v-else :href="href('/ads/decisions')" class="block truncate text-xs font-medium hover:underline" dir="auto">
                                 <bdi>{{ alertTitle(c) }}</bdi>
                             </Link>
-                            <p class="line-clamp-2 text-2xs text-muted-foreground">{{ alertLine(c) }}</p>
+                            <p class="line-clamp-2 text-[12.5px] text-fg-2">{{ alertLine(c) }}</p>
                         </div>
-                        <span v-if="Math.round(c.money_at_risk_per_day) > 0" class="shrink-0 text-2xs tabular-nums">
+                        <span v-if="Math.round(c.money_at_risk_per_day) > 0" class="shrink-0 text-xs font-semibold tabular-nums">
                             {{ t('ads.alerts.money_at_risk', { money: Math.round(c.money_at_risk_per_day) }) }}
                         </span>
                     </li>
@@ -167,7 +220,7 @@ const listHref = (list: (typeof LISTS)[number]) =>
                 <Link
                     v-if="d.alerts_total > d.alerts.length"
                     :href="href('/ads/decisions')"
-                    class="block text-xs text-primary hover:underline"
+                    class="block border-t border-line px-4 py-2.5 text-[13px] font-semibold text-brand-ink hover:underline"
                     data-test="more-alerts"
                 >
                     {{ t('ads.control.today.more_alerts', { n: n(d.alerts_total - d.alerts.length) }) }}
@@ -175,43 +228,49 @@ const listHref = (list: (typeof LISTS)[number]) =>
                 <EmptyState v-if="decisionsCount === 0" :icon="CheckCircle2" :title="t('ads.control.today.empty_decisions')" />
             </section>
 
+            <div class="flex flex-col gap-4">
+            <!-- 09:00 digest (S5, D14): owner or buyer variant, fetched on its own so the page does not wait for it -->
+            <DigestCard />
+
             <!-- «جاهزة للنشر» (F4): drafts content prepared that wait for a buyer -->
-            <section v-if="handoff && handoff.total > 0" class="space-y-2 rounded-lg bg-card p-4 shadow-card" data-test="handoff">
-                <div class="flex items-center justify-between gap-2">
-                    <h2 class="text-sm font-semibold">{{ t('ads.control.today.handoff') }}</h2>
+            <section v-if="handoff && handoff.total > 0" :class="panel" data-test="handoff">
+                <div :class="panelHead">
+                    <h2 :class="panelTitle">{{ t('ads.control.today.handoff') }}</h2>
                     <Link
                         :href="`/ads/launches?box=${handoff.box}`"
-                        class="inline-flex h-9 items-center text-xs text-primary hover:underline"
+                        :class="panelLink"
                     >
                         {{ t(handoff.buyers.length ? 'ads.control.today.handoff_total' : 'ads.control.today.handoff_mine', { n: n(handoff.total) }) }}
                     </Link>
                 </div>
-                <ul v-if="handoff.buyers.length" class="flex flex-wrap gap-2">
+                <ul v-if="handoff.buyers.length" class="flex flex-wrap gap-2 px-4 pb-4">
                     <li v-for="b in handoff.buyers" :key="b.buyer_id">
                         <Link
                             :href="`/ads/launches?box=ready&reviewer=${b.buyer_id}`"
-                            class="inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs hover:bg-muted"
+                            class="inline-flex h-9 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[13px] hover:bg-surface-2"
                         >
                             <bdi>{{ b.buyer_name }}</bdi>
-                            <span class="rounded-full bg-muted px-1.5 tabular-nums">{{ n(b.count) }}</span>
+                            <span class="rounded-full bg-sunken px-1.5 tabular-nums">{{ n(b.count) }}</span>
                         </Link>
                     </li>
                 </ul>
             </section>
+            </div>
+            </div>
 
             <div class="grid gap-4 lg:grid-cols-2">
                 <!-- Money today -->
-                <section class="min-w-0 space-y-3 rounded-lg bg-card p-4 shadow-card">
-                    <h2 class="text-sm font-semibold">{{ t('ads.control.today.money_today') }}</h2>
-                    <dl class="grid grid-cols-2 gap-3 text-xs tabular-nums">
+                <section class="min-w-0 space-y-3 rounded-lg border border-line bg-card p-4">
+                    <h2 class="text-base font-bold leading-snug">{{ t('ads.control.today.money_today') }}</h2>
+                    <dl class="grid grid-cols-2 gap-3 text-[13px] tabular-nums">
                         <div>
-                            <dt class="text-muted-foreground">{{ t('ads.control.today.spent') }}</dt>
+                            <dt class="text-fg-2">{{ t('ads.control.today.spent') }}</dt>
                             <dd>
                                 <Link :href="href('/ads/explorer', { range: 'today', sort: '-spend' })" class="text-lg font-bold hover:underline">{{ money(m.spend_so_far) }}</Link>
                             </dd>
                         </div>
                         <div>
-                            <dt class="text-muted-foreground">{{ usualLabel }}</dt>
+                            <dt class="text-fg-2">{{ usualLabel }}</dt>
                             <dd class="text-lg font-semibold">{{ money(m.usual_by_now) }}</dd>
                             <dd v-if="m.ratio !== null" class="text-2xs" :class="m.ratio >= 2 ? 'font-semibold text-destructive' : 'text-muted-foreground'">
                                 {{ t('ads.control.today.ratio', { x: m.ratio }) }}
@@ -227,28 +286,28 @@ const listHref = (list: (typeof LISTS)[number]) =>
                 </section>
 
                 <!-- Last 7 complete days -->
-                <section class="min-w-0 space-y-3 rounded-lg bg-card p-4 shadow-card">
-                    <h2 class="text-sm font-semibold">{{ t('ads.control.today.last7') }}</h2>
-                    <dl class="grid grid-cols-2 gap-3 text-xs tabular-nums">
+                <section class="min-w-0 space-y-3 rounded-lg border border-line bg-card p-4">
+                    <h2 class="text-base font-bold leading-snug">{{ t('ads.control.today.last7') }}</h2>
+                    <dl class="grid grid-cols-2 gap-3 text-[13px] tabular-nums">
                         <div>
-                            <dt class="text-muted-foreground">{{ t('ads.control.today.spent') }}</dt>
+                            <dt class="text-fg-2">{{ t('ads.control.today.spent') }}</dt>
                             <dd>
                                 <Link :href="href('/ads/numbers', { range: 'last7' })" class="text-lg font-bold hover:underline">{{ money(w.spend_tax) }}</Link>
                             </dd>
                         </div>
                         <div>
-                            <dt class="text-muted-foreground">{{ t('ads.control.today.real_orders') }}</dt>
+                            <dt class="text-fg-2">{{ t('ads.control.today.real_orders') }}</dt>
                             <dd>
                                 <Link :href="href('/ads/numbers', { range: 'last7' })" class="text-lg font-bold hover:underline">{{ n(w.real_orders) }}</Link>
                             </dd>
                         </div>
                         <div>
-                            <dt class="text-muted-foreground">{{ t('ads.control.today.real_roas') }}</dt>
+                            <dt class="text-fg-2">{{ t('ads.control.today.real_roas') }}</dt>
                             <dd data-test="real-roas" class="text-2xl font-bold">{{ formatRoas(w.real_roas, locale) }}</dd>
                             <dd class="text-2xs text-muted-foreground">{{ t('ads.control.today.meta_roas') }} {{ formatRoas(w.roas, locale) }}</dd>
                         </div>
                         <div>
-                            <dt class="text-muted-foreground">{{ t('ads.control.today.losers', { pct: formatPct(w.losers_spend_share, locale, 0) }) }}</dt>
+                            <dt class="text-fg-2">{{ t('ads.control.today.losers', { pct: formatPct(w.losers_spend_share, locale, 0) }) }}</dt>
                             <dd>
                                 <Link data-test="losers-link" :href="href('/ads/explorer', { range: 'last7', health: 'losing', sort: '-spend' })" class="text-primary hover:underline">
                                     {{ t('ads.control.today.who') }}
@@ -269,12 +328,12 @@ const listHref = (list: (typeof LISTS)[number]) =>
             </div>
 
             <!-- Buyers strip (managers) -->
-            <section v-if="today.buyers" data-test="buyers-strip" class="space-y-2 rounded-lg bg-card p-4 shadow-card">
+            <section v-if="today.buyers" data-test="buyers-strip" class="space-y-2 rounded-lg border border-line bg-card p-4">
                 <div class="flex items-center justify-between gap-2">
-                    <h2 class="text-sm font-semibold">{{ t('ads.control.today.buyers') }}</h2>
-                    <Link :href="href('/ads/numbers', { range: 'last7', section: 'buyers' })" class="text-xs text-primary hover:underline">{{ t('ads.control.today.see_all') }}</Link>
+                    <h2 class="text-base font-bold leading-snug">{{ t('ads.control.today.buyers') }}</h2>
+                    <Link :href="href('/ads/numbers', { range: 'last7', section: 'buyers' })" class="text-[13px] font-semibold text-brand-ink hover:underline">{{ t('ads.control.today.see_all') }}</Link>
                 </div>
-                <ul class="divide-y divide-border text-xs">
+                <ul class="divide-y divide-line text-[13px]">
                     <li v-for="b in today.buyers" :key="b.buyer_id ?? 'none'" class="grid grid-cols-2 items-center gap-x-4 gap-y-1 py-2 md:grid-cols-[10rem_1fr_1fr_12rem_auto]">
                         <Link v-if="b.buyer_id" :href="href(`/ads/buyers/${b.buyer_id}`, { range: 'last7' })" class="truncate font-medium hover:underline">{{ b.name }}</Link>
                         <span v-else class="truncate text-muted-foreground">{{ b.name }}</span>
@@ -298,12 +357,12 @@ const listHref = (list: (typeof LISTS)[number]) =>
 
             <!-- Best / worst -->
             <div class="grid gap-4 lg:grid-cols-2">
-                <section v-for="list in LISTS" :key="list" class="min-w-0 space-y-2 rounded-lg bg-card p-4 shadow-card">
+                <section v-for="list in LISTS" :key="list" class="min-w-0 space-y-2 rounded-lg border border-line bg-card p-4">
                     <div class="flex items-center justify-between">
-                        <h2 class="text-sm font-semibold">{{ t(`ads.control.today.${list}`) }}</h2>
-                        <Link :href="listHref(list)" class="text-xs text-primary hover:underline">{{ t('ads.control.today.see_all') }}</Link>
+                        <h2 class="text-base font-bold leading-snug">{{ t(`ads.control.today.${list}`) }}</h2>
+                        <Link :href="listHref(list)" class="text-[13px] font-semibold text-brand-ink hover:underline">{{ t('ads.control.today.see_all') }}</Link>
                     </div>
-                    <ul v-if="today[list].length" class="divide-y divide-border">
+                    <ul v-if="today[list].length" class="divide-y divide-line">
                         <li v-for="r in today[list]" :key="r.id" class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                             <!-- Phones: name on its own line, then real ROAS and Stop; sm+: one line. -->
                             <AdRow :row="r" part="creative" :currency="currency" :thumb="false" class="col-span-2 sm:col-span-1" @open="drawer.open" />
