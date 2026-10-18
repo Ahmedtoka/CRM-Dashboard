@@ -603,6 +603,11 @@ const en: Messages = {
         },
     },
     customer: {
+        profile: 'Customer details',
+        totals: 'Her purchases',
+        contact: 'Contact',
+        copy_phone: 'Copy number',
+        phone_copied: 'Number copied',
         phone: 'Phone',
         email: 'Email',
         city: 'City',
@@ -630,6 +635,15 @@ const en: Messages = {
         ads: 'Came from ads',
     },
     order: {
+        fulfillments: {
+            title: 'Shipments',
+            no_update: 'No update from the carrier yet',
+            shipment: {
+                in_transit: 'In transit', out_for_delivery: 'Out for delivery', attempted_delivery: 'Delivery attempted', delivered: 'Delivered',
+                failure: 'Delivery failed', not_delivered: 'Not delivered', confirmed: 'Carrier confirmed', label_printed: 'Label printed',
+                label_purchased: 'Label purchased', ready_for_pickup: 'Ready for pickup', picked_up: 'Picked up', carrier_picked_up: 'Carrier picked up',
+            },
+        },
         create_title: 'New order',
         search: 'Search product or SKU',
         no_products: 'No products found',
@@ -833,6 +847,8 @@ const en: Messages = {
         empty: 'No comments match the filters',
     },
     orders: {
+        description: 'Every Shopify order, from chat and the store. New orders are made from the conversation.',
+        cancel_question: 'Cancel this order?',
         title: 'Orders',
         presets: { awaiting_payment: 'Awaiting payment', mismatch: 'Shopify mismatch', stuck: 'Stuck' },
         search: 'Order number or customer name/phone',
@@ -989,6 +1005,8 @@ const en: Messages = {
         },
     },
     cases: {
+        description: 'Returns, exchanges, complaints and delivery follow-ups. The bot records them; the team follows them until they close.',
+        load_error: 'Could not open this case',
         title: 'After-sale',
         search: 'Order number or customer name/phone',
         type_all: 'All types',
@@ -1046,10 +1064,13 @@ const en: Messages = {
         },
     },
     customers: {
+        description: 'Each customer’s file: her orders and conversations. Search (Ctrl K) is the fastest way to a customer.',
+        empty_search: 'No customers match this search',
+        empty_search_body: 'Try the phone number without the leading zero, or part of the name.',
         title: 'Customers',
         search: 'Search by name, phone or email',
         clear_search: 'Clear search',
-        columns: { name: 'Name', phone: 'Phone', platforms: 'Platforms', orders: 'Orders', spent: 'Total spent', last_contact: 'Last contact' },
+        columns: { city: 'Location', name: 'Name', phone: 'Phone', platforms: 'Platforms', orders: 'Orders', spent: 'Total spent', last_contact: 'Last contact' },
         empty: 'No customers',
         back: 'All customers',
         conversations: 'Conversations',
@@ -4603,6 +4624,7 @@ const en: Messages = {
         open_meta: 'Open in Meta',
         open_ad: 'Ad details',
         analytics: {
+            summary: 'Period summary',
             orders: 'Orders', revenue: 'Revenue', aov: 'Average order', customers: 'Customers', new_customers: 'New customers', repeat_customers: 'Returning customers',
             real_hint: 'Without cancelled and failed',
             by_governorate: 'By governorate', by_district: 'By district', rest: 'Others ({n})', unknown: 'Not set',
@@ -4693,6 +4715,8 @@ const en: Messages = {
         answers: { confirm: 'confirmed', edit: 'asked to edit', cancel: 'asked to cancel' },
         call_outcomes: { confirmed: 'confirmed', cancelled: 'cancelled', unreachable: 'unreachable' },
         call: {
+            dial: 'Call {phone}',
+            dial_short: 'Call',
             record: "Record the customer's answer",
             group: 'Call outcome',
             confirmed: 'Confirmed on the call',

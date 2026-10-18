@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import BarChart, { type BarDatum } from '@/components/crm/BarChart.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
-import StatCard from '@/components/crm/StatCard.vue';
+import Ledger, { type LedgerFigure } from '@/components/today/Ledger.vue';
 import { useI18n } from '@/composables/useI18n';
 import { formatCount, formatMoney } from '@/lib/format';
 import { formatTodayDate } from '@/lib/today';
@@ -29,6 +29,25 @@ const statuses = computed<BarDatum[]>(() =>
 const days = computed<BarDatum[]>(() => props.data.days.map((d) => ({ key: d.date, label: formatTodayDate(d.date, locale.value), value: d.orders })));
 const labelEvery = computed(() => Math.max(1, Math.ceil(props.data.days.length / 10)));
 const totals = computed(() => props.data.totals);
+/** The period in one ledger (DESIGN §3 Ledger): money as whole pounds with «ج.م» beside it, not six separate cards. */
+const currency = computed(() => t('common.currency'));
+const figures = computed<LedgerFigure[]>(() => {
+    const tt = totals.value;
+    return [
+        { key: 'orders', label: t('ordersHub.analytics.orders'), value: n(tt.orders) },
+        {
+            key: 'revenue',
+            label: t('ordersHub.analytics.revenue'),
+            value: n(Math.round(tt.revenue)),
+            unit: currency.value,
+            note: t('ordersHub.analytics.real_hint'),
+        },
+        { key: 'aov', label: t('ordersHub.analytics.aov'), value: n(Math.round(tt.aov)), unit: currency.value },
+        { key: 'customers', label: t('ordersHub.analytics.customers'), value: n(tt.customers) },
+        { key: 'new_customers', label: t('ordersHub.analytics.new_customers'), value: n(tt.new_customers ?? 0) },
+        { key: 'repeat_customers', label: t('ordersHub.analytics.repeat_customers'), value: n(tt.repeat_customers ?? 0) },
+    ];
+});
 const frequency = computed(() => [
     { key: 'one', label: t('ordersHub.analytics.one'), value: props.data.frequency.one },
     { key: 'two', label: t('ordersHub.analytics.two'), value: props.data.frequency.two },
@@ -39,14 +58,7 @@ const frequency = computed(() => [
 <template>
     <EmptyState v-if="totals.orders === 0" :icon="ChartColumn" :title="t('ordersHub.analytics.empty')" />
     <div v-else class="min-w-0 space-y-4" data-orders-analytics>
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <StatCard :label="t('ordersHub.analytics.orders')" :value="totals.orders" />
-            <StatCard :label="t('ordersHub.analytics.revenue')" :value="money(totals.revenue)" :hint="t('ordersHub.analytics.real_hint')" />
-            <StatCard :label="t('ordersHub.analytics.aov')" :value="money(totals.aov)" />
-            <StatCard :label="t('ordersHub.analytics.customers')" :value="totals.customers" />
-            <StatCard :label="t('ordersHub.analytics.new_customers')" :value="totals.new_customers ?? 0" />
-            <StatCard :label="t('ordersHub.analytics.repeat_customers')" :value="totals.repeat_customers ?? 0" />
-        </div>
+        <Ledger :figures="figures" :label="t('ordersHub.analytics.summary')" />
 
         <section class="min-w-0 rounded-lg bg-card p-3 shadow-card">
             <BarChart :title="t('ordersHub.analytics.by_day')" :items="days" orientation="vertical" :label-every="labelEvery" :format="n" />

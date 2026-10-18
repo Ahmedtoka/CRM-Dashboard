@@ -16,6 +16,21 @@ const Table = loose(DataTable);
 describe('DataTable', () => {
     beforeEach(() => localStorage.clear());
 
+    it('lays the phone card out as a two-column grid only when asked, a wide column across both', () => {
+        const plain = mount(Table, { props: { columns, rows } });
+        expect(plain.find('[data-card-grid]').exists()).toBe(false);
+
+        const wide = [...columns, { key: 'note', label: 'Note', wide: true }];
+        const w = mount(Table, { props: { columns: wide, rows: [{ id: 1, name: 'A', spend: 10, note: 'n' }], cardGrid: true } });
+        const card = w.find('[data-card-grid]');
+        expect(card.classes()).toContain('grid');
+        const cells = card.findAll(':scope > div');
+        expect(cells[0].classes()).toContain('col-span-2');
+        expect(cells[1].classes()).not.toContain('col-span-2');
+        expect(cells[2].classes()).toContain('col-span-2');
+        expect(cells[1].text()).toContain('Spend');
+    });
+
     it('keeps the header sticky inside its own scroll box by default', () => {
         const w = mount(Table, { props: { columns, rows } });
         expect(w.find('thead').classes()).toContain('crm-sticky-head');

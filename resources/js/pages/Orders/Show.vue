@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import AdDrawer from '@/components/ads/AdDrawer.vue';
 import OrderConfirmationCard from '@/components/crm/confirmations/OrderConfirmationCard.vue';
+import DetailPanel from '@/components/crm/orders/DetailPanel.vue';
 import OrderNote from '@/components/crm/orders/OrderNote.vue';
+import OrderSourceChip from '@/components/crm/orders/OrderSourceChip.vue';
 import OrderSyncLine from '@/components/crm/orders/OrderSyncLine.vue';
 import OrderSummary from '@/components/crm/OrderSummary.vue';
 import OrderTimeline from '@/components/crm/OrderTimeline.vue';
@@ -8,11 +11,13 @@ import PageHeader from '@/components/crm/PageHeader.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { Button } from '@/components/ui/button';
+import { useAdDrawer } from '@/composables/useAdDrawer';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatDateTime } from '@/lib/format';
+import { cairoDayKey, cairoToday, formatDateTime } from '@/lib/format';
+import { drawerRange } from '@/lib/ordersHub';
 import {
     orderFamilies,
     orderLabel,
@@ -27,7 +32,19 @@ import type { OrderRow } from '@/types/admin';
 import type { Order } from '@/types/crm';
 import type { OrderConfirmationBlock } from '@/types/orderConfirmations';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { ExternalLink, MessageCircle, MessagesSquare, Package, RotateCcw, StickyNote, Store, TriangleAlert, Truck } from 'lucide-vue-next';
+import {
+    ExternalLink,
+    MapPin,
+    MessageCircle,
+    MessagesSquare,
+    Package,
+    RotateCcw,
+    StickyNote,
+    Store,
+    TriangleAlert,
+    Truck,
+    User,
+} from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = withDefaults(
@@ -36,8 +53,10 @@ const props = withDefaults(
         canManage: boolean;
         /** WhatsApp order confirmation (spec 2026-10-16); null when none was made. */
         confirmation?: OrderConfirmationBlock | null;
+        /** Supervisors and admins: the source chip opens the ad drawer. */
+        canOpenAds?: boolean;
     }>(),
-    { confirmation: null },
+    { confirmation: null, canOpenAds: false },
 );
 
 const { t, locale } = useI18n();
@@ -79,7 +98,9 @@ const canCancel = computed(
 const canMarkPaid = computed(() => props.canManage && order.value.status === 'awaiting_payment');
 // Mirrors OrderPolicy::retry — supervisors/admins or the order's creator.
 const canRetry = computed(() => order.value.status === 'failed' && (props.canManage || order.value.created_by?.id === page.props.auth.user.id));
-const trackingUrl = computed(() => order.value.fulfillments?.find((f) => f.tracking_url)?.tracking_url ?? null);
+/** Carrier links come from Shopify: only http(s) ones become links. */
+const safeUrl = (url: string | null | undefined): string | null => (url && /^https?:\/\//i.test(url) ? url : null);
+const trackingUrl = computed(() => safeUrl(order.value.fulfillments?.find((f) => safeUrl(f.tracking_url))?.tracking_url));
 
 const statusLabel = (prefix: string, value: string | null | undefined) => shopifyLabel(t, prefix, value);
 
@@ -129,7 +150,34 @@ const breadcrumbs = computed(() => [
     { title: number.value, href: `/orders/${order.value.id}` },
 ]);
 const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, href: b.href })));
-const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-background px-3 text-xs font-medium hover:bg-muted disabled:opacity-50';
+const btn =
+    'inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 text-13 font-semibold hover:bg-surface-2 disabled:opacity-50';
+
+const drawer = useAdDrawer();
+/** The ad drawer opens on the order's own month (its figures, not this month's), up to today. */
+const adRange = computed(() => {
+    const day = cairoDayKey(order.value.placed_at ?? order.value.created_at);
+    if (!day) return drawerRange({ from: null, to: null });
+    const [y, m] = day.split('-').map(Number);
+    const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    const today = cairoToday();
+    return drawerRange({ from: `${day.slice(0, 8)}01`, to: last < today ? last : today });
+});
+/** The line under the title: who, how she pays, when (the chips beside the title carry the state). */
+const subline = computed(() =>
+    [
+        order.value.customer?.name ?? order.value.shipping?.name,
+        t(`order.${order.value.type}`),
+        formatDateTime(order.value.placed_at ?? order.value.created_at, locale.value),
+    ]
+        .filter(Boolean)
+        .join(' · '),
+);
+
+/** Shopify fulfillments (tracking company, number, the carrier's step), newest first (OrderResource sends them oldest first). */
+const fulfillments = computed(() => [...(order.value.fulfillments ?? [])].reverse());
+const fulfillmentTone = (status: string | null) =>
+    status === 'delivered' ? 'ok' : status === 'failure' || status === 'not_delivered' ? 'danger' : status ? 'info' : 'neutral';
 </script>
 
 <template>
@@ -137,18 +185,34 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full min-w-0 max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="number" :breadcrumbs="crumbs">
+            <PageHeader :title="number" :description="subline" :breadcrumbs="crumbs">
+                <template #extra>
+                    <!-- One chip per family (payment, fulfilment, shipment step), never twice. -->
+                    <span class="flex flex-wrap items-center gap-1.5" data-order-chips>
+                        <StatusChip v-if="crmStatusChip" :label="t(`orders.statuses.${order.status}`)" :tone="orderStatusTone[order.status]" />
+                        <StatusChip
+                            v-if="families.payment"
+                            :label="statusLabel('orders.payment_status', families.payment)"
+                            :tone="paymentTone(families.payment)"
+                        />
+                        <StatusChip
+                            v-if="families.fulfillment"
+                            :label="statusLabel('orders.fulfillment_status', families.fulfillment)"
+                            tone="neutral"
+                        />
+                        <StatusChip v-if="families.step" :label="statusLabel('shipment.status', families.step)" :tone="shipmentTone(families.step)" />
+                    </span>
+                </template>
                 <button type="button" :class="btn" @click="copyStatus">
-                    <Package class="size-3.5" aria-hidden="true" />{{ t('order.copy_status') }}
+                    <Package class="size-4" aria-hidden="true" />{{ t('order.copy_status') }}
                 </button>
                 <a v-if="trackingUrl" :href="trackingUrl" target="_blank" rel="noopener noreferrer" :class="btn">
-                    <Truck class="size-3.5" aria-hidden="true" />{{ t('order.track') }}
+                    <Truck class="size-4" aria-hidden="true" />{{ t('order.track') }}
                 </a>
                 <Button
                     v-if="canRetry"
                     type="button"
                     variant="outline"
-                    size="sm"
                     class="text-destructive"
                     :loading="busy === 'retry'"
                     :disabled="!!busy"
@@ -160,160 +224,180 @@ const btn = 'inline-flex h-8 items-center gap-1.5 rounded-md border bg-backgroun
                     v-if="canMarkPaid"
                     type="button"
                     variant="outline"
-                    size="sm"
                     :loading="busy === 'mark-paid'"
                     :disabled="!!busy"
                     @click="act('mark-paid')"
                 >
                     {{ t('orders.mark_paid') }}
                 </Button>
-                <button v-if="canCancel && !confirmingCancel" type="button" :class="[btn, 'text-destructive']" @click="confirmingCancel = true">
+                <button v-if="canCancel && !confirmingCancel" type="button" :class="[btn, 'text-danger']" @click="confirmingCancel = true">
                     {{ t('orders.cancel') }}
                 </button>
             </PageHeader>
 
             <div
                 v-if="canCancel && confirmingCancel"
-                class="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive"
+                class="flex flex-wrap items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-13 text-danger"
+                role="alert"
+                data-cancel-confirm
             >
-                <label class="flex items-center gap-1.5"><input v-model="restock" type="checkbox" />{{ t('order.restock') }}</label>
-                <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    class="h-7 px-2"
-                    :loading="busy === 'cancel'"
-                    :disabled="!!busy"
-                    @click="act('cancel')"
+                <span class="font-semibold">{{ t('orders.cancel_question') }}</span>
+                <label class="flex items-center gap-1.5 text-foreground"
+                    ><input v-model="restock" type="checkbox" class="size-4" />{{ t('order.restock') }}</label
                 >
+                <span class="flex-1" />
+                <Button type="button" variant="destructive" size="sm" :loading="busy === 'cancel'" :disabled="!!busy" @click="act('cancel')">
                     {{ t('orders.cancel_confirm') }}
                 </Button>
-                <button
-                    type="button"
-                    class="inline-flex h-7 items-center rounded-md border bg-background px-2 font-medium hover:bg-muted"
-                    @click="confirmingCancel = false"
-                >
-                    {{ t('ui.no') }}
-                </button>
+                <Button type="button" variant="ghost" size="sm" class="text-foreground" @click="confirmingCancel = false">{{ t('ui.no') }}</Button>
             </div>
 
-            <div class="flex flex-wrap items-center gap-1.5 text-xs">
-                <span class="inline-flex text-muted-foreground" :title="t(`orders.source.${order.source ?? 'chat'}`)"
-                    ><component :is="order.source === 'store' ? Store : MessageCircle" class="size-3.5" aria-hidden="true" /><span class="sr-only">{{
+            <!-- Where it came from: chat or store, the platform, and the ad it is credited to (or «مباشر»). -->
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-13 text-fg-2" data-order-source-line>
+                <span class="inline-flex items-center gap-1.5">
+                    <component :is="order.source === 'store' ? Store : MessageCircle" class="size-4 text-fg-3" aria-hidden="true" />{{
                         t(`orders.source.${order.source ?? 'chat'}`)
-                    }}</span></span
-                >
-                <!-- One chip per family (payment, fulfilment, shipment step), never twice. -->
-                <StatusChip v-if="crmStatusChip" :label="t(`orders.statuses.${order.status}`)" :tone="orderStatusTone[order.status]" />
-                <StatusChip
-                    v-if="families.payment"
-                    :label="statusLabel('orders.payment_status', families.payment)"
-                    :tone="paymentTone(families.payment)"
-                />
-                <StatusChip v-if="families.fulfillment" :label="statusLabel('orders.fulfillment_status', families.fulfillment)" tone="neutral" />
-                <StatusChip v-if="families.step" :label="statusLabel('shipment.status', families.step)" :tone="shipmentTone(families.step)" />
-                <PlatformBadge :platform="order.platform" show-label />
-                <span class="text-muted-foreground"
-                    >{{ t(`order.${order.type}`) }} · <span class="tabular-nums">{{ formatDateTime(order.created_at, locale) }}</span></span
-                >
+                    }}
+                </span>
+                <PlatformBadge v-if="order.platform" :platform="order.platform" show-label />
+                <span v-if="order.ad_source !== undefined" class="inline-flex min-w-0 items-center gap-1.5" data-order-ad>
+                    <span class="text-fg-3">{{ t('ordersHub.columns.source') }}:</span>
+                    <OrderSourceChip :source="order.ad_source" :can-open-ads="canOpenAds" @open="drawer.open" />
+                </span>
+                <span>{{ t('order.created_by', { name: order.created_by?.name ?? t('orders.bot') }) }}</span>
             </div>
 
             <OrderSyncLine :order="order" @refreshed="onRefreshed" />
 
             <p
                 v-if="order.mismatch"
-                class="flex items-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive"
+                class="flex items-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-13 text-danger"
+                role="status"
             >
-                <TriangleAlert class="size-3.5 shrink-0" aria-hidden="true" />
+                <TriangleAlert class="size-4 shrink-0" aria-hidden="true" />
                 {{ order.mismatch_reason ? t(`order.mismatch.reasons.${order.mismatch_reason}`) : t('order.mismatch.title') }}
             </p>
 
-            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
                 <div class="min-w-0 space-y-4">
-                    <section v-if="order.note" class="rounded-lg bg-card p-3 text-xs shadow-card lg:hidden" :aria-label="t('orders.note_card.title')">
-                        <h2 class="mb-1.5 flex items-center gap-1.5 font-medium">
-                            <StickyNote class="size-3.5 text-amber-600 dark:text-amber-400" aria-hidden="true" />{{ t('orders.note_card.title') }}
-                        </h2>
+                    <!-- On a phone (one column) the note sits above the items; on desktop it heads the side column. -->
+                    <DetailPanel v-if="order.note" :title="t('orders.note_card.title')" :icon="StickyNote" tone="note" class="lg:hidden">
                         <OrderNote :note="order.note" :lines="6" class="text-sm" />
-                    </section>
+                    </DetailPanel>
                     <OrderSummary :order="order" />
-                    <section class="rounded-lg bg-card p-3 shadow-card">
-                        <h2 class="mb-2 text-xs font-medium">{{ t('orders.timeline.title') }}</h2>
+
+                    <DetailPanel v-if="fulfillments.length" :title="t('order.fulfillments.title')" :icon="Truck" flush data-order-fulfillments>
+                        <ul class="divide-y divide-line">
+                            <li v-for="f in fulfillments" :key="f.id" class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-13">
+                                <StatusChip
+                                    :label="
+                                        f.shipment_status
+                                            ? statusLabel('order.fulfillments.shipment', f.shipment_status)
+                                            : t('order.fulfillments.no_update')
+                                    "
+                                    :tone="fulfillmentTone(f.shipment_status)"
+                                />
+                                <span class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+                                    <span v-if="f.tracking_company" class="font-semibold" dir="auto">{{ f.tracking_company }}</span>
+                                    <bdi v-if="f.tracking_number" class="tabular-nums text-fg-2" dir="ltr">{{ f.tracking_number }}</bdi>
+                                </span>
+                                <span class="whitespace-nowrap text-xs tabular-nums text-fg-3">{{
+                                    formatDateTime(f.updated_at ?? f.created_at, locale)
+                                }}</span>
+                                <a
+                                    v-if="safeUrl(f.tracking_url)"
+                                    :href="safeUrl(f.tracking_url) ?? undefined"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="inline-flex items-center gap-1 font-semibold text-brand-ink hover:underline"
+                                >
+                                    <ExternalLink class="size-3.5" aria-hidden="true" />{{ t('order.track') }}
+                                </a>
+                            </li>
+                        </ul>
+                    </DetailPanel>
+
+                    <DetailPanel :title="t('orders.timeline.title')">
                         <OrderTimeline :entries="order.timeline ?? []" />
-                    </section>
+                    </DetailPanel>
                 </div>
 
-                <aside class="space-y-4 text-xs">
-                    <!-- The note heads the side column; on a phone (one column) it sits above the items instead. -->
-                    <section v-if="order.note" class="hidden rounded-lg bg-card p-3 shadow-card lg:block" :aria-label="t('orders.note_card.title')">
-                        <h2 class="mb-1.5 flex items-center gap-1.5 font-medium">
-                            <StickyNote class="size-3.5 text-amber-600 dark:text-amber-400" aria-hidden="true" />{{ t('orders.note_card.title') }}
-                        </h2>
+                <aside class="min-w-0 space-y-4 text-13">
+                    <DetailPanel v-if="order.note" :title="t('orders.note_card.title')" :icon="StickyNote" tone="note" class="hidden lg:block">
                         <OrderNote :note="order.note" :lines="6" class="text-sm" />
-                    </section>
+                    </DetailPanel>
 
                     <OrderConfirmationCard v-if="confirmation" :confirmation="confirmation" />
 
-                    <section class="space-y-1.5 rounded-lg bg-card p-3 shadow-card">
-                        <h2 class="font-medium">{{ t('orders.columns.customer') }}</h2>
-                        <Link
-                            v-if="order.customer"
-                            :href="`/customers/${order.customer.id}`"
-                            class="block font-medium text-primary hover:underline"
-                            >{{ order.customer.name }}</Link
-                        >
-                        <p class="text-muted-foreground">{{ t('order.created_by', { name: order.created_by?.name ?? t('orders.bot') }) }}</p>
-                        <Link
-                            v-if="order.conversation_id"
-                            :href="`/inbox?c=${order.conversation_id}`"
-                            class="inline-flex items-center gap-1 text-primary hover:underline"
-                        >
-                            <MessagesSquare class="size-3.5" aria-hidden="true" />{{ t('ui.open_conversation') }}
-                        </Link>
-                    </section>
+                    <DetailPanel :title="t('orders.columns.customer')" :icon="User">
+                        <div class="space-y-1.5">
+                            <Link
+                                v-if="order.customer"
+                                :href="`/customers/${order.customer.id}`"
+                                class="block font-semibold text-brand-ink hover:underline"
+                                dir="auto"
+                                >{{ order.customer.name }}</Link
+                            >
+                            <p v-if="order.customer?.phone" class="text-start tabular-nums text-fg-2" dir="ltr">{{ order.customer.phone }}</p>
+                            <Link
+                                v-if="order.conversation_id"
+                                :href="`/inbox?c=${order.conversation_id}`"
+                                class="inline-flex items-center gap-1.5 font-semibold text-brand-ink hover:underline"
+                            >
+                                <MessagesSquare class="size-4" aria-hidden="true" />{{ t('ui.open_conversation') }}
+                            </Link>
+                        </div>
+                    </DetailPanel>
 
-                    <section v-if="order.shipping" class="space-y-1 rounded-lg bg-card p-3 shadow-card">
-                        <h2 class="font-medium">{{ t('orders.shipping_to') }}</h2>
-                        <p>{{ order.shipping.name }}</p>
-                        <p v-if="order.shipping.phone" dir="ltr" class="text-start">{{ order.shipping.phone }}</p>
-                        <p class="text-muted-foreground">{{ [order.shipping.city, order.shipping.address].filter(Boolean).join(' — ') }}</p>
-                    </section>
+                    <DetailPanel v-if="order.shipping" :title="t('orders.shipping_to')" :icon="MapPin">
+                        <div class="space-y-1">
+                            <p class="font-semibold" dir="auto">{{ order.shipping.name }}</p>
+                            <p v-if="order.shipping.phone" dir="ltr" class="text-start tabular-nums text-fg-2">{{ order.shipping.phone }}</p>
+                            <p class="text-fg-2" dir="auto">{{ [order.shipping.city, order.shipping.address].filter(Boolean).join(' — ') }}</p>
+                        </div>
+                    </DetailPanel>
 
-                    <section class="space-y-1.5 rounded-lg bg-card p-3 shadow-card">
-                        <h2 class="font-medium">{{ t('orders.shopify') }}</h2>
-                        <p v-if="order.shopify_order_id">
-                            <span class="text-muted-foreground">{{ t('orders.shopify_order') }}:</span>
-                            <span dir="ltr">{{ order.shopify_order_id }}</span>
-                        </p>
-                        <p v-if="order.shopify_draft_order_id">
-                            <span class="text-muted-foreground">{{ t('orders.shopify_draft') }}:</span>
-                            <span dir="ltr">{{ order.shopify_draft_order_id }}</span>
-                        </p>
-                        <a
-                            v-if="order.shopify_admin_url"
-                            :href="order.shopify_admin_url"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="inline-flex items-center gap-1 text-primary hover:underline"
-                        >
-                            <ExternalLink class="size-3.5" aria-hidden="true" />{{ t('orders.open_shopify') }}
-                        </a>
-                        <p v-else-if="order.shopify_order_id" class="text-2xs text-muted-foreground">{{ t('orders.shop_missing') }}</p>
-                        <p v-if="order.paid_at">
-                            <span class="text-muted-foreground">{{ t('orders.paid_at') }}:</span> {{ formatDateTime(order.paid_at, locale) }}
-                        </p>
-                        <a
-                            v-if="order.invoice_url"
-                            :href="order.invoice_url"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="inline-flex items-center gap-1 break-all text-primary hover:underline"
-                        >
-                            <ExternalLink class="size-3.5 shrink-0" aria-hidden="true" />{{ t('orders.invoice') }}
-                        </a>
-                    </section>
+                    <DetailPanel :title="t('orders.shopify')" :icon="Store">
+                        <dl class="space-y-1.5">
+                            <div v-if="order.shopify_order_id" class="flex justify-between gap-3">
+                                <dt class="text-fg-2">{{ t('orders.shopify_order') }}</dt>
+                                <dd class="tabular-nums" dir="ltr">{{ order.shopify_order_id }}</dd>
+                            </div>
+                            <div v-if="order.shopify_draft_order_id" class="flex justify-between gap-3">
+                                <dt class="text-fg-2">{{ t('orders.shopify_draft') }}</dt>
+                                <dd class="tabular-nums" dir="ltr">{{ order.shopify_draft_order_id }}</dd>
+                            </div>
+                            <div v-if="order.paid_at" class="flex justify-between gap-3">
+                                <dt class="text-fg-2">{{ t('orders.paid_at') }}</dt>
+                                <dd class="tabular-nums">{{ formatDateTime(order.paid_at, locale) }}</dd>
+                            </div>
+                        </dl>
+                        <div class="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
+                            <a
+                                v-if="order.shopify_admin_url"
+                                :href="order.shopify_admin_url"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="inline-flex items-center gap-1.5 font-semibold text-brand-ink hover:underline"
+                            >
+                                <ExternalLink class="size-4" aria-hidden="true" />{{ t('orders.open_shopify') }}
+                            </a>
+                            <p v-else-if="order.shopify_order_id" class="text-xs text-fg-2">{{ t('orders.shop_missing') }}</p>
+                            <a
+                                v-if="order.invoice_url"
+                                :href="order.invoice_url"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="inline-flex items-center gap-1.5 break-all font-semibold text-brand-ink hover:underline"
+                            >
+                                <ExternalLink class="size-4 shrink-0" aria-hidden="true" />{{ t('orders.invoice') }}
+                            </a>
+                        </div>
+                    </DetailPanel>
                 </aside>
             </div>
         </div>
+
+        <AdDrawer v-if="canOpenAds" :ad-id="drawer.adId.value" :filters="adRange" @close="drawer.close" />
     </AppLayout>
 </template>

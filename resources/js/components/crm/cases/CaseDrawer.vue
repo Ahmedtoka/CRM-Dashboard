@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import CaseSlaChip from '@/components/crm/cases/CaseSlaChip.vue';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import EmptyState from '@/components/crm/EmptyState.vue';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
-import { casePriorityTone, caseStatusTone } from '@/lib/caseStatus';
+import { casePriorityTone, caseStatusTone, caseTypeTone } from '@/lib/caseStatus';
 import { formatCount, formatDateTime, formatMoney } from '@/lib/format';
 import type { SupportCase } from '@/types/crm';
 import { Link } from '@inertiajs/vue3';
+import { useMediaQuery } from '@vueuse/core';
+import { MessagesSquare } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 import StatusChip from '../StatusChip.vue';
 import CaseSummarySections from './CaseSummarySections.vue';
@@ -70,95 +74,132 @@ function onAssignedChange(event: Event): void {
     void patch({ assigned_to_id: value ? Number(value) : null });
 }
 
-const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-2 text-xs';
+const phone = useMediaQuery('(max-width: 759px)');
+const selectClass = 'h-9 w-full rounded-md border border-line-strong bg-card px-2 text-13 disabled:opacity-60';
 </script>
 
 <template>
     <Sheet v-model:open="open">
-        <SheetContent :side="dir === 'rtl' ? 'left' : 'right'" class="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-md">
-            <SheetHeader class="border-b px-4 py-3 text-start">
-                <SheetTitle class="text-sm">{{ item ? t('cases.card_title', { id: item.id }) : t('cases.title') }}</SheetTitle>
-                <SheetDescription v-if="item" class="text-xs" :dir="dir">{{ item.summary_header }}</SheetDescription>
+        <!-- 440px from the end side on desktop; a bottom sheet on a phone (DESIGN §3 Sheet, §6). -->
+        <SheetContent
+            :side="phone ? 'bottom' : dir === 'rtl' ? 'left' : 'right'"
+            class="flex w-full flex-col gap-0 p-0"
+            :class="phone ? 'max-h-[90dvh] rounded-t-xl' : 'sm:max-w-[440px]'"
+        >
+            <SheetHeader class="space-y-1.5 border-b border-line px-5 pb-3.5 pt-4 text-start">
+                <SheetTitle class="flex flex-wrap items-center gap-2 text-lg font-bold">
+                    {{ item ? t('cases.card_title', { id: item.id }) : t('cases.title') }}
+                    <StatusChip v-if="item" :label="t(`cases.types.${item.type}`)" :tone="caseTypeTone[item.type] ?? 'neutral'" />
+                </SheetTitle>
+                <!-- The header line repeats the chips under it; screen readers still get it as the sheet's description. -->
+                <SheetDescription v-if="item" class="sr-only" :dir="dir">{{ item.summary_header }}</SheetDescription>
+                <div v-if="item" class="flex flex-wrap items-center gap-1.5 pt-0.5" data-case-chips>
+                    <StatusChip :label="t(`cases.tabs.${item.status}`)" :tone="caseStatusTone[item.status]" />
+                    <CaseSlaChip :sla="item.sla" />
+                    <StatusChip :label="t(`cases.priority.${item.priority}`)" :tone="casePriorityTone[item.priority]" size="sm" />
+                    <StatusChip v-if="item.request_kind" :label="t(`cases.types.${item.request_kind}`)" tone="info" size="sm" />
+                </div>
             </SheetHeader>
 
-            <div v-if="loading" class="space-y-3 p-4" aria-busy="true">
+            <div v-if="loading" class="space-y-3 p-5" aria-busy="true" :aria-label="t('ui.loading')">
                 <Skeleton class="h-5 w-1/2" />
                 <Skeleton class="h-16 w-full" />
                 <Skeleton class="h-16 w-full" />
+                <Skeleton class="h-24 w-full" />
             </div>
 
-            <div v-else-if="error && !item" class="p-4 text-xs text-destructive">{{ error }}</div>
+            <!-- What failed, and a way to try again (DESIGN §4: no bare «حصل خطأ»). -->
+            <EmptyState v-else-if="error && !item" variant="error" :title="t('cases.load_error')" :body="error">
+                <template #action>
+                    <Button v-if="caseId !== null" variant="outline" size="sm" @click="load(caseId)">{{ t('ui.retry') }}</Button>
+                </template>
+            </EmptyState>
 
-            <div v-else-if="item" class="scrollbar-thin flex-1 space-y-4 overflow-y-auto p-4 text-sm">
-                <div class="flex flex-wrap items-center gap-2">
-                    <StatusChip :label="t(`cases.priority.${item.priority}`)" :tone="casePriorityTone[item.priority]" />
-                    <StatusChip :label="t(`cases.tabs.${item.status}`)" :tone="caseStatusTone[item.status]" />
-                    <CaseSlaChip :sla="item.sla" />
-                    <StatusChip v-if="item.request_kind" :label="t(`cases.types.${item.request_kind}`)" tone="info" />
-                </div>
-
-                <p v-if="item.request_kind && item.reason" class="text-xs">
-                    <span class="font-semibold text-muted-foreground">{{ t('cases.reason') }}:</span> {{ item.reason }}
-                </p>
-
-                <p v-if="item.opened_by" class="text-xs text-muted-foreground">
-                    {{ t('cases.sla.opened_by', { name: item.opened_by.name }) }}
-                </p>
-
-                <p class="text-xs text-muted-foreground">
-                    {{ t('cases.created_at') }}: <span class="tabular-nums">{{ formatDateTime(item.created_at, locale) }}</span>
-                </p>
+            <div v-else-if="item" class="scrollbar-thin flex-1 space-y-5 overflow-y-auto px-5 py-4 text-sm">
+                <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-13" data-case-meta>
+                    <template v-if="item.customer">
+                        <dt class="text-fg-2">{{ t('cases.columns.customer') }}</dt>
+                        <dd class="min-w-0">
+                            <Link
+                                v-if="item.customer.id"
+                                :href="`/customers/${item.customer.id}`"
+                                class="font-semibold text-brand-ink hover:underline"
+                                dir="auto"
+                                >{{ item.customer.name ?? '—' }}</Link
+                            >
+                            <bdi v-if="item.customer.phone" dir="ltr" class="ms-2 tabular-nums text-fg-2">{{ item.customer.phone }}</bdi>
+                        </dd>
+                    </template>
+                    <dt class="text-fg-2">{{ t('cases.columns.order') }}</dt>
+                    <dd>
+                        <Link v-if="item.order_id" :href="`/orders/${item.order_id}`" class="font-semibold text-brand-ink hover:underline"
+                            ><bdi dir="ltr">{{ item.order_number ?? `#${item.order_id}` }}</bdi></Link
+                        >
+                        <span v-else class="text-fg-3">{{ t('cases.no_order') }}</span>
+                    </dd>
+                    <template v-if="item.request_kind && item.reason">
+                        <dt class="text-fg-2">{{ t('cases.reason') }}</dt>
+                        <dd dir="auto">{{ item.reason }}</dd>
+                    </template>
+                    <dt class="text-fg-2">{{ t('cases.created_at') }}</dt>
+                    <dd class="tabular-nums">{{ formatDateTime(item.created_at, locale) }}</dd>
+                </dl>
+                <p v-if="item.opened_by" class="-mt-3 text-xs text-fg-2">{{ t('cases.sla.opened_by', { name: item.opened_by.name }) }}</p>
 
                 <CaseSummarySections :sections="item.summary_sections" />
 
-                <div v-if="item.items?.length" class="space-y-1.5">
-                    <h3 class="text-xs font-semibold text-muted-foreground">{{ t('cases.items.title') }}</h3>
-                    <div class="overflow-x-auto rounded-md border border-border">
-                        <table class="w-full text-xs" :dir="dir">
-                            <thead class="bg-muted/60 text-muted-foreground">
+                <div v-if="item.items?.length" class="space-y-2">
+                    <h3 class="text-13 font-bold">{{ t('cases.items.title') }}</h3>
+                    <div class="overflow-x-auto rounded-lg border border-line">
+                        <table class="w-full text-13" :dir="dir">
+                            <thead class="bg-surface-2 text-xs font-semibold text-fg-2">
                                 <tr>
-                                    <th scope="col" class="px-2 py-1.5 text-start font-medium">{{ t('cases.items.item') }}</th>
-                                    <th scope="col" class="px-2 py-1.5 text-start font-medium">{{ t('cases.items.variant') }}</th>
-                                    <th scope="col" class="px-2 py-1.5 text-center font-medium">{{ t('cases.items.qty') }}</th>
-                                    <th scope="col" class="px-2 py-1.5 text-end font-medium">{{ t('cases.items.price') }}</th>
+                                    <th scope="col" class="px-3 py-2 text-start">{{ t('cases.items.item') }}</th>
+                                    <th scope="col" class="px-3 py-2 text-start">{{ t('cases.items.variant') }}</th>
+                                    <th scope="col" class="px-3 py-2 text-center">{{ t('cases.items.qty') }}</th>
+                                    <th scope="col" class="px-3 py-2 text-end">{{ t('cases.items.price') }}</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="(row, index) in item.items" :key="index" class="border-t border-border">
-                                    <td class="px-2 py-1.5" dir="auto">
-                                        <span class="font-medium">{{ row.title }}</span>
-                                        <span
+                                <tr v-for="(row, index) in item.items" :key="index" class="border-t border-line">
+                                    <td class="px-3 py-2" dir="auto">
+                                        <span class="font-semibold">{{ row.title }}</span>
+                                        <StatusChip
                                             v-if="row.exchange_only"
-                                            class="ms-1.5 inline-flex rounded-full bg-warning/15 px-1.5 py-px text-2xs font-medium text-foreground ring-1 ring-warning/40"
-                                            >{{ t('cases.items.exchange_only') }}</span
-                                        >
+                                            class="ms-1.5"
+                                            :label="t('cases.items.exchange_only')"
+                                            tone="warn"
+                                            size="sm"
+                                        />
                                     </td>
-                                    <td class="px-2 py-1.5 text-muted-foreground" dir="auto">{{ row.variant ?? '—' }}</td>
-                                    <td class="px-2 py-1.5 text-center tabular-nums">{{ formatCount(row.qty, locale) }}</td>
-                                    <td class="px-2 py-1.5 text-end tabular-nums">{{ row.price !== null ? formatMoney(row.price, locale) : '—' }}</td>
+                                    <td class="px-3 py-2 text-fg-2" dir="auto">{{ row.variant ?? '—' }}</td>
+                                    <td class="px-3 py-2 text-center tabular-nums">{{ formatCount(row.qty, locale) }}</td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-end tabular-nums">
+                                        {{ row.price !== null ? formatMoney(row.price, locale) : '—' }}
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <div v-if="item.exchange_product" class="space-y-1.5">
-                    <h3 class="text-xs font-semibold text-muted-foreground">{{ t('cases.exchange_product.title') }}</h3>
-                    <div class="flex items-center gap-3 rounded-md border border-border p-2" :dir="dir">
+                <div v-if="item.exchange_product" class="space-y-2">
+                    <h3 class="text-13 font-bold">{{ t('cases.exchange_product.title') }}</h3>
+                    <div class="flex items-center gap-3 rounded-lg border border-line p-2.5" :dir="dir">
                         <img
                             v-if="item.exchange_product.image"
                             :src="item.exchange_product.image"
-                            class="size-14 shrink-0 rounded-md border border-border object-cover"
+                            class="h-[70px] w-14 shrink-0 rounded-md object-cover"
                             alt=""
                         />
                         <span
                             v-else
-                            class="flex size-14 shrink-0 items-center justify-center rounded-md bg-muted text-center text-2xs text-muted-foreground"
+                            class="flex h-[70px] w-14 shrink-0 items-center justify-center rounded-md bg-sunken text-center text-2xs text-fg-2"
                             >{{ t('cases.exchange_product.no_image') }}</span
                         >
                         <div class="min-w-0 flex-1 space-y-0.5">
-                            <p class="truncate text-sm font-medium" dir="auto">{{ item.exchange_product.title }}</p>
-                            <p v-if="item.exchange_product.variant_title" class="truncate text-xs text-muted-foreground" dir="auto">
+                            <p class="truncate font-semibold" dir="auto">{{ item.exchange_product.title }}</p>
+                            <p v-if="item.exchange_product.variant_title" class="truncate text-xs text-fg-2" dir="auto">
                                 {{ item.exchange_product.variant_title }}
                             </p>
                             <p v-if="item.exchange_product.price !== null" class="text-xs tabular-nums">
@@ -169,44 +210,62 @@ const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-
                                 :href="item.exchange_product.url"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                class="inline-flex text-xs font-medium text-primary hover:underline"
+                                class="inline-flex text-xs font-semibold text-brand-ink hover:underline"
                                 >{{ t('cases.exchange_product.open') }}</a
                             >
                         </div>
                     </div>
                 </div>
 
-                <div class="space-y-1.5">
-                    <h3 class="text-xs font-semibold text-muted-foreground">{{ t('cases.photos') }}</h3>
-                    <p v-if="!item.photos.length" class="text-xs text-muted-foreground">{{ t('cases.no_photos') }}</p>
+                <div class="space-y-2">
+                    <h3 class="text-13 font-bold">{{ t('cases.photos') }}</h3>
+                    <p v-if="!item.photos.length" class="text-13 text-fg-3">{{ t('cases.no_photos') }}</p>
                     <div v-else class="flex flex-wrap gap-2">
-                        <a v-for="photo in item.photos" :key="photo.id" :href="photo.url" target="_blank" rel="noopener">
-                            <img :src="photo.url" class="size-16 rounded-md border border-border object-cover" alt="" />
+                        <a
+                            v-for="photo in item.photos"
+                            :key="photo.id"
+                            :href="photo.url"
+                            target="_blank"
+                            rel="noopener"
+                            class="rounded-md focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                            <img :src="photo.url" class="h-20 w-16 rounded-md border border-line object-cover" alt="" />
                         </a>
                     </div>
                 </div>
-
-                <label class="grid gap-1">
-                    <span class="text-xs font-semibold">{{ t('cases.columns.status') }}</span>
-                    <select :value="item.status" :disabled="saving" :class="selectClass" @change="onStatusChange">
-                        <option v-for="s in ['new', 'in_progress', 'resolved', 'closed']" :key="s" :value="s">{{ t(`cases.tabs.${s}`) }}</option>
-                    </select>
-                </label>
-
-                <label class="grid gap-1">
-                    <span class="text-xs font-semibold">{{ t('cases.assigned') }}</span>
-                    <select :value="item.assigned_to?.id ?? ''" :disabled="saving" :class="selectClass" @change="onAssignedChange">
-                        <option value="">{{ t('cases.unassigned') }}</option>
-                        <option v-for="member in team" :key="member.id" :value="String(member.id)">{{ member.name }}</option>
-                    </select>
-                </label>
-
-                <p v-if="error" role="alert" class="text-xs text-destructive">{{ error }}</p>
-
-                <Link :href="`/inbox?c=${item.conversation_id}`" class="inline-flex text-xs font-medium text-primary hover:underline">
-                    {{ t('cases.open_conversation') }}
-                </Link>
             </div>
+
+            <!-- The footer: the two controls that move a case, then the conversation as the one primary action. -->
+            <SheetFooter
+                v-if="item"
+                class="flex-col gap-3 border-t border-line bg-card px-5 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:flex-col"
+            >
+                <div class="grid grid-cols-2 gap-3">
+                    <label class="grid min-w-0 gap-1">
+                        <span class="text-xs font-semibold text-fg-2">{{ t('cases.columns.status') }}</span>
+                        <select :value="item.status" :disabled="saving" :class="selectClass" data-case-status @change="onStatusChange">
+                            <option v-for="s in ['new', 'in_progress', 'resolved', 'closed']" :key="s" :value="s">{{ t(`cases.tabs.${s}`) }}</option>
+                        </select>
+                    </label>
+                    <label class="grid min-w-0 gap-1">
+                        <span class="text-xs font-semibold text-fg-2">{{ t('cases.assigned') }}</span>
+                        <select
+                            :value="item.assigned_to?.id ?? ''"
+                            :disabled="saving"
+                            :class="selectClass"
+                            data-case-assigned
+                            @change="onAssignedChange"
+                        >
+                            <option value="">{{ t('cases.unassigned') }}</option>
+                            <option v-for="member in team" :key="member.id" :value="String(member.id)">{{ member.name }}</option>
+                        </select>
+                    </label>
+                </div>
+                <p v-if="error" role="alert" class="text-xs text-danger">{{ error }}</p>
+                <Button as-child size="lg" class="h-11 w-full">
+                    <Link :href="`/inbox?c=${item.conversation_id}`"> <MessagesSquare aria-hidden="true" />{{ t('cases.open_conversation') }} </Link>
+                </Button>
+            </SheetFooter>
         </SheetContent>
     </Sheet>
 </template>

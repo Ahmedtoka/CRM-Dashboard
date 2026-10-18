@@ -7,7 +7,7 @@ import { formatDateTime, formatMoney } from '@/lib/format';
 import { notOnShopifyText, orderLabel } from '@/lib/orderStatus';
 import type { OrderRow } from '@/types/admin';
 import { router } from '@inertiajs/vue3';
-import { AlertTriangle } from 'lucide-vue-next';
+import { AlertTriangle, MessageCircle, StickyNote, Store } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 /** One order row for /orders and /orders/ads/{ad} (fresh-orders F5). */
@@ -24,11 +24,12 @@ const columns = computed<Column[]>(() => [
     { key: 'order', label: t('orders.list.order'), primary: true },
     { key: 'customer', label: t('ordersHub.columns.customer') },
     { key: 'governorate', label: t('ordersHub.columns.governorate') },
-    { key: 'district', label: t('ordersHub.columns.district'), hideOnMobile: true },
+    // Only on very wide screens: at 1440 the products thumbs need the room (the governorate stays).
+    { key: 'district', label: t('ordersHub.columns.district'), hideOnMobile: true, class: 'hidden 2xl:table-cell' },
     { key: 'total', label: t('ordersHub.columns.total'), numeric: true, sortable: true },
     { key: 'status', label: t('ordersHub.columns.status') },
     // Kept on the phone card (thumbs + «+n»): what was ordered is the first thing staff look for.
-    { key: 'products', label: t('ordersHub.columns.products') },
+    { key: 'products', label: t('ordersHub.columns.products'), wide: true },
     ...(props.showSource ? [{ key: 'source', label: t('ordersHub.columns.source') }] : []),
     // The order date the filters use: placed in the store, else made in the CRM (server sort key `date`).
     { key: 'date', label: t('ordersHub.columns.date'), sortable: true },
@@ -38,6 +39,7 @@ const columns = computed<Column[]>(() => [
 <template>
     <DataTable
         :table-id="tableId"
+        card-grid
         :columns="columns"
         :rows="rows"
         clickable
@@ -51,6 +53,11 @@ const columns = computed<Column[]>(() => [
         <template v-if="$slots.empty" #empty><slot name="empty" /></template>
         <template #cell-order="{ row }">
             <span class="inline-flex max-w-full items-center gap-1.5 align-middle">
+                <!-- Where it came from (chat or the store), as an icon with its name for screen readers (mockup). -->
+                <span v-if="row.source" class="inline-flex shrink-0 text-fg-3" :title="t(`orders.source.${row.source}`)" data-order-source>
+                    <component :is="row.source === 'store' ? Store : MessageCircle" class="size-3.5" aria-hidden="true" />
+                    <span class="sr-only">{{ t(`orders.source.${row.source}`) }}</span>
+                </span>
                 <span
                     v-if="orderLabel(row, t).draft"
                     class="truncate font-medium text-muted-foreground"
@@ -66,6 +73,11 @@ const columns = computed<Column[]>(() => [
                 >
                     <AlertTriangle class="size-3" :aria-label="t('order.mismatch.title')" />
                 </span>
+                <!-- The order note («تغليف هدية…»): a marker here, the text on hover and for screen readers. -->
+                <span v-if="row.note" class="inline-flex shrink-0 text-note" :title="row.note" data-order-note>
+                    <StickyNote class="size-3.5" aria-hidden="true" />
+                    <span class="sr-only">{{ t('orders.note_card.title') }}: {{ row.note }}</span>
+                </span>
             </span>
         </template>
         <template #cell-customer="{ row }">
@@ -74,9 +86,13 @@ const columns = computed<Column[]>(() => [
                 row.customer?.phone ?? row.shipping?.phone
             }}</span>
         </template>
-        <template #cell-governorate="{ row }"
-            ><span dir="auto">{{ row.governorate ?? '—' }}</span></template
-        >
+        <template #cell-governorate="{ row }">
+            <span class="block" dir="auto">{{ row.governorate ?? '—' }}</span>
+            <!-- Below 2xl the district column is hidden: the district rides under the governorate instead. -->
+            <span v-if="row.district" class="block max-w-[10rem] truncate text-xs text-fg-2 2xl:hidden" dir="auto" data-district-sub>{{
+                row.district
+            }}</span>
+        </template>
         <template #cell-district="{ row }"
             ><span class="block max-w-[10rem] truncate" dir="auto">{{ row.district ?? '—' }}</span></template
         >
