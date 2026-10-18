@@ -4,6 +4,7 @@
 
 use App\Http\Controllers\Web\Ads\LegacyAdsRedirectController;
 use App\Http\Controllers\Web\BoardController;
+use App\Http\Controllers\Web\Bot\BotReplyInsightController;
 use App\Http\Controllers\Web\CaseController;
 use App\Http\Controllers\Web\CommentController;
 use App\Http\Controllers\Web\CustomerController;
@@ -72,6 +73,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::get('conversations/{conversation}/media', [InboxController::class, 'media'])->name('conversations.media.index');
         Route::post('conversations/{conversation}/attachments', [InboxController::class, 'uploadAttachment'])->name('conversations.attachments.store');
         Route::post('messages/{message}/retry', [InboxController::class, 'retryMessage'])->name('messages.retry');
+        // «ليه البوت رد كده؟» and «رد البوت ده غلط» on a bot bubble (b2, 2026-10-19).
+        Route::get('messages/{message}/bot-trace', [BotReplyInsightController::class, 'trace'])->name('messages.bot-trace');
+        Route::post('messages/{message}/bot-feedback', [BotReplyInsightController::class, 'feedback'])->name('messages.bot-feedback');
         Route::post('conversations/{conversation}/typing', [InboxController::class, 'typing'])->name('conversations.typing');
         Route::post('conversations/{conversation}/notes', [InboxController::class, 'storeNote'])->name('conversations.notes.store');
         Route::post('conversations/{conversation}/claim', [InboxController::class, 'claim'])->name('conversations.claim');
