@@ -10,7 +10,6 @@ import RevenueSummaryCard from '@/components/ads/RevenueSummaryCard.vue';
 import DataTable from '@/components/crm/DataTable.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import DataHealthBanner from '@/components/ads/DataHealthBanner.vue';
-import StatCard from '@/components/crm/StatCard.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { useAdDrawer } from '@/composables/useAdDrawer';
 import { useI18n } from '@/composables/useI18n';
@@ -73,6 +72,8 @@ const kpis = computed(() => {
         },
     ] as { key: string; label: string; value: string; hint?: string; tip?: string; tone?: 'default' | 'positive' | 'warning' | 'negative'; border: string }[];
 });
+
+const TONE = { default: 'text-foreground', positive: 'text-ok', warning: 'text-warn', negative: 'text-danger' } as const;
 
 const series = computed<{ bars: ComboSeries[]; lines: ComboSeries[] }>(() => ({
     bars: [
@@ -144,9 +145,9 @@ const crumbs = computed(() => [{ label: t('nav.ads_numbers'), href: '/ads/number
     <Head :title="buyer.name" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-            <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
+        <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-5 p-4 md:p-6">
             <PageHeader :title="buyer.name" :description="t('ads.buyers.show_hint')" :breadcrumbs="crumbs" :freshness="freshness" />
+            <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
             <AdsFilterBar
                 :path="`/ads/buyers/${buyer.id}`"
                 :filters="filters"
@@ -156,23 +157,18 @@ const crumbs = computed(() => [{ label: t('nav.ads_numbers'), href: '/ads/number
                 :show="{ status: false, list: false, presets: false }"
             />
 
-            <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-                <div class="rounded-lg border-t-4 bg-card px-4 py-3 shadow-card" :style="{ borderTopColor: buyer.color ?? 'hsl(var(--primary))' }">
-                    <p class="text-2xs font-medium text-muted-foreground">{{ t('ads.kpi.spend_tax') }}</p>
+            <!-- The buyer's ledger: one panel, hairline dividers, the figure large and its context under it. -->
+            <section class="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line md:grid-cols-3 xl:grid-cols-5" data-test="buyer-ledger">
+                <div class="min-w-0 bg-card px-4 py-3.5">
+                    <p class="truncate text-[12.5px] font-medium text-fg-2">{{ t('ads.kpi.spend_tax') }}</p>
                     <MoneyCell :amount="d.spend" :with-tax="d.spend_tax" size="lg" align="start" class="mt-0.5" :currency="currency" />
                 </div>
-                <StatCard
-                    v-for="k in kpis"
-                    :key="k.key"
-                    :label="k.label"
-                    :value="k.value"
-                    :hint="k.hint"
-                    :title="k.tip"
-                    :tone="k.tone"
-                    class="border-t-4"
-                    :class="k.border"
-                />
-            </div>
+                <div v-for="k in kpis" :key="k.key" class="min-w-0 bg-card px-4 py-3.5" :title="k.tip" :data-kpi="k.key">
+                    <p class="truncate text-[12.5px] font-medium text-fg-2">{{ k.label }}</p>
+                    <p class="truncate text-xl font-bold leading-snug tabular-nums" :class="TONE[k.tone ?? 'default']">{{ k.value }}</p>
+                    <p v-if="k.hint" class="truncate text-xs text-fg-3">{{ k.hint }}</p>
+                </div>
+            </section>
 
             <RevenueSummaryCard :summary="summary" />
 
@@ -186,32 +182,34 @@ const crumbs = computed(() => [{ label: t('nav.ads_numbers'), href: '/ads/number
                 :right-format="(v) => formatRoas(v, locale)"
             />
 
-            <section class="space-y-2">
-                <h2 class="text-sm font-bold">{{ t('ads.buyers.top_creatives') }}</h2>
-                <p v-if="!d.top_ads.length" class="rounded-lg bg-card p-6 text-center text-xs text-muted-foreground shadow-card">
+            <section class="space-y-2.5">
+                <h2 class="text-base font-bold">{{ t('ads.buyers.top_creatives') }}</h2>
+                <p v-if="!d.top_ads.length" class="rounded-lg border border-line bg-card p-6 text-center text-[13px] text-fg-3">
                     {{ t('ads.empty.range') }}
                 </p>
-                <ul v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                <ul v-else class="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
                     <li v-for="ad in d.top_ads" :key="ad.id">
                         <button
                             type="button"
-                            class="flex w-full flex-col gap-2 rounded-lg bg-card p-2 text-start shadow-card hover:shadow-md"
+                            class="flex w-full flex-col overflow-hidden rounded-lg border border-line bg-card text-start transition-colors duration-150 hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             @click="drawer.open(ad.id)"
                         >
-                            <CreativeThumb :ad="ad" size="fill" />
-                            <span class="line-clamp-2 text-xs font-semibold" dir="auto">{{ ad.name }}</span>
-                            <span class="flex items-center justify-between gap-2 text-2xs">
-                                <span class="tabular-nums text-muted-foreground">{{ money(ad.spend_tax) }}</span>
-                                <StatusChip :label="formatRoas(ad.roas, locale)" :tone="roasTone(ad.roas)" />
+                            <CreativeThumb :ad="ad" size="fill" square class="!aspect-[4/5]" />
+                            <span class="flex flex-col gap-1.5 px-3 pb-2.5 pt-2">
+                                <span class="line-clamp-2 text-[13px] font-semibold" dir="auto">{{ ad.name }}</span>
+                                <span class="flex items-center justify-between gap-2 text-xs">
+                                    <span class="tabular-nums text-fg-2">{{ money(ad.spend_tax) }}</span>
+                                    <StatusChip :label="formatRoas(ad.roas, locale)" :tone="roasTone(ad.roas)" size="sm" />
+                                </span>
                             </span>
                         </button>
                     </li>
                 </ul>
             </section>
 
-            <div class="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-                <section class="space-y-2">
-                    <h2 class="text-sm font-bold">{{ t('ads.buyers.accounts') }}</h2>
+            <div class="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                <section class="min-w-0 space-y-2.5">
+                    <h2 class="text-base font-bold">{{ t('ads.buyers.accounts') }}</h2>
                     <DataTable
                         table-id="ads-buyer-assignments"
                         :columns="assignmentColumns"
@@ -234,8 +232,8 @@ const crumbs = computed(() => [{ label: t('nav.ads_numbers'), href: '/ads/number
                     </DataTable>
                 </section>
 
-                <section class="space-y-2">
-                    <h2 class="text-sm font-bold">{{ t('ads.buyers.campaigns') }}</h2>
+                <section class="min-w-0 space-y-2.5">
+                    <h2 class="text-base font-bold">{{ t('ads.buyers.campaigns') }}</h2>
                     <DataTable table-id="ads-buyer-campaigns" :columns="campaignColumns" :rows="campaigns" :caption="t('ads.buyers.campaigns')" :empty="t('ads.empty.range')">
                         <template #cell-name="{ row }">
                             <span class="flex flex-col">

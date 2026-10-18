@@ -2,6 +2,7 @@
 /** «الأرقام» (D11, U 2.1, quick win 9): 5 hero tiles + «باقي الأرقام», chat funnel (S3, deferred), daily chart and table, accounts, buyers, chat table. */
 import AdsFilterBar from '@/components/ads/AdsFilterBar.vue';
 import BuyerCard from '@/components/ads/BuyerCard.vue';
+import PlatformChip from '@/components/ads/PlatformChip.vue';
 import ChatFunnelBlock from '@/components/ads/ChatFunnelBlock.vue';
 import ComboChart from '@/components/ads/ComboChart.vue';
 import DataHealthBanner from '@/components/ads/DataHealthBanner.vue';
@@ -9,7 +10,6 @@ import RevenueSummaryCard from '@/components/ads/RevenueSummaryCard.vue';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import SkeletonList from '@/components/crm/SkeletonList.vue';
-import StatCard from '@/components/crm/StatCard.vue';
 import { useI18n } from '@/composables/useI18n';
 import { usePathVisitLoading } from '@/composables/usePathVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -18,6 +18,7 @@ import { buildHref, carryQuery, readQuery } from '@/lib/adsFilters';
 import { formatCount } from '@/lib/format';
 import type { AdsNumbersProps, AdsOption } from '@/types/ads';
 import { Deferred, Head, Link } from '@inertiajs/vue3';
+import { ChevronRight } from 'lucide-vue-next';
 import { computed, onMounted } from 'vue';
 
 const props = defineProps<AdsNumbersProps>();
@@ -88,10 +89,10 @@ onMounted(() => {
 <template>
     <Head :title="t('ads.control.numbers.title')" />
     <AppLayout :breadcrumbs="appCrumbs">
-        <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-5 p-3 md:p-6">
+        <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-5 p-4 md:p-6">
             <PageHeader :title="t('ads.control.numbers.title')" :description="t('ads.control.numbers.description')" :breadcrumbs="crumbs" :freshness="freshness" />
             <DataHealthBanner :data-health="data_health" :numbers-under-review="numbers_under_review" :clamped-to-history="clamped_to_history" />
-            <ul v-if="sync_errors.length" class="space-y-1 rounded-md bg-destructive/10 p-3 text-xs text-destructive" role="alert">
+            <ul v-if="sync_errors.length" class="space-y-1 rounded-lg bg-danger-soft px-4 py-2.5 text-[13px] text-danger" role="alert">
                 <li v-for="e in sync_errors" :key="e.account"><span dir="auto">{{ e.account }}</span>: {{ e.error }}</li>
             </ul>
             <AdsFilterBar
@@ -103,24 +104,48 @@ onMounted(() => {
                 :show="{ status: false, list: false, presets: false }"
             />
             <!-- Dims while a filter visit to this page runs (M7). -->
-            <div class="space-y-4 transition-opacity" :class="loading ? 'opacity-60' : ''" :aria-busy="loading" data-test="page-body">
-
-            <section class="grid grid-cols-2 gap-3 md:grid-cols-5" :aria-label="t('ads.control.numbers.title')">
-                <StatCard v-for="h in hero" :key="h.key" data-test="hero" :label="h.label" :value="h.value">
-                    <Link :data-test="h.key === 'losers' ? 'losers-link' : `hero-link-${h.key}`" :href="h.href" class="text-2xs text-primary hover:underline">{{ h.link }}</Link>
-                </StatCard>
+            <div class="space-y-5 transition-opacity" :class="loading ? 'opacity-60' : ''" :aria-busy="loading" data-test="page-body">
+            <!-- The period ledger (DESIGN §3 Ledger): one panel, five figures with dividers, a way in under each. -->
+            <section
+                class="grid grid-cols-2 overflow-hidden rounded-lg border border-line bg-card md:grid-cols-5"
+                :aria-label="t('ads.control.numbers.title')"
+            >
+                <div
+                    v-for="(h, i) in hero"
+                    :key="h.key"
+                    data-test="hero"
+                    class="min-w-0 border-line px-4 py-3.5 max-md:[&:nth-child(even)]:border-s max-md:[&:nth-child(n+3)]:border-t md:border-s md:first:border-s-0"
+                    :class="i === hero.length - 1 ? 'max-md:col-span-2' : ''"
+                >
+                    <div class="truncate text-[12.5px] font-medium text-fg-2">{{ h.label }}</div>
+                    <div class="whitespace-nowrap text-2xl font-bold leading-snug tabular-nums" :class="h.key === 'losers' ? 'text-danger' : 'text-foreground'">{{ h.value }}</div>
+                    <Link
+                        :data-test="h.key === 'losers' ? 'losers-link' : `hero-link-${h.key}`"
+                        :href="h.href"
+                        class="inline-flex items-center gap-0.5 text-xs font-medium text-brand-ink underline-offset-2 hover:underline"
+                        >{{ h.link }}<ChevronRight class="rtl-flip size-3.5" aria-hidden="true"
+                    /></Link>
+                </div>
             </section>
-            <details data-test="more" class="rounded-lg bg-card p-3 shadow-card">
-                <summary class="cursor-pointer text-xs font-medium">{{ t('ads.control.numbers.more') }}</summary>
-                <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
-                    <Link v-for="m in more" :key="m.key" :href="m.href" class="block rounded-lg hover:ring-1 hover:ring-primary">
-                        <StatCard :label="m.label" :value="m.value" />
+            <details data-test="more" class="group rounded-lg border border-line bg-card">
+                <summary class="flex cursor-pointer list-none items-center gap-1.5 px-4 py-3 text-[13px] font-semibold text-fg-2 hover:text-foreground [&::-webkit-details-marker]:hidden">
+                    <ChevronRight class="rtl-flip size-4 transition-transform duration-150 group-open:rotate-90 rtl:group-open:-rotate-90" aria-hidden="true" />{{ t('ads.control.numbers.more') }}
+                </summary>
+                <div class="grid grid-cols-2 border-t border-line md:grid-cols-4 xl:grid-cols-7">
+                    <Link
+                        v-for="m in more"
+                        :key="m.key"
+                        :href="m.href"
+                        class="min-w-0 border-b border-e border-line px-4 py-3 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    >
+                        <span class="block truncate text-xs text-fg-3">{{ m.label }}</span>
+                        <span class="block truncate text-base font-bold tabular-nums">{{ m.value }}</span>
                     </Link>
                 </div>
             </details>
 
-            <section id="funnel" class="scroll-mt-20 space-y-2 rounded-lg bg-card p-3 shadow-card" data-test="chat-funnel">
-                <h2 class="text-sm font-semibold" :title="t('ads.funnel.multi_touch')">{{ t('ads.funnel.title') }}</h2>
+            <section id="funnel" class="scroll-mt-20 space-y-3 rounded-lg border border-line bg-card px-4 pb-4 pt-3.5" data-test="chat-funnel">
+                <h2 class="text-base font-bold" :title="t('ads.funnel.multi_touch')">{{ t('ads.funnel.title') }}</h2>
                 <Deferred data="chatFunnel">
                     <template #fallback><SkeletonList variant="tiles" :count="5" /></template>
                     <ChatFunnelBlock :funnel="chatFunnel ?? null" :heading="false" scope="all" />
@@ -145,12 +170,12 @@ onMounted(() => {
                 <template #cell-roas="{ row }">{{ formatRoas(row.roas, locale) }}</template>
             </DataTable>
 
-            <section id="accounts" class="scroll-mt-20 space-y-2">
-                <h2 class="text-sm font-semibold">{{ t('ads.control.numbers.accounts') }}</h2>
+            <section id="accounts" class="scroll-mt-20 space-y-2.5">
+                <h2 class="text-base font-bold">{{ t('ads.control.numbers.accounts') }}</h2>
                 <DataTable table-id="ads-numbers-accounts" :columns="accountCols" :rows="top_accounts" :caption="t('ads.control.numbers.accounts')">
                     <template #cell-name="{ row }">
-                        <Link :data-test="`account-link-${row.id}`" :href="href('/ads/explorer', { accounts: String(row.id), status: 'all' })" class="hover:underline" dir="auto">
-                            {{ row.name }}
+                        <Link :data-test="`account-link-${row.id}`" :href="href('/ads/explorer', { accounts: String(row.id), status: 'all' })" class="inline-flex min-w-0 items-center gap-2 font-medium hover:underline">
+                            <PlatformChip :platform="row.platform" size="xs" icon-only /><bdi class="truncate">{{ row.name }}</bdi>
                         </Link>
                     </template>
                     <template #cell-buyer="{ row }"><bdi>{{ row.buyer ?? '—' }}</bdi></template>
@@ -159,15 +184,15 @@ onMounted(() => {
                 </DataTable>
             </section>
 
-            <section id="buyers" class="scroll-mt-20 space-y-2">
-                <h2 class="text-sm font-semibold">{{ t('ads.control.numbers.buyers') }}</h2>
+            <section id="buyers" class="scroll-mt-20 space-y-2.5">
+                <h2 class="text-base font-bold">{{ t('ads.control.numbers.buyers') }}</h2>
                 <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     <BuyerCard v-for="c in buyers" :key="c.buyer_id ?? 'none'" :card="c" :currency="currency" :href="c.buyer_id === null ? null : href(`/ads/buyers/${c.buyer_id}`)" />
                 </div>
             </section>
 
-            <section v-if="chat_campaigns" id="chat" class="scroll-mt-20 space-y-2">
-                <h2 class="text-sm font-semibold">{{ t('ads.control.numbers.chat') }}</h2>
+            <section v-if="chat_campaigns" id="chat" class="scroll-mt-20 space-y-2.5">
+                <h2 class="text-base font-bold">{{ t('ads.control.numbers.chat') }}</h2>
                 <DataTable table-id="ads-numbers-chat" :columns="chatCols" :rows="chatRows" :empty="t('ads.control.numbers.no_chat')" :caption="t('ads.control.numbers.chat')">
                     <template #cell-campaign="{ row }">
                         <Link :href="href('/ads/explorer', { view: 'tree', status: 'all' })" class="hover:underline" dir="auto">{{ row.campaign }}</Link>
