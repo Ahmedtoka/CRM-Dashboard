@@ -42,6 +42,7 @@ import {
     LoaderCircle,
     Lock,
     Megaphone,
+    Package,
     PanelRight,
     RotateCcw,
     Tags,
@@ -71,6 +72,8 @@ const emit = defineEmits<{
     priority: [value: ConversationPriority];
     toggleTag: [id: number];
     claim: [];
+    /** The mockup's «اعملي أوردر» icon: the same drawer as `o` and the customer panel's button. */
+    createOrder: [];
 }>();
 
 const { t, locale } = useI18n();
@@ -85,7 +88,8 @@ const phone = computed(() => props.customer?.phone?.trim() || '');
 const selectedTags = computed(() => new Set((props.conversation.tags ?? []).map((tag) => tag.id)));
 const busy = computed(() => props.busyAction !== null);
 const headerBg = computed(() => skinClasses(props.skin).header);
-const iconButton = cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'size-9 shrink-0 rounded-lg');
+const iconButton = cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'size-9 shrink-0 rounded-md text-fg-2 hover:bg-sunken hover:text-foreground');
+const ordersCount = computed(() => props.customer?.orders_count ?? 0);
 
 const adTooltip = computed(() => {
     const ad = props.conversation.ad;
@@ -197,25 +201,31 @@ defineExpose({
 </script>
 
 <template>
-    <header ref="headerEl" class="shrink-0 border-b shadow-card" :class="headerBg" data-thread-header>
-        <!-- Row 1: who she is, and what to do. The name truncates; the actions never do. -->
-        <div class="flex h-14 min-w-0 items-center gap-2 pe-2 ps-2 md:pe-3 md:ps-4" data-header-row1>
+    <header ref="headerEl" class="shrink-0 border-b border-line" :class="headerBg" data-thread-header>
+        <!-- Row 1: who she is, and what to do. The name truncates; the actions never do. The primary action
+             («خلصت» / resolve / reopen) is the last thing on the row (DESIGN §3 ThreadHeader). -->
+        <div class="flex h-[60px] min-w-0 items-center gap-2 pe-2 ps-2 md:gap-2.5 md:pe-3.5 md:ps-3.5" data-header-row1>
             <button type="button" :class="cn(iconButton, 'md:hidden')" :aria-label="t('inbox.back')" :title="t('inbox.back')" @click="emit('back')">
                 <ChevronLeft class="rtl-flip" />
             </button>
 
             <span
-                class="relative hidden size-9 shrink-0 items-center justify-center rounded-full bg-elevated text-xs font-semibold text-muted-foreground sm:flex"
+                class="relative hidden size-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[13px] font-semibold text-brand-ink sm:flex"
                 aria-hidden="true"
             >
                 {{ getInitials(name) }}
+                <span class="absolute -bottom-0.5 -end-0.5 rounded-full ring-2 ring-card"><PlatformBadge :platform="conversation.platform" size="xs" /></span>
             </span>
 
             <div class="min-w-0 flex-1">
-                <h2 class="truncate text-sm font-semibold leading-5" dir="auto" :title="name" data-header-name>{{ name }}</h2>
-                <p class="flex min-w-0 items-center gap-1.5 text-2xs leading-4 text-muted-foreground">
-                    <PlatformBadge :platform="conversation.platform" size="xs" :show-label="!phone" />
+                <h2 class="truncate text-[15px] font-bold leading-5" dir="auto" :title="name" data-header-name>{{ name }}</h2>
+                <p class="flex min-w-0 items-center gap-1.5 text-xs leading-5 text-fg-2">
+                    <PlatformBadge :platform="conversation.platform" size="xs" :show-label="!phone" :class="phone ? 'sm:hidden' : ''" />
                     <span v-if="phone" class="truncate tabular-nums" dir="ltr">{{ phone }}</span>
+                    <template v-if="ordersCount > 0">
+                        <span aria-hidden="true">·</span>
+                        <span class="shrink-0" data-header-orders>{{ t('thread.header.orders_n', { n: formatCount(ordersCount, locale) }) }}</span>
+                    </template>
                 </p>
             </div>
 
@@ -223,55 +233,19 @@ defineExpose({
                 <PresenceBar :viewers="viewers" :me-id="meId" :typing="typing" />
             </div>
 
-            <!-- The primary action: «خلصت» (with its reasons menu) on her queue window, else resolve / reopen as always. -->
-            <CloseWindowMenu
-                v-if="queueWindow"
-                ref="closeMenu"
-                :entry="queueWindow"
-                :owner-name="windowOwner"
-                :disabled="busy"
-                :hint="hint('inbox.resolve')"
-                @closed-for-bot="emit('action', 'return-to-bot')"
-            />
-            <span
-                v-else-if="heldByOther"
-                class="inline-flex h-9 min-w-0 shrink-0 items-center gap-1 rounded-lg bg-elevated px-2.5 text-xs text-muted-foreground sm:max-w-[12rem] sm:shrink"
-                :title="`${t('queue.held_by', { name: holderName })} · ${t('queue.held_by_hint')}`"
-                data-held-by
-            >
-                <Lock class="size-3.5 shrink-0" aria-hidden="true" />
-                <!-- On a phone only the lock: the name keeps the room (the row-2 chip says who has her). -->
-                <span class="hidden truncate sm:inline" dir="auto">{{ t('queue.held_by', { name: holderName }) }}</span>
-                <span class="sr-only sm:hidden">{{ t('queue.held_by', { name: holderName }) }}</span>
-            </span>
-            <ResolveMenu
-                v-else-if="conversation.status !== 'resolved'"
-                ref="resolveMenu"
-                :disabled="busy"
-                :busy="busyAction === 'resolve'"
-                :hint="hint('inbox.resolve')"
-                @resolve="(payload, done) => emit('resolve', payload, done)"
-            />
-            <Button
-                v-else
-                variant="outline"
-                size="sm"
-                class="h-9 shrink-0 gap-1.5 rounded-lg px-2.5 sm:px-3"
-                type="button"
-                :title="`${t('thread.header.reopen')}${hint('inbox.reopen')}`"
-                :disabled="busy"
-                :aria-label="t('thread.header.reopen')"
-                data-primary-action
-                @click="emit('action', 'reopen')"
-                :loading="busyAction === 'reopen'"
-            >
-                <RotateCcw aria-hidden="true" />
-                <span class="hidden sm:inline">{{ t('thread.header.reopen') }}</span>
-            </Button>
-
             <button
                 type="button"
-                :class="cn(iconButton, detailsShown && 'bg-accent text-accent-foreground')"
+                :class="cn(iconButton, 'hidden md:inline-flex')"
+                :aria-label="t('thread.header.create_order')"
+                :title="`${t('thread.header.create_order')}${hint('inbox.order')}`"
+                data-create-order
+                @click="emit('createOrder')"
+            >
+                <Package aria-hidden="true" />
+            </button>
+            <button
+                type="button"
+                :class="cn(iconButton, detailsShown && 'bg-brand-soft text-brand-ink')"
                 :aria-label="t('thread.header.details')"
                 :aria-pressed="detailsShown"
                 :title="`${t('thread.header.details')}${hint('inbox.details')}`"
@@ -341,11 +315,58 @@ defineExpose({
                     </template>
                 </DropdownMenuContent>
             </DropdownMenu>
+
+            <!-- Slot of the primary action (p5 owns what renders here): «خلصت» on her queue window, else resolve / reopen as always. -->
+            <CloseWindowMenu
+                v-if="queueWindow"
+                ref="closeMenu"
+                :entry="queueWindow"
+                :owner-name="windowOwner"
+                :disabled="busy"
+                :hint="hint('inbox.resolve')"
+                @closed-for-bot="emit('action', 'return-to-bot')"
+            />
+            <span
+                v-else-if="heldByOther"
+                class="inline-flex h-9 min-w-0 shrink-0 items-center gap-1 rounded-lg bg-elevated px-2.5 text-xs text-muted-foreground sm:max-w-[12rem] sm:shrink"
+                :title="`${t('queue.held_by', { name: holderName })} · ${t('queue.held_by_hint')}`"
+                data-held-by
+            >
+                <Lock class="size-3.5 shrink-0" aria-hidden="true" />
+                <!-- On a phone only the lock: the name keeps the room (the row-2 chip says who has her). -->
+                <span class="hidden truncate sm:inline" dir="auto">{{ t('queue.held_by', { name: holderName }) }}</span>
+                <span class="sr-only sm:hidden">{{ t('queue.held_by', { name: holderName }) }}</span>
+            </span>
+            <ResolveMenu
+                v-else-if="conversation.status !== 'resolved'"
+                ref="resolveMenu"
+                :disabled="busy"
+                :busy="busyAction === 'resolve'"
+                :hint="hint('inbox.resolve')"
+                @resolve="(payload, done) => emit('resolve', payload, done)"
+            />
+            <Button
+                v-else
+                variant="outline"
+                size="sm"
+                class="h-9 shrink-0 gap-1.5 rounded-lg px-2.5 sm:px-3"
+                type="button"
+                :title="`${t('thread.header.reopen')}${hint('inbox.reopen')}`"
+                :disabled="busy"
+                :aria-label="t('thread.header.reopen')"
+                data-primary-action
+                @click="emit('action', 'reopen')"
+                :loading="busyAction === 'reopen'"
+            >
+                <RotateCcw aria-hidden="true" />
+                <span class="hidden sm:inline">{{ t('thread.header.reopen') }}</span>
+            </Button>
+
         </div>
 
         <!-- Row 2: one line of state, scrolled sideways when it does not fit; it never wraps over row 1. -->
         <div
-            class="scrollbar-none flex h-9 min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap border-t border-border/60 px-3 md:px-4"
+            class="scrollbar-none flex h-9 min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap px-3 pb-1 md:px-3.5"
             role="group"
             :aria-label="t('thread.header.chips')"
             data-header-row2
@@ -360,7 +381,7 @@ defineExpose({
             <StatusChip v-else-if="conversation.priority === 'low'" :label="t('thread.priority_low')" tone="neutral" />
             <span
                 v-if="topic"
-                class="inline-flex h-5 max-w-[14rem] shrink-0 items-center rounded-full border border-border px-2 text-2xs text-muted-foreground"
+                class="inline-flex h-6 max-w-[14rem] shrink-0 items-center rounded-full border border-line-strong px-[9px] text-xs font-semibold text-fg-2"
                 :title="conversation.handover_topic ? t('inbox.topic', { topic }) : t('inbox.category', { label: topic })"
                 dir="auto"
             >
@@ -368,25 +389,25 @@ defineExpose({
             </span>
             <span
                 v-if="conversation.ad"
-                class="inline-flex h-5 max-w-56 shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 text-2xs text-amber-800 dark:text-amber-200"
+                class="inline-flex h-6 max-w-64 shrink-0 items-center gap-1 rounded-full bg-brand-soft px-[9px] text-xs font-semibold text-brand-ink"
                 :title="adTooltip"
                 dir="auto"
             >
-                <Megaphone class="size-3 shrink-0" aria-hidden="true" />
+                <Megaphone class="size-3.5 shrink-0" aria-hidden="true" />
                 <span class="truncate">{{
                     conversation.ad.title || conversation.ad.name || (conversation.ad.ref ? t('thread.source_link') : t('thread.source_ad'))
                 }}</span>
             </span>
             <span
                 v-else-if="conversation.source === 'comment' || conversation.source === 'ad'"
-                class="inline-flex h-5 shrink-0 items-center rounded-full bg-muted px-2 text-2xs text-muted-foreground"
+                class="inline-flex h-6 shrink-0 items-center rounded-full bg-sunken px-[9px] text-xs font-semibold text-fg-2"
             >
                 {{ t(`thread.source_${conversation.source}`) }}
             </span>
             <span
                 v-for="tag in conversation.tags ?? []"
                 :key="tag.id"
-                class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-border bg-card px-2 text-2xs text-foreground"
+                class="inline-flex h-6 shrink-0 items-center gap-1 rounded-full border border-line-strong bg-card px-[9px] text-xs font-semibold text-fg-2"
                 dir="auto"
             >
                 <span class="size-1.5 rounded-full" :style="{ backgroundColor: tag.color || '#64748b' }" aria-hidden="true" />{{ tag.name }}

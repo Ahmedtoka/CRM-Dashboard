@@ -584,7 +584,7 @@ onBeforeUnmount(() => {
         <!-- Fills the space left under the header and any admin alert strip (no fixed calc). -->
         <div
             class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background"
-            :class="showDetails ? 'md:grid-cols-[360px_minmax(0,1fr)_340px]' : 'md:grid-cols-[360px_minmax(0,1fr)]'"
+            :class="showDetails ? 'md:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)_320px]' : 'md:grid-cols-[360px_minmax(0,1fr)]'"
         >
             <ConversationList
                 ref="listView"
@@ -614,7 +614,7 @@ onBeforeUnmount(() => {
                 @tag-menu="openTagMenu"
             />
 
-            <main class="min-h-0 min-w-0 flex-col bg-background" :class="selectedId !== null ? 'flex' : 'hidden md:flex'">
+            <main class="min-h-0 min-w-0 flex-col bg-[var(--thread-bg)]" :class="selectedId !== null ? 'flex' : 'hidden md:flex'">
                 <ChatThread
                     v-if="detail"
                     ref="threadView"
@@ -656,6 +656,7 @@ onBeforeUnmount(() => {
                     @priority="setPriority"
                     @toggle-tag="toggleTag"
                     @claim="claim"
+                    @create-order="openOrderDrawer"
                     @window-expired="thread.silentReload().catch(() => undefined)"
                     @dismiss-error="thread.clearError"
                 >
@@ -678,7 +679,7 @@ onBeforeUnmount(() => {
                 <EmptyState v-else :icon="MessageSquareText" :title="t('inbox.select_title')" :body="t('inbox.select_body')" />
             </main>
 
-            <div v-if="showDetails" class="hidden min-h-0 flex-col border-s bg-card xl:flex">
+            <div v-if="showDetails" class="hidden min-h-0 flex-col border-s border-line bg-card xl:flex">
                 <CustomerPanel v-if="panelProps" class="flex-1" v-bind="panelProps" v-on="panelListeners" />
             </div>
         </div>
