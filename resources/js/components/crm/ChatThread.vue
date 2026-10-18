@@ -24,7 +24,6 @@ import type {
     ConversationDetail,
     ConversationPriority,
     Message,
-    OutcomePayload,
     QuickReply,
     QuickReplyCategory,
     RenderedQuickReply,
@@ -81,7 +80,6 @@ const emit = defineEmits<{
     retryAttachment: [attachment: Attachment];
     typing: [];
     action: [name: ConversationAction];
-    resolve: [payload: OutcomePayload, done: (error: string | null) => void];
     priority: [value: ConversationPriority];
     toggleTag: [id: number];
     claim: [];
@@ -94,6 +92,12 @@ const now = useNow();
 const platform = usePlatform(() => props.detail.conversation.platform);
 const { skin, classes: skinClasses } = useChatSkin(() => props.detail.conversation.platform);
 const customerName = computed(() => props.detail.customer?.name ?? null);
+/** Close cycle: her message is the thread's last real one, so she waits for a reply (the «خلصت» sheet warns). */
+const lastFromCustomer = computed(() => {
+    const last = [...props.messages].reverse().find((m) => m.sender_type !== 'system');
+
+    return last?.direction === 'in' ? { body: last.body } : null;
+});
 
 // Messages and internal notes interleaved by time, image runs and note runs folded, run starts
 // marked (lib/chatTimeline). Rebuilt incrementally: a new message or an older page only regroups
@@ -352,10 +356,10 @@ defineExpose({ composer, header, viewState: list.viewState, moveNote });
             :tags="tags"
             :busy-action="busyAction"
             :skin="skin"
+            :last-from-customer="lastFromCustomer"
             @back="emit('back')"
             @open-customer="emit('openCustomer')"
             @action="emit('action', $event)"
-            @resolve="(payload, done) => emit('resolve', payload, done)"
             @priority="emit('priority', $event)"
             @toggle-tag="emit('toggleTag', $event)"
             @claim="emit('claim')"
@@ -461,6 +465,7 @@ defineExpose({ composer, header, viewState: list.viewState, moveNote });
             :adding-note="addingNote"
             :me-id="meId"
             :autofocus="autofocus"
+            :claim-from-bot="detail.conversation.handler === 'bot' || detail.conversation.status === 'resolved'"
             @send="onSend"
             @send-and-resolve="(...args) => emit('sendAndResolve', ...args)"
             @note="(...args) => emit('note', ...args)"

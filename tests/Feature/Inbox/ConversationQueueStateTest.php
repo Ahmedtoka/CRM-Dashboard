@@ -48,7 +48,9 @@ it('carries the ticket state for waiting, called and active entries', function (
     $called = qsConv(['status' => 'called', 'ticket_no' => 13, 'assigned_user_id' => $mod->id]);
     $active = qsConv(['status' => 'active', 'ticket_no' => 14, 'assigned_user_id' => $mod->id]);
 
+    // Close cycle RC-1: the entry id, so «خلصت» from the lounge names the entry it ends.
     expect(qsRow($waiting->id)['queue_state'])->toBe([
+        'id' => $waiting->queue_entry_id,
         'status' => 'waiting', 'ticket' => 12, 'priority' => 'returning', 'overdue' => false, 'assigned_user_id' => null,
     ]);
     expect(qsRow($called->id)['queue_state'])->toMatchArray(['status' => 'called', 'ticket' => 13, 'assigned_user_id' => $mod->id]);

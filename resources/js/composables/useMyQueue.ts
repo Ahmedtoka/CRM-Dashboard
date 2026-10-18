@@ -69,6 +69,10 @@ export interface MyQueue {
     /** `toBot`: «رجوع للبوت» — the close ends with no thanks and no rating (close-cycle hotfix C1, D-03). */
     closeEntry: (id: number, reason: QueueCloseReason, caseType?: SupportCaseType | null, outcome?: OutcomePayload, toBot?: boolean) => Promise<boolean>;
     escalate: (id: number) => Promise<boolean>;
+    /** «خلصت» closed this window from elsewhere (the finish sheet): the strip, the list and the thread drop it at once. */
+    forget: (id: number) => void;
+    /** «تراجع» brought this window back (same id): it may show again; `/queue/me` is read for it. */
+    restore: (id: number) => Promise<void>;
     setStatus: (status: MyStatus) => Promise<boolean>;
     checkIn: () => Promise<boolean>;
     checkOut: () => Promise<boolean>;
@@ -377,6 +381,17 @@ export function useMyQueue(options: Options): MyQueue {
         );
     }
 
+    function forget(id: number): void {
+        release(id);
+    }
+
+    function restore(id: number): Promise<void> {
+        gone.delete(id);
+        eventSeq++;
+
+        return refresh().catch(() => undefined);
+    }
+
     function escalate(id: number): Promise<boolean> {
         return act(
             `escalate-${id}`,
@@ -510,6 +525,8 @@ export function useMyQueue(options: Options): MyQueue {
         entryOf,
         closeEntry,
         escalate,
+        forget,
+        restore,
         setStatus,
         checkIn,
         checkOut,

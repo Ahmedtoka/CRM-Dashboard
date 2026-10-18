@@ -154,6 +154,8 @@ class ConversationResource extends JsonResource
         }
 
         return [
+            // Close cycle RC-1: «خلصت» on a customer in the lounge names the entry it ends.
+            'id' => (int) $e->id,
             'status' => $e->status,
             'ticket' => (int) $e->ticket_no,
             'priority' => (string) $e->priority,
