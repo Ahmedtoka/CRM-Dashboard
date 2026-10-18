@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Bot\Brain\Trace\TurnTrace;
 use App\Bot\Router\TurnMetrics;
 use Database\Factories\BotRunFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -52,7 +53,15 @@ class BotRun extends Model
             }
         }
 
-        return parent::save($options);
+        $creating = ! $this->exists;
+        $saved = parent::save($options);
+
+        // «ليه البوت رد كده؟» (b2): the turn's trace is written next to its run.
+        if ($saved && $creating) {
+            app(TurnTrace::class)->persist($this);
+        }
+
+        return $saved;
     }
 
     protected function casts(): array

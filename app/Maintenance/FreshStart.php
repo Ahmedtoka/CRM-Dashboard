@@ -34,8 +34,8 @@ final class FreshStart
         'conversation_outcomes', 'support_cases', 'queue_decisions', 'queue_attendance_events', 'queue_message_sends', 'queue_entries', 'shift_members', 'shifts', 'queue_days',
         // Shopify orders (shipments/shipment_events were dropped by fresh-orders F4).
         'fulfillments', 'refunds', 'order_items', 'orders',
-        // Conversations and everything hanging off them.
-        'message_attachments', 'messages', 'conversation_notes', 'conversation_tag', 'conversation_participants', 'conversation_ad_referrals',
+        // Conversations and everything hanging off them (staff feedback on bot replies points at messages and runs).
+        'bot_reply_feedback', 'bot_reply_traces', 'message_attachments', 'messages', 'conversation_notes', 'conversation_tag', 'conversation_participants', 'conversation_ad_referrals',
         'bot_learning_notes', 'bot_runs', 'bot_shadow_plans', 'activity_logs', 'conversations',
         // Customers.
         'customer_merge_suggestions', 'customer_addresses', 'customer_identities', 'customers',
@@ -61,7 +61,7 @@ final class FreshStart
     public const KEEP = [
         'users', 'user_platforms', 'password_reset_tokens', 'personal_access_tokens',
         'bot_settings', 'queue_settings', 'ads_settings', 'order_confirmation_settings', 'shopify_integrations', 'shopify_webhook_subscriptions',
-        'bot_flows', 'bot_flow_versions', 'bot_intents', 'bot_rules', 'bot_knowledge_entries', 'bot_translations', 'bot_test_links',
+        'bot_flows', 'bot_flow_versions', 'bot_intents', 'bot_rules', 'bot_knowledge_entries', 'bot_translations', 'bot_test_links', 'bot_eval_cases',
         'channel_accounts',
         'ad_platform_connections', 'ad_accounts', 'media_buyers', 'ad_account_assignments', 'buyer_targets',
         'products', 'product_variants',

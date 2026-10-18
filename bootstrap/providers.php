@@ -2,6 +2,7 @@
 
 use App\Ads\AdsServiceProvider;
 use App\Analytics\AnalyticsServiceProvider;
+use App\Bot\Brain\BotBrainServiceProvider;
 use App\Bot\BotServiceProvider;
 use App\Channels\ChannelsServiceProvider;
 use App\Comments\CommentsServiceProvider;
@@ -24,6 +25,7 @@ return [
     MediaServiceProvider::class,
     CommentsServiceProvider::class,
     BotServiceProvider::class,
+    BotBrainServiceProvider::class,
     CommerceServiceProvider::class,
     ShopifyServiceProvider::class,
     AnalyticsServiceProvider::class,
