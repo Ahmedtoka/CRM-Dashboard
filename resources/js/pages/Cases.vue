@@ -8,15 +8,17 @@ import FilterBar from '@/components/crm/FilterBar.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import Pagination from '@/components/crm/Pagination.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useUrlFilters } from '@/composables/useUrlFilters';
 import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { casePriorityTone, caseStatusTone } from '@/lib/caseStatus';
-import { formatCount, formatDateTime } from '@/lib/format';
+import { casePriorityTone, caseStatusTone, caseTypeTone } from '@/lib/caseStatus';
+import { formatCount, formatDateTime, formatListStamp } from '@/lib/format';
 import type { Paginated } from '@/types/admin';
 import type { CaseStatus, CaseType, SupportCase } from '@/types/crm';
 import { Head, router } from '@inertiajs/vue3';
+import { useMediaQuery } from '@vueuse/core';
 import { ClipboardList } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
 
@@ -60,9 +62,11 @@ const apply = (patch: Partial<typeof filters.value>) => set(patch);
 
 const selectValue = (event: Event) => (event.target as HTMLSelectElement).value || null;
 
-// The type and the date range show as removable chips; the range picker lives in the «فلاتر» popover.
+// The type and the date range show as removable chips; on a phone both live in the «فلاتر» popover (with a label).
 const range = computed(() => ({ from: filters.value.from ?? '', to: filters.value.to ?? '' }));
-const moreCount = computed(() => (filters.value.from || filters.value.to ? 1 : 0));
+const wide = useMediaQuery('(min-width: 640px)');
+const currentTab = computed(() => filters.value.status ?? 'all');
+const now = Date.now();
 const chips = computed(() => {
     const f = filters.value;
     const out: { key: string; label: string }[] = [];
@@ -71,8 +75,12 @@ const chips = computed(() => {
     if (f.overdue) out.push({ key: 'overdue', label: t('cases.overdue_chip') });
     return out;
 });
-const filtered = computed(() => Boolean(filters.value.type || filters.value.from || filters.value.to || filters.value.q || filters.value.status || filters.value.overdue));
-const summary = computed(() => [t('ui.results', { n: props.cases.meta?.total ?? props.cases.data.length }), ...chips.value.map((c) => c.label)].join(' · '));
+const filtered = computed(() =>
+    Boolean(filters.value.type || filters.value.from || filters.value.to || filters.value.q || filters.value.status || filters.value.overdue),
+);
+const summary = computed(() =>
+    [t('ui.results', { n: props.cases.meta?.total ?? props.cases.data.length }), ...chips.value.map((c) => c.label)].join(' · '),
+);
 
 function removeChip(key: string): void {
     if (key === 'date') apply({ from: null, to: null });
@@ -102,7 +110,7 @@ const columns = computed<Column[]>(() => [
     { key: 'id', label: t('cases.columns.id'), hideOnMobile: true, sortable: true },
     { key: 'type', label: t('cases.columns.type'), primary: true },
     { key: 'customer', label: t('cases.columns.customer') },
-    { key: 'order', label: t('cases.columns.order'), hideOnMobile: true },
+    { key: 'assigned', label: t('cases.assigned'), hideOnMobile: true },
     { key: 'priority', label: t('cases.columns.priority') },
     { key: 'status', label: t('cases.columns.status') },
     { key: 'date', label: t('cases.columns.date'), sortable: true },
@@ -122,58 +130,63 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
     <Head :title="t('cases.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('cases.title')" />
+        <div class="mx-auto w-full min-w-0 max-w-7xl space-y-4 p-3 md:p-6">
+            <PageHeader :title="t('cases.title')" :description="t('cases.description')" />
 
-            <div class="flex flex-wrap gap-1.5" role="tablist" :aria-label="t('cases.title')">
-                <button
-                    v-for="tab in TABS"
-                    :key="tab"
-                    type="button"
-                    role="tab"
-                    :aria-selected="(filters.status ?? 'all') === tab"
-                    class="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium"
-                    :class="(filters.status ?? 'all') === tab ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'"
-                    @click="apply({ status: tab === 'all' ? null : tab })"
-                >
-                    {{ t(`cases.tabs.${tab}`) }}
-                    <span
-                        v-if="(counts[tab] ?? 0) > 0"
-                        class="inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-2xs tabular-nums"
-                        :class="(filters.status ?? 'all') === tab ? 'bg-primary-foreground/20' : 'bg-muted'"
+            <!-- The status tabs (مفتوحة · قيد المتابعة · اتحلّت …): one strip, a count on each, the selected one underlined. -->
+            <div class="scrollbar-none -mx-3 overflow-x-auto border-b border-line px-3 md:mx-0 md:px-0">
+                <div class="flex min-w-max gap-1" role="tablist" :aria-label="t('cases.title')">
+                    <button
+                        v-for="tab in TABS"
+                        :key="tab"
+                        type="button"
+                        role="tab"
+                        :aria-selected="currentTab === tab"
+                        class="relative -mb-px inline-flex h-10 items-center gap-1.5 border-b-2 px-3 text-13 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                        :class="currentTab === tab ? 'border-brand text-brand-ink' : 'border-transparent text-fg-2 hover:text-foreground'"
+                        :data-case-tab="tab"
+                        @click="apply({ status: tab === 'all' ? null : tab })"
                     >
-                        {{ formatCount(counts[tab] ?? 0, locale) }}
-                    </span>
-                </button>
+                        {{ t(`cases.tabs.${tab}`) }}
+                        <span
+                            v-if="(counts[tab] ?? 0) > 0"
+                            class="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold tabular-nums"
+                            :class="currentTab === tab ? 'bg-brand text-brand-on' : 'bg-sunken text-fg-2'"
+                        >
+                            {{ formatCount(counts[tab] ?? 0, locale) }}
+                        </span>
+                    </button>
+                </div>
             </div>
 
-            <div class="rounded-lg bg-card p-3 shadow-card">
-                <FilterBar
-                    :search="filters.q"
-                    :search-placeholder="t('cases.search')"
-                    :chips="chips"
-                    :more-count="moreCount"
-                    :summary="summary"
-                    @update:search="set({ q: $event })"
-                    @remove="removeChip"
-                    @clear="clear(['status', 'sort'])"
-                >
-                    <template #inline>
-                        <select :value="filters.type ?? ''" :class="selectClass" :aria-label="t('cases.type_all')" @change="apply({ type: selectValue($event) as CaseType | null })">
-                            <option value="">{{ t('cases.type_all') }}</option>
-                            <option v-for="ty in TYPES" :key="ty" :value="ty">{{ t(`cases.types.${ty}`) }}</option>
-                        </select>
-                    </template>
-                    <template #more>
-                        <div>
-                            <span :class="fieldLabel">{{ t('cases.filter_date') }}</span>
-                            <DateRangePicker :model-value="range" @update:model-value="apply({ from: $event.from || null, to: $event.to || null })" />
-                        </div>
-                    </template>
-                </FilterBar>
-            </div>
+            <FilterBar
+                :search="filters.q"
+                :search-placeholder="t('cases.search')"
+                :chips="chips"
+                :summary="summary"
+                @update:search="set({ q: $event })"
+                @remove="removeChip"
+                @clear="clear(['status', 'sort'])"
+            >
+                <template #inline>
+                    <select
+                        :value="filters.type ?? ''"
+                        :class="selectClass"
+                        :aria-label="t('cases.type_all')"
+                        data-filter="type"
+                        @change="apply({ type: selectValue($event) as CaseType | null })"
+                    >
+                        <option value="">{{ t('cases.type_all') }}</option>
+                        <option v-for="ty in TYPES" :key="ty" :value="ty">{{ t(`cases.types.${ty}`) }}</option>
+                    </select>
+                    <div class="min-w-0" data-filter="date">
+                        <span v-if="!wide" :class="fieldLabel">{{ t('cases.filter_date') }}</span>
+                        <DateRangePicker :model-value="range" @update:model-value="apply({ from: $event.from || null, to: $event.to || null })" />
+                    </div>
+                </template>
+            </FilterBar>
 
-            <div>
+            <div class="min-w-0">
                 <DataTable
                     table-id="cases"
                     :columns="columns"
@@ -186,22 +199,47 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                     @row-click="openCase"
                 >
                     <template #empty>
-                        <EmptyState :icon="ClipboardList" :title="t('cases.empty')" :body="filtered ? t('cases.empty_filtered') : t('cases.empty_body')" />
+                        <EmptyState
+                            :icon="ClipboardList"
+                            :title="t('cases.empty')"
+                            :body="filtered ? t('cases.empty_filtered') : t('cases.empty_body')"
+                        >
+                            <template v-if="filtered" #action>
+                                <Button variant="outline" size="sm" @click="clear(['sort'])">{{ t('ui.clear_filters') }}</Button>
+                            </template>
+                        </EmptyState>
                     </template>
-                    <template #cell-id="{ row }"><span class="font-medium tabular-nums" dir="ltr">#{{ row.id }}</span></template>
+                    <template #cell-id="{ row }"
+                        ><span class="font-semibold tabular-nums" dir="ltr">#{{ row.id }}</span></template
+                    >
                     <template #cell-type="{ row }">
-                        <span class="block whitespace-nowrap">{{ t(`cases.types.${row.type}`) }}</span>
-                        <span v-if="requestLine(row)" class="block max-w-[16rem] truncate text-2xs text-muted-foreground" dir="auto" :title="requestLine(row) ?? undefined">
-                            {{ requestLine(row) }}
+                        <span class="flex min-w-0 flex-col items-start gap-1">
+                            <StatusChip :label="t(`cases.types.${row.type}`)" :tone="caseTypeTone[row.type] ?? 'neutral'" />
+                            <span
+                                v-if="requestLine(row)"
+                                class="block max-w-[18rem] truncate text-xs text-fg-2"
+                                dir="auto"
+                                :title="requestLine(row) ?? undefined"
+                            >
+                                {{ requestLine(row) }}
+                            </span>
                         </span>
                     </template>
                     <template #cell-customer="{ row }">
-                        <span class="block max-w-[12rem] truncate">{{ row.customer?.name ?? '—' }}</span>
-                        <span v-if="row.customer?.phone" class="block text-2xs text-muted-foreground" dir="ltr">{{ row.customer.phone }}</span>
+                        <span class="block max-w-[12rem] truncate font-semibold" dir="auto">{{ row.customer?.name ?? '—' }}</span>
+                        <span class="block text-xs text-fg-2">
+                            <template v-if="row.order_number"
+                                >{{ t('cases.columns.order') }} <bdi dir="ltr" class="tabular-nums">{{ row.order_number }}</bdi></template
+                            >
+                            <bdi v-else-if="row.customer?.phone" dir="ltr" class="tabular-nums">{{ row.customer.phone }}</bdi>
+                        </span>
                     </template>
-                    <template #cell-order="{ row }"><span dir="ltr">{{ row.order_number ?? '—' }}</span></template>
+                    <template #cell-assigned="{ row }">
+                        <span v-if="row.assigned_to" class="block max-w-[10rem] truncate" dir="auto">{{ row.assigned_to.name }}</span>
+                        <span v-else class="text-fg-3">{{ t('cases.unassigned') }}</span>
+                    </template>
                     <template #cell-priority="{ row }">
-                        <StatusChip :label="t(`cases.priority.${row.priority}`)" :tone="casePriorityTone[row.priority]" />
+                        <StatusChip :label="t(`cases.priority.${row.priority}`)" :tone="casePriorityTone[row.priority]" size="sm" />
                     </template>
                     <template #cell-status="{ row }">
                         <span class="flex flex-wrap items-center gap-1">
@@ -209,7 +247,11 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                             <CaseSlaChip :sla="row.sla" />
                         </span>
                     </template>
-                    <template #cell-date="{ row }"><span class="whitespace-nowrap tabular-nums text-muted-foreground">{{ formatDateTime(row.created_at, locale) }}</span></template>
+                    <template #cell-date="{ row }">
+                        <span class="whitespace-nowrap tabular-nums text-fg-2" :title="formatDateTime(row.created_at, locale)">{{
+                            formatListStamp(row.created_at, locale, now)
+                        }}</span>
+                    </template>
                 </DataTable>
                 <Pagination :page="cases" />
             </div>
