@@ -5,6 +5,10 @@
  */
 import LaunchEditor from '@/components/ads/launch/LaunchEditor.vue';
 import LaunchStateChip from '@/components/ads/launch/LaunchStateChip.vue';
+import PlatformChip from '@/components/ads/PlatformChip.vue';
+import AdsPanel from '@/components/ads/ui/AdsPanel.vue';
+import DecisionRow from '@/components/ads/ui/DecisionRow.vue';
+import StageBoxes, { type StageBox } from '@/components/ads/ui/StageBoxes.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
@@ -17,11 +21,12 @@ import { useI18n } from '@/composables/useI18n';
 import { formatCount } from '@/lib/format';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { ADS_META, ADS_TONE } from '@/lib/adsUi';
 import { launchErrorText, newIdempotencyKey } from '@/lib/launch';
 import type { AdsLaunchesProps, LaunchAnswer, LaunchRow, SlotRow } from '@/types/ads';
 import { Head, router } from '@inertiajs/vue3';
-import { Rocket } from 'lucide-vue-next';
-import { computed, onMounted, ref } from 'vue';
+import { ChevronRight, MessageSquareText, PackageX, Pause, Plus, Rocket } from 'lucide-vue-next';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 const props = defineProps<AdsLaunchesProps>();
 
@@ -29,22 +34,19 @@ const api = useApi();
 const toast = useToast();
 const { t, locale } = useI18n();
 
-type Tab = AdsLaunchesProps['box'] | 'slots';
-const tab = ref<Tab>(props.filters.tab === 'slots' && props.canToggleSlots ? 'slots' : props.box);
-const tabs = computed<{ key: Tab; count: number | null }[]>(() => [
-    { key: 'mine', count: props.counts.mine },
-    ...(props.canReview ? [{ key: 'review' as Tab, count: props.counts.review }] : []),
-    ...(props.canSeeReady ? [{ key: 'ready' as Tab, count: props.counts.ready }] : []),
-    { key: 'live', count: props.counts.live },
-    ...(props.canToggleSlots ? [{ key: 'slots' as Tab, count: null }] : []),
+/** The stage boxes (DESIGN §3 StageBoxes); the open slots are a panel of their own beside the list, not a stage. */
+type Tab = AdsLaunchesProps['box'];
+const tab = ref<Tab>(props.box);
+const boxes = computed<StageBox[]>(() => [
+    ...(props.canReview ? [{ key: 'review', label: t('ads.launch.page.box.review'), count: props.counts.review, mine: true }] : []),
+    { key: 'mine', label: t('ads.launch.page.box.mine'), count: props.counts.mine, mine: !props.canReview },
+    ...(props.canSeeReady ? [{ key: 'ready', label: t('ads.launch.page.box.ready'), count: props.counts.ready }] : []),
+    { key: 'live', label: t('ads.launch.page.box.live'), count: props.counts.live },
+    ...(props.box === 'all' ? [{ key: 'all', label: t('ads.launch.page.box.all'), count: null }] : []),
 ]);
 
 function go(box: Tab, extra: Record<string, string | number | null> = {}): void {
     tab.value = box;
-    if (box === 'slots') {
-        void loadSlots();
-        return;
-    }
     const query: Record<string, string | number> = { box };
     if (props.filters.material !== null) query.material = props.filters.material;
     for (const [k, v] of Object.entries(extra)) if (v !== null) query[k] = v;
@@ -142,6 +144,18 @@ async function confirmRetire(): Promise<void> {
 
 /* ---- slots ---- */
 const slots = ref<SlotRow[] | null>(null);
+const slotsPanel = ref<InstanceType<typeof AdsPanel> | null>(null);
+const openCount = computed(() => (slots.value ?? []).filter((s) => s.open).length);
+/** One row per ad account: its slots as cells (open = mauve plus, closed = dashed) over the switches. */
+const slotGroups = computed(() => {
+    const out = new Map<number, { key: number; name: string; platform: string | null; slots: SlotRow[] }>();
+    for (const s of slots.value ?? []) {
+        const g = out.get(s.account.id) ?? { key: s.account.id, name: s.account.name, platform: s.account.platform ?? null, slots: [] };
+        g.slots.push(s);
+        out.set(s.account.id, g);
+    }
+    return [...out.values()];
+});
 async function loadSlots(): Promise<void> {
     slots.value = null;
     try {
@@ -166,7 +180,16 @@ async function toggleSlot(s: SlotRow, open: boolean): Promise<void> {
 
 /* ---- deep links ---- */
 onMounted(async () => {
-    if (tab.value === 'slots') void loadSlots();
+    if (props.canToggleSlots) {
+        void loadSlots();
+        // ?tab=slots (the old slots tab, notifications): bring the panel into view.
+        if (props.filters.tab === 'slots')
+            void nextTick(() => {
+                const el = (slotsPanel.value?.$el ?? null) as HTMLElement | null;
+                el?.scrollIntoView?.({ block: 'start' });
+                el?.focus?.({ preventScroll: true });
+            });
+    }
     if (props.filters.launch) {
         const row = props.launches.data.find((l) => l.id === props.filters.launch);
         if (row) editing.value = row.can.edit ? row : null;
@@ -190,164 +213,190 @@ onMounted(async () => {
     <Head :title="t('ads.launch.page.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-[1200px] space-y-4 p-3 md:p-6">
+        <div class="mx-auto w-full min-w-0 max-w-[1400px] space-y-5 p-4 md:p-6">
             <PageHeader :title="t('ads.launch.page.title')" :description="t('ads.launch.page.description')" />
 
-            <nav class="flex flex-wrap gap-1 border-b" :aria-label="t('ads.launch.page.title')">
-                <button
-                    v-for="x in tabs"
-                    :key="x.key"
-                    type="button"
-                    class="-mb-px border-b-2 px-3 py-2 text-sm"
-                    :class="
-                        tab === x.key ? 'border-primary font-semibold text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
-                    "
-                    :aria-current="tab === x.key ? 'page' : undefined"
-                    @click="go(x.key)"
-                >
-                    {{ t(`ads.launch.page.box.${x.key}`) }}
-                    <span v-if="x.count" class="ms-1 rounded-full bg-muted px-1.5 text-2xs tabular-nums">{{ formatCount(x.count, locale) }}</span>
-                </button>
-            </nav>
+            <StageBoxes :boxes="boxes" :current="tab" :label="t('ads.launch.page.title')" @select="(k) => go(k as Tab)" />
 
-            <p v-if="filters.material !== null && tab !== 'slots'" class="flex items-center gap-2 text-xs text-muted-foreground">
-                {{ t('ads.launch.page.material_filter') }}
-                <button type="button" class="text-primary hover:underline" @click="router.get('/ads/launches', { box })">
+            <p v-if="filters.material !== null" class="flex flex-wrap items-center gap-2 text-[13px] text-fg-2">
+                <span class="inline-flex h-8 items-center gap-1.5 rounded-full bg-brand-soft px-3 font-medium text-brand-ink">{{ t('ads.launch.page.material_filter') }}</span>
+                <button type="button" class="font-medium text-brand-ink underline-offset-2 hover:underline" @click="router.get('/ads/launches', { box })">
                     {{ t('ads.launch.page.clear_filter') }}
                 </button>
             </p>
 
-            <p
-                v-if="filters.stop && tab === 'live'"
-                role="alert"
-                class="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-            >
-                {{ t('ads.launch.page.stop_banner') }}
+            <p v-if="filters.stop && tab === 'live'" role="alert" class="flex items-center gap-2 rounded-lg bg-danger-soft px-4 py-2.5 text-[13px] font-medium text-danger">
+                <PackageX class="size-4 shrink-0" aria-hidden="true" />{{ t('ads.launch.page.stop_banner') }}
             </p>
 
-            <!-- «جاهزة للنشر» (F4): per-buyer counts of the drafts waiting for a buyer -->
-            <section v-if="tab === 'ready' && handoff.length" class="space-y-2" data-test="handoff">
-                <p class="text-xs text-muted-foreground">{{ t('ads.launch.page.ready_hint') }}</p>
-                <div class="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        class="inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs"
-                        :class="!filters.reviewer ? 'border-primary bg-primary/5 font-semibold text-primary' : 'hover:bg-muted'"
-                        :aria-pressed="!filters.reviewer"
-                        @click="go('ready')"
-                    >
-                        {{ t('ads.launch.page.ready_all') }}
-                        <span class="rounded-full bg-muted px-1.5 tabular-nums">{{ formatCount(counts.ready, locale) }}</span>
-                    </button>
-                    <button
-                        v-for="b in handoff"
-                        :key="b.buyer_id"
-                        type="button"
-                        class="inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs"
-                        :class="filters.reviewer === b.buyer_id ? 'border-primary bg-primary/5 font-semibold text-primary' : 'hover:bg-muted'"
-                        :aria-pressed="filters.reviewer === b.buyer_id"
-                        @click="go('ready', { reviewer: b.buyer_id })"
-                    >
-                        <bdi>{{ b.buyer_name }}</bdi>
-                        <span class="rounded-full bg-muted px-1.5 tabular-nums">{{ formatCount(b.count, locale) }}</span>
-                        <span v-if="b.oldest_at" class="text-muted-foreground">
-                            · {{ t('ads.launch.page.ready_oldest') }} <RelativeTime :iso="b.oldest_at" />
-                        </span>
-                    </button>
-                </div>
-            </section>
-
-            <!-- open slots -->
-            <section v-if="tab === 'slots'" class="space-y-2">
-                <p class="text-xs text-muted-foreground">{{ t('ads.launch.page.slots_hint') }}</p>
-                <SkeletonList v-if="slots === null" variant="table" :count="6" />
-                <EmptyState v-else-if="!slots.length" :title="t('ads.launch.page.slots_empty')" />
-                <ul v-else class="divide-y rounded-lg border bg-card">
-                    <li v-for="s in slots" :key="s.id" class="flex flex-wrap items-center gap-3 px-3 py-2">
-                        <div class="min-w-0 flex-1">
-                            <p class="truncate text-sm font-medium">{{ s.name }}</p>
-                            <p class="truncate text-2xs text-muted-foreground">{{ s.account.name }} · {{ s.campaign.name }}</p>
+            <div class="grid items-start gap-5" :class="canToggleSlots ? 'lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]' : ''">
+                <div class="min-w-0 space-y-3">
+                    <!-- «جاهزة للنشر» (F4): per-buyer counts of the drafts waiting for a buyer -->
+                    <section v-if="tab === 'ready' && handoff.length" class="space-y-2" data-test="handoff">
+                        <p class="text-[13px] text-fg-2">{{ t('ads.launch.page.ready_hint') }}</p>
+                        <div class="scrollbar-none -mx-1 flex gap-1.5 overflow-x-auto px-1">
+                            <button
+                                type="button"
+                                class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium"
+                                :class="!filters.reviewer ? 'border-foreground bg-foreground text-background' : 'border-line-strong bg-card text-fg-2 hover:text-foreground'"
+                                :aria-pressed="!filters.reviewer"
+                                @click="go('ready')"
+                            >
+                                {{ t('ads.launch.page.ready_all') }}
+                                <span class="tabular-nums">{{ formatCount(counts.ready, locale) }}</span>
+                            </button>
+                            <button
+                                v-for="b in handoff"
+                                :key="b.buyer_id"
+                                type="button"
+                                class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium"
+                                :class="filters.reviewer === b.buyer_id ? 'border-foreground bg-foreground text-background' : 'border-line-strong bg-card text-fg-2 hover:text-foreground'"
+                                :aria-pressed="filters.reviewer === b.buyer_id"
+                                @click="go('ready', { reviewer: b.buyer_id })"
+                            >
+                                <bdi>{{ b.buyer_name }}</bdi>
+                                <span class="tabular-nums">{{ formatCount(b.count, locale) }}</span>
+                                <span v-if="b.oldest_at" class="font-normal opacity-75"> · {{ t('ads.launch.page.ready_oldest') }} <RelativeTime :iso="b.oldest_at" /> </span>
+                            </button>
                         </div>
-                        <ToggleSwitch
-                            :model-value="s.open"
-                            :label="s.open ? t('ads.launch.page.slot_open') : t('ads.launch.page.slot_closed')"
-                            @update:model-value="toggleSlot(s, $event)"
-                        />
-                    </li>
-                </ul>
-            </section>
+                    </section>
 
-            <!-- launches -->
-            <section v-else class="space-y-2">
-                <EmptyState
-                    v-if="!launches.data.length"
-                    :icon="Rocket"
-                    :title="t(`ads.launch.page.empty.${box}`)"
-                    :body="t('ads.launch.page.empty_body')"
-                />
-                <ul v-else class="space-y-2">
-                    <li v-for="l in launches.data" :key="l.id" class="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3">
-                        <img
-                            v-if="l.material?.thumb_url"
-                            :src="l.material.thumb_url"
-                            alt=""
-                            class="size-14 shrink-0 rounded-md object-cover"
-                            loading="lazy"
+                    <!-- launches of the chosen stage -->
+                    <AdsPanel :title="t(`ads.launch.page.box.${tab}`)" :count="launches.total ?? launches.data.length" flush data-test="launches">
+                        <EmptyState
+                            v-if="!launches.data.length"
+                            class="border-0"
+                            :icon="Rocket"
+                            :title="t(`ads.launch.page.empty.${box}`)"
+                            :body="t('ads.launch.page.empty_body')"
                         />
-                        <div class="min-w-0 flex-1 space-y-0.5">
-                            <p class="truncate text-sm font-semibold">{{ l.material?.title }}</p>
-                            <p class="truncate text-2xs text-muted-foreground">{{ l.account?.name }} · {{ l.adset.name }}</p>
-                            <p class="flex flex-wrap items-center gap-2 text-2xs text-muted-foreground">
+                        <DecisionRow v-for="l in launches.data" v-else :key="l.id">
+                            <template #thumb>
+                                <img v-if="l.material?.thumb_url" :src="l.material.thumb_url" alt="" class="size-full object-cover" loading="lazy" />
+                                <Rocket v-else class="m-auto mt-5 size-5 text-fg-3" aria-hidden="true" />
+                            </template>
+                            <h3 class="flex min-w-0 items-center gap-2">
+                                <span class="truncate text-sm font-semibold" dir="auto">{{ l.material?.title }}</span>
+                                <PlatformChip v-if="l.account" :platform="l.account.platform" size="xs" icon-only />
+                            </h3>
+                            <p :class="ADS_META">
+                                <bdi>{{ l.account?.name }}</bdi><template v-if="l.adset.name"> · <bdi>{{ l.adset.name }}</bdi></template>
+                                <template v-if="l.people.preparer"> · {{ l.people.preparer.name }}</template>
+                            </p>
+                            <p class="flex flex-wrap items-center gap-x-2.5 gap-y-1 pt-1 text-xs text-fg-3">
                                 <LaunchStateChip :state="l.state" />
                                 <span>{{ t('ads.launch.approvals.card.ads_n', { n: l.ads_count }) }}</span>
                                 <RelativeTime :iso="l.dates.submitted_at ?? l.dates.created_at" />
-                                <span v-if="l.decision" class="text-amber-800 dark:text-amber-200">
-                                    {{ t(`ads.launch.reason.${l.decision.code}`)
-                                    }}<template v-if="l.decision.reason">: {{ l.decision.reason }}</template>
+                            </p>
+                            <p v-if="l.decision" class="mt-1.5 flex items-start gap-2 rounded-md bg-note-soft px-2.5 py-1.5 text-[13px] text-note-ink">
+                                <MessageSquareText class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                                <span>
+                                    <template v-if="l.people.decider">{{ l.people.decider.name }}: </template>{{ t(`ads.launch.reason.${l.decision.code}`)
+                                    }}<template v-if="l.decision.reason"> · {{ l.decision.reason }}</template>
                                 </span>
                             </p>
-                            <p v-if="l.last_error && l.state === 'create_failed'" class="text-2xs text-destructive">
+                            <p v-if="l.last_error && l.state === 'create_failed'" class="pt-1 text-xs text-danger">
                                 {{ launchErrorText(l.last_error, t) }}
                             </p>
+                            <template #actions>
+                                <Button v-if="l.can.edit" size="sm" class="h-11 md:h-[30px]" @click="editing = l">{{ t('ads.launch.actions.open') }}</Button>
+                                <Button v-if="l.can.retry" size="sm" variant="outline" class="h-11 md:h-[30px]" :loading="busy === l.id" @click="retry(l)">{{
+                                    t('ads.launch.actions.retry')
+                                }}</Button>
+                                <Button
+                                    v-if="l.can.stop && l.state === 'live'"
+                                    size="sm"
+                                    variant="ghost"
+                                    class="h-11 md:h-[30px]"
+                                    :class="ADS_TONE.danger"
+                                    @click="askStop([l])"
+                                    ><Pause aria-hidden="true" />{{ t('ads.launch.actions.stop') }}</Button
+                                >
+                                <Button
+                                    v-if="l.can.retire"
+                                    size="sm"
+                                    variant="ghost"
+                                    class="h-11 md:h-[30px]"
+                                    :class="ADS_TONE.quiet"
+                                    @click="((retiring = l), (retireReason = ''), (retireError = null))"
+                                    >{{ t('ads.launch.actions.retire') }}</Button
+                                >
+                            </template>
+                        </DecisionRow>
+                        <div v-if="launches.last_page > 1" class="flex items-center justify-between gap-2 border-t border-line px-4 py-2.5 text-[13px] text-fg-2">
+                            <span class="tabular-nums">{{ formatCount(launches.current_page, locale) }} / {{ formatCount(launches.last_page, locale) }}</span>
+                            <span class="flex gap-1.5">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="size-11 p-0 md:size-8"
+                                    :disabled="launches.current_page <= 1"
+                                    :aria-label="t('ui.prev')"
+                                    @click="page(launches.current_page - 1)"
+                                    ><ChevronRight class="rtl-flip rotate-180" aria-hidden="true"
+                                /></Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="size-11 p-0 md:size-8"
+                                    :disabled="launches.current_page >= launches.last_page"
+                                    :aria-label="t('ui.next')"
+                                    @click="page(launches.current_page + 1)"
+                                    ><ChevronRight class="rtl-flip" aria-hidden="true"
+                                /></Button>
+                            </span>
                         </div>
-                        <div class="flex flex-wrap gap-1.5">
-                            <Button v-if="l.can.edit" size="sm" @click="editing = l">{{ t('ads.launch.actions.open') }}</Button>
-                            <Button v-if="l.can.retry" size="sm" variant="outline" :loading="busy === l.id" @click="retry(l)">{{
-                                t('ads.launch.actions.retry')
-                            }}</Button>
-                            <Button v-if="l.can.stop && l.state === 'live'" size="sm" variant="destructive" @click="askStop([l])">{{
-                                t('ads.launch.actions.stop')
-                            }}</Button>
-                            <Button
-                                v-if="l.can.retire"
-                                size="sm"
-                                variant="outline"
-                                @click="((retiring = l), (retireReason = ''), (retireError = null))"
-                                >{{ t('ads.launch.actions.retire') }}</Button
-                            >
-                        </div>
-                    </li>
-                </ul>
-                <div v-if="launches.last_page > 1" class="flex items-center justify-center gap-2 text-xs">
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        :disabled="launches.current_page <= 1"
-                        :aria-label="t('ui.prev')"
-                        @click="page(launches.current_page - 1)"
-                        ><span class="inline-block rtl:rotate-180" aria-hidden="true">&lsaquo;</span></Button
-                    >
-                    <span class="tabular-nums">{{ launches.current_page }} / {{ launches.last_page }}</span>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        :disabled="launches.current_page >= launches.last_page"
-                        :aria-label="t('ui.next')"
-                        @click="page(launches.current_page + 1)"
-                        ><span class="inline-block rtl:rotate-180" aria-hidden="true">&rsaquo;</span></Button
-                    >
+                    </AdsPanel>
                 </div>
-            </section>
+
+                <!-- open slots (SlotsBoard): the ad sets content may prepare new materials on -->
+                <AdsPanel
+                    v-if="canToggleSlots"
+                    id="slots"
+                    ref="slotsPanel"
+                    :title="t('ads.launch.page.box.slots')"
+                    :sub="slots ? t('ads.launch.page.slots_open_n', { n: formatCount(openCount, locale), total: formatCount(slots.length, locale) }) : undefined"
+                    flush
+                    data-test="slots"
+                    class="lg:sticky lg:top-[calc(var(--page-header-h,56px)+16px)]"
+                    tabindex="-1"
+                >
+                    <p class="px-4 pb-2 text-[12.5px] text-fg-3">{{ t('ads.launch.page.slots_hint') }}</p>
+                    <div v-if="slots === null" class="px-4 pb-4"><SkeletonList variant="table" :count="4" /></div>
+                    <EmptyState v-else-if="!slots.length" class="border-0" :title="t('ads.launch.page.slots_empty')" />
+                    <div v-else>
+                        <div v-for="g in slotGroups" :key="g.key" class="border-t border-line">
+                            <div class="flex items-center gap-2 px-4 pb-1.5 pt-3">
+                                <PlatformChip :platform="g.platform" size="xs" icon-only />
+                                <bdi class="min-w-0 truncate text-[13px] font-semibold">{{ g.name }}</bdi>
+                                <span class="ms-auto flex gap-1" aria-hidden="true">
+                                    <span
+                                        v-for="s in g.slots"
+                                        :key="s.id"
+                                        class="grid size-[22px] place-items-center rounded-[6px]"
+                                        :class="s.open ? 'bg-brand-soft text-brand-ink ring-1 ring-inset ring-brand' : 'border-[1.5px] border-dashed border-line-strong'"
+                                    >
+                                        <Plus v-if="s.open" class="size-3" />
+                                    </span>
+                                </span>
+                            </div>
+                            <ul>
+                                <li v-for="s in g.slots" :key="s.id" class="flex items-center gap-3 px-4 py-2">
+                                    <div class="min-w-0 flex-1">
+                                        <p class="truncate text-[13.5px] font-medium" dir="auto">{{ s.name }}</p>
+                                        <p class="truncate text-xs text-fg-3" dir="auto">{{ s.campaign.name }}</p>
+                                    </div>
+                                    <ToggleSwitch
+                                        :model-value="s.open"
+                                        :label="s.open ? t('ads.launch.page.slot_open') : t('ads.launch.page.slot_closed')"
+                                        @update:model-value="toggleSlot(s, $event)"
+                                    />
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </AdsPanel>
+            </div>
         </div>
 
         <LaunchEditor
@@ -381,12 +430,12 @@ onMounted(async () => {
             @submit="confirmRetire"
         >
             <label class="block space-y-1">
-                <span class="text-xs font-medium">{{ t('ads.launch.actions.retire_reason') }}</span>
+                <span class="text-[13px] font-medium">{{ t('ads.launch.actions.retire_reason') }}</span>
                 <input
                     v-model="retireReason"
                     type="text"
                     maxlength="500"
-                    class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    class="h-10 w-full rounded-md border border-line-strong bg-card px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
             </label>
         </FormDialog>

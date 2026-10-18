@@ -784,6 +784,8 @@ export interface MaterialCollectionRow {
     not_started: number;
     need_stop: number;
     done: number;
+    /** Up to three pictures of its newest materials (the library grid). */
+    covers?: string[];
 }
 
 export interface AdsMaterialCollectionsProps {
@@ -1048,7 +1050,7 @@ export interface SlotRow {
     open: boolean;
     opened_at: string | null;
     campaign: { name: string; status: string | null };
-    account: AdsOption;
+    account: AdsOption & { platform?: string | null };
 }
 export interface LaunchOptions {
     slots: OpenSlot[];
