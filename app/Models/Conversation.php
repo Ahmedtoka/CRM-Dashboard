@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Bot\Episodes\ConversationEpisode;
 use App\Enums\ConversationPriority;
 use App\Enums\ConversationSource;
 use App\Enums\ConversationStatus;
@@ -269,10 +270,10 @@ class Conversation extends Model
      * to the bot (human bot flow Task 5 ruling 6a): only the burst turn marker, so
      * stale clarified/repeat_count/last_intents/asks/collected can never trigger a
      * "repeated" or clarify handover when the customer writes again. The
-     * once-per-conversation delayed-response flag (final fix wave I2) is kept too.
-     * Null when neither was set. Returned, not saved — callers persist it.
+     * once-per-conversation delayed-response flag (final fix wave I2) is kept too, and the
+     * close's `episode` marker (round b1). Returned, not saved — callers persist it.
      *
-     * @return array{last_turn_message_id?: int|string, delayed_response_sent?: true}|null
+     * @return array{last_turn_message_id?: int|string, delayed_response_sent?: true, episode: array<string, mixed>}
      */
     public function resetBotState(): ?array
     {
@@ -287,6 +288,10 @@ class Conversation extends Model
             $kept['delayed_response_sent'] = true;
         }
 
-        return $kept !== [] ? $kept : null;
+        // Round b1 (2026-10-19): every team close leaves its marker, so her next message follows
+        // ONE rule (ConversationEpisode): the same topic inside the reopen window, a fresh start after.
+        $kept[ConversationEpisode::KEY] = ConversationEpisode::marker($this, ConversationEpisode::STAFF);
+
+        return $kept;
     }
 }

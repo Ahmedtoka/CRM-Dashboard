@@ -8,6 +8,7 @@ use App\Bot\Agent\ReplyGuards;
 use App\Bot\Agent\StoreAgent;
 use App\Bot\Agent\TierProfile;
 use App\Bot\Ai\ModelPricing;
+use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Flows\FlowLabels;
@@ -173,7 +174,8 @@ class HybridRouter
         return [
             'flow' => $flow['key'] ?? null,
             'step' => $flow['step'] ?? null,
-            'last_question' => $c->messages()->where('sender_type', SenderType::Bot->value)->latest('id')->value('body'),
+            'last_question' => $c->messages()->where('sender_type', SenderType::Bot->value)
+                ->when(ConversationEpisode::historyFloor($c), fn ($q, $floor) => $q->where('id', '>=', $floor))->latest('id')->value('body'),
         ];
     }
 
@@ -380,6 +382,7 @@ class HybridRouter
         $firstId = $burst->first()?->id;
 
         return $c->messages()->when($firstId, fn ($q) => $q->where('id', '<', $firstId))
+            ->when(ConversationEpisode::historyFloor($c), fn ($q, $floor) => $q->where('id', '>=', $floor))
             ->whereIn('sender_type', [SenderType::Customer->value, SenderType::Bot->value, SenderType::User->value])
             ->orderByDesc('id')->limit(6)->get()->reverse()->values()
             ->map(fn (Message $m) => ['role' => $m->direction === MessageDirection::In ? 'customer' : 'agent', 'text' => (string) $m->body])

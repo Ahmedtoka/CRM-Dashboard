@@ -4,6 +4,7 @@ namespace App\Bot\Flows;
 
 use App\Bot\Agent\StoreAgent;
 use App\Bot\Catalog\ProductBrowser;
+use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flows\Sandbox\SandboxMode;
 use App\Bot\Flows\Steps\FlowStep;
@@ -161,6 +162,11 @@ class FlowEngine
 
             // A stale tap (an old step's button, or yes/no with no pending offer): its body is only the
             // button title, so never read it as a typed answer — re-ask the waiting step, no retry counted.
+            // Round b1: only the main menu is up, so the old button is from a request that is over.
+            if (str_starts_with($payload, 'step:') && $state['key'] === ConversationRouter::MAIN_MENU && app(StaleTap::class)->answer($c, $payload)) {
+                return new FlowResult(true, exited: true);
+            }
+
             if (str_starts_with($payload, 'step:') || in_array($payload, ['yes', 'no'], true)) {
                 // Never word for word (design 2026-09-21 §3): the waiting step comes back
                 // under «إحنا خلصنا الخطوة دي فعلًا», so she can see why it changed.
@@ -657,6 +663,8 @@ class FlowEngine
                 return null;
             case StepOutcome::END:
                 FlowState::clear($c);
+                // «لأ كده تمام» with nothing picked (round b1): she closed the request herself.
+                $this->closeEpisode($c, $state, ConversationEpisode::CUSTOMER);
 
                 return null;
             default: // wait
@@ -1063,6 +1071,20 @@ class FlowEngine
         }
 
         app(TaskOrchestrator::class)->flowEnded($c, $state);
+        $this->closeEpisode($c->refresh(), $state, ConversationEpisode::BOT);
+    }
+
+    /**
+     * Round b1: a request that is over (its flow reached the end, or she stopped it) closes the
+     * chat's episode — unless the next request of her message, or another flow, already goes on.
+     */
+    private function closeEpisode(Conversation $c, array $state, string $kind): void
+    {
+        if (SandboxMode::active() || $state['key'] === ConversationRouter::MAIN_MENU || ! ConversationEpisode::idle($c) || FlowState::flow($c) !== null) {
+            return;
+        }
+
+        ConversationEpisode::markClosed($c, $kind, ConversationEpisode::topicOf($c, FlowLabels::of($state['key'])));
     }
 
     /** Every flow handover: the working-hours reply, then the team (HumanHandover). */

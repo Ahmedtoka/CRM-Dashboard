@@ -7,9 +7,12 @@ use App\Bot\Agent\AgentRunner;
 use App\Bot\Agent\StoreAgent;
 use App\Bot\Ai\AiResponder;
 use App\Bot\Ai\MessageClassifier;
+use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Flows\ConversationRouter;
 use App\Bot\Flows\EntityExtractor;
+use App\Bot\Flows\FlowPrompter;
+use App\Bot\Flows\FlowState;
 use App\Bot\Flows\GreetingMirror;
 use App\Bot\Flows\HumanHandover;
 use App\Bot\Flows\Returns\ReturnPrefill;
@@ -133,6 +136,17 @@ class BotEngine
             return $this->recordRun($c, $last, engine: 'limit', decision: 'handover');
         }
 
+        // Round b1 (2026-10-19): ONE rule for a message after a close, for both routers — she closes
+        // it herself («لا تمام شكرا»), or her first message after a close continues the same topic
+        // (inside the reopen window) or starts fresh (ConversationEpisode).
+        $episode = app(ConversationEpisode::class);
+
+        if (ConversationEpisode::idle($c) && $episode->isCustomerClose($text)) {
+            return $this->customerClosed($c, $last, $text);
+        }
+
+        $episode->begin($c, $burst);
+
         // Agent rebuild: button taps, an active guided flow and greetings / "منيو" → main menu.
         if (($run = app(ConversationRouter::class)->route($c, $burst)) !== null) {
             return $run;
@@ -174,6 +188,21 @@ class BotEngine
         }
 
         return $run;
+    }
+
+    /**
+     * «لا تمام شكرا» with nothing waiting for her: the thanks line at once (no model), and the chat
+     * is closed by her — her next message starts fresh (ConversationEpisode).
+     */
+    private function customerClosed(Conversation $c, Message $last, string $text): BotRun
+    {
+        $reply = app(FlowPrompter::class)->script('thanks') ?? 'العفو يا فندم تحت أمرك في أي وقت';
+        $this->trySendBot($c, $this->withGreetingMirror($text, $reply));
+        // The main menu she was looking at is no longer waiting for a choice.
+        FlowState::clear($c);
+        ConversationEpisode::markClosed($c->refresh(), ConversationEpisode::CUSTOMER);
+
+        return $this->recordRun($c, $last, engine: 'flow_engine', decision: 'closed', replyText: $reply);
     }
 
     /** No order number, no return/exchange request, at most a few words: a rule may answer it all. */

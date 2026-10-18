@@ -3,6 +3,7 @@
 namespace App\Bot\Agent;
 
 use App\Bot\Ai\ClaudeMessages;
+use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Router\TurnMetrics;
 use App\Models\BotKnowledgeEntry;
 use App\Models\Conversation;
@@ -160,6 +161,11 @@ class StoreAgent
 
         if ($insideFlow) {
             $lines[] = '- she is in the middle of a guided flow: only answer her question; the flow asks its own next question right after you, so do not start another flow.';
+        }
+
+        // Round b1: after a close, whether this continues the closed topic or starts fresh (with what she asked before).
+        if (($episode = ConversationEpisode::context($c)) !== null) {
+            $lines[] = $episode;
         }
 
         if ($extra !== null && trim($extra) !== '') {

@@ -164,6 +164,15 @@ final class OrderItemsStep extends BaseStep
             return StepOutcome::wait([['text' => $this->fallbackText()]], 0, ['items_pending' => ['mode' => 'fallback'], 'selected_items' => null]);
         }
 
+        // Round b1: the piece of an old picture card she tapped again (the request restarted for it).
+        $ids = array_values(array_filter(array_map('intval', (array) ($state['data']['item_ids'] ?? [])), fn (int $id) => $order->items->contains('id', $id)));
+
+        if ($ids !== [] && ! $this->plain) {
+            $state['data']['items_pending'] = ['mode' => 'pick'];
+
+            return $this->pick($state, $order, $ids)->withData(['item_ids' => null]);
+        }
+
         // Bot hybrid R1/R3: the pieces named in the message that started the flow are picked at once.
         $hints = array_values(array_filter((array) ($state['data']['item_hints'] ?? []), 'is_array'));
 

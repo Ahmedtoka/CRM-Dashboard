@@ -109,6 +109,12 @@ class ConversationRouter
             if ($payload !== null && $this->runPayload($c, $payload)) {
                 return $this->record($c, $texts, $started, 'button');
             }
+
+            // Round b1: a button of a request that is over (an old picture card) — answered here, at
+            // once, never handed to a model that only reads «رجّع القطعة دي».
+            if ($payload !== null && app(StaleTap::class)->answer($c, $payload)) {
+                return $this->record($c, $texts, $started, 'stale_tap');
+            }
         }
 
         // 2b. She asks for a person in words (the human_request intent's words, flow 7): «محتاجة إيه؟» first.

@@ -111,6 +111,12 @@ final class FlowScripts
             // Angry with a threat (bot-hybrid.md §3.6): an apology, then a person at high priority.
             'bot_sorry_handover' => ['title' => 'البوت: اعتذار قبل التحويل', 'body' => 'معلش يا فندم على اللي حصل، وحقك علينا. هوصّلك بحد من الفريق يتابع معاكي'],
             'bot_safe_fallback' => ['title' => 'البوت: مش متأكدة من الإجابة', 'body' => 'خليني أتأكد من المعلومة دي مع الفريق، تحبي أوصّلك بحد منهم؟'],
+            // Round b1 (2026-10-19): she writes again soon after a close — the same topic goes on.
+            'episode_continue' => ['title' => 'البوت: نكمل نفس الموضوع بعد القفل', 'body' => 'أهلاً بيكي تاني، بنكمل في {topic}'],
+            // Round b1: a button from a request that is already over (an old picture card).
+            'stale_tap_closed' => ['title' => 'البوت: زرار من طلب قديم خلص', 'body' => 'الزرار ده من طلب قديم خلص، اختاري من القائمة أو اكتبيلي محتاجة إيه'],
+            'stale_piece_restart' => ['title' => 'البوت: نبدأ طلب جديد للقطعة', 'body' => 'الطلب اللي فات اتقفل، فهنبدأ طلب جديد للقطعة دي'],
+            'stale_piece_recorded' => ['title' => 'البوت: القطعة متسجلة خلاص', 'body' => '«{title}» متسجلة خلاص في طلب #{case_id}، وهيتم التواصل معاكي في أقرب وقت'],
         ];
     }
 }

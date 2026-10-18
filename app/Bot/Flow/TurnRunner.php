@@ -3,6 +3,7 @@
 namespace App\Bot\Flow;
 
 use App\Bot\ArabicNormalizer;
+use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\Orders\OrderLookup;
 use App\Bot\Flow\Orders\OrderSnapshot;
 use App\Bot\Flow\Orders\OrderStatusText;
@@ -1072,6 +1073,8 @@ class TurnRunner
 
         return $c->messages()
             ->when($firstId, fn ($q) => $q->where('id', '<', $firstId))
+            // Round b1: after a fresh start the closed chat is not read as this one.
+            ->when(ConversationEpisode::historyFloor($c), fn ($q, $floor) => $q->where('id', '>=', $floor))
             ->orderByDesc('id')
             ->limit(12)
             ->get()

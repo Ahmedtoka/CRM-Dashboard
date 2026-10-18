@@ -134,7 +134,9 @@ it('hands the conversation back to the bot on a manual close, with a fresh bot s
         ->and($c->queue)->toBeNull()
         ->and($c->handover_category)->toBeNull()
         ->and($c->handover_topic)->toBeNull()
-        ->and($c->bot_state)->toBe(['last_turn_message_id' => 7])
+        // Round b1: the close's episode marker rides along (ConversationEpisode).
+        ->and(collect($c->bot_state)->except('episode')->all())->toBe(['last_turn_message_id' => 7])
+        ->and($c->bot_state['episode']['kind'])->toBe('staff')
         ->and($c->assignee_id)->toBeNull();
 })->with(['inquiry', 'problem', 'case']);
 

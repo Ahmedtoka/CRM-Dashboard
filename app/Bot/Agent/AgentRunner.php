@@ -3,6 +3,7 @@
 namespace App\Bot\Agent;
 
 use App\Bot\Catalog\ProductBrowser;
+use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Flows\HumanHandover;
@@ -177,6 +178,8 @@ class AgentRunner
     {
         $history = $c->messages()
             ->when($burst->first()?->id, fn ($q, $id) => $q->where('id', '<', $id))
+            // Round b1: after a fresh start the closed chat is not read as this one (CONTEXT has its memory).
+            ->when(ConversationEpisode::historyFloor($c), fn ($q, $floor) => $q->where('id', '>=', $floor))
             ->whereIn('sender_type', [SenderType::Customer->value, SenderType::Bot->value, SenderType::User->value])
             ->orderByDesc('id')->limit(self::HISTORY)->get()->reverse()
             ->map(fn (Message $m) => ['role' => $m->sender_type === SenderType::Customer ? 'user' : 'assistant', 'content' => trim((string) $m->body)])

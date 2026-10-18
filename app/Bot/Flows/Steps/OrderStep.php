@@ -307,6 +307,17 @@ final class OrderStep extends BaseStep
         return StepOutcome::wait([['text' => self::VERIFY_RETRY_TEXT]], 0, ['order_verify' => ['tries' => $tries] + $pending]);
     }
 
+    /**
+     * The flow data of an order she already proved is hers in this chat (round b1: an old picture
+     * card of that order restarts the request without asking for the order again).
+     *
+     * @return array<string, mixed>
+     */
+    public function provenData(Order $order): array
+    {
+        return array_filter($this->verifiedData(['data' => []], $this->lookup->ownedSnapshot($order)), fn ($v) => $v !== null);
+    }
+
     /** @return array<string, mixed> the order keys plus the proof, remembered for the rest of the flow */
     private function verifiedData(array $state, OrderSnapshot $s): array
     {
