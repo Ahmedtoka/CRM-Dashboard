@@ -192,9 +192,13 @@ class OrderController extends Controller
     {
         Gate::authorize('view', $order);
 
+        // The source chip under the title (web only, like the list's «المصدر» column).
+        $order->loadMissing(ModeratorScope::ORDER_AD_RELATIONS);
+
         return Inertia::render('Orders/Show', [
             'order' => $this->orderResource($order)->resolve($request),
             'canManage' => $request->user()->isSupervisorOrAbove(),
+            'canOpenAds' => $request->user()->isSupervisorOrAbove(),
             // WhatsApp order confirmation (spec 2026-10-16, W4): status and timeline, null when none was made.
             'confirmation' => fn () => ($c = OrderConfirmation::query()->with('caller:id,name')->where('order_id', $order->id)->first())
                 ? $board->forOrder($c->setRelation('order', $order))
