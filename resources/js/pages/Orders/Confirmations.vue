@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import SectionTabs from '@/components/crm/SectionTabs.vue';
-import type { SharedData } from '@/types';
-import { sectionTabs } from '@/lib/sectionTabs';
 import Callout from '@/components/crm/Callout.vue';
 import CallOutcomeActions from '@/components/crm/confirmations/CallOutcomeActions.vue';
 import ConfirmationStatusChip from '@/components/crm/confirmations/ConfirmationStatusChip.vue';
@@ -11,17 +8,19 @@ import EmptyState from '@/components/crm/EmptyState.vue';
 import IconAction from '@/components/crm/IconAction.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import Pagination from '@/components/crm/Pagination.vue';
-import StatCard from '@/components/crm/StatCard.vue';
+import SectionTabs from '@/components/crm/SectionTabs.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useUrlFilters } from '@/composables/useUrlFilters';
 import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatDateTime, formatMoney } from '@/lib/format';
+import { sectionTabs } from '@/lib/sectionTabs';
 import { formatShare } from '@/lib/today';
+import type { SharedData } from '@/types';
 import type { Paginated } from '@/types/admin';
 import { CONFIRMATION_TABS, type ConfirmationCounts, type ConfirmationRow, type ConfirmationTab } from '@/types/orderConfirmations';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { ClipboardList, ListChecks, MessagesSquare, Settings } from 'lucide-vue-next';
+import { ClipboardList, ListChecks, MessagesSquare, Phone, Settings } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 // The server still shares the props it read; the page reads the same values from the URL (useUrlFilters).
@@ -77,30 +76,30 @@ function onRecorded(row: ConfirmationRow): void {
 
 const n = (v: number) => formatCount(v, locale.value);
 
-const counters = computed(() => {
+/**
+ * The tabs as boxes (mockup «التأكيدات»): the call list first, its number red while anyone waits for a call (the SLA
+ * colour), the confirmations under it; «الكل» last. Each box is the tab, so one control filters the table.
+ */
+const BOX_ORDER: ConfirmationTab[] = ['needs_call', 'requests', 'confirmed', 'skipped', 'all'];
+const boxes = computed(() =>
+    BOX_ORDER.map((tab) => ({ tab, value: props.counts.tabs[tab] ?? 0, urgent: tab === 'needs_call' && (props.counts.tabs[tab] ?? 0) > 0 })),
+);
+
+/** The day's numbers the old cards showed, as one line under the boxes, so nothing is lost. */
+const dayLine = computed(() => {
     const c = props.counts;
-    return [
-        { key: 'sent', value: n(c.sent), tab: 'all' as const, tone: 'default' as const },
-        {
-            key: 'confirmed',
-            value: n(c.confirmed),
-            hint:
-                c.confirmed_share === null
-                    ? undefined
-                    : t('order_confirmations.counters.confirmed_share', { share: formatShare(c.confirmed_share, locale.value) }),
-            tab: 'confirmed' as const,
-            tone: 'positive' as const,
-        },
-        { key: 'cancel', value: n(c.cancel), tab: 'requests' as const, tone: c.cancel > 0 ? ('negative' as const) : ('default' as const) },
-        { key: 'edit', value: n(c.edit), tab: 'requests' as const, tone: 'default' as const },
-        {
-            key: 'no_response',
-            value: n(c.no_response),
-            tab: 'needs_call' as const,
-            tone: c.no_response > 0 ? ('warning' as const) : ('default' as const),
-        },
-        { key: 'waiting', value: n(c.waiting), tab: 'all' as const, tone: 'default' as const },
+    const parts = [
+        `${t('order_confirmations.counters.sent')} ${n(c.sent)}`,
+        `${t('order_confirmations.counters.waiting')} ${n(c.waiting)}`,
+        `${t('order_confirmations.counters.confirmed')} ${n(c.confirmed)}` +
+            (c.confirmed_share === null
+                ? ''
+                : ` (${t('order_confirmations.counters.confirmed_share', { share: formatShare(c.confirmed_share, locale.value) })})`),
+        `${t('order_confirmations.counters.cancel')} ${n(c.cancel)}`,
+        `${t('order_confirmations.counters.edit')} ${n(c.edit)}`,
+        `${t('order_confirmations.counters.no_response')} ${n(c.no_response)}`,
     ];
+    return parts.join(' · ');
 });
 
 const columns = computed<Column[]>(() => [
@@ -109,7 +108,7 @@ const columns = computed<Column[]>(() => [
     { key: 'total', label: t('order_confirmations.columns.total'), numeric: true, hideOnMobile: true },
     { key: 'status', label: t('order_confirmations.columns.status') },
     { key: 'sent', label: t('order_confirmations.columns.sent'), hideOnMobile: true },
-    { key: 'answered', label: t('order_confirmations.columns.answered') },
+    { key: 'answered', label: t('order_confirmations.columns.answered'), hideOnMobile: true },
     { key: 'note', label: t('order_confirmations.columns.note'), hideOnMobile: true },
     { key: 'links', label: t('order_confirmations.columns.links'), align: 'end' },
 ]);
@@ -138,7 +137,10 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                     :label="t('order_confirmations.settings.title')"
                 />
             </PageHeader>
-            <SectionTabs :tabs="sectionTabs.orders(t, inertiaPage.props.auth.user?.role, inertiaPage.props.navBadges?.confirmations)" :label="t('section_tabs.orders.label')" />
+            <SectionTabs
+                :tabs="sectionTabs.orders(t, inertiaPage.props.auth.user?.role, inertiaPage.props.navBadges?.confirmations)"
+                :label="t('section_tabs.orders.label')"
+            />
 
             <Callout v-if="!enabled" tone="warning" :title="t('order_confirmations.off.title')" data-confirmations-off>
                 {{ t('order_confirmations.off.body') }}
@@ -147,53 +149,49 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                 }}</Link>
             </Callout>
 
-            <div class="flex flex-wrap items-end gap-3 rounded-lg bg-card p-3 shadow-card">
-                <label class="min-w-0">
-                    <span class="mb-1 block text-2xs font-medium text-muted-foreground">{{ t('order_confirmations.day') }}</span>
+            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" role="tablist" :aria-label="title" data-confirmation-counters>
+                <button
+                    v-for="box in boxes"
+                    :key="box.tab"
+                    type="button"
+                    role="tab"
+                    :aria-selected="activeTab === box.tab"
+                    class="min-w-0 rounded-lg border px-4 py-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    :class="
+                        activeTab === box.tab
+                            ? 'border-brand bg-brand-soft shadow-[inset_0_0_0_1px_hsl(var(--brand))]'
+                            : 'border-line bg-card hover:border-line-strong hover:bg-surface-2'
+                    "
+                    :data-tab="box.tab"
+                    :data-urgent="box.urgent || undefined"
+                    @click="set({ tab: box.tab })"
+                >
+                    <span class="block truncate text-[12.5px] font-semibold" :class="activeTab === box.tab ? 'text-brand-ink' : 'text-fg-2'">{{
+                        t(`order_confirmations.tabs.${box.tab}`)
+                    }}</span>
+                    <span class="block text-2xl font-bold tabular-nums leading-snug" :class="box.urgent ? 'text-danger' : 'text-foreground'">{{
+                        n(box.value)
+                    }}</span>
+                </button>
+            </div>
+
+            <!-- The day filter and the day's numbers on one line (the call list ignores the day). -->
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <label class="flex items-center gap-2">
+                    <span class="text-13 font-semibold text-fg-2">{{ t('order_confirmations.day') }}</span>
                     <DateInput :model-value="day" :max="today" @update:model-value="set({ date: $event && $event !== today ? $event : null })" />
                 </label>
                 <button
                     v-if="!isToday"
                     type="button"
-                    class="inline-flex h-9 items-center rounded-md border bg-background px-3 text-xs font-medium hover:bg-muted"
+                    class="inline-flex h-9 items-center rounded-md border border-line-strong bg-card px-3 text-13 font-semibold hover:bg-surface-2"
                     @click="set({ date: null })"
                 >
                     {{ t('order_confirmations.back_to_today') }}
                 </button>
+                <p class="min-w-0 flex-1 text-xs tabular-nums text-fg-2" data-day-line>{{ dayLine }}</p>
             </div>
-
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" data-confirmation-counters>
-                <button
-                    v-for="c in counters"
-                    :key="c.key"
-                    type="button"
-                    class="rounded-lg text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    :data-counter="c.key"
-                    @click="set({ tab: c.tab })"
-                >
-                    <StatCard :label="t(`order_confirmations.counters.${c.key}`)" :value="c.value" :hint="c.hint" :tone="c.tone" />
-                </button>
-            </div>
-
-            <div class="flex flex-wrap gap-1.5" role="tablist" :aria-label="title">
-                <button
-                    v-for="tab in CONFIRMATION_TABS"
-                    :key="tab"
-                    type="button"
-                    role="tab"
-                    :aria-selected="activeTab === tab"
-                    class="inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-xs font-medium"
-                    :class="
-                        activeTab === tab ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground shadow-card hover:text-foreground'
-                    "
-                    :data-tab="tab"
-                    @click="set({ tab })"
-                >
-                    {{ t(`order_confirmations.tabs.${tab}`) }}
-                    <span class="tabular-nums opacity-80">{{ n(counts.tabs[tab] ?? 0) }}</span>
-                </button>
-            </div>
-            <p v-if="allDays" class="text-2xs text-muted-foreground" data-all-days>{{ t('order_confirmations.all_days_hint') }}</p>
+            <p v-if="allDays" class="text-xs text-fg-2" data-all-days>{{ t('order_confirmations.all_days_hint') }}</p>
 
             <div role="tabpanel" class="min-w-0">
                 <DataTable
@@ -250,7 +248,17 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                         <span v-else class="text-muted-foreground">—</span>
                     </template>
                     <template #cell-links="{ row }">
-                        <span class="inline-flex items-center gap-0.5">
+                        <span class="inline-flex items-center gap-1" @click.stop>
+                            <!-- The call itself first (mockup «اتصلي»): a tel: link on the phone, then what she said. -->
+                            <a
+                                v-if="row.needs_call && row.phone"
+                                :href="`tel:${row.phone}`"
+                                class="inline-flex h-[30px] items-center gap-1.5 rounded-md bg-brand px-2.5 text-13 font-semibold text-brand-on hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                :aria-label="t('order_confirmations.call.dial', { phone: row.phone })"
+                                data-dial
+                            >
+                                <Phone class="size-3.5" aria-hidden="true" />{{ t('order_confirmations.call.dial_short') }}
+                            </a>
                             <CallOutcomeActions v-if="row.needs_call" :confirmation-id="row.id" @recorded="onRecorded" />
                             <CallOutcomeActions v-else-if="row.can_record" menu :confirmation-id="row.id" @recorded="onRecorded" />
                             <IconAction
