@@ -50,26 +50,26 @@ const tone = (s: PublicationStatus) => (s === 'done' ? 'positive' : s === 'error
 
 <template>
     <div class="space-y-2">
-        <p v-if="loading" class="flex items-center gap-2 text-xs text-muted-foreground">
+        <p v-if="loading" class="flex items-center gap-2 text-xs text-fg-2">
             <LoaderCircle class="size-3.5 animate-spin" aria-hidden="true" />{{ t('ads.publish.loading') }}
         </p>
-        <p v-else-if="error" role="alert" class="text-xs text-destructive">{{ error }}</p>
-        <p v-else-if="!rows.length" class="text-xs text-muted-foreground">{{ t('ads.publish.none') }}</p>
-        <ul v-else class="divide-y divide-border/60 rounded-md border border-border/60">
+        <p v-else-if="error" role="alert" class="text-xs text-danger">{{ error }}</p>
+        <p v-else-if="!rows.length" class="text-xs text-fg-2">{{ t('ads.publish.none') }}</p>
+        <ul v-else class="divide-y divide-line rounded-md border border-line/60">
             <li v-for="r in rows" :key="r.id" class="flex flex-wrap items-start gap-x-3 gap-y-1 px-3 py-2 text-xs">
                 <div class="min-w-0 flex-1 space-y-0.5">
                     <p class="flex flex-wrap items-center gap-1.5">
                         <span class="font-semibold" dir="ltr">{{ r.ad_name }}</span>
                         <PlatformChip :platform="r.platform" size="xs" />
                     </p>
-                    <p class="truncate text-2xs text-muted-foreground" dir="auto">
+                    <p class="truncate text-xs text-fg-3" dir="auto">
                         {{ [r.account, r.campaign, r.adset].filter(Boolean).join(' / ') }}
                     </p>
-                    <p v-if="r.error" role="alert" class="text-2xs text-destructive" dir="auto">{{ r.error }}</p>
+                    <p v-if="r.error" role="alert" class="text-2xs text-danger" dir="auto">{{ r.error }}</p>
                 </div>
                 <div class="flex flex-col items-end gap-1">
                     <StatusChip :label="t(`ads.publish.status.${r.status}`)" :tone="tone(r.status)" :dot="r.status !== 'done' && r.status !== 'error'" />
-                    <span class="text-2xs text-muted-foreground tabular-nums">{{ formatDate(r.created_at, locale) }} {{ formatClock(r.created_at, locale) }}</span>
+                    <span class="text-xs text-fg-3 tabular-nums">{{ formatDate(r.created_at, locale) }} {{ formatClock(r.created_at, locale) }}</span>
                     <a
                         v-if="safeUrl(r.manager_url)"
                         :href="safeUrl(r.manager_url) ?? undefined"

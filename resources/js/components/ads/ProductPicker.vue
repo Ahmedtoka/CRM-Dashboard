@@ -112,18 +112,18 @@ const img = (p: MaterialProduct) => safeUrl(p.image_url);
 
 <template>
     <div class="space-y-2">
-        <div v-if="props.modelValue" class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-2">
+        <div v-if="props.modelValue" class="flex items-center gap-3 rounded-lg border border-line bg-sunken/30 p-2">
             <img v-if="img(props.modelValue)" :src="img(props.modelValue) ?? undefined" alt="" class="size-10 rounded object-cover" loading="lazy" />
-            <span v-else class="flex size-10 items-center justify-center rounded bg-muted"
-                ><Package class="size-4 text-muted-foreground" aria-hidden="true"
+            <span v-else class="flex size-10 items-center justify-center rounded bg-sunken"
+                ><Package class="size-4 text-fg-2" aria-hidden="true"
             /></span>
             <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-medium" dir="auto">{{ props.modelValue.title }}</p>
-                <p class="text-2xs text-muted-foreground">{{ t('ads.materials.product.inventory', { n: stock(props.modelValue.inventory) }) }}</p>
+                <p class="text-xs text-fg-3">{{ t('ads.materials.product.inventory', { n: stock(props.modelValue.inventory) }) }}</p>
             </div>
             <button
                 type="button"
-                class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-destructive"
+                class="inline-flex size-8 items-center justify-center rounded-md text-fg-2 hover:bg-sunken hover:text-danger"
                 :aria-label="t('ads.materials.product.clear')"
                 :title="t('ads.materials.product.clear')"
                 @click="emit('update:modelValue', null)"
@@ -133,14 +133,14 @@ const img = (p: MaterialProduct) => safeUrl(p.image_url);
         </div>
 
         <div ref="root" class="relative" @focusout="onFocusOut">
-            <Search class="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Search class="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-fg-2" aria-hidden="true" />
             <input
                 :id="inputId"
                 v-model="query"
                 type="search"
                 autocomplete="off"
                 :placeholder="props.modelValue ? t('ads.materials.product.change') : t('ads.materials.product.search')"
-                class="flex h-9 w-full rounded-md border border-input bg-card pe-8 ps-8 text-sm placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                class="flex h-9 w-full rounded-md border border-line-strong bg-card pe-8 ps-8 text-sm placeholder:text-fg-3 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
                 role="combobox"
                 aria-autocomplete="list"
                 :aria-expanded="open"
@@ -150,18 +150,18 @@ const img = (p: MaterialProduct) => safeUrl(p.image_url);
             />
             <LoaderCircle
                 v-if="loading"
-                class="absolute end-2.5 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-muted-foreground"
+                class="absolute end-2.5 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-fg-2"
                 aria-hidden="true"
             />
 
             <ul
                 v-show="open"
                 :id="listId"
-                class="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-lg"
+                class="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-line bg-popover p-1 shadow-lg"
                 role="listbox"
                 :aria-label="t('ads.materials.form.product')"
             >
-                <li v-if="!loading && !results.length" role="presentation" class="px-3 py-2 text-xs text-muted-foreground">
+                <li v-if="!loading && !results.length" role="presentation" class="px-3 py-2 text-xs text-fg-2">
                     {{ t('ads.materials.product.none_found') }}
                 </li>
                 <li
@@ -171,19 +171,19 @@ const img = (p: MaterialProduct) => safeUrl(p.image_url);
                     role="option"
                     :aria-selected="i === active"
                     class="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-start"
-                    :class="i === active ? 'bg-muted' : 'hover:bg-muted'"
+                    :class="i === active ? 'bg-muted' : 'hover:bg-sunken'"
                     @mousedown.prevent
                     @mouseenter="active = i"
                     @click="pick(p)"
                 >
                     <img v-if="img(p)" :src="img(p) ?? undefined" alt="" class="size-8 rounded object-cover" loading="lazy" />
-                    <span v-else class="flex size-8 items-center justify-center rounded bg-muted"
-                        ><Package class="size-3.5 text-muted-foreground" aria-hidden="true"
+                    <span v-else class="flex size-8 items-center justify-center rounded bg-sunken"
+                        ><Package class="size-3.5 text-fg-2" aria-hidden="true"
                     /></span>
                     <span class="min-w-0 flex-1 truncate text-xs" dir="auto">{{ p.title }}</span>
                     <span
                         class="shrink-0 text-2xs tabular-nums"
-                        :class="p.inventory > 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-destructive'"
+                        :class="p.inventory > 0 ? 'text-ok' : 'text-danger'"
                     >
                         {{ t('ads.materials.product.inventory', { n: stock(p.inventory) }) }}
                     </span>

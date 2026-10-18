@@ -14,7 +14,7 @@ const lines = computed(() => reasonTexts(props.reasons, locale.value, props.curr
 
 <template>
     <ul class="space-y-0.5 text-2xs leading-snug">
-        <li v-for="l in lines" :key="l.key" class="flex items-start gap-1.5" :class="l.bad ? 'text-destructive' : 'text-muted-foreground'">
+        <li v-for="l in lines" :key="l.key" class="flex items-start gap-1.5" :class="l.bad ? 'text-danger' : 'text-fg-2'">
             <span class="mt-1 size-1 shrink-0 rounded-full bg-current" aria-hidden="true" />
             <span>{{ l.text }}</span>
         </li>

@@ -227,8 +227,8 @@ async function submit(): Promise<void> {
     }
 }
 
-const field = 'h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-60';
-const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm';
+const field = 'h-9 w-full rounded-md border border-line-strong bg-card px-2 text-sm disabled:opacity-60';
+const area = 'min-h-20 w-full rounded-md border border-line-strong bg-card px-2 py-1.5 text-sm';
 </script>
 
 <template>
@@ -244,11 +244,11 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
         @update:open="emit('update:open', $event)"
         @submit="submit"
     >
-        <p v-if="loading" class="flex items-center gap-2 text-xs text-muted-foreground">
+        <p v-if="loading" class="flex items-center gap-2 text-xs text-fg-2">
             <LoaderCircle class="size-3.5 animate-spin" aria-hidden="true" />{{ t('ads.publish.loading') }}
         </p>
-        <p v-else-if="!accounts.length" class="text-xs text-muted-foreground">{{ t('ads.publish.no_accounts') }}</p>
-        <p v-if="!loading && !link" role="alert" class="rounded-md bg-warning/20 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+        <p v-else-if="!accounts.length" class="text-xs text-fg-2">{{ t('ads.publish.no_accounts') }}</p>
+        <p v-if="!loading && !link" role="alert" class="rounded-md bg-warning/20 px-3 py-2 text-xs text-warn">
             {{ t('ads.publish.no_link') }}
         </p>
 
@@ -263,12 +263,12 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
             <div class="space-y-1">
                 <label class="flex items-center gap-1.5 text-xs font-medium" for="pub-identity">
                     {{ t('ads.publish.identity') }}
-                    <LoaderCircle v-if="loadingAccount" class="size-3 animate-spin text-muted-foreground" aria-hidden="true" />
+                    <LoaderCircle v-if="loadingAccount" class="size-3 animate-spin text-fg-2" aria-hidden="true" />
                 </label>
                 <select id="pub-identity" v-model="form.page_id" :class="field" :disabled="!identities.length">
                     <option v-for="i in identities" :key="i.page_id" :value="i.page_id">{{ i.page_name }}</option>
                 </select>
-                <p v-if="form.account_id && !loadingAccount && !identities.length" class="text-2xs text-muted-foreground">
+                <p v-if="form.account_id && !loadingAccount && !identities.length" class="text-xs text-fg-3">
                     {{ t('ads.publish.no_identities') }}
                 </p>
             </div>
@@ -278,10 +278,10 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
                     <option value="">{{ t('ads.publish.pick') }}</option>
                     <option v-for="c in campaigns" :key="c.id" :value="c.id">{{ c.name }}</option>
                 </select>
-                <p v-if="form.account_id && !loadingAccount && !campaigns.length" class="text-2xs text-muted-foreground">
+                <p v-if="form.account_id && !loadingAccount && !campaigns.length" class="text-xs text-fg-3">
                     {{ t('ads.publish.no_campaigns') }}
                 </p>
-                <p v-else-if="campaign && !campaign.naming_ok" class="text-2xs text-amber-800 dark:text-amber-200">
+                <p v-else-if="campaign && !campaign.naming_ok" class="text-2xs text-warn">
                     {{ t('ads.publish.naming_off') }}
                 </p>
             </div>
@@ -291,8 +291,8 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
                     <option value="">{{ t('ads.publish.pick') }}</option>
                     <option v-for="s in campaign?.adsets ?? []" :key="s.id" :value="s.id">{{ s.name }}</option>
                 </select>
-                <p v-if="campaign && !campaign.adsets.length" class="text-2xs text-muted-foreground">{{ t('ads.publish.no_adsets') }}</p>
-                <p v-else-if="adset && !adset.naming_ok" class="text-2xs text-amber-800 dark:text-amber-200">{{ t('ads.publish.naming_off') }}</p>
+                <p v-if="campaign && !campaign.adsets.length" class="text-xs text-fg-3">{{ t('ads.publish.no_adsets') }}</p>
+                <p v-else-if="adset && !adset.naming_ok" class="text-2xs text-warn">{{ t('ads.publish.naming_off') }}</p>
             </div>
         </div>
 
@@ -300,7 +300,7 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
             <legend class="text-xs font-medium">{{ t('ads.publish.files') }}</legend>
             <ul class="flex flex-wrap gap-2">
                 <li v-for="f in files" :key="f.id">
-                    <label class="flex cursor-pointer items-center gap-2 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
+                    <label class="flex cursor-pointer items-center gap-2 rounded-md border border-line px-2 py-1 text-xs hover:bg-sunken">
                         <input
                             type="checkbox"
                             :checked="form.file_ids.includes(f.id)"
@@ -315,13 +315,13 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
 
         <fieldset class="space-y-2">
             <legend class="text-xs font-medium">{{ t('ads.publish.captions') }}</legend>
-            <div v-for="(c, i) in captionDrafts" :key="i" class="space-y-2 rounded-md border border-border/70 p-2.5">
+            <div v-for="(c, i) in captionDrafts" :key="i" class="space-y-2 rounded-md border border-line/70 p-2.5">
                 <div class="flex items-center justify-between">
                     <p class="text-xs font-semibold">{{ t('ads.publish.caption_n', { n: i + 1 }) }}</p>
                     <button
                         v-if="captionDrafts.length > 1"
                         type="button"
-                        class="inline-flex size-6 items-center justify-center rounded hover:bg-muted hover:text-destructive"
+                        class="inline-flex size-6 items-center justify-center rounded hover:bg-sunken hover:text-danger"
                         :aria-label="t('ads.publish.remove_caption', { n: i + 1 })"
                         @click="removeCaption(i)"
                     >
@@ -330,18 +330,18 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
                 </div>
                 <div class="grid gap-2 sm:grid-cols-[1fr_10rem]">
                     <div class="space-y-1">
-                        <label class="text-2xs text-muted-foreground" :for="`pub-h-${i}`">{{ t('ads.publish.headline') }}</label>
+                        <label class="text-xs text-fg-3" :for="`pub-h-${i}`">{{ t('ads.publish.headline') }}</label>
                         <input :id="`pub-h-${i}`" v-model="c.headline" type="text" maxlength="255" dir="auto" :class="field" />
                     </div>
                     <div class="space-y-1">
-                        <label class="text-2xs text-muted-foreground" :for="`pub-c-${i}`">{{ t('ads.publish.cta') }}</label>
+                        <label class="text-xs text-fg-3" :for="`pub-c-${i}`">{{ t('ads.publish.cta') }}</label>
                         <select :id="`pub-c-${i}`" v-model="c.cta" :class="field">
                             <option v-for="o in CTAS" :key="o" :value="o">{{ t(`ads.publish.cta_options.${o}`) }}</option>
                         </select>
                     </div>
                 </div>
                 <div class="space-y-1">
-                    <label class="text-2xs text-muted-foreground" :for="`pub-t-${i}`">{{ t('ads.publish.primary_text') }}</label>
+                    <label class="text-xs text-fg-3" :for="`pub-t-${i}`">{{ t('ads.publish.primary_text') }}</label>
                     <textarea :id="`pub-t-${i}`" v-model="c.primary_text" maxlength="2000" dir="auto" :class="area" />
                 </div>
             </div>
@@ -360,17 +360,17 @@ const area = 'min-h-20 w-full rounded-md border border-input bg-background px-2 
             {{ t('ads.publish.allow_duplicate') }}
         </label>
 
-        <section v-if="previewNames.length" class="space-y-1 rounded-md bg-muted/50 p-3 text-xs" aria-live="polite">
+        <section v-if="previewNames.length" class="space-y-1 rounded-md bg-sunken/50 p-3 text-xs" aria-live="polite">
             <p class="font-medium">
-                {{ t('ads.publish.preview') }} <span class="text-muted-foreground">({{ t('ads.publish.count', { n: previewNames.length }) }})</span>
+                {{ t('ads.publish.preview') }} <span class="text-fg-2">({{ t('ads.publish.count', { n: previewNames.length }) }})</span>
             </p>
             <ul class="space-y-0.5" dir="ltr">
                 <li v-for="(n, i) in previewNames" :key="i" class="font-mono text-2xs">{{ n }}</li>
             </ul>
             <p v-if="link" class="break-all" dir="ltr">
-                <span class="text-muted-foreground" dir="auto">{{ t('ads.publish.link') }}:</span> {{ link }}
+                <span class="text-fg-2" dir="auto">{{ t('ads.publish.link') }}:</span> {{ link }}
             </p>
-            <p class="break-all text-2xs text-muted-foreground" dir="ltr">{{ t('ads.publish.url_tags') }}: {{ urlTags }}</p>
+            <p class="break-all text-xs text-fg-3" dir="ltr">{{ t('ads.publish.url_tags') }}: {{ urlTags }}</p>
         </section>
     </FormDialog>
 </template>

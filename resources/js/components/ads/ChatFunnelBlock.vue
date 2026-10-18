@@ -51,25 +51,25 @@ const reasons = computed(() => {
         <div v-else-if="loading && !funnel" class="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-busy="true">
             <Skeleton v-for="i in 5" :key="i" class="h-12" />
         </div>
-        <p v-else-if="!funnel || funnel.chats === 0" class="text-xs text-muted-foreground">{{ t(scope === 'all' ? 'ads.funnel.empty_all' : 'ads.funnel.empty') }}</p>
+        <p v-else-if="!funnel || funnel.chats === 0" class="text-xs text-fg-2">{{ t(scope === 'all' ? 'ads.funnel.empty_all' : 'ads.funnel.empty') }}</p>
         <template v-else>
             <ol class="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                <li v-for="s in stages" :key="s.key" class="rounded-md bg-muted/60 px-2 py-1.5" :data-funnel-stage="s.key">
-                    <p class="text-2xs text-muted-foreground" :title="s.key === 'orders' ? t('ads.funnel.real_orders') : undefined">{{ t(`ads.funnel.${s.key}`) }}</p>
+                <li v-for="s in stages" :key="s.key" class="rounded-md bg-sunken/60 px-2 py-1.5" :data-funnel-stage="s.key">
+                    <p class="text-xs text-fg-3" :title="s.key === 'orders' ? t('ads.funnel.real_orders') : undefined">{{ t(`ads.funnel.${s.key}`) }}</p>
                     <p class="text-sm font-semibold tabular-nums">
                         {{ formatCount(s.value, locale) }}
-                        <span v-if="s.share !== null" class="text-2xs font-normal text-muted-foreground">({{ formatPct(s.share, locale, 0) }})</span>
+                        <span v-if="s.share !== null" class="text-2xs font-normal text-fg-2">({{ formatPct(s.share, locale, 0) }})</span>
                     </p>
                 </li>
             </ol>
-            <p class="text-2xs text-muted-foreground" data-funnel-real-note>{{ t('ads.funnel.real_orders') }}</p>
+            <p class="text-xs text-fg-3" data-funnel-real-note>{{ t('ads.funnel.real_orders') }}</p>
             <div>
                 <p class="mb-1 text-xs font-medium">{{ t('ads.funnel.why') }}</p>
-                <p v-if="!reasons.length" class="text-xs text-muted-foreground">{{ t('ads.funnel.no_reasons') }}</p>
+                <p v-if="!reasons.length" class="text-xs text-fg-2">{{ t('ads.funnel.no_reasons') }}</p>
                 <ul v-else class="space-y-1">
                     <li v-for="r in reasons" :key="r.key" class="grid grid-cols-[7rem_minmax(0,1fr)_3rem] items-center gap-2 text-xs" :data-funnel-reason="r.key">
                         <span class="truncate">{{ t(`outcomes.${r.key}`) }}</span>
-                        <span class="h-2 rounded-full bg-muted" aria-hidden="true"><span class="block h-2 rounded-full bg-primary" :style="{ width: `${Math.round(r.share * 100)}%` }" /></span>
+                        <span class="h-2 rounded-full bg-sunken" aria-hidden="true"><span class="block h-2 rounded-full bg-primary" :style="{ width: `${Math.round(r.share * 100)}%` }" /></span>
                         <span class="text-end tabular-nums">{{ formatPct(r.share, locale, 0) }}</span>
                     </li>
                 </ul>

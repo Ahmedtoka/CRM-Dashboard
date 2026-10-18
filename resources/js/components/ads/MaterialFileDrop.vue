@@ -133,18 +133,18 @@ const size = (bytes: number | null) => formatBytes(bytes, locale.value);
     <div class="space-y-3">
         <div
             class="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors"
-            :class="dragging ? 'border-primary bg-primary/5' : 'border-border bg-muted/30'"
+            :class="dragging ? 'border-primary bg-primary/5' : 'border-line bg-sunken/30'"
             @dragenter.prevent="onDragEnter"
             @dragover.prevent
             @dragleave.prevent="onDragLeave"
             @drop.prevent="onDrop"
         >
-            <UploadCloud class="size-7 text-muted-foreground" aria-hidden="true" />
+            <UploadCloud class="size-7 text-fg-2" aria-hidden="true" />
             <p class="text-sm font-medium">{{ t('ads.materials.files.drop') }}</p>
-            <p class="text-2xs text-muted-foreground">{{ t('ads.materials.files.hint', { image: limits.image_mb, video: limits.video_mb }) }}</p>
+            <p class="text-xs text-fg-3">{{ t('ads.materials.files.hint', { image: limits.image_mb, video: limits.video_mb }) }}</p>
             <button
                 type="button"
-                class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted disabled:opacity-50"
+                class="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-xs font-medium hover:bg-sunken disabled:opacity-50"
                 :disabled="disabled"
                 @click="input?.click()"
             >
@@ -161,16 +161,16 @@ const size = (bytes: number | null) => formatBytes(bytes, locale.value);
             />
         </div>
 
-        <ul v-if="errors.length" role="alert" class="space-y-1 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <ul v-if="errors.length" role="alert" class="space-y-1 rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">
             <li v-for="(e, i) in errors" :key="i">{{ e }}</li>
         </ul>
 
         <div v-if="progress !== null" class="space-y-1" role="status">
-            <div class="flex justify-between text-2xs text-muted-foreground">
+            <div class="flex justify-between text-xs text-fg-3">
                 <span>{{ t('ads.materials.files.uploading') }}</span>
                 <span class="tabular-nums">{{ progress }}%</span>
             </div>
-            <div class="h-2 overflow-hidden rounded-full bg-muted">
+            <div class="h-2 overflow-hidden rounded-full bg-sunken">
                 <div class="h-full rounded-full bg-primary transition-[width]" :style="{ width: `${progress}%` }" />
             </div>
         </div>
@@ -179,7 +179,7 @@ const size = (bytes: number | null) => formatBytes(bytes, locale.value);
             <li
                 v-for="f in existing"
                 :key="`e-${f.id}`"
-                class="relative overflow-hidden rounded-lg border border-border bg-card"
+                class="relative overflow-hidden rounded-lg border border-line bg-card"
                 :class="{ 'opacity-40': removed.includes(f.id) }"
             >
                 <video
@@ -195,7 +195,7 @@ const size = (bytes: number | null) => formatBytes(bytes, locale.value);
                     <span class="min-w-0 flex-1 truncate" dir="auto" :title="f.original_name ?? ''">{{ f.original_name ?? '—' }}</span>
                     <button
                         type="button"
-                        class="inline-flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
+                        class="inline-flex size-6 items-center justify-center rounded text-fg-2 hover:bg-sunken hover:text-danger"
                         :aria-label="removed.includes(f.id) ? t('ads.materials.files.keep') : t('ads.materials.files.remove')"
                         :title="removed.includes(f.id) ? t('ads.materials.files.keep') : t('ads.materials.files.remove')"
                         :disabled="disabled"
@@ -216,10 +216,10 @@ const size = (bytes: number | null) => formatBytes(bytes, locale.value);
                 </span>
                 <div class="flex items-center gap-1 px-2 py-1.5 text-2xs">
                     <span class="min-w-0 flex-1 truncate" dir="auto" :title="f.name">{{ f.name }}</span>
-                    <span class="shrink-0 tabular-nums text-muted-foreground">{{ size(f.size) }}</span>
+                    <span class="shrink-0 tabular-nums text-fg-2">{{ size(f.size) }}</span>
                     <button
                         type="button"
-                        class="inline-flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
+                        class="inline-flex size-6 items-center justify-center rounded text-fg-2 hover:bg-sunken hover:text-danger"
                         :aria-label="t('ads.materials.files.remove')"
                         :title="t('ads.materials.files.remove')"
                         :disabled="disabled"

@@ -54,41 +54,41 @@ const columns = computed(() => {
 </script>
 
 <template>
-    <section v-if="summary" class="space-y-3 rounded-lg bg-card p-4 shadow-card" aria-labelledby="revenue-summary-title">
+    <section v-if="summary" class="space-y-3 rounded-lg bg-card p-4 border border-line" aria-labelledby="revenue-summary-title">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
             <div>
                 <h2 id="revenue-summary-title" class="text-sm font-semibold">{{ t('ads.summary.title') }}</h2>
-                <p class="text-2xs text-muted-foreground">{{ t('ads.summary.hint') }}</p>
+                <p class="text-xs text-fg-3">{{ t('ads.summary.hint') }}</p>
             </div>
-            <p class="text-2xs tabular-nums text-muted-foreground" :title="t('ads.summary.spend_tip')">
+            <p class="text-2xs tabular-nums text-fg-2" :title="t('ads.summary.spend_tip')">
                 {{ t('ads.summary.spend', { pre: money(summary.spend), tax: money(summary.spend_tax) }) }}
             </p>
         </div>
 
-        <p v-if="summary.note === 'foreign_currency'" class="text-2xs text-muted-foreground">{{ t('ads.summary.foreign_currency_note') }}</p>
+        <p v-if="summary.note === 'foreign_currency'" class="text-xs text-fg-3">{{ t('ads.summary.foreign_currency_note') }}</p>
 
         <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div v-for="c in columns" :key="c.key" class="min-w-0 rounded-md border border-border px-3 py-2" :title="c.tip">
-                <p class="text-2xs font-medium text-muted-foreground">{{ c.title }}</p>
-                <p class="mt-0.5 text-lg font-bold tabular-nums" :class="{ '!text-sm !font-medium text-muted-foreground': c.hidden }">{{ c.value }}</p>
-                <p v-if="c.sub" class="text-2xs text-muted-foreground">{{ c.sub }}</p>
+            <div v-for="c in columns" :key="c.key" class="min-w-0 rounded-md border border-line px-3 py-2" :title="c.tip">
+                <p class="text-2xs font-medium text-fg-2">{{ c.title }}</p>
+                <p class="mt-0.5 text-lg font-bold tabular-nums" :class="{ '!text-sm !font-medium text-fg-2': c.hidden }">{{ c.value }}</p>
+                <p v-if="c.sub" class="text-xs text-fg-3">{{ c.sub }}</p>
                 <p v-if="!c.hidden" class="mt-1 text-xs tabular-nums">
-                    <span class="text-muted-foreground">{{ c.roasLabel }}</span> <span class="font-semibold">{{ formatRoas(c.roas, locale) }}</span>
+                    <span class="text-fg-2">{{ c.roasLabel }}</span> <span class="font-semibold">{{ formatRoas(c.roas, locale) }}</span>
                 </p>
             </div>
         </div>
 
         <dl class="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-            <div class="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-1.5" :title="t('ads.summary.gap_platform_crm_tip')">
-                <dt class="text-muted-foreground">{{ t('ads.summary.gap_platform_crm') }}</dt>
+            <div class="flex items-center justify-between gap-2 rounded-md bg-sunken/50 px-3 py-1.5" :title="t('ads.summary.gap_platform_crm_tip')">
+                <dt class="text-fg-2">{{ t('ads.summary.gap_platform_crm') }}</dt>
                 <dd class="font-semibold tabular-nums">{{ signed(summary.gaps.platform_vs_crm) }} · {{ signedPct(summary.gaps.platform_vs_crm_pct) }}</dd>
             </div>
             <div
                 v-if="summary.store"
-                class="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-1.5"
+                class="flex items-center justify-between gap-2 rounded-md bg-sunken/50 px-3 py-1.5"
                 :title="t('ads.summary.gap_crm_store_tip')"
             >
-                <dt class="text-muted-foreground">{{ t('ads.summary.gap_crm_store') }}</dt>
+                <dt class="text-fg-2">{{ t('ads.summary.gap_crm_store') }}</dt>
                 <dd class="font-semibold tabular-nums">{{ signed(summary.gaps.crm_vs_store, moneyEgp) }} · {{ signedPct(summary.gaps.crm_vs_store_pct) }}</dd>
             </div>
         </dl>

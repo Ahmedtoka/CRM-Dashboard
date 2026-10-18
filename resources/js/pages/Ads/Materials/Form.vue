@@ -110,10 +110,10 @@ function addCollection(): void {
 }
 
 const inputClass =
-    'flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50';
+    'flex h-9 w-full rounded-md border border-line-strong bg-card px-3 text-sm placeholder:text-fg-3 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50';
 const areaClass =
-    'flex min-h-20 w-full rounded-md border border-input bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary';
-const sectionClass = 'space-y-4 rounded-lg bg-card p-4 shadow-card md:p-5';
+    'flex min-h-20 w-full rounded-md border border-line-strong bg-card px-3 py-2 text-sm placeholder:text-fg-3 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary';
+const sectionClass = 'space-y-4 rounded-lg bg-card p-4 border border-line md:p-5';
 
 const pageTitle = computed(() => (editing.value ? t('ads.materials.form.edit_title') : t('ads.materials.form.create_title')));
 const breadcrumbs = computed(() => [
@@ -146,13 +146,13 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                         :class="inputClass"
                         :placeholder="t('ads.materials.form.title_placeholder')"
                     />
-                    <p v-if="form.errors.title" class="text-2xs text-destructive">{{ form.errors.title }}</p>
+                    <p v-if="form.errors.title" class="text-2xs text-danger">{{ form.errors.title }}</p>
                 </div>
 
                 <div class="space-y-1">
                     <label class="text-xs font-medium" for="mat-product">{{ t('ads.materials.form.product') }}</label>
                     <ProductPicker v-model="product" input-id="mat-product" />
-                    <p v-if="form.errors.product_id" class="text-2xs text-destructive">{{ form.errors.product_id }}</p>
+                    <p v-if="form.errors.product_id" class="text-2xs text-danger">{{ form.errors.product_id }}</p>
                 </div>
 
                 <fieldset class="space-y-2">
@@ -167,14 +167,14 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                             :class="
                                 form.types.includes(ty)
                                     ? 'border-primary bg-primary text-primary-foreground'
-                                    : 'border-border bg-background text-muted-foreground hover:text-foreground'
+                                    : 'border-line bg-card text-fg-2 hover:text-foreground'
                             "
                             @click="toggleType(ty)"
                         >
                             <Check v-if="form.types.includes(ty)" class="size-3.5" aria-hidden="true" />{{ t(`ads.materials.type.${ty}`) }}
                         </button>
                     </div>
-                    <p v-for="e in errorsFor('types')" :key="e" class="text-2xs text-destructive">{{ e }}</p>
+                    <p v-for="e in errorsFor('types')" :key="e" class="text-2xs text-danger">{{ e }}</p>
                 </fieldset>
             </section>
 
@@ -182,19 +182,19 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
             <section :class="sectionClass">
                 <fieldset class="space-y-3">
                     <legend class="text-sm font-semibold">{{ t('ads.materials.form.collections') }}</legend>
-                    <p v-if="!collections.length" class="text-xs text-muted-foreground">{{ t('ads.materials.form.no_collections') }}</p>
+                    <p v-if="!collections.length" class="text-xs text-fg-2">{{ t('ads.materials.form.no_collections') }}</p>
                     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                         <label
                             v-for="c in collections"
                             :key="c.id"
                             class="flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-2 text-xs transition-colors"
-                            :class="form.collection_ids.includes(c.id) ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted'"
+                            :class="form.collection_ids.includes(c.id) ? 'border-primary bg-primary/5' : 'border-line hover:bg-sunken'"
                         >
                             <input v-model="form.collection_ids" type="checkbox" :value="c.id" class="size-3.5 accent-primary" />
                             <span class="min-w-0 truncate" dir="auto">{{ c.name }}</span>
                         </label>
                     </div>
-                    <p v-for="e in errorsFor('collection_ids')" :key="e" class="text-2xs text-destructive">{{ e }}</p>
+                    <p v-for="e in errorsFor('collection_ids')" :key="e" class="text-2xs text-danger">{{ e }}</p>
                 </fieldset>
                 <div class="flex flex-wrap items-center gap-2">
                     <label class="sr-only" for="mat-new-collection">{{ t('ads.materials.form.new_collection') }}</label>
@@ -218,7 +218,7 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                     >
                         <Plus class="size-3.5" aria-hidden="true" />{{ t('ads.materials.form.add_collection') }}
                     </Button>
-                    <p v-if="collectionError" role="alert" class="w-full text-2xs text-destructive">{{ collectionError }}</p>
+                    <p v-if="collectionError" role="alert" class="w-full text-2xs text-danger">{{ collectionError }}</p>
                 </div>
             </section>
 
@@ -233,18 +233,18 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                     :progress="progress"
                     :disabled="form.processing"
                 />
-                <p v-for="e in errorsFor('files')" :key="e" class="text-2xs text-destructive">{{ e }}</p>
+                <p v-for="e in errorsFor('files')" :key="e" class="text-2xs text-danger">{{ e }}</p>
             </section>
 
             <!-- Links + notes -->
             <section :class="sectionClass">
                 <h2 class="text-sm font-semibold">{{ t('ads.materials.form.links') }}</h2>
-                <p class="text-2xs text-muted-foreground">{{ t('ads.materials.form.links_hint') }}</p>
+                <p class="text-xs text-fg-3">{{ t('ads.materials.form.links_hint') }}</p>
                 <div class="grid gap-4 md:grid-cols-3">
                     <div v-for="field in ['website_links', 'drive_links', 'ig_links'] as const" :key="field" class="space-y-1">
                         <label class="text-xs font-medium" :for="`mat-${field}`">{{ t(`ads.materials.form.${field}`) }}</label>
                         <textarea :id="`mat-${field}`" v-model="form[field]" dir="ltr" rows="3" :class="areaClass" placeholder="https://" />
-                        <p v-for="e in errorsFor(field)" :key="e" class="text-2xs text-destructive">{{ e }}</p>
+                        <p v-for="e in errorsFor(field)" :key="e" class="text-2xs text-danger">{{ e }}</p>
                     </div>
                 </div>
                 <div class="space-y-1">
@@ -257,7 +257,7 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                         :class="areaClass"
                         :placeholder="t('ads.materials.form.content_notes_placeholder')"
                     />
-                    <p v-if="form.errors.content_notes" class="text-2xs text-destructive">{{ form.errors.content_notes }}</p>
+                    <p v-if="form.errors.content_notes" class="text-2xs text-danger">{{ form.errors.content_notes }}</p>
                 </div>
                 <div class="max-w-xs space-y-1">
                     <label class="text-xs font-medium" for="mat-buyer">{{ t('ads.materials.form.buyer') }}</label>
@@ -265,7 +265,7 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                         <option :value="null">{{ t('ads.materials.form.no_buyer') }}</option>
                         <option v-for="b in buyers" :key="b.id" :value="b.id">{{ b.name }}</option>
                     </select>
-                    <p v-if="form.errors.media_buyer_id" class="text-2xs text-destructive">{{ form.errors.media_buyer_id }}</p>
+                    <p v-if="form.errors.media_buyer_id" class="text-2xs text-danger">{{ form.errors.media_buyer_id }}</p>
                 </div>
             </section>
 
@@ -273,11 +273,11 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
             <section v-if="perms.canOperate.value" :class="sectionClass">
                 <h2 class="text-sm font-semibold">{{ t('ads.materials.link.title') }}</h2>
                 <AdLinkPicker v-if="material" :material-id="material.id" :ads="material.ads" />
-                <p v-else class="text-xs text-muted-foreground">{{ t('ads.materials.form.link_after_save') }}</p>
+                <p v-else class="text-xs text-fg-2">{{ t('ads.materials.form.link_after_save') }}</p>
             </section>
 
             <div
-                class="sticky bottom-0 z-10 -mx-3 flex flex-wrap items-center gap-2 border-t border-border bg-background/95 px-3 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0"
+                class="sticky bottom-0 z-10 -mx-3 flex flex-wrap items-center gap-2 border-t border-line bg-card/95 px-3 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0"
             >
                 <!-- While a file uploads the label carries the percentage, so the spinner only covers the rest of the save. -->
                 <Button type="submit" class="gap-1.5" :loading="form.processing && progress === null" :disabled="form.processing">

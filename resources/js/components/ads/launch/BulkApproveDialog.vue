@@ -56,13 +56,13 @@ async function start(): Promise<void> {
                 </DialogDescription>
             </DialogHeader>
 
-            <p v-if="!plan && !error" role="status" class="flex items-center gap-2 text-sm text-muted-foreground">
+            <p v-if="!plan && !error" role="status" class="flex items-center gap-2 text-sm text-fg-2">
                 <LoaderCircle class="size-4 animate-spin" aria-hidden="true" />{{ t('ads.launch.bulk.loading') }}
             </p>
-            <p v-else-if="error" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{{ error }}</p>
+            <p v-else-if="error" role="alert" class="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">{{ error }}</p>
             <template v-else-if="plan">
                 <p v-if="!plan.launches.length" class="text-sm">{{ t('ads.launch.bulk.none') }}</p>
-                <p class="text-2xs text-muted-foreground">
+                <p class="text-xs text-fg-3">
                     {{
                         t('ads.launch.bulk.skipped', {
                             warned: plan.skipped.warned,
@@ -83,16 +83,16 @@ async function start(): Promise<void> {
                         <CircleCheck v-if="r.outcome === 'ok'" class="size-4 text-emerald-600" :aria-label="t('ads.launch.bulk.result_ok')" />
                         <CircleX
                             v-else-if="r.outcome === 'failed'"
-                            class="size-4 text-destructive"
+                            class="size-4 text-danger"
                             :aria-label="t('ads.launch.bulk.result_failed')"
                         />
                         <span v-else class="size-4 rounded-full border" aria-hidden="true" />
                         <span class="min-w-0 flex-1 truncate">{{ r.title }}</span>
-                        <span class="text-2xs tabular-nums text-muted-foreground">{{ r.ads }}</span>
-                        <span v-if="r.outcome === 'failed' && r.message" class="truncate text-2xs text-destructive">{{ r.message }}</span>
+                        <span class="text-2xs tabular-nums text-fg-2">{{ r.ads }}</span>
+                        <span v-if="r.outcome === 'failed' && r.message" class="truncate text-2xs text-danger">{{ r.message }}</span>
                     </li>
                 </ul>
-                <p v-if="stoppedReason" role="alert" class="text-xs text-destructive">
+                <p v-if="stoppedReason" role="alert" class="text-xs text-danger">
                     {{ t('ads.launch.bulk.stopped', { reason: stoppedReason, n: leftCount }) }}
                 </p>
                 <p v-else-if="done > 0 && !running" role="status" class="text-xs">

@@ -195,7 +195,7 @@ function toggleFile(id: number, on: boolean): void {
     form.file_ids = on ? [...new Set([...form.file_ids, id])] : form.file_ids.filter((x) => x !== id);
 }
 
-const field = 'w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-ring';
+const field = 'w-full rounded-md border border-line-strong bg-card px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-ring';
 </script>
 
 <template>
@@ -216,10 +216,10 @@ const field = 'w-full rounded-md border border-input bg-background px-3 py-2 tex
                             <option :value="null" disabled>{{ t('ads.launch.editor.slot_placeholder') }}</option>
                             <option v-for="s in options?.slots ?? []" :key="s.id" :value="s.id">{{ s.account.name }} · {{ s.name }}</option>
                         </select>
-                        <span v-if="options && !options.slots.length" class="block text-2xs text-amber-800 dark:text-amber-200">{{
+                        <span v-if="options && !options.slots.length" class="block text-2xs text-warn">{{
                             t('ads.launch.editor.slot_none')
                         }}</span>
-                        <span v-else-if="slot" class="block text-2xs text-muted-foreground">
+                        <span v-else-if="slot" class="block text-xs text-fg-3">
                             {{
                                 t('ads.launch.editor.slot_hint', { account: slot.account.name, campaign: slot.campaign.name, buyer: slot.buyer.name })
                             }}
@@ -234,7 +234,7 @@ const field = 'w-full rounded-md border border-input bg-background px-3 py-2 tex
                                 v-for="f in options?.files ?? []"
                                 :key="f.id"
                                 class="relative block cursor-pointer overflow-hidden rounded-md border"
-                                :class="form.file_ids.includes(f.id) ? 'border-primary ring-2 ring-primary/40' : 'border-border'"
+                                :class="form.file_ids.includes(f.id) ? 'border-primary ring-2 ring-primary/40' : 'border-line'"
                             >
                                 <img
                                     v-if="f.thumb_url"
@@ -243,7 +243,7 @@ const field = 'w-full rounded-md border border-input bg-background px-3 py-2 tex
                                     class="aspect-[4/5] w-full object-cover"
                                     loading="lazy"
                                 />
-                                <span v-else class="flex aspect-[4/5] items-center justify-center bg-muted text-2xs text-muted-foreground">{{
+                                <span v-else class="flex aspect-[4/5] items-center justify-center bg-sunken text-xs text-fg-3">{{
                                     f.mime
                                 }}</span>
                                 <input
@@ -261,7 +261,7 @@ const field = 'w-full rounded-md border border-input bg-background px-3 py-2 tex
                     <section class="space-y-2">
                         <div class="flex flex-wrap items-center gap-2">
                             <h3 class="text-xs font-medium">{{ t('ads.launch.editor.captions') }}</h3>
-                            <span class="text-2xs text-muted-foreground">{{ t('ads.launch.editor.ads_count', { n: adsCount }) }}</span>
+                            <span class="text-xs text-fg-3">{{ t('ads.launch.editor.ads_count', { n: adsCount }) }}</span>
                             <button
                                 v-if="options?.captions.length"
                                 type="button"
@@ -276,7 +276,7 @@ const field = 'w-full rounded-md border border-input bg-background px-3 py-2 tex
                             <li v-for="(c, i) in options?.captions ?? []" :key="i">
                                 <button
                                     type="button"
-                                    class="w-full rounded px-2 py-1 text-start text-xs hover:bg-muted disabled:opacity-50"
+                                    class="w-full rounded px-2 py-1 text-start text-xs hover:bg-sunken disabled:opacity-50"
                                     :disabled="form.captions.length >= maxCaptions"
                                     @click="addCaption(c)"
                                 >
@@ -288,17 +288,17 @@ const field = 'w-full rounded-md border border-input bg-background px-3 py-2 tex
                             v-for="(c, i) in form.captions"
                             :key="i"
                             class="space-y-2 rounded-md border p-2"
-                            :class="changed(i) ? 'border-warning bg-warning/5' : 'border-border'"
+                            :class="changed(i) ? 'border-warning bg-warning/5' : 'border-line'"
                         >
                             <div class="flex items-center gap-2">
-                                <span class="text-2xs font-semibold text-muted-foreground">C{{ i + 1 }}</span>
-                                <span v-if="changed(i)" class="text-2xs font-medium text-amber-800 dark:text-amber-200">{{
+                                <span class="text-2xs font-semibold text-fg-2">C{{ i + 1 }}</span>
+                                <span v-if="changed(i)" class="text-2xs font-medium text-warn">{{
                                     t('ads.launch.approvals.card.edited')
                                 }}</span>
                                 <button
                                     v-if="form.captions.length > 1"
                                     type="button"
-                                    class="ms-auto rounded p-1 text-muted-foreground hover:bg-muted"
+                                    class="ms-auto rounded p-1 text-fg-2 hover:bg-sunken"
                                     :aria-label="t('ads.launch.editor.remove_caption')"
                                     @click="form.captions.splice(i, 1)"
                                 >
@@ -333,7 +333,7 @@ const field = 'w-full rounded-md border border-input bg-background px-3 py-2 tex
                     <!-- content's original (buyer review) -->
                     <details v-if="original" class="rounded-md border border-dashed p-2 text-xs">
                         <summary class="cursor-pointer font-medium">{{ t('ads.launch.editor.original') }}</summary>
-                        <p class="mt-1 text-muted-foreground">{{ t('ads.launch.editor.original_hint') }}</p>
+                        <p class="mt-1 text-fg-2">{{ t('ads.launch.editor.original_hint') }}</p>
                         <ul class="mt-1 space-y-1">
                             <li v-for="(o, i) in original.captions" :key="i">
                                 <strong>{{ o.headline }}</strong> — {{ o.primary_text }}
@@ -341,23 +341,23 @@ const field = 'w-full rounded-md border border-input bg-background px-3 py-2 tex
                         </ul>
                     </details>
 
-                    <p class="text-2xs text-muted-foreground">
+                    <p class="text-xs text-fg-3">
                         {{ t('ads.launch.editor.link') }}
                         <span dir="ltr" class="break-all">{{ current?.link ?? '' }}</span>
                     </p>
-                    <p v-if="mode === 'buyer'" class="text-2xs text-muted-foreground">
+                    <p v-if="mode === 'buyer'" class="text-xs text-fg-3">
                         {{ t('ads.launch.editor.identity') }}: {{ current?.identity?.page_name || t('ads.launch.editor.identity_auto') }}
                     </p>
                 </div>
 
                 <aside class="space-y-2 lg:border-s lg:ps-4">
                     <h3 class="text-xs font-medium">{{ t('ads.launch.editor.checks') }}</h3>
-                    <p v-if="!current" class="text-xs text-muted-foreground">{{ t('ads.launch.editor.saved_first') }}</p>
+                    <p v-if="!current" class="text-xs text-fg-2">{{ t('ads.launch.editor.saved_first') }}</p>
                     <ChecksPanel v-else :checks="checks" :loading="checking" />
                 </aside>
             </div>
 
-            <p v-if="error" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{{ error }}</p>
+            <p v-if="error" role="alert" class="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">{{ error }}</p>
 
             <DialogFooter class="flex-wrap gap-2 sm:justify-start">
                 <template v-if="mode === 'content'">
@@ -388,7 +388,7 @@ const field = 'w-full rounded-md border border-input bg-background px-3 py-2 tex
                 <Button
                     v-if="can?.withdraw"
                     variant="ghost"
-                    class="text-destructive"
+                    class="text-danger"
                     :loading="busy === 'withdraw'"
                     :disabled="busy !== null"
                     @click="withdraw"

@@ -121,8 +121,8 @@ watch(fileId, () => {
     if (props.open) void load();
 });
 
-const field = 'h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-60';
-const area = 'min-h-24 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm';
+const field = 'h-9 w-full rounded-md border border-line-strong bg-card px-2 text-sm disabled:opacity-60';
+const area = 'min-h-24 w-full rounded-md border border-line-strong bg-card px-2 py-1.5 text-sm';
 </script>
 
 <template>
@@ -134,9 +134,9 @@ const area = 'min-h-24 w-full rounded-md border border-input bg-background px-2 
             </DialogHeader>
 
             <div class="space-y-3 text-sm">
-                <p v-if="!videos.length" class="text-xs text-muted-foreground">{{ t('ads.captions.no_video') }}</p>
+                <p v-if="!videos.length" class="text-xs text-fg-2">{{ t('ads.captions.no_video') }}</p>
                 <div v-else class="flex flex-wrap items-center gap-3">
-                    <img v-if="file?.thumb_url" :src="file.thumb_url" alt="" class="h-20 w-14 rounded-md border border-border object-cover" />
+                    <img v-if="file?.thumb_url" :src="file.thumb_url" alt="" class="h-20 w-14 rounded-md border border-line object-cover" />
                     <div v-if="videos.length > 1" class="space-y-1">
                         <label class="text-xs font-medium" for="cap-file">{{ t('ads.captions.video') }}</label>
                         <select id="cap-file" v-model="fileId" :class="field" :disabled="busy">
@@ -149,28 +149,28 @@ const area = 'min-h-24 w-full rounded-md border border-input bg-background px-2 
                     </Button>
                 </div>
 
-                <p v-if="generating" class="text-xs text-muted-foreground" role="status">{{ t('ads.captions.working') }}</p>
-                <p v-if="framesUsed === 0" role="status" class="rounded-md bg-warning/20 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">{{ t('ads.captions.no_frames') }}</p>
-                <p v-else-if="framesUsed" class="text-2xs text-muted-foreground">{{ t('ads.captions.frames_used', { n: framesUsed }) }}</p>
+                <p v-if="generating" class="text-xs text-fg-2" role="status">{{ t('ads.captions.working') }}</p>
+                <p v-if="framesUsed === 0" role="status" class="rounded-md bg-warning/20 px-3 py-2 text-xs text-warn">{{ t('ads.captions.no_frames') }}</p>
+                <p v-else-if="framesUsed" class="text-xs text-fg-3">{{ t('ads.captions.frames_used', { n: framesUsed }) }}</p>
 
-                <div v-for="(c, i) in captions" :key="c.id" class="space-y-2 rounded-md border border-border/70 p-2.5">
+                <div v-for="(c, i) in captions" :key="c.id" class="space-y-2 rounded-md border border-line/70 p-2.5">
                     <p class="text-xs font-semibold">{{ t('ads.captions.angle_n', { n: i + 1, angle: t(`ads.captions.angles.${c.angle}`) }) }}</p>
                     <div class="grid gap-2 sm:grid-cols-[1fr_10rem]">
                         <div class="space-y-1">
-                            <label class="flex justify-between text-2xs text-muted-foreground" :for="`cap-h-${c.id}`">
+                            <label class="flex justify-between text-xs text-fg-3" :for="`cap-h-${c.id}`">
                                 <span>{{ t('ads.publish.headline') }}</span><span>{{ formatCount(c.headline.length, locale) }}/{{ formatCount(MAX_HEADLINE, locale) }}</span>
                             </label>
                             <input :id="`cap-h-${c.id}`" v-model="c.headline" type="text" :maxlength="MAX_HEADLINE" dir="auto" :class="field" />
                         </div>
                         <div class="space-y-1">
-                            <label class="text-2xs text-muted-foreground" :for="`cap-c-${c.id}`">{{ t('ads.publish.cta') }}</label>
+                            <label class="text-xs text-fg-3" :for="`cap-c-${c.id}`">{{ t('ads.publish.cta') }}</label>
                             <select :id="`cap-c-${c.id}`" v-model="c.cta" :class="field">
                                 <option v-for="o in CTAS" :key="o" :value="o">{{ t(`ads.publish.cta_options.${o}`) }}</option>
                             </select>
                         </div>
                     </div>
                     <div class="space-y-1">
-                        <label class="flex justify-between text-2xs text-muted-foreground" :for="`cap-t-${c.id}`">
+                        <label class="flex justify-between text-xs text-fg-3" :for="`cap-t-${c.id}`">
                             <span>{{ t('ads.publish.primary_text') }}</span><span>{{ formatCount(c.primary_text.length, locale) }}/{{ formatCount(MAX_TEXT, locale) }}</span>
                         </label>
                         <textarea :id="`cap-t-${c.id}`" v-model="c.primary_text" :maxlength="MAX_TEXT" dir="auto" :class="area" />
@@ -178,7 +178,7 @@ const area = 'min-h-24 w-full rounded-md border border-input bg-background px-2 
                 </div>
             </div>
 
-            <p v-if="error" role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{{ error }}</p>
+            <p v-if="error" role="alert" class="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">{{ error }}</p>
 
             <DialogFooter class="gap-2 sm:justify-start">
                 <Button v-if="canPublish" type="button" :loading="saving" :disabled="busy || !valid" @click="createAds">
