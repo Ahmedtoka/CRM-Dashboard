@@ -94,6 +94,8 @@ final class FlowScripts
             // Flow revision (2026-09-29) §4.2: the moderator has not replied yet.
             'queue_agent_delay_apology' => ['title' => 'الطابور: اعتذار عن تأخير الموظفة', 'body' => 'معلش على التأخير، زميلتنا {agent} معاكي حالاً'],
             // Spec 2026-09-30 §2: «خلصت» — the closing message of every manual close (the last word is ours).
+            // Close cycle Q15 (2026-10-18): «خلصت» on a customer still waiting in the lounge.
+            'queue_ticket_cancelled' => ['title' => 'الطابور: إلغاء التذكرة', 'body' => 'لغينا تذكرتك يا فندم، ابعتيلنا في أي وقت لو احتجتي حاجة.'],
             'queue_closed_thanks' => ['title' => 'الطابور: رسالة القفل', 'body' => 'سعدنا بخدمتك يا فندم، لو احتجتي أي حاجة تانية ابعتيلنا في أي وقت.'],
             // Bot hybrid (owner B2, 2026-10-17): the answer needs a model and is taking more than 2 s.
             'hold_short' => ['title' => 'البوت: ثانية واحدة', 'body' => 'ثانية واحدة يا فندم'],

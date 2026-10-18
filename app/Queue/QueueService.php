@@ -142,7 +142,7 @@ class QueueService
      * unless an open case already reserves her case owner. The same holds inside an auto-close's
      * return window (`return_priority_until`). Otherwise `live`; no shift open: `overnight`.
      */
-    public function enqueue(Conversation $c, HandoverContext $ctx, ?string $priority = null): ?QueueEntry
+    public function enqueue(Conversation $c, HandoverContext $ctx, ?string $priority = null, bool $quiet = false): ?QueueEntry
     {
         $s = $this->settings();
 
@@ -178,6 +178,8 @@ class QueueService
             'shift_id' => $shift?->id, 'enqueued_at' => now(), 'last_customer_message_at' => $c->last_customer_message_at, 'is_test' => (bool) $c->is_test,
             'bot_summary' => ['topic' => $ctx->topic, 'category' => $ctx->category, 'reason' => $ctx->reason, 'order_number' => $ctx->orderNumber, 'lines' => $ctx->summaryLines],
             'waiting_messages' => [], 'open_case_id' => $case?->id, 'reserved_user_id' => $owner,
+            // Close cycle RC-16: a Q8 reopen to her moderator is called with no message at all.
+            'silent_call' => $quiet,
         ]);
 
         if ($priority === 'returning' && $recent !== null) {
@@ -189,7 +191,9 @@ class QueueService
         $c->forceFill(['queue_entry_id' => $entry->id, 'assignee_id' => null, 'assigned_at' => null])->save();
         $this->logger->log(ActorType::System, null, ActivityLogger::QUEUE_ENQUEUE, null, $c, ['ticket' => $entry->ticket_no, 'priority' => $priority]);
 
-        if ($priority === 'overnight') {
+        if ($quiet) {
+            // Q8: no ticket message; the router gives her to her moderator at once.
+        } elseif ($priority === 'overnight') {
             if ($s->night_message_enabled) {
                 SendQueueMessage::dispatch($entry->id, 'queue_night', ['ticket' => $entry->ticket_no, 'opening' => $this->nextOpeningPhrase()]);
             }
@@ -331,7 +335,7 @@ class QueueService
             return false;
         }
 
-        return DB::transaction(function () use ($c, $acknowledgement) {
+        return DB::transaction(function () use ($c, $m, $acknowledgement) {
             $row = Conversation::query()->whereKey($c->id)->lockForUpdate()->first(['id', 'handler', 'needs_human', 'return_priority_until']);
             $handler = $row?->handler;
 
@@ -342,8 +346,15 @@ class QueueService
                 $c->forceFill(['handler' => $row->handler, 'needs_human' => $row->needs_human, 'return_priority_until' => $row->return_priority_until])
                     ->syncOriginalAttributes(['handler', 'needs_human', 'return_priority_until']);
             }
-            $last = QueueEntry::query()->where('conversation_id', $c->id)->latest('id')->lockForUpdate()->first(['id', 'status', 'closed_at', 'close_reason']);
+            $last = QueueEntry::query()->where('conversation_id', $c->id)->latest('id')->lockForUpdate()
+                ->first(['id', 'status', 'closed_at', 'close_reason', 'end_mode', 'assigned_user_id', 'customer_back_at']);
             $ended = $last !== null && in_array($last->status, QueueEntry::TERMINAL_STATUSES, true);
+
+            // Close cycle RC-6: her real message after a close, marked under this lock, so the closing
+            // message sees it even when its `created_at` is not later than the close.
+            if (! $acknowledgement && $ended && $last->status === 'closed' && $last->customer_back_at === null) {
+                QueueEntry::query()->whereKey($last->id)->update(['customer_back_at' => now()]);
+            }
 
             if ($acknowledgement && $ended && $this->quietAfter($last, $handler)) {
                 return true;
@@ -359,6 +370,17 @@ class QueueService
             // Only while that auto-close is still her latest story: a later «خلصت» hands her to the bot for good.
             if ($handler !== Handler::Human && ! $acknowledgement && $ended && $last->close_reason === 'auto' && self::inReturnWindow($c)) {
                 $this->customerReturned($c);
+            }
+
+            // Close cycle Q8 / H-13: after «خلصت» with the thanks, her free-text message (never a tap on
+            // one of the bot's buttons) inside `reopen_after_done_minutes` goes back to that moderator —
+            // only while she is logged in with a free window, and quietly (no ticket, no «دورك جه»).
+            // Otherwise the bot answers. Q9: `reopened_at` on the closed window, a quality metric.
+            if ($handler !== Handler::Human && ! $acknowledgement && $ended && $last->end_mode === 'thanks' && self::inReturnWindow($c)
+                && trim((string) $m->payload) === '' && $last->assigned_user_id !== null
+                && app(QueueRouter::class)->canTakeNow((int) $last->assigned_user_id) !== null
+                && $this->customerReturned($c, quiet: true)) {
+                QueueEntry::query()->whereKey($last->id)->whereNull('reopened_at')->update(['reopened_at' => now()]);
             }
 
             return false;
@@ -441,7 +463,7 @@ class QueueService
      * Lock order: conversation, then entries. Two messages arriving together are serialised on
      * the conversation row and the second one finds the first one's entry (locking read).
      */
-    public function customerReturned(Conversation $c): bool
+    public function customerReturned(Conversation $c, bool $quiet = false): bool
     {
         $s = $this->settings();
 
@@ -449,7 +471,7 @@ class QueueService
             return false;
         }
 
-        return DB::transaction(function () use ($c, $s) {
+        return DB::transaction(function () use ($c, $s, $quiet) {
             Conversation::query()->whereKey($c->id)->lockForUpdate()->first(['id']);
 
             if (QueueEntry::query()->where('conversation_id', $c->id)->whereIn('status', ['waiting', 'called', 'active'])->lockForUpdate()->first(['id'])) {
@@ -463,7 +485,10 @@ class QueueService
                 return false;
             }
 
-            $returning = $c->return_priority_until !== null && $c->return_priority_until->isFuture();
+            // The return window of an auto-close (C1 / H-01). After «خلصت» with the thanks the same
+            // window (Q8) is opened only by settles()' own rules (`$quiet`).
+            $returning = $c->return_priority_until !== null && $c->return_priority_until->isFuture()
+                && ($last->close_reason === 'auto' || $last->end_mode !== 'thanks' || $quiet);
 
             if (! $returning) {
                 // After the windows: only a conversation a human handles, only while the queue takes handovers.
@@ -478,7 +503,7 @@ class QueueService
             $ctx = new HandoverContext('returning', (string) ($summary['category'] ?? 'returning'), 'medium', $summary['topic'] ?? null, $summary['lines'] ?? [], $last->kind, $summary['order_number'] ?? null);
             $c->forceFill(['handler' => Handler::Human, 'needs_human' => true])->save();
             // null = live, or overnight when no shift is open (enqueue() decides).
-            $entry = $this->enqueue($c, $ctx, $returning ? 'returning' : null);
+            $entry = $this->enqueue($c, $ctx, $returning ? 'returning' : null, $quiet);
 
             if ($entry === null) {
                 return false;

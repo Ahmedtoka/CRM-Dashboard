@@ -56,9 +56,10 @@ it('ends every manual close with the closing message, after the case number on a
 
     app(WindowLifecycle::class)->close($e, $reason, $u, ['case_type' => 'complaint']);
 
+    // Close cycle Q1: one closing message, the case number inside it.
     $texts = cmBotTexts($e);
-    expect($texts)->toHaveCount($reason === 'case' ? 2 : 1)
-        ->and(end($texts))->toBe(CM_CLOSING_TEXT);
+    expect($texts)->toHaveCount(1)
+        ->and($texts[0])->toEndWith(CM_CLOSING_TEXT);
 
     if ($reason === 'case') {
         expect($texts[0])->toContain('فتحنالك طلب رقم '.$e->fresh()->support_case_id);
@@ -99,7 +100,8 @@ it('sends none on a real escalation, transfer or automatic close after silence',
         ->and(cmBotTexts($e1))->not->toContain(CM_CLOSING_TEXT)
         ->and(cmBotTexts($e2))->not->toContain(CM_CLOSING_TEXT)
         ->and(cmBotTexts($e3))->not->toContain(CM_CLOSING_TEXT)
-        ->and(cmBotTexts($e3))->toContain(FlowScripts::all()['queue_auto_closed']['body']);
+        // Close cycle Q4: the auto-close is silent.
+        ->and(cmBotTexts($e3))->toBe([]);
 });
 
 it('uses the owner\'s wording, and says nothing when she turned it off', function () {

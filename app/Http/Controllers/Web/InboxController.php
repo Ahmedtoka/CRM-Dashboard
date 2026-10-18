@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\ConversationContextEndpoint;
 use App\Http\Controllers\Concerns\ConversationEndpoints;
+use App\Http\Controllers\Concerns\FinishEndpoints;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ConversationResource;
 use App\Inbox\ConversationQuery;
@@ -22,6 +23,7 @@ class InboxController extends Controller
 {
     use ConversationContextEndpoint;
     use ConversationEndpoints;
+    use FinishEndpoints;
 
     public function index(Request $request, ConversationQuery $query, QuickReplyCatalog $quickReplies): Response
     {

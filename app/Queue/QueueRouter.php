@@ -430,6 +430,26 @@ class QueueRouter
         return ($handled + $openSec) / (max(1, $this->capOf($m, $setting ?? QueueSetting::current())) * $shiftSec);
     }
 
+    /**
+     * Close cycle (Q8 / H-13): her desk on the open shift could take one more window right now —
+     * serving, her shift open, her account active and logged in, below her cap. Plain reads.
+     */
+    public function canTakeNow(int $userId, ?QueueSetting $setting = null): ?ShiftMember
+    {
+        $setting ??= QueueSetting::current();
+        $desk = $this->deskOf($userId);
+        $u = $desk?->user;
+
+        return $desk !== null && $u !== null && app(PresenceTracker::class)->isOnline($u) && $this->assignable($desk, $setting) ? $desk : null;
+    }
+
+    /** Her desk (not left) on an open shift, newest first; null when she is on none. */
+    public function deskOf(int $userId): ?ShiftMember
+    {
+        return ShiftMember::query()->with(['shift', 'user'])->where('user_id', $userId)->where('status', '!=', 'left')
+            ->whereHas('shift', fn ($q) => $q->where('status', 'open'))->latest('id')->first();
+    }
+
     private function capOf(ShiftMember $m, QueueSetting $setting): int
     {
         return (int) ($m->windows_cap ?? $setting->windows_per_moderator);
@@ -448,9 +468,9 @@ class QueueRouter
      * (`assignable()`). False, and nothing changes, when not: the entry stays waiting for the
      * next pass (or, when the customer left, stays as it is).
      */
-    public function assign(QueueEntry $e, ShiftMember $m, string $rule, string $ruleKey, ?QueueSetting $setting = null): bool
+    public function assign(QueueEntry $e, ShiftMember $m, string $rule, string $ruleKey, ?QueueSetting $setting = null, bool $tellCustomer = true): bool
     {
-        return DB::transaction(function () use ($e, $m, $rule, $ruleKey, $setting) {
+        return DB::transaction(function () use ($e, $m, $rule, $ruleKey, $setting, $tellCustomer) {
             $locked = WindowLifecycle::lockBoth($e);
             $c = $locked?->conversation;
 
@@ -489,7 +509,10 @@ class QueueRouter
             $user = $m->user;
 
             $this->logger->log(ActorType::System, null, ActivityLogger::QUEUE_ASSIGN, null, $c, ['ticket' => $locked->ticket_no, 'user_id' => $m->user_id, 'window' => $window, 'rule' => $ruleKey]);
-            SendQueueMessage::dispatch($locked->id, 'queue_called', ['ticket' => $locked->ticket_no, 'name' => $user->name, 'window' => $window]);
+            // Close cycle (H-10): a moderator who answered a waiting customer takes her with no «دورك جه».
+            if ($tellCustomer && ! $locked->silent_call) {
+                SendQueueMessage::dispatch($locked->id, 'queue_called', ['ticket' => $locked->ticket_no, 'name' => $user->name, 'window' => $window]);
+            }
 
             // The notification row and every real-time push only once the assignment is committed,
             // so a client that refetches sees it (and a rolled-back assignment notifies nobody), and

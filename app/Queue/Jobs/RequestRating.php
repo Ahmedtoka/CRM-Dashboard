@@ -56,7 +56,9 @@ class RequestRating implements ShouldQueue
     {
         $e = QueueEntry::query()->find($this->entryId);
 
-        if ($e === null || $e->closed_at === null || $e->closed_at->toIso8601String() !== $this->closedAt) {
+        // Close cycle (§6.1): a close made by the new code carries `end_mode` and its closing message
+        // already holds the rating question — a job of the old code still queued at deploy asks nothing.
+        if ($e === null || $e->closed_at === null || $e->closed_at->toIso8601String() !== $this->closedAt || $e->end_mode !== null) {
             return;
         }
 

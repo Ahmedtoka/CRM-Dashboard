@@ -590,6 +590,16 @@ class ShiftService
     }
 
     /**
+     * Close cycle (M-05, queue off with windows still open): only the half of `transition()` that
+     * closes the shifts whose time is over, so the shift-end watchdog can still free their windows.
+     */
+    public function closeEnded(): void
+    {
+        Shift::query()->where('status', 'open')->where('ends_at', '<=', now())->orderBy('ends_at')->get()
+            ->each(fn (Shift $shift) => $this->close($shift));
+    }
+
+    /**
      * The shift is over: whoever is still checked in leaves (`auto_out`, attendance §3); her open
      * windows stay with her while she is logged in (Part 1: she finishes them) — once she is gone,
      * `WindowLifecycle::tickStranded()` moves them (close-cycle hotfix C1, D-12) — and her

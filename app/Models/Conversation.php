@@ -82,6 +82,7 @@ class Conversation extends Model
             'source' => ConversationSource::class,
             'locked_until' => 'datetime',
             'claimed_until' => 'datetime',
+            'bot_paused_until' => 'datetime',
             'unread_count' => 'integer',
             'last_message_at' => 'datetime',
             'last_customer_message_at' => 'datetime',

@@ -42,6 +42,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::middleware('throttle:mobile-queue')->group(function () {
             Route::get('queue/me', [QueueDeskController::class, 'me'])->name('queue.me');
             Route::get('queue/me/points', [QueueDeskController::class, 'points'])->name('queue.me.points');
+            Route::get('queue/me/auto-closed', [ConversationController::class, 'autoClosed'])->name('queue.me.auto-closed');
             Route::post('queue/me/check-in', [QueueDeskController::class, 'checkIn'])->name('queue.check-in');
             Route::post('queue/me/check-out', [QueueDeskController::class, 'checkOut'])->name('queue.check-out');
             Route::post('queue/me/hand-back', [QueueDeskController::class, 'handBack'])->name('queue.hand-back');
@@ -74,6 +75,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('conversations/{conversation}/notes', [ConversationController::class, 'storeNote'])->name('conversations.notes.store');
         Route::post('conversations/{conversation}/claim', [ConversationController::class, 'claim'])->name('conversations.claim');
         Route::get('conversations/{conversation}/mentionable', [ConversationController::class, 'mentionable'])->name('conversations.mentionable');
+        Route::post('conversations/{conversation}/finish', [ConversationController::class, 'finish'])->name('conversations.finish');
+        Route::post('conversations/{conversation}/finish/undo', [ConversationController::class, 'undoFinish'])->name('conversations.finish.undo');
+        Route::post('conversations/{conversation}/outcome', [ConversationController::class, 'amendOutcome'])->name('conversations.outcome');
         Route::post('conversations/{conversation}/resolve', [ConversationController::class, 'resolve'])->name('conversations.resolve');
         Route::post('conversations/{conversation}/reopen', [ConversationController::class, 'reopen'])->name('conversations.reopen');
         Route::post('conversations/{conversation}/return-to-bot', [ConversationController::class, 'returnToBot'])->name('conversations.return-to-bot');

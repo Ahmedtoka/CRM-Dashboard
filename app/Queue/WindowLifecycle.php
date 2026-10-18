@@ -25,14 +25,13 @@ use App\Queue\Events\QueueEntryUpdated;
 use App\Queue\Events\QueueMemberUpdated;
 use App\Queue\Events\WindowClosed;
 use App\Queue\Jobs\ConfirmClose;
-use App\Queue\Jobs\RequestRating;
+use App\Queue\Jobs\SendClosingMessage;
 use App\Queue\Jobs\SendQueueMessage;
 use App\Queue\Scoring\ScoreListener;
 use App\Support\SafeBroadcast;
 use Carbon\CarbonInterface;
 use Illuminate\Database\DetectsConcurrencyErrors;
 use Illuminate\Database\DetectsLostConnections;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Throwable;
@@ -307,11 +306,11 @@ class WindowLifecycle
      * a Reverb or network outage must not close or move everybody's windows), nor while two or
      * more of these moderators went dark together less than STRANDED_OUTAGE_MINUTES ago.
      */
-    public function tickStranded(?QueueSetting $settings = null): void
+    public function tickStranded(?QueueSetting $settings = null, bool $draining = false): void
     {
         $s = $settings ?? QueueSetting::current();
 
-        if (! $s->enabled || app(ShiftService::class)->heartbeatsFailing()) {
+        if ((! $s->enabled && ! $draining) || app(ShiftService::class)->heartbeatsFailing()) {
             return;
         }
 
@@ -390,11 +389,11 @@ class WindowLifecycle
      * Every open window whose customer is silent after the moderator's last reply: one warning
      * message per silence period at `silence_warn_seconds`, auto-close at `silence_close_seconds`.
      */
-    public function tickSilence(?QueueSetting $settings = null): void
+    public function tickSilence(?QueueSetting $settings = null, bool $draining = false): void
     {
         $s = $settings ?? QueueSetting::current();
 
-        if (! $s->enabled) {
+        if (! $s->enabled && ! $draining) {
             return;
         }
 
@@ -738,9 +737,12 @@ class WindowLifecycle
             }
 
             $locked->forceFill(['silence_warned_at' => now()])->save();
-            SendQueueMessage::dispatch($locked->id, 'queue_silence_warning', [
-                'minutes' => QueueWording::minutes((int) ceil(($s->silence_close_seconds - $idle) / 60)),
-            ]);
+            // Q4: the moderator's chip only, unless the owner turned the customer warning back on.
+            if ($s->silence_warn_customer) {
+                SendQueueMessage::dispatch($locked->id, 'queue_silence_warning', [
+                    'minutes' => QueueWording::minutes((int) ceil(($s->silence_close_seconds - $idle) / 60)),
+                ]);
+            }
             DB::afterCommit(fn () => SafeBroadcast::send(new QueueEntryUpdated($locked->fresh())));
         }, attempts: 3);
     }
@@ -843,17 +845,34 @@ class WindowLifecycle
         return app(QueueService::class)->openCaseFor($c);
     }
 
-    /** The close itself, on an entry the caller holds locked and knows to be open. */
-    private function closeLocked(QueueEntry $e, string $reason, ?User $by, array $opts = [], ?QueueSetting $s = null, bool $route = true): void
+    /**
+     * The close itself, on an entry the caller holds locked (`lockBoth()`) and knows to be open.
+     * Public for `ConversationCycle` (close-cycle-FINAL §4), which holds the locks.
+     *
+     * `$opts` beyond `close()`'s: `end_mode` (thanks / bot; a final close without it is `thanks`,
+     * or `bot` with `to_bot`; an auto-close is `silent`), `closing` (false: no closing message, with
+     * `skip_reason` stored as `closing_skipped_reason`), `silent` (an auto-close without its message).
+     */
+    public function closeLocked(QueueEntry $e, string $reason, ?User $by, array $opts = [], ?QueueSetting $s = null, bool $route = true): void
     {
         $s ??= QueueSetting::current();
         $c = $e->conversation;
         $handle = $e->delivered_at ? max(0, (int) $e->delivered_at->diffInSeconds(now())) : 0;
         $kind = $opts['kind'] ?? (in_array($reason, ['inquiry', 'problem', 'case'], true) ? $reason : $e->kind);
+        $final = in_array($reason, QueueEntry::FINAL_CLOSE_REASONS, true);
+        $toBot = (bool) ($opts['to_bot'] ?? false);
+        $endMode = match (true) {
+            $final => in_array($opts['end_mode'] ?? null, ['thanks', 'bot'], true) ? $opts['end_mode'] : ($toBot ? 'bot' : 'thanks'),
+            $reason === 'auto' => 'silent',
+            default => null,
+        };
+        $toBot = $toBot || $endMode === 'bot';
 
         $e->forceFill([
             'status' => 'closed', 'close_reason' => $reason, 'closed_at' => now(), 'closed_by_id' => $by?->id, 'handle_seconds' => $handle,
-            'kind' => in_array($kind, QueueEntry::KINDS, true) ? $kind : $e->kind,
+            'kind' => in_array($kind, QueueEntry::KINDS, true) ? $kind : $e->kind, 'end_mode' => $endMode,
+            // RC-4: a window closed again after «تراجع» earns under a key of its own.
+            'close_seq' => (int) $e->close_seq + 1,
         ])->save();
 
         $c?->forceFill(['assignee_id' => null, 'assigned_at' => null])->save();
@@ -882,7 +901,8 @@ class WindowLifecycle
             $until = now()->addMinutes($s->return_priority_minutes);
             $c->forceFill(['return_priority_until' => $until])->save();
             $e->forceFill(['return_priority_until' => $until])->save();
-            if (! ($opts['silent'] ?? false)) {
+            // Q4: silent unless the owner turned the customer message back on.
+            if (! ($opts['silent'] ?? false) && $s->auto_close_message) {
                 SendQueueMessage::dispatch($e->id, 'queue_auto_closed', []);
             }
             // Close-cycle hotfix C1 (D-08): the chat goes back to the bot here, on the row this
@@ -908,44 +928,36 @@ class WindowLifecycle
             $e->forceFill(['support_case_id' => $case->id])->save();
         }
 
-        // Spec 2026-09-30 §2: «خلصت» is the final close — hers, or a supervisor's on her behalf —
-        // and it ends with the closing message. A case close sends its case number first. One
-        // chain on the `outbound` queue keeps the two in that order (each is its own job, afterCommit).
-        // Automatic close, transfer, escalation, no_reply and cancels send nothing new.
+        // Spec 2026-09-30 §2 + close-cycle-FINAL §6 (Q1): «خلصت» is the final close — hers, or a
+        // supervisor's on her behalf — and it ends with ONE closing message: the thanks and, when she
+        // may be asked, the rating question with its buttons, after the case number of a case this
+        // close opened. `SendClosingMessage` decides under the locks when it runs (DELAY_SECONDS
+        // later, so «تراجع» and a message of hers already on its way come first) and claims it once.
+        // «البوت يكمّل» (`to_bot`, end_mode bot) and `closing: false` send no thanks (a new case
+        // number still goes out). Automatic close, transfer, escalation, no_reply and cancels send nothing new.
         //
-        // Addendum C2 (the R1 override): the conversation then goes back to the bot, with the same
-        // reset as «رجوع للبوت», on the conversation row this transaction holds locked. Her next
-        // real message is the bot's; a human request is a new ticket (`returning` within
-        // `return_priority_minutes`, see QueueService::enqueue()). The close is final: her return
-        // never reverses it. No bot turn is started here.
-        // Close-cycle hotfix C1 (D-03): «رجوع للبوت» from the web (`to_bot`) is the same final close —
-        // reason, outcome, points, back to the bot — without the thanks and the rating.
-        $toBot = (bool) ($opts['to_bot'] ?? false);
+        // Addendum C2 (the R1 override): the conversation then goes back to the bot, on the row this
+        // transaction holds locked. After a thanks close her free-text message inside
+        // `reopen_after_done_minutes` may go back to this moderator (Q8, QueueService::settles()).
+        if ($final && $c) {
+            $caseOpened = $reason === 'case' && $e->support_case_id !== null && $linked === null;
+            $thanks = ! $toBot && ($opts['closing'] ?? true) !== false;
 
-        if (in_array($reason, QueueEntry::FINAL_CLOSE_REASONS, true) && $c) {
-            // A linked case already has its number (she was told when it opened): only the thanks.
-            $messages = $reason === 'case' && $e->support_case_id !== null && $linked === null
-                ? [new SendQueueMessage($e->id, 'queue_case_opened', ['case_id' => $e->support_case_id])]
-                : [];
-            if (! $toBot) {
-                $messages[] = new SendQueueMessage($e->id, 'queue_closed_thanks', []);
-            }
-            // A few seconds first (close-cycle hotfix C1, H-03): a message of hers already on its way lands before
-            // the job decides; it is re-checked again right before the platform call.
-            if ($messages !== []) {
-                Bus::chain($messages)->onQueue('outbound')->delay(now()->addSeconds(SendQueueMessage::CLOSING_SETTLE_SECONDS))->dispatch();
+            if ($thanks || $caseOpened) {
+                SendClosingMessage::dispatch($e->id, $c->id, $e->closed_at->toIso8601String(), $caseOpened, $thanks)
+                    ->delay(now()->addSeconds(SendClosingMessage::DELAY_SECONDS));
             }
 
-            // §3: an inquiry / problem close is rated `review_delay_seconds` after the closing
-            // message (not a case: Part 2 rates it when it is resolved). RatingService decides then;
-            // the job is afterCommit and carries the close's token.
-            if (! $toBot && in_array($reason, QueueEntry::RATED_CLOSE_REASONS, true)) {
-                RequestRating::dispatch($e->id, $e->closed_at->toIso8601String())->delay(now()->addSeconds((int) $s->review_delay_seconds));
+            if (! $thanks) {
+                $e->forceFill(['closing_skipped_reason' => $toBot ? 'to_bot' : mb_substr((string) ($opts['skip_reason'] ?? 'not_asked'), 0, 30)])->save();
             }
+
+            $until = $endMode === 'thanks' ? ConversationCycle::reopenUntil($s) : null;
+            $c->return_priority_until = $until;
+            $e->forceFill(['return_priority_until' => $until])->save();
 
             app(BotEngine::class)->resetToBot($c);
         }
-
         $confirmNow = false;
 
         if (in_array($reason, QueueEntry::CONFIRMABLE_REASONS, true)) {

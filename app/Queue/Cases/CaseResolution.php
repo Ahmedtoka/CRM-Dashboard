@@ -25,9 +25,10 @@ class CaseResolution
 {
     public function __construct(private readonly ScoreKeeper $keeper) {}
 
-    public function setStatus(SupportCase $case, string $status, User $by): SupportCase
+    /** `$notify` false: the customer is not told here (close cycle: «خلصت» with «اتحل», the closing message is the last word). */
+    public function setStatus(SupportCase $case, string $status, User $by, bool $notify = true): SupportCase
     {
-        return DB::transaction(function () use ($case, $status, $by) {
+        return DB::transaction(function () use ($case, $status, $by, $notify) {
             $locked = SupportCase::query()->whereKey($case->id)->lockForUpdate()->firstOrFail();
             $was = $locked->status;
 
@@ -50,7 +51,7 @@ class CaseResolution
             }
 
             if ($status === 'resolved') {
-                $this->resolved($locked, $by);
+                $this->resolved($locked, $by, $notify);
             }
 
             return $locked;
@@ -66,7 +67,7 @@ class CaseResolution
         return $id !== null ? (int) $id : null;
     }
 
-    private function resolved(SupportCase $case, User $by): void
+    private function resolved(SupportCase $case, User $by, bool $notify = true): void
     {
         $entry = $case->queue_entry_id !== null ? $case->queueEntry : null;
 
@@ -74,7 +75,9 @@ class CaseResolution
             return;
         }
 
-        if ($case->resolved_notified_at === null) {
+        if (! $notify) {
+            $case->forceFill(['resolved_notified_at' => $case->resolved_notified_at ?? now()])->save();
+        } elseif ($case->resolved_notified_at === null) {
             $case->forceFill(['resolved_notified_at' => now()])->save();
             SendQueueMessage::dispatch($entry->id, 'queue_case_resolved', ['case_id' => $case->id]);
         }

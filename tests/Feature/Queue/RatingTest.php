@@ -17,6 +17,7 @@ use App\Models\Shift;
 use App\Models\ShiftMember;
 use App\Models\User;
 use App\Queue\Jobs\RequestRating;
+use App\Queue\Jobs\SendClosingMessage;
 use App\Queue\RatingService;
 use App\Queue\WindowLifecycle;
 use App\Support\Emoji;
@@ -79,25 +80,26 @@ function rtAsk(QueueEntry $e): ?Message
 
 // ───── When it is asked ─────
 
-it('schedules the rating review_delay_seconds after an inquiry or problem close only', function (string $reason, bool $asked) {
-    Bus::fake([RequestRating::class]);
+// Close cycle §6.1 (Q1): the rating rides in the one closing message; no separate RequestRating any more.
+it('sends the one closing message on a final close only, never a separate rating job', function (string $reason, bool $asked) {
+    Bus::fake([RequestRating::class, SendClosingMessage::class]);
     $u = User::factory()->create();
     $e = QueueEntry::factory()->create(['assigned_user_id' => $u->id, 'status' => 'active', 'window_no' => 1, 'delivered_at' => now()]);
     $e->conversation->update(['queue_entry_id' => $e->id, 'handler' => 'human']);
 
     app(WindowLifecycle::class)->close($e, $reason, $reason === 'auto' ? null : $u, ['case_type' => 'complaint']);
 
+    Bus::assertNotDispatched(RequestRating::class);
     if ($asked) {
-        Bus::assertDispatched(RequestRating::class, fn (RequestRating $job) => $job->entryId === $e->id
-            && $job->closedAt === $e->fresh()->closed_at->toIso8601String()
-            && $job->delay->equalTo(now()->addSeconds(60)));
+        Bus::assertDispatched(SendClosingMessage::class, fn (SendClosingMessage $job) => $job->entryId === $e->id
+            && $job->closedAt === $e->fresh()->closed_at->toIso8601String());
     } else {
-        Bus::assertNotDispatched(RequestRating::class);
+        Bus::assertNotDispatched(SendClosingMessage::class);
     }
 })->with([
     'inquiry' => ['inquiry', true],
     'problem' => ['problem', true],
-    'case' => ['case', false],
+    'case' => ['case', true],
     'auto' => ['auto', false],
     'escalation' => ['escalation', false],
     'transfer' => ['transfer', false],
@@ -105,9 +107,12 @@ it('schedules the rating review_delay_seconds after an inquiry or problem close 
     'cancelled' => ['cancelled', false],
 ]);
 
+// A RequestRating the old code queued before the deploy (its close has no `end_mode`) still works.
 it('releases an early job for the rest of the delay, then asks with five number buttons so the last word is ours', function () {
+    Bus::fake([SendClosingMessage::class]);
     [$e, $u, $c] = rtWindow();
     app(WindowLifecycle::class)->close($e, 'inquiry', $u);
+    $e->forceFill(['end_mode' => null])->save();
     $token = $e->fresh()->closed_at->toIso8601String();
 
     $job = (new RequestRating($e->id, $token))->withFakeQueueInteractions();
