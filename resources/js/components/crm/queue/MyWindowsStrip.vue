@@ -100,18 +100,19 @@ const freeSlots = computed(() => {
 });
 const status = computed(() => queue?.member.value?.status ?? null);
 
-const statusDot = computed(() => {
+/** The attendance pill's tint (mockup «مكتبي»): green at her desk, amber on the way to a break or out, red past the break. */
+const statusPill = computed(() => {
     switch (status.value) {
         case 'available':
         case 'busy':
-            return 'bg-success';
+            return 'bg-ok-soft text-ok';
         case 'break':
-            return queue?.breakOver.value ? 'bg-destructive' : 'bg-warning';
+            return queue?.breakOver.value ? 'bg-danger-soft text-danger' : 'bg-warn-soft text-warn';
         case 'pending_break':
         case 'checking_out':
-            return 'bg-warning';
+            return 'bg-warn-soft text-warn';
         default:
-            return 'bg-muted-foreground/50';
+            return 'bg-sunken text-fg-2';
     }
 });
 
@@ -245,10 +246,10 @@ const note = computed(() => {
 });
 
 const cardTone: Record<Card['tone'], string> = {
-    calm: 'border-border bg-background hover:bg-elevated',
-    warning: 'border-warning/60 bg-warning/10 hover:bg-warning/15',
-    last: 'border-destructive/50 bg-destructive/10 hover:bg-destructive/15',
-    overdue: 'border-overdue/70 bg-overdue/10 hover:bg-overdue/15',
+    calm: 'border-line-strong bg-card hover:bg-surface-2',
+    warning: 'border-warn-solid bg-warn-soft/50 hover:bg-warn-soft',
+    last: 'border-danger-solid bg-danger-soft/50 hover:bg-danger-soft',
+    overdue: 'border-danger-solid bg-danger-soft/50 hover:bg-danger-soft',
 };
 
 /**
@@ -270,9 +271,9 @@ function focusConfirm(event: Event): void {
     document.querySelector<HTMLButtonElement>('[data-hand-back-confirm]')?.focus();
 }
 const silenceTone: Record<Card['tone'], string> = {
-    calm: 'text-muted-foreground',
-    warning: 'font-semibold text-foreground',
-    last: 'font-semibold text-destructive',
+    calm: 'text-fg-2',
+    warning: 'font-semibold text-warn',
+    last: 'font-bold text-danger',
     // Text keeps the overdue chip's text pair (StatusChip): the raw --overdue orange is ~2.8:1 on white;
     // the token itself colours the icon (and the card's border / tint in cardTone).
     overdue: 'font-semibold text-orange-800 dark:text-orange-100 [&>svg]:text-overdue',
@@ -280,26 +281,28 @@ const silenceTone: Record<Card['tone'], string> = {
 </script>
 
 <template>
-    <!-- One 44 px row: her state and button, a divider, then her windows (scrolls sideways on a phone). -->
+    <!-- One 52 px row (mockup «مكتبي في الطابور»): her state and buttons, a divider, her windows, then «٢ من ٣ شبابيك»
+         at the end. Scrolls sideways on a phone. -->
     <section
         v-if="queue?.shown.value"
-        class="flex h-11 shrink-0 items-center gap-2 border-b bg-card px-3"
+        class="flex h-[52px] shrink-0 items-center gap-2 border-b border-line bg-card px-3"
         :aria-label="t('queue.my_windows')"
         data-my-windows
     >
         <div class="flex shrink-0 items-center gap-1.5" role="group" :aria-label="t('queue.status.label')">
             <span
-                class="inline-flex h-7 items-center gap-1.5 rounded-full bg-muted px-2.5 text-xs font-medium"
+                class="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[13px] font-semibold"
+                :class="statusPill"
                 :title="`${t('queue.my_windows')}: ${t('queue.windows_count', { open: formatCount(cards.length, locale), cap: formatCount(queue.cap.value, locale) })}`"
                 data-attendance-chip
             >
-                <span class="size-2 shrink-0 rounded-full" :class="statusDot" aria-hidden="true" />
+                <span class="size-2 shrink-0 rounded-full bg-current" aria-hidden="true" />
                 <!-- Announced when the status changes; the break clock stays out of the live region (no reading every second). -->
                 <span role="status">
                     <span class="hidden sm:inline">{{ statusLabel }}</span>
                     <span class="sr-only sm:hidden">{{ statusLabel }}</span>
                 </span>
-                <span v-if="breakSince !== null" class="tabular-nums" :class="breakOver ? 'font-semibold text-destructive' : 'text-muted-foreground'">
+                <span v-if="breakSince !== null" class="tabular-nums" :class="breakOver ? 'font-bold' : 'font-medium opacity-80'">
                     {{ t('queue.attendance.break_since', { time: breakSince }) }}
                 </span>
             </span>
@@ -308,7 +311,7 @@ const silenceTone: Record<Card['tone'], string> = {
             <Link
                 v-if="queue.pointsToday.value !== null"
                 href="/reports/me"
-                class="inline-flex h-7 items-center rounded-full bg-muted px-2.5 text-xs font-semibold tabular-nums text-foreground hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                class="inline-flex h-8 items-center whitespace-nowrap rounded-full bg-sunken px-2.5 text-[13px] font-semibold tabular-nums text-foreground hover:bg-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 :title="t('queue_points.mine_hint')"
                 data-my-points
                 >{{ t('queue_points.mine_today', { n: formatCount(queue.pointsToday.value, locale) }) }}</Link
@@ -321,7 +324,7 @@ const silenceTone: Record<Card['tone'], string> = {
                             type="button"
                             :variant="action.variant"
                             size="sm"
-                            class="h-7 gap-1 rounded-full px-2.5 text-xs [&_svg]:size-3.5"
+                            class="h-8 gap-1.5 rounded-md px-2.5 text-[13px] [&_svg]:size-4"
                             :loading="queue.busy.value === action.busy"
                             :disabled="queue.busy.value !== null || action.disabled === true"
                             :title="action.hint"
@@ -376,7 +379,7 @@ const silenceTone: Record<Card['tone'], string> = {
                     type="button"
                     :variant="action.variant"
                     size="sm"
-                    class="h-7 gap-1 rounded-full px-2.5 text-xs [&_svg]:size-3.5"
+                    class="h-8 gap-1.5 rounded-md px-2.5 text-[13px] [&_svg]:size-4"
                     :loading="queue.busy.value === action.busy"
                     :disabled="queue.busy.value !== null || action.disabled === true"
                     :title="action.hint"
@@ -388,22 +391,22 @@ const silenceTone: Record<Card['tone'], string> = {
             </template>
         </div>
 
-        <span class="h-6 w-px shrink-0 bg-border" aria-hidden="true" />
+        <span class="h-6 w-px shrink-0 bg-line" aria-hidden="true" />
 
         <ul class="scrollbar-none flex h-full min-w-0 flex-1 items-center gap-1.5 overflow-x-auto" role="list">
             <li v-for="card in cards" :key="card.entry.id" class="shrink-0">
                 <button
                     type="button"
-                    class="flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                    :class="[cardTone[card.tone], card.selected ? 'ring-2 ring-inset ring-primary' : '']"
+                    class="flex h-9 items-center gap-2 whitespace-nowrap rounded-md border pe-2.5 ps-2 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    :class="card.selected && card.tone === 'calm' ? 'border-brand bg-brand-soft' : [cardTone[card.tone], card.selected ? 'ring-2 ring-inset ring-brand' : '']"
                     :aria-label="t('queue.open_chat', { name: card.name, ticket: card.ticket, window: card.entry.window_no ?? '' })"
                     :aria-current="card.selected ? 'true' : undefined"
                     :title="card.name"
                     :data-window="card.entry.window_no"
                     @click="emit('select', card.entry.conversation_id, $event.detail > 0)"
                 >
-                    <span class="font-bold tabular-nums" dir="ltr">#{{ formatCount(card.ticket, locale) }}</span>
-                    <span class="max-w-[6rem] truncate font-medium" dir="auto">{{ card.first }}</span>
+                    <span class="font-bold tabular-nums text-fg-2" dir="ltr">#{{ formatCount(card.ticket, locale) }}</span>
+                    <span class="max-w-[6rem] truncate font-semibold" dir="auto">{{ card.first }}</span>
                     <span
                         v-if="card.badge"
                         class="inline-flex size-4 shrink-0 items-center justify-center rounded-full"
@@ -433,7 +436,7 @@ const silenceTone: Record<Card['tone'], string> = {
                     </span>
                     <span
                         v-else
-                        class="inline-flex items-center gap-0.5 tabular-nums text-primary"
+                        class="inline-flex items-center gap-0.5 text-[12.5px] tabular-nums text-fg-2"
                         :title="`${t('queue.waiting_reply')} · ${t('queue.timer')}`"
                     >
                         <MessageCircleReply class="size-3" aria-hidden="true" /><span class="sr-only">{{ t('queue.waiting_reply') }}: </span
@@ -441,7 +444,7 @@ const silenceTone: Record<Card['tone'], string> = {
                     </span>
                     <span
                         v-if="card.unread > 0"
-                        class="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs font-semibold text-primary-foreground"
+                        class="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand px-1 text-2xs font-bold text-brand-on"
                         :title="t('queue.unread')"
                     >
                         <span class="sr-only">{{ t('queue.unread') }}: </span>{{ formatCount(card.unread, locale) }}
@@ -453,7 +456,7 @@ const silenceTone: Record<Card['tone'], string> = {
             <li
                 v-for="slot in freeSlots"
                 :key="`free-${slot}`"
-                class="flex h-8 shrink-0 items-center rounded-lg border border-dashed border-border px-2.5 text-2xs text-muted-foreground"
+                class="flex h-9 shrink-0 items-center rounded-md border border-dashed border-line-strong px-2.5 text-xs text-fg-3"
                 :title="t('queue.free_window_hint')"
             >
                 {{ t('queue.free_window') }}
@@ -463,6 +466,9 @@ const silenceTone: Record<Card['tone'], string> = {
                 {{ t('queue.attendance.idle') }}
             </li>
             <li v-if="note" class="shrink-0 text-2xs text-muted-foreground">{{ note }}</li>
+            <li v-if="queue.member.value !== null && queue.cap.value > 0" class="ms-auto shrink-0 ps-2 text-xs text-fg-3" data-windows-count>
+                {{ t('queue.windows_used', { open: formatCount(cards.length, locale), cap: formatCount(queue.cap.value, locale) }) }}
+            </li>
         </ul>
     </section>
 </template>

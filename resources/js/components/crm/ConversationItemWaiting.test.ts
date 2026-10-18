@@ -41,7 +41,7 @@ describe('ConversationItem waiting age', () => {
         const w = mount(ConversationItem, { props: { conversation: base, state: null, firstReplyTarget: 300 }, global: { stubs: { PlatformBadge: true } } });
         const chip = w.find('[data-waiting-age]');
         expect(chip.text()).toBe('مستنية ٧ د');
-        expect(chip.classes().join(' ')).toContain('amber');
+        expect(chip.classes().join(' ')).toContain('warn');
         w.unmount();
     });
 
