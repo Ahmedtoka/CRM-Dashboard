@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from '@/composables/useI18n';
+import { formatCount } from '@/lib/format';
 import { Link } from '@inertiajs/vue3';
 import { ChevronLeft, ChevronRight, CircleAlert, type LucideIcon } from 'lucide-vue-next';
 import { useId } from 'vue';
@@ -20,9 +21,20 @@ export interface UrgentRow {
  * «محتاج تدخلك» (DESIGN §3 UrgentList): one row per thing that needs the manager, most important first, each a link to
  * the place it gets solved. Colour comes with the words, never alone.
  */
-withDefaults(defineProps<{ title: string; rows: UrgentRow[]; empty?: string; aside?: string }>(), { empty: undefined, aside: undefined });
+withDefaults(
+    defineProps<{
+        title: string;
+        rows: UrgentRow[];
+        empty?: string;
+        aside?: string;
+        /** A count beside the title; red when one of the rows is past its target (DESIGN §3 Badge). */
+        badge?: number | null;
+        badgeUrgent?: boolean;
+    }>(),
+    { empty: undefined, aside: undefined, badge: null, badgeUrgent: false },
+);
 
-const { dir } = useI18n();
+const { dir, locale } = useI18n();
 const titleId = useId();
 const tiles = {
     danger: 'bg-danger-soft text-danger',
@@ -36,6 +48,13 @@ const tiles = {
     <section class="overflow-hidden rounded-lg border border-line bg-card" :aria-labelledby="titleId">
         <header class="flex items-center gap-2 border-b border-line px-4 py-3">
             <h2 :id="titleId" class="text-base font-bold">{{ title }}</h2>
+            <span
+                v-if="badge"
+                class="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold tabular-nums"
+                :class="badgeUrgent ? 'bg-danger-solid text-white' : 'bg-sunken text-fg-2'"
+                data-urgent-count
+                >{{ formatCount(badge, locale) }}</span
+            >
             <span v-if="aside" class="ms-auto text-xs text-fg-3">{{ aside }}</span>
         </header>
         <p v-if="rows.length === 0" class="px-4 py-3 text-sm text-fg-2">{{ empty }}</p>

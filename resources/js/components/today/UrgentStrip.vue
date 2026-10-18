@@ -30,5 +30,12 @@ const rows = computed<UrgentRow[]>(() =>
 </script>
 
 <template>
-    <UrgentList :title="t('today.urgent.title')" :rows="rows" :empty="t('today.urgent.empty')" />
+    <UrgentList
+        :title="t('today.urgent.title')"
+        :rows="rows"
+        :empty="t('today.urgent.empty')"
+        :aside="rows.length > 1 ? t('today.urgent.sorted') : undefined"
+        :badge="rows.length"
+        :badge-urgent="items.some((i) => i.tone === 'danger')"
+    />
 </template>
