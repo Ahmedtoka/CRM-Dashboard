@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import SettingsPanel from '@/components/crm/settings/SettingsPanel.vue';
+import SettingsRow from '@/components/crm/settings/SettingsRow.vue';
+import StatusChip from '@/components/crm/StatusChip.vue';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { formatDateTime } from '@/lib/format';
@@ -42,40 +45,62 @@ const verified = computed(() => {
     ].filter((row) => row.at !== null || row.key === 'app' || row.key === 'legacy');
 });
 
+/** One state in words for the panel header: where the store stands with the app right now. */
+const state = computed(() => {
+    if (onApp.value)
+        return props.integration?.status === 'connected' ? { key: 'on_app', tone: 'ok' as const } : { key: 'reopen', tone: 'warn' as const };
+    if (rolledBack.value) return { key: 'rolled_back', tone: 'neutral' as const };
+    return props.app.configured ? { key: 'ready', tone: 'info' as const } : { key: 'not_configured', tone: 'neutral' as const };
+});
+
 function confirmThen(message: string, action: () => void): void {
     if (window.confirm(message)) action();
 }
 </script>
 
 <template>
-    <section class="grid gap-3 rounded-lg bg-card p-4 text-xs shadow-card" data-testid="shopify-app-connection">
-        <h2 class="text-sm font-semibold">{{ t('settings.shopify.app_conn.title') }}</h2>
+    <SettingsPanel
+        :title="t('settings.shopify.app_conn.title')"
+        :description="t('settings.shopify.app_conn.what')"
+        data-testid="shopify-app-connection"
+    >
+        <template #actions>
+            <StatusChip :label="t(`settings.shopify.app_conn.state.${state.key}`)" :tone="state.tone" data-testid="shopify-app-state" />
+        </template>
 
-        <dl class="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5">
-            <dt class="text-muted-foreground">{{ t('settings.shopify.app_conn.mode') }}</dt>
-            <dd data-testid="shopify-auth-mode">{{ t(`settings.shopify.app_conn.mode_${onApp ? 'app' : 'custom_token'}`) }}</dd>
+        <SettingsRow :title="t('settings.shopify.app_conn.mode')">
+            <span class="text-13 text-fg-2" data-testid="shopify-auth-mode">{{
+                t(`settings.shopify.app_conn.mode_${onApp ? 'app' : 'custom_token'}`)
+            }}</span>
+        </SettingsRow>
 
-            <template v-if="onApp">
-                <dt class="text-muted-foreground">{{ t('settings.shopify.app_conn.token_valid_until') }}</dt>
-                <dd>
-                    <span class="tabular-nums">{{ formatDateTime(integration?.access_token_expires_at ?? null, locale) || '—' }}</span>
-                    <span class="text-muted-foreground"> · {{ t('settings.shopify.app_conn.token_renews') }}</span>
-                </dd>
-                <dt class="text-muted-foreground">{{ t('settings.shopify.app_conn.refresh_valid_until') }}</dt>
-                <dd class="tabular-nums">{{ formatDateTime(integration?.refresh_token_expires_at ?? null, locale) || '—' }}</dd>
-                <dt class="text-muted-foreground">{{ t('settings.shopify.app_conn.installed_at') }}</dt>
-                <dd class="tabular-nums">{{ formatDateTime(integration?.installed_at ?? null, locale) || '—' }}</dd>
-            </template>
-        </dl>
+        <template v-if="onApp">
+            <SettingsRow :title="t('settings.shopify.app_conn.token_valid_until')" :description="t('settings.shopify.app_conn.token_renews')">
+                <span class="text-13 tabular-nums">{{ formatDateTime(integration?.access_token_expires_at ?? null, locale) || '—' }}</span>
+            </SettingsRow>
+            <SettingsRow :title="t('settings.shopify.app_conn.refresh_valid_until')">
+                <span class="text-13 tabular-nums">{{ formatDateTime(integration?.refresh_token_expires_at ?? null, locale) || '—' }}</span>
+            </SettingsRow>
+            <SettingsRow :title="t('settings.shopify.app_conn.installed_at')">
+                <span class="text-13 tabular-nums">{{ formatDateTime(integration?.installed_at ?? null, locale) || '—' }}</span>
+            </SettingsRow>
+        </template>
 
-        <p v-if="onApp && integration?.status !== 'connected'" class="rounded bg-warning/10 px-2 py-1.5" data-testid="shopify-app-reopen">
-            {{ t('settings.shopify.app_conn.not_connected') }}
-        </p>
-        <div v-else-if="rolledBack" class="flex flex-wrap items-center gap-2" data-testid="shopify-rolled-back">
-            <p class="basis-full text-muted-foreground">{{ t('settings.shopify.app_conn.rolled_back_note') }}</p>
+        <div v-if="onApp && integration?.status !== 'connected'" class="py-3">
+            <p class="rounded-md bg-warn-soft px-3 py-2 text-13 text-foreground" data-testid="shopify-app-reopen">
+                {{ t('settings.shopify.app_conn.not_connected') }}
+            </p>
+        </div>
+        <SettingsRow
+            v-else-if="rolledBack"
+            :title="t('settings.shopify.app_conn.state.rolled_back')"
+            :description="t('settings.shopify.app_conn.rolled_back_note')"
+            data-testid="shopify-rolled-back"
+        >
             <Button
                 variant="outline"
-                class="h-8 rounded-md px-2.5 text-[length:inherit]"
+                size="sm"
+                class="max-sm:h-10"
                 type="button"
                 :loading="allowing"
                 data-testid="shopify-allow-app"
@@ -83,23 +108,35 @@ function confirmThen(message: string, action: () => void): void {
             >
                 {{ t('settings.shopify.app_conn.allow_app') }}
             </Button>
-        </div>
-        <p v-else-if="!onApp && app.configured" class="text-muted-foreground">{{ t('settings.shopify.app_conn.ready') }}</p>
-
-        <div class="grid gap-1">
-            <span class="font-medium">{{ t('settings.shopify.app_conn.last_verified') }}</span>
-            <ul class="grid gap-0.5">
-                <li v-for="row in verified" :key="row.key" :data-testid="`shopify-verified-${row.key}`">
-                    <span class="text-muted-foreground">{{ t(`settings.shopify.app_conn.verified_${row.key}`) }}:</span>
-                    <span class="tabular-nums"> {{ formatDateTime(row.at, locale) || t('settings.shopify.app_conn.never') }}</span>
-                </li>
-            </ul>
+        </SettingsRow>
+        <div v-else-if="!onApp" class="py-3">
+            <p class="rounded-md bg-sunken px-3 py-2 text-13 text-fg-2">
+                {{ app.configured ? t('settings.shopify.app_conn.ready') : t('settings.shopify.app_conn.not_configured') }}
+            </p>
         </div>
 
-        <div v-if="onApp" class="flex flex-wrap items-center gap-2">
+        <SettingsRow :title="t('settings.shopify.app_conn.last_verified')" stack>
+            <template #below>
+                <ul class="mt-1.5 grid gap-1 text-13">
+                    <li v-for="row in verified" :key="row.key" class="flex flex-wrap gap-x-2" :data-testid="`shopify-verified-${row.key}`">
+                        <span class="text-fg-2">{{ t(`settings.shopify.app_conn.verified_${row.key}`) }}:</span>
+                        <span class="tabular-nums">{{ formatDateTime(row.at, locale) || t('settings.shopify.app_conn.never') }}</span>
+                    </li>
+                </ul>
+            </template>
+        </SettingsRow>
+
+        <SettingsRow
+            v-if="onApp"
+            :title="t('settings.shopify.app_conn.cutover')"
+            :description="
+                integration?.has_legacy_credentials ? t('settings.shopify.app_conn.cutover_hint') : t('settings.shopify.app_conn.no_legacy')
+            "
+        >
             <Button
                 variant="outline"
-                class="h-8 rounded-md px-2.5 text-[length:inherit]"
+                size="sm"
+                class="max-sm:h-10"
                 type="button"
                 :loading="removing"
                 data-testid="shopify-remove-legacy"
@@ -108,8 +145,9 @@ function confirmThen(message: string, action: () => void): void {
                 {{ t('settings.shopify.app_conn.remove_legacy') }}
             </Button>
             <Button
-                variant="outline"
-                class="h-8 rounded-md px-2.5 text-[length:inherit]"
+                variant="ghost"
+                size="sm"
+                class="max-sm:h-10"
                 type="button"
                 :disabled="!integration?.has_legacy_credentials"
                 :loading="rollingBack"
@@ -118,7 +156,6 @@ function confirmThen(message: string, action: () => void): void {
             >
                 {{ t('settings.shopify.app_conn.rollback') }}
             </Button>
-            <p v-if="!integration?.has_legacy_credentials" class="basis-full text-muted-foreground">{{ t('settings.shopify.app_conn.no_legacy') }}</p>
-        </div>
-    </section>
+        </SettingsRow>
+    </SettingsPanel>
 </template>

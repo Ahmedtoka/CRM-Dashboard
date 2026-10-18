@@ -75,7 +75,7 @@ function missingLabel(page: SystemTokenPage): string {
 
 <template>
     <div class="grid gap-3 text-xs">
-        <p class="leading-relaxed text-muted-foreground">{{ t('settings.integrations.facebook.system_user.intro') }}</p>
+        <p class="leading-relaxed text-fg-2">{{ t('settings.integrations.facebook.system_user.intro') }}</p>
 
         <form v-if="pages === null" class="grid gap-2" @submit.prevent="listPages">
             <label class="grid gap-1">
@@ -88,9 +88,9 @@ function missingLabel(page: SystemTokenPage): string {
                     spellcheck="false"
                     required
                     minlength="20"
-                    class="h-9 rounded-md border border-input bg-background px-2.5 text-sm"
+                    class="h-9 rounded-md border border-line-strong bg-card px-2.5 text-sm"
                 />
-                <span class="text-2xs text-muted-foreground">{{ t('settings.integrations.facebook.system_user.token_note') }}</span>
+                <span class="text-2xs text-fg-2">{{ t('settings.integrations.facebook.system_user.token_note') }}</span>
             </label>
             <Button
                 variant="outline"
@@ -112,7 +112,7 @@ function missingLabel(page: SystemTokenPage): string {
                     :key="page.id"
                     class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-md border px-2.5 py-1.5"
                     :class="[
-                        selected === page.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50',
+                        selected === page.id ? 'border-brand bg-brand-soft' : 'border-line hover:bg-sunken',
                         page.missing_tasks.length ? 'cursor-not-allowed opacity-60' : '',
                     ]"
                 >
@@ -122,7 +122,7 @@ function missingLabel(page: SystemTokenPage): string {
                         name="system-user-page"
                         :value="page.id"
                         :disabled="page.missing_tasks.length > 0"
-                        class="accent-primary"
+                        class="accent-brand"
                     />
                     <img
                         v-if="page.picture"
@@ -134,10 +134,10 @@ function missingLabel(page: SystemTokenPage): string {
                     />
                     <span class="min-w-0 flex-1">
                         <span class="block truncate font-medium">{{ page.name }}</span>
-                        <span v-if="page.missing_tasks.length" class="block text-2xs text-destructive">
+                        <span v-if="page.missing_tasks.length" class="block text-2xs text-danger">
                             {{ t('settings.integrations.facebook.system_user.missing', { tasks: missingLabel(page) }) }}
                         </span>
-                        <span v-else-if="page.category" class="block truncate text-2xs text-muted-foreground">{{ page.category }}</span>
+                        <span v-else-if="page.category" class="block truncate text-2xs text-fg-2">{{ page.category }}</span>
                     </span>
                 </label>
             </fieldset>
@@ -150,7 +150,7 @@ function missingLabel(page: SystemTokenPage): string {
                     dir="ltr"
                     required
                     pattern="\d{5,30}"
-                    class="h-9 rounded-md border border-input bg-background px-2.5 text-sm"
+                    class="h-9 rounded-md border border-line-strong bg-card px-2.5 text-sm"
                     :aria-label="t('settings.integrations.facebook.system_user.page_id')"
                     :placeholder="t('settings.integrations.facebook.system_user.page_id')"
                 />
@@ -165,7 +165,7 @@ function missingLabel(page: SystemTokenPage): string {
             </div>
         </form>
 
-        <div v-if="error" role="alert" class="flex items-start gap-2 rounded-md bg-destructive/10 px-2.5 py-2 text-destructive">
+        <div v-if="error" role="alert" class="flex items-start gap-2 rounded-md bg-danger-soft px-2.5 py-2 text-danger">
             <CircleAlert class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
             <div class="min-w-0">
                 <p>{{ error.message }}</p>

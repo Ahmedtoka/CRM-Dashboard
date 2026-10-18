@@ -2,8 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import type { ShopifyWebhookRow } from '@/types/admin';
-import { Link } from '@inertiajs/vue3';
-import { CheckCircle2, CircleAlert, Scale } from 'lucide-vue-next';
+import { CheckCircle2, CircleAlert } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{ hasSecret: boolean; webhooks: ShopifyWebhookRow[]; saving: boolean }>();
@@ -24,40 +23,34 @@ function submit(): void {
 </script>
 
 <template>
-    <section class="grid gap-3 rounded-lg bg-card p-4 text-xs shadow-card">
+    <section class="grid gap-3 rounded-lg border border-line bg-card p-4 text-13">
         <header class="flex flex-wrap items-center gap-2">
-            <CheckCircle2 v-if="live" class="size-4 text-success" aria-hidden="true" />
-            <CircleAlert v-else class="size-4 text-warning" aria-hidden="true" />
-            <h2 class="text-sm font-semibold">{{ t('settings.shopify.live.title') }}</h2>
-            <Link
-                href="/settings/shopify/reconcile"
-                class="ms-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 font-medium hover:bg-muted"
-            >
-                <Scale class="size-3.5" aria-hidden="true" />
-                {{ t('settings.shopify.reconcile.title') }}
-            </Link>
+            <CheckCircle2 v-if="live" class="size-4 text-ok" aria-hidden="true" />
+            <CircleAlert v-else class="size-4 text-warn" aria-hidden="true" />
+            <h2 class="text-base font-bold">{{ t('settings.shopify.live.title') }}</h2>
         </header>
 
-        <p v-if="live" class="text-success">{{ t('settings.shopify.live.ok') }}</p>
+        <p v-if="live" class="text-ok">{{ t('settings.shopify.live.ok') }}</p>
         <template v-else>
-            <p v-if="!hasSecret" class="rounded bg-warning/10 px-2 py-1.5">{{ t('settings.shopify.live.no_secret') }}</p>
-            <p v-else class="rounded bg-warning/10 px-2 py-1.5">{{ t('settings.shopify.live.nothing_received') }}</p>
+            <p v-if="!hasSecret" class="rounded bg-warn-soft px-2 py-1.5">{{ t('settings.shopify.live.no_secret') }}</p>
+            <p v-else class="rounded bg-warn-soft px-2 py-1.5">{{ t('settings.shopify.live.nothing_received') }}</p>
         </template>
 
         <form class="flex flex-wrap items-end gap-2" @submit.prevent="submit">
             <label class="grid min-w-64 flex-1 gap-1">
-                <span class="text-muted-foreground">{{ hasSecret ? t('settings.shopify.live.replace_secret') : t('settings.shopify.live.secret') }}</span>
-                <input v-model="secret" type="password" autocomplete="off" dir="ltr" class="h-8 rounded-md border border-input bg-background px-2" />
+                <span class="text-fg-2">{{ hasSecret ? t('settings.shopify.live.replace_secret') : t('settings.shopify.live.secret') }}</span>
+                <input
+                    v-model="secret"
+                    type="password"
+                    autocomplete="off"
+                    dir="ltr"
+                    class="h-10 rounded-md border border-line-strong bg-card px-3 sm:h-9"
+                />
             </label>
-            <Button
-                class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 text-[length:inherit]"
-                type="submit"
-                :disabled="saving || secret.trim().length < 10"
-                :loading="saving"
-            >
+            <Button size="sm" type="submit" :disabled="saving || secret.trim().length < 10" :loading="saving">
                 {{ t('settings.shopify.live.save') }}
             </Button>
-            <p class="basis-full text-muted-foreground">{{ t('settings.shopify.live.secret_hint') }}</p>
+            <p class="basis-full text-fg-2">{{ t('settings.shopify.live.secret_hint') }}</p>
         </form>
     </section>
 </template>

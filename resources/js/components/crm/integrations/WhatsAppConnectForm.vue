@@ -76,7 +76,7 @@ async function connect(): Promise<void> {
 </script>
 
 <template>
-    <form class="grid gap-3 rounded-md border border-border p-3 text-xs" @submit.prevent="connect">
+    <form class="grid gap-3 rounded-md border border-line p-3 text-xs" @submit.prevent="connect">
         <div class="grid gap-3 sm:grid-cols-2">
             <label class="grid gap-1">
                 <span class="font-semibold">{{ t('settings.integrations.whatsapp.waba_id') }}</span>
@@ -88,7 +88,7 @@ async function connect(): Promise<void> {
                     required
                     :pattern="idPattern"
                     autocomplete="off"
-                    class="h-9 rounded-md border border-input bg-background px-2.5 text-sm"
+                    class="h-9 rounded-md border border-line-strong bg-card px-2.5 text-sm"
                 />
             </label>
             <label class="grid gap-1">
@@ -102,11 +102,11 @@ async function connect(): Promise<void> {
                     autocomplete="off"
                     spellcheck="false"
                     :placeholder="t('settings.integrations.whatsapp.token_placeholder')"
-                    class="h-9 rounded-md border border-input bg-background px-2.5 text-sm"
+                    class="h-9 rounded-md border border-line-strong bg-card px-2.5 text-sm"
                 />
             </label>
         </div>
-        <p class="-mt-1 text-2xs text-muted-foreground">{{ t('settings.integrations.whatsapp.token_note') }}</p>
+        <p class="-mt-1 text-2xs text-fg-2">{{ t('settings.integrations.whatsapp.token_note') }}</p>
 
         <div>
             <Button
@@ -127,19 +127,17 @@ async function connect(): Promise<void> {
                 v-for="number in numbers"
                 :key="number.id"
                 class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-md border px-2.5 py-1.5"
-                :class="phoneNumberId === number.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'"
+                :class="phoneNumberId === number.id ? 'border-brand bg-brand-soft' : 'border-line hover:bg-sunken'"
             >
-                <input v-model="phoneNumberId" type="radio" name="whatsapp-number" :value="number.id" class="accent-primary" />
+                <input v-model="phoneNumberId" type="radio" name="whatsapp-number" :value="number.id" class="accent-brand" />
                 <span class="min-w-0 flex-1">
                     <span class="block font-medium tabular-nums" dir="ltr">{{ number.display_phone_number ?? number.id }}</span>
-                    <span class="block truncate text-2xs text-muted-foreground">{{ number.verified_name ?? '—' }}</span>
+                    <span class="block truncate text-2xs text-fg-2">{{ number.verified_name ?? '—' }}</span>
                 </span>
-                <span class="text-2xs text-muted-foreground"
-                    >{{ t('settings.integrations.whatsapp.quality') }}: {{ qualityLabel(number.quality_rating) }}</span
-                >
+                <span class="text-2xs text-fg-2">{{ t('settings.integrations.whatsapp.quality') }}: {{ qualityLabel(number.quality_rating) }}</span>
             </label>
         </fieldset>
-        <p v-else-if="numbers" class="text-muted-foreground">{{ t('settings.integrations.whatsapp.no_numbers') }}</p>
+        <p v-else-if="numbers" class="text-fg-2">{{ t('settings.integrations.whatsapp.no_numbers') }}</p>
 
         <label v-if="!numbers || !numbers.length" class="grid gap-1">
             <span class="font-semibold">{{ t('settings.integrations.whatsapp.phone_number_id') }}</span>
@@ -151,21 +149,19 @@ async function connect(): Promise<void> {
                 required
                 :pattern="idPattern"
                 autocomplete="off"
-                class="h-9 rounded-md border border-input bg-background px-2.5 text-sm sm:max-w-xs"
+                class="h-9 rounded-md border border-line-strong bg-card px-2.5 text-sm sm:max-w-xs"
             />
         </label>
 
         <label class="flex items-start gap-2" :class="canOverride ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'">
-            <input v-model="override" type="checkbox" class="mt-0.5 rounded border-input accent-primary" :disabled="!canOverride" />
+            <input v-model="override" type="checkbox" class="mt-0.5 rounded border-line-strong accent-brand" :disabled="!canOverride" />
             <span>
                 {{ t('settings.integrations.whatsapp.override') }}
-                <span v-if="!canOverride" class="block text-2xs text-muted-foreground">{{
-                    t('settings.integrations.whatsapp.override_unavailable')
-                }}</span>
+                <span v-if="!canOverride" class="block text-2xs text-fg-2">{{ t('settings.integrations.whatsapp.override_unavailable') }}</span>
             </span>
         </label>
 
-        <div v-if="error" role="alert" class="flex items-start gap-2 rounded-md bg-destructive/10 px-2.5 py-2 text-destructive">
+        <div v-if="error" role="alert" class="flex items-start gap-2 rounded-md bg-danger-soft px-2.5 py-2 text-danger">
             <CircleAlert class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
             <div class="min-w-0">
                 <p>{{ error.message }}</p>
