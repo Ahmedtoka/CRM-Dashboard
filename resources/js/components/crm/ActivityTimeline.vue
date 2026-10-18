@@ -17,25 +17,37 @@ const icon = (log: ActivityLogItem) => (log.actor_type === 'bot' ? Bot : log.use
 </script>
 
 <template>
-    <ol class="divide-y divide-border rounded-lg bg-card shadow-card">
-        <li v-if="!logs.length" class="px-3 py-8 text-center text-xs text-muted-foreground">{{ empty ?? t('activity.ui.empty') }}</li>
-        <li v-for="log in logs" :key="log.id" class="flex items-start gap-2.5 px-3 py-2 text-xs">
+    <ol class="divide-y divide-line rounded-lg border border-line bg-card" data-activity-timeline>
+        <li v-if="!logs.length" class="px-4 py-8 text-center text-13 text-fg-2">{{ empty ?? t('activity.ui.empty') }}</li>
+        <li v-for="log in logs" :key="log.id" class="flex items-start gap-3 px-4 py-3">
             <span
-                class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
+                class="grid size-[30px] shrink-0 place-items-center rounded-md bg-brand-soft text-brand-ink"
                 :style="log.user?.color ? { backgroundColor: `${log.user.color}22`, color: log.user.color } : undefined"
                 aria-hidden="true"
             >
-                <component :is="icon(log)" class="size-3.5" />
+                <component :is="icon(log)" class="size-4" />
             </span>
             <div class="min-w-0 flex-1">
-                <p class="text-foreground">{{ activitySentence(log, locale, page.props.platforms ?? []) }}</p>
-                <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-muted-foreground">
-                    <time class="tabular-nums" :datetime="log.created_at ?? undefined">{{ formatDateTime(log.created_at, locale) }}</time>
+                <p class="text-[13.5px] leading-relaxed text-foreground">{{ activitySentence(log, locale, page.props.platforms ?? []) }}</p>
+                <p
+                    v-if="log.platform || log.conversation_id || activityOrderId(log)"
+                    class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-2"
+                >
                     <PlatformBadge v-if="log.platform" :platform="log.platform" size="xs" />
-                    <Link v-if="log.conversation_id" :href="`/inbox?c=${log.conversation_id}`" class="text-primary hover:underline">{{ t('ui.open_conversation') }}</Link>
-                    <Link v-if="activityOrderId(log)" :href="`/orders/${activityOrderId(log)}`" class="text-primary hover:underline">{{ t('activity.ui.open_order') }}</Link>
+                    <Link v-if="log.conversation_id" :href="`/inbox?c=${log.conversation_id}`" class="font-semibold text-brand-ink hover:underline">{{
+                        t('ui.open_conversation')
+                    }}</Link>
+                    <Link
+                        v-if="activityOrderId(log)"
+                        :href="`/orders/${activityOrderId(log)}`"
+                        class="font-semibold text-brand-ink hover:underline"
+                        >{{ t('activity.ui.open_order') }}</Link
+                    >
                 </p>
             </div>
+            <time class="shrink-0 whitespace-nowrap pt-0.5 text-xs tabular-nums text-fg-3" :datetime="log.created_at ?? undefined">{{
+                formatDateTime(log.created_at, locale)
+            }}</time>
         </li>
     </ol>
 </template>

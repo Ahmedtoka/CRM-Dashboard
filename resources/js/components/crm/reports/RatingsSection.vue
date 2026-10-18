@@ -30,39 +30,39 @@ onMounted(() => {
 </script>
 
 <template>
-    <section id="ratings" class="space-y-3 rounded-lg bg-card p-4 shadow-card">
+    <section id="ratings" class="space-y-3 rounded-lg border border-line bg-card p-4">
         <header class="flex flex-wrap items-center gap-x-4 gap-y-2">
             <h2 class="text-base font-bold text-foreground">{{ t('reports.ratings.title') }}</h2>
-            <p v-if="ratings.summary.count > 0" class="text-sm tabular-nums text-muted-foreground">
+            <p v-if="ratings.summary.count > 0" class="text-sm tabular-nums text-fg-2">
                 {{ t('reports.ratings.summary', { avg: formatRatio(ratings.summary.avg, locale), n: formatCount(ratings.summary.count, locale) }) }}
-                <span v-if="ratings.summary.low > 0" class="ms-2 font-semibold text-destructive">{{
+                <span v-if="ratings.summary.low > 0" class="ms-2 font-semibold text-danger">{{
                     t('reports.ratings.low', { n: formatCount(ratings.summary.low, locale) })
                 }}</span>
             </p>
         </header>
 
-        <p v-if="ratings.summary.count === 0" class="text-sm text-muted-foreground">{{ t('reports.ratings.empty') }}</p>
+        <p v-if="ratings.summary.count === 0" class="text-sm text-fg-2">{{ t('reports.ratings.empty') }}</p>
 
         <template v-else>
-            <h3 class="text-xs font-semibold text-muted-foreground">{{ t('reports.ratings.by_agent_day') }}</h3>
+            <h3 class="text-xs font-semibold text-fg-2">{{ t('reports.ratings.by_agent_day') }}</h3>
             <DataTable table-id="team-ratings" :columns="columns" :rows="rows">
                 <template #cell-date="{ row }">{{ formatDate(`${row.date}T12:00:00Z`, locale) }}</template>
                 <template #cell-agent="{ row }">{{ row.user.name }}</template>
                 <template #cell-avg="{ row }">{{ formatRatio(row.avg, locale) }}</template>
                 <template #cell-low="{ row }">
-                    <span :class="row.low > 0 ? 'font-semibold text-destructive' : ''">{{ formatCount(row.low, locale) }}</span>
+                    <span :class="row.low > 0 ? 'font-semibold text-danger' : ''">{{ formatCount(row.low, locale) }}</span>
                 </template>
             </DataTable>
 
             <div class="flex flex-wrap items-center gap-2">
-                <h3 class="text-xs font-semibold text-muted-foreground">{{ t('reports.ratings.list') }}</h3>
-                <div class="ms-auto inline-flex rounded-md border border-border p-0.5 text-xs" role="group">
+                <h3 class="text-xs font-semibold text-fg-2">{{ t('reports.ratings.list') }}</h3>
+                <div class="ms-auto inline-flex rounded-md border border-line p-0.5 text-xs" role="group">
                     <button
                         v-for="s in ['all', 'low'] as const"
                         :key="s"
                         type="button"
                         class="rounded px-2 py-1"
-                        :class="ratings.stars === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'"
+                        :class="ratings.stars === s ? 'bg-brand text-brand-on' : 'text-fg-2'"
                         :aria-pressed="ratings.stars === s"
                         @click="setStars(s)"
                     >
@@ -70,16 +70,19 @@ onMounted(() => {
                     </button>
                 </div>
             </div>
-            <ul class="divide-y divide-border text-sm">
+            <ul class="divide-y divide-line text-sm">
                 <li v-for="r in ratings.list" :key="r.entry_id" class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-                    <span class="w-10 font-bold tabular-nums" :class="r.stars <= 2 ? 'text-destructive' : 'text-foreground'"
+                    <span class="w-10 font-bold tabular-nums" :class="r.stars <= 2 ? 'text-danger' : 'text-foreground'"
                         >{{ formatCount(r.stars, locale) }}/{{ formatCount(5, locale) }}</span
                     >
                     <span class="min-w-0 flex-1 truncate">{{ r.customer ?? '—' }} · {{ r.user?.name ?? '—' }}</span>
-                    <span class="text-xs tabular-nums text-muted-foreground">{{ formatDateTime(r.reviewed_at, locale) }}</span>
-                    <Link v-if="r.conversation_id" :href="`/inbox?c=${r.conversation_id}`" class="text-xs font-medium text-primary hover:underline">{{
-                        t('reports.ratings.open')
-                    }}</Link>
+                    <span class="text-xs tabular-nums text-fg-2">{{ formatDateTime(r.reviewed_at, locale) }}</span>
+                    <Link
+                        v-if="r.conversation_id"
+                        :href="`/inbox?c=${r.conversation_id}`"
+                        class="text-xs font-medium text-brand-ink hover:underline"
+                        >{{ t('reports.ratings.open') }}</Link
+                    >
                 </li>
             </ul>
         </template>

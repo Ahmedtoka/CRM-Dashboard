@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import SectionTabs from '@/components/crm/SectionTabs.vue';
-import { sectionTabs } from '@/lib/sectionTabs';
 import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
-import ReportFilters from '@/components/crm/ReportFilters.vue';
+import PeriodControls from '@/components/crm/reports/PeriodControls.vue';
+import { teamTabs } from '@/components/crm/reports/teamTabs';
+import SectionTabs from '@/components/crm/SectionTabs.vue';
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/composables/useI18n';
 import { useReportFilters } from '@/composables/useReportFilters';
 import { useUrlFilters } from '@/composables/useUrlFilters';
@@ -13,7 +14,8 @@ import { formatCount, formatDateTime, slashShortcut } from '@/lib/format';
 import { sortRows } from '@/lib/sort';
 import type { QuickReplyAgentRow, QuickReplyTopRow, QuickReplyUnusedRow, ReportRange } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
-import { Head } from '@inertiajs/vue3';
+import { Head, usePage } from '@inertiajs/vue3';
+import { Download } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -25,6 +27,8 @@ const props = defineProps<{
 }>();
 
 const { t, locale } = useI18n();
+const page = usePage();
+const tabs = computed(() => teamTabs(t, page.url));
 // Each table sorts client-side (full lists) and keeps its own sort in the URL; a range change keeps them.
 const { filters: sorts, set: setSort, query: sortQuery } = useUrlFilters({ sort_top: '', sort_used: '', sort_unused: '' });
 const { visit } = useReportFilters(() => sortQuery.value as Record<string, string>);
@@ -36,15 +40,21 @@ const exportHref = computed(() => {
     return `/reports/quick-replies/export?${query.toString()}`;
 });
 
-const scopeLabel = (scope: QuickReplyTopRow['scope']) => t(scope === 'shared' ? 'reports.quick_replies.scope_shared' : 'reports.quick_replies.scope_personal');
+const scopeLabel = (scope: QuickReplyTopRow['scope']) =>
+    t(scope === 'shared' ? 'reports.quick_replies.scope_shared' : 'reports.quick_replies.scope_personal');
 
 const topRows = computed(() => sortRows(props.top, sorts.value.sort_top));
-const agentRows = computed(() => sortRows(props.perAgent.map((row) => ({ ...row, id: row.user.id })), sorts.value.sort_used));
+const agentRows = computed(() =>
+    sortRows(
+        props.perAgent.map((row) => ({ ...row, id: row.user.id })),
+        sorts.value.sort_used,
+    ),
+);
 const unusedRows = computed(() => sortRows(props.unused, sorts.value.sort_unused));
 
 const topColumns = computed<Column[]>(() => [
     { key: 'shortcut', label: t('reports.quick_replies.shortcut') },
-    { key: 'title', label: t('reports.quick_replies.title_label') },
+    { key: 'title', label: t('reports.quick_replies.title_label'), primary: true },
     { key: 'category', label: t('reports.quick_replies.category') },
     { key: 'scope', label: t('reports.quick_replies.scope') },
     { key: 'uses', label: t('reports.quick_replies.uses'), numeric: true, sortable: true },
@@ -54,14 +64,14 @@ const topColumns = computed<Column[]>(() => [
 ]);
 
 const agentColumns = computed<Column[]>(() => [
-    { key: 'user', label: t('reports.quick_replies.agent') },
+    { key: 'user', label: t('reports.quick_replies.agent'), primary: true },
     { key: 'uses', label: t('reports.quick_replies.uses'), numeric: true, sortable: true },
     { key: 'replies', label: t('reports.quick_replies.replies'), numeric: true, sortable: true },
 ]);
 
 const unusedColumns = computed<Column[]>(() => [
     { key: 'shortcut', label: t('reports.quick_replies.shortcut') },
-    { key: 'title', label: t('reports.quick_replies.title_label') },
+    { key: 'title', label: t('reports.quick_replies.title_label'), primary: true },
     { key: 'scope', label: t('reports.quick_replies.scope') },
     { key: 'last_used_at', label: t('reports.quick_replies.last_used'), sortable: true },
 ]);
@@ -74,78 +84,107 @@ const breadcrumbs = computed(() => [{ title: t('reports.quick_replies.title'), h
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('reports.quick_replies.title')">
-                <a
-                    :href="exportHref"
-                    class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium hover:bg-muted/50"
-                >
-                    {{ t('reports.quick_replies.export') }}
-                </a>
+            <PageHeader :title="t('reports.hub.title')" :description="t('reports.hub.description')">
+                <PeriodControls :range="range" :platform="platform" @change="visit" />
+                <Button as="a" :href="exportHref" variant="secondary" :aria-label="t('reports.quick_replies.export')" data-export>
+                    <Download aria-hidden="true" />
+                    {{ t('reports.hub.csv') }}
+                </Button>
             </PageHeader>
-            <SectionTabs :tabs="sectionTabs.team(t)" :label="t('section_tabs.team.label')" />
-
-            <div class="rounded-lg bg-card p-3 shadow-card">
-                <ReportFilters :range="range" :platform="platform" @change="visit" />
-            </div>
+            <SectionTabs :tabs="tabs" :label="t('section_tabs.team.label')" />
 
             <section class="space-y-2">
-                <h2 class="text-sm font-medium">{{ t('reports.quick_replies.top') }}</h2>
+                <h2 class="text-base font-bold">{{ t('reports.quick_replies.top') }}</h2>
                 <DataTable
                     table-id="report-qr-top"
                     :sort="sorts.sort_top || null"
                     @update:sort="setSort({ sort_top: $event })"
-                    :columns="topColumns" :rows="topRows" :empty="t('reports.quick_replies.empty')" :caption="t('reports.quick_replies.top')">
-                    <template #cell-shortcut="{ value }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">{{ slashShortcut(String(value)) }}</code></template>
-                    <template #cell-title="{ value }"><span dir="auto">{{ value }}</span></template>
+                    :columns="topColumns"
+                    :rows="topRows"
+                    :empty="t('reports.quick_replies.empty')"
+                    :caption="t('reports.quick_replies.top')"
+                >
+                    <template #cell-shortcut="{ value }"
+                        ><kbd class="text-12 rounded-sm border border-line bg-surface-2 px-1.5 py-0.5 font-mono" dir="ltr">{{
+                            slashShortcut(String(value))
+                        }}</kbd></template
+                    >
+                    <template #cell-title="{ value }"
+                        ><span dir="auto">{{ value }}</span></template
+                    >
                     <template #cell-scope="{ value }">{{ scopeLabel(value as QuickReplyTopRow['scope']) }}</template>
-                    <template #cell-uses="{ value }"><span class="tabular-nums">{{ n(value as number) }}</span></template>
-                    <template #cell-users="{ value }"><span class="tabular-nums">{{ n(value as number) }}</span></template>
+                    <template #cell-uses="{ value }"
+                        ><span class="tabular-nums">{{ n(value as number) }}</span></template
+                    >
+                    <template #cell-users="{ value }"
+                        ><span class="tabular-nums">{{ n(value as number) }}</span></template
+                    >
                     <template #cell-platforms="{ value }">
                         <span class="flex flex-wrap items-center gap-1.5">
                             <span v-for="(count, p) in value as Record<string, number>" :key="p" class="inline-flex items-center gap-0.5">
                                 <PlatformBadge :platform="p as PlatformValue" size="xs" />
-                                <span class="text-2xs tabular-nums text-muted-foreground">{{ n(count) }}</span>
+                                <span class="text-xs tabular-nums text-fg-3">{{ n(count) }}</span>
                             </span>
                         </span>
                     </template>
                     <template #cell-last_used_at="{ value }">
-                        <span class="whitespace-nowrap tabular-nums text-muted-foreground">{{ formatDateTime(value as string | null, locale) || '—' }}</span>
+                        <span class="whitespace-nowrap tabular-nums text-fg-2">{{ formatDateTime(value as string | null, locale) || '—' }}</span>
                     </template>
                 </DataTable>
             </section>
 
             <section class="space-y-2">
-                <h2 class="text-sm font-medium">{{ t('reports.quick_replies.per_agent') }}</h2>
+                <h2 class="text-base font-bold">{{ t('reports.quick_replies.per_agent') }}</h2>
                 <DataTable
                     table-id="report-qr-agents"
                     :sort="sorts.sort_used || null"
                     @update:sort="setSort({ sort_used: $event })"
-                    :columns="agentColumns" :rows="agentRows" :empty="t('reports.quick_replies.empty')" :caption="t('reports.quick_replies.per_agent')">
+                    :columns="agentColumns"
+                    :rows="agentRows"
+                    :empty="t('reports.quick_replies.empty')"
+                    :caption="t('reports.quick_replies.per_agent')"
+                >
                     <template #cell-user="{ row }">
-                        <span class="inline-flex items-center gap-2 whitespace-nowrap font-medium">
-                            <span class="size-2.5 rounded-full" :style="{ backgroundColor: row.user.color ?? '#94a3b8' }" aria-hidden="true" />
+                        <span class="inline-flex items-center gap-2 whitespace-nowrap font-semibold">
+                            <span
+                                class="size-2.5 shrink-0 rounded-full"
+                                :style="{ backgroundColor: row.user.color ?? 'hsl(var(--fg-3))' }"
+                                aria-hidden="true"
+                            />
                             {{ row.user.name }}
                         </span>
                     </template>
-                    <template #cell-uses="{ value }"><span class="tabular-nums">{{ n(value as number) }}</span></template>
-                    <template #cell-replies="{ value }"><span class="tabular-nums">{{ n(value as number) }}</span></template>
+                    <template #cell-uses="{ value }"
+                        ><span class="tabular-nums">{{ n(value as number) }}</span></template
+                    >
+                    <template #cell-replies="{ value }"
+                        ><span class="tabular-nums">{{ n(value as number) }}</span></template
+                    >
                 </DataTable>
             </section>
 
             <section class="space-y-2">
-                <div>
-                    <h2 class="text-sm font-medium">{{ t('reports.quick_replies.unused') }}</h2>
-                </div>
+                <h2 class="text-base font-bold">{{ t('reports.quick_replies.unused') }}</h2>
                 <DataTable
                     table-id="report-qr-unused"
                     :sort="sorts.sort_unused || null"
                     @update:sort="setSort({ sort_unused: $event })"
-                    :columns="unusedColumns" :rows="unusedRows" :empty="t('reports.quick_replies.empty')" :caption="t('reports.quick_replies.unused')">
-                    <template #cell-shortcut="{ value }"><code class="rounded bg-muted px-1.5 py-0.5" dir="ltr">{{ slashShortcut(String(value)) }}</code></template>
-                    <template #cell-title="{ value }"><span dir="auto">{{ value }}</span></template>
+                    :columns="unusedColumns"
+                    :rows="unusedRows"
+                    :empty="t('reports.quick_replies.empty')"
+                    :caption="t('reports.quick_replies.unused')"
+                >
+                    <template #cell-shortcut="{ value }"
+                        ><kbd class="text-12 rounded-sm border border-line bg-surface-2 px-1.5 py-0.5 font-mono" dir="ltr">{{
+                            slashShortcut(String(value))
+                        }}</kbd></template
+                    >
+                    <template #cell-title="{ value }"
+                        ><span dir="auto">{{ value }}</span></template
+                    >
                     <template #cell-scope="{ value }">{{ scopeLabel(value as QuickReplyUnusedRow['scope']) }}</template>
                     <template #cell-last_used_at="{ value }">
-                        <span class="whitespace-nowrap tabular-nums text-muted-foreground">{{ formatDateTime(value as string | null, locale) || '—' }}</span>
+                        <span class="whitespace-nowrap tabular-nums text-fg-2">{{ formatDateTime(value as string | null, locale) || '—' }}</span>
                     </template>
                 </DataTable>
             </section>

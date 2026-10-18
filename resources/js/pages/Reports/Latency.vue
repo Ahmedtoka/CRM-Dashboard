@@ -60,7 +60,9 @@ const presets = computed(() =>
         active: props.window === w,
     })),
 );
-const summary = computed(() => t('range.summary', { from: formatDateTime(props.range.from, locale.value), to: formatDateTime(props.range.to, locale.value) }));
+const summary = computed(() =>
+    t('range.summary', { from: formatDateTime(props.range.from, locale.value), to: formatDateTime(props.range.to, locale.value) }),
+);
 
 function applyCustom(): void {
     if (customInvalid.value) return;
@@ -94,90 +96,92 @@ const breadcrumbs = computed(() => [{ title: t('reports.latency.title'), href: '
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
             <PageHeader :title="t('reports.latency.title')" :description="t('reports.latency.hint')" />
 
-            <div class="rounded-lg bg-card p-3 shadow-card">
-                <FilterBar :chips="[]" :presets="presets" :summary="summary">
-                    <template #inline>
+            <FilterBar :chips="[]" :presets="presets" :summary="summary">
+                <template #inline>
+                    <button
+                        type="button"
+                        :aria-pressed="window === 'custom' || showCustom"
+                        :aria-expanded="showCustom"
+                        class="h-10 rounded-md border px-3 text-13 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        :class="
+                            window === 'custom' || showCustom
+                                ? 'border-brand bg-brand text-brand-on'
+                                : 'border-line-strong bg-card text-fg-2 hover:text-foreground'
+                        "
+                        @click="choose('custom')"
+                    >
+                        {{ t('reports.latency.window_custom') }}
+                    </button>
+                    <form v-if="showCustom" class="flex flex-wrap items-center gap-1.5" @submit.prevent="applyCustom">
+                        <label class="sr-only" for="latency-from">{{ t('reports.latency.from') }}</label>
+                        <input
+                            id="latency-from"
+                            v-model="customFrom"
+                            type="datetime-local"
+                            dir="ltr"
+                            class="h-10 rounded-md border border-line-strong bg-card px-2 text-13 tabular-nums"
+                            :max="customTo"
+                        />
+                        <span class="text-13 text-fg-2" aria-hidden="true">{{ t('reports.latency.to') }}</span>
+                        <label class="sr-only" for="latency-to">{{ t('reports.latency.to') }}</label>
+                        <input
+                            id="latency-to"
+                            v-model="customTo"
+                            type="datetime-local"
+                            dir="ltr"
+                            class="h-10 rounded-md border border-line-strong bg-card px-2 text-13 tabular-nums"
+                            :min="customFrom"
+                        />
                         <button
-                            type="button"
-                            :aria-pressed="window === 'custom' || showCustom"
-                            :aria-expanded="showCustom"
-                            class="h-9 rounded-md border px-2.5 text-xs transition-colors"
-                            :class="window === 'custom' || showCustom ? 'border-primary bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-foreground'"
-                            @click="choose('custom')"
+                            type="submit"
+                            class="h-10 rounded-md bg-brand px-4 text-13 font-semibold text-brand-on hover:bg-brand-hover disabled:opacity-50"
+                            :disabled="customInvalid"
                         >
-                            {{ t('reports.latency.window_custom') }}
+                            {{ t('reports.latency.apply') }}
                         </button>
-                        <form v-if="showCustom" class="flex flex-wrap items-center gap-1.5" @submit.prevent="applyCustom">
-                            <label class="sr-only" for="latency-from">{{ t('reports.latency.from') }}</label>
-                            <input
-                                id="latency-from"
-                                v-model="customFrom"
-                                type="datetime-local"
-                                dir="ltr"
-                                class="h-9 rounded-md border border-input bg-background px-2 text-xs"
-                                :max="customTo"
-                            />
-                            <span class="text-xs text-muted-foreground" aria-hidden="true">{{ t('reports.latency.to') }}</span>
-                            <label class="sr-only" for="latency-to">{{ t('reports.latency.to') }}</label>
-                            <input
-                                id="latency-to"
-                                v-model="customTo"
-                                type="datetime-local"
-                                dir="ltr"
-                                class="h-9 rounded-md border border-input bg-background px-2 text-xs"
-                                :min="customFrom"
-                            />
-                            <button
-                                type="submit"
-                                class="h-9 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50"
-                                :disabled="customInvalid"
-                            >
-                                {{ t('reports.latency.apply') }}
-                            </button>
-                        </form>
-                    </template>
-                </FilterBar>
-            </div>
+                    </form>
+                </template>
+            </FilterBar>
 
-            <div class="grid gap-4 lg:grid-cols-3">
-                <section v-for="card in cards" :key="card.kind" class="space-y-2 rounded-lg bg-card p-3 shadow-card">
+            <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
+                <section v-for="card in cards" :key="card.kind" class="space-y-3 rounded-lg border border-line bg-card p-4">
                     <div class="flex items-start justify-between gap-2">
-                        <h2 class="text-xs font-medium">{{ card.label }}</h2>
+                        <h2 class="text-base font-bold">{{ card.label }}</h2>
                         <StatusChip v-if="card.stats.pass === null" :label="t('reports.latency.no_data')" tone="neutral" />
                         <StatusChip
                             v-else
                             :label="card.stats.pass ? t('reports.latency.pass') : t('reports.latency.fail')"
-                            :tone="card.stats.pass ? 'positive' : 'negative'"
+                            :tone="card.stats.pass ? 'ok' : 'danger'"
                         />
                     </div>
 
                     <EmptyState v-if="card.stats.count === 0" :icon="Timer" :title="t('reports.latency.no_data')" class="p-4" />
-                    <dl v-else class="grid grid-cols-2 gap-x-2 gap-y-1.5 text-xs">
+                    <dl v-else class="grid grid-cols-2 gap-x-3 gap-y-2.5 text-13">
                         <div>
-                            <dt class="text-muted-foreground">{{ t('reports.latency.count') }}</dt>
-                            <dd class="tabular-nums font-medium">{{ n(card.stats.count) }}</dd>
+                            <dt class="text-fg-2">{{ t('reports.latency.count') }}</dt>
+                            <dd class="font-medium tabular-nums">{{ n(card.stats.count) }}</dd>
                         </div>
                         <div>
-                            <dt class="text-muted-foreground">{{ t('reports.latency.target') }}</dt>
-                            <dd class="tabular-nums font-medium">{{ n(card.stats.target) }} {{ t('reports.latency.unit_ms') }}</dd>
+                            <dt class="text-fg-2">{{ t('reports.latency.target') }}</dt>
+                            <dd class="font-medium tabular-nums">{{ n(card.stats.target) }} {{ t('reports.latency.unit_ms') }}</dd>
                         </div>
                         <div>
-                            <dt class="text-muted-foreground">{{ t('reports.latency.p50') }}</dt>
-                            <dd class="tabular-nums font-medium">{{ n(card.stats.p50) }} {{ t('reports.latency.unit_ms') }}</dd>
+                            <dt class="text-fg-2">{{ t('reports.latency.p50') }}</dt>
+                            <dd class="font-medium tabular-nums">{{ n(card.stats.p50) }} {{ t('reports.latency.unit_ms') }}</dd>
                         </div>
                         <div>
-                            <dt class="text-muted-foreground">{{ t('reports.latency.p95') }}</dt>
-                            <dd class="tabular-nums font-semibold" :class="{ 'text-destructive': card.stats.pass === false }">
+                            <dt class="text-fg-2">{{ t('reports.latency.p95') }}</dt>
+                            <dd class="font-semibold tabular-nums" :class="{ 'text-danger': card.stats.pass === false }">
                                 {{ n(card.stats.p95) }} {{ t('reports.latency.unit_ms') }}
                             </dd>
                         </div>
                         <div>
-                            <dt class="text-muted-foreground">{{ t('reports.latency.p99') }}</dt>
-                            <dd class="tabular-nums font-medium">{{ n(card.stats.p99) }} {{ t('reports.latency.unit_ms') }}</dd>
+                            <dt class="text-fg-2">{{ t('reports.latency.p99') }}</dt>
+                            <dd class="font-medium tabular-nums">{{ n(card.stats.p99) }} {{ t('reports.latency.unit_ms') }}</dd>
                         </div>
                         <div>
-                            <dt class="text-muted-foreground">{{ t('reports.latency.max') }}</dt>
-                            <dd class="tabular-nums font-medium">{{ n(card.stats.max) }} {{ t('reports.latency.unit_ms') }}</dd>
+                            <dt class="text-fg-2">{{ t('reports.latency.max') }}</dt>
+                            <dd class="font-medium tabular-nums">{{ n(card.stats.max) }} {{ t('reports.latency.unit_ms') }}</dd>
                         </div>
                     </dl>
                 </section>

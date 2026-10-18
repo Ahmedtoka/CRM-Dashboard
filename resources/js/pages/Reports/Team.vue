@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import SectionTabs from '@/components/crm/SectionTabs.vue';
-import { sectionTabs } from '@/lib/sectionTabs';
 import BarChart from '@/components/crm/BarChart.vue';
-import Leaderboard from '@/components/crm/Leaderboard.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
+import Leaderboard from '@/components/crm/Leaderboard.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
-import ReportFilters from '@/components/crm/ReportFilters.vue';
+import PeriodControls from '@/components/crm/reports/PeriodControls.vue';
 import RatingsSection from '@/components/crm/reports/RatingsSection.vue';
+import { teamTabs } from '@/components/crm/reports/teamTabs';
+import SectionTabs from '@/components/crm/SectionTabs.vue';
 import SkeletonList from '@/components/crm/SkeletonList.vue';
-import StatCard from '@/components/crm/StatCard.vue';
+import Ledger, { type LedgerFigure } from '@/components/today/Ledger.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useReportFilters } from '@/composables/useReportFilters';
 import { formatNumber } from '@/i18n';
@@ -36,31 +36,56 @@ const { t, locale } = useI18n();
 const page = usePage<SharedData>();
 const { visit, loading } = useReportFilters();
 const n = (v: number) => formatCount(v, locale.value);
+const tabs = computed(() => teamTabs(t, page.url));
 
-const cards = computed(() => {
+// The period's ledger (mockup V.team): six figures; the bot's messages and the chats needing a person sit as notes.
+const figures = computed<LedgerFigure[]>(() => {
     const m = props.metrics;
     return [
-        { label: t('reports.cards.inbound'), value: n(m.inbound_messages) },
-        { label: t('reports.cards.outbound'), value: n(m.outbound_messages) },
-        { label: t('reports.cards.bot_messages'), value: n(m.bot_messages) },
-        { label: t('reports.cards.avg_first_response'), value: formatAvgSeconds(m.avg_first_response_sec, locale.value) },
-        { label: t('reports.cards.waiting_now'), value: n(m.waiting_now), tone: m.waiting_now > 0 ? 'warning' : 'default' },
-        { label: t('reports.cards.needs_human_now'), value: n(m.needs_human_now), tone: m.needs_human_now > 0 ? 'negative' : 'default' },
-        { label: t('reports.cards.orders'), value: n(m.orders_count) },
-        { label: t('reports.cards.revenue'), value: formatMoney(m.orders_total, locale.value) },
-    ] as const;
+        { key: 'inbound', label: t('reports.cards.inbound'), value: n(m.inbound_messages) },
+        {
+            key: 'outbound',
+            label: t('reports.cards.outbound'),
+            value: n(m.outbound_messages),
+            note: t('reports.hub.bot_note', { n: n(m.bot_messages) }),
+        },
+        { key: 'first_response', label: t('reports.cards.avg_first_response'), value: formatAvgSeconds(m.avg_first_response_sec, locale.value) },
+        {
+            key: 'waiting',
+            label: t('reports.cards.waiting_now'),
+            value: n(m.waiting_now),
+            note: t('reports.hub.needs_human_note', { n: n(m.needs_human_now) }),
+            tone: m.needs_human_now > 0 ? 'down' : 'neutral',
+        },
+        { key: 'orders', label: t('reports.cards.orders'), value: n(m.orders_count) },
+        { key: 'revenue', label: t('reports.cards.revenue'), value: formatMoney(m.orders_total, locale.value) },
+    ];
 });
 
 // Platform series: bars take the platform's brand color.
 const byPlatform = computed(() =>
-    (page.props.platforms ?? []).map((p) => ({ key: p.value, label: p.label, color: p.color, value: props.metrics.by_platform?.[p.value]?.inbound ?? 0 })),
+    (page.props.platforms ?? []).map((p) => ({
+        key: p.value,
+        label: p.label,
+        color: p.color,
+        value: props.metrics.by_platform?.[p.value]?.inbound ?? 0,
+    })),
 );
 const revenueByPlatform = computed(() =>
-    (page.props.platforms ?? []).map((p) => ({ key: p.value, label: p.label, color: p.color, value: props.metrics.by_platform?.[p.value]?.orders_total ?? 0 })),
+    (page.props.platforms ?? []).map((p) => ({
+        key: p.value,
+        label: p.label,
+        color: p.color,
+        value: props.metrics.by_platform?.[p.value]?.orders_total ?? 0,
+    })),
 );
 
 const byHour = computed(() =>
-    (props.metrics.by_hour ?? []).map((value, hour) => ({ key: String(hour), label: formatNumber(locale.value, hour, { useGrouping: false }), value })),
+    (props.metrics.by_hour ?? []).map((value, hour) => ({
+        key: String(hour),
+        label: formatNumber(locale.value, hour, { useGrouping: false }),
+        value,
+    })),
 );
 
 function openUser(userId: number): void {
@@ -81,36 +106,34 @@ const breadcrumbs = computed(() => [{ title: t('reports.team_title'), href: '/re
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('reports.team_title')" />
-            <SectionTabs :tabs="sectionTabs.team(t)" :label="t('section_tabs.team.label')" />
+            <PageHeader :title="t('reports.hub.title')" :description="t('reports.hub.description')">
+                <PeriodControls :range="range" :platform="platform" @change="visit" />
+            </PageHeader>
+            <SectionTabs :tabs="tabs" :label="t('section_tabs.team.label')" />
 
-            <div class="rounded-lg bg-card p-3 shadow-card">
-                <ReportFilters :range="range" :platform="platform" @change="visit" />
+            <SkeletonList v-if="loading" variant="tiles" :count="6" />
+            <Ledger v-else :figures="figures" :label="t('reports.hub.figures')" />
+
+            <div v-if="empty && !loading" class="rounded-lg border border-line bg-card">
+                <EmptyState :icon="BarChart3" :title="t('reports.no_data')" />
             </div>
-
-            <SkeletonList v-if="loading" variant="tiles" :count="8" />
-            <div v-else class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <StatCard v-for="card in cards" :key="card.label" :label="card.label" :value="card.value" :tone="'tone' in card ? card.tone : 'default'" />
-            </div>
-
-            <RatingsSection :ratings="ratings" :range="range" />
-
-            <EmptyState v-if="empty && !loading" :icon="BarChart3" :title="t('reports.no_data')" class="rounded-lg bg-card shadow-card" />
             <template v-else>
+                <section class="space-y-2" :aria-label="t('reports.leaderboard')">
+                    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                        <h2 class="text-base font-bold">{{ t('reports.leaderboard') }}</h2>
+                        <p class="text-13 text-fg-2">{{ t('reports.leaderboard_hint') }}</p>
+                    </div>
+                    <Leaderboard :rows="leaderboard" :online-user-ids="online_user_ids" @open="openUser" />
+                </section>
+
                 <div class="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
                     <BarChart :title="t('reports.by_platform')" :items="byPlatform" :format="n" />
                     <BarChart :title="t('reports.revenue_by_platform')" :items="revenueByPlatform" :format="(v) => formatMoney(v, locale)" />
                 </div>
                 <BarChart :title="t('reports.by_hour')" :items="byHour" orientation="vertical" :label-every="3" :format="n" />
-
-                <section class="space-y-2">
-                    <div>
-                        <h2 class="text-sm font-medium">{{ t('reports.leaderboard') }}</h2>
-                        <p class="text-2xs text-muted-foreground">{{ t('reports.leaderboard_hint') }}</p>
-                    </div>
-                    <Leaderboard :rows="leaderboard" :online-user-ids="online_user_ids" @open="openUser" />
-                </section>
             </template>
+
+            <RatingsSection :ratings="ratings" :range="range" />
         </div>
     </AppLayout>
 </template>

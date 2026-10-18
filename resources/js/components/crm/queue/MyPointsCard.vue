@@ -21,14 +21,14 @@ function signed(n: number): string {
 </script>
 
 <template>
-    <section class="space-y-3 rounded-lg bg-card p-4 shadow-card" :aria-label="t('queue_points.mine')">
+    <section class="space-y-3 rounded-lg border border-line bg-card p-4" :aria-label="t('queue_points.mine')">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
             <h2 class="text-sm font-semibold text-foreground">{{ t('queue_points.mine') }}</h2>
             <span class="text-2xl font-bold tabular-nums text-foreground">{{ formatCount(points.total, locale) }}</span>
         </div>
-        <p class="text-xs text-muted-foreground">{{ t('queue_points.mine_hint') }}</p>
+        <p class="text-xs text-fg-2">{{ t('queue_points.mine_hint') }}</p>
         <ul v-if="kinds.length" class="flex flex-wrap gap-1 text-xs">
-            <li v-for="k in kinds" :key="k.key" class="rounded-full bg-muted px-2 py-0.5 tabular-nums">
+            <li v-for="k in kinds" :key="k.key" class="rounded-full bg-sunken px-2 py-0.5 tabular-nums text-fg-2">
                 {{ t(`queue_points.kinds.${k.key}`) }} {{ signed(k.value) }}
             </li>
         </ul>
