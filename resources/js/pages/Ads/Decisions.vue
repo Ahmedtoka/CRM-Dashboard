@@ -34,7 +34,6 @@ const props = defineProps<AdsDecisionsProps>();
 const { t, locale } = useI18n();
 const loading = usePathVisitLoading('/ads/decisions');
 const drawer = useAdDrawer();
-const TABS: DecisionsTab[] = ['open', 'snoozed', 'closed', 'log'];
 const search = () => (typeof window === 'undefined' ? '' : window.location.search);
 /** Switching tab drops the log filters (they belong to the log tab only). */
 const tabHref = (tab: DecisionsTab) => {
