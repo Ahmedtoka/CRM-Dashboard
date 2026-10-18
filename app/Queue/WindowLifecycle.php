@@ -140,6 +140,34 @@ class WindowLifecycle
         }
     }
 
+    /**
+     * Close cycle Q12 (RC-15): a person answered from outside the CRM (an echo EchoPolicy counts).
+     * Takes the conversation lock (the queue's order). In an open window the clocks move as for a
+     * colleague's reply (no first reply, no points); on a chat the bot holds, the bot stays quiet for
+     * `human_outside_minutes`.
+     */
+    public function staffEchoed(Conversation $c): void
+    {
+        DB::transaction(function () use ($c) {
+            $row = Conversation::query()->lockForUpdate()->find($c->id);
+            $e = $row?->queue_entry_id ? QueueEntry::query()->lockForUpdate()->find($row->queue_entry_id) : null;
+
+            if ($e !== null && $e->isOpen()) {
+                QueueEntry::query()->whereKey($e->id)->update([
+                    'last_agent_message_at' => now(), 'silence_warned_at' => null,
+                    'awaiting_reply_since' => null, 'apology_sent_at' => null, 'overdue_alerted_at' => null, 'updated_at' => now(),
+                ]);
+                DB::afterCommit(fn () => SafeBroadcast::send(new QueueEntryUpdated($e->fresh())));
+
+                return;
+            }
+
+            if ($row !== null && $row->handler === Handler::Bot) {
+                $row->forceFill(['bot_paused_until' => now()->addMinutes((int) (QueueSetting::current()->human_outside_minutes ?? 30))])->save();
+            }
+        }, attempts: 3);
+    }
+
     /** The assignee's first reply in an open window: stamps `first_reply_at` and whether it met the first-reply SLA. */
     public function markFirstReply(Conversation $c, User $u): void
     {
@@ -185,6 +213,12 @@ class WindowLifecycle
             if ($locked->status === 'waiting' && in_array($reason, ['resolved_elsewhere', 'cancelled'], true)) {
                 $note = is_string($opts['note'] ?? null) && trim($opts['note']) !== '' ? mb_substr(trim($opts['note']), 0, 200) : null;
                 $locked->forceFill(['status' => 'cancelled', 'close_reason' => $reason, 'close_note' => $note, 'closed_at' => now(), 'closed_by_id' => $by?->id])->save();
+                // Close cycle M-01: the board's cancel hands her back to the bot in this transaction (RC-17).
+                if (($opts['to_bot'] ?? false) && $locked->conversation !== null) {
+                    $locked->conversation->return_priority_until = null;
+                    app(BotEngine::class)->resetToBot($locked->conversation);
+                    DB::afterCommit(fn () => SafeBroadcast::send(new ConversationUpdated($locked->conversation->fresh())));
+                }
                 $this->logger->log($by ? ActorType::User : ActorType::System, $by, ActivityLogger::QUEUE_CLOSE, null, $locked->conversation, [
                     'ticket' => $locked->ticket_no, 'reason' => $reason, 'handle_seconds' => null, 'left_the_lounge' => true,
                 ]);

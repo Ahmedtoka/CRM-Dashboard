@@ -180,7 +180,7 @@ class BoardController extends Controller
         }
 
         $by = $request->user();
-        $closed = $windows->close($entry, 'cancelled', $by, ['note' => $data['reason']]);
+        $closed = $windows->close($entry, 'cancelled', $by, ['note' => $data['reason'], 'to_bot' => true]);
 
         // The router called her between our read and the lock: she is in a window, not cancelled.
         if ($closed->status !== 'cancelled' || (int) $closed->closed_by_id !== (int) $by->id) {

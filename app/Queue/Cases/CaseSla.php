@@ -40,8 +40,10 @@ class CaseSla
     public function sweep(): int
     {
         $n = 0;
-        $due = SupportCase::query()->with('queueEntry:id,assigned_user_id,is_test')->whereIn('status', SupportCase::OPEN_STATUSES)->whereNotNull('queue_entry_id')
-            ->whereNotIn('queue_entry_id', QueueEntry::query()->where('is_test', true)->select('id'))
+        // Close cycle Q11: the bot's cases (no queue window) too; test windows and test chats never.
+        $due = SupportCase::query()->with('queueEntry:id,assigned_user_id,is_test')->whereIn('status', SupportCase::OPEN_STATUSES)
+            ->where(fn ($q) => $q->whereNull('queue_entry_id')->orWhereNotIn('queue_entry_id', QueueEntry::query()->where('is_test', true)->select('id')))
+            ->whereNotIn('conversation_id', \App\Models\Conversation::query()->where('is_test', true)->select('id'))
             ->whereNotNull('sla_due_at')->where('sla_due_at', '<', now())->whereNull('sla_breached_at')->orderBy('id')->limit(200)->get();
 
         foreach ($due as $case) {
@@ -53,6 +55,13 @@ class CaseSla
             $n++;
             $data = ['case_id' => $case->id, 'type' => $case->typeLabel(), 'conversation_id' => $case->conversation_id];
             $ids = array_values(array_filter(array_unique([(int) CaseResolution::payeeOf($case), (int) $case->assigned_to_id])));
+            if ($ids === []) {
+                // A bot case nobody owns yet: the supervisors hear (Q11).
+                app(UserNotifier::class)->notifySupervisors('cases.sla_overdue', $data);
+
+                continue;
+            }
+
             User::query()->where('is_active', true)->whereIn('id', $ids)->orderBy('id')->get()
                 ->each(fn (User $u) => app(UserNotifier::class)->notify($u, 'cases.sla_overdue', $data));
         }

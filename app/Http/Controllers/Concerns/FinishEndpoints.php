@@ -121,7 +121,7 @@ trait FinishEndpoints
     {
         $rows = QueueEntry::query()->with('conversation.customer')
             ->where('assigned_user_id', $request->user()->id)->where('status', 'closed')->where('close_reason', 'auto')
-            ->where('business_date', $queue->businessDate())
+            ->where('closed_at', '>=', now()->setTimezone(QueueService::TZ)->startOfDay()->utc())
             ->whereExists(fn ($q) => $q->from('conversation_outcomes')->whereColumn('conversation_outcomes.queue_entry_id', 'queue_entries.id')
                 ->where('conversation_outcomes.outcome', Outcome::Unknown->value))
             ->orderByDesc('closed_at')->limit(50)->get();

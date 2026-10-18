@@ -356,7 +356,8 @@ it('lets the assignee resolve her own window through the inbox', function () {
 
     $this->actingAs($u)->postJson("/inbox/conversations/{$e->conversation_id}/resolve", ['outcome' => 'browsing'])->assertOk();
 
-    expect($e->fresh()->close_reason)->toBe('resolved_elsewhere')->and($e->conversation->fresh()->status->value)->toBe('resolved');
+    // Close cycle D-11: «حل» on an open window is «خلصت» — a real close, its kind from the outcome.
+    expect($e->fresh()->close_reason)->toBe('inquiry')->and($e->fresh()->end_mode)->toBe('thanks')->and($e->conversation->fresh()->status->value)->toBe('resolved');
 });
 
 it('lets a supervisor or an admin resolve a moderator\'s window through the inbox', function (string $role) {
@@ -364,7 +365,7 @@ it('lets a supervisor or an admin resolve a moderator\'s window through the inbo
 
     $this->actingAs(User::factory()->create(['role' => $role]))->postJson("/inbox/conversations/{$e->conversation_id}/resolve", ['outcome' => 'browsing'])->assertOk();
 
-    expect($e->fresh()->status)->toBe('closed')->and($e->fresh()->close_reason)->toBe('resolved_elsewhere');
+    expect($e->fresh()->status)->toBe('closed')->and($e->fresh()->close_reason)->toBe('inquiry'); // D-11
 })->with(['supervisor', 'admin']);
 
 it('lets any moderator resolve a customer who is still waiting in the lounge', function () {
@@ -410,7 +411,8 @@ it('lets the assignee, a supervisor or an admin return an open window to the bot
 
     $this->actingAs($actor)->postJson("/inbox/conversations/{$e->conversation_id}/return-to-bot")->assertOk();
 
-    expect($e->fresh()->status)->toBe('closed')->and($e->fresh()->close_reason)->toBe('cancelled')
+    // Close cycle D-10: «خلصت» with «البوت يكمّل» (outcome unknown, points, no message), not `cancelled`.
+    expect($e->fresh()->status)->toBe('closed')->and($e->fresh()->close_reason)->toBe('inquiry')->and($e->fresh()->end_mode)->toBe('bot')
         ->and($e->conversation->fresh()->handler->value)->toBe('bot');
 })->with(['assignee', 'supervisor', 'admin']);
 

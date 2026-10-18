@@ -33,7 +33,7 @@ it('serves the outcome state: nothing automatic, then ordered', function () {
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
     $this->actingAs($admin)->getJson("/inbox/conversations/{$c->id}/context")->assertOk()
-        ->assertJsonPath('data.outcome', ['current' => null, 'source' => null, 'auto' => null]);
+        ->assertJsonPath('data.outcome', ['current' => null, 'source' => null, 'auto' => null, 'auto_order' => null]);
 
     Order::factory()->create(['conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'status' => 'confirmed']);
     $this->actingAs($admin)->getJson("/inbox/conversations/{$c->id}/context")->assertJsonPath('data.outcome.auto', 'ordered');

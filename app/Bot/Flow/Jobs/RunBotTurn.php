@@ -59,6 +59,11 @@ class RunBotTurn implements ShouldQueue
             return;
         }
 
+        // Close cycle Q12: a person answered her from outside the CRM a moment ago.
+        if ($c->bot_paused_until !== null && $c->bot_paused_until->isFuture()) {
+            return;
+        }
+
         if ($c->bot_due_at && $c->bot_due_at->isFuture()) {
             return; // a newer message moved the due time; its own dispatch will run
         }

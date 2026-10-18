@@ -96,7 +96,7 @@ it('serves the conversation context like the web', function () {
     Sanctum::actingAs($mod);
 
     $api = $this->getJson("/api/v1/conversations/{$c->id}/context")->assertOk()
-        ->assertJsonPath('data.outcome', ['current' => null, 'source' => null, 'auto' => null])->json();
+        ->assertJsonPath('data.outcome', ['current' => null, 'source' => null, 'auto' => null, 'auto_order' => null])->json();
     expect($api)->toBe($this->actingAs($mod, 'web')->getJson("/inbox/conversations/{$c->id}/context")->json());
 });
 

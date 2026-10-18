@@ -426,6 +426,97 @@ class ConversationCycle
         return true;
     }
 
+    /**
+     * A staff reply from the CRM, inside the send's transaction with the conversation locked, BEFORE
+     * the handler flips and `agentReplied()` runs (close-cycle-FINAL §7.2, Q10, H-08, H-10, H-11):
+     *  - the assignee answers seconds after the tick auto-closed her window → that window again (H-08);
+     *  - a customer waiting in the lounge, answered by a moderator on the open shift → hers, quietly
+     *    (no «دورك جه», her cap not in the way, nobody waiting any more: RC-9);
+     *  - a chat the bot holds (after a close, or never handed over), answered by a moderator on the
+     *    open shift → a `manual` window of hers (`rule = claim`, no message, out of the SLA: RC-8);
+     *  - anybody else (off shift, a supervisor with no desk, the queue off): the chat is hers by
+     *    `assignee_id`, as a person handles it — «خلصت» then takes the no-window path (§4.4).
+     */
+    public function onStaffReply(Conversation $c, User $u): void
+    {
+        $s = QueueSetting::current();
+
+        if (! $s->enabled) {
+            if ($c->handler === Handler::Bot) {
+                $c->assignee_id = $u->id;
+                $c->assigned_at = now();
+            }
+
+            return;
+        }
+
+        if ($this->reviveOnReply($c, $u)) {
+            $c->refresh();
+
+            return;
+        }
+
+        $queue = app(QueueService::class);
+        $router = app(QueueRouter::class);
+        $open = $queue->activeEntry($c);
+
+        if ($open !== null && $open->isOpen()) {
+            return;
+        }
+
+        $desk = $router->deskOf((int) $u->id);
+
+        if ($open !== null) {
+            if ($desk !== null) {
+                $router->assign($open, $desk, 'ردّت عليها '.$u->name, 'answered_waiting', $s, tellCustomer: false, ignoreCap: true, awaiting: false);
+                $c->refresh();
+            }
+
+            return;
+        }
+
+        if ($c->handler !== Handler::Bot) {
+            return;
+        }
+
+        if ($desk === null || ! in_array($desk->status, ['available', 'busy'], true)) {
+            $c->assignee_id = $u->id;
+            $c->assigned_at = now();
+
+            return;
+        }
+
+        $date = $queue->businessDate();
+        $used = $router->openForUser((int) $u->id)->whereNotNull('window_no')->pluck('window_no')->map(fn ($w) => (int) $w)->all();
+        $window = 1;
+        while (in_array($window, $used, true)) {
+            $window++;
+        }
+
+        $e = QueueEntry::create([
+            'conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'business_date' => $date, 'ticket_no' => $queue->nextTicket($date),
+            'kind' => 'unknown', 'priority' => 'manual', 'status' => 'active', 'rule' => 'claim', 'is_test' => (bool) $c->is_test,
+            'shift_id' => $desk->shift_id, 'shift_member_id' => $desk->id, 'assigned_user_id' => $u->id, 'window_no' => $window,
+            'enqueued_at' => now(), 'called_at' => now(), 'delivered_at' => now(), 'wait_seconds' => 0,
+            // RC-8: the claim is her first reply; it is no first-reply SLA.
+            'first_reply_at' => now(), 'sla_met' => null, 'last_customer_message_at' => $c->last_customer_message_at,
+            'bot_summary' => ['topic' => null, 'category' => $c->handover_category, 'reason' => 'claim', 'order_number' => null, 'lines' => []],
+            'waiting_messages' => [], 'open_case_id' => $queue->openCaseFor($c)?->id,
+        ]);
+
+        $c->forceFill(['queue_entry_id' => $e->id, 'assignee_id' => $u->id, 'assigned_at' => now(), 'return_priority_until' => null])->save();
+
+        if ($desk->status === 'available') {
+            $desk->update(['status' => 'busy']);
+        }
+
+        $this->logger->log(ActorType::User, $u, ActivityLogger::QUEUE_ASSIGN, null, $c, ['ticket' => $e->ticket_no, 'user_id' => $u->id, 'window' => $window, 'rule' => 'claim']);
+        DB::afterCommit(function () use ($e, $desk) {
+            SafeBroadcast::send(new QueueEntryUpdated($e->fresh()));
+            SafeBroadcast::send(new QueueMemberUpdated($desk->fresh()));
+        });
+    }
+
     /** The outcome to record: hers, else the automatic one, else the wrapper's default; refused when none. */
     private function outcomeOf(Conversation $c, ?QueueEntry $e, array $r): ?Outcome
     {

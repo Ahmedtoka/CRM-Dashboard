@@ -67,6 +67,8 @@ class CaseRecorder
                 'data' => $data,
                 'photo_attachment_ids' => $this->photoIds($data),
                 'policy_notes' => $this->policyNotes($type, $data, $order),
+                // Close cycle Q11: a case the bot collected has the same SLA as one a moderator opened.
+                'sla_due_at' => now()->addHours((int) \App\Models\QueueSetting::current()->case_sla_hours),
             ]);
 
             $text = CaseSummary::text($case);

@@ -109,7 +109,6 @@ class InboxIngestor
                 $previous = $conversation->last_customer_message_at;
 
                 $conversation->forceFill([
-                    'status' => $claim !== null ? $conversation->status : ConversationStatus::Open,
                     'last_message_at' => now(),
                     'last_customer_message_at' => $previous && $previous->greaterThan($occurred) ? $previous : $occurred,
                 ])->save();
@@ -126,8 +125,14 @@ class InboxIngestor
                 $settled = $claim !== null || (! $message->is_spam
                     && app(QueueService::class)->settles($conversation, $message, app(Acknowledgement::class)->matches($message)));
 
+                // Close cycle M-09: a settled message (a thanks, a rating answer) leaves a closed chat closed;
+                // any other message (not a claimed confirmation answer) opens it, as before.
                 if (! $settled) {
                     $conversation->increment('unread_count');
+                }
+
+                if ($claim === null && ! $settled && $conversation->status !== ConversationStatus::Open) {
+                    $conversation->forceFill(['status' => ConversationStatus::Open])->save();
                 }
 
                 $this->logger->log(ActorType::System, null, ActivityLogger::MESSAGE_RECEIVED, $message, $conversation);
@@ -337,6 +342,11 @@ class InboxIngestor
         // Human-handled conversations are left alone: needs_human stays as it is
         // until a human replies (OutboundService clears it).
         if ($conversation->handler !== Handler::Bot || ! BotSetting::current()->enabled) {
+            return;
+        }
+
+        // Close cycle Q12: a person answered her from Business Suite a moment ago — the bot keeps quiet.
+        if ($conversation->bot_paused_until !== null && $conversation->bot_paused_until->isFuture()) {
             return;
         }
 

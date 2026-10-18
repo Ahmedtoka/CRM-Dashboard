@@ -5,7 +5,7 @@ namespace App\Queue\Cases;
 use App\Models\ScoreEvent;
 use App\Models\SupportCase;
 use App\Models\User;
-use App\Queue\Jobs\SendQueueMessage;
+use App\Queue\Jobs\SendCaseResolved;
 use App\Queue\QueueService;
 use App\Queue\Scoring\ScoreKeeper;
 use Illuminate\Support\Facades\DB;
@@ -71,15 +71,17 @@ class CaseResolution
     {
         $entry = $case->queue_entry_id !== null ? $case->queueEntry : null;
 
-        if ($entry === null || $entry->is_test) {
-            return;
-        }
-
+        // Close cycle §6.3 (Q3, Q11, D-04, RC-14): once per case, for a bot case too; the job waits until
+        // she is the bot's or closed, and asks the window's rating with it. `$notify` false: «خلصت» with «اتحل».
         if (! $notify) {
             $case->forceFill(['resolved_notified_at' => $case->resolved_notified_at ?? now()])->save();
-        } elseif ($case->resolved_notified_at === null) {
+        } elseif ($case->resolved_notified_at === null && ! $entry?->is_test) {
             $case->forceFill(['resolved_notified_at' => now()])->save();
-            SendQueueMessage::dispatch($entry->id, 'queue_case_resolved', ['case_id' => $case->id]);
+            SendCaseResolved::dispatch($case->id);
+        }
+
+        if ($entry === null || $entry->is_test) {
+            return;
         }
 
         $payee = self::payeeOf($case);

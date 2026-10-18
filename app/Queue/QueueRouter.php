@@ -468,9 +468,9 @@ class QueueRouter
      * (`assignable()`). False, and nothing changes, when not: the entry stays waiting for the
      * next pass (or, when the customer left, stays as it is).
      */
-    public function assign(QueueEntry $e, ShiftMember $m, string $rule, string $ruleKey, ?QueueSetting $setting = null, bool $tellCustomer = true): bool
+    public function assign(QueueEntry $e, ShiftMember $m, string $rule, string $ruleKey, ?QueueSetting $setting = null, bool $tellCustomer = true, bool $ignoreCap = false, bool $awaiting = true): bool
     {
-        return DB::transaction(function () use ($e, $m, $rule, $ruleKey, $setting, $tellCustomer) {
+        return DB::transaction(function () use ($e, $m, $rule, $ruleKey, $setting, $tellCustomer, $ignoreCap, $awaiting) {
             $locked = WindowLifecycle::lockBoth($e);
             $c = $locked?->conversation;
 
@@ -482,7 +482,7 @@ class QueueRouter
             // a snapshot; she may have gone on break, gone offline, left, or filled her windows since.
             $desk = ShiftMember::query()->with(['shift', 'user'])->lockForUpdate()->find($m->id);
 
-            if ($desk === null || ! $this->assignable($desk, $setting ?? QueueSetting::current())) {
+            if ($desk === null || ! $this->assignable($desk, $setting ?? QueueSetting::current(), $ignoreCap)) {
                 return false;
             }
 
@@ -500,7 +500,8 @@ class QueueRouter
                 'called_at' => now(), 'delivered_at' => now(), 'wait_seconds' => max(0, (int) $locked->enqueued_at->diffInSeconds(now())), 'rule' => mb_substr($rule, 0, 120),
                 'last_customer_message_at' => $locked->last_customer_message_at ?? now(), 'reserved_user_id' => null,
                 // Flow revision §4.1: she now waits for this moderator's first reply.
-                'awaiting_reply_since' => now(), 'apology_sent_at' => null, 'overdue_alerted_at' => null,
+                // RC-9: a moderator who answered a waiting customer took her with that answer — nobody waits.
+                'awaiting_reply_since' => $awaiting ? now() : null, 'apology_sent_at' => null, 'overdue_alerted_at' => null,
             ])->save();
             $e->setRawAttributes($locked->getAttributes(), true);
 
@@ -537,12 +538,12 @@ class QueueRouter
      * waiting for her break, offline or gone), her shift still open, her account active, and her
      * open windows (per USER) below her cap.
      */
-    private function assignable(ShiftMember $m, QueueSetting $setting): bool
+    private function assignable(ShiftMember $m, QueueSetting $setting, bool $ignoreCap = false): bool
     {
         return in_array($m->status, ['available', 'busy'], true)
             && $m->shift?->status === 'open'
             && $m->user !== null && $m->user->is_active
-            && $this->openForUser((int) $m->user_id)->count() < $this->capOf($m, $setting);
+            && ($ignoreCap || $this->openForUser((int) $m->user_id)->count() < $this->capOf($m, $setting));
     }
 
     /** An escalation nobody on the shift can take: alert active supervisors, at most once per entry per 15 min. */
