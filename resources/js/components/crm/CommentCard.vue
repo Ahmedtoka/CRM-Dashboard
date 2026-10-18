@@ -56,11 +56,12 @@ function submit(action: 'reply' | 'private-reply', text: string): void {
     emit('action', action, text, () => (open.value = null));
 }
 
-const btn = 'inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50';
+const btn =
+    'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-semibold text-fg-2 hover:bg-sunken hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 </script>
 
 <template>
-    <article class="flex gap-2.5 px-3 py-2.5" :aria-busy="!!busy">
+    <article class="flex gap-3 py-3" :aria-busy="!!busy">
         <img
             v-if="comment.customer?.avatar_url"
             :src="comment.customer.avatar_url"
@@ -68,32 +69,32 @@ const btn = 'inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-mut
             class="mt-0.5 size-8 shrink-0 rounded-full object-cover"
             loading="lazy"
         />
-        <span v-else class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-elevated text-2xs font-semibold text-foreground" aria-hidden="true">
+        <span v-else class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-2xs font-semibold text-brand-ink" aria-hidden="true">
             {{ getInitials(comment.customer?.name ?? t('comments.customer_unknown')) }}
         </span>
 
         <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-1.5 text-xs">
-                <span class="font-medium text-foreground">{{ comment.customer?.name ?? t('comments.customer_unknown') }}</span>
-                <time class="text-2xs tabular-nums text-muted-foreground" :datetime="comment.created_at ?? undefined">{{ formatDateTime(comment.created_at, locale) }}</time>
+            <div class="flex flex-wrap items-center gap-1.5 text-[13px]">
+                <span class="font-bold text-foreground">{{ comment.customer?.name ?? t('comments.customer_unknown') }}</span>
+                <time class="text-xs tabular-nums text-fg-3" :datetime="comment.created_at ?? undefined">{{ formatDateTime(comment.created_at, locale) }}</time>
                 <StatusChip v-if="comment.intent" :label="t(`comments.intent.${comment.intent}`)" :tone="intentTone[comment.intent]" />
                 <StatusChip v-if="comment.status" :label="t(`comments.status.${comment.status}`)" :tone="statusTone[comment.status]" />
             </div>
-            <p class="mt-1 whitespace-pre-line break-words text-sm" dir="auto" :class="{ 'text-muted-foreground line-through': comment.status === 'hidden' }">{{ comment.body }}</p>
+            <p class="mt-0.5 whitespace-pre-line break-words text-sm leading-6" dir="auto" :class="{ 'text-fg-3 line-through': comment.status === 'hidden' }">{{ comment.body }}</p>
 
-            <div v-if="repliedBy" class="mt-1.5 rounded-md border-s-2 bg-muted/50 px-2 py-1 text-xs" :class="comment.replied_by_type === 'bot' ? 'border-primary/60' : 'border-success'">
-                <p class="flex items-center gap-1 text-2xs text-muted-foreground">
+            <div v-if="repliedBy" class="mt-2 rounded-md border-s-2 bg-surface-2 px-2.5 py-1.5 text-[13px]" :class="comment.replied_by_type === 'bot' ? 'border-brand' : 'border-ok'">
+                <p class="flex items-center gap-1 text-xs text-fg-2">
                     <Bot v-if="comment.replied_by_type === 'bot'" class="size-3" aria-hidden="true" />
                     {{ repliedBy }} · <span class="tabular-nums">{{ formatDateTime(comment.public_replied_at, locale) }}</span>
                 </p>
                 <p class="break-words" dir="auto">{{ comment.public_reply }}</p>
             </div>
-            <p v-if="comment.private_reply_sent_at" class="mt-1 flex items-center gap-1 text-2xs text-muted-foreground">
+            <p v-if="comment.private_reply_sent_at" class="mt-1 flex items-center gap-1 text-xs text-fg-2">
                 <Lock class="size-3" aria-hidden="true" />{{ t('comments.private_sent_at', { time: formatDateTime(comment.private_reply_sent_at, locale) }) }}
             </p>
 
             <TooltipProvider :delay-duration="150">
-                <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                <div class="mt-1.5 flex flex-wrap items-center gap-0.5">
                     <Tooltip :disabled="!replyBlock">
                         <TooltipTrigger as-child>
                             <span :tabindex="replyBlock ? 0 : undefined">
@@ -145,7 +146,7 @@ const btn = 'inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-mut
                         <TooltipContent v-if="privateBlock">{{ privateBlock }}</TooltipContent>
                     </Tooltip>
 
-                    <Link v-if="comment.conversation_id" :href="`/inbox?c=${comment.conversation_id}`" class="ms-auto inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    <Link v-if="comment.conversation_id" :href="`/inbox?c=${comment.conversation_id}`" class="ms-auto inline-flex h-8 items-center gap-1 text-[13px] font-semibold text-brand-ink hover:underline">
                         <MessagesSquare class="size-3.5" aria-hidden="true" />{{ t('ui.open_conversation') }}
                     </Link>
                 </div>
