@@ -379,51 +379,6 @@ defineExpose({
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            <!-- Slot of the primary action (p5 owns what renders here): «خلصت» on her queue window, else resolve / reopen as always. -->
-            <CloseWindowMenu
-                v-if="queueWindow"
-                ref="closeMenu"
-                :entry="queueWindow"
-                :owner-name="windowOwner"
-                :disabled="busy"
-                :hint="hint('inbox.resolve')"
-                @closed-for-bot="emit('action', 'return-to-bot')"
-            />
-            <span
-                v-else-if="heldByOther"
-                class="inline-flex h-9 min-w-0 shrink-0 items-center gap-1 rounded-lg bg-elevated px-2.5 text-xs text-muted-foreground sm:max-w-[12rem] sm:shrink"
-                :title="`${t('queue.held_by', { name: holderName })} · ${t('queue.held_by_hint')}`"
-                data-held-by
-            >
-                <Lock class="size-3.5 shrink-0" aria-hidden="true" />
-                <!-- On a phone only the lock: the name keeps the room (the row-2 chip says who has her). -->
-                <span class="hidden truncate sm:inline" dir="auto">{{ t('queue.held_by', { name: holderName }) }}</span>
-                <span class="sr-only sm:hidden">{{ t('queue.held_by', { name: holderName }) }}</span>
-            </span>
-            <ResolveMenu
-                v-else-if="conversation.status !== 'resolved'"
-                ref="resolveMenu"
-                :disabled="busy"
-                :busy="busyAction === 'resolve'"
-                :hint="hint('inbox.resolve')"
-                @resolve="(payload, done) => emit('resolve', payload, done)"
-            />
-            <Button
-                v-else
-                variant="outline"
-                size="sm"
-                class="h-9 shrink-0 gap-1.5 rounded-lg px-2.5 sm:px-3"
-                type="button"
-                :title="`${t('thread.header.reopen')}${hint('inbox.reopen')}`"
-                :disabled="busy"
-                :aria-label="t('thread.header.reopen')"
-                data-primary-action
-                @click="emit('action', 'reopen')"
-                :loading="busyAction === 'reopen'"
-            >
-                <RotateCcw aria-hidden="true" />
-                <span class="hidden sm:inline">{{ t('thread.header.reopen') }}</span>
-            </Button>
 
         </div>
 
