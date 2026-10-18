@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import SectionTabs from '@/components/crm/SectionTabs.vue';
-import { sectionTabs } from '@/lib/sectionTabs';
 /**
- * Settings → «روابط التجربة» (design 2026-09-21 §1). One card per link: the address to
- * share, how often it was opened, how many runs it produced, and the runs themselves.
+ * «التجربة › الروابط» (design 2026-09-21 §1). One row per link: the address to share and copy,
+ * its state, how often it was opened, how many runs it produced, and the runs themselves.
  */
 import DateInput from '@/components/crm/DateInput.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
@@ -11,15 +9,19 @@ import FormDialog from '@/components/crm/FormDialog.vue';
 import IconAction from '@/components/crm/IconAction.vue';
 import InlineError from '@/components/crm/InlineError.vue';
 import PageHeader from '@/components/crm/PageHeader.vue';
+import SectionTabs from '@/components/crm/SectionTabs.vue';
 import SkeletonList from '@/components/crm/SkeletonList.vue';
+import StatusChip from '@/components/crm/StatusChip.vue';
+import { Button } from '@/components/ui/button';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatShortDuration } from '@/lib/format';
+import { sectionTabs } from '@/lib/sectionTabs';
 import type { TestLinkRow, TestLinkSessionRow } from '@/types/admin';
 import { Head, router } from '@inertiajs/vue3';
-import { BarChart3, Check, Copy, ExternalLink, History, Pencil, Play, Plus, Square, Trash2 } from 'lucide-vue-next';
+import { Check, Copy, ExternalLink, History, Link2, Pencil, Play, Plus, Square, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 
 const props = defineProps<{ links: TestLinkRow[] }>();
@@ -149,122 +151,158 @@ const stamp = (value: string | null): string =>
 
 const minutes = (seconds: number): string => formatShortDuration(seconds, locale.value);
 
-function status(row: TestLinkRow): { label: string; tone: string } {
-    if (!row.is_active) return { label: t('settings.test_links.stopped'), tone: 'bg-muted text-muted-foreground' };
-    if (!row.is_open) return { label: t('settings.test_links.expired'), tone: 'bg-amber-500/10 text-amber-600' };
-    return { label: t('settings.test_links.active'), tone: 'bg-emerald-500/10 text-emerald-600' };
+function status(row: TestLinkRow): { label: string; tone: 'neutral' | 'warn' | 'ok' } {
+    if (!row.is_active) return { label: t('settings.test_links.stopped'), tone: 'neutral' };
+    if (!row.is_open) return { label: t('settings.test_links.expired'), tone: 'warn' };
+    return { label: t('settings.test_links.active'), tone: 'ok' };
 }
 
-const breadcrumbs = computed(() => [{ title: t('nav.bot'), href: '/bot' }, { title: t('settings.test_links.title'), href: '/bot/test-links' }]);
-const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';
+const breadcrumbs = computed(() => [
+    { title: t('nav.bot'), href: '/bot' },
+    { title: t('nav.bot_testing'), href: '/bot/test-links' },
+    { title: t('nav.bot_test_links'), href: '/bot/test-links' },
+]);
+const input =
+    'h-10 w-full rounded-md border border-line-strong bg-card px-3 text-sm focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40';
 </script>
 
 <template>
-    <Head :title="t('settings.test_links.title')" />
+    <Head :title="t('nav.bot_testing')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-3xl space-y-5 p-3 md:p-6">
-            <PageHeader :title="t('settings.test_links.title')" :description="t('settings.test_links.description')">
-                <a href="/bot/test-sessions" class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium hover:bg-muted">
-                    <BarChart3 class="size-3.5" aria-hidden="true" />{{ t('settings.test_links.report') }}
-                </a>
-                <button type="button" class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" @click="edit(null)">
-                    <Plus class="size-3.5" aria-hidden="true" />{{ t('settings.test_links.add') }}
-                </button>
+        <div class="mx-auto w-full max-w-4xl space-y-4 p-3 md:p-6">
+            <PageHeader
+                :title="t('nav.bot_testing')"
+                :description="t('settings.test_links.section_hint')"
+                :breadcrumbs="[{ label: t('nav.bot'), href: '/bot' }, { label: t('nav.bot_testing') }]"
+            >
+                <Button type="button" class="gap-1.5" @click="edit(null)"
+                    ><Plus class="size-4" aria-hidden="true" />{{ t('settings.test_links.add') }}</Button
+                >
             </PageHeader>
             <SectionTabs :tabs="sectionTabs.botTesting(t)" :label="t('nav.bot_testing')" />
 
-            <p v-if="!props.links.length" class="rounded-lg bg-card p-6 text-center text-sm text-muted-foreground shadow-card">
-                {{ t('settings.test_links.empty') }}
-            </p>
+            <div v-if="!props.links.length" class="rounded-lg border border-line bg-card">
+                <EmptyState :icon="Link2" :title="t('settings.test_links.empty')" :body="t('settings.test_links.empty_hint')">
+                    <template #action>
+                        <Button type="button" class="gap-1.5" @click="edit(null)"
+                            ><Plus class="size-4" aria-hidden="true" />{{ t('settings.test_links.add') }}</Button
+                        >
+                    </template>
+                </EmptyState>
+            </div>
 
-            <article v-for="row in props.links" :key="row.id" class="space-y-3 rounded-lg bg-card p-4 shadow-card">
-                <header class="flex flex-wrap items-start gap-x-3 gap-y-1">
-                    <div class="min-w-0 flex-1">
-                        <h2 class="flex items-center gap-2 truncate text-sm font-semibold" dir="auto">
-                            {{ row.label }}
-                            <span class="rounded-full px-2 py-0.5 text-2xs font-medium" :class="status(row).tone">{{ status(row).label }}</span>
-                        </h2>
-                        <p class="mt-0.5 text-xs text-muted-foreground">
-                            {{ t('settings.test_links.stats', { views: row.views_count, runs: row.runs_count }) }}
-                            ·
-                            {{ row.last_opened_at ? `${t('settings.test_links.last_opened')} ${stamp(row.last_opened_at)}` : t('settings.test_links.never_opened') }}
-                        </p>
+            <section v-else class="rounded-lg border border-line bg-card" :aria-label="t('nav.bot_test_links')">
+                <article v-for="row in props.links" :key="row.id" class="border-b border-line px-4 py-3.5 last:border-b-0" :data-test-link="row.id">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <span class="grid size-10 shrink-0 place-items-center rounded-md bg-brand-soft text-brand-ink" aria-hidden="true">
+                            <Link2 class="size-4" />
+                        </span>
+                        <div class="min-w-[min(100%,12rem)] flex-1">
+                            <h2 class="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                                <span class="min-w-0 truncate" dir="auto">{{ row.label }}</span>
+                                <StatusChip size="sm" :label="status(row).label" :tone="status(row).tone" />
+                            </h2>
+                            <p class="mt-0.5 text-13 text-fg-2">
+                                {{ t('settings.test_links.stats', { views: row.views_count, runs: row.runs_count }) }}
+                                ·
+                                {{
+                                    row.last_opened_at
+                                        ? `${t('settings.test_links.last_opened')} ${stamp(row.last_opened_at)}`
+                                        : t('settings.test_links.never_opened')
+                                }}
+                            </p>
+                        </div>
+                        <div class="flex shrink-0 flex-wrap items-center gap-1">
+                            <Button type="button" variant="secondary" size="sm" class="gap-1.5" @click="copy(row)">
+                                <Check v-if="copiedId === row.id" class="size-4 text-ok" aria-hidden="true" />
+                                <Copy v-else class="size-4" aria-hidden="true" />
+                                {{ copiedId === row.id ? t('settings.test_links.copied') : t('settings.test_links.copy') }}
+                            </Button>
+                            <IconAction :icon="Pencil" size="sm" :label="`${t('ui.edit')} ${row.label}`" @click="edit(row)" />
+                            <IconAction
+                                :icon="row.is_active ? Square : Play"
+                                size="sm"
+                                :label="row.is_active ? t('settings.test_links.stop') : t('settings.test_links.activate')"
+                                :loading="rowBusy === `toggle-${row.id}`"
+                                :disabled="rowBusy !== null"
+                                @click="toggle(row)"
+                            />
+                            <IconAction
+                                :icon="Trash2"
+                                size="sm"
+                                variant="destructive"
+                                :label="`${t('ui.delete')} ${row.label}`"
+                                :loading="rowBusy === `delete-${row.id}`"
+                                :disabled="rowBusy !== null"
+                                @click="remove(row)"
+                            />
+                        </div>
                     </div>
-                    <div class="flex shrink-0 items-center gap-0.5">
-                        <IconAction :icon="Pencil" size="sm" :label="`${t('ui.edit')} ${row.label}`" @click="edit(row)" />
-                        <IconAction
-                            :icon="row.is_active ? Square : Play"
-                            size="sm"
-                            :label="row.is_active ? t('settings.test_links.stop') : t('settings.test_links.activate')"
-                            :loading="rowBusy === `toggle-${row.id}`"
-                            :disabled="rowBusy !== null"
-                            @click="toggle(row)"
-                        />
-                        <IconAction
-                            :icon="Trash2"
-                            size="sm"
-                            variant="destructive"
-                            :label="`${t('ui.delete')} ${row.label}`"
-                            :loading="rowBusy === `delete-${row.id}`"
-                            :disabled="rowBusy !== null"
-                            @click="remove(row)"
-                        />
+
+                    <div class="mt-2.5 flex min-w-0 items-center gap-2 rounded-md bg-sunken px-3 py-2 sm:ms-[3.25rem]">
+                        <code class="min-w-0 flex-1 truncate text-xs" dir="ltr">{{ row.url }}</code>
+                        <a
+                            :href="row.url"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2 text-xs font-semibold text-brand-ink hover:bg-surface-2"
+                        >
+                            <ExternalLink class="size-3.5" aria-hidden="true" />{{ t('settings.test_links.open') }}
+                        </a>
                     </div>
-                </header>
 
-                <div class="flex flex-wrap items-center gap-2 rounded-md bg-muted/60 px-3 py-2">
-                    <code class="min-w-0 flex-1 truncate text-xs" dir="ltr">{{ row.url }}</code>
-                    <button type="button" class="inline-flex h-7 items-center gap-1 rounded-md bg-background px-2 text-2xs font-medium shadow-sm" @click="copy(row)">
-                        <Check v-if="copiedId === row.id" class="size-3 text-emerald-600" aria-hidden="true" />
-                        <Copy v-else class="size-3" aria-hidden="true" />
-                        {{ copiedId === row.id ? t('settings.test_links.copied') : t('settings.test_links.copy') }}
-                    </button>
-                    <a
-                        :href="row.url"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="inline-flex h-7 items-center gap-1 rounded-md bg-background px-2 text-2xs font-medium shadow-sm"
-                    >
-                        <ExternalLink class="size-3" aria-hidden="true" />{{ t('settings.test_links.open') }}
-                    </a>
-                </div>
+                    <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-3 sm:ms-[3.25rem]">
+                        <span>
+                            {{ t('settings.test_links.max_messages') }}:
+                            <span class="tabular-nums">{{ formatCount(row.max_messages_per_session, locale) }}</span> ·
+                            {{ t('settings.test_links.max_sessions') }}:
+                            <span class="tabular-nums">{{
+                                row.max_sessions === null ? t('settings.test_links.unlimited') : formatCount(row.max_sessions, locale)
+                            }}</span>
+                            <template v-if="row.expires_at"> · {{ t('settings.test_links.expires_at') }} {{ stamp(row.expires_at) }}</template>
+                        </span>
+                        <button
+                            type="button"
+                            class="inline-flex h-8 items-center gap-1 font-semibold text-brand-ink hover:underline"
+                            :aria-expanded="openSessions === row.id"
+                            @click="showSessions(row)"
+                        >
+                            <History class="size-3.5" aria-hidden="true" />
+                            {{ t('settings.test_links.sessions') }} ({{ formatCount(row.runs_count, locale) }})
+                        </button>
+                    </div>
 
-                <p class="text-2xs text-muted-foreground">
-                    {{ t('settings.test_links.max_messages') }}: {{ formatCount(row.max_messages_per_session, locale) }} ·
-                    {{ t('settings.test_links.max_sessions') }}: {{ row.max_sessions === null ? t('settings.test_links.unlimited') : formatCount(row.max_sessions, locale) }}
-                    <template v-if="row.expires_at"> · {{ t('settings.test_links.expires_at') }} {{ stamp(row.expires_at) }}</template>
-                </p>
-
-                <button
-                    type="button"
-                    class="text-xs font-medium text-primary hover:underline"
-                    :aria-expanded="openSessions === row.id"
-                    @click="showSessions(row)"
-                >
-                    {{ t('settings.test_links.sessions') }} ({{ formatCount(row.runs_count, locale) }})
-                </button>
-
-                <div v-if="openSessions === row.id" class="rounded-md border border-border/60">
-                    <SkeletonList v-if="loadingSessions" variant="cards" :count="2" class="p-2" />
-                    <InlineError v-else-if="sessionsError" :message="sessionsError" class="m-2" @retry="loadSessions(row)" />
-                    <EmptyState v-else-if="!sessions.length" :icon="History" :title="t('settings.test_links.sessions_empty')" class="p-4" />
-                    <ul v-else class="divide-y divide-border/60">
-                        <li v-for="s in sessions" :key="s.id" class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-xs">
-                            <span class="font-medium" dir="auto">{{ s.label }}</span>
-                            <span class="text-muted-foreground">{{ stamp(s.started_at) }}</span>
-                            <span class="text-muted-foreground">{{ minutes(s.duration_seconds) }}</span>
-                            <span class="text-muted-foreground">{{ formatCount(s.messages_count, locale) }} · {{ s.device_family ?? '—' }}</span>
-                            <span class="rounded-full px-2 py-0.5 text-2xs" :class="s.ended_at ? 'bg-muted text-muted-foreground' : 'bg-emerald-500/10 text-emerald-600'">
-                                {{ s.ended_at ? t('settings.test_links.session_ended') : t('settings.test_links.session_running') }}
-                            </span>
-                            <a v-if="s.conversation_id" :href="`/inbox?c=${s.conversation_id}`" class="ms-auto text-primary hover:underline">
-                                {{ t('settings.test_links.open_conversation') }}
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </article>
+                    <div v-if="openSessions === row.id" class="mt-2 rounded-md border border-line sm:ms-[3.25rem]">
+                        <SkeletonList v-if="loadingSessions" variant="cards" :count="2" class="p-2" />
+                        <InlineError v-else-if="sessionsError" :message="sessionsError" class="m-2" @retry="loadSessions(row)" />
+                        <EmptyState v-else-if="!sessions.length" :icon="History" :title="t('settings.test_links.sessions_empty')" class="p-4" />
+                        <ul v-else class="divide-y divide-line">
+                            <li v-for="s in sessions" :key="s.id" class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-13">
+                                <span class="font-medium" dir="auto">{{ s.label }}</span>
+                                <span class="text-fg-3">{{ stamp(s.started_at) }}</span>
+                                <span class="tabular-nums text-fg-3">{{ minutes(s.duration_seconds) }}</span>
+                                <span class="text-fg-3"
+                                    ><span class="tabular-nums">{{ formatCount(s.messages_count, locale) }}</span> ·
+                                    {{ s.device_family ?? '—' }}</span
+                                >
+                                <StatusChip
+                                    size="sm"
+                                    :tone="s.ended_at ? 'neutral' : 'ok'"
+                                    :label="s.ended_at ? t('settings.test_links.session_ended') : t('settings.test_links.session_running')"
+                                />
+                                <a
+                                    v-if="s.conversation_id"
+                                    :href="`/inbox?c=${s.conversation_id}`"
+                                    class="ms-auto font-semibold text-brand-ink hover:underline"
+                                >
+                                    {{ t('settings.test_links.open_conversation') }}
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </article>
+            </section>
         </div>
 
         <FormDialog
@@ -275,21 +313,35 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
             @submit="submit"
         >
             <label class="grid gap-1">
-                <span class="text-xs font-medium">{{ t('settings.test_links.label') }}</span>
-                <input v-model="form.label" :class="input" :placeholder="t('settings.test_links.label_placeholder')" required maxlength="120" dir="auto" />
+                <span class="text-13 font-semibold">{{ t('settings.test_links.label') }}</span>
+                <input
+                    v-model="form.label"
+                    :class="input"
+                    :placeholder="t('settings.test_links.label_placeholder')"
+                    required
+                    maxlength="120"
+                    dir="auto"
+                />
             </label>
             <label class="grid gap-1">
-                <span class="text-xs font-medium">{{ t('settings.test_links.expires_at') }}</span>
+                <span class="text-13 font-semibold">{{ t('settings.test_links.expires_at') }}</span>
                 <DateInput v-model="form.expires_at" :class="input" wrapper-class="w-full" />
-                <span class="text-2xs text-muted-foreground">{{ t('settings.test_links.expires_hint') }}</span>
+                <span class="text-xs text-fg-3">{{ t('settings.test_links.expires_hint') }}</span>
             </label>
             <div class="grid gap-3 sm:grid-cols-2">
                 <label class="grid gap-1">
-                    <span class="text-xs font-medium">{{ t('settings.test_links.max_sessions') }}</span>
-                    <input v-model="form.max_sessions" type="number" min="1" max="1000" :class="input" :placeholder="t('settings.test_links.unlimited')" />
+                    <span class="text-13 font-semibold">{{ t('settings.test_links.max_sessions') }}</span>
+                    <input
+                        v-model="form.max_sessions"
+                        type="number"
+                        min="1"
+                        max="1000"
+                        :class="input"
+                        :placeholder="t('settings.test_links.unlimited')"
+                    />
                 </label>
                 <label class="grid gap-1">
-                    <span class="text-xs font-medium">{{ t('settings.test_links.max_messages') }}</span>
+                    <span class="text-13 font-semibold">{{ t('settings.test_links.max_messages') }}</span>
                     <input v-model="form.max_messages_per_session" type="number" min="5" max="500" :class="input" />
                 </label>
             </div>
