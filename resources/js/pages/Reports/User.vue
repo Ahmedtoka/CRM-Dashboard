@@ -17,7 +17,7 @@ const props = defineProps<{ range: ReportRange; platform: PlatformValue | null; 
 const { t, locale } = useI18n();
 const { visit } = useReportFilters();
 const title = computed(() => t('reports.user_title', { name: props.user.name }));
-const teamHref = computed(() => `/reports/team?from=${props.range.from}&to=${props.range.to}`);
+const teamHref = computed(() => `/reports/team?from=${props.range.from}&to=${props.range.to}${props.platform ? `&platform=${props.platform}` : ''}`);
 const breadcrumbs = computed(() => [
     { title: t('reports.hub.title'), href: teamHref.value },
     { title: props.user.name, href: `/reports/users/${props.user.id}` },

@@ -78,10 +78,15 @@ const addLabel = computed(() => (addScope.value === 'shared' ? t('settings.quick
 
 // Search in the browser: both lists arrive whole.
 const search = ref('');
+/** «أحمد» finds «احمد», «ة» finds «ه» (same folding as the intents search). */
+function fold(value: string): string {
+    return value.toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').trim();
+}
+
 function matches(row: QuickReplyRow): boolean {
-    const q = search.value.trim().toLowerCase();
+    const q = fold(search.value);
     if (!q) return true;
-    return [row.title, row.shortcut, row.body].some((v) => (v ?? '').toLowerCase().includes(q));
+    return [row.title, row.shortcut, row.body].some((v) => fold(v ?? '').includes(q));
 }
 
 const list = computed(() => {
@@ -165,7 +170,7 @@ const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
                                 <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                                     <span class="min-w-0 font-semibold" dir="auto">{{ row.title }}</span>
                                     <kbd
-                                        class="text-12 rounded-sm border border-line-strong bg-surface-2 px-1.5 py-0.5 font-mono text-fg-2"
+                                        class="rounded-sm border border-line-strong bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-fg-2"
                                         dir="ltr"
                                         >{{ slashShortcut(row.shortcut) }}</kbd
                                     >
@@ -186,7 +191,7 @@ const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
                                     </span>
                                 </div>
                                 <p class="line-clamp-2 whitespace-pre-line text-13 text-fg-2" dir="auto">{{ row.body }}</p>
-                                <p class="text-12 flex flex-wrap items-center gap-x-2 gap-y-1 text-fg-3">
+                                <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-3">
                                     <span>{{ categoryName(row.category_id) }}</span>
                                     <span aria-hidden="true">·</span>
                                     <span v-if="!row.platforms?.length">{{ t('ui.all_platforms') }}</span>

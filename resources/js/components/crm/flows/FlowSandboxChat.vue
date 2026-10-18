@@ -188,8 +188,8 @@ defineExpose({ reset });
     <div class="flex h-full min-h-0 flex-col">
         <!-- Toolbar: source toggle + start over -->
         <div class="flex items-center gap-2 border-b border-line px-3 py-2">
-            <span class="text-12 text-fg-2">{{ t('flows.test_source') }}</span>
-            <div class="text-12 inline-flex rounded-md bg-sunken p-0.5 font-semibold" role="radiogroup" :aria-label="t('flows.test_source')">
+            <span class="text-xs text-fg-2">{{ t('flows.test_source') }}</span>
+            <div class="inline-flex rounded-md bg-sunken p-0.5 text-xs font-semibold" role="radiogroup" :aria-label="t('flows.test_source')">
                 <button
                     v-for="option in ['draft', 'published'] as const"
                     :key="option"
@@ -205,7 +205,7 @@ defineExpose({ reset });
             </div>
             <button
                 type="button"
-                class="text-12 ms-auto inline-flex h-7 items-center gap-1 rounded-md border border-line-strong bg-card px-2 font-medium hover:bg-sunken"
+                class="ms-auto inline-flex h-7 items-center gap-1 rounded-md border border-line-strong bg-card px-2 text-xs font-medium hover:bg-sunken"
                 @click="reset"
             >
                 <RotateCcw class="size-3.5" aria-hidden="true" />{{ t('flows.test_reset') }}
@@ -215,14 +215,14 @@ defineExpose({ reset });
         <p
             v-if="dirty && source === 'draft'"
             role="status"
-            class="text-12 flex items-center gap-1.5 border-b border-warn/20 bg-warn-soft px-3 py-1.5 font-medium text-warn"
+            class="flex items-center gap-1.5 border-b border-warn/20 bg-warn-soft px-3 py-1.5 text-xs font-medium text-warn"
         >
             <TriangleAlert class="size-3.5 shrink-0" aria-hidden="true" />{{ t('flows.test_unsaved') }}
         </p>
 
         <!-- Conversation -->
         <div ref="scroller" class="scrollbar-thin min-h-0 flex-1 space-y-2 overflow-y-auto bg-muted/30 px-3 py-3" aria-live="polite">
-            <p class="text-12 mx-auto flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 text-center text-fg-2">
+            <p class="mx-auto flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 text-center text-xs text-fg-2">
                 <FlaskConical class="size-3" aria-hidden="true" />{{ t('flows.test_intro') }}
             </p>
 
@@ -250,7 +250,7 @@ defineExpose({ reset });
                 <!-- Engine events: centred pills -->
                 <div v-else-if="item.kind === 'event'" class="flex justify-center py-0.5">
                     <span
-                        class="text-12 inline-flex max-w-[92%] items-center gap-1.5 rounded-full px-3 py-1 text-center font-medium"
+                        class="inline-flex max-w-[92%] items-center gap-1.5 rounded-full px-3 py-1 text-center text-xs font-medium"
                         :class="eventTone(item.event.type)"
                     >
                         <component :is="eventIcon(item.event.type)" class="size-3.5 shrink-0" aria-hidden="true" />
@@ -260,7 +260,7 @@ defineExpose({ reset });
 
                 <div v-else-if="item.kind === 'error'" class="flex justify-center py-0.5" role="alert">
                     <span
-                        class="text-12 inline-flex max-w-[92%] items-center gap-1.5 rounded-full bg-danger-soft px-3 py-1 text-center font-medium text-danger"
+                        class="inline-flex max-w-[92%] items-center gap-1.5 rounded-full bg-danger-soft px-3 py-1 text-center text-xs font-medium text-danger"
                     >
                         <CircleAlert class="size-3.5 shrink-0" aria-hidden="true" />{{ item.text }}
                     </span>
@@ -268,7 +268,7 @@ defineExpose({ reset });
 
                 <div v-else class="flex justify-center py-1">
                     <span
-                        class="text-12 inline-flex items-center gap-1.5 rounded-full border border-dashed border-line bg-card px-3 py-1 font-medium text-fg-2"
+                        class="inline-flex items-center gap-1.5 rounded-full border border-dashed border-line bg-card px-3 py-1 text-xs font-medium text-fg-2"
                     >
                         <Flag class="size-3.5 shrink-0" aria-hidden="true" />{{ t('flows.test_ended') }}
                     </span>

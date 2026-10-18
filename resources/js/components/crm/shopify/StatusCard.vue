@@ -29,8 +29,8 @@ const now = useNow();
 
 const statusTone = { connected: 'ok', error: 'danger', disconnected: 'neutral' } as const;
 
-/** Orders arrive all day: three quiet hours (or nothing ever) is worth a look. */
-const LATE_AFTER_MS = 3 * 60 * 60 * 1000;
+/** A full quiet day (or nothing ever) is worth a look; a quiet night is normal. */
+const LATE_AFTER_MS = 24 * 60 * 60 * 1000;
 const late = computed(() => !props.lastWebhookAt || now.value - new Date(props.lastWebhookAt).getTime() > LATE_AFTER_MS);
 const topics = computed(() => props.webhooks.map((w) => w.topic).join(' · '));
 </script>
@@ -90,7 +90,15 @@ const topics = computed(() => props.webhooks.map((w) => w.topic).join(' · '));
                     <template v-else>{{ t('settings.shopify.webhooks.empty') }}</template>
                 </p>
             </template>
-            <Button variant="secondary" size="sm" class="max-sm:h-10" type="button" :loading="reregistering" @click="emit('reregister')">
+            <Button
+                v-if="integration.status === 'connected'"
+                variant="secondary"
+                size="sm"
+                class="max-sm:h-10"
+                type="button"
+                :loading="reregistering"
+                @click="emit('reregister')"
+            >
                 <RefreshCw aria-hidden="true" />
                 {{ t('settings.shopify.webhooks.reregister') }}
             </Button>

@@ -52,7 +52,7 @@ const title = computed(() => t('settings_hub.items.order_confirmations'));
 const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
 const num = 'h-10 w-28 tabular-nums';
 const text = 'h-10 w-full sm:w-60';
-const error = 'mt-1 text-12 text-danger';
+const error = 'mt-1 text-xs text-danger';
 </script>
 
 <template>

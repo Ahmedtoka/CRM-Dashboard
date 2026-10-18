@@ -156,15 +156,15 @@ const label = 'mb-1 block text-xs font-medium text-fg-2';
             </span>
             <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-semibold">{{ typeLabel(step.type) }}</p>
-                <p class="text-12 truncate text-fg-2" dir="ltr">{{ stepId }}</p>
+                <p class="truncate text-xs text-fg-2" dir="ltr">{{ stepId }}</p>
             </div>
-            <span v-if="isStart" class="text-12 inline-flex items-center gap-1 rounded-full bg-ok px-2 py-0.5 font-semibold text-white">
+            <span v-if="isStart" class="inline-flex items-center gap-1 rounded-full bg-ok px-2 py-0.5 text-xs font-semibold text-white">
                 <Flag class="size-3" aria-hidden="true" />{{ t('flows.start') }}
             </span>
             <button
                 v-else
                 type="button"
-                class="text-12 inline-flex h-7 items-center gap-1 rounded-full border border-line-strong px-2.5 font-medium hover:border-ok hover:text-ok"
+                class="inline-flex h-7 items-center gap-1 rounded-full border border-line-strong px-2.5 text-xs font-medium hover:border-ok hover:text-ok"
                 @click="makeStart"
             >
                 <Flag class="size-3" aria-hidden="true" />{{ t('flows.make_start') }}
@@ -198,7 +198,7 @@ const label = 'mb-1 block text-xs font-medium text-fg-2';
                     {{ t('flows.apply') }}
                 </button>
             </div>
-            <p v-if="renameError" class="text-12 mt-1 text-danger">{{ renameError }}</p>
+            <p v-if="renameError" class="mt-1 text-xs text-danger">{{ renameError }}</p>
         </div>
 
         <div>
@@ -218,9 +218,9 @@ const label = 'mb-1 block text-xs font-medium text-fg-2';
                 class="w-full rounded-md border border-line-strong bg-background px-3 py-2 text-sm leading-6"
                 @input="setText('text', ($event.target as HTMLTextAreaElement).value)"
             />
-            <p v-if="step.type === 'record_case'" class="text-12 mt-1 text-fg-2">{{ t('flows.record_case_text_hint') }}</p>
-            <p v-if="step.type === 'script'" class="text-12 mt-1 text-fg-2">{{ t('flows.script_text_hint') }}</p>
-            <details class="text-12 mt-1.5 rounded-md bg-muted/60 px-2.5 py-1.5 text-fg-2">
+            <p v-if="step.type === 'record_case'" class="mt-1 text-xs text-fg-2">{{ t('flows.record_case_text_hint') }}</p>
+            <p v-if="step.type === 'script'" class="mt-1 text-xs text-fg-2">{{ t('flows.script_text_hint') }}</p>
+            <details class="mt-1.5 rounded-md bg-muted/60 px-2.5 py-1.5 text-xs text-fg-2">
                 <summary class="cursor-pointer select-none font-medium">{{ t('flows.placeholders_title') }}</summary>
                 <ul class="mt-1 space-y-0.5">
                     <li v-for="p in PLACEHOLDERS" :key="p" class="flex flex-wrap gap-x-1.5">
@@ -254,7 +254,7 @@ const label = 'mb-1 block text-xs font-medium text-fg-2';
             />
             <span class="grid gap-0.5">
                 <span class="text-xs font-semibold">{{ t(`flows.${flag}`) }}</span>
-                <span class="text-12 text-fg-2">{{ t(`flows.${flag}_hint`) }}</span>
+                <span class="text-xs text-fg-2">{{ t(`flows.${flag}_hint`) }}</span>
             </span>
         </label>
 
@@ -267,7 +267,7 @@ const label = 'mb-1 block text-xs font-medium text-fg-2';
             />
             <span class="grid gap-0.5">
                 <span class="text-xs font-semibold">{{ t('flows.verify_owner') }}</span>
-                <span class="text-12 text-fg-2">{{ t('flows.verify_owner_hint') }}</span>
+                <span class="text-xs text-fg-2">{{ t('flows.verify_owner_hint') }}</span>
             </span>
         </label>
 
@@ -284,7 +284,7 @@ const label = 'mb-1 block text-xs font-medium text-fg-2';
             <datalist id="flow-step-fields">
                 <option v-for="f in knownFields" :key="f" :value="f" />
             </datalist>
-            <p class="text-12 mt-1 text-fg-2">{{ t('flows.field_hint') }}</p>
+            <p class="mt-1 text-xs text-fg-2">{{ t('flows.field_hint') }}</p>
         </div>
 
         <div v-if="hasField('case_type')">
@@ -352,7 +352,7 @@ const label = 'mb-1 block text-xs font-medium text-fg-2';
             >
                 <Trash2 class="size-4" aria-hidden="true" />{{ t('flows.delete_step') }}
             </button>
-            <p v-if="isStart" class="text-12 mt-1 text-center text-fg-2">{{ t('flows.start_cannot_delete') }}</p>
+            <p v-if="isStart" class="mt-1 text-center text-xs text-fg-2">{{ t('flows.start_cannot_delete') }}</p>
         </div>
     </div>
 </template>

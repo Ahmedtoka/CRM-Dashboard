@@ -73,11 +73,11 @@ const stamp = (row: FlowVersionRow): string => formatDateTime(row.published_at ?
 <template>
     <div class="space-y-3 p-3">
         <div class="flex items-start gap-2">
-            <p class="text-12 flex-1 leading-relaxed text-fg-2">{{ t('flows.versions_hint') }}</p>
+            <p class="flex-1 text-xs leading-relaxed text-fg-2">{{ t('flows.versions_hint') }}</p>
             <button
                 v-if="canPublish"
                 type="button"
-                class="text-12 inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-brand px-2.5 font-semibold text-brand-on hover:bg-brand-hover"
+                class="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-brand px-2.5 text-xs font-semibold text-brand-on hover:bg-brand-hover"
                 @click="emit('publish')"
             >
                 <Send class="size-3.5" aria-hidden="true" />{{ t('flows.publish') }}
@@ -95,18 +95,18 @@ const stamp = (row: FlowVersionRow): string => formatDateTime(row.published_at ?
             >
                 <div class="flex items-center gap-2">
                     <span class="text-sm font-bold tabular-nums">{{ t('flows.version', { n: row.version }) }}</span>
-                    <span class="text-12 rounded-full px-2 py-0.5 font-semibold" :class="badge(row.status).tone">{{ badgeLabel(row.status) }}</span>
+                    <span class="rounded-full px-2 py-0.5 text-xs font-semibold" :class="badge(row.status).tone">{{ badgeLabel(row.status) }}</span>
                     <button
                         v-if="row.status === 'archived'"
                         type="button"
-                        class="text-12 ms-auto inline-flex h-7 items-center gap-1 rounded-md border border-line-strong bg-card px-2 font-medium hover:bg-sunken"
+                        class="ms-auto inline-flex h-7 items-center gap-1 rounded-md border border-line-strong bg-card px-2 text-xs font-medium hover:bg-sunken"
                         @click="askRestore(row)"
                     >
                         <ArchiveRestore class="size-3.5" aria-hidden="true" />{{ t('flows.restore') }}
                     </button>
                 </div>
                 <p v-if="row.note" dir="auto" class="mt-1.5 whitespace-pre-line break-words text-xs text-foreground/90">{{ row.note }}</p>
-                <div class="text-12 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-fg-2">
+                <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-2">
                     <span class="inline-flex items-center gap-1">
                         <UserRound class="size-3" aria-hidden="true" />{{ row.created_by ?? t('flows.version_unknown_author') }}
                     </span>

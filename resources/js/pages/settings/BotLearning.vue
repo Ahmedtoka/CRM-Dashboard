@@ -309,13 +309,13 @@ const panel = 'rounded-lg border border-line bg-card';
                         @click="select(row.id)"
                     >
                         <span class="flex-1 tabular-nums">{{ formatDate(row.report_date, locale) }}</span>
-                        <span
-                            v-if="row.pending_count"
-                            class="text-on-brand rounded-full bg-brand px-1.5 text-2xs font-bold tabular-nums"
-                            :aria-label="t('settings.bot_learning.status.pending')"
-                            >{{ formatCount(row.pending_count, locale) }}</span
+                        <span v-if="row.pending_count" class="rounded-full bg-brand px-1.5 text-2xs font-bold tabular-nums text-brand-on"
+                            >{{ formatCount(row.pending_count, locale)
+                            }}<span class="sr-only"> {{ t('settings.bot_learning.status.pending') }}</span></span
                         >
-                        <span v-if="row.stats?.demo" class="sr-only">{{ t('settings.bot_learning.demo') }}</span>
+                        <span v-if="row.stats?.demo" class="rounded-full bg-sunken px-1.5 text-2xs font-semibold text-fg-2">{{
+                            t('settings.bot_learning.demo')
+                        }}</span>
                     </button>
                 </nav>
 

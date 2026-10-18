@@ -106,7 +106,12 @@ async function remove(): Promise<void> {
                 <StatusChip v-if="entry.is_template" tone="warn" size="sm" :label="t('settings.bot_knowledge.template')" />
             </div>
             <div class="flex shrink-0 items-center gap-0.5">
-                <ToggleSwitch :model-value="localActive" :label="t('settings.bot_knowledge.active')" @update:model-value="toggleActive" />
+                <ToggleSwitch
+                    :model-value="localActive"
+                    :label="t('settings.bot_knowledge.active')"
+                    :disabled="busy"
+                    @update:model-value="toggleActive"
+                />
                 <template v-if="!editing">
                     <IconAction :icon="Pencil" :label="t('ui.edit')" @click="edit" />
                     <IconAction v-if="deletable" :icon="Trash2" variant="destructive" :label="t('ui.delete')" @click="remove" />
@@ -138,7 +143,7 @@ async function remove(): Promise<void> {
         </div>
         <div v-else class="space-y-2 px-4 pb-4">
             <p class="line-clamp-4 text-[13.5px] leading-[1.75] text-fg-2" dir="auto">{{ entry.body }}</p>
-            <p v-if="!deletable" class="text-12 text-fg-3">{{ t('settings.bot_knowledge.core_locked') }}</p>
+            <p v-if="!deletable" class="text-xs text-fg-3">{{ t('settings.bot_knowledge.core_locked') }}</p>
         </div>
     </section>
 </template>

@@ -69,7 +69,8 @@ const needsCredentials = computed(
 );
 // The Partners app panel: always once a store is connected (it says where the store stands with the app), and before
 // that only when the app is configured on the server (then installing it is the way to connect).
-const showAppCard = computed(() => props.app !== undefined && (integration.value !== null || props.app.configured));
+// Same as before the redesign: the app panel is for a store on the app, or once the app is set up.
+const showAppCard = computed(() => integration.value !== null && (integration.value.auth_mode === 'app' || props.app?.configured === true));
 
 async function refreshStatus(): Promise<void> {
     const { data } = await api.get<ShopifyStatusResponse>('/settings/shopify/status', { silent: true });

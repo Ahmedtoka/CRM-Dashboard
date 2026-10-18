@@ -749,6 +749,16 @@ const input = 'h-9 w-full rounded-md border border-line-strong bg-card px-3 text
 const chains = reactive<Record<number, { steps: string[]; more: number } | null | false>>({});
 const CHAIN_MAX = 6;
 
+/** A step's type in the reader's language, the same way the editor's node names it (StepNode). */
+function stepLabel(type: string): string {
+    const ar = props.stepTypes[type]?.label_ar;
+    if (locale.value === 'ar' && ar) return ar;
+    const key = `flows.types.${type}`;
+    const text = t(key);
+
+    return text === key ? (ar ?? type) : text;
+}
+
 /** Walks start → next (a choice's first jump, a branch's first target) and names each step by its type. */
 function chainOf(definition: FlowDefinition): { steps: string[]; more: number } {
     const seen = new Set<string>();
@@ -757,20 +767,31 @@ function chainOf(definition: FlowDefinition): { steps: string[]; more: number } 
     while (id && definition.steps[id] && !seen.has(id)) {
         seen.add(id);
         const step: FlowStep = definition.steps[id];
-        steps.push(props.stepTypes[step.type]?.label_ar ?? step.type);
+        steps.push(stepLabel(step.type));
         id = step.next ?? step.options?.find((o) => o.next)?.next ?? step.branches?.[0]?.next;
     }
 
     return { steps: steps.slice(0, CHAIN_MAX), more: Math.max(0, steps.length - CHAIN_MAX) };
 }
 
-function loadChains(): void {
-    for (const row of flowRows.value) {
-        chains[row.id] = null;
-        api.get<{ data: FlowShowPayload }>(`/bot/flows/${row.id}`)
-            .then(({ data }) => (chains[row.id] = chainOf(data.data.draft ?? data.data.published)))
-            .catch(() => (chains[row.id] = false));
-    }
+/** Three at a time: each GET validates the draft and loads the versions, so a long list must not hit the server at once. */
+const CHAIN_CONCURRENCY = 3;
+
+async function loadChains(): Promise<void> {
+    const queue = [...flowRows.value];
+    for (const row of queue) chains[row.id] = null;
+    const worker = async (): Promise<void> => {
+        for (let row = queue.shift(); row; row = queue.shift()) {
+            try {
+                const { data } = await api.get<{ data: FlowShowPayload }>(`/bot/flows/${row.id}`);
+                // The live path first: an unpublished draft is not what customers see yet.
+                chains[row.id] = chainOf(data.data.published ?? data.data.draft);
+            } catch {
+                chains[row.id] = false;
+            }
+        }
+    };
+    await Promise.all(Array.from({ length: CHAIN_CONCURRENCY }, worker));
 }
 </script>
 
@@ -802,7 +823,7 @@ function loadChains(): void {
                         <StatusChip v-if="row.has_draft" :label="t('flows.has_draft')" tone="warn" size="sm" />
                         <StatusChip v-if="row.in_main_menu" :label="t('flows.in_main_menu')" tone="outline" size="sm" />
                         <span class="ms-auto flex items-center gap-2">
-                            <span v-if="row.published_version" class="text-12 tabular-nums text-fg-3">{{
+                            <span v-if="row.published_version" class="text-xs tabular-nums text-fg-3">{{
                                 t('flows.version', { n: formatCount(row.published_version, locale) })
                             }}</span>
                             <Link
@@ -818,24 +839,25 @@ function loadChains(): void {
                     <div v-if="chains[row.id] === null" class="flex gap-1.5" aria-hidden="true">
                         <Skeleton v-for="i in 4" :key="i" class="h-[26px] w-16 rounded-sm" />
                     </div>
+                    <p v-else-if="chains[row.id] === false" class="text-13 text-fg-2">{{ t('flows.chain_failed') }}</p>
                     <ol v-else-if="chains[row.id]" class="flex flex-wrap items-center gap-1.5" :aria-label="t('flows.chain')">
-                        <li class="text-12 inline-flex h-[26px] items-center gap-1 rounded-sm bg-brand-soft px-2 font-semibold text-brand-ink">
+                        <li class="inline-flex h-[26px] items-center gap-1 rounded-sm bg-brand-soft px-2 text-xs font-semibold text-brand-ink">
                             <Play class="size-3.5" aria-hidden="true" />{{ t('flows.start') }}
                         </li>
                         <template v-for="(label, i) in (chains[row.id] || { steps: [] }).steps" :key="i">
                             <ChevronRight class="rtl-flip size-3.5 text-fg-3" aria-hidden="true" />
-                            <li class="text-12 inline-flex h-[26px] items-center rounded-sm bg-sunken px-2 font-semibold text-fg-2" dir="auto">
+                            <li class="inline-flex h-[26px] items-center rounded-sm bg-sunken px-2 text-xs font-semibold text-fg-2" dir="auto">
                                 {{ label }}
                             </li>
                         </template>
                         <template v-if="(chains[row.id] || { more: 0 }).more">
                             <ChevronRight class="rtl-flip size-3.5 text-fg-3" aria-hidden="true" />
-                            <li class="text-12 inline-flex h-[26px] items-center rounded-sm bg-sunken px-2 font-semibold tabular-nums text-fg-3">
+                            <li class="inline-flex h-[26px] items-center rounded-sm bg-sunken px-2 text-xs font-semibold tabular-nums text-fg-3">
                                 {{ t('flows.chain_more', { n: formatCount((chains[row.id] || { more: 0 }).more, locale) }) }}
                             </li>
                         </template>
                         <ChevronRight class="rtl-flip size-3.5 text-fg-3" aria-hidden="true" />
-                        <li class="text-12 inline-flex h-[26px] items-center gap-1 rounded-sm bg-ok-soft px-2 font-semibold text-ok">
+                        <li class="inline-flex h-[26px] items-center gap-1 rounded-sm bg-ok-soft px-2 text-xs font-semibold text-ok">
                             <Check class="size-3.5" aria-hidden="true" />{{ t('flows.chain_end') }}
                         </li>
                     </ol>
@@ -1088,7 +1110,7 @@ function loadChains(): void {
             <label class="block">
                 <span class="mb-1 block text-xs font-medium">{{ t('flows.key') }}</span>
                 <input v-model="createForm.key" :class="input" required dir="ltr" pattern="[a-z][a-z0-9_]{2,40}" maxlength="41" />
-                <span class="text-12 mt-1 block text-fg-2">{{ t('flows.key_hint') }}</span>
+                <span class="mt-1 block text-xs text-fg-2">{{ t('flows.key_hint') }}</span>
             </label>
             <label class="block">
                 <span class="mb-1 block text-xs font-medium">{{ t('flows.copy_from') }}</span>

@@ -37,7 +37,7 @@ function chipTooltip(chip: { full: string; truncated: boolean; hidden: string | 
 
 <template>
     <section class="overflow-hidden rounded-xl border border-line" :aria-label="t('flows.preview.title')">
-        <h3 class="text-12 flex items-center gap-1.5 border-b border-line bg-muted/50 px-3 py-1.5 font-semibold text-fg-2">
+        <h3 class="flex items-center gap-1.5 border-b border-line bg-muted/50 px-3 py-1.5 text-xs font-semibold text-fg-2">
             <Eye class="size-3.5" aria-hidden="true" />{{ t('flows.preview.title') }}
         </h3>
 
@@ -73,26 +73,26 @@ function chipTooltip(chip: { full: string; truncated: boolean; hidden: string | 
                 <MessengerBubble>
                     <MessageCards :cards="model.cards" variant="messenger" class="max-w-full" />
                 </MessengerBubble>
-                <p class="text-12 text-center text-fg-2">{{ t('flows.preview.cards_hint') }}</p>
+                <p class="text-center text-xs text-fg-2">{{ t('flows.preview.cards_hint') }}</p>
             </template>
 
-            <p v-if="model.scriptMissing" class="text-12 flex items-start gap-1.5 rounded-md bg-warn-soft px-2.5 py-1.5 text-warn">
+            <p v-if="model.scriptMissing" class="flex items-start gap-1.5 rounded-md bg-warn-soft px-2.5 py-1.5 text-xs text-warn">
                 <TriangleAlert class="mt-px size-3.5 shrink-0" aria-hidden="true" />{{ t('flows.preview.script_missing') }}
             </p>
 
-            <p v-if="overLimit" class="text-12 text-warn">
+            <p v-if="overLimit" class="text-xs text-warn">
                 {{ t('flows.preview.over_limit_count', { n: overLimit, max: MAX_QUICK_REPLIES }) }}
             </p>
 
             <MessengerBubble v-if="model.expects" side="customer" dashed :text="t(`flows.preview.expects_${model.expects}`)" />
 
             <div v-if="model.note" class="flex justify-center py-0.5">
-                <span class="text-12 inline-flex max-w-[92%] items-center gap-1.5 rounded-full bg-sunken px-3 py-1 text-center font-medium text-fg-2">
+                <span class="inline-flex max-w-[92%] items-center gap-1.5 rounded-full bg-sunken px-3 py-1 text-center text-xs font-medium text-fg-2">
                     <component :is="NOTE_ICONS[model.note]" class="size-3.5 shrink-0" aria-hidden="true" />{{ t(`flows.preview.note_${model.note}`) }}
                 </span>
             </div>
 
-            <p v-if="!model.text && !model.chips.length && !model.note && !model.scriptMissing" class="text-12 text-center italic text-fg-2">
+            <p v-if="!model.text && !model.chips.length && !model.note && !model.scriptMissing" class="text-center text-xs italic text-fg-2">
                 {{ t('flows.preview.empty') }}
             </p>
         </div>

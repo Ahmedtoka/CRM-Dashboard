@@ -119,7 +119,7 @@ async function removeImage(): Promise<void> {
                         :alt="t('settings.bot_knowledge.image')"
                         class="max-h-64 max-w-full rounded-md border border-line object-contain"
                     />
-                    <p class="text-12 text-fg-3">{{ t('settings.bot_knowledge.image_hint') }}</p>
+                    <p class="text-xs text-fg-3">{{ t('settings.bot_knowledge.image_hint') }}</p>
                     <p v-if="imageError" role="alert" class="text-13 text-danger">{{ imageError }}</p>
                     <div class="flex flex-wrap gap-2">
                         <Button type="button" variant="outline" size="sm" :disabled="imageBusy" @click="imageInput?.click()">

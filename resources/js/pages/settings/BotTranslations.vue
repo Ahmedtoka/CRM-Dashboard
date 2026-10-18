@@ -160,7 +160,7 @@ function clearFilters(): void {
             >
                 <template #cell-source="{ row: { r: row } }">
                     <span class="max-w-xs whitespace-pre-wrap" dir="auto">{{ row.source }}</span>
-                    <span v-if="row.short" class="text-12 ms-1 text-fg-3">({{ t('settings.bot_translations.button') }})</span>
+                    <span v-if="row.short" class="ms-1 text-xs text-fg-3">({{ t('settings.bot_translations.button') }})</span>
                 </template>
                 <template #cell-text="{ row: { r: row } }">
                     <div v-if="editing === row.source" class="flex max-w-xs items-start gap-1">

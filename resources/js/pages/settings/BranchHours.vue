@@ -83,7 +83,7 @@ const input =
                 </template>
                 <template #cell-name="{ row }">
                     <span class="block font-semibold" dir="auto">{{ row.name }}</span>
-                    <span class="text-12 block text-fg-3" dir="auto">{{ area(row) }}</span>
+                    <span class="block text-xs text-fg-3" dir="auto">{{ area(row) }}</span>
                 </template>
                 <template #cell-hours="{ row }">
                     <span v-if="row.hours" class="whitespace-pre-line" dir="auto">{{ row.hours }}</span>
@@ -132,7 +132,7 @@ const input =
                     :placeholder="t('settings.branch_hours.hours_placeholder')"
                     class="w-full rounded-md border border-line-strong bg-card px-3 py-2 text-sm focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
                 />
-                <span class="text-12 flex justify-between gap-2 text-fg-2">
+                <span class="flex justify-between gap-2 text-xs text-fg-2">
                     <span>{{ t('settings.branch_hours.hours_hint') }}</span>
                     <span class="shrink-0 tabular-nums" aria-live="polite">{{
                         t('settings.branch_hours.hours_count', { n: form.hours.length, max: HOURS_MAX })

@@ -197,7 +197,7 @@ async function save(entryId: number | null, original: string, source?: string): 
             <section v-for="section in visible" :key="section.key" class="rounded-lg border border-line bg-card">
                 <h2 class="flex items-center gap-2 border-b border-line px-4 pb-2.5 pt-3.5 text-base font-bold text-foreground">
                     {{ t(`settings.bot_replies.sections.${section.key}`) }}
-                    <span class="text-12 ms-auto font-normal tabular-nums text-fg-3">{{ formatCount(section.rows.length, locale) }}</span>
+                    <span class="ms-auto text-xs font-normal tabular-nums text-fg-3">{{ formatCount(section.rows.length, locale) }}</span>
                 </h2>
 
                 <div
@@ -225,7 +225,7 @@ async function save(entryId: number | null, original: string, source?: string): 
                         <Link
                             v-else-if="row.edit_url"
                             :href="row.edit_url"
-                            class="text-12 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-line-strong bg-card px-2.5 font-semibold text-foreground hover:bg-surface-2"
+                            class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-line-strong bg-card px-2.5 text-xs font-semibold text-foreground hover:bg-surface-2"
                         >
                             <ExternalLink class="size-3.5" aria-hidden="true" />{{ t('settings.bot_replies.open_editor') }}
                         </Link>
@@ -240,7 +240,7 @@ async function save(entryId: number | null, original: string, source?: string): 
                             :aria-label="t('settings.bot_replies.reply')"
                             class="w-full rounded-md border border-line-strong bg-card px-3 py-2 text-sm focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
                         />
-                        <p v-if="row.source === 'text' && row.key.includes('⟦')" class="text-12 text-fg-3">
+                        <p v-if="row.source === 'text' && row.key.includes('⟦')" class="text-xs text-fg-3">
                             {{ t('settings.bot_replies.values_hint') }}
                         </p>
                         <p v-if="error" role="alert" class="text-13 text-danger">{{ error }}</p>
@@ -260,12 +260,12 @@ async function save(entryId: number | null, original: string, source?: string): 
                     </template>
                     <template v-else>
                         <p class="whitespace-pre-line break-words text-[13.5px] leading-[1.75] text-foreground" dir="auto">{{ row.reply }}</p>
-                        <p v-if="row.original" class="text-12 text-fg-3" dir="auto">{{ t('settings.bot_replies.original') }}: {{ row.original }}</p>
+                        <p v-if="row.original" class="text-xs text-fg-3" dir="auto">{{ t('settings.bot_replies.original') }}: {{ row.original }}</p>
                         <p v-if="row.buttons.length" class="flex flex-wrap gap-1" :aria-label="t('settings.bot_replies.buttons')">
                             <span
                                 v-for="(b, i) in row.buttons"
                                 :key="i"
-                                class="text-12 rounded-full border border-line-strong px-2 py-0.5 text-fg-2"
+                                class="rounded-full border border-line-strong px-2 py-0.5 text-xs text-fg-2"
                                 dir="auto"
                                 >{{ b }}</span
                             >

@@ -86,7 +86,7 @@ const updatePassword = () => {
                             autocomplete="new-password"
                             aria-describedby="password-help"
                         />
-                        <p id="password-help" class="text-12 text-fg-2">{{ t('nav.settings_layout.password_help') }}</p>
+                        <p id="password-help" class="text-xs text-fg-2">{{ t('nav.settings_layout.password_help') }}</p>
                         <InputError :message="form.errors.password" />
                     </div>
 

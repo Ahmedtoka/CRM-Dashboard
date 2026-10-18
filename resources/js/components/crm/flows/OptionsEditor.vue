@@ -179,7 +179,7 @@ const input = 'h-8 w-full rounded-md border border-line-strong bg-background px-
                     >
                         <GripVertical class="size-4" aria-hidden="true" />
                     </span>
-                    <span class="text-12 font-semibold text-fg-2">{{ t('flows.option_n', { n: index + 1 }) }}</span>
+                    <span class="text-xs font-semibold text-fg-2">{{ t('flows.option_n', { n: index + 1 }) }}</span>
                     <button
                         type="button"
                         class="ms-auto rounded p-1 text-fg-2 hover:bg-danger-soft hover:text-danger"
@@ -193,7 +193,7 @@ const input = 'h-8 w-full rounded-md border border-line-strong bg-background px-
 
                 <div class="mt-1.5 grid gap-2">
                     <label class="block">
-                        <span class="text-12 mb-0.5 flex items-center justify-between text-fg-2">
+                        <span class="mb-0.5 flex items-center justify-between text-xs text-fg-2">
                             {{ t('flows.option_title') }}
                             <span class="tabular-nums" :class="(option.title?.length ?? 0) > MAX_TITLE ? 'text-danger' : ''" dir="ltr">
                                 {{ option.title?.length ?? 0 }}/{{ MAX_TITLE }}
@@ -209,7 +209,7 @@ const input = 'h-8 w-full rounded-md border border-line-strong bg-background px-
                     </label>
 
                     <label v-if="kind === 'choice'" class="block">
-                        <span class="text-12 mb-0.5 block text-fg-2">{{ t('flows.option_value') }}</span>
+                        <span class="mb-0.5 block text-xs text-fg-2">{{ t('flows.option_value') }}</span>
                         <input
                             :value="option.value ?? ''"
                             :class="[input, valueProblem(index) ? 'border-danger' : '']"
@@ -217,12 +217,12 @@ const input = 'h-8 w-full rounded-md border border-line-strong bg-background px-
                             :aria-invalid="valueProblem(index) ? 'true' : undefined"
                             @input="update(index, { value: ($event.target as HTMLInputElement).value })"
                         />
-                        <span v-if="valueProblem(index)" class="text-12 mt-0.5 block text-danger">{{ valueProblem(index) }}</span>
+                        <span v-if="valueProblem(index)" class="mt-0.5 block text-xs text-danger">{{ valueProblem(index) }}</span>
                     </label>
 
                     <div v-else class="grid grid-cols-2 gap-2">
                         <label class="block">
-                            <span class="text-12 mb-0.5 block text-fg-2">{{ t('flows.option_action') }}</span>
+                            <span class="mb-0.5 block text-xs text-fg-2">{{ t('flows.option_action') }}</span>
                             <select
                                 :value="actionKind(option)"
                                 :class="input"
@@ -233,7 +233,7 @@ const input = 'h-8 w-full rounded-md border border-line-strong bg-background px-
                             </select>
                         </label>
                         <label v-if="actionKind(option) && actionKind(option) !== 'handover'" class="block">
-                            <span class="text-12 mb-0.5 block text-fg-2">{{ t('flows.option_target') }}</span>
+                            <span class="mb-0.5 block text-xs text-fg-2">{{ t('flows.option_target') }}</span>
                             <select
                                 :value="actionKey(option)"
                                 :class="input"
@@ -254,7 +254,7 @@ const input = 'h-8 w-full rounded-md border border-line-strong bg-background px-
                     </div>
 
                     <label v-if="kind === 'choice'" class="block">
-                        <span class="text-12 mb-0.5 block text-fg-2">{{ t('flows.option_go') }}</span>
+                        <span class="mb-0.5 block text-xs text-fg-2">{{ t('flows.option_go') }}</span>
                         <select :value="choiceGo(option)" :class="input" @change="setChoiceGo(index, ($event.target as HTMLSelectElement).value)">
                             <option value="step">{{ t('flows.option_go_step') }}</option>
                             <option v-for="k in CHOICE_ACTION_KINDS" :key="k" :value="k">{{ t(`flows.action_${k}`) }}</option>
@@ -262,7 +262,7 @@ const input = 'h-8 w-full rounded-md border border-line-strong bg-background px-
                     </label>
 
                     <label v-if="kind === 'choice' && (choiceGo(option) === 'flow' || choiceGo(option) === 'menu')" class="block">
-                        <span class="text-12 mb-0.5 block text-fg-2">{{ t('flows.option_target') }}</span>
+                        <span class="mb-0.5 block text-xs text-fg-2">{{ t('flows.option_target') }}</span>
                         <select :value="actionKey(option)" :class="input" @change="setActionKey(index, ($event.target as HTMLSelectElement).value)">
                             <option value="">{{ t('flows.action_none') }}</option>
                             <option v-if="actionKey(option) && !targetKnown(option)" :value="actionKey(option)">{{ actionKey(option) }}</option>
@@ -273,7 +273,7 @@ const input = 'h-8 w-full rounded-md border border-line-strong bg-background px-
                     </label>
 
                     <label v-if="allowWhen" class="block">
-                        <span class="text-12 mb-0.5 block text-fg-2">{{ t('flows.option_when') }}</span>
+                        <span class="mb-0.5 block text-xs text-fg-2">{{ t('flows.option_when') }}</span>
                         <select :value="option.when ?? ''" :class="input" @change="setWhen(index, ($event.target as HTMLSelectElement).value)">
                             <option value="">{{ t('flows.option_when_always') }}</option>
                             <option v-for="w in WHEN_VALUES" :key="w" :value="w">{{ t(`flows.option_when_${w}`) }}</option>
@@ -281,7 +281,7 @@ const input = 'h-8 w-full rounded-md border border-line-strong bg-background px-
                     </label>
 
                     <label v-if="kind === 'choice' && choiceGo(option) === 'step'" class="block">
-                        <span class="text-12 mb-0.5 block text-fg-2">{{ t('flows.option_next') }}</span>
+                        <span class="mb-0.5 block text-xs text-fg-2">{{ t('flows.option_next') }}</span>
                         <select :value="option.next ?? ''" :class="input" @change="setNext(index, ($event.target as HTMLSelectElement).value)">
                             <option value="">{{ t('flows.option_next_default') }}</option>
                             <option v-for="id in stepIds" :key="id" :value="id">{{ id }}</option>
@@ -290,7 +290,7 @@ const input = 'h-8 w-full rounded-md border border-line-strong bg-background px-
                     </label>
 
                     <div>
-                        <span class="text-12 mb-0.5 block text-fg-2">{{ t('flows.synonyms') }}</span>
+                        <span class="mb-0.5 block text-xs text-fg-2">{{ t('flows.synonyms') }}</span>
                         <ChipsInput
                             :model-value="option.synonyms ?? []"
                             :label="t('flows.synonyms')"

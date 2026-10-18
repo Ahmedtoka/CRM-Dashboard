@@ -42,11 +42,11 @@ const current = computed(() => props.flows.find((row) => row.id === props.select
             <span class="min-w-0 flex-1 leading-tight">
                 <span class="flex items-center gap-1.5">
                     <span class="truncate text-sm font-bold">{{ current?.title_ar ?? t('flows.choose_flow') }}</span>
-                    <span v-if="current?.has_draft" class="text-12 shrink-0 rounded-full bg-warn-soft px-1.5 py-px font-semibold text-warn">{{
+                    <span v-if="current?.has_draft" class="shrink-0 rounded-full bg-warn-soft px-1.5 py-px text-xs font-semibold text-warn">{{
                         t('flows.has_draft')
                     }}</span>
                 </span>
-                <span v-if="current" class="text-12 block truncate text-fg-2">
+                <span v-if="current" class="block truncate text-xs text-fg-2">
                     {{ current.is_active ? t('flows.active') : t('flows.inactive') }}
                     <template v-if="current.published_version"> · {{ t('flows.version', { n: current.published_version }) }}</template>
                 </span>
@@ -55,7 +55,7 @@ const current = computed(() => props.flows.find((row) => row.id === props.select
         </DropdownMenuTrigger>
 
         <DropdownMenuContent align="start" class="w-80 p-1.5">
-            <DropdownMenuLabel class="text-12 px-2 pb-1 pt-0.5 font-medium text-fg-2">{{ t('flows.list') }}</DropdownMenuLabel>
+            <DropdownMenuLabel class="px-2 pb-1 pt-0.5 text-xs font-medium text-fg-2">{{ t('flows.list') }}</DropdownMenuLabel>
             <div class="scrollbar-thin max-h-[min(60svh,26rem)] overflow-y-auto">
                 <DropdownMenuItem
                     v-for="row in flows"
@@ -72,7 +72,7 @@ const current = computed(() => props.flows.find((row) => row.id === props.select
                     />
                     <span class="min-w-0 flex-1">
                         <span class="block truncate text-sm font-semibold" :class="row.is_active ? '' : 'text-fg-2'">{{ row.title_ar }}</span>
-                        <span class="text-12 flex items-center gap-1.5 text-fg-2">
+                        <span class="flex items-center gap-1.5 text-xs text-fg-2">
                             <span dir="ltr" class="truncate">{{ row.key }}</span>
                             <span class="sr-only">{{ row.is_active ? t('flows.active') : t('flows.inactive') }}</span>
                             <span v-if="row.has_draft" class="shrink-0 rounded-full bg-warn-soft px-1.5 font-semibold text-warn">{{

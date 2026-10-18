@@ -173,7 +173,7 @@ const iconBtn =
                             >
                                 <component :is="problem.tone === 'error' ? CircleAlert : TriangleAlert" class="mt-0.5 !size-3.5" aria-hidden="true" />
                                 <span class="min-w-0 flex-1 leading-5">{{ problem.text }}</span>
-                                <span v-if="problem.stepId" class="text-12 shrink-0 rounded bg-sunken px-1 text-fg-2" dir="ltr">{{
+                                <span v-if="problem.stepId" class="shrink-0 rounded bg-sunken px-1 text-xs text-fg-2" dir="ltr">{{
                                     problem.stepId
                                 }}</span>
                             </DropdownMenuItem>

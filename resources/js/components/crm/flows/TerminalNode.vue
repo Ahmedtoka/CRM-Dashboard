@@ -27,7 +27,7 @@ const tone: Record<TerminalNodeData['kind'], string> = {
     </div>
     <div
         v-else
-        class="text-12 h-6 max-w-[200px] truncate rounded-full border px-3 font-medium leading-[22px] shadow-sm"
+        class="h-6 max-w-[200px] truncate rounded-full border px-3 text-xs font-medium leading-[22px] shadow-sm"
         :class="tone[data.kind]"
         dir="rtl"
         :title="data.label"

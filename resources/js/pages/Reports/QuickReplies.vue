@@ -105,7 +105,7 @@ const breadcrumbs = computed(() => [{ title: t('reports.quick_replies.title'), h
                     :caption="t('reports.quick_replies.top')"
                 >
                     <template #cell-shortcut="{ value }"
-                        ><kbd class="text-12 rounded-sm border border-line bg-surface-2 px-1.5 py-0.5 font-mono" dir="ltr">{{
+                        ><kbd class="rounded-sm border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-xs" dir="ltr">{{
                             slashShortcut(String(value))
                         }}</kbd></template
                     >
@@ -175,7 +175,7 @@ const breadcrumbs = computed(() => [{ title: t('reports.quick_replies.title'), h
                     :caption="t('reports.quick_replies.unused')"
                 >
                     <template #cell-shortcut="{ value }"
-                        ><kbd class="text-12 rounded-sm border border-line bg-surface-2 px-1.5 py-0.5 font-mono" dir="ltr">{{
+                        ><kbd class="rounded-sm border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-xs" dir="ltr">{{
                             slashShortcut(String(value))
                         }}</kbd></template
                     >

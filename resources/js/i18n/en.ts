@@ -2534,6 +2534,7 @@ const en: Messages = {
         chain: 'Flow steps',
         chain_more: '+{n} steps',
         chain_end: 'Done',
+        chain_failed: 'Couldn’t load this flow’s steps right now; open it to see them.',
         choose_flow: 'Choose a flow',
         new_flow: 'New flow',
         new_flow_description: 'Start an empty flow or copy an existing one and edit it',

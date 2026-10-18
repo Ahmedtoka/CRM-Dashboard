@@ -193,7 +193,7 @@ const num = 'h-10 w-28 tabular-nums';
 const field =
     'h-10 w-full rounded-md border border-line-strong bg-card px-3 text-sm focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:cursor-not-allowed disabled:opacity-50';
 const fieldLabel = 'text-13 font-semibold text-fg-2';
-const error = 'mt-1 text-12 text-danger';
+const error = 'mt-1 text-xs text-danger';
 </script>
 
 <template>

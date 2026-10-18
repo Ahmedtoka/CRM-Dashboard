@@ -2490,6 +2490,7 @@ const ar = {
         chain: 'خطوات الفلو',
         chain_more: '+{n} خطوات',
         chain_end: 'خلص',
+        chain_failed: 'مقدرناش نجيب خطوات الفلو ده دلوقتي، افتحيه تشوفيها.',
         choose_flow: 'اختاري فلو',
         new_flow: 'فلو جديد',
         new_flow_description: 'ابدئي فلو فاضي أو انسخي فلو موجود وعدّلي عليه',

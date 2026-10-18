@@ -77,7 +77,7 @@ const scopes = ['all_visible', 'mine_and_handover'] as const;
                     :for="notifications.permission.value === 'granted' ? 'notifications-desktop' : undefined"
                 >
                     <template v-if="permissionText" #below>
-                        <p class="text-12 mt-1 text-warn">{{ permissionText }}</p>
+                        <p class="mt-1 text-xs text-warn">{{ permissionText }}</p>
                     </template>
                     <ToggleSwitch
                         v-if="notifications.permission.value === 'granted'"

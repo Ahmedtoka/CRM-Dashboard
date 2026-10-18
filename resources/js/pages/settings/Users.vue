@@ -113,7 +113,7 @@ const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
                 <template #cell-name="{ row }">
                     <span class="flex min-w-0 items-center gap-2.5">
                         <span
-                            class="text-12 grid size-8 shrink-0 place-items-center rounded-full font-bold text-white"
+                            class="grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold text-white"
                             :class="row.color ? '' : 'bg-brand'"
                             :style="row.color ? { backgroundColor: row.color } : undefined"
                             aria-hidden="true"
@@ -121,7 +121,7 @@ const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
                         >
                         <span class="min-w-0">
                             <span class="block truncate font-semibold" dir="auto">{{ row.name }}</span>
-                            <bdi class="text-12 block truncate text-fg-3" dir="ltr">{{ row.email }}</bdi>
+                            <bdi class="block truncate text-xs text-fg-3" dir="ltr">{{ row.email }}</bdi>
                         </span>
                     </span>
                 </template>

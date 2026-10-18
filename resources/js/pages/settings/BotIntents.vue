@@ -131,6 +131,10 @@ const filtered = computed(() => {
     );
 });
 
+function queueLabel(queue: string | null | undefined): string {
+    return t(`settings.bot_intents.queues.${queue === 'agents' || queue === 'senior' ? queue : 'default'}`);
+}
+
 function scriptsSummary(row: BotIntentRow): string {
     const keys = drafts[row.id]?.script_keys ?? [];
     if (!keys.length) return t('settings.bot_intents.no_scripts');
@@ -279,7 +283,7 @@ const selectClass = 'h-10 w-full rounded-md border border-line-strong bg-card px
                         >
                             {{ label(row) }}
                         </p>
-                        <p class="text-12 text-fg-3">{{ groupLabel(row.group) }}</p>
+                        <p class="text-xs text-fg-3">{{ groupLabel(row.group) }}</p>
                         <div v-if="!drafts[row.id].is_active || isDirty(row)" class="mt-1 flex flex-wrap gap-1">
                             <StatusChip v-if="!drafts[row.id].is_active" size="sm" :label="t('settings.bot_intents.inactive')" />
                             <StatusChip v-if="isDirty(row)" size="sm" tone="warn" :label="t('settings.bot_intents.unsaved')" />
@@ -293,7 +297,12 @@ const selectClass = 'h-10 w-full rounded-md border border-line-strong bg-card px
                             :tone="handsOver(drafts[row.id].route) ? 'warn' : 'brand'"
                             :label="t(`settings.bot_intents.routes.${drafts[row.id].route}`)"
                         />
-                        <span v-if="drafts[row.id].flow_key" class="text-12 text-fg-2" dir="auto">{{ flowTitle(drafts[row.id].flow_key) }}</span>
+                        <span v-if="drafts[row.id].flow_key" class="text-xs text-fg-2" dir="auto">{{ flowTitle(drafts[row.id].flow_key) }}</span>
+                        <!-- Priority, queue and scripts stay visible in the list, as before the redesign. -->
+                        <span class="text-xs text-fg-2">
+                            {{ t(`settings.bot_intents.priorities.${drafts[row.id].priority}`) }} · {{ queueLabel(drafts[row.id].queue) }}
+                        </span>
+                        <span v-if="drafts[row.id].script_keys?.length" class="text-xs text-fg-2" dir="auto">{{ scriptsSummary(row) }}</span>
                     </div>
                 </template>
                 <template #cell-examples="{ row }">
@@ -374,7 +383,7 @@ const selectClass = 'h-10 w-full rounded-md border border-line-strong bg-card px
                                     <ChevronDown class="size-4 shrink-0 text-fg-3" aria-hidden="true" />
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="start" class="max-h-80 w-64 overflow-y-auto">
-                                    <DropdownMenuLabel class="text-12">{{ t('settings.bot_intents.scripts') }}</DropdownMenuLabel>
+                                    <DropdownMenuLabel class="text-xs">{{ t('settings.bot_intents.scripts') }}</DropdownMenuLabel>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuCheckboxItem
                                         v-for="[suffix, script] in scriptsBySuffix"
@@ -384,7 +393,7 @@ const selectClass = 'h-10 w-full rounded-md border border-line-strong bg-card px
                                         @select.prevent="toggleScript(editing, suffix)"
                                     >
                                         <span class="min-w-0 flex-1 truncate" dir="auto">{{ script.title }}</span>
-                                        <span v-if="!script.is_active" class="text-12 ms-2 shrink-0 text-fg-3">{{
+                                        <span v-if="!script.is_active" class="ms-2 shrink-0 text-xs text-fg-3">{{
                                             t('settings.bot_intents.inactive_script')
                                         }}</span>
                                     </DropdownMenuCheckboxItem>
