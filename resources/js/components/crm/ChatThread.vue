@@ -85,6 +85,7 @@ const emit = defineEmits<{
     priority: [value: ConversationPriority];
     toggleTag: [id: number];
     claim: [];
+    createOrder: [];
     windowExpired: [];
     dismissError: [];
 }>();
@@ -359,19 +360,20 @@ defineExpose({ composer, header, viewState: list.viewState, moveNote });
             @priority="emit('priority', $event)"
             @toggle-tag="emit('toggleTag', $event)"
             @claim="emit('claim')"
+            @create-order="emit('createOrder')"
         />
 
-        <div v-if="lockedByOther" role="status" class="flex items-center gap-2 border-b bg-warning/15 px-4 py-1.5 text-xs text-foreground">
+        <div v-if="lockedByOther" role="status" class="flex items-center gap-2 border-b border-line bg-warn-soft px-4 py-1.5 text-xs font-medium text-warn">
             <PenLine class="size-3.5 shrink-0" aria-hidden="true" />{{ t('thread.replying', { name: lockedByOther.name }) }}
         </div>
-        <div v-if="error" role="alert" class="flex items-center gap-2 border-b bg-destructive/10 px-4 py-1.5 text-xs text-destructive">
+        <div v-if="error" role="alert" class="flex items-center gap-2 border-b border-line bg-danger-soft px-4 py-1.5 text-xs font-medium text-danger">
             <CircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
             <span class="min-w-0 flex-1">{{ error }}</span>
             <button type="button" class="rounded p-0.5 hover:bg-destructive/20" :aria-label="t('common.close')" @click="emit('dismissError')">
                 <X class="size-3.5" />
             </button>
         </div>
-        <div v-if="flash" role="status" class="border-b bg-success/10 px-4 py-1.5 text-xs text-success">{{ flash }}</div>
+        <div v-if="flash" role="status" class="border-b border-line bg-ok-soft px-4 py-1.5 text-xs font-medium text-ok">{{ flash }}</div>
 
         <div class="relative flex min-h-0 flex-1 flex-col">
             <div
@@ -396,7 +398,7 @@ defineExpose({ composer, header, viewState: list.viewState, moveNote });
                         <div v-if="row.kind === 'older'" class="flex justify-center">
                             <button
                                 type="button"
-                                class="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1 text-xs shadow-card text-muted-foreground hover:text-foreground"
+                                class="inline-flex items-center gap-1.5 rounded-full border border-line bg-card px-3 py-1 text-xs font-medium text-fg-2 hover:text-foreground"
                                 :disabled="loadingOlder"
                                 @click="emit('loadOlder')"
                             >
@@ -404,7 +406,7 @@ defineExpose({ composer, header, viewState: list.viewState, moveNote });
                             </button>
                         </div>
                         <div v-else-if="row.kind === 'day'" class="flex justify-center py-1">
-                            <span class="rounded-md bg-card/90 px-2.5 py-0.5 text-2xs font-medium text-muted-foreground shadow-card">{{
+                            <span class="rounded-full border border-line bg-card px-2.5 py-0.5 text-xs font-medium text-fg-2">{{
                                 formatDay(row.iso, locale)
                             }}</span>
                         </div>
@@ -429,7 +431,7 @@ defineExpose({ composer, header, viewState: list.viewState, moveNote });
             </div>
             <!-- The day of the rows at the top edge (the day rows themselves scroll away). -->
             <div v-if="topDay" class="pointer-events-none absolute inset-x-0 top-2 z-[1] flex justify-center" aria-hidden="true">
-                <span class="rounded-md bg-card/90 px-2.5 py-0.5 text-2xs font-medium text-muted-foreground shadow-card">{{ topDay }}</span>
+                <span class="rounded-full border border-line bg-card/95 px-2.5 py-0.5 text-xs font-medium text-fg-2">{{ topDay }}</span>
             </div>
             <!-- Control room S3: the details overlay, over the messages only (header and composer stay clear). -->
             <slot name="overlay" />

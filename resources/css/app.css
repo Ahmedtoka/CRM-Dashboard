@@ -117,6 +117,11 @@ html {
         --wa-header: #f0f2f5;
         --wa-read-tick: #53bdeb;
         --suite-in: #eeeaf0;
+        /* Inbox redesign (p1, DESIGN §2.1): bubbles and the thread's backdrop. */
+        --bubble-in: #ffffff;
+        --bubble-out: #f2e9f5;
+        --bubble-bot: #eef1f6;
+        --thread-bg: #f7f5f8;
         --note-bg: #fff5d3;
         --note-border: #e39b1b;
         color-scheme: light;
@@ -185,6 +190,10 @@ html {
         --wa-header: #202c33;
         --wa-read-tick: #53bdeb;
         --suite-in: #2a2430;
+        --bubble-in: #241f29;
+        --bubble-out: #382546;
+        --bubble-bot: #1f2533;
+        --thread-bg: #16131a;
         --note-bg: #302812;
         --note-border: #e8a532;
         color-scheme: dark;
