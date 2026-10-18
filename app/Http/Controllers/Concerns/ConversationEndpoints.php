@@ -44,6 +44,8 @@ use App\Models\QuickReply;
 use App\Models\QuickReplyAttachment;
 use App\Models\SupportCase;
 use App\Models\User;
+use App\Queue\ConversationCycle;
+use App\Queue\FinishRefused;
 use App\Queue\QueueService;
 use App\Support\SafeBroadcast;
 use Closure;
@@ -497,6 +499,12 @@ trait ConversationEndpoints
             throw ValidationException::withMessages(['outcome' => __('errors.outcome.required')]);
         }
 
+        // Close cycle §5.2: an open queue window ends through «خلصت» (D-11: a real close with the thanks
+        // and her points, never a silent `resolved_elsewhere`); everything else resolves as before (RC-12, H-18).
+        if ($this->closesWindow($conversation, ['after' => 'thanks', 'outcome' => $outcome, 'outcome_note' => $data['outcome_note'] ?? null, 'default_outcome' => Outcome::Unknown], $request->user())) {
+            return new ConversationResource($this->listRow($conversation));
+        }
+
         $resolved = $actions->resolve($conversation, $request->user(), $outcome, $data['outcome_note'] ?? null, $api ? EpisodeEnd::ApiResolve : EpisodeEnd::Resolve);
 
         return new ConversationResource($this->listRow($resolved));
@@ -521,11 +529,13 @@ trait ConversationEndpoints
         }
     }
 
-    public function reopen(Request $request, Conversation $conversation, ConversationActions $actions): ConversationResource
+    public function reopen(Request $request, Conversation $conversation, ConversationActions $actions): JsonResponse
     {
         Gate::authorize('reply', $conversation);
 
-        return new ConversationResource($this->listRow($actions->reopen($conversation, $request->user())));
+        // Close cycle §7.3: kept for the installed app (same body); the web no longer offers it — a reply is the claim.
+        return (new ConversationResource($this->listRow($actions->reopen($conversation, $request->user()))))
+            ->response($request)->header('Deprecation', 'true');
     }
 
     public function returnToBot(Request $request, Conversation $conversation, BotEngine $bot): ConversationResource
@@ -533,9 +543,42 @@ trait ConversationEndpoints
         Gate::authorize('reply', $conversation);
         $this->guardQueueWindow($request->user(), $conversation);
 
-        $bot->returnToBot($conversation, $request->user());
+        // Close cycle §5.2 (D-10): on an open window «رجوع للبوت» is «خلصت» with «البوت يكمّل» — her outcome
+        // (else the automatic one, else `unknown`: H-14) and her points, no message. Otherwise as before.
+        if (! $this->closesWindow($conversation, ['after' => 'bot', 'default_outcome' => Outcome::Unknown], $request->user())) {
+            $bot->returnToBot($conversation, $request->user());
+        }
 
         return new ConversationResource($this->listRow($conversation));
+    }
+
+    /**
+     * The old endpoints' way into «خلصت» (close-cycle-FINAL §5.2): only for an OPEN window of the queue
+     * (on); false when there is none, and the caller does what it always did. She waiting for a reply
+     * never refuses (the old app knows no `customer_waiting`): the close goes, with no closing message.
+     */
+    private function closesWindow(Conversation $conversation, array $r, User $user): bool
+    {
+        if (! QueueSetting::current()->enabled) {
+            return false;
+        }
+
+        $entry = app(QueueService::class)->activeEntry($conversation);
+
+        if ($entry === null || ! $entry->isOpen()) {
+            return false;
+        }
+
+        try {
+            app(ConversationCycle::class)->finish($conversation, $user, $r + ['entry_id' => $entry->id, 'confirm_waiting' => true, 'no_amend' => true]);
+        } catch (FinishRefused $x) {
+            if ($x->key === 'outcome_required') {
+                throw ValidationException::withMessages(['outcome' => __('errors.outcome.required')]);
+            }
+            abort(response()->json(['message' => __('errors.queue.'.$x->key), 'code' => $x->key], $x->status));
+        }
+
+        return true;
     }
 
     public function reset(Request $request, Conversation $conversation, ConversationActions $actions): ConversationResource
