@@ -68,6 +68,12 @@ class BotHoldNotice implements ShouldQueue
         return 'bot:turn:'.$conversationId;
     }
 
+    /** The «ثانية واحدة» message a turn got (round b1: it does not count as the turn's answer). */
+    public static function sentKey(string $turn): string
+    {
+        return 'bot:hold-msg:'.$turn;
+    }
+
     /** A bot, system or staff message went out after the turn started. */
     private function answered(Conversation $c): bool
     {
@@ -101,7 +107,8 @@ class BotHoldNotice implements ShouldQueue
         }
 
         try {
-            app(OutboundService::class)->sendBot($c, $text);
+            $sent = app(OutboundService::class)->sendBot($c, $text);
+            Cache::put(self::sentKey($this->turn), $sent->id, now()->addMinutes(3));
             rescue(fn () => app(ReplyScheduler::class)->typing($c, true), report: false);
         } catch (WindowClosedException) {
             Log::info('bot.hold_notice_window_closed', ['conversation_id' => $c->id]);

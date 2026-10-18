@@ -722,6 +722,8 @@ class BotEngine
 
         return BotRun::query()
             ->where('conversation_id', $c->id)
+            // Round b1: an answer dropped for a merged one was never a turn she saw.
+            ->where('decision', '!=', 'superseded')
             ->where('created_at', '>', $since);
     }
 

@@ -4,12 +4,14 @@ namespace App\Bot\Flow\Jobs;
 
 use App\Bot\BotEngine;
 use App\Bot\Flow\ReplyScheduler;
+use App\Bot\Flow\TurnSuperseded;
 use App\Bot\Flows\WaitingReply;
 use App\Bot\Jobs\BotHoldNotice;
 use App\Bot\Router\TurnMetrics;
 use App\Enums\Handler;
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
+use App\Models\BotRun;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Bus\Queueable;
@@ -87,6 +89,14 @@ class RunBotTurn implements ShouldQueue
 
         try {
             app(BotEngine::class)->handleTurn($c, $burst);
+        } catch (TurnSuperseded $s) {
+            // Round b1: nothing went out; her newer message's turn answers the whole burst at once.
+            Cache::forget(BotHoldNotice::turnKey($c->id));
+            $c->refresh()->forceFill(['bot_state' => array_merge($c->bot_state ?? [], ['last_turn_message_id' => $previousMarker])])->save();
+            $this->recordSuperseded($c, $burst, $s);
+            $this->scheduleMessagesThatArrivedDuringTheTurn($c, $lastId);
+
+            return;
         } catch (Throwable $e) {
             Cache::forget(BotHoldNotice::turnKey($c->id));
 
@@ -118,6 +128,25 @@ class RunBotTurn implements ShouldQueue
         $metrics->burstWaitMs = $first !== null ? max(0, (int) ($metrics->startedAtMs - $first->getTimestampMs())) : null;
 
         Cache::put(BotHoldNotice::turnKey($c->id), $metrics->turn, now()->addMinutes(3));
+    }
+
+    /** The dropped answer's model cost stays counted (decision `superseded`, never a turn of its own). */
+    private function recordSuperseded(Conversation $c, Collection $burst, TurnSuperseded $s): void
+    {
+        $metrics = app(TurnMetrics::class);
+
+        rescue(fn () => BotRun::create([
+            'conversation_id' => $c->id,
+            'trigger_message' => $burst->pluck('body')->filter()->implode("\n"),
+            'engine' => 'superseded',
+            'model' => $s->model,
+            'tier' => $s->tier,
+            'decision' => 'superseded',
+            'input_tokens' => 0,
+            'output_tokens' => 0,
+            'cost_usd' => round($s->costUsd, 6),
+            'latency_ms' => $metrics->startedAtMs !== null ? (int) floor(microtime(true) * 1000) - $metrics->startedAtMs : 0,
+        ]), report: true);
     }
 
     /** A customer message stored while this turn ran gets its own turn (final fix wave I4). */

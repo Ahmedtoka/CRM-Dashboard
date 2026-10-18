@@ -412,6 +412,12 @@ class TurnRunner
             }
         }
 
+        // Round b1: she wrote again while the models were thinking — nothing saved or sent yet, so the
+        // next turn answers all of it at once.
+        if (! $socialOnly && ! $photoOnly) {
+            TurnSupersede::check($c);
+        }
+
         if ($reply !== null && trim($reply) !== '') {
             // 2026-09-21: she greeted, so the reply opens by greeting her back the same way.
             $reply = $this->withGreetingMirror($reply);

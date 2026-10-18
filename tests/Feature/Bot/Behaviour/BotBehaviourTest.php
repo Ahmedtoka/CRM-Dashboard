@@ -282,3 +282,84 @@ it('never trusts a piece button the bot did not send in this chat (no order show
     expect(implode("\n", bbBot($before)))->toContain('الزرار ده من طلب قديم خلص')->not->toContain('777001')->not->toContain('عباية')
         ->and(FlowState::flow($c->refresh())['key'] ?? null)->toBe('main_menu');
 })->with('routers');
+
+// ---------------------------------------------------------------------------------------------
+// Problem 2 — several messages about one topic: one answer, not one per message.
+// ---------------------------------------------------------------------------------------------
+
+/** Like bbFake, but her next message lands while the FIRST agent call is still thinking. */
+function bbFakeWithMessageDuringTurn(string $router, string $lateText, array $agentReplies): void
+{
+    config(['crm.bot.router.mode' => $router]);
+    test()->ai->agent = $agentReplies;
+    test()->ai->late = $lateText;
+
+    Http::fake(['api.anthropic.com/*' => function (Request $request) {
+        $body = $request->data();
+
+        if (! isset($body['output_config']['format']) && (test()->ai->late ?? null) !== null) {
+            $c = Conversation::firstOrFail();
+            $c->messages()->create(['platform' => $c->platform, 'direction' => 'in', 'sender_type' => 'customer', 'body' => test()->ai->late, 'status' => 'received', 'external_id' => 'late-'.uniqid()]);
+            test()->ai->late = null;
+        }
+
+        if (isset($body['output_config']['format'])) {
+            test()->ai->log[] = ['kind' => 'planner', 'body' => $body];
+
+            return Http::response(['stop_reason' => 'end_turn', 'model' => 'claude-haiku-5-5', 'usage' => ['input_tokens' => 10, 'output_tokens' => 10], 'content' => [
+                ['type' => 'text', 'text' => json_encode(['tasks' => [['kind' => 'other', 'order_refs' => [], 'items' => [], 'governorate' => null, 'place' => null, 'product_query' => null, 'question' => null, 'confidence' => 0.9]], 'sentiment' => 'neutral', 'wants_human' => false, 'continues_previous' => false, 'policy_edge' => false, 'clarify' => null])],
+            ]]);
+        }
+
+        test()->ai->log[] = ['kind' => 'agent', 'body' => $body];
+        $next = array_shift(test()->ai->agent) ?? 'تحت أمرك يا فندم';
+
+        return Http::response(['stop_reason' => 'end_turn', 'model' => $body['model'] ?? 'claude-sonnet-5-5', 'usage' => ['input_tokens' => 10, 'output_tokens' => 10], 'content' => [['type' => 'text', 'text' => $next]]]);
+    }]);
+}
+
+it('answers a message that arrived while the bot was still thinking together with the first one, once', function (string $router) {
+    bbFakeWithMessageDuringTurn($router, 'ومقاس L متاح؟', ['الفستان الأسود متاح يا فندم', 'الفستان الأسود متاح يا فندم والمقاس ده موجود']);
+
+    $c = bbSay('الفستان الاسود متاح؟');
+    // The late message's own (delayed) turn wakes up after its burst wait, as the queue runs it.
+    $this->travel(15)->seconds();
+    (new \App\Bot\Flow\Jobs\RunBotTurn($c->id))->handle();
+
+    $replies = bbBot();
+    expect($replies)->toBe(['الفستان الأسود متاح يا فندم والمقاس ده موجود'])
+        ->and(\App\Models\BotRun::where('decision', 'superseded')->count())->toBe(1)
+        // The answer that went out read BOTH messages.
+        ->and(bbLastAgentHistory())->toContain('الفستان الاسود متاح؟')->toContain('ومقاس L متاح؟');
+})->with('routers');
+
+it('still answers once when she sends two messages inside the burst wait', function (string $router) {
+    bbFake($router, ['متاح يا فندم بالمقاسين']);
+    BotSetting::current()->update(['burst_wait_seconds' => 3]);
+    \Illuminate\Support\Facades\Queue::fake();
+
+    bbSay('الفستان الاسود متاح؟');
+    $this->travel(1)->seconds();
+    $c = bbSay('ومقاس L؟');
+    \Illuminate\Support\Facades\Queue::assertPushed(\App\Bot\Flow\Jobs\RunBotTurn::class, 2);
+
+    // Both queued turns wake up: the first finds the due time moved, the second answers the burst.
+    $this->travel(5)->seconds();
+    (new \App\Bot\Flow\Jobs\RunBotTurn($c->id))->handle();
+    (new \App\Bot\Flow\Jobs\RunBotTurn($c->id))->handle();
+
+    expect(bbBot())->toBe(['متاح يا فندم بالمقاسين'])
+        ->and(bbAgentCalls())->toBe(1);
+})->with('routers');
+
+it('sends the answer as it is once she has been waiting past the supersede limit (no endless waiting)', function (string $router) {
+    config(['crm.bot.supersede_max_seconds' => 0]);
+    bbFakeWithMessageDuringTurn($router, 'ومقاس L متاح؟', ['الفستان الأسود متاح يا فندم', 'والمقاس ده موجود كمان']);
+
+    $c = bbSay('الفستان الاسود متاح؟');
+    $this->travel(15)->seconds();
+    (new \App\Bot\Flow\Jobs\RunBotTurn($c->id))->handle();
+
+    expect(bbBot())->toBe(['الفستان الأسود متاح يا فندم', 'والمقاس ده موجود كمان'])
+        ->and(\App\Models\BotRun::where('decision', 'superseded')->count())->toBe(0);
+})->with('routers');

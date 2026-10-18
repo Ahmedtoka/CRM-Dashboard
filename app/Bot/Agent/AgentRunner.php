@@ -6,6 +6,7 @@ use App\Bot\Catalog\ProductBrowser;
 use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
+use App\Bot\Flow\TurnSupersede;
 use App\Bot\Flows\HumanHandover;
 use App\Bot\Jobs\BotHoldNotice;
 use App\Bot\Language\ConversationLanguage;
@@ -116,6 +117,9 @@ class AgentRunner
         if ($c->refresh()->handler !== Handler::Bot) {
             return $this->record($c, $texts, $outcome, 'human_took_over', false, $started, $engine, $plan);
         }
+
+        // Round b1: she wrote again while the model was thinking — one answer to all of it, not two.
+        TurnSupersede::check($c, $outcome->costUsd, $outcome->tier, $outcome->model);
 
         if ($outcome->flow !== null && ! $insideFlow && $tasks === []) {
             // Bot hybrid R1/R6: filled from her words, one task per order she named.
