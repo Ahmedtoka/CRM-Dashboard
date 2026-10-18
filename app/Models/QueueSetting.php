@@ -28,6 +28,8 @@ class QueueSetting extends Model
     {
         return [
             'enabled' => 'boolean', 'night_message_enabled' => 'boolean', 'case_follow_owner' => 'boolean',
+            'silence_warn_customer' => 'boolean', 'auto_close_message' => 'boolean',
+            'reopen_after_done_minutes' => 'integer', 'human_outside_minutes' => 'integer',
             'points' => 'array', 'shifts' => 'array', 'default_roster' => 'array',
         ];
     }

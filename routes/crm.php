@@ -76,6 +76,10 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('conversations/{conversation}/notes', [InboxController::class, 'storeNote'])->name('conversations.notes.store');
         Route::post('conversations/{conversation}/claim', [InboxController::class, 'claim'])->name('conversations.claim');
         Route::get('conversations/{conversation}/mentionable', [InboxController::class, 'mentionable'])->name('conversations.mentionable');
+        // Close cycle: «خلصت», its «تراجع», and the outcome of an auto-closed window set later (Q6).
+        Route::post('conversations/{conversation}/finish', [InboxController::class, 'finish'])->name('conversations.finish');
+        Route::post('conversations/{conversation}/finish/undo', [InboxController::class, 'undoFinish'])->name('conversations.finish.undo');
+        Route::post('conversations/{conversation}/outcome', [InboxController::class, 'amendOutcome'])->name('conversations.outcome');
         Route::post('conversations/{conversation}/resolve', [InboxController::class, 'resolve'])->name('conversations.resolve');
         Route::post('conversations/{conversation}/reopen', [InboxController::class, 'reopen'])->name('conversations.reopen');
         Route::post('conversations/{conversation}/return-to-bot', [InboxController::class, 'returnToBot'])->name('conversations.return-to-bot');
@@ -97,6 +101,7 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::post('/queue/me/check-out', [QueueWindowController::class, 'checkOut'])->name('queue.me.check-out');
         Route::post('/queue/me/hand-back', [QueueWindowController::class, 'handBack'])->name('queue.me.hand-back');
         Route::get('/queue/me/points', [QueueWindowController::class, 'points'])->name('queue.me.points');
+        Route::get('/queue/me/auto-closed', [InboxController::class, 'autoClosed'])->name('queue.me.auto-closed');
         Route::post('/queue/entries/{entry}/close', [QueueWindowController::class, 'close'])->name('queue.close');
         Route::post('/queue/entries/{entry}/escalate', [QueueWindowController::class, 'escalate'])->name('queue.escalate');
     });

@@ -116,8 +116,9 @@ it('still thanks and rates a plain «خلصت»', function () {
 
     $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'inquiry', 'outcome' => 'browsing', 'to_bot' => false])->assertOk();
 
+    // Close cycle Q1: the rating rides in the closing message (none here: she was never answered, Q2).
     expect(chBotTexts($e))->toBe([CH_THANKS]);
-    Bus::assertDispatched(RequestRating::class);
+    Bus::assertNotDispatched(RequestRating::class);
 });
 
 it('takes to_bot on the mobile API too, with the same response shape', function () {
@@ -275,7 +276,7 @@ it('lets exactly one of the tick and «خلصت» close the window, whoever comm
     (fn () => $this->closeIfSilent($staleRead, QueueSetting::current()))->call(app(WindowLifecycle::class));
 
     expect($e->fresh()->close_reason)->toBe('inquiry')
-        ->and(chBotTexts($e))->toBe([CH_THANKS])
+        ->and(chBotTexts($e))->toHaveCount(1)->and(chBotTexts($e)[0])->toStartWith(CH_THANKS)
         ->and(QueueEntry::where('conversation_id', $c->id)->count())->toBe(1);
 });
 

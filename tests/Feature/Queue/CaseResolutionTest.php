@@ -7,6 +7,7 @@ use App\Models\SupportCase;
 use App\Models\User;
 use App\Models\UserNotification;
 use App\Queue\Cases\CaseSla;
+use App\Queue\Jobs\SendCaseResolved;
 use App\Queue\Jobs\SendQueueMessage;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
@@ -39,7 +40,7 @@ function crLines(int $userId): array
 }
 
 it('resolves a case in time: stamps it, pays the opener and tells the customer', function () {
-    Bus::fake([SendQueueMessage::class]);
+    Bus::fake([SendCaseResolved::class]);
     $opener = User::factory()->create();
     $case = crCase($opener);
 
@@ -50,7 +51,7 @@ it('resolves a case in time: stamps it, pays the opener and tells the customer',
     expect($case->resolved_at)->not->toBeNull()->and($case->resolved_by_id)->not->toBeNull()
         ->and(crLines($opener->id))->toBe([['case', 14]])
         ->and(ScoreEvent::query()->value('support_case_id'))->toBe($case->id);
-    Bus::assertDispatched(SendQueueMessage::class, fn ($job) => $job->scriptKey === 'queue_case_resolved' && $job->vars['case_id'] === $case->id);
+    Bus::assertDispatched(SendCaseResolved::class, fn ($job) => $job->caseId === $case->id); // close cycle §6.3
 });
 
 it('pays the late amount after the due time and takes it back when the case is reopened', function () {
@@ -112,7 +113,7 @@ it('tells the opener and the assignee once when an open queue case goes overdue'
 });
 
 it('pays nothing when the moderator resolves her own case, and tells the customer only the first time', function () {
-    Bus::fake([SendQueueMessage::class]);
+    Bus::fake([SendCaseResolved::class]);
     $opener = User::factory()->create();
     $case = crCase($opener);
     $opener->userPlatforms()->create(['platform' => $case->conversation->platform->value]); // she may work this platform
@@ -122,7 +123,7 @@ it('pays nothing when the moderator resolves her own case, and tells the custome
     $this->actingAs(crSupervisor())->patchJson("/cases/{$case->id}", ['status' => 'resolved'])->assertOk();
 
     expect(crLines($opener->id))->toBe([['case', 14]]);
-    Bus::assertDispatchedTimes(SendQueueMessage::class, 1);
+    Bus::assertDispatchedTimes(SendCaseResolved::class, 1);
 });
 
 it('pays the window moderator, not the supervisor who closed the window as a case for her', function () {

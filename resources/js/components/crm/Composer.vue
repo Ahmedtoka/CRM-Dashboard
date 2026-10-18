@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ComposerModeToggle from '@/components/crm/ComposerModeToggle.vue';
+import ClaimConfirmDialog from '@/components/crm/finish/ClaimConfirmDialog.vue';
 import MentionTextarea from '@/components/crm/MentionTextarea.vue';
 import AttachmentTray from '@/components/crm/media/AttachmentTray.vue';
 import VoiceRecorderBar from '@/components/crm/media/VoiceRecorderBar.vue';
@@ -13,6 +14,7 @@ import { useQuickReplyInsertion } from '@/composables/inbox/useQuickReplyInserti
 import { useI18n } from '@/composables/useI18n';
 import { shortcutHint } from '@/composables/useShortcuts';
 import { useVoiceRecorder } from '@/composables/useVoiceRecorder';
+import { claimConfirmed, rememberClaim } from '@/lib/claimConfirm';
 import { cn } from '@/lib/utils';
 import type { Attachment, Message, PlatformValue, QuickReply, QuickReplyCategory, RenderedQuickReply, UserRef } from '@/types/crm';
 import { MessageSquareText, Mic, NotebookPen, Paperclip, SendHorizontal, Shirt } from 'lucide-vue-next';
@@ -35,8 +37,10 @@ const props = withDefaults(
     meId: number;
     /** Focus the text box on mount: only when the chat was opened by a pointer click (never by j/k). */
     autofocus?: boolean;
+    /** The bot holds this chat (or it is closed): her first reply takes it over, confirmed once (Q10). */
+    claimFromBot?: boolean;
 }>(),
-    { autofocus: false },
+    { autofocus: false, claimFromBot: false },
 );
 const text = defineModel<string>({ required: true });
 const mode = defineModel<ComposerMode>('mode', { default: 'reply' });
@@ -119,8 +123,16 @@ const composerShortcuts = useComposerShortcuts({
     emitSend: (body, attachments, id) => emit('send', body, attachments, id),
     emitSendAndResolve: (body, attachments, id) => emit('sendAndResolve', body, attachments, id),
     emitNote: (body, mentions, done) => emit('note', body, mentions, done),
+    needsClaimConfirm: () => props.claimFromBot && !claimConfirmed(props.meId, props.conversationId),
+    rememberClaim: () => rememberClaim(props.meId, props.conversationId),
 });
-const { confirming } = composerShortcuts;
+const { confirming, claiming } = composerShortcuts;
+
+function onClaimDone(sent: boolean): void {
+    if (sent) composerShortcuts.confirmClaim();
+    else composerShortcuts.cancelClaim();
+    nextTick(focusEnd);
+}
 
 // Switching conversation always drops back to reply mode (ruling: notes are per-message-in-context, not a sticky
 // preference) and drops any locked-conversation confirm banner left over from the conversation being replaced.
@@ -130,6 +142,7 @@ watch(
         mode.value = 'reply';
         confirming.value = false;
         noteMentions.value = [];
+        claiming.value = false;
         // A chat opened from the cache keeps this composer mounted (Task 6c): the pointer-open rule
         // applies on the switch as it does on mount; a j/k open (autofocus false) leaves focus alone.
         if (props.autofocus && window.matchMedia('(min-width: 768px)').matches) nextTick(() => textarea.value?.focus());
@@ -364,6 +377,8 @@ defineExpose({
             <button ref="confirmButton" type="button" :class="cn(buttonVariants({ size: 'sm' }), 'h-7')" @click="onConfirmSend">{{ t('composer.send_anyway') }}</button>
             <button type="button" :class="cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'h-7')" @click="onCancelConfirm">{{ t('common.cancel') }}</button>
         </div>
+
+        <ClaimConfirmDialog v-model:open="claiming" @confirm="onClaimDone(true)" @cancel="onClaimDone(false)" />
 
         <p v-if="recorder.state.value === 'denied'" role="alert" class="mb-1.5 px-1 text-2xs text-warning">{{ t('media.mic_denied') }}</p>
         <p v-if="recorder.state.value === 'unsupported'" role="alert" class="mb-1.5 px-1 text-2xs text-warning">{{ t('media.mic_unsupported') }}</p>

@@ -318,6 +318,13 @@ return [
     // (no tashkeel, أ/إ/آ → ا, ة → ه, ى → ي, repeated letters collapsed, lowercase), so write them
     // the natural way. App\Queue\Acknowledgement is the one place that reads them.
     'queue' => [
+        // Close cycle Q12 / H-05: a person's reply from Meta Business Suite (an echo) counts as a staff
+        // reply (silence clock, closing-message guard, the bot paused). Off until real echoes were
+        // tried on the live page: Meta's own automatic replies are echoes too. Echoes from the apps
+        // listed in `automated_echo_app_ids` (comma separated) never count.
+        'echo_as_staff' => (bool) env('QUEUE_ECHO_AS_STAFF', false),
+        'automated_echo_app_ids' => array_values(array_filter(array_map('trim', explode(',', (string) env('QUEUE_AUTOMATED_ECHO_APP_IDS', ''))))),
+
         'acknowledgements' => [
             'phrases' => [
                 'شكرا', 'شكرا جزيلا', 'ألف شكر', 'متشكرة', 'متشكرين', 'متشكر', 'مشكورة', 'مشكورين',
@@ -326,6 +333,8 @@ return [
                 'تمام', 'تمام التمام', 'تمم', 'أوك', 'أوكي', 'أوكيه', 'ماشي', 'اشطا', 'اشطة', 'حلو', 'جميل', 'كويس', 'حاضر', 'خلاص', 'تم',
                 'ok', 'okay', 'okey', 'okk', 'k', 'kk', 'thanks', 'thank you', 'thank u', 'thx', 'thnx', 'thanx', 'ty', 'tysm', 'merci',
                 'great', 'perfect', 'good', 'nice', 'cool', 'fine', 'alright', 'all right', 'noted', 'done', 'got it',
+                // Close cycle H-15: a goodbye asks for nothing either.
+                'مع السلامة', 'مع السلامه', 'باي', 'باي باي', 'bye', 'bye bye',
             ],
             'fillers' => [
                 'يا', 'جدا', 'خالص', 'أوي', 'قوي', 'كتير', 'ليكي', 'ليكو', 'ليكم', 'لكم', 'ليك', 'فندم', 'حبيبتي', 'حبيبي', 'قمر', 'عسل', 'كده', 'بجد',

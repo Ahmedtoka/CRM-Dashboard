@@ -25,6 +25,8 @@ return [
         'qa' => 'تقييم الجودة :score من 5 · دور #:ticket',
         'qa_replaced' => 'تقييم جودة اتعدّل · دور #:ticket',
         'reversed' => 'اتلغت',
+        'undone' => 'اتلغت بالتراجع',
+        'revived' => 'الشباك رجع مفتوح',
         'capped' => '(فوق السقف :cap)',
     ],
     // The queue report's CSV header (queue Part 2).

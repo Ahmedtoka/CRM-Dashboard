@@ -56,11 +56,22 @@ class ScoreListener
         $s = QueueSetting::current();
         [$pointsKey, $reasonKey] = self::BASE[$e->close_reason] ?? [null, null];
 
-        if ($pointsKey !== null && ($points = $s->point($pointsKey)) !== 0) {
-            $this->award($e, 'base', $points, $reasonKey, [], 'base:'.$e->id);
+        // Close cycle RC-8: a window she took by answering a bot chat (`claim`) earns its base only
+        // when the customer wrote after it, and never the speed bonus (its first reply is the claim).
+        $claim = $e->rule === 'claim';
+        if ($claim && ($e->last_customer_message_at === null || $e->delivered_at === null || $e->last_customer_message_at->lessThanOrEqualTo($e->delivered_at))) {
+            $pointsKey = null;
+        }
+        // H-16: «البوت يكمّل» with no reply of hers earns nothing.
+        if ($e->end_mode === 'bot' && $e->first_reply_at === null) {
+            $pointsKey = null;
         }
 
-        if (in_array($e->close_reason, self::SPEED_REASONS, true) && $e->delivered_at !== null && $e->first_reply_at !== null) {
+        if ($pointsKey !== null && ($points = $s->point($pointsKey)) !== 0) {
+            $this->award($e, 'base', $points, $reasonKey, [], 'base:'.$e->id.self::seq($e));
+        }
+
+        if (! $claim && in_array($e->close_reason, self::SPEED_REASONS, true) && $e->delivered_at !== null && $e->first_reply_at !== null) {
             $secs = max(0, (int) $e->delivered_at->diffInSeconds($e->first_reply_at));
             [$key, $points] = match (true) {
                 $secs <= (int) $s->speed_fast_seconds => ['speed_fast', $s->point('speed_fast')],
@@ -69,7 +80,7 @@ class ScoreListener
             };
 
             if ($key !== null && $points !== 0) {
-                $this->award($e, 'speed', $points, $key, ['time' => sprintf('%d:%02d', intdiv($secs, 60), $secs % 60)], 'speed:'.$e->id);
+                $this->award($e, 'speed', $points, $key, ['time' => sprintf('%d:%02d', intdiv($secs, 60), $secs % 60)], 'speed:'.$e->id.self::seq($e));
             }
         }
     }
@@ -95,6 +106,12 @@ class ScoreListener
         if ($points !== 0) {
             $this->award($e, 'review', $points, 'review', ['stars' => $stars], 'review:'.$e->id);
         }
+    }
+
+    /** RC-4: the first close keeps the old key; a close after «تراجع» gets its own. */
+    private static function seq(QueueEntry $e): string
+    {
+        return (int) $e->close_seq > 1 ? ':'.(int) $e->close_seq : '';
     }
 
     private function earns(?QueueEntry $e): bool

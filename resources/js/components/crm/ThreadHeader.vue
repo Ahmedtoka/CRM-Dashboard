@@ -1,13 +1,14 @@
 <script setup lang="ts">
+import AmendOutcome from '@/components/crm/finish/AmendOutcome.vue';
+import FinishSheet from '@/components/crm/finish/FinishSheet.vue';
 import HandlerAvatar from '@/components/crm/HandlerAvatar.vue';
-import ResolveMenu from '@/components/crm/outcomes/ResolveMenu.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import PresenceBar from '@/components/crm/PresenceBar.vue';
-import CloseWindowMenu from '@/components/crm/queue/CloseWindowMenu.vue';
 import QueueBanner from '@/components/crm/queue/QueueBanner.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import ResetDialog from '@/components/crm/thread/ResetDialog.vue';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -22,18 +23,23 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { skinClasses, type ChatSkin } from '@/composables/inbox/useChatSkin';
+import { useFinish } from '@/composables/inbox/useFinish';
 import { useI18n } from '@/composables/useI18n';
 import { useInitials } from '@/composables/useInitials';
 import { useMyQueueContext } from '@/composables/useMyQueue';
 import { shortcutHint } from '@/composables/useShortcuts';
+import { useToast } from '@/composables/useToast';
 import { conversationState } from '@/lib/conversationState';
+import { finishTarget, isFinishable } from '@/lib/finish';
 import { formatCount } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { SharedData } from '@/types';
-import type { Conversation, ConversationAction, ConversationPriority, Customer, OutcomePayload, Tag, UserRef } from '@/types/crm';
+import type { Conversation, ConversationAction, ConversationPriority, Customer, FinishAfter, Tag, UserRef } from '@/types/crm';
 import { usePage } from '@inertiajs/vue3';
 import {
+    ArrowUpCircle,
     Bot,
+    CheckCircle2,
     ChevronLeft,
     Ellipsis,
     Eraser,
@@ -44,7 +50,6 @@ import {
     Megaphone,
     Package,
     PanelRight,
-    RotateCcw,
     Tags,
 } from 'lucide-vue-next';
 import { computed, inject, nextTick, ref, watch, type Ref } from 'vue';
@@ -60,15 +65,15 @@ const props = withDefaults(
         tags: Tag[];
         busyAction: string | null;
         skin?: ChatSkin;
+        /** The thread's last real message is hers: the «خلصت» sheet warns she is waiting (close cycle). */
+        lastFromCustomer?: { body: string | null } | null;
     }>(),
-    { skin: 'suite', customer: null },
+    { skin: 'suite', customer: null, lastFromCustomer: null },
 );
 const emit = defineEmits<{
     back: [];
     openCustomer: [];
     action: [name: ConversationAction];
-    /** Control room S3: «حل» outside the queue, with the picked outcome. */
-    resolve: [payload: OutcomePayload, done: (error: string | null) => void];
     priority: [value: ConversationPriority];
     toggleTag: [id: number];
     claim: [];
@@ -104,27 +109,61 @@ const adTooltip = computed(() => {
         .join('\n');
 });
 
-// Handover queue: an open window is closed with a reason (or handed to the shift leader), and
-// returned to the bot through the same reasons, by its moderator or a supervisor / admin only.
-// For anybody else «حل» and «رجوع للبوت» are hidden (the server refuses them too); the chat
-// stays open to her for reading, replying and notes. With the queue off nothing changes.
+// Close cycle: ONE primary «خلصت» (close-cycle-FINAL §0) on her open window (or a supervisor /
+// admin on anyone's), a customer waiting in the lounge, or a human chat with no window (also with
+// the queue off). It opens the finish sheet. Somebody else's window keeps the lock chip; a chat the
+// bot holds, or a resolved one, has no primary action. The chat stays open to her for replies and notes.
 const queue = useMyQueueContext();
 const page = usePage<SharedData>();
-const closeMenu = ref<InstanceType<typeof CloseWindowMenu> | null>(null);
-const resolveMenu = ref<InstanceType<typeof ResolveMenu> | null>(null);
-const openWindow = computed(() => (queue?.enabled.value ? props.conversation.queue_entry : null));
-const queueWindow = computed(() => {
-    const entry = openWindow.value;
-    if (!entry) return null;
-    const role = page.props.auth.user?.role;
-
-    return entry.assigned_user_id === props.meId || role === 'supervisor' || role === 'admin' ? entry : null;
-});
+const toast = useToast();
+const cycle = useFinish();
+const target = computed(() => finishTarget(props.conversation, props.meId, page.props.auth.user?.role));
+const finishing = computed(() => (isFinishable(target.value) ? target.value : null));
 /** Somebody else's open window: she may read and reply, not end it. */
-const heldByOther = computed(() => openWindow.value !== null && queueWindow.value === null);
+const heldByOther = computed(() => target.value.kind === 'held');
 const holderName = computed(() => props.conversation.assignee?.name ?? '');
+const queueWindow = computed(() => (target.value.kind === 'window' ? target.value : null));
 const windowOwner = computed(() =>
-    queueWindow.value && queueWindow.value.assigned_user_id !== props.meId ? (props.conversation.assignee?.name ?? null) : null,
+    queueWindow.value && queueWindow.value.assignedUserId !== props.meId ? (props.conversation.assignee?.name ?? null) : null,
+);
+/** Her own window's «مستنية ردك» clock (/queue/me knows only her windows). */
+const awaitingSince = computed(() => queue?.entryOf(props.conversation.id)?.awaiting_reply_since ?? null);
+
+const sheetOpen = ref(false);
+const sheetAfter = ref<FinishAfter>('thanks');
+/** Opens the sheet (on «البوت يكمّل» for «رجوع للبوت»); false when this chat has nothing to finish. */
+function openSheet(after: FinishAfter): boolean {
+    if (!finishing.value) return false;
+    if (!busy.value) {
+        sheetAfter.value = after;
+        sheetOpen.value = true;
+    }
+
+    return true;
+}
+
+/* «تحويل للتيم ليدر» moved from the close menu to «⋯»: her window, and she is not the shift leader. */
+const escalateOpen = ref(false);
+const canEscalate = computed(() => !!queue && queueWindow.value !== null && (queue.leaderUserId.value ?? null) !== queueWindow.value.assignedUserId);
+const escalating = computed(() => queueWindow.value !== null && queue?.busy.value === `escalate-${queueWindow.value.entryId}`);
+async function escalate(): Promise<void> {
+    const w = queueWindow.value;
+    if (!queue || !w || (queue.busy.value ?? null) !== null) return;
+    if (await queue.escalate(w.entryId)) {
+        escalateOpen.value = false;
+        toast.push(t('queue.close.escalated', { ticket: w.ticket % 100000 }));
+    }
+}
+
+/* Q6: her window here was closed by the silence with no outcome: «حددي النتيجة». */
+const amend = ref<InstanceType<typeof AmendOutcome> | null>(null);
+const needsOutcome = computed(() => cycle.autoClosed.value.some((row) => row.conversation_id === props.conversation.id));
+watch(
+    () => [props.conversation.id, queue?.enabled.value ?? false] as const,
+    ([, on]) => {
+        if (on) void cycle.loadAutoClosed();
+    },
+    { immediate: true },
 );
 
 /**
@@ -142,7 +181,7 @@ const topic = computed(() => props.conversation.handover_topic || props.conversa
 const canClaim = computed(
     () => props.conversation.handling?.id !== props.meId && props.conversation.status !== 'resolved' && props.conversation.can.reply,
 );
-const canReturnToBot = computed(() => props.conversation.handler === 'human' && !heldByOther.value);
+const canReturnToBot = computed(() => finishing.value !== null && finishing.value.kind !== 'lounge');
 
 const moreOpen = ref(false);
 const tagsOpen = ref(false);
@@ -175,28 +214,21 @@ defineExpose({
         void nextTick(() => requestAnimationFrame(() => (tagsOpen.value = true)));
     },
     /**
-     * «حل» / «رجوع للبوت» on a queue window: `menu` when the reasons were opened (her window, or a
-     * supervisor), `blocked` when the window is somebody else's, `none` when there is no open
-     * window (the plain action applies).
+     * «حل» / «رجوع للبوت» (and their shortcuts): `menu` when the «خلصت» sheet opened (on «البوت
+     * يكمّل» for `bot`), `blocked` when the window is somebody else's, `none` when there is nothing
+     * to finish (the bot holds the chat, or it is resolved).
      */
     openCloseWindow: (mode: 'close' | 'bot' = 'close'): 'menu' | 'blocked' | 'none' => {
         if (heldByOther.value) return 'blocked';
-        if (!queueWindow.value) return 'none';
-        closeMenu.value?.open(mode);
 
-        return 'menu';
+        return openSheet(mode === 'bot' ? 'bot' : 'thanks') ? 'menu' : 'none';
     },
     /** Who holds the open window this user may not end ('' when none). */
     holder: (): string => (heldByOther.value ? holderName.value : ''),
-    /** «حل» outside the queue: opens the outcome menu; false when there is nothing to resolve. */
-    openResolve: (): boolean => {
-        if (!resolveMenu.value) return false;
-        resolveMenu.value.open();
-
-        return true;
-    },
-    /** The close menu (or one of its dialogs) or the resolve menu is open. */
-    closeMenuOpen: (): boolean => closeMenu.value?.isOpen() || resolveMenu.value?.isOpen() || false,
+    /** «حل»: opens the «خلصت» sheet; false when there is nothing to finish. */
+    openResolve: (): boolean => openSheet('thanks'),
+    /** The «خلصت» sheet, the escalation confirm or the outcome picker is open (the inbox does not switch chats under it). */
+    closeMenuOpen: (): boolean => sheetOpen.value || escalateOpen.value || (amend.value?.isOpen() ?? false),
 });
 </script>
 
@@ -233,6 +265,34 @@ defineExpose({
                 <PresenceBar :viewers="viewers" :me-id="meId" :typing="typing" />
             </div>
 
+            <!-- The one primary action: «خلصت» opens the finish sheet. Somebody else's window: the lock chip. -->
+            <Button
+                v-if="finishing"
+                size="sm"
+                class="h-9 shrink-0 gap-1.5 rounded-lg px-2.5 font-semibold sm:px-3"
+                type="button"
+                :title="`${t('finish.button')}${hint('inbox.resolve')}`"
+                :aria-label="t('finish.button')"
+                :disabled="busy"
+                data-primary-action
+                data-finish-open
+                @click="openSheet('thanks')"
+            >
+                <CheckCircle2 aria-hidden="true" />
+                <span class="hidden sm:inline">{{ t('finish.button') }}</span>
+            </Button>
+            <span
+                v-else-if="heldByOther"
+                class="inline-flex h-9 min-w-0 shrink-0 items-center gap-1 rounded-lg bg-elevated px-2.5 text-xs text-muted-foreground sm:max-w-[12rem] sm:shrink"
+                :title="`${t('queue.held_by', { name: holderName })} · ${t('queue.held_by_hint')}`"
+                data-held-by
+            >
+                <Lock class="size-3.5 shrink-0" aria-hidden="true" />
+                <!-- On a phone only the lock: the name keeps the room (the row-2 chip says who has her). -->
+                <span class="hidden truncate sm:inline" dir="auto">{{ t('queue.held_by', { name: holderName }) }}</span>
+                <span class="sr-only sm:hidden">{{ t('queue.held_by', { name: holderName }) }}</span>
+            </span>
+
             <button
                 type="button"
                 :class="cn(iconButton, 'hidden md:inline-flex')"
@@ -257,15 +317,18 @@ defineExpose({
 
             <DropdownMenu v-model:open="moreOpen">
                 <DropdownMenuTrigger :class="iconButton" :aria-label="t('thread.header.more')" :title="t('thread.header.more')" data-more-menu>
-                    <LoaderCircle v-if="busy && busyAction !== 'resolve' && busyAction !== 'reopen'" class="animate-spin" aria-hidden="true" />
+                    <LoaderCircle v-if="(busy && busyAction !== 'resolve' && busyAction !== 'reopen') || escalating" class="animate-spin" aria-hidden="true" />
                     <Ellipsis v-else aria-hidden="true" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" class="w-56">
                     <DropdownMenuItem v-if="canClaim" :disabled="busy" data-menu="claim" @select="emit('claim')">
                         <Hand aria-hidden="true" />{{ t('handling.claim') }}
                     </DropdownMenuItem>
-                    <DropdownMenuItem v-if="canReturnToBot" :disabled="busy" data-menu="return-to-bot" @select="emit('action', 'return-to-bot')">
-                        <Bot aria-hidden="true" />{{ t('thread.return_to_bot') }}
+                    <DropdownMenuItem v-if="canReturnToBot" :disabled="busy" data-menu="return-to-bot" @select="openSheet('bot')">
+                        <Bot aria-hidden="true" />{{ t('finish.return_to_bot') }}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem v-if="canEscalate" :disabled="busy || escalating" data-menu="escalate" @select="escalateOpen = true">
+                        <ArrowUpCircle class="text-destructive" aria-hidden="true" />{{ t('queue.close.escalate') }}
                     </DropdownMenuItem>
 
                     <DropdownMenuSub>
@@ -371,6 +434,7 @@ defineExpose({
             :aria-label="t('thread.header.chips')"
             data-header-row2
         >
+            <AmendOutcome v-if="needsOutcome" ref="amend" :conversation-id="conversation.id" />
             <StatusChip v-if="state" :label="state.label" :tone="state.tone" :icon="state.key === 'bot' ? Bot : undefined" data-state-chip />
             <StatusChip v-if="conversation.is_test" :label="t('inbox.test_badge')" tone="neutral" />
             <StatusChip v-if="conversation.is_load_test" :label="t('inbox.load_test_badge')" tone="warning" data-load-test-chip />
@@ -419,5 +483,32 @@ defineExpose({
         <QueueBanner :conversation="conversation" :me-id="meId" part="bar" />
 
         <ResetDialog v-model:open="resetOpen" :busy="busyAction === 'reset'" @confirm="emit('action', 'reset')" @close-focus="focusMore" />
+
+        <FinishSheet
+            v-if="finishing"
+            v-model:open="sheetOpen"
+            :conversation="conversation"
+            :target="finishing"
+            :initial-after="sheetAfter"
+            :owner-name="windowOwner"
+            :awaiting-since="awaitingSince"
+            :last-from-customer="lastFromCustomer"
+        />
+
+        <Dialog v-model:open="escalateOpen">
+            <DialogContent class="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>{{ t('queue.close.escalate_title') }}</DialogTitle>
+                    <DialogDescription>{{ t('queue.close.escalate_description') }}</DialogDescription>
+                </DialogHeader>
+                <DialogFooter class="gap-2">
+                    <Button type="button" variant="ghost" :disabled="escalating" @click="escalateOpen = false">{{ t('common.cancel') }}</Button>
+                    <Button type="button" variant="destructive" :loading="escalating" data-escalate-ok @click="escalate">
+                        <ArrowUpCircle aria-hidden="true" />
+                        {{ t('queue.close.escalate_confirm') }}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </header>
 </template>

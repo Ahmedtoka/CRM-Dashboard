@@ -71,6 +71,9 @@ class QueueEntryResource extends JsonResource
             'reopened_from_entry_id' => $e->reopened_from_entry_id,
             // Her open support case when she took the ticket: «عندها كيس مفتوح #N».
             'open_case_id' => $e->open_case_id,
+            // Close cycle §5.3 (additive): whose turn it is in an open window — `agent` (she waits for us) or `customer`.
+            'awaiting' => $e->isOpen() ? ($e->awaiting_reply_since !== null ? 'agent' : ($e->last_agent_message_at !== null ? 'customer' : null)) : null,
+            'end_mode' => $e->end_mode,
         ];
     }
 

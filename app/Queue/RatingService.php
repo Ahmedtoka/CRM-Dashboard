@@ -65,6 +65,9 @@ class RatingService
     /** «5 نجوم», «5 stars», a 5 and star glyphs; spaces and punctuation already removed. */
     private const DIGIT_ANSWER = '/^([1-5])(?:(?:\x{2B50}|\x{2605}|\x{1F31F})+|نجوم|نجمات|نجمة|نجمه|stars?)?$/iu'; // emoji-input
 
+    /** Close cycle Q2: a window closed this fast after delivery is not rated. */
+    public const MIN_HANDLE_SECONDS = 30;
+
     public function __construct(
         private readonly ArabicNormalizer $normalizer,
         private readonly Acknowledgement $acknowledgements,
@@ -112,6 +115,25 @@ class RatingService
             ! app(WindowPolicy::class)->evaluate($c, SenderType::Bot)->canSendText() => 'window_closed',
             default => null,
         };
+    }
+
+    /**
+     * Close cycle §6.1 (Q1, Q2): may the closing message of this close carry the rating question?
+     * The queue is on, an inquiry / problem close with a moderator who replied at least once and a
+     * window that lasted MIN_HANDLE_SECONDS, not asked yet, not a test chat (a load test is rated),
+     * and the customer not asked in the last 24 hours. Whether she came back, a colleague replied or
+     * the reply window closed is the closing message's own check (AfterCloseGuard, sendBot).
+     */
+    public function askableAtClose(QueueEntry $e, ?QueueSetting $s = null): bool
+    {
+        $s ??= QueueSetting::current();
+        $c = $e->conversation;
+
+        return $s->enabled && $c !== null && $e->status === 'closed' && in_array($e->close_reason, QueueEntry::RATED_CLOSE_REASONS, true)
+            && $e->review_requested_at === null && $e->assigned_user_id !== null && $e->first_reply_at !== null
+            && (int) $e->handle_seconds >= self::MIN_HANDLE_SECONDS
+            && ! (($e->is_test || (bool) $c->is_test) && ! $c->isLoadTest())
+            && ! $this->askedRecently($e);
     }
 
     /** Asks for the rating of this close now, when nothing stops it. True when the question went out. */
@@ -188,8 +210,9 @@ class RatingService
             return false;
         }
 
-        // Typed, it counts only while the question is the last thing we (the bot or a moderator) said.
-        $latest = $c->messages()->where('direction', MessageDirection::Out->value)
+        // Typed, it counts only while the question is the last thing we (the bot or a moderator) said
+        // from the CRM — an echo from outside it does not move it (close cycle D-28).
+        $latest = $c->messages()->where('direction', MessageDirection::Out->value)->where('sent_outside_crm', false)
             ->whereIn('sender_type', [SenderType::Bot->value, SenderType::User->value])->where('id', '<', $m->id)->max('id');
 
         if ((int) $latest !== (int) $e->review_message_id) {
@@ -274,7 +297,7 @@ class RatingService
     }
 
     /** The same customer (else the same conversation) got a rating question in the last 24 hours. */
-    private function askedRecently(QueueEntry $e): bool
+    public function askedRecently(QueueEntry $e): bool
     {
         return QueueEntry::query()->whereKeyNot($e->id)
             ->when($e->customer_id !== null, fn ($q) => $q->where('customer_id', $e->customer_id), fn ($q) => $q->where('conversation_id', $e->conversation_id))

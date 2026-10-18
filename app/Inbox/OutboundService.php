@@ -21,6 +21,7 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\User;
+use App\Queue\ConversationCycle;
 use App\Queue\WindowLifecycle;
 use App\Simulator\LoadTest\FollowUps;
 use App\Support\Emoji;
@@ -180,6 +181,10 @@ class OutboundService
                 $created->push($message);
             }
 
+            // Close cycle §7.2: her reply may take the chat (a claim), a waiting customer, or the window
+            // the tick auto-closed seconds ago back — before the handler flips and the clocks move.
+            app(ConversationCycle::class)->onStaffReply($c, $u);
+
             if ($c->handler === Handler::Bot) {
                 $c->handler = Handler::Human;
             }
@@ -205,7 +210,7 @@ class OutboundService
             $this->lock->release($c, $u, broadcast: false);
 
             return $created;
-        });
+        }, attempts: 3);
 
         // Hand off to the platform first: a broadcast failure must never strand a
         // committed message in "queued". The UI pushes are best-effort.

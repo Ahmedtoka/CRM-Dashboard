@@ -165,7 +165,7 @@ final class OutcomeRecorder
 
     /**
      * Ends the running episode (see Definitions). Precedence: ordered > picked > service > the end's
-     * own default (no_answer for a silence auto-close; idle: no_answer, or unknown when the customer
+     * own default (unknown for a silence auto-close, close cycle Q6; idle: no_answer, or unknown when the customer
      * wrote last and nobody answered) > unknown. Nothing new since the last end: that row is
      * returned untouched (a second resolve changes nothing). Call it inside the close's transaction
      * when there is one.
@@ -186,7 +186,8 @@ final class OutcomeRecorder
             $auto === Outcome::Ordered => [Outcome::Ordered, ConversationOutcome::SOURCE_AUTO],
             $picked !== null && $picked !== Outcome::Ordered && $picked !== Outcome::Unknown => [$picked, ConversationOutcome::SOURCE_AGENT],
             $auto !== null => [$auto, ConversationOutcome::SOURCE_AUTO],
-            $how === EpisodeEnd::AutoClose => [Outcome::NoAnswer, ConversationOutcome::SOURCE_AUTO],
+            // Close cycle Q6 (D-24): a silent auto-close is not a lost sale — `unknown`, set later by her moderator.
+            $how === EpisodeEnd::AutoClose => [Outcome::Unknown, ConversationOutcome::SOURCE_AUTO],
             $how === EpisodeEnd::Idle => [$this->idleOutcome($c), ConversationOutcome::SOURCE_AUTO],
             default => [Outcome::Unknown, $person ? ConversationOutcome::SOURCE_AGENT : ConversationOutcome::SOURCE_AUTO],
         };
@@ -293,5 +294,54 @@ final class OutcomeRecorder
             ->whereNotIn('id', $held)
             ->when($since !== null, fn ($q) => $q->where('created_at', '>', $since))
             ->latest('id')->first(['id', 'created_at']);
+    }
+    /** The ended episode row a queue close wrote (null when it wrote none). */
+    public function rowOf(?QueueEntry $e): ?ConversationOutcome
+    {
+        return $e === null ? null : ConversationOutcome::query()->where('queue_entry_id', $e->id)->whereNotNull('ended_at')->latest('id')->first();
+    }
+
+    /**
+     * Close cycle H-09 / Q6: a person sets the outcome of an episode the silence auto-close ended.
+     * An `ordered` episode keeps its order; anything else takes her pick (an agent outcome).
+     */
+    public function amend(QueueEntry $e, Outcome $outcome, ?string $note, User $by): ?ConversationOutcome
+    {
+        $row = $this->rowOf($e);
+
+        // Null: nothing was written (no row, an ordered episode keeps its order, not a person's pick).
+        if ($row === null || $row->outcome === Outcome::Ordered->value || in_array($outcome, [Outcome::Ordered, Outcome::Unknown], true)) {
+            return null;
+        }
+
+        $row->forceFill([
+            'outcome' => $outcome->value, 'source' => ConversationOutcome::SOURCE_AGENT, 'set_by_id' => $by->id, 'set_at' => now(),
+            'note' => $outcome === Outcome::Other && $note !== null && trim($note) !== '' ? mb_substr(trim($note), 0, 200) : null,
+        ])->save();
+
+        return $row;
+    }
+
+    /**
+     * Close cycle «تراجع» / H-08: the episode a just-undone close ended is running again — an
+     * `ordered` row (it existed before the close, holding its order) is open again, any other row
+     * the close created is removed, so the next close ends the episode afresh.
+     */
+    public function reopenEpisode(Conversation $c, QueueEntry $e, CarbonInterface $closedAt): void
+    {
+        $row = ConversationOutcome::query()->where('conversation_id', $c->id)->where('queue_entry_id', $e->id)
+            ->whereNotNull('ended_at')->where('ended_at', '>=', $closedAt->copy()->subSecond())->latest('id')->first();
+
+        if ($row === null) {
+            return;
+        }
+
+        if ($row->outcome === Outcome::Ordered->value && $row->order_id !== null) {
+            $row->forceFill(['ended_at' => null, 'ended_by' => null])->save();
+
+            return;
+        }
+
+        $row->delete();
     }
 }

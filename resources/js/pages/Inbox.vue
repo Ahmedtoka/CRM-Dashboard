@@ -11,6 +11,7 @@ import MyWindowsStrip from '@/components/crm/queue/MyWindowsStrip.vue';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { INBOX_OUTCOME, useConversationContext } from '@/composables/inbox/useConversationContext';
+import { provideFinish } from '@/composables/inbox/useFinish';
 import { useConversationList } from '@/composables/inbox/useConversationList';
 import { useDetailsPanel } from '@/composables/inbox/useDetailsPanel';
 import { useConversationThread } from '@/composables/inbox/useConversationThread';
@@ -33,7 +34,6 @@ import type {
     InboxFilters,
     InboxModerator,
     Order,
-    OutcomePayload,
     QueueEntry,
     QuickReply,
     QuickReplyCategory,
@@ -185,6 +185,30 @@ const { conversations: listRows, filters: listFilters, loading, loadingMore, loa
 // shift, this is one request and nothing of it is rendered.
 const queue = useMyQueue({ userId: me.id, onAssigned: onWindowAssigned, onReleased: onWindowReleased });
 
+// Close cycle: «خلصت» and its «تراجع» (the header's finish sheet) update the list, the thread, the
+// strip and the outcome state here; a refusal that says the chat changed reads it again.
+function applyFinished(conversation: Conversation): void {
+    list.applyConversation(conversation);
+    if (detail.value?.conversation.id === conversation.id) thread.applyConversation(conversation);
+    if (selectedId.value === conversation.id) void ctx.reload();
+}
+provideFinish({
+    finished: (result) => {
+        applyFinished(result.conversation);
+        if (result.entry && result.path === 'window') queue.forget(result.entry.id);
+    },
+    undone: (conversation, entry) => {
+        applyFinished(conversation);
+        void (entry ? queue.restore(entry.id) : queue.refresh().catch(() => undefined));
+        if (detail.value?.conversation.id === conversation.id) void thread.silentReload().catch(() => undefined);
+    },
+    stale: (conversationId) => {
+        if (detail.value?.conversation.id === conversationId) void thread.silentReload().catch(() => undefined);
+        if (selectedId.value === conversationId) void ctx.reload();
+        void queue.refresh().catch(() => undefined);
+    },
+});
+
 const windowUnread = computed<Record<number, number>>(() => {
     const ids = new Set(queue.entries.value.map((e) => e.conversation_id));
 
@@ -334,39 +358,18 @@ function sendTemplate(template: TemplatePayload): void {
 async function runAction(name: ConversationAction): Promise<void> {
     // `e` on a chat that is already closed: nothing to resolve (no request, no 422).
     if (name === 'resolve' && detail.value?.conversation.status === 'resolved') return;
-    // An open queue window is never ended without a reason: resolve and return-to-bot (and their
-    // shortcuts, and send-and-resolve) open the reasons; somebody else's window is not hers to end.
+    // Close cycle: resolve and return-to-bot (and their shortcuts, and send-and-resolve) open the
+    // «خلصت» sheet; somebody else's window is not hers to end; a chat the bot holds has nothing to end.
     if (name === 'resolve' || name === 'return-to-bot') {
         const header = threadView.value?.header;
         const gate = header?.openCloseWindow(name === 'return-to-bot' ? 'bot' : 'close') ?? 'none';
-        if (gate === 'menu') return;
-        if (gate === 'blocked') {
-            toast.push(t('queue.held_by', { name: header?.holder() ?? '' }), 'error');
+        if (gate === 'blocked') toast.push(t('queue.held_by', { name: header?.holder() ?? '' }), 'error');
 
-            return;
-        }
-        // D13: outside the queue «حل» (and `e`, and send-and-resolve) opens the outcome menu.
-        if (name === 'resolve' && header?.openResolve()) return;
+        return;
     }
 
     const conversation = await thread.action(name);
     if (conversation) list.applyConversation(conversation);
-}
-
-/** «حل» confirmed with its outcome (control room S3); a refusal goes back to the open menu with its message. */
-async function resolveWith(payload: OutcomePayload, done: (error: string | null) => void): Promise<void> {
-    const conversation = await thread.action('resolve', { ...payload });
-    if (conversation) {
-        done(null);
-        list.applyConversation(conversation);
-        void ctx.reload();
-
-        return;
-    }
-    // The menu shows the reason itself: no second copy in the thread's error strip.
-    const message = error.value ?? t('common.error');
-    thread.clearError();
-    done(message);
 }
 
 async function setPriority(value: ConversationPriority): Promise<void> {
@@ -645,7 +648,6 @@ onBeforeUnmount(() => {
                     @load-older="thread.loadOlder"
                     @send="send"
                     @send-and-resolve="sendAndResolve"
-                    @resolve="resolveWith"
                     @note="onNote"
                     @send-template="sendTemplate"
                     @product-sent="thread.mergeMessage($event)"

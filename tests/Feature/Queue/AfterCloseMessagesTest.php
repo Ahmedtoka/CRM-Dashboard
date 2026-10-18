@@ -11,6 +11,7 @@ use App\Models\Shift;
 use App\Models\ShiftMember;
 use App\Models\User;
 use App\Queue\AfterCloseGuard;
+use App\Queue\Jobs\SendClosingMessage;
 use App\Queue\Jobs\SendQueueMessage;
 use App\Queue\RatingService;
 use App\Queue\WindowLifecycle;
@@ -179,8 +180,9 @@ it('delays the closing chain a few seconds so in-flight webhooks land first', fu
 
     app(WindowLifecycle::class)->close($e, 'inquiry', $u);
 
-    Bus::assertDispatched(SendQueueMessage::class, fn (SendQueueMessage $job) => $job->scriptKey === 'queue_closed_thanks'
-        && $job->delay !== null && now()->diffInSeconds($job->delay) >= SendQueueMessage::CLOSING_SETTLE_SECONDS - 1);
+    // Close cycle §6.1: the one closing message waits long enough for «تراجع» too.
+    Bus::assertDispatched(SendClosingMessage::class, fn (SendClosingMessage $job) => $job->entryId === $e->id
+        && $job->delay !== null && now()->diffInSeconds($job->delay) >= SendClosingMessage::DELAY_SECONDS - 1);
 });
 
 // ───── the rating (D-02) ─────

@@ -16,10 +16,11 @@ function dismiss(id: number): void {
     toasts.value = toasts.value.filter((toast) => toast.id !== id);
 }
 
-function push(message: string, tone: Toast['tone'] = 'success', link?: Toast['link'], action?: Toast['action']): void {
+/** `ms`: how long it stays (an «تراجع» toast lives as long as its undo may run). */
+function push(message: string, tone: Toast['tone'] = 'success', link?: Toast['link'], action?: Toast['action'], ms?: number): void {
     const id = ++seq;
     toasts.value = [...toasts.value.slice(-3), { id, message, tone, link, action }];
-    window.setTimeout(() => dismiss(id), tone === 'error' ? 8000 : 5000);
+    window.setTimeout(() => dismiss(id), ms ?? (tone === 'error' ? 8000 : 5000));
 }
 
 /** App-wide toasts, rendered once by ToastStack in AppLayout. */

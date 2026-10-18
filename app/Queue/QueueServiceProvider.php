@@ -3,6 +3,7 @@
 namespace App\Queue;
 
 use App\Models\User;
+use App\Queue\Commands\QueueOrphansCommand;
 use App\Queue\Commands\QueueRollupCommand;
 use App\Queue\Commands\QueueTick;
 use App\Queue\Events\CloseReversed;
@@ -20,7 +21,7 @@ class QueueServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([QueueTick::class, QueueRollupCommand::class]);
+            $this->commands([QueueTick::class, QueueRollupCommand::class, QueueOrphansCommand::class]);
         }
 
         // Queue Part 2: what a window earns (the listener rescues itself, never failing the close).

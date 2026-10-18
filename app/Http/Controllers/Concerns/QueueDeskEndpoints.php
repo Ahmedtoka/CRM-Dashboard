@@ -12,6 +12,8 @@ use App\Models\ShiftMember;
 use App\Models\SupportCase;
 use App\Models\User;
 use App\Queue\AttendanceRefused;
+use App\Queue\ConversationCycle;
+use App\Queue\FinishRefused;
 use App\Queue\QueueService;
 use App\Queue\Reports\QueueDayView;
 use App\Queue\Scoring\ScoreKeeper;
@@ -127,6 +129,8 @@ trait QueueDeskEndpoints
                 'silence_close_seconds' => (int) $s->silence_close_seconds,
                 'windows_per_moderator' => (int) $s->windows_per_moderator,
                 'break_minutes' => (int) $s->break_minutes,
+                // Close cycle §5.3 (additive): the reopen window after «خلصت» (Q8).
+                'reopen_after_done_minutes' => (int) $s->reopen_after_done_minutes,
             ],
             // The leader of the open shift: nobody above her to escalate to (the menu hides it).
             'leader_user_id' => $open?->leader_user_id,
@@ -182,13 +186,29 @@ trait QueueDeskEndpoints
             throw ValidationException::withMessages(['outcome' => __('errors.outcome.required')]);
         }
 
-        $closed = $windows->close($entry, $data['reason'], $request->user(), [
-            'case_type' => $data['case_type'] ?? null, 'outcome' => $outcome, 'outcome_note' => $data['outcome_note'] ?? null,
-            'to_bot' => (bool) ($data['to_bot'] ?? false),
-        ]);
+        // Close cycle §5.2: the installed app's «خلصت» goes through the same ConversationCycle, keeping its
+        // reason as `close_reason` and this response's shape. A waiting customer never refuses it (the
+        // app knows no `customer_waiting`: no closing message then); her open case is linked (C1, D-21);
+        // a window the tick auto-closed meanwhile stays `window_not_open` (RC-11).
+        try {
+            $result = app(ConversationCycle::class)->finish($entry->conversation, $request->user(), [
+                'entry_id' => $entry->id, 'reason' => $data['reason'], 'case_type' => $data['case_type'] ?? null,
+                'open_case' => $data['reason'] === 'case' ? ($data['case_type'] ?? null) : null, 'link_case' => true,
+                'outcome' => $outcome, 'outcome_note' => $data['outcome_note'] ?? null,
+                'after' => ($data['to_bot'] ?? false) ? 'bot' : 'thanks', 'confirm_waiting' => true, 'no_amend' => true,
+            ]);
+        } catch (FinishRefused $x) {
+            if ($x->key === 'outcome_required') {
+                throw ValidationException::withMessages(['outcome' => __('errors.outcome.required')]);
+            }
+
+            return $x->status === 403 ? response()->json(['message' => __('errors.queue.not_your_window')], 403) : $this->notOpen();
+        }
+
+        $closed = $result['entry'];
 
         // Somebody (or the silence timer) closed it between our read and the lock: nothing was done here.
-        if ($closed->status !== 'closed' || $closed->close_reason !== $data['reason'] || (int) $closed->closed_by_id !== (int) $request->user()->id) {
+        if ($closed === null || $closed->status !== 'closed' || $closed->close_reason !== $data['reason'] || (int) $closed->closed_by_id !== (int) $request->user()->id) {
             return $this->notOpen();
         }
 

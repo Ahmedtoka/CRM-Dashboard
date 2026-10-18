@@ -31,11 +31,11 @@ class QueueReport
     {
         $acc = [];
         $kpi = ['tickets' => 0, 'windows' => 0, 'handled' => 0, 'closed' => array_fill_keys(QueueEntry::CLOSE_REASONS, 0),
-            'reply_sum' => 0, 'reply_n' => 0, 'handle_sum' => 0, 'handle_n' => 0, 'sla_met' => 0, 'sla_n' => 0, 'stars_sum' => 0, 'stars_n' => 0];
+            'reply_sum' => 0, 'reply_n' => 0, 'handle_sum' => 0, 'handle_n' => 0, 'sla_met' => 0, 'sla_n' => 0, 'stars_sum' => 0, 'stars_n' => 0, 'to_bot' => 0, 'reopened_after_done' => 0];
 
         $entries = DB::table('queue_entries')->where('is_test', false)
             ->whereBetween('business_date', self::storedBounds($from, $to))
-            ->select(['id', 'assigned_user_id', 'status', 'close_reason', 'ticket_no', 'delivered_at', 'first_reply_at', 'handle_seconds', 'sla_met', 'review_stars']);
+            ->select(['id', 'assigned_user_id', 'status', 'close_reason', 'ticket_no', 'delivered_at', 'first_reply_at', 'handle_seconds', 'sla_met', 'review_stars', 'end_mode', 'reopened_at', 'rule']);
 
         foreach ($entries->lazyById(2000, 'id') as $e) {
             $kpi['tickets'] += (int) $e->ticket_no < 100000 ? 1 : 0;
@@ -67,7 +67,14 @@ class QueueReport
                 }
             }
 
-            if ($e->first_reply_at !== null) {
+            // Close cycle: «البوت يكمّل» and «رجعت بعد خلصت» (Q9, a quality metric).
+            $row['to_bot'] += (int) ($e->end_mode === 'bot');
+            $kpi['to_bot'] += (int) ($e->end_mode === 'bot');
+            $row['reopened_after_done'] += (int) ($e->reopened_at !== null);
+            $kpi['reopened_after_done'] += (int) ($e->reopened_at !== null);
+
+            // RC-8: a claimed window's first reply is the claim itself — no first-reply time, no SLA.
+            if ($e->first_reply_at !== null && $e->rule !== 'claim') {
                 $secs = max(0, self::ts($e->first_reply_at) - self::ts($e->delivered_at));
                 $row['reply_sum'] += $secs;
                 $row['reply_n']++;
@@ -147,6 +154,8 @@ class QueueReport
                     ->whereNotIn('queue_entry_id', QueueEntry::query()->where('is_test', true)->select('id'))
                     ->whereNotNull('sla_due_at')->where('sla_due_at', '<', now())->count(),
                 'points_total' => (int) $points->sum('total'),
+                'to_bot' => $kpi['to_bot'],
+                'reopened_after_done' => $kpi['reopened_after_done'],
             ],
             'rows' => $rows,
         ];
@@ -195,7 +204,7 @@ class QueueReport
     private static function blank(): array
     {
         return ['received' => 0, 'handled' => 0, 'closed' => [], 'reply_sum' => 0, 'reply_n' => 0, 'sla_met' => 0, 'handle_sum' => 0, 'handle_n' => 0,
-            'stars_sum' => 0, 'stars_n' => 0, 'qa_n' => 0, 'qa_avg' => null, 'cases_resolved' => 0, 'points' => []];
+            'stars_sum' => 0, 'stars_n' => 0, 'qa_n' => 0, 'qa_avg' => null, 'cases_resolved' => 0, 'points' => [], 'to_bot' => 0, 'reopened_after_done' => 0];
     }
 
     /** @return array<string, mixed> */
@@ -220,6 +229,8 @@ class QueueReport
             'qa_count' => $r['qa_n'],
             'cases_opened' => $r['closed']['case'] ?? 0,
             'cases_resolved' => $r['cases_resolved'],
+            'to_bot' => $r['to_bot'],
+            'reopened_after_done' => $r['reopened_after_done'],
             'points' => $points,
             'total' => array_sum($points),
         ];

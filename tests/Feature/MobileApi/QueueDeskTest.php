@@ -8,6 +8,7 @@ use App\Models\Shift;
 use App\Models\ShiftMember;
 use App\Models\SupportCase;
 use App\Models\User;
+use App\Queue\Jobs\SendClosingMessage;
 use App\Queue\Jobs\SendQueueMessage;
 use App\Queue\ShiftService;
 use Illuminate\Support\Carbon;
@@ -140,7 +141,7 @@ it('answers a check-out off the shift with 404', function () {
 // ───── close ─────
 
 it('closes an inquiry with an outcome and sends the closing message', function () {
-    Bus::fake([SendQueueMessage::class]);
+    Bus::fake([SendClosingMessage::class]);
     [$u, $m, $e] = mqDesk();
     Sanctum::actingAs($u);
 
@@ -149,7 +150,7 @@ it('closes an inquiry with an outcome and sends the closing message', function (
         ->assertJsonPath('data.close_reason', 'inquiry')->assertJsonPath('data.support_case_id', null);
 
     expect($e->fresh()->status)->toBe('closed')->and($m->fresh()->status)->toBe('available');
-    Bus::assertDispatched(SendQueueMessage::class, fn ($job) => $job->entryId === $e->id && $job->scriptKey === 'queue_closed_thanks');
+    Bus::assertDispatched(SendClosingMessage::class, fn ($job) => $job->entryId === $e->id && $job->withThanks); // close cycle Q1
 });
 
 it('needs a case type on a case close and opens the support case', function () {

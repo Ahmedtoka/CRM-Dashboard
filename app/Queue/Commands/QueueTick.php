@@ -4,6 +4,7 @@ namespace App\Queue\Commands;
 
 use App\Models\QueueDecision;
 use App\Models\QueueMessageSend;
+use App\Models\QueueEntry;
 use App\Models\QueueSetting;
 use App\Queue\Cases\CaseSla;
 use App\Queue\QueueRouter;
@@ -67,6 +68,16 @@ TXT;
         $settings = QueueSetting::current();
 
         if (! $settings->enabled) {
+            // Close cycle (M-05 / H-06): the queue switched off with windows still open — they keep
+            // their silent auto-close and the shift-end watchdog until they are all closed (nothing
+            // is routed, no apology, no hand-off). Bot cases keep their SLA (Q11).
+            rescue(fn () => app(CaseSla::class)->sweep(), null, report: true);
+            if (QueueEntry::query()->whereIn('status', QueueEntry::OPEN_STATUSES)->exists()) {
+                rescue(fn () => $shifts->closeEnded(), null, report: true);
+                rescue(fn () => $windows->tickStranded($settings, draining: true), null, report: true);
+                rescue(fn () => $windows->tickSilence($settings, draining: true), null, report: true);
+            }
+
             return self::SUCCESS;
         }
 

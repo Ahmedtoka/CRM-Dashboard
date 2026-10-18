@@ -82,7 +82,7 @@ class InboxIngestor
                 // An answer a handler takes (an order-confirmation tap, 2026-10-16) goes into her latest
                 // thread as it is: never reopened, not unread, no queue ticket, no bot (InboundInterceptors).
                 $claim = $this->claimFor($d, $identity, $account);
-                $conversation = $claim !== null ? $claim[1] : $this->openConversationFor($identity, $account);
+                $conversation = $claim !== null ? $claim[1] : $this->conversationFor($identity, $account, ConversationSource::Direct, null, reopen: false);
                 $claim = $claim[0] ?? null;
                 $opened = $conversation->wasRecentlyCreated;
 
@@ -109,7 +109,6 @@ class InboxIngestor
                 $previous = $conversation->last_customer_message_at;
 
                 $conversation->forceFill([
-                    'status' => $claim !== null ? $conversation->status : ConversationStatus::Open,
                     'last_message_at' => now(),
                     'last_customer_message_at' => $previous && $previous->greaterThan($occurred) ? $previous : $occurred,
                 ])->save();
@@ -126,8 +125,19 @@ class InboxIngestor
                 $settled = $claim !== null || (! $message->is_spam
                     && app(QueueService::class)->settles($conversation, $message, app(Acknowledgement::class)->matches($message)));
 
+                // Close cycle M-09: a settled message (a thanks, a rating answer) leaves a closed chat closed;
+                // any other message (not a claimed confirmation answer) opens it, as before.
                 if (! $settled) {
                     $conversation->increment('unread_count');
+                }
+
+                if (! $settled && $conversation->status !== ConversationStatus::Open) {
+                    $reopened = $conversation->status === ConversationStatus::Resolved;
+                    $conversation->forceFill(['status' => ConversationStatus::Open, 'resolved_at' => null, 'resolved_by_id' => null])->save();
+
+                    if ($reopened) {
+                        $this->logger->log(ActorType::System, null, ActivityLogger::CONVERSATION_REOPENED, $conversation, $conversation);
+                    }
                 }
 
                 $this->logger->log(ActorType::System, null, ActivityLogger::MESSAGE_RECEIVED, $message, $conversation);
@@ -245,6 +255,12 @@ class InboxIngestor
      */
     public function openConversationFor(CustomerIdentity $i, ChannelAccount $a, ConversationSource $src = ConversationSource::Direct, ?int $sourceCommentId = null): Conversation
     {
+        return $this->conversationFor($i, $a, $src, $sourceCommentId, reopen: true);
+    }
+
+    /** Close cycle M-09: `reopen: false` for her inbound message (the ingest opens it after `settles()`). */
+    private function conversationFor(CustomerIdentity $i, ChannelAccount $a, ConversationSource $src, ?int $sourceCommentId, bool $reopen): Conversation
+    {
         Customer::query()->whereKey($i->customer_id)->lockForUpdate()->first();
 
         $query = fn () => Conversation::where('customer_id', $i->customer_id)
@@ -257,6 +273,13 @@ class InboxIngestor
         }
 
         $resolved = $query()->where('status', ConversationStatus::Resolved->value)->latest('id')->first();
+
+        // Close cycle M-09: for her inbound message (`reopen: false`) the ingest opens it once it knows the
+        // message asks for something (a thanks or a rating answer leaves it resolved). Every other
+        // caller (a comment's private reply, a confirmation, a test link, the load test) opens it here.
+        if ($resolved !== null && ! $reopen) {
+            return $resolved;
+        }
 
         if ($resolved !== null) {
             $resolved->forceFill([
@@ -337,6 +360,11 @@ class InboxIngestor
         // Human-handled conversations are left alone: needs_human stays as it is
         // until a human replies (OutboundService clears it).
         if ($conversation->handler !== Handler::Bot || ! BotSetting::current()->enabled) {
+            return;
+        }
+
+        // Close cycle Q12: a person answered her from Business Suite a moment ago — the bot keeps quiet.
+        if ($conversation->bot_paused_until !== null && $conversation->bot_paused_until->isFuture()) {
             return;
         }
 

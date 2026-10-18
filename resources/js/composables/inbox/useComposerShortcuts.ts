@@ -25,6 +25,10 @@ interface Options {
     emitSendAndResolve: (body: string, attachments: Attachment[], quickReplyId: number | null) => void;
     /** `done` fires only once the note actually persisted — the caller clears the textarea then, never before (a failed post keeps the draft). */
     emitNote: (body: string, mentions: number[], done: () => void) => void;
+    /** Q10: this send takes the chat over from the bot and she has not confirmed that yet (close cycle). */
+    needsClaimConfirm?: () => boolean;
+    /** She confirmed taking it over: not asked again for this chat. */
+    rememberClaim?: () => void;
 }
 
 /**
@@ -36,6 +40,9 @@ interface Options {
  */
 export function useComposerShortcuts(options: Options) {
     const confirming = ref(false);
+    /** Q10: «هتستلمي المحادثة دي من البوت» is asking; the send waits for it. */
+    const claiming = ref(false);
+    let claimKind: 'send' | 'sendAndResolve' = 'send';
     // Which action the locked-conversation confirm banner performs once
     // confirmed — set by whichever of submit()/mod+enter hit the lock guard.
     let confirmKind: 'send' | 'sendAndResolve' = 'send';
@@ -62,6 +69,15 @@ export function useComposerShortcuts(options: Options) {
     }
 
     function run(kind: 'send' | 'sendAndResolve'): void {
+        if (options.needsClaimConfirm?.()) {
+            claimKind = kind;
+            claiming.value = true;
+            return;
+        }
+        runLocked(kind);
+    }
+
+    function runLocked(kind: 'send' | 'sendAndResolve'): void {
         if (options.lockHolderName()) {
             confirmKind = kind;
             confirming.value = true;
@@ -81,6 +97,16 @@ export function useComposerShortcuts(options: Options) {
 
     function cancelConfirm(): void {
         confirming.value = false;
+    }
+
+    function confirmClaim(): void {
+        claiming.value = false;
+        options.rememberClaim?.();
+        if (canSubmit()) runLocked(claimKind);
+    }
+
+    function cancelClaim(): void {
+        claiming.value = false;
     }
 
     function submitNote(): void {
@@ -105,5 +131,5 @@ export function useComposerShortcuts(options: Options) {
         return true;
     }
 
-    return { confirming, setMode, submit, confirmSend, cancelConfirm, submitNote, handleModEnter };
+    return { confirming, claiming, setMode, submit, confirmSend, cancelConfirm, confirmClaim, cancelClaim, submitNote, handleModEnter };
 }

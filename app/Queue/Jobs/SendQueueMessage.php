@@ -7,6 +7,7 @@ use App\Inbox\SendClaimRefused;
 use App\Inbox\WindowClosedException;
 use App\Models\QueueEntry;
 use App\Models\QueueMessageSend;
+use App\Models\QueueSetting;
 use App\Queue\AfterCloseGuard;
 use App\Queue\QueueScripts;
 use App\Queue\WindowLifecycle;
@@ -43,13 +44,16 @@ class SendQueueMessage implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable;
 
     /** Scripts that only make sense while she waits in the lounge. */
-    public const WHILE_WAITING = ['queue_position_update', 'queue_left_5', 'queue_left_3', 'queue_left_1', 'queue_apology'];
+    public const WHILE_WAITING = ['queue_position_update', 'queue_left_5', 'queue_left_3', 'queue_left_1', 'queue_apology', 'queue_returning'];
 
     /** Scripts that only make sense while her open window waits for the moderator's reply. */
     public const WHILE_AWAITING_REPLY = ['queue_agent_delay_apology'];
 
     /** Scripts that only make sense while the close they end is her latest queue entry. */
-    public const AFTER_CLOSE = ['queue_closed_thanks'];
+    public const AFTER_CLOSE = ['queue_closed_thanks', 'queue_ticket_cancelled', 'queue_auto_closed'];
+
+    /** Close cycle D-04: the silence warning only while that silence still runs. */
+    public const WHILE_SILENT = ['queue_silence_warning'];
 
     /** The closing chain waits this long after the close, so a webhook already on its way lands first (H-03). */
     public const CLOSING_SETTLE_SECONDS = 5;
@@ -135,6 +139,12 @@ class SendQueueMessage implements ShouldQueue
 
         if (in_array($this->scriptKey, self::AFTER_CLOSE, true)) {
             return AfterCloseGuard::reason($e) !== null;
+        }
+
+        if (in_array($this->scriptKey, self::WHILE_SILENT, true)) {
+            $idle = $e->isOpen() ? WindowLifecycle::idleSeconds($e) : null;
+
+            return $idle === null || $idle < (int) QueueSetting::current()->silence_warn_seconds;
         }
 
         return false;

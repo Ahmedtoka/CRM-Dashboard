@@ -37,6 +37,7 @@ class Message extends Model
         'is_template',
         'template',
         'sent_outside_crm',
+        'echo_app_id',
         'is_spam',
         'is_low_value',
         'queued_at_ms',

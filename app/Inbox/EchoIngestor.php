@@ -16,6 +16,8 @@ use App\Media\Jobs\DownloadInboundMedia;
 use App\Models\Conversation;
 use App\Models\CustomerIdentity;
 use App\Models\Message;
+use App\Queue\EchoPolicy;
+use App\Queue\WindowLifecycle;
 use App\Support\SafeBroadcast;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -115,7 +117,15 @@ class EchoIngestor
                     'status' => MessageStatus::Sent,
                     'sent_outside_crm' => true,
                     'sent_at' => $d->occurredAt,
+                    // Close cycle H-05: which app sent it (null on Instagram), for EchoPolicy.
+                    'echo_app_id' => $d->appId !== null ? mb_substr((string) $d->appId, 0, 40) : null,
                 ]);
+
+                // Close cycle Q12 / D-20 for echoes (off until tried on the live page, RC-15): a person's
+                // reply from outside the CRM answers her window, or pauses the bot on a bot chat.
+                if (EchoPolicy::isHuman($message)) {
+                    app(WindowLifecycle::class)->staffEchoed($conversation);
+                }
 
                 $pending = $this->attachmentRecorder->record($message, $d->attachments);
 

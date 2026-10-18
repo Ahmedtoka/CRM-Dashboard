@@ -323,6 +323,7 @@ it('does not warn or close while the customer wrote last', function () {
 });
 
 it('sends the silence warning once per silence period, 180 seconds after the moderator last replied', function () {
+    QueueSetting::query()->update(['silence_warn_customer' => true]); // Q4: off by default
     [$e, $m, $u] = activeWindow();
     Carbon::setTestNow(now()->addSeconds(10));
     app(OutboundService::class)->sendHuman($e->conversation, $u, 'تمام يا فندم');
@@ -353,6 +354,7 @@ it('sends the silence warning once per silence period, 180 seconds after the mod
 });
 
 it('dispatches the warning through the queue message job with the minutes left', function () {
+    QueueSetting::query()->update(['silence_warn_customer' => true]); // Q4: off by default
     Bus::fake([SendQueueMessage::class]);
     [$e] = activeWindow();
     agentRepliedAgo($e, 200);
@@ -382,7 +384,8 @@ it('auto-closes 300 seconds after the moderator last replied', function () {
     Carbon::setTestNow(now()->addSeconds(1));
     app(WindowLifecycle::class)->tickSilence();
     expect($e->fresh()->status)->toBe('closed')->and($e->fresh()->close_reason)->toBe('auto')->and($e->fresh()->handle_seconds)->toBe(520)
-        ->and($e->conversation->messages()->where('sender_type', 'bot')->latest('id')->first()->body)->toContain('اتقفلت المحادثة');
+        // Close cycle Q4: silent — no «اتقفلت المحادثة» to the customer.
+        ->and($e->conversation->messages()->where('sender_type', 'bot')->count())->toBe(0);
 });
 
 // Close-cycle hotfix C1 #3 (D-20): a colleague's (or the leader's) reply in her window answers the customer.

@@ -43,7 +43,7 @@ it('ends the episode on her final close with the picked outcome', function () {
         ->and($row->queue_entry_id)->toBe($e->id)->and($row->ended_by)->toBe('close')->and($row->reached_agent)->toBeTrue();
 });
 
-it('ends the episode as no_answer when the silence closes the window', function () {
+it('ends the episode as unknown (close cycle Q6) when the silence closes the window', function () {
     [$e] = s3OpenWindow();
     $e->forceFill(['last_agent_message_at' => now()->subSeconds(400), 'last_customer_message_at' => now()->subSeconds(405)])->save();
     $e->conversation->forceFill(['last_customer_message_at' => now()->subSeconds(405)])->save();
@@ -51,7 +51,7 @@ it('ends the episode as no_answer when the silence closes the window', function 
     app(WindowLifecycle::class)->tickSilence();
 
     expect($e->fresh()->close_reason)->toBe('auto')
-        ->and(ConversationOutcome::sole()->outcome)->toBe('no_answer')
+        ->and(ConversationOutcome::sole()->outcome)->toBe('unknown')
         ->and(ConversationOutcome::sole()->ended_by)->toBe('auto_close');
 });
 

@@ -83,6 +83,8 @@ export interface Conversation {
 }
 
 export interface ConversationQueueState {
+    /** The ticket's id: «خلصت» on a customer waiting in the lounge names it (`entry_id`, RC-1). Absent from older payloads. */
+    id?: number;
     status: 'waiting' | 'called' | 'active';
     ticket: number;
     priority: string;
@@ -715,6 +717,42 @@ export interface OutcomeState {
     current: OutcomeKey | null;
     source: 'auto' | 'agent' | 'bot' | null;
     auto: OutcomeKey | null;
+    /** Close cycle: the order behind an automatic `ordered` (the «خلصت» sheet says why it picked it). */
+    auto_order?: { id: number; number: string | null; created_at: string | null } | null;
+}
+
+/* Close cycle (close-cycle-FINAL §5.1): «خلصت», its «تراجع», and the outcome of an auto-closed window. */
+export type FinishAfter = 'thanks' | 'bot';
+/** Which end the sheet is for: her open window, a customer waiting in the lounge, a human chat with no window. */
+export type FinishPath = 'window' | 'lounge' | 'none';
+export interface FinishBody {
+    /** The open / waiting ticket the sheet shows; null when the chat has no window. Always sent (RC-1). */
+    entry_id: number | null;
+    outcome?: AgentOutcome;
+    outcome_note?: string;
+    after?: FinishAfter;
+    send_closing?: boolean;
+    confirm_waiting?: boolean;
+    open_case?: SupportCaseType;
+    resolve_case_id?: number;
+}
+export interface FinishResult {
+    conversation: Conversation;
+    entry: QueueEntry | null;
+    path: FinishPath | 'amend';
+    end_mode: string | null;
+    closing: 'queued' | 'skipped';
+    skipped_reason: string | null;
+    support_case_id: number | null;
+    undo_until: string | null;
+}
+/** GET /queue/me/auto-closed: her windows the silence closed today with no outcome yet (Q6). */
+export interface AutoClosedWindow {
+    entry_id: number;
+    conversation_id: number;
+    ticket: number;
+    customer_name: string | null;
+    closed_at: string | null;
 }
 export interface HandoverDigest {
     reason: string | null;

@@ -61,12 +61,12 @@ it('keeps ordered over the picked outcome and the picked one over service', func
     expect($ordered->outcome)->toBe('ordered')->and($ordered->source)->toBe('auto')->and($ordered->order_id)->toBe($order->id);
 });
 
-it('records no_answer on a silence auto-close and unknown on an API resolve with nothing', function () {
+it('records unknown (close cycle Q6) on a silence auto-close and unknown on an API resolve with nothing', function () {
     $r = app(OutcomeRecorder::class);
     $e = QueueEntry::factory()->create(['status' => 'active', 'delivered_at' => now(), 'bot_summary' => ['category' => 'sizes']]);
     s3EndIn($e->conversation);
     $auto = $r->endEpisode($e->conversation, $e, null, null, null, EpisodeEnd::AutoClose);
-    expect($auto->outcome)->toBe('no_answer')->and($auto->queue_entry_id)->toBe($e->id)->and($auto->reached_agent)->toBeTrue();
+    expect($auto->outcome)->toBe('unknown')->and($auto->queue_entry_id)->toBe($e->id)->and($auto->reached_agent)->toBeTrue();
 
     $c = Conversation::factory()->create();
     s3EndIn($c);
