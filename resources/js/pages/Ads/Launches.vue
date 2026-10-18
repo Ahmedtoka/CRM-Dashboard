@@ -358,7 +358,7 @@ onMounted(async () => {
                     :sub="slots ? t('ads.launch.page.slots_open_n', { n: formatCount(openCount, locale), total: formatCount(slots.length, locale) }) : undefined"
                     flush
                     data-test="slots"
-                    class="lg:sticky lg:top-[calc(var(--page-header-h,56px)+16px)]"
+                    class="lg:sticky lg:top-[72px] lg:max-h-[calc(100vh-96px)] lg:overflow-y-auto"
                     tabindex="-1"
                 >
                     <p class="px-4 pb-2 text-[12.5px] text-fg-3">{{ t('ads.launch.page.slots_hint') }}</p>

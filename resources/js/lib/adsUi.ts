@@ -6,6 +6,7 @@ export const ADS_TONE = {
     danger: 'bg-danger-soft text-danger hover:bg-danger-soft hover:brightness-95 dark:hover:brightness-125',
     ok: 'bg-ok-soft text-ok hover:bg-ok-soft hover:brightness-95 dark:hover:brightness-125',
     quiet: 'text-fg-2 hover:bg-sunken hover:text-foreground',
+    brand: 'bg-brand-soft text-brand-ink hover:bg-brand-soft hover:brightness-95 dark:hover:brightness-125',
 } as const;
 
 /** A native select dressed as a FilterBar field (DESIGN §3 FilterBar `fsel`). */

@@ -172,7 +172,7 @@ function sendDisagree(): void {
                     v-if="showPrimary"
                     size="sm"
                     variant="ghost"
-                    :class="['h-11 md:h-[30px]', card.primary.verb === 'stop' ? ADS_TONE.danger : ADS_TONE.ok]"
+                    :class="['h-11 md:h-[30px]', card.primary.verb === 'stop' ? ADS_TONE.danger : card.primary.verb === 'run' ? ADS_TONE.ok : ADS_TONE.brand]"
                     :disabled="primaryDisabled"
                     data-test="primary"
                     @click="primary"
