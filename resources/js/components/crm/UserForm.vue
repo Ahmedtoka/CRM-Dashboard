@@ -50,11 +50,19 @@ function submit(): void {
     emit('submit', props.user?.id ?? null, payload);
 }
 
-const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';
+const input =
+    'h-10 w-full rounded-md border border-line-strong bg-card px-3 text-sm focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40';
 </script>
 
 <template>
-    <FormDialog :open="open" :title="user ? t('settings.users.edit') : t('settings.users.add')" :busy="busy" :error="error" @update:open="emit('update:open', $event)" @submit="submit">
+    <FormDialog
+        :open="open"
+        :title="user ? t('settings.users.edit') : t('settings.users.add')"
+        :busy="busy"
+        :error="error"
+        @update:open="emit('update:open', $event)"
+        @submit="submit"
+    >
         <label class="grid gap-1">
             <span class="text-sm font-semibold">{{ t('settings.users.name') }}</span>
             <input v-model="form.name" :class="input" required maxlength="255" autocomplete="off" />
@@ -67,7 +75,7 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
             <span class="text-sm font-semibold">{{ t('settings.users.password') }}</span>
             <input v-model="form.password" type="password" dir="ltr" :class="input" required minlength="8" autocomplete="new-password" />
         </label>
-        <div class="grid grid-cols-3 gap-2">
+        <div class="grid gap-2 sm:grid-cols-3">
             <label class="grid gap-1">
                 <span class="text-sm font-semibold">{{ t('settings.users.role') }}</span>
                 <select v-model="form.role" :class="input">
@@ -83,12 +91,16 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
             </label>
             <label class="grid gap-1">
                 <span class="text-sm font-semibold">{{ t('settings.users.color') }}</span>
-                <input v-model="form.color" type="color" class="h-9 w-full rounded-md border border-input bg-background p-1" />
+                <input v-model="form.color" type="color" class="h-10 w-full rounded-md border border-line-strong bg-card p-1" />
             </label>
         </div>
-        <PlatformCheckboxes v-model="form.platforms" :legend="t('settings.users.platforms')" :hint="isModerator ? undefined : t('settings.users.platforms_hint')" />
-        <label class="flex items-center gap-2 text-xs">
-            <input v-model="form.is_active" type="checkbox" class="rounded border-input" />{{ t('settings.users.active') }}
+        <PlatformCheckboxes
+            v-model="form.platforms"
+            :legend="t('settings.users.platforms')"
+            :hint="isModerator ? undefined : t('settings.users.platforms_hint')"
+        />
+        <label class="flex min-h-10 items-center gap-2 text-sm">
+            <input v-model="form.is_active" type="checkbox" class="size-4 rounded border-line-strong accent-brand" />{{ t('settings.users.active') }}
         </label>
     </FormDialog>
 </template>

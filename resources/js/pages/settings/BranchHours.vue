@@ -3,10 +3,11 @@ import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import IconAction from '@/components/crm/IconAction.vue';
-import PageHeader from '@/components/crm/PageHeader.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
+import SettingsShell from '@/components/crm/settings/SettingsShell.vue';
 import { useCrud } from '@/composables/useCrud';
 import { useI18n } from '@/composables/useI18n';
+import { useSettingsBreadcrumbs } from '@/composables/useSettingsBreadcrumbs';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BranchRow } from '@/types/admin';
@@ -52,49 +53,50 @@ async function toggle(row: BranchRow): Promise<void> {
 const area = (row: BranchRow) => (locale.value === 'en' ? row.area_en || row.area_ar : row.area_ar);
 
 const columns = computed<Column[]>(() => [
-    { key: 'name', label: t('settings.branch_hours.branch') },
+    { key: 'name', label: t('settings.branch_hours.branch'), primary: true },
     { key: 'hours', label: t('settings.branch_hours.hours') },
     { key: 'phone', label: t('settings.branch_hours.phone') },
     { key: 'is_active', label: t('settings.branch_hours.status') },
     { key: 'actions', label: t('ui.actions'), align: 'end' },
 ]);
 
-const breadcrumbs = computed(() => [{ title: t('settings.branch_hours.title'), href: '/settings/branch-hours' }]);
-const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';
+const title = computed(() => t('settings_hub.items.branch_hours'));
+const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
+const input =
+    'h-10 w-full rounded-md border border-line-strong bg-card px-3 text-sm focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40';
 </script>
 
 <template>
-    <Head :title="t('settings.branch_hours.title')" />
+    <Head :title="title" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-3xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('settings.branch_hours.title')" :description="t('settings.branch_hours.description')" />
-
+        <SettingsShell :title="title" :description="t('settings.branch_hours.description')" width="wide">
             <DataTable
                 table-id="settings-branch-hours"
                 :columns="columns"
                 :rows="branches"
-                :caption="t('settings.branch_hours.title')"
+                :caption="title"
                 :row-class="(r) => (r.is_active ? undefined : 'opacity-70')"
             >
                 <template #empty>
                     <EmptyState :icon="Store" :title="t('settings.branch_hours.empty')" :body="t('settings.branch_hours.empty_body')" />
                 </template>
                 <template #cell-name="{ row }">
-                    <span class="block font-medium" dir="auto">{{ row.name }}</span>
-                    <span class="block text-xs text-muted-foreground" dir="auto">{{ area(row) }}</span>
+                    <span class="block font-semibold" dir="auto">{{ row.name }}</span>
+                    <span class="text-12 block text-fg-3" dir="auto">{{ area(row) }}</span>
                 </template>
                 <template #cell-hours="{ row }">
                     <span v-if="row.hours" class="whitespace-pre-line" dir="auto">{{ row.hours }}</span>
-                    <span v-else class="text-muted-foreground">{{ t('settings.branch_hours.no_hours') }}</span>
+                    <span v-else class="text-fg-3">{{ t('settings.branch_hours.no_hours') }}</span>
                 </template>
                 <template #cell-phone="{ row }">
-                    <span class="whitespace-nowrap tabular-nums" dir="ltr">{{ row.phone || '—' }}</span>
+                    <bdi v-if="row.phone" class="whitespace-nowrap tabular-nums" dir="ltr">{{ row.phone }}</bdi>
+                    <span v-else class="text-fg-3">—</span>
                 </template>
                 <template #cell-is_active="{ row }">
                     <StatusChip
                         :label="row.is_active ? t('settings.branch_hours.active') : t('settings.branch_hours.inactive')"
-                        :tone="row.is_active ? 'positive' : 'neutral'"
+                        :tone="row.is_active ? 'ok' : 'neutral'"
                         dot
                     />
                 </template>
@@ -111,7 +113,7 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
                     </span>
                 </template>
             </DataTable>
-        </div>
+        </SettingsShell>
 
         <FormDialog
             v-model:open="open"
@@ -128,9 +130,9 @@ const input = 'h-9 w-full rounded-md border border-input bg-background px-3 text
                     rows="2"
                     :maxlength="HOURS_MAX"
                     :placeholder="t('settings.branch_hours.hours_placeholder')"
-                    class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    class="w-full rounded-md border border-line-strong bg-card px-3 py-2 text-sm focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
                 />
-                <span class="flex justify-between gap-2 text-xs text-muted-foreground">
+                <span class="text-12 flex justify-between gap-2 text-fg-2">
                     <span>{{ t('settings.branch_hours.hours_hint') }}</span>
                     <span class="shrink-0 tabular-nums" aria-live="polite">{{
                         t('settings.branch_hours.hours_count', { n: form.hours.length, max: HOURS_MAX })
