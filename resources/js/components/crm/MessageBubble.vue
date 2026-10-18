@@ -76,7 +76,11 @@ const shapeClass = computed(() => {
             props.tail && outbound.value && ['before:absolute before:top-0 before:-end-2 before:border-8 before:border-transparent', outTailColor],
         ];
     }
-    return 'rounded-2xl';
+    // Suite (DESIGN §3 Message): 14 px corners, the corner toward the sender squared on the run's first bubble, a hairline lift.
+    return [
+        'rounded-[14px] shadow-e1',
+        props.tail && (outbound.value ? 'rounded-se-[4px]' : 'rounded-ss-[4px]'),
+    ];
 });
 
 // A failed outgoing message never renders on its skin's normal bubble colour — red error
@@ -84,6 +88,7 @@ const shapeClass = computed(() => {
 // bubble is unreadable, so it drops to a neutral surface instead, in both skins.
 const bubbleBgClass = computed(() => {
     if (failed.value && outbound.value) return 'bg-card text-foreground';
+    if (kind.value === 'bot') return classes.value.bot;
     return outbound.value ? classes.value.out : classes.value.in;
 });
 
@@ -95,7 +100,7 @@ const tickToneClass = computed(() => {
     if (!status) return '';
     if (status === 'failed') return 'text-destructive';
     if (status === 'read') return classes.value.tickRead;
-    return props.skin === 'suite' ? 'text-primary-foreground/60' : '';
+    return props.skin === 'suite' ? 'text-fg-3' : '';
 });
 
 // WhatsApp never groups by avatar (it uses the tail instead) — showing one anyway would
@@ -106,7 +111,7 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
 
 <template>
     <div v-if="kind === 'system'" class="flex justify-center py-1" :data-message-id="message?.id">
-        <p class="max-w-[85%] rounded-full bg-elevated px-3 py-1 text-center text-2xs text-muted-foreground">
+        <p class="max-w-[85%] rounded-full border border-line bg-card px-2.5 py-[3px] text-center text-xs text-fg-2">
             {{ body }} <span class="tabular-nums opacity-70">· {{ stamp }}</span>
         </p>
     </div>
@@ -120,17 +125,17 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
     >
         <span
             v-if="showRunAvatar"
-            class="mb-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-2xs font-semibold text-muted-foreground"
+            class="mb-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-2xs font-semibold text-brand-ink"
             aria-hidden="true"
         >
             {{ getInitials(customerName || undefined) || '?' }}
         </span>
 
         <article
-            class="max-w-[min(80%,36rem)] text-sm"
+            class="max-w-[min(80%,36rem)] text-sm md:max-w-[min(72%,32.5rem)]"
             :class="[bareSticker ? undefined : ['px-3 py-2', shapeClass, bubbleBgClass], failed && 'border border-destructive/40', runIndent && 'ms-9']"
         >
-            <header v-if="(kind === 'user' || kind === 'bot') && !bareSticker" class="mb-1 flex items-center gap-1.5 text-2xs font-semibold opacity-80">
+            <header v-if="(kind === 'user' || kind === 'bot') && !bareSticker" class="mb-0.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-fg-2">
                 <span
                     v-if="kind === 'user'"
                     :class="skin === 'whatsapp' ? 'rounded px-1.5 py-px text-white' : ''"
@@ -139,18 +144,18 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
                     {{ message?.user?.name ?? (message?.sent_outside_crm ? t('thread.team') : '') }}
                 </span>
                 <span v-else class="inline-flex items-center gap-1"><Bot class="size-3.5 shrink-0" aria-hidden="true" />{{ t('thread.bot') }}</span>
-                <span v-if="message?.is_template" class="rounded bg-black/10 px-1 opacity-90 dark:bg-white/10">{{ t('thread.template') }}</span>
+                <span v-if="message?.is_template" class="rounded bg-sunken px-1 text-fg-2">{{ t('thread.template') }}</span>
                 <!-- A reply sent from Meta Business Suite or the phone app, recorded from its echo (2026-10-17). -->
                 <span
                     v-if="message?.sent_outside_crm"
-                    class="rounded bg-black/10 px-1 font-normal opacity-90 dark:bg-white/10"
+                    class="rounded bg-note-soft px-1.5 font-semibold text-note-ink"
                     :title="t('thread.sent_outside_crm_hint')"
                     data-testid="sent-outside-crm"
                     >{{ t('thread.sent_outside_crm') }}</span
                 >
             </header>
 
-            <p v-if="body" class="whitespace-pre-wrap break-words leading-relaxed" dir="auto">
+            <p v-if="body" class="whitespace-pre-wrap break-words leading-[1.65]" dir="auto">
                 <template v-if="kind === 'customer' && message?.payload"><CircleDot class="me-1 inline size-3.5 align-[-2px]" aria-hidden="true" /><span class="sr-only">{{ t('thread.tapped_button') }}: </span></template>{{ body }}
             </p>
 
@@ -160,7 +165,7 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
                 <span
                     v-for="b in message.buttons"
                     :key="b.payload"
-                    class="rounded-full bg-white/20 px-1.5 py-px text-2xs leading-4 opacity-80 ring-1 ring-white/30 dark:bg-black/20 dark:ring-white/15"
+                    class="rounded-full bg-card px-2 py-px text-2xs font-semibold leading-4 text-fg-2 ring-1 ring-line-strong"
                     >{{ b.title }}</span
                 >
             </div>
@@ -178,7 +183,7 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
                 @retry="emit('retryAttachment', $event)"
             />
 
-            <span class="float-end ms-2 mt-1 inline-flex items-center gap-0.5 text-[10px] leading-none opacity-70">
+            <span class="float-end ms-2 mt-1 inline-flex items-center gap-0.5 text-[11px] leading-none text-fg-3">
                 <span class="tabular-nums">{{ stamp }}</span>
                 <component
                     :is="statusIcon"

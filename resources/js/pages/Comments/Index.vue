@@ -74,17 +74,21 @@ const breadcrumbs = computed(() => [{ title: t('comments.title'), href: '/commen
     <Head :title="t('comments.title')" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('comments.title')">
-                <span v-if="!live" class="inline-flex items-center gap-1 text-2xs text-muted-foreground"><WifiOff class="size-3" aria-hidden="true" />{{ t('alerts.polling') }}</span>
+        <div class="mx-auto w-full max-w-[1100px] space-y-4 p-4 md:space-y-5 md:p-6">
+            <PageHeader :title="t('comments.title')" :description="t('comments.description')">
+                <span v-if="live" class="inline-flex items-center gap-1.5 text-xs font-medium text-fg-2" data-comments-live>
+                    <i class="size-[7px] rounded-full bg-ok shadow-[0_0_0_3px_hsl(var(--ok-soft))]" aria-hidden="true" />{{ t('comments.live') }}
+                </span>
+                <span v-else class="inline-flex items-center gap-1.5 text-xs font-medium text-fg-2"><WifiOff class="size-3.5" aria-hidden="true" />{{ t('alerts.polling') }}</span>
             </PageHeader>
 
             <div class="space-y-4">
-                <CommentFilters v-model:ad-only="adOnly" :filters="filters" class="rounded-lg bg-card p-3 shadow-card" @update:filters="applyFilters" />
+                <CommentFilters v-model:ad-only="adOnly" :filters="filters" @update:filters="applyFilters" />
 
                 <div class="space-y-3" :aria-busy="loading">
                     <SkeletonList v-if="loading && !groups.length" variant="cards" />
-                    <EmptyState v-else-if="!groups.length" :icon="MessagesSquare" :title="t('comments.empty')" class="rounded-lg bg-card shadow-card" />
+                    <EmptyState v-else-if="!groups.length" :icon="MessagesSquare" :title="t('comments.empty')" class="rounded-lg border border-line bg-card" />
+                    <section v-else class="overflow-hidden rounded-lg border border-line bg-card">
                     <PostGroup v-for="group in groups" :key="group.key" :post="group.post" :comments="group.comments" @filter-post="applyFilters({ ...filters, post_id: $event })">
                         <CommentCard
                             v-for="comment in group.comments"
@@ -95,6 +99,7 @@ const breadcrumbs = computed(() => [{ title: t('comments.title'), href: '/commen
                             @action="(action, text, done) => onAction(comment.id, action, text, done)"
                         />
                     </PostGroup>
+                    </section>
                     <InlineError v-if="loadError" :message="loadError" :retrying="loadingMore" @retry="loadMore" />
                     <div v-else-if="nextCursor" class="text-center">
                         <Button type="button" variant="ghost" size="sm" class="text-primary" :loading="loadingMore" @click="loadMore">{{ t('ui.load_more') }}</Button>

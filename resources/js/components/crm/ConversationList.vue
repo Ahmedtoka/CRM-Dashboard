@@ -248,14 +248,14 @@ defineExpose({
 </script>
 
 <template>
-    <section class="min-h-0 min-w-0 flex-col border-e bg-card" :aria-label="t('inbox.list_title')">
-        <div class="space-y-2 border-b bg-card px-3 pb-2 pt-3">
+    <section class="min-h-0 min-w-0 flex-col border-e border-line bg-card" :aria-label="t('inbox.list_title')">
+        <div class="space-y-2 border-b border-line bg-card px-3 pb-2 pt-3">
             <div class="flex items-center gap-2">
                 <h2 class="text-base font-bold">{{ t('inbox.list_title') }}</h2>
                 <button
                     type="button"
-                    class="ms-auto inline-flex size-7 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    :class="live ? 'text-muted-foreground/70' : pollFailed ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+                    class="ms-auto inline-flex size-[30px] items-center justify-center rounded-md hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    :class="live ? 'text-ok' : pollFailed ? 'text-warn' : 'text-fg-3'"
                     :title="live ? t('inbox.live') : pollFailed ? t('inbox.poll_failed') : t('alerts.polling')"
                     :aria-label="live ? t('inbox.live') : pollFailed ? t('inbox.poll_failed') : t('alerts.polling')"
                     @click="emit('refresh')"
@@ -305,19 +305,15 @@ defineExpose({
                                 role="tab"
                                 :aria-selected="tabActive(tab)"
                                 :tabindex="tabActive(tab) ? 0 : -1"
-                                class="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                :class="
-                                    tabActive(tab)
-                                        ? 'bg-surface-accent font-semibold text-primary'
-                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                                "
+                                class="inline-flex h-8 shrink-0 items-center gap-[5px] rounded-full px-2.5 text-[12.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                :class="tabActive(tab) ? 'bg-brand-soft text-brand-ink' : 'text-fg-2 hover:bg-sunken hover:text-foreground'"
                                 @click="emit('update', { status: tab })"
                             >
                                 {{ t(`inbox.tabs.${tab ?? 'all'}`) }}
                                 <span
                                     v-if="tabCount(tab)"
-                                    class="tabular-nums"
-                                    :class="tabActive(tab) ? 'text-primary/80' : 'text-muted-foreground/80'"
+                                    class="font-medium tabular-nums"
+                                    :class="tabActive(tab) ? 'text-brand-ink/80' : 'text-fg-3'"
                                     >{{ tabCount(tab) }}</span
                                 >
                             </button>
@@ -325,12 +321,8 @@ defineExpose({
                         <!-- Control room S3 (G8): oldest waiting first, waiting chats only. -->
                         <button
                             type="button"
-                            class="inline-flex h-8 shrink-0 items-center rounded-full border px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            :class="
-                                filters.sort === 'oldest_waiting'
-                                    ? 'border-primary bg-surface-accent font-semibold text-primary'
-                                    : 'border-border text-muted-foreground hover:bg-elevated'
-                            "
+                            class="inline-flex h-8 shrink-0 items-center rounded-full border px-2.5 text-[12.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            :class="filters.sort === 'oldest_waiting' ? 'border-brand bg-brand-soft text-brand-ink' : 'border-line-strong text-fg-2 hover:bg-sunken'"
                             :aria-pressed="filters.sort === 'oldest_waiting'"
                             :aria-label="`${t('inbox.sort.label')}: ${t('inbox.sort.oldest_waiting')}`"
                             data-sort-oldest-waiting
@@ -353,7 +345,7 @@ defineExpose({
             @keydown="onKeydown"
         >
             <div v-if="loading" :aria-busy="true" :aria-label="t('common.loading')">
-                <div v-for="n in SKELETON_ROWS" :key="n" class="flex h-[72px] items-center gap-3 px-3" aria-hidden="true">
+                <div v-for="n in SKELETON_ROWS" :key="n" class="flex h-[72px] items-center gap-3 border-b border-line px-3" aria-hidden="true">
                     <div class="size-10 shrink-0 animate-pulse rounded-full bg-elevated" />
                     <div class="min-w-0 flex-1 space-y-2.5">
                         <div class="flex items-center gap-2">

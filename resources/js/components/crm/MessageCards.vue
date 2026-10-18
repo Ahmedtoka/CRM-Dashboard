@@ -5,7 +5,7 @@ import { ExternalLink, Phone } from 'lucide-vue-next';
 
 /**
  * The rich cards a bot message carries (the branch cards, the store-link button — 2026-09-19;
- * app/Channels/Cards/OutboundCards.php). `quiet` is the inbox look: small translucent cards that sit
+ * app/Channels/Cards/OutboundCards.php). `quiet` is the inbox look: small white cards that sit
  * inside the bot bubble like its quick-reply chips; `messenger` is the designer sandbox look (white
  * cards in a sideways carousel, as the customer sees them on Messenger).
  */
@@ -30,7 +30,7 @@ const quiet = props.variant === 'quiet';
             class="w-44 shrink-0 snap-start overflow-hidden"
             :class="
                 quiet
-                    ? 'rounded-lg bg-white/15 text-2xs leading-4 ring-1 ring-white/25 dark:bg-black/15 dark:ring-white/10'
+                    ? 'rounded-[10px] bg-card text-xs leading-4 ring-1 ring-line'
                     : 'rounded-xl bg-card text-xs shadow-sm ring-1 ring-border'
             "
         >
@@ -38,7 +38,7 @@ const quiet = props.variant === 'quiet';
                 <p class="truncate font-semibold" dir="auto">{{ card.title }}</p>
                 <p v-if="card.subtitle" class="mt-0.5 line-clamp-3 whitespace-pre-line opacity-80" dir="auto">{{ card.subtitle }}</p>
             </div>
-            <div v-if="card.buttons.length" class="grid border-t" :class="quiet ? 'border-white/20 dark:border-white/10' : 'border-border'">
+            <div v-if="card.buttons.length" class="grid border-t" :class="quiet ? 'border-line' : 'border-border'">
                 <a
                     v-for="(b, j) in card.buttons"
                     :key="j"
@@ -48,8 +48,8 @@ const quiet = props.variant === 'quiet';
                     dir="auto"
                     class="flex items-center justify-center gap-1 truncate px-2 py-1 text-center font-medium hover:underline"
                     :class="[
-                        j > 0 && (quiet ? 'border-t border-white/20 dark:border-white/10' : 'border-t border-border'),
-                        quiet ? 'opacity-90' : 'text-primary',
+                        j > 0 && (quiet ? 'border-t border-line' : 'border-t border-border'),
+                        quiet ? 'text-brand-ink' : 'text-primary',
                     ]"
                 >
                     {{ b.title }}
@@ -69,7 +69,7 @@ const quiet = props.variant === 'quiet';
             class="inline-flex items-center gap-1 font-medium hover:underline"
             :class="
                 quiet
-                    ? 'rounded-full bg-white/20 px-1.5 py-px text-2xs leading-4 opacity-80 ring-1 ring-white/30 dark:bg-black/20 dark:ring-white/15'
+                    ? 'rounded-full bg-card px-2 py-px text-2xs font-semibold leading-4 text-brand-ink ring-1 ring-line-strong'
                     : 'rounded-lg bg-card px-3 py-1.5 text-xs text-primary shadow-sm ring-1 ring-border'
             "
         >

@@ -39,6 +39,8 @@ export interface ChatsCard {
     bot_alone: number;
     to_agent: number;
     first_reply_avg_sec: number;
+    /** New chats per Cairo hour, 0–23 (redesign p1); absent on a card cached before it existed. */
+    by_hour?: number[];
     queue: QueueDayFigures | null;
     rating: RatingSummary;
     links: Record<'new' | 'ads' | 'bot' | 'first_reply' | 'rating' | 'queue', string>;

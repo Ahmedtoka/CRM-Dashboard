@@ -6,10 +6,8 @@ import ConversationMediaGrid from '@/components/crm/media/ConversationMediaGrid.
 import MentionTextarea from '@/components/crm/MentionTextarea.vue';
 import OrderCard from '@/components/crm/OrderCard.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
-import StatCard from '@/components/crm/StatCard.vue';
 import NoteLine from '@/components/crm/thread/NoteLine.vue';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { useI18n } from '@/composables/useI18n';
 import { useInitials } from '@/composables/useInitials';
 import { useStaleOrderRefresh } from '@/composables/useStaleOrderRefresh';
@@ -88,13 +86,13 @@ const heading = 'mb-2 text-sm font-bold';
 
 <template>
     <aside class="flex min-h-0 flex-col bg-card" :aria-label="t('thread.customer')">
-        <div role="tablist" class="flex shrink-0 border-b">
+        <div role="tablist" class="flex shrink-0 border-b border-line">
             <button
                 type="button"
                 role="tab"
                 :aria-selected="tab === 'details'"
-                class="flex-1 border-b-2 px-3 py-2 text-xs font-medium"
-                :class="tab === 'details' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
+                class="flex-1 border-b-2 px-3 py-2.5 text-[13px] font-semibold"
+                :class="tab === 'details' ? 'border-brand text-brand-ink' : 'border-transparent text-fg-2 hover:text-foreground'"
                 @click="tab = 'details'"
             >
                 {{ t('media.tab_details') }}
@@ -103,8 +101,8 @@ const heading = 'mb-2 text-sm font-bold';
                 type="button"
                 role="tab"
                 :aria-selected="tab === 'media'"
-                class="flex-1 border-b-2 px-3 py-2 text-xs font-medium"
-                :class="tab === 'media' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
+                class="flex-1 border-b-2 px-3 py-2.5 text-[13px] font-semibold"
+                :class="tab === 'media' ? 'border-brand text-brand-ink' : 'border-transparent text-fg-2 hover:text-foreground'"
                 @click="tab = 'media'"
             >
                 {{ t('media.tab_media') }}
@@ -113,27 +111,27 @@ const heading = 'mb-2 text-sm font-bold';
 
         <ConversationMediaGrid v-if="tab === 'media' && conversationId" class="min-h-0 flex-1 overflow-y-auto" :conversation-id="conversationId" />
 
-        <div v-else class="scrollbar-thin min-h-0 flex-1 space-y-3 overflow-y-auto bg-background p-3">
+        <div v-else class="scrollbar-thin min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
             <AdSourceCard v-if="ad" :ad="ad" />
             <BotSummaryCard v-if="handover" :digest="handover" />
-            <Card class="space-y-3 p-4">
-                <section class="flex items-start gap-3">
-                    <span class="flex size-11 shrink-0 items-center justify-center rounded-full bg-elevated text-sm font-semibold text-muted-foreground">
+            <section class="space-y-3" data-panel-who>
+                <div class="flex items-start gap-3">
+                    <span class="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand-ink">
                         {{ getInitials(name) }}
                     </span>
                     <div class="min-w-0 flex-1 space-y-1">
-                        <p class="flex flex-wrap items-center gap-1.5 truncate text-sm font-bold">
+                        <p class="flex flex-wrap items-center gap-1.5 truncate text-[15px] font-bold">
                             {{ name }}
                             <span
                                 v-for="badge in customer?.badges ?? []"
                                 :key="badge"
                                 class="rounded-full px-1.5 py-0.5 text-2xs font-medium"
-                                :class="badge === 'has_return' ? 'bg-destructive/10 text-destructive' : badge === 'repeat' ? 'bg-success/15 text-success' : 'bg-surface-accent text-primary'"
+                                :class="badge === 'has_return' ? 'bg-danger-soft text-danger' : badge === 'repeat' ? 'bg-ok-soft text-ok' : 'bg-brand-soft text-brand-ink'"
                             >
                                 {{ t(`customer.badges.${badge}`) }}
                             </span>
                         </p>
-                        <a v-if="customer?.phone" :href="`tel:${customer.phone}`" class="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+                        <a v-if="customer?.phone" :href="`tel:${customer.phone}`" class="flex items-center gap-1.5 text-xs text-fg-2 hover:text-foreground">
                             <Phone class="size-3.5 shrink-0" aria-hidden="true" /><span dir="ltr">{{ customer.phone }}</span>
                         </a>
                         <p v-if="customer?.email" class="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
@@ -143,12 +141,18 @@ const heading = 'mb-2 text-sm font-bold';
                             <MapPin class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" /><span>{{ place }}</span>
                         </p>
                     </div>
-                </section>
-
-                <div class="grid grid-cols-2 gap-2">
-                    <StatCard :label="t('customer.orders_count')" :value="formatNumber(locale, customer?.orders_count ?? 0)" />
-                    <StatCard :label="t('customer.total_spent')" :value="formatMoney(customer?.total_spent ?? 0, locale)" />
                 </div>
+
+                <dl class="text-[13.5px]" data-panel-kv>
+                    <div class="flex items-center justify-between gap-3 border-b border-line py-2">
+                        <dt class="text-fg-2">{{ t('customer.orders_count') }}</dt>
+                        <dd class="font-semibold tabular-nums">{{ formatNumber(locale, customer?.orders_count ?? 0) }}</dd>
+                    </div>
+                    <div class="flex items-center justify-between gap-3 py-2">
+                        <dt class="text-fg-2">{{ t('customer.total_spent') }}</dt>
+                        <dd class="font-semibold tabular-nums">{{ formatMoney(customer?.total_spent ?? 0, locale) }}</dd>
+                    </div>
+                </dl>
 
                 <button
                     type="button"
@@ -159,9 +163,9 @@ const heading = 'mb-2 text-sm font-bold';
                 >
                     <ShoppingBag />{{ t('customer.create_order') }}
                 </button>
-            </Card>
+            </section>
 
-            <Card v-if="customer?.identities?.length" class="p-4">
+            <section v-if="customer?.identities?.length" class="border-t border-line pt-4">
                 <h3 :class="heading">{{ t('customer.identities') }}</h3>
                 <ul class="space-y-1.5">
                     <li v-for="identity in customer.identities" :key="identity.id" class="flex items-center gap-2 text-xs">
@@ -169,24 +173,24 @@ const heading = 'mb-2 text-sm font-bold';
                         <span class="truncate text-muted-foreground" dir="auto">{{ identity.display_name || identity.username || identity.external_id }}</span>
                     </li>
                 </ul>
-            </Card>
+            </section>
 
-            <Card v-if="participants.length" class="p-4">
+            <section v-if="participants.length" class="border-t border-line pt-4">
                 <h3 :class="heading">{{ t('customer.participants') }}</h3>
                 <ul class="flex flex-wrap gap-1.5">
-                    <li v-for="(p, index) in participants" :key="index" class="inline-flex items-center gap-1.5 rounded-full bg-elevated px-2 py-0.5 text-2xs">
+                    <li v-for="(p, index) in participants" :key="index" class="inline-flex items-center gap-1.5 rounded-full bg-sunken px-2 py-0.5 text-xs text-fg-2">
                         <span class="size-2 rounded-full" :style="{ backgroundColor: p.user?.color || '#6366f1' }" aria-hidden="true" />
                         {{ p.user?.name ?? t('thread.bot') }} · {{ t(`customer.roles.${p.role}`) }}
                     </li>
                 </ul>
-            </Card>
+            </section>
 
-            <div v-if="cases?.length" class="space-y-2">
+            <div v-if="cases?.length" class="space-y-2 border-t border-line pt-4">
                 <h3 :class="heading">{{ t('nav.cases') }}</h3>
                 <CaseCard v-for="c in cases" :key="c.id" :support-case="c" @updated="emit('caseUpdated', $event)" />
             </div>
 
-            <Card class="p-4">
+            <section class="border-t border-line pt-4">
                 <h3 :class="heading">{{ t('customer.orders') }}</h3>
                 <p v-if="!customer?.orders?.length" class="text-xs text-muted-foreground">{{ t('customer.no_orders') }}</p>
                 <div v-else class="space-y-2">
@@ -200,9 +204,9 @@ const heading = 'mb-2 text-sm font-bold';
                         @copy-status="emit('copyStatus', $event)"
                     />
                 </div>
-            </Card>
+            </section>
 
-            <Card class="p-4">
+            <section class="border-t border-line pt-4">
                 <h3 :class="heading">{{ t('customer.notes') }}</h3>
                 <p class="mb-1 text-2xs text-muted-foreground">{{ t('notes.mention_hint') }} · {{ t('notes.newline_hint') }}</p>
                 <form class="space-y-1.5" @submit.prevent="submitNote">
@@ -232,7 +236,7 @@ const heading = 'mb-2 text-sm font-bold';
                         <NoteLine :note="note" :mentionable="mentionable" />
                     </li>
                 </ul>
-            </Card>
+            </section>
         </div>
     </aside>
 </template>

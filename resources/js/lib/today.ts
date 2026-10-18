@@ -1,7 +1,8 @@
 import { formatNumber, type Locale } from '@/i18n';
 import { formatAvgSeconds, formatCount, formatMoney, formatSeconds } from '@/lib/format';
 import type { Role } from '@/types/crm';
-import type { AdsCard, ChatsCard, OrdersCard, UrgentItem, WhyCard } from '@/types/today';
+import type { LedgerFigure } from '@/components/today/Ledger.vue';
+import type { AdsCard, ChatsCard, OrdersCard, TodayCardsData, UrgentItem, WhyCard } from '@/types/today';
 
 export interface CardRow {
     key: string;
@@ -192,4 +193,89 @@ export function oldestStamp(stamps: (string | null | undefined)[]): string | nul
     }
 
     return oldest;
+}
+
+/**
+ * The day's ledger (DESIGN §3 Ledger, mockup «النهارده › الملخص»): orders, sales, ad spend, real ROAS, new chats and the
+ * first human reply, each with one line of context and the link of the screen that lists it. The two ad figures drop
+ * out when the viewer has no ad accounts (or the currencies are mixed: no money summed across them).
+ */
+export function ledgerFigures(c: TodayCardsData, t: Translate, locale: Locale): LedgerFigure[] {
+    const o = c.orders;
+    const ch = c.chats;
+    const money = (v: number) => formatNumber(locale, Math.round(v));
+    const currency = t('common.currency');
+    const figures: LedgerFigure[] = [
+        {
+            key: 'orders',
+            label: t('today.ledger.orders'),
+            value: n(o.count, locale),
+            note: t('today.ledger.orders_split', { chat: n(o.from_chat, locale), store: n(o.from_store, locale) }),
+            href: o.links.count,
+        },
+        {
+            key: 'sales',
+            label: t('today.ledger.sales'),
+            value: money(o.total),
+            unit: currency,
+            note: o.count > 0 ? t('today.ledger.avg_order', { value: money(o.total / o.count) }) : null,
+            href: o.links.count,
+        },
+    ];
+    const a = c.ads;
+    if (a && a.currency !== 'mixed') {
+        figures.push(
+            {
+                key: 'spend',
+                label: t('today.ledger.spend'),
+                value: a.spend === null ? '—' : money(a.spend),
+                unit: a.spend === null ? undefined : currency,
+                note: a.cost_per_order === null ? null : t('today.ledger.cost_per_order', { value: money(a.cost_per_order) }),
+                href: a.links.spend,
+            },
+            {
+                key: 'roas',
+                label: t('today.ledger.roas'),
+                value: a.real_roas === null ? '—' : `${formatRatio(a.real_roas, locale)}×`,
+                note: a.meta_roas === null ? null : t('today.ledger.meta_says', { value: `${formatRatio(a.meta_roas, locale)}×` }),
+                href: a.links.spend,
+            },
+        );
+    }
+    figures.push({
+        key: 'chats',
+        label: t('today.ledger.chats'),
+        value: n(ch.new, locale),
+        note: ch.new > 0 ? t('today.ledger.bot_closed', { share: formatShare(ch.bot_alone / ch.new, locale) }) : null,
+        href: ch.links.new,
+    });
+    const q = ch.queue;
+    const sla = q && q.sla_pct !== null ? q.sla_pct : null;
+    figures.push({
+        key: 'first_reply',
+        label: t('today.ledger.first_reply'),
+        value: formatAvgSeconds(ch.first_reply_avg_sec, locale),
+        note:
+            sla === null || !q
+                ? null
+                : t('today.ledger.sla', { pct: formatShare(sla / 100, locale), target: formatShare(q.sla_target_pct / 100, locale) }),
+        tone: sla === null || !q ? 'neutral' : sla >= q.sla_target_pct ? 'up' : 'down',
+        href: ch.links.first_reply,
+    });
+
+    return figures;
+}
+
+/** The hourly chart's bars: the hours from the first chat (or 9 ص) to the last hour of the window, oldest first. */
+export function hourBars(byHour: number[] | undefined, lastHour: number, locale: Locale): { key: string; label: string; value: number }[] {
+    if (!byHour || byHour.length !== 24) return [];
+    const first = byHour.findIndex((v) => v > 0);
+    const start = Math.min(first === -1 ? 9 : first, 9, lastHour);
+    const fmt = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-EG' : 'en-GB', { hour: 'numeric', hour12: true, timeZone: 'UTC' });
+
+    return byHour.slice(start, lastHour + 1).map((value, i) => {
+        const h = start + i;
+
+        return { key: String(h), label: fmt.format(new Date(Date.UTC(2026, 0, 1, h))), value };
+    });
 }

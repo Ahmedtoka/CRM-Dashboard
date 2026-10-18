@@ -7,7 +7,10 @@ import type { PlatformValue } from '@/types/crm';
 import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
-/** The comments feed's filter bar: platform and status inline, intent and «الإعلانات فقط» under «فلاتر». */
+/**
+ * The comments feed's filter bar (mockup «الكومنتات»): the status as a segmented strip (الكل · من غير رد · اترد عليها ·
+ * مخفية · متجاهلة), the platform inline, intent and «الإعلانات فقط» under «فلاتر».
+ */
 const props = defineProps<{ filters: CommentFilters; adOnly: boolean; summary?: string }>();
 const emit = defineEmits<{ 'update:filters': [filters: CommentFilters]; 'update:adOnly': [value: boolean] }>();
 
@@ -31,7 +34,6 @@ const chips = computed(() => {
     const f = props.filters;
     const out: { key: string; label: string }[] = [];
     if (f.platform) out.push({ key: 'platform', label: platforms.value.find((p) => p.value === f.platform)?.label ?? f.platform });
-    if (f.status) out.push({ key: 'status', label: t(`comments.status.${f.status}`) });
     if (f.intent) out.push({ key: 'intent', label: t(`comments.intent.${f.intent}`) });
     if (f.post_id) out.push({ key: 'post_id', label: t('comments.post_chip', { id: f.post_id }) });
     if (props.adOnly) out.push({ key: 'ad', label: t('comments.ad_only') });
@@ -51,7 +53,7 @@ function clear(): void {
 }
 
 const selectValue = (event: Event) => (event.target as HTMLSelectElement).value || null;
-const selectClass = 'h-9 w-full rounded-md border border-input bg-background px-2 text-xs sm:w-auto';
+const selectClass = 'h-9 w-full rounded-md border border-line-strong bg-card px-2.5 text-13 sm:w-auto';
 const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
 </script>
 
@@ -68,15 +70,26 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                     <option value="">{{ t('ui.all_platforms') }}</option>
                     <option v-for="p in platforms" :key="p.value" :value="p.value">{{ p.label }}</option>
                 </select>
-                <select
-                    :value="filters.status ?? ''"
-                    :class="selectClass"
+            </template>
+            <template #tabs>
+                <div
+                    class="scrollbar-none inline-flex max-w-full gap-0.5 overflow-x-auto rounded-md bg-sunken p-0.5"
+                    role="group"
                     :aria-label="t('comments.status_label')"
-                    @change="set({ status: selectValue($event) as CommentStatus | null })"
+                    data-comment-status
                 >
-                    <option value="">{{ t('comments.status_all') }}</option>
-                    <option v-for="s in STATUSES" :key="s" :value="s">{{ t(`comments.status.${s}`) }}</option>
-                </select>
+                    <button
+                        v-for="s in [null, ...STATUSES]"
+                        :key="s ?? 'all'"
+                        type="button"
+                        class="inline-flex min-h-[30px] shrink-0 items-center whitespace-nowrap rounded-[6px] px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        :class="(filters.status ?? null) === s ? 'bg-card text-foreground shadow-e1' : 'text-fg-2 hover:text-foreground'"
+                        :aria-pressed="(filters.status ?? null) === s"
+                        @click="set({ status: s })"
+                    >
+                        {{ t(`comments.segment.${s ?? 'all'}`) }}
+                    </button>
+                </div>
             </template>
             <template #more>
                 <label class="block">

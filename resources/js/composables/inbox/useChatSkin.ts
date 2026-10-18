@@ -7,6 +7,8 @@ export interface ChatSkinClasses {
     wallpaper: string;
     header: string;
     out: string;
+    /** The bot's bubble: its own soft tint on the suite skin (DESIGN §2.1 `--bubble-bot`), WhatsApp's out colour there. */
+    bot: string;
     in: string;
     /** Colour for a *read* tick on an outgoing bubble. Sent/delivered/queued ticks on the
      *  suite skin use `text-primary-foreground/60` instead — computed at the call site,
@@ -27,18 +29,20 @@ export function skinClasses(skin: ChatSkin): ChatSkinClasses {
               wallpaper: 'chat-wallpaper-wa',
               header: 'bg-[var(--wa-header)]',
               out: 'bg-[var(--wa-out)] text-foreground',
+              bot: 'bg-[var(--wa-out)] text-foreground',
               in: 'bg-[var(--wa-in)] text-foreground',
               tickRead: 'text-[var(--wa-read-tick)]',
               accent: '#00A884',
           }
         : {
-              wallpaper: 'bg-card',
+              // The redesign (p1): a quiet thread backdrop, white customer bubbles, Le Voile's soft mauve for the team
+              // and a cool grey for the bot (DESIGN §2.1 --thread-bg / --bubble-*), all on the normal text colour.
+              wallpaper: 'bg-[var(--thread-bg)]',
               header: 'bg-card',
-              out: 'bg-primary text-primary-foreground',
-              in: 'bg-[var(--suite-in)] text-foreground',
-              // Read ticks on a blue outgoing bubble must not be `text-primary` (invisible
-              // on `bg-primary`) — use the bubble's own foreground colour instead.
-              tickRead: 'text-primary-foreground',
+              out: 'bg-[var(--bubble-out)] text-foreground',
+              bot: 'bg-[var(--bubble-bot)] text-foreground',
+              in: 'bg-[var(--bubble-in)] text-foreground',
+              tickRead: 'text-brand-ink',
               accent: '',
           };
 }

@@ -20,7 +20,7 @@ describe('Today components', () => {
         const a = w.find('a[href="/orders?status=failed"]');
         expect(a.exists()).toBe(true);
         expect(a.text()).toContain('1');
-        expect(a.classes().join(' ')).toContain('text-destructive');
+        expect(a.classes().join(' ')).toContain('text-danger');
     });
 
     it('TodayCard shows its empty line when there are no rows', () => {
