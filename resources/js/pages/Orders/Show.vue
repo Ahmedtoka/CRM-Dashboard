@@ -16,7 +16,7 @@ import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatDateTime } from '@/lib/format';
+import { cairoDayKey, cairoToday, formatDateTime } from '@/lib/format';
 import { drawerRange } from '@/lib/ordersHub';
 import {
     orderFamilies,
@@ -98,7 +98,9 @@ const canCancel = computed(
 const canMarkPaid = computed(() => props.canManage && order.value.status === 'awaiting_payment');
 // Mirrors OrderPolicy::retry — supervisors/admins or the order's creator.
 const canRetry = computed(() => order.value.status === 'failed' && (props.canManage || order.value.created_by?.id === page.props.auth.user.id));
-const trackingUrl = computed(() => order.value.fulfillments?.find((f) => f.tracking_url)?.tracking_url ?? null);
+/** Carrier links come from Shopify: only http(s) ones become links. */
+const safeUrl = (url: string | null | undefined): string | null => (url && /^https?:\/\//i.test(url) ? url : null);
+const trackingUrl = computed(() => safeUrl(order.value.fulfillments?.find((f) => safeUrl(f.tracking_url))?.tracking_url));
 
 const statusLabel = (prefix: string, value: string | null | undefined) => shopifyLabel(t, prefix, value);
 
@@ -152,6 +154,15 @@ const btn =
     'inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 text-13 font-semibold hover:bg-surface-2 disabled:opacity-50';
 
 const drawer = useAdDrawer();
+/** The ad drawer opens on the order's own month (its figures, not this month's), up to today. */
+const adRange = computed(() => {
+    const day = cairoDayKey(order.value.placed_at ?? order.value.created_at);
+    if (!day) return drawerRange({ from: null, to: null });
+    const [y, m] = day.split('-').map(Number);
+    const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    const today = cairoToday();
+    return drawerRange({ from: `${day.slice(0, 8)}01`, to: last < today ? last : today });
+});
 /** The line under the title: who, how she pays, when (the chips beside the title carry the state). */
 const subline = computed(() =>
     [
@@ -163,7 +174,7 @@ const subline = computed(() =>
         .join(' · '),
 );
 
-/** Shopify fulfillments (tracking company, number, the carrier's step), newest first. */
+/** Shopify fulfillments (tracking company, number, the carrier's step), newest first (OrderResource sends them oldest first). */
 const fulfillments = computed(() => [...(order.value.fulfillments ?? [])].reverse());
 const fulfillmentTone = (status: string | null) =>
     status === 'delivered' ? 'ok' : status === 'failure' || status === 'not_delivered' ? 'danger' : status ? 'info' : 'neutral';
@@ -261,7 +272,7 @@ const fulfillmentTone = (status: string | null) =>
             <p
                 v-if="order.mismatch"
                 class="flex items-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-13 text-danger"
-                role="alert"
+                role="status"
             >
                 <TriangleAlert class="size-4 shrink-0" aria-hidden="true" />
                 {{ order.mismatch_reason ? t(`order.mismatch.reasons.${order.mismatch_reason}`) : t('order.mismatch.title') }}
@@ -294,8 +305,8 @@ const fulfillmentTone = (status: string | null) =>
                                     formatDateTime(f.updated_at ?? f.created_at, locale)
                                 }}</span>
                                 <a
-                                    v-if="f.tracking_url"
-                                    :href="f.tracking_url"
+                                    v-if="safeUrl(f.tracking_url)"
+                                    :href="safeUrl(f.tracking_url) ?? undefined"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     class="inline-flex items-center gap-1 font-semibold text-brand-ink hover:underline"
@@ -387,6 +398,6 @@ const fulfillmentTone = (status: string | null) =>
             </div>
         </div>
 
-        <AdDrawer v-if="canOpenAds" :ad-id="drawer.adId.value" :filters="drawerRange({ from: null, to: null })" @close="drawer.close" />
+        <AdDrawer v-if="canOpenAds" :ad-id="drawer.adId.value" :filters="adRange" @close="drawer.close" />
     </AppLayout>
 </template>

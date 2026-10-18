@@ -29,7 +29,7 @@ const columns = computed<Column[]>(() => [
     { key: 'total', label: t('ordersHub.columns.total'), numeric: true, sortable: true },
     { key: 'status', label: t('ordersHub.columns.status') },
     // Kept on the phone card (thumbs + «+n»): what was ordered is the first thing staff look for.
-    { key: 'products', label: t('ordersHub.columns.products') },
+    { key: 'products', label: t('ordersHub.columns.products'), wide: true },
     ...(props.showSource ? [{ key: 'source', label: t('ordersHub.columns.source') }] : []),
     // The order date the filters use: placed in the store, else made in the CRM (server sort key `date`).
     { key: 'date', label: t('ordersHub.columns.date'), sortable: true },
@@ -38,6 +38,7 @@ const columns = computed<Column[]>(() => [
 
 <template>
     <DataTable
+        card-grid
         :table-id="tableId"
         :columns="columns"
         :rows="rows"
@@ -85,9 +86,13 @@ const columns = computed<Column[]>(() => [
                 row.customer?.phone ?? row.shipping?.phone
             }}</span>
         </template>
-        <template #cell-governorate="{ row }"
-            ><span dir="auto">{{ row.governorate ?? '—' }}</span></template
-        >
+        <template #cell-governorate="{ row }">
+            <span class="block" dir="auto">{{ row.governorate ?? '—' }}</span>
+            <!-- Below 2xl the district column is hidden: the district rides under the governorate instead. -->
+            <span v-if="row.district" class="block max-w-[10rem] truncate text-xs text-fg-2 2xl:hidden" dir="auto" data-district-sub>{{
+                row.district
+            }}</span>
+        </template>
         <template #cell-district="{ row }"
             ><span class="block max-w-[10rem] truncate" dir="auto">{{ row.district ?? '—' }}</span></template
         >

@@ -55,4 +55,11 @@ it('shows the ad source on the order page, and only supervisors and admins may o
     $direct = Order::factory()->create(['customer_id' => Customer::factory()->create()->id, 'status' => 'confirmed']);
     $this->actingAs(User::factory()->create(['role' => UserRole::Supervisor]))->get("/orders/{$direct->id}")->assertOk()
         ->assertInertia(fn ($page) => $page->where('order.ad_source', null)->where('canOpenAds', true));
+
+    // A moderator sees where her order came from, but the chip does not open the ad.
+    $mod = User::factory()->create(['role' => UserRole::Moderator]);
+    $mod->userPlatforms()->create(['platform' => \App\Enums\Platform::Facebook]);
+    $own = Order::factory()->create(['customer_id' => Customer::factory()->create()->id, 'ad_id' => $ad->id, 'status' => 'confirmed', 'platform' => 'facebook', 'created_by_id' => $mod->id]);
+    $this->actingAs($mod)->get("/orders/{$own->id}")->assertOk()
+        ->assertInertia(fn ($page) => $page->where('order.ad_source.name', 'خمار شيفون')->where('canOpenAds', false));
 });

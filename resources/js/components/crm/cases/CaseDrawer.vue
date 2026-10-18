@@ -10,6 +10,7 @@ import { casePriorityTone, caseStatusTone, caseTypeTone } from '@/lib/caseStatus
 import { formatCount, formatDateTime, formatMoney } from '@/lib/format';
 import type { SupportCase } from '@/types/crm';
 import { Link } from '@inertiajs/vue3';
+import { useMediaQuery } from '@vueuse/core';
 import { MessagesSquare } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 import StatusChip from '../StatusChip.vue';
@@ -73,18 +74,25 @@ function onAssignedChange(event: Event): void {
     void patch({ assigned_to_id: value ? Number(value) : null });
 }
 
+const phone = useMediaQuery('(max-width: 759px)');
 const selectClass = 'h-9 w-full rounded-md border border-line-strong bg-card px-2 text-13 disabled:opacity-60';
 </script>
 
 <template>
     <Sheet v-model:open="open">
-        <SheetContent :side="dir === 'rtl' ? 'left' : 'right'" class="flex w-full flex-col gap-0 p-0 sm:max-w-[440px]">
+        <!-- 440px from the end side on desktop; a bottom sheet on a phone (DESIGN §3 Sheet, §6). -->
+        <SheetContent
+            :side="phone ? 'bottom' : dir === 'rtl' ? 'left' : 'right'"
+            class="flex w-full flex-col gap-0 p-0"
+            :class="phone ? 'max-h-[90dvh] rounded-t-xl' : 'sm:max-w-[440px]'"
+        >
             <SheetHeader class="space-y-1.5 border-b border-line px-5 pb-3.5 pt-4 text-start">
                 <SheetTitle class="flex flex-wrap items-center gap-2 text-lg font-bold">
                     {{ item ? t('cases.card_title', { id: item.id }) : t('cases.title') }}
                     <StatusChip v-if="item" :label="t(`cases.types.${item.type}`)" :tone="caseTypeTone[item.type] ?? 'neutral'" />
                 </SheetTitle>
-                <SheetDescription v-if="item" class="text-13 text-fg-2" :dir="dir">{{ item.summary_header }}</SheetDescription>
+                <!-- The header line repeats the chips under it; screen readers still get it as the sheet's description. -->
+                <SheetDescription v-if="item" class="sr-only" :dir="dir">{{ item.summary_header }}</SheetDescription>
                 <div v-if="item" class="flex flex-wrap items-center gap-1.5 pt-0.5" data-case-chips>
                     <StatusChip :label="t(`cases.tabs.${item.status}`)" :tone="caseStatusTone[item.status]" />
                     <CaseSlaChip :sla="item.sla" />

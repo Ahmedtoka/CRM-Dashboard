@@ -108,9 +108,9 @@ const columns = computed<Column[]>(() => [
     { key: 'total', label: t('order_confirmations.columns.total'), numeric: true, hideOnMobile: true },
     { key: 'status', label: t('order_confirmations.columns.status') },
     { key: 'sent', label: t('order_confirmations.columns.sent'), hideOnMobile: true },
-    { key: 'answered', label: t('order_confirmations.columns.answered'), hideOnMobile: true },
+    { key: 'answered', label: t('order_confirmations.columns.answered') },
     { key: 'note', label: t('order_confirmations.columns.note'), hideOnMobile: true },
-    { key: 'links', label: t('order_confirmations.columns.links'), align: 'end' },
+    { key: 'links', label: t('order_confirmations.columns.links'), align: 'end', wide: true },
 ]);
 
 const emptyTitle = computed(() => t(`order_confirmations.empty.${activeTab.value}`));
@@ -149,7 +149,12 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
                 }}</Link>
             </Callout>
 
-            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" role="tablist" :aria-label="title" data-confirmation-counters>
+            <div
+                class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 [&>*:last-child]:max-sm:col-span-2"
+                role="tablist"
+                :aria-label="title"
+                data-confirmation-counters
+            >
                 <button
                     v-for="box in boxes"
                     :key="box.tab"
@@ -195,6 +200,7 @@ const crumbs = computed(() => breadcrumbs.value.map((b) => ({ label: b.title, hr
 
             <div role="tabpanel" class="min-w-0">
                 <DataTable
+                    card-grid
                     table-id="order-confirmations"
                     :columns="columns"
                     :rows="rows"

@@ -190,6 +190,7 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
 
             <div class="min-w-0">
                 <DataTable
+                    card-grid
                     table-id="cases"
                     :columns="columns"
                     :rows="cases.data"
@@ -206,8 +207,8 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                             :title="t('cases.empty')"
                             :body="filtered ? t('cases.empty_filtered') : t('cases.empty_body')"
                         >
-                            <template v-if="filtered" #action>
-                                <Button variant="outline" size="sm" @click="clear(['sort'])">{{ t('ui.clear_filters') }}</Button>
+                            <template v-if="chips.length || filters.q" #action>
+                                <Button variant="outline" size="sm" @click="clear(['status', 'sort'])">{{ t('ui.clear_filters') }}</Button>
                             </template>
                         </EmptyState>
                     </template>
@@ -230,10 +231,11 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
                     <template #cell-customer="{ row }">
                         <span class="block max-w-[12rem] truncate font-semibold" dir="auto">{{ row.customer?.name ?? '—' }}</span>
                         <span class="block text-xs text-fg-2">
-                            <template v-if="row.order_number"
-                                >{{ t('cases.columns.order') }} <bdi dir="ltr" class="tabular-nums">{{ row.order_number }}</bdi></template
-                            >
-                            <bdi v-else-if="row.customer?.phone" dir="ltr" class="tabular-nums">{{ row.customer.phone }}</bdi>
+                            <bdi v-if="row.customer?.phone" dir="ltr" class="tabular-nums">{{ row.customer.phone }}</bdi>
+                            <template v-if="row.order_number">
+                                <template v-if="row.customer?.phone"> · </template>{{ t('cases.columns.order') }}
+                                <bdi dir="ltr" class="tabular-nums">{{ row.order_number }}</bdi>
+                            </template>
                         </span>
                     </template>
                     <template #cell-assigned="{ row }">
