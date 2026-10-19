@@ -44,6 +44,7 @@ class BotBrainController extends Controller
         return Inertia::render('Bot/Costs', [
             'report' => $report->build(),
             'canEditBalance' => request()->user()->isAdmin(),
+            'nowLocal' => now(BotCostReport::TZ)->format('Y-m-d\\TH:i'),
         ]);
     }
 

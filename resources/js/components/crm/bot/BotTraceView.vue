@@ -50,7 +50,7 @@ const totalCost = computed(() => props.trace.calls.reduce((sum, c) => sum + c.co
 const guardFailure = computed(() => props.trace.guards.find((g) => g !== 'pass') ?? null);
 const handoverReason = computed(() => {
     const reason = props.trace.handover?.reason;
-    return reason ? label(`reports.reasons.${reason}`, reason) : null;
+    return reason ? label(`bot_brain.trace.handover_reasons.${reason}`, label(`reports.reasons.${reason}`, reason)) : null;
 });
 </script>
 

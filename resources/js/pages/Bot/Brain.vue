@@ -59,10 +59,13 @@ const props = defineProps<{ full: boolean; brain: Brain }>();
 
 const { t, locale } = useI18n();
 const n = (v: number) => formatCount(v, locale.value);
+/** A handover reason in words: the trace's own list first, then the report's. */
 const reason = (r: string) => {
-    const key = `reports.reasons.${r}`;
-    const text = translate(locale.value, key);
-    return text === key ? r : text;
+    for (const key of [`bot_brain.trace.handover_reasons.${r}`, `reports.reasons.${r}`]) {
+        const text = translate(locale.value, key);
+        if (text !== key) return text;
+    }
+    return r;
 };
 
 const showPrompt = ref(false);

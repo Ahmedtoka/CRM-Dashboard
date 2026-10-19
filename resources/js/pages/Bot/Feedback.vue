@@ -267,7 +267,7 @@ const inputClass =
                 <li v-for="item in items.data" :key="item.id" class="rounded-lg border border-line bg-card" :data-feedback="item.id">
                     <div class="space-y-3 px-4 py-3">
                         <div class="flex flex-wrap items-center gap-1.5">
-                            <StatusChip v-for="r in item.reasons" :key="r" :label="t(`bot_brain.feedback.reasons.${r}`)" tone="danger" size="sm" />
+                            <StatusChip v-for="r in item.reasons" :key="r" :label="t(`bot_brain.feedback.reasons.${r}`)" tone="warn" size="sm" />
                             <StatusChip v-if="item.layer" :label="t(`bot_brain.brain.layers.${item.layer}`)" tone="outline" size="sm" />
                             <StatusChip v-if="item.tier" :label="t(`bot_brain.trace.tier.${item.tier}`)" tone="outline" size="sm" />
                             <span class="text-12 ms-auto text-fg-3">

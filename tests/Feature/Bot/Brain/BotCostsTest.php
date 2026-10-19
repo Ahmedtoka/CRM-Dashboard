@@ -117,7 +117,7 @@ it('shows the cost page to supervisors and lets only an admin enter the balance'
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
     $this->actingAs($sup)->get('/bot/costs')->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->component('Bot/Costs')->where('canEditBalance', false)->has('report.spend'));
+        ->assertInertia(fn (Assert $page) => $page->component('Bot/Costs')->where('canEditBalance', false)->where('nowLocal', '2026-10-19T12:00')->has('report.spend'));
     $this->actingAs($sup)->putJson('/settings/bot-balance', ['balance_usd' => 100])->assertForbidden();
 
     $this->actingAs($admin)->putJson('/settings/bot-balance', ['balance_usd' => 100, 'balance_at' => '2026-10-19 09:00'])->assertOk();

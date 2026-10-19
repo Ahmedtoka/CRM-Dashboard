@@ -44,7 +44,7 @@ interface Report {
     console_today: number;
 }
 
-const props = defineProps<{ report: Report; canEditBalance: boolean }>();
+const props = defineProps<{ report: Report; canEditBalance: boolean; nowLocal: string }>();
 
 const { t, locale } = useI18n();
 const api = useApi();
@@ -76,10 +76,9 @@ const modelColumns = computed(() => [
 const tierLabel = (tier: string | null) => (tier === 'shadow' ? t('bot_brain.costs.shadow') : tier ? t(`bot_brain.trace.tier.${tier}`) : '—');
 
 const balance = computed(() => props.report.balance);
-// Cairo wall-clock «YYYY-MM-DDTHH:mm» for the datetime-local input (the server reads it as Cairo time).
-const cairoNow = () => new Date().toLocaleString('sv-SE', { timeZone: 'Africa/Cairo' }).slice(0, 16).replace(' ', 'T');
 const amount = ref<string>(balance.value.set ? String(balance.value.entered_usd) : '');
-const readAt = ref<string>(cairoNow());
+// Cairo wall-clock «YYYY-MM-DDTHH:mm» from the server; it reads the value back as Cairo time.
+const readAt = ref<string>(props.nowLocal);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 

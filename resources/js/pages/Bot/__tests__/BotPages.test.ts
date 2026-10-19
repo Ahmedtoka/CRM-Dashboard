@@ -121,7 +121,7 @@ const report = {
 
 describe('Bot/Costs', () => {
     it('says how many days the balance lasts and warns under 3 days', () => {
-        const w = mount(Costs, { props: { report, canEditBalance: true } as never, global: { stubs } });
+        const w = mount(Costs, { props: { report, canEditBalance: true, nowLocal: '2026-10-19T12:00' } as never, global: { stubs } });
         expect(w.find('[data-testid="days-left"]').text()).toContain('الرصيد هيكفي حوالي');
         expect(w.text()).toContain('أقل من ٣ أيام');
         expect(w.find('[data-scenario="legacy"]').text()).toContain('تقدير من رد نموذجي');
@@ -129,14 +129,17 @@ describe('Bot/Costs', () => {
 
     it('lets an admin save the balance, and asks for it when it is missing', async () => {
         put.mockResolvedValue({ data: { data: { saved: true } } });
-        const w = mount(Costs, { props: { report: { ...report, balance: { set: false } }, canEditBalance: true } as never, global: { stubs } });
+        const w = mount(Costs, {
+            props: { report: { ...report, balance: { set: false } }, canEditBalance: true, nowLocal: '2026-10-19T12:00' } as never,
+            global: { stubs },
+        });
         expect(w.text()).toContain('لسه الرصيد مش متسجل');
         await w.find('input[type="number"]').setValue('100');
         await w.find('form').trigger('submit');
         await flushPromises();
         expect(put).toHaveBeenCalledWith('/settings/bot-balance', expect.objectContaining({ balance_usd: 100 }));
 
-        const sup = mount(Costs, { props: { report, canEditBalance: false } as never, global: { stubs } });
+        const sup = mount(Costs, { props: { report, canEditBalance: false, nowLocal: '2026-10-19T12:00' } as never, global: { stubs } });
         expect(sup.find('form').exists()).toBe(false);
         expect(sup.text()).toContain('الأدمن بس يقدر يغيّر الرصيد');
     });
