@@ -4,7 +4,10 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 const { get, post, push } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), push: vi.fn() }));
 vi.mock('@/composables/useApi', () => ({ useApi: () => ({ get, post }), apiErrorMessage: (_e: unknown, f: string) => f }));
 vi.mock('@/composables/useToast', () => ({ useToast: () => ({ push }) }));
-vi.mock('@inertiajs/vue3', () => ({ Link: { props: ['href'], template: '<a :href="href"><slot /></a>' } }));
+vi.mock('@inertiajs/vue3', () => ({
+    Link: { props: ['href'], template: '<a :href="href"><slot /></a>' },
+    usePage: () => ({ props: { auth: { user: { role: 'moderator' } } } }),
+}));
 
 import BotConsole from '@/components/crm/bot/BotConsole.vue';
 import BotFeedbackForm from '@/components/crm/bot/BotFeedbackForm.vue';
@@ -173,8 +176,14 @@ describe('BotReplyActions', () => {
         expect(get).toHaveBeenCalledWith('/inbox/messages/5/bot-trace');
         expect(w.find('[data-testid="bot-trace"]').exists()).toBe(true);
         expect(w.find('[data-testid="bot-feedback-form"]').exists()).toBe(true);
+        // A moderator sees what happened, not the tokens and dollars.
+        expect(w.find('[data-testid="trace-cost"]').exists()).toBe(false);
+
+        // From the flag: the form first, the trace behind «ليه رد كده؟».
         await w.find('[data-action="feedback"]').trigger('click');
         expect(get).toHaveBeenCalledTimes(1);
+        expect(w.find('h2').text()).toBe('رد البوت ده غلط');
+        expect(w.find('[data-testid="trace-disclosure"]').exists()).toBe(true);
 
         get.mockResolvedValueOnce({ data: { data: null, feedback: null } });
         const old = mount(BotReplyActions, { props: { messageId: 6 }, global: { stubs: sheetStubs } });

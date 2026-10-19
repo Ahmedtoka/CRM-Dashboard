@@ -14,6 +14,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatDate, formatDateTime, formatUsd } from '@/lib/format';
 import { sectionTabs } from '@/lib/sectionTabs';
 import { Head, router } from '@inertiajs/vue3';
+import { useMediaQuery } from '@vueuse/core';
 import { AlertTriangle, Wallet } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
@@ -49,6 +50,7 @@ const props = defineProps<{ report: Report; canEditBalance: boolean; nowLocal: s
 const { t, locale } = useI18n();
 const api = useApi();
 const toast = useToast();
+const phone = useMediaQuery('(max-width: 759px)');
 const usd = (v: number) => formatUsd(v, locale.value);
 const n = (v: number) => formatCount(v, locale.value);
 
@@ -206,7 +208,13 @@ const daysText = computed(() =>
 
                 <div class="space-y-4">
                     <Ledger :figures="figures" :label="t('bot_brain.costs.ledger')" />
-                    <BarChart :title="t('bot_brain.costs.daily_title')" :items="daily" orientation="vertical" :label-every="5" :format="usd" />
+                    <BarChart
+                        :title="t('bot_brain.costs.daily_title')"
+                        :items="daily"
+                        orientation="vertical"
+                        :label-every="phone ? 10 : 5"
+                        :format="usd"
+                    />
                 </div>
             </div>
 
@@ -247,8 +255,8 @@ const daysText = computed(() =>
                     <h2 id="cache-title" class="border-b border-line px-4 py-3 text-base font-bold">{{ t('bot_brain.costs.cache_title') }}</h2>
                     <div class="space-y-1 px-4 py-3">
                         <p>
-                            <span class="text-lg font-bold tabular-nums">{{ pct(report.cache.share) }}</span>
-                            <span class="text-13 text-fg-2">{{ t('bot_brain.costs.cache_share') }}</span>
+                            <span class="text-lg font-bold tabular-nums">{{ pct(report.cache.share) }}</span
+                            >&nbsp;<span class="text-13 text-fg-2">{{ t('bot_brain.costs.cache_share') }}</span>
                         </p>
                         <p class="text-12 text-fg-3">{{ t('bot_brain.costs.cache_hint') }}</p>
                     </div>

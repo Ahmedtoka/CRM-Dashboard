@@ -110,8 +110,10 @@ async function send(): Promise<void> {
             />
         </label>
         <p v-if="error" class="text-13 text-danger" role="alert">{{ error }}</p>
-        <Button type="submit" class="h-11 w-full" :disabled="sending">{{
-            existing ? t('bot_brain.feedback.update') : t('bot_brain.feedback.send')
-        }}</Button>
+        <div class="sticky bottom-0 -mx-1 bg-card px-1 pb-1 pt-2">
+            <Button type="submit" class="h-11 w-full" :disabled="sending">{{
+                existing ? t('bot_brain.feedback.update') : t('bot_brain.feedback.send')
+            }}</Button>
+        </div>
     </form>
 </template>

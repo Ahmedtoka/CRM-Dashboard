@@ -14,7 +14,7 @@ import { computed } from 'vue';
  * every model call with its tokens, cost and time. Shared by the inbox sheet, the test console and
  * the feedback review.
  */
-const props = defineProps<{ trace: BotTrace }>();
+const props = withDefaults(defineProps<{ trace: BotTrace; showCost?: boolean }>(), { showCost: true });
 
 const { t, locale } = useI18n();
 
@@ -106,7 +106,9 @@ const handoverReason = computed(() => {
                     <p class="text-12 mt-0.5 text-fg-2">{{ label(`bot_brain.brain.tools.${tool.name}`, '') }}</p>
                     <dl v-if="tool.input || tool.output !== null" class="text-12 mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1">
                         <dt v-if="tool.input" class="text-fg-3">{{ t('bot_brain.trace.input') }}</dt>
-                        <dd v-if="tool.input" class="break-words" dir="auto">{{ tool.input }}</dd>
+                        <dd v-if="tool.input" class="break-words">
+                            <bdi dir="ltr">{{ tool.input }}</bdi>
+                        </dd>
                         <dt class="text-fg-3">{{ t('bot_brain.trace.output') }}</dt>
                         <dd class="break-words" dir="auto">{{ tool.output ?? t('bot_brain.trace.no_output') }}</dd>
                     </dl>
@@ -135,17 +137,25 @@ const handoverReason = computed(() => {
             </p>
         </section>
 
-        <section class="space-y-1.5">
+        <section v-if="showCost" class="space-y-1.5" data-testid="trace-cost">
             <h3 class="text-12 font-semibold text-fg-2">{{ t('bot_brain.trace.calls_title') }}</h3>
             <p v-if="!trace.calls.length" class="text-fg-2">
                 {{ trace.cost_usd > 0 ? formatUsd(trace.cost_usd, locale) : t('bot_brain.trace.free') }}
             </p>
             <table v-else class="text-12 w-full">
+                <thead>
+                    <tr class="border-b border-line text-start text-fg-3">
+                        <th class="py-1 pe-2 text-start font-medium">{{ t('bot_brain.trace.col_step') }}</th>
+                        <th class="py-1 pe-2 text-start font-medium">{{ t('bot_brain.trace.col_tokens') }}</th>
+                        <th class="py-1 pe-2 text-start font-medium">{{ t('bot_brain.trace.latency') }}</th>
+                        <th class="py-1 text-end font-medium">{{ t('bot_brain.trace.col_cost') }}</th>
+                    </tr>
+                </thead>
                 <tbody>
                     <tr v-for="(call, i) in trace.calls" :key="i" class="border-b border-line align-top last:border-0">
                         <td class="py-1.5 pe-2">
                             <span class="font-semibold">{{ t(`bot_brain.trace.phase.${call.phase}`) }}</span>
-                            <bdi class="block text-fg-3" dir="ltr">{{ call.model }}</bdi>
+                            <bdi class="block whitespace-nowrap text-fg-3" dir="ltr">{{ call.model }}</bdi>
                         </td>
                         <td class="py-1.5 pe-2 text-fg-2">
                             {{

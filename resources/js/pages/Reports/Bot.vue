@@ -123,7 +123,7 @@ const breadcrumbs = computed(() => [
                         {{ t('bot_brain.feedback.review.open_count', { n: n(feedback.open) }) }}
                     </Link>
                 </div>
-                <BarChart v-if="feedbackReasons.length" :title="t('bot_brain.feedback.review.counts_title')" :items="feedbackReasons" :format="n" />
+                <BarChart v-if="feedbackReasons.length" :title="t('bot_brain.feedback.review.by_reason')" :items="feedbackReasons" :format="n" />
                 <p v-else class="rounded-lg border border-line bg-card px-4 py-3 text-13 text-fg-3">{{ t('bot_brain.feedback.review.empty_hint') }}</p>
             </section>
 

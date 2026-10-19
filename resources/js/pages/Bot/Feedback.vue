@@ -326,7 +326,7 @@ const inputClass =
                                 @click="startConvert(item, k)"
                                 >{{ t(`bot_brain.feedback.review.convert.${k}`) }}</Button
                             >
-                            <Button variant="ghost" size="sm" class="ms-auto" @click="dismiss(item)">{{
+                            <Button variant="outline" size="sm" class="ms-auto" @click="dismiss(item)">{{
                                 t('bot_brain.feedback.review.dismiss')
                             }}</Button>
                         </div>

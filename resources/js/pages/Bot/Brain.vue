@@ -81,9 +81,15 @@ const warning = computed(() => {
     const s = props.brain.state;
     if (!s.bot_enabled) return t('bot_brain.brain.state.off');
     if (!s.ai_enabled) return t('bot_brain.brain.state.ai_off');
-    if (!s.agent_ready) return t('bot_brain.brain.state.no_key');
+    if (!s.agent_ready) return props.full ? t('bot_brain.brain.state.no_key') : t('bot_brain.brain.state.no_model_staff');
     return null;
 });
+
+const effortLabel = (level: string) => {
+    const key = `bot_brain.brain.effort_levels.${level}`;
+    const text = translate(locale.value, key);
+    return text === key ? level : text;
+};
 
 const models = computed(() => {
     const r = props.brain.router;
@@ -145,18 +151,19 @@ const usd = (v: number) => formatUsd(v, locale.value);
                                 <span class="text-fg-2">{{ t('bot_brain.brain.mode_label') }}: </span>
                                 <span class="font-semibold" data-testid="router-mode">{{ t(`bot_brain.brain.modes.${brain.router.mode}`) }}</span>
                             </p>
-                            <dl class="divide-y divide-line rounded-md border border-line">
+                            <p v-if="!full" class="text-fg-2">{{ t('bot_brain.brain.mod_router') }}</p>
+                            <dl v-if="full" class="divide-y divide-line rounded-md border border-line">
                                 <div v-for="row in models" :key="row.key" class="flex items-center justify-between gap-3 px-3 py-2">
                                     <dt class="text-fg-2">{{ t(`bot_brain.brain.model_roles.${row.key}`) }}</dt>
                                     <dd class="text-end">
                                         <bdi class="font-semibold" dir="ltr">{{ row.model }}</bdi>
                                         <span v-if="row.effort" class="text-12 block text-fg-3">{{
-                                            t('bot_brain.brain.effort', { level: row.effort })
+                                            t('bot_brain.brain.effort', { level: effortLabel(row.effort) })
                                         }}</span>
                                     </dd>
                                 </div>
                             </dl>
-                            <p v-if="brain.router.mode === 'hybrid'" class="text-13">
+                            <p v-if="full && brain.router.mode === 'hybrid'" class="text-13">
                                 {{
                                     t('bot_brain.brain.cap_line', {
                                         spent: usd(brain.router.sonnet_cap.spent_today),
@@ -171,7 +178,7 @@ const usd = (v: number) => formatUsd(v, locale.value);
                                     size="sm"
                                 />
                             </p>
-                            <p class="text-12 text-fg-3">{{ t('bot_brain.brain.how_to_switch') }}</p>
+                            <p v-if="full" class="text-12 text-fg-3">{{ t('bot_brain.brain.how_to_switch') }}</p>
                             <div v-if="full" class="flex flex-wrap gap-2">
                                 <Button as-child variant="outline" size="sm"
                                     ><Link href="/bot/guide">{{ t('bot_brain.brain.see_guide') }}</Link></Button
@@ -288,7 +295,7 @@ const usd = (v: number) => formatUsd(v, locale.value);
                                 <Link
                                     v-if="s.href"
                                     :href="s.href"
-                                    class="text-fg-3 hover:text-foreground"
+                                    class="-m-2 inline-flex size-10 items-center justify-center rounded-md text-fg-3 hover:bg-sunken hover:text-foreground"
                                     :aria-label="t(`bot_brain.brain.sources.${s.key}`)"
                                     ><ExternalLink class="size-4 rtl:-scale-x-100" aria-hidden="true"
                                 /></Link>
@@ -353,7 +360,7 @@ const usd = (v: number) => formatUsd(v, locale.value);
                     <div class="space-y-3 px-4 py-3 text-sm">
                         <ul class="space-y-2">
                             <li v-for="g in brain.guards" :key="g" class="flex gap-2">
-                                <StatusChip :label="t(`bot_brain.trace.guard_names.${g}`)" tone="brand" size="sm" class="shrink-0" />
+                                <StatusChip :label="t(`bot_brain.trace.guard_names.${g}`)" tone="outline" size="sm" class="shrink-0" />
                                 <span>{{ t(`bot_brain.brain.guards.${g}`) }}</span>
                             </li>
                         </ul>

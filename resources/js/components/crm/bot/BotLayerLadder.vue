@@ -38,7 +38,7 @@ const isPast = (layer: BotLayer) => props.active !== null && BOT_LAYERS.indexOf(
 <template>
     <ol
         class="grid gap-1.5"
-        :class="compact ? 'grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'"
+        :class="compact ? 'grid-cols-3 min-[480px]:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'"
         :aria-label="t('bot_brain.brain.ladder_title')"
         data-testid="bot-layer-ladder"
     >
@@ -49,7 +49,7 @@ const isPast = (layer: BotLayer) => props.active !== null && BOT_LAYERS.indexOf(
             :class="[
                 compact ? 'items-center gap-1 px-1 py-1.5 text-center' : 'gap-1 px-3 py-2.5',
                 isActive(layer) ? 'border-brand bg-brand-soft text-brand-ink' : 'border-line bg-card',
-                isPast(layer) && 'opacity-60',
+                isPast(layer) && 'text-fg-3',
             ]"
             :aria-current="isActive(layer) ? 'step' : undefined"
             :data-layer="layer"
@@ -66,9 +66,13 @@ const isPast = (layer: BotLayer) => props.active !== null && BOT_LAYERS.indexOf(
                     t(`bot_brain.brain.layers.${layer}`)
                 }}</span>
             </span>
-            <span v-if="counts" class="font-bold tabular-nums" :class="compact ? 'text-xs' : 'text-xl'" :data-count="counts[layer] ?? 0">{{
-                formatCount(counts[layer] ?? 0, locale)
-            }}</span>
+            <span
+                v-if="counts"
+                class="font-bold tabular-nums"
+                :class="[compact ? 'text-xs' : 'text-xl', !(counts[layer] ?? 0) && 'text-fg-3']"
+                :data-count="counts[layer] ?? 0"
+                >{{ formatCount(counts[layer] ?? 0, locale) }}</span
+            >
             <span v-if="hints && !compact" class="text-12 leading-snug text-fg-2">{{ t(`bot_brain.brain.layer_hints.${layer}`) }}</span>
         </li>
     </ol>

@@ -71,7 +71,7 @@ const { t } = useI18n();
     list-style: disc;
 }
 .bot-guide :deep(ol) {
-    list-style: decimal;
+    list-style: arabic-indic;
 }
 .bot-guide :deep(code) {
     border-radius: 4px;
@@ -82,6 +82,8 @@ const { t } = useI18n();
     unicode-bidi: isolate;
 }
 .bot-guide :deep(table) {
+    display: block;
+    overflow-x: auto;
     margin-top: 0.75rem;
     width: 100%;
     border-collapse: collapse;
