@@ -59,7 +59,13 @@ export function buildNav(ctx: NavContext): NavItem[] {
     const query = ctx.adsQuery === '' ? undefined : ctx.adsQuery;
     const settings: NavItem = { title: t('nav.settings'), href: '/settings', icon: Settings, match: ['/simulator', '/reports/latency'] };
 
-    const decisions: NavItem = { title: t('nav.ads_decisions'), href: '/ads/decisions', badge: count(badges.decisions), query, match: ['/ads/approvals'] };
+    const decisions: NavItem = {
+        title: t('nav.ads_decisions'),
+        href: '/ads/decisions',
+        badge: count(badges.decisions),
+        query,
+        match: ['/ads/approvals'],
+    };
     const explorer: NavItem = { title: t('nav.ads_explorer'), href: '/ads/explorer', query, match: ['/ads/creatives'] };
     const numbers: NavItem = { title: t('nav.ads_numbers'), href: '/ads/numbers', query, match: ['/ads/buyers'] };
     const library: NavItem = { title: t('nav.ads_library'), href: '/ads/materials', match: ['/ads/collections', '/ads/stock'] };
@@ -156,10 +162,11 @@ export function buildNav(ctx: NavContext): NavItem[] {
             icon: Bot,
             children: [
                 { title: t('nav.bot_run'), href: '/bot', exact: true },
+                { title: t('bot_brain.nav.brain'), href: '/bot/brain', match: ['/bot/costs', '/bot/guide'] },
                 { title: t('nav.bot_flows'), href: '/bot/flows', match: ['/bot/intents'] },
                 { title: t('nav.bot_copy'), href: '/bot/replies', match: ['/bot/knowledge', '/bot/translations'] },
                 { title: t('nav.bot_testing'), href: '/bot/test-links', match: ['/bot/test-sessions'] },
-                { title: t('nav.bot_learning'), href: '/bot/learning', badge: count(badges.learning) },
+                { title: t('nav.bot_learning'), href: '/bot/learning', match: ['/bot/feedback'], badge: count(badges.learning) },
                 { title: t('nav.bot_performance'), href: '/bot/performance' },
             ],
         },

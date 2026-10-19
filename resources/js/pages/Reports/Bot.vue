@@ -12,11 +12,17 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCount, formatUsd } from '@/lib/format';
 import type { BotMetrics, ReportRange } from '@/types/admin';
 import type { PlatformValue } from '@/types/crm';
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { Workflow } from 'lucide-vue-next';
 import { computed } from 'vue';
 
-const props = defineProps<{ range: ReportRange; platform: PlatformValue | null; metrics: BotMetrics }>();
+const props = defineProps<{
+    range: ReportRange;
+    platform: PlatformValue | null;
+    metrics: BotMetrics;
+    /** b2: the team's «رد البوت ده غلط» notes. */
+    feedback?: { open: number; last_30: number; by_reason: Record<string, number> };
+}>();
 
 const { t, locale } = useI18n();
 const { visit } = useReportFilters();
@@ -66,6 +72,14 @@ const reasons = computed(() =>
         .sort((x, y) => y.value - x.value),
 );
 
+// b2: «رد البوت ده غلط» by reason (last 30 days), biggest first.
+const feedbackReasons = computed(() =>
+    Object.entries(props.feedback?.by_reason ?? {})
+        .map(([reason, value]) => ({ key: reason, label: t(`bot_brain.feedback.reasons.${reason}`), value }))
+        .filter((r) => r.value > 0)
+        .sort((x, y) => y.value - x.value),
+);
+
 // One row per guided flow; flows nobody entered in the period sink to the bottom (server order).
 const flowRows = computed(() => (props.metrics.flows ?? []).map((row) => ({ ...row, id: row.key })));
 const flowColumns = computed(() => [
@@ -101,6 +115,19 @@ const breadcrumbs = computed(() => [
                 <BarChart :title="t('reports.bot.why_handover')" :items="reasons" :format="n" />
                 <BarChart :title="t('reports.bot.comments')" :items="comments" :format="n" />
             </div>
+
+            <section v-if="feedback" class="space-y-2" aria-labelledby="bot-feedback-title" data-testid="bot-feedback-counts">
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                    <h2 id="bot-feedback-title" class="text-base font-bold">{{ t('bot_brain.feedback.review.counts_title') }}</h2>
+                    <Link v-if="feedback.open" href="/bot/feedback" class="text-13 font-semibold text-brand hover:underline">
+                        {{ t('bot_brain.feedback.review.open_count', { n: n(feedback.open) }) }}
+                    </Link>
+                </div>
+                <BarChart v-if="feedbackReasons.length" :title="t('bot_brain.feedback.review.counts_title')" :items="feedbackReasons" :format="n" />
+                <p v-else class="rounded-lg border border-line bg-card px-4 py-3 text-13 text-fg-3">
+                    {{ t('bot_brain.feedback.review.empty_hint') }}
+                </p>
+            </section>
 
             <section class="space-y-2" aria-labelledby="bot-flows-title">
                 <div>

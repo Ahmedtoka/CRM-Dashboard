@@ -1,5 +1,5 @@
-import { buildNav, groupBadge, type NavContext } from '@/lib/navMenu';
 import { translate } from '@/i18n';
+import { buildNav, groupBadge, type NavContext } from '@/lib/navMenu';
 import type { NavItem } from '@/types';
 import { describe, expect, it } from 'vitest';
 
@@ -27,8 +27,8 @@ describe('buildNav (IA §3.4)', () => {
         expect(titles(items[3].children!)).toEqual(['محتاج قرار', 'الإطلاقات', 'كل الإعلانات', 'الأرقام', 'المكتبة']);
         expect(hrefs(items[4])).toEqual(['/reports/team', '/reports/activity']);
         expect(titles(items[4].children!)).toEqual(['الفريق', 'السجل']);
-        expect(hrefs(items[5])).toEqual(['/bot', '/bot/flows', '/bot/replies', '/bot/test-links', '/bot/learning', '/bot/performance']);
-        expect(titles(items[5].children!)).toEqual(['التشغيل', 'الفلوهات', 'كلام البوت', 'التجربة', 'التعلم', 'الأداء']);
+        expect(hrefs(items[5])).toEqual(['/bot', '/bot/brain', '/bot/flows', '/bot/replies', '/bot/test-links', '/bot/learning', '/bot/performance']);
+        expect(titles(items[5].children!)).toEqual(['التشغيل', 'عقل البوت', 'الفلوهات', 'كلام البوت', 'التجربة', 'التعلم', 'الأداء']);
         expect(items[6].href).toBe('/settings');
     });
 

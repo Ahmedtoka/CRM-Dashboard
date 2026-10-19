@@ -132,9 +132,18 @@ export const sectionTabs = {
     ],
 
     /** «التعلم» › الاقتراحات · الملاحظات. */
-    botLearning: (t: Translate, pending?: number | null): SectionTab[] => [
+    botLearning: (t: Translate, pending?: number | null, feedback?: number | null): SectionTab[] => [
         { label: t('section_tabs.learning.suggestions'), href: '/bot/learning', badge: pending },
         { label: t('section_tabs.learning.notes'), href: '/bot/learning?tab=notes' },
+        // b2: the team's «رد البوت ده غلط» notes, turned into suggestions from here.
+        { label: t('bot_brain.nav.feedback'), href: '/bot/feedback', badge: feedback },
+    ],
+
+    /** b2: «عقل البوت» › عقل البوت · التكلفة · إزاي نطوّر البوت. */
+    botBrain: (t: Translate): SectionTab[] => [
+        { label: t('bot_brain.nav.brain'), href: '/bot/brain' },
+        { label: t('bot_brain.nav.costs'), href: '/bot/costs' },
+        { label: t('bot_brain.nav.guide'), href: '/bot/guide' },
     ],
 
     /** D5: «حسابي» › البيانات · كلمة السر · المظهر · الإشعارات (the inner side menu is gone). */

@@ -92,3 +92,10 @@ it('runs the scripted paths when no model is available, and refuses moderators',
 
     $this->actingAs(User::factory()->create(['role' => UserRole::Moderator]))->postJson('/settings/bot-brain/try', ['text' => 'x'])->assertForbidden();
 });
+
+it('renders the guide from the repo markdown for admins and supervisors', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Supervisor]))->get('/bot/guide')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('Bot/Guide')->where('html', fn (string $html) => str_contains($html, '<table>') && str_contains($html, 'CRM_BOT_ROUTER')));
+    $this->actingAs(User::factory()->create(['role' => UserRole::Moderator]))->get('/bot/guide')->assertForbidden();
+});

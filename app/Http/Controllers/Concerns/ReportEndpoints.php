@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Concerns;
 use App\Analytics\MetricsService;
 use App\Analytics\PresenceTracker;
 use App\Enums\Platform;
+use App\Http\Controllers\Web\Bot\BotFeedbackController;
 use App\Http\Resources\UserResource;
 use App\Http\Support\DateRange;
 use App\Models\User;
@@ -55,6 +56,8 @@ trait ReportEndpoints
             'range' => $range->toArray(),
             'platform' => $platform?->value,
             'metrics' => $metrics->botMetrics($range->from, $range->to, $platform),
+            // b2: the team's «رد البوت ده غلط» notes (last 30 days, by reason) and how many wait for review.
+            'feedback' => BotFeedbackController::counts(),
         ];
     }
 
