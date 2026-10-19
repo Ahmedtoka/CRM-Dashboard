@@ -22,16 +22,18 @@ class CostWatchCommand extends Command
         $data = $report->build();
         $day = now(BotCostReport::TZ)->toDateString();
 
-        if (($data['balance']['warn'] ?? false) && Cache::add("bot:cost-watch:balance:{$day}", true, now()->addDays(2))) {
+        if (($data['balance']['warn'] ?? false) && ! Cache::has($key = "bot:cost-watch:balance:{$day}")) {
             $notifier->notifyAdmins('bot.balance_low', [
                 'days' => $data['balance']['days_left'],
                 'left_usd' => $data['balance']['left_usd'],
             ]);
+            Cache::put($key, true, now()->addDays(2));
             $this->info('balance warning sent');
         }
 
-        if (($data['sonnet']['hit'] ?? false) && Cache::add("bot:cost-watch:sonnet:{$day}", true, now()->addDays(2))) {
+        if (($data['sonnet']['hit'] ?? false) && ! Cache::has($key = "bot:cost-watch:sonnet:{$day}")) {
             $notifier->notifyAdmins('bot.sonnet_cap', ['cap' => $data['sonnet']['cap'], 'spent' => $data['sonnet']['spent_today']]);
+            Cache::put($key, true, now()->addDays(2));
             $this->info('sonnet cap warning sent');
         }
 

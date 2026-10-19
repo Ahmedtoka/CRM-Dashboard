@@ -2,6 +2,7 @@
 
 namespace App\Bot\Brain\Console;
 
+use App\Analytics\ActivityLogger;
 use App\Bot\Agent\StoreAgent;
 use App\Bot\BotEngine;
 use App\Bot\Brain\Costs\BotCostReport;
@@ -10,7 +11,6 @@ use App\Bot\Brain\Trace\TurnTrace;
 use App\Bot\Flows\FlowState;
 use App\Bot\Flows\Sandbox\SandboxLog;
 use App\Bot\Flows\Sandbox\SandboxMode;
-use App\Bot\Flows\Sandbox\SandboxOutbound;
 use App\Bot\Router\TurnMetrics;
 use App\Enums\ConversationSource;
 use App\Enums\ConversationStatus;
@@ -19,6 +19,7 @@ use App\Enums\MessageDirection;
 use App\Enums\MessageStatus;
 use App\Enums\Platform;
 use App\Enums\SenderType;
+use App\Events\CommentUpdated;
 use App\Events\ConversationUpdated;
 use App\Events\CustomerUpdated;
 use App\Events\MessageCreated;
@@ -31,6 +32,15 @@ use App\Models\BotSetting;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
 use App\Models\Customer;
+use App\Queue\Events\QueueAssigned;
+use App\Queue\Events\QueueEntryUpdated;
+use App\Queue\Events\QueueMemberUpdated;
+use App\Queue\Events\RouterDecided;
+use App\Queue\Events\ShiftUpdated;
+use App\Queue\QueueScripts;
+use App\Queue\QueueService;
+use App\Queue\WaitEstimator;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
@@ -48,6 +58,12 @@ class BotConsole
 {
     private const HISTORY_MAX = 20;
 
+    /** Everything real-time the team's screens listen to: faked for the console's throwaway chat. */
+    private const BROADCASTS = [
+        ConversationUpdated::class, MessageCreated::class, MessageUpdated::class, OrderUpdated::class, CustomerUpdated::class, UserNotified::class, CommentUpdated::class,
+        QueueAssigned::class, QueueEntryUpdated::class, QueueMemberUpdated::class, RouterDecided::class, ShiftUpdated::class,
+    ];
+
     /**
      * @param  list<array{role: 'customer'|'bot', text: string}>  $history  the console's earlier lines
      * @param  array<string, mixed>|null  $state  the bot_state a previous run returned
@@ -57,12 +73,25 @@ class BotConsole
     {
         $log = new SandboxLog;
         $previousOutbound = app(OutboundService::class);
+        $previousQueue = app(QueueService::class);
+        $previousCache = Cache::getDefaultDriver();
         $wasSandbox = SandboxMode::active();
         $result = ['replies' => [], 'trace' => null, 'handover' => false, 'flow' => null, 'state' => null, 'error' => null];
 
         Queue::fake();
-        Event::fake([ConversationUpdated::class, MessageCreated::class, MessageUpdated::class, OrderUpdated::class, CustomerUpdated::class, UserNotified::class]);
-        app()->instance(OutboundService::class, new SandboxOutbound($log));
+        Event::fake(self::BROADCASTS);
+        app()->instance(OutboundService::class, new ConsoleOutbound($log));
+        // A handover is shown, never routed: no ticket, no queue_days row lock, no router lock.
+        app()->instance(QueueService::class, new class(app(ActivityLogger::class), app(WaitEstimator::class), app(QueueScripts::class)) extends QueueService
+        {
+            public function shouldQueue(): bool
+            {
+                return false;
+            }
+        });
+        // The turn's cache writes (the Sonnet spend counter, locks) stay in memory: with the database
+        // cache store they would hold row locks against live bot turns until the rollback.
+        Cache::setDefaultDriver('array');
         SandboxMode::set(true);
         DB::beginTransaction();
 
@@ -104,7 +133,9 @@ class BotConsole
         } finally {
             rescue(fn () => DB::rollBack(), null, report: true);
             SandboxMode::set($wasSandbox);
+            Cache::setDefaultDriver($previousCache);
             app()->instance(OutboundService::class, $previousOutbound);
+            app()->instance(QueueService::class, $previousQueue);
         }
 
         if (($result['spent_usd'] ?? 0) > 0) {

@@ -76,7 +76,8 @@ const modelColumns = computed(() => [
 const tierLabel = (tier: string | null) => (tier === 'shadow' ? t('bot_brain.costs.shadow') : tier ? t(`bot_brain.trace.tier.${tier}`) : '—');
 
 const balance = computed(() => props.report.balance);
-const cairoNow = () => new Date(Date.now() + 2 * 3600 * 1000).toISOString().slice(0, 16);
+// Cairo wall-clock «YYYY-MM-DDTHH:mm» for the datetime-local input (the server reads it as Cairo time).
+const cairoNow = () => new Date().toLocaleString('sv-SE', { timeZone: 'Africa/Cairo' }).slice(0, 16).replace(' ', 'T');
 const amount = ref<string>(balance.value.set ? String(balance.value.entered_usd) : '');
 const readAt = ref<string>(cairoNow());
 const saving = ref(false);

@@ -10,6 +10,8 @@ use App\Models\User;
 use App\Models\UserNotification;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
 
 // «التكلفة» (b2): spend from the bot's own records, split by model/tier, per conversation, the
@@ -126,3 +128,37 @@ it('shows the cost page to supervisors and lets only an admin enter the balance'
     expect(BotSetting::current()->anthropic_balance_usd)->toBeNull();
     $this->actingAs(User::factory()->create(['role' => UserRole::Moderator]))->get('/bot/costs')->assertForbidden();
 });
+
+it('counts the cache share per run even where the hybrid router recorded no input tokens', function () {
+    bcRun(0.001, '2026-10-19 10:00', ['input_tokens' => 0, 'cache_read_tokens' => 3000, 'cache_write_tokens' => 1000]);
+    bcRun(0.001, '2026-10-19 10:05', ['input_tokens' => 5000, 'cache_read_tokens' => 4000]);
+
+    // (3000 + 4000) read of (4000 + 5000) read in all.
+    expect(app(BotCostReport::class)->build()['cache']['share'])->toBe(round(7000 / 9000, 3));
+});
+
+it('counts the learning reviews and the nightly analyst, paid by the same key', function () {
+    $c = Conversation::factory()->create();
+    DB::table('bot_learning_notes')->insert(['conversation_id' => $c->id, 'cost_usd' => 0.02, 'created_at' => now(), 'updated_at' => now()] + bcNoteDefaults());
+    DB::table('bot_learning_reports')->insert(['report_date' => '2026-10-19', 'summary' => '', 'stats' => '[]', 'model' => 'claude-sonnet-5-5', 'input_tokens' => 100_000, 'output_tokens' => 10_000, 'created_at' => now(), 'updated_at' => now()]);
+
+    // 0.02 + (100k × $2 + 10k × $10) / 1M = 0.02 + 0.3
+    expect(app(BotCostReport::class)->build()['spend']['today'])->toBe(0.32);
+});
+
+it('takes the balance time as Cairo time and never later than now', function () {
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+
+    $this->actingAs($admin)->putJson('/settings/bot-balance', ['balance_usd' => 50, 'balance_at' => '2026-10-19 14:30'])->assertOk();
+
+    expect(BotSetting::current()->anthropic_balance_at->equalTo(now()))->toBeTrue();
+});
+
+/** The NOT NULL columns of a learning note other than its conversation and cost. */
+function bcNoteDefaults(): array
+{
+    $cols = collect(Schema::getColumns('bot_learning_notes'))
+        ->filter(fn ($col) => ! $col['nullable'] && $col['default'] === null && ! $col['auto_increment'] && ! in_array($col['name'], ['conversation_id', 'cost_usd', 'created_at', 'updated_at'], true));
+
+    return $cols->mapWithKeys(fn ($col) => [$col['name'] => str_contains((string) $col['type_name'], 'int') ? 0 : ''])->all();
+}

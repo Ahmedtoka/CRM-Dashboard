@@ -2,6 +2,7 @@
 
 namespace App\Bot\Learning;
 
+use App\Bot\Brain\Feedback\FeedbackSuggestionTypes;
 use App\Enums\SenderType;
 use App\Models\BotFlow;
 use App\Models\BotIntent;
@@ -394,7 +395,8 @@ class LearnCommand extends Command
                     break;
                 }
 
-                if (! is_array($suggestion)) {
+                // b2: the feedback-only types (agent_instruction, eval_case) are made by an admin, never by the analyst.
+                if (! is_array($suggestion) || in_array($suggestion['type'] ?? null, FeedbackSuggestionTypes::TYPES, true)) {
                     continue;
                 }
 

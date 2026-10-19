@@ -75,13 +75,15 @@ class BotBrainController extends Controller
 
         $data = $request->validate([
             'balance_usd' => ['nullable', 'numeric', 'min:0', 'max:100000'],
-            'balance_at' => ['nullable', 'date', 'before_or_equal:now'],
+            'balance_at' => ['nullable', 'date'],
         ]);
 
+        // The form sends Cairo wall-clock time; never later than now (a projection from the future is meaningless).
+        $at = isset($data['balance_at']) ? CarbonImmutable::parse($data['balance_at'], BotCostReport::TZ)->utc() : CarbonImmutable::now();
         $clear = ($data['balance_usd'] ?? null) === null;
         BotSetting::current()->update([
             'anthropic_balance_usd' => $clear ? null : round((float) $data['balance_usd'], 2),
-            'anthropic_balance_at' => $clear ? null : (isset($data['balance_at']) ? CarbonImmutable::parse($data['balance_at'], BotCostReport::TZ)->utc() : now()),
+            'anthropic_balance_at' => $clear ? null : ($at->gt(now()) ? now() : $at),
         ]);
 
         return $this->done($request, ['saved' => true]);

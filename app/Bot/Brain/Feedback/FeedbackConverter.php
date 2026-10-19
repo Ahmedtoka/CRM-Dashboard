@@ -53,6 +53,10 @@ class FeedbackConverter
         }
 
         return DB::transaction(function () use ($f, $kind, $type, $target, $proposed, $reason, $by) {
+            if (BotReplyFeedback::query()->whereKey($f->id)->lockForUpdate()->value('status') !== 'open') {
+                throw new DomainException('الملاحظة دي اتراجعت قبل كده.');
+            }
+
             $report = BotLearningReport::query()->firstOrCreate(
                 ['report_date' => now('Africa/Cairo')->toDateString()],
                 ['summary' => '', 'stats' => []],

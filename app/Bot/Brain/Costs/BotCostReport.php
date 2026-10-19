@@ -75,12 +75,31 @@ class BotCostReport
             ? (float) DB::table('bot_shadow_plans')->whereBetween('created_at', [$from->utc(), $to->utc()])->sum('cost_usd')
             : 0.0;
 
+        // The console counters live 40 days: never more lookups than that.
         $console = 0.0;
-        for ($d = $from->setTimezone(self::TZ)->startOfDay(); $d->lte($to); $d = $d->addDay()) {
+        for ($d = max($from->setTimezone(self::TZ)->startOfDay(), $to->setTimezone(self::TZ)->startOfDay()->subDays(40)); $d->lte($to); $d = $d->addDay()) {
             $console += self::consoleSpentOn($d);
         }
 
-        return round($runs + $shadow + $console, 4);
+        return round($runs + $shadow + $console + $this->learningSpend($from, $to), 4);
+    }
+
+    /**
+     * The same Anthropic key also pays for the learning reviews (one per handed-over chat) and the
+     * nightly analyst; they count toward the balance too.
+     */
+    private function learningSpend(CarbonImmutable $from, CarbonImmutable $to): float
+    {
+        $notes = Schema::hasTable('bot_learning_notes')
+            ? (float) DB::table('bot_learning_notes')->whereBetween('created_at', [$from->utc(), $to->utc()])->sum('cost_usd')
+            : 0.0;
+
+        $reports = Schema::hasTable('bot_learning_reports')
+            ? DB::table('bot_learning_reports')->whereBetween('created_at', [$from->utc(), $to->utc()])->get(['model', 'input_tokens', 'output_tokens'])
+                ->sum(fn ($r) => ModelPricing::cost($r->model, (int) $r->input_tokens, (int) $r->output_tokens))
+            : 0.0;
+
+        return $notes + (float) $reports;
     }
 
     /** The test console's spend, kept per Cairo day (its runs are rolled back). */
@@ -171,8 +190,10 @@ class BotCostReport
     /** @return array{read: int, input: int, share: float} share of input tokens served from the prompt cache */
     private function cache(CarbonImmutable $from, CarbonImmutable $now): array
     {
+        // Per run, everything the model read: input_tokens already includes the cache (AgentOutcome), but the
+        // hybrid router's own rows record 0 there while TurnMetrics fills the cache columns.
         $row = DB::table('bot_runs')->whereBetween('created_at', [$from->utc(), $now->utc()])
-            ->selectRaw('sum(coalesce(cache_read_tokens, 0)) as r, sum(input_tokens) as i')->first();
+            ->selectRaw('sum(coalesce(cache_read_tokens, 0)) as r, sum(case when input_tokens > coalesce(cache_read_tokens, 0) + coalesce(cache_write_tokens, 0) then input_tokens else coalesce(cache_read_tokens, 0) + coalesce(cache_write_tokens, 0) end) as i')->first();
         $read = (int) ($row->r ?? 0);
         $input = (int) ($row->i ?? 0);
 

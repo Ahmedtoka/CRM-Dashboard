@@ -15,8 +15,11 @@ use Illuminate\Support\Facades\DB;
  */
 class TraceView
 {
-    /** A bubble with no exact link (sent later by a job) belongs to the latest turn this long before it. */
+    /** Where an exact link is looked for around a bubble (a turn's row is written after its first sends). */
     private const FALLBACK_SECONDS = 120;
+
+    /** A bubble with no exact link (a delayed send of that turn) takes the latest turn at most this long before it. */
+    private const NEAREST_SECONDS = 60;
 
     /** The trace row that produced this bot message, or null (an old message, or not a bot turn). */
     public function traceIdFor(Message $m): ?int
@@ -38,7 +41,8 @@ class TraceView
         }
 
         // Not listed: the latest turn written before it (a delayed send of that turn).
-        $earlier = $rows->first(fn ($row) => $row->created_at <= $m->created_at->copy()->addSeconds(5)->toDateTimeString());
+        $earlier = $rows->first(fn ($row) => $row->created_at <= $m->created_at->copy()->addSeconds(5)->toDateTimeString()
+            && $row->created_at >= $m->created_at->copy()->subSeconds(self::NEAREST_SECONDS)->toDateTimeString());
 
         return $earlier !== null ? (int) $earlier->id : null;
     }

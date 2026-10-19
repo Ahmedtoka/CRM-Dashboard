@@ -5325,7 +5325,7 @@ const en: Messages = {
             measured: 'from real replies',
             estimated: 'estimated from a typical reply',
             console_line: 'Including today’s "Try the bot" tests: {usd}',
-            note: 'These numbers come from the bot’s own records (tokens × Anthropic prices). The invoice on console.anthropic.com may differ slightly.',
+            note: 'These numbers come from the bot’s own records (tokens × Anthropic prices): replies, the background planner, tests and learning reviews. The invoice on console.anthropic.com may differ slightly.',
         },
         guide: {
             title: 'Improving the bot',
