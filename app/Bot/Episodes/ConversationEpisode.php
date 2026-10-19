@@ -217,6 +217,18 @@ final class ConversationEpisode
         return is_array($episode) && ($episode['mode'] ?? null) === 'fresh' && is_numeric($episode['from_id'] ?? null) ? (int) $episode['from_id'] : null;
     }
 
+    /** When the closed chat ended, for a fresh start (the turn limit counts from there), else null. */
+    public static function freshSince(Conversation $c): ?Carbon
+    {
+        $episode = ($c->bot_state ?? [])[self::KEY] ?? null;
+
+        if (! is_array($episode) || ($episode['mode'] ?? null) !== 'fresh') {
+            return null;
+        }
+
+        return rescue(fn () => Carbon::parse((string) $episode['closed_at']), null, report: false);
+    }
+
     /** The CONTEXT lines the model reads about the close (both routers' agent calls). */
     public static function context(Conversation $c): ?string
     {

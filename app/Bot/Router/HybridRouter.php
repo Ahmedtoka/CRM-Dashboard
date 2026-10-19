@@ -19,6 +19,7 @@ use App\Bot\Flows\HumanHandover;
 use App\Bot\Flows\Returns\ReturnPrefill;
 use App\Bot\Jobs\BotHoldNotice;
 use App\Bot\Language\ConversationLanguage;
+use App\Enums\Handler;
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
 use App\Inbox\OutboundService;
@@ -133,9 +134,9 @@ class HybridRouter
                 return app(TurnRunner::class)->run($c, $burst);
             }
 
-            $this->safeFallback($c);
+            $this->safeFallback($c, $text);
 
-            return $this->record($c, $texts, 'safe_fallback', $metrics->tier, $started, $intent, null, $planCost, $planModel);
+            return $this->record($c, $texts, $c->refresh()->handler === Handler::Bot ? 'safe_fallback' : 'handover', $metrics->tier, $started, $intent, null, $planCost, $planModel);
         }
 
         $outcome->costUsd += $planCost;
@@ -356,9 +357,22 @@ class HybridRouter
     }
 
     /** No checked answer and no flow: never a made-up one — «خليني أتأكد…» and the offer of a person. */
-    private function safeFallback(Conversation $c): void
+    private function safeFallback(Conversation $c, string $customerText): void
     {
-        $this->send($c, $this->script('bot_safe_fallback'), [FlowLabels::YES_BUTTON, FlowLabels::NO_BUTTON]);
+        $text = $this->script('bot_safe_fallback');
+
+        // Round b1: unsure twice in a row — «خليني أتأكد…» again would be the bot going in circles.
+        $previous = $c->messages()->where('sender_type', SenderType::Bot->value)
+            ->where('created_at', '>=', now()->subMinutes(30))->latest('id')->value('body');
+
+        if ($previous !== null && trim((string) $previous) === trim($text)) {
+            FlowState::setConfirm($c, null);
+            app(HumanHandover::class)->handover($c, null, $customerText, 'bot_unsure', 'human_request');
+
+            return;
+        }
+
+        $this->send($c, $text, [FlowLabels::YES_BUTTON, FlowLabels::NO_BUTTON]);
         FlowState::setConfirm($c, 'handover_offer');
     }
 

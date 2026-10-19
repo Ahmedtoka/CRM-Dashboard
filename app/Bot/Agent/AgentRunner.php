@@ -7,6 +7,10 @@ use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Flow\TurnSupersede;
+use App\Bot\Flows\FlowLabels;
+use App\Bot\Flows\FlowPrompter;
+use App\Bot\Flows\FlowScripts;
+use App\Bot\Flows\FlowState;
 use App\Bot\Flows\HumanHandover;
 use App\Bot\Jobs\BotHoldNotice;
 use App\Bot\Language\ConversationLanguage;
@@ -127,6 +131,15 @@ class AgentRunner
         }
 
         $flows = ! $insideFlow && $outcome->handover === null && $tasks !== [];
+
+        // Round b1: the same long answer again means the first one did not help — a person is offered.
+        if (! $insideFlow && ! $flows && $outcome->handover === null && $outcome->products->isEmpty() && $outcome->branchCards === null
+            && RepeatedReply::repeats($c, $outcome->reply)) {
+            $this->offerPerson($c);
+
+            return $this->record($c, $texts, $outcome, 'repeat_offer', false, $started, $engine, $plan);
+        }
+
         $sent = $this->deliver($c, $outcome, $insideFlow, $flows);
 
         if ($outcome->handover !== null) {
@@ -140,6 +153,19 @@ class AgentRunner
             $flows => 'flow_started',
             default => 'reply',
         }, $sent, $started, $engine, $plan);
+    }
+
+    /** «خليني أتأكد من المعلومة دي مع الفريق، تحبي أوصّلك بحد منهم؟» [أيوه] [لأ] — her «أيوه» hands over. */
+    private function offerPerson(Conversation $c): void
+    {
+        $text = app(FlowPrompter::class)->script('bot_safe_fallback') ?? (string) FlowScripts::all()['bot_safe_fallback']['body'];
+
+        try {
+            $this->outbound->sendBot($c, $text, 0, true, [FlowLabels::YES_BUTTON, FlowLabels::NO_BUTTON]);
+            FlowState::setConfirm($c, 'handover_offer');
+        } catch (WindowClosedException) {
+            Log::info('agent.repeat_offer_window_closed', ['conversation_id' => $c->id]);
+        }
     }
 
     private function deliver(Conversation $c, AgentOutcome $o, bool $insideFlow, bool $flows = false): bool

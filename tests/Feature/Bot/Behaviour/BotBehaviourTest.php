@@ -363,3 +363,67 @@ it('sends the answer as it is once she has been waiting past the supersede limit
     expect(bbBot())->toBe(['الفستان الأسود متاح يا فندم', 'والمقاس ده موجود كمان'])
         ->and(\App\Models\BotRun::where('decision', 'superseded')->count())->toBe(0);
 })->with('routers');
+
+// ---------------------------------------------------------------------------------------------
+// Problem 4 — handing over too much / too little, repeating itself.
+// ---------------------------------------------------------------------------------------------
+
+it('does not hand a returning customer over for the turns of a chat that was already closed', function (string $router) {
+    BotSetting::current()->update(['max_bot_turns' => 3]);
+    bbFake($router, ['متاح يا فندم بكل المقاسات', 'الخامة كتان طبيعي يا فندم', 'بيتغسل على البارد يا فندم', 'الاسدال متاح بالاسود والكحلي يا فندم']);
+
+    bbSay('الفستان متاح؟');
+    $this->travel(1)->minutes();
+    bbSay('خامته ايه؟');
+    $this->travel(1)->minutes();
+    bbSay('بيتغسل ازاي؟');
+    $this->travel(1)->minutes();
+    bbSay('شكرا');                                   // her own close
+    $this->travel(40)->minutes();
+    $c = bbSay('عندكم اسدال اسود؟');                 // a new conversation, inside the 120-minute turn window
+
+    expect($c->refresh()->handler)->toBe(Handler::Bot)
+        ->and(bbBot())->toContain('الاسدال متاح بالاسود والكحلي يا فندم');
+})->with('routers');
+
+it('never spends the turn limit on answers that needed no model (the owner rules and FAQ)', function (string $router) {
+    BotSetting::current()->update(['max_bot_turns' => 2]);
+    bbFake($router, []);
+    BotRule::query()->update(['is_active' => false]);
+    BotRule::factory()->create(['name' => 'دفع', 'keywords' => ['انستاباي'], 'match_type' => 'any_keyword', 'action' => 'reply', 'public_replies' => ['أيوه بنقبل انستاباي يا فندم'], 'scope' => 'both', 'platforms' => []]);
+
+    foreach (range(1, 4) as $i) {
+        $c = bbSay('بتقبلوا انستاباي؟');
+        $this->travel(1)->minutes();
+    }
+
+    expect($c->refresh()->handler)->toBe(Handler::Bot);
+})->with('routers');
+
+it('offers a person instead of sending her the same long answer again', function (string $router) {
+    $same = 'المرتجع بيتم خلال 14 يوم من الاستلام والقطعة بحالتها الأصلية يا فندم';
+    bbFake($router, [$same, $same]);
+
+    bbSay('ازاي ارجع الفستان؟');
+    $this->travel(1)->minutes();
+    $c = bbSay('يعني اعمل ايه عشان ارجعه؟');
+
+    $said = bbBot();
+    expect(array_count_values($said)[$same] ?? 0)->toBe(1)
+        ->and(end($said))->toContain('تحبي أوصّلك بحد منهم')
+        ->and(FlowState::confirm($c->refresh()))->toBe('handover_offer');
+})->with('routers');
+
+it('hands her to a person when the bot is unsure twice in a row, instead of «خليني أتأكد» again (hybrid)', function () {
+    // Every model draft invents a promise, so tier 1 and the tier-2 retry both fail the guards.
+    bbFake('hybrid', ['وليكي هدية مع الأوردر', 'وكمان هدية تانية', 'وهدية تالتة', 'وهدية رابعة']);
+
+    bbSay('عايزة اعرف عن العروض');
+    $this->travel(1)->minutes();
+    $c = bbSay('طب في عروض النهارده؟');
+
+    $fallback = \App\Bot\Flows\FlowScripts::all()['bot_safe_fallback']['body'];
+    expect(array_count_values(bbBot())[$fallback] ?? 0)->toBe(1)
+        ->and($c->refresh()->handler)->not->toBe(Handler::Bot)
+        ->and(implode(' ', bbBot()))->not->toContain('هدية');
+});
