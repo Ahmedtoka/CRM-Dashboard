@@ -230,6 +230,9 @@ return [
         // Defaults for new bot_settings rows; phpunit.xml pins them to 0 so synchronous tests stay synchronous.
         'burst_wait_seconds' => (int) env('CRM_BOT_BURST_WAIT_SECONDS', 3),
         'burst_max_wait_seconds' => (int) env('CRM_BOT_MAX_WAIT_SECONDS', 12),
+        // Round b1: a model answer is dropped for one that also reads the message she sent meanwhile,
+        // up to this long after her first message (then the answer goes out as it is).
+        'supersede_max_seconds' => (int) env('CRM_BOT_SUPERSEDE_MAX_SECONDS', 20),
         'typing_ms_per_char' => (int) env('CRM_BOT_TYPING_MS_PER_CHAR', 35),
 
         // Bilingual bot (design 2026-09-21 §2): at most this many NEW automatic

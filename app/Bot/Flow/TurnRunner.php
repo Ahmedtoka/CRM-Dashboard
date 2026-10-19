@@ -3,6 +3,7 @@
 namespace App\Bot\Flow;
 
 use App\Bot\ArabicNormalizer;
+use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\Orders\OrderLookup;
 use App\Bot\Flow\Orders\OrderSnapshot;
 use App\Bot\Flow\Orders\OrderStatusText;
@@ -409,6 +410,12 @@ class TurnRunner
             if ($reply !== null && $firstReply && $handover === null && ! $menuButton && $flowIntent === null && ($offer = $this->offerLine()) !== null && ! str_contains($reply, $offer)) {
                 $reply = rtrim($reply)."\n\n".$offer;
             }
+        }
+
+        // Round b1: she wrote again while the models were thinking — nothing saved or sent yet, so the
+        // next turn answers all of it at once.
+        if (! $socialOnly && ! $photoOnly) {
+            TurnSupersede::check($c);
         }
 
         if ($reply !== null && trim($reply) !== '') {
@@ -1072,6 +1079,8 @@ class TurnRunner
 
         return $c->messages()
             ->when($firstId, fn ($q) => $q->where('id', '<', $firstId))
+            // Round b1: after a fresh start the closed chat is not read as this one.
+            ->when(ConversationEpisode::historyFloor($c), fn ($q, $floor) => $q->where('id', '>=', $floor))
             ->orderByDesc('id')
             ->limit(12)
             ->get()

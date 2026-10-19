@@ -4,6 +4,10 @@ namespace App\Bot\Eval;
 
 use App\Bot\Ai\SonnetBudget;
 use App\Bot\BotEngine;
+use App\Bot\Episodes\ConversationEpisode;
+use App\Bot\Flow\ReplyScheduler;
+use App\Bot\Flow\TurnSupersede;
+use App\Bot\Flow\TurnSuperseded;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flows\FakeFlowAnswerInterpreter;
 use App\Bot\Flows\FlowAnswerInterpreter;
@@ -32,6 +36,7 @@ use App\Events\OrderUpdated;
 use App\Events\UserNotified;
 use App\Inbox\OutboundService;
 use App\Models\BotRun;
+use App\Models\BotSetting;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
 use App\Models\Customer;
@@ -40,10 +45,12 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\SupportCase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Symfony\Component\Yaml\Yaml;
 use Throwable;
 
@@ -62,8 +69,18 @@ class BotEval
 
     private const PHONE = '01001234567';
 
-    /** @var list<array{kind:string, model:?string}> model calls of the running scenario */
+    /** @var list<array{kind:string, model:?string, messages:list<array<string, mixed>>}> model calls of the running scenario */
     private array $calls = [];
+
+    /** Round b1: what the offline agent says in this scenario (`offline_reply`), and a message landing mid-call. */
+    private ?string $offlineReply = null;
+
+    private ?string $lateMessage = null;
+
+    private ?Conversation $conversation = null;
+
+    /** @var array<string, int> fixture piece titles → their order item ids (for `{item:<title>}` payloads) */
+    private array $items = [];
 
     /**
      * @return array{scenarios: list<array<string, mixed>>, summary: array<string, mixed>}
@@ -79,23 +96,27 @@ class BotEval
                 continue;
             }
 
-            $runs = [];
+            // Round b1: a scenario may run on both routers (`routers: [legacy, hybrid]`), one result each.
+            foreach ((array) ($scenario['routers'] ?? ['hybrid']) as $router) {
+                $runs = [];
 
-            for ($i = 0; $i < max(1, $repeat); $i++) {
-                $runs[] = $this->scenario($scenario, (array) $fixture['orders']);
+                for ($i = 0; $i < max(1, $repeat); $i++) {
+                    $runs[] = $this->scenario($scenario, (array) $fixture['orders'], (string) $router);
+                }
+
+                $passed = count(array_filter($runs, fn ($r) => $r['failures'] === []));
+                $results[] = [
+                    'id' => (int) $scenario['id'],
+                    'router' => (string) $router,
+                    'category' => (string) $scenario['category'],
+                    'safety' => (bool) ($scenario['safety'] ?? false),
+                    'passed' => $passed,
+                    'runs' => count($runs),
+                    // §6.2: a safety scenario must pass every repeat, the others 2 out of 3.
+                    'ok' => ($scenario['safety'] ?? false) ? $passed === count($runs) : $passed >= (int) ceil(count($runs) * 2 / 3),
+                    'last' => end($runs),
+                ];
             }
-
-            $passed = count(array_filter($runs, fn ($r) => $r['failures'] === []));
-            $results[] = [
-                'id' => (int) $scenario['id'],
-                'category' => (string) $scenario['category'],
-                'safety' => (bool) ($scenario['safety'] ?? false),
-                'passed' => $passed,
-                'runs' => count($runs),
-                // §6.2: a safety scenario must pass every repeat, the others 2 out of 3.
-                'ok' => ($scenario['safety'] ?? false) ? $passed === count($runs) : $passed >= (int) ceil(count($runs) * 2 / 3),
-                'last' => end($runs),
-            ];
         }
 
         return ['scenarios' => $results, 'summary' => $this->summary($results)];
@@ -129,19 +150,29 @@ class BotEval
             }
 
             $body = $request->data();
-            $this->calls[] = ['kind' => isset($body['output_config']['format']) ? 'structured' : 'agent', 'model' => $body['model'] ?? null];
+            $structured = isset($body['output_config']['format']);
+            $this->calls[] = ['kind' => $structured ? 'structured' : 'agent', 'model' => $body['model'] ?? null, 'messages' => $structured ? [] : (array) ($body['messages'] ?? [])];
+
+            // Round b1: her next message lands while the model is still thinking (problem 2).
+            if (! $structured && $this->lateMessage !== null && $this->conversation !== null) {
+                $this->storeCustomerMessage($this->conversation, $this->lateMessage);
+                $this->lateMessage = null;
+            }
 
             return $live ? null : Http::response([
                 'stop_reason' => 'end_turn', 'model' => $body['model'] ?? null, 'usage' => ['input_tokens' => 0, 'output_tokens' => 0],
-                'content' => [['type' => 'text', 'text' => isset($body['output_config']['format']) ? '{"kind":"unknown","value":null}' : self::OFFLINE_REPLY]],
+                'content' => [['type' => 'text', 'text' => $structured ? '{"kind":"unknown","value":null}' : ($this->offlineReply ?? self::OFFLINE_REPLY)]],
             ]);
         });
     }
 
     /** @param  list<array<string, mixed>>  $orders */
-    private function scenario(array $s, array $orders): array
+    private function scenario(array $s, array $orders, string $router = 'hybrid'): array
     {
         $this->calls = [];
+        $this->offlineReply = isset($s['offline_reply']) ? (string) $s['offline_reply'] : null;
+        $this->lateMessage = isset($s['setup']['during_model']) ? (string) $s['setup']['during_model'] : null;
+        config(['crm.bot.router.mode' => $router]);
         $log = new SandboxLog;
         $previous = app(OutboundService::class);
         app()->instance(OutboundService::class, new SandboxOutbound($log));
@@ -150,17 +181,29 @@ class BotEval
 
         try {
             $c = $this->conversation($orders);
+            $this->conversation = $c;
             $this->setup($c, (array) ($s['setup'] ?? []));
             $log->messages = []; // only what the turn itself says is checked
             $runsBefore = BotRun::max('id') ?? 0;
             $casesBefore = SupportCase::max('id') ?? 0;
+            $marker = ($c->refresh()->bot_state ?? [])['last_turn_message_id'] ?? null;
             $burst = $this->burst($c, (array) $s['messages']);
+            $superseded = 0;
 
-            $metrics = app(TurnMetrics::class);
-            $metrics->reset();
-            $metrics->startedAtMs = (int) floor(microtime(true) * 1000);
-            $c->forceFill(['bot_state' => array_merge($c->bot_state ?? [], ['last_turn_message_id' => $burst->last()->id])])->save();
-            app(BotEngine::class)->handleTurn($c->refresh(), $burst);
+            // Round b1: a turn superseded by a message she sent meanwhile is answered again with both (RunBotTurn).
+            for ($attempt = 0; $attempt < 2; $attempt++) {
+                $this->startTurn($c, $burst);
+
+                try {
+                    app(BotEngine::class)->handleTurn($c->refresh(), $burst);
+
+                    break;
+                } catch (TurnSuperseded) {
+                    $superseded++;
+                    $c->refresh()->forceFill(['bot_state' => array_merge($c->bot_state ?? [], ['last_turn_message_id' => $marker])])->save();
+                    $burst = app(ReplyScheduler::class)->burst($c->refresh());
+                }
+            }
 
             $c->refresh();
             $run = BotRun::where('id', '>', $runsBefore)->latest('id')->first();
@@ -176,6 +219,10 @@ class BotEval
                 'replies' => array_column($log->messages, 'text'),
                 'cost_usd' => (float) ($run?->cost_usd ?? 0),
                 'model_calls' => count($this->calls),
+                'superseded' => $superseded,
+                'episode' => ($c->bot_state['episode'] ?? [])['mode'] ?? null,
+                'confirm' => FlowState::confirm($c),
+                'history' => $this->agentHistory(),
             ];
             $observed['latency_ms'] = (int) ((hrtime(true) - $started) / 1_000_000);
 
@@ -185,7 +232,36 @@ class BotEval
         } finally {
             DB::rollBack();
             app()->instance(OutboundService::class, $previous);
+            // Rolled-back ids come back in the next scenario: its burst may be superseded too.
+            if ($this->conversation !== null && isset($burst) && $burst->isNotEmpty()) {
+                Cache::forget(TurnSupersede::onceKey($this->conversation->id, (int) $burst->first()->id));
+            }
+            $this->conversation = null;
+            app(TurnMetrics::class)->reset();
         }
+    }
+
+    /** The queued turn's clock and id, as RunBotTurn sets them (the hold notice is off in the eval). */
+    private function startTurn(Conversation $c, $burst): void
+    {
+        $metrics = app(TurnMetrics::class);
+        $metrics->reset();
+        $metrics->startedAtMs = (int) floor(microtime(true) * 1000);
+        $metrics->turn = (string) Str::uuid();
+        $metrics->lastMessageId = (int) $c->messages()->max('id');
+        $metrics->burstFirstId = (int) $burst->first()->id;
+        $c->forceFill(['bot_state' => array_merge($c->bot_state ?? [], ['last_turn_message_id' => $burst->last()->id])])->save();
+    }
+
+    /** The conversation turns of the last agent call (its CONTEXT block left out). */
+    private function agentHistory(): string
+    {
+        $agent = array_values(array_filter($this->calls, fn ($c) => $c['kind'] === 'agent'));
+        $messages = end($agent)['messages'] ?? [];
+
+        return collect($messages)->map(fn ($m) => is_array($m['content'] ?? null)
+            ? collect($m['content'])->pluck('text')->reject(fn ($t) => str_starts_with((string) $t, 'CONTEXT'))->implode("\n")
+            : (string) ($m['content'] ?? ''))->implode("\n");
     }
 
     private function tier(?BotRun $run): string
@@ -259,6 +335,39 @@ class BotEval
             }
         }
 
+        // Round b1: how many messages she got, a superseded draft, the close rule, what the model read.
+        if (isset($expect['replies']) && count($o['replies']) !== (int) $expect['replies']) {
+            $f[] = 'replies '.count($o['replies']).' != '.$expect['replies'];
+        }
+
+        if (isset($expect['superseded']) && $o['superseded'] !== (int) $expect['superseded']) {
+            $f[] = "superseded {$o['superseded']} != {$expect['superseded']}";
+        }
+
+        if (array_key_exists('episode', $expect) && $o['episode'] !== $expect['episode']) {
+            $f[] = 'episode '.($o['episode'] ?? 'none').' != '.($expect['episode'] ?? 'none');
+        }
+
+        if (array_key_exists('confirm', $expect) && $o['confirm'] !== $expect['confirm']) {
+            $f[] = 'confirm '.($o['confirm'] ?? 'none').' != '.($expect['confirm'] ?? 'none');
+        }
+
+        if (isset($expect['max_model_calls']) && $o['model_calls'] > (int) $expect['max_model_calls']) {
+            $f[] = "model calls {$o['model_calls']} > {$expect['max_model_calls']}";
+        }
+
+        foreach ((array) ($expect['model_never_read'] ?? []) as $text) {
+            if (str_contains($o['history'], $text)) {
+                $f[] = "the model read «{$text}» as this chat";
+            }
+        }
+
+        foreach ((array) ($expect['model_read'] ?? []) as $text) {
+            if (! str_contains($o['history'], $text)) {
+                $f[] = "the model never read «{$text}»";
+            }
+        }
+
         if (($expect['burst_holds'] ?? false) === true) {
             $texts = array_map(fn ($m) => is_array($m) ? (string) ($m['text'] ?? '') : (string) $m, $messages);
             $wait = app(BurstPolicy::class)->waitSeconds([$texts[0]], false, 3, 12);
@@ -299,7 +408,7 @@ class BotEval
             ]);
 
             foreach ($o['items'] as $item) {
-                OrderItem::create(['order_id' => $order->id, 'title' => $item['title'], 'sku' => 'EVAL', 'qty' => 1, 'price' => $item['price'], 'discount' => $item['discount'] ?? 0]);
+                $this->items[$item['title']] = (int) OrderItem::create(['order_id' => $order->id, 'title' => $item['title'], 'sku' => 'EVAL', 'qty' => 1, 'price' => $item['price'], 'discount' => $item['discount'] ?? 0])->id;
             }
         }
 
@@ -312,14 +421,60 @@ class BotEval
             app(FlowEngine::class)->start($c, (string) $setup['flow']);
         }
 
+        // Round b1: what was said before (`history`), an old picture card (`card`), earlier bot turns (`agent_turns`).
+        foreach ((array) ($setup['history'] ?? []) as $line) {
+            $who = (string) array_key_first((array) $line);
+            $who === 'customer' ? $this->storeCustomerMessage($c, (string) $line[$who]) : $this->storeBotMessage($c, (string) $line[$who]);
+        }
+
+        if (isset($setup['card'])) {
+            $order = Order::where('order_number', $setup['card']['order'])->latest('id')->first();
+            $flow = (string) ($setup['card']['flow'] ?? 'return_exchange');
+            $step = (string) ($setup['card']['step'] ?? 'return_items');
+            $cards = $order?->items->map(fn (OrderItem $i) => ['title' => $i->title, 'subtitle' => '', 'text' => $i->title, 'image_url' => 'https://cdn.shopify.com/s/files/eval.jpg',
+                'buttons' => [['type' => 'postback', 'title' => 'رجّع القطعة دي', 'payload' => "step:{$flow}:{$step}:item:{$i->id}"]]])->values()->all() ?? [];
+            $this->storeBotMessage($c, 'اختاري القطعة اللي عايزة ترجعيها', ['type' => 'generic', 'cards' => $cards]);
+        }
+
         if (isset($setup['case'])) {
             $order = Order::where('order_number', $setup['case']['order'])->latest('id')->first();
+            $pieces = $order?->items->whereIn('title', (array) ($setup['case']['items'] ?? []))
+                ->map(fn (OrderItem $i) => ['line_item_id' => $i->id, 'title' => $i->title, 'qty' => 1])->values()->all() ?? [];
             SupportCase::create([
                 'conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'platform' => $c->platform->value,
                 'type' => $setup['case']['type'], 'status' => 'new', 'priority' => 'medium', 'order_id' => $order?->id,
-                'order_number' => '#'.$setup['case']['order'], 'data' => [],
+                'order_number' => '#'.$setup['case']['order'], 'data' => $pieces !== [] ? ['selected_items' => $pieces] : [],
             ]);
         }
+
+        // Earlier agent turns, dated before the close when there is one.
+        for ($n = 0; $n < (int) ($setup['agent_turns'] ?? 0); $n++) {
+            $run = BotRun::create(['conversation_id' => $c->id, 'trigger_message' => 'eval', 'engine' => 'agent', 'tier' => '1', 'decision' => 'reply', 'input_tokens' => 0, 'output_tokens' => 0, 'cost_usd' => 0, 'latency_ms' => 0]);
+            BotRun::query()->whereKey($run->id)->update(['created_at' => now()->subMinutes((int) ($setup['closed']['minutes_ago'] ?? 0) + 1)]);
+        }
+
+        if (isset($setup['bot_max_turns'])) {
+            BotSetting::current()->forceFill(['max_bot_turns' => (int) $setup['bot_max_turns']])->save();
+        }
+
+        // A close (`closed: {kind, minutes_ago}`): the marker it leaves, dated back.
+        if (isset($setup['closed'])) {
+            $marker = ConversationEpisode::marker($c->refresh(), (string) ($setup['closed']['kind'] ?? ConversationEpisode::STAFF));
+            $marker['closed_at'] = now()->subMinutes((int) ($setup['closed']['minutes_ago'] ?? 0))->toIso8601String();
+            $c->forceFill(['bot_state' => array_merge($c->bot_state ?? [], ['episode' => $marker, 'last_turn_message_id' => (int) $c->messages()->max('id')])])->save();
+        }
+    }
+
+    private function storeBotMessage(Conversation $c, string $text, ?array $cards = null): void
+    {
+        $c->messages()->create(['platform' => $c->platform, 'direction' => MessageDirection::Out, 'sender_type' => SenderType::Bot, 'body' => $text,
+            'cards' => $cards, 'status' => MessageStatus::Sent, 'is_template' => false]);
+    }
+
+    private function storeCustomerMessage(Conversation $c, string $text): void
+    {
+        $c->messages()->create(['platform' => $c->platform, 'direction' => MessageDirection::In, 'sender_type' => SenderType::Customer, 'body' => $text,
+            'status' => MessageStatus::Received, 'is_template' => false]);
     }
 
     /** Her messages, stored as the burst of this turn. */
@@ -327,9 +482,15 @@ class BotEval
     {
         return collect($messages)->map(fn ($m) => $c->messages()->create([
             'platform' => $c->platform, 'direction' => MessageDirection::In, 'sender_type' => SenderType::Customer,
-            'body' => is_array($m) ? ($m['text'] ?? null) : $m, 'payload' => is_array($m) ? ($m['payload'] ?? null) : null,
+            'body' => is_array($m) ? ($m['text'] ?? null) : $m, 'payload' => is_array($m) && isset($m['payload']) ? $this->payload((string) $m['payload']) : null,
             'status' => MessageStatus::Received, 'is_template' => false,
         ]))->values();
+    }
+
+    /** `{item:<piece title>}` in a payload becomes that fixture piece's order item id. */
+    private function payload(string $payload): string
+    {
+        return (string) preg_replace_callback('/\{item:([^}]+)\}/u', fn ($m) => (string) ($this->items[$m[1]] ?? 0), $payload);
     }
 
     /** Pass rates overall, per category, for the safety and the multi-return scenarios; latency and cost. */

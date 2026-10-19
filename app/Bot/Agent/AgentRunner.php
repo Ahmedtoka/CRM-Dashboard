@@ -3,8 +3,14 @@
 namespace App\Bot\Agent;
 
 use App\Bot\Catalog\ProductBrowser;
+use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
+use App\Bot\Flow\TurnSupersede;
+use App\Bot\Flows\FlowLabels;
+use App\Bot\Flows\FlowPrompter;
+use App\Bot\Flows\FlowScripts;
+use App\Bot\Flows\FlowState;
 use App\Bot\Flows\HumanHandover;
 use App\Bot\Jobs\BotHoldNotice;
 use App\Bot\Language\ConversationLanguage;
@@ -28,6 +34,9 @@ use Throwable;
 class AgentRunner
 {
     private const HISTORY = 14;
+
+    /** Tier 1 (Haiku, the planner already read the turn) gets a shorter history: fewer tokens, faster (coordinator live test, round b1). */
+    public const TIER1_HISTORY = 8;
 
     public function __construct(
         private readonly StoreAgent $agent,
@@ -116,12 +125,24 @@ class AgentRunner
             return $this->record($c, $texts, $outcome, 'human_took_over', false, $started, $engine, $plan);
         }
 
+        // Round b1: she wrote again while the model was thinking — one answer to all of it, not two.
+        TurnSupersede::check($c, $outcome->costUsd, $outcome->tier, $outcome->model);
+
         if ($outcome->flow !== null && ! $insideFlow && $tasks === []) {
             // Bot hybrid R1/R6: filled from her words, one task per order she named.
             $tasks = TaskOrchestrator::flowTasks($outcome->flow, implode("\n", $texts));
         }
 
         $flows = ! $insideFlow && $outcome->handover === null && $tasks !== [];
+
+        // Round b1: the same long answer again means the first one did not help — a person is offered.
+        if (! $insideFlow && ! $flows && $outcome->handover === null && $outcome->products->isEmpty() && $outcome->branchCards === null
+            && RepeatedReply::repeats($c, $outcome->reply)) {
+            $this->offerPerson($c);
+
+            return $this->record($c, $texts, $outcome, 'repeat_offer', false, $started, $engine, $plan);
+        }
+
         $sent = $this->deliver($c, $outcome, $insideFlow, $flows);
 
         if ($outcome->handover !== null) {
@@ -135,6 +156,19 @@ class AgentRunner
             $flows => 'flow_started',
             default => 'reply',
         }, $sent, $started, $engine, $plan);
+    }
+
+    /** «خليني أتأكد من المعلومة دي مع الفريق، تحبي أوصّلك بحد منهم؟» [أيوه] [لأ] — her «أيوه» hands over. */
+    private function offerPerson(Conversation $c): void
+    {
+        $text = app(FlowPrompter::class)->script('bot_safe_fallback') ?? (string) FlowScripts::all()['bot_safe_fallback']['body'];
+
+        try {
+            $this->outbound->sendBot($c, $text, 0, true, [FlowLabels::YES_BUTTON, FlowLabels::NO_BUTTON]);
+            FlowState::setConfirm($c, 'handover_offer');
+        } catch (WindowClosedException) {
+            Log::info('agent.repeat_offer_window_closed', ['conversation_id' => $c->id]);
+        }
     }
 
     private function deliver(Conversation $c, AgentOutcome $o, bool $insideFlow, bool $flows = false): bool
@@ -173,12 +207,14 @@ class AgentRunner
      * @param  list<string>  $texts
      * @return list<array{role:'user'|'assistant', content:string}>
      */
-    public function messages(Conversation $c, Collection $burst, array $texts): array
+    public function messages(Conversation $c, Collection $burst, array $texts, int $history = self::HISTORY): array
     {
         $history = $c->messages()
             ->when($burst->first()?->id, fn ($q, $id) => $q->where('id', '<', $id))
+            // Round b1: after a fresh start the closed chat is not read as this one (CONTEXT has its memory).
+            ->when(ConversationEpisode::historyFloor($c), fn ($q, $floor) => $q->where('id', '>=', $floor))
             ->whereIn('sender_type', [SenderType::Customer->value, SenderType::Bot->value, SenderType::User->value])
-            ->orderByDesc('id')->limit(self::HISTORY)->get()->reverse()
+            ->orderByDesc('id')->limit(max(2, $history))->get()->reverse()
             ->map(fn (Message $m) => ['role' => $m->sender_type === SenderType::Customer ? 'user' : 'assistant', 'content' => trim((string) $m->body)])
             ->filter(fn (array $m) => $m['content'] !== '')
             ->values()->all();

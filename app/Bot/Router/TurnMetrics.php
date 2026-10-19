@@ -34,6 +34,9 @@ final class TurnMetrics
     /** The newest message id when the turn started: anything after it answered her. */
     public ?int $lastMessageId = null;
 
+    /** Her first message of the burst (round b1: a burst is superseded at most once). */
+    public ?int $burstFirstId = null;
+
     /** «ثانية واحدة» is armed at most once per turn. */
     public bool $holdArmed = false;
 

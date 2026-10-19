@@ -7,9 +7,12 @@ use App\Bot\Agent\AgentRunner;
 use App\Bot\Agent\StoreAgent;
 use App\Bot\Ai\AiResponder;
 use App\Bot\Ai\MessageClassifier;
+use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Flows\ConversationRouter;
 use App\Bot\Flows\EntityExtractor;
+use App\Bot\Flows\FlowPrompter;
+use App\Bot\Flows\FlowState;
 use App\Bot\Flows\GreetingMirror;
 use App\Bot\Flows\HumanHandover;
 use App\Bot\Flows\Returns\ReturnPrefill;
@@ -110,6 +113,18 @@ class BotEngine
             return $this->maybeSendOutsideHoursMessage($c, $last, $peeked, $settings);
         }
 
+        // Round b1 (2026-10-19): ONE rule for a message after a close, for both routers — she closes
+        // it herself («لا تمام شكرا»), or her first message after a close continues the same topic
+        // (inside the reopen window) or starts fresh (ConversationEpisode). Before the gates below:
+        // a fresh start is a new conversation for the turn limit too.
+        $episode = app(ConversationEpisode::class);
+
+        if (ConversationEpisode::idle($c) && $episode->isCustomerClose($text)) {
+            return $this->customerClosed($c, $last, $text);
+        }
+
+        $episode->begin($c, $burst);
+
         // She asked for a person (the owner's flow 7, 2026-09-19): the topic question first
         // («محتاجة إيه؟»), or straight to the team from inside a flow; the reply names the hours.
         if ($this->signals->matchesKeyword($text, $settings->handover_keywords)) {
@@ -174,6 +189,21 @@ class BotEngine
         }
 
         return $run;
+    }
+
+    /**
+     * «لا تمام شكرا» with nothing waiting for her: the thanks line at once (no model), and the chat
+     * is closed by her — her next message starts fresh (ConversationEpisode).
+     */
+    private function customerClosed(Conversation $c, Message $last, string $text): BotRun
+    {
+        $reply = app(FlowPrompter::class)->script('thanks') ?? 'العفو يا فندم تحت أمرك في أي وقت';
+        $this->trySendBot($c, $this->withGreetingMirror($text, $reply));
+        // The main menu she was looking at is no longer waiting for a choice.
+        FlowState::clear($c);
+        ConversationEpisode::markClosed($c->refresh(), ConversationEpisode::CUSTOMER);
+
+        return $this->recordRun($c, $last, engine: 'flow_engine', decision: 'closed', replyText: $reply);
     }
 
     /** No order number, no return/exchange request, at most a few words: a rule may answer it all. */
@@ -321,6 +351,8 @@ class BotEngine
             // A staff decision: an earlier auto-close's return window no longer sends her to a moderator.
             $c->return_priority_until = null;
             $this->resetToBot($c);
+            // A hand-back, not a goodbye (review I4): she carries on, without «أهلاً بيكي تاني».
+            ConversationEpisode::markClosed($c, ConversationEpisode::HANDBACK);
         }, attempts: 3);
 
         $this->logger->log(ActorType::User, $u, ActivityLogger::CONVERSATION_RETURN_TO_BOT, null, $c);
@@ -664,17 +696,28 @@ class BotEngine
     private function agentTurnCount(Conversation $c): int
     {
         return $this->runsSinceLastHuman($c)
-            ->where(fn ($q) => $q->where('engine', '!=', 'flow_engine')->orWhereIn('decision', self::AGENT_FLOW_DECISIONS))
+            ->where(fn ($q) => $q->where(fn ($q) => $q->where('engine', '!=', 'flow_engine')->whereNot(fn ($q) => $this->noModel($q)))
+                ->orWhere(fn ($q) => $q->where('engine', 'flow_engine')->whereIn('decision', self::AGENT_FLOW_DECISIONS)))
             ->count();
     }
 
-    /** Guided-flow router turns since a person last wrote. */
+    /** Guided-flow router turns since a person last wrote, and (round b1) the answers that needed no model. */
     private function flowTurnCount(Conversation $c): int
     {
         return $this->runsSinceLastHuman($c)
-            ->where('engine', 'flow_engine')
-            ->whereNotIn('decision', self::AGENT_FLOW_DECISIONS)
+            ->where(fn ($q) => $q->where(fn ($q) => $q->where('engine', 'flow_engine')->whereNotIn('decision', self::AGENT_FLOW_DECISIONS))
+                ->orWhere(fn ($q) => $this->noModel($q)))
             ->count();
+    }
+
+    /**
+     * Round b1 (2026-10-19): an owner rule or a standing question (hybrid tier 0) answers without a
+     * model — four questions about payment are not a bot going round in circles, so they never spend
+     * the agent turn limit (only the flows' larger backstop).
+     */
+    private function noModel(Builder $q): Builder
+    {
+        return $q->where(fn ($q) => $q->where('engine', 'rule')->orWhere(fn ($q) => $q->where('engine', 'hybrid')->where('tier', '0')));
     }
 
     /**
@@ -689,10 +732,14 @@ class BotEngine
             $c->messages()->where('sender_type', SenderType::User->value)->latest('id')->value('created_at'),
             SupportCase::query()->where('conversation_id', $c->id)->latest('id')->value('created_at'),
             now()->subMinutes(max(1, (int) config('crm.bot.turn_limit_minutes', 120))),
+            // Round b1: a fresh start after a close is a new conversation for the limit too.
+            ConversationEpisode::freshSince($c),
         ])->filter()->max();
 
         return BotRun::query()
             ->where('conversation_id', $c->id)
+            // Round b1: an answer dropped for a merged one was never a turn she saw.
+            ->where('decision', '!=', 'superseded')
             ->where('created_at', '>', $since);
     }
 

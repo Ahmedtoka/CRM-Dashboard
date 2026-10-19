@@ -8,8 +8,10 @@ use App\Bot\Agent\ReplyGuards;
 use App\Bot\Agent\StoreAgent;
 use App\Bot\Agent\TierProfile;
 use App\Bot\Ai\ModelPricing;
+use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
+use App\Bot\Flows\FlowAnswerResolver;
 use App\Bot\Flows\FlowLabels;
 use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\FlowScripts;
@@ -18,6 +20,7 @@ use App\Bot\Flows\HumanHandover;
 use App\Bot\Flows\Returns\ReturnPrefill;
 use App\Bot\Jobs\BotHoldNotice;
 use App\Bot\Language\ConversationLanguage;
+use App\Enums\Handler;
 use App\Enums\MessageDirection;
 use App\Enums\SenderType;
 use App\Inbox\OutboundService;
@@ -132,9 +135,9 @@ class HybridRouter
                 return app(TurnRunner::class)->run($c, $burst);
             }
 
-            $this->safeFallback($c);
+            $this->safeFallback($c, $text);
 
-            return $this->record($c, $texts, 'safe_fallback', $metrics->tier, $started, $intent, null, $planCost, $planModel);
+            return $this->record($c, $texts, $c->refresh()->handler === Handler::Bot ? 'safe_fallback' : 'handover', $metrics->tier, $started, $intent, null, $planCost, $planModel);
         }
 
         $outcome->costUsd += $planCost;
@@ -173,7 +176,8 @@ class HybridRouter
         return [
             'flow' => $flow['key'] ?? null,
             'step' => $flow['step'] ?? null,
-            'last_question' => $c->messages()->where('sender_type', SenderType::Bot->value)->latest('id')->value('body'),
+            'last_question' => $c->messages()->where('sender_type', SenderType::Bot->value)
+                ->when(ConversationEpisode::historyFloor($c), fn ($q, $floor) => $q->where('id', '>=', $floor))->latest('id')->value('body'),
         ];
     }
 
@@ -185,7 +189,7 @@ class HybridRouter
      */
     private function answer(Conversation $c, Collection $burst, array $texts, string $tier, string $context, int $started): ?AgentOutcome
     {
-        $messages = $this->runner->messages($c, $burst, $texts);
+        $messages = $this->runner->messages($c, $burst, $texts, $tier === '1' ? AgentRunner::TIER1_HISTORY : 14);
         $language = $this->language->of($c);
         $profile = TierProfile::tier($tier);
         $first = $this->attempt($c, $messages, $language, $profile, $context);
@@ -354,9 +358,25 @@ class HybridRouter
     }
 
     /** No checked answer and no flow: never a made-up one — «خليني أتأكد…» and the offer of a person. */
-    private function safeFallback(Conversation $c): void
+    private function safeFallback(Conversation $c, string $customerText): void
     {
-        $this->send($c, $this->script('bot_safe_fallback'), [FlowLabels::YES_BUTTON, FlowLabels::NO_BUTTON]);
+        $text = $this->script('bot_safe_fallback');
+
+        // Round b1: unsure twice in a row — «خليني أتأكد…» again would be the bot going in circles.
+        $previous = $c->messages()->where('sender_type', SenderType::Bot->value)
+            ->where('created_at', '>=', now()->subMinutes(30))->latest('id')->first(['id', 'body']);
+        // Her «لأ» to that offer stands (review I6): she is not handed over against it.
+        $declined = $previous !== null && $c->messages()->where('id', '>', $previous->id)->where('direction', MessageDirection::In->value)->get(['body', 'payload'])
+            ->contains(fn (Message $m) => $m->payload === 'no' || app(FlowAnswerResolver::class)->yesNo((string) $m->body) === 'no');
+
+        if ($previous !== null && ! $declined && trim((string) $previous->body) === trim($text)) {
+            FlowState::setConfirm($c, null);
+            app(HumanHandover::class)->handover($c, null, $customerText, 'bot_unsure', 'human_request');
+
+            return;
+        }
+
+        $this->send($c, $text, [FlowLabels::YES_BUTTON, FlowLabels::NO_BUTTON]);
         FlowState::setConfirm($c, 'handover_offer');
     }
 
@@ -380,6 +400,7 @@ class HybridRouter
         $firstId = $burst->first()?->id;
 
         return $c->messages()->when($firstId, fn ($q) => $q->where('id', '<', $firstId))
+            ->when(ConversationEpisode::historyFloor($c), fn ($q, $floor) => $q->where('id', '>=', $floor))
             ->whereIn('sender_type', [SenderType::Customer->value, SenderType::Bot->value, SenderType::User->value])
             ->orderByDesc('id')->limit(6)->get()->reverse()->values()
             ->map(fn (Message $m) => ['role' => $m->direction === MessageDirection::In ? 'customer' : 'agent', 'text' => (string) $m->body])

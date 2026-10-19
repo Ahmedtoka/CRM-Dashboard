@@ -70,7 +70,8 @@ it('resets bot_state to only the turn marker when a conversation is resolved', f
 
     app(ConversationActions::class)->resolve($c, User::factory()->create(['role' => UserRole::Moderator]));
 
-    expect($c->refresh()->bot_state)->toBe(['last_turn_message_id' => 4242]);
+    expect(collect($c->refresh()->bot_state)->except('episode')->all())->toBe(['last_turn_message_id' => 4242])
+        ->and($c->bot_state['episode']['kind'])->toBe('staff'); // round b1: the close marker
 });
 
 it('resets bot_state to only the turn marker when a conversation is returned to the bot', function () {
@@ -79,10 +80,11 @@ it('resets bot_state to only the turn marker when a conversation is returned to 
 
     app(BotEngine::class)->returnToBot($c, User::factory()->create(['role' => UserRole::Moderator]));
 
-    expect($c->refresh()->bot_state)->toBe(['last_turn_message_id' => 4242]);
+    expect(collect($c->refresh()->bot_state)->except('episode')->all())->toBe(['last_turn_message_id' => 4242])
+        ->and($c->bot_state['episode']['kind'])->toBe('handback'); // round b1: «رجوع للبوت» is a hand-back, not a goodbye
 });
 
-it('nulls bot_state on resolve or return-to-bot when there was no turn marker', function () {
+it('keeps only the close marker on resolve or return-to-bot when there was no turn marker', function () {
     $u = User::factory()->create(['role' => UserRole::Moderator]);
 
     $resolved = routedConversation();
@@ -93,8 +95,9 @@ it('nulls bot_state on resolve or return-to-bot when there was no turn marker', 
     $returned->forceFill(['bot_state' => ['asks' => ['defect' => 1]]])->save();
     app(BotEngine::class)->returnToBot($returned, $u);
 
-    expect($resolved->refresh()->bot_state)->toBeNull()
-        ->and($returned->refresh()->bot_state)->toBeNull();
+    // Round b1: nothing of the old flow memory, only the close's episode marker.
+    expect(array_keys($resolved->refresh()->bot_state))->toBe(['episode'])
+        ->and(array_keys($returned->refresh()->bot_state))->toBe(['episode']);
 });
 
 it('keeps the routing fields on a plain human reply', function () {

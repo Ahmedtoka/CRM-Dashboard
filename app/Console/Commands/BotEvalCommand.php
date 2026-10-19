@@ -6,8 +6,8 @@ use App\Bot\Eval\BotEval;
 use Illuminate\Console\Command;
 
 /**
- * `php artisan bot:eval` (bot-hybrid.md §6): runs the 44 bot scenarios through the hybrid router and
- * prints pass rates. Offline by default — keyword planner, canned model replies, no network. With
+ * `php artisan bot:eval` (bot-hybrid.md §6): runs the bot scenarios (the 44 of bot-hybrid.md, and since round b1
+ * the staff's complaints on BOTH routers) through the real bot engine and prints pass rates. Offline by default — keyword planner, canned model replies, no network. With
  * --live the real Anthropic API answers (it costs money: confirm, or pass --force). Nothing is ever
  * sent to a customer or saved: each scenario runs in a rolled-back transaction.
  */
@@ -47,8 +47,9 @@ class BotEvalCommand extends Command
         $only = filled($this->option('only')) ? array_map('intval', explode(',', (string) $this->option('only'))) : null;
         $report = $eval->run($file, $live, max(1, (int) $this->option('repeat')), $only);
 
-        $this->table(['#', 'category', 'result', 'tier', 'flow', 'why'], array_map(fn ($r) => [
+        $this->table(['#', 'router', 'category', 'result', 'tier', 'flow', 'why'], array_map(fn ($r) => [
             $r['id'],
+            $r['router'] ?? 'hybrid',
             $r['category'].($r['safety'] ? ' (safety)' : ''),
             ($r['ok'] ? 'PASS' : 'FAIL')." {$r['passed']}/{$r['runs']}",
             $r['last']['observed']['tier'] ?? '-',
