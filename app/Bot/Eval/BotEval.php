@@ -6,6 +6,7 @@ use App\Bot\Ai\SonnetBudget;
 use App\Bot\BotEngine;
 use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\ReplyScheduler;
+use App\Bot\Flow\TurnSupersede;
 use App\Bot\Flow\TurnSuperseded;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flows\FakeFlowAnswerInterpreter;
@@ -44,6 +45,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\SupportCase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -230,6 +232,10 @@ class BotEval
         } finally {
             DB::rollBack();
             app()->instance(OutboundService::class, $previous);
+            // Rolled-back ids come back in the next scenario: its burst may be superseded too.
+            if ($this->conversation !== null && isset($burst) && $burst->isNotEmpty()) {
+                Cache::forget(TurnSupersede::onceKey($this->conversation->id, (int) $burst->first()->id));
+            }
             $this->conversation = null;
             app(TurnMetrics::class)->reset();
         }
@@ -243,6 +249,7 @@ class BotEval
         $metrics->startedAtMs = (int) floor(microtime(true) * 1000);
         $metrics->turn = (string) Str::uuid();
         $metrics->lastMessageId = (int) $c->messages()->max('id');
+        $metrics->burstFirstId = (int) $burst->first()->id;
         $c->forceFill(['bot_state' => array_merge($c->bot_state ?? [], ['last_turn_message_id' => $burst->last()->id])])->save();
     }
 

@@ -48,6 +48,12 @@ final class ConversationEpisode
 
     public const CUSTOMER = 'customer';
 
+    /** «رجوع للبوت»: the team hands the chat back to the bot in the middle of it — not a goodbye. */
+    public const HANDBACK = 'handback';
+
+    /** After her own close, a follow-up within this many minutes still carries on quietly (review I3). */
+    public const CUSTOMER_GRACE_MINUTES = 10;
+
     /** Fallback reopen window when the queue has no settings row (minutes). */
     public const DEFAULT_REOPEN_MINUTES = 30;
 
@@ -74,10 +80,14 @@ final class ConversationEpisode
     /** The marker a close leaves: when, who closed, about what, and the last message it covers. */
     public static function marker(Conversation $c, string $kind, ?string $topic = null): array
     {
+        // Resolve writes the marker twice (review M7): the second pass no longer sees the topic.
+        $pending = ($c->bot_state ?? [])[self::KEY] ?? null;
+        $topic ??= self::topicOf($c) ?? (is_array($pending) && ! isset($pending['mode']) ? ($pending['topic'] ?? null) : null);
+
         return [
             'closed_at' => now()->toIso8601String(),
             'kind' => $kind,
-            'topic' => $topic ?? self::topicOf($c),
+            'topic' => $topic,
             'last_id' => (int) ($c->exists ? $c->messages()->max('id') : 0),
         ];
     }
@@ -168,7 +178,9 @@ final class ConversationEpisode
         $episode = $state[self::KEY] ?? null;
         $first = $burst->first();
 
-        if (! is_array($episode) || ! isset($episode['closed_at']) || ! $first instanceof Message || (int) $first->id <= (int) ($episode['last_id'] ?? 0) || ! self::idle($c)) {
+        // Applied once (review C1): a marker that already has its `mode` is the conversation going on.
+        if (! is_array($episode) || ! isset($episode['closed_at']) || isset($episode['mode']) || ! $first instanceof Message
+            || (int) $first->id <= (int) ($episode['last_id'] ?? 0) || ! self::idle($c)) {
             return null;
         }
 
@@ -177,10 +189,17 @@ final class ConversationEpisode
         $topic = is_string($episode['topic'] ?? null) && trim($episode['topic']) !== '' ? trim($episode['topic']) : null;
         $applied = ['closed_at' => $closedAt->toIso8601String(), 'kind' => $kind, 'topic' => $topic, 'at_id' => (int) $burst->last()->id];
 
-        if ($kind !== self::CUSTOMER && now()->lessThanOrEqualTo($this->reopenUntil($c, $closedAt))) {
+        // Her own «شكرا» followed by a follow-up a few minutes later is the same chat (review I3).
+        $within = $kind === self::CUSTOMER
+            ? now()->lessThanOrEqualTo($closedAt->copy()->addMinutes(self::CUSTOMER_GRACE_MINUTES))
+            : now()->lessThanOrEqualTo($this->reopenUntil($c, $closedAt));
+
+        if ($within) {
             $c->forceFill(['bot_state' => array_merge($state, [self::KEY => ['mode' => 'continue'] + $applied])])->save();
 
-            if ($topic !== null) {
+            // «أهلاً بيكي تاني» only when the team closed it — after the bot's own end, her «شكرا» or a
+            // hand-back she never left (review I4).
+            if ($topic !== null && $kind === self::STAFF) {
                 $this->send($c, str_replace('{topic}', $topic, $this->script('episode_continue')));
             }
 

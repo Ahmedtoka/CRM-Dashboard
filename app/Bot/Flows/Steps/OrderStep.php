@@ -9,6 +9,8 @@ use App\Bot\Flow\Orders\OrderStatusText;
 use App\Bot\Flows\EntityExtractor;
 use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\Returns\ReturnItems;
+use App\Enums\MessageDirection;
+use App\Enums\SenderType;
 use App\Models\Conversation;
 use App\Models\Order;
 use Illuminate\Support\Collection;
@@ -175,6 +177,20 @@ final class OrderStep extends BaseStep
 
         $result = $this->lookup->find($c, $entities, self::MAX_ORDER_BUTTONS);
 
+        // Coordinator live test (round b1): a mobile that is not the chat's own needs the order number
+        // as the second proof (A4) — one she already typed in this chat counts, she is not asked again.
+        if ($result['status'] === 'unverified' && ! isset($entities['order_ref'])) {
+            foreach ($this->typedOrderRefs($c) as $ref) {
+                $again = $this->lookup->find($c, ['order_ref' => $ref] + $entities, self::MAX_ORDER_BUTTONS);
+
+                if ($again['status'] === 'found') {
+                    $result = $again;
+
+                    break;
+                }
+            }
+        }
+
         if ($result['status'] === 'found') {
             $snapshot = $result['snapshots'][0];
 
@@ -231,6 +247,18 @@ final class OrderStep extends BaseStep
         }
 
         return $this->notFound($state, $text);
+    }
+
+    /** @return list<string> order numbers she typed in this chat in the last hour, newest first */
+    private function typedOrderRefs(Conversation $c): array
+    {
+        if (! $c->exists) {
+            return [];
+        }
+
+        return $c->messages()->where('direction', MessageDirection::In->value)->where('sender_type', SenderType::Customer->value)
+            ->where('created_at', '>=', now()->subHour())->whereNotNull('body')->latest('id')->limit(10)->pluck('body')
+            ->flatMap(fn ($body) => EntityExtractor::orderRefsInContext((string) $body))->unique()->take(3)->values()->all();
     }
 
     private function verifies(array $step): bool

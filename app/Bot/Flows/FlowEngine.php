@@ -6,6 +6,7 @@ use App\Bot\Agent\StoreAgent;
 use App\Bot\Catalog\ProductBrowser;
 use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\BurstPolicy;
+use App\Bot\Flows\Returns\ReturnPrefill;
 use App\Bot\Flows\Sandbox\SandboxMode;
 use App\Bot\Flows\Steps\FlowStep;
 use App\Bot\Flows\Steps\OrderStep;
@@ -186,7 +187,7 @@ class FlowEngine
             FlowState::setConfirm($c, null);
         }
 
-        return $this->resolveText($c, $state, $step, $text, $burst);
+        return $this->resolveText($c, $state = $this->keepRequestWords($c, $state, $step, $text), $step, $text, $burst);
     }
 
     /**
@@ -250,6 +251,54 @@ class FlowEngine
             default:
                 return false;
         }
+    }
+
+    /**
+     * Round b1: a flow opened by typed words (the menu's synonyms) gets the same prefill as the planner
+     * path — the order number, the pieces she named and what she wants for each — one queued task per
+     * order (TaskOrchestrator). False when her words carry nothing beyond the option itself.
+     */
+    private function startFromWords(Conversation $c, string $flowKey, string $text): bool
+    {
+        if ($this->definition($flowKey) === null) {
+            return false;
+        }
+
+        $tasks = TaskOrchestrator::flowTasks($flowKey, $text);
+        $filled = collect($tasks)->contains(fn ($t) => array_intersect_key((array) ($t['data'] ?? []), array_flip(['order_ref_hint', 'item_hints'])) !== []
+            || in_array($t['data']['request_kind'] ?? null, ['return', 'exchange'], true));
+
+        if (! $filled) {
+            return false;
+        }
+
+        return app(TaskOrchestrator::class)->start($c, $tasks);
+    }
+
+    /**
+     * Round b1: the return flow was opened by a tap and is still at its order step with nothing
+     * known — her first typed message («ارجع الجيبة وابدل الطقم بمقاس اكبر من اوردر 1313») also
+     * says the kind and the pieces: they are kept (the order step reads the number itself).
+     */
+    private function keepRequestWords(Conversation $c, array $state, array $step, string $text): array
+    {
+        if ($state['key'] !== 'return_exchange' || ($step['type'] ?? null) !== 'order' || isset($state['data']['request_kind']) || isset($state['data']['item_hints'])
+            || isset($state['data']['selected_items'])) {
+            return $state;
+        }
+
+        $words = ReturnPrefill::fromText($text);
+        $data = ReturnPrefill::flowData($words);
+        unset($data['order_ref_hint']);
+
+        if (($data['item_hints'] ?? []) === [] && ! in_array($data['request_kind'] ?? null, ['return', 'exchange'], true)) {
+            return $state;
+        }
+
+        $state['data'] = $data + $state['data'];
+        FlowState::put($c, $state);
+
+        return $state;
     }
 
     /** Re-sends the waiting step's prompt with its buttons (after an agent answered a question). */
@@ -420,6 +469,12 @@ class FlowEngine
         $isQuestion = $this->resolver->isQuestion($text);
 
         if (! $isQuestion && $type === 'menu' && ($o = $this->matchOption($c, $this->prompter->visibleMenuOptions($step), $text)) !== null) {
+            // Coordinator live test (round b1): «عايزة ارجع الجيبة وابدل الطقم بمقاس اكبر من اوردر 1313»
+            // typed at the menu starts the flow already filled from her words, like the planner path.
+            if (str_starts_with((string) $o['action'], 'flow:') && $this->startFromWords($c, substr((string) $o['action'], 5), $text)) {
+                return new FlowResult(true);
+            }
+
             return new FlowResult($this->runPayload($c, (string) $o['action']));
         }
 

@@ -31,6 +31,9 @@ class StaleTap
     /** Request types whose cases list their pieces (`data.selected_items`). */
     private const PIECE_TYPES = ['return', 'exchange', 'return_exchange'];
 
+    /** How old a card may be to still prove the order (review M2). */
+    public const CARD_DAYS = 30;
+
     public function __construct(
         private readonly FlowEngine $flows,
         private readonly FlowPrompter $prompter,
@@ -61,11 +64,29 @@ class StaleTap
     /** The bot message of this chat that carried the button (its issued-at), or null: never offered here. */
     public function issuedIn(Conversation $c, string $payload): ?Message
     {
-        $needle = '%"'.str_replace(['\\', '%'], ['\\\\', '\\%'], $payload).'"%';
-
+        // A card from more than CARD_DAYS ago no longer proves the order is hers (review M2). The payload
+        // is compared exactly on the decoded buttons and cards (review M1: no LIKE wildcards at all).
         return Message::query()->where('conversation_id', $c->id)->where('sender_type', SenderType::Bot->value)
-            ->where(fn ($q) => $q->where('buttons', 'like', $needle)->orWhere('cards', 'like', $needle))
-            ->latest('id')->first();
+            ->where('created_at', '>=', now()->subDays(self::CARD_DAYS))
+            ->where(fn ($q) => $q->whereNotNull('buttons')->orWhereNotNull('cards'))
+            ->latest('id')->limit(200)->get(['id', 'buttons', 'cards', 'created_at'])
+            ->first(fn (Message $m) => in_array($payload, self::payloadsOf([$m->buttons, $m->cards]), true));
+    }
+
+    /** @return list<string> every `payload` value in the decoded buttons/cards */
+    private static function payloadsOf(mixed $node): array
+    {
+        if (! is_array($node)) {
+            return [];
+        }
+
+        $out = is_string($node['payload'] ?? null) ? [$node['payload']] : [];
+
+        foreach ($node as $child) {
+            array_push($out, ...self::payloadsOf($child));
+        }
+
+        return $out;
     }
 
     private function restartForPiece(Conversation $c, string $flowKey, string $stepKey, int $itemId): bool
@@ -80,7 +101,8 @@ class StaleTap
 
         if (($case = $this->openCaseFor($c, $item)) !== null) {
             $title = trim($item->title);
-            $this->send($c, str_replace(['{title}', '{case_id}'], [$title, (string) $case->id], $this->script('stale_piece_recorded')), [FlowPrompter::MAIN_MENU_BUTTON]);
+            $text = $this->prompter->script('stale_piece_recorded', ['case_id' => $case->id]) ?? (string) FlowScripts::all()['stale_piece_recorded']['body'];
+            $this->send($c, str_replace(['{title}', '{case_id}'], [$title, (string) $case->id], $text), [FlowPrompter::MAIN_MENU_BUTTON]);
             FlowState::clear($c);
 
             return true;
@@ -97,14 +119,24 @@ class StaleTap
         return true;
     }
 
-    /** The open request of this chat (last day) that already has this piece. */
+    /**
+     * Her open return/exchange request that already covers this piece (review I2): from this chat or
+     * any chat of hers, of any age, listing the piece — or for the same order with no pieces listed
+     * (a request the team opened by hand).
+     */
     private function openCaseFor(Conversation $c, OrderItem $item): ?SupportCase
     {
-        return SupportCase::query()->where('conversation_id', $c->id)->whereIn('type', self::PIECE_TYPES)
-            ->whereIn('status', SupportCase::OPEN_STATUSES)->where('created_at', '>=', now()->subDay())
-            ->latest('id')->get()
-            ->first(fn (SupportCase $case) => collect((array) ($case->data['selected_items'] ?? []))
-                ->contains(fn ($row) => is_array($row) && (int) ($row['line_item_id'] ?? 0) === (int) $item->id));
+        return SupportCase::query()
+            ->where(fn ($q) => $q->where('conversation_id', $c->id)->when($c->customer_id, fn ($q) => $q->orWhere('customer_id', $c->customer_id)))
+            ->whereIn('type', self::PIECE_TYPES)->whereIn('status', SupportCase::OPEN_STATUSES)
+            ->latest('id')->limit(20)->get()
+            ->first(function (SupportCase $case) use ($item) {
+                $rows = collect((array) ($case->data['selected_items'] ?? []))->filter(fn ($row) => is_array($row) && is_numeric($row['line_item_id'] ?? null));
+
+                return $rows->isEmpty()
+                    ? (int) $case->order_id === (int) $item->order_id
+                    : $rows->contains(fn ($row) => (int) $row['line_item_id'] === (int) $item->id);
+            });
     }
 
     /** «إرجاع» leads to `return_items`: the kind the picker was asked under, so it is not asked again. */

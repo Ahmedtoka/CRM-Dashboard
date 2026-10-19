@@ -132,15 +132,27 @@ scenarios:
   - id: 47
     category: after_close
     routers: [legacy, hybrid]
-    setup: { history: [{ customer: 'عايزة اعرف الاوردر فين' }, { bot: 'الأوردر في الطريق ليكي يا فندم' }], closed: { kind: customer, minutes_ago: 5 } }
+    setup: { history: [{ customer: 'عايزة اعرف الاوردر فين' }, { bot: 'الأوردر في الطريق ليكي يا فندم' }], closed: { kind: customer, minutes_ago: 15 } }
     messages: ['الشحن للجيزة بكام؟']
     expect: { episode: fresh, never: ['بنكمل'], model_never_read: ['الأوردر في الطريق ليكي'] }
+  - id: 68
+    category: after_close
+    routers: [legacy, hybrid]
+    setup: { history: [{ customer: 'عندكم الفستان الكتان؟' }, { bot: 'الفستان الكتان متاح يا فندم' }], closed: { kind: customer, minutes_ago: 2 } }
+    messages: ['طب ومقاس L متاح؟']
+    expect: { episode: continue, never: ['بنكمل'], model_read: ['عندكم الفستان الكتان؟'] }
+  - id: 69
+    category: after_close
+    routers: [legacy, hybrid]
+    setup: { history: [{ customer: 'عايزة ارجع الفستان' }, { bot: 'تمام يا فندم، البوت هيكمل معاكي' }], case: { type: return, order: '209129' }, closed: { kind: handback, minutes_ago: 1 } }
+    messages: ['طب هو هيجي امتى؟']
+    expect: { episode: continue, never: ['بنكمل'], model_read: ['البوت هيكمل معاكي'] }
   - id: 48
     category: after_close
     routers: [legacy, hybrid]
     setup: { history: [{ customer: 'عايزة ارجع الفستان' }, { bot: 'تم تسجيل طلب حضرتك برقم #812' }], case: { type: return, order: '209129' }, closed: { kind: bot, minutes_ago: 5 } }
     messages: ['طب هيوصلني امتى؟']
-    expect: { episode: continue, says: ['بنكمل'] }
+    expect: { episode: continue, never: ['بنكمل'], model_read: ['تم تسجيل طلب حضرتك'] }
   - id: 49
     category: after_close
     routers: [legacy, hybrid]
@@ -220,3 +232,17 @@ scenarios:
     setup: { history: [{ customer: 'عايزة اعرف عن العروض' }, { bot: 'خليني أتأكد من المعلومة دي مع الفريق، تحبي أوصّلك بحد منهم؟' }] }
     messages: ['طب في عروض النهارده؟']
     expect: { handover: true, never: ['هدية'] }
+
+  # Coordinator live test (2026-10-19): the whole request typed while the main menu is up.
+  - id: 70
+    category: multi_return
+    routers: [legacy, hybrid]
+    setup: { flow: main_menu }
+    messages: ['عايزة ارجع البلوزة وابدل الجيبة بمقاس اكبر من اوردر 209129']
+    expect: { flow: return_exchange, flow_data: { request_kind: mixed }, selected: ['بلوزة كتان', 'جيبة بليسيه'], never: ['ممكن رقم الأوردر', 'ترجعي ولا تبدلي'], max_model_calls: 0 }
+  - id: 71
+    category: multi_return
+    routers: [legacy, hybrid]
+    setup: { flow: return_exchange }
+    messages: ['عايزة ارجع الفستان الاسود والطرحة من اوردر 209129']
+    expect: { flow: return_exchange, flow_data: { request_kind: return }, selected: ['فستان ستان اسود', 'طرحة شيفون بيج'], never: ['ترجعي ولا تبدلي'] }

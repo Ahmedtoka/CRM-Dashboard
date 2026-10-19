@@ -113,7 +113,7 @@ function bbAgentCalls(): int
     return count(array_filter(test()->ai->log, fn ($c) => $c['kind'] === 'agent'));
 }
 
-/** A chat a moderator handled (a return case recorded) and then closed back to the bot. */
+/** A chat a moderator handled (a return case recorded) and then closed with «خلصت» (ConversationCycle → resetToBot). */
 function bbStaffHandledThenClosed(): Conversation
 {
     $c = bbSay('عايزة ارجع الفستان من اوردر 209129 لو سمحتي');
@@ -124,7 +124,7 @@ function bbStaffHandledThenClosed(): Conversation
         'conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'platform' => $c->platform->value,
         'type' => 'return', 'status' => 'new', 'priority' => 'medium', 'order_number' => '#209129', 'data' => [],
     ]);
-    app(BotEngine::class)->returnToBot($c->refresh(), $staff);
+    app(BotEngine::class)->resetToBot($c->refresh());
 
     return $c->refresh();
 }
@@ -165,7 +165,7 @@ it('starts fresh after the reopen window, but still knows her recent cases and o
         ->and($prompt)->toContain('#209129')->toContain('new conversation');
 })->with('routers');
 
-it('starts fresh right away after she closed it herself («لا تمام شكرا»), even inside the window', function (string $router) {
+it('starts fresh after she closed it herself («لا تمام شكرا»), even inside the team reopen window', function (string $router) {
     bbFake($router, ['المندوب هيعدي عليكي خلال يومين يا فندم', 'الشحن بيوصل خلال يومين لتلات أيام يا فندم']);
     $c = bbStaffHandledThenClosed();
     $this->travel(2)->minutes();
@@ -174,7 +174,8 @@ it('starts fresh right away after she closed it herself («لا تمام شكر�
     bbSay('لا تمام شكرا');
     $before = (int) Message::max('id');
 
-    $this->travel(5)->minutes();
+    // Past the 10-minute grace after her own «شكرا» (a follow-up inside it carries on quietly).
+    $this->travel(15)->minutes();
     bbSay('الشحن للجيزة بكام؟');
 
     expect(implode("\n", bbBot($before)))->not->toContain('بنكمل')
@@ -426,4 +427,223 @@ it('hands her to a person when the bot is unsure twice in a row, instead of «خ
     expect(array_count_values(bbBot())[$fallback] ?? 0)->toBe(1)
         ->and($c->refresh()->handler)->not->toBe(Handler::Bot)
         ->and(implode(' ', bbBot()))->not->toContain('هدية');
+});
+
+
+// ---------------------------------------------------------------------------------------------
+// Coordinator live test (2026-10-19): a full request typed while the main menu is up.
+// ---------------------------------------------------------------------------------------------
+
+function bbOrder1313(): array
+{
+    $order = \App\Models\Order::factory()->create(['order_number' => '1313', 'shopify_order_name' => '#1313', 'shipping_phone' => '+201001234567']);
+    $order->update(['shipment_status' => 'delivered', 'delivered_at' => now()->subDays(3)]);
+    $skirt = \App\Models\OrderItem::factory()->for($order)->create(['title' => 'جيبة بليسيه', 'qty' => 1, 'price' => 500, 'discount' => 0]);
+    $suit = \App\Models\OrderItem::factory()->for($order)->create(['title' => 'طقم رياضي', 'qty' => 1, 'price' => 900, 'discount' => 0]);
+
+    return [$order, $skirt, $suit];
+}
+
+it('fills the return flow from her words when she types the whole request at the main menu', function (string $router) {
+    bbFake($router, []);
+    [, $skirt, $suit] = bbOrder1313();
+    bbSay('السلام عليكم');                                   // the main menu is up
+    expect(FlowState::flow(Conversation::first())['key'] ?? null)->toBe('main_menu');
+    $before = (int) Message::max('id');
+
+    bbSay('عايزة ارجع الجيبة البليسيه وابدل الطقم الرياضي بمقاس اكبر من اوردر 1313');
+    $said = implode("\n", bbBot($before));
+    expect($said)->not->toContain('ممكن رقم الأوردر')->toContain('آخر ٤ أرقام');
+
+    $c = bbSay('4567');
+    $flow = FlowState::flow($c->refresh());
+    $rows = collect((array) ($flow['data']['selected_items'] ?? []))->keyBy('line_item_id');
+    expect($flow['data']['request_kind'] ?? null)->toBe('mixed')
+        ->and(implode("\n", bbBot($before)))->not->toContain('ترجعي ولا تبدلي')
+        ->and($rows[$skirt->id]['action'] ?? null)->toBe('return')
+        ->and($rows[$suit->id]['action'] ?? null)->toBe('exchange')
+        ->and($rows[$suit->id]['exchange_to'] ?? '')->toContain('اكبر');
+})->with('routers');
+
+it('keeps her words when she taps «المرتجع والاستبدال» and then types the whole request', function (string $router) {
+    bbFake($router, []);
+    [, $skirt, $suit] = bbOrder1313();
+    bbSay('المرتجع والاستبدال', 'flow:return_exchange');
+    $before = (int) Message::max('id');
+
+    bbSay('عايزة ارجع الجيبة البليسيه وابدل الطقم الرياضي بمقاس اكبر من اوردر 1313');
+    $c = bbSay('4567');
+
+    $flow = FlowState::flow($c->refresh());
+    $rows = collect((array) ($flow['data']['selected_items'] ?? []))->keyBy('line_item_id');
+    expect($flow['data']['request_kind'] ?? null)->toBe('mixed')
+        ->and(implode("\n", bbBot($before)))->not->toContain('ترجعي ولا تبدلي')
+        ->and($rows[$skirt->id]['action'] ?? null)->toBe('return')
+        ->and($rows[$suit->id]['action'] ?? null)->toBe('exchange');
+})->with('routers');
+
+it('takes the order number she already typed as the second proof after her mobile (A4)', function (string $router) {
+    bbFake($router, ['تمام يا فندم، هشوفلك الأوردر']);
+    $order = bbOrder1313()[0];
+    $order->update(['shipping_phone' => '+201112223334']);   // not the chat's own mobile: A4 asks a second proof
+    bbSay('اوردر 1313 لسه موصلش');                              // the number, said before any flow
+    bbSay('المرتجع والاستبدال', 'flow:return_exchange');
+    $before = (int) Message::max('id');
+
+    $c = bbSay('01112223334');
+
+    expect(implode("\n", bbBot($before)))->not->toContain('رقم الأوردر')
+        ->and(FlowState::flow($c->refresh())['data']['order_verified'] ?? null)->toBeTrue();
+})->with('routers');
+
+
+// ---------------------------------------------------------------------------------------------
+// Code review of round b1 (C1, C2, I1–I6).
+// ---------------------------------------------------------------------------------------------
+
+it('applies the close rule once: the next turns are just the conversation going on (C1)', function (string $router) {
+    bbFake($router, ['المندوب هيعدي عليكي خلال يومين يا فندم', 'مقاسك كام يا فندم؟', 'تمام، مقاس L متاح يا فندم']);
+    bbStaffHandledThenClosed();
+    $this->travel(3)->hours();
+    bbSay('عندكم الفستان الكتان؟');                  // fresh start
+    $before = (int) Message::max('id');
+    $this->travel(1)->minutes();
+    bbSay('عايزاه');
+    $this->travel(1)->minutes();
+    bbSay('L');
+
+    expect(implode("\n", bbBot($before)))->not->toContain('بنكمل')
+        // The current chat is still read: her «عايزاه» and the question before «L».
+        ->and(bbLastAgentHistory())->toContain('عايزاه')->toContain('عندكم الفستان الكتان؟');
+})->with('routers');
+
+it('never sends «بنكمل» twice inside the reopen window (C1)', function (string $router) {
+    bbFake($router, ['المندوب هيعدي عليكي خلال يومين يا فندم', 'هيكلمك قبلها يا فندم', 'أيوه يا فندم']);
+    bbStaffHandledThenClosed();
+    $before = (int) Message::max('id');
+    $this->travel(10)->minutes();
+    bbSay('طب هو هيجي امتى؟');
+    $this->travel(1)->minutes();
+    bbSay('وهيكلمني قبلها؟');
+
+    expect(collect(bbBot($before))->filter(fn ($t) => str_contains($t, 'بنكمل'))->count())->toBe(1);
+})->with('routers');
+
+it('keeps her first message when the first turn of a new chat is superseded after «ثانية واحدة» (C2)', function (string $router) {
+    bbFakeWithMessageDuringTurn($router, 'ومقاس L متاح؟', ['الفستان الأسود متاح يا فندم', 'الفستان الأسود متاح يا فندم والمقاس ده موجود']);
+    // The hold notice went out while the model was thinking: it is stored like any bot message.
+    test()->ai->hold = true;
+    Http::fake(['api.anthropic.com/*' => function (Request $request) {
+        if (test()->ai->hold ?? false) {
+            test()->ai->hold = false;
+            $c = Conversation::firstOrFail();
+            $m = $c->messages()->create(['platform' => $c->platform, 'direction' => 'out', 'sender_type' => 'bot', 'body' => 'ثانية واحدة يا فندم', 'status' => 'sent']);
+            \Illuminate\Support\Facades\Cache::put(\App\Bot\Jobs\BotHoldNotice::sentKey((string) app(\App\Bot\Router\TurnMetrics::class)->turn), $m->id, 60);
+            $c->messages()->create(['platform' => $c->platform, 'direction' => 'in', 'sender_type' => 'customer', 'body' => 'ومقاس L متاح؟', 'status' => 'received', 'external_id' => 'late-'.uniqid()]);
+        }
+        $body = $request->data();
+        if (isset($body['output_config']['format'])) {
+            return Http::response(['stop_reason' => 'end_turn', 'model' => 'claude-haiku-5-5', 'usage' => ['input_tokens' => 1, 'output_tokens' => 1], 'content' => [['type' => 'text', 'text' => json_encode(['tasks' => [['kind' => 'other', 'order_refs' => [], 'items' => [], 'governorate' => null, 'place' => null, 'product_query' => null, 'question' => null, 'confidence' => 0.9]], 'sentiment' => 'neutral', 'wants_human' => false, 'continues_previous' => false, 'policy_edge' => false, 'clarify' => null])]]]);
+        }
+        test()->ai->log[] = ['kind' => 'agent', 'body' => $body];
+
+        return Http::response(['stop_reason' => 'end_turn', 'model' => $body['model'] ?? 'x', 'usage' => ['input_tokens' => 1, 'output_tokens' => 1], 'content' => [['type' => 'text', 'text' => array_shift(test()->ai->agent) ?? 'تحت أمرك يا فندم']]]);
+    }]);
+
+    $c = bbSay('الفستان الاسود متاح؟');
+    $this->travel(15)->seconds();
+    (new \App\Bot\Flow\Jobs\RunBotTurn($c->id))->handle();
+
+    expect(bbLastAgentHistory())->toContain('الفستان الاسود متاح؟')->toContain('ومقاس L متاح؟')
+        ->and(bbBot())->toHaveCount(2)->and(bbBot()[0])->toBe('ثانية واحدة يا فندم')
+        ->and(\App\Models\BotRun::where('decision', 'superseded')->count())->toBe(1);
+})->with('routers');
+
+it('names the request the piece is already in (I1)', function (string $router) {
+    bbFake($router, []);
+    [$c, $dress] = bbReturnPictures();
+    $case = SupportCase::create([
+        'conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'platform' => $c->platform->value, 'type' => 'return', 'status' => 'new', 'priority' => 'medium',
+        'order_id' => $dress->order_id, 'order_number' => '#209129', 'data' => ['selected_items' => [['line_item_id' => $dress->id, 'title' => 'فستان ستان', 'qty' => 1]]],
+    ]);
+    bbSay('لا تمام');
+    $before = (int) Message::max('id');
+
+    bbSay('رجّع القطعة دي', 'step:return_exchange:return_items:item:'.$dress->id);
+
+    expect(implode("\n", bbBot($before)))->toContain('في طلب #'.$case->id.'،');
+})->with('routers');
+
+it('finds the open request for the piece days later, or one the team opened without pieces (I2)', function (string $router) {
+    bbFake($router, []);
+    [$c, $dress] = bbReturnPictures();
+    $case = SupportCase::create([
+        'conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'platform' => $c->platform->value, 'type' => 'return', 'status' => 'new', 'priority' => 'medium',
+        'order_id' => $dress->order_id, 'order_number' => '#209129', 'data' => [],
+    ]);
+    bbSay('لا تمام');
+    $this->travel(3)->days();
+    $before = (int) Message::max('id');
+
+    bbSay('رجّع القطعة دي', 'step:return_exchange:return_items:item:'.$dress->id);
+
+    expect(implode("\n", bbBot($before)))->toContain('#'.$case->id)
+        ->and(FlowState::flow($c->refresh())['key'] ?? null)->not->toBe('return_exchange');
+})->with('routers');
+
+it('carries on quietly when she asks a follow-up right after her own «شكرا» (I3)', function (string $router) {
+    bbFake($router, ['الفستان الكتان متاح يا فندم', 'أيوه مقاس L متاح يا فندم']);
+    bbSay('عندكم الفستان الكتان؟');
+    $this->travel(1)->minutes();
+    bbSay('تمام شكرا');
+    $before = (int) Message::max('id');
+    $this->travel(2)->minutes();
+    bbSay('طب ومقاس L متاح؟');
+
+    expect(implode("\n", bbBot($before)))->not->toContain('بنكمل')
+        ->and(bbLastAgentHistory())->toContain('عندكم الفستان الكتان؟');
+})->with('routers');
+
+it('sends no welcome-back line after a plain «رجوع للبوت» or right after the bot recorded her request (I4)', function (string $router) {
+    bbFake($router, ['المندوب هيعدي عليكي خلال يومين يا فندم']);
+    $c = bbSay('عايزة ارجع الفستان من اوردر 209129 لو سمحتي');
+    $staff = User::factory()->create(['role' => 'supervisor']);
+    $c->refresh()->forceFill(['handler' => Handler::Human, 'needs_human' => true])->save();
+    app(OutboundService::class)->sendHuman($c, $staff, 'تمام يا فندم، البوت هيكمل معاكي');
+    app(BotEngine::class)->returnToBot($c->refresh(), $staff);
+    $before = (int) Message::max('id');
+
+    $this->travel(1)->minutes();
+    bbSay('طب هو هيجي امتى؟');
+
+    expect(implode("\n", bbBot($before)))->not->toContain('بنكمل')
+        ->and(bbLastAgentHistory())->toContain('البوت هيكمل معاكي');
+})->with('routers');
+
+it('does not hand her over for being unsure again after she said «لأ» to the offer (I6)', function () {
+    bbFake('hybrid', ['وليكي هدية', 'وهدية تانية', 'وهدية تالتة', 'وهدية رابعة']);
+    bbSay('عايزة اعرف عن العروض');
+    $this->travel(1)->minutes();
+    bbSay('لأ', 'no');
+    $this->travel(1)->minutes();
+    $c = bbSay('طب في عروض النهارده؟');
+
+    expect($c->refresh()->handler)->toBe(Handler::Bot);
+});
+
+
+it('sends tier 1 a shorter history (the last 8 messages) to keep it fast (coordinator live test)', function () {
+    bbFake('hybrid', array_fill(0, 8, 'تحت أمرك يا فندم'));
+    BotSetting::current()->update(['max_bot_turns' => 20]);
+    foreach (range(1, 7) as $i) {
+        bbSay("سؤال رقم {$i} عن الفستان؟");
+        $this->travel(1)->minutes();
+    }
+    bbSay('وآخر سؤال عن المقاسات؟');
+
+    $calls = array_values(array_filter(test()->ai->log, fn ($c) => $c['kind'] === 'agent'));
+    $last = end($calls)['body'];
+
+    expect($last['model'])->toBe('claude-haiku-5-5')
+        ->and(bbLastAgentHistory())->not->toContain('سؤال رقم 1 عن')->toContain('سؤال رقم 7 عن');
 });

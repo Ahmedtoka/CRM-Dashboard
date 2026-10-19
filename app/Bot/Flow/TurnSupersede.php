@@ -25,6 +25,11 @@ use Illuminate\Support\Facades\Cache;
  */
 final class TurnSupersede
 {
+    public static function onceKey(int $conversationId, int $burstFirstId): string
+    {
+        return 'bot:superseded:'.$conversationId.':'.$burstFirstId;
+    }
+
     /** Throws TurnSuperseded when a newer message of hers should be answered together with this burst. */
     public static function check(Conversation $c, float $costUsd = 0.0, ?string $tier = null, ?string $model = null): void
     {
@@ -57,7 +62,8 @@ final class TurnSupersede
             ->when($hold, fn ($q) => $q->where('id', '!=', (int) $hold))
             ->exists();
 
-        if (! $sent) {
+        // At most once per burst (review M4): a customer who keeps typing costs one extra model call, not five.
+        if (! $sent && Cache::add(self::onceKey($c->id, (int) ($metrics->burstFirstId ?? $marker)), 1, now()->addMinutes(5))) {
             throw new TurnSuperseded($costUsd, $tier, $model);
         }
     }

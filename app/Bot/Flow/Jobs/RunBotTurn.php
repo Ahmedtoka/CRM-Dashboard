@@ -73,6 +73,7 @@ class RunBotTurn implements ShouldQueue
         $burst = app(ReplyScheduler::class)->burst($c);
         $lastId = $burst->last()?->id;
         $previousMarker = $c->bot_state['last_turn_message_id'] ?? null;
+        $stateBefore = $c->bot_state ?? [];
 
         if ($lastId === null || $previousMarker === $lastId) {
             return; // nothing new, or this burst was already answered (retry / duplicate dispatch)
@@ -92,7 +93,11 @@ class RunBotTurn implements ShouldQueue
         } catch (TurnSuperseded $s) {
             // Round b1: nothing went out; her newer message's turn answers the whole burst at once.
             Cache::forget(BotHoldNotice::turnKey($c->id));
-            $c->refresh()->forceFill(['bot_state' => array_merge($c->bot_state ?? [], ['last_turn_message_id' => $previousMarker])])->save();
+            // The state as it was before this turn (review I5: the planner memory, a pending offer…), and
+            // a burst start that stays put even with no earlier marker (review C2: «ثانية واحدة» went out).
+            $restored = $c->refresh()->handler === Handler::Bot ? $stateBefore : ($c->bot_state ?? []);
+            $restored['last_turn_message_id'] = $previousMarker ?? ((int) $burst->first()->id - 1);
+            $c->forceFill(['bot_state' => $restored])->save();
             $this->recordSuperseded($c, $burst, $s);
             $this->scheduleMessagesThatArrivedDuringTheTurn($c, $lastId);
 
@@ -123,6 +128,7 @@ class RunBotTurn implements ShouldQueue
         $metrics->reset();
         $metrics->startedAtMs = (int) floor(microtime(true) * 1000);
         $metrics->lastMessageId = $lastMessageId;
+        $metrics->burstFirstId = $burst->first()?->id;
         $metrics->turn = (string) Str::uuid();
         $first = $burst->first()?->created_at;
         $metrics->burstWaitMs = $first !== null ? max(0, (int) ($metrics->startedAtMs - $first->getTimestampMs())) : null;

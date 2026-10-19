@@ -351,6 +351,8 @@ class BotEngine
             // A staff decision: an earlier auto-close's return window no longer sends her to a moderator.
             $c->return_priority_until = null;
             $this->resetToBot($c);
+            // A hand-back, not a goodbye (review I4): she carries on, without «أهلاً بيكي تاني».
+            ConversationEpisode::markClosed($c, ConversationEpisode::HANDBACK);
         }, attempts: 3);
 
         $this->logger->log(ActorType::User, $u, ActivityLogger::CONVERSATION_RETURN_TO_BOT, null, $c);

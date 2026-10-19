@@ -81,7 +81,7 @@ it('resets bot_state to only the turn marker when a conversation is returned to 
     app(BotEngine::class)->returnToBot($c, User::factory()->create(['role' => UserRole::Moderator]));
 
     expect(collect($c->refresh()->bot_state)->except('episode')->all())->toBe(['last_turn_message_id' => 4242])
-        ->and($c->bot_state['episode']['kind'])->toBe('staff');
+        ->and($c->bot_state['episode']['kind'])->toBe('handback'); // round b1: «رجوع للبوت» is a hand-back, not a goodbye
 });
 
 it('keeps only the close marker on resolve or return-to-bot when there was no turn marker', function () {

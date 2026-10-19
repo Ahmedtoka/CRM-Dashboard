@@ -11,6 +11,7 @@ use App\Bot\Ai\ModelPricing;
 use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
+use App\Bot\Flows\FlowAnswerResolver;
 use App\Bot\Flows\FlowLabels;
 use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\FlowScripts;
@@ -188,7 +189,7 @@ class HybridRouter
      */
     private function answer(Conversation $c, Collection $burst, array $texts, string $tier, string $context, int $started): ?AgentOutcome
     {
-        $messages = $this->runner->messages($c, $burst, $texts);
+        $messages = $this->runner->messages($c, $burst, $texts, $tier === '1' ? AgentRunner::TIER1_HISTORY : 14);
         $language = $this->language->of($c);
         $profile = TierProfile::tier($tier);
         $first = $this->attempt($c, $messages, $language, $profile, $context);
@@ -363,9 +364,12 @@ class HybridRouter
 
         // Round b1: unsure twice in a row — «خليني أتأكد…» again would be the bot going in circles.
         $previous = $c->messages()->where('sender_type', SenderType::Bot->value)
-            ->where('created_at', '>=', now()->subMinutes(30))->latest('id')->value('body');
+            ->where('created_at', '>=', now()->subMinutes(30))->latest('id')->first(['id', 'body']);
+        // Her «لأ» to that offer stands (review I6): she is not handed over against it.
+        $declined = $previous !== null && $c->messages()->where('id', '>', $previous->id)->where('direction', MessageDirection::In->value)->get(['body', 'payload'])
+            ->contains(fn (Message $m) => $m->payload === 'no' || app(FlowAnswerResolver::class)->yesNo((string) $m->body) === 'no');
 
-        if ($previous !== null && trim((string) $previous) === trim($text)) {
+        if ($previous !== null && ! $declined && trim((string) $previous->body) === trim($text)) {
             FlowState::setConfirm($c, null);
             app(HumanHandover::class)->handover($c, null, $customerText, 'bot_unsure', 'human_request');
 

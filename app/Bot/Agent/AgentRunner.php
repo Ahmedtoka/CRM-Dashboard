@@ -35,6 +35,9 @@ class AgentRunner
 {
     private const HISTORY = 14;
 
+    /** Tier 1 (Haiku, the planner already read the turn) gets a shorter history: fewer tokens, faster (coordinator live test, round b1). */
+    public const TIER1_HISTORY = 8;
+
     public function __construct(
         private readonly StoreAgent $agent,
         private readonly OutboundService $outbound,
@@ -204,14 +207,14 @@ class AgentRunner
      * @param  list<string>  $texts
      * @return list<array{role:'user'|'assistant', content:string}>
      */
-    public function messages(Conversation $c, Collection $burst, array $texts): array
+    public function messages(Conversation $c, Collection $burst, array $texts, int $history = self::HISTORY): array
     {
         $history = $c->messages()
             ->when($burst->first()?->id, fn ($q, $id) => $q->where('id', '<', $id))
             // Round b1: after a fresh start the closed chat is not read as this one (CONTEXT has its memory).
             ->when(ConversationEpisode::historyFloor($c), fn ($q, $floor) => $q->where('id', '>=', $floor))
             ->whereIn('sender_type', [SenderType::Customer->value, SenderType::Bot->value, SenderType::User->value])
-            ->orderByDesc('id')->limit(self::HISTORY)->get()->reverse()
+            ->orderByDesc('id')->limit(max(2, $history))->get()->reverse()
             ->map(fn (Message $m) => ['role' => $m->sender_type === SenderType::Customer ? 'user' : 'assistant', 'content' => trim((string) $m->body)])
             ->filter(fn (array $m) => $m['content'] !== '')
             ->values()->all();
