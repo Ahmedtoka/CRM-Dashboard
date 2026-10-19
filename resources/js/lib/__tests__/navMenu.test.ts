@@ -1,5 +1,5 @@
-import { translate } from '@/i18n';
 import { buildNav, groupBadge, type NavContext } from '@/lib/navMenu';
+import { translate } from '@/i18n';
 import type { NavItem } from '@/types';
 import { describe, expect, it } from 'vitest';
 

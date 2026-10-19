@@ -52,16 +52,7 @@ export interface Conversation {
     needs_human: boolean;
     source: 'direct' | 'comment' | 'ad' | null;
     /** Which ad (or m.me link) the conversation came through; null when none. */
-    ad?: {
-        id: string | null;
-        title: string | null;
-        name: string | null;
-        adset: string | null;
-        campaign: string | null;
-        post_id: string | null;
-        photo_url: string | null;
-        ref: string | null;
-    } | null;
+    ad?: { id: string | null; title: string | null; name: string | null; adset: string | null; campaign: string | null; post_id: string | null; photo_url: string | null; ref: string | null } | null;
     /** A run of a public team test link (design 2026-09-21): shown with a «تجربة» badge. */
     is_test: boolean;
     /** A production load-test chat (2026-10-07): an extra «تيست» chip, nothing else changes. */
@@ -308,12 +299,7 @@ export interface OrderDisplay {
     shipment_at: string | null;
 }
 
-export type MismatchReason =
-    | 'fulfilled_but_returned'
-    | 'cancelled_but_in_transit'
-    | 'delivered_but_unfulfilled'
-    | 'cod_delivered_unpaid'
-    | 'shopify_total_differs';
+export type MismatchReason = 'fulfilled_but_returned' | 'cancelled_but_in_transit' | 'delivered_but_unfulfilled' | 'cod_delivered_unpaid' | 'shopify_total_differs';
 
 export interface Fulfillment {
     id: number;

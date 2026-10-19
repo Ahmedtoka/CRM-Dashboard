@@ -124,9 +124,7 @@ const breadcrumbs = computed(() => [
                     </Link>
                 </div>
                 <BarChart v-if="feedbackReasons.length" :title="t('bot_brain.feedback.review.counts_title')" :items="feedbackReasons" :format="n" />
-                <p v-else class="rounded-lg border border-line bg-card px-4 py-3 text-13 text-fg-3">
-                    {{ t('bot_brain.feedback.review.empty_hint') }}
-                </p>
+                <p v-else class="rounded-lg border border-line bg-card px-4 py-3 text-13 text-fg-3">{{ t('bot_brain.feedback.review.empty_hint') }}</p>
             </section>
 
             <section class="space-y-2" aria-labelledby="bot-flows-title">

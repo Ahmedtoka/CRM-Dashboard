@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import BotReplyActions from '@/components/crm/bot/BotReplyActions.vue';
-import MessageAttachments from '@/components/crm/media/MessageAttachments.vue';
 import MessageCards from '@/components/crm/MessageCards.vue';
+import MessageAttachments from '@/components/crm/media/MessageAttachments.vue';
 import { skinClasses, type ChatSkin } from '@/composables/inbox/useChatSkin';
 import { useI18n } from '@/composables/useI18n';
 import { useInitials } from '@/composables/useInitials';
@@ -73,14 +73,15 @@ const shapeClass = computed(() => {
         const outTailColor = failed.value ? 'before:border-t-card' : 'before:border-t-[var(--wa-out)]';
         return [
             'rounded-lg shadow-sm relative',
-            props.tail &&
-                !outbound.value &&
-                'before:absolute before:top-0 before:-start-2 before:border-8 before:border-transparent before:border-t-[var(--wa-in)]',
+            props.tail && !outbound.value && 'before:absolute before:top-0 before:-start-2 before:border-8 before:border-transparent before:border-t-[var(--wa-in)]',
             props.tail && outbound.value && ['before:absolute before:top-0 before:-end-2 before:border-8 before:border-transparent', outTailColor],
         ];
     }
     // Suite (DESIGN §3 Message): 14 px corners, the corner toward the sender squared on the run's first bubble, a hairline lift.
-    return ['rounded-[14px] shadow-e1', props.tail && (outbound.value ? 'rounded-se-[4px]' : 'rounded-ss-[4px]')];
+    return [
+        'rounded-[14px] shadow-e1',
+        props.tail && (outbound.value ? 'rounded-se-[4px]' : 'rounded-ss-[4px]'),
+    ];
 });
 
 // A failed outgoing message never renders on its skin's normal bubble colour — red error
@@ -133,16 +134,9 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
 
         <article
             class="max-w-[min(80%,36rem)] text-sm md:max-w-[min(72%,32.5rem)]"
-            :class="[
-                bareSticker ? undefined : ['px-3 py-2', shapeClass, bubbleBgClass],
-                failed && 'border border-destructive/40',
-                runIndent && 'ms-9',
-            ]"
+            :class="[bareSticker ? undefined : ['px-3 py-2', shapeClass, bubbleBgClass], failed && 'border border-destructive/40', runIndent && 'ms-9']"
         >
-            <header
-                v-if="(kind === 'user' || kind === 'bot') && !bareSticker"
-                class="mb-0.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-fg-2"
-            >
+            <header v-if="(kind === 'user' || kind === 'bot') && !bareSticker" class="mb-0.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-fg-2">
                 <span
                     v-if="kind === 'user'"
                     :class="skin === 'whatsapp' ? 'rounded px-1.5 py-px text-white' : ''"
@@ -165,11 +159,7 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
             </header>
 
             <p v-if="body" class="whitespace-pre-wrap break-words leading-[1.65]" dir="auto">
-                <template v-if="kind === 'customer' && message?.payload"
-                    ><CircleDot class="me-1 inline size-3.5 align-[-2px]" aria-hidden="true" /><span class="sr-only"
-                        >{{ t('thread.tapped_button') }}:
-                    </span></template
-                >{{ body }}
+                <template v-if="kind === 'customer' && message?.payload"><CircleDot class="me-1 inline size-3.5 align-[-2px]" aria-hidden="true" /><span class="sr-only">{{ t('thread.tapped_button') }}: </span></template>{{ body }}
             </p>
 
             <!-- The quick replies the customer sees. Solid light chips so they stay readable
@@ -208,10 +198,7 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
                 />
             </span>
 
-            <div
-                v-if="failed && message"
-                class="clear-both mt-1.5 flex items-center gap-2 border-t border-destructive/30 pt-1.5 text-2xs text-destructive"
-            >
+            <div v-if="failed && message" class="clear-both mt-1.5 flex items-center gap-2 border-t border-destructive/30 pt-1.5 text-2xs text-destructive">
                 <span class="min-w-0 flex-1">{{ message.error || t('thread.failed') }}</span>
                 <button
                     type="button"

@@ -59,13 +59,7 @@ export function buildNav(ctx: NavContext): NavItem[] {
     const query = ctx.adsQuery === '' ? undefined : ctx.adsQuery;
     const settings: NavItem = { title: t('nav.settings'), href: '/settings', icon: Settings, match: ['/simulator', '/reports/latency'] };
 
-    const decisions: NavItem = {
-        title: t('nav.ads_decisions'),
-        href: '/ads/decisions',
-        badge: count(badges.decisions),
-        query,
-        match: ['/ads/approvals'],
-    };
+    const decisions: NavItem = { title: t('nav.ads_decisions'), href: '/ads/decisions', badge: count(badges.decisions), query, match: ['/ads/approvals'] };
     const explorer: NavItem = { title: t('nav.ads_explorer'), href: '/ads/explorer', query, match: ['/ads/creatives'] };
     const numbers: NavItem = { title: t('nav.ads_numbers'), href: '/ads/numbers', query, match: ['/ads/buyers'] };
     const library: NavItem = { title: t('nav.ads_library'), href: '/ads/materials', match: ['/ads/collections', '/ads/stock'] };
