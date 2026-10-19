@@ -42,6 +42,9 @@ class BotSetting extends Model
         'store_url',
         // «ابدأ من هنا» skipped by the admin (2026-09-26).
         'onboarding_dismissed_at',
+        // «رصيد حساب Anthropic» typed by the owner in «التكلفة» (b2, 2026-10-19).
+        'anthropic_balance_usd',
+        'anthropic_balance_at',
     ];
 
     /** Seeded from the existing "حذف السبام" comment rule keywords (spec §11.1). */
@@ -93,6 +96,8 @@ class BotSetting extends Model
             'typing_ms_per_char' => 'integer',
             'order_lookup_enabled' => 'boolean',
             'non_returnable_keywords' => 'array',
+            'anthropic_balance_usd' => 'decimal:2',
+            'anthropic_balance_at' => 'datetime',
         ];
     }
 

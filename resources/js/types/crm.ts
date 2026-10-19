@@ -700,7 +700,9 @@ export interface AppNotification {
         | 'ads.token_expiring'
         | 'ads.data_health'
         | 'ads.stop_failed'
-        | 'ads.stop_unknown';
+        | 'ads.stop_unknown'
+        | 'bot.balance_low'
+        | 'bot.sonnet_cap';
     data: Record<string, unknown>;
     read_at: string | null;
     created_at: string | null;

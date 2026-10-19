@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BotReplyActions from '@/components/crm/bot/BotReplyActions.vue';
 import MessageCards from '@/components/crm/MessageCards.vue';
 import MessageAttachments from '@/components/crm/media/MessageAttachments.vue';
 import { skinClasses, type ChatSkin } from '@/composables/inbox/useChatSkin';
@@ -153,6 +154,8 @@ const runIndent = computed(() => props.skin === 'suite' && kind.value === 'custo
                     data-testid="sent-outside-crm"
                     >{{ t('thread.sent_outside_crm') }}</span
                 >
+                <!-- «ليه البوت رد كده؟» and «رد البوت ده غلط» (b2, 2026-10-19). -->
+                <BotReplyActions v-if="kind === 'bot' && message?.id && message.id > 0" :message-id="message.id" />
             </header>
 
             <p v-if="body" class="whitespace-pre-wrap break-words leading-[1.65]" dir="auto">

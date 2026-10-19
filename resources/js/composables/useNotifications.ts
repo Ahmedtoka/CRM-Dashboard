@@ -34,6 +34,8 @@ export const TYPE_KEY = {
     'ads.data_health': 'ads_data_health',
     'ads.stop_failed': 'ads_stop_failed',
     'ads.stop_unknown': 'ads_stop_unknown',
+    'bot.balance_low': 'bot_balance_low',
+    'bot.sonnet_cap': 'bot_sonnet_cap',
 } as const;
 
 /** Desktop notification bodies never carry more than this many characters of a message (privacy ruling). */

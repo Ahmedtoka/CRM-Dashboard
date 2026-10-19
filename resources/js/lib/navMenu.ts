@@ -156,10 +156,11 @@ export function buildNav(ctx: NavContext): NavItem[] {
             icon: Bot,
             children: [
                 { title: t('nav.bot_run'), href: '/bot', exact: true },
+                { title: t('bot_brain.nav.brain'), href: '/bot/brain', match: ['/bot/costs', '/bot/guide'] },
                 { title: t('nav.bot_flows'), href: '/bot/flows', match: ['/bot/intents'] },
                 { title: t('nav.bot_copy'), href: '/bot/replies', match: ['/bot/knowledge', '/bot/translations'] },
                 { title: t('nav.bot_testing'), href: '/bot/test-links', match: ['/bot/test-sessions'] },
-                { title: t('nav.bot_learning'), href: '/bot/learning', badge: count(badges.learning) },
+                { title: t('nav.bot_learning'), href: '/bot/learning', match: ['/bot/feedback'], badge: count(badges.learning) },
                 { title: t('nav.bot_performance'), href: '/bot/performance' },
             ],
         },

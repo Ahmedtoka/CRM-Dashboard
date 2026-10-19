@@ -38,6 +38,8 @@ const SWEPT: string[] = [
     'Today',
     // WhatsApp order confirmation (W4)
     'Orders/Confirmations', 'settings/OrderConfirmations',
+    // b2 «عقل البوت»
+    'Bot/Brain', 'Bot/Costs', 'Bot/Feedback', 'Bot/Guide',
 ];
 
 /**
@@ -61,8 +63,8 @@ const NO_PAGE_HEADER = new Set([
 ]);
 
 describe('S0 kit adoption', () => {
-    it('sees all 68 pages and only real ones are listed', () => {
-        expect(Object.keys(pages)).toHaveLength(68);
+    it('sees all 72 pages and only real ones are listed', () => {
+        expect(Object.keys(pages)).toHaveLength(72);
         for (const name of SWEPT) expect(pages[name], name).toBeDefined();
     });
 

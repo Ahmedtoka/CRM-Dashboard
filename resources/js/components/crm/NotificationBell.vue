@@ -117,6 +117,14 @@ function itemText(n: AppNotification): string {
         return t('notifications.ads_token_expiring_item', { name: String(n.data.connection ?? ''), days: Number(n.data.days ?? 0) });
     }
 
+    if (n.type === 'bot.balance_low') {
+        return t('notifications.bot_balance_low_item', { days: Number(n.data.days ?? 0), left: Number(n.data.left_usd ?? 0) });
+    }
+
+    if (n.type === 'bot.sonnet_cap') {
+        return t('notifications.bot_sonnet_cap_item', { cap: Number(n.data.cap ?? 0) });
+    }
+
     if (n.type === 'legal.deletion_review') {
         return t('notifications.legal_deletion_review_item', { code: String(n.data.code ?? '') });
     }
@@ -178,6 +186,10 @@ function open(n: AppNotification): void {
     }
     if (n.type === 'ads.token_invalid' || n.type === 'ads.token_scope_missing' || n.type === 'ads.token_expiring') {
         router.visit('/settings/ads/accounts');
+        return;
+    }
+    if (n.type === 'bot.balance_low' || n.type === 'bot.sonnet_cap') {
+        router.visit('/bot/costs');
         return;
     }
     if (n.type === 'shopify.app') {

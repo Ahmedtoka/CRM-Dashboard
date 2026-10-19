@@ -4,6 +4,9 @@
 
 use App\Http\Controllers\Web\Ads\LegacyAdsRedirectController;
 use App\Http\Controllers\Web\BoardController;
+use App\Http\Controllers\Web\Bot\BotBrainController;
+use App\Http\Controllers\Web\Bot\BotFeedbackController;
+use App\Http\Controllers\Web\Bot\BotReplyInsightController;
 use App\Http\Controllers\Web\CaseController;
 use App\Http\Controllers\Web\CommentController;
 use App\Http\Controllers\Web\CustomerController;
@@ -72,6 +75,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::get('conversations/{conversation}/media', [InboxController::class, 'media'])->name('conversations.media.index');
         Route::post('conversations/{conversation}/attachments', [InboxController::class, 'uploadAttachment'])->name('conversations.attachments.store');
         Route::post('messages/{message}/retry', [InboxController::class, 'retryMessage'])->name('messages.retry');
+        // «ليه البوت رد كده؟» and «رد البوت ده غلط» on a bot bubble (b2, 2026-10-19).
+        Route::get('messages/{message}/bot-trace', [BotReplyInsightController::class, 'trace'])->name('messages.bot-trace');
+        Route::post('messages/{message}/bot-feedback', [BotReplyInsightController::class, 'feedback'])->name('messages.bot-feedback');
         Route::post('conversations/{conversation}/typing', [InboxController::class, 'typing'])->name('conversations.typing');
         Route::post('conversations/{conversation}/notes', [InboxController::class, 'storeNote'])->name('conversations.notes.store');
         Route::post('conversations/{conversation}/claim', [InboxController::class, 'claim'])->name('conversations.claim');
@@ -232,6 +238,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
 
     // «البوت» (redesign 2026-10-17, A2): the bot's pages left Settings for their own section. Their old GET URLs
     // answer 301 here (IA §5, MovedPageController); every write keeps its old /settings/bot-* URL.
+    // «عقل البوت» (b2, 2026-10-19): every inbox staff member may read it; moderators get the summary (the controller decides).
+    Route::get('bot/brain', [BotBrainController::class, 'brain'])->name('bot.brain');
+
     Route::prefix('bot')->name('bot.')->middleware('role:supervisor')->group(function () {
         Route::get('/', [BotController::class, 'index'])->name('index');
         Route::get('flows', [BotFlowController::class, 'index'])->name('flows.index');
@@ -247,12 +256,22 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::get('test-sessions/{session}', [ReportController::class, 'teamTestSession'])->name('test-sessions.show');
         Route::get('learning', [BotLearningController::class, 'index'])->name('learning.index');
         Route::get('performance', [ReportController::class, 'bot'])->name('performance');
+        // b2: staff feedback on bot replies, the cost view and the guide.
+        Route::get('feedback', [BotFeedbackController::class, 'index'])->name('feedback.index');
+        Route::get('feedback/traces/{trace}', [BotFeedbackController::class, 'trace'])->whereNumber('trace')->name('feedback.trace');
+        Route::get('costs', [BotBrainController::class, 'costs'])->name('costs');
+        Route::get('guide', [BotBrainController::class, 'guide'])->name('guide');
     });
 
     // Settings — supervisor+
     Route::prefix('settings')->name('settings.')->middleware('role:supervisor')->group(function () {
         Route::get('bot', MovedPageController::class)->defaults('to', '/bot')->name('bot.index');
         Route::put('bot', [BotController::class, 'update'])->name('bot.update');
+        // b2: the test console, the Anthropic balance, and turning feedback into a learning suggestion.
+        Route::post('bot-brain/try', [BotBrainController::class, 'try'])->middleware('throttle:20,1')->name('bot-brain.try');
+        Route::put('bot-balance', [BotBrainController::class, 'balance'])->name('bot-balance.update');
+        Route::post('bot-feedback/{feedback}/convert', [BotFeedbackController::class, 'convert'])->name('bot-feedback.convert');
+        Route::post('bot-feedback/{feedback}/dismiss', [BotFeedbackController::class, 'dismiss'])->name('bot-feedback.dismiss');
 
         // Handover queue settings (queue routing design 2026-09-26): windows, timers, SLA,
         // points and shift templates. Points/shifts are admin-only inside the controller.
