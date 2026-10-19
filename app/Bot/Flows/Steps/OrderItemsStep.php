@@ -326,6 +326,12 @@ final class OrderItemsStep extends BaseStep
             $item = $order->items->firstWhere('id', (int) ($pending['qty_for'] ?? 0));
             $qty = $item !== null ? $this->selection->quantity($text, (int) $item->qty) : null;
 
+            // Live chat 2026-10-19: «لأ كده تمام» at the quantity question answered the earlier «تحبي تضيفي
+            // قطعة تانية؟» in her head — it means the one piece, never «مش واضحة».
+            if ($qty === null && $item !== null && $this->isDone($text)) {
+                $qty = 1;
+            }
+
             return $qty !== null ? $this->withQuantity($state, $order, $item, $qty) : null;
         }
 
@@ -535,7 +541,9 @@ final class OrderItemsStep extends BaseStep
                 continue;
             }
 
-            if ((int) $item->qty > 1) {
+            // The complaint picker (`optional`) never asks how many: the complaint is about the piece, not a count
+            // (live chat 2026-10-19: the question read as a misunderstanding).
+            if ((int) $item->qty > 1 && ! $this->optional) {
                 if ($added !== []) {
                     $messages[] = ['text' => $this->addedText($added)];
                 }
@@ -547,7 +555,7 @@ final class OrderItemsStep extends BaseStep
                 );
             }
 
-            $row = $this->row($item, 1, $actions[$id] ?? null, $state);
+            $row = $this->row($item, $this->optional ? max(1, (int) $item->qty) : 1, $actions[$id] ?? null, $state);
             $selected[] = $row;
             $added[] = $row;
 

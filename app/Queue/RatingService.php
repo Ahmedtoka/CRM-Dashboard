@@ -3,6 +3,7 @@
 namespace App\Queue;
 
 use App\Bot\ArabicNormalizer;
+use App\Bot\Episodes\ConversationEpisode;
 use App\Channels\Adapters\WhatsAppAdapter;
 use App\Enums\MessageDirection;
 use App\Enums\MessageStatus;
@@ -278,6 +279,16 @@ class RatingService
         $done = QueueEntry::query()->whereKey($e->id)->whereNull('review_stars')->update(['review_stars' => $stars, 'reviewed_at' => now()]);
 
         if ($done === 1) {
+            // Owner 2026-10-19: her rating closes the loop. No quiet return to the moderator inside the
+            // reopen window (Q8), and her next message starts fresh with the bot (ConversationEpisode).
+            $c = Conversation::query()->whereKey($e->conversation_id)->first();
+
+            if ($c !== null) {
+                $c->forceFill(['return_priority_until' => null])->save();
+                ConversationEpisode::seal($c);
+            }
+
+            QueueEntry::query()->whereKey($e->id)->update(['return_priority_until' => null]);
             SendQueueMessage::dispatch($e->id, 'queue_review_thanks', []);
             // Queue Part 2: the rating's points, once the answer committed.
             $id = $e->id;

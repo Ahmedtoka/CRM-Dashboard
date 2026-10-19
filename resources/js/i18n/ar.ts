@@ -2869,6 +2869,8 @@ const ar = {
         timer: 'مدة الشات',
         silence_left: 'قفل تلقائي بعد',
         waiting_reply: 'مستنية ردك',
+        awaiting_you: 'مستنية ردك من',
+        awaiting_her: 'مستنيين ردها',
         reply_overdue: 'متأخرة في الرد',
         handoff_left: 'تتحوّل لزميلة بعد',
         open_case: 'عندها كيس مفتوح #{id}',

@@ -190,9 +190,11 @@ final class ConversationEpisode
         $applied = ['closed_at' => $closedAt->toIso8601String(), 'kind' => $kind, 'topic' => $topic, 'at_id' => (int) $burst->last()->id];
 
         // Her own «شكرا» followed by a follow-up a few minutes later is the same chat (review I3).
-        $within = $kind === self::CUSTOMER
-            ? now()->lessThanOrEqualTo($closedAt->copy()->addMinutes(self::CUSTOMER_GRACE_MINUTES))
-            : now()->lessThanOrEqualTo($this->reopenUntil($c, $closedAt));
+        // A sealed close (she rated it, owner 2026-10-19) starts fresh whatever the window.
+        $within = empty($episode['sealed']) && $kind === self::CUSTOMER
+            && now()->lessThanOrEqualTo($closedAt->copy()->addMinutes(self::CUSTOMER_GRACE_MINUTES));
+
+        $within = $within || (empty($episode['sealed']) && $kind !== self::CUSTOMER && now()->lessThanOrEqualTo($this->reopenUntil($c, $closedAt)));
 
         if ($within) {
             $c->forceFill(['bot_state' => array_merge($state, [self::KEY => ['mode' => 'continue'] + $applied])])->save();
@@ -212,6 +214,23 @@ final class ConversationEpisode
         $c->forceFill(['bot_state' => $kept + [self::KEY => ['mode' => 'fresh', 'from_id' => (int) $first->id, 'memory' => $memory] + $applied]])->save();
 
         return 'fresh';
+    }
+
+    /**
+     * Her rating after a close seals it (owner 2026-10-19): the chat is over for her, so her next
+     * message starts fresh — the greeting and the menu — whatever the reopen window says. Nothing
+     * to seal once the close was already applied by a later message.
+     */
+    public static function seal(Conversation $c): void
+    {
+        $state = $c->bot_state ?? [];
+        $episode = $state[self::KEY] ?? null;
+
+        if (! is_array($episode) || ! isset($episode['closed_at']) || isset($episode['mode'])) {
+            return;
+        }
+
+        $c->forceFill(['bot_state' => array_merge($state, [self::KEY => $episode + ['sealed' => true]])])->save();
     }
 
     /** The end of the reopen window for a close at $closedAt. */

@@ -149,6 +149,8 @@ export interface QueueEntry {
     awaiting_reply_since: string | null;
     /** She waited past the apology: the window shows orange. */
     reply_overdue: boolean;
+    /** Whose turn it is in an open window: `agent` (she waits for us) or `customer` (we wait for her); null before anyone wrote. */
+    awaiting?: 'agent' | 'customer' | null;
     /** Seconds to the hand-off to a colleague, as of the server's answer; null without that clock and for an escalation. */
     handoff_left_seconds: number | null;
     return_priority_until: string | null;

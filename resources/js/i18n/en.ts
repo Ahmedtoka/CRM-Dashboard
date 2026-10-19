@@ -2913,6 +2913,8 @@ const en: Messages = {
         timer: 'Chat time',
         silence_left: 'Closes automatically in',
         waiting_reply: 'Waiting for your reply',
+        awaiting_you: 'Waiting for you for',
+        awaiting_her: 'Waiting for her reply',
         reply_overdue: 'Reply overdue',
         handoff_left: 'Handed to a colleague in',
         open_case: 'Open case #{id}',

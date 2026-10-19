@@ -47,6 +47,8 @@ export interface MyQueue {
     busy: Readonly<Ref<string | null>>;
     /** Seconds since the conversation reached her window. */
     elapsed: (entry: Pick<QueueEntry, 'delivered_at'>) => number;
+    /** Seconds she has been waiting for the moderator's reply; null while she is not. */
+    awaitingSeconds: (entry: Pick<QueueEntry, 'awaiting_reply_since'>) => number | null;
     /** Seconds to the auto-close; null while the silence clock is not running. */
     silenceLeft: (entry: QueueEntry) => number | null;
     /** The silence auto-close in seconds (the full width of the thread header's countdown bar); null until known. */
@@ -303,6 +305,12 @@ export function useMyQueue(options: Options): MyQueue {
         return Number.isNaN(from) ? 0 : Math.max(0, Math.floor((tick.value + skew - from) / 1000));
     }
 
+    function awaitingSeconds(entry: Pick<QueueEntry, 'awaiting_reply_since'>): number | null {
+        const from = entry.awaiting_reply_since ? Date.parse(entry.awaiting_reply_since) : NaN;
+
+        return Number.isNaN(from) ? null : Math.max(0, Math.floor((tick.value + skew - from) / 1000));
+    }
+
     function silenceLeft(entry: QueueEntry): number | null {
         if (entry.silence_left_seconds === null) return null;
         const since = stampedAt.get(entry.id) ?? tick.value;
@@ -513,6 +521,7 @@ export function useMyQueue(options: Options): MyQueue {
         leaderUserId,
         busy,
         elapsed,
+        awaitingSeconds,
         silenceLeft,
         silenceWarning,
         silenceTotal,

@@ -5,6 +5,7 @@ import { Popover, PopoverContent } from '@/components/ui/popover';
 import { useI18n } from '@/composables/useI18n';
 import { useMyQueueContext } from '@/composables/useMyQueue';
 import { formatClock, formatCount, formatSeconds } from '@/lib/format';
+import { windowClock } from '@/lib/windowClock';
 import { cn } from '@/lib/utils';
 import type { QueueEntry, QueuePriority } from '@/types/crm';
 import { Link } from '@inertiajs/vue3';
@@ -56,6 +57,8 @@ interface Card {
     first: string;
     unread: number;
     elapsed: string;
+    /** Her wait for this moderator's reply (window clock 2026-10-19); null while it is our turn to wait. */
+    awaiting: string | null;
     silence: string | null;
     /** Time to the hand-off while she is late with her reply (flow revision §4). */
     handoff: string | null;
@@ -77,6 +80,7 @@ const cards = computed<Card[]>(() =>
             first: (entry.customer?.name || t('queue.customer_fallback')).trim().split(/\s+/)[0],
             unread: props.unread[entry.conversation_id] ?? 0,
             elapsed: formatSeconds(queue!.elapsed(entry), locale.value),
+            awaiting: windowClock(entry, left) === 'awaiting_agent' ? formatSeconds(queue!.awaitingSeconds(entry) ?? 0, locale.value) : null,
             silence: left === null ? null : formatSeconds(left, locale.value),
             handoff: handoff === null ? null : formatSeconds(handoff, locale.value),
             tone: entry.reply_overdue
@@ -434,12 +438,16 @@ const silenceTone: Record<Card['tone'], string> = {
                         }}
                     </span>
                     <span
-                        v-else
-                        class="inline-flex items-center gap-0.5 text-[12.5px] tabular-nums text-fg-2"
-                        :title="`${t('queue.waiting_reply')} · ${t('queue.timer')}`"
+                        v-else-if="card.awaiting !== null"
+                        class="inline-flex items-center gap-0.5 text-[12.5px] font-semibold tabular-nums text-warn"
+                        :title="t('queue.awaiting_you')"
+                        data-awaiting
                     >
-                        <MessageCircleReply class="size-3" aria-hidden="true" /><span class="sr-only">{{ t('queue.waiting_reply') }}: </span
-                        >{{ card.elapsed }}
+                        <MessageCircleReply class="size-3" aria-hidden="true" /><span class="sr-only">{{ t('queue.awaiting_you') }}: </span
+                        >{{ card.awaiting }}
+                    </span>
+                    <span v-else class="inline-flex items-center gap-0.5 text-[12.5px] tabular-nums text-fg-2" :title="t('queue.timer')">
+                        <span class="sr-only">{{ t('queue.timer') }}: </span>{{ card.elapsed }}
                     </span>
                     <span
                         v-if="card.unread > 0"

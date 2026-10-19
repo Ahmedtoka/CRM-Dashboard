@@ -2,9 +2,10 @@
 import { useI18n } from '@/composables/useI18n';
 import { useMyQueueContext } from '@/composables/useMyQueue';
 import { formatCount, formatSeconds } from '@/lib/format';
+import { windowClock } from '@/lib/windowClock';
 import { queueReason } from '@/lib/queueReason';
 import type { Conversation, QueuePriority } from '@/types/crm';
-import { ArrowUpCircle, Bot, FolderOpen, Hand, Hourglass, Moon, Star, Ticket, type LucideIcon } from 'lucide-vue-next';
+import { ArrowUpCircle, Bot, FolderOpen, Hand, Hourglass, Moon, Star, Ticket, type LucideIcon, MessageCircleReply } from 'lucide-vue-next';
 import { computed, inject, ref, watch } from 'vue';
 
 /**
@@ -41,6 +42,14 @@ const badge = computed(() => (entry.value ? (badges[entry.value.priority] ?? nul
 
 const since = computed(() => (mine.value && entry.value ? formatSeconds(queue!.elapsed(entry.value), locale.value) : null));
 const silenceLeft = computed(() => (myWindow.value ? queue!.silenceLeft(myWindow.value) : null));
+/** Her wait for this moderator's reply (window clock 2026-10-19): shown until the moderator answers. */
+const awaiting = computed(() => {
+    const w = myWindow.value;
+    if (!w || w.reply_overdue || windowClock(w, silenceLeft.value) !== 'awaiting_agent') return null;
+    const seconds = queue!.awaitingSeconds(w);
+
+    return seconds === null ? null : formatSeconds(seconds, locale.value);
+});
 const handoffLeft = computed(() => (myWindow.value?.reply_overdue ? queue!.handoffLeft(myWindow.value) : null));
 // Remember the largest hand-off value seen per ticket (the bar's full width), outside the computed.
 watch(
@@ -79,7 +88,7 @@ const countdown = computed(() => {
     }
     if (silenceLeft.value === null) return null;
 
-    return { label: t('queue.silence_left'), time: formatSeconds(silenceLeft.value, locale.value) };
+    return { label: `${t('queue.awaiting_her')} · ${t('queue.silence_left')}`, time: formatSeconds(silenceLeft.value, locale.value) };
 });
 const countdownTone: Record<Tone, string> = {
     calm: 'bg-muted text-muted-foreground',
@@ -163,6 +172,9 @@ const summary = computed(() => {
         <span v-if="since !== null" class="shrink-0 text-2xs tabular-nums text-muted-foreground">{{
             t('queue.banner.received_since', { time: since })
         }}</span>
+        <span v-if="awaiting !== null" :class="[chip, 'tabular-nums', countdownTone.warning]" data-awaiting>
+            <MessageCircleReply class="size-3" aria-hidden="true" />{{ t('queue.awaiting_you') }} {{ awaiting }}
+        </span>
         <span v-if="countdown" :class="[chip, 'tabular-nums', countdownTone[tone]]" data-countdown>
             <Hourglass class="size-3" :class="tone === 'last' || tone === 'overdue' ? 'motion-safe:animate-pulse' : ''" aria-hidden="true" />
             {{ countdown.time === null ? t('queue.reply_overdue') : `${countdown.label} ${countdown.time}` }}

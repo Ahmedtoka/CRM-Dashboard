@@ -688,3 +688,17 @@ it('returns the whole order in one tap', function () {
 
     expect(oarFlow()['data']['selected_items'])->toHaveCount(2);
 });
+
+// Live chat 2026-10-19: she answered «لأ كده تمام» to «كام قطعة؟» and got «مش واضحة ليا».
+it('takes «لأ كده تمام» at the quantity question as one piece', function () {
+    $order = oarOrder([['title' => 'طرحة شيفون', 'qty' => 3, 'price' => 150], ['title' => 'جيبة', 'qty' => 1]]);
+    $item = $order->items[0];
+    oarVerified($order);
+
+    oarTap("item:{$item->id}");
+    expect(oarBot()->body)->toContain('كام قطعة؟');
+
+    oarTurn('لأ كده تمام');
+    expect(oarFlow()['data']['selected_items'][0]['qty'])->toBe(1)
+        ->and(oarBot()->body)->toBe("تمام، ضفت: طرحة شيفون × 1\n".OrderItemsStep::MORE_QUESTION);
+});

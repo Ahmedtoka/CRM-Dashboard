@@ -391,3 +391,18 @@ it('reads a typed digit as a real message when the question ended failed on the 
 
     expect($e->fresh()->review_stars)->toBeNull();
 });
+
+// Owner 2026-10-19: he rated the closed chat, wrote again a minute later and landed on the same moderator.
+it('seals the close once she rates: the return window ends and the bot starts fresh on her next message', function () {
+    Bus::fake([RunBotTurn::class]);
+    [$e, $u, $c] = rtClosed();
+    app(RatingService::class)->request($e);
+    expect($c->fresh()->return_priority_until)->not->toBeNull()
+        ->and($e->fresh()->return_priority_until)->not->toBeNull();
+
+    rtIngest('tap', '4', "queue_rating:{$e->id}:4", bot: true);
+
+    expect($c->fresh()->return_priority_until)->toBeNull()
+        ->and($e->fresh()->return_priority_until)->toBeNull()
+        ->and(($c->fresh()->bot_state['episode'] ?? [])['sealed'] ?? false)->toBeTrue();
+});

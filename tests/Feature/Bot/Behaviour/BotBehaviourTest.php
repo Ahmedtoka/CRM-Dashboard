@@ -1,8 +1,12 @@
 <?php
 
 use App\Bot\BotEngine;
-use App\Bot\Flows\FlowEngine;
+use App\Bot\Episodes\ConversationEpisode;
+use App\Bot\Flow\Jobs\RunBotTurn;
+use App\Bot\Flows\FlowScripts;
 use App\Bot\Flows\FlowState;
+use App\Bot\Jobs\BotHoldNotice;
+use App\Bot\Router\TurnMetrics;
 use App\Channels\Data\InboundMessageData;
 use App\Enums\Handler;
 use App\Enums\Platform;
@@ -10,16 +14,21 @@ use App\Enums\SenderType;
 use App\Inbox\InboxIngestor;
 use App\Inbox\OutboundService;
 use App\Models\BotRule;
+use App\Models\BotRun;
 use App\Models\BotSetting;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\SupportCase;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 // Staff complaints, round b1 (2026-10-19): every scenario runs through the real inbound pipeline
 // (InboxIngestor → ReplyScheduler → RunBotTurn → BotEngine) for BOTH routers, every model call faked.
@@ -101,11 +110,11 @@ function bbLastAgentHistory(): string
     $body = end($calls)['body'] ?? null;
 
     return $body === null ? '' : collect($body['messages'])->map(fn ($m) => is_array($m['content'])
-        ? collect($m['content'])->pluck('text')->reject(fn ($t) => str_starts_with((string) $t, 'CONTEXT'))->implode("
-")
-        : (string) $m['content'])->implode("
+        ? collect($m['content'])->pluck('text')->reject(fn ($t) => str_starts_with((string) $t, 'CONTEXT'))->implode('
+')
+        : (string) $m['content'])->implode('
 ---
-");
+');
 }
 
 function bbAgentCalls(): int
@@ -190,10 +199,10 @@ it('starts fresh after she closed it herself («لا تمام شكرا»), even 
 /** Her order 209129 (two pieces with photos), the return flow up to its picture cards. */
 function bbReturnPictures(): array
 {
-    $order = \App\Models\Order::factory()->create(['order_number' => '209129', 'shopify_order_name' => '#209129', 'shipping_phone' => '+201001234567']);
+    $order = Order::factory()->create(['order_number' => '209129', 'shopify_order_name' => '#209129', 'shipping_phone' => '+201001234567']);
     $order->update(['shipment_status' => 'delivered', 'delivered_at' => now()->subDays(3)]);
-    $dress = \App\Models\OrderItem::factory()->for($order)->create(['title' => 'فستان ستان', 'qty' => 1, 'price' => 850, 'discount' => 0, 'image_url' => 'https://cdn.shopify.com/s/files/a.jpg']);
-    $scarf = \App\Models\OrderItem::factory()->for($order)->create(['title' => 'طرحة شيفون', 'qty' => 1, 'price' => 150, 'discount' => 0, 'image_url' => 'https://cdn.shopify.com/s/files/b.jpg']);
+    $dress = OrderItem::factory()->for($order)->create(['title' => 'فستان ستان', 'qty' => 1, 'price' => 850, 'discount' => 0, 'image_url' => 'https://cdn.shopify.com/s/files/a.jpg']);
+    $scarf = OrderItem::factory()->for($order)->create(['title' => 'طرحة شيفون', 'qty' => 1, 'price' => 150, 'discount' => 0, 'image_url' => 'https://cdn.shopify.com/s/files/b.jpg']);
 
     bbSay('المرتجع والاستبدال', 'flow:return_exchange');
     bbSay('209129');
@@ -273,8 +282,8 @@ it('re-offers the menu with a short line for any other button of a request that 
 
 it('never trusts a piece button the bot did not send in this chat (no order shown, no request opened)', function (string $router) {
     bbFake($router, []);
-    $other = \App\Models\Order::factory()->create(['order_number' => '777001']);
-    $piece = \App\Models\OrderItem::factory()->for($other)->create(['title' => 'عباية', 'qty' => 1, 'price' => 900]);
+    $other = Order::factory()->create(['order_number' => '777001']);
+    $piece = OrderItem::factory()->for($other)->create(['title' => 'عباية', 'qty' => 1, 'price' => 900]);
     $c = bbSay('اهلا');
     $before = (int) Message::max('id');
 
@@ -325,11 +334,11 @@ it('answers a message that arrived while the bot was still thinking together wit
     $c = bbSay('الفستان الاسود متاح؟');
     // The late message's own (delayed) turn wakes up after its burst wait, as the queue runs it.
     $this->travel(15)->seconds();
-    (new \App\Bot\Flow\Jobs\RunBotTurn($c->id))->handle();
+    (new RunBotTurn($c->id))->handle();
 
     $replies = bbBot();
     expect($replies)->toBe(['الفستان الأسود متاح يا فندم والمقاس ده موجود'])
-        ->and(\App\Models\BotRun::where('decision', 'superseded')->count())->toBe(1)
+        ->and(BotRun::where('decision', 'superseded')->count())->toBe(1)
         // The answer that went out read BOTH messages.
         ->and(bbLastAgentHistory())->toContain('الفستان الاسود متاح؟')->toContain('ومقاس L متاح؟');
 })->with('routers');
@@ -337,17 +346,17 @@ it('answers a message that arrived while the bot was still thinking together wit
 it('still answers once when she sends two messages inside the burst wait', function (string $router) {
     bbFake($router, ['متاح يا فندم بالمقاسين']);
     BotSetting::current()->update(['burst_wait_seconds' => 3]);
-    \Illuminate\Support\Facades\Queue::fake();
+    Queue::fake();
 
     bbSay('الفستان الاسود متاح؟');
     $this->travel(1)->seconds();
     $c = bbSay('ومقاس L؟');
-    \Illuminate\Support\Facades\Queue::assertPushed(\App\Bot\Flow\Jobs\RunBotTurn::class, 2);
+    Queue::assertPushed(RunBotTurn::class, 2);
 
     // Both queued turns wake up: the first finds the due time moved, the second answers the burst.
     $this->travel(5)->seconds();
-    (new \App\Bot\Flow\Jobs\RunBotTurn($c->id))->handle();
-    (new \App\Bot\Flow\Jobs\RunBotTurn($c->id))->handle();
+    (new RunBotTurn($c->id))->handle();
+    (new RunBotTurn($c->id))->handle();
 
     expect(bbBot())->toBe(['متاح يا فندم بالمقاسين'])
         ->and(bbAgentCalls())->toBe(1);
@@ -359,10 +368,10 @@ it('sends the answer as it is once she has been waiting past the supersede limit
 
     $c = bbSay('الفستان الاسود متاح؟');
     $this->travel(15)->seconds();
-    (new \App\Bot\Flow\Jobs\RunBotTurn($c->id))->handle();
+    (new RunBotTurn($c->id))->handle();
 
     expect(bbBot())->toBe(['الفستان الأسود متاح يا فندم', 'والمقاس ده موجود كمان'])
-        ->and(\App\Models\BotRun::where('decision', 'superseded')->count())->toBe(0);
+        ->and(BotRun::where('decision', 'superseded')->count())->toBe(0);
 })->with('routers');
 
 // ---------------------------------------------------------------------------------------------
@@ -423,12 +432,11 @@ it('hands her to a person when the bot is unsure twice in a row, instead of «خ
     $this->travel(1)->minutes();
     $c = bbSay('طب في عروض النهارده؟');
 
-    $fallback = \App\Bot\Flows\FlowScripts::all()['bot_safe_fallback']['body'];
+    $fallback = FlowScripts::all()['bot_safe_fallback']['body'];
     expect(array_count_values(bbBot())[$fallback] ?? 0)->toBe(1)
         ->and($c->refresh()->handler)->not->toBe(Handler::Bot)
         ->and(implode(' ', bbBot()))->not->toContain('هدية');
 });
-
 
 // ---------------------------------------------------------------------------------------------
 // Coordinator live test (2026-10-19): a full request typed while the main menu is up.
@@ -436,10 +444,10 @@ it('hands her to a person when the bot is unsure twice in a row, instead of «خ
 
 function bbOrder1313(): array
 {
-    $order = \App\Models\Order::factory()->create(['order_number' => '1313', 'shopify_order_name' => '#1313', 'shipping_phone' => '+201001234567']);
+    $order = Order::factory()->create(['order_number' => '1313', 'shopify_order_name' => '#1313', 'shipping_phone' => '+201001234567']);
     $order->update(['shipment_status' => 'delivered', 'delivered_at' => now()->subDays(3)]);
-    $skirt = \App\Models\OrderItem::factory()->for($order)->create(['title' => 'جيبة بليسيه', 'qty' => 1, 'price' => 500, 'discount' => 0]);
-    $suit = \App\Models\OrderItem::factory()->for($order)->create(['title' => 'طقم رياضي', 'qty' => 1, 'price' => 900, 'discount' => 0]);
+    $skirt = OrderItem::factory()->for($order)->create(['title' => 'جيبة بليسيه', 'qty' => 1, 'price' => 500, 'discount' => 0]);
+    $suit = OrderItem::factory()->for($order)->create(['title' => 'طقم رياضي', 'qty' => 1, 'price' => 900, 'discount' => 0]);
 
     return [$order, $skirt, $suit];
 }
@@ -496,7 +504,6 @@ it('takes the order number she already typed as the second proof after her mobil
         ->and(FlowState::flow($c->refresh())['data']['order_verified'] ?? null)->toBeTrue();
 })->with('routers');
 
-
 // ---------------------------------------------------------------------------------------------
 // Code review of round b1 (C1, C2, I1–I6).
 // ---------------------------------------------------------------------------------------------
@@ -538,7 +545,7 @@ it('keeps her first message when the first turn of a new chat is superseded afte
             test()->ai->hold = false;
             $c = Conversation::firstOrFail();
             $m = $c->messages()->create(['platform' => $c->platform, 'direction' => 'out', 'sender_type' => 'bot', 'body' => 'ثانية واحدة يا فندم', 'status' => 'sent']);
-            \Illuminate\Support\Facades\Cache::put(\App\Bot\Jobs\BotHoldNotice::sentKey((string) app(\App\Bot\Router\TurnMetrics::class)->turn), $m->id, 60);
+            Cache::put(BotHoldNotice::sentKey((string) app(TurnMetrics::class)->turn), $m->id, 60);
             $c->messages()->create(['platform' => $c->platform, 'direction' => 'in', 'sender_type' => 'customer', 'body' => 'ومقاس L متاح؟', 'status' => 'received', 'external_id' => 'late-'.uniqid()]);
         }
         $body = $request->data();
@@ -552,11 +559,11 @@ it('keeps her first message when the first turn of a new chat is superseded afte
 
     $c = bbSay('الفستان الاسود متاح؟');
     $this->travel(15)->seconds();
-    (new \App\Bot\Flow\Jobs\RunBotTurn($c->id))->handle();
+    (new RunBotTurn($c->id))->handle();
 
     expect(bbLastAgentHistory())->toContain('الفستان الاسود متاح؟')->toContain('ومقاس L متاح؟')
         ->and(bbBot())->toHaveCount(2)->and(bbBot()[0])->toBe('ثانية واحدة يا فندم')
-        ->and(\App\Models\BotRun::where('decision', 'superseded')->count())->toBe(1);
+        ->and(BotRun::where('decision', 'superseded')->count())->toBe(1);
 })->with('routers');
 
 it('names the request the piece is already in (I1)', function (string $router) {
@@ -631,7 +638,6 @@ it('does not hand her over for being unsure again after she said «لأ» to the
     expect($c->refresh()->handler)->toBe(Handler::Bot);
 });
 
-
 it('sends tier 1 a shorter history (the last 8 messages) to keep it fast (coordinator live test)', function () {
     bbFake('hybrid', array_fill(0, 8, 'تحت أمرك يا فندم'));
     BotSetting::current()->update(['max_bot_turns' => 20]);
@@ -655,4 +661,20 @@ it('answers a question at the order step without fixing her request kind from it
     $c = bbSay('لو عايزة ابدل المقاس ينفع؟');
 
     expect(FlowState::flow($c->refresh())['data']['request_kind'] ?? null)->toBeNull();
+})->with('routers');
+
+// Owner 2026-10-19: once she rated the closed chat it is over — the next message is a new conversation.
+it('starts fresh right after she rated the closed chat, even inside the reopen window', function (string $router) {
+    bbFake($router, ['أهلاً بيكي يا فندم، أقدر أساعد حضرتك إزاي؟']);
+    $c = bbStaffHandledThenClosed();
+    ConversationEpisode::seal($c->refresh());
+    $before = (int) Message::max('id');
+
+    $this->travel(1)->minutes();
+    bbSay('طيب انا محدش حللي حاجة');
+
+    expect(($c->refresh()->bot_state['episode'] ?? [])['mode'] ?? null)->toBe('fresh')
+        ->and(implode("\n", bbBot($before)))->not->toContain('بنكمل')
+        // The closed chat is no longer the conversation (its tail may sit in CONTEXT as memory).
+        ->and(bbLastAgentHistory())->not->toContain('طلب المرتجع للفستان اتسجل');
 })->with('routers');

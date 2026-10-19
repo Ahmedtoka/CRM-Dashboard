@@ -24,6 +24,7 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\SupportCase;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -255,4 +256,24 @@ it('validates and walks the published complaint in the designer sandbox', functi
 
 it('gives the answer interpreter enough time to answer (6 s timed out in real use)', function () {
     expect((int) config('crm.anthropic.flow_timeout'))->toBeGreaterThanOrEqual(10);
+});
+
+// Live chat 2026-10-19: tapping a 3-piece line asked «كام قطعة؟», which read as a misunderstanding.
+it('never asks how many for a complaint about a line with several pieces', function () {
+    $order = Order::factory()->create([
+        'order_number' => '1047', 'shopify_order_name' => '#1047', 'shipping_name' => 'سارة أحمد', 'shipping_phone' => '+201001234567',
+    ]);
+    $tape = OrderItem::factory()->for($order)->create(['title' => 'Double Sided Tape', 'qty' => 3, 'price' => 50, 'discount' => 0]);
+    OrderItem::factory()->for($order)->create(['title' => 'Cotton Sleeves', 'qty' => 1, 'price' => 75, 'discount' => 0]);
+    ocpStart();
+    ocpTap('type', 'product', 'منتج');
+    Conversation::firstOrFail()->customer->update(['phone' => '01001234567']);
+    ocpTurn('01001234567');
+    expect(ocpFlow()['step'])->toBe('complaint_items');
+
+    ocpTap('complaint_items', "item:{$tape->id}", 'الشكوى عن القطعة دي');
+
+    expect(ocpBot()->body)->not->toContain('كام قطعة')
+        ->and(ocpFlow()['data']['selected_items'][0]['title'])->toBe('Double Sided Tape')
+        ->and(ocpFlow()['data']['selected_items'][0]['qty'])->toBe(3);
 });
