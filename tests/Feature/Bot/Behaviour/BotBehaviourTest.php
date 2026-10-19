@@ -647,3 +647,12 @@ it('sends tier 1 a shorter history (the last 8 messages) to keep it fast (coordi
     expect($last['model'])->toBe('claude-haiku-5-5')
         ->and(bbLastAgentHistory())->not->toContain('سؤال رقم 1 عن')->toContain('سؤال رقم 7 عن');
 });
+
+it('answers a question at the order step without fixing her request kind from it (re-review)', function (string $router) {
+    bbFake($router, ['أيوه ينفع تبدلي المقاس خلال 14 يوم يا فندم']);
+    bbOrder1313();
+    bbSay('المرتجع والاستبدال', 'flow:return_exchange');
+    $c = bbSay('لو عايزة ابدل المقاس ينفع؟');
+
+    expect(FlowState::flow($c->refresh())['data']['request_kind'] ?? null)->toBeNull();
+})->with('routers');

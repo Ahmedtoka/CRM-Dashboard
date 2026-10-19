@@ -272,7 +272,10 @@ class FlowEngine
             return false;
         }
 
-        return app(TaskOrchestrator::class)->start($c, $tasks);
+        // Queued means handled: a request already recorded for that order is reported by the queue itself.
+        app(TaskOrchestrator::class)->start($c, $tasks);
+
+        return true;
     }
 
     /**
@@ -282,8 +285,9 @@ class FlowEngine
      */
     private function keepRequestWords(Conversation $c, array $state, array $step, string $text): array
     {
+        // A question at the order step («لو عايزة أبدل المقاس ينفع؟») is answered, never kept as her request.
         if ($state['key'] !== 'return_exchange' || ($step['type'] ?? null) !== 'order' || isset($state['data']['request_kind']) || isset($state['data']['item_hints'])
-            || isset($state['data']['selected_items'])) {
+            || isset($state['data']['selected_items']) || $this->resolver->isQuestion($text)) {
             return $state;
         }
 
