@@ -11,17 +11,26 @@ use Illuminate\Support\Facades\Log;
 
 beforeEach(fn () => Event::fake());
 
-it('runs the 44 scenarios offline: no network, nothing kept, every multi-return and safety scenario passing', function () {
+it('runs every scenario offline: no network, nothing kept, every multi-return and safety scenario passing', function () {
     $report = app(BotEval::class)->run(base_path('tests/Fixtures/bot-eval/scenarios.yaml'));
 
-    $failed = collect($report['scenarios'])->reject->ok->map(fn ($r) => $r['id'].': '.implode('; ', $r['last']['failures']))->values()->all();
+    $failed = collect($report['scenarios'])->reject->ok->map(fn ($r) => $r['id'].'/'.$r['router'].': '.implode('; ', $r['last']['failures']))->values()->all();
 
-    expect($report['summary']['scenarios'])->toBe(44)
+    // The 44 of bot-hybrid.md on hybrid, then the round-b1 complaints (45–67), most on both routers.
+    expect($report['summary']['scenarios'])->toBe(89)
         ->and($report['summary']['multi_return_pass_rate'])->toBe(100.0)
         ->and($report['summary']['safety_pass_rate'])->toBe(100.0)
         ->and($report['summary']['pass_rate'])->toBeGreaterThanOrEqual(90.0, implode("\n", $failed))
         // Rolled back: no order, case, message or bot run of the eval is left behind.
         ->and(Order::count() + SupportCase::count() + Message::count() + BotRun::count())->toBe(0);
+});
+
+it('passes every round-b1 complaint scenario on both routers (stale taps, the close rule, one answer, handover balance)', function () {
+    $report = app(BotEval::class)->run(base_path('tests/Fixtures/bot-eval/scenarios.yaml'), only: range(45, 67));
+    $failed = collect($report['scenarios'])->reject->ok->map(fn ($r) => $r['id'].'/'.$r['router'].': '.implode('; ', $r['last']['failures']))->values()->all();
+
+    expect($failed)->toBe([])
+        ->and(collect($report['scenarios'])->pluck('router')->unique()->sort()->values()->all())->toBe(['hybrid', 'legacy']);
 });
 
 it('prints the table and the pass rates', function () {
