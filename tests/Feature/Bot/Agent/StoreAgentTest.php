@@ -135,3 +135,19 @@ it('never sends a promise (a gift, a discount) the tools and the knowledge did n
     expect(agentBotMessages()->pluck('body')->implode(' '))->not->toContain('هدية')
         ->and(BotRun::where('engine', 'agent')->count())->toBe(0);
 });
+
+// Round b1 live eval (2026-10-19, scenario 64): the real model paraphrases, so the word-for-word repeat guard
+// never fired. The agent now says so itself: offer_person offers a moderator instead of the same answer again.
+it('offers a person instead of repeating itself when the agent calls offer_person', function () {
+    Http::fakeSequence('api.anthropic.com/*')
+        ->push(agentToolUse('offer_person', ['reason' => 'asked again']))
+        ->push(agentText(''));
+
+    $c = agentSay('طب يعني اغسله ازاي بالظبط؟');
+
+    expect($c->refresh()->handler)->toBe(Handler::Bot)
+        ->and(FlowState::confirm($c))->toBe('handover_offer')
+        ->and(agentBotMessages()->pluck('body')->implode(' '))->toContain('تحبي أوصّلك')
+        ->and(agentBotMessages()->count())->toBe(1)
+        ->and(BotRun::latest('id')->first()->decision)->toBe('repeat_offer');
+});

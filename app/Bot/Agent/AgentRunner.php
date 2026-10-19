@@ -87,7 +87,7 @@ class AgentRunner
 
         // Failed, refused or cut off: the older path answers instead (legacy mode).
         if ($outcome === null || $outcome->refused || $outcome->truncated
-            || ($outcome->reply === '' && $outcome->flow === null && $outcome->handover === null)) {
+            || ($outcome->reply === '' && $outcome->flow === null && $outcome->handover === null && ! $outcome->offerPerson)) {
             return null;
         }
 
@@ -136,8 +136,9 @@ class AgentRunner
         $flows = ! $insideFlow && $outcome->handover === null && $tasks !== [];
 
         // Round b1: the same long answer again means the first one did not help — a person is offered.
+        // Live eval 2026-10-19: the real model paraphrases, so it says so itself with the offer_person tool.
         if (! $insideFlow && ! $flows && $outcome->handover === null && $outcome->products->isEmpty() && $outcome->branchCards === null
-            && RepeatedReply::repeats($c, $outcome->reply)) {
+            && ($outcome->offerPerson || RepeatedReply::repeats($c, $outcome->reply))) {
             $this->offerPerson($c);
 
             return $this->record($c, $texts, $outcome, 'repeat_offer', false, $started, $engine, $plan);

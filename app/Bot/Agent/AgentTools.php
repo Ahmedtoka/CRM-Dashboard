@@ -92,6 +92,13 @@ class AgentTools
                     'summary' => ['type' => 'string', 'description' => 'One or two Arabic sentences for the team: what she wants and what she already gave.'],
                 ], 'required' => ['reason', 'summary']],
             ],
+            [
+                'name' => 'offer_person',
+                'description' => "She asks again about something this chat already answered (your earlier reply is in the conversation), says the answer did not help, or wants it 'exactly' — and KNOWLEDGE and the tools give you nothing new. Do not repeat the same answer: this tool sends her «خليني أتأكد من المعلومة دي مع الفريق، تحبي أوصّلك بحد منهم؟» with yes/no buttons. Write nothing to her in the same turn.",
+                'input_schema' => ['type' => 'object', 'properties' => [
+                    'reason' => ['type' => 'string', 'description' => 'One short English sentence: what she asked again.'],
+                ]],
+            ],
         ];
 
         // Not on the legacy agent: it already is the strongest model, and nothing above it takes the turn.
@@ -135,6 +142,7 @@ class AgentTools
             'find_branches' => $this->findBranches($input, $outcome),
             'get_shipping_fee' => $this->shippingFee($input),
             'handover_to_human' => $this->handover($input, $outcome),
+            'offer_person' => $this->offerPerson($outcome),
             'start_flow' => $this->startFlow($input, $outcome),
             'get_order_items' => $this->orderItems($input, $c),
             'escalate' => $this->escalate($input, $outcome),
@@ -225,6 +233,13 @@ class AgentTools
         $outcome->handover = ['reason' => mb_substr((string) ($input['reason'] ?? 'agent_handover'), 0, 60), 'summary' => (string) ($input['summary'] ?? '')];
 
         return 'Done: a human agent takes over after your message, and she is told so automatically. Do not promise a time.';
+    }
+
+    private function offerPerson(AgentOutcome $outcome): string
+    {
+        $outcome->offerPerson = true;
+
+        return 'Done: she is offered a person right after this turn, with yes/no buttons. Write nothing.';
     }
 
     private function startFlow(array $input, AgentOutcome $outcome): string

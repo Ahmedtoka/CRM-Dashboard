@@ -269,7 +269,7 @@ class HybridRouter
 
     private function usable(AgentOutcome $o): bool
     {
-        return $o->reply !== '' || $o->flow !== null || $o->handover !== null || $o->products->isNotEmpty();
+        return $o->reply !== '' || $o->flow !== null || $o->handover !== null || $o->offerPerson || $o->products->isNotEmpty();
     }
 
     /**

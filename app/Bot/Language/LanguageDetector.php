@@ -34,6 +34,16 @@ final class LanguageDetector
         'aiwa', 'aywa', 'ayoa', 'gamda', 'helw', 'helwa', 'kwayes', 'kwais', 'kwayess',
         'orderi', 'talaby', 'mandoob', 'mandob', 'estebdal', 'morgtaa', 'mortagaa', 'fadlek', 'fadlik',
         'law', 'samahti', 'meen', 'eshmalha', 'haga', 'hagat', 'betaa', 'bta3', 'ezaa',
+        // Live eval 2026-10-19 (scenario 50): «tab hayegy emta el mandoub?» read as English. Everyday
+        // words of a shop chat written without digit-letters.
+        'tab', 'tb', 'tayeb', 'tayb', 'mashi', 'mashy', 'hayegy', 'hayegi', 'hayigi', 'haygy', 'yegy', 'hayewsal', 'yewsal', 'ywsl', 'wasal', 'wesel',
+        'mandoub', 'mandoop', 'howa', 'heya', 'hya', 'hoa', 'homa', 'ehna', 'enty', 'ento', 'da', 'di', 'dih', 'elly', 'ely', 'eli',
+        'bokra', 'bukra', 'imta', 'naharda', 'elnaharda', 'enaharda', 'leeh', 'lih', 'mnen', 'mneen', 'menen', 'hena', 'henak',
+        'fostan', 'fustan', 'fasateen', 'isdal', 'esdal', 'tarha', 'abayat', 'gonella', 'gebba', 'blouza', 'bloza',
+        'eswed', 'eswid', 'aswad', 'abyad', 'byad', 'lon', 'alwan', 'maqas', 'makas', 'maqasat', 'kbeer', 'kebeer', 'kbir', 'soghayar', 'sogayar',
+        'mawgood', 'mawgoud', 'mawjood', 'motah', 'matah', 'kam', 'bkam', 'bekam', 'bikam', 'ghaly', 'ghali', 'rekhees',
+        'shahn', 'tawseel', 'tawsil', 'tasleem', 'taslim', 'estelam', 'estlam', 'rakm', 'rakam', 'tabdeel', 'tabdil', 'ragaa', 'targeea',
+        'lazem', 'lazm', 'mehtaga', 'mehtag', 'mestagel', 'mestagla', 'maleesh', 'mandish', 'wallahi', 'walahi', 'inshallah', 'yarab',
     ];
 
     /**

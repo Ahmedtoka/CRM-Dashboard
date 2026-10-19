@@ -5057,6 +5057,7 @@ const en: Messages = {
                 find_branches: 'Finds the nearest branch and its hours.',
                 get_shipping_fee: 'Works out the shipping fee for a governorate.',
                 handover_to_human: 'Hands the chat to a person.',
+                offer_person: 'When she asks the same thing again and it has nothing new: offers a person instead of repeating the answer.',
                 start_flow: 'Starts a flow: return, exchange, complaint, cancel or edit an order.',
                 escalate: 'Haiku asks Sonnet to take a hard case.',
             },

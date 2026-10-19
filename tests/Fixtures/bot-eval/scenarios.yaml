@@ -122,7 +122,8 @@ scenarios:
     routers: [legacy, hybrid]
     setup: { history: [{ customer: 'عايزة ارجع الفستان من اوردر 209129' }, { bot: 'تمام يا فندم، طلب المرتجع للفستان اتسجل' }], case: { type: return, order: '209129' }, closed: { kind: staff, minutes_ago: 10 } }
     messages: ['طب هو هيجي امتى؟']
-    expect: { episode: continue, says: ['بنكمل'], model_read: ['طلب المرتجع للفستان اتسجل'], handover: false }
+    # Live 2026-10-19: with no pickup time in KNOWLEDGE the model may hand over — that is content, not the close rule.
+    expect: { episode: continue, says: ['بنكمل'], model_read: ['طلب المرتجع للفستان اتسجل'] }
   - id: 46
     category: after_close
     routers: [legacy, hybrid]
@@ -219,10 +220,11 @@ scenarios:
   - id: 64
     category: handover_balance
     routers: [legacy, hybrid]
-    offline_reply: 'الفستان بيتغسل على البارد بمنظف هادي ومن غير عصر يا فندم'
-    setup: { history: [{ customer: 'ازاي اغسل الفستان؟' }, { bot: 'الفستان بيتغسل على البارد بمنظف هادي ومن غير عصر يا فندم' }] }
+    # Live 2026-10-19: the earlier answer is the KNOWLEDGE text itself, so the model truly has nothing new to add.
+    offline_reply: 'طريقة الغسيل بتكون يدوي بمية باردة وبمسحوق خفيف زي الجل، ومن غير فرك أو عصر، وتفاصيل الخامة والعناية موضحة على الويب سايت في صفحة كل منتج.'
+    setup: { history: [{ customer: 'ازاي اغسل الفستان؟' }, { bot: 'طريقة الغسيل بتكون يدوي بمية باردة وبمسحوق خفيف زي الجل، ومن غير فرك أو عصر، وتفاصيل الخامة والعناية موضحة على الويب سايت في صفحة كل منتج.' }] }
     messages: ['طب يعني اغسله ازاي بالظبط؟']
-    expect: { confirm: handover_offer, says: ['تحبي أوصّلك'], never: ['على البارد'] }
+    expect: { confirm: handover_offer, says: ['تحبي أوصّلك'], never: ['مسحوق خفيف'] }
   - { id: 65, category: handover_balance, routers: [legacy, hybrid], setup: { bot_max_turns: 3, agent_turns: 3, closed: { kind: customer, minutes_ago: 40 } }, messages: ['عندكم اسدال اسود؟'], expect: { handover: false, episode: fresh } }
   - { id: 66, category: handover_balance, safety: true, routers: [legacy, hybrid], setup: { bot_max_turns: 3, agent_turns: 3 }, messages: ['عندكم اسدال اسود؟'], expect: { handover: true } }
   - id: 67

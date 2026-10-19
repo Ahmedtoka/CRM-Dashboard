@@ -21,6 +21,9 @@ final class AgentOutcome
     /** @var array{reason:string, summary:string}|null */
     public ?array $handover = null;
 
+    /** The agent chose not to repeat itself: she is offered a person instead (the `offer_person` tool, round b1). */
+    public bool $offerPerson = false;
+
     /** @var list<string> everything the tools returned: the only evidence a number or a link may come from */
     public array $evidence = [];
 

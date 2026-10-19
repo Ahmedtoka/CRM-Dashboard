@@ -4,12 +4,12 @@ namespace App\Bot\Eval;
 
 use App\Bot\Ai\SonnetBudget;
 use App\Bot\BotEngine;
+use App\Bot\Brain\Feedback\FeedbackEvalCases;
 use App\Bot\Episodes\ConversationEpisode;
+use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\ReplyScheduler;
 use App\Bot\Flow\TurnSupersede;
 use App\Bot\Flow\TurnSuperseded;
-use App\Bot\Brain\Feedback\FeedbackEvalCases;
-use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flows\FakeFlowAnswerInterpreter;
 use App\Bot\Flows\FlowAnswerInterpreter;
 use App\Bot\Flows\FlowEngine;
@@ -220,6 +220,8 @@ class BotEval
                 'handover' => $c->handler !== Handler::Bot,
                 'cases' => SupportCase::where('id', '>', $casesBefore)->count(),
                 'replies' => array_column($log->messages, 'text'),
+                // Live eval 2026-10-19: a product answer is an intro line plus a card message — one answer, two bubbles.
+                'answers' => self::answers($log->messages),
                 'cost_usd' => (float) ($run?->cost_usd ?? 0),
                 'model_calls' => count($this->calls),
                 'superseded' => $superseded,
@@ -242,6 +244,30 @@ class BotEval
             $this->conversation = null;
             app(TurnMetrics::class)->reset();
         }
+    }
+
+    /**
+     * How many answers she got: a card message right after a text rides on it (ProductBrowser::show sends
+     * the intro, then the cards), so «one answer» may be two bubbles.
+     *
+     * @param  list<array{text:string, cards:array|null}>  $messages
+     */
+    public static function answers(array $messages): int
+    {
+        $count = 0;
+        $previousWasText = false;
+
+        foreach ($messages as $m) {
+            $isCards = ($m['cards'] ?? null) !== null;
+
+            if (! ($isCards && $previousWasText)) {
+                $count++;
+            }
+
+            $previousWasText = ! $isCards;
+        }
+
+        return $count;
     }
 
     /** The queued turn's clock and id, as RunBotTurn sets them (the hold notice is off in the eval). */
@@ -339,8 +365,8 @@ class BotEval
         }
 
         // Round b1: how many messages she got, a superseded draft, the close rule, what the model read.
-        if (isset($expect['replies']) && count($o['replies']) !== (int) $expect['replies']) {
-            $f[] = 'replies '.count($o['replies']).' != '.$expect['replies'];
+        if (isset($expect['replies']) && ($o['answers'] ?? count($o['replies'])) !== (int) $expect['replies']) {
+            $f[] = 'replies '.($o['answers'] ?? count($o['replies'])).' != '.$expect['replies'];
         }
 
         if (isset($expect['superseded']) && $o['superseded'] !== (int) $expect['superseded']) {
