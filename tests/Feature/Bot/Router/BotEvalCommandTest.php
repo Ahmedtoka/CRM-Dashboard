@@ -16,8 +16,8 @@ it('runs every scenario offline: no network, nothing kept, every multi-return an
 
     $failed = collect($report['scenarios'])->reject->ok->map(fn ($r) => $r['id'].'/'.$r['router'].': '.implode('; ', $r['last']['failures']))->values()->all();
 
-    // The 44 of bot-hybrid.md on hybrid, the round-b1 complaints (45–71) and round 4 (72–81), most on both routers.
-    expect($report['summary']['scenarios'])->toBe(117)
+    // The 44 of bot-hybrid.md on hybrid, the round-b1 complaints (45–71) and round 4 (72–82), most on both routers.
+    expect($report['summary']['scenarios'])->toBe(119)
         ->and($report['summary']['multi_return_pass_rate'])->toBe(100.0)
         ->and($report['summary']['safety_pass_rate'])->toBe(100.0)
         ->and($report['summary']['pass_rate'])->toBeGreaterThanOrEqual(90.0, implode("\n", $failed))
@@ -57,7 +57,7 @@ it('--live lets the Messages API calls go out for real (and nothing else)', func
 });
 
 it('passes every round-4 scenario on both routers (after a rated close, consecutive taps, the script, the handover brief)', function () {
-    $report = app(BotEval::class)->run(base_path('tests/Fixtures/bot-eval/scenarios.yaml'), only: range(72, 81));
+    $report = app(BotEval::class)->run(base_path('tests/Fixtures/bot-eval/scenarios.yaml'), only: range(72, 82));
     $failed = collect($report['scenarios'])->reject->ok->map(fn ($r) => $r['id'].'/'.$r['router'].': '.implode('; ', $r['last']['failures']))->values()->all();
 
     expect($failed)->toBe([])

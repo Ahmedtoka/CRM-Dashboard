@@ -1061,3 +1061,48 @@ it('reads «محدش حللي حاجة» after a 1-star complaint close as that 
         ->and(implode("\n", bbBot($before)))->not->toContain('بتسألي عن')
         ->and(bbLastAgentPrompt())->toContain('open request')->toContain('شكوى');
 })->with('routers');
+
+it('names the topic and the order on the handover line of the thread', function (string $router) {
+    bbFake($router, []);
+    bbOrder209129();
+    bbSay('شكوى', 'flow:complaint');
+    bbSay('منتج', 'step:complaint:type:product');
+    bbSay('209129');
+    bbSay('4567');
+    $c = bbSay('اديني موظف اكلمه');
+
+    $line = (string) Message::where('conversation_id', $c->id)->where('sender_type', SenderType::System->value)->latest('id')->value('body');
+    expect($line)->toContain('تم تحويل المحادثة لفريق خدمة العملاء')->toContain('شكوى عن منتج')->toContain('209129');
+})->with('routers');
+
+it('hands over instead of offering a person twice when she asks again right after the offer (live eval, hybrid)', function () {
+    config(['crm.bot.router.mode' => 'hybrid']);
+    test()->ai->step = 0;
+    Http::fake(['api.anthropic.com/*' => function (Request $request) {
+        $body = $request->data();
+        if (isset($body['output_config']['format'])) {
+            return Http::response(['stop_reason' => 'end_turn', 'model' => 'claude-haiku-5-5', 'usage' => ['input_tokens' => 1, 'output_tokens' => 1], 'content' => [['type' => 'text', 'text' => json_encode(['tasks' => [['kind' => 'other', 'order_refs' => [], 'items' => [], 'governorate' => null, 'place' => null, 'product_query' => null, 'question' => null, 'confidence' => 0.9]], 'sentiment' => 'neutral', 'wants_human' => false, 'continues_previous' => false, 'policy_edge' => false, 'clarify' => null])]]]);
+        }
+        test()->ai->log[] = ['kind' => 'agent', 'body' => $body];
+
+        // The first question gets a plain answer; «ask again» after that is answered with the offer_person tool, every time.
+        if (test()->ai->step++ === 0) {
+            return Http::response(['stop_reason' => 'end_turn', 'model' => $body['model'], 'usage' => ['input_tokens' => 1, 'output_tokens' => 1], 'content' => [['type' => 'text', 'text' => 'العروض بتتنشر على صفحتنا أول بأول يا فندم']]]);
+        }
+
+        return Http::response(['stop_reason' => 'tool_use', 'model' => $body['model'], 'usage' => ['input_tokens' => 1, 'output_tokens' => 1], 'content' => [['type' => 'tool_use', 'id' => 'tu_'.uniqid(), 'name' => 'offer_person', 'input' => ['reason' => 'asked again']]]]);
+    }]);
+
+    bbSay('عايزة اعرف عن العروض');
+    $this->travel(1)->minutes();
+    $c = bbSay('طب في عروض النهارده؟');
+    $fallback = FlowScripts::all()['bot_safe_fallback']['body'];
+    expect(array_count_values(bbBot())[$fallback] ?? 0)->toBe(1)
+        ->and($c->refresh()->handler)->toBe(Handler::Bot);
+
+    $this->travel(1)->minutes();
+    $c = bbSay('يعني في ولا لأ؟');
+
+    expect(array_count_values(bbBot())[$fallback] ?? 0)->toBe(1)
+        ->and($c->refresh()->handler)->not->toBe(Handler::Bot);
+});

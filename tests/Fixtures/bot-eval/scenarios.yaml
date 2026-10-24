@@ -224,12 +224,15 @@ scenarios:
     offline_reply: 'طريقة الغسيل بتكون يدوي بمية باردة وبمسحوق خفيف زي الجل، ومن غير فرك أو عصر، وتفاصيل الخامة والعناية موضحة على الويب سايت في صفحة كل منتج.'
     setup: { history: [{ customer: 'ازاي اغسل الفستان؟' }, { bot: 'طريقة الغسيل بتكون يدوي بمية باردة وبمسحوق خفيف زي الجل، ومن غير فرك أو عصر، وتفاصيل الخامة والعناية موضحة على الويب سايت في صفحة كل منتج.' }] }
     messages: ['طب يعني اغسله ازاي بالظبط؟']
-    expect: { confirm: handover_offer, says: ['تحبي أوصّلك'], never: ['مسحوق خفيف'] }
+    # Round 4 (live 2026-10-24): the real model either offers a person or hands over (both end the circle);
+    # the strict offer is scenario 82, offline. What must never happen is the same answer again.
+    expect: { never: ['مسحوق خفيف'] }
   - { id: 65, category: handover_balance, routers: [legacy, hybrid], setup: { bot_max_turns: 3, agent_turns: 3, closed: { kind: customer, minutes_ago: 40 } }, messages: ['عندكم اسدال اسود؟'], expect: { handover: false, episode: fresh } }
   - { id: 66, category: handover_balance, safety: true, routers: [legacy, hybrid], setup: { bot_max_turns: 3, agent_turns: 3 }, messages: ['عندكم اسدال اسود؟'], expect: { handover: true } }
   - id: 67
     category: handover_balance
     routers: [hybrid]
+    offline_only: true
     offline_reply: 'ولو طلبتي النهارده ليكي هدية'
     setup: { history: [{ customer: 'عايزة اعرف عن العروض' }, { bot: 'خليني أتأكد من المعلومة دي مع الفريق، تحبي أوصّلك بحد منهم؟' }] }
     messages: ['طب في عروض النهارده؟']
@@ -313,3 +316,13 @@ scenarios:
     routers: [legacy, hybrid]
     messages: ['عايزة اكلم حد عشان الاوردر 209129 اتأخر ومحدش بيرد']
     expect: { handover: true, summary_has: ['#209129', 'آخر كلامها', 'مزاجها', 'زعلانة'] }
+
+  # The strict form of 64 (the canned model repeats itself, so the guard offers a person), offline only.
+  - id: 82
+    category: handover_balance
+    routers: [legacy, hybrid]
+    offline_only: true
+    offline_reply: 'طريقة الغسيل بتكون يدوي بمية باردة وبمسحوق خفيف زي الجل، ومن غير فرك أو عصر، وتفاصيل الخامة والعناية موضحة على الويب سايت في صفحة كل منتج.'
+    setup: { history: [{ customer: 'ازاي اغسل الفستان؟' }, { bot: 'طريقة الغسيل بتكون يدوي بمية باردة وبمسحوق خفيف زي الجل، ومن غير فرك أو عصر، وتفاصيل الخامة والعناية موضحة على الويب سايت في صفحة كل منتج.' }] }
+    messages: ['طب يعني اغسله ازاي بالظبط؟']
+    expect: { confirm: handover_offer, says: ['تحبي أوصّلك'], never: ['مسحوق خفيف'] }

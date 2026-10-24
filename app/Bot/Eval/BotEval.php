@@ -102,6 +102,11 @@ class BotEval
                 continue;
             }
 
+            // Round 4: a scenario that needs a canned model answer (a guard that must fail) cannot run on the real model.
+            if ($live && ($scenario['offline_only'] ?? false) === true) {
+                continue;
+            }
+
             // Round b1: a scenario may run on both routers (`routers: [legacy, hybrid]`), one result each.
             foreach ((array) ($scenario['routers'] ?? ['hybrid']) as $router) {
                 $runs = [];

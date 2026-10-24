@@ -254,7 +254,7 @@ final class HandoverBrief
             ->when($beforeId, fn ($q, $id) => $q->where('id', '<', $id))
             ->whereNotNull('body')->orderByDesc('id')->limit(8)->pluck('body')
             ->map(fn ($b) => trim(preg_replace('/\s+/u', ' ', (string) $b) ?? ''))
-            ->filter(fn (string $t) => $t !== '' && preg_match('/[?؟]\s*$/u', $t) !== 1 && ! str_contains($t, 'ثانية واحدة'))
+            ->filter(fn (string $t) => $t !== '' && preg_match('/[?؟]\s*$/u', $t) !== 1 && ! str_contains($t, 'ثانية واحدة') && ! str_contains($t, 'تحويلك') && ! str_contains($t, 'رقم تذكرتك'))
             ->take(2)->reverse()->values();
 
         return $lines->isEmpty() ? null : $lines->map(fn (string $t) => '«'.Str::limit($t, 100).'»')->implode(' / ');

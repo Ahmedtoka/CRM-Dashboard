@@ -319,14 +319,17 @@ class BotEngine
         $c->handover_category = $category;
         $c->save();
 
-        $this->outbound->sendSystem($c, 'تم تحويل المحادثة لفريق خدمة العملاء');
-
-        $this->logger->log(ActorType::System, null, ActivityLogger::CONVERSATION_HANDOVER, null, $c, ['reason' => $reason]);
-
         // Round 4 (2026-10-24): the moderator gets the topic, the order, what she wants, what the bot
         // already answered, her mood and her last lines — the same lines on the note and the window.
         $brief = rescue(fn () => app(HandoverBrief::class)->build($c, $reason, $category, $customerText, (array) ($routing['summary_extra'] ?? []), $routing['flow'] ?? null), null, report: true)
             ?? ['lines' => [], 'topic' => null, 'order_number' => null];
+
+        // The line in the thread (staff only) says what it is about, not just that it happened.
+        $about = collect([$brief['topic'], $brief['order_number'] !== null && ! str_contains((string) $brief['topic'], (string) $brief['order_number']) ? 'أوردر #'.$brief['order_number'] : null])->filter()->implode(' — ');
+        $this->outbound->sendSystem($c, 'تم تحويل المحادثة لفريق خدمة العملاء'.($about !== '' ? ' — '.\Illuminate\Support\Str::limit($about, 140) : ''));
+
+        $this->logger->log(ActorType::System, null, ActivityLogger::CONVERSATION_HANDOVER, null, $c, ['reason' => $reason]);
+
         $summaryExtra = array_values(array_unique(array_filter(array_merge((array) ($routing['summary_extra'] ?? []), $brief['lines']), fn ($l) => is_string($l) && trim($l) !== '')));
 
         if ($customerText !== null) {
