@@ -4768,6 +4768,7 @@ const en: Messages = {
                 trend_up: 'Rising', trend_down: 'Falling', trend_flat: 'Flat',
                 stock_out: 'Product «{product}» is out of stock', stock_low: 'Product «{product}» has only {n} left (threshold {threshold})',
                 keep_note: 'Doing fine as far as we can see: nothing to do today.',
+                google_note: 'Google is read-only from here: do this one in Google Ads.',
             },
             explorer: { title: 'All ads', description: 'Every ad on every account, with our own numbers (real Shopify orders), not only the platform figures.', empty: 'No ads match these filters', totals: 'Total', per_page: 'Per page', shown: 'Showing {n} of {total}', page: 'Page {n} of {total}', prev: 'Previous', next: 'Next', naming_bad: 'Name breaks the convention', naming_hint: 'The campaign name does not follow the agreed naming convention', tiers: 'Tier', tier_top: 'Winners and promising', tier_all: 'All scored', expand: 'Expand {name}', collapse: 'Collapse {name}' },
             numbers: {

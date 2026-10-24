@@ -22,7 +22,7 @@ class NumbersController extends Controller
 {
     use BuildsAdsPages;
 
-    public const SECTIONS = ['buyers', 'chat', 'accounts'];
+    public const SECTIONS = ['buyers', 'chat', 'accounts', 'attribution'];
 
     public function __invoke(Request $request, AdsOverview $overview, RevenueSummary $summary, TopAccounts $top,
         BuyerScorecard $cards, AdsReport $chat, AdsQuery $q, ChatFunnel $funnel, AttributionBreakdown $attribution): Response

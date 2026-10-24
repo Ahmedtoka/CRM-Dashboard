@@ -53,3 +53,12 @@ describe('DecisionCard', () => {
         expect(w.text()).toContain('2');
     });
 });
+
+describe('DecisionCard Google', () => {
+    it('has no execute button for Google (read-only) and says where to do it', () => {
+        const g: DailyDecision = { ...base, ad: { ...base.ad, platform: 'google' } };
+        const w = mount(DecisionCard, { props: { decision: g, currency: 'EGP', execute: true }, global: { stubs } });
+        expect(w.find('[data-test="execute"]').exists()).toBe(false);
+        expect(w.find('[data-test="google-note"]').exists()).toBe(true);
+    });
+});

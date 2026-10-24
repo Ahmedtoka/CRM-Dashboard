@@ -4724,6 +4724,7 @@ const ar = {
                 trend_up: 'طالع', trend_down: 'نازل', trend_flat: 'ثابت',
                 stock_out: 'المنتج «{product}» خلص من المخزون', stock_low: 'المنتج «{product}» باقي منه {n} بس (الحد {threshold})',
                 keep_note: 'ماشي كويس على قد ما نشوف: مفيش حاجة نعملها النهارده.',
+                google_note: 'جوجل للقراءة بس من هنا: نفّذ القرار ده من Google Ads.',
             },
             explorer: { title: 'كل الإعلانات', description: 'كل الإعلانات في كل الحسابات، بأرقامنا احنا (الأوردرات الحقيقية من شوبيفاي) مش أرقام المنصة بس.', empty: 'مفيش إعلانات بالفلاتر دي', totals: 'الإجمالي', per_page: 'في الصفحة', shown: 'بيعرض {n} من {total}', page: 'صفحة {n} من {total}', prev: 'السابق', next: 'التالي', naming_bad: 'الاسم مش على النظام', naming_hint: 'اسم الحملة مش ماشي على نظام التسمية المتفق عليه', tiers: 'التصنيف', tier_top: 'الكسبان والواعد', tier_all: 'كل اللي اتقيّموا', expand: 'افتح {name}', collapse: 'اقفل {name}' },
             numbers: {

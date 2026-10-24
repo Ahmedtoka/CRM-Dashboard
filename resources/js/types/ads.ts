@@ -1328,7 +1328,7 @@ export interface AdsChatReport {
 
 /** `buyers` here is the buyer cards (it replaces the common buyer options; the filter bar derives its options from the cards). */
 export interface AdsNumbersProps extends Omit<AdsPageBase, 'buyers'> {
-    filters: AdsControlFilters & { section: 'buyers' | 'chat' | 'accounts' | null };
+    filters: AdsControlFilters & { section: 'buyers' | 'chat' | 'accounts' | 'attribution' | null };
     sync_errors: { account: string; error: string }[];
     sync: AdsSync;
     overview: AdsOverviewData;

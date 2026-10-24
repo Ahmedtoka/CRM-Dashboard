@@ -87,6 +87,7 @@ function done(): void {
         </p>
         <WhyList :reasons="decision.reasons" :currency="currency" class="pt-1" />
         <p v-if="decision.kind === 'keep'" class="pt-1 text-2xs text-fg-3">{{ t('ads.control.daily.keep_note') }}</p>
+        <p v-else-if="action && decision.ad.platform === 'google'" class="pt-1 text-2xs text-fg-3" data-test="google-note">{{ t('ads.control.daily.google_note') }}</p>
         <template #actions>
             <Button variant="ghost" size="sm" class="h-11 md:h-[30px]" :class="ADS_TONE.quiet" @click="emit('openAd', decision.ad.id)">{{ t('ads.control.row.why') }}</Button>
             <template v-if="action && allowed">
