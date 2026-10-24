@@ -226,6 +226,36 @@ class TikTokAdsWriter implements AdPlatformWriter
         ]);
     }
 
+    /** TikTok budget endpoints per level (the ad group is TikTok's ad set); budgets travel in the major unit (decimal). */
+    private const BUDGET_PATHS = [
+        'campaign' => ['campaign/update/', 'campaign_id'],
+        'adset' => ['adgroup/budget/update/', 'adgroup_id'],
+    ];
+
+    /**
+     * Daily budget of a campaign or ad group. ASSUMPTION (same as readObject): TikTok budgets are decimals in the account
+     * currency's major unit, so the minor amount is divided by 100. The ad group endpoint takes a list of {adgroup_id, budget}.
+     */
+    public function setDailyBudget(AdAccount $a, string $level, string $externalId, int $dailyBudgetMinor): void
+    {
+        if (! isset(self::BUDGET_PATHS[$level])) {
+            throw new AdsApiException('Only a campaign or an ad group has a daily budget on TikTok.');
+        }
+        if ($dailyBudgetMinor <= 0) {
+            throw new AdsApiException('A daily budget must be above zero.');
+        }
+        [$path, $key] = self::BUDGET_PATHS[$level];
+        $budget = round($dailyBudgetMinor / 100, 2);
+        $body = ['advertiser_id' => $this->advertiserId($a)];
+        if ($level === 'adset') {
+            $body['budgets'] = [[$key => $this->numericId($externalId), 'budget' => $budget]];
+        } else {
+            $body[$key] = $this->numericId($externalId);
+            $body['budget'] = $budget;
+        }
+        $this->api->post($this->token($a), $path, $body);
+    }
+
     /**
      * Live status and budgets of one object and its parents (A1): ad/get, then adgroup/get, then campaign/get, each
      * filtered by id with STATUS_ALL so a deleted object is seen (and reported DELETED). Statuses come back in the

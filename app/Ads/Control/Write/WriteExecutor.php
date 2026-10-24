@@ -6,6 +6,7 @@ use App\Ads\Alerts\AlertStore;
 use App\Ads\Audit\AdsAudit;
 use App\Ads\Control\AdWriteService;
 use App\Ads\Control\Write\Jobs\RetryStopWrite;
+use App\Ads\Control\Write\Types\SetBudgetType;
 use App\Ads\Control\Write\Types\SetStatusType;
 use App\Ads\Platforms\AdPlatform;
 use App\Ads\Platforms\AdsApiException;
@@ -62,7 +63,7 @@ class WriteExecutor
             if ($account === null || $confirmer === null) {
                 throw WriteDenied::make('out_of_scope');
             }
-            $this->policy->authorize($confirmer, $account, $x->target_level, (string) $x->to_status, 'execute');
+            $this->policy->authorize($confirmer, $account, $x->target_level, $x->isBudget() ? 'active' : (string) $x->to_status, 'execute');
             $writer = $this->drivers->writer(AdPlatform::from($account->platform));
             WriteGuard::check($account, $writer);
         } catch (WriteDenied $e) {
@@ -73,10 +74,19 @@ class WriteExecutor
             return $this->finish($x, AdWriteAction::FAILED, 'platform_not_writable', SecretScrubber::scrub($e->getMessage()), []);
         }
 
+        // Round 3: CRM_ADS_EXECUTE off = dry run. Everything above (policy, guard) ran for real; nothing below is sent.
+        if (config('crm.ads.execute') !== true) {
+            return $this->dryRun($x);
+        }
+
         $step = $this->sendStep($x, $stepMeta);
 
         try {
-            $writer->setStatus($account, $x->target_level, $x->target_external_id, (string) $x->to_status);
+            if ($x->isBudget()) {
+                $writer->setDailyBudget($account, $x->target_level, $x->target_external_id, (int) ($x->params['to_minor'] ?? 0));
+            } else {
+                $writer->setStatus($account, $x->target_level, $x->target_external_id, (string) $x->to_status);
+            }
         } catch (WriteRefused $e) {
             return $this->failStep($x, $step, $e->reason, null);
         } catch (TokenInvalid $e) {
@@ -130,7 +140,10 @@ class WriteExecutor
             return $this->finish($x, AdWriteAction::UNKNOWN, 'unknown_outcome', $message, ['read_back' => false]);
         }
 
-        if (AdWriteService::statusKind($live->status) === $x->to_status) {
+        $landed = $x->isBudget()
+            ? $live->dailyBudgetMinor === (int) ($x->params['to_minor'] ?? -1)
+            : AdWriteService::statusKind($live->status) === $x->to_status;
+        if ($landed) {
             $this->closeStep($step, AdWriteStep::SUCCEEDED, null, null, ['read_back' => true]);
 
             return $this->succeed($x, ['read_back' => true]);
@@ -234,6 +247,35 @@ class WriteExecutor
         };
 
         return 'https://adsmanager.facebook.com/adsmanager/manage/'.$page.'?act='.$act.'&'.$param.'='.rawurlencode($x->target_external_id);
+    }
+
+    /**
+     * Round 3 dry run: the step is written with what WOULD have been sent (op, level, id, after) and the action ends
+     * dry_run with outcome.would; nothing is called, the local mirror is untouched, no card is closed, no lock is taken.
+     */
+    protected function dryRun(AdWriteAction $x): AdWriteAction
+    {
+        [$op, $before, $after] = $this->stepShape($x);
+        $seq = ((int) AdWriteStep::where('ad_write_action_id', $x->id)->max('seq')) + 1;
+        AdWriteStep::create([
+            'ad_write_action_id' => $x->id, 'seq' => $seq, 'op' => $op, 'level' => $x->target_level, 'target_external_id' => $x->target_external_id,
+            'before' => $before, 'after' => $after, 'state' => AdWriteStep::DRY_RUN, 'attempts' => 0, 'meta' => ['dry_run' => true],
+        ]);
+
+        return $this->finish($x, AdWriteAction::DRY_RUN, null, null, [
+            'dry_run' => true,
+            'would' => ['op' => $op, 'level' => $x->target_level, 'external_id' => $x->target_external_id, 'after' => $after],
+        ]);
+    }
+
+    /** @return array{0: string, 1: array<string, mixed>, 2: array<string, mixed>} op, before, after of the one platform mutation */
+    protected function stepShape(AdWriteAction $x): array
+    {
+        if ($x->isBudget()) {
+            return [SetBudgetType::TYPE, ['daily_budget_minor' => (int) ($x->params['from_minor'] ?? 0)], ['daily_budget_minor' => (int) ($x->params['to_minor'] ?? 0)]];
+        }
+
+        return [SetStatusType::TYPE, ['status' => $x->from_status], ['status' => $x->to_status === 'active' ? 'ACTIVE' : 'PAUSED']];
     }
 
     protected function succeed(AdWriteAction $x, array $outcome): AdWriteAction
@@ -353,14 +395,15 @@ class WriteExecutor
     protected function sendStep(AdWriteAction $x, array $meta = []): AdWriteStep
     {
         $seq = ((int) AdWriteStep::where('ad_write_action_id', $x->id)->max('seq')) + 1;
+        [$op, $before, $after] = $this->stepShape($x);
         $step = AdWriteStep::create([
             'ad_write_action_id' => $x->id,
             'seq' => $seq,
-            'op' => SetStatusType::TYPE,
+            'op' => $op,
             'level' => $x->target_level,
             'target_external_id' => $x->target_external_id,
-            'before' => ['status' => $x->from_status],
-            'after' => ['status' => $x->to_status === 'active' ? 'ACTIVE' : 'PAUSED'],
+            'before' => $before,
+            'after' => $after,
             'state' => AdWriteStep::PENDING,
             'attempts' => 1,
             'meta' => $meta ?: null,
@@ -432,6 +475,9 @@ class WriteExecutor
     /** Mirror the new status on the local row like slice 1; a local failure is noted, never undoes the action. */
     protected function mirrorLocal(AdWriteAction $x): void
     {
+        if ($x->isBudget()) {
+            return; // the CRM keeps no budget column; the next sync / live read shows it
+        }
         try {
             $account = $x->account;
             if ($account === null) {

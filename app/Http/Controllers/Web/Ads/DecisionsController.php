@@ -38,7 +38,7 @@ class DecisionsController extends Controller
         $logFilters = [
             'user' => is_numeric($request->query('who')) ? (int) $request->query('who') : null,
             'level' => in_array($request->query('level'), AdWriteService::LEVELS, true) ? (string) $request->query('level') : null,
-            'result' => in_array($request->query('result'), ['ok', 'error', 'pending'], true) ? (string) $request->query('result') : null,
+            'result' => in_array($request->query('result'), ['ok', 'error', 'pending', 'dry_run'], true) ? (string) $request->query('result') : null,
         ];
 
         $feedData = $feed->forUser($user, self::FEED_TABS[$tab]);

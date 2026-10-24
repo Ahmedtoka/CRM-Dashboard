@@ -135,6 +135,21 @@ class MetaAdsWriter implements AdPlatformWriter
         $this->api->post($token, $externalId, ['status' => match ($status) { 'active' => 'ACTIVE', 'archived' => 'ARCHIVED', default => 'PAUSED' }], $this->writeTimeout());
     }
 
+    /**
+     * Daily budget of a campaign (CBO) or ad set: POST /{id} daily_budget=<minor>. Meta takes budgets in the account
+     * currency's minor unit (the same unit readObject returns), so no conversion here.
+     */
+    public function setDailyBudget(AdAccount $a, string $level, string $externalId, int $dailyBudgetMinor): void
+    {
+        if (! in_array($level, ['campaign', 'adset'], true)) {
+            throw new AdsApiException('Only a campaign or an ad set has a daily budget on Meta.');
+        }
+        if ($dailyBudgetMinor <= 0) {
+            throw new AdsApiException('A daily budget must be above zero.');
+        }
+        $this->api->post($this->token($a), $this->numericId($externalId), ['daily_budget' => (string) $dailyBudgetMinor], $this->writeTimeout());
+    }
+
     /** Fields of one live read per level: the object's own status and budgets plus its parents'. */
     private const READ_FIELDS = [
         'ad' => 'status,effective_status,adset{status,daily_budget,lifetime_budget,end_time},campaign{status,daily_budget,lifetime_budget,stop_time}',

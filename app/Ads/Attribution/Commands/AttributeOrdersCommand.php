@@ -2,6 +2,7 @@
 
 namespace App\Ads\Attribution\Commands;
 
+use App\Ads\Attribution\AdCostPerOrder;
 use App\Ads\Attribution\AttributionBackup;
 use App\Ads\Attribution\OrderAttribution;
 use App\Ads\Audit\AdsAudit;
@@ -12,9 +13,9 @@ class AttributeOrdersCommand extends Command
 {
     protected $signature = 'ads:attribute-orders {--days=35} {--force : Re-resolve orders that already have an attribution (snapshots them first)}';
 
-    protected $description = 'Attribute recent orders to ads (utm ad id, utm campaign, latest inbox ad within the window)';
+    protected $description = 'Attribute recent orders to ads (chat referral, utm ad id, utm ad set id, utm campaign) and compute the ad cost per order';
 
-    public function handle(OrderAttribution $attribution, AttributionBackup $backup): int
+    public function handle(OrderAttribution $attribution, AttributionBackup $backup, AdCostPerOrder $cost): int
     {
         $days = max((int) $this->option('days'), 1);
         $to = CarbonImmutable::now();
@@ -38,6 +39,10 @@ class AttributeOrdersCommand extends Command
         $count = $attribution->run($from, $to, $force);
 
         $this->info("Attributed {$count} order(s).");
+
+        // Round 3: «تكلفة الإعلان لكل أوردر» follows every attribution run over the same window.
+        $costs = $cost->run($from, $to);
+        $this->info("Ad cost per order written on {$costs} order(s).");
 
         return self::SUCCESS;
     }

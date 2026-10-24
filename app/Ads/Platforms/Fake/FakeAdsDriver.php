@@ -259,6 +259,23 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
         }
     }
 
+    /** Recorded in the writer state (`budgets`) and mirrored into the fake live read of the object. */
+    public function setDailyBudget(AdAccount $a, string $level, string $externalId, int $dailyBudgetMinor): void
+    {
+        $fault = self::takeFault('setDailyBudget');
+        if ($fault !== null && $fault !== 'none') {
+            self::throwFault($fault);
+        }
+        if (! in_array($level, ['campaign', 'adset'], true)) {
+            throw new AdsApiException('Only a campaign or an ad set has a budget.');
+        }
+
+        $state = $this->writerState();
+        $state['budgets'][] = ['level' => $level, 'id' => $externalId, 'minor' => $dailyBudgetMinor];
+        $state['objects'][$level.':'.$externalId] = array_merge($state['objects'][$level.':'.$externalId] ?? [], ['dailyBudgetMinor' => $dailyBudgetMinor]);
+        $this->saveWriterState($state);
+    }
+
     /**
      * Every read is recorded in the writer state (`reads`), so tests can count them.
      * Status: the last fake setStatus for the id, else the local row's status, else PAUSED. Budgets: 50,000 minor on the
@@ -321,7 +338,7 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
     /**
      * Test helper: the next $times calls of $op fail.
      *
-     * @param  'setStatus'|'readObject'  $op
+     * @param  'setStatus'|'readObject'|'setDailyBudget'  $op
      * @param  string  $kind  none (a call that works, to reach a later fault) | rate (regain 120 s) | rate:<seconds> | unreachable_before | unreachable_after | rejected | permission | token
      */
     public static function failNext(string $op, string $kind, int $times = 1): void
@@ -385,7 +402,7 @@ class FakeAdsDriver implements AdPlatformDriver, AdPlatformWriter
     /** @return array{n:int,media:int,ads:array<string,array<string,mixed>>,statuses:list<array<string,string>>,objects:array<string,array<string,mixed>>,reads:list<array<string,string>>} */
     private function writerState(): array
     {
-        return (Cache::get(self::WRITER_KEY) ?? []) + ['n' => 0, 'media' => 0, 'ads' => [], 'statuses' => [], 'objects' => [], 'reads' => []];
+        return (Cache::get(self::WRITER_KEY) ?? []) + ['n' => 0, 'media' => 0, 'ads' => [], 'statuses' => [], 'objects' => [], 'reads' => [], 'budgets' => []];
     }
 
     private function saveWriterState(array $state): void

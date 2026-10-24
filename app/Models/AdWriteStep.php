@@ -18,6 +18,9 @@ class AdWriteStep extends Model
 
     public const UNKNOWN = 'unknown';
 
+    /** Round 3: written instead of a platform call while CRM_ADS_EXECUTE is off. */
+    public const DRY_RUN = 'dry_run';
+
     protected $guarded = ['id'];
 
     protected function casts(): array

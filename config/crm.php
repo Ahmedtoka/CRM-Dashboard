@@ -552,6 +552,14 @@ return [
         'material_max_mb' => ['video' => 500, 'image' => 20],
         // Phase B write pipeline. enabled = deploy-level kill switch; the runtime switch is ads_settings.writes_enabled
         // (ads:writes). Writes need both on; Stop is always exempt.
+        // Round 3 (2026-10-24): the execution switch of every platform change made from the CRM («نفّذ»). Off = every
+        // confirmed action is a DRY RUN: the row, the step and the audit entry are written with what would have been sent,
+        // nothing reaches Meta or TikTok. Set CRM_ADS_EXECUTE=true on the server to execute for real.
+        'execute' => (bool) env('CRM_ADS_EXECUTE', false),
+        // The «scale» decision raises the daily budget of a winner by this percentage (ads_settings.scale_pct overrides).
+        'scale_pct' => (int) env('CRM_ADS_SCALE_PCT', 20),
+        // The «stock risk» decision: a running ad whose product has at most this many units left (ads_settings.stock_low_threshold overrides).
+        'stock_low_threshold' => (int) env('CRM_ADS_STOCK_LOW_THRESHOLD', 5),
         'write' => [
             'enabled' => (bool) env('CRM_ADS_WRITES_ENABLED', true),
             // HTTP timeout (seconds) of an inline platform write and of the live pre-read (the old write POST waited 90).

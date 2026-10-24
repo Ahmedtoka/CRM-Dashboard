@@ -29,7 +29,7 @@ function placedOrder(array $attrs = []): Order
     ], $attrs));
 }
 
-it('attributes orders by utm ad id, then utm campaign, then the latest inbox touch', function () {
+it('attributes orders by chat referral, utm ad id, utm campaign (round 3 order)', function () {
     $acc = AdAccount::factory()->create();
     $camp = AdCampaign::factory()->for($acc, 'account')->create(['external_id' => '9001', 'name' => 'SALES | UP TO 50%']);
     $ad = Ad::factory()->for($acc, 'account')->create(['external_id' => '120200000001', 'ad_campaign_id' => $camp->id]);
@@ -140,18 +140,18 @@ it('schedules attribution hourly at minute 40 Cairo time', function () {
         ->and($event->command)->toContain('--days=35');
 });
 
-it('lets utm evidence replace an inbox attribution without force but keeps an unchanged inbox one', function () {
+it('round 3: a chat referral is the strongest rule, so utm evidence never replaces an inbox attribution without force', function () {
     $inboxAd = Ad::factory()->create(['external_id' => '111']);
-    $utmAd = Ad::factory()->create(['external_id' => '222']);
+    Ad::factory()->create(['external_id' => '222']);
     $c = Customer::factory()->create();
     Conversation::factory()->create(['customer_id' => $c->id, 'ad_id' => '111', 'ad_attributed_at' => '2026-09-09 10:00']);
-    $upgrade = placedOrder(['customer_id' => $c->id, 'utm_content' => '222', 'ad_id' => $inboxAd->id, 'ad_attribution' => 'inbox']);
+    $withUtm = placedOrder(['customer_id' => $c->id, 'utm_content' => '222', 'ad_id' => $inboxAd->id, 'ad_attribution' => 'inbox']);
     $stay = placedOrder(['customer_id' => $c->id, 'ad_id' => $inboxAd->id, 'ad_attribution' => 'inbox']);
 
     [$from, $to] = attributionRange();
 
-    expect(app(OrderAttribution::class)->run($from, $to))->toBe(1)
-        ->and($upgrade->fresh()->ad_id)->toBe($utmAd->id)->and($upgrade->fresh()->ad_attribution)->toBe('utm_ad')
+    expect(app(OrderAttribution::class)->run($from, $to))->toBe(0)
+        ->and($withUtm->fresh()->ad_id)->toBe($inboxAd->id)->and($withUtm->fresh()->ad_attribution)->toBe('inbox')
         ->and($stay->fresh()->ad_id)->toBe($inboxAd->id)->and($stay->fresh()->ad_attribution)->toBe('inbox');
 });
 
