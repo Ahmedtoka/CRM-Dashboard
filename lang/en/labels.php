@@ -39,6 +39,8 @@ return [
         'instagram_unlinked' => 'The Instagram account was unlinked from the Facebook Page',
         'instagram_changed' => 'The Facebook Page is now linked to a different Instagram account',
         'facebook_disconnected' => 'The Facebook Page that Instagram uses is not connected',
+        'no_advanced_access' => 'The TikTok account is not a verified Business Account (Advanced Access) — messaging will not work',
+        'refresh_token_expired' => 'The TikTok authorization expired — reconnect the account',
     ],
 
     'csv' => [

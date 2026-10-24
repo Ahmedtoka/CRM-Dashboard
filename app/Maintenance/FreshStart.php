@@ -49,6 +49,8 @@ final class FreshStart
         // steps before their test sessions; logs and health state.
         'comments', 'posts', 'bot_suggestions', 'bot_learning_reports', 'bot_test_session_steps', 'bot_test_sessions',
         'quick_reply_usages', 'webhook_events', 'webhook_rejections', 'shopify_sync_runs', 'ads_health_state',
+        // TikTok DM conversation ids per customer (x6): the next message from each customer brings its id again.
+        'tiktok_conversations',
         // The production load test's runs (2026-10-07); its «تيست» channels stay with the channel accounts.
         'load_test_runs',
     ];

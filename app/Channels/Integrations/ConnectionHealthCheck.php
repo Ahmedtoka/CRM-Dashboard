@@ -69,6 +69,9 @@ final class ConnectionHealthCheck
         'instagram_unlinked',
         'instagram_changed',
         'facebook_disconnected',
+        // TikTok messaging (x6)
+        'no_advanced_access',
+        'refresh_token_expired',
     ];
 
     /**
@@ -110,6 +113,19 @@ final class ConnectionHealthCheck
     public function run(ChannelAccount $account): array
     {
         $checks = [];
+
+        // TikTok messaging (x6, 2026-10-24): its own token / account / webhook checks, the inbound check shared below.
+        if (TikTokConnector::isMessagingAccount($account)) {
+            $checks = app(TikTokHealthCheck::class)->checks($account);
+            $checks[] = $this->inboundCheck($account);
+
+            $statuses = array_column($checks, 'status');
+            $status = in_array('problem', $statuses, true) ? 'problem' : (in_array('warning', $statuses, true) ? 'warning' : 'ok');
+            $result = ['status' => $status, 'checked_at' => now()->toIso8601String(), 'checks' => $checks];
+            $this->store($account, $result);
+
+            return $result;
+        }
 
         $checks[] = $this->safely('token', fn () => $this->tokenCheck($account));
 

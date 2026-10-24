@@ -7,7 +7,9 @@ use App\Channels\Integrations\ChannelDisconnector;
 use App\Channels\Integrations\ConnectionHealthCheck;
 use App\Channels\Integrations\FacebookPageConnector;
 use App\Channels\Integrations\InstagramConnector;
+use App\Channels\Http\TikTokConnectController;
 use App\Channels\Integrations\IntegrationException;
+use App\Channels\Integrations\TikTokConnector;
 use App\Channels\Integrations\WhatsAppConnector;
 use App\Channels\MetaPageSubscriber;
 use App\Channels\VerifyToken;
@@ -45,6 +47,7 @@ class IntegrationController extends Controller
         private readonly ChannelDisconnector $disconnector,
         private readonly MetaPageSubscriber $subscriber,
         private readonly IntegrationRepository $shopify,
+        private readonly TikTokConnector $tiktok,
     ) {}
 
     public function index(Request $request): Response
@@ -72,6 +75,8 @@ class IntegrationController extends Controller
                 'required_scopes' => ConnectionHealthCheck::SCOPES,
             ],
             'facebookLogin' => FacebookLoginController::settings(),
+            // TikTok direct messages (x6, 2026-10-24): the OAuth button, the URLs to register, the connect outcome.
+            'tiktok' => TikTokConnectController::settings(),
         ]);
     }
 
@@ -231,6 +236,7 @@ class IntegrationController extends Controller
         $request->validate(['action' => ['required', Rule::in(['resubscribe'])]]);
 
         $result = match ($channel->platform) {
+            Platform::TikTok => $this->tiktok->subscribeWebhook($channel),
             Platform::WhatsApp => $this->whatsapp->subscribe($channel),
             Platform::Instagram => ($page = $channel->linkedFacebookAccount()) !== null && filled($page->external_id)
                 ? $this->subscriber->subscribe($page, (string) $page->external_id)
@@ -274,14 +280,17 @@ class IntegrationController extends Controller
         ]);
     }
 
-    /** Only live Meta accounts are managed from this page (demo accounts stay on Advanced). */
+    /** Only live Meta accounts and the TikTok messaging account are managed from this page (demo accounts stay on Advanced). */
     private function ensureManaged(ChannelAccount $channel): void
     {
-        abort_unless($channel->isLive() && in_array($channel->platform, [Platform::Facebook, Platform::Instagram, Platform::WhatsApp], true), 404);
+        $managed = in_array($channel->platform, [Platform::Facebook, Platform::Instagram, Platform::WhatsApp], true)
+            || TikTokConnector::isMessagingAccount($channel);
+
+        abort_unless($channel->isLive() && $managed, 404);
     }
 
     /**
-     * @return array{facebook: ?array<string, mixed>, instagram: ?array<string, mixed>, whatsapp: ?array<string, mixed>}
+     * @return array{facebook: ?array<string, mixed>, instagram: ?array<string, mixed>, whatsapp: ?array<string, mixed>, tiktok: ?array<string, mixed>}
      */
     private function accountsPayload(): array
     {
@@ -289,6 +298,7 @@ class IntegrationController extends Controller
             'facebook' => ($a = $this->facebook->liveAccount(includeDisconnected: true)) ? $this->present($a) : null,
             'instagram' => ($a = $this->instagram->liveAccount(includeDisconnected: true)) ? $this->present($a) : null,
             'whatsapp' => ($a = $this->whatsapp->liveAccount(includeDisconnected: true)) ? $this->present($a) : null,
+            'tiktok' => ($a = $this->tiktok->liveAccount(includeDisconnected: true)) ? $this->present($a) : null,
         ];
     }
 
@@ -299,6 +309,10 @@ class IntegrationController extends Controller
      */
     private function present(ChannelAccount $a): array
     {
+        if (TikTokConnector::isMessagingAccount($a)) {
+            return TikTokConnectController::present($a);
+        }
+
         $profile = $a->profile ?? [];
 
         return [

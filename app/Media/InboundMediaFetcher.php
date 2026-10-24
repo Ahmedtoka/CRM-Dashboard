@@ -39,6 +39,13 @@ final class InboundMediaFetcher
         'cdninstagram.com',
         'whatsapp.net',
         'facebook.com',
+        // TikTok DM media (x6): the download_url the Business Messaging API hands out (ASSUMPTION on the CDN hosts).
+        'tiktok.com',
+        'tiktokcdn.com',
+        'tiktokcdn-us.com',
+        'tiktokcdn-eu.com',
+        'byteoversea.com',
+        'ibyteimg.com',
     ];
 
     /** `remote_url` scheme for bytes already stored on the media disk (test-link uploads). */
@@ -109,6 +116,28 @@ final class InboundMediaFetcher
             return $this->download((string) $meta->json('url'), (string) $account->graphToken(), $meta->json('mime_type'), $a->type);
         }
 
+        // TikTok DMs (x6, 2026-10-24): a media_id becomes a 24-hour download_url, fetched with the account token in `x-user`.
+        if ($a->remote_id !== null && $conversation->platform === Platform::TikTok) {
+            $account = $conversation->channelAccount ?? throw new MediaFetchFailed('no_channel_account');
+            $identity = \App\Models\CustomerIdentity::query()->where('customer_id', $conversation->customer_id)->where('platform', Platform::TikTok)->latest('id')->first();
+            $conversationId = $identity === null ? null : \App\Models\TikTokConversation::idFor((string) $account->external_id, (string) $identity->external_id);
+            $messageId = (string) ($a->message?->external_id ?? '');
+
+            if ($conversationId === null || $messageId === '') {
+                throw new MediaFetchFailed('tiktok_conversation_unknown');
+            }
+
+            try {
+                $url = app(\App\Channels\Adapters\TikTok\TikTokMessagingApi::class)->downloadUrl($account, $conversationId, $messageId, $a->remote_id, $a->type === AttachmentType::Video ? 'VIDEO' : 'IMAGE');
+            } catch (\App\Channels\Adapters\TikTok\TikTokApiException $e) {
+                throw new MediaFetchFailed('tiktok_media_lookup_'.$e->apiCode);
+            } catch (ConnectionException|RequestException) {
+                throw new MediaFetchFailed('download_connection_error');
+            }
+
+            return $this->download($url, null, $a->mime, $a->type, ['x-user' => (string) ($account->credentials['access_token'] ?? '')]);
+        }
+
         if ($remote !== '') {
             return $this->download($remote, null, $a->mime, $a->type);
         }
@@ -116,7 +145,8 @@ final class InboundMediaFetcher
         throw new MediaFetchFailed('nothing_to_fetch');
     }
 
-    private function download(string $url, ?string $token, ?string $mime, AttachmentType $type): FetchedMedia
+    /** @param  array<string, string>  $headers  extra request headers (TikTok's `x-user` token) */
+    private function download(string $url, ?string $token, ?string $mime, AttachmentType $type, array $headers = []): FetchedMedia
     {
         $this->assertUrlAllowed($url);
 
@@ -126,6 +156,10 @@ final class InboundMediaFetcher
 
         if ($token) {
             $request = $request->withToken($token);
+        }
+
+        if ($headers !== []) {
+            $request = $request->withHeaders(array_filter($headers, fn ($v) => $v !== ''));
         }
 
         try {

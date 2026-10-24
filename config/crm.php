@@ -483,10 +483,10 @@ return [
                 'image' => ['mimes' => null, 'max_bytes' => 8 * 1024 * 1024], 'video' => ['mimes' => null, 'max_bytes' => 25 * 1024 * 1024],
                 'audio' => ['mimes' => null, 'max_bytes' => 25 * 1024 * 1024], 'sticker' => ['mimes' => null, 'max_bytes' => 8 * 1024 * 1024],
             ],
+            // TikTok direct messages (x6, 2026-10-24): the Business Messaging API sends one JPG/PNG image up to 3 MB and
+            // nothing else (no video, voice, file or sticker from the business side).
             'tiktok' => [
-                'image' => ['mimes' => null, 'max_bytes' => 25 * 1024 * 1024], 'video' => ['mimes' => null, 'max_bytes' => 25 * 1024 * 1024],
-                'audio' => ['mimes' => null, 'max_bytes' => 25 * 1024 * 1024], 'file' => ['mimes' => null, 'max_bytes' => 25 * 1024 * 1024],
-                'sticker' => ['mimes' => null, 'max_bytes' => 25 * 1024 * 1024],
+                'image' => ['mimes' => ['image/jpeg', 'image/png'], 'max_bytes' => 3 * 1024 * 1024],
             ],
         ],
     ],

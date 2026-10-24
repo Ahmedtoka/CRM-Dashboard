@@ -2,7 +2,9 @@
 
 namespace App\Channels\Adapters;
 
+use App\Channels\Adapters\TikTok\TikTokWindow;
 use App\Channels\Contracts\ChannelAdapter;
+use App\Channels\Contracts\LimitsOutbound;
 use App\Channels\Contracts\UnhidesComments;
 use App\Channels\Data\AdReferralData;
 use App\Channels\Data\ChannelCapabilities;
@@ -13,6 +15,7 @@ use App\Channels\Data\SendResult;
 use App\Enums\MessageStatus;
 use App\Enums\Platform;
 use App\Models\ChannelAccount;
+use App\Models\Conversation;
 use App\Models\CustomerIdentity;
 use App\Models\MessageAttachment;
 use Carbon\CarbonImmutable;
@@ -25,7 +28,7 @@ use Symfony\Component\HttpFoundation\Response;
  * static log so tests can assert on what was "sent" without hitting a
  * real platform API.
  */
-final class FakeChannelAdapter implements ChannelAdapter, UnhidesComments
+final class FakeChannelAdapter implements ChannelAdapter, LimitsOutbound, UnhidesComments
 {
     /** @var array<int, array<string, mixed>> */
     private static array $sent = [];
@@ -81,14 +84,21 @@ final class FakeChannelAdapter implements ChannelAdapter, UnhidesComments
                 humanAgentHours: 168,
                 templatesOutsideWindow: false,
             ),
+            // Mirrors TikTokAdapter (x6): 48 h window, staff may still use TikTok's 3 after-window messages.
             Platform::TikTok => new ChannelCapabilities(
                 privateReply: false,
                 hideComment: true,
-                windowHours: 48,
-                humanAgentHours: 0,
+                windowHours: TikTokWindow::WINDOW_HOURS,
+                humanAgentHours: 24 * 30,
                 templatesOutsideWindow: false,
             ),
         };
+    }
+
+    /** TikTok's message caps apply to the fake channel too, so the demo and the tests see the real rule. */
+    public function outboundAllowance(Conversation $conversation): ?int
+    {
+        return $this->platform === Platform::TikTok ? TikTokWindow::remaining($conversation) : null;
     }
 
     public function handshake(Request $request): ?Response

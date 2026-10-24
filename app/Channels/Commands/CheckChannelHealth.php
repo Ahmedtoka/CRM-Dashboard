@@ -21,7 +21,9 @@ class CheckChannelHealth extends Command
         $accounts = ChannelAccount::query()
             ->where('driver', 'live')
             ->where('status', '!=', 'disconnected')
-            ->whereIn('platform', ['facebook', 'instagram', 'whatsapp'])
+            // Meta channels, and the TikTok messaging account (x6; the ad-comments channel has no token to check).
+            ->where(fn ($q) => $q->whereIn('platform', ['facebook', 'instagram', 'whatsapp'])
+                ->orWhere(fn ($q) => $q->where('platform', 'tiktok')->where('profile->kind', 'messaging')))
             ->when($this->option('account'), fn ($q, $id) => $q->whereKey($id))
             ->orderBy('id')
             ->get();

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web\Settings;
 
 use App\Channels\Adapters\MetaGraphClient;
 use App\Channels\Integrations\ConnectionHealthCheck;
+use App\Channels\Integrations\TikTokConnector;
 use App\Channels\Integrations\WhatsAppConnector;
 use App\Channels\Jobs\ProcessWebhookEvent;
 use App\Channels\MetaPageSubscriber;
@@ -44,7 +45,7 @@ class ChannelController extends Controller
                 ->get(['id', 'provider', 'event_type', 'status', 'attempts', 'error', 'payload', 'created_at']),
             'facebookLogin' => FacebookLoginController::settings(),
             // Webhooks refused for a bad signature in the last day, per platform (2026-10-17).
-            'webhookRejections' => app(WebhookRejections::class)->summaries(['facebook', 'instagram', 'whatsapp']),
+            'webhookRejections' => app(WebhookRejections::class)->summaries(['facebook', 'instagram', 'whatsapp', 'tiktok']),
         ]);
     }
 
@@ -88,6 +89,13 @@ class ChannelController extends Controller
 
         if ($channel->platform === Platform::Instagram) {
             return $this->testInstagram($channel);
+        }
+
+        // TikTok messaging (x6): the same health check Settings → Channels runs, answered in this page's shape.
+        if (TikTokConnector::isMessagingAccount($channel)) {
+            $result = app(ConnectionHealthCheck::class)->run($channel);
+
+            return response()->json(['ok' => $result['status'] !== 'problem', 'page_name' => $channel->fresh()->name, 'error' => $result['status'] === 'problem' ? (ConnectionHealthCheck::problemText($channel->fresh()->last_error) ?? 'problem') : null]);
         }
 
         if (empty($channel->external_id)) {
@@ -147,6 +155,12 @@ class ChannelController extends Controller
         $this->refuseTestAccount($channel);
 
         $pageId = $channel->external_id;
+
+        if (TikTokConnector::isMessagingAccount($channel)) {
+            $result = app(TikTokConnector::class)->subscribeWebhook($channel);
+
+            return response()->json($result->success ? ['ok' => true] : ['ok' => false, 'error' => $result->error]);
+        }
 
         if ($channel->platform === Platform::Instagram) {
             $linked = $channel->linkedFacebookAccount();
