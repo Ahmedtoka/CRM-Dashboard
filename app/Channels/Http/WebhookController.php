@@ -2,6 +2,7 @@
 
 namespace App\Channels\Http;
 
+use App\Channels\Adapters\TikTokAdapter;
 use App\Channels\ChannelHealth;
 use App\Channels\ChannelRegistry;
 use App\Channels\Jobs\ProcessWebhookEvent;
@@ -76,6 +77,15 @@ class WebhookController extends Controller
 
     private function rejectionReason(Request $request): string
     {
+        // TikTok (x6) signs with its own header and the TikTok app secret (TikTokAdapter::verifySignature).
+        if ($request->route('platform') === Platform::TikTok->value) {
+            return match (true) {
+                ! $request->headers->has(TikTokAdapter::SIGNATURE_HEADER) => 'missing_signature',
+                blank(config('services.tiktok.app_secret')) => 'no_app_secret',
+                default => 'bad_signature',
+            };
+        }
+
         return match (true) {
             ! $request->headers->has('X-Hub-Signature-256') => 'missing_signature',
             blank(config('crm.meta.app_secret')) => 'no_app_secret',

@@ -37,6 +37,7 @@ use App\Http\Controllers\Web\Settings\BotTranslationController;
 use App\Http\Controllers\Web\Settings\BranchHoursController;
 use App\Http\Controllers\Web\Settings\ChannelController;
 use App\Http\Controllers\Web\Settings\CityController;
+use App\Channels\Http\TikTokConnectController;
 use App\Http\Controllers\Web\Settings\FacebookLoginController;
 use App\Http\Controllers\Web\Settings\IntegrationController;
 use App\Http\Controllers\Web\Settings\OrderConfirmationSettingsController;
@@ -358,6 +359,8 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
             Route::post('integrations/instagram/connect', [IntegrationController::class, 'instagramConnect'])->name('integrations.instagram.connect');
             Route::post('integrations/whatsapp/phone-numbers', [IntegrationController::class, 'whatsappPhoneNumbers'])->name('integrations.whatsapp.phone-numbers');
             Route::post('integrations/whatsapp/connect', [IntegrationController::class, 'whatsappConnect'])->name('integrations.whatsapp.connect');
+            // TikTok direct messages (x6): a code pasted by hand when the redirect lands on the storefront.
+            Route::post('integrations/tiktok/code', [TikTokConnectController::class, 'code'])->name('integrations.tiktok.code');
             Route::post('integrations/{channel}/test', [IntegrationController::class, 'test'])->name('integrations.test');
             Route::post('integrations/{channel}/fix', [IntegrationController::class, 'fix'])->name('integrations.fix');
             Route::delete('integrations/{channel}', [IntegrationController::class, 'destroy'])->name('integrations.destroy');
@@ -375,6 +378,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         Route::get('channels/facebook/callback', [FacebookLoginController::class, 'callback'])->name('channels.facebook.callback');
         Route::get('channels/facebook/pages', [FacebookLoginController::class, 'pages'])->name('channels.facebook.pages');
         Route::post('channels/facebook/pages/{pageId}', [FacebookLoginController::class, 'select'])->where('pageId', '[0-9]+')->name('channels.facebook.select');
+        // «الربط بتيك توك» (x6, 2026-10-24): TikTok's redirect URL rules want https and a trailing slash; Laravel matches both spellings.
+        Route::get('channels/tiktok/connect', [TikTokConnectController::class, 'connect'])->name('channels.tiktok.connect');
+        Route::get('channels/tiktok/callback', [TikTokConnectController::class, 'callback'])->name('channels.tiktok.callback');
 
         Route::get('cities', [CityController::class, 'index'])->name('cities.index');
         Route::post('cities', [CityController::class, 'store'])->name('cities.store');

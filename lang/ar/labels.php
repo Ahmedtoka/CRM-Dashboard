@@ -39,6 +39,8 @@ return [
         'instagram_unlinked' => 'حساب إنستجرام اتفصل عن صفحة فيسبوك',
         'instagram_changed' => 'صفحة فيسبوك بقت مربوطة بحساب إنستجرام تاني',
         'facebook_disconnected' => 'صفحة فيسبوك اللي إنستجرام بيستخدمها مش متوصلة',
+        'no_advanced_access' => 'حساب تيك توك مش Business Account معتمد (Advanced Access) — الرسائل مش هتشتغل',
+        'refresh_token_expired' => 'ربط تيك توك خلصت صلاحيته — اعمل إعادة ربط',
     ],
 
     'csv' => [

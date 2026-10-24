@@ -3,6 +3,7 @@
 namespace App\Inbox;
 
 use App\Channels\ChannelRegistry;
+use App\Channels\Contracts\LimitsOutbound;
 use App\Enums\SenderType;
 use App\Models\Conversation;
 use Carbon\CarbonImmutable;
@@ -16,8 +17,16 @@ class WindowPolicy
 
     public function evaluate(Conversation $c, SenderType $sender): WindowState
     {
-        $caps = $this->registry->adapter($c->platform)->capabilities();
+        $adapter = $this->registry->adapter($c->platform);
+        $caps = $adapter->capabilities();
         $now = CarbonImmutable::now();
+
+        // TikTok (x6, 2026-10-24): 10 messages before her first reply, 3 after 48 h of silence. Nothing left = closed,
+        // whatever the hours say, so the bot and the queue meet the WindowClosedException they already handle.
+        if ($adapter instanceof LimitsOutbound && $adapter->outboundAllowance($c) === 0) {
+            return new WindowState(WindowState::CLOSED, null);
+        }
+
         $last = $c->last_customer_message_at
             ? CarbonImmutable::instance($c->last_customer_message_at)
             : null;

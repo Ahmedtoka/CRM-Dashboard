@@ -44,7 +44,7 @@ class ChannelController extends Controller
                 ->get(['id', 'provider', 'event_type', 'status', 'attempts', 'error', 'payload', 'created_at']),
             'facebookLogin' => FacebookLoginController::settings(),
             // Webhooks refused for a bad signature in the last day, per platform (2026-10-17).
-            'webhookRejections' => app(WebhookRejections::class)->summaries(['facebook', 'instagram', 'whatsapp']),
+            'webhookRejections' => app(WebhookRejections::class)->summaries(['facebook', 'instagram', 'whatsapp', 'tiktok']),
         ]);
     }
 

@@ -46,6 +46,11 @@ final class ChannelDisconnector
             $this->unsubscribe($account, $account->wabaId());
         }
 
+        // TikTok messaging (x6): the app-level webhook stays (it serves any account); the token is revoked.
+        if (TikTokConnector::isMessagingAccount($account)) {
+            app(TikTokConnector::class)->revoke($account);
+        }
+
         $this->markDisconnected($account);
         $ids[] = $account->id;
 
