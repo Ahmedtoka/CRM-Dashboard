@@ -3,14 +3,17 @@
 namespace App\Http\Resources;
 
 use App\Analytics\ActivityLogger;
+use App\Cases\Returns\ReturnLifecycle;
 use App\Commerce\OrderStatusResolver;
 use App\Models\ActivityLog;
 use App\Models\Fulfillment;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Refund;
+use App\Models\SupportCase;
 use App\Orders\AdsManagerLink;
 use App\Orders\GovernorateKey;
+use App\Shipping\ShippingTimeline;
 use App\Shopify\Connection\IntegrationRepository;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -37,7 +40,7 @@ class OrderResource extends JsonResource
         $models = $resource instanceof AbstractPaginator ? $resource->getCollection() : $resource;
 
         if ($models instanceof EloquentCollection && $models->isNotEmpty() && $models->first() instanceof Order) {
-            $models->loadMissing(['fulfillments', 'refunds']);
+            $models->loadMissing(['fulfillments', 'fulfillmentEvents', 'refunds', 'returnCases']);
 
             $logs = self::timelineLogs($models->modelKeys())->groupBy('subject_id');
             $models->each(fn (Order $o) => $o->setRelation(self::LOGS_RELATION, $logs->get($o->id, new EloquentCollection)));
@@ -132,6 +135,17 @@ class OrderResource extends JsonResource
                 'created_at' => ($r->shopify_created_at ?? $r->created_at)?->toIso8601String(),
             ])->values()->all(),
             'timeline' => $this->timeline(),
+            // Round 2026-10-24: the shipping timeline from Shopify (current step, carrier link, every reported step).
+            'shipping' => ShippingTimeline::summary($this->resource),
+            // Round 2026-10-24: the order's return/exchange cases and where each one stands (the thread card's chip).
+            'return_cases' => $this->returnCases->map(fn (SupportCase $c) => [
+                'id' => $c->id,
+                'type' => $c->type,
+                'is_exchange' => ReturnLifecycle::isExchange($c),
+                'stage' => ReturnLifecycle::stageOf($c),
+                'stage_at' => ($c->return_stage_at ?? $c->created_at)?->toIso8601String(),
+                'pickup_date' => $c->pickup_date?->toDateString(),
+            ])->values()->all(),
             // Control room S3 (C 2.1, G5), web only: the ad the order is credited to. Only where the caller loaded it.
             'ad_source' => $this->when(! $request->is('api/*') && $this->relationLoaded('ad'), fn () => $this->ad === null ? null : [
                 'id' => $this->ad->id,

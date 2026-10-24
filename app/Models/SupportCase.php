@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A customer request a guided flow collected for staff to act on (design §4):
@@ -31,6 +32,9 @@ class SupportCase extends Model
     public const OPEN_STATUSES = ['new', 'in_progress'];
 
     public const PRIORITIES = ['medium', 'high'];
+
+    /** The case types the return/exchange lifecycle applies to (round 2026-10-24, App\Cases\Returns\ReturnLifecycle). */
+    public const RETURN_TYPES = ['return_exchange', 'return', 'exchange'];
 
     /**
      * The raw Arabic type words. Kept for the flow sandbox log (SandboxCaseRecorder),
@@ -68,6 +72,12 @@ class SupportCase extends Model
         'resolved_by_id',
         'sla_breached_at',
         'resolved_notified_at',
+        // Return/exchange lifecycle (round 2026-10-24).
+        'return_stage',
+        'return_stage_at',
+        'pickup_date',
+        'refund_amount',
+        'exchange_order_id',
     ];
 
     protected function casts(): array
@@ -81,6 +91,9 @@ class SupportCase extends Model
             'resolved_at' => 'datetime',
             'sla_breached_at' => 'datetime',
             'resolved_notified_at' => 'datetime',
+            'return_stage_at' => 'datetime',
+            'pickup_date' => 'date',
+            'refund_amount' => 'decimal:2',
         ];
     }
 
@@ -163,6 +176,24 @@ class SupportCase extends Model
     public function openedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'opened_by_id');
+    }
+
+    /** Whether the return/exchange lifecycle applies (by type: an older case with no stage still reads as «requested»). */
+    public function isReturnLike(): bool
+    {
+        return in_array($this->type, self::RETURN_TYPES, true);
+    }
+
+    /** The lifecycle steps, oldest first (round 2026-10-24). @return HasMany<SupportCaseEvent, $this> */
+    public function events(): HasMany
+    {
+        return $this->hasMany(SupportCaseEvent::class)->orderBy('happened_at')->orderBy('id');
+    }
+
+    /** The new order that ships the replacement piece of an exchange. @return BelongsTo<Order, $this> */
+    public function exchangeOrder(): BelongsTo
+    {
+        return $this->belongsTo(Order::class, 'exchange_order_id')->withoutGlobalScope(Order::LOAD_TEST_SCOPE);
     }
 
     /** The queue ticket whose window was closed as a case (null for a flow-collected case). @return BelongsTo<QueueEntry, $this> */

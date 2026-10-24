@@ -59,6 +59,8 @@ final class ShopifyWebhookProcessor
             'orders/updated', 'orders/paid' => $this->routeOrderUpsert($payload),
             'orders/cancelled' => $this->routeOrderCancelled($payload),
             'fulfillments/create', 'fulfillments/update' => $this->requireParent($payload) && $this->orders->applyFulfillment($payload),
+            // Round 2026-10-24: the carrier's steps (in transit, out for delivery, delivered, failure …) as Shopify reports them.
+            'fulfillment_events/create' => $this->orders->applyFulfillmentEvent($payload),
             'refunds/create' => $this->requireParent($payload) && $this->orders->applyRefund($payload),
             'draft_orders/update' => $this->routeDraftOrderUpdate($payload),
             'app/uninstalled' => $this->handleUninstalled($verifiedWith),

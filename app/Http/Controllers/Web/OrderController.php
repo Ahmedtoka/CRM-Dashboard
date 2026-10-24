@@ -6,11 +6,13 @@ use App\Confirmations\Ui\ConfirmationBoard;
 use App\Http\Controllers\Concerns\OrderEndpoints;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
+use App\Http\Resources\SupportCaseResource;
 use App\Http\Support\ModeratorScope;
 use App\Http\Support\SortParam;
 use App\Models\Ad;
 use App\Models\Order;
 use App\Models\OrderConfirmation;
+use App\Models\SupportCase;
 use App\Models\User;
 use App\Orders\AdsManagerLink;
 use App\Orders\OrdersAnalytics;
@@ -203,6 +205,12 @@ class OrderController extends Controller
             'confirmation' => fn () => ($c = OrderConfirmation::query()->with('caller:id,name')->where('order_id', $order->id)->first())
                 ? $board->forOrder($c->setRelation('order', $order))
                 : null,
+            // Returns and exchanges end to end (round 2026-10-24): this order's return cases with their lifecycle.
+            'returnCases' => fn () => SupportCaseResource::collection(
+                SupportCase::query()->whereIn('type', SupportCase::RETURN_TYPES)->where('order_id', $order->id)
+                    ->with(['customer', 'assignedTo', 'openedBy:id,name', 'queueEntry:id,assigned_user_id,is_test', 'order.items.variant', 'events.user:id,name'])
+                    ->orderByDesc('id')->get()
+            )->resolve($request),
         ]);
     }
 

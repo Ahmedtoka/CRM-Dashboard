@@ -2,6 +2,8 @@
 
 namespace App\Bot\Flows;
 
+use App\Cases\Returns\ReturnScripts;
+
 /**
  * Closing and knowledge scripts for the guided flows (Task 3, design doc
  * §flows), the handover transfer sentences and the greeting mirrors. Seeded as
@@ -117,6 +119,7 @@ final class FlowScripts
             'stale_tap_closed' => ['title' => 'البوت: زرار من طلب قديم خلص', 'body' => 'الزرار ده من طلب قديم خلص، اختاري من القائمة أو اكتبيلي محتاجة إيه'],
             'stale_piece_restart' => ['title' => 'البوت: نبدأ طلب جديد للقطعة', 'body' => 'الطلب اللي فات اتقفل، فهنبدأ طلب جديد للقطعة دي'],
             'stale_piece_recorded' => ['title' => 'البوت: القطعة متسجلة خلاص', 'body' => '«{title}» متسجلة خلاص في طلب #{case_id}، وهيتم التواصل معاكي في أقرب وقت'],
-        ];
+            // Round 2026-10-24 (x4): the return/exchange lifecycle texts live with their lifecycle (App\Cases\Returns).
+        ] + ReturnScripts::all();
     }
 }

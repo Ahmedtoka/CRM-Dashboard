@@ -6,6 +6,7 @@ use Database\Factories\FulfillmentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Fulfillment extends Model
 {
@@ -40,5 +41,11 @@ class Fulfillment extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    /** Every delivery status Shopify reported for this fulfillment, oldest first (round 2026-10-24). @return HasMany<FulfillmentEvent, $this> */
+    public function events(): HasMany
+    {
+        return $this->hasMany(FulfillmentEvent::class)->orderBy('happened_at')->orderBy('id');
     }
 }

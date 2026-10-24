@@ -13,9 +13,11 @@ use App\Inbox\OutboundService;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Fulfillment;
+use App\Models\FulfillmentEvent;
 use App\Models\Order;
 use App\Models\ProductVariant;
 use App\Models\Refund;
+use App\Shipping\FulfillmentEventRecorder;
 use App\Shopify\Customers\CustomerOrderFlags;
 use App\Shopify\Customers\PhoneNormalizer;
 use App\Support\DataFloor;
@@ -191,7 +193,9 @@ final class OrderMapper
             return MapResult::Skipped;
         }
 
-        Fulfillment::updateOrCreate(['shopify_fulfillment_id' => $fulfillmentId], [
+        $previousStatus = $existing !== null ? Payload::lower($existing->shipment_status) : null;
+
+        $stored = Fulfillment::updateOrCreate(['shopify_fulfillment_id' => $fulfillmentId], [
             'order_id' => $order->id,
             'status' => Payload::lower($f['status'] ?? null),
             'tracking_company' => Payload::string($f['tracking_company'] ?? null),
@@ -205,10 +209,51 @@ final class OrderMapper
             'shopify_updated_at' => Payload::time($f['updated_at'] ?? null),
         ]);
 
+        // Shipping timeline (round 2026-10-24): Shopify's own events when the sync carried them, else the status move.
+        $recorder = app(FulfillmentEventRecorder::class);
+        foreach (Payload::list($f['events'] ?? []) as $event) {
+            if (is_array($event)) {
+                $recorder->fromShopifyEvent($stored, $event, FulfillmentEvent::SOURCE_SYNC);
+            }
+        }
+        $recorder->fromStatusChange($stored->refresh(), $previousStatus);
+
         $this->syncShipmentStatus($order);
         $this->afterChange($order);
 
         return $existing === null ? MapResult::Created : MapResult::Updated;
+    }
+
+    /**
+     * A `fulfillment_events/create` webhook (round 2026-10-24): one delivery status for a fulfillment we store.
+     * Skipped when the fulfillment (or its order) is not here yet — the next fulfillments/update carries the status.
+     */
+    public function applyFulfillmentEvent(array $event): MapResult
+    {
+        $fulfillmentId = Payload::id($event['fulfillment_id'] ?? null) ?? throw new InvalidArgumentException('Shopify fulfillment event has no fulfillment_id.');
+        $fulfillment = Fulfillment::query()->where('shopify_fulfillment_id', $fulfillmentId)->first();
+
+        if ($fulfillment === null) {
+            return MapResult::Skipped;
+        }
+
+        $order = Order::withLoadTest()->find($fulfillment->order_id);
+
+        if ($order === null) {
+            return MapResult::Skipped;
+        }
+
+        $row = app(FulfillmentEventRecorder::class)->fromShopifyEvent($fulfillment, $event, FulfillmentEvent::SOURCE_WEBHOOK);
+
+        if ($row === null) {
+            return MapResult::Skipped;
+        }
+
+        $this->stampSynced($order);
+        $this->syncShipmentStatus($order);
+        $this->afterChange($order);
+
+        return MapResult::Created;
     }
 
     /**
@@ -803,6 +848,13 @@ final class OrderMapper
             'delivered_at' => $node['deliveredAt'] ?? null,
             'created_at' => $node['createdAt'] ?? null,
             'updated_at' => $node['updatedAt'] ?? null,
+            // Round 2026-10-24: the carrier steps Shopify holds for the fulfillment (FulfillmentEvent nodes).
+            'events' => array_values(array_map(fn (array $e) => [
+                'id' => $e['id'] ?? null,
+                'status' => $e['status'] ?? null,
+                'happened_at' => $e['happenedAt'] ?? null,
+                'message' => $e['message'] ?? null,
+            ], array_filter(Payload::list($node['events'] ?? []), 'is_array'))),
         ];
     }
 
