@@ -220,6 +220,11 @@ function open(n: AppNotification): void {
         router.visit('/board');
         return;
     }
+    // A failed delivery opens the order (its shipping timeline), not the chat.
+    if (n.type === 'order.delivery_failed' && n.data.order_id) {
+        router.visit(`/orders/${n.data.order_id}`);
+        return;
+    }
     const conversationId = n.data.conversation_id;
     if (conversationId) router.visit(`/inbox?c=${conversationId}`);
 }

@@ -799,6 +799,8 @@ const ar = {
             environment: 'البيئة (production = الرقم الحقيقي بس)',
         },
         present: 'موجود',
+        on: 'مفعّل',
+        off: 'مقفول',
         missing: 'ناقص',
         unknown: 'مش معروف',
         reasons: {

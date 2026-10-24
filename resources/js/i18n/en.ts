@@ -822,6 +822,8 @@ const en: Messages = {
             environment: 'Environment (production = live number only)',
         },
         present: 'Present',
+        on: 'On',
+        off: 'Off',
         missing: 'Missing',
         unknown: 'Unknown',
         reasons: {

@@ -48,7 +48,8 @@ function value(check: ReadinessCheck): string {
         if (check.ok === null) return t(`wa_ready.template_errors.${check.detail ?? 'graph_error'}`);
         return (report.value?.templates ?? []).map((x) => `${x.name}: ${t(`wa_ready.template_status.${x.status}`)}`).join(' · ');
     }
-    if (check.key === 'token' || check.key === 'enabled') return check.ok ? t('wa_ready.present') : t('wa_ready.missing');
+    if (check.key === 'token') return check.ok ? t('wa_ready.present') : t('wa_ready.missing');
+    if (check.key === 'enabled') return check.ok ? t('wa_ready.on') : t('wa_ready.off');
     if (check.key === 'environment') return check.detail ?? '';
     return check.detail ?? (check.ok ? t('wa_ready.present') : t('wa_ready.missing'));
 }
