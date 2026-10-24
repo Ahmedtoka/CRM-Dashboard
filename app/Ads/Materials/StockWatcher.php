@@ -6,11 +6,13 @@ use App\Ads\Alerts\RuleSettings;
 use App\Ads\Control\Write\WriteDenied;
 use App\Ads\Launch\LaunchService;
 use App\Ads\Launch\LaunchState;
+use App\Ads\Reports\AdsFilter;
 use App\Inbox\UserNotifier;
 use App\Models\AdLaunch;
 use App\Models\AdMaterial;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Stock watch (fixes C3, D6): every material with a non-terminal launch or a running linked ad is watched. A running one
@@ -23,6 +25,11 @@ final class StockWatcher
     public const NOTIFICATION_TYPE = 'ads.need_stop';
 
     public const LINK = '/ads/materials?status=live&stock=out';
+
+    /** Round 3: «خطر مخزون» — a running material whose product is at or under the low-stock number (RuleSettings::lowStockUnits). */
+    public const LOW_NOTIFICATION_TYPE = 'ads.stock_low';
+
+    public const LOW_LINK = '/ads/decisions';
 
     public function __construct(private readonly UserNotifier $notifier, private readonly LaunchService $launches) {}
 
@@ -67,6 +74,106 @@ final class StockWatcher
             });
 
         return ['flagged' => $flagged, 'cleared' => $cleared];
+    }
+
+    /**
+     * Round 3: the low-stock episode. A running material whose product still has stock but at most `threshold` units is
+     * flagged once (low_stock_at) and its buyer + the supervisors get ads.stock_low with the running ads' names; the flag
+     * clears silently when stock passes the threshold again, runs out (that is need_stop's episode) or nothing runs.
+     *
+     * @param  list<int>|null  $productIds
+     * @return array{flagged: int, cleared: int}
+     */
+    public function low(?array $productIds = null): array
+    {
+        $threshold = $this->lowThreshold();
+        $base = fn () => AdMaterial::query()->whereNotNull('product_id')
+            ->when($productIds !== null, fn ($q) => $q->whereIn('product_id', $productIds));
+        $stock = '('.MaterialService::stockSql().')';
+        $units = MaterialService::inventorySql();
+
+        $cleared = $base()->whereNotNull('low_stock_at')
+            ->where(fn ($q) => $q->whereRaw("$stock <> 'in'")->orWhereRaw("$units > ?", [$threshold])->orWhereNot(fn ($n) => self::running($n)))
+            ->update(['low_stock_at' => null]);
+
+        $flagged = 0;
+        self::running($base()->whereNull('low_stock_at')->whereRaw("$stock = 'in'")->whereRaw("$units <= ?", [$threshold]))
+            ->with(['product', 'buyer.user', 'ads:id,name,status'])->get()
+            ->each(function (AdMaterial $m) use (&$flagged, $threshold) {
+                if (AdMaterial::query()->whereKey($m->id)->whereNull('low_stock_at')->update(['low_stock_at' => now()]) === 1) {
+                    $flagged++;
+                    $this->notifyLow($m, $threshold);
+                }
+            });
+
+        return ['flagged' => $flagged, 'cleared' => $cleared];
+    }
+
+    /** One low-stock number for launch checks, restock alerts and the stock-risk decision (RuleSettings::lowStockUnits). */
+    public function lowThreshold(): int
+    {
+        return app(RuleSettings::class)->lowStockUnits();
+    }
+
+    /**
+     * The running ads at stock risk for «قرار اليوم»: every active ad linked to a flagged material (out: need_stop_at;
+     * low: low_stock_at), in the filter's accounts, with the product and the units left.
+     *
+     * @return list<array{ad_id:int, external_id:string, name:string, status:?string, thumbnail_url:?string, account_id:int, account:string, platform:string, material_id:int, material:string, product:?string, stock:'out'|'low', inventory:int, threshold:int}>
+     */
+    public function riskRows(?AdsFilter $f = null): array
+    {
+        $threshold = $this->lowThreshold();
+        $q = DB::table('ad_material_ads as l')
+            ->join('ad_materials as mat', 'mat.id', '=', 'l.ad_material_id')
+            ->join('ads as ad', 'ad.id', '=', 'l.ad_id')
+            ->join('ad_accounts as acc', 'acc.id', '=', 'ad.ad_account_id')
+            ->leftJoin('products as p', 'p.id', '=', 'mat.product_id')
+            ->where(fn ($w) => $w->whereNotNull('mat.need_stop_at')->orWhereNotNull('mat.low_stock_at'))
+            ->whereRaw("UPPER(ad.status) = 'ACTIVE'")
+            ->select(['l.ad_id', 'ad.external_id', 'ad.name', 'ad.status', 'ad.thumbnail_url', 'acc.id as account_id', 'acc.name as account', 'acc.platform',
+                'mat.id as material_id', 'mat.title as material', 'p.title as product', 'mat.need_stop_at', 'mat.low_stock_at'])
+            ->selectRaw(str_replace('ad_materials.', 'mat.', MaterialService::inventorySql()).' as inventory')
+            ->orderBy('mat.id')->orderBy('l.ad_id');
+        if ($f?->accountIds !== null) {
+            $q->whereIn('ad.ad_account_id', $f->accountIds);
+        }
+        if ($f?->platform !== null) {
+            $q->where('acc.platform', $f->platform);
+        }
+
+        $out = [];
+        foreach ($q->get() as $r) {
+            $id = (int) $r->ad_id;
+            if (isset($out[$id]) && $out[$id]['stock'] === 'out') {
+                continue; // one row per ad; out beats low
+            }
+            $out[$id] = [
+                'ad_id' => $id, 'external_id' => (string) $r->external_id, 'name' => (string) $r->name, 'status' => $r->status, 'thumbnail_url' => $r->thumbnail_url,
+                'account_id' => (int) $r->account_id, 'account' => (string) $r->account, 'platform' => (string) $r->platform,
+                'material_id' => (int) $r->material_id, 'material' => (string) $r->material, 'product' => $r->product,
+                'stock' => $r->need_stop_at !== null ? 'out' : 'low', 'inventory' => (int) $r->inventory, 'threshold' => $threshold,
+            ];
+        }
+
+        return array_values($out);
+    }
+
+    private function notifyLow(AdMaterial $m, int $threshold): void
+    {
+        $data = [
+            'material_id' => $m->id,
+            'title' => $m->title,
+            'product_title' => $m->product?->title,
+            'inventory' => (int) ($m->product?->variants()->sum('inventory_quantity') ?? 0),
+            'threshold' => $threshold,
+            'ads' => $m->ads->filter(fn ($a) => strtoupper((string) $a->status) === 'ACTIVE')->pluck('name')->values()->all(),
+            'link' => self::LOW_LINK,
+        ];
+        $recipients = collect([$m->buyer?->user])->filter(fn ($u) => $u instanceof User && $u->is_active);
+        User::query()->where('is_active', true)->get()->filter(fn (User $u) => $u->isSupervisorOrAbove())
+            ->each(fn (User $u) => $recipients->push($u));
+        $recipients->unique('id')->each(fn (User $u) => $this->notifier->notify($u, self::LOW_NOTIFICATION_TYPE, $data));
     }
 
     /**

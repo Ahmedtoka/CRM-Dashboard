@@ -20,6 +20,7 @@ class CheckProductStock implements ShouldQueue
     {
         $watcher->run($this->productIds);
         $watcher->holds($this->productIds);
+        $watcher->low($this->productIds);
     }
 
     /**

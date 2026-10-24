@@ -558,8 +558,6 @@ return [
         'execute' => (bool) env('CRM_ADS_EXECUTE', false),
         // The «scale» decision raises the daily budget of a winner by this percentage (ads_settings.scale_pct overrides).
         'scale_pct' => (int) env('CRM_ADS_SCALE_PCT', 20),
-        // The «stock risk» decision: a running ad whose product has at most this many units left (ads_settings.stock_low_threshold overrides).
-        'stock_low_threshold' => (int) env('CRM_ADS_STOCK_LOW_THRESHOLD', 5),
         'write' => [
             'enabled' => (bool) env('CRM_ADS_WRITES_ENABLED', true),
             // HTTP timeout (seconds) of an inline platform write and of the live pre-read (the old write POST waited 90).
