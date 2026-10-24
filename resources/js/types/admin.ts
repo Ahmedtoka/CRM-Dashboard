@@ -682,7 +682,7 @@ export interface BotPreviewResult {
 export type HealthLevel = 'ok' | 'warning' | 'problem';
 
 export interface HealthCheckItem {
-    key: 'token' | 'webhooks' | 'phone' | 'link' | 'inbound';
+    key: 'token' | 'webhooks' | 'phone' | 'link' | 'inbound' | 'account';
     status: HealthLevel;
     code: string;
     detail?: string;
@@ -699,7 +699,7 @@ export interface IntegrationHealth {
 /** A live Meta account as the Integrations page sees it — never carries a token. */
 export interface IntegrationAccount {
     id: number;
-    platform: 'facebook' | 'instagram' | 'whatsapp';
+    platform: 'facebook' | 'instagram' | 'whatsapp' | 'tiktok';
     name: string;
     external_id: string | null;
     status: 'connected' | 'error' | 'disconnected';
@@ -719,6 +719,10 @@ export interface IntegrationAccount {
         verified_name: string | null;
         quality_rating: string | null;
         override_callback: boolean;
+        /** TikTok messaging only (x6). */
+        has_advanced_access?: boolean | null;
+        webhook_subscribed_at?: string | null;
+        token_expires_at?: string | null;
     };
     health: IntegrationHealth | null;
     health_status: HealthLevel | null;
@@ -729,6 +733,21 @@ export interface IntegrationAccounts {
     facebook: IntegrationAccount | null;
     instagram: IntegrationAccount | null;
     whatsapp: IntegrationAccount | null;
+    tiktok: IntegrationAccount | null;
+}
+
+/** TikTok direct messages on Settings → Channels (x6, 2026-10-24). */
+export interface TikTokSettings {
+    enabled: boolean;
+    app_id_set: boolean;
+    app_secret_set: boolean;
+    app_id: string;
+    connect_url: string;
+    redirect_uri: string;
+    callback_url: string;
+    scopes: string[];
+    driver: string;
+    flash: { code: string; name?: string; detail?: string } | null;
 }
 
 export interface IntegrationsMeta {

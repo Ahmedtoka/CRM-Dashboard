@@ -165,7 +165,8 @@ async function copy(value: string | null): Promise<void> {
             <div
                 v-for="field in [
                     { label: t('settings.channels.webhook_url'), value: account.webhook_url },
-                    { label: t('settings.channels.verify_token'), value: account.verify_token },
+                    // TikTok has no verify-token handshake (x6): it signs every delivery with the app secret instead.
+                    ...(platform === 'tiktok' ? [] : [{ label: t('settings.channels.verify_token'), value: account.verify_token }]),
                 ]"
                 :key="field.label"
                 class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1"

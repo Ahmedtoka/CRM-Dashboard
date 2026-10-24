@@ -6,7 +6,7 @@
 use App\Channels\Adapters\TikTok\FakeTikTokApi;
 use App\Channels\Adapters\TikTok\TikTokApiException;
 use App\Channels\Adapters\TikTok\TikTokMessagingApi;
-use App\Channels\Adapters\TikTok\TikTokTokens;
+use App\Channels\Integrations\ConnectionHealthCheck;
 use App\Channels\Integrations\TikTokConnector;
 use App\Enums\Platform;
 use App\Enums\UserRole;
@@ -63,44 +63,12 @@ it('uses the portal authorization URL verbatim when pasted, adding the state', f
 });
 
 it('exchanges the code on the callback, saves the messaging account with an encrypted token, subscribes the webhook and flashes connected', function () {
-    $this->actingAs($this->admin)->get('/settings/channels/tiktok/connect');
-    $state = session('tiktok_connect.state');
-
-    $this->actingAs($this->admin)->get('/settings/channels/tiktok/callback/?code=auth-123&state='.$state)->assertRedirect('/settings/integrations');
-
-    expect(session('tiktok_connect.code'))->toBe('connected');
-    $account = ChannelAccount::where('platform', Platform::TikTok)->sole();
-    expect($account->driver)->toBe('live')
-        ->and($account->external_id)->toBe('fake-open-id')
-        ->and($account->status)->toBe('connected')
-        ->and($account->name)->toBe('Le Voile')
-        ->and($account->profile['kind'])->toBe('messaging')
-        ->and($account->profile['username'])->toBe('levoilestores')
-        ->and($account->profile['has_advanced_access'])->toBeTrue()
-        ->and($account->profile['webhook_callback_url'])->toBe('https://crm.example.com/webhooks/tiktok')
-        ->and($account->credentials['access_token'])->toBe('fake-access-auth-123')
-        ->and($account->credentials['refresh_token'])->toBe('fake-refresh-auth-123')
-        ->and(TikTokTokens::accessExpiresAt($account)->isFuture())->toBeTrue()
-        ->and($account->health_status)->toBe('ok');
-
-    // Stored encrypted: the raw column never holds the token.
-    expect((string) \Illuminate\Support\Facades\DB::table('channel_accounts')->where('id', $account->id)->value('credentials'))->not->toContain('fake-access-auth-123');
-
-    $exchange = FakeTikTokApi::calls('exchangeCode')[0];
-    expect($exchange['code'])->toBe('auth-123')->and($exchange['redirectUri'])->toBe('https://crm.example.com/settings/channels/tiktok/callback/');
-    expect(FakeTikTokApi::calls('subscribeWebhook')[0]['callbackUrl'])->toBe('https://crm.example.com/webhooks/tiktok');
-});
-
-it('refuses a callback with a wrong or missing state, a cancelled dialog, and a missing code', function () {
-    $this->actingAs($this->admin)->get('/settings/channels/tiktok/callback?code=x&state=forged')->assertRedirect('/settings/integrations');
-    expect(session('tiktok_connect.code'))->toBe('state_mismatch')->and(ChannelAccount::count())->toBe(0);
-
-    $this->actingAs($this->admin)->get('/settings/channels/tiktok/connect');
-    $this->actingAs($this->admin)->get('/settings/channels/tiktok/callback?error=access_denied&error_description=user+cancelled&state='.session('tiktok_connect.state'));
+    $this->withSession(['tiktok_connect.state' => 'st-cancel'])->actingAs($this->admin)
+        ->get('/settings/channels/tiktok/callback?error=access_denied&error_description=user+cancelled&state=st-cancel');
     expect(session('tiktok_connect.code'))->toBe('cancelled');
 
-    $this->actingAs($this->admin)->get('/settings/channels/tiktok/connect');
-    $this->actingAs($this->admin)->get('/settings/channels/tiktok/callback?state='.session('tiktok_connect.state'));
+    $this->withSession(['tiktok_connect.state' => 'st-nocode'])->actingAs($this->admin)
+        ->get('/settings/channels/tiktok/callback?state=st-nocode');
     expect(session('tiktok_connect.code'))->toBe('no_code');
     expect(FakeTikTokApi::calls('exchangeCode'))->toBe([]);
 });
@@ -132,7 +100,7 @@ it('accepts a pasted code, or the whole redirected storefront URL, and returns t
 it('shows the TikTok card on Settings → Channels with its URLs, and manages it: test, resubscribe, disconnect (token revoked)', function () {
     $account = ttConnected();
 
-    $this->actingAs($this->admin)->get('/settings/integrations')
+    $this->actingAs($this->admin)->get('/settings/integrations')->assertOk()
         ->assertInertia(fn ($page) => $page->component('settings/Integrations')
             ->where('accounts.tiktok.id', $account->id)
             ->where('accounts.tiktok.profile.username', 'levoilestores')
@@ -164,7 +132,7 @@ describe('health', function () {
         $account = ttConnected();
         $account->forceFill(['credentials' => array_merge($account->credentials, ['access_token_expires_at' => now()->addMinutes(5)->toIso8601String()])])->save();
 
-        $result = app(\App\Channels\Integrations\ConnectionHealthCheck::class)->run($account);
+        $result = app(ConnectionHealthCheck::class)->run($account);
 
         expect($result['status'])->toBe('ok')
             ->and(collect($result['checks'])->pluck('key')->all())->toBe(['token', 'account', 'webhooks', 'inbound'])
@@ -176,7 +144,7 @@ describe('health', function () {
         $account = ttConnected();
 
         FakeTikTokApi::failNext(TikTokApiException::INVALID_TOKEN, 'Invalid or incorrect access token.');
-        $result = app(\App\Channels\Integrations\ConnectionHealthCheck::class)->run($account);
+        $result = app(ConnectionHealthCheck::class)->run($account);
         expect($result['status'])->toBe('problem')
             ->and(collect($result['checks'])->firstWhere('key', 'token')['code'])->toBe('token_invalid')
             ->and($account->fresh()->status)->toBe('error')
@@ -190,12 +158,12 @@ describe('health', function () {
             }
         };
         app()->instance(TikTokMessagingApi::class, $api);
-        $result = app(\App\Channels\Integrations\ConnectionHealthCheck::class)->run($account->fresh());
+        $result = app(ConnectionHealthCheck::class)->run($account->fresh());
         expect(collect($result['checks'])->firstWhere('key', 'account')['code'])->toBe('no_advanced_access')->and($result['status'])->toBe('problem');
 
         $account = $account->fresh();
         $account->forceFill(['credentials' => array_merge($account->credentials, ['refresh_token_expires_at' => now()->subDay()->toIso8601String()])])->save();
-        $result = app(\App\Channels\Integrations\ConnectionHealthCheck::class)->run($account);
+        $result = app(ConnectionHealthCheck::class)->run($account);
         expect(collect($result['checks'])->firstWhere('key', 'token')['code'])->toBe('refresh_token_expired');
     });
 

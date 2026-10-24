@@ -6,6 +6,7 @@ import HowToSteps from '@/components/crm/integrations/HowToSteps.vue';
 import IntegrationCard from '@/components/crm/integrations/IntegrationCard.vue';
 import MetaSetupHint from '@/components/crm/integrations/MetaSetupHint.vue';
 import SystemUserTokenForm from '@/components/crm/integrations/SystemUserTokenForm.vue';
+import TikTokConnectPanel from '@/components/crm/integrations/TikTokConnectPanel.vue';
 import WhatsAppConnectForm from '@/components/crm/integrations/WhatsAppConnectForm.vue';
 import SettingsPanel from '@/components/crm/settings/SettingsPanel.vue';
 import SettingsShell from '@/components/crm/settings/SettingsShell.vue';
@@ -27,6 +28,7 @@ import type {
     IntegrationAccounts,
     IntegrationsMeta,
     ShopifySummary,
+    TikTokSettings,
 } from '@/types/admin';
 import { Head, Link } from '@inertiajs/vue3';
 import {
@@ -50,13 +52,14 @@ const props = defineProps<{
     shopify: ShopifySummary | null;
     meta: IntegrationsMeta;
     facebookLogin: FacebookLoginSettings;
+    tiktok: TikTokSettings;
 }>();
 
 const { t, locale } = useI18n();
 const api = useApi();
 const toast = useToast();
 
-type MetaPlatform = 'facebook' | 'instagram' | 'whatsapp';
+type MetaPlatform = 'facebook' | 'instagram' | 'whatsapp' | 'tiktok';
 
 const accounts = reactive<IntegrationAccounts>({ ...props.accounts });
 watch(
@@ -64,11 +67,12 @@ watch(
     (next) => Object.assign(accounts, next),
 );
 
-const busy = reactive<Record<MetaPlatform, 'test' | 'fix' | 'reconnect' | null>>({ facebook: null, instagram: null, whatsapp: null });
+const busy = reactive<Record<MetaPlatform, 'test' | 'fix' | 'reconnect' | null>>({ facebook: null, instagram: null, whatsapp: null, tiktok: null });
 
 const facebook = computed(() => accounts.facebook);
 const instagram = computed(() => accounts.instagram);
 const whatsapp = computed(() => accounts.whatsapp);
+const tiktokAccount = computed(() => accounts.tiktok);
 const facebookActive = computed(() => isActive(accounts.facebook));
 
 const appReady = computed(() => props.meta.app_id_set && props.meta.app_secret_set);
@@ -93,13 +97,26 @@ const flashClasses = {
 } as const;
 const flashIcons = { success: CircleCheck, info: Info, warning: TriangleAlert, error: CircleAlert } as const;
 
+// ---- TikTok: outcome of the OAuth round trip (flashed once by the server) -------------------------------------
+const tiktokFlashTones = { connected: 'success', cancelled: 'info', subscribe_failed: 'warning', no_code: 'warning' } as const;
+const dismissedTikTokFlash = ref(false);
+const tiktokFlash = computed(() => {
+    const flash = props.tiktok.flash;
+    if (!flash || dismissedTikTokFlash.value) return null;
+    return {
+        tone: tiktokFlashTones[flash.code as keyof typeof tiktokFlashTones] ?? 'error',
+        message: t(`settings.integrations.tiktok.flash.${flash.code}`, { name: flash.name ?? '' }),
+        detail: flash.detail ?? null,
+    };
+});
+
 // ---- shared account actions ------------------------------------------------------
 function applyAccounts(payload: { accounts?: IntegrationAccounts; account?: IntegrationAccount }): void {
     if (payload.accounts) Object.assign(accounts, payload.accounts);
     else if (payload.account) accounts[payload.account.platform] = payload.account;
 }
 
-function onConnected(payload: { account: IntegrationAccount; accounts: IntegrationAccounts; subscribed: boolean }): void {
+function onConnected(payload: { account: IntegrationAccount; accounts?: IntegrationAccounts; subscribed: boolean }): void {
     applyAccounts(payload);
     toast.push(
         payload.subscribed
@@ -112,6 +129,7 @@ function onConnected(payload: { account: IntegrationAccount; accounts: Integrati
         if (!isActive(accounts.instagram)) void discoverInstagram();
     }
     if (payload.account.platform === 'whatsapp') whatsappForm.value = false;
+    if (payload.account.platform === 'tiktok') open.tiktok = true;
 }
 
 async function test(account: IntegrationAccount): Promise<void> {
@@ -241,6 +259,10 @@ const whatsappState = computed(() => accountState(whatsapp.value));
 const whatsappSteps = computed(() => [1, 2, 3, 4].map((n) => t(`settings.integrations.whatsapp.step_${n}`)));
 const qualityTone: Record<string, string> = { GREEN: 'text-ok', YELLOW: 'text-warn', RED: 'text-danger' };
 
+// ---- TikTok -----------------------------------------------------------------------
+const tiktokState = computed(() => accountState(tiktokAccount.value));
+const tiktokSteps = computed(() => [1, 2, 3, 4, 5].map((n) => t(`settings.integrations.tiktok.step_${n}`)));
+
 // ---- Shopify / TikTok -------------------------------------------------------------
 const shopifyState = computed(() => {
     if (!props.shopify || props.shopify.status === 'disconnected')
@@ -288,6 +310,7 @@ const open = reactive<Record<MetaPlatform, boolean>>({
     facebook: facebookState.value === 'problem',
     instagram: instagramState.value === 'problem',
     whatsapp: whatsappState.value === 'problem',
+    tiktok: tiktokState.value === 'problem' || props.tiktok.flash !== null,
 });
 watch(facebookReconnect, (on) => on && (open.facebook = true));
 watch(whatsappForm, (on) => on && (open.whatsapp = true));
@@ -343,6 +366,28 @@ const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
                     class="-m-1 grid size-10 shrink-0 place-items-center rounded-md text-fg-2 hover:bg-card/60 hover:text-foreground"
                     :aria-label="t('common.close')"
                     @click="dismissedFlash = true"
+                >
+                    <X class="size-4" aria-hidden="true" />
+                </button>
+            </div>
+
+            <div
+                v-if="tiktokFlash"
+                role="status"
+                class="flex items-start gap-2 rounded-lg border px-4 py-3 text-13"
+                :class="flashClasses[tiktokFlash.tone]"
+                data-testid="tiktok-flash"
+            >
+                <component :is="flashIcons[tiktokFlash.tone]" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                <div class="min-w-0 flex-1">
+                    <p class="font-semibold">{{ tiktokFlash.message }}</p>
+                    <p v-if="tiktokFlash.detail" class="mt-0.5 break-words text-xs text-fg-2" dir="ltr">{{ tiktokFlash.detail }}</p>
+                </div>
+                <button
+                    type="button"
+                    class="-m-1 grid size-10 shrink-0 place-items-center rounded-md text-fg-2 hover:bg-card/60 hover:text-foreground"
+                    :aria-label="t('common.close')"
+                    @click="dismissedTikTokFlash = true"
                 >
                     <X class="size-4" aria-hidden="true" />
                 </button>
@@ -591,14 +636,39 @@ const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
                     </p>
                 </IntegrationCard>
 
-                <!-- TikTok: not offered yet -->
+                <!-- TikTok direct messages (x6) -->
                 <IntegrationCard
+                    v-model:open="open.tiktok"
                     :title="t('settings.integrations.tiktok.title')"
                     :description="t('settings.integrations.tiktok.what')"
-                    state="soon"
+                    :state="tiktokState"
                     :icon="Music2"
-                    :toggleable="false"
-                />
+                    :account-name="tiktokState === 'not_connected' ? null : tiktokAccount?.name"
+                    :account-detail="tiktokState === 'not_connected' ? null : tiktokAccount?.profile.username ? `@${tiktokAccount.profile.username}` : null"
+                    :picture="tiktokState === 'not_connected' ? null : tiktokAccount?.profile.picture"
+                >
+                    <HowToSteps v-if="tiktokState === 'not_connected'" :steps="tiktokSteps" />
+
+                    <AccountSummary
+                        v-if="tiktokAccount && tiktokState !== 'not_connected'"
+                        :account="tiktokAccount"
+                        :testing="busy.tiktok === 'test'"
+                        :fixing="busy.tiktok === 'fix'"
+                        @test="test(tiktokAccount)"
+                        @fix="(action) => fix(tiktokAccount!, action)"
+                        @reconnect="open.tiktok = true"
+                        @disconnect="disconnectTarget = tiktokAccount"
+                    >
+                        <template #facts>
+                            <div class="min-w-0">
+                                <dt class="text-fg-2">{{ t('settings.integrations.tiktok.token_until') }}</dt>
+                                <dd class="truncate font-medium tabular-nums">{{ formatDateTime(tiktokAccount.profile.token_expires_at ?? null, locale) || '—' }}</dd>
+                            </div>
+                        </template>
+                    </AccountSummary>
+
+                    <TikTokConnectPanel :settings="tiktok" :connected="tiktokState !== 'not_connected'" @connected="onConnected" />
+                </IntegrationCard>
             </SettingsPanel>
         </SettingsShell>
 

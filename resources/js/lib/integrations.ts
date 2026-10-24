@@ -31,6 +31,8 @@ const KNOWN_ERRORS = [
     'phone_not_accessible',
     'phone_not_in_waba',
     'subscribe_failed',
+    'tiktok_code_invalid',
+    'tiktok_unreachable',
 ] as const;
 
 /**
