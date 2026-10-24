@@ -33,7 +33,7 @@ beforeEach(function () {
 it('sends a plain text to the conversation id, cut to 6000 characters', function () {
     $result = $this->adapter->sendText($this->account, $this->to, str_repeat('ا', 6500));
 
-    expect($result->success)->toBeTrue()->and($result->externalId)->toBe('tt_fake_1');
+    expect($result->success)->toBeTrue()->and($result->externalId)->toStartWith('tt_fake_');
     $sent = FakeTikTokApi::sent();
     expect($sent)->toHaveCount(1)
         ->and($sent[0]['recipient_type'])->toBe('CONVERSATION')
@@ -56,7 +56,7 @@ it('sends up to three short bot buttons as a Q&A button card after the text, car
         ['title' => 'الشحن', 'payload' => 'flow:shipping'],
     ]]);
 
-    expect($result->success)->toBeTrue()->and($result->externalId)->toBe('tt_fake_1');
+    expect($result->success)->toBeTrue()->and($result->externalId)->toStartWith('tt_fake_');
     $sent = FakeTikTokApi::sent();
     expect($sent)->toHaveCount(2)
         ->and($sent[0]['text']['body'])->toBe('تحبي نساعدك في إيه؟')
@@ -77,7 +77,7 @@ it('falls back to a numbered list in one message for more than three buttons, a 
 
     FakeTikTokApi::reset();
     $this->adapter->sendText($this->account, $this->to, 'اختاري', ['quick_replies' => [['title' => 'عنوان طويل جداً أكتر من عشرين حرف بكتير', 'payload' => 'p1']]]);
-    expect(FakeTikTokApi::sent()[0]['text']['body'])->toContain("1- عنوان طويل");
+    expect(FakeTikTokApi::sent()[0]['text']['body'])->toContain('1- عنوان طويل');
 
     FakeTikTokApi::reset();
     config(['services.tiktok.menu_style' => 'text']);
@@ -154,7 +154,7 @@ describe('attachments', function () {
         expect($upload['filename'])->toBe('chart.png');
         $sent = FakeTikTokApi::sent();
         expect($sent)->toHaveCount(2)
-            ->and($sent[0]['message_type'])->toBe('IMAGE')->and($sent[0]['image'])->toBe(['media_id' => 'media_fake_1'])
+            ->and($sent[0]['message_type'])->toBe('IMAGE')->and($sent[0]['image']['media_id'])->toStartWith('media_fake_')
             ->and($sent[1]['message_type'])->toBe('TEXT')->and($sent[1]['text']['body'])->toBe('جدول المقاسات');
     });
 

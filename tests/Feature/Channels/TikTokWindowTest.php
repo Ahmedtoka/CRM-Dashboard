@@ -96,3 +96,14 @@ it('throws the WindowClosedException the queue already handles when the cap is s
 
     expect(fn () => app(OutboundService::class)->sendBot($this->conversation, 'كمان رسالة'))->toThrow(WindowClosedException::class);
 });
+
+it('counts a bot message whose buttons go out as a Q&A card as two TikTok messages', function () {
+    $card = ['buttons' => [['title' => 'المقاسات', 'payload' => 'flow:sizes'], ['title' => 'الشحن', 'payload' => 'flow:shipping']]];
+    $this->conversation->messages()->create($card + ['platform' => Platform::TikTok, 'direction' => MessageDirection::Out, 'sender_type' => SenderType::Bot, 'body' => 'تحبي إيه؟', 'status' => MessageStatus::Sent]);
+    expect(TikTokWindow::remaining($this->conversation))->toBe(8);
+
+    // Seven options go out as one numbered text: one message.
+    $seven = array_map(fn ($i) => ['title' => "اختيار {$i}", 'payload' => "p{$i}"], range(1, 7));
+    $this->conversation->messages()->create(['buttons' => $seven] + ['platform' => Platform::TikTok, 'direction' => MessageDirection::Out, 'sender_type' => SenderType::Bot, 'body' => 'اختاري', 'status' => MessageStatus::Sent]);
+    expect(TikTokWindow::remaining($this->conversation))->toBe(7);
+});

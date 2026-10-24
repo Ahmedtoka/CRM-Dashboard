@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web\Settings;
 
 use App\Channels\Adapters\MetaGraphClient;
 use App\Channels\Integrations\ConnectionHealthCheck;
+use App\Channels\Integrations\TikTokConnector;
 use App\Channels\Integrations\WhatsAppConnector;
 use App\Channels\Jobs\ProcessWebhookEvent;
 use App\Channels\MetaPageSubscriber;
@@ -90,6 +91,13 @@ class ChannelController extends Controller
             return $this->testInstagram($channel);
         }
 
+        // TikTok messaging (x6): the same health check Settings → Channels runs, answered in this page's shape.
+        if (TikTokConnector::isMessagingAccount($channel)) {
+            $result = app(ConnectionHealthCheck::class)->run($channel);
+
+            return response()->json(['ok' => $result['status'] !== 'problem', 'page_name' => $channel->fresh()->name, 'error' => $result['status'] === 'problem' ? (ConnectionHealthCheck::problemText($channel->fresh()->last_error) ?? 'problem') : null]);
+        }
+
         if (empty($channel->external_id)) {
             return response()->json(['ok' => false, 'error' => 'missing_external_id']);
         }
@@ -147,6 +155,12 @@ class ChannelController extends Controller
         $this->refuseTestAccount($channel);
 
         $pageId = $channel->external_id;
+
+        if (TikTokConnector::isMessagingAccount($channel)) {
+            $result = app(TikTokConnector::class)->subscribeWebhook($channel);
+
+            return response()->json($result->success ? ['ok' => true] : ['ok' => false, 'error' => $result->error]);
+        }
 
         if ($channel->platform === Platform::Instagram) {
             $linked = $channel->linkedFacebookAccount();

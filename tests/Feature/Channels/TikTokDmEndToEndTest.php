@@ -16,6 +16,7 @@ use App\Models\Conversation;
 use App\Models\CustomerIdentity;
 use App\Models\Message;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 
 const TT_E2E_SECRET = 'e2e-secret';
 
@@ -77,9 +78,28 @@ it('answers a TikTok DM with the bot through the messaging API, then lets a mode
     expect($reply->fresh()->status)->toBe(MessageStatus::Sent)
         ->and(collect(FakeTikTokApi::sent())->where('message_type', 'TEXT')->last()['text']['body'])->toBe('اتفضلي الكتالوج');
 
-    expect(fn () => app(OutboundService::class)->sendHuman($conversation->fresh(), $other, 'x'))->toThrow(\Illuminate\Auth\Access\AuthorizationException::class);
+    expect(fn () => app(OutboundService::class)->sendHuman($conversation->fresh(), $other, 'x'))->toThrow(AuthorizationException::class);
 
     // The same message id delivered again changes nothing.
     ttE2ePost(['text' => ['body' => 'بكام الفستان؟']], 'msg-1');
     expect(Message::where('direction', 'in')->count())->toBe(1);
+});
+
+it('offers bot buttons on TikTok as a Q&A card, or as one numbered text beyond three, and the typed number comes back as an ordinary message', function () {
+    ttE2ePost(['text' => ['body' => 'أهلاً']], 'msg-hello');
+    $conversation = Conversation::where('platform', Platform::TikTok)->sole();
+    FakeTikTokApi::reset();
+
+    app(OutboundService::class)->sendBot($conversation, 'تحبي نساعدك في إيه؟', buttons: [['title' => 'المقاسات', 'payload' => 'flow:sizes'], ['title' => 'الشحن', 'payload' => 'flow:shipping']]);
+    $sent = FakeTikTokApi::sent();
+    expect($sent)->toHaveCount(2)->and($sent[1]['template']['type'])->toBe('QA_BUTTON_CARD')->and($sent[1]['template']['buttons'][0]['id'])->toBe('flow:sizes');
+
+    FakeTikTokApi::reset();
+    $menu = array_map(fn ($i) => ['title' => "اختيار {$i}", 'payload' => "p{$i}"], range(1, 5));
+    app(OutboundService::class)->sendBot($conversation->fresh(), 'القائمة', buttons: $menu);
+    $sent = FakeTikTokApi::sent();
+    expect($sent)->toHaveCount(1)->and($sent[0]['text']['body'])->toStartWith('القائمة
+
+1- اختيار 1
+2- اختيار 2');
 });

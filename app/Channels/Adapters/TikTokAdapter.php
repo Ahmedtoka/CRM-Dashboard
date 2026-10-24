@@ -407,14 +407,8 @@ final class TikTokAdapter implements ChannelAdapter, LimitsOutbound, UnhidesComm
      */
     private function buttonCard(array $buttons): ?array
     {
-        if ($buttons === [] || count($buttons) > self::MAX_BUTTONS || config('services.tiktok.menu_style', 'card') !== 'card') {
+        if (! TikTokWindow::sentAsCard($buttons)) {
             return null;
-        }
-
-        foreach ($buttons as $b) {
-            if (mb_strlen((string) $b['title']) > self::BUTTON_TITLE_MAX) {
-                return null;
-            }
         }
 
         return [

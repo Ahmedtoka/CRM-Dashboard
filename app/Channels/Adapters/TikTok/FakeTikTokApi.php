@@ -23,7 +23,7 @@ class FakeTikTokApi implements TikTokMessagingApi
     {
         self::$calls = [];
         self::$failNext = null;
-        self::$sequence = 0;
+        // The id sequence keeps counting across reset(): a message id must stay unique within one test database.
     }
 
     /** @return list<array<string, mixed>> */
