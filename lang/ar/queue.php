@@ -45,4 +45,20 @@ return [
         'points' => ['base' => 'نقط الشبابيك', 'speed' => 'نقط السرعة', 'case' => 'نقط الطلبات', 'review' => 'نقط التقييم', 'qa' => 'نقط الجودة', 'no_reply' => 'خصم عدم الرد'],
         'total' => 'إجمالي النقط',
     ],
+    // The leader's per-moderator CSV («الموظفات في الطابور» on /reports/team).
+    'team_report' => [
+        'moderator' => 'الموظفة',
+        'received' => 'استلمت',
+        'handled' => 'قفلت بشغل',
+        'first_reply_median' => 'وسيط أول رد (ثانية)',
+        'auto_closes' => 'قفل تلقائي',
+        'hand_offs' => 'تحويلات',
+        'hand_offs_no_reply' => 'تحويل لعدم الرد',
+        'hand_offs_transfer' => 'تحويل لموظفة',
+        'rating_avg' => 'متوسط التقييم',
+        'rating_count' => 'عدد التقييمات',
+        'points' => 'النقط',
+        'open_cases' => 'طلبات مفتوحة دلوقتي',
+        'totals' => 'الإجمالي',
+    ],
 ];

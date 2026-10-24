@@ -44,4 +44,20 @@ return [
         'points' => ['base' => 'Window points', 'speed' => 'Speed points', 'case' => 'Case points', 'review' => 'Rating points', 'qa' => 'Quality points', 'no_reply' => 'No-reply deductions'],
         'total' => 'Total points',
     ],
+    // The leader's per-moderator CSV (the queue table on /reports/team).
+    'team_report' => [
+        'moderator' => 'Moderator',
+        'received' => 'Received',
+        'handled' => 'Handled',
+        'first_reply_median' => 'Median first reply (s)',
+        'auto_closes' => 'Auto-closes',
+        'hand_offs' => 'Hand-offs',
+        'hand_offs_no_reply' => 'Hand-offs: no reply',
+        'hand_offs_transfer' => 'Hand-offs: transfer',
+        'rating_avg' => 'Avg rating',
+        'rating_count' => 'Ratings',
+        'points' => 'Points',
+        'open_cases' => 'Open cases now',
+        'totals' => 'Total',
+    ],
 ];

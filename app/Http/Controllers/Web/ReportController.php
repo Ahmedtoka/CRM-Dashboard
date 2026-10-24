@@ -18,6 +18,7 @@ use App\Models\BotTestSession;
 use App\Models\QueueEntry;
 use App\Models\User;
 use App\Queue\RatingStats;
+use App\Queue\Reports\TeamReport;
 use App\Queue\Scoring\ScoreKeeper;
 use App\TestLinks\TestLinkReport;
 use Carbon\CarbonImmutable;
@@ -37,9 +38,12 @@ class ReportController extends Controller
     {
         $request->validate(['stars' => ['nullable', Rule::in(['low', 'all'])]]);
 
-        // Ratings (G11) are a web-only addition: teamReport() is shared with API v1 and stays as it is.
+        // Ratings (G11) and the leader's per-moderator table are web-only additions: teamReport() is shared with API v1 and stays as it is.
+        $range = DateRange::fromRequest($request);
+
         return Inertia::render('Reports/Team', $this->teamReport($request, $metrics, $presence) + [
-            'ratings' => $this->teamRatings($ratings, DateRange::fromRequest($request), $request->query('stars') === 'low' ? 'low' : 'all'),
+            'ratings' => $this->teamRatings($ratings, $range, $request->query('stars') === 'low' ? 'low' : 'all'),
+            'team_queue' => app(TeamReport::class)->build($range->fromDate, $range->toDate),
         ]);
     }
 
