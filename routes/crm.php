@@ -8,6 +8,7 @@ use App\Http\Controllers\Web\Bot\BotBrainController;
 use App\Http\Controllers\Web\Bot\BotFeedbackController;
 use App\Http\Controllers\Web\Bot\BotReplyInsightController;
 use App\Http\Controllers\Web\CaseController;
+use App\Http\Controllers\Web\CaseFollowUpController;
 use App\Http\Controllers\Web\CommentController;
 use App\Http\Controllers\Web\CustomerController;
 use App\Http\Controllers\Web\InboxController;
@@ -49,6 +50,7 @@ use App\Http\Controllers\Web\Settings\TagController;
 use App\Http\Controllers\Web\Settings\UserController;
 use App\Http\Controllers\Web\ShippingController;
 use App\Http\Controllers\Web\SimulatorController;
+use App\Http\Controllers\Web\TeamReportController;
 use App\Http\Controllers\Web\TodayController;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\RestrictAdsRoles;
@@ -179,6 +181,8 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
 
     // Support cases (spec §4)
     Route::get('/cases', [CaseController::class, 'index'])->name('cases.index');
+    // «المتابعة» (queue ops): the open-cases follow-up page (before /cases/{supportCase}, or the binding swallows "follow-up").
+    Route::get('/cases/follow-up', [CaseFollowUpController::class, 'index'])->name('cases.follow_up');
     Route::get('/cases/{supportCase}', [CaseController::class, 'show'])->name('cases.show');
     Route::patch('/cases/{supportCase}', [CaseController::class, 'update'])->name('cases.update');
 
@@ -201,6 +205,8 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
     Route::get('/reports/me', [ReportController::class, 'me'])->name('reports.me');
     Route::middleware('role:supervisor')->group(function () {
         Route::get('/reports/team', [ReportController::class, 'team'])->name('reports.team');
+        // The leader's per-moderator table on /reports/team («الموظفات في الطابور») as a CSV.
+        Route::get('/reports/team/queue-export', [TeamReportController::class, 'export'])->name('reports.team.queue-export');
         // Queue Part 2: the queue's report for any range (≤ 92 days) and its CSV.
         Route::get('/reports/queue', [QueueReportController::class, 'index'])->name('reports.queue');
         Route::get('/reports/queue/export', [QueueReportController::class, 'export'])->name('reports.queue.export');
