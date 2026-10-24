@@ -6,7 +6,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import { cairoToday, formatDate, formatDateTime } from '@/lib/format';
 import type { SupportCase } from '@/types/crm';
-import { RETURN_STAGES, type ReturnStage, type ReturnView } from '@/types/returnsShipping';
+import { type ReturnStage, type ReturnView } from '@/types/returnsShipping';
 import { Check, Circle, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
@@ -130,18 +130,15 @@ const field = 'h-9 w-full rounded-md border border-line-strong bg-card px-2 text
                 <p class="text-2xs tabular-nums text-fg-3">
                     {{ formatDateTime(entry.at, locale) }}<template v-if="entry.by"> · {{ t('return_lifecycle.by', { name: entry.by }) }}</template>
                 </p>
-                <p
-                    v-if="entry.notified !== null"
-                    class="text-2xs"
-                    :class="entry.notified ? 'text-ok' : 'text-warn'"
-                    data-return-notified
-                >
+                <p v-if="entry.notified !== null" class="text-2xs" :class="entry.notified ? 'text-ok' : 'text-warn'" data-return-notified>
                     {{ entry.notified ? t('return_lifecycle.notified') : t('return_lifecycle.not_notified') }}
                     <template v-if="entry.notify_error"> — {{ t(`return_lifecycle.notify_errors.${entry.notify_error}`) }}</template>
                 </p>
             </li>
             <li v-for="s in stepsAhead" :key="`ahead-${s}`" class="relative text-fg-3">
-                <span class="absolute -start-[1.4rem] top-0.5 grid size-4 place-items-center text-line-strong" aria-hidden="true"><Circle class="size-3.5" /></span>
+                <span class="absolute -start-[1.4rem] top-0.5 grid size-4 place-items-center text-line-strong" aria-hidden="true"
+                    ><Circle class="size-3.5"
+                /></span>
                 <p>{{ t(`return_lifecycle.stages.${s}`) }}</p>
             </li>
         </ol>
@@ -170,7 +167,16 @@ const field = 'h-9 w-full rounded-md border border-line-strong bg-card px-2 text
                 </label>
                 <label v-if="open === 'picked_up' && !view.is_exchange" class="grid gap-1">
                     <span class="text-xs font-semibold text-fg-2">{{ t('return_lifecycle.fields.refund_amount') }}</span>
-                    <input v-model="refundAmount" type="number" min="0" step="0.01" :class="field" dir="ltr" data-return-field="refund_amount" required />
+                    <input
+                        v-model="refundAmount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        :class="field"
+                        dir="ltr"
+                        data-return-field="refund_amount"
+                        required
+                    />
                 </label>
                 <label v-if="open === 'exchange_shipped'" class="grid gap-1">
                     <span class="text-xs font-semibold text-fg-2">{{ t('return_lifecycle.fields.exchange_order') }}</span>

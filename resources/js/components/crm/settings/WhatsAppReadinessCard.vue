@@ -59,13 +59,17 @@ async function sendTest(): Promise<void> {
     sending.value = true;
     testError.value = null;
     try {
-        const { data } = await api.post<{ ok: boolean; order: string | null; phone: string }>('/settings/whatsapp-readiness/test', { phone: phone.value });
+        const { data } = await api.post<{ ok: boolean; order: string | null; phone: string }>('/settings/whatsapp-readiness/test', {
+            phone: phone.value,
+        });
         toast.push(t('wa_ready.test.sent', { phone: data.phone, order: data.order ?? '' }));
     } catch (e) {
         const body = (e as { response?: { data?: { error?: string } } }).response?.data;
         const code = body?.error ?? '';
         const known = ['invalid_phone', 'customer_number', 'no_whatsapp_account', 'no_order'];
-        testError.value = known.includes(code) ? t(`wa_ready.test.errors.${code}`) : t('wa_ready.test.errors.failed', { error: code || apiErrorMessage(e, t('common.error')) });
+        testError.value = known.includes(code)
+            ? t(`wa_ready.test.errors.${code}`)
+            : t('wa_ready.test.errors.failed', { error: code || apiErrorMessage(e, t('common.error')) });
     } finally {
         sending.value = false;
     }
@@ -77,8 +81,16 @@ const steps = ['s1', 's2', 's3', 's4', 's5', 's6', 's7'];
 <template>
     <SettingsPanel :title="t('wa_ready.title')" :description="t('wa_ready.description')" data-wa-readiness>
         <template #actions>
-            <StatusChip v-if="report" :label="report.ready ? t('wa_ready.ready') : t('wa_ready.not_ready')" :tone="report.ready ? 'ok' : 'warn'" dot data-wa-ready-chip />
-            <Button type="button" variant="outline" size="sm" :loading="loading" @click="load"><RefreshCw aria-hidden="true" />{{ t('wa_ready.refresh') }}</Button>
+            <StatusChip
+                v-if="report"
+                :label="report.ready ? t('wa_ready.ready') : t('wa_ready.not_ready')"
+                :tone="report.ready ? 'ok' : 'warn'"
+                dot
+                data-wa-ready-chip
+            />
+            <Button type="button" variant="outline" size="sm" :loading="loading" @click="load"
+                ><RefreshCw aria-hidden="true" />{{ t('wa_ready.refresh') }}</Button
+            >
         </template>
 
         <p v-if="loadError" role="alert" class="py-3 text-13 text-danger">{{ loadError }}</p>
