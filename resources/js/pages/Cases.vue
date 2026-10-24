@@ -17,8 +17,8 @@ import { casePriorityTone, caseStatusTone, caseTypeTone } from '@/lib/caseStatus
 import { formatCount, formatDateTime, formatListStamp } from '@/lib/format';
 import type { Paginated } from '@/types/admin';
 import type { CaseStatus, CaseType, SupportCase } from '@/types/crm';
-import { Head, router } from '@inertiajs/vue3';
-import { ClipboardList } from 'lucide-vue-next';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { ClipboardList, ListChecks } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
 
 const TYPES: CaseType[] = ['return', 'exchange', 'return_exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
@@ -130,7 +130,12 @@ const fieldLabel = 'mb-1 block text-2xs font-medium text-muted-foreground';
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full min-w-0 max-w-7xl space-y-4 p-3 md:p-6">
-            <PageHeader :title="t('cases.title')" :description="t('cases.description')" />
+            <PageHeader :title="t('cases.title')" :description="t('cases.description')">
+                <!-- «المتابعة» (queue ops): the open cases, who has them and what to do next. -->
+                <Button as-child variant="outline" size="sm">
+                    <Link href="/cases/follow-up" data-cases-follow-up><ListChecks aria-hidden="true" />{{ t('cases.follow_up.link') }}</Link>
+                </Button>
+            </PageHeader>
 
             <!-- The status tabs (مفتوحة · قيد المتابعة · اتحلّت …): one strip, a count on each, the selected one underlined. -->
             <div class="scrollbar-none -mx-3 overflow-x-auto border-b border-line px-3 md:mx-0 md:px-0">

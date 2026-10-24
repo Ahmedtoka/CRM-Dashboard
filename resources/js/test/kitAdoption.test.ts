@@ -40,6 +40,8 @@ const SWEPT: string[] = [
     'Orders/Confirmations', 'settings/OrderConfirmations',
     // b2 «عقل البوت»
     'Bot/Brain', 'Bot/Costs', 'Bot/Feedback', 'Bot/Guide',
+    // Queue ops: «المتابعة»
+    'Cases/FollowUp',
 ];
 
 /**
@@ -63,8 +65,8 @@ const NO_PAGE_HEADER = new Set([
 ]);
 
 describe('S0 kit adoption', () => {
-    it('sees all 72 pages and only real ones are listed', () => {
-        expect(Object.keys(pages)).toHaveLength(72);
+    it('sees all 73 pages and only real ones are listed', () => {
+        expect(Object.keys(pages)).toHaveLength(73);
         for (const name of SWEPT) expect(pages[name], name).toBeDefined();
     });
 
