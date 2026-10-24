@@ -82,8 +82,8 @@ it('applies a fulfillment_events/create webhook, moves the fulfillment with it a
 
     $event = [
         'id' => 9001, 'fulfillment_id' => $f['id'], 'order_id' => $f['order_id'],
-        'status' => 'failure', 'message' => 'Customer not reachable', 'happened_at' => '2026-09-13T12:00:00+03:00',
-        'created_at' => '2026-09-13T12:00:05+03:00',
+        'status' => 'failure', 'message' => 'Customer not reachable', 'happened_at' => now()->subHours(2)->toIso8601String(),
+        'created_at' => now()->subHours(2)->toIso8601String(),
     ];
 
     expect(app(OrderMapper::class)->applyFulfillmentEvent($event))->toBe(MapResult::Created)
@@ -146,4 +146,17 @@ it('sends the shipping summary with the order resource', function () {
 
 it('maps the fulfillment_events webhook route to its topic', function () {
     expect(config('crm.shopify.webhook_topics'))->toContain('fulfillment_events/create');
+});
+
+it('does not ring the bell for a failed delivery from an old import', function () {
+    User::factory()->create(['role' => UserRole::Supervisor]);
+    [$order, $f] = fulfilledStoreOrder();
+
+    // Shopify reports a failure that happened a month ago (a backfill): kept in the timeline, no alert.
+    app(OrderMapper::class)->applyFulfillmentEvent([
+        'id' => 9100, 'fulfillment_id' => $f['id'], 'status' => 'failure', 'happened_at' => now()->subDays(30)->toIso8601String(),
+    ]);
+
+    expect($order->fresh()->shippingTimeline())->toHaveCount(2)
+        ->and(UserNotification::where('type', DeliveryFailureAlert::TYPE)->count())->toBe(0);
 });

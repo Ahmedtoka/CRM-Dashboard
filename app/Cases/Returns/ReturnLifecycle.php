@@ -325,7 +325,10 @@ final class ReturnLifecycle
             return null;
         }
 
-        $case->loadMissing(['events.user:id,name', 'exchangeOrder:id,order_number,shopify_order_name']);
+        $case->loadMissing('events.user:id,name');
+        if ($case->exchange_order_id !== null) {
+            $case->loadMissing('exchangeOrder:id,order_number,shopify_order_name');
+        }
         $exchange = $case->exchange_order_id !== null ? $case->exchangeOrder : null;
 
         return [

@@ -22,8 +22,15 @@ final class DeliveryFailureAlert
 
     public function __construct(private readonly UserNotifier $notifier) {}
 
+    /** An import or backfill of old fulfillments must not ring the bell for deliveries that failed weeks ago. */
+    public const FRESH_HOURS = 36;
+
     public function raise(Fulfillment $fulfillment, FulfillmentEvent $event): void
     {
+        if ($event->happened_at === null || $event->happened_at->lt(now()->subHours(self::FRESH_HOURS))) {
+            return;
+        }
+
         if (! Cache::add('delivery-failed-alert:'.$event->id, 1, now()->addDay())) {
             return;
         }
