@@ -258,6 +258,7 @@ export function adStatusLabel(status: string | null | undefined, t: (k: string) 
 export function writeChangeKey(toStatus: string): string {
     if (toStatus === 'PAUSED') return 'ads.control.write.done_stop';
     if (toStatus === 'ARCHIVED') return 'ads.control.write.done_archive';
+    if (toStatus === 'BUDGET') return 'ads.control.write.done_budget';
 
     return 'ads.control.write.done_run';
 }

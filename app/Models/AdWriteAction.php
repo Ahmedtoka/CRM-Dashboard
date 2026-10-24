@@ -39,7 +39,10 @@ class AdWriteAction extends Model
 
     public const ROLLED_BACK = 'rolled_back';
 
-    public const TERMINAL = [self::SUCCEEDED, self::FAILED, self::EXPIRED, self::CANCELLED, self::SUPERSEDED, self::SUPERSEDED_BY_STOP, self::ROLLED_BACK];
+    /** Round 3: confirmed while CRM_ADS_EXECUTE was off; nothing was sent to the platform. */
+    public const DRY_RUN = 'dry_run';
+
+    public const TERMINAL = [self::SUCCEEDED, self::FAILED, self::EXPIRED, self::CANCELLED, self::SUPERSEDED, self::SUPERSEDED_BY_STOP, self::ROLLED_BACK, self::DRY_RUN];
 
     /** Confirmed and not finished: the platform may be changing. */
     public const OPEN = [self::EXECUTING, self::UNKNOWN];
@@ -83,6 +86,12 @@ class AdWriteAction extends Model
     public function isStop(): bool
     {
         return $this->to_status === 'paused';
+    }
+
+    /** A daily budget change (round 3, type set_budget): neither a Stop nor a Run. */
+    public function isBudget(): bool
+    {
+        return $this->type === 'set_budget';
     }
 
     public function account(): BelongsTo

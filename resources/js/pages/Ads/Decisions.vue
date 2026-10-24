@@ -5,6 +5,8 @@ import AdStatusButton from '@/components/ads/AdStatusButton.vue';
 import AdsFilterBar from '@/components/ads/AdsFilterBar.vue';
 import AlertsSection from '@/components/ads/AlertsSection.vue';
 import CreativeThumb from '@/components/ads/CreativeThumb.vue';
+import DecisionCard from '@/components/ads/DecisionCard.vue';
+import WriteActionDialog from '@/components/ads/WriteActionDialog.vue';
 import PlatformChip from '@/components/ads/PlatformChip.vue';
 import AdsPanel from '@/components/ads/ui/AdsPanel.vue';
 import DecisionRow from '@/components/ads/ui/DecisionRow.vue';
@@ -25,10 +27,10 @@ import { ADS_FIELD, ADS_META, ADS_TONE } from '@/lib/adsUi';
 import { buildHref, readQuery, withParam } from '@/lib/adsFilters';
 import { formatCount, formatDateTime } from '@/lib/format';
 import { sectionTabs, type SectionTab } from '@/lib/sectionTabs';
-import type { AdActionLogRow, AdSuggestion, AdsDecisionsProps, DecisionsTab } from '@/types/ads';
+import type { AdActionLogRow, AdSuggestion, AdsDecisionsProps, DecisionKind, DecisionsTab } from '@/types/ads';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { CheckCircle2, ChevronRight, History, Rocket } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { CheckCircle2, ChevronRight, FlaskConical, History, Rocket, Undo2 } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 const props = defineProps<AdsDecisionsProps>();
 const { t, locale } = useI18n();
@@ -66,7 +68,26 @@ const logColumns = computed<Column[]>(() => [
     { key: 'change', label: t('ads.control.col.status') },
     { key: 'result', label: t('ads.control.decisions.log_result') },
 ]);
-const resultTone = (r: AdActionLogRow['result']) => (r === 'ok' ? 'positive' : r === 'pending' ? 'info' : 'negative');
+const resultTone = (r: AdActionLogRow['result']) => (r === 'ok' ? 'positive' : r === 'pending' ? 'info' : r === 'dry_run' ? 'warning' : 'negative');
+/** Round 3 «قرار اليوم»: the kind filter chips and the list; the old stop suggestions keep only the ads the day has no decision for. */
+const KINDS: DecisionKind[] = ['stock_risk', 'cut', 'fix_creative', 'scale', 'keep'];
+const kindFilter = ref<DecisionKind | null>(null);
+const dailyItems = computed(() => (props.daily?.items ?? []).filter((d) => kindFilter.value === null || d.kind === kindFilter.value));
+const decidedAdIds = computed(() => new Set((props.daily?.items ?? []).map((d) => d.ad.id)));
+const restSuggestions = computed(() => props.suggestions.filter((s) => !decidedAdIds.value.has(s.ad_id)));
+const kindTone = (k: DecisionKind) => ({ stock_risk: 'text-danger', cut: 'text-danger', fix_creative: 'text-warning', scale: 'text-ok', keep: 'text-fg-2' })[k];
+/** The log's «تراجع»: the inverse is proposed by the server and confirmed in the same dialog. */
+const undoRow = ref<AdActionLogRow | null>(null);
+const undoOpen = ref(false);
+function undo(row: AdActionLogRow): void {
+    undoRow.value = row;
+    undoOpen.value = true;
+}
+const budgetChange = (row: AdActionLogRow) =>
+    t('ads.control.write.change_budget', {
+        from: formatAdsMoney(Number(row.params?.from_minor ?? 0) / 100, locale.value, row.params?.currency ?? props.currency, 2),
+        to: formatAdsMoney(Number(row.params?.to_minor ?? 0) / 100, locale.value, row.params?.currency ?? props.currency, 2),
+    });
 const crumbs = computed(() => [{ label: t('nav.ads'), href: '/today/ads' }, { label: t('ads.control.decisions.title') }]);
 const appCrumbs = computed(() => crumbs.value.map((c) => ({ title: c.label, href: c.href ?? '/ads/decisions' })));
 </script>
@@ -109,10 +130,58 @@ const appCrumbs = computed(() => crumbs.value.map((c) => ({ title: c.label, href
                         </Link>
                     </section>
 
+                    <!-- Round 3: «قرار اليوم» — one decision per running ad, with the evidence and the exact change «نفّذ» sends. -->
+                    <section v-if="daily" data-test="daily" aria-labelledby="dec-daily" class="space-y-3">
+                        <div class="flex flex-wrap items-end justify-between gap-2">
+                            <div>
+                                <h2 id="dec-daily" class="text-base font-bold text-foreground">{{ t('ads.control.daily.title') }}</h2>
+                                <p class="text-[12.5px] text-fg-2">{{ t('ads.control.daily.description') }}</p>
+                            </div>
+                            <div v-if="daily.items.length" class="flex flex-wrap gap-1.5" role="group" :aria-label="t('ads.control.daily.title')">
+                                <button
+                                    type="button"
+                                    class="h-9 rounded-md border border-line px-3 text-xs font-semibold md:h-8"
+                                    :class="kindFilter === null ? 'bg-foreground text-background' : 'bg-card text-fg-2 hover:bg-sunken'"
+                                    @click="kindFilter = null"
+                                >
+                                    {{ t('ads.control.daily.all') }} · {{ formatCount(daily.items.length, locale) }}
+                                </button>
+                                <button
+                                    v-for="k in KINDS"
+                                    :key="k"
+                                    type="button"
+                                    :data-test="`kind-${k}`"
+                                    class="h-9 rounded-md border border-line px-3 text-xs font-semibold md:h-8"
+                                    :class="kindFilter === k ? 'bg-foreground text-background' : ['bg-card hover:bg-sunken', kindTone(k)]"
+                                    :disabled="!daily.counts[k]"
+                                    @click="kindFilter = kindFilter === k ? null : k"
+                                >
+                                    {{ t(`ads.control.daily.kind_${k}`) }} · {{ formatCount(daily.counts[k] ?? 0, locale) }}
+                                </button>
+                            </div>
+                        </div>
+                        <p v-if="!daily.execute && daily.items.length" data-test="dry-run-banner" class="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/15 px-4 py-3 text-[12.5px]">
+                            <FlaskConical class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                            <span>{{ t('ads.control.daily.dry_run_banner') }}</span>
+                        </p>
+                        <AdsPanel v-if="dailyItems.length" flush>
+                            <DecisionCard
+                                v-for="d in dailyItems"
+                                :key="d.key"
+                                :decision="d"
+                                :currency="currency"
+                                :execute="daily.execute"
+                                :data-at="freshness"
+                                @open-ad="drawer.open"
+                            />
+                        </AdsPanel>
+                        <EmptyState v-else-if="!daily.items.length" :icon="CheckCircle2" :title="t('ads.control.daily.empty')" />
+                    </section>
+
                     <AlertsSection v-if="alertsMeta" :alerts="alerts" :meta="alertsMeta" mode="open" :data-at="freshness" :currency="currency" @open-ad="drawer.open" />
 
-                    <AdsPanel v-if="suggestions.length" data-test="suggestions" :title="t('ads.control.decisions.suggestions')" :count="suggestions.length" flush>
-                        <DecisionRow v-for="s in suggestions" :key="s.ad_id">
+                    <AdsPanel v-if="restSuggestions.length" data-test="suggestions" :title="t(daily?.items.length ? 'ads.control.decisions.suggestions_rest' : 'ads.control.decisions.suggestions')" :count="restSuggestions.length" flush>
+                        <DecisionRow v-for="s in restSuggestions" :key="s.ad_id">
                             <template #thumb>
                                 <button type="button" class="block size-full" :aria-label="t('ads.control.row.preview')" @click="drawer.open(s.ad_id)">
                                     <CreativeThumb :ad="thumb(s)" size="fill" square :show-pills="false" class="!aspect-auto h-full" />
@@ -155,7 +224,7 @@ const appCrumbs = computed(() => crumbs.value.map((c) => ({ title: c.label, href
                         </DecisionRow>
                     </AdsPanel>
                     <EmptyState
-                        v-if="!suggestions.length && !(approvals && approvals.count) && !alerts.length"
+                        v-if="!suggestions.length && !(approvals && approvals.count) && !alerts.length && !daily?.items.length"
                         :icon="CheckCircle2"
                         :title="t('ads.control.decisions.empty_open')"
                     />
@@ -201,7 +270,7 @@ const appCrumbs = computed(() => crumbs.value.map((c) => ({ title: c.label, href
                             @change="setLog('result', ($event.target as HTMLSelectElement).value || null)"
                         >
                             <option value="">{{ t('ads.control.decisions.log_result') }}: {{ t('ads.control.decisions.any') }}</option>
-                            <option v-for="r in ['ok', 'error', 'pending']" :key="r" :value="r">{{ t(`ads.control.decisions.result_${r}`) }}</option>
+                            <option v-for="r in ['ok', 'error', 'pending', 'dry_run']" :key="r" :value="r">{{ t(`ads.control.decisions.result_${r}`) }}</option>
                         </select>
                     </div>
                     <DataTable
@@ -223,15 +292,43 @@ const appCrumbs = computed(() => crumbs.value.map((c) => ({ title: c.label, href
                                 <PlatformChip :platform="row.platform" size="xs" icon-only />{{ t(`ads.campaigns.level_${row.level}`) }} · <bdi>{{ row.account }}</bdi>
                             </span>
                         </template>
-                        <template #cell-change="{ row }">{{ t(writeChangeKey(row.to_status)) }}</template>
+                        <template #cell-change="{ row }">
+                            <span v-if="row.type === 'set_budget'" class="tabular-nums">{{ budgetChange(row) }}</span>
+                            <template v-else>{{ t(writeChangeKey(row.to_status)) }}</template>
+                        </template>
                         <template #cell-result="{ row }">
-                            <StatusChip :label="t(`ads.control.decisions.result_${row.result}`)" :tone="resultTone(row.result)" size="sm" />
+                            <span class="flex flex-wrap items-center gap-1.5">
+                                <StatusChip :label="t(`ads.control.decisions.result_${row.result}`)" :tone="resultTone(row.result)" size="sm" />
+                                <button
+                                    v-if="row.undoable && row.public_id"
+                                    type="button"
+                                    data-test="undo"
+                                    class="inline-flex h-9 items-center gap-1 rounded-md px-2 text-xs font-semibold text-fg-2 hover:bg-sunken md:h-7"
+                                    :aria-label="t('ads.control.decisions.undo_aria', { name: row.name })"
+                                    @click="undo(row)"
+                                >
+                                    <Undo2 class="rtl-flip size-3.5" aria-hidden="true" />{{ t('ads.control.decisions.undo') }}
+                                </button>
+                            </span>
                             <span v-if="row.error" class="block text-xs text-danger">{{ row.error }}</span>
                         </template>
                     </DataTable>
                 </template>
             </div>
         </div>
+        <WriteActionDialog
+            v-if="undoRow"
+            v-model:open="undoOpen"
+            :account-id="undoRow.account_id"
+            :account="undoRow.account"
+            :platform="String(undoRow.platform)"
+            :level="undoRow.level"
+            :external-id="undoRow.external_id"
+            :name="undoRow.name"
+            :undo-of="undoRow.public_id"
+            :currency="currency"
+            @done="router.reload({ only: ['log'] })"
+        />
         <AdDrawer
             :ad-id="drawer.adId.value"
             :filters="filters"

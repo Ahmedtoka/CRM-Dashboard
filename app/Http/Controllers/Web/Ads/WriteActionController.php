@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web\Ads;
 
 use App\Ads\Alerts\AlertScope;
 use App\Ads\Control\Write\RecentPassword;
+use App\Ads\Control\Write\Types\SetBudgetType;
 use App\Ads\Control\Write\Types\SetStatusType;
 use App\Ads\Control\Write\WriteActionService;
 use App\Ads\Control\Write\WriteDenied;
@@ -33,19 +34,27 @@ class WriteActionController extends Controller
     {
         $key = $this->idempotencyKey($request);
         $data = $this->validated($request, [
-            'type' => ['required', Rule::in([SetStatusType::TYPE])],
+            'type' => ['required', Rule::in([SetStatusType::TYPE, SetBudgetType::TYPE])],
             'account_id' => ['required', 'integer', Rule::exists('ad_accounts', 'id')],
             'target' => ['required', 'array'],
             'target.level' => ['required', Rule::in(WritePolicy::LEVELS)],
             'target.external_id' => ['required', 'string', 'max:100'],
             'params' => ['required', 'array'],
-            'params.to' => ['required', Rule::in(['active', 'paused'])],
+            'params.to' => ['required_if:type,'.SetStatusType::TYPE, Rule::in(['active', 'paused'])],
+            // Round 3: a budget change by a whole percentage, never zero (the undo sends an exact amount internally).
+            'params.pct' => ['required_if:type,'.SetBudgetType::TYPE, 'integer', 'not_in:0', 'min:'.SetBudgetType::MIN_PCT, 'max:'.SetBudgetType::MAX_PCT],
             'reason' => ['nullable', 'string', 'max:1000'],
             'source' => ['nullable', Rule::in(['ui', 'alert'])],
             'source_ref' => ['nullable', 'string', 'max:100'],
         ]);
 
         [$source, $sourceRef] = $this->alertSource($request->user(), $data);
+        if ($data['type'] === SetBudgetType::TYPE) {
+            $result = $service->proposeBudget($request->user(), AdAccount::findOrFail($data['account_id']), $data['target']['level'],
+                (string) $data['target']['external_id'], (int) $data['params']['pct'], null, $data['reason'] ?? null, $key, $source, $sourceRef);
+
+            return $this->proposal($result['action'], $result['replayed']);
+        }
         $result = $service->propose($request->user(), AdAccount::findOrFail($data['account_id']), $data['target']['level'],
             (string) $data['target']['external_id'], $data['params']['to'], $data['reason'] ?? null, $key, $source, $sourceRef);
 
@@ -142,7 +151,9 @@ class WriteActionController extends Controller
         $present = self::present($x);
 
         return match ($x->state) {
+            AdWriteAction::DRY_RUN => response()->json(['action' => $present, 'message' => __('ads.flash.dry_run')]),
             AdWriteAction::SUCCEEDED => response()->json(['action' => $present, 'message' => __(match (true) {
+                $x->isBudget() => 'ads.flash.budget_changed',
                 $x->isStop() => 'ads.flash.stopped',
                 (bool) ($x->outcome['noop'] ?? false) => 'ads.write.notes.already_active',
                 default => 'ads.flash.resumed',
@@ -220,6 +231,8 @@ class WriteActionController extends Controller
             'account_id' => $x->ad_account_id,
             'to' => $x->to_status,
             'from_status' => $x->from_status,
+            'params' => $x->params,
+            'dry_run' => $x->state === AdWriteAction::DRY_RUN,
             'expires_at' => $x->expires_at?->toIso8601String(),
             'source' => $x->source,
             'attempts' => (int) $x->attempts,
@@ -238,6 +251,8 @@ class WriteActionController extends Controller
             'diff_hash' => $x->diff_hash,
             'notes' => $x->notes ?? [],
             'limits_checked' => array_values($x->limits_checked ?? []),
+            // Round 3: false = confirming is a dry run (CRM_ADS_EXECUTE off); the dialog says so before the click.
+            'execute' => config('crm.ads.execute') === true,
         ];
 
         return $replayed

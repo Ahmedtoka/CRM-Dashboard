@@ -110,6 +110,11 @@ function itemText(n: AppNotification): string {
         return t('notifications.ads_need_stop_item', { product: String(n.data.product_title ?? ''), material: String(n.data.title ?? '') });
     }
 
+    if (n.type === 'ads.stock_low') {
+        const ads = Array.isArray(n.data.ads) ? (n.data.ads as unknown[]).map(String).join('، ') : String(n.data.title ?? '');
+        return t('notifications.ads_stock_low_item', { product: String(n.data.product_title ?? ''), n: Number(n.data.inventory ?? 0), ads });
+    }
+
     if (n.type === 'ads.token_invalid') {
         return t('notifications.ads_token_invalid_item', { name: String(n.data.connection ?? '') });
     }
@@ -197,6 +202,10 @@ function open(n: AppNotification): void {
     }
     if (n.type === 'ads.need_stop') {
         router.visit(String(n.data.link ?? '/ads/materials?status=live&stock=out'));
+        return;
+    }
+    if (n.type === 'ads.stock_low') {
+        router.visit(String(n.data.link ?? '/ads/decisions'));
         return;
     }
     if (n.type === 'ads.data_health') {

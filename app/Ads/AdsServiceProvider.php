@@ -5,6 +5,7 @@ namespace App\Ads;
 use App\Ads\Alerts\Commands\AlertsDigestCommand;
 use App\Ads\Alerts\Commands\EvaluateAlertsCommand;
 use App\Ads\Attribution\Commands\AttributeOrdersCommand;
+use App\Ads\Attribution\Commands\BackfillAttributionCommand;
 use App\Ads\Attribution\Commands\BackfillReferralsCommand;
 use App\Ads\Attribution\Commands\RestoreAttributionCommand;
 use App\Ads\Captions\CaptionGenerator;
@@ -69,7 +70,7 @@ class AdsServiceProvider extends ServiceProvider
         Event::listen(LaunchMoved::class, [MaterialStatus::class, 'handle']);
         Event::listen(LaunchMoved::class, [DecisionCounter::class, 'onLaunchMoved']);
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, StockWatchCommand::class, LaunchSweepCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, AdsAuthorityCommand::class, WritesSwitchCommand::class, WriteResolveCommand::class, WriteSweepCommand::class, WriteLimitsCommand::class, WritePreviewCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class, ReconcileCommand::class, DecisionsCountCommand::class, EvaluateAlertsCommand::class, AlertsDigestCommand::class]);
+            $this->commands([SyncAdsCommand::class, BackfillAdsCommand::class, RefreshCreativesCommand::class, AttributeOrdersCommand::class, BackfillAttributionCommand::class, StockWatchCommand::class, LaunchSweepCommand::class, ImportArenaTokenCommand::class, SetupTeamCommand::class, ClearOpenKeysCommand::class, SweepStuckRunsCommand::class, WritableAccountsCommand::class, AdsAuthorityCommand::class, WritesSwitchCommand::class, WriteResolveCommand::class, WriteSweepCommand::class, WriteLimitsCommand::class, WritePreviewCommand::class, DoctorCommand::class, PruneHistoryCommand::class, BackfillReferralsCommand::class, RestoreAttributionCommand::class, TokenProbeCommand::class, HealthCommand::class, GateCommand::class, ReconcileCommand::class, DecisionsCountCommand::class, EvaluateAlertsCommand::class, AlertsDigestCommand::class]);
         }
 
         WriteRateLimits::register();

@@ -19,6 +19,8 @@ return [
     'flash' => [
         'stopped' => 'Stopped.',
         'resumed' => 'Running again.',
+        'budget_changed' => 'Budget changed.',
+        'dry_run' => 'Dry run only: what would have happened was logged; nothing was sent to the platform (CRM_ADS_EXECUTE is off).',
         'connected' => 'Connected. :count ad accounts found; the last 90 days are loading in the background.',
         'saved' => 'Saved.',
         'test_ok' => 'Connection works.',

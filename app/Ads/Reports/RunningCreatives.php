@@ -172,6 +172,8 @@ final class RunningCreatives
                 'roas' => $d['roas'],
                 'real_orders' => $mine->count(),
                 'real_revenue' => $revenue,
+                // Round 3: CAC = spend with tax ÷ real (Shopify) orders attributed to the ad; null without orders.
+                'cac' => $mine->count() > 0 ? round($d['spend_tax'] / $mine->count(), 2) : null,
                 'real_roas' => $egp ? AdsQuery::ratio($revenue, $d['spend'], 2) : null,
                 'currency' => $currency !== null && $currency !== '' ? strtoupper((string) $currency) : 'EGP',
                 'objective' => Objective::family($r->objective ?? null, $chats),

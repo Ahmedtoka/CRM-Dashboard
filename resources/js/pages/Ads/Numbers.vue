@@ -78,6 +78,14 @@ const chatCols = computed<Column[]>(() => [
     { key: 'cost_per_order', label: t('ads.control.numbers.cost_per_order'), numeric: true },
     { key: 'roas', label: t('ads.control.numbers.roas'), numeric: true },
 ]);
+const attributionRows = computed(() =>
+    (props.attribution?.rules ?? []).map((r) => ({ ...r, id: r.rule, label: t(`ads.control.numbers.rule_${r.rule}`), hint: t(`ads.control.numbers.rule_${r.rule}_hint`) })),
+);
+const attributionCols = computed<Column[]>(() => [
+    { key: 'label', label: t('ads.control.numbers.rule'), primary: true },
+    { key: 'orders', label: t('ads.control.numbers.orders'), numeric: true },
+    { key: 'revenue', label: t('ads.control.numbers.shopify_revenue'), numeric: true },
+]);
 const crumbs = computed(() => [{ label: t('nav.ads'), href: '/today/ads' }, { label: t('ads.control.numbers.title') }]);
 const appCrumbs = computed(() => crumbs.value.map((c) => ({ title: c.label, href: c.href ?? '/ads/numbers' })));
 
@@ -189,6 +197,24 @@ onMounted(() => {
                 <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     <BuyerCard v-for="c in buyers" :key="c.buyer_id ?? 'none'" :card="c" :currency="currency" :href="c.buyer_id === null ? null : href(`/ads/buyers/${c.buyer_id}`)" />
                 </div>
+            </section>
+
+            <!-- Round 3: how many real orders the ads really brought, and by which evidence (chat referral → utm ad → utm ad set → utm campaign). -->
+            <section v-if="attribution" id="attribution" class="scroll-mt-20 space-y-2.5" data-test="attribution">
+                <h2 class="text-base font-bold">{{ t('ads.control.numbers.attribution') }}</h2>
+                <p class="text-[12.5px] text-fg-2">
+                    {{ t('ads.control.numbers.attribution_summary', { attributed: formatCount(attribution.attributed_orders, locale), total: formatCount(attribution.total_orders, locale), pct: attribution.attributed_pct === null ? '—' : formatCount(attribution.attributed_pct, locale) }) }}
+                </p>
+                <DataTable table-id="ads-numbers-attribution" :columns="attributionCols" :rows="attributionRows" :empty="t('ads.control.numbers.no_chat')" :caption="t('ads.control.numbers.attribution')">
+                    <template #cell-label="{ row }">
+                        <span class="font-medium">{{ row.label }}</span>
+                        <span class="block text-xs text-fg-3">{{ row.hint }}</span>
+                    </template>
+                    <template #cell-revenue="{ row }">{{ money(row.revenue) }}</template>
+                </DataTable>
+                <p class="text-xs text-fg-3" data-test="attribution-none">
+                    {{ t('ads.control.numbers.attribution_none', { orders: formatCount(attribution.unattributed_orders, locale), revenue: money(attribution.unattributed_revenue) }) }}
+                </p>
             </section>
 
             <section v-if="chat_campaigns" id="chat" class="scroll-mt-20 space-y-2.5">

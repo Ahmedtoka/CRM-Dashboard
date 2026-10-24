@@ -31,8 +31,9 @@ final class WriteActionLog
             ->when(is_int($filters['user'] ?? null), fn ($q) => $q->where(fn ($w) => $w->where('confirmed_by_id', $filters['user'])->orWhere(fn ($p) => $p->whereNull('confirmed_by_id')->where('proposed_by_id', $filters['user']))))
             ->when(in_array($filters['level'] ?? null, AdWriteService::LEVELS, true), fn ($q) => $q->where('target_level', $filters['level']))
             ->when($result === 'ok', fn ($q) => $q->whereIn('state', [AdWriteAction::SUCCEEDED, AdWriteAction::ROLLED_BACK]))
+            ->when($result === 'dry_run', fn ($q) => $q->where('state', AdWriteAction::DRY_RUN))
             ->when($result === 'pending', fn ($q) => $q->whereIn('state', [AdWriteAction::EXECUTING, AdWriteAction::UNKNOWN]))
-            ->when($result === 'error', fn ($q) => $q->whereNotIn('state', [AdWriteAction::SUCCEEDED, AdWriteAction::ROLLED_BACK, AdWriteAction::EXECUTING, AdWriteAction::UNKNOWN]))
+            ->when($result === 'error', fn ($q) => $q->whereNotIn('state', [AdWriteAction::SUCCEEDED, AdWriteAction::ROLLED_BACK, AdWriteAction::EXECUTING, AdWriteAction::UNKNOWN, AdWriteAction::DRY_RUN]))
             ->when(isset($filters['ad']), fn ($q) => $q->where('target_level', 'ad')->where('ad_account_id', $filters['ad']['account_id'])->where('target_external_id', $filters['ad']['external_id']))
             ->orderByRaw('COALESCE(confirmed_at, created_at) DESC')->orderByDesc('id')->limit($limit)->get();
         // Ad-level rows open the ad drawer: one lookup for the whole list.
@@ -45,15 +46,28 @@ final class WriteActionLog
             'user' => ($a->confirmer ?? $a->proposer)?->name, 'user_id' => $a->confirmed_by_id ?? $a->proposed_by_id,
             'platform' => $a->platform, 'account' => (string) ($a->account?->name ?? $a->account_name ?? ''), 'account_id' => (int) $a->ad_account_id,
             'level' => $a->target_level, 'name' => (string) $a->target_name, 'external_id' => (string) $a->target_external_id,
-            'from_status' => $a->from_status, 'to_status' => match ($a->to_status) { 'active' => 'ACTIVE', 'archived' => 'ARCHIVED', default => 'PAUSED' },
+            'from_status' => $a->from_status, 'to_status' => $a->isBudget() ? 'BUDGET' : match ($a->to_status) { 'active' => 'ACTIVE', 'archived' => 'ARCHIVED', default => 'PAUSED' },
             'reason' => $a->reason, 'result' => self::result($a->state), 'error' => self::error($a), 'source' => (string) $a->source,
+            // Round 3: the row's type and params (a budget row shows before → after), and whether «تراجع» applies.
+            'public_id' => $a->public_id, 'type' => $a->type, 'params' => $a->params, 'undoable' => self::undoable($a),
         ])->all();
     }
 
-    /** @return 'ok'|'error'|'pending' */
+    /** A succeeded Stop, Run or budget change can be undone (the inverse is proposed like any other write); nothing else. */
+    public static function undoable(AdWriteAction $a): bool
+    {
+        if ($a->state !== AdWriteAction::SUCCEEDED) {
+            return false;
+        }
+
+        return $a->isBudget() ? is_numeric($a->params['from_minor'] ?? null) : in_array($a->to_status, ['active', 'paused'], true);
+    }
+
+    /** @return 'ok'|'error'|'pending'|'dry_run' */
     public static function result(string $state): string
     {
         return match ($state) {
+            AdWriteAction::DRY_RUN => 'dry_run',
             AdWriteAction::SUCCEEDED, AdWriteAction::ROLLED_BACK => 'ok',
             AdWriteAction::EXECUTING, AdWriteAction::UNKNOWN => 'pending',
             default => 'error',
@@ -62,7 +76,7 @@ final class WriteActionLog
 
     public static function error(AdWriteAction $a): ?string
     {
-        if (in_array($a->state, [AdWriteAction::SUCCEEDED, AdWriteAction::ROLLED_BACK], true)) {
+        if (in_array($a->state, [AdWriteAction::SUCCEEDED, AdWriteAction::ROLLED_BACK, AdWriteAction::DRY_RUN], true)) {
             return null;
         }
         $code = (string) $a->error_code;

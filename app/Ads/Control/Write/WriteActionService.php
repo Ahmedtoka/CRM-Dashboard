@@ -3,6 +3,7 @@
 namespace App\Ads\Control\Write;
 
 use App\Ads\Audit\AdsAudit;
+use App\Ads\Control\Write\Types\SetBudgetType;
 use App\Ads\Control\Write\Types\SetStatusType;
 use App\Ads\Platforms\Data\ObjectState;
 use App\Ads\Reports\AdsFilter;
@@ -28,6 +29,7 @@ class WriteActionService
         private readonly RunGuard $runGuard,
         private readonly WriteExecutor $executor,
         private readonly WriteLimits $limits,
+        private readonly SetBudgetType $budgetType = new SetBudgetType,
     ) {}
 
     /**
@@ -128,6 +130,109 @@ class WriteActionService
     }
 
     /**
+     * Round 3: propose a DAILY budget change (the «scale» / «cut» decisions). $pct is the percentage (the undo passes an
+     * exact $toMinor instead). The write is resolved onto the object that holds the budget (SetBudgetType::budgetHolder),
+     * which becomes the action's target; the policy is evaluated for that level too (budgets live above the ad level, so
+     * only Ads-authority holders change them, D4). A budget change adds spend exposure like a Run: the kill switch applies
+     * and the new amount is checked against the daily cap (RunGuard::budgetCheck) before any row is written.
+     *
+     * @param  'campaign'|'adset'|'ad'  $level
+     * @return array{action: AdWriteAction, replayed: bool}
+     *
+     * @throws WriteDenied
+     */
+    public function proposeBudget(User $u, AdAccount $a, string $level, string $externalId, ?int $pct, ?int $toMinor, ?string $reason, string $key,
+        string $source = 'ui', ?string $sourceRef = null, ?AdWriteAction $rollbackOf = null): array
+    {
+        $reason = $reason !== null && trim($reason) !== '' ? trim($reason) : null;
+        $requestHash = Canonical::hash([
+            'type' => SetBudgetType::TYPE, 'account_id' => $a->id, 'level' => $level, 'external_id' => $externalId, 'pct' => $pct, 'to_minor' => $toMinor, 'reason' => $reason,
+        ]);
+
+        $existing = $this->byKey($u, $key);
+        if ($existing !== null) {
+            return $this->replay($existing, $requestHash);
+        }
+
+        try {
+            if (($pct === null && $toMinor === null) || ($pct !== null && ($pct === 0 || $pct < SetBudgetType::MIN_PCT || $pct > SetBudgetType::MAX_PCT))) {
+                throw new WriteDenied('validation_failed', 422, ['fields' => ['params.pct']]);
+            }
+            $this->policy->authorize($u, $a, $level, 'active', 'propose');
+            $target = $this->type->target($a, $level, $externalId);
+            $live = $this->runGuard->read($a, $level, $externalId);
+            $holder = $this->budgetType->budgetHolder($target, $live);
+            if ($holder['level'] !== $level) {
+                $this->policy->authorize($u, $a, $holder['level'], 'active', 'propose');
+                $holderRow = $this->budgetType->holderRow($a, $holder['level'], $holder['external_id']);
+            } else {
+                $holderRow = $target;
+            }
+            $to = $toMinor ?? SetBudgetType::apply($holder['minor'], (int) $pct);
+            // The daily cap is checked on the NEW amount of the holder (the budget that will actually be live).
+            $after = new ObjectState($live->status, $live->effectiveStatus, $to, null, null, (string) ($a->currency ?: $live->currency), []);
+            $limits = $this->runGuard->budgetCheck($u, $a, $holderRow, $after);
+        } catch (WriteDenied $e) {
+            AdsAudit::record('write.refused', $a, null, null, [
+                'code' => $e->errorCode, 'level' => $level, 'external_id' => $externalId, 'type' => SetBudgetType::TYPE, 'pct' => $pct, 'to_minor' => $toMinor,
+                'source' => $source, 'phase' => 'propose', 'reason' => $reason,
+            ], $u);
+
+            throw $e;
+        }
+
+        $built = $this->budgetType->build($a, $holder, $pct, $to, $live, $limits);
+        $request = app()->bound('request') ? request() : null;
+
+        try {
+            $x = AdWriteAction::create([
+                'type' => SetBudgetType::TYPE,
+                'state' => AdWriteAction::PROPOSED,
+                'platform' => $a->platform,
+                'ad_account_id' => $a->id,
+                'account_name' => $a->name,
+                'target_level' => $holder['level'],
+                'target_external_id' => $holder['external_id'],
+                'target_name' => mb_substr((string) $holderRow->name, 0, 500),
+                'target_key' => $built['target_key'],
+                'from_status' => $built['from_status'],
+                'to_status' => null,
+                'params' => $built['params'],
+                'diff' => $built['diff'],
+                'diff_hash' => $built['diff_hash'],
+                'expected' => $built['expected'],
+                'limits_checked' => $built['limits_checked'],
+                'notes' => [],
+                'reason' => $reason,
+                'source' => $source,
+                'source_ref' => $sourceRef,
+                'actor_type' => 'user',
+                'proposed_by_id' => $u->id,
+                'idempotency_key' => $key,
+                'request_hash' => $requestHash,
+                'open_business_key' => null,
+                'expires_at' => now()->addMinutes(max(1, (int) config('crm.ads.write.proposal_ttl_minutes', 10))),
+                'rollback_of_id' => $rollbackOf?->id,
+                'request_id' => $request?->headers->get('X-Request-Id') ?? $request?->attributes->get('request_id'),
+                'ip' => $request?->ip(),
+                'user_agent' => $request?->userAgent() !== null ? mb_substr((string) $request->userAgent(), 0, 255) : null,
+            ]);
+        } catch (UniqueConstraintViolationException $e) {
+            $twin = $this->byKey($u, $key);
+            if ($twin === null) {
+                throw $e;
+            }
+
+            return $this->replay($twin, $requestHash);
+        }
+
+        AdsAudit::record('write.proposed', $x, null, ['state' => $x->state, 'type' => SetBudgetType::TYPE, 'level' => $holder['level'], 'external_id' => $holder['external_id'],
+            'from_minor' => $holder['minor'], 'to_minor' => $to], ['public_id' => $x->public_id, 'diff_hash' => $x->diff_hash, 'source' => $source], $u);
+
+        return ['action' => $x, 'replayed' => false];
+    }
+
+    /**
      * Step 2 of two: claim the proposal (DB compare-and-set), take the Run key (a Stop never takes one), supersede the
      * other proposed Runs on the target, then execute inline. Exactly one platform call per confirmed intent.
      *
@@ -155,7 +260,7 @@ class WriteActionService
                 throw WriteDenied::make('not_found');
             }
             // Abilities are re-evaluated now, never taken from the proposal.
-            $this->policy->authorize($u, $account, $x->target_level, (string) $x->to_status, 'confirm');
+            $this->policy->authorize($u, $account, $x->target_level, $x->isBudget() ? 'active' : (string) $x->to_status, 'confirm');
         } catch (WriteDenied $e) {
             AdsAudit::record('write.refused', $x, null, null, ['code' => $e->errorCode, 'public_id' => $x->public_id, 'phase' => 'confirm', 'reason' => $x->reason], $u);
 
@@ -163,7 +268,7 @@ class WriteActionService
         }
 
         $noop = false;
-        if (! $x->isStop()) {
+        if (! $x->isStop() && ! $x->isBudget()) {
             $stop = AdWriteAction::where('target_key', $x->target_key)->where('to_status', 'paused')
                 ->whereIn('state', AdWriteAction::OPEN)->first(['id', 'public_id']);
             if ($stop !== null) {
@@ -246,8 +351,18 @@ class WriteActionService
      */
     public function rollback(User $u, AdWriteAction $done, string $key, ?string $reason = null): array
     {
-        $inverse = $this->type->inverse($done);
         $account = $done->account;
+        if ($done->isBudget()) {
+            // Undo of a budget change = the old amount back (round 3), through the same cap and policy.
+            $inverse = $this->budgetType->inverse($done);
+            if ($inverse === null || $account === null) {
+                throw WriteDenied::make('not_reversible', ['state' => $done->state]);
+            }
+
+            return $this->proposeBudget($u, $account, $done->target_level, $done->target_external_id, null, $inverse['to_minor'], $reason, $key,
+                'rollback', $done->public_id, $done);
+        }
+        $inverse = $this->type->inverse($done);
         if ($inverse === null || $account === null) {
             throw WriteDenied::make('not_reversible', ['state' => $done->state]);
         }
@@ -294,7 +409,7 @@ class WriteActionService
      */
     private function claim(User $u, AdWriteAction $x): array
     {
-        $key = $x->isStop() ? null : SetStatusType::runKey($x->target_key);
+        $key = $x->isStop() ? null : ($x->isBudget() ? SetBudgetType::budgetKey($x->target_key) : SetStatusType::runKey($x->target_key));
 
         try {
             $ids = DB::transaction(function () use ($u, $x, $key) {
@@ -308,7 +423,7 @@ class WriteActionService
                     'open_business_key' => $key,
                     'updated_at' => $now,
                 ];
-                if (! $x->isStop()) {
+                if (! $x->isStop() && ! $x->isBudget()) {
                     $update['limits_checked'] = json_encode(array_merge(array_values($x->limits_checked ?? []), $this->activationCaps($u, $x)));
                 }
                 $claimed = AdWriteAction::whereKey($x->id)->where('state', AdWriteAction::PROPOSED)->where('expires_at', '>', $now)->update($update) === 1;

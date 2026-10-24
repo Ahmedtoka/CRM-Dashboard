@@ -17,6 +17,8 @@ class StockWatchCommand extends Command
         $this->info("Flagged {$r['flagged']}, cleared {$r['cleared']}.");
         $h = $watcher->holds();
         $this->info("Held {$h['held']}, released {$h['released']}.");
+        $l = $watcher->low();
+        $this->info("Low stock: flagged {$l['flagged']}, cleared {$l['cleared']}.");
 
         return self::SUCCESS;
     }

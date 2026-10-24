@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web\Ads;
 use App\Ads\Alerts\AlertFeed;
 use App\Ads\Control\AdWriteService;
 use App\Ads\Control\WriteActionLog;
+use App\Ads\Decisions\DailyDecisions;
 use App\Ads\Decisions\DecisionCounter;
 use App\Ads\Decisions\PendingApprovals;
 use App\Ads\Reports\AdsFilter;
@@ -30,7 +31,7 @@ class DecisionsController extends Controller
     public const FEED_TABS = ['open' => 'open', 'snoozed' => 'later', 'closed' => 'closed', 'log' => 'log'];
 
     public function __invoke(Request $request, AdWriteService $writer, WriteActionLog $log,
-        PendingApprovals $approvals, DecisionCounter $counter, AlertFeed $feed): Response
+        PendingApprovals $approvals, DecisionCounter $counter, AlertFeed $feed, DailyDecisions $daily): Response
     {
         $user = $request->user();
         $tab = in_array($request->query('tab'), self::TABS, true) ? (string) $request->query('tab') : 'open';
@@ -38,11 +39,12 @@ class DecisionsController extends Controller
         $logFilters = [
             'user' => is_numeric($request->query('who')) ? (int) $request->query('who') : null,
             'level' => in_array($request->query('level'), AdWriteService::LEVELS, true) ? (string) $request->query('level') : null,
-            'result' => in_array($request->query('result'), ['ok', 'error', 'pending'], true) ? (string) $request->query('result') : null,
+            'result' => in_array($request->query('result'), ['ok', 'error', 'pending', 'dry_run'], true) ? (string) $request->query('result') : null,
         ];
 
         $feedData = $feed->forUser($user, self::FEED_TABS[$tab]);
         $suggestions = [];
+        $dailyItems = $tab === 'open' ? $daily->build($user, $filter) : [];
         $openNow = null; // the open tab counts here (DecisionCounter::breakdown), on the page's filter
         if ($tab === 'open') {
             $b = $counter->breakdown($user, $filter);
@@ -77,6 +79,11 @@ class DecisionsController extends Controller
             ],
             'approvals' => $approvals->canApprove($user) ? ['count' => $pending, 'href' => '/ads/approvals', 'items' => $approvals->items($user)] : null,
             'suggestions' => $suggestions,
+            // Round 3: «قرار اليوم» — every running ad's decision with its evidence and the action «نفّذ» sends.
+            'daily' => [
+                'items' => $dailyItems, 'counts' => DailyDecisions::counts($dailyItems),
+                'execute' => config('crm.ads.execute') === true, 'scale_pct' => $daily->scalePct(),
+            ],
             'alerts' => $feedData['items'],
             'alertsMeta' => $feedData['meta'],
             'log' => $logRows,

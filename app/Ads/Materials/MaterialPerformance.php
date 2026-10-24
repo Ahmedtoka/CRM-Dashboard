@@ -104,7 +104,7 @@ final class MaterialPerformance
     }
 
     /** The last 30 days ending today (Cairo), restricted to the user's accounts and, for a buyer, their own rows. */
-    private function filter(User $user): AdsFilter
+    public function filter(User $user): AdsFilter
     {
         $to = CarbonImmutable::now(AdsFilter::TIMEZONE)->startOfDay();
         $from = $to->subDays(self::DAYS - 1);

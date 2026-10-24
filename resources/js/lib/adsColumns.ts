@@ -1,6 +1,6 @@
 import type { Column } from '@/components/crm/DataTable.vue';
 
-export const AD_PARTS = ['creative', 'spend', 'result', 'return', 'trend', 'status'] as const;
+export const AD_PARTS = ['creative', 'spend', 'result', 'cac', 'return', 'trend', 'status'] as const;
 export type AdPart = (typeof AD_PARTS)[number];
 
 /** Server sort key behind each sortable column (RunningCreatives::SORTS); the kit's DataTable sorts by column key. */
@@ -12,6 +12,8 @@ export function adColumns(t: (k: string) => string): Column[] {
         { key: 'creative', label: t('ads.control.col.creative'), primary: true },
         { key: 'spend', label: t('ads.control.col.spend'), numeric: true, sortable: true },
         { key: 'result', label: t('ads.control.col.result'), numeric: true, sortable: true },
+        // Round 3: cost per real order (spend with tax ÷ Shopify orders); not a server sort key, so not sortable.
+        { key: 'cac', label: t('ads.library_r3.col_cac'), numeric: true },
         { key: 'return', label: t('ads.control.col.return'), numeric: true },
         { key: 'trend', label: t('ads.control.col.trend'), hideOnMobile: true },
         { key: 'status', label: t('ads.control.col.status'), align: 'end' },

@@ -33,6 +33,14 @@ interface AdPlatformWriter
     public function setStatus(AdAccount $a, string $level, string $externalId, string $status): void;
 
     /**
+     * Sets the DAILY budget of a campaign or ad set (round 3, the «scale» / «cut» decisions). Amount in the account
+     * currency's minor unit. An ad has no budget of its own: the caller resolves the budget holder first (SetBudgetType).
+     *
+     * @param  'campaign'|'adset'  $level
+     */
+    public function setDailyBudget(AdAccount $a, string $level, string $externalId, int $dailyBudgetMinor): void;
+
+    /**
      * Live status and budgets of one object and its parents (one read).
      *
      * @param  'campaign'|'adset'|'ad'  $level

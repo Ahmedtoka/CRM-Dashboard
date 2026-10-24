@@ -167,6 +167,7 @@ const viewOptions = computed(() => [
                         <td v-for="c in columns" :key="c.key" class="px-3 py-2.5 text-[13px] font-semibold" :class="c.numeric ? 'text-end tabular-nums' : ''">
                             <template v-if="c.key === 'creative'">{{ t('ads.control.explorer.totals') }}</template>
                             <template v-else-if="c.key === 'spend'">{{ money(result.totals.spend_tax) }}</template>
+                            <template v-else-if="c.key === 'cac'">{{ result.totals.real_orders > 0 ? money(result.totals.spend_tax / result.totals.real_orders) : '—' }}</template>
                             <template v-else-if="c.key === 'return'">
                                 <span data-test="totals-real-roas" class="block text-sm font-semibold">{{ formatRoas(result.totals.real_roas, locale) }}</span>
                                 <span class="block text-xs font-normal text-fg-3">{{ t('ads.control.row.meta') }} {{ formatRoas(result.totals.roas, locale) }}</span>

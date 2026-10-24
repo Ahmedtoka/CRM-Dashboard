@@ -38,8 +38,8 @@ const target = computed(() => (props.platform === 'google' ? null : toggleTarget
 const stopping = computed(() => target.value === 'paused');
 const open = ref(false);
 
-function done(status: 'active' | 'paused'): void {
-    emit('done', status);
+function done(status: 'active' | 'paused' | 'budget' | 'undo'): void {
+    if (status === 'active' || status === 'paused') emit('done', status);
     if (!props.noReload) router.reload();
 }
 </script>

@@ -79,7 +79,7 @@ function afterWrite(): void {
     if (props.adId) void load(props.adId);
     if (props.reloadOnly.length) router.reload({ only: props.reloadOnly });
 }
-const resultTone = (r: 'ok' | 'error' | 'pending') => (r === 'ok' ? 'positive' : r === 'pending' ? 'info' : 'negative');
+const resultTone = (r: 'ok' | 'error' | 'pending' | 'dry_run') => (r === 'ok' ? 'positive' : r === 'pending' ? 'info' : r === 'dry_run' ? 'warning' : 'negative');
 </script>
 
 <template>
@@ -144,6 +144,7 @@ const resultTone = (r: 'ok' | 'error' | 'pending') => (r === 'ok' ? 'positive' :
                                 </dd>
                                 <dd v-else-if="ad.objective === 'traffic'">{{ t('ads.control.row.clicks', { n: formatCount(ad.clicks, locale) }) }}</dd>
                                 <dd v-else>{{ t('ads.control.row.purchases_orders', { purchases: formatCount(ad.purchases, locale), orders: formatCount(ad.real_orders, locale) }) }}</dd>
+                                <dd data-test="drawer-cac" class="mt-1 text-xs text-fg-2">{{ t('ads.library_r3.drawer_cac') }}: <span class="font-semibold text-foreground">{{ money(ad.cac ?? null) }}</span></dd>
                             </div>
                         </dl>
                         <Sparkline :points="ad.series" :currency="cur" :width="320" :height="48" />

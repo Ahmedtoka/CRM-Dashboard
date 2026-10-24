@@ -27,6 +27,7 @@ export const TYPE_KEY = {
     'cases.sla_overdue': 'cases_sla_overdue',
     'order.delivery_failed': 'order_delivery_failed',
     'ads.need_stop': 'ads_need_stop',
+    'ads.stock_low': 'ads_stock_low',
     'ads.alerts': 'ads_alerts',
     'ads.alerts_digest': 'ads_alerts_digest',
     'ads.alerts_stock': 'ads_alerts_stock',

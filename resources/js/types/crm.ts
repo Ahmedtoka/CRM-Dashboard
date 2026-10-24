@@ -735,6 +735,7 @@ export interface AppNotification {
         | 'order.delivery_failed'
         | 'queue.break_overrun'
         | 'ads.need_stop'
+        | 'ads.stock_low'
         | 'ads.alerts'
         | 'ads.alerts_digest'
         | 'ads.alerts_stock'
