@@ -20,19 +20,34 @@ class ShiftMemberResource extends JsonResource
 {
     public const COUNTED_REASONS = ['inquiry', 'problem', 'case', 'auto', 'escalation', 'no_reply'];
 
+    private ?QueueSetting $settings = null;
+
+    /**
+     * The settings the caller already read (`/queue/me` reads them first): the windows' silence
+     * countdown and the desk's cap then read nothing more. Without it the settings row is read once
+     * — not once per window as before (screen speed 2026-10-24).
+     */
+    public function usingSettings(QueueSetting $settings): static
+    {
+        $this->settings = $settings;
+
+        return $this;
+    }
+
     public function toArray(Request $request): array
     {
         /** @var ShiftMember $m */
         $m = $this->resource;
-
-        $windows = $m->openEntries()->with('conversation')->orderBy('window_no')->orderBy('id')->get()
-            ->map(fn (QueueEntry $e) => self::window($e))->values()->all();
+        $open = $m->openEntries()->with('conversation')->orderBy('window_no')->orderBy('id')->get();
+        // Read once for every window and the cap below; a desk without windows reads nothing here.
+        $s = $this->settings ?? ($open->isNotEmpty() ? QueueSetting::current() : null);
+        $windows = $open->map(fn (QueueEntry $e) => self::window($e, $s))->values()->all();
 
         $byReason = QueueEntry::query()->where('shift_member_id', $m->id)->whereNotNull('close_reason')
             ->selectRaw('close_reason, COUNT(*) as n')->groupBy('close_reason')->pluck('n', 'close_reason')->all();
         $received = QueueEntry::query()->where('shift_member_id', $m->id)->count();
 
-        return self::shape($m, $windows, self::today($received, $byReason), $m->cap());
+        return self::shape($m, $windows, self::today($received, $byReason), $m->cap($s));
     }
 
     /**

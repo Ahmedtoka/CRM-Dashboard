@@ -33,8 +33,9 @@ use Throwable;
  * break end, window close…). Order of a pass:
  *   0) returning (with priority) → her case owner, else the same moderator, when she has a free window; else
  *      the least loaded;
- *   0b) escalations → the shift leader (or any supervisor on the shift) who may serve the
- *       platform, else they wait and supervisors are alerted once;
+ *   0b) escalations → the shift leader when she may serve the platform and has a window, else any
+ *       other supervisor on the shift who may (round 2026-10-24: a full leader no longer holds an
+ *       escalation while a supervisor sits free), else they wait and supervisors are alerted once;
  *   1) live (and manual) customers, oldest first → her case owner when free, else the least
  *      loaded moderator;
  *   2) the overnight backlog → each moderator drains her own reserved share into her free
@@ -46,6 +47,12 @@ use Throwable;
  * moderator working both shifts (or the leader) keeps her windows across the handover.
  * Every pass that found somebody waiting writes one `queue_decisions` row (the board's decision
  * lines); an empty lounge (most of the 30-second ticks) writes nothing.
+ *
+ * A customer nobody can take is said so, and the supervisors hear (round 2026-10-24, «الدور»):
+ * `queue.waiting_no_desk` with `reason` `platform` (desks are logged in, none may serve her
+ * platform — once per entry per 15 min) or `nobody` (no desk but the leader's is logged in during
+ * the shift — once per shift per 15 min, with the oldest ticket and the count). Before, the live
+ * copy had tickets that waited 29 hours and 6 days with the generic «مفيش شباك فاضي» line only.
  *
  * The leader of the open shift is never given a live, returning or overnight customer: her desk
  * serves escalations, and whatever the board assigns her by hand. With only the leader on the
@@ -196,6 +203,7 @@ class QueueRouter
         // Nobody can take a live customer: say why, right under the shift line (flow revision §2).
         if ($lounge->isEmpty()) {
             $lines[] = '<span class="no">'.e($this->nobodyReason($serving, $members, $leaderId)).'</span>';
+            $this->alertNobodyLoggedIn($shift, $waiting->whereIn('priority', ['live', 'manual', 'returning']));
         }
 
         // Per-user open windows, snapshotted once (passes are serialised) and kept current as we assign.
@@ -249,6 +257,20 @@ class QueueRouter
             $e->excluded_user_id !== null ? $lounge->reject(fn (ShiftMember $m) => (int) $m->user_id === (int) $e->excluded_user_id)->values() : $lounge,
             $e->conversation->platform, $open, $setting,
         ), $loadOf);
+        // Nobody in the lounge may serve her platform (the desks that could are all logged out or not
+        // checked in): the line says so, the supervisors hear once. Someone could but is full: she
+        // waits for a window like everybody else. Returns the decision line for this customer.
+        $noDesk = function (QueueEntry $e) use ($lounge): string {
+            $platform = $e->conversation->platform;
+
+            if ($lounge->isNotEmpty() && ! $lounge->contains(fn (ShiftMember $m) => $m->user->canAccessPlatform($platform))) {
+                $this->alertNoDeskForPlatform($e);
+
+                return '<span class="no">#'.$e->ticket_no.': مفيش موظفة فاتحة على '.e($platform->label()).'</span>';
+            }
+
+            return '<span class="no">#'.$e->ticket_no.': مفيش شباك فاضي</span>';
+        };
         // Who she should go to first (flow revision §6): the moderator who opened her open case,
         // then (a returning customer) her last moderator — each only when logged in (in the
         // lounge) with a free window and allowed on her platform, never the excluded one.
@@ -286,7 +308,7 @@ class QueueRouter
             $m ??= $pick($e);
 
             if ($m === null) {
-                $lines[] = '<span class="no">#'.$e->ticket_no.' راجعة: مفيش شباك فاضي</span>';
+                $lines[] = $noDesk($e);
 
                 continue;
             }
@@ -300,9 +322,9 @@ class QueueRouter
 
         foreach ($waiting->where('priority', 'escalation') as $e) {
             $platform = $e->conversation->platform;
-            $m = ($leader && $leader->user->canAccessPlatform($platform))
-                ? ($open($leader) ? $leader : null)
-                : $members->first(fn (ShiftMember $s) => $s->user->isSupervisorOrAbove() && $s->user->canAccessPlatform($platform) && $open($s));
+            $m = $leader !== null && $leader->user->canAccessPlatform($platform) && $open($leader)
+                ? $leader
+                : $members->first(fn (ShiftMember $s) => (int) $s->user_id !== $leaderId && $s->user->isSupervisorOrAbove() && $s->user->canAccessPlatform($platform) && $open($s));
 
             if ($m === null) {
                 $lines[] = '<span class="no">#'.$e->ticket_no.' تصعيد مستني الليدر</span>';
@@ -330,7 +352,7 @@ class QueueRouter
                 $m = $pick($e);
 
                 if ($m === null) {
-                    $lines[] = '<span class="no">#'.$e->ticket_no.': مفيش شباك فاضي</span>';
+                    $lines[] = $noDesk($e);
 
                     continue;
                 }
@@ -344,7 +366,9 @@ class QueueRouter
         // 2) overnight: each member drains her own share into her free windows. An entry whose
         //    reserved member is not serving now (offline, on break, left) is an orphan: anyone.
         //    A case customer is not held for a busy owner (the reservation is a preference).
-        foreach ($waiting->where('priority', 'overnight')->sortBy('ticket_no') as $e) {
+        // Arrival order, not ticket order: ticket numbers restart every business day, and after a day
+        // off the backlog spans two days (Saturday's #1 must not pass Friday's #2).
+        foreach ($waiting->where('priority', 'overnight') as $e) {
             if (! $anyOpen()) {
                 break;
             }
@@ -371,6 +395,8 @@ class QueueRouter
                 $m = $pick($e);
 
                 if ($m === null) {
+                    $noDesk($e);
+
                     continue;
                 }
                 $rule = $e->reserved_user_id ? 'معلّق من الليل (موظفتها مش متاحة)' : 'معلّق من الليل (بدون موظفة)';
@@ -549,21 +575,54 @@ class QueueRouter
     /** An escalation nobody on the shift can take: alert active supervisors, at most once per entry per 15 min. */
     private function alertEscalationWaiting(QueueEntry $e): void
     {
-        $key = 'queue:esc-notified:'.$e->id;
+        $this->alertOnce('queue:esc-notified:'.$e->id, 'queue.escalation_waiting', $this->customerData($e));
+    }
 
+    /** Desks are logged in but none may serve her platform: the supervisors hear, once per entry per 15 min. */
+    private function alertNoDeskForPlatform(QueueEntry $e): void
+    {
+        $this->alertOnce('queue:nodesk-notified:'.$e->id, 'queue.waiting_no_desk', $this->customerData($e) + ['reason' => 'platform', 'count' => 1]);
+    }
+
+    /**
+     * Customers wait during the shift and no desk (but the leader's) is logged in: the supervisors
+     * hear once per shift per 15 min, with the oldest ticket and how many wait. Nothing when the
+     * lounge holds no live customer (an overnight backlog is served when somebody checks in).
+     *
+     * @param  Collection<int, QueueEntry>  $waiting  live / manual / returning entries, oldest first
+     */
+    private function alertNobodyLoggedIn(Shift $shift, Collection $waiting): void
+    {
+        $oldest = $waiting->first();
+
+        if ($oldest === null) {
+            return;
+        }
+
+        $this->alertOnce('queue:nodesk-notified:shift:'.$shift->id, 'queue.waiting_no_desk', $this->customerData($oldest) + ['reason' => 'nobody', 'count' => $waiting->count()]);
+    }
+
+    /** @return array<string, mixed> */
+    private function customerData(QueueEntry $e): array
+    {
+        $c = $e->conversation;
+
+        return [
+            'entry_id' => $e->id, 'conversation_id' => $c->id, 'ticket' => $e->ticket_no,
+            'customer_name' => $c->customer?->name, 'platform' => $c->platform?->value, 'bot_summary' => $e->bot_summary,
+        ];
+    }
+
+    /** One supervisors' alert per `$key` per ESCALATION_ALERT_MINUTES, sent with the pass's other pushes. */
+    private function alertOnce(string $key, string $type, array $data): void
+    {
         if (Cache::has($key)) {
             return;
         }
 
-        $c = $e->conversation;
-        $data = [
-            'entry_id' => $e->id, 'conversation_id' => $c->id, 'ticket' => $e->ticket_no,
-            'customer_name' => $c->customer?->name, 'platform' => $c->platform?->value, 'bot_summary' => $e->bot_summary,
-        ];
-
-        $this->push(function () use ($key, $data) {
+        $this->push(function () use ($key, $type, $data) {
             if (Cache::add($key, true, now()->addMinutes(self::ESCALATION_ALERT_MINUTES))) {
-                $this->notifier->notifySupervisors('queue.escalation_waiting', $data);
+                $this->notifier->notifySupervisors($type, $data);
             }
         });
     }

@@ -17,7 +17,8 @@ use Inertia\Response;
 
 class QueueSettingController extends Controller
 {
-    private const ADMIN_FIELDS = ['points', 'shifts'];
+    /** Points, shifts and the service-cost figures (round 2026-10-24: salaries are the admin's) are the admin's alone. */
+    private const ADMIN_FIELDS = ['points', 'shifts', 'team_monthly_cost_egp', 'usd_egp_rate'];
 
     public function index(Request $request): Response
     {
@@ -70,6 +71,9 @@ class QueueSettingController extends Controller
             'shifts.*.location' => ['required', 'in:office,home'],
             'shifts.*.leader_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->whereIn('role', [UserRole::Admin->value, UserRole::Supervisor->value, UserRole::Moderator->value])],
             'default_roster' => ['sometimes', 'array'],
+            // «تكلفة الخدمة» (round 2026-10-24): the team's monthly cost in EGP and the EGP per USD for the bot's cost.
+            'team_monthly_cost_egp' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:99999999'],
+            'usd_egp_rate' => ['sometimes', 'nullable', 'numeric', 'min:0.001', 'max:10000'],
         ]);
         $s = QueueSetting::current();
         $warn = (int) ($data['silence_warn_seconds'] ?? $s->silence_warn_seconds);

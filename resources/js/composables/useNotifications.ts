@@ -18,6 +18,7 @@ export const TYPE_KEY = {
     'shopify.app': 'shopify_app',
     'queue.assigned': 'queue_assigned',
     'queue.escalation_waiting': 'queue_escalation_waiting',
+    'queue.waiting_no_desk': 'queue_waiting_no_desk',
     'queue.mass_offline': 'queue_mass_offline',
     'queue.break_overrun': 'queue_break_overrun',
     'queue.reply_overdue': 'queue_reply_overdue',

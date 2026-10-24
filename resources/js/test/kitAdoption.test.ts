@@ -40,6 +40,8 @@ const SWEPT: string[] = [
     'Orders/Confirmations', 'settings/OrderConfirmations',
     // b2 «عقل البوت»
     'Bot/Brain', 'Bot/Costs', 'Bot/Feedback', 'Bot/Guide',
+    // Queue ops: «المتابعة»
+    'Cases/FollowUp',
 ];
 
 /**

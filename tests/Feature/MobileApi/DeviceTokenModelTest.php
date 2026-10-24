@@ -80,5 +80,6 @@ it('exposes the mobile and push config', function () {
         ->and(config('crm.push.types')['queue.assigned'])->toBe(['channel' => 'queue', 'priority' => 'high'])
         ->and(config('crm.push.types')['note.mention'])->toBe(['channel' => 'mentions', 'priority' => 'normal'])
         ->and(config('crm.push.types')['conversation.handover_urgent'])->toBe(['channel' => 'handover', 'priority' => 'high'])
-        ->and(config('crm.push.types'))->toHaveCount(9);
+        ->and(config('crm.push.types')['queue.waiting_no_desk'])->toBe(['channel' => 'queue', 'priority' => 'high']) // round 2026-10-24: a customer nobody logged in can take
+        ->and(config('crm.push.types'))->toHaveCount(10);
 });

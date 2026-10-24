@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Http\Resources\ConversationResource;
 use App\Http\Resources\QueueEntryResource;
 use App\Http\Resources\ShiftMemberResource;
 use App\Inbox\Outcomes\Outcome;
@@ -53,7 +54,8 @@ trait QueueDeskEndpoints
             ]]);
         }
 
-        return response()->json(['data' => $this->payload($request, $s, $queue, $shifts)]);
+        // Web: Arabic as UTF-8, not `\uXXXX`; the mobile API keeps its escaped form (ConversationResource::jsonOptionsFor).
+        return response()->json(['data' => $this->payload($request, $s, $queue, $shifts)], 200, [], ConversationResource::jsonOptionsFor($request));
     }
 
     /** «بدأت شغل» (attendance §3). Answers the same payload as `me`. */
@@ -121,7 +123,8 @@ trait QueueDeskEndpoints
 
         return [
             'enabled' => true,
-            'member' => $member ? (new ShiftMemberResource($member))->resolve($request) : null,
+            // The settings read above for her desk too: not once per window (screen speed 2026-10-24).
+            'member' => $member ? (new ShiftMemberResource($member))->usingSettings($s)->resolve($request) : null,
             // The settings read above, not once more per window.
             'entries' => $entries->map(fn (QueueEntry $e) => QueueEntryResource::data($e, $s))->values()->all(),
             'settings' => [

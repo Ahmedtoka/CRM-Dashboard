@@ -82,7 +82,7 @@ trait ConversationEndpoints
      * Every user the thread shows (responders, assignee, lock holder, message and note authors,
      * participants, case owners) is read in one query instead of one per relation.
      */
-    public function show(Request $request, int|string $conversation, WindowPolicy $windows, SoftLock $lock): JsonResponse
+    public function show(Request $request, int|string $conversation, WindowPolicy $windows): JsonResponse
     {
         $conversation = ConversationQuery::withListColumns(Conversation::query()->whereKey((int) $conversation))
             ->without(['lockedBy', 'firstResponder', 'lastResponder', 'assignee'])
@@ -123,7 +123,9 @@ trait ConversationEndpoints
             ])->values();
 
         $window = $windows->evaluate($conversation, SenderType::User);
-        $holder = $lock->holder($conversation);
+        // SoftLock::holder()'s rule (an unexpired lock) on the holder attachUsers() already read with
+        // the thread's other users — not one more users query (screen speed 2026-10-24).
+        $holder = $conversation->locked_by_id !== null && $conversation->locked_until?->isFuture() ? $conversation->lockedBy : null;
 
         return response()->json([
             'conversation' => (new ConversationResource($conversation))->resolve($request),
@@ -137,7 +139,7 @@ trait ConversationEndpoints
                 'holder' => $holder ? ['id' => $holder->id, 'name' => $holder->name] : null,
                 'until' => $holder ? $conversation->locked_until?->toIso8601String() : null,
             ],
-        ]);
+        ], 200, [], ConversationResource::jsonOptionsFor($request));
     }
 
     public function messages(Request $request, Conversation $conversation): AnonymousResourceCollection

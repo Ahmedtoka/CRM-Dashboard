@@ -3,12 +3,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSepar
 import { useI18n } from '@/composables/useI18n';
 import { useNotifications } from '@/composables/useNotifications';
 import { formatCount } from '@/lib/format';
+import type { SharedData } from '@/types';
 import type { AppNotification } from '@/types/crm';
-import { Link, router } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { Bell } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const { t, locale } = useI18n();
+const page = usePage<SharedData>();
 const notifications = useNotifications();
 
 function reasonLabel(n: AppNotification): string {
@@ -30,6 +32,20 @@ function itemText(n: AppNotification): string {
             ticket: Number(n.data.ticket ?? 0) % 100000,
             name: String(n.data.customer_name ?? t('notifications.customer')),
         });
+    }
+
+    if (n.type === 'queue.waiting_no_desk') {
+        const platform = String(n.data.platform ?? '');
+        const label = (page.props.platforms ?? []).find((p: { value: string; label: string }) => p.value === platform)?.label ?? platform;
+        return t(
+            n.data.reason === 'nobody' ? 'notifications.queue_waiting_no_desk_nobody_item' : 'notifications.queue_waiting_no_desk_platform_item',
+            {
+                ticket: Number(n.data.ticket ?? 0) % 100000,
+                name: String(n.data.customer_name ?? t('notifications.customer')),
+                platform: label,
+                count: Number(n.data.count ?? 1),
+            },
+        );
     }
 
     if (n.type === 'queue.mass_offline') {
