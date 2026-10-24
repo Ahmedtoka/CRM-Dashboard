@@ -711,8 +711,33 @@ export interface AppNotification {
 }
 
 /* Control room S3: conversation outcomes (D13), the context endpoint, ad source. */
-export type OutcomeKey = 'ordered' | 'price' | 'size_out' | 'shipping' | 'no_answer' | 'browsing' | 'service' | 'other' | 'unknown';
-export type AgentOutcome = Exclude<OutcomeKey, 'ordered' | 'unknown'>;
+export type OutcomeKey =
+    | 'ordered'
+    | 'price'
+    | 'size_out'
+    | 'shipping'
+    | 'browsing'
+    | 'order_inquiry'
+    | 'return_case'
+    | 'exchange_case'
+    | 'complaint_case'
+    | 'order_change'
+    | 'no_answer'
+    | 'spam'
+    | 'other'
+    | 'service'
+    | 'unknown';
+/** What a person may pick in «خلصت» (finish-api.md §1): everything but the legacy `service` and `unknown`. */
+export type AgentOutcome = Exclude<OutcomeKey, 'service' | 'unknown'>;
+/** Why the sheet preselected an outcome (finish-api.md §2). */
+export type SuggestionWhy = 'order_placed' | 'case_open' | 'case_resolved' | 'handover' | 'no_reply' | 'answered';
+export interface OutcomeSuggestion {
+    outcome: AgentOutcome;
+    why: SuggestionWhy;
+    params: { case_id?: number; type?: SupportCaseType; number?: string | null; created_at?: string | null; minutes?: number; category?: string; category_label?: string };
+    case_id: number | null;
+    order_id: number | null;
+}
 export interface OutcomePayload {
     outcome?: AgentOutcome;
     outcome_note?: string;
@@ -723,6 +748,8 @@ export interface OutcomeState {
     auto: OutcomeKey | null;
     /** Close cycle: the order behind an automatic `ordered` (the «خلصت» sheet says why it picked it). */
     auto_order?: { id: number; number: string | null; created_at: string | null } | null;
+    /** finish-api.md §2: what the sheet shows preselected, and why; null = she picks. */
+    suggested?: OutcomeSuggestion | null;
 }
 
 /* Close cycle (close-cycle-FINAL §5.1): «خلصت», its «تراجع», and the outcome of an auto-closed window. */
@@ -737,8 +764,10 @@ export interface FinishBody {
     after?: FinishAfter;
     send_closing?: boolean;
     confirm_waiting?: boolean;
-    open_case?: SupportCaseType;
+    open_case?: SupportCaseType | null;
     resolve_case_id?: number;
+    /** finish-api.md §3: the outcome the sheet showed preselected (recorded with whether she followed it). */
+    suggested_outcome?: AgentOutcome | null;
 }
 export interface FinishResult {
     conversation: Conversation;
@@ -749,6 +778,8 @@ export interface FinishResult {
     skipped_reason: string | null;
     support_case_id: number | null;
     undo_until: string | null;
+    /** finish-api.md §3.3: what was recorded, what was suggested, whether she followed it. */
+    outcome?: { key: OutcomeKey; source: 'auto' | 'agent' | 'bot'; suggested: AgentOutcome | null; followed: boolean | null } | null;
 }
 /** GET /queue/me/auto-closed: her windows the silence closed today with no outcome yet (Q6). */
 export interface AutoClosedWindow {

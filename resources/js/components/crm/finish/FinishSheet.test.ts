@@ -1,7 +1,7 @@
 import FinishSheet from '@/components/crm/finish/FinishSheet.vue';
 import { INBOX_OUTCOME } from '@/composables/inbox/useConversationContext';
 import type { FinishTarget } from '@/lib/finish';
-import type { Conversation, OutcomeState } from '@/types/crm';
+import type { AgentOutcome, Conversation, OutcomeState, OutcomeSuggestion } from '@/types/crm';
 import { flushPromises, mount } from '@vue/test-utils';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -19,10 +19,29 @@ vi.mock('@/composables/useApi', async (importOriginal) => {
 });
 
 const conversation = { id: 9, customer: { id: 1, name: 'رشا', avatar_url: null }, open_case_id: null } as unknown as Conversation;
-const windowTarget: Extract<FinishTarget, { kind: 'window' }> = { kind: 'window', entryId: 41, windowNo: 8, ticket: 100008, assignedUserId: 3, openCaseId: null };
+const windowTarget: Extract<FinishTarget, { kind: 'window' }> = {
+    kind: 'window',
+    entryId: 41,
+    windowNo: 8,
+    ticket: 100008,
+    assignedUserId: 3,
+    openCaseId: null,
+};
 
 const ok = (over: Record<string, unknown> = {}) => ({
-    data: { data: { conversation, entry: null, path: 'window', end_mode: 'thanks', closing: 'queued', skipped_reason: null, support_case_id: null, undo_until: null, ...over } },
+    data: {
+        data: {
+            conversation,
+            entry: null,
+            path: 'window',
+            end_mode: 'thanks',
+            closing: 'queued',
+            skipped_reason: null,
+            support_case_id: null,
+            undo_until: null,
+            ...over,
+        },
+    },
 });
 
 function refusal(status: number, data: unknown): AxiosError {
@@ -35,8 +54,16 @@ function refusal(status: number, data: unknown): AxiosError {
     });
 }
 
+const suggest = (outcome: AgentOutcome, why: OutcomeSuggestion['why'], params: OutcomeSuggestion['params'] = {}): OutcomeSuggestion => ({
+    outcome,
+    why,
+    params,
+    case_id: params.case_id ?? null,
+    order_id: null,
+});
+
 function mountSheet(props: Record<string, unknown> = {}, outcome: Partial<OutcomeState> = {}) {
-    const state = computed<OutcomeState>(() => ({ current: null, source: null, auto: null, ...outcome }));
+    const state = computed<OutcomeState>(() => ({ current: null, source: null, auto: null, suggested: null, ...outcome }));
 
     return mount(FinishSheet, {
         props: { open: true, conversation, target: windowTarget, ...props },
@@ -54,7 +81,13 @@ async function opened(w: ReturnType<typeof mountSheet>): Promise<void> {
 
 const $ = (sel: string) => document.body.querySelector<HTMLElement>(sel);
 const sheet = () => $('[data-finish-sheet]')!;
-const key = (k: string, target: HTMLElement = sheet()) => target.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+const key = (k: string, target: HTMLElement = sheet()) =>
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+const checked = () => [...document.body.querySelectorAll('[data-outcome][aria-checked="true"]')].map((el) => el.getAttribute('data-outcome'));
+const confirm = async () => {
+    $('[data-finish-confirm]')!.click();
+    await flushPromises();
+};
 
 afterEach(() => {
     document.body.innerHTML = '';
@@ -63,18 +96,23 @@ afterEach(() => {
 });
 
 describe('FinishSheet', () => {
-    it('a window: says which window, no outcome invented, and refuses «خلصت» until one is picked', async () => {
+    it('shows the three groups, picks nothing by itself, and refuses «خلصت» until one thing is picked', async () => {
         const w = mountSheet();
         await opened(w);
 
         expect($('[data-finish-line]')?.textContent).toContain('شباك #٨ هيفضى');
         expect($('[data-finish-smart]')?.textContent).toContain('اختاري نتيجة المحادثة');
-        expect(document.body.querySelectorAll('[data-outcome][aria-checked="true"]').length).toBe(0);
+        expect([...document.body.querySelectorAll('[data-outcome-group]')].map((g) => g.getAttribute('data-outcome-group'))).toEqual([
+            'sale',
+            'service',
+            'rest',
+        ]);
+        expect(document.body.querySelectorAll('[data-outcome]').length).toBe(13);
+        expect(checked()).toEqual([]);
 
-        $('[data-finish-confirm]')!.click();
-        await flushPromises();
+        await confirm();
         expect(post).not.toHaveBeenCalled();
-        expect($('[data-finish-error]')?.textContent).toContain('اختاري نتيجة المحادثة الأول');
+        expect($('[data-finish-error]')?.textContent).toContain('اختاري إيه اللي حصل في الشات الأول');
         w.unmount();
     });
 
@@ -83,55 +121,170 @@ describe('FinishSheet', () => {
         const w = mountSheet();
         await opened(w);
 
-        key('1');
+        key('2');
         await nextTick();
-        expect($('[data-outcome="price"]')?.getAttribute('aria-checked')).toBe('true');
+        expect(checked()).toEqual(['price']);
         expect($('[data-finish-closing] [role="switch"]')?.getAttribute('aria-checked')).toBe('true');
 
         key('Enter');
         await flushPromises();
         expect(post).toHaveBeenCalledWith('/inbox/conversations/9/finish', { entry_id: 41, outcome: 'price', after: 'thanks', send_closing: true });
         expect(w.emitted('update:open')?.at(-1)).toEqual([false]);
-        expect(push).toHaveBeenCalledWith('اتقفلت المحادثة مع رشا · اتبعت طلب التقييم', 'success', undefined, expect.objectContaining({ label: 'تراجع' }), 10000);
+        expect(push).toHaveBeenCalledWith(
+            'اتقفلت المحادثة مع رشا · اتبعت طلب التقييم',
+            'success',
+            undefined,
+            expect.objectContaining({ label: 'تراجع' }),
+            10000,
+        );
         w.unmount();
     });
 
-    it('Enter while typing the «other» note does not confirm', async () => {
+    it('Enter while typing the «حاجة تانية» note does not confirm', async () => {
         const w = mountSheet();
         await opened(w);
         $('[data-outcome="other"]')!.click();
         await nextTick();
-        const input = $('[data-outcome-note]')!;
-        key('Enter', input);
+        key('Enter', $('[data-outcome-note]')!);
         await flushPromises();
         expect(post).not.toHaveBeenCalled();
         w.unmount();
     });
 
-    it('«البوت يكمّل معاها»: no closing switch, «بتتفرج» picked ahead, no message flag', async () => {
+    it("preselects the server's suggestion with its reason; confirming sends it and says it was the suggestion", async () => {
+        post.mockResolvedValueOnce(ok());
+        const w = mountSheet({}, { suggested: suggest('return_case', 'case_open', { case_id: 12, type: 'return' }) });
+        await opened(w);
+
+        expect(checked()).toEqual(['return_case']);
+        expect($('[data-finish-smart]')?.textContent).toContain('اخترنالك «مرتجع اتسجل»');
+        expect($('[data-finish-why]')?.textContent).toContain('طلب مرتجع #١٢ مفتوح');
+
+        key('Enter');
+        await flushPromises();
+        expect(post).toHaveBeenCalledWith('/inbox/conversations/9/finish', {
+            entry_id: 41,
+            outcome: 'return_case',
+            suggested_outcome: 'return_case',
+            after: 'thanks',
+            send_closing: true,
+        });
+        w.unmount();
+    });
+
+    it('«ما ردّتش» suggested: no closing message by default, says so, and changing the pick turns the message on and records the change', async () => {
+        post.mockResolvedValueOnce(ok({ closing: 'skipped', skipped_reason: 'no_reply' }));
+        const w = mountSheet({}, { suggested: suggest('no_answer', 'no_reply', { minutes: 7 }) });
+        await opened(w);
+
+        expect(checked()).toEqual(['no_answer']);
+        expect($('[data-finish-why]')?.textContent).toContain('ردّينا عليها ومابعتتش حاجة');
+        expect($('[data-finish-will]')?.textContent).toContain('مش هيتبعتلها رسالة عشان ما ردّتش');
+        expect($('[data-finish-closing] [role="switch"]')?.getAttribute('aria-checked')).toBe('false');
+
+        $('[data-outcome="price"]')!.click();
+        await nextTick();
+        expect($('[data-finish-smart]')?.textContent).toContain('اقترحنا «ما ردّتش» وانتي اخترتي غيرها');
+        expect($('[data-finish-will]')?.textContent).toContain('هيتبعتلها شكر + طلب تقييم');
+        expect($('[data-finish-closing] [role="switch"]')?.getAttribute('aria-checked')).toBe('true');
+
+        await confirm();
+        expect(post).toHaveBeenCalledWith('/inbox/conversations/9/finish', {
+            entry_id: 41,
+            outcome: 'price',
+            suggested_outcome: 'no_answer',
+            after: 'thanks',
+            send_closing: true,
+        });
+        w.unmount();
+    });
+
+    it('«ما ردّتش» with the thanks switched on by hand still sends send_closing', async () => {
+        post.mockResolvedValueOnce(ok());
+        const w = mountSheet({}, { suggested: suggest('no_answer', 'no_reply', { minutes: 0 }) });
+        await opened(w);
+        $('[data-finish-closing] [role="switch"]')!.click();
+        await nextTick();
+        await confirm();
+        expect(post.mock.calls[0][1]).toMatchObject({ outcome: 'no_answer', send_closing: true });
+        w.unmount();
+    });
+
+    it('a purchase suggestion names the order, and a late-arriving suggestion fills an empty pick but never replaces hers', async () => {
+        post.mockResolvedValueOnce(ok());
+        const order = suggest('ordered', 'order_placed', { number: '1384', created_at: new Date().toISOString() });
+        const w = mountSheet({}, { auto: 'ordered', suggested: order, auto_order: { id: 3, number: '1384', created_at: new Date().toISOString() } });
+        await opened(w);
+        expect(checked()).toEqual(['ordered']);
+        expect($('[data-finish-smart]')?.textContent).toContain('اخترنالك «اشترت / اتعمل أوردر»');
+        expect($('[data-finish-why]')?.textContent).toContain('أوردر #1384');
+        // Not locked: she may still change it.
+        $('[data-outcome="return_case"]')!.click();
+        await nextTick();
+        expect(checked()).toEqual(['return_case']);
+        w.unmount();
+    });
+
+    it('a case outcome tells what happens to the case: a new request in her name, or her open one linked', async () => {
+        post.mockResolvedValue(ok({ support_case_id: 5 }));
+        const w = mountSheet();
+        await opened(w);
+        $('[data-outcome="complaint_case"]')!.click();
+        await nextTick();
+        expect($('[data-finish-will]')?.textContent).toContain('هيتفتح طلب شكوى باسمك');
+        await confirm();
+        expect(post.mock.calls[0][1]).toEqual({ entry_id: 41, outcome: 'complaint_case', after: 'thanks', send_closing: true });
+        expect(post.mock.calls[0][1]).not.toHaveProperty('open_case');
+        w.unmount();
+
+        const v = mountSheet({ target: { ...windowTarget, openCaseId: 12 } });
+        await opened(v);
+        $('[data-outcome="exchange_case"]')!.click();
+        await nextTick();
+        expect($('[data-finish-will]')?.textContent).toContain('طلبها #١٢ المفتوح هيتربط');
+        ($('[data-finish-resolve-case]') as HTMLInputElement).click();
+        await nextTick();
+        expect($('[data-finish-will]')?.textContent).toContain('طلب #١٢ هيتعلّم «اتحل»');
+        await confirm();
+        expect(post.mock.calls[1][1]).toMatchObject({ outcome: 'exchange_case', resolve_case_id: 12 });
+        v.unmount();
+    });
+
+    it('«سبام»: goes to the bot with no message, whatever «بعدها» says', async () => {
+        post.mockResolvedValueOnce(ok({ end_mode: 'bot', closing: 'skipped' }));
+        const w = mountSheet();
+        await opened(w);
+        $('[data-outcome="spam"]')!.click();
+        await nextTick();
+
+        expect($('[data-finish-closing]')).toBeNull();
+        expect($('[data-finish-will]')?.textContent).toContain('الشات يرجع للبوت');
+        await confirm();
+        expect(post).toHaveBeenCalledWith('/inbox/conversations/9/finish', { entry_id: 41, outcome: 'spam', after: 'bot' });
+        w.unmount();
+    });
+
+    it('«البوت يكمّل معاها»: no closing switch, «استفسرت وهترجع» picked ahead, no message flag', async () => {
         post.mockResolvedValueOnce(ok({ end_mode: 'bot', closing: 'skipped' }));
         const w = mountSheet({ initialAfter: 'bot', lastFromCustomer: { body: 'لسه مستنية' } });
         await opened(w);
 
         expect($('[data-finish-closing]')).toBeNull();
         expect($('[data-finish-waiting]')).toBeNull();
-        expect($('[data-outcome="browsing"]')?.getAttribute('aria-checked')).toBe('true');
-        expect($('[data-finish-smart]')?.textContent).toContain('اخترنالك «بتتفرج / هترجع»');
+        expect(checked()).toEqual(['browsing']);
+        expect($('[data-finish-smart]')?.textContent).toContain('اخترنالك «استفسرت وهترجع»');
 
-        $('[data-finish-confirm]')!.click();
-        await flushPromises();
+        await confirm();
         expect(post).toHaveBeenCalledWith('/inbox/conversations/9/finish', { entry_id: 41, outcome: 'browsing', after: 'bot' });
-
-        // Back on «شكر» the suggestion goes away again.
         w.unmount();
     });
 
-    it('back on «شكر + تقييم» after «البوت يكمّل» drops the suggested outcome', async () => {
+    it('back on «شكر + تقييم» after «البوت يكمّل» drops the hinted pick', async () => {
         const w = mountSheet({ initialAfter: 'bot' });
         await opened(w);
         $('[data-after="thanks"]')!.click();
         await nextTick();
-        expect(document.body.querySelectorAll('[data-outcome][aria-checked="true"]').length).toBe(0);
+        expect(checked()).toEqual([]);
         expect($('[data-finish-closing]')).not.toBeNull();
         w.unmount();
     });
@@ -145,10 +298,9 @@ describe('FinishSheet', () => {
         expect($('[data-finish-waiting-text]')?.textContent).toContain('المقاس ده متاح؟');
         expect($('[data-finish-closing] [role="switch"]')?.getAttribute('aria-checked')).toBe('false');
 
-        key('2');
+        key('3');
         await nextTick();
-        $('[data-finish-confirm]')!.click();
-        await flushPromises();
+        await confirm();
         expect(post).toHaveBeenCalledWith('/inbox/conversations/9/finish', {
             entry_id: 41,
             outcome: 'size_out',
@@ -165,10 +317,9 @@ describe('FinishSheet', () => {
         const w = mountSheet({ awaitingSince: '2026-10-18T10:00:00Z' });
         await opened(w);
         $('[data-finish-closing] [role="switch"]')!.click();
-        key('3');
+        key('4');
         await nextTick();
-        $('[data-finish-confirm]')!.click();
-        await flushPromises();
+        await confirm();
         expect(post.mock.calls[0][1]).toMatchObject({ send_closing: true, confirm_waiting: true });
         w.unmount();
     });
@@ -177,17 +328,15 @@ describe('FinishSheet', () => {
         post.mockRejectedValueOnce(refusal(409, { code: 'customer_waiting', last_message: 'فين الأوردر؟' })).mockResolvedValueOnce(ok());
         const w = mountSheet();
         await opened(w);
-        key('1');
+        key('2');
         await nextTick();
-        $('[data-finish-confirm]')!.click();
-        await flushPromises();
+        await confirm();
 
         expect(w.emitted('update:open')).toBeUndefined();
         expect($('[data-finish-waiting-text]')?.textContent).toContain('فين الأوردر؟');
         expect($('[data-finish-closing] [role="switch"]')?.getAttribute('aria-checked')).toBe('false');
 
-        $('[data-finish-confirm]')!.click();
-        await flushPromises();
+        await confirm();
         expect(post.mock.calls[1][1]).toMatchObject({ confirm_waiting: true, send_closing: false });
         w.unmount();
     });
@@ -196,25 +345,12 @@ describe('FinishSheet', () => {
         post.mockRejectedValueOnce(refusal(409, { code: 'stale_state', entry_id: 99 }));
         const w = mountSheet();
         await opened(w);
-        key('1');
+        key('2');
         await nextTick();
         key('Enter');
         await flushPromises();
         expect(w.emitted('update:open')?.at(-1)).toEqual([false]);
         expect(push).toHaveBeenCalledWith(expect.stringContaining('المحادثة اتغيرت'), 'error');
-        w.unmount();
-    });
-
-    it('an ordered chat: the smart box says why, the outcome is locked, nothing to send for it', async () => {
-        post.mockResolvedValueOnce(ok());
-        const w = mountSheet({}, { auto: 'ordered', auto_order: { id: 3, number: '1384', created_at: new Date().toISOString() } });
-        await opened(w);
-        expect($('[data-finish-smart]')?.textContent).toContain('اخترنالك «اتعمل أوردر»');
-        expect($('[data-finish-smart]')?.textContent).toContain('أوردر #1384');
-        expect($('[data-outcome-locked]')).not.toBeNull();
-        key('Enter');
-        await flushPromises();
-        expect(post).toHaveBeenCalledWith('/inbox/conversations/9/finish', { entry_id: 41, after: 'thanks', send_closing: true });
         w.unmount();
     });
 
@@ -240,37 +376,16 @@ describe('FinishSheet', () => {
         expect($('[data-finish-closing]')?.textContent).toContain('ابعتي رسالة الختام');
         expect($('[data-finish-closing]')?.textContent).not.toContain('التقييم');
         expect($('[data-finish-case]')).toBeNull();
-        key('4');
+        key('5');
         await nextTick();
         key('Enter');
         await flushPromises();
-        expect(post).toHaveBeenCalledWith('/inbox/conversations/9/finish', { entry_id: null, outcome: 'browsing', after: 'thanks', send_closing: true });
+        expect(post).toHaveBeenCalledWith('/inbox/conversations/9/finish', {
+            entry_id: null,
+            outcome: 'browsing',
+            after: 'thanks',
+            send_closing: true,
+        });
         w.unmount();
-    });
-
-    it('her open case can be marked resolved; without one a new request can be opened', async () => {
-        post.mockResolvedValue(ok());
-        const w = mountSheet({ target: { ...windowTarget, openCaseId: 12 } });
-        await opened(w);
-        expect($('[data-finish-case]')?.textContent).toContain('عندها طلب #١٢ مفتوح');
-        ($('[data-finish-resolve-case]') as HTMLInputElement).click();
-        key('1');
-        await nextTick();
-        $('[data-finish-confirm]')!.click();
-        await flushPromises();
-        expect(post.mock.calls[0][1]).toMatchObject({ resolve_case_id: 12 });
-        w.unmount();
-
-        const v = mountSheet();
-        await opened(v);
-        ($('[data-finish-open-case]') as HTMLInputElement).click();
-        await nextTick();
-        expect(($('[data-finish-case-type]') as HTMLSelectElement).value).toBe('complaint');
-        key('1');
-        await nextTick();
-        $('[data-finish-confirm]')!.click();
-        await flushPromises();
-        expect(post.mock.calls[1][1]).toMatchObject({ open_case: 'complaint' });
-        v.unmount();
     });
 });
