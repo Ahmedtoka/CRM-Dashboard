@@ -4,6 +4,7 @@ import DataTable, { type Column } from '@/components/crm/DataTable.vue';
 import IconAction from '@/components/crm/IconAction.vue';
 import PlatformBadge from '@/components/crm/PlatformBadge.vue';
 import SettingsShell from '@/components/crm/settings/SettingsShell.vue';
+import WhatsAppReadinessCard from '@/components/crm/settings/WhatsAppReadinessCard.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
@@ -292,6 +293,9 @@ const breadcrumbs = useSettingsBreadcrumbs(() => title.value);
                     </template>
                 </DataTable>
             </section>
+
+            <!-- Round 2026-10-24: is the number the order confirmations go from ready? (admin-only endpoints) -->
+            <WhatsAppReadinessCard />
 
             <section class="grid gap-3">
                 <div>

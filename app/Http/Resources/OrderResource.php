@@ -136,7 +136,7 @@ class OrderResource extends JsonResource
             ])->values()->all(),
             'timeline' => $this->timeline(),
             // Round 2026-10-24: the shipping timeline from Shopify (current step, carrier link, every reported step).
-            'shipping' => ShippingTimeline::summary($this->resource),
+            'delivery' => ShippingTimeline::summary($this->resource),
             // Round 2026-10-24: the order's return/exchange cases and where each one stands (the thread card's chip).
             'return_cases' => $this->returnCases->map(fn (SupportCase $c) => [
                 'id' => $c->id,

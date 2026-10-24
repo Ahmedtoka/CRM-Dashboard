@@ -385,6 +385,10 @@ export interface Order {
     /** Web list only (fresh-orders F5): governorate name and district (Shopify city line). */
     governorate?: string | null;
     district?: string | null;
+    /** Round 2026-10-24: the shipping timeline from Shopify (Order::shippingSummary), sent as `delivery` (`shipping` is the address). */
+    delivery?: import('@/types/returnsShipping').ShippingSummary;
+    /** Round 2026-10-24: the order's return/exchange cases and where each stands. */
+    return_cases?: import('@/types/returnsShipping').ReturnCaseChip[];
 }
 
 export interface Identity {
@@ -516,6 +520,8 @@ export interface SupportCase {
     closed_at: string | null;
     sla?: CaseSla;
     opened_by?: { id: number; name: string } | null;
+    /** Round 2026-10-24: the return/exchange lifecycle; null for other case types. */
+    return?: import('@/types/returnsShipping').ReturnView | null;
 }
 
 export interface ConversationDetail {
@@ -692,6 +698,7 @@ export interface AppNotification {
         | 'queue.reply_overdue_leader'
         | 'queue.member_not_arrived'
         | 'cases.sla_overdue'
+        | 'order.delivery_failed'
         | 'queue.break_overrun'
         | 'ads.need_stop'
         | 'ads.alerts'

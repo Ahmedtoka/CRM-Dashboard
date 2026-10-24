@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CaseSlaChip from '@/components/crm/cases/CaseSlaChip.vue';
+import ReturnLifecycle from '@/components/crm/cases/ReturnLifecycle.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -116,6 +117,20 @@ const selectClass = 'h-9 w-full rounded-md border border-line-strong bg-card px-
             </EmptyState>
 
             <div v-else-if="item" class="scrollbar-thin flex-1 space-y-5 overflow-y-auto px-5 py-4 text-sm">
+                <section v-if="item.return" class="rounded-lg border border-line p-3" data-case-return>
+                    <h3 class="mb-2 text-sm font-bold">{{ t('return_lifecycle.title') }}</h3>
+                    <ReturnLifecycle
+                        :case-id="item.id"
+                        :view="item.return"
+                        @updated="
+                            (fresh) => {
+                                item = fresh;
+                                emit('updated', fresh);
+                            }
+                        "
+                    />
+                </section>
+
                 <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-13" data-case-meta>
                     <template v-if="item.customer">
                         <dt class="text-fg-2">{{ t('cases.columns.customer') }}</dt>

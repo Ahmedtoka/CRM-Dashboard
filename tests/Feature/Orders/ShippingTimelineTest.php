@@ -139,9 +139,9 @@ it('sends the shipping summary with the order resource', function () {
 
     $this->actingAs($admin)->get("/orders/{$order->id}")->assertOk()
         ->assertInertia(fn ($p) => $p->component('Orders/Show')
-            ->where('order.shipping.step', 'created')
-            ->where('order.shipping.tracking.company', 'Bosta')
-            ->has('order.shipping.timeline', 1));
+            ->where('order.delivery.step', 'created')
+            ->where('order.delivery.tracking.company', 'Bosta')
+            ->has('order.delivery.timeline', 1));
 });
 
 it('maps the fulfillment_events webhook route to its topic', function () {
