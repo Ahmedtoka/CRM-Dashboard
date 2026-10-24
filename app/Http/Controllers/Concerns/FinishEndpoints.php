@@ -29,15 +29,18 @@ trait FinishEndpoints
     {
         Gate::authorize('reply', $conversation);
 
+        // finish-api.md §3 (2026-10-24): the new outcome keys (the legacy `service` still accepted), the suggestion the
+        // sheet showed, and `after` / `open_case` only when sent — without them the outcome decides (§3.2).
         $data = $request->validate([
             'entry_id' => ['present', 'nullable', 'integer'],
-            'outcome' => ['nullable', 'string', Rule::in(Outcome::agentValues())],
+            'outcome' => ['nullable', 'string', Rule::in(Outcome::acceptedValues())],
             'outcome_note' => ['nullable', 'required_if:outcome,other', 'string', 'max:120'],
             'after' => ['sometimes', 'string', Rule::in(['thanks', 'bot'])],
             'send_closing' => ['sometimes', 'boolean'],
             'confirm_waiting' => ['sometimes', 'boolean'],
             'open_case' => ['sometimes', 'nullable', 'string', Rule::in(SupportCase::TYPES)],
             'resolve_case_id' => ['sometimes', 'nullable', 'integer'],
+            'suggested_outcome' => ['sometimes', 'nullable', 'string', Rule::in(Outcome::agentValues())],
         ], [
             'outcome.in' => __('errors.outcome.required'),
             'outcome_note.required_if' => __('errors.outcome.note_required'),
@@ -45,14 +48,17 @@ trait FinishEndpoints
 
         $r = [
             'entry_id' => $data['entry_id'],
-            'outcome' => isset($data['outcome']) ? Outcome::from($data['outcome']) : null,
+            'outcome' => Outcome::fromRequest($data['outcome'] ?? null, $data['open_case'] ?? null),
             'outcome_note' => $data['outcome_note'] ?? null,
-            'after' => $data['after'] ?? 'thanks',
             'confirm_waiting' => (bool) ($data['confirm_waiting'] ?? false),
-            'open_case' => $data['open_case'] ?? null,
             'resolve_case_id' => $data['resolve_case_id'] ?? null,
             'lounge_message' => true, 'closing_without_window' => true,
         ];
+        foreach (['after', 'open_case', 'suggested_outcome'] as $key) {
+            if (array_key_exists($key, $data)) {
+                $r[$key] = $data[$key];
+            }
+        }
         if (array_key_exists('send_closing', $data)) {
             $r['send_closing'] = (bool) $data['send_closing'];
         }
@@ -74,6 +80,8 @@ trait FinishEndpoints
             'skipped_reason' => $result['skipped_reason'],
             'support_case_id' => $result['support_case_id'],
             'undo_until' => $result['undo_until'],
+            // finish-api.md §3.3: what was recorded, what was suggested, and whether she followed it.
+            'outcome' => $result['outcome'] ?? null,
         ]]);
     }
 
@@ -99,7 +107,7 @@ trait FinishEndpoints
         Gate::authorize('reply', $conversation);
 
         $data = $request->validate([
-            'outcome' => ['required', 'string', Rule::in(Outcome::agentValues())],
+            'outcome' => ['required', 'string', Rule::in(Outcome::acceptedValues())],
             'outcome_note' => ['nullable', 'required_if:outcome,other', 'string', 'max:120'],
         ], [
             'outcome.required' => __('errors.outcome.required'),
@@ -107,7 +115,7 @@ trait FinishEndpoints
             'outcome_note.required_if' => __('errors.outcome.note_required'),
         ]);
 
-        $entry = $this->runCycle(fn () => $cycle->amendOutcome($conversation, $request->user(), Outcome::from($data['outcome']), $data['outcome_note'] ?? null));
+        $entry = $this->runCycle(fn () => $cycle->amendOutcome($conversation, $request->user(), Outcome::fromRequest($data['outcome']), $data['outcome_note'] ?? null));
 
         if ($entry instanceof JsonResponse) {
             return $entry;

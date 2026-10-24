@@ -485,13 +485,13 @@ trait ConversationEndpoints
         // D16: the mobile app sends no body; there the outcome is optional and recorded `unknown`.
         $api = $request->is('api/*');
         $data = $request->validate([
-            'outcome' => ['nullable', 'string', Rule::in(Outcome::agentValues())],
+            'outcome' => ['nullable', 'string', Rule::in(Outcome::acceptedValues())],
             'outcome_note' => ['nullable', 'required_if:outcome,other', 'string', 'max:120'],
         ], [
             'outcome.in' => __('errors.outcome.required'),
             'outcome_note.required_if' => __('errors.outcome.note_required'),
         ]);
-        $outcome = isset($data['outcome']) ? Outcome::from($data['outcome']) : null;
+        $outcome = Outcome::fromRequest($data['outcome'] ?? null);
 
         // D13: on the web a resolve needs the chat's outcome unless it is automatic or the chat is already resolved.
         if (! $api && $outcome === null && $conversation->status !== ConversationStatus::Resolved

@@ -924,6 +924,7 @@ class WindowLifecycle
                 DB::transaction(fn () => app(OutcomeRecorder::class)->endEpisode(
                     $c, $e, $picked instanceof Outcome ? $picked : null, $opts['outcome_note'] ?? null, $by,
                     $reason === 'auto' ? EpisodeEnd::AutoClose : EpisodeEnd::Close,
+                    ['suggested_outcome' => $opts['suggested_outcome'] ?? null],
                 ));
             } catch (Throwable $outcomeError) {
                 if ($this->causedByConcurrencyError($outcomeError) || $this->causedByLostConnection($outcomeError)) {
@@ -962,6 +963,11 @@ class WindowLifecycle
                 'assigned_to_id' => $by?->id, 'opened_by_id' => $by?->id, 'queue_entry_id' => $e->id, 'sla_due_at' => now()->addHours($s->case_sla_hours),
             ]);
             $e->forceFill(['support_case_id' => $case->id])->save();
+        }
+
+        // finish-api.md §5: the episode's outcome row names the case this close opened or linked.
+        if ($e->support_case_id !== null && $c !== null && in_array($reason, OutcomeRecorder::ENDING_CLOSE_REASONS, true)) {
+            rescue(fn () => app(OutcomeRecorder::class)->rowOf($e)?->forceFill(['support_case_id' => $e->support_case_id])->save(), null, false);
         }
 
         // Spec 2026-09-30 §2 + close-cycle-FINAL §6 (Q1): «خلصت» is the final close — hers, or a

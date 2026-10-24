@@ -46,7 +46,8 @@ it('ends the row a racing order inserted instead of failing on the unique key', 
         }
     });
 
-    $row = app(OutcomeRecorder::class)->endEpisode($c, null, Outcome::Price, null, User::factory()->create(), EpisodeEnd::Resolve);
+    // Nothing picked: the racing order's row is ended as `ordered`. (A pick would win over it, finish-api.md §2.)
+    $row = app(OutcomeRecorder::class)->endEpisode($c, null, null, null, User::factory()->create(), EpisodeEnd::Resolve);
 
     expect(ConversationOutcome::count())->toBe(1)
         ->and($row->fresh()->outcome)->toBe('ordered')->and($row->fresh()->order_id)->toBe($order->id)

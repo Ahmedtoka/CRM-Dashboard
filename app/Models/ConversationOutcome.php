@@ -20,7 +20,7 @@ class ConversationOutcome extends Model
     protected function casts(): array
     {
         return [
-            'set_at' => 'datetime', 'started_at' => 'datetime', 'ended_at' => 'datetime', 'reached_agent' => 'boolean',
+            'set_at' => 'datetime', 'started_at' => 'datetime', 'ended_at' => 'datetime', 'reached_agent' => 'boolean', 'suggestion_followed' => 'boolean',
             'first_message_id' => 'integer', 'last_message_id' => 'integer',
         ];
     }
@@ -35,6 +35,18 @@ class ConversationOutcome extends Model
     public function setBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'set_by_id');
+    }
+
+    /** @return BelongsTo<SupportCase, $this> */
+    public function supportCase(): BelongsTo
+    {
+        return $this->belongsTo(SupportCase::class, 'support_case_id');
+    }
+
+    /** @return BelongsTo<QueueEntry, $this> */
+    public function queueEntry(): BelongsTo
+    {
+        return $this->belongsTo(QueueEntry::class, 'queue_entry_id');
     }
 
     public function outcomeEnum(): Outcome

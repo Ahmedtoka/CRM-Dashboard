@@ -10,6 +10,7 @@ use App\Models\ConversationOutcome;
 use App\Models\Message;
 use App\Models\Order;
 use App\Models\QueueEntry;
+use App\Models\SupportCase;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 
@@ -40,7 +41,7 @@ it('stores the picked outcome with its author, its note only for other, and the 
     expect($price->outcome)->toBe('other');
 });
 
-it('keeps ordered over the picked outcome and the picked one over service', function () {
+it('keeps her pick over the handover outcome and over an order placed in the episode (finish-api.md §2)', function () {
     $c = Conversation::factory()->create(['handover_category' => 'return', 'handover_at' => now()]);
     s3EndIn($c);
     $u = User::factory()->create();
@@ -52,13 +53,40 @@ it('keeps ordered over the picked outcome and the picked one over service', func
     s3EndIn($c);
     $c->forceFill(['handover_at' => now()])->save();
     $service = $r->endEpisode($c->fresh(), null, null, null, $u, EpisodeEnd::Resolve);
-    expect($service->outcome)->toBe('service')->and($service->source)->toBe('auto')->and($service->set_by_id)->toBeNull();
+    expect($service->outcome)->toBe('return_case')->and($service->source)->toBe('auto')->and($service->set_by_id)->toBeNull();
 
     Carbon::setTestNow(now()->addMinute());
     s3EndIn($c);
     $order = Order::factory()->create(['conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'status' => 'confirmed']);
-    $ordered = $r->endEpisode($c->fresh(), null, Outcome::Price, null, $u, EpisodeEnd::Resolve);
+    $picked = $r->endEpisode($c->fresh(), null, Outcome::Price, null, $u, EpisodeEnd::Resolve);
+    expect($picked->outcome)->toBe('price')->and($picked->source)->toBe('agent')->and($picked->order_id)->toBeNull();
+
+    Carbon::setTestNow(now()->addMinute());
+    s3EndIn($c);
+    $order = Order::factory()->create(['conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'status' => 'confirmed']);
+    $ordered = $r->endEpisode($c->fresh(), null, null, null, $u, EpisodeEnd::Resolve);
     expect($ordered->outcome)->toBe('ordered')->and($ordered->source)->toBe('auto')->and($ordered->order_id)->toBe($order->id);
+});
+
+it('stores what the sheet suggested, whether she followed it, and the case the outcome is about', function () {
+    $c = Conversation::factory()->create();
+    s3EndIn($c);
+    $u = User::factory()->create();
+    $case = SupportCase::factory()->create(['conversation_id' => $c->id, 'type' => 'return']);
+    $r = app(OutcomeRecorder::class);
+
+    $row = $r->endEpisode($c, null, Outcome::ReturnCase, null, $u, EpisodeEnd::Close, ['suggested_outcome' => 'return_case']);
+    expect($row->suggested_outcome)->toBe('return_case')->and($row->suggestion_followed)->toBeTrue()->and($row->support_case_id)->toBe($case->id);
+
+    Carbon::setTestNow(now()->addMinute());
+    s3EndIn($c);
+    $changed = $r->endEpisode($c->fresh(), null, Outcome::Price, null, $u, EpisodeEnd::Close, ['suggested_outcome' => 'no_answer']);
+    expect($changed->suggested_outcome)->toBe('no_answer')->and($changed->suggestion_followed)->toBeFalse()->and($changed->support_case_id)->toBeNull();
+
+    Carbon::setTestNow(now()->addMinute());
+    s3EndIn($c);
+    $none = $r->endEpisode($c->fresh(), null, Outcome::Browsing, null, $u, EpisodeEnd::Close);
+    expect($none->suggested_outcome)->toBeNull()->and($none->suggestion_followed)->toBeNull();
 });
 
 it('records unknown (close cycle Q6) on a silence auto-close and unknown on an API resolve with nothing', function () {
@@ -81,7 +109,7 @@ it('closes the open ordered row instead of adding another', function () {
     $r = app(OutcomeRecorder::class);
     $open = $r->orderPlaced($order);
 
-    $closed = $r->endEpisode($c, null, Outcome::Browsing, null, User::factory()->create(), EpisodeEnd::Resolve);
+    $closed = $r->endEpisode($c, null, null, null, User::factory()->create(), EpisodeEnd::Resolve);
 
     expect($closed->id)->toBe($open->id)->and($closed->outcome)->toBe('ordered')->and($closed->ended_at)->not->toBeNull()
         ->and(ConversationOutcome::count())->toBe(1);

@@ -60,7 +60,7 @@ it('finds ordered first, then service from the handover in this episode, else no
     s3In($c);
     $r = app(OutcomeRecorder::class);
 
-    expect($r->autoOutcome($c))->toBe(Outcome::Service);
+    expect($r->autoOutcome($c))->toBe(Outcome::ReturnCase);
 
     Order::factory()->create(['conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'status' => 'confirmed']);
     expect($r->autoOutcome($c))->toBe(Outcome::Ordered);
@@ -82,7 +82,7 @@ it('reads the service category from the open queue entry summary', function () {
     $e = QueueEntry::factory()->create(['status' => 'active', 'bot_summary' => ['category' => 'order_status', 'lines' => []]]);
     s3In($e->conversation);
 
-    expect(app(OutcomeRecorder::class)->autoOutcome($e->conversation, $e))->toBe(Outcome::Service);
+    expect(app(OutcomeRecorder::class)->autoOutcome($e->conversation, $e))->toBe(Outcome::OrderInquiry);
 });
 
 it('records an order placed in the running episode as ordered and open', function () {

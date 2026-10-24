@@ -10,6 +10,7 @@ use App\Models\ConversationOutcome;
 use App\Models\Message;
 use App\Models\Order;
 use App\Models\QueueEntry;
+use App\Models\SupportCase;
 use App\Models\User;
 use App\Queue\Acknowledgement;
 use App\Queue\RatingService;
@@ -123,7 +124,8 @@ final class OutcomeRecorder
             $category = $c->handover_category;
         }
 
-        return is_string($category) && in_array($category, self::SERVICE_CATEGORIES, true) ? Outcome::Service : null;
+        // 2026-10-24: the service outcome of the category (return_case, complaint_case, order_inquiry, …), never the old `service`.
+        return is_string($category) && in_array($category, self::SERVICE_CATEGORIES, true) ? (Outcome::fromHandoverCategory($category) ?? Outcome::OrderInquiry) : null;
     }
 
     /**
@@ -164,13 +166,13 @@ final class OutcomeRecorder
     }
 
     /**
-     * Ends the running episode (see Definitions). Precedence: ordered > picked > service > the end's
+     * Ends the running episode (see Definitions). Precedence: picked > ordered > the handover's service outcome > the end's
      * own default (unknown for a silence auto-close, close cycle Q6; idle: no_answer, or unknown when the customer
      * wrote last and nobody answered) > unknown. Nothing new since the last end: that row is
      * returned untouched (a second resolve changes nothing). Call it inside the close's transaction
      * when there is one.
      */
-    public function endEpisode(Conversation $c, ?QueueEntry $entry, ?Outcome $picked, ?string $note, ?User $by, EpisodeEnd $how): ConversationOutcome
+    public function endEpisode(Conversation $c, ?QueueEntry $entry, ?Outcome $picked, ?string $note, ?User $by, EpisodeEnd $how, array $meta = []): ConversationOutcome
     {
         $ep = $this->episode($c);
         $row = ConversationOutcome::query()->where('conversation_id', $c->id)->where('episode_key', $ep['key'])->first();
@@ -182,9 +184,10 @@ final class OutcomeRecorder
         $auto = $this->autoOutcome($c, $entry, $ep['since'], sinceKnown: true);
         $person = $by !== null && in_array($how, [EpisodeEnd::Close, EpisodeEnd::Resolve, EpisodeEnd::ApiResolve], true);
 
+        // 2026-10-24 (finish-api.md §2): her pick says what happened and wins — even over an order placed in the
+        // episode (the sheet showed «اشترت» preselected with its reason; she changed it on purpose, and that is recorded).
         [$outcome, $source] = match (true) {
-            $auto === Outcome::Ordered => [Outcome::Ordered, ConversationOutcome::SOURCE_AUTO],
-            $picked !== null && $picked !== Outcome::Ordered && $picked !== Outcome::Unknown => [$picked, ConversationOutcome::SOURCE_AGENT],
+            $picked !== null && $picked !== Outcome::Unknown => [$picked, ConversationOutcome::SOURCE_AGENT],
             $auto !== null => [$auto, ConversationOutcome::SOURCE_AUTO],
             // Close cycle Q6 (D-24): a silent auto-close is not a lost sale — `unknown`, set later by her moderator.
             $how === EpisodeEnd::AutoClose => [Outcome::Unknown, ConversationOutcome::SOURCE_AUTO],
@@ -194,6 +197,7 @@ final class OutcomeRecorder
 
         $lastMessageId = (int) Message::query()->where('conversation_id', $c->id)->max('id') ?: null;
         $reached = $entry?->delivered_at !== null || $this->reachedAgent($c, $ep['since']);
+        $suggested = isset($meta['suggested_outcome']) ? Outcome::tryFrom((string) $meta['suggested_outcome']) : null;
         $fill = fn (ConversationOutcome $row, Outcome $outcome, string $source) => $row->forceFill([
             'first_message_id' => $row->first_message_id ?? $ep['first_message_id'],
             'started_at' => $row->started_at ?? $ep['started_at'],
@@ -205,6 +209,10 @@ final class OutcomeRecorder
             'queue_entry_id' => $entry?->id ?? $row->queue_entry_id,
             // Only an `ordered` episode holds an order (an unpaid order placed in it no longer counts once she picks another outcome).
             'order_id' => $outcome === Outcome::Ordered ? ($row->order_id ?? $this->episodeOrder($c, $ep['since'])?->id) : null,
+            // finish-api.md §5: what the sheet suggested, whether she followed it, and the case the outcome is about.
+            'suggested_outcome' => $suggested?->value,
+            'suggestion_followed' => $suggested === null ? null : $suggested === $outcome,
+            'support_case_id' => $meta['support_case_id'] ?? ($outcome->isService() ? $this->episodeCaseId($c, $ep['since']) : null),
             'last_message_id' => $lastMessageId,
             'ended_at' => now(),
             'ended_by' => $how->value,
@@ -225,7 +233,7 @@ final class OutcomeRecorder
             // orderPlaced() inserted this episode's row between our read and our insert (a failed INSERT does
             // not abort the surrounding close transaction on MariaDB): end that row instead. Its order wins.
             $row = ConversationOutcome::query()->where('conversation_id', $c->id)->where('episode_key', $ep['key'])->firstOrFail();
-            if ($row->outcome === Outcome::Ordered->value && $row->order_id !== null) {
+            if ($picked === null && $row->outcome === Outcome::Ordered->value && $row->order_id !== null) {
                 [$outcome, $source] = [Outcome::Ordered, ConversationOutcome::SOURCE_AUTO];
             }
             $fill($row, $outcome, $source);
@@ -285,7 +293,7 @@ final class OutcomeRecorder
      * linked to the conversation in this episode, never one an earlier ended episode already holds
      * (an order placed between a close and her next message is credited once).
      */
-    private function episodeOrder(Conversation $c, ?CarbonInterface $since): ?Order
+    public function episodeOrder(Conversation $c, ?CarbonInterface $since): ?Order
     {
         $held = ConversationOutcome::query()->where('conversation_id', $c->id)
             ->whereNotNull('ended_at')->whereNotNull('order_id')->select('order_id');
@@ -293,8 +301,22 @@ final class OutcomeRecorder
         return Order::withLoadTest()->where('conversation_id', $c->id)->whereNotIn('status', AdsQuery::NOT_REAL_STATUSES)
             ->whereNotIn('id', $held)
             ->when($since !== null, fn ($q) => $q->where('created_at', '>', $since))
-            ->latest('id')->first(['id', 'created_at']);
+            ->latest('id')->first(['id', 'order_number', 'created_at']);
     }
+    /** The latest support case opened in this episode (the chat's own), for `support_case_id`. */
+    private function episodeCaseId(?Conversation $c, ?CarbonInterface $since): ?int
+    {
+        if ($c === null) {
+            return null;
+        }
+
+        $id = SupportCase::query()->where('conversation_id', $c->id)
+            ->when($since !== null, fn ($q) => $q->where('created_at', '>', $since))
+            ->latest('id')->value('id');
+
+        return $id !== null ? (int) $id : null;
+    }
+
     /** The ended episode row a queue close wrote (null when it wrote none). */
     public function rowOf(?QueueEntry $e): ?ConversationOutcome
     {
@@ -310,12 +332,13 @@ final class OutcomeRecorder
         $row = $this->rowOf($e);
 
         // Null: nothing was written (no row, an ordered episode keeps its order, not a person's pick).
-        if ($row === null || $row->outcome === Outcome::Ordered->value || in_array($outcome, [Outcome::Ordered, Outcome::Unknown], true)) {
+        if ($row === null || ($row->outcome === Outcome::Ordered->value && $row->order_id !== null) || $outcome === Outcome::Unknown) {
             return null;
         }
 
         $row->forceFill([
             'outcome' => $outcome->value, 'source' => ConversationOutcome::SOURCE_AGENT, 'set_by_id' => $by->id, 'set_at' => now(),
+            'support_case_id' => $outcome->isService() ? ($row->support_case_id ?? $this->episodeCaseId($row->conversation, $row->started_at)) : $row->support_case_id,
             'note' => $outcome === Outcome::Other && $note !== null && trim($note) !== '' ? mb_substr(trim($note), 0, 200) : null,
         ])->save();
 

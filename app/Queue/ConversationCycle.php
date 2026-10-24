@@ -14,6 +14,7 @@ use App\Events\ConversationUpdated;
 use App\Inbox\Outcomes\EpisodeEnd;
 use App\Inbox\Outcomes\Outcome;
 use App\Inbox\Outcomes\OutcomeRecorder;
+use App\Inbox\Outcomes\OutcomeSuggestion;
 use App\Models\Conversation;
 use App\Models\ConversationOutcome;
 use App\Models\Message;
@@ -147,34 +148,45 @@ class ConversationCycle
         }
 
         $outcome = $this->outcomeOf($c, $e, $r);
+        // What the close records (her pick, else the automatic one): it decides the message, the case and the kind (finish-api.md §3.2).
+        $effective = $outcome ?? $this->outcomes->autoOutcome($c, $e);
+        $suggested = $this->suggestedOutcome($c, $e, $r);
         $waiting = $e->awaiting_reply_since !== null;
+        $after = $this->afterOf($r, $effective);
 
         // RC-17: «البوت يكمّل» says nothing to her, so her waiting is the bot's to answer.
-        if ($waiting && ($r['after'] ?? 'thanks') !== 'bot' && ! ($r['confirm_waiting'] ?? false)) {
+        if ($waiting && $after !== 'bot' && ! ($r['confirm_waiting'] ?? false)) {
             throw new FinishRefused('customer_waiting', 409, ['last_message' => $this->lastWords($c)]);
         }
 
-        $after = ($r['after'] ?? 'thanks') === 'bot' ? 'bot' : 'thanks';
-        $openCase = isset($r['open_case']) && in_array($r['open_case'], SupportCase::TYPES, true) ? $r['open_case'] : null;
         $existing = app(QueueService::class)->openCaseFor($c);
+        $openCase = isset($r['open_case']) && in_array($r['open_case'], SupportCase::TYPES, true) ? $r['open_case'] : null;
+        $link = (bool) ($r['link_case'] ?? false);
 
-        if ($openCase !== null && $existing !== null && ! ($r['link_case'] ?? false)) {
+        // A case outcome with no `open_case` in the request records its case itself: her open one is linked, else one is opened.
+        if (! array_key_exists('open_case', $r) && $effective?->caseType() !== null) {
+            $openCase = $existing?->type ?? $effective->caseType();
+            $link = true;
+        }
+
+        if ($openCase !== null && $existing !== null && ! $link) {
             throw new FinishRefused('case_exists', 422, ['case_id' => $existing->id]);
         }
 
         $reason = $r['reason'] ?? null;
         if (! in_array($reason, ['inquiry', 'problem', 'case'], true)) {
-            $reason = $openCase !== null ? 'case' : $this->kindOf($e, $c, $outcome);
+            $reason = $openCase !== null ? 'case' : $this->kindOf($e, $c, $effective);
         }
 
-        // Q1 / R2: the closing message by default, but not to a customer still waiting for a reply
-        // unless the moderator chose «ابعتي الشكر برضه».
-        $send = $after === 'thanks' && ($r['send_closing'] ?? ! $waiting) === true;
+        // Q1 / R2: the closing message by default, but not to a customer still waiting for a reply unless the
+        // moderator chose «ابعتي الشكر برضه» — and not for an outcome that sends nothing (she never replied, spam).
+        $send = $after === 'thanks' && ($r['send_closing'] ?? (! $waiting && $effective?->sendsClosing() !== false)) === true;
 
         $this->windows->closeLocked($e, $reason, $by, [
             'case_type' => $openCase ?? ($r['case_type'] ?? null), 'outcome' => $outcome, 'outcome_note' => $r['outcome_note'] ?? null,
+            'suggested_outcome' => $suggested,
             'to_bot' => $after === 'bot', 'end_mode' => $after, 'closing' => $send,
-            'skip_reason' => $send || $after === 'bot' ? null : ($waiting ? 'waiting' : 'not_asked'),
+            'skip_reason' => $send || $after === 'bot' ? null : ($waiting ? 'waiting' : ($effective?->skipReason() ?? 'not_asked')),
         ]);
 
         $this->markResolved($c, $by);
@@ -190,6 +202,39 @@ class ConversationCycle
             'path' => 'window', 'entry' => $e, 'end_mode' => $e->end_mode, 'closing' => $send ? 'queued' : 'skipped',
             'skipped_reason' => $send ? null : $e->closing_skipped_reason, 'support_case_id' => $e->support_case_id,
             'undo_until' => $e->closed_at?->copy()->addSeconds(self::UNDO_SECONDS)->toIso8601String(),
+            'outcome' => self::outcomeBlock($this->outcomes->rowOf($e)),
+        ];
+    }
+
+    /** The outcome the sheet showed preselected: sent with the request, else read from the chat's facts now. */
+    private function suggestedOutcome(Conversation $c, ?QueueEntry $e, array $r): ?string
+    {
+        if (array_key_exists('suggested_outcome', $r)) {
+            return is_string($r['suggested_outcome']) && Outcome::tryFrom($r['suggested_outcome']) !== null ? $r['suggested_outcome'] : null;
+        }
+
+        return rescue(fn () => app(OutcomeSuggestion::class)->for($c, $e)['outcome'] ?? null, null, false);
+    }
+
+    /** `after` as asked; without it, spam goes straight back to the bot and everything else ends with the thanks. */
+    private function afterOf(array $r, ?Outcome $effective): string
+    {
+        if (isset($r['after'])) {
+            return $r['after'] === 'bot' ? 'bot' : 'thanks';
+        }
+
+        return $effective?->endsWithBot() ? 'bot' : 'thanks';
+    }
+
+    /**
+     * The response's `outcome` block (finish-api.md §3.3).
+     *
+     * @return array{key: ?string, source: ?string, suggested: ?string, followed: ?bool}|null
+     */
+    public static function outcomeBlock(?ConversationOutcome $row): ?array
+    {
+        return $row === null ? null : [
+            'key' => $row->outcome, 'source' => $row->source, 'suggested' => $row->suggested_outcome, 'followed' => $row->suggestion_followed,
         ];
     }
 
@@ -200,6 +245,7 @@ class ConversationCycle
         $closed = $this->windows->close($e, 'cancelled', $by);
         $c->refresh();
         $this->endEpisode($c, $closed, $outcome instanceof Outcome ? $outcome : null, $r['outcome_note'] ?? null, $by, EpisodeEnd::Resolve);
+        $row = $this->outcomes->rowOf($closed);
 
         $c->return_priority_until = null;
         app(BotEngine::class)->resetToBot($c);
@@ -211,7 +257,7 @@ class ConversationCycle
             SendQueueMessage::dispatch($closed->id, 'queue_ticket_cancelled', []);
         }
 
-        return ['path' => 'lounge', 'entry' => $closed, 'end_mode' => null, 'closing' => $tell ? 'queued' : 'skipped', 'skipped_reason' => $tell ? null : 'lounge', 'support_case_id' => null, 'undo_until' => null];
+        return ['path' => 'lounge', 'entry' => $closed, 'end_mode' => null, 'closing' => $tell ? 'queued' : 'skipped', 'skipped_reason' => $tell ? null : 'lounge', 'support_case_id' => null, 'undo_until' => null, 'outcome' => self::outcomeBlock($row)];
     }
 
     /** @return array<string, mixed> */
@@ -223,15 +269,18 @@ class ConversationCycle
         }
 
         $outcome = $this->outcomeOf($c, null, $r);
+        $effective = $outcome ?? $this->outcomes->autoOutcome($c, null);
+        $suggested = $this->suggestedOutcome($c, null, $r);
         $waiting = $this->customerWaiting($c);
+        $after = $this->afterOf($r, $effective);
 
-        if ($waiting && ($r['after'] ?? 'thanks') !== 'bot' && ! ($r['confirm_waiting'] ?? false)) {
+        if ($waiting && $after !== 'bot' && ! ($r['confirm_waiting'] ?? false)) {
             throw new FinishRefused('customer_waiting', 409, ['last_message' => $this->lastWords($c)]);
         }
 
-        $this->endEpisode($c, null, $outcome, $r['outcome_note'] ?? null, $by, EpisodeEnd::Close);
+        $this->endEpisode($c, null, $outcome, $r['outcome_note'] ?? null, $by, EpisodeEnd::Close, ['suggested_outcome' => $suggested]);
+        $row = ConversationOutcome::query()->where('conversation_id', $c->id)->whereNotNull('ended_at')->latest('id')->first();
 
-        $after = ($r['after'] ?? 'thanks') === 'bot' ? 'bot' : 'thanks';
         $toBot = (bool) ($r['no_window_to_bot'] ?? true);
         $c->forceFill(['assignee_id' => null, 'assigned_at' => null, 'return_priority_until' => null])->save();
 
@@ -241,7 +290,8 @@ class ConversationCycle
 
         $this->markResolved($c, $by);
 
-        $send = $after === 'thanks' && (bool) ($r['closing_without_window'] ?? false) && ($r['send_closing'] ?? ! $waiting) === true;
+        $send = $after === 'thanks' && (bool) ($r['closing_without_window'] ?? false)
+            && ($r['send_closing'] ?? (! $waiting && $effective?->sendsClosing() !== false)) === true;
 
         if ($send) {
             SendClosingMessage::dispatch(null, $c->id, now()->toIso8601String(), false)->delay(now()->addSeconds(SendClosingMessage::DELAY_SECONDS));
@@ -250,7 +300,11 @@ class ConversationCycle
         $this->logger->log(ActorType::User, $by, ActivityLogger::CONVERSATION_RESOLVED, null, $c, ['finish' => $after]);
         DB::afterCommit(fn () => SafeBroadcast::send(new ConversationUpdated($c->fresh())));
 
-        return ['path' => 'none', 'entry' => null, 'end_mode' => $after, 'closing' => $send ? 'queued' : 'skipped', 'skipped_reason' => $send ? null : ($waiting ? 'waiting' : 'not_asked'), 'support_case_id' => null, 'undo_until' => null];
+        return [
+            'path' => 'none', 'entry' => null, 'end_mode' => $after, 'closing' => $send ? 'queued' : 'skipped',
+            'skipped_reason' => $send ? null : ($waiting ? 'waiting' : ($effective?->skipReason() ?? 'not_asked')),
+            'support_case_id' => $row?->support_case_id, 'undo_until' => null, 'outcome' => self::outcomeBlock($row),
+        ];
     }
 
     /**
@@ -274,7 +328,7 @@ class ConversationCycle
         }
         DB::afterCommit(fn () => SafeBroadcast::send(new ConversationUpdated($c->fresh())));
 
-        return ['path' => 'amend', 'entry' => $last, 'end_mode' => $last->end_mode, 'closing' => 'skipped', 'skipped_reason' => 'auto_closed', 'support_case_id' => null, 'undo_until' => null];
+        return ['path' => 'amend', 'entry' => $last, 'end_mode' => $last->end_mode, 'closing' => 'skipped', 'skipped_reason' => 'auto_closed', 'support_case_id' => null, 'undo_until' => null, 'outcome' => self::outcomeBlock($this->outcomes->rowOf($last))];
     }
 
     /** Her auto-closed window (the tick's, nobody's hand) within `$seconds`, hers or a supervisor's to fix. */
@@ -566,11 +620,11 @@ class ConversationCycle
     /** D-15: the kind is the outcome's — a service chat is a problem, anything else an inquiry. */
     private function kindOf(QueueEntry $e, Conversation $c, ?Outcome $outcome): string
     {
-        if ($outcome === Outcome::Service) {
+        if ($outcome?->isService()) {
             return 'problem';
         }
 
-        if ($outcome === null && $this->outcomes->autoOutcome($c, $e) === Outcome::Service) {
+        if ($outcome === null && $this->outcomes->autoOutcome($c, $e)?->isService()) {
             return 'problem';
         }
 
@@ -612,10 +666,10 @@ class ConversationCycle
     }
 
     /** The episode end, in a savepoint (an outcomes failure never fails the close; a deadlock propagates). */
-    private function endEpisode(Conversation $c, ?QueueEntry $e, ?Outcome $outcome, ?string $note, User $by, EpisodeEnd $how): void
+    private function endEpisode(Conversation $c, ?QueueEntry $e, ?Outcome $outcome, ?string $note, User $by, EpisodeEnd $how, array $meta = []): void
     {
         try {
-            DB::transaction(fn () => $this->outcomes->endEpisode($c, $e, $outcome, $note, $by, $how));
+            DB::transaction(fn () => $this->outcomes->endEpisode($c, $e, $outcome, $note, $by, $how, $meta));
         } catch (Throwable $x) {
             if ($this->causedByConcurrencyError($x) || $this->causedByLostConnection($x)) {
                 throw $x;
