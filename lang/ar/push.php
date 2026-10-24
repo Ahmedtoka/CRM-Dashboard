@@ -8,6 +8,7 @@ return [
         'reply_overdue' => ['title' => 'العميلة مستنية ردك', 'body' => '#:ticket هيتحوّل لزميلة لو مردتيش'],
         'break_overrun' => ['title' => 'استراحة زادت عن وقتها', 'body' => ':name عدّت :minutes دقيقة استراحة'],
         'escalation_waiting' => ['title' => 'تصعيد مستني حد يستلمه', 'body' => '#:ticket — :name — :platform'],
+        'waiting_no_desk' => ['title' => 'عميلة مستنية ومفيش موظفة تاخدها', 'body' => '#:ticket — :name — :platform'],
         'reply_overdue_leader' => ['title' => 'رد متأخر في الصالة', 'body' => '#:ticket — :agent مردتش على :name'],
     ],
     'note' => [

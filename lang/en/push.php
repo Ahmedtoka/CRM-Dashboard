@@ -8,6 +8,7 @@ return [
         'reply_overdue' => ['title' => 'The customer is waiting for your reply', 'body' => '#:ticket moves to a teammate if you do not reply'],
         'break_overrun' => ['title' => 'Break ran over', 'body' => ':name passed :minutes minutes of break'],
         'escalation_waiting' => ['title' => 'Escalation waiting for someone', 'body' => '#:ticket — :name — :platform'],
+        'waiting_no_desk' => ['title' => 'A customer waits with nobody to take her', 'body' => '#:ticket — :name — :platform'],
         'reply_overdue_leader' => ['title' => 'Overdue reply on the floor', 'body' => '#:ticket — :agent has not replied to :name'],
     ],
     'note' => [

@@ -636,6 +636,7 @@ return [
             // Leader / supervisor alerts (only they receive these notifications).
             'queue.break_overrun' => ['channel' => 'queue', 'priority' => 'normal'],
             'queue.escalation_waiting' => ['channel' => 'queue', 'priority' => 'high'],
+            'queue.waiting_no_desk' => ['channel' => 'queue', 'priority' => 'high'],
             'queue.reply_overdue_leader' => ['channel' => 'queue', 'priority' => 'high'],
         ],
     ],
