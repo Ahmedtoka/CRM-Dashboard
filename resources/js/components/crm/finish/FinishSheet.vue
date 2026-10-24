@@ -273,8 +273,9 @@ watch(
     { immediate: true },
 );
 // Another chat (or her window ended elsewhere): the sheet belongs to the one it was opened for.
+// A string key, not an array: an array getter is "changed" on every re-render of the props, which closed the sheet by itself.
 watch(
-    () => [props.conversation.id, props.target.kind, 'entryId' in props.target ? props.target.entryId : null],
+    () => `${props.conversation.id}:${props.target.kind}:${'entryId' in props.target ? props.target.entryId : ''}`,
     () => {
         if (open.value) open.value = false;
     },

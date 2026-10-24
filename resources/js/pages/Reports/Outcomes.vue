@@ -200,21 +200,19 @@ const control =
                             <li
                                 v-for="row in split"
                                 :key="row.key"
-                                class="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_4.5rem] items-center gap-3 text-13 sm:grid-cols-[13rem_minmax(0,1fr)_6rem]"
+                                class="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)_2rem_2.75rem] items-center gap-3 text-13 sm:grid-cols-[13rem_minmax(0,1fr)_3rem_3.5rem]"
                                 :data-split="row.key"
                             >
                                 <span class="truncate">{{ t(`outcomes.${row.key}`) }}</span>
                                 <span class="h-2.5 rounded-full bg-sunken" aria-hidden="true"
                                     ><span
-                                        class="bg-chart block h-2.5 rounded-full"
+                                        class="block h-2.5 rounded-full bg-chart-1"
                                         :style="{ width: `${Math.max(2, Math.round((row.count / maxCount) * 100))}%` }"
                                 /></span>
-                                <span class="text-end tabular-nums"
-                                    >{{ n(row.count)
-                                    }}<span v-if="row.share !== null" class="ms-1 text-xs text-fg-3">{{
-                                        pct(Math.round(row.share * 100))
-                                    }}</span></span
-                                >
+                                <span class="text-end font-semibold tabular-nums">{{ n(row.count) }}</span>
+                                <span class="text-end text-xs tabular-nums text-fg-3">{{
+                                    row.share === null ? '' : pct(Math.round(row.share * 100))
+                                }}</span>
                             </li>
                         </ul>
                     </section>
