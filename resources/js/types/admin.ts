@@ -265,6 +265,9 @@ export interface QueueSettings {
     agent_reassign_seconds: number;
     /** An open case goes to the moderator who opened it. */
     case_follow_owner: boolean;
+    /** «تكلفة الخدمة» (2026-10-24): the team's monthly cost in EGP and EGP per USD; null until the admin fills them. */
+    team_monthly_cost_egp: number | string | null;
+    usd_egp_rate: number | string | null;
     points: Record<string, number> | null;
     shifts: QueueShiftTemplate[] | null;
     default_roster: Record<string, unknown> | null;

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Http\Support\DateRange;
 use App\Queue\Reports\QueueReport;
+use App\Queue\Reports\ServiceCost;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -19,13 +20,15 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class QueueReportController extends Controller
 {
-    public function index(Request $request, QueueReport $report): Response
+    public function index(Request $request, QueueReport $report, ServiceCost $cost): Response
     {
         $range = $this->range($request);
 
         return Inertia::render('Reports/Queue', [
             'range' => ['from' => $range->fromDate, 'to' => $range->toDate],
             'report' => $report->build($range->fromDate, $range->toDate),
+            // «تكلفة الخدمة» (round 2026-10-24): the same range, one computation.
+            'service_cost' => $cost->build($range->fromDate, $range->toDate),
         ]);
     }
 

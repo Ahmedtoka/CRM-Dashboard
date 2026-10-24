@@ -55,6 +55,9 @@ type QueueForm = {
     case_follow_owner: boolean;
     points: Record<string, number>;
     shifts: ShiftRow[];
+    /** Nullable decimals (the admin's): sent as numbers or null, never coerced to 0. */
+    team_monthly_cost_egp: number | string;
+    usd_egp_rate: number | string;
 } & Record<(typeof NUMERIC_KEYS)[number], number>;
 
 const NUMERIC_KEYS = [
@@ -106,6 +109,9 @@ const form = useForm<QueueForm>({
     case_follow_owner: props.settings.case_follow_owner,
     points: { ...(props.settings.points ?? {}) },
     shifts: (props.settings.shifts ?? []).map((s) => ({ ...s })),
+    // '' = not set: the <Input> v-model has no null; submit() turns it back into null.
+    team_monthly_cost_egp: props.settings.team_monthly_cost_egp ?? '',
+    usd_egp_rate: props.settings.usd_egp_rate ?? '',
 });
 
 // Each shift reads as one row (name, hours, place, leader); «عدّلي» opens its fields under it. A new shift, or one
@@ -151,9 +157,15 @@ function submit(): void {
         }
         if (props.canEditAdmin) {
             payload.points = Object.fromEntries(Object.entries(data.points).map(([key, value]) => [key, Number(value)]));
+            for (const key of ['team_monthly_cost_egp', 'usd_egp_rate'] as const) {
+                const raw = data[key];
+                payload[key] = raw === null || raw === '' ? null : Number(raw);
+            }
         } else {
             delete payload.points;
             delete payload.shifts;
+            delete payload.team_monthly_cost_egp;
+            delete payload.usd_egp_rate;
         }
 
         return payload;
@@ -338,6 +350,44 @@ const error = 'mt-1 text-xs text-danger';
                             <p :class="error">{{ form.errors[f.key] }}</p>
                         </template>
                         <Input :id="`queue-${f.key}`" v-model="form[f.key]" type="number" :min="f.min" :max="f.max" dir="ltr" :class="num" />
+                    </SettingsRow>
+                </SettingsPanel>
+
+                <!-- Service cost (round 2026-10-24): the two numbers /reports/queue prices a conversation and an order with. -->
+                <SettingsPanel
+                    :title="t('settings.queue.cost_section')"
+                    :description="canEditAdmin ? t('settings.queue.cost_section_hint') : t('settings.queue.cost_admin_only')"
+                    data-queue-cost
+                >
+                    <SettingsRow for="queue-team_monthly_cost_egp" :title="t('settings.queue.team_monthly_cost_egp')">
+                        <template v-if="form.errors.team_monthly_cost_egp" #below>
+                            <p :class="error">{{ form.errors.team_monthly_cost_egp }}</p>
+                        </template>
+                        <Input
+                            id="queue-team_monthly_cost_egp"
+                            v-model="form.team_monthly_cost_egp"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            dir="ltr"
+                            :disabled="!canEditAdmin"
+                            class="h-10 w-36 tabular-nums"
+                        />
+                    </SettingsRow>
+                    <SettingsRow for="queue-usd_egp_rate" :title="t('settings.queue.usd_egp_rate')">
+                        <template v-if="form.errors.usd_egp_rate" #below>
+                            <p :class="error">{{ form.errors.usd_egp_rate }}</p>
+                        </template>
+                        <Input
+                            id="queue-usd_egp_rate"
+                            v-model="form.usd_egp_rate"
+                            type="number"
+                            min="0"
+                            step="0.001"
+                            dir="ltr"
+                            :disabled="!canEditAdmin"
+                            class="h-10 w-28 tabular-nums"
+                        />
                     </SettingsRow>
                 </SettingsPanel>
 

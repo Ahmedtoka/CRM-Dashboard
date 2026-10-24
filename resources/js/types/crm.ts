@@ -518,6 +518,39 @@ export interface SupportCase {
     opened_by?: { id: number; name: string } | null;
 }
 
+/** «المتابعة» (queue ops): the one next step the follow-up list picks for an open case. */
+export type FollowUpNextAction = 'assign' | 'reply' | 'overdue' | 'resolve_check';
+
+/** One open case as `FollowUpList` lists it. */
+export interface FollowUpRow {
+    id: number;
+    type: CaseType;
+    type_label: string;
+    status: CaseStatus;
+    order_id: number | null;
+    order_number: string | null;
+    conversation_id: number;
+    customer: { id: number; name: string | null; phone: string | null } | null;
+    /** The moderator the case pays: its window's assignee, else whoever opened it. */
+    owner: { id: number; name: string } | null;
+    /** The drawer's assignee, set by hand. */
+    assigned_to: { id: number; name: string } | null;
+    opened_at: string | null;
+    sla: CaseSla;
+    /** Her last inbound message, trimmed to 120 chars. */
+    last_customer_message: string | null;
+    last_customer_message_at: string | null;
+    last_note: { body: string; author: { id: number; name: string } | null; at: string | null } | null;
+    next_action: FollowUpNextAction;
+}
+
+export interface FollowUpCounts {
+    open: number;
+    overdue: number;
+    unassigned: number;
+    mine: number;
+}
+
 export interface ConversationDetail {
     conversation: Conversation;
     messages: Message[];
@@ -687,6 +720,7 @@ export interface AppNotification {
         | 'shopify.app'
         | 'queue.assigned'
         | 'queue.escalation_waiting'
+        | 'queue.waiting_no_desk'
         | 'queue.mass_offline'
         | 'queue.reply_overdue'
         | 'queue.reply_overdue_leader'

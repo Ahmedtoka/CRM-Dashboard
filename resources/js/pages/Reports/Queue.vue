@@ -12,11 +12,11 @@ import { useI18n } from '@/composables/useI18n';
 import { useUrlFilters } from '@/composables/useUrlFilters';
 import { useVisitLoading } from '@/composables/useVisitLoading';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatCount, formatSeconds } from '@/lib/format';
+import { formatCount, formatMoney, formatSeconds } from '@/lib/format';
 import { sortRows } from '@/lib/sort';
 import type { ReportRange } from '@/types/admin';
-import type { PointsKind, QueueReport, QueueReportRow } from '@/types/queue';
-import { Head, router, usePage } from '@inertiajs/vue3';
+import type { PointsKind, QueueReport, QueueReportRow, ServiceCostReport } from '@/types/queue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { Download, ListOrdered } from 'lucide-vue-next';
 import { computed } from 'vue';
 
@@ -25,7 +25,7 @@ import { computed } from 'vue';
  * tiles and one row per moderator (closes, times, ratings, QA, cases, points per kind). Test and
  * load-test chats are never in it. Sorted client-side; the CSV carries the same rows.
  */
-const props = defineProps<{ range: ReportRange; report: QueueReport }>();
+const props = defineProps<{ range: ReportRange; report: QueueReport; service_cost: ServiceCostReport }>();
 
 const { t, locale } = useI18n();
 const page = usePage();
@@ -117,6 +117,46 @@ const caseFigures = computed<LedgerFigure[]>(() => [
         tone: k.value.cases_overdue > 0 ? 'down' : 'neutral',
     },
 ]);
+// «تكلفة الخدمة» (round 2026-10-24): what a handled conversation and an order from a chat cost, team + bot.
+const money = (v: number | null | undefined) => (v === null || v === undefined ? '—' : formatMoney(v, locale.value));
+const usd = (v: number) => `$${v.toLocaleString(locale.value === 'ar' ? 'ar-EG' : 'en', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+const costFigures = computed<LedgerFigure[]>(() => {
+    const c = props.service_cost;
+    return [
+        {
+            key: 'per_conversation',
+            label: t('reports.queue.cost.per_conversation'),
+            value: money(c.cost_per_conversation_egp),
+            note: t('reports.queue.cost.per_conversation_note', {
+                team: money(c.team_cost_per_conversation_egp),
+                bot: money(c.bot_cost_per_conversation_egp),
+            }),
+        },
+        {
+            key: 'per_order',
+            label: t('reports.queue.cost.per_order'),
+            value: money(c.cost_per_order_egp),
+            note: t('reports.queue.cost.per_order_note', { n: n(c.orders_from_chats) }),
+        },
+        {
+            key: 'team',
+            label: t('reports.queue.cost.team'),
+            value: money(c.team_cost_egp),
+            note: t('reports.queue.cost.team_note', { monthly: money(c.team_monthly_cost_egp), days: n(c.days), n: n(c.handled_conversations) }),
+        },
+        {
+            key: 'bot',
+            label: t('reports.queue.cost.bot'),
+            value: c.bot_cost_egp === null ? usd(c.bot_cost_usd) : money(c.bot_cost_egp),
+            note: t('reports.queue.cost.bot_note', {
+                usd: usd(c.bot_cost_usd),
+                rate: c.usd_egp_rate === null ? '—' : n(c.usd_egp_rate),
+                n: n(c.bot_conversations),
+            }),
+        },
+        { key: 'total', label: t('reports.queue.cost.total'), value: money(c.total_egp) },
+    ];
+});
 const breadcrumbs = computed(() => [{ title: t('reports.queue.title'), href: '/reports/queue' }]);
 </script>
 
@@ -141,6 +181,20 @@ const breadcrumbs = computed(() => [{ title: t('reports.queue.title'), href: '/r
                 <Ledger :figures="queueFigures" :label="t('reports.hub.queue_figures')" />
                 <Ledger :figures="caseFigures" :label="t('reports.hub.cases_figures')" />
             </div>
+
+            <section class="space-y-2" :aria-label="t('reports.queue.cost.title')" data-service-cost>
+                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                    <h2 class="text-base font-bold">{{ t('reports.queue.cost.title') }}</h2>
+                    <p class="text-13 text-fg-2">{{ t('reports.queue.cost.scope') }}</p>
+                </div>
+                <p v-if="service_cost.missing.length" class="rounded-md border border-line bg-sunken px-3 py-2 text-13" data-service-cost-missing>
+                    {{ t('reports.queue.cost.missing') }}
+                    <Link href="/settings/queue" class="font-semibold text-brand-ink underline">{{ t('reports.queue.cost.settings_link') }}</Link>
+                </p>
+                <SkeletonList v-if="loading" variant="tiles" :count="5" />
+                <Ledger v-else :figures="costFigures" :label="t('reports.queue.cost.title')" />
+                <p class="text-xs leading-5 text-fg-3">{{ t('reports.queue.cost.formula') }}</p>
+            </section>
 
             <div v-if="report.rows.length === 0" class="rounded-lg border border-line bg-card">
                 <EmptyState :icon="ListOrdered" :title="t('reports.queue.empty')" :body="t('reports.queue.empty_body')" />

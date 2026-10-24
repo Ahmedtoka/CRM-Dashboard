@@ -90,9 +90,66 @@ export interface QueueReportKpis {
     points_total: number;
 }
 
+/** «تكلفة الخدمة» (ServiceCost): team and bot cost per handled conversation and per order, for the report's range. Null = not computable (see `missing`). */
+export interface ServiceCostReport {
+    from: string;
+    to: string;
+    days: number;
+    team_monthly_cost_egp: number | null;
+    usd_egp_rate: number | null;
+    team_cost_egp: number | null;
+    handled_conversations: number;
+    team_cost_per_conversation_egp: number | null;
+    bot_cost_usd: number;
+    bot_cost_egp: number | null;
+    bot_conversations: number;
+    bot_cost_per_bot_conversation_egp: number | null;
+    bot_cost_per_conversation_egp: number | null;
+    cost_per_conversation_egp: number | null;
+    orders_from_chats: number;
+    orders_chat_cost_egp: number | null;
+    cost_per_order_egp: number | null;
+    total_egp: number | null;
+    /** The settings still empty: `team_monthly_cost_egp`, `usd_egp_rate`. */
+    missing: string[];
+}
+
 export interface QueueReport {
     from: string;
     to: string;
     kpis: QueueReportKpis;
     rows: QueueReportRow[];
+}
+
+/** The leader's table on /reports/team (TeamReport): a moderator's queue work in the range, outcomes counted by key. */
+export interface TeamQueueTotals {
+    received: number;
+    handled: number;
+    first_reply_median_seconds: number | null;
+    auto_closes: number;
+    hand_offs: number;
+    hand_offs_no_reply: number;
+    hand_offs_transfer: number;
+    rating_avg: number | null;
+    rating_count: number;
+    points: number;
+    /** Live (now), whatever the range. */
+    open_cases: number;
+    /** Every key of `outcome_keys`, zero when none. */
+    outcomes: Record<string, number>;
+}
+
+export interface TeamQueueRow extends TeamQueueTotals {
+    user: { id: number; name: string; color: string | null };
+}
+
+export interface TeamQueueReport {
+    from: string;
+    to: string;
+    /** The range is longer than the report allows: `rows` is empty. */
+    too_long: boolean;
+    /** The distinct outcome keys seen in the range, sorted — the UI builds its columns from them. */
+    outcome_keys: string[];
+    rows: TeamQueueRow[];
+    totals: TeamQueueTotals;
 }
