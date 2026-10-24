@@ -117,6 +117,8 @@ final class FlowScripts
             'stale_tap_closed' => ['title' => 'البوت: زرار من طلب قديم خلص', 'body' => 'الزرار ده من طلب قديم خلص، اختاري من القائمة أو اكتبيلي محتاجة إيه'],
             'stale_piece_restart' => ['title' => 'البوت: نبدأ طلب جديد للقطعة', 'body' => 'الطلب اللي فات اتقفل، فهنبدأ طلب جديد للقطعة دي'],
             'stale_piece_recorded' => ['title' => 'البوت: القطعة متسجلة خلاص', 'body' => '«{title}» متسجلة خلاص في طلب #{case_id}، وهيتم التواصل معاكي في أقرب وقت'],
+            // Round 4 (2026-10-24): after a rated close her message may be about a request she still has open.
+            'episode_relates_ask' => ['title' => 'البوت: بتسألي عن طلبك القديم؟', 'body' => 'بتسألي عن {request}؟'],
         ];
     }
 }

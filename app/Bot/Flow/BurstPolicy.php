@@ -40,6 +40,17 @@ final class BurstPolicy
     private const GREETING_MAX_WORDS = 3;
 
     /**
+     * Round 4 (2026-10-24): a request with no object yet — «عايزة ارجع», «عايزة اشتكي», «عندي
+     * مشكلة» — is the first half of what she is typing (chat 214: the piece and the order came in the
+     * next message, 3–10 s later, and the flow had already started empty). A message of up to three
+     * words that ENDS with one of these (normalized) waits for the rest.
+     */
+    private const REQUEST_STUBS = ['ارجع', 'ابدل', 'اشتكي', 'اعرف', 'اسال', 'اغير', 'اعدل', 'الغي', 'اطلب', 'اتابع', 'استبدل', 'استرجع', 'ارجعه', 'ارجعها',
+        'عندي مشكله', 'عندي سؤال', 'عندي استفسار', 'ممكن سؤال', 'ممكن استفسار', 'عندي شكوي', 'عندي شكوه', 'في مشكله', 'فيه مشكله'];
+
+    private const REQUEST_STUB_MAX_WORDS = 3;
+
+    /**
      * 'greeting' or 'thanks' when the text is only a short greeting or thanks (no question mark,
      * at most $maxWords words, opening with one of the opener words), else null. TurnRunner uses
      * it with 2 words to answer a lone greeting/thanks without the understanding call.
@@ -112,6 +123,10 @@ final class BurstPolicy
             return true;
         }
 
+        if ($this->isRequestStub($norm)) {
+            return true;
+        }
+
         // A connector on its own ("و", "وكمان") has more coming.
         foreach (self::UNFINISHED_CONNECTOR_PREFIXES as $prefix) {
             if (trim($norm) === $this->normalizer->normalize($prefix)) {
@@ -140,6 +155,27 @@ final class BurstPolicy
             }
 
             if (trim(mb_substr($normalized, mb_strlen($p))) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** «عايزة ارجع» / «عندي مشكلة»: a short request that has not said what it is about yet. */
+    private function isRequestStub(string $normalized): bool
+    {
+        $bare = trim((string) preg_replace('/\s+/u', ' ', (string) preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $normalized)));
+        $words = preg_split('/\s/u', $bare, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        if ($words === [] || count($words) > self::REQUEST_STUB_MAX_WORDS) {
+            return false;
+        }
+
+        foreach (self::REQUEST_STUBS as $stub) {
+            $s = $this->normalizer->normalize($stub);
+
+            if ($bare === $s || str_ends_with($bare, ' '.$s)) {
                 return true;
             }
         }

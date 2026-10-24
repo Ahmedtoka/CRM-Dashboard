@@ -248,3 +248,68 @@ scenarios:
     setup: { flow: return_exchange }
     messages: ['عايزة ارجع الفستان الاسود والطرحة من اوردر 209129']
     expect: { flow: return_exchange, flow_data: { request_kind: return }, selected: ['فستان ستان اسود', 'طرحة شيفون بيج'], never: ['ترجعي ولا تبدلي'] }
+
+  # ── Round 4 (2026-10-24): the owner's four asks, on BOTH routers ──────────────────────────────
+  # setup.closed.sealed: she rated the closed chat (the close is sealed → a fresh start whatever the window)
+  # expect.relates case|ask|none: the open-request decision after a fresh start (OpenRequests)
+  # expect.context_has: lines the model's CONTEXT must carry · expect.summary_has: what the moderator's handover summary must carry
+
+  # After the close and her rating: FIRST her open requests, then a brand-new conversation.
+  - id: 72
+    category: after_rating
+    routers: [legacy, hybrid]
+    setup: { history: [{ customer: 'عايزة ارجع الفستان' }, { bot: 'تم تسجيل طلب حضرتك برقم #812' }], case: { type: return, order: '209129' }, closed: { kind: staff, minutes_ago: 1, sealed: true } }
+    messages: ['السلام عليكم']
+    expect: { episode: fresh, flow: main_menu, max_model_calls: 0, never: ['بنكمل', 'بتسألي عن'] }
+  - id: 73
+    category: after_rating
+    routers: [legacy, hybrid]
+    setup: { history: [{ customer: 'عايزة ارجع الفستان' }, { bot: 'تم تسجيل طلب حضرتك برقم #812' }], case: { type: return, order: '209129' }, closed: { kind: staff, minutes_ago: 1, sealed: true } }
+    messages: ['المندوب مجاش']
+    expect: { episode: fresh, relates: case, never: ['بنكمل', 'بتسألي عن'], context_has: ['open request', '#209129'] }
+  - id: 74
+    category: after_rating
+    routers: [legacy, hybrid]
+    setup: { history: [{ customer: 'عايزة ارجع الفستان' }, { bot: 'تم تسجيل طلب حضرتك برقم #812' }], case: { type: return, order: '209129' }, closed: { kind: staff, minutes_ago: 1, sealed: true } }
+    messages: ['الشحن للجيزة بكام؟']
+    expect: { episode: fresh, relates: none, never: ['بنكمل', 'بتسألي عن'], handover: false }
+  - id: 75
+    category: after_rating
+    routers: [legacy, hybrid]
+    setup: { history: [{ customer: 'عايزة ارجع الفستان' }, { bot: 'تم تسجيل طلب حضرتك برقم #812' }], case: { type: return, order: '209129' }, closed: { kind: staff, minutes_ago: 1, sealed: true } }
+    messages: ['طيب ايه اللي حصل؟']
+    expect: { episode: fresh, relates: ask, says: ['بتسألي عن', '209129'], confirm: episode_relates, max_model_calls: 0 }
+  - id: 76
+    category: after_rating
+    routers: [legacy, hybrid]
+    setup: { history: [{ customer: 'عايزة اشتكي من المنتج' }, { bot: 'اساعد حضرتك' }], case: { type: complaint, order: '209129' }, closed: { kind: staff, minutes_ago: 1, sealed: true } }
+    messages: ['طيب انا محدش حللي حاجة']
+    expect: { episode: fresh, relates: case, never: ['بتسألي عن'], context_has: ['open request', 'شكوى'] }
+
+  # Consecutive messages (chat 214): a tap and the words typed around it are one turn; «عايزة ارجع» waits for the rest.
+  - id: 77
+    category: consecutive
+    routers: [legacy, hybrid]
+    messages: [{ text: 'المرتجع والاستبدال', payload: 'flow:return_exchange' }, 'عايزة ارجع الفستان الاسود من اوردر 209129']
+    expect: { flow: return_exchange, flow_data: { request_kind: return }, selected: ['فستان ستان اسود'], never: ['ممكن رقم الأوردر'], max_model_calls: 0 }
+  - id: 78
+    category: consecutive
+    routers: [legacy, hybrid]
+    messages: ['عايزة ارجع الفستان الاسود من اوردر 209129', { text: 'المرتجع والاستبدال', payload: 'flow:return_exchange' }]
+    expect: { flow: return_exchange, flow_data: { request_kind: return }, selected: ['فستان ستان اسود'], never: ['ممكن رقم الأوردر'], max_model_calls: 0 }
+  - { id: 79, category: still_typing, routers: [legacy, hybrid], messages: ['عايزة ارجع', 'الفستان الاسود من اوردر 209129'], expect: { burst_holds: true, flow: return_exchange, selected: ['فستان ستان اسود'] } }
+
+  # The script: a side question inside a flow is answered and the step comes back.
+  - id: 80
+    category: script
+    routers: [legacy, hybrid]
+    setup: { flow: return_exchange }
+    messages: ['الشحن بياخد كام يوم؟']
+    expect: { flow: return_exchange, says: ['نرجع لـ'], handover: false }
+
+  # A handover WITH information: the moderator reads the order, her mood and her last words.
+  - id: 81
+    category: handover_info
+    routers: [legacy, hybrid]
+    messages: ['عايزة اكلم حد عشان الاوردر 209129 اتأخر ومحدش بيرد']
+    expect: { handover: true, summary_has: ['#209129', 'آخر كلامها', 'مزاجها', 'زعلانة'] }

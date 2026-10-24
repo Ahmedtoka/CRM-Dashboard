@@ -16,6 +16,7 @@ use App\Bot\Flows\FlowEngine;
 use App\Bot\Flows\FlowState;
 use App\Bot\Flows\Sandbox\SandboxLog;
 use App\Bot\Flows\Sandbox\SandboxOutbound;
+use App\Bot\HandoverSummary;
 use App\Bot\Router\FakeTurnPlanner;
 use App\Bot\Router\TaskQueue;
 use App\Bot\Router\TurnMetrics;
@@ -40,10 +41,12 @@ use App\Models\BotRun;
 use App\Models\BotSetting;
 use App\Models\ChannelAccount;
 use App\Models\Conversation;
+use App\Models\ConversationNote;
 use App\Models\Customer;
 use App\Models\Fulfillment;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\QueueEntry;
 use App\Models\SupportCase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -189,6 +192,7 @@ class BotEval
             $log->messages = []; // only what the turn itself says is checked
             $runsBefore = BotRun::max('id') ?? 0;
             $casesBefore = SupportCase::max('id') ?? 0;
+            $notesBefore = ConversationNote::max('id') ?? 0;
             $marker = ($c->refresh()->bot_state ?? [])['last_turn_message_id'] ?? null;
             $burst = $this->burst($c, (array) $s['messages']);
             $superseded = 0;
@@ -228,6 +232,10 @@ class BotEval
                 'episode' => ($c->bot_state['episode'] ?? [])['mode'] ?? null,
                 'confirm' => FlowState::confirm($c),
                 'history' => $this->agentHistory(),
+                // Round 4: the open-request decision after a fresh start, the CONTEXT the model read, the handover summary.
+                'relates' => ($c->bot_state['episode'] ?? [])['relates']['decision'] ?? null,
+                'context' => $this->agentContext(),
+                'summary' => $this->handoverSummary($c, (int) $notesBefore),
             ];
             $observed['latency_ms'] = (int) ((hrtime(true) - $started) / 1_000_000);
 
@@ -291,6 +299,28 @@ class BotEval
         return collect($messages)->map(fn ($m) => is_array($m['content'] ?? null)
             ? collect($m['content'])->pluck('text')->reject(fn ($t) => str_starts_with((string) $t, 'CONTEXT'))->implode("\n")
             : (string) ($m['content'] ?? ''))->implode("\n");
+    }
+
+    /** The CONTEXT block(s) of the last agent call (what the system told the model about the chat). */
+    private function agentContext(): string
+    {
+        $agent = array_values(array_filter($this->calls, fn ($c) => $c['kind'] === 'agent'));
+        $messages = end($agent)['messages'] ?? [];
+
+        return collect($messages)->map(fn ($m) => is_array($m['content'] ?? null)
+            ? collect($m['content'])->pluck('text')->filter(fn ($t) => str_starts_with((string) $t, 'CONTEXT'))->implode("\n")
+            : '')->filter()->implode("\n");
+    }
+
+    /** The handover note written in this turn plus the queue ticket's summary lines, as one text. */
+    private function handoverSummary(Conversation $c, int $notesBefore): string
+    {
+        $note = (string) ConversationNote::query()->where('conversation_id', $c->id)->where('id', '>', $notesBefore)
+            ->where('body', 'like', HandoverSummary::NOTE_HEADER.'%')->latest('id')->value('body');
+        $entry = $c->queue_entry_id ? QueueEntry::query()->find($c->queue_entry_id) : null;
+        $lines = is_array($entry?->bot_summary) ? (array) ($entry->bot_summary['lines'] ?? []) : [];
+
+        return trim($note."\n".implode("\n", array_map('strval', $lines)));
     }
 
     private function tier(?BotRun $run): string
@@ -397,6 +427,23 @@ class BotEval
             }
         }
 
+        // Round 4: the open-request decision, the CONTEXT lines, the handover summary.
+        if (array_key_exists('relates', $expect) && $o['relates'] !== $expect['relates']) {
+            $f[] = 'relates '.($o['relates'] ?? 'none').' != '.($expect['relates'] ?? 'none');
+        }
+
+        foreach ((array) ($expect['context_has'] ?? []) as $text) {
+            if (! str_contains((string) $o['context'], $text)) {
+                $f[] = "the CONTEXT never said «{$text}»";
+            }
+        }
+
+        foreach ((array) ($expect['summary_has'] ?? []) as $text) {
+            if (! str_contains((string) $o['summary'], $text)) {
+                $f[] = "the handover summary lacks «{$text}»";
+            }
+        }
+
         if (($expect['burst_holds'] ?? false) === true) {
             $texts = array_map(fn ($m) => is_array($m) ? (string) ($m['text'] ?? '') : (string) $m, $messages);
             $wait = app(BurstPolicy::class)->waitSeconds([$texts[0]], false, 3, 12);
@@ -490,6 +537,11 @@ class BotEval
         if (isset($setup['closed'])) {
             $marker = ConversationEpisode::marker($c->refresh(), (string) ($setup['closed']['kind'] ?? ConversationEpisode::STAFF));
             $marker['closed_at'] = now()->subMinutes((int) ($setup['closed']['minutes_ago'] ?? 0))->toIso8601String();
+
+            // Round 4: she rated the closed chat — the close is sealed, her next message starts fresh.
+            if (! empty($setup['closed']['sealed'])) {
+                $marker['sealed'] = true;
+            }
             $c->forceFill(['bot_state' => array_merge($c->bot_state ?? [], ['episode' => $marker, 'last_turn_message_id' => (int) $c->messages()->max('id')])])->save();
         }
     }

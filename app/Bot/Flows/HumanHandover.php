@@ -206,6 +206,8 @@ class HumanHandover
      */
     public function handover(Conversation $c, ?string $topic, ?string $customerText, string $reason = 'human_request', string $category = 'human_request', array $summaryExtra = [], string $priority = 'medium'): void
     {
+        // Round 4: the flow she was in (its key, step and data) rides to the handover brief before it is cleared.
+        $flow = FlowState::flow($c);
         $this->clearPending($c);
 
         // With the handover queue on, its «رقمك في الدور …» message replaces the transfer sentence.
@@ -224,6 +226,7 @@ class HumanHandover
             'queue' => 'agents',
             'category' => $category,
             'summary_extra' => $summaryExtra,
+            'flow' => $flow !== null && $flow['key'] !== ConversationRouter::MAIN_MENU ? $flow : null,
         ]);
 
         if ($topic !== null) {

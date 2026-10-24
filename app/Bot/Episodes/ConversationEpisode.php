@@ -3,7 +3,9 @@
 namespace App\Bot\Episodes;
 
 use App\Bot\ArabicNormalizer;
+use App\Bot\BotEngine;
 use App\Bot\Flows\ConversationRouter;
+use App\Bot\Flows\FlowEngine;
 use App\Bot\Flows\FlowLabels;
 use App\Bot\Flows\FlowPrompter;
 use App\Bot\Flows\FlowScripts;
@@ -51,6 +53,15 @@ final class ConversationEpisode
     /** «رجوع للبوت»: the team hands the chat back to the bot in the middle of it — not a goodbye. */
     public const HANDBACK = 'handback';
 
+    /**
+     * Round 4 (2026-10-24): a fresh start whose first message only MIGHT be about a request she still has
+     * open — «بتسألي عن طلب المرتجع #812 (أوردر #209129)؟» is asked first (begin() returns ASK; the
+     * yes/no is FlowState::confirm = CONFIRM, answered by answerRelates()).
+     */
+    public const ASK = 'ask';
+
+    public const CONFIRM = 'episode_relates';
+
     /** After her own close, a follow-up within this many minutes still carries on quietly (review I3). */
     public const CUSTOMER_GRACE_MINUTES = 10;
 
@@ -75,6 +86,7 @@ final class ConversationEpisode
         private readonly OutboundService $outbound,
         private readonly FlowPrompter $prompter,
         private readonly ArabicNormalizer $normalizer = new ArabicNormalizer,
+        private readonly OpenRequests $requests = new OpenRequests,
     ) {}
 
     /** The marker a close leaves: when, who closed, about what, and the last message it covers. */
@@ -211,9 +223,89 @@ final class ConversationEpisode
         // A fresh start: only the burst marker (and the delay apology flag) survive, like a team reset.
         $kept = array_intersect_key($state, array_flip(['last_turn_message_id', 'delayed_response_sent']));
         $memory = $this->memory($c, $closedAt, $topic, (int) $first->id);
-        $c->forceFill(['bot_state' => $kept + [self::KEY => ['mode' => 'fresh', 'from_id' => (int) $first->id, 'memory' => $memory] + $applied]])->save();
+        // Round 4 (the owner): FIRST her open requests — is this message about one of them?
+        $relates = $this->relates($c, $burst);
+        $c->forceFill(['bot_state' => $kept + [self::KEY => ['mode' => 'fresh', 'from_id' => (int) $first->id, 'memory' => $memory, 'relates' => $relates] + $applied]])->save();
+
+        if ($relates['decision'] === self::ASK) {
+            $this->ask($c, $relates);
+
+            return self::ASK;
+        }
 
         return 'fresh';
+    }
+
+    /**
+     * Whether the first message of a fresh start speaks about a request she still has open (OpenRequests):
+     * `case` (answer in its light), `ask` (only likely: «بتسألي عن …؟» first) or `none` (a new matter).
+     *
+     * @return array{decision:string, strength:string, case_id:?int, order_number:?string, label:?string, detail:?string, pending_ids:list<int>, confirmed:bool}
+     */
+    private function relates(Conversation $c, Collection $burst): array
+    {
+        $none = ['decision' => 'none', 'strength' => 'none', 'case_id' => null, 'order_number' => null, 'label' => null, 'detail' => null, 'pending_ids' => [], 'confirmed' => false];
+        $text = $burst->map(fn (Message $m) => trim((string) $m->body))->filter()->implode("\n");
+
+        if ($text === '' || $burst->contains(fn (Message $m) => filled($m->payload))) {
+            return $none;
+        }
+
+        $found = rescue(fn () => $this->requests->relate($text, OpenRequests::candidates($c)), ['strength' => 'none', 'request' => null], report: true);
+        $request = $found['request'] ?? null;
+
+        if (! is_array($request)) {
+            return $none;
+        }
+
+        return [
+            'decision' => $found['strength'] === 'strong' ? 'case' : self::ASK,
+            'strength' => (string) $found['strength'],
+            'case_id' => $request['kind'] === 'case' ? (int) $request['id'] : null,
+            'order_number' => $request['order_number'] ?? null,
+            'label' => (string) $request['label'],
+            'detail' => (string) ($request['detail'] ?? ''),
+            'pending_ids' => $burst->map(fn (Message $m) => (int) $m->id)->all(),
+            'confirmed' => false,
+        ];
+    }
+
+    /** «بتسألي عن طلب المرتجع #812 (أوردر #209129)؟» [أيوه] [لأ] — her message waits for the answer. */
+    private function ask(Conversation $c, array $relates): void
+    {
+        $this->send($c, str_replace('{request}', (string) $relates['label'], $this->script('episode_relates_ask')), [FlowLabels::YES_BUTTON, FlowLabels::NO_BUTTON]);
+        FlowState::setConfirm($c, self::CONFIRM);
+    }
+
+    /**
+     * Her yes/no to «بتسألي عن طلب …؟»: the decision is kept on the episode (the model reads it in CONTEXT)
+     * and the message she sent before the question is answered now, as one turn.
+     */
+    public function answerRelates(Conversation $c, bool $yes): bool
+    {
+        FlowState::setConfirm($c, null);
+        $state = $c->bot_state ?? [];
+        $episode = is_array($state[self::KEY] ?? null) ? $state[self::KEY] : [];
+        $relates = (array) ($episode['relates'] ?? []);
+        $pending = array_map('intval', (array) ($relates['pending_ids'] ?? []));
+        $relates['decision'] = $yes ? 'case' : 'none';
+        $relates['confirmed'] = $yes;
+        $relates['declined'] = ! $yes;
+        $relates['pending_ids'] = [];
+        $episode['relates'] = $relates;
+        $c->forceFill(['bot_state' => array_merge($state, [self::KEY => $episode])])->save();
+
+        $messages = $pending !== [] ? Message::query()->whereKey($pending)->where('conversation_id', $c->id)->orderBy('id')->get() : collect();
+
+        if ($messages->isEmpty()) {
+            app(FlowEngine::class)->start($c, ConversationRouter::MAIN_MENU);
+
+            return true;
+        }
+
+        app(BotEngine::class)->handleTurn($c->refresh(), $messages);
+
+        return true;
     }
 
     /**
@@ -288,8 +380,18 @@ final class ConversationEpisode
             return '- she came back '.$ago.' after this chat was closed'.($topic !== null ? ' (topic: '.$topic.')' : '').': this continues that same conversation, answer in its light.';
         }
 
+        $relates = (array) ($episode['relates'] ?? []);
+        $label = (string) ($relates['label'] ?? '');
+        $detail = trim((string) ($relates['detail'] ?? ''));
+        $about = match ($relates['decision'] ?? null) {
+            'case' => '- her message is about her open request: '.$label.($detail !== '' ? ' ('.$detail.')' : '').(! empty($relates['confirmed']) ? ' — she confirmed it' : '')
+                .'. Answer in its light: the team already has this request, so say what happens next from KNOWLEDGE, never open a new request for it, never promise a date; hand over when KNOWLEDGE does not say.',
+            'none' => ! empty($relates['declined']) && $label !== '' ? '- she said her message is not about her earlier request ('.$label.'): treat it as a new question.' : null,
+            default => null,
+        };
+
         return trim("- new conversation: her previous chat was closed {$ago}".($topic !== null ? " (topic: {$topic})" : '').'. Do not carry on that topic unless she brings it up herself.'
-            ."\n".(string) ($episode['memory'] ?? ''));
+            ."\n".(string) ($episode['memory'] ?? '').($about !== null ? "\n".$about : ''));
     }
 
     /** What the bot still knows after a fresh start: her recent requests and the end of the closed chat. */
@@ -345,14 +447,15 @@ final class ConversationEpisode
         return $this->prompter->script($key) ?? (string) (FlowScripts::all()[$key]['body'] ?? '');
     }
 
-    private function send(Conversation $c, string $text): void
+    /** @param  list<array{title:string, payload:string}>  $buttons */
+    private function send(Conversation $c, string $text, array $buttons = []): void
     {
         if (trim($text) === '') {
             return;
         }
 
         try {
-            $this->outbound->sendBot($c, $text, 0, true);
+            $this->outbound->sendBot($c, $text, 0, true, $buttons);
         } catch (WindowClosedException) {
             Log::info('episode.window_closed', ['conversation_id' => $c->id]);
         }
