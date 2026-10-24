@@ -66,6 +66,7 @@ const result = computed(() =>
                     </span>
                 </span>
                 <span class="block text-xs text-fg-2">{{ result }}</span>
+                <span v-if="row.cac != null" data-test="card-cac" class="block text-xs text-fg-2">{{ t('ads.library_r3.col_cac') }} · {{ formatAdsMoney(row.cac, locale, cur) }}</span>
             </button>
             <Sparkline :points="row.series" :currency="cur" :width="200" />
             <div class="mt-auto flex items-center justify-between gap-2 border-t border-line pt-2">

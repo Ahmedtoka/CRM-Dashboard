@@ -50,3 +50,37 @@ describe('WriteActionDialog', () => {
         w.unmount();
     });
 });
+
+describe('WriteActionDialog round 3', () => {
+    beforeEach(() => post.mockReset());
+
+    it('shows a budget change as money before and after, and the dry-run banner when execution is off', async () => {
+        post.mockResolvedValueOnce({
+            status: 201,
+            data: {
+                action: { id: 'wa_2', state: 'proposed', type: 'set_budget', from_status: 'ACTIVE', to: null, name: 'Set A', account: 'Acc', expires_at: null, params: { pct: 20, from_minor: 50000, to_minor: 60000, currency: 'EGP' } },
+                diff: [{ path: 'daily_budget', level: 'adset', before: { minor: 50000, currency: 'EGP' }, after: { minor: 60000, currency: 'EGP' } }],
+                diff_hash: 'h'.repeat(64),
+                notes: [],
+                execute: false,
+            },
+        });
+        const w = mount(WriteActionDialog, { props: { ...props, type: 'set_budget', pct: 20, to: null } as never, global: { stubs: { FormDialog: FormDialogStub } } });
+        await w.setProps({ open: true });
+        await flushPromises();
+        expect(post.mock.calls[0][1]).toMatchObject({ type: 'set_budget', params: { pct: 20 } });
+        expect(w.text()).toContain('500');
+        expect(w.text()).toContain('600');
+        expect(w.find('[data-test="dry-run"]').exists()).toBe(true);
+        expect(w.findComponent({ name: 'FormDialog' }).props('submitLabel')).toBe('Yes, change the budget');
+    });
+
+    it('undo mode proposes the inverse through the rollback endpoint', async () => {
+        post.mockResolvedValueOnce({ status: 201, data: { ...proposal, execute: true, action: { ...proposal.action, rollback_of: 'wa_1' } } });
+        const w = mount(WriteActionDialog, { props: { ...props, undoOf: 'wa_1' } as never, global: { stubs: { FormDialog: FormDialogStub } } });
+        await w.setProps({ open: true });
+        await flushPromises();
+        expect(post.mock.calls[0][0]).toBe('/ads/write-actions/wa_1/rollback');
+        expect(w.findComponent({ name: 'FormDialog' }).props('submitLabel')).toBe('Yes, undo it');
+    });
+});

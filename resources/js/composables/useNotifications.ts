@@ -25,6 +25,7 @@ export const TYPE_KEY = {
     'queue.member_not_arrived': 'queue_member_not_arrived',
     'cases.sla_overdue': 'cases_sla_overdue',
     'ads.need_stop': 'ads_need_stop',
+    'ads.stock_low': 'ads_stock_low',
     'ads.alerts': 'ads_alerts',
     'ads.alerts_digest': 'ads_alerts_digest',
     'ads.alerts_stock': 'ads_alerts_stock',

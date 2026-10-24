@@ -761,6 +761,8 @@ export interface AdsMaterialsIndexProps {
     materials: LaravelPage<MaterialRow>;
     collections: AdsOption[];
     canSeeSpend: boolean;
+    /** Round 3: the winners library strip (empty for a viewer who cannot see spend). */
+    winners?: import('@/types/adsLibrary').WinningMaterial[];
 }
 
 export interface MaterialFormRow extends MaterialRow {
@@ -857,13 +859,75 @@ export interface AdActionLogRow {
     from_status: string | null;
     to_status: string;
     reason: string | null;
-    result: 'ok' | 'error' | 'pending';
+    result: 'ok' | 'error' | 'pending' | 'dry_run';
     error: string | null;
     ad_id: number | null;
     user_id: number | null;
     account_id: number;
     external_id: string;
     source: string;
+    /** Round 3: the row's public id, its type and params (a budget row: from_minor → to_minor), and whether «تراجع» applies. */
+    public_id?: string;
+    type?: 'set_status' | 'set_budget';
+    params?: { pct?: number | null; from_minor?: number; to_minor?: number; currency?: string; to?: string } | null;
+    undoable?: boolean;
+}
+
+/** Round 3 «قرار اليوم»: one decision per running scored ad (App\Ads\Decisions\DailyDecisions). */
+export type DecisionKind = 'stock_risk' | 'cut' | 'fix_creative' | 'scale' | 'keep';
+
+export type DecisionAction = { type: 'set_status'; to: 'paused' | 'active' } | { type: 'set_budget'; pct: number };
+
+export interface DailyDecision {
+    key: string;
+    kind: DecisionKind;
+    action: DecisionAction | null;
+    ad: {
+        id: number;
+        external_id: string;
+        name: string;
+        account_id: number;
+        account: string;
+        platform: AdPlatformValue | string;
+        status: string | null;
+        effective_status: string | null;
+        thumbnail_url: string | null;
+        campaign: string | null;
+        objective: string | null;
+        currency: string;
+        parent_paused: boolean;
+    };
+    evidence: {
+        /** Spend with tax over the window; spend_pre_tax is the platform figure. */
+        spend: number;
+        spend_pre_tax: number;
+        /** Platform purchases; real_orders are the Shopify orders attributed to the ad. */
+        results: number;
+        real_orders: number;
+        conversations: number;
+        revenue: number;
+        real_revenue: number;
+        roas: number | null;
+        real_roas: number | null;
+        cac: number | null;
+        trend: { roas_pct: number | null; spend_pct: number | null; dir: 'up' | 'down' | 'flat' };
+        fatigue: { flag: boolean; ctr_drop_pct: number | null; frequency: number | null };
+        days: number;
+        tier: string | null;
+        score: number | null;
+    };
+    reasons: AdReason[];
+    spend_today: number;
+    stock: { state: 'out' | 'low'; inventory: number; threshold: number; product: string | null; material: string } | null;
+    can_write: boolean;
+}
+
+export interface DailyDecisions {
+    items: DailyDecision[];
+    counts: Record<DecisionKind, number>;
+    /** false = CRM_ADS_EXECUTE is off: «نفّذ» is a dry run. */
+    execute: boolean;
+    scale_pct: number;
 }
 
 export interface AdsActionsProps extends AdsBannerProps {
@@ -1143,6 +1207,8 @@ export interface AdRowData extends CreativeRow {
     real_revenue: number;
     /** null on non-EGP accounts: store revenue is EGP, so the ratio would mean nothing (render «—»). */
     real_roas: number | null;
+    /** Round 3: spend with tax ÷ real (Shopify) orders; null without orders. */
+    cac?: number | null;
     /** The ad account currency (upper-case); money on the row is in it. */
     currency: string;
     spend_today: number;
@@ -1231,6 +1297,8 @@ export interface AdsDecisionsProps extends AdsPageBase {
     counts: { open: number; snoozed: number; closed: number };
     approvals: { count: number; href: string; items: unknown[] } | null;
     suggestions: AdSuggestion[];
+    /** Round 3: the decision of the day (open tab only; empty elsewhere). */
+    daily: DailyDecisions;
     /** S5 alert cards of the feed tab that follows the page tab (snoozed = the feed's «later»). */
     alerts: AlertCardData[];
     alertsMeta: AlertsMeta;

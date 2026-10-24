@@ -19,7 +19,8 @@ it('lists running ads of the last 7 complete days by spend, with row extras', fu
         ->where('filters.view', 'table')->where('filters.status', 'running')->where('filters.sort', '-spend')->where('filters.range', 'last7')
         ->where('tree', null)
         ->has('result.data', 2)->where('result.data.0.id', $big->id)->where('result.data.1.id', $small->id)
-        ->has('result.data.0.series', 14)->has('result.data.0.health')->has('result.data.0.real_roas')->has('result.data.0.spend_today'));
+        ->has('result.data.0.series', 14)->has('result.data.0.health')->has('result.data.0.real_roas')->has('result.data.0.spend_today')
+        ->has('result.data.0.cac')->where('result.data.0.cac', null)->has('result.data.0.real_orders'));
 });
 
 it('answers the spending-without-result preset', function () {

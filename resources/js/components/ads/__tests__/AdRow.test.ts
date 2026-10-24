@@ -37,6 +37,13 @@ describe('AdRow', () => {
         expect(text).toContain('9');
     });
 
+    it('shows the cost per real order and a dash without orders (round 3)', () => {
+        expect(mount(AdRow, { props: { row: row({ cac: 126.67 }), part: 'cac' }, global: { stubs } }).get('[data-test="cac"]').text()).toContain('127');
+        expect(mount(AdRow, { props: { row: row({ cac: null }), part: 'cac' }, global: { stubs } }).get('[data-test="cac"]').text()).toContain('—');
+        expect(mount(AdCard, { props: { row: row({ cac: 126.67 }) }, global: { stubs } }).get('[data-test="card-cac"]').text()).toContain('127');
+        expect(mount(AdCard, { props: { row: row({ cac: null }) }, global: { stubs } }).find('[data-test="card-cac"]').exists()).toBe(false);
+    });
+
     it('puts real ROAS first and hides Meta ROAS for Messages ads', () => {
         const w = mount(AdRow, { props: { row: row(), part: 'return' }, global: { stubs } });
         expect(w.find('[data-test="real-roas"]').text()).toContain('2.1');
@@ -85,6 +92,11 @@ describe('adColumns', () => {
     it('always keeps the trend column and maps the result sort to conversations', () => {
         const t = (k: string) => k;
         expect(adColumns(t).map((c) => c.key)).toContain('trend');
+        // Round 3: cost per order sits right after the result (real orders) column and is not sortable.
+        const keys = adColumns(t).map((c) => c.key);
+        expect(keys.indexOf('cac')).toBe(keys.indexOf('result') + 1);
+        expect(adColumns(t).find((c) => c.key === 'cac')?.sortable).toBeUndefined();
+        expect(columnSort('-cac')).toBe('');
         expect(columnSort('-conversations')).toBe('-result');
         expect(columnSort('-roas')).toBe('');
         expect(serverSort('result')).toBe('conversations');

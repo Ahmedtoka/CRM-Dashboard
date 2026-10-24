@@ -694,6 +694,7 @@ export interface AppNotification {
         | 'cases.sla_overdue'
         | 'queue.break_overrun'
         | 'ads.need_stop'
+        | 'ads.stock_low'
         | 'ads.alerts'
         | 'ads.alerts_digest'
         | 'ads.alerts_stock'

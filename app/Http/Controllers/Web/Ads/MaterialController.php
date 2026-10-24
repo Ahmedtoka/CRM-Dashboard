@@ -9,6 +9,7 @@ use App\Ads\Launch\LaunchService;
 use App\Ads\Launch\LaunchState;
 use App\Ads\Launch\MaterialStatus;
 use App\Ads\Materials\MaterialService;
+use App\Ads\Materials\WinningMaterials;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Ads\StoreMaterialRequest;
 use App\Http\Requests\Ads\UpdateMaterialRequest;
@@ -35,7 +36,7 @@ class MaterialController extends Controller
 {
     private const FILTERS = ['q', 'status', 'stock', 'collection', 'type', 'from', 'to'];
 
-    public function index(Request $request, MaterialService $service, AdsScope $scope): Response
+    public function index(Request $request, MaterialService $service, AdsScope $scope, WinningMaterials $winning): Response
     {
         $user = $request->user();
         $filters = $this->filters($request);
@@ -52,6 +53,7 @@ class MaterialController extends Controller
             'collections' => AdMaterialCollection::query()->orderBy('sort')->orderBy('name')->get(['id', 'name'])
                 ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->all(),
             'canSeeSpend' => $scope->canSeeSpend($user),
+            'winners' => $winning->top($user),
         ]);
     }
 

@@ -21,7 +21,7 @@ it('returns the ad row, series, reasons, history and an empty funnel slot', func
         ->assertJsonPath('funnel', null)
         ->assertJsonCount(1, 'history')
         ->assertJsonPath('history.0.result', 'ok')
-        ->assertJsonStructure(['ad' => ['health', 'can_write', 'objective', 'real_roas', 'preview_html'], 'reasons', 'decisions', 'levels']);
+        ->assertJsonStructure(['ad' => ['health', 'can_write', 'objective', 'real_roas', 'cac', 'real_orders', 'preview_html'], 'reasons', 'decisions', 'levels']);
 });
 
 it('reads another buyer ad as not found', function () {

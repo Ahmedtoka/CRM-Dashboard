@@ -13,6 +13,7 @@ import PublicationsList from '@/components/ads/PublicationsList.vue';
 import PublishDialog from '@/components/ads/PublishDialog.vue';
 import ViewSwitch from '@/components/ads/ui/ViewSwitch.vue';
 import WinnerBadge from '@/components/ads/WinnerBadge.vue';
+import WinningMaterialsStrip from '@/components/ads/WinningMaterialsStrip.vue';
 import EmptyState from '@/components/crm/EmptyState.vue';
 import FormDialog from '@/components/crm/FormDialog.vue';
 import IconAction from '@/components/crm/IconAction.vue';
@@ -257,8 +258,13 @@ const publications = ref<MaterialRow | null>(null);
 const publicationsOpen = computed({ get: () => publications.value !== null, set: (v) => !v && (publications.value = null) });
 
 /* ---- launches (S1) ---- */
-const preparing = ref<MaterialRow | null>(null);
+const preparing = ref<Pick<MaterialRow, 'id' | 'title'> | null>(null);
 const prepareOpen = computed({ get: () => preparing.value !== null, set: (v) => !v && (preparing.value = null) });
+/** «Reuse it» on a winners card: the same launch editor the Rocket opens (the editor only needs the id and title). */
+function reuseWinner(id: number): void {
+    const w = props.winners?.find((x) => x.id === id);
+    if (w) preparing.value = props.materials.data.find((m) => m.id === id) ?? { id: w.id, title: w.title };
+}
 function launchSaved(): void {
     router.reload({ only: ['materials', 'stats'] });
 }
@@ -327,6 +333,9 @@ const breadcrumbs = computed(() => [
                 </Link>
             </PageHeader>
             <SectionTabs :tabs="sectionTabs.library(t)" :label="t('section_tabs.library.label')" />
+
+            <!-- Round 3: the winners library — the materials whose ads win over the last 30 days, reusable in one click -->
+            <WinningMaterialsStrip v-if="winners?.length" :winners="winners" @reuse="reuseWinner" />
 
             <!-- KPIs (whole library): one ledger panel, hairline dividers -->
             <ul class="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-5" data-test="material-kpis">

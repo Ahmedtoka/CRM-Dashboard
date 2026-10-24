@@ -74,6 +74,10 @@ async function copyId(): Promise<void> {
 
     <button v-else-if="part === 'result'" type="button" class="block w-full text-end text-xs tabular-nums hover:underline" @click="emit('open', row.id)">{{ result }}</button>
 
+    <button v-else-if="part === 'cac'" type="button" data-test="cac" class="block w-full text-end text-sm font-semibold tabular-nums hover:underline" @click="emit('open', row.id)">
+        {{ money(row.cac ?? null) }}
+    </button>
+
     <button v-else-if="part === 'return'" type="button" class="block w-full text-end tabular-nums hover:underline" @click="emit('open', row.id)">
         <span data-test="real-roas" class="block text-sm font-semibold">
             <span class="sr-only">{{ t('ads.control.row.real') }} </span>{{ formatRoas(row.real_roas, locale) }}
