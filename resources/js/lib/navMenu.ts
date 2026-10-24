@@ -146,7 +146,7 @@ export function buildNav(ctx: NavContext): NavItem[] {
             href: '/reports',
             icon: BarChart3,
             children: [
-                { title: t('nav.team'), href: '/reports/team', match: ['/reports/queue', '/reports/quick-replies', '/reports/users'] },
+                { title: t('nav.team'), href: '/reports/team', match: ['/reports/queue', '/reports/outcomes', '/reports/quick-replies', '/reports/users'] },
                 { title: t('nav.reports_activity'), href: '/reports/activity' },
             ],
         },

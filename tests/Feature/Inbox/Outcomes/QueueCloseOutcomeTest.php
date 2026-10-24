@@ -54,7 +54,7 @@ it('needs a short note for other and refuses an outcome a person cannot pick', f
 
     $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'inquiry', 'outcome' => 'other'])
         ->assertUnprocessable()->assertJsonValidationErrors('outcome_note');
-    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'inquiry', 'outcome' => 'ordered'])
+    $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'inquiry', 'outcome' => 'unknown'])
         ->assertUnprocessable()->assertJsonValidationErrors('outcome');
     $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'inquiry', 'outcome' => 'other', 'outcome_note' => 'عايزة تقسيط'])->assertOk();
 
@@ -62,7 +62,7 @@ it('needs a short note for other and refuses an outcome a person cannot pick', f
 });
 
 it('closes without an outcome when it is automatic', function (string $why) {
-    [$e, $u] = s3Desk($why === 'service' ? ['bot_summary' => ['category' => 'return', 'lines' => []]] : []);
+    [$e, $u] = s3Desk($why === 'return_case' ? ['bot_summary' => ['category' => 'return', 'lines' => []]] : []);
     if ($why === 'ordered') {
         Order::factory()->create(['conversation_id' => $e->conversation_id, 'customer_id' => $e->conversation->customer_id, 'status' => 'confirmed']);
     }
@@ -70,7 +70,7 @@ it('closes without an outcome when it is automatic', function (string $why) {
     $this->actingAs($u)->postJson("/queue/entries/{$e->id}/close", ['reason' => 'inquiry'])->assertOk();
 
     expect(ConversationOutcome::sole()->outcome)->toBe($why)->and(ConversationOutcome::sole()->source)->toBe('auto');
-})->with(['ordered', 'service']);
+})->with(['ordered', 'return_case']);
 
 it('applies the same rule to a supervisor closing on her behalf', function () {
     [$e] = s3Desk();

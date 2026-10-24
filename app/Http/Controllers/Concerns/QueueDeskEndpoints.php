@@ -163,7 +163,8 @@ trait QueueDeskEndpoints
         $data = $request->validate([
             'reason' => ['required', 'string', Rule::in(self::MANUAL_REASONS)],
             'case_type' => ['nullable', 'required_if:reason,case', 'string', Rule::in(SupportCase::TYPES)],
-            'outcome' => ['nullable', 'string', Rule::in(Outcome::agentValues())],
+            // finish-api.md §4: the new keys and the installed app's legacy `service` (read as the case type's outcome).
+            'outcome' => ['nullable', 'string', Rule::in(Outcome::acceptedValues())],
             'outcome_note' => ['nullable', 'required_if:outcome,other', 'string', 'max:120'],
             // Close-cycle hotfix C1 (D-03): the web «رجوع للبوت» — no thanks, no rating. Optional: the app never sends it.
             'to_bot' => ['sometimes', 'boolean'],
@@ -181,7 +182,7 @@ trait QueueDeskEndpoints
         }
 
         // D13: «خلصت» needs the chat's outcome unless it is automatic (an order in this episode, a service handover).
-        $outcome = isset($data['outcome']) ? Outcome::from($data['outcome']) : null;
+        $outcome = Outcome::fromRequest($data['outcome'] ?? null, $data['case_type'] ?? null);
         if ($outcome === null && ($entry->conversation === null || $outcomes->autoOutcome($entry->conversation, $entry) === null)) {
             throw ValidationException::withMessages(['outcome' => __('errors.outcome.required')]);
         }

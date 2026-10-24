@@ -18,6 +18,7 @@ use App\Http\Controllers\Web\NotificationController;
 use App\Http\Controllers\Web\OnboardingController;
 use App\Http\Controllers\Web\OrderConfirmationController;
 use App\Http\Controllers\Web\OrderController;
+use App\Http\Controllers\Web\OutcomesReportController;
 use App\Http\Controllers\Web\PresenceController;
 use App\Http\Controllers\Web\ProductController;
 use App\Http\Controllers\Web\QueueReportController;
@@ -204,6 +205,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         // Queue Part 2: the queue's report for any range (≤ 92 days) and its CSV.
         Route::get('/reports/queue', [QueueReportController::class, 'index'])->name('reports.queue');
         Route::get('/reports/queue/export', [QueueReportController::class, 'export'])->name('reports.queue.export');
+        // 2026-10-24 (x1): «نتائج المحادثات» — what happened in the chats, per period and per moderator, and its CSV.
+        Route::get('/reports/outcomes', [OutcomesReportController::class, 'index'])->name('reports.outcomes');
+        Route::get('/reports/outcomes/export', [OutcomesReportController::class, 'export'])->name('reports.outcomes.export');
         Route::get('/reports/users/{user}', [ReportController::class, 'user'])->name('reports.users.show');
         Route::get('/reports/bot', MovedPageController::class)->defaults('to', '/bot/performance')->name('reports.bot');
         // D11: merged into «الأرقام» (/ads/numbers?section=chat).

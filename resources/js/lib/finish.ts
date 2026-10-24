@@ -1,8 +1,5 @@
 import { outcomePayload } from '@/lib/outcomes';
-import type { AgentOutcome, Conversation, FinishAfter, FinishBody, FinishPath, OutcomeKey, SupportCaseType } from '@/types/crm';
-
-/** The case types «افتحي طلب» offers (the ones today's close menu offered), complaint first picked. */
-export const FINISH_CASE_TYPES: SupportCaseType[] = ['return_exchange', 'return', 'exchange', 'complaint', 'cancel_edit', 'delivery_followup'];
+import type { AgentOutcome, Conversation, FinishAfter, FinishBody, FinishPath, OutcomeKey } from '@/types/crm';
 
 /** «تراجع» shows in the toast this long; the server allows 15 s (close-cycle-FINAL §4.5). */
 export const UNDO_TOAST_MS = 10_000;
@@ -28,7 +25,14 @@ export function finishTarget(conversation: Conversation, meId: number, role: str
         const mayEnd = entry.assigned_user_id === meId || role === 'supervisor' || role === 'admin';
 
         return mayEnd
-            ? { kind: 'window', entryId: entry.id, windowNo: entry.window_no, ticket: entry.ticket, assignedUserId: entry.assigned_user_id, openCaseId: entry.open_case_id }
+            ? {
+                  kind: 'window',
+                  entryId: entry.id,
+                  windowNo: entry.window_no,
+                  ticket: entry.ticket,
+                  assignedUserId: entry.assigned_user_id,
+                  openCaseId: entry.open_case_id,
+              }
             : { kind: 'held' };
     }
     if (!conversation.can.reply) return { kind: 'idle' };
@@ -52,16 +56,19 @@ export interface FinishChoices {
     sendClosing: boolean;
     waiting: boolean;
     resolveCaseId: number | null;
-    openCase: SupportCaseType | null;
+    /** The outcome the sheet showed preselected (recorded with whether she followed it); null = none was shown. */
+    suggested?: AgentOutcome | null;
 }
 
 /**
- * The POST body for these choices. `entry_id` is always present (RC-1). The lounge sends only the
- * outcome (the server cancels the ticket and tells her, §4.3); «البوت يكمّل» sends no closing flag
- * and never confirms a wait (the bot answers her, RC-17); the case fields only go with a window.
+ * The POST body for these choices (finish-api.md §3). `entry_id` is always present (RC-1). The lounge
+ * sends only the outcome (the server cancels the ticket and tells her, §4.3); «البوت يكمّل» sends no
+ * closing flag and never confirms a wait (the bot answers her, RC-17). A case outcome never sends
+ * `open_case`: the server links her open case or opens the one the outcome records.
  */
 export function finishBody(c: FinishChoices): FinishBody {
     const body: FinishBody = { entry_id: c.entryId, ...outcomePayload(c.picked, c.note, c.auto) };
+    if (c.suggested) body.suggested_outcome = c.suggested;
     if (c.path === 'lounge') return body;
 
     body.after = c.after;
@@ -69,10 +76,7 @@ export function finishBody(c: FinishChoices): FinishBody {
         body.send_closing = c.sendClosing;
         if (c.waiting) body.confirm_waiting = true;
     }
-    if (c.path === 'window') {
-        if (c.resolveCaseId !== null) body.resolve_case_id = c.resolveCaseId;
-        else if (c.openCase !== null) body.open_case = c.openCase;
-    }
+    if (c.path === 'window' && c.resolveCaseId !== null) body.resolve_case_id = c.resolveCaseId;
 
     return body;
 }

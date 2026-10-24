@@ -19,7 +19,12 @@ const windowEntry = (assigned: number) =>
 
 describe('finishTarget (the header primary action)', () => {
     it('her own open window, and a supervisor / admin on anyone’s', () => {
-        expect(finishTarget(conv({ queue_entry: windowEntry(3) }), 3, 'moderator')).toMatchObject({ kind: 'window', entryId: 41, windowNo: 8, openCaseId: 5 });
+        expect(finishTarget(conv({ queue_entry: windowEntry(3) }), 3, 'moderator')).toMatchObject({
+            kind: 'window',
+            entryId: 41,
+            windowNo: 8,
+            openCaseId: 5,
+        });
         expect(finishTarget(conv({ queue_entry: windowEntry(7) }), 3, 'supervisor').kind).toBe('window');
         expect(finishTarget(conv({ queue_entry: windowEntry(7) }), 3, 'admin').kind).toBe('window');
     });
@@ -29,11 +34,23 @@ describe('finishTarget (the header primary action)', () => {
     });
 
     it('a customer waiting in the lounge names her ticket when the payload has it', () => {
-        expect(finishTarget(conv({ queue_state: { id: 77, status: 'waiting', ticket: 12, priority: 'live', overdue: false, assigned_user_id: null } }), 3, 'moderator')).toEqual({
+        expect(
+            finishTarget(
+                conv({ queue_state: { id: 77, status: 'waiting', ticket: 12, priority: 'live', overdue: false, assigned_user_id: null } }),
+                3,
+                'moderator',
+            ),
+        ).toEqual({
             kind: 'lounge',
             entryId: 77,
         });
-        expect(finishTarget(conv({ queue_state: { status: 'waiting', ticket: 12, priority: 'live', overdue: false, assigned_user_id: null } }), 3, 'moderator')).toEqual({
+        expect(
+            finishTarget(
+                conv({ queue_state: { status: 'waiting', ticket: 12, priority: 'live', overdue: false, assigned_user_id: null } }),
+                3,
+                'moderator',
+            ),
+        ).toEqual({
             kind: 'lounge',
             entryId: null,
         });
@@ -57,7 +74,6 @@ const base: FinishChoices = {
     sendClosing: true,
     waiting: false,
     resolveCaseId: null,
-    openCase: null,
 };
 
 describe('finishBody', () => {
@@ -66,13 +82,19 @@ describe('finishBody', () => {
     });
 
     it('confirms a waiting customer only with thanks; the bot path never sends the closing flag', () => {
-        expect(finishBody({ ...base, waiting: true, sendClosing: false })).toEqual({ entry_id: 41, outcome: 'price', after: 'thanks', send_closing: false, confirm_waiting: true });
+        expect(finishBody({ ...base, waiting: true, sendClosing: false })).toEqual({
+            entry_id: 41,
+            outcome: 'price',
+            after: 'thanks',
+            send_closing: false,
+            confirm_waiting: true,
+        });
         expect(finishBody({ ...base, waiting: true, after: 'bot', picked: 'browsing' })).toEqual({ entry_id: 41, outcome: 'browsing', after: 'bot' });
     });
 
     it('the lounge sends the outcome only; no window sends entry_id null and no case fields', () => {
-        expect(finishBody({ ...base, path: 'lounge', entryId: 77, picked: null, openCase: 'complaint' })).toEqual({ entry_id: 77 });
-        expect(finishBody({ ...base, path: 'none', entryId: null, openCase: 'complaint', resolveCaseId: 3 })).toEqual({
+        expect(finishBody({ ...base, path: 'lounge', entryId: 77, picked: null })).toEqual({ entry_id: 77 });
+        expect(finishBody({ ...base, path: 'none', entryId: null, resolveCaseId: 3 })).toEqual({
             entry_id: null,
             outcome: 'price',
             after: 'thanks',
@@ -80,11 +102,26 @@ describe('finishBody', () => {
         });
     });
 
-    it('an automatic ordered sends no outcome; a case is resolved or opened', () => {
+    it('nothing picked sends no outcome (the server records the automatic one); a case is resolved, never opened from here', () => {
         expect(finishBody({ ...base, auto: 'ordered', picked: null })).toEqual({ entry_id: 41, after: 'thanks', send_closing: true });
         expect(finishBody({ ...base, resolveCaseId: 5 })).toMatchObject({ resolve_case_id: 5 });
-        expect(finishBody({ ...base, openCase: 'return' })).toMatchObject({ open_case: 'return' });
+        expect(finishBody({ ...base, picked: 'return_case' })).not.toHaveProperty('open_case');
         expect(finishBody({ ...base, picked: 'other', note: '  later ' })).toMatchObject({ outcome: 'other', outcome_note: 'later' });
+    });
+
+    it('carries the suggestion the sheet showed, in the lounge too', () => {
+        expect(finishBody({ ...base, suggested: 'no_answer' })).toEqual({
+            entry_id: 41,
+            outcome: 'price',
+            suggested_outcome: 'no_answer',
+            after: 'thanks',
+            send_closing: true,
+        });
+        expect(finishBody({ ...base, path: 'lounge', entryId: 77, suggested: 'no_answer' })).toMatchObject({
+            entry_id: 77,
+            suggested_outcome: 'no_answer',
+        });
+        expect(finishBody({ ...base, suggested: null })).not.toHaveProperty('suggested_outcome');
     });
 });
 

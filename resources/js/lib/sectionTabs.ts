@@ -109,6 +109,7 @@ export const sectionTabs = {
     team: (t: Translate): SectionTab[] => [
         { label: t('section_tabs.team.performance'), href: '/reports/team', match: ['/reports/users'] },
         { label: t('section_tabs.team.queue'), href: '/reports/queue' },
+        { label: t('section_tabs.team.outcomes'), href: '/reports/outcomes' },
         { label: t('section_tabs.team.quick_replies'), href: '/reports/quick-replies' },
     ],
 

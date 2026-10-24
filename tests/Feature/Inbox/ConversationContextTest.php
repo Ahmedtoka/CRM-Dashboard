@@ -33,7 +33,7 @@ it('serves the outcome state: nothing automatic, then ordered', function () {
     $admin = User::factory()->create(['role' => UserRole::Admin]);
 
     $this->actingAs($admin)->getJson("/inbox/conversations/{$c->id}/context")->assertOk()
-        ->assertJsonPath('data.outcome', ['current' => null, 'source' => null, 'auto' => null, 'auto_order' => null]);
+        ->assertJsonPath('data.outcome', ['current' => null, 'source' => null, 'auto' => null, 'auto_order' => null, 'suggested' => null]);
 
     Order::factory()->create(['conversation_id' => $c->id, 'customer_id' => $c->customer_id, 'status' => 'confirmed']);
     $this->actingAs($admin)->getJson("/inbox/conversations/{$c->id}/context")->assertJsonPath('data.outcome.auto', 'ordered');
@@ -62,7 +62,7 @@ it('prefers the queue ticket summary for reason, order and lines', function () {
 
     expect($data['handover']['order_number'])->toBe('1043')->and($data['handover']['topic'])->toBe('تأخير')
         ->and($data['handover']['lines'])->toBe([['label' => 'رقم الأوردر', 'value' => '1043']])
-        ->and($data['outcome']['auto'])->toBe('service');
+        ->and($data['outcome']['auto'])->toBe('order_inquiry')->and($data['outcome']['suggested']['outcome'])->toBe('order_inquiry');
 });
 
 it('serves the ad block with the latest referral first and a link only for ads roles', function () {

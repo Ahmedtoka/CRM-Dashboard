@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Concerns;
 use App\Inbox\ConversationAdContext;
 use App\Inbox\HandoverDigest;
 use App\Inbox\Outcomes\OutcomeRecorder;
+use App\Inbox\Outcomes\OutcomeSuggestion;
 use App\Models\Conversation;
 use App\Models\Order;
 use App\Queue\QueueService;
@@ -19,7 +20,7 @@ use Illuminate\Support\Facades\Gate;
  */
 trait ConversationContextEndpoint
 {
-    public function context(Request $request, Conversation $conversation, OutcomeRecorder $outcomes, HandoverDigest $digest, ConversationAdContext $ads): JsonResponse
+    public function context(Request $request, Conversation $conversation, OutcomeRecorder $outcomes, OutcomeSuggestion $suggestion, HandoverDigest $digest, ConversationAdContext $ads): JsonResponse
     {
         Gate::authorize('view', $conversation);
 
@@ -35,6 +36,8 @@ trait ConversationContextEndpoint
                 'source' => $row?->source,
                 'auto' => $outcomes->autoOutcome($conversation, $entry, $episode['since'], sinceKnown: true)?->value,
                 'auto_order' => $order ? ['id' => $order->id, 'number' => $order->order_number, 'created_at' => $order->created_at?->toIso8601String()] : null,
+                // finish-api.md §2 (additive): what the «خلصت» sheet shows preselected, and why.
+                'suggested' => rescue(fn () => $suggestion->for($conversation, $entry, $episode['since'], sinceKnown: true), null, false),
             ],
             'handover' => $digest->for($conversation, $entry, $episode['since']),
             'ad' => $ads->for($conversation, $request->user()),
