@@ -154,12 +154,13 @@ final class HandoverBrief
         $numbers = [];
 
         if (filled($data['order_number'] ?? null)) {
+            // The order the flow verified is the order: a 4-digit answer («4567») is not another one.
             $numbers[] = ltrim((string) $data['order_number'], '#');
-        }
-
-        foreach ($texts as $t) {
-            foreach (EntityExtractor::orderRefsInContext($t) as $ref) {
-                $numbers[] = $ref;
+        } else {
+            foreach ($texts as $t) {
+                foreach (EntityExtractor::orderRefsInContext($t) as $ref) {
+                    $numbers[] = $ref;
+                }
             }
         }
 

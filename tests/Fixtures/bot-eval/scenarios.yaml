@@ -297,7 +297,7 @@ scenarios:
     routers: [legacy, hybrid]
     messages: ['عايزة ارجع الفستان الاسود من اوردر 209129', { text: 'المرتجع والاستبدال', payload: 'flow:return_exchange' }]
     expect: { flow: return_exchange, flow_data: { request_kind: return }, selected: ['فستان ستان اسود'], never: ['ممكن رقم الأوردر'], max_model_calls: 0 }
-  - { id: 79, category: still_typing, routers: [legacy, hybrid], messages: ['عايزة ارجع', 'الفستان الاسود من اوردر 209129'], expect: { burst_holds: true, flow: return_exchange, selected: ['فستان ستان اسود'] } }
+  - { id: 79, category: still_typing, routers: [legacy, hybrid], setup: { flow: main_menu }, messages: ['عايزة ارجع', 'الفستان الاسود من اوردر 209129'], expect: { burst_holds: true, flow: return_exchange, selected: ['فستان ستان اسود'] } }
 
   # The script: a side question inside a flow is answered and the step comes back.
   - id: 80
