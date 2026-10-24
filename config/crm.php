@@ -164,6 +164,8 @@ return [
             'orders/cancelled',
             'fulfillments/create',
             'fulfillments/update',
+            // Round 2026-10-24: the shipping timeline (carrier steps Shopify records on a fulfillment).
+            'fulfillment_events/create',
             'refunds/create',
             'draft_orders/update',
             'app/uninstalled',

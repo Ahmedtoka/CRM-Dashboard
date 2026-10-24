@@ -74,6 +74,10 @@ api_version = "2026-10"
   uri = "https://crm.levoilestores.com/webhooks/shopify/fulfillments-update"
 
   [[webhooks.subscriptions]]
+  topics = ["fulfillment_events/create"]
+  uri = "https://crm.levoilestores.com/webhooks/shopify/fulfillment_events-create"
+
+  [[webhooks.subscriptions]]
   topics = ["refunds/create"]
   uri = "https://crm.levoilestores.com/webhooks/shopify/refunds-create"
 

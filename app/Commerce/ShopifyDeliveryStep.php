@@ -21,6 +21,9 @@ final class ShopifyDeliveryStep
         'submitted' => ShipmentStatus::Created,
         'ready_for_pickup' => ShipmentStatus::Created,
         'picked_up' => ShipmentStatus::PickedUp,
+        // GraphQL FulfillmentEventStatus words (round 2026-10-24): the carrier took it, or it is late but still moving.
+        'carrier_picked_up' => ShipmentStatus::PickedUp,
+        'delayed' => ShipmentStatus::InTransit,
         'in_transit' => ShipmentStatus::InTransit,
         'out_for_delivery' => ShipmentStatus::OutForDelivery,
         'attempted_delivery' => ShipmentStatus::FailedAttempt,
@@ -37,6 +40,12 @@ final class ShopifyDeliveryStep
             return ShipmentStatus::Delivered;
         }
 
-        return self::MAP[strtolower(trim((string) $order->shipment_status))] ?? null;
+        return self::stepFor($order->shipment_status);
+    }
+
+    /** One Shopify status word (any case) → the CRM step; null for «fulfilled», a cancelled label or an unknown word. */
+    public static function stepFor(?string $status): ?ShipmentStatus
+    {
+        return self::MAP[strtolower(trim((string) $status))] ?? null;
     }
 }

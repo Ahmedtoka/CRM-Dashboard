@@ -25,6 +25,7 @@ export const TYPE_KEY = {
     'queue.reply_overdue_leader': 'queue_reply_overdue_leader',
     'queue.member_not_arrived': 'queue_member_not_arrived',
     'cases.sla_overdue': 'cases_sla_overdue',
+    'order.delivery_failed': 'order_delivery_failed',
     'ads.need_stop': 'ads_need_stop',
     'ads.alerts': 'ads_alerts',
     'ads.alerts_digest': 'ads_alerts_digest',

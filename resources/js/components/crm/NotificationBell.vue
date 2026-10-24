@@ -75,6 +75,13 @@ function itemText(n: AppNotification): string {
         return t('notifications.cases_sla_overdue_item', { id: Number(n.data.case_id ?? 0), type: String(n.data.type ?? '') });
     }
 
+    if (n.type === 'order.delivery_failed') {
+        return t('notifications.order_delivery_failed_item', {
+            number: String(n.data.order_number ?? n.data.order_id ?? ''),
+            name: String(n.data.customer_name ?? t('notifications.customer')),
+        });
+    }
+
     if (n.type === 'queue.member_not_arrived') {
         return t('notifications.queue_member_not_arrived_item', { name: String(n.data.name ?? ''), shift: String(n.data.shift ?? '') });
     }
@@ -227,6 +234,11 @@ function open(n: AppNotification): void {
     }
     if (n.type === 'queue.mass_offline' || n.type === 'queue.member_not_arrived' || n.type === 'queue.break_overrun') {
         router.visit('/board');
+        return;
+    }
+    // A failed delivery opens the order (its shipping timeline), not the chat.
+    if (n.type === 'order.delivery_failed' && n.data.order_id) {
+        router.visit(`/orders/${n.data.order_id}`);
         return;
     }
     const conversationId = n.data.conversation_id;

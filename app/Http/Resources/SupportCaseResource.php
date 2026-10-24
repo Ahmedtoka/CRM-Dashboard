@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Cases\CaseSummary;
+use App\Cases\Returns\ReturnLifecycle;
 use App\Media\MediaUrls;
 use App\Models\MessageAttachment;
 use App\Models\SupportCase;
@@ -48,6 +49,8 @@ class SupportCaseResource extends JsonResource
             // Queue Part 2: the SLA of a case opened from a window, and who opened it.
             'sla' => CaseSla::of($this->resource),
             'opened_by' => $this->opened_by_id !== null && $this->openedBy ? ['id' => $this->openedBy->id, 'name' => $this->openedBy->name] : null,
+            // Round 2026-10-24: the return/exchange lifecycle (stage, next steps, timeline); null for other case types.
+            'return' => ReturnLifecycle::present($this->resource),
         ];
     }
 }

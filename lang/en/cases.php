@@ -202,4 +202,28 @@ return [
             'intent' => 'Customer request',
         ],
     ],
+
+    // Returns and exchanges end to end (round 2026-10-24): the lifecycle stages and why a step was refused.
+    'returns' => [
+        'stages' => [
+            'requested' => 'Requested',
+            'pickup_scheduled' => 'Pickup scheduled',
+            'picked_up' => 'Picked up by the courier',
+            'received' => 'Received at the warehouse',
+            'exchange_shipped' => 'Replacement shipped',
+            'closed' => 'Closed',
+            'cancelled' => 'Cancelled',
+        ],
+        'errors' => [
+            'not_a_return' => 'This case is not a return or an exchange.',
+            'unknown_stage' => 'Unknown step.',
+            'out_of_order' => 'This step is not next.',
+            'pickup_date_required' => 'Pick the pickup day.',
+            'pickup_date_past' => 'The pickup day must be today or later.',
+            'refund_amount_required' => 'Enter the cash amount the courier refunded.',
+            'refund_amount_invalid' => 'The amount is not valid.',
+            'exchange_order_required' => 'Pick the order of the replacement piece (not the returned order).',
+            'reason_required' => 'Write the cancellation reason.',
+        ],
+    ],
 ];

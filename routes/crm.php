@@ -26,6 +26,7 @@ use App\Http\Controllers\Web\QueueReportController;
 use App\Http\Controllers\Web\QueueWindowController;
 use App\Http\Controllers\Web\QuickReplyAttachmentController;
 use App\Http\Controllers\Web\ReportController;
+use App\Http\Controllers\Web\ReturnLifecycleController;
 use App\Http\Controllers\Web\SearchController;
 use App\Http\Controllers\Web\Settings\BotController;
 use App\Http\Controllers\Web\Settings\BotFlowController;
@@ -49,6 +50,7 @@ use App\Http\Controllers\Web\Settings\ShopifyIntegrationController;
 use App\Http\Controllers\Web\Settings\ShopifyReconcileController;
 use App\Http\Controllers\Web\Settings\TagController;
 use App\Http\Controllers\Web\Settings\UserController;
+use App\Http\Controllers\Web\Settings\WhatsAppReadinessController;
 use App\Http\Controllers\Web\ShippingController;
 use App\Http\Controllers\Web\SimulatorController;
 use App\Http\Controllers\Web\TeamReportController;
@@ -186,6 +188,8 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
     Route::get('/cases/follow-up', [CaseFollowUpController::class, 'index'])->name('cases.follow_up');
     Route::get('/cases/{supportCase}', [CaseController::class, 'show'])->name('cases.show');
     Route::patch('/cases/{supportCase}', [CaseController::class, 'update'])->name('cases.update');
+    // Returns and exchanges end to end (round 2026-10-24): one lifecycle step per call.
+    Route::post('/cases/{supportCase}/return/{stage}', [ReturnLifecycleController::class, 'advance'])->name('cases.return.advance');
 
     // Customers
     Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
@@ -398,6 +402,9 @@ Route::middleware([EnsureUserIsActive::class, RestrictAdsRoles::class, SetLocale
         // «تأكيد الأوردرات على الواتساب» (spec 2026-10-16): ConfirmationSettings and the WhatsApp number's state.
         Route::get('order-confirmations', [OrderConfirmationSettingsController::class, 'index'])->name('order-confirmations.index');
         Route::put('order-confirmations', [OrderConfirmationSettingsController::class, 'update'])->name('order-confirmations.update');
+        // Round 2026-10-24: the WhatsApp readiness checklist and «ابعتي تيست لرقمي» (to the admin's own number only).
+        Route::get('whatsapp-readiness', [WhatsAppReadinessController::class, 'show'])->name('whatsapp-readiness.show');
+        Route::post('whatsapp-readiness/test', [WhatsAppReadinessController::class, 'test'])->middleware('throttle:5,1')->name('whatsapp-readiness.test');
 
         Route::get('shopify', [ShopifyIntegrationController::class, 'index'])->name('shopify.index');
         Route::get('shopify/status', [ShopifyIntegrationController::class, 'status'])->name('shopify.status');

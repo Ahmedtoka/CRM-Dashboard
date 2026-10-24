@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import AdDrawer from '@/components/ads/AdDrawer.vue';
 import OrderConfirmationCard from '@/components/crm/confirmations/OrderConfirmationCard.vue';
+import OrderReturnCases from '@/components/crm/orders/OrderReturnCases.vue';
+import ShippingTimeline from '@/components/crm/orders/ShippingTimeline.vue';
 import DetailPanel from '@/components/crm/orders/DetailPanel.vue';
 import OrderNote from '@/components/crm/orders/OrderNote.vue';
 import OrderSourceChip from '@/components/crm/orders/OrderSourceChip.vue';
@@ -29,7 +31,7 @@ import {
 } from '@/lib/orderStatus';
 import type { SharedData } from '@/types';
 import type { OrderRow } from '@/types/admin';
-import type { Order } from '@/types/crm';
+import type { Order, SupportCase } from '@/types/crm';
 import type { OrderConfirmationBlock } from '@/types/orderConfirmations';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
@@ -55,8 +57,10 @@ const props = withDefaults(
         confirmation?: OrderConfirmationBlock | null;
         /** Supervisors and admins: the source chip opens the ad drawer. */
         canOpenAds?: boolean;
+        /** Round 2026-10-24: this order's return/exchange cases with their lifecycle. */
+        returnCases?: SupportCase[];
     }>(),
-    { confirmation: null, canOpenAds: false },
+    { confirmation: null, canOpenAds: false, returnCases: () => [] },
 );
 
 const { t, locale } = useI18n();
@@ -285,6 +289,12 @@ const fulfillmentTone = (status: string | null) =>
                         <OrderNote :note="order.note" :lines="6" class="text-sm" />
                     </DetailPanel>
                     <OrderSummary :order="order" />
+
+                    <DetailPanel v-if="order.delivery?.timeline?.length" :title="t('shipping_timeline.title')" :icon="Truck" data-order-shipping>
+                        <ShippingTimeline :shipping="order.delivery" />
+                    </DetailPanel>
+
+                    <OrderReturnCases :cases="returnCases" @updated="router.reload({ only: ['order', 'returnCases'] })" />
 
                     <DetailPanel v-if="fulfillments.length" :title="t('order.fulfillments.title')" :icon="Truck" flush data-order-fulfillments>
                         <ul class="divide-y divide-line">

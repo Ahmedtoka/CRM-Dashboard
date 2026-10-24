@@ -6,6 +6,7 @@ use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Enums\Platform;
+use App\Shipping\ShippingTimeline;
 use Database\Factories\OrderFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -186,6 +187,50 @@ class Order extends Model
             || $this->delivered_at !== null
             || in_array($this->financial_status, ['refunded', 'voided'], true)
             || ($this->fulfillment_status === 'fulfilled' && $this->shipment_status === 'delivered');
+    }
+
+    /**
+     * Every delivery status Shopify reported for this order's fulfillments (round 2026-10-24).
+     *
+     * @return HasMany<FulfillmentEvent, $this>
+     */
+    public function fulfillmentEvents(): HasMany
+    {
+        return $this->hasMany(FulfillmentEvent::class)->orderBy('happened_at')->orderBy('id');
+    }
+
+    /**
+     * The shipping timeline from Shopify (round 2026-10-24): created → picked up → in transit → out for delivery →
+     * delivered / failed attempt / returned / cancelled, one entry per step with the carrier and tracking.
+     * See docs/round-2026-10-24/orders-api.md.
+     *
+     * @return list<array{step:string, status:?string, at:string, fulfillment_id:int, message:?string, tracking_company:?string, tracking_number:?string, tracking_url:?string}>
+     */
+    public function shippingTimeline(): array
+    {
+        return ShippingTimeline::build($this);
+    }
+
+    /**
+     * Where the shipment stands now, for the bot's «فين أوردري» answer and the cards: the current step and its time,
+     * whether the latest step is a failed delivery, the carrier link, and whether Shopify ever reported a carrier
+     * step for this order. See docs/round-2026-10-24/orders-api.md.
+     *
+     * @return array{step:?string, step_at:?string, failed_attempt:bool, delivered_at:?string, carrier_updates:bool, tracking:array{company:?string, number:?string, url:?string}|null, timeline:list<array<string, mixed>>}
+     */
+    public function shippingSummary(): array
+    {
+        return ShippingTimeline::summary($this);
+    }
+
+    /**
+     * The return/exchange cases opened on this order (round 2026-10-24), newest first.
+     *
+     * @return HasMany<SupportCase, $this>
+     */
+    public function returnCases(): HasMany
+    {
+        return $this->hasMany(SupportCase::class)->whereIn('type', SupportCase::RETURN_TYPES)->orderByDesc('id');
     }
 
     /**

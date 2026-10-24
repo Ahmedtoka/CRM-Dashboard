@@ -202,4 +202,28 @@ return [
             'intent' => 'طلب العميل',
         ],
     ],
+
+    // Returns and exchanges end to end (round 2026-10-24): the lifecycle stages and why a step was refused.
+    'returns' => [
+        'stages' => [
+            'requested' => 'طلب مسجّل',
+            'pickup_scheduled' => 'اتحدد يوم الاستلام',
+            'picked_up' => 'المندوب استلم القطعة',
+            'received' => 'وصلت المخزن',
+            'exchange_shipped' => 'القطعة الجديدة اتشحنت',
+            'closed' => 'اتقفل',
+            'cancelled' => 'اتلغى',
+        ],
+        'errors' => [
+            'not_a_return' => 'الطلب ده مش مرتجع ولا استبدال.',
+            'unknown_stage' => 'خطوة مش معروفة.',
+            'out_of_order' => 'الخطوة دي مش دورها دلوقتي.',
+            'pickup_date_required' => 'اختاري يوم الاستلام.',
+            'pickup_date_past' => 'يوم الاستلام لازم يكون النهارده أو بعده.',
+            'refund_amount_required' => 'اكتبي المبلغ اللي المندوب رده كاش.',
+            'refund_amount_invalid' => 'المبلغ مش صحيح.',
+            'exchange_order_required' => 'اختاري أوردر القطعة الجديدة (أوردر غير أوردر المرتجع).',
+            'reason_required' => 'اكتبي سبب الإلغاء.',
+        ],
+    ],
 ];

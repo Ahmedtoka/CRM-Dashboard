@@ -25,7 +25,7 @@ use Illuminate\Validation\Rule;
 trait CaseEndpoints
 {
     /** What the list, show and update responses load (Queue Part 2 adds the opener and the queue entry). */
-    private const CASE_RELATIONS = ['customer', 'assignedTo', 'openedBy:id,name', 'queueEntry:id,assigned_user_id,is_test', 'order.items.variant'];
+    private const CASE_RELATIONS = ['customer', 'assignedTo', 'openedBy:id,name', 'queueEntry:id,assigned_user_id,is_test', 'order.items.variant', 'events.user:id,name'];
 
     /**
      * `SupportCaseResource` has its own `data` field (the flow payload), which defeats

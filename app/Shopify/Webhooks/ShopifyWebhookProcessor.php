@@ -9,6 +9,7 @@ use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Events\UserNotified;
+use App\Models\Fulfillment;
 use App\Models\Order;
 use App\Models\User;
 use App\Shopify\App\WebhookSignature;
@@ -59,6 +60,8 @@ final class ShopifyWebhookProcessor
             'orders/updated', 'orders/paid' => $this->routeOrderUpsert($payload),
             'orders/cancelled' => $this->routeOrderCancelled($payload),
             'fulfillments/create', 'fulfillments/update' => $this->requireParent($payload) && $this->orders->applyFulfillment($payload),
+            // Round 2026-10-24: the carrier's steps (in transit, out for delivery, delivered, failure …) as Shopify reports them.
+            'fulfillment_events/create' => $this->requireFulfillment($payload) && $this->orders->applyFulfillmentEvent($payload),
             'refunds/create' => $this->requireParent($payload) && $this->orders->applyRefund($payload),
             'draft_orders/update' => $this->routeDraftOrderUpdate($payload),
             'app/uninstalled' => $this->handleUninstalled($verifiedWith),
@@ -71,6 +74,22 @@ final class ShopifyWebhookProcessor
     {
         if (! $this->orders->knowsOrder($payload['order_id'] ?? null)) {
             throw new ParentOrderMissing('Shopify order '.($payload['order_id'] ?? '?').' is not in the CRM (before the data floor or not imported yet).');
+        }
+
+        return true;
+    }
+
+    /**
+     * A fulfillment event can beat its fulfillments/create: retried like any child webhook (ParentOrderMissing), then ignored.
+     *
+     * @throws ParentOrderMissing when the payload's fulfillment is not stored here
+     */
+    private function requireFulfillment(array $payload): bool
+    {
+        $id = Payload::id($payload['fulfillment_id'] ?? null);
+
+        if ($id === null || ! Fulfillment::query()->where('shopify_fulfillment_id', $id)->exists()) {
+            throw new ParentOrderMissing('Shopify fulfillment '.($id ?? '?').' is not in the CRM yet.');
         }
 
         return true;

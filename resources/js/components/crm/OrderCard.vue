@@ -3,12 +3,13 @@ import AdSourceChip from '@/components/crm/AdSourceChip.vue';
 import OrderNote from '@/components/crm/orders/OrderNote.vue';
 import OrderStatusChip from '@/components/crm/orders/OrderStatusChip.vue';
 import OrderSyncLine from '@/components/crm/orders/OrderSyncLine.vue';
+import ShippingTimeline from '@/components/crm/orders/ShippingTimeline.vue';
 import StatusChip from '@/components/crm/StatusChip.vue';
 import { apiErrorMessage, useApi } from '@/composables/useApi';
 import { useI18n } from '@/composables/useI18n';
 import { useToast } from '@/composables/useToast';
 import { notOnShopifyText, orderLabel, orderStatusText } from '@/lib/orderStatus';
-import { formatDateTime, formatMoney } from '@/lib/format';
+import { formatDate, formatDateTime, formatMoney } from '@/lib/format';
 import type { SharedData } from '@/types';
 import type { Order } from '@/types/crm';
 import { Button } from '@/components/ui/button';
@@ -147,6 +148,17 @@ async function copyStatus(): Promise<void> {
         <p v-if="current.mismatch" class="mt-1.5 flex items-start gap-1.5 rounded-md bg-destructive/10 px-2 py-1 text-foreground">
             <TriangleAlert class="mt-px size-3.5 shrink-0 text-destructive" aria-hidden="true" />
             <span>{{ current.mismatch_reason ? t(`order.mismatch.reasons.${current.mismatch_reason}`) : t('order.mismatch.title') }}</span>
+        </p>
+
+        <ShippingTimeline v-if="current.delivery?.timeline?.length" :shipping="current.delivery" compact class="mt-1.5" />
+
+        <p v-for="rc in current.return_cases ?? []" :key="rc.id" class="mt-1.5 flex flex-wrap items-center gap-1.5" data-order-return-chip>
+            <StatusChip
+                :label="`${t(`return_lifecycle.kind.${rc.is_exchange ? 'exchange' : 'return'}`)}: ${t(`return_lifecycle.stages.${rc.stage}`)}`"
+                :tone="rc.stage === 'closed' ? 'ok' : rc.stage === 'cancelled' ? 'neutral' : 'warn'"
+                size="sm"
+            />
+            <span v-if="rc.stage === 'pickup_scheduled' && rc.pickup_date" class="text-2xs tabular-nums text-muted-foreground">{{ formatDate(rc.pickup_date, locale) }}</span>
         </p>
 
         <OrderSyncLine v-if="!isSubmitting" :order="current" compact class="mt-1.5" @refreshed="onRefreshed" />
