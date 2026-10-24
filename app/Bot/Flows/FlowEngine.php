@@ -254,6 +254,16 @@ class FlowEngine
     }
 
     /**
+     * Round 4 (2026-10-24): a menu tap and typed words in the same burst (chat 214: she tapped
+     * «المرتجع والاستبدال» and typed the request while the worker was busy). The flow starts filled
+     * from her words when they carry anything (the order, the pieces, the kind); else it simply begins.
+     */
+    public function startWithWords(Conversation $c, string $flowKey, string $text): bool
+    {
+        return $this->startFromWords($c, $flowKey, $text) || $this->begin($c, $flowKey);
+    }
+
+    /**
      * Round b1: a flow opened by typed words (the menu's synonyms) gets the same prefill as the planner
      * path — the order number, the pieces she named and what she wants for each — one queued task per
      * order (TaskOrchestrator). False when her words carry nothing beyond the option itself.
@@ -572,6 +582,13 @@ class FlowEngine
             // number. With the store agent on it is answered (or handed over) instead; the detour cap
             // of returnToFlow still stops her going round forever.
             if ($answer->kind === 'question' && StoreAgent::enabled()) {
+                return new FlowResult(true, question: $text);
+            }
+
+            // Round 4 (2026-10-24): a second message that reads as a question («بتقبلوا فودافون كاش؟»)
+            // is answered too — never kept as the order number or counted as a miss. The detour cap
+            // (returnToFlow) still offers a person after `crm.bot.flow_max_detours` questions.
+            if ($this->resolver->isQuestion($text) && StoreAgent::enabled()) {
                 return new FlowResult(true, question: $text);
             }
         }
@@ -997,6 +1014,11 @@ class FlowEngine
             $this->noteAbandoned($c);
 
             return $this->begin($c, substr($confirm, 7));
+        }
+
+        // Round 4 (2026-10-24): «بتسألي عن طلب المرتجع #812؟» after a rated close (ConversationEpisode).
+        if ($confirm === ConversationEpisode::CONFIRM) {
+            return app(ConversationEpisode::class)->answerRelates($c, $answer === 'yes');
         }
 
         if ($confirm !== 'handover_offer') {

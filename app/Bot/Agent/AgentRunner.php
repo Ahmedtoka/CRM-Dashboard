@@ -139,9 +139,9 @@ class AgentRunner
         // Live eval 2026-10-19: the real model paraphrases, so it says so itself with the offer_person tool.
         if (! $insideFlow && ! $flows && $outcome->handover === null && $outcome->products->isEmpty() && $outcome->branchCards === null
             && ($outcome->offerPerson || RepeatedReply::repeats($c, $outcome->reply))) {
-            $this->offerPerson($c);
+            $this->offerPerson($c, implode("\n", $texts));
 
-            return $this->record($c, $texts, $outcome, 'repeat_offer', false, $started, $engine, $plan);
+            return $this->record($c, $texts, $outcome, $c->refresh()->handler === Handler::Bot ? 'repeat_offer' : 'handover', false, $started, $engine, $plan);
         }
 
         $sent = $this->deliver($c, $outcome, $insideFlow, $flows);
@@ -160,9 +160,22 @@ class AgentRunner
     }
 
     /** «خليني أتأكد من المعلومة دي مع الفريق، تحبي أوصّلك بحد منهم؟» [أيوه] [لأ] — her «أيوه» hands over. */
-    private function offerPerson(Conversation $c): void
+    private function offerPerson(Conversation $c, string $customerText = ''): void
     {
         $text = app(FlowPrompter::class)->script('bot_safe_fallback') ?? (string) FlowScripts::all()['bot_safe_fallback']['body'];
+
+        // Round 4 (live eval 2026-10-24): she asks again right after this very offer and did not say «لأ»
+        // to it — offering it a second time is the bot going in circles; a person takes it.
+        $previous = $c->messages()->where('sender_type', SenderType::Bot->value)->where('created_at', '>=', now()->subMinutes(RepeatedReply::REPEAT_MINUTES))->latest('id')->first(['id', 'body']);
+        $declined = $previous !== null && $c->messages()->where('id', '>', $previous->id)->where('direction', \App\Enums\MessageDirection::In->value)->get(['body', 'payload'])
+            ->contains(fn (Message $m) => $m->payload === 'no' || app(\App\Bot\Flows\FlowAnswerResolver::class)->yesNo((string) $m->body) === 'no');
+
+        if ($previous !== null && ! $declined && trim((string) $previous->body) === trim($text)) {
+            FlowState::setConfirm($c, null);
+            app(HumanHandover::class)->handover($c, null, $customerText !== '' ? $customerText : null, 'bot_unsure', 'human_request');
+
+            return;
+        }
 
         try {
             $this->outbound->sendBot($c, $text, 0, true, [FlowLabels::YES_BUTTON, FlowLabels::NO_BUTTON]);

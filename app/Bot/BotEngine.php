@@ -123,7 +123,11 @@ class BotEngine
             return $this->customerClosed($c, $last, $text);
         }
 
-        $episode->begin($c, $burst);
+        // Round 4 (2026-10-24): after a rated close her message may be about a request she still has
+        // open («المندوب مجاش»): «بتسألي عن طلب المرتجع #812؟» is asked first when that is only likely.
+        if ($episode->begin($c, $burst) === ConversationEpisode::ASK) {
+            return $this->recordRun($c, $last, engine: 'flow_engine', decision: 'clarify');
+        }
 
         // She asked for a person (the owner's flow 7, 2026-09-19): the topic question first
         // («محتاجة إيه؟»), or straight to the team from inside a flow; the reply names the hours.
@@ -148,8 +152,23 @@ class BotEngine
             return $this->recordRun($c, $last, engine: 'limit', decision: 'handover');
         }
 
+        // Round 4 (2026-10-24, chat 214): a tap in the middle of the burst is run first; only the words
+        // after it go on (a button title never reaches the model as if she had typed it).
+        $router = app(ConversationRouter::class);
+        $remaining = $router->consumeTaps($c, $burst);
+
+        if ($remaining->count() !== $burst->count()) {
+            if ($remaining->isEmpty() || $c->refresh()->handler !== Handler::Bot) {
+                return $this->recordRun($c, $last, engine: 'flow_engine', decision: $c->handler === Handler::Bot ? 'button' : 'handover');
+            }
+
+            $burst = $remaining;
+            $text = $burst->pluck('body')->map(fn ($b) => (string) $b)->filter(fn ($b) => trim($b) !== '')->implode("\n");
+            $peeked = $this->rules->peek($text, 'message', $c->platform);
+        }
+
         // Agent rebuild: button taps, an active guided flow and greetings / "منيو" → main menu.
-        if (($run = app(ConversationRouter::class)->route($c, $burst)) !== null) {
+        if (($run = $router->route($c, $burst)) !== null) {
             return $run;
         }
 
@@ -300,12 +319,21 @@ class BotEngine
         $c->handover_category = $category;
         $c->save();
 
-        $this->outbound->sendSystem($c, 'تم تحويل المحادثة لفريق خدمة العملاء');
+        // Round 4 (2026-10-24): the moderator gets the topic, the order, what she wants, what the bot
+        // already answered, her mood and her last lines — the same lines on the note and the window.
+        $brief = rescue(fn () => app(HandoverBrief::class)->build($c, $reason, $category, $customerText, (array) ($routing['summary_extra'] ?? []), $routing['flow'] ?? null), null, report: true)
+            ?? ['lines' => [], 'topic' => null, 'order_number' => null];
+
+        // The line in the thread (staff only) says what it is about, not just that it happened.
+        $about = collect([$brief['topic'], $brief['order_number'] !== null && ! str_contains((string) $brief['topic'], (string) $brief['order_number']) ? 'أوردر #'.$brief['order_number'] : null])->filter()->implode(' — ');
+        $this->outbound->sendSystem($c, 'تم تحويل المحادثة لفريق خدمة العملاء'.($about !== '' ? ' — '.\Illuminate\Support\Str::limit($about, 140) : ''));
 
         $this->logger->log(ActorType::System, null, ActivityLogger::CONVERSATION_HANDOVER, null, $c, ['reason' => $reason]);
 
+        $summaryExtra = array_values(array_unique(array_filter(array_merge((array) ($routing['summary_extra'] ?? []), $brief['lines']), fn ($l) => is_string($l) && trim($l) !== '')));
+
         if ($customerText !== null) {
-            $this->summary->note($c, $reason, $customerText, $intent, $ctx, $routing['summary_extra'] ?? []);
+            $this->summary->note($c, $reason, $customerText, $intent, $ctx, $summaryExtra);
         }
 
         // Handover queue (2026-09-29): when it is on, the customer takes a ticket and the router
@@ -316,9 +344,10 @@ class BotEngine
                 reason: $reason,
                 category: $category,
                 priority: $priority,
-                topic: $c->handover_topic,
-                summaryLines: $routing['summary_extra'] ?? [],
+                topic: $c->handover_topic ?? $brief['topic'],
+                summaryLines: $summaryExtra,
                 kind: HandoverContext::kindFor($category),
+                orderNumber: $brief['order_number'],
             ))
             : null;
 

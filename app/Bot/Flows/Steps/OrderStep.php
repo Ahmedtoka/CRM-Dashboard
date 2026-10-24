@@ -198,9 +198,17 @@ final class OrderStep extends BaseStep
                 return StepOutcome::continue($this->orderData($snapshot));
             }
 
-            return $this->owned($state, $snapshot)
-                ? StepOutcome::continue($this->verifiedData($state, $snapshot))
-                : $this->askLastDigits($snapshot);
+            if ($this->owned($state, $snapshot)) {
+                return StepOutcome::continue($this->verifiedData($state, $snapshot));
+            }
+
+            // Round 4 (2026-10-24): «209129» then «4567» as two quick messages, read as one burst — the
+            // proof is already here, so it is not asked for.
+            if (($proven = $this->provedInSameText($state, $text, $entities, $snapshot)) !== null) {
+                return $proven;
+            }
+
+            return $this->askLastDigits($snapshot);
         }
 
         if ($result['status'] === 'unverified') {
@@ -238,6 +246,40 @@ final class OrderStep extends BaseStep
         }
 
         return $this->notFound($state, $text);
+    }
+
+    /**
+     * The last 4 digits of the order's mobile, written in the same burst as the order number (the
+     * number, a phone and an email taken out first): the order is proven at once.
+     */
+    private function provedInSameText(array $state, string $text, array $entities, OrderSnapshot $s): ?StepOutcome
+    {
+        $latin = (new ArabicNormalizer)->digitsToLatin($text);
+        $rest = preg_replace(['/(?<!\d)(?:\+?20|0)?1[0125]\d{8}(?!\d)/', '/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/'], ' ', $latin) ?? $latin;
+
+        if (is_string($entities['order_ref'] ?? null) && $entities['order_ref'] !== '') {
+            $rest = preg_replace('/#?(?<!\d)'.preg_quote($entities['order_ref'], '/').'(?!\d)/', ' ', $rest) ?? $rest;
+        }
+
+        if (preg_match_all('/(?<!\d)(\d{4})(?!\d)/', $rest, $m) === 0) {
+            return null;
+        }
+
+        $order = Order::withLoadTest()->with('customer')->find($s->orderId);
+
+        if ($order === null) {
+            return null;
+        }
+
+        $phones = $this->lookup->orderPhoneDigits($order);
+
+        foreach ($m[1] as $digits) {
+            if (collect($phones)->contains(fn (string $p) => substr($p, -4) === $digits)) {
+                return StepOutcome::continue($this->verifiedData($state, $this->lookup->ownedSnapshot($order)) + ['order_verify' => null]);
+            }
+        }
+
+        return null;
     }
 
     public function unresolved(Conversation $c, array $state, array $step, string $text): StepOutcome

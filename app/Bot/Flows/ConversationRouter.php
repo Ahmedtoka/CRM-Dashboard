@@ -5,6 +5,7 @@ namespace App\Bot\Flows;
 use App\Bot\Agent\AgentRunner;
 use App\Bot\Agent\StoreAgent;
 use App\Bot\Agent\TierProfile;
+use App\Bot\Episodes\ConversationEpisode;
 use App\Bot\Flow\BurstPolicy;
 use App\Bot\Flow\TurnRunner;
 use App\Bot\Router\HybridRouter;
@@ -17,6 +18,7 @@ use App\Models\BotFlow;
 use App\Models\BotRun;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Queue\RatingService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
@@ -48,6 +50,51 @@ class ConversationRouter
         private readonly GreetingMirror $mirrors,
     ) {}
 
+    /**
+     * Round 4 (2026-10-24, chat 214): a button tap that is NOT the last message of the burst — she
+     * tapped and typed while the worker was busy, or typed and then tapped. Each tap is run here
+     * first (a menu option that starts a flow takes the words typed around it as its prefill, so the
+     * order is not asked again), and only what is left after the last tap goes on to the flow or the
+     * model: a button title never reaches a model as if she had typed it.
+     *
+     * @return Collection<int, Message> the messages still to answer (empty when the taps said it all)
+     */
+    public function consumeTaps(Conversation $c, Collection $burst): Collection
+    {
+        $messages = $burst->values();
+        $last = $messages->last();
+        $taps = $messages->filter(fn (Message $m) => filled($m->payload) && ! str_starts_with((string) $m->payload, RatingService::PAYLOAD_PREFIX));
+
+        if (! $last instanceof Message || $taps->isEmpty() || $taps->last()->id === $last->id) {
+            return $messages;
+        }
+
+        $tap = $taps->last();
+        $index = $messages->search(fn (Message $m) => $m->id === $tap->id);
+        $head = $messages->slice(0, $index + 1)->values();
+        $tail = $messages->slice($index + 1)->values();
+        $tailText = $tail->map(fn (Message $m) => trim((string) $m->body))->filter()->implode("\n");
+        $payload = (string) $tap->payload;
+
+        // «المرتجع والاستبدال» + «عايزة ارجع الفستان من اوردر 209129»: the flow starts from her words
+        // (the main menu she tapped from is not a flow in progress).
+        if (str_starts_with($payload, 'flow:') && $tailText !== '' && (! $this->flows->isActive($c) || $this->flows->atMenu($c))) {
+            $flowKey = substr($payload, 5);
+
+            if ($this->flows->startWithWords($c, $flowKey, implode("\n", $head->merge($tail)->map(fn (Message $m) => trim((string) $m->body))->filter()->all()))) {
+                $filled = array_intersect_key((array) (FlowState::flow($c)['data'] ?? []), array_flip(['order_ref_hint', 'order_number', 'item_hints', 'selected_items', 'request_kind']));
+
+                // Her words were taken by the start (the order, the pieces): nothing is left to answer.
+                // Otherwise the flow asks its first question and her words are read as its answer.
+                return $filled !== [] || ! $this->flows->isActive($c) ? collect() : $tail;
+            }
+        }
+
+        $this->route($c, $head);
+
+        return $c->refresh()->handler === Handler::Bot ? $tail : collect();
+    }
+
     public function route(Conversation $c, Collection $burst): ?BotRun
     {
         $last = $burst->last();
@@ -58,6 +105,16 @@ class ConversationRouter
 
         $started = hrtime(true);
         $texts = $burst->map(fn (Message $m) => trim((string) $m->body))->filter(fn (string $t) => $t !== '')->values()->all();
+
+        // Round 4: «عايزة ارجع الفستان من اوردر 209129» typed, then the menu option tapped (chat 214):
+        // the flow starts filled from the words that came with the tap — from the menu or from nowhere.
+        $tapped = filled($last->payload) && str_starts_with((string) $last->payload, 'flow:') ? (string) $last->payload : null;
+        $words = $tapped !== null ? $burst->filter(fn (Message $m) => $m->id !== $last->id)->map(fn (Message $m) => trim((string) $m->body))->filter()->implode("\n") : '';
+
+        if ($tapped !== null && $words !== '' && (! $this->flows->isActive($c) || $this->flows->atMenu($c))
+            && $this->flows->startWithWords($c, substr($tapped, 5), $words)) {
+            return $this->record($c, $texts, $started, 'button');
+        }
 
         // 2. An active flow reads the burst itself (payloads, typed answers, questions).
         if ($this->flows->isActive($c)) {
@@ -146,8 +203,9 @@ class ConversationRouter
     /** runPayload, plus the main menu after a "no" to an offer made outside a flow (never silence). */
     private function runPayload(Conversation $c, string $payload): bool
     {
-        // «بعدين» to the next request of her message has its own reply and summary (review #12).
-        $offerOutsideFlow = $payload === 'no' && ! in_array(FlowState::confirm($c), [null, TaskOrchestrator::CONFIRM], true) && ! $this->flows->isActive($c);
+        // «بعدين» to the next request of her message has its own reply and summary (review #12); «لأ» to
+        // «بتسألي عن طلب …؟» (round 4) is followed by the answer to her message, not by the menu.
+        $offerOutsideFlow = $payload === 'no' && ! in_array(FlowState::confirm($c), [null, TaskOrchestrator::CONFIRM, ConversationEpisode::CONFIRM], true) && ! $this->flows->isActive($c);
 
         if (! $this->flows->runPayload($c, $payload)) {
             return false;

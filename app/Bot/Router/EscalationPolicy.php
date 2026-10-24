@@ -75,6 +75,8 @@ class EscalationPolicy
         $router = (array) ($state['router'] ?? []);
         $router['last_text'] = $this->normalizer->normalize($text);
         $router['clarified'] = $plan->clarify !== null ? (int) ($router['clarified'] ?? 0) + 1 : 0;
+        // Round 4: her mood as the planner read it, for the handover brief («مزاجها»).
+        $router['sentiment'] = $plan->sentiment;
         $state['router'] = $router;
         $c->forceFill(['bot_state' => $state])->save();
     }
