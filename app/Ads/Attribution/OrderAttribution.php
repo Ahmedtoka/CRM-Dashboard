@@ -57,11 +57,11 @@ final class OrderAttribution
      * that still carry one, and orders of the last UTM_REPROCESS_DAYS days whose attribution could become stronger (a
      * weaker rule is only ever replaced by a stronger one; an inbox attribution is never replaced).
      */
-    public function run(CarbonImmutable $from, CarbonImmutable $to, bool $force = false): int
+    public function run(CarbonImmutable $from, CarbonImmutable $to, bool $force = false, int $reprocessDays = self::UTM_REPROCESS_DAYS): int
     {
         $this->loadLookups();
         $count = 0;
-        $reprocessFrom = CarbonImmutable::now()->subDays(self::UTM_REPROCESS_DAYS);
+        $reprocessFrom = CarbonImmutable::now()->subDays($reprocessDays);
 
         Order::query()
             ->whereBetween('placed_at', [$from, $to])

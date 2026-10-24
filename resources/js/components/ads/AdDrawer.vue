@@ -79,7 +79,7 @@ function afterWrite(): void {
     if (props.adId) void load(props.adId);
     if (props.reloadOnly.length) router.reload({ only: props.reloadOnly });
 }
-const resultTone = (r: 'ok' | 'error' | 'pending') => (r === 'ok' ? 'positive' : r === 'pending' ? 'info' : 'negative');
+const resultTone = (r: 'ok' | 'error' | 'pending' | 'dry_run') => (r === 'ok' ? 'positive' : r === 'pending' ? 'info' : r === 'dry_run' ? 'warning' : 'negative');
 </script>
 
 <template>

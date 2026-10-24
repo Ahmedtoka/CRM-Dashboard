@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web\Ads;
 use App\Ads\Reports\AdsFilter;
 use App\Ads\Reports\AdsOverview;
 use App\Ads\Reports\AdsQuery;
+use App\Ads\Reports\AttributionBreakdown;
 use App\Ads\Reports\BuyerScorecard;
 use App\Ads\Reports\RevenueSummary;
 use App\Ads\Reports\TopAccounts;
@@ -24,7 +25,7 @@ class NumbersController extends Controller
     public const SECTIONS = ['buyers', 'chat', 'accounts'];
 
     public function __invoke(Request $request, AdsOverview $overview, RevenueSummary $summary, TopAccounts $top,
-        BuyerScorecard $cards, AdsReport $chat, AdsQuery $q, ChatFunnel $funnel): Response
+        BuyerScorecard $cards, AdsReport $chat, AdsQuery $q, ChatFunnel $funnel, AttributionBreakdown $attribution): Response
     {
         $user = $request->user();
         $filter = AdsFilter::fromRequest($request, $user, 'this_month');
@@ -46,6 +47,8 @@ class NumbersController extends Controller
             'top_accounts' => $top->build($filter),
             'buyers' => $cards->build($filter),
             'chat_campaigns' => $manager ? $this->chat($filter, $chat, $q) : null,
+            // Round 3: real orders by the rule that attributed them, and how many no rule could (managers: the whole store).
+            'attribution' => $manager ? $attribution->build($filter) : null,
             // S3 (spec 5.3): the chat funnel and why-not-bought over the page's own filter (a buyer: her accounts only), deferred.
             'chatFunnel' => Inertia::defer(fn () => $funnel->forFilter($filter), 'funnel'),
         ]);

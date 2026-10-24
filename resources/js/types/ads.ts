@@ -1336,8 +1336,21 @@ export interface AdsNumbersProps extends Omit<AdsPageBase, 'buyers'> {
     top_accounts: AdsTopAccountRow[];
     buyers: BuyerCardData[];
     chat_campaigns: AdsChatReport | null;
+    /** Round 3: real orders by the attribution rule that won (managers only; null for buyers). */
+    attribution: AdsAttributionBreakdown | null;
     /** S3: deferred (group `funnel`), totals over the page filter. */
     chatFunnel?: ChatFunnel;
+}
+
+export interface AdsAttributionBreakdown {
+    rules: { rule: 'inbox' | 'utm_ad' | 'utm_adset' | 'utm_campaign'; orders: number; revenue: number }[];
+    total_orders: number;
+    attributed_orders: number;
+    unattributed_orders: number;
+    attributed_pct: number | null;
+    total_revenue: number;
+    attributed_revenue: number;
+    unattributed_revenue: number;
 }
 
 /* Control room S3: the per-ad chat funnel (GET /ads/chat-funnel). */
