@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\CommentController;
 use App\Http\Controllers\Api\V1\ConversationController;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DeviceController;
+use App\Http\Controllers\Api\V1\FinishOptionsController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\PresenceController;
@@ -66,6 +67,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('conversations/{conversation}/tags', [ConversationController::class, 'syncTags'])->name('conversations.tags');
         Route::post('conversations/{conversation}/quick-replies/{quickReply}/render', [ConversationController::class, 'renderQuickReply'])->name('conversations.quick-replies.render');
         Route::post('conversations/{conversation}/product', [ConversationController::class, 'sendProduct'])->name('conversations.product.store');
+
+        // Mobile r2 (docs/round-2026-10-24/finish-api.md): the «خلصت» sheet's outcome list, labels and groups.
+        Route::get('finish/options', FinishOptionsController::class)->name('finish.options');
 
         Route::get('conversations', [ConversationController::class, 'list'])->middleware('record-list-latency')->name('conversations.index');
         Route::get('conversations/{conversation}', [ConversationController::class, 'show'])->name('conversations.show');
