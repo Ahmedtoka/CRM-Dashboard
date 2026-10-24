@@ -29,6 +29,8 @@ class InboxController extends Controller
     {
         $filters = $this->conversationFilters($request);
         $user = $request->user();
+        // Read once for the two props below (screen speed 2026-10-24).
+        $queueSettings = QueueSetting::current();
 
         return Inertia::render('Inbox', [
             'conversations' => ConversationResource::collection($query->paginate($user, $filters))->additional(['search_mode' => $query->searchMode(), 'meta' => ['search_truncated' => $query->searchTruncated()]]),
@@ -42,9 +44,9 @@ class InboxController extends Controller
                 ->whereIn('role', [UserRole::Moderator->value, UserRole::Supervisor->value])
                 ->orderBy('name')->get(['id', 'name', 'color'])
                 ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'color' => $u->color])->values(),
-            'queueEnabled' => (bool) QueueSetting::current()->enabled,
+            'queueEnabled' => (bool) $queueSettings->enabled,
             // Control room S3: the waiting-age chip turns red past the first-reply target.
-            'firstReplyTargetSeconds' => (int) QueueSetting::current()->sla_first_reply_seconds,
+            'firstReplyTargetSeconds' => (int) $queueSettings->sla_first_reply_seconds,
             'quickReplies' => $quickReplies->toArray($user),
             'quickReplyCategories' => QuickReplyCategory::orderBy('sort')->get(['id', 'name', 'sort']),
             'tags' => Tag::orderBy('name')->get(['id', 'name', 'color']),

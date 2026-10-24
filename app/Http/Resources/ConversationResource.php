@@ -11,6 +11,7 @@ use App\Models\SupportCase;
 use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -18,6 +19,34 @@ use Illuminate\Support\Str;
 /** @mixin Conversation */
 class ConversationResource extends JsonResource
 {
+    /**
+     * Screen speed (2026-10-24): the web inbox reads Arabic as UTF-8, not as `\uXXXX` — a letter is
+     * 2 bytes instead of 6, which takes about a third off a list page and almost half off a thread
+     * of Arabic messages. The mobile API (`api/*`) keeps the escaped form it has always decoded:
+     * a client that reads the body without a charset would otherwise see mojibake.
+     */
+    public static function jsonOptionsFor(?Request $request): int
+    {
+        return $request !== null && $request->is('api/*') ? 0 : JSON_UNESCAPED_UNICODE;
+    }
+
+    public function jsonOptions(): int
+    {
+        return self::jsonOptionsFor(request());
+    }
+
+    /** The list collection encodes like the single resource (ResourceCollection does not ask the item class). */
+    protected static function newCollection($resource): AnonymousResourceCollection
+    {
+        return new class($resource, static::class) extends AnonymousResourceCollection
+        {
+            public function jsonOptions(): int
+            {
+                return ConversationResource::jsonOptionsFor(request());
+            }
+        };
+    }
+
     public function toArray(Request $request): array
     {
         /** @var Conversation $c */
